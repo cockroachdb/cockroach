@@ -362,7 +362,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 				{"c", 6, "ccc"},    // same TS as existing, LSM-shadows existing.
 				{"d", 4, "dddd"},   // mvcc-shadow existing deleted d.
 				{"e", 4, "eeee"},   // mvcc-shadow existing 1b.
-				{"j", 2, "jj"},     // no colission – via MVCC or LSM – with existing.
+				{"j", 2, "jj"},     // no collision – via MVCC or LSM – with existing.
 			})
 			var delta enginepb.MVCCStats
 			// the sst will think it added 4 keys here, but a, c, and e shadow or are shadowed.
