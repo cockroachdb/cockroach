@@ -115,7 +115,7 @@ What's wrong with this?
 - the rewrite of the subquery results, when applicable, is expensive
   towards Go's heap allocator and GC.
 
-## Motivation for column data referencs ("indexed vars")
+## Motivation for column data references ("indexed vars")
 
 Currently in CockroachDB an early transform called "name resolution"
 will replace any column reference by name (e.g. "`k`" in `select k
