@@ -4435,7 +4435,7 @@ func setupBackupEncryptedTest(ctx context.Context, t *testing.T, sqlDB *sqlutils
 	// Create a table with a name and content that we never see in cleartext in a
 	// backup. And while the content and name are user data and metadata, by also
 	// partitioning the table at the sentinel value, we can ensure it also appears
-	// in the *backup* metadata as well (since partion = range boundary = backup
+	// in the *backup* metadata as well (since partition = range boundary = backup
 	// file boundary that is recorded in metadata).
 	sqlDB.Exec(t, `CREATE DATABASE neverappears`)
 	sqlDB.Exec(t, `CREATE TABLE neverappears.neverappears (

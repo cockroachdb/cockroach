@@ -68,7 +68,7 @@ func (m *mockStreamClient) ConsumePartition(
 	var events []streamingccl.Event
 	var ok bool
 	if events, ok = m.partitionEvents[address]; !ok {
-		return nil, nil, errors.Newf("no events found for paritition %s", address)
+		return nil, nil, errors.Newf("no events found for partition %s", address)
 	}
 
 	eventCh := make(chan streamingccl.Event, len(events))
