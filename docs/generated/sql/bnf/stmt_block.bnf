@@ -21,7 +21,7 @@ stmt ::=
 	| nonpreparable_set_stmt
 	| transaction_stmt
 	| close_cursor_stmt
-	|
+	| 
 
 preparable_stmt ::=
 	alter_stmt
@@ -263,15 +263,15 @@ table_name ::=
 
 opt_column_list ::=
 	'(' name_list ')'
-	|
+	| 
 
 opt_with_copy_options ::=
 	opt_with copy_options_list
-	|
+	| 
 
 opt_where_clause ::=
 	where_clause
-	|
+	| 
 
 database_name ::=
 	name
@@ -299,7 +299,7 @@ table_alias_name ::=
 
 execute_param_clause ::=
 	'(' expr_list ')'
-	|
+	| 
 
 name ::=
 	'identifier'
@@ -334,7 +334,7 @@ schema_name_list ::=
 
 prep_type_clause ::=
 	'(' type_list ')'
-	|
+	| 
 
 role_spec ::=
 	username_or_sconst
@@ -344,7 +344,7 @@ role_spec ::=
 opt_drop_behavior ::=
 	'CASCADE'
 	| 'RESTRICT'
-	|
+	| 
 
 savepoint_name ::=
 	'SAVEPOINT' name
@@ -352,7 +352,7 @@ savepoint_name ::=
 
 opt_concurrently ::=
 	'CONCURRENTLY'
-	|
+	| 
 
 view_name ::=
 	table_name
@@ -360,7 +360,7 @@ view_name ::=
 opt_clear_data ::=
 	'WITH' 'DATA'
 	| 'WITH' 'NO' 'DATA'
-	|
+	| 
 
 set_transaction_stmt ::=
 	'SET' 'TRANSACTION' transaction_mode_list
@@ -414,16 +414,16 @@ string_or_placeholder_opt_list ::=
 
 opt_as_of_clause ::=
 	as_of_clause
-	|
+	| 
 
 opt_with_backup_options ::=
 	'WITH' backup_options_list
 	| 'WITH' 'OPTIONS' '(' backup_options_list ')'
-	|
+	| 
 
 opt_incremental ::=
 	'INCREMENTAL' 'FROM' string_or_placeholder_list
-	|
+	| 
 
 cancel_jobs_stmt ::=
 	'CANCEL' 'JOB' a_expr
@@ -477,7 +477,7 @@ create_extension_stmt ::=
 
 opt_with_clause ::=
 	with_clause
-	|
+	| 
 
 table_expr_opt_alias_idx ::=
 	table_name_opt_idx
@@ -486,16 +486,16 @@ table_expr_opt_alias_idx ::=
 
 opt_sort_clause ::=
 	sort_clause
-	|
+	| 
 
 opt_limit_clause ::=
 	limit_clause
-	|
+	| 
 
 returning_clause ::=
 	'RETURNING' target_list
 	| 'RETURNING' 'NOTHING'
-	|
+	| 
 
 drop_ddl_stmt ::=
 	drop_database_stmt
@@ -531,7 +531,7 @@ string_or_placeholder ::=
 opt_with_options ::=
 	'WITH' kv_option_list
 	| 'WITH' 'OPTIONS' '(' kv_option_list ')'
-	|
+	| 
 
 string_or_placeholder_list ::=
 	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*
@@ -583,7 +583,7 @@ list_of_string_or_placeholder_opt_list ::=
 opt_with_restore_options ::=
 	'WITH' restore_options_list
 	| 'WITH' 'OPTIONS' '(' restore_options_list ')'
-	|
+	| 
 
 resume_jobs_stmt ::=
 	'RESUME' 'JOB' a_expr
@@ -792,7 +792,7 @@ show_default_privileges_stmt ::=
 
 opt_table ::=
 	'TABLE'
-	|
+	| 
 
 relation_expr_list ::=
 	( relation_expr ) ( ( ',' relation_expr ) )*
@@ -802,7 +802,7 @@ set_clause_list ::=
 
 opt_from_list ::=
 	'FROM' from_list
-	|
+	| 
 
 db_object_name ::=
 	simple_db_object_name
@@ -810,7 +810,7 @@ db_object_name ::=
 
 opt_with ::=
 	'WITH'
-	|
+	| 
 
 copy_options_list ::=
 	( copy_options ) ( ( copy_options ) )*
@@ -1253,7 +1253,7 @@ col_name_keyword ::=
 
 opt_privileges_clause ::=
 	'PRIVILEGES'
-	|
+	| 
 
 complex_table_pattern ::=
 	complex_db_object_name
@@ -1296,16 +1296,16 @@ transaction_mode_list ::=
 
 opt_transaction ::=
 	'TRANSACTION'
-	|
+	| 
 
 begin_transaction ::=
 	transaction_mode_list
-	|
+	| 
 
 opt_abort_mod ::=
 	'TRANSACTION'
 	| 'WORK'
-	|
+	| 
 
 alter_table_stmt ::=
 	alter_onetable_stmt
@@ -1378,11 +1378,11 @@ role_or_group_or_user ::=
 
 opt_role_options ::=
 	opt_with role_options
-	|
+	| 
 
 opt_in_database ::=
 	'IN' 'DATABASE' database_name
-	|
+	| 
 
 set_or_reset_clause ::=
 	'SET' set_rest
@@ -1446,19 +1446,19 @@ statistics_name ::=
 
 opt_stats_columns ::=
 	'ON' name_list
-	|
+	| 
 
 create_stats_target ::=
 	table_name
 
 opt_create_stats_options ::=
 	as_of_clause
-	|
+	| 
 
 schedule_label_spec ::=
 	string_or_placeholder
 	| 'IF' 'NOT' 'EXISTS' string_or_placeholder
-	|
+	| 
 
 cron_expr ::=
 	'RECURRING' sconst_or_placeholder
@@ -1466,12 +1466,12 @@ cron_expr ::=
 opt_full_backup_clause ::=
 	'FULL' 'BACKUP' sconst_or_placeholder
 	| 'FULL' 'BACKUP' 'ALWAYS'
-	|
+	| 
 
 opt_with_schedule_options ::=
 	'WITH' 'SCHEDULE' 'OPTIONS' kv_option_list
 	| 'WITH' 'SCHEDULE' 'OPTIONS' '(' kv_option_list ')'
-	|
+	| 
 
 changefeed_targets ::=
 	single_table_pattern_list
@@ -1483,7 +1483,7 @@ opt_changefeed_sink ::=
 opt_with_replication_options ::=
 	'WITH' replication_options_list
 	| 'WITH' 'OPTIONS' '(' replication_options_list ')'
-	|
+	| 
 
 with_clause ::=
 	'WITH' cte_list
@@ -1572,7 +1572,7 @@ restore_options_list ::=
 
 opt_scrub_options_clause ::=
 	'WITH' 'OPTIONS' scrub_option_list
-	|
+	| 
 
 simple_select ::=
 	simple_select_clause
@@ -1590,7 +1590,7 @@ for_locking_clause ::=
 
 opt_select_limit ::=
 	select_limit
-	|
+	| 
 
 select_limit ::=
 	limit_clause offset_clause
@@ -1600,7 +1600,7 @@ select_limit ::=
 
 opt_for_locking_clause ::=
 	for_locking_clause
-	|
+	| 
 
 set_rest_more ::=
 	set_rest
@@ -1618,15 +1618,15 @@ var_value ::=
 
 with_comment ::=
 	'WITH' 'COMMENT'
-	|
+	| 
 
 opt_on_targets_roles ::=
 	'ON' targets_roles
-	|
+	| 
 
 for_grantee_clause ::=
 	'FOR' name_list
-	|
+	| 
 
 opt_schedule_executor_type ::=
 	'FOR' 'BACKUP'
@@ -1646,7 +1646,7 @@ statements_or_queries ::=
 
 opt_compact ::=
 	'COMPACT'
-	|
+	| 
 
 from_with_implicit_for_alias ::=
 	'FROM'
@@ -1656,14 +1656,14 @@ zone_name ::=
 
 opt_partition ::=
 	partition
-	|
+	| 
 
 partition_name ::=
 	unrestricted_name
 
 opt_for_roles ::=
 	'FOR' role_or_group_or_user name_list
-	|
+	| 
 
 relation_expr ::=
 	table_name
@@ -1725,7 +1725,7 @@ transaction_mode ::=
 
 opt_comma ::=
 	','
-	|
+	| 
 
 alter_onetable_stmt ::=
 	'ALTER' 'TABLE' relation_expr alter_table_cmds
@@ -1857,11 +1857,11 @@ alter_zone_partition_stmt ::=
 opt_add_val_placement ::=
 	'BEFORE' 'SCONST'
 	| 'AFTER' 'SCONST'
-	|
+	| 
 
 opt_in_schemas ::=
 	'IN' 'SCHEMA' schema_name_list
-	|
+	| 
 
 abbreviated_grant_stmt ::=
 	'GRANT' privileges 'ON' alter_default_privileges_target_object 'TO' name_list opt_with_grant_option
@@ -1897,7 +1897,7 @@ collation_name ::=
 
 opt_asymmetric ::=
 	'ASYMMETRIC'
-	|
+	| 
 
 b_expr ::=
 	( c_expr | '+' b_expr | '-' b_expr | '~' b_expr | qual_op b_expr ) ( ( 'TYPECAST' cast_target | 'TYPEANNOTATE' typename | '+' b_expr | '-' b_expr | '*' b_expr | '/' b_expr | 'FLOORDIV' b_expr | '%' b_expr | '^' b_expr | '#' b_expr | '&' b_expr | '|' b_expr | '<' b_expr | '>' b_expr | '=' b_expr | 'CONCAT' b_expr | 'LSHIFT' b_expr | 'RSHIFT' b_expr | 'LESS_EQUALS' b_expr | 'GREATER_EQUALS' b_expr | 'NOT_EQUALS' b_expr | qual_op b_expr | 'IS' 'DISTINCT' 'FROM' b_expr | 'IS' 'NOT' 'DISTINCT' 'FROM' b_expr | 'IS' 'OF' '(' type_list ')' | 'IS' 'NOT' 'OF' '(' type_list ')' ) )*
@@ -1921,72 +1921,72 @@ sub_type ::=
 
 opt_template_clause ::=
 	'TEMPLATE' opt_equal non_reserved_word_or_sconst
-	|
+	| 
 
 opt_encoding_clause ::=
 	'ENCODING' opt_equal non_reserved_word_or_sconst
-	|
+	| 
 
 opt_lc_collate_clause ::=
 	'LC_COLLATE' opt_equal non_reserved_word_or_sconst
-	|
+	| 
 
 opt_lc_ctype_clause ::=
 	'LC_CTYPE' opt_equal non_reserved_word_or_sconst
-	|
+	| 
 
 opt_connection_limit ::=
 	'CONNECTION' 'LIMIT' opt_equal signed_iconst
-	|
+	| 
 
 opt_primary_region_clause ::=
 	primary_region_clause
-	|
+	| 
 
 opt_regions_list ::=
 	region_or_regions opt_equal region_name_list
-	|
+	| 
 
 opt_survival_goal_clause ::=
 	survival_goal_clause
-	|
+	| 
 
 opt_unique ::=
 	'UNIQUE'
-	|
+	| 
 
 opt_index_name ::=
 	opt_name
 
 opt_index_access_method ::=
 	'USING' name
-	|
+	| 
 
 index_params ::=
 	( index_elem ) ( ( ',' index_elem ) )*
 
 opt_hash_sharded ::=
 	'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' a_expr
-	|
+	| 
 
 opt_storing ::=
 	storing '(' name_list ')'
-	|
+	| 
 
 opt_interleave ::=
 	'INTERLEAVE' 'IN' 'PARENT' table_name '(' name_list ')'
-	|
+	| 
 
 opt_partition_by_index ::=
 	partition_by
-	|
+	| 
 
 opt_with_storage_parameter_list ::=
 	'WITH' '(' storage_parameter_list ')'
 
 opt_schema_name ::=
 	qualifiable_schema_name
-	|
+	| 
 
 opt_persistence_temp_table ::=
 	opt_temp
@@ -1998,11 +1998,11 @@ opt_persistence_temp_table ::=
 
 opt_table_elem_list ::=
 	table_elem_list
-	|
+	| 
 
 opt_partition_by_table ::=
 	partition_by_table
-	|
+	| 
 
 opt_table_with ::=
 	opt_with_storage_parameter_list
@@ -2012,27 +2012,27 @@ opt_create_table_on_commit ::=
 
 opt_locality ::=
 	locality
-	|
+	| 
 
 create_as_opt_col_list ::=
 	'(' create_as_table_defs ')'
-	|
+	| 
 
 opt_enum_val_list ::=
 	enum_val_list
-	|
+	| 
 
 opt_temp ::=
 	'TEMPORARY'
 	| 'TEMP'
-	|
+	| 
 
 sequence_name ::=
 	db_object_name
 
 opt_sequence_option_list ::=
 	sequence_option_list
-	|
+	| 
 
 single_table_pattern_list ::=
 	( table_name ) ( ( ',' table_name ) )*
@@ -2045,17 +2045,17 @@ cte_list ::=
 
 opt_only ::=
 	'ONLY'
-	|
+	| 
 
 opt_index_flags ::=
 	'@' index_name
 	| '@' '[' iconst64 ']'
 	| '@' '{' index_flags_param_list '}'
-	|
+	| 
 
 opt_descendant ::=
 	'*'
-	|
+	| 
 
 sortby_list ::=
 	( sortby ) ( ( ',' sortby ) )*
@@ -2108,7 +2108,7 @@ table_constraint ::=
 
 opt_validate_behavior ::=
 	'NOT' 'VALID'
-	|
+	| 
 
 like_table_option_list ::=
 	(  ) ( ( 'INCLUDING' like_table_option | 'EXCLUDING' like_table_option ) )*
@@ -2294,7 +2294,7 @@ simple_typename ::=
 
 opt_array_bounds ::=
 	'[' ']'
-	|
+	| 
 
 transaction_user_priority ::=
 	'PRIORITY' user_priority
@@ -2349,7 +2349,7 @@ alter_default_privileges_target_object ::=
 
 opt_with_grant_option ::=
 	'WITH' 'GRANT' 'OPTION'
-	|
+	| 
 
 role_option ::=
 	'CREATEROLE'
@@ -2450,7 +2450,7 @@ all_op ::=
 
 opt_equal ::=
 	'='
-	|
+	| 
 
 signed_iconst ::=
 	'ICONST'
@@ -2464,7 +2464,7 @@ region_name_list ::=
 
 opt_name ::=
 	name
-	|
+	| 
 
 index_elem ::=
 	func_expr_windowless index_elem_options
@@ -2547,23 +2547,23 @@ scrub_option ::=
 
 opt_all_clause ::=
 	'ALL'
-	|
+	| 
 
 from_clause ::=
 	'FROM' from_list opt_as_of_clause
-	|
+	| 
 
 group_clause ::=
 	'GROUP' 'BY' group_by_list
-	|
+	| 
 
 having_clause ::=
 	'HAVING' a_expr
-	|
+	| 
 
 window_clause ::=
 	'WINDOW' window_definition_list
-	|
+	| 
 
 distinct_clause ::=
 	'DISTINCT'
@@ -2574,7 +2574,7 @@ distinct_on_clause ::=
 all_or_distinct ::=
 	'ALL'
 	| 'DISTINCT'
-	|
+	| 
 
 for_locking_item ::=
 	for_locking_strength opt_locked_rels opt_nowait_or_skip
@@ -2584,11 +2584,11 @@ var_list ::=
 
 opt_ordinality ::=
 	'WITH' 'ORDINALITY'
-	|
+	| 
 
 opt_alias_clause ::=
 	alias_clause
-	|
+	| 
 
 joined_table ::=
 	'(' joined_table ')'
@@ -2758,14 +2758,14 @@ array_subscript ::=
 
 case_arg ::=
 	a_expr
-	|
+	| 
 
 when_clause_list ::=
 	( when_clause ) ( ( when_clause ) )*
 
 case_default ::=
 	'ELSE' a_expr
-	|
+	| 
 
 tuple1_ambiguous_values ::=
 	a_expr
@@ -2809,12 +2809,12 @@ index_flags_param ::=
 opt_asc_desc ::=
 	'ASC'
 	| 'DESC'
-	|
+	| 
 
 opt_nulls_order ::=
 	'NULLS' 'FIRST'
 	| 'NULLS' 'LAST'
-	|
+	| 
 
 col_qualification ::=
 	'CONSTRAINT' constraint_name col_qualification_elem
@@ -2828,14 +2828,14 @@ col_qualification ::=
 key_match ::=
 	'MATCH' 'SIMPLE'
 	| 'MATCH' 'FULL'
-	|
+	| 
 
 reference_actions ::=
 	reference_on_update
 	| reference_on_delete
 	| reference_on_update reference_on_delete
 	| reference_on_delete reference_on_update
-	|
+	| 
 
 group_by_list ::=
 	( group_by_item ) ( ( ',' group_by_item ) )*
@@ -2861,7 +2861,7 @@ opt_join_hint ::=
 	| 'MERGE'
 	| 'LOOKUP'
 	| 'INVERTED'
-	|
+	| 
 
 join_type ::=
 	'FULL' join_outer
@@ -2924,7 +2924,7 @@ const_geo ::=
 
 opt_varying ::=
 	'VARYING'
-	|
+	| 
 
 character_base ::=
 	char_aliases
@@ -2949,7 +2949,7 @@ interval_qualifier ::=
 
 opt_column ::=
 	'COLUMN'
-	|
+	| 
 
 alter_column_default ::=
 	'SET' 'DEFAULT' a_expr
@@ -2965,15 +2965,15 @@ alter_column_visible ::=
 
 opt_set_data ::=
 	'SET' 'DATA'
-	|
+	| 
 
 opt_collate ::=
 	'COLLATE' collation_name
-	|
+	| 
 
 opt_alter_column_using ::=
 	'USING' a_expr
-	|
+	| 
 
 audit_mode ::=
 	'READ' 'WRITE'
@@ -2991,7 +2991,7 @@ func_name_no_crdb_extra ::=
 
 opt_interval_qualifier ::=
 	interval_qualifier
-	|
+	| 
 
 func_application ::=
 	func_name '(' ')'
@@ -3002,16 +3002,16 @@ func_application ::=
 
 within_group_clause ::=
 	'WITHIN' 'GROUP' '(' single_sort_clause ')'
-	|
+	| 
 
 filter_clause ::=
 	'FILTER' '(' 'WHERE' a_expr ')'
-	|
+	| 
 
 over_clause ::=
 	'OVER' window_specification
 	| 'OVER' window_name
-	|
+	| 
 
 func_expr_common_subexpr ::=
 	'COLLATION' 'FOR' '(' a_expr ')'
@@ -3040,7 +3040,7 @@ func_expr_common_subexpr ::=
 
 opt_expr_list ::=
 	expr_list
-	|
+	| 
 
 expr_tuple_unambiguous ::=
 	'(' ')'
@@ -3051,14 +3051,14 @@ array_expr_list ::=
 
 opt_slice_bound ::=
 	a_expr
-	|
+	| 
 
 when_clause ::=
 	'WHEN' a_expr 'THEN' a_expr
 
 opt_class ::=
 	name
-	|
+	| 
 
 list_partitions ::=
 	( list_partition ) ( ( ',' list_partition ) )*
@@ -3108,24 +3108,24 @@ window_definition ::=
 
 join_outer ::=
 	'OUTER'
-	|
+	| 
 
 rowsfrom_item ::=
 	func_expr_windowless
 
 opt_float ::=
 	'(' 'ICONST' ')'
-	|
+	| 
 
 opt_numeric_modifiers ::=
 	'(' iconst32 ')'
 	| '(' iconst32 ',' iconst32 ')'
-	|
+	| 
 
 opt_timezone ::=
 	'WITH' 'TIME' 'ZONE'
 	| 'WITHOUT' 'TIME' 'ZONE'
-	|
+	| 
 
 geo_shape_type ::=
 	'POINT'
@@ -3226,7 +3226,7 @@ create_as_params ::=
 
 opt_name_parens ::=
 	'(' name ')'
-	|
+	| 
 
 generated_as ::=
 	'AS'
@@ -3252,17 +3252,17 @@ type_function_name ::=
 
 opt_existing_window_name ::=
 	name
-	|
+	| 
 
 opt_partition_clause ::=
 	'PARTITION' 'BY' expr_list
-	|
+	| 
 
 opt_frame_clause ::=
 	'RANGE' frame_extent opt_frame_exclusion
 	| 'ROWS' frame_extent opt_frame_exclusion
 	| 'GROUPS' frame_extent opt_frame_exclusion
-	|
+	| 
 
 extract_list ::=
 	extract_arg 'FROM' a_expr
@@ -3275,7 +3275,7 @@ overlay_list ::=
 
 position_list ::=
 	b_expr 'IN' b_expr
-	|
+	| 
 
 substr_list ::=
 	a_expr substr_from substr_for
@@ -3291,7 +3291,7 @@ trim_list ::=
 
 opt_partition_by ::=
 	partition_by
-	|
+	| 
 
 create_as_param ::=
 	column_name
@@ -3305,7 +3305,7 @@ opt_frame_exclusion ::=
 	| 'EXCLUDE' 'GROUP'
 	| 'EXCLUDE' 'TIES'
 	| 'EXCLUDE' 'NO' 'OTHERS'
-	|
+	| 
 
 extract_arg ::=
 	'identifier'
