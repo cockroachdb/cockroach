@@ -1020,7 +1020,7 @@ message ProblemRangesResponse {
 // API: PUBLIC ALPHA
 message HotRangesRequest {
   // NodeID indicates which node to query for a hot range report.
-  // It is posssible to populate any node ID; if the node receiving
+  // It is possible to populate any node ID; if the node receiving
   // the request is not the target node, it will forward the
   // request to the target node.
   //
