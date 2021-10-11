@@ -18,7 +18,7 @@ import { emailSubscriptionAlertLocalSetting } from "src/redux/alerts";
 import {
   EMAIL_SUBSCRIPTION_SIGN_UP,
   EmailSubscriptionSignUpPayload,
-} from "./customAnanlyticsActions";
+} from "./customAnalyticsActions";
 
 export type AnalyticsClientTarget = "email_sign_up";
 

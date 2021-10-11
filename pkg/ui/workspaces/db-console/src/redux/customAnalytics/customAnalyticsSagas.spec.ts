@@ -13,7 +13,7 @@ import sinon from "sinon";
 import Analytics from "analytics-node";
 
 import { signUpEmailSubscription } from "./customAnalyticsSagas";
-import { signUpForEmailSubscription } from "./customAnanlyticsActions";
+import { signUpForEmailSubscription } from "./customAnalyticsActions";
 
 const sandbox = sinon.createSandbox();
 

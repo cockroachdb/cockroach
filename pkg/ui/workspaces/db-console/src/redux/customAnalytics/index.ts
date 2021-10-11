@@ -9,4 +9,4 @@
 // licenses/APL.txt.
 
 export * from "./customAnalyticsSagas";
-export * from "./customAnanlyticsActions";
+export * from "./customAnalyticsActions";
