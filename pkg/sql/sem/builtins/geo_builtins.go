@@ -3123,7 +3123,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 			types.Geometry,
 			infoBuilder{
 				info: `Returns the "simplest" representation of a collection's contents. Collections of a single ` +
-					`type will be returned as an appopriate multitype, or a singleton if it only contains a ` +
+					`type will be returned as an appropriate multitype, or a singleton if it only contains a ` +
 					`single geometry.`,
 			},
 			tree.VolatilityImmutable,
