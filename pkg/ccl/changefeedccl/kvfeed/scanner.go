@@ -296,7 +296,7 @@ func maxConcurrentScanRequests(gw gossip.OptionalGossip, sv *settings.Values) in
 	}
 
 	// TODO(yevgeniy): Currently, issuing multiple concurrent updates scaled to the size of
-	//  the cluster only make sense for the core change feeds.  This configuration shoould
+	//  the cluster only make sense for the core change feeds.  This configuration should
 	//  be specified explicitly when creating scanner.
 	nodes := clusterNodeCount(gw)
 	// This is all hand-wavy: 3 per node used to be the default for a very long time.
