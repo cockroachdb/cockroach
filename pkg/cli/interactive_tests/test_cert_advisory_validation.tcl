@@ -32,7 +32,7 @@ eexpect "interrupted"
 eexpect $prompt
 end_test
 
-start_test "Check that the server reports no warning if the avertise addr is in the cert."
+start_test "Check that the server reports no warning if the advertise addr is in the cert."
 send "$argv start-single-node --store=$db_dir --certs-dir=$certs_dir --advertise-addr=localhost\r"
 expect {
   "not in node certificate" {
