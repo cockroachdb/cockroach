@@ -457,7 +457,7 @@ type Result struct {
 	//
 	// Internally, Results are refcounted. Multiple Results referencing the same
 	// GetResp/ScanResp can be returned from separate `GetResults()` calls, and
-	// the Streamer internally does bufferring and caching of Results - which also
+	// the Streamer internally does buffering and caching of Results - which also
 	// contributes to the refcounts.
 	MemoryTok ResultMemoryToken
 }
