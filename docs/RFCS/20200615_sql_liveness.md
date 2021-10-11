@@ -499,7 +499,7 @@ be written somewhere. This does not have to be the same place as sessions.
     - They align with the terminology in etcd/v3/concurrency.
   - Cons:
     - Overloads term used to mean the session of a SQL connection.
-  - We could use the full `sqlliveness.SesssionID` wherever it might be
+  - We could use the full `sqlliveness.SessionID` wherever it might be
     ambiguous.
 - How should transactions dependent upon claims verify the validity? There are
 two different approaches offered above and another below. They seems like they
