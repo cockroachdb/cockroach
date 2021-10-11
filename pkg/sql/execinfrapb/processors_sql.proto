@@ -137,7 +137,7 @@ message TableReaderSpec {
 
   // Indicates the policy to be used by the scan for handling conflicting locks
   // held by other active transactions when attempting to lock rows. Always set
-  // to BLOCK when locking_stength is FOR_NONE.
+  // to BLOCK when locking_strength is FOR_NONE.
   optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 11 [(gogoproto.nullable) = false];
 
   reserved 13;
@@ -192,7 +192,7 @@ message IndexSkipTableReaderSpec {
 
   // Indicates the policy to be used by the scan for handling conflicting locks
   // held by other active transactions when attempting to lock rows. Always set
-  // to BLOCK when locking_stength is FOR_NONE.
+  // to BLOCK when locking_strength is FOR_NONE.
   optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 7 [(gogoproto.nullable) = false];
 }
 
@@ -377,7 +377,7 @@ message JoinReaderSpec {
 
   // Indicates the policy to be used by the join for handling conflicting locks
   // held by other active transactions when attempting to lock rows. Always set
-  // to BLOCK when locking_stength is FOR_NONE.
+  // to BLOCK when locking_strength is FOR_NONE.
   optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 10 [(gogoproto.nullable) = false];
 
   // Indicates that the join reader should maintain the ordering of the input
