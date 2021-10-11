@@ -259,7 +259,7 @@ func (b *blockingBuffer) Close(ctx context.Context) error {
 	//
 	// Note: we might be releasing memory prematurely, and that there could still
 	// be some resources batched up in the sink.  We could try to wait for all
-	// the resources to be releases (e.g. memQuota.alllocated reaching 0); however
+	// the resources to be releases (e.g. memQuota.allocated reaching 0); however
 	// it is unlikely to work correctly, and can block Close from ever completing.
 	// That's because the shutdown is often accomplished via context cancellation,
 	// and in those cases we may not even get a notification that a alloc
