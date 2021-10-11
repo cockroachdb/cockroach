@@ -183,7 +183,7 @@ func (m *mockInternalClient) RangeFeed(
 func (m *mockInternalClient) GossipSubscription(
 	ctx context.Context, args *roachpb.GossipSubscriptionRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_GossipSubscriptionClient, error) {
-	return nil, fmt.Errorf("unsupported GossipSubscripion call")
+	return nil, fmt.Errorf("unsupported GossipSubscription call")
 }
 
 func (m *mockInternalClient) Join(
