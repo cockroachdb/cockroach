@@ -57,7 +57,7 @@ var (
 		time.Minute,
 		settings.NonNegativeDuration,
 	)
-	delayPerAttmpt = settings.RegisterDurationSetting(
+	delayPerAttempt = settings.RegisterDurationSetting(
 		"bulkio.backup.read_retry_delay",
 		"amount of time since the read-as-of time, per-prior attempt, to wait before making another attempt",
 		time.Second*5,
@@ -302,7 +302,7 @@ func runBackupProcessor(
 						// We're okay with delaying this worker until then since we assume any
 						// other work it could pull off the queue will likely want to delay to
 						// a similar or later time anyway.
-						if delay := delayPerAttmpt.Get(&clusterSettings.SV) - timeutil.Since(span.lastTried); delay > 0 {
+						if delay := delayPerAttempt.Get(&clusterSettings.SV) - timeutil.Since(span.lastTried); delay > 0 {
 							timer.Reset(delay)
 							log.Infof(ctx, "waiting %s to start attempt %d of remaining spans", delay, span.attempts+1)
 							select {
