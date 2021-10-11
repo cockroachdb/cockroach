@@ -121,7 +121,7 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 //
 // Note that both the quiesce and wake-the-leader messages can be dropped or
 // reordered by the transport. The wake-the-leader message is termless so it
-// won't affect elections and, while it triggers reproprosals that won't cause
+// won't affect elections and, while it triggers reproposals that won't cause
 // problems on reordering. If the wake-the-leader message is dropped the leader
 // won't be woken and the follower will eventually call an election.
 //
