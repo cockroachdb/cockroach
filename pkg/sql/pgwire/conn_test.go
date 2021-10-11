@@ -1225,7 +1225,7 @@ func TestConnResultsBufferSize(t *testing.T) {
 }
 
 // Test that closing a connection while authentication was ongoing cancels the
-// auhentication process. In other words, this checks that the server is reading
+// authentication process. In other words, this checks that the server is reading
 // from the connection while authentication is ongoing and so it reacts to the
 // connection closing.
 func TestConnCloseCancelsAuth(t *testing.T) {
