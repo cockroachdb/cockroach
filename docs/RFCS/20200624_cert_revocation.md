@@ -351,7 +351,7 @@ In practice, CRLs are fed using two mechanisms:
   For each URL in this list it checks if it has an entry in the URL ->
   timestamp map. If it does not (URL not known yet), or if the timestamp
   is older than the configured refresh interval, it fetches that URL
-  psynchronously and updates the cache with the results. If there is an
+  asynchronously and updates the cache with the results. If there is an
   error, the URL -> timestamp map is not updated and the TLS cert
   validation fails.
 

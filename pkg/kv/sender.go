@@ -246,7 +246,7 @@ type TxnSender interface {
 	// Note that this method allows for false negatives: sometimes the
 	// client only figures out that it's been pushed when it sends an
 	// EndTxn - i.e. it's possible for the txn to have been pushed
-	// asynchoronously by some other operation (usually, but not
+	// asynchronously by some other operation (usually, but not
 	// exclusively, by a high-priority txn with conflicting writes).
 	IsSerializablePushAndRefreshNotPossible() bool
 
