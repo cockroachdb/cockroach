@@ -148,7 +148,7 @@ type ExternalStorageContext struct {
 }
 
 // ExternalStorageConstructor is a function registered to create instances
-// of a given external storage implamentation.
+// of a given external storage implementation.
 type ExternalStorageConstructor func(
 	context.Context, ExternalStorageContext, roachpb.ExternalStorage,
 ) (ExternalStorage, error)
