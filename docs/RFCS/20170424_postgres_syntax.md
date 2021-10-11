@@ -116,7 +116,7 @@ differing operator precedence can easily be rewritten with parenthesis.
 
 # Drawbacks
 
-Some users may encounter surpsising behavior when they discover that
+Some users may encounter surprising behavior when they discover that
 CockroachDB produces different results for identical queries. These users will
 silently get unexpected results until they discover the differences. However
 since they are moving to a completely new database and we will not be
