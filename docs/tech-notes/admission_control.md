@@ -218,7 +218,7 @@ number of processors, is too high or too low. The adjustment also
 takes into account current usage of slots. The exact heuristic can be
 found in `admission.kvSlotAdjuster`. It monitors the runnable count at
 1ms intervals. The motivation for this high frequency is that sudden
-shifts in CPU/IO ratio or lock cotention can cause the current slot
+shifts in CPU/IO ratio or lock contention can cause the current slot
 count to be inadequate, while leaving the CPU underutilized, which is
 undesirable.
 
