@@ -330,10 +330,15 @@ func (s *crdbSpan) recordStructured(item Structured) {
 	s.recordInternal(sr, &s.mu.recording.structured)
 }
 
-// sizable is a subset for protoutil.Message, for payloads (log records and
-// structured events) that can be recorded.
-type sizable interface {
-	Size() int
+// memorySizable is implemented by log records and structured events for
+// exposing their in-memory size. This size is used to put caps on the payloads
+// accumulated by a span.
+//
+// Note that, as opposed to the Size() method implemented by our
+// protoutil.Messages, MemorySize() aims to represent the memory footprint, not
+// the serialized length.
+type memorySizable interface {
+	MemorySize() int
 }
 
 // inAnEmptyTrace indicates whether or not the containing trace is "empty" (i.e.
@@ -347,11 +352,11 @@ func (s *crdbSpan) markTraceAsNonEmpty() {
 	atomic.StoreInt32(&s.rootSpan.traceEmpty, 1)
 }
 
-func (s *crdbSpan) recordInternal(payload sizable, buffer *sizeLimitedBuffer) {
+func (s *crdbSpan) recordInternal(payload memorySizable, buffer *sizeLimitedBuffer) {
 	s.markTraceAsNonEmpty()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	size := int64(payload.Size())
+	size := int64(payload.MemorySize())
 	if size > buffer.limit {
 		// The incoming payload alone blows past the memory limit. Let's just
 		// drop it.
@@ -364,9 +369,9 @@ func (s *crdbSpan) recordInternal(payload sizable, buffer *sizeLimitedBuffer) {
 		s.mu.recording.dropped = true
 	}
 	for buffer.size > buffer.limit {
-		first := buffer.GetFirst().(sizable)
+		first := buffer.GetFirst().(memorySizable)
 		buffer.RemoveFirst()
-		buffer.size -= int64(first.Size())
+		buffer.size -= int64(first.MemorySize())
 	}
 	buffer.AddLast(payload)
 }
