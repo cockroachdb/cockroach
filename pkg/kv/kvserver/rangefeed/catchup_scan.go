@@ -58,7 +58,7 @@ func NewCatchUpIterator(
 			// CatchUpScan currently emits all inline
 			// values it encounters.
 			//
-			// TODO(ssd): Re-evalutate if this behavior is
+			// TODO(ssd): Re-evaluate if this behavior is
 			// still needed (#69357).
 			InlinePolicy: storage.MVCCIncrementalIterInlinePolicyEmit,
 		})

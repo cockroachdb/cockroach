@@ -267,7 +267,7 @@ define ZipItem {
     Cols ColList
 }
 
-# And is the boolean conjunction operator that evalutes to true only if both of
+# And is the boolean conjunction operator that evaluates to true only if both of
 # its conditions evaluate to true.
 [Scalar, Bool]
 define And {

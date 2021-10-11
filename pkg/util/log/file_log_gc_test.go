@@ -199,6 +199,6 @@ func succeedsSoon(t *testing.T, fn func() error) {
 		time.Sleep(wait)
 	}
 	if lastErr != nil {
-		t.Fatalf("condition failed to evalute: %+v", lastErr)
+		t.Fatalf("condition failed to evaluate: %+v", lastErr)
 	}
 }

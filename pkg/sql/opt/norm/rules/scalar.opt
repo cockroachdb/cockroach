@@ -23,7 +23,7 @@
 #   SELECT * FROM a WHERE a.x = (SELECT SUM(b.x) FROM b)
 #
 # The right side of the equality expression is a constant expression tree, even
-# though it contains an entire subquery, because it always evalutes to the same
+# though it contains an entire subquery, because it always evaluates to the same
 # result. The left side is not a constant expression tree, even though it
 # contains just a single variable, because its value can be different for each
 # row in the table "a".
