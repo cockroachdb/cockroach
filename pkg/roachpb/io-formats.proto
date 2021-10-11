@@ -78,7 +78,7 @@ message MySQLOutfileOptions {
   optional int32 field_separator = 2 [(gogoproto.nullable) = false];
   // enclose is the enclosing (quoting) behavior (i.e. if specified and if optional).
   optional Enclose enclose = 3 [(gogoproto.nullable) = false];
-  // encloser is the character used to enclose (qupte) fields (--fields-enclosed-by)
+  // encloser is the character used to enclose (quote) fields (--fields-enclosed-by)
   optional int32 encloser = 4 [(gogoproto.nullable) = false];
   // has_escape indicates that an escape character is set (mysql's default is not).
   optional bool has_escape = 5 [(gogoproto.nullable) = false];
