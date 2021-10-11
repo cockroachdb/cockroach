@@ -1123,7 +1123,7 @@ message TableDescriptor {
   // ReplacementOf tracks prior IDs by which this table went -- e.g. when
   // TRUNCATE creates a replacement of a table and swaps it in for the the old
   // one, it should note on the new table the ID of the table it replaced. This
-  // can be used when trying to track a table's history across truncatations.
+  // can be used when trying to track a table's history across truncations.
   optional Replacement replacement_of = 30 [(gogoproto.nullable) = false];
 
   // AuditMode indicates which auditing actions to take when this table is used.
