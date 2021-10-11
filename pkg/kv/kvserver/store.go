@@ -2251,7 +2251,7 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 
 // GetReplica fetches a replica by Range ID. Returns an error if no replica is found.
 //
-// See also GetReplicaIfExists for a more perfomant version.
+// See also GetReplicaIfExists for a more performant version.
 func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 	if r := s.GetReplicaIfExists(rangeID); r != nil {
 		return r, nil
