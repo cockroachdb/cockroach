@@ -26,7 +26,7 @@ const initialState: SessionsState = {
   valid: true,
 };
 
-const ssessionsSlice = createSlice({
+const sessionsSlice = createSlice({
   name: `${DOMAIN_NAME}/sessions`,
   initialState,
   reducers: {
@@ -48,4 +48,4 @@ const ssessionsSlice = createSlice({
   },
 });
 
-export const { reducer, actions } = ssessionsSlice;
+export const { reducer, actions } = sessionsSlice;
