@@ -84,7 +84,7 @@ Table of contents:
 - [Blindness to error causes in telemetry](#Blindness-to-error-causes-in-telemetry)
 - [Barrier errors with debugging details](#Barrier-errors-with-debugging-details)
 - [Stack traces for troubleshooting](#Stack-traces-for-troubleshooting)
-- [Unexpected errors encoutnered while handling other errors](#Unexpected-errors-encountered-while-handling-other-errors)
+- [Unexpected errors encountered while handling other errors](#Unexpected-errors-encountered-while-handling-other-errors)
 - [Ignored, potentially important errors](#Ignored-potentially-important-errors)
 - [Motivation for a new error library: summary](#Motivation-for-a-new-error-library-summary)
 
