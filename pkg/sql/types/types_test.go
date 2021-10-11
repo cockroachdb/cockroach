@@ -119,12 +119,10 @@ func TestTypes(t *testing.T) {
 		{MakeCollatedString(MakeChar(20), enCollate),
 			MakeScalar(CollatedStringFamily, oid.T_bpchar, 0, 20, enCollate)},
 
-		{MakeCollatedString(typeQChar, enCollate), &T{InternalType: InternalType{
-			Family: CollatedStringFamily, Oid: oid.T_char, Locale: &enCollate}}},
-		{MakeCollatedString(MakeQChar(20), enCollate), &T{InternalType: InternalType{
-			Family: CollatedStringFamily, Oid: oid.T_char, Width: 20, Locale: &enCollate}}},
-		{MakeCollatedString(MakeQChar(20), enCollate),
-			MakeScalar(CollatedStringFamily, oid.T_char, 0, 20, enCollate)},
+		{MakeCollatedString(QChar, enCollate), &T{InternalType: InternalType{
+			Family: CollatedStringFamily, Oid: oid.T_char, Width: 1, Locale: &enCollate}}},
+		{MakeCollatedString(QChar, enCollate),
+			MakeScalar(CollatedStringFamily, oid.T_char, 0, 1, enCollate)},
 
 		{MakeCollatedString(Name, enCollate), &T{InternalType: InternalType{
 			Family: CollatedStringFamily, Oid: oid.T_name, Locale: &enCollate}}},
@@ -381,19 +379,15 @@ func TestTypes(t *testing.T) {
 			Family: StringFamily, Oid: oid.T_varchar, Width: 20, Locale: &emptyLocale}}},
 		{MakeVarChar(20), MakeScalar(StringFamily, oid.T_varchar, 0, 20, emptyLocale)},
 
-		{MakeChar(0), typeBpChar},
-		{MakeChar(0), &T{InternalType: InternalType{
-			Family: StringFamily, Oid: oid.T_bpchar, Locale: &emptyLocale}}},
+		{MakeChar(1), &T{InternalType: InternalType{
+			Family: StringFamily, Oid: oid.T_bpchar, Width: 1, Locale: &emptyLocale}}},
 		{MakeChar(20), &T{InternalType: InternalType{
 			Family: StringFamily, Oid: oid.T_bpchar, Width: 20, Locale: &emptyLocale}}},
 		{MakeChar(20), MakeScalar(StringFamily, oid.T_bpchar, 0, 20, emptyLocale)},
 
-		{MakeQChar(0), typeQChar},
-		{MakeQChar(0), &T{InternalType: InternalType{
-			Family: StringFamily, Oid: oid.T_char, Locale: &emptyLocale}}},
-		{MakeQChar(20), &T{InternalType: InternalType{
-			Family: StringFamily, Oid: oid.T_char, Width: 20, Locale: &emptyLocale}}},
-		{MakeQChar(20), MakeScalar(StringFamily, oid.T_char, 0, 20, emptyLocale)},
+		{QChar, &T{InternalType: InternalType{
+			Family: StringFamily, Oid: oid.T_char, Width: 1, Locale: &emptyLocale}}},
+		{QChar, MakeScalar(StringFamily, oid.T_char, 0, 1, emptyLocale)},
 
 		{Name, &T{InternalType: InternalType{
 			Family: StringFamily, Oid: oid.T_name, Locale: &emptyLocale}}},
@@ -691,7 +685,7 @@ func TestMarshalCompat(t *testing.T) {
 		{MakeString(10), InternalType{Family: StringFamily, Oid: oid.T_text, Width: 10}},
 		{VarChar, InternalType{Family: StringFamily, Oid: oid.T_varchar, VisibleType: visibleVARCHAR}},
 		{MakeChar(10), InternalType{Family: StringFamily, Oid: oid.T_bpchar, Width: 10, VisibleType: visibleCHAR}},
-		{MakeQChar(1), InternalType{Family: StringFamily, Oid: oid.T_char, Width: 1, VisibleType: visibleQCHAR}},
+		{QChar, InternalType{Family: StringFamily, Oid: oid.T_char, Width: 1, VisibleType: visibleQCHAR}},
 		{Name, InternalType{Family: name, Oid: oid.T_name}},
 	}
 
@@ -755,7 +749,7 @@ func TestUnmarshalCompat(t *testing.T) {
 		{InternalType{Family: StringFamily, VisibleType: visibleVARCHAR}, VarChar},
 		{InternalType{Family: StringFamily, VisibleType: visibleVARCHAR, Width: 20}, MakeVarChar(20)},
 		{InternalType{Family: StringFamily, VisibleType: visibleCHAR}, typeBpChar},
-		{InternalType{Family: StringFamily, VisibleType: visibleQCHAR}, typeQChar},
+		{InternalType{Family: StringFamily, VisibleType: visibleQCHAR, Width: 1}, QChar},
 	}
 
 	for _, tc := range testCases {
