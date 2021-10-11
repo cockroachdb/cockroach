@@ -648,7 +648,7 @@ configuration](#default-configuration) is visualized as follows:
   - enable the `redact` parameter on log channels that are centrally collected.
   - avoid exposing data from the USER_ADMIN and SENSITIVE_ACCESS
     channels, even when `redact` is enabled: the patterns of
-    behavior may themselves be sensitive. It is best to restric data
+    behavior may themselves be sensitive. It is best to restrict data
     mining to e.g. the `SQL_PERF`, `OPS` and `HEALTH` channels.
 
 - To make `cockroach` more robust to its standard error stream getting
