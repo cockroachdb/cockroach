@@ -590,6 +590,8 @@ func (t *Tracer) startSpanGeneric(
 		octx     optimizedContext
 		// tagsAlloc preallocates space for crdbSpan.mu.tags.
 		tagsAlloc [3]attribute.KeyValue
+		// structuredEventsAlloc preallocates space for structured events.
+		structuredEventsAlloc [3]interface{}
 	}{}
 
 	helper.crdbSpan = crdbSpan{
@@ -605,8 +607,8 @@ func (t *Tracer) startSpanGeneric(
 		testing: &t.testing,
 	}
 	helper.crdbSpan.mu.operation = opName
-	helper.crdbSpan.mu.recording.logs = newSizeLimitedBuffer(maxLogBytesPerSpan)
-	helper.crdbSpan.mu.recording.structured = newSizeLimitedBuffer(maxStructuredBytesPerSpan)
+	helper.crdbSpan.mu.recording.logs = newSizeLimitedBuffer(maxLogBytesPerSpan, nil /* scratch */)
+	helper.crdbSpan.mu.recording.structured = newSizeLimitedBuffer(maxStructuredBytesPerSpan, helper.structuredEventsAlloc[:])
 	helper.crdbSpan.mu.tags = helper.tagsAlloc[:0]
 	if opts.SpanKind != oteltrace.SpanKindUnspecified {
 		helper.crdbSpan.setTagLocked(spanKindTagKey, attribute.StringValue(opts.SpanKind.String()))
