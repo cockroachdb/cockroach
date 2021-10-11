@@ -463,7 +463,7 @@ func (tc *TxnCoordSender) Send(
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// NOTE: The locking here is unusual. Although it might look like it, we are
 	// NOT holding the lock continuously for the duration of the Send. We lock
-	// here, and unlock at the botton of the interceptor stack, in the
+	// here, and unlock at the bottom of the interceptor stack, in the
 	// txnLockGatekeeper. The we lock again in that interceptor when the response
 	// comes, and unlock again in the defer below.
 	tc.mu.Lock()
