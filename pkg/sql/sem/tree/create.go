@@ -86,7 +86,7 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	if node.CType != "" {
 		// NB: the ctype (formatting customization) is not currently
 		// edited out under FmtAnonymize, because we don't support custom
-		// cutomizations. If/when custom customizations are supported,
+		// customizations. If/when custom customizations are supported,
 		// this should call ctx.FormatNode on the ctype expr.
 		ctx.WriteString(" LC_CTYPE = ")
 		lexbase.EncodeSQLStringWithFlags(&ctx.Buffer, node.CType, ctx.flags.EncodeFlags())
