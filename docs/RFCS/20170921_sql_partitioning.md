@@ -408,7 +408,7 @@ are pinned to an Australian datacenter, than reads and writes will be fast (as
 long as the cross-ocean link has enough bandwidth that the third replica doesn’t
 fall behind and hit the quota pool). If those two replicas are in the same
 datacenter, then loss of one datacenter can lead to data unavailability, so some
-deployments may want two separate Austrialian datacenters. If all three replicas
+deployments may want two separate Australian datacenters. If all three replicas
 are in Australian datacenters, then three Australian datacenters are needed to
 be resilient to a datacenter loss.
 
