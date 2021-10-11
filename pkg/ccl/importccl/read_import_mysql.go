@@ -611,7 +611,7 @@ func toNameList(cols mysql.Columns) tree.NameList {
 // mysqlColToCockroach attempts to convert a parsed MySQL column definition to a
 // Cockroach column definition, mapping the mysql type to its closest Cockroach
 // counterpart (or returning an error if it is unable to do so).
-// To the extent possible, parameters such as length or precision are preseved
+// To the extent possible, parameters such as length or precision are preserved
 // even if they have only cosmetic (i.e. when viewing schemas) effects compared
 // to their behavior in MySQL.
 func mysqlColToCockroach(
