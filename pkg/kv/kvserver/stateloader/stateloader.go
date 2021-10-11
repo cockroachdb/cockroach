@@ -341,7 +341,7 @@ func (rsl StateLoader) MigrateToRangeAppliedStateKey(
 // SetLegacyAppliedIndex sets the legacy {raft,lease} applied index values,
 // properly accounting for existing keys in the returned stats.
 //
-// The range applied state key cannot already exist or an assetion will be
+// The range applied state key cannot already exist or an assertion will be
 // triggered. See comment on SetRangeAppliedState for why this is "legacy".
 func (rsl StateLoader) SetLegacyAppliedIndex(
 	ctx context.Context,
@@ -376,7 +376,7 @@ func (rsl StateLoader) SetLegacyAppliedIndex(
 // index values during write operations where we definitively know the size of
 // the previous values.
 //
-// The range applied state key cannot already exist or an assetion will be
+// The range applied state key cannot already exist or an assertion will be
 // triggered. See comment on SetRangeAppliedState for why this is "legacy".
 func (rsl StateLoader) SetLegacyAppliedIndexBlind(
 	ctx context.Context,
