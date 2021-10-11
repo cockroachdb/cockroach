@@ -52,6 +52,11 @@ exp,benchmark
 20,Grant/grant_all_on_3_tables
 17,GrantRole/grant_1_role
 20,GrantRole/grant_2_roles
+10,InternalExecutor/has_schema_privilege_1_col
+14,InternalExecutor/has_schema_privilege_2_col
+18,InternalExecutor/has_schema_privilege_3_col
+48,InternalExecutor/has_schema_privilege_3_schemas_3_col
+72,InternalExecutor/has_schema_privilege_5_schemas_3_col
 2,ORMQueries/activerecord_type_introspection_query
 2,ORMQueries/django_table_introspection_1_table
 2,ORMQueries/django_table_introspection_4_tables
@@ -60,8 +65,13 @@ exp,benchmark
 2,ORMQueries/has_column_privilege_using_column_name
 2,ORMQueries/has_table_privilege_real_table
 2,ORMQueries/has_table_privilege_virtual_table
+3,ORMQueries/information_schema._pg_index_position
 2,ORMQueries/pg_attribute
 2,ORMQueries/pg_class
+4,ORMQueries/pg_is_other_temp_schema
+4,ORMQueries/pg_is_other_temp_schema_multiple_times
+2,ORMQueries/pg_my_temp_schema
+2,ORMQueries/pg_my_temp_schema_multiple_times
 2,ORMQueries/pg_namespace
 2,ORMQueries/pg_type
 16,Revoke/revoke_all_on_1_table

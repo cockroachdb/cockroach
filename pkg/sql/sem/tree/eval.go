@@ -3229,7 +3229,7 @@ type EvalPlanner interface {
 		ctx context.Context,
 		opName string,
 		txn *kv.Txn,
-		session sessiondata.InternalExecutorOverride,
+		session *sessiondata.SessionData,
 		stmt string,
 		qargs ...interface{}) (Datums, error)
 
@@ -3237,7 +3237,7 @@ type EvalPlanner interface {
 		ctx context.Context,
 		opName string,
 		txn *kv.Txn,
-		session sessiondata.InternalExecutorOverride,
+		session *sessiondata.SessionData,
 		stmt string,
 		qargs ...interface{},
 	) (InternalRows, error)

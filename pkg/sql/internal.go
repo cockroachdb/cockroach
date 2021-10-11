@@ -71,6 +71,8 @@ type InternalExecutor struct {
 	//
 	// Warning: Not safe for concurrent use from multiple goroutines.
 	syntheticDescriptors []catalog.Descriptor
+
+	extraTxnState ExtraTxnState
 }
 
 // WithSyntheticDescriptors sets the synthetic descriptors before running the
@@ -125,6 +127,10 @@ func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData)
 	ie.sessionDataStack = sessiondata.NewStack(sessionData)
 }
 
+func (ie *InternalExecutor) SetExtraTxnState(extraTxnState ExtraTxnState) {
+	ie.extraTxnState = extraTxnState
+}
+
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
 // takes in a StmtBuf into which commands can be pushed and a WaitGroup that
 // will be signaled when connEx.run() returns.
@@ -143,6 +149,7 @@ func (ie *InternalExecutor) initConnEx(
 	sd *sessiondata.SessionData,
 	stmtBuf *StmtBuf,
 	wg *sync.WaitGroup,
+	extraTxnState ExtraTxnState,
 	syncCallback func([]resWithPos),
 	errCallback func(error),
 ) {
@@ -182,6 +189,7 @@ func (ie *InternalExecutor) initConnEx(
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
 			applicationStats,
+			extraTxnState,
 		)
 	} else {
 		ex = ie.s.newConnExecutorWithTxn(
@@ -195,6 +203,7 @@ func (ie *InternalExecutor) initConnEx(
 			txn,
 			ie.syntheticDescriptors,
 			applicationStats,
+			extraTxnState,
 		)
 	}
 
@@ -570,9 +579,6 @@ func (ie *InternalExecutor) QueryIteratorEx(
 
 // applyOverrides overrides the respective fields from sd for all the fields set on o.
 func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.SessionData) {
-	if o.SessionData != nil {
-		*sd = *o.SessionData
-	}
 	if !o.User.Undefined() {
 		sd.UserProto = o.User.EncodeProto()
 	}
@@ -588,7 +594,6 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.DatabaseIDToTempSchemaID != nil {
 		sd.DatabaseIDToTempSchemaID = o.DatabaseIDToTempSchemaID
 	}
-	sd.StubCatalogTablesEnabled = o.StubCatalogTables
 }
 
 func (ie *InternalExecutor) maybeRootSessionDataOverride(
@@ -732,7 +737,7 @@ func (ie *InternalExecutor) execInternal(
 		stmtBuf.Close()
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
+	ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, ie.extraTxnState, syncCallback, errCallback)
 
 	typeHints := make(tree.PlaceholderTypes, len(datums))
 	for i, d := range datums {

@@ -615,7 +615,7 @@ func (s *Server) SetupConn(
 
 	ex := s.newConnExecutor(
 		ctx, sdMutIterator, stmtBuf, clientComm, memMetrics, &s.Metrics,
-		s.sqlStats.GetApplicationStats(sd.ApplicationName),
+		s.sqlStats.GetApplicationStats(sd.ApplicationName), ExtraTxnState{},
 	)
 	return ConnectionHandler{ex}, nil
 }
@@ -724,6 +724,7 @@ func (s *Server) newConnExecutor(
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
 	applicationStats sqlstats.ApplicationStats,
+	extraTxnState ExtraTxnState,
 ) *connExecutor {
 	// Create the various monitors.
 	// The session monitors are started in activate().
@@ -809,6 +810,12 @@ func (s *Server) newConnExecutor(
 	}
 
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
+	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
+	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
+
+	ex.sessionTracing.ex = ex
+	ex.transitionCtx.sessionTracing = &ex.sessionTracing
+
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
 		prepStmts: make(map[string]*PreparedStatement),
 		portals:   make(map[string]PreparedPortal),
@@ -818,18 +825,19 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(
-		descs.NewTemporarySchemaProvider(sdMutIterator.sds),
-	)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
-	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
-	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
-
-	ex.sessionTracing.ex = ex
-	ex.transitionCtx.sessionTracing = &ex.sessionTracing
-
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
+
+	if extraTxnState.descs != nil {
+		ex.extraTxnState.descCollection = extraTxnState.descs
+		ex.extraTxnState.keepDescCollectionOnClose = true
+	} else {
+		descCol := s.cfg.CollectionFactory.MakeCollection(
+			descs.NewTemporarySchemaProvider(sdMutIterator.sds),
+		)
+		ex.extraTxnState.descCollection = &descCol
+	}
 
 	ex.initPlanner(ctx, &ex.planner)
 
@@ -857,6 +865,7 @@ func (s *Server) newConnExecutorWithTxn(
 	txn *kv.Txn,
 	syntheticDescs []catalog.Descriptor,
 	applicationStats sqlstats.ApplicationStats,
+	extraTxnState ExtraTxnState,
 ) *connExecutor {
 	ex := s.newConnExecutor(
 		ctx,
@@ -866,6 +875,7 @@ func (s *Server) newConnExecutorWithTxn(
 		memMetrics,
 		srvMetrics,
 		applicationStats,
+		extraTxnState,
 	)
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
@@ -1114,7 +1124,12 @@ type connExecutor struct {
 	// transaction finishes or gets retried.
 	extraTxnState struct {
 		// descCollection collects descriptors used by the current transaction.
-		descCollection descs.Collection
+		descCollection *descs.Collection
+
+		// keepDescsCollectionOnClose determines if descCollection should be
+		// flushed on connExec's close. If the descCollection is passed in
+		// from the parent, we do not want to flush it.
+		keepDescCollectionOnClose bool
 
 		// jobs accumulates jobs staged for execution inside the transaction.
 		// Staging happens when executing statements that are implemented with a
@@ -1482,7 +1497,9 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 		delete(ex.extraTxnState.schemaChangeJobRecords, k)
 	}
 
-	ex.extraTxnState.descCollection.ReleaseAll(ctx)
+	if !ex.extraTxnState.keepDescCollectionOnClose {
+		ex.extraTxnState.descCollection.ReleaseAll(ctx)
+	}
 
 	// Close all portals.
 	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
@@ -2445,7 +2462,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		RegionsServer:          ex.server.cfg.RegionsServer,
 		SQLStatusServer:        ex.server.cfg.SQLStatusServer,
 		MemMetrics:             &ex.memMetrics,
-		Descs:                  &ex.extraTxnState.descCollection,
+		Descs:                  ex.extraTxnState.descCollection,
 		ExecCfg:                ex.server.cfg,
 		DistSQLPlanner:         ex.server.cfg.DistSQLPlanner,
 		TxnModesSetter:         ex,
@@ -2897,7 +2914,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		return nil
 	}
 	executor := scexec.NewExecutor(
-		ex.planner.txn, &ex.extraTxnState.descCollection, ex.server.cfg.Codec,
+		ex.planner.txn, ex.extraTxnState.descCollection, ex.server.cfg.Codec,
 		nil /* backfiller */, nil /* jobTracker */, ex.server.cfg.NewSchemaChangerTestingKnobs,
 		ex.server.cfg.JobRegistry, ex.planner.execCfg.InternalExecutor,
 	)
@@ -2948,7 +2965,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	}
 	// Write the job ID to the affected descriptors.
 	if err := scexec.UpdateDescriptorJobIDs(
-		ctx, ex.planner.Txn(), &ex.extraTxnState.descCollection, descIDs, jobspb.InvalidJobID, job.ID(),
+		ctx, ex.planner.Txn(), ex.extraTxnState.descCollection, descIDs, jobspb.InvalidJobID, job.ID(),
 	); err != nil {
 		return err
 	}

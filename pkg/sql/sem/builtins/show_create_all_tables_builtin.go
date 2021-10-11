@@ -17,7 +17,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -53,10 +52,10 @@ func getTopologicallySortedTableIDs(
 	evalPlanner tree.EvalPlanner,
 	txn *kv.Txn,
 	dbName string,
-	user security.SQLUsername,
+	sessionData *sessiondata.SessionData,
 	acc *mon.BoundAccount,
 ) ([]int64, error) {
-	ids, err := getTableIDs(ctx, evalPlanner, txn, dbName, user, acc)
+	ids, err := getTableIDs(ctx, evalPlanner, txn, dbName, sessionData, acc)
 	if err != nil {
 		return nil, err
 	}
@@ -80,10 +79,8 @@ func getTopologicallySortedTableIDs(
 			ctx,
 			"crdb_internal.show_create_all_tables",
 			txn,
-			sessiondata.InternalExecutorOverride{
-				User:     user,
-				Database: dbName,
-			}, query,
+			sessionData,
+			query,
 			tid,
 		)
 		if err != nil {
@@ -160,7 +157,7 @@ func getTableIDs(
 	evalPlanner tree.EvalPlanner,
 	txn *kv.Txn,
 	dbName string,
-	user security.SQLUsername,
+	sessionData *sessiondata.SessionData,
 	acc *mon.BoundAccount,
 ) ([]int64, error) {
 	query := fmt.Sprintf(`
@@ -174,10 +171,7 @@ func getTableIDs(
 		ctx,
 		"crdb_internal.show_create_all_tables",
 		txn,
-		sessiondata.InternalExecutorOverride{
-			User:     user,
-			Database: dbName,
-		},
+		sessionData,
 		query,
 		dbName,
 	)
@@ -254,7 +248,7 @@ func getCreateStatement(
 	txn *kv.Txn,
 	id int64,
 	dbName string,
-	user security.SQLUsername,
+	sessionData *sessiondata.SessionData,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
 		SELECT
@@ -266,10 +260,7 @@ func getCreateStatement(
 		ctx,
 		"crdb_internal.show_create_all_tables",
 		txn,
-		sessiondata.InternalExecutorOverride{
-			User:     user,
-			Database: dbName,
-		},
+		sessionData,
 		query,
 		id,
 	)
@@ -288,7 +279,7 @@ func getAlterStatements(
 	txn *kv.Txn,
 	id int64,
 	dbName string,
-	user security.SQLUsername,
+	sessionData *sessiondata.SessionData,
 	statementType string,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
@@ -301,10 +292,7 @@ func getAlterStatements(
 		ctx,
 		"crdb_internal.show_create_all_tables",
 		txn,
-		sessiondata.InternalExecutorOverride{
-			User:     user,
-			Database: dbName,
-		},
+		sessionData,
 		query,
 		id,
 	)
