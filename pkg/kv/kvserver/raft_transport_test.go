@@ -628,7 +628,7 @@ func TestSendFailureToConnectDoesNotHangRaft(t *testing.T) {
 	// call). The test ensures that the Send call does not block.
 	const rangeID, from, to = 1, 1, 2
 	transport := rttc.AddNode(from)
-	// Set up a plain old TCP listener that's not going to accept any connecitons
+	// Set up a plain old TCP listener that's not going to accept any connections
 	// which will lead to blocking during dial.
 	ln, err := net.Listen("tcp", util.TestAddr.String())
 	require.NoError(t, err)
