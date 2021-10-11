@@ -94,7 +94,7 @@ var CommuteRelationshipMap = map[RelationshipType]RelationshipType{
 //   rooted at the covering of g, (b) all the parent nodes of the covering
 //   of g. The individual entries in (b) are representable as ranges of
 //   length 1. All of this is represented as UnionKeySpans. Covers, which
-//   is the shape that g covers, currently delegates to Interects so
+//   is the shape that g covers, currently delegates to Intersects so
 //   returns the same.
 //
 // - CoveredBy, which are the shapes that g is covered-by, needs to compute
