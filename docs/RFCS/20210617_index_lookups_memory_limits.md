@@ -730,7 +730,7 @@ back into the request pool, waiting for budget to open up.
 There's a tension between the desire to effectively batch requests into
 single-range batches, and the desire to send requests as soon as there's some
 budget available. Simply sending a `BatchRequest` with all the requests
-targetting a range is not enough; that `BatchRequest` also needs to have a
+targeting a range is not enough; that `BatchRequest` also needs to have a
 decent budget. Otherwise, we might as well have sent the requests one by one. If
 there's very little budget available, we're better off waiting for more budget
 to become available. We could define a minimum budget required in order to send
