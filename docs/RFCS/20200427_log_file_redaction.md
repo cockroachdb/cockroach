@@ -412,7 +412,7 @@ type SafePrinter interface {
    SafeString(string)  // forced by linter to only take literals
    Safe(SafeFormatter)
 
-   // The following methods dynamicall check for the SafeFormatter
+   // The following methods dynamically check for the SafeFormatter
    // interface and either use that, or mark the argument
    // payload as unsafe.
    Print(args ...interface{})
