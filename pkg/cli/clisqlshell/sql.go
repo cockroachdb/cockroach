@@ -1937,7 +1937,7 @@ func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 		// the constant string parser.helpHintPrefix.
 		//
 		// However, we cannot include the 'parser' package here because it
-		// would incur a hughe dependency overhead.
+		// would incur a hugh dependency overhead.
 		if strings.HasPrefix(message, "help token in input") && strings.HasPrefix(hint, "help:") {
 			// Yes: return it.
 			helpText = hint[6:]
