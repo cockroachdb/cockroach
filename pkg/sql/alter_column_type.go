@@ -335,30 +335,64 @@ func alterColumnTypeGeneral(
 
 	// Create the default expression for the new column.
 	hasDefault := col.HasDefault()
+	hasUpdate := col.HasOnUpdate()
 	var newColDefaultExpr *string
 	if hasDefault {
-		if col.ColumnDesc().HasNullDefault() {
-			s := tree.Serialize(tree.DNull)
-			newColDefaultExpr = &s
-		} else {
-			// The default expression for the new column is applying the
-			// computed expression to the previous default expression.
-			expr, err := parser.ParseExpr(col.GetDefaultExpr())
-			if err != nil {
-				return err
-			}
-			typedExpr, err := expr.TypeCheck(ctx, &params.p.semaCtx, toType)
-			if err != nil {
-				return err
-			}
-			castExpr := tree.NewTypedCastExpr(typedExpr, toType)
-			newDefaultComputedExpr, err := castExpr.Eval(params.EvalContext())
-			if err != nil {
-				return err
-			}
-			s := tree.Serialize(newDefaultComputedExpr)
-			newColDefaultExpr = &s
+		expr, err := parser.ParseExpr(col.GetDefaultExpr())
+		if err != nil {
+			return err
 		}
+		typedExpr, err := expr.TypeCheck(ctx, &params.p.semaCtx, toType)
+		if err != nil {
+			return err
+		}
+
+		if !toType.Equivalent(typedExpr.ResolvedType()) {
+			colName := col.ColName()
+			return pgerror.Newf(
+				pgcode.DatatypeMismatch,
+				"default for column %q cannot be cast automatically to type %s",
+				colName,
+				toType.SQLString(),
+			)
+		}
+
+		castExpr := tree.NewTypedCastExpr(typedExpr, toType)
+		newDefaultComputedExpr, err := castExpr.Eval(params.EvalContext())
+		if err != nil {
+			return err
+		}
+		s := tree.Serialize(newDefaultComputedExpr)
+		newColDefaultExpr = &s
+	}
+
+	if hasUpdate {
+		expr, err := parser.ParseExpr(col.GetOnUpdateExpr())
+		if err != nil {
+			return err
+		}
+		typedExpr, err := expr.TypeCheck(ctx, &params.p.semaCtx, toType)
+		if err != nil {
+			return err
+		}
+
+		if !toType.Equivalent(typedExpr.ResolvedType()) {
+			colName := col.ColName()
+			return pgerror.Newf(
+				pgcode.DatatypeMismatch,
+				"on update for column %q cannot be cast automatically to type %s",
+				colName,
+				toType.SQLString(),
+			)
+		}
+
+		castExpr := tree.NewTypedCastExpr(typedExpr, toType)
+		newDefaultComputedExpr, err := castExpr.Eval(params.EvalContext())
+		if err != nil {
+			return err
+		}
+		s := tree.Serialize(newDefaultComputedExpr)
+		newColDefaultExpr = &s
 	}
 
 	newCol := descpb.ColumnDescriptor{
