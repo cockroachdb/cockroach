@@ -2465,7 +2465,7 @@ func TestToDecimal(t *testing.T) {
 
 			dec2, ok := json.AsDecimal()
 			if !ok {
-				t.Fatalf("could not cast %v to decmial", json)
+				t.Fatalf("could not cast %v to decimal", json)
 			}
 
 			if dec1.Cmp(dec2) != 0 {
