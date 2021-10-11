@@ -97,7 +97,7 @@ var slowQueryLogFullTableScans = settings.RegisterBoolSetting(
 
 var unstructuredQueryLog = settings.RegisterBoolSetting(
 	"sql.log.unstructured_entries.enabled",
-	"when set, SQL execution and audit logs use the pre-v21.1 unstrucured format",
+	"when set, SQL execution and audit logs use the pre-v21.1 unstructured format",
 	false,
 )
 
