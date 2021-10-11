@@ -143,7 +143,7 @@ func AfterTest(t testing.TB) func() {
 	}
 }
 
-// diffGoroutines compares the current goroutines with the base snapshort and
+// diffGoroutines compares the current goroutines with the base snapshot and
 // returns an error if they differ.
 func diffGoroutines(base map[int64]string) error {
 	var leaked []string
