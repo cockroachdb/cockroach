@@ -390,7 +390,7 @@ Experience revealed two more problems with this interface however:
   as hex value (`Infof(ctx, "%x", myInt)`, or zero-padded `Infof(ctx,
   "%08d" myInt)` and `SafeMessager` does not support this.
 
-The proposed evolution to this sytem is inspired by Go's standard
+The proposed evolution to this system is inspired by Go's standard
 `fmt.Formatter` interface:
 
 ```go
