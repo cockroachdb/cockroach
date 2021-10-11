@@ -884,7 +884,7 @@ func (t *btree) Clone() Tree {
 	return t.cloneInternal()
 }
 
-// adjustRange sets the Range to the maximum extent of the childrens' Range
+// adjustRange sets the Range to the maximum extent of the children's Range
 // spans and its range spans.
 func (n *node) adjustRange() {
 	n.Range.Start = n.rangeStart()
