@@ -781,7 +781,7 @@ The rocksdb `env_encryption` functionality is barely tested and has no known ope
 This raises serious concerns about the correctness of the proposed approach.
 
 We can improve testing of this functionality at the rocksdb level as well as within cockroach.
-A testing plan must be developped and implemented to provide some assurances of correctness.
+A testing plan must be developed and implemented to provide some assurances of correctness.
 
 ### Complexity of configuration and monitoring
 
