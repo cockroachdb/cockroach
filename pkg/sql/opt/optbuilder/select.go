@@ -1216,6 +1216,7 @@ func (b *Builder) exprIsLateral(t tree.TableExpr) bool {
 	}
 	// Expressions which explicitly use the LATERAL keyword are lateral.
 	if ate.Lateral {
+		telemetry.Inc(sqltelemetry.LateralJoinUseCounter)
 		return true
 	}
 	// SRFs are always lateral.
