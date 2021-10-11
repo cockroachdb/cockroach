@@ -1946,7 +1946,7 @@ func (ds *DistSender) sendToReplicas(
 			// is correct, we want the serve to return an update, at which point
 			// the cached entry will no longer be "speculative".
 			DescriptorGeneration: routing.Desc().Generation,
-			// The LeaseSequence will be 0 if the cache doen't have lease info,
+			// The LeaseSequence will be 0 if the cache doesn't have lease info,
 			// or has a speculative lease. Like above, this asks the server to
 			// return an update.
 			LeaseSequence: routing.LeaseSeq(),
