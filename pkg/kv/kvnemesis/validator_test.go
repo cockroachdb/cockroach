@@ -1273,7 +1273,7 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
-			name: "one tranactional scan after write and delete returning extra key",
+			name: "one transactional scan after write and delete returning extra key",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
