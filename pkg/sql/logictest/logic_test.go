@@ -13,7 +13,6 @@ package logictest
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -27,7 +26,6 @@ import (
 // See the comments in logic.go for more details.
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderDeadlockWithIssue(t, 71366)
 	RunLogicTest(t, TestServerArgs{}, "testdata/logic_test/[^.]*")
 }
 
@@ -35,7 +33,6 @@ func TestLogic(t *testing.T) {
 // for runSQLLiteLogicTest for more detail on these tests.
 func TestSqlLiteLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderDeadlockWithIssue(t, 71366)
 	RunSQLLiteLogicTest(t, "" /* configOverride */)
 }
 
