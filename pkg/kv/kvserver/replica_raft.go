@@ -1573,7 +1573,7 @@ func shouldCampaignOnWake(
 	// when all replicas create their raft groups at about the same
 	// time, with a lease pre-assigned to one of them). Note that
 	// thanks to PreVote, unnecessary campaigns are not disruptive so
-	// we should err on the side of campaigining here.
+	// we should err on the side of campaigning here.
 	if leaseStatus.IsValid() && !leaseStatus.OwnedBy(storeID) {
 		return false
 	}
