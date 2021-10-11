@@ -353,13 +353,13 @@ ORDER BY
 			currentCols = nil
 		}
 
-		coltyp, err := s.typeFromSQLTypeSyntax(typ)
+		coltype, err := s.typeFromSQLTypeSyntax(typ)
 		if err != nil {
 			return nil, err
 		}
 		column := tree.ColumnTableDef{
 			Name: col,
-			Type: coltyp,
+			Type: coltype,
 		}
 		if nullable {
 			column.Nullable.Nullability = tree.Null
