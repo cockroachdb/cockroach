@@ -28,6 +28,7 @@ import (
 	"math/bits"
 	"math/rand"
 	"net"
+	"regexp"
 	"regexp/syntax"
 	"strconv"
 	"strings"
@@ -5708,6 +5709,35 @@ value if you rely on the HLC for accuracy.`,
 			},
 			Info: "This function can be used to report the usage of an arbitrary feature. The " +
 				"feature name is hashed for privacy purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.increment_orm_version_counter": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     categorySystemInfo,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"orm_version", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				// Truncate the minor release version.
+				// E.g. "SQLAlchemy 1.4.25" will be truncated to "SQLAlchemy 1.4".
+				matches := regexp.MustCompile(`(.+)\.`).FindStringSubmatch(string(s))
+				if len(matches) < 2 {
+					return nil, errors.Newf("expected version to be of xx.xx format, but got %T", args[0])
+				}
+				version := matches[1]
+				telemetry.Inc(sqltelemetry.HashedFeatureCounter(version))
+				return tree.DBoolTrue, nil
+			},
+			Info: "This function can be used to report the usage of an arbitrary orm version. The " +
+				"orm version is hashed for privacy purposes.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),

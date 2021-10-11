@@ -8,3 +8,13 @@ feature-usage
 SELECT crdb_internal.increment_feature_counter('abc');
 ----
 sql.hashed.ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+
+feature-usage
+SELECT crdb_internal.increment_orm_version_counter('SQLAlchemy 1.4.25');
+----
+sql.hashed.02da1babdbf411bb46832b6aa131e58d63b01291eaa027b3f5c583e47bfcdcba
+
+feature-usage
+SELECT crdb_internal.increment_orm_version_counter('SQLAlchemy 1.4.24');
+----
+sql.hashed.02da1babdbf411bb46832b6aa131e58d63b01291eaa027b3f5c583e47bfcdcba
