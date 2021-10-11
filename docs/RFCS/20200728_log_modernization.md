@@ -744,7 +744,7 @@ list or *documentation* of channels and severities is modified in
 
 The list of supported channels and severities is now auto-generated in
 the source tree at location `docs/generated/logging.md`, ready to be
-embeded in the reference documentation.
+embedded in the reference documentation.
 
 It is also advised to use `cockroach debug check-log-config` with the
 `--only-channels` parameter to simplify diagrams for inclusion in
