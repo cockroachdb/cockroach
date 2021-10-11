@@ -1111,7 +1111,7 @@ var ingestDelayTime = settings.RegisterDurationSetting(
 // number of files in it or if PendingCompactionBytesEstimate is elevated. This
 // it is intended to be called before ingesting a new SST, since we'd rather
 // backpressure the bulk operation adding SSTs than slow down the whole RocksDB
-// instance and impact all forground traffic by adding too many files to it.
+// instance and impact all foreground traffic by adding too many files to it.
 // After the number of L0 files exceeds the configured limit, it gradually
 // begins delaying more for each additional file in L0 over the limit until
 // hitting its configured (via settings) maximum delay. If the pending
