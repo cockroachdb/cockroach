@@ -379,5 +379,5 @@ Drawbacks:
 * "too much magic"
 
 Advantages:
-* full validation can provide user-friendly error messages on improper files (still obscure without decent knowledge of certficates).
+* full validation can provide user-friendly error messages on improper files (still obscure without decent knowledge of certificates).
 * support for multiple ways of generating/deploying certificates and keys.
