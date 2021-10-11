@@ -462,7 +462,7 @@ func TestClosedTimestampCanServeForWritingTransaction(t *testing.T) {
 	baRead.Txn.Sequence++
 
 	// The write timestamp of the transaction is still closed, so a read-only
-	// request by the transaction should be servicable by followers. This is
+	// request by the transaction should be serviceable by followers. This is
 	// because the writing transaction can still read its writes on the
 	// followers.
 	testutils.SucceedsSoon(t, func() error {
