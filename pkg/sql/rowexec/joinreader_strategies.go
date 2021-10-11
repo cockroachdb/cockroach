@@ -137,6 +137,9 @@ type joinReaderNoOrderingStrategy struct {
 
 	groupingState *inputBatchGroupingState
 
+	// memAcc is owned by this strategy and is closed when the strategy is
+	// closed. inputRows are owned by the joinReader, so they aren't accounted
+	// for with this memory account.
 	memAcc *mon.BoundAccount
 }
 
@@ -180,9 +183,6 @@ func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
 ) (joinReaderState, error) {
 	matchingInputRowIndices := s.getMatchingRowIndices(key)
 	if s.isPartialJoin {
-		// Perform memory accounting.
-		beforeSize := s.memUsage()
-
 		// In the case of partial joins, only process input rows that have not been
 		// matched yet. Make a copy of the matching input row indices to avoid
 		// overwriting the caller's slice.
@@ -195,8 +195,7 @@ func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
 		matchingInputRowIndices = s.scratchMatchingInputRowIndices
 
 		// Perform memory accounting.
-		afterSize := s.memUsage()
-		if err := s.memAcc.Resize(s.Ctx, beforeSize, afterSize); err != nil {
+		if err := s.memAcc.ResizeTo(s.Ctx, s.memUsage()); err != nil {
 			return jrStateUnknown, err
 		}
 	}
@@ -222,9 +221,6 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 		}
 
 		if !s.emitState.unmatchedInputRowIndicesInitialized {
-			// Perform memory accounting.
-			beforeSize := s.memUsage()
-
 			s.emitState.unmatchedInputRowIndices = s.emitState.unmatchedInputRowIndices[:0]
 			for inputRowIdx := range s.inputRows {
 				if s.groupingState.isUnmatched(inputRowIdx) {
@@ -235,8 +231,7 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 			s.emitState.unmatchedInputRowIndicesCursor = 0
 
 			// Perform memory accounting.
-			afterSize := s.memUsage()
-			if err := s.memAcc.Resize(s.Ctx, beforeSize, afterSize); err != nil {
+			if err := s.memAcc.ResizeTo(s.Ctx, s.memUsage()); err != nil {
 				return nil, jrStateUnknown, err
 			}
 		}
@@ -297,7 +292,11 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 
 func (s *joinReaderNoOrderingStrategy) spilled() bool { return false }
 
-func (s *joinReaderNoOrderingStrategy) close(_ context.Context) {}
+func (s *joinReaderNoOrderingStrategy) close(ctx context.Context) {
+	s.memAcc.Close(ctx)
+	s.joinReaderSpanGenerator.close(ctx)
+	*s = joinReaderNoOrderingStrategy{}
+}
 
 // memUsage returns the size of the data structures in the
 // joinReaderNoOrderingStrategy for memory accounting purposes.
@@ -341,6 +340,14 @@ type joinReaderIndexJoinStrategy struct {
 		processingLookupRow bool
 		lookedUpRow         rowenc.EncDatumRow
 	}
+
+	// memAcc is owned by this strategy and is closed when the strategy is
+	// closed. inputRows are owned by the joinReader, so they aren't accounted
+	// for with this memory account.
+	//
+	// Note that joinReaderIndexJoinStrategy doesn't actually need a
+	// memory account, and it's only responsible for closing it.
+	memAcc *mon.BoundAccount
 }
 
 // getLookupRowsBatchSizeHint returns the batch size for the join reader index
@@ -395,7 +402,11 @@ func (s *joinReaderIndexJoinStrategy) spilled() bool {
 	return false
 }
 
-func (s *joinReaderIndexJoinStrategy) close(ctx context.Context) {}
+func (s *joinReaderIndexJoinStrategy) close(ctx context.Context) {
+	s.memAcc.Close(ctx)
+	s.joinReaderSpanGenerator.close(ctx)
+	*s = joinReaderIndexJoinStrategy{}
+}
 
 // partialJoinSentinel is used as the inputRowIdxToLookedUpRowIndices value for
 // semi- and anti-joins, where we only need to know about the existence of a
@@ -477,7 +488,14 @@ type joinReaderOrderingStrategy struct {
 	// the second join in paired-joins).
 	outputGroupContinuationForLeftRow bool
 
+	// memAcc is owned by this strategy and is closed when the strategy is
+	// closed. inputRows are owned by the joinReader, so they aren't accounted
+	// for with this memory account.
 	memAcc *mon.BoundAccount
+
+	// testingInfoSpilled is set when the strategy is closed to indicate whether
+	// it has spilled to disk during its lifetime. Used only in tests.
+	testingInfoSpilled bool
 }
 
 func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
@@ -515,10 +533,8 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 			s.inputRowIdxToLookedUpRowIndices[i] = s.inputRowIdxToLookedUpRowIndices[i][:0]
 		}
 	} else {
-		beforeSize := s.memUsage(nil)
 		s.inputRowIdxToLookedUpRowIndices = make([][]int, len(rows))
-		afterSize := s.memUsage(nil)
-		if err := s.memAcc.Resize(s.Ctx, beforeSize, afterSize); err != nil {
+		if err := s.memAcc.ResizeTo(s.Ctx, s.memUsage(nil /* matchingInputRowIndices */)); err != nil {
 			return nil, err
 		}
 	}
@@ -548,7 +564,6 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	}
 
 	// Update our map from input rows to looked up rows.
-	beforeSize := s.memUsage(matchingInputRowIndices)
 	for _, inputRowIdx := range matchingInputRowIndices {
 		if !s.isPartialJoin {
 			s.inputRowIdxToLookedUpRowIndices[inputRowIdx] = append(
@@ -576,8 +591,7 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	}
 
 	// Perform memory accounting.
-	afterSize := s.memUsage(matchingInputRowIndices)
-	if err := s.memAcc.Resize(s.Ctx, beforeSize, afterSize); err != nil {
+	if err := s.memAcc.ResizeTo(s.Ctx, s.memUsage(matchingInputRowIndices)); err != nil {
 		return jrStateUnknown, err
 	}
 
@@ -670,12 +684,21 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 }
 
 func (s *joinReaderOrderingStrategy) spilled() bool {
-	return s.lookedUpRows.Spilled()
+	if s.lookedUpRows != nil {
+		return s.lookedUpRows.Spilled()
+	}
+	// The strategy must have been closed.
+	return s.testingInfoSpilled
 }
 
 func (s *joinReaderOrderingStrategy) close(ctx context.Context) {
+	s.memAcc.Close(ctx)
+	s.joinReaderSpanGenerator.close(ctx)
 	if s.lookedUpRows != nil {
 		s.lookedUpRows.Close(ctx)
+	}
+	*s = joinReaderOrderingStrategy{
+		testingInfoSpilled: s.lookedUpRows.Spilled(),
 	}
 }
 
