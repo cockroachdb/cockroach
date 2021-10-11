@@ -142,7 +142,7 @@ func (r *registration) publish(event *roachpb.RangeFeedEvent) {
 }
 
 // validateEvent checks that the event contains enough information for the
-// registation.
+// registration.
 func (r *registration) validateEvent(event *roachpb.RangeFeedEvent) {
 	switch t := event.GetValue().(type) {
 	case *roachpb.RangeFeedValue:
