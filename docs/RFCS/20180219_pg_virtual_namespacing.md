@@ -781,7 +781,7 @@ The resolution rules are very well specified across all SQL engines:
 
     For example, `SELECT (a.b.c.d).e.f` in the query above.
 
-    In constrast, `SELECT a.b.c.d.e.f` would not be allowed, because
+    In contrast, `SELECT a.b.c.d.e.f` would not be allowed, because
      it is ambiguous: it could refer either to `.b.c.d.e.f` in column
      `a` of some implicit table, or `.c.d.e.f` in column `b` of table
      `a`, or `.d.e.f` in column `c` of table `b` in schema `a`, etc.
