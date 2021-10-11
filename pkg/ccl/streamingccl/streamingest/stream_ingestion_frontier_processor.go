@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// PartitionProgressFrequency controls the frequency of partition progress checkopints.
+// PartitionProgressFrequency controls the frequency of partition progress checkpoints.
 var PartitionProgressFrequency = settings.RegisterDurationSetting(
 	"streaming.partition_progress_frequency",
 	"controls the frequency with which partitions update their progress; if 0, disabled.",
