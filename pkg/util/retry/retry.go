@@ -111,7 +111,7 @@ func (r Retry) retryIn() time.Duration {
 //
 // Next is guaranteed to return true on its first call. As such, a retry loop
 // can be thought of as implementing do-while semantics (i.e. always running at
-// least once). Otherwide, if a context and/or closer is present, Next will
+// least once). Otherwise, if a context and/or closer is present, Next will
 // return false if the context is canceled and/or the closer fires while the
 // method is waiting.
 func (r *Retry) Next() bool {

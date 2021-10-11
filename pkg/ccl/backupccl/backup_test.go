@@ -1111,7 +1111,7 @@ func backupAndRestore(
 	} else {
 		// Start a new cluster to restore into.
 		// If the backup is on nodelocal, we need to determine which node it's on.
-		// Othewise, default to 0.
+		// Otherwise, default to 0.
 		backupNodeID := 0
 		if err != nil {
 			t.Fatal(err)
