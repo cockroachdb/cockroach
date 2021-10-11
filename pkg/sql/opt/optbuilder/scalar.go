@@ -588,7 +588,7 @@ func (b *Builder) buildRangeCond(
 
 // checkSubqueryOuterCols uses the subquery outer columns to update the given
 // set of column references and the set of outer columns for any enclosing
-// subuqery. It also performs the following checks:
+// subquery. It also performs the following checks:
 //   1. If aggregates are not allowed in the current context (e.g., if we
 //      are building the WHERE clause), it checks that the subquery does not
 //      reference any aggregates from this scope.
