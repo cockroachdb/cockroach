@@ -55,7 +55,7 @@ func (p *partitionerToOperator) Init(ctx context.Context) {
 	if !p.InitHelper.Init(ctx) {
 		return
 	}
-	// We will be dequeueing the batches from disk into this batch, so we
+	// We will be dequeuing the batches from disk into this batch, so we
 	// need to have enough capacity to support the batches of any size.
 	p.batch = p.allocator.NewMemBatchWithFixedCapacity(p.types, coldata.BatchSize())
 }

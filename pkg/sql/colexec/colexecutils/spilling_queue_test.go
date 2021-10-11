@@ -85,7 +85,7 @@ func TestSpillingQueue(t *testing.T) {
 				prefix, humanizeutil.IBytes(memoryLimit), diskQueueCacheMode, alwaysCompress, numBatches, setInMemEnqueuesLimit)
 			// Since the spilling queue coalesces tuples to fill-in the batches
 			// up to their capacity, we cannot use the batches we get when
-			// dequeueing directly. Instead, we are tracking all of the input
+			// dequeuing directly. Instead, we are tracking all of the input
 			// tuples and will be comparing against a window into them.
 			var tuples *AppendOnlyBufferedBatch
 			// Create random input.
@@ -160,7 +160,7 @@ func TestSpillingQueue(t *testing.T) {
 				// queue doesn't spill to disk, we can safely keep the
 				// references to the dequeued batches because a new batch is
 				// allocated whenever it is kept in the in-memory buffer (which
-				// is not the case when dequeueing from disk).
+				// is not the case when dequeuing from disk).
 				dequeuedBatches      []coldata.Batch
 				dequeuedBatchLengths []int
 			)

@@ -138,7 +138,7 @@ type diskQueueState int
 
 const (
 	diskQueueStateEnqueueing diskQueueState = iota
-	diskQueueStateDequeueing
+	diskQueueStateDequeuing
 )
 
 // diskQueue is an on-disk queue of coldata.Batches that implements the Queue
@@ -228,7 +228,7 @@ type Queue interface {
 
 // RewindableQueue is a Queue that can be read from multiple times. Note that
 // in order for this Queue to return the same data after rewinding, all
-// Enqueueing *must* occur before any Dequeueing.
+// Enqueueing *must* occur before any Dequeuing.
 type RewindableQueue interface {
 	Queue
 	// Rewind resets the Queue so that it Dequeues all Enqueued batches from the
@@ -555,7 +555,7 @@ func (d *diskQueue) writeFooterAndFlush(ctx context.Context) (err error) {
 }
 
 func (d *diskQueue) Enqueue(ctx context.Context, b coldata.Batch) error {
-	if d.state == diskQueueStateDequeueing {
+	if d.state == diskQueueStateDequeuing {
 		if d.cfg.CacheMode != DiskQueueCacheModeDefault {
 			return errors.Errorf("attempted to Enqueue to DiskQueue in mode that disallows it: %d", d.cfg.CacheMode)
 		}
@@ -741,7 +741,7 @@ func (d *diskQueue) Dequeue(ctx context.Context, b coldata.Batch) (bool, error) 
 		d.writer.buffer.Reset()
 		d.scratchDecompressedReadBytes = d.writer.buffer.Bytes()
 	}
-	d.state = diskQueueStateDequeueing
+	d.state = diskQueueStateDequeuing
 
 	if d.deserializerState.FileDeserializer != nil && d.deserializerState.curBatch >= d.deserializerState.NumBatches() {
 		// Finished all the batches, set the deserializer to nil to initialize a new

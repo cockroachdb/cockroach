@@ -239,7 +239,7 @@ func (p *PartitionedDiskQueue) Enqueue(
 
 		if needToAcquireFD {
 			// Acquire only one file descriptor. This will represent the write file
-			// descriptor. When we start Dequeueing from this partition, this will
+			// descriptor. When we start Dequeuing from this partition, this will
 			// represent the read file descriptor.
 			if err := p.acquireNewFD(ctx); err != nil {
 				return err
