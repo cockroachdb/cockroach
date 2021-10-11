@@ -148,7 +148,7 @@ func computeStatsDelta(
 	fast := desc.StartKey.Equal(from) && desc.EndKey.Equal(to)
 	if fast {
 		// Note this it is safe to use the full range MVCC stats, as
-		// opposed to the usual method of computing only a localizied
+		// opposed to the usual method of computing only a localized
 		// stats delta, because a full-range clear prevents any concurrent
 		// access to the stats. Concurrent changes to range-local keys are
 		// explicitly ignored (i.e. SysCount, SysBytes).
