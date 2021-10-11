@@ -1819,7 +1819,7 @@ CREATE TABLE t.test2 ();
 	// From now on henceforth do not acquire a lease, so any renewals can only
 	// happen through the periodic lease renewal mechanism.
 
-	// Reset testAcquisitionBlockCount as the first acqusitions will always block.
+	// Reset testAcquisitionBlockCount as the first acquisitions will always block.
 	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
 
 	// Check that lease acquisition happens independent of lease being requested.

@@ -76,7 +76,7 @@ type AbstractPool struct {
 	config
 
 	// name is used for logging purposes and is passed to functions used to report
-	// acquistions or slow acqusitions.
+	// acquisitions or slow acquisitions.
 	name string
 
 	// Ongoing acquisitions listen on done which is closed when the quota
