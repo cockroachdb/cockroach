@@ -79,7 +79,7 @@ Expiration-based range leases were previously verified when applying
 the raft command by checking the command timestamp against the lease's
 expiration. Epoch-based range leases cannot be independently verified
 in the same way by each Raft applier, as they rely on state which may
-or may not be available (i.e. slow or broken gossip connecton at an
+or may not be available (i.e. slow or broken gossip connection at an
 applier). Instead of checking lease parameters both upstream and
 downstream of Raft, this new design accommodates both lease types by
 checking lease parameters upstream and then verifying that the lease
