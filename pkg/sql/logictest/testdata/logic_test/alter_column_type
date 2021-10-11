@@ -263,20 +263,12 @@ t6  CREATE TABLE public.t6 (
     FAMILY f2 (id2)
 )
 
-# Ensure default expressions are casted correctly.
-statement ok
+# Ensure the type of the default column is checked
+statement error default for column "x" cannot be cast automatically to type DATE
 CREATE TABLE t7 (x INT DEFAULT 1, y INT);
 INSERT INTO t7 (y) VALUES (1), (2), (3);
 ALTER TABLE t7 ALTER COLUMN x TYPE DATE;
 INSERT INTO t7 (y) VALUES (4);
-
-query TI
-SELECT * FROM t7 ORDER BY y
-----
-1970-01-02 00:00:00 +0000 +0000  1
-1970-01-02 00:00:00 +0000 +0000  2
-1970-01-02 00:00:00 +0000 +0000  3
-1970-01-02 00:00:00 +0000 +0000  4
 
 # Ensure a runtime error correctly rolls back and the table is unchanged.
 statement ok
@@ -369,10 +361,13 @@ Baz
 
 # Ensure ALTER COLUMN TYPE fails if the DEFAULT EXPR cannot be casted to the new type.
 statement ok
-CREATE TABLE t17 (x STRING DEFAULT 'HELLO');
+CREATE TABLE t17 (x STRING DEFAULT 'HELLO', y STRING ON UPDATE 'HELLO', FAMILY f1 (x,y));
 
-statement error pq: could not parse "HELLO" as type int: strconv.ParseInt: parsing "HELLO": invalid syntax
+statement error default for column "x" cannot be cast automatically to type INT8
 ALTER TABLE t17 ALTER COLUMN x TYPE INT
+
+statement error on update for column "y" cannot be cast automatically to type INT8
+ALTER TABLE t17 ALTER COLUMN y TYPE INT
 
 query TT colnames
 show create table t17
@@ -380,10 +375,12 @@ show create table t17
 table_name  create_statement
 t17         CREATE TABLE public.t17 (
             x STRING NULL DEFAULT 'HELLO':::STRING,
+            y STRING NULL ON UPDATE 'HELLO':::STRING,
             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
             CONSTRAINT t17_pkey PRIMARY KEY (rowid ASC),
-            FAMILY "primary" (x, rowid)
+            FAMILY f1 (x, y, rowid)
 )
+
 
 # Ensure ALTER COLUMN TYPE fails if the column is part of an FK relationship.
 statement ok
