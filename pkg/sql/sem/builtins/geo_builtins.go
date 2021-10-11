@@ -6754,7 +6754,7 @@ May return a Point or LineString in the case of degenerate inputs.`,
 				return tree.NewDInt(tree.DInt(ret)), nil
 			},
 			Info: infoBuilder{
-				info: `Returns an interger value defining behavior of crossing of lines: 
+				info: `Returns an integer value defining behavior of crossing of lines: 
 0: lines do not cross,
 -1: linestring_b crosses linestring_a from right to left,
 1: linestring_b crosses linestring_a from left to right,

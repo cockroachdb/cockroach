@@ -79,7 +79,7 @@ func getSegCrossDirection(fromSeg1, toSeg1, fromSeg2, toSeg2 geom.Coord) lineCro
 	return posT2FromSeg1
 }
 
-// LineCrossingDirection takes two lines and returns an interger value defining behavior of crossing of lines:
+// LineCrossingDirection takes two lines and returns an integer value defining behavior of crossing of lines:
 // 0: lines do not cross,
 // -1: line2 crosses line1 from right to left,
 // 1: line2 crosses line1 from left to right,
