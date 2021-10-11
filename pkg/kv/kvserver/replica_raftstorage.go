@@ -1191,7 +1191,7 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 ) error {
 	for _, sr := range subsumedRepls {
 		// We removed sr's data when we committed the batch. Finish subsumption by
-		// updating the in-memory bookkeping.
+		// updating the in-memory bookkeeping.
 		if err := sr.postDestroyRaftMuLocked(ctx, sr.GetMVCCStats()); err != nil {
 			return err
 		}
