@@ -382,7 +382,7 @@
           "expr": "sum(rate(txn_commits{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "Commited",
+          "legendFormat": "Committed",
           "refId": "A"
         },
         {
@@ -391,7 +391,7 @@
           "hide": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "Fast-path Commited",
+          "legendFormat": "Fast-path Committed",
           "refId": "C"
         },
         {

@@ -676,7 +676,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 		t.Errorf("expected success on consistent read: %+v", err)
 	}
 
-	// Try a read commmitted read and an inconsistent read, both within a
+	// Try a read committed read and an inconsistent read, both within a
 	// transaction.
 	txn := newTransaction("test", roachpb.Key("a"), 1, tc.Clock())
 	assignSeqNumsForReqs(txn, &gArgs)
