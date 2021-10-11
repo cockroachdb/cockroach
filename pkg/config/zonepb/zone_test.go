@@ -965,7 +965,7 @@ func TestMarshalableZoneConfigRoundTrip(t *testing.T) {
 	roundTripped := zoneConfigFromMarshalable(marshalable, *original)
 
 	if !reflect.DeepEqual(roundTripped, *original) {
-		t.Errorf("round-tripping a ZoneConfig through a marshalableZoneConfig failed:\noriginal:\n%+v\nmarshable:\n%+v\ngot:\n%+v", original, marshalable, roundTripped)
+		t.Errorf("round-tripping a ZoneConfig through a marshalableZoneConfig failed:\noriginal:\n%+v\nmarshalable:\n%+v\ngot:\n%+v", original, marshalable, roundTripped)
 	}
 }
 
