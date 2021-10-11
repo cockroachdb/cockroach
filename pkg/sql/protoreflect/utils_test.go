@@ -161,7 +161,7 @@ func TestMessageToJSONBRoundTrip(t *testing.T) {
 func TestInvalidConversions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Run("no such messagge", func(t *testing.T) {
+	t.Run("no such message", func(t *testing.T) {
 		_, err := protoreflect.DecodeMessage("no.such.message", nil)
 		require.Error(t, err)
 	})

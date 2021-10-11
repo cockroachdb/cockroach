@@ -151,7 +151,7 @@ func runImport(
 	}
 
 	ex := conn.GetDriverConn()
-	importCompletedMesssage := func() {
+	importCompletedMessage := func() {
 		switch mode {
 		case singleTable:
 			fmt.Printf("successfully imported table %s from %s file %s\n", tableName, importFormat,
@@ -221,7 +221,7 @@ func runImport(
 		return err
 	}
 
-	importCompletedMesssage()
+	importCompletedMessage()
 	return nil
 }
 

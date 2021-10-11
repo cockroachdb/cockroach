@@ -829,7 +829,7 @@ func finishQuery(t finishType, c *conn) error {
 			return err
 		}
 	case bind:
-		// pgx doesn't send a Sync mesage in between Bind and Execute, so we're not
+		// pgx doesn't send a Sync message in between Bind and Execute, so we're not
 		// going to send a ReadyForQuery below.
 		c.msgBuilder.initMsg(pgwirebase.ServerMsgBindComplete)
 	case generateError:
