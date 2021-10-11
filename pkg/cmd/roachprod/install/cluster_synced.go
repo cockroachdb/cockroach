@@ -1580,7 +1580,7 @@ func (c *SyncedCluster) pghosts(nodes []int) map[int]string {
 // SSH TODO(peter): document
 func (c *SyncedCluster) SSH(sshArgs, args []string) error {
 	if len(c.Nodes) != 1 && len(args) == 0 {
-		// If trying to ssh to more than 1 node and the ssh session is interative,
+		// If trying to ssh to more than 1 node and the ssh session is interactive,
 		// try sshing with an iTerm2 split screen configuration.
 		sshed, err := maybeSplitScreenSSHITerm2(c)
 		if sshed {

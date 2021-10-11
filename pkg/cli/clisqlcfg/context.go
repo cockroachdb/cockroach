@@ -137,7 +137,7 @@ func (c *Context) getInputFile(defaultIn *os.File) (cmdIn *os.File, closeFn func
 // checkInteractive sets the isInteractive parameter depending on the
 // execution environment and the presence of -e flags.
 func (c *Context) checkInteractive() {
-	// We don't consider sessions interactives unless we have a
+	// We don't consider sessions interactive unless we have a
 	// serious hunch they are. For now, only `cockroach sql` *without*
 	// `-e` has the ability to input from a (presumably) human user,
 	// and we'll also assume that there is no human if the standard
