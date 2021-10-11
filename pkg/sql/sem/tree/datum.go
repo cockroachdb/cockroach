@@ -4165,7 +4165,7 @@ func (d *DArray) IsComposite() bool {
 }
 
 // FirstIndex returns the first index of the array. 1 for normal SQL arrays,
-// which are 1-indexed, and 0 for the special Postgers vector types which are
+// which are 1-indexed, and 0 for the special Postgres vector types which are
 // 0-indexed.
 func (d *DArray) FirstIndex() int {
 	switch d.customOid {
