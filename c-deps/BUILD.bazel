@@ -89,25 +89,52 @@ cmake(
         },
     }),
     cmake_options = ["-GUnix Makefiles"],
+    data = select({
+        "//build/toolchains:is_cross_macos": [
+            "@toolchain_cross_x86_64-apple-darwin19//:bin/x86_64-apple-darwin19-install_name_tool",
+            "@toolchain_cross_x86_64-apple-darwin19//:bin/x86_64-apple-darwin19-otool",
+        ],
+        "//conditions:default": [],
+    }),
+    env = select({
+        "//build/toolchains:is_cross_macos": {
+            "CMAKE_INSTALL_NAME_TOOL": "$(execpath @toolchain_cross_x86_64-apple-darwin19//:bin/x86_64-apple-darwin19-install_name_tool)",
+            "OTOOL": "$(execpath @toolchain_cross_x86_64-apple-darwin19//:bin/x86_64-apple-darwin19-otool)",
+        },
+        "//conditions:default": {},
+    }),
     lib_source = "@geos//:all",
     make_commands = [
         "mkdir -p libgeos/lib",
         "make --no-print-directory geos_c",
     ] + select({
+        "//build/toolchains:is_cross_macos": [
+            "cp -L lib/libgeos.dylib libgeos/lib",
+            "cp -L lib/libgeos_c.dylib libgeos/lib",
+            "PREFIX=$($OTOOL -D lib/libgeos_c.dylib | tail -n1 | rev | cut -d/ -f2- | rev)",
+            "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos.3.8.1.dylib libgeos/lib/libgeos.dylib",
+            "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos_c.1.dylib libgeos/lib/libgeos_c.dylib",
+            "$CMAKE_INSTALL_NAME_TOOL -change $PREFIX/libgeos.3.8.1.dylib @rpath/libgeos.3.8.1.dylib libgeos/lib/libgeos_c.dylib",
+        ],
         "@io_bazel_rules_go//go/platform:darwin": [
             "cp -L lib/libgeos.dylib libgeos/lib",
             "cp -L lib/libgeos_c.dylib libgeos/lib",
-            # TODO(#bazel): install_name_tool is also required here for release.
         ],
         "@io_bazel_rules_go//go/platform:windows": [
             # NOTE: Windows ends up in bin/ on the BUILD_TMPDIR.
             "cp -L bin/libgeos.dll libgeos/lib",
             "cp -L bin/libgeos_c.dll libgeos/lib",
         ],
+        "//build/toolchains:is_cross_linux": [
+            "cp -L lib/libgeos.so libgeos/lib",
+            "cp -L lib/libgeos_c.so libgeos/lib",
+            "patchelf --set-rpath /usr/local/lib/cockroach/ libgeos/lib/libgeos_c.so",
+            "patchelf --set-soname libgeos.so libgeos/lib/libgeos.so",
+            "patchelf --replace-needed libgeos.so.3.8.1 libgeos.so libgeos/lib/libgeos_c.so",
+        ],
         "//conditions:default": [
             "cp -L lib/libgeos.so libgeos/lib",
             "cp -L lib/libgeos_c.so libgeos/lib",
-            # TODO(#bazel): patchelf is also required here for release.
         ],
     }),
     out_shared_libs = select({

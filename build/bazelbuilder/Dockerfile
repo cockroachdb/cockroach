@@ -19,6 +19,7 @@ RUN apt-get update \
     make \
     netbase \
     openjdk-8-jre \
+    patchelf \
     unzip \
  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10 \

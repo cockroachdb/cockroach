@@ -92,3 +92,23 @@ config_setting(
         "cockroach_bazel_dev": "y",
     },
 )
+
+config_setting(
+    name = "is_cross_macos",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+    ],
+    define_values = {
+        "cockroach_cross": "y",
+    },
+)
+
+config_setting(
+    name = "is_cross_linux",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+    ],
+    define_values = {
+        "cockroach_cross": "y",
+    },
+)
