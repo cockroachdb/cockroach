@@ -26,19 +26,20 @@ test:ci --test_tmpdir=/artifacts/tmp
 build:crosslinux --platforms=//build/toolchains:cross_linux
 build:crosslinux --crosstool_top=@toolchain_cross_x86_64-unknown-linux-gnu//:suite
 build:crosslinux '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu'
-build:crosslinux --config=ci
+build:crosslinux --config=ci --config=cross
 build:crosswindows --platforms=//build/toolchains:cross_windows
 build:crosswindows --crosstool_top=@toolchain_cross_x86_64-w64-mingw32//:suite
 build:crosswindows '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32'
-build:crosswindows --config=ci
+build:crosswindows --config=ci --config=cross
 build:crossmacos --platforms=//build/toolchains:cross_macos
 build:crossmacos --crosstool_top=@toolchain_cross_x86_64-apple-darwin19//:suite
 build:crossmacos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19'
-build:crossmacos --config=ci
+build:crossmacos --config=ci --config=cross
 build:crosslinuxarm --platforms=//build/toolchains:cross_linux_arm
 build:crosslinuxarm --crosstool_top=@toolchain_cross_aarch64-unknown-linux-gnu//:suite
 build:crosslinuxarm '--workspace_status_command=./build/bazelutil/stamp.sh aarch64-unknown-linux-gnu'
-build:crosslinuxarm --config=ci
+build:crosslinuxarm --config=ci --config=cross
+build:cross --define cockroach_cross=y
 
 # developer configurations. Add e.g. --config=devdarwinx86_64 to turn these on.
 build:devdarwinx86_64 --crosstool_top=@toolchain_dev_darwin_x86-64//:suite
