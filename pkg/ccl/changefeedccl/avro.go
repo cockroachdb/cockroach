@@ -1003,7 +1003,7 @@ func (r *avroDataRecord) refreshTypeMetadata(tbl catalog.TableDescriptor) {
 
 // decimalToRat converts one of our apd decimals to the format expected by the
 // avro library we use. If the column has a fixed scale (which is always true if
-// precision is set) this is roundtripable without information loss.
+// precision is set) this is roundtrippable without information loss.
 func decimalToRat(dec apd.Decimal, scale int32) (big.Rat, error) {
 	if dec.Form != apd.Finite {
 		return big.Rat{}, errors.Errorf(`cannot convert %s form decimal`, dec.Form)
