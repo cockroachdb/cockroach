@@ -14,8 +14,8 @@ option go_package = "protoutil";
 
 import "gogoproto/gogo.proto";
 
-message RecursiveAndUncloneable {
-    RecursiveAndUncloneable r = 1;
+message RecursiveAndUnclonable {
+    RecursiveAndUnclonable r = 1;
     bytes uuid = 2 [(gogoproto.nullable) = false,
         (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }

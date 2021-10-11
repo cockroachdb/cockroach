@@ -31,12 +31,12 @@ func TestCloneProto(t *testing.T) {
 		pb          protoutil.Message
 		shouldPanic bool
 	}{
-		// Uncloneable types (all contain UUID fields).
+		// Unclonable types (all contain UUID fields).
 		{&roachpb.StoreIdent{}, true},
 		{&enginepb.TxnMeta{}, true},
 		{&roachpb.Transaction{}, true},
 		{&roachpb.Error{}, true},
-		{&protoutil.RecursiveAndUncloneable{}, true},
+		{&protoutil.RecursiveAndUnclonable{}, true},
 
 		// Cloneable types. This includes all types for which a
 		// protoutil.Clone call exists in the codebase as of 2016-11-21.
