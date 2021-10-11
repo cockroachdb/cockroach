@@ -100,7 +100,7 @@ func (e *Entry) Compare(b llrb.Comparable) int {
 }
 
 // The following methods implement the interval.Interface for entry by casting
-// the entry key to an interval key and calling the appropriate accessers.
+// the entry key to an interval key and calling the appropriate assessors.
 
 // ID implements interval.Interface
 func (e *Entry) ID() uintptr {
