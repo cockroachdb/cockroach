@@ -934,7 +934,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	require.NotNil(t, br)
 	require.Equal(t, 1, tp.ifWrites.len())
 
-	// Commit the txn. Again with pipeling disabled. Again, in-flight writes
+	// Commit the txn. Again with pipelining disabled. Again, in-flight writes
 	// should be proven first.
 	ba.Requests = nil
 	etArgs := roachpb.EndTxnRequest{Commit: true}

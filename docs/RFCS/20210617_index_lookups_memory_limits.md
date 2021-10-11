@@ -1032,7 +1032,7 @@ contention). Even in `InOrder` mode, pipelining lookups can be beneficial, even
 if a slow request does block the delivery of results (but it doesn't need to
 immediately block performing and buffering new lookups).
 
-I think the `Streamer` should offer pipelinig, although not necessarily from
+I think the `Streamer` should offer pipelining, although not necessarily from
 the start. My hope is that, depending on the details of the implementation,
 pipelining would come pretty much for free: given that the `Streamer` by nature
 needs to keep track of requests that are in different phases of completion, does
