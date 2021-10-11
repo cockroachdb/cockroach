@@ -1400,7 +1400,7 @@ func (r *Registry) RetryMaxDelay() float64 {
 	return retryMaxDelaySetting.Get(&r.settings.SV).Seconds()
 }
 
-// maybeRecordRetriableExeuctionFailure will record a
+// maybeRecordRetriableExecutionFailure will record a
 // RetriableExecutionFailureError into the job payload.
 func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j *Job) {
 	var efe *retriableExecutionError
