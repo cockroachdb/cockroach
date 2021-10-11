@@ -906,7 +906,7 @@ to achieve the semantics described above.
 - log writes are redirected to the appropriate logger based on the provided channel.
 
 - each `*loggerT` is associated with zero or more `logSinks`. Each
-  logging event is writen to all sinks associated with its channel
+  logging event is written to all sinks associated with its channel
   logger.
 
 - the [API explained
