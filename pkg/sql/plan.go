@@ -104,7 +104,7 @@ type planNode interface {
 }
 
 // mutationPlanNode is a specification of planNode for mutations operations
-// (those that insert/update/detele/etc rows).
+// (those that insert/update/delete/etc rows).
 type mutationPlanNode interface {
 	planNode
 
