@@ -629,7 +629,7 @@ func (r *Replica) evaluate1PC(
 // batch/txn.
 //
 // deadline, if not nil, specifies the highest timestamp (exclusive) at which
-// the request can be evaluated. If ba is a transactional request, then dealine
+// the request can be evaluated. If ba is a transactional request, then deadline
 // cannot be specified; a transaction's deadline comes from it's EndTxn request.
 func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	ctx context.Context,

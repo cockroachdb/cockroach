@@ -113,7 +113,7 @@ message ConsumerHandshake {
 
   // If consumer_scheduled is false, then this indicates the deadline for the
   // scheduling of the consumer flow. If the flow is not scheduled within that
-  // dealine, this stream will be disconnected by the server-side.
+  // deadline, this stream will be disconnected by the server-side.
   optional google.protobuf.Timestamp consumer_schedule_deadline = 2 [(gogoproto.stdtime) = true];
 
   // The server's DistSQL version range.

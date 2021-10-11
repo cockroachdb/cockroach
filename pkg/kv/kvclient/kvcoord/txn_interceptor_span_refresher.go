@@ -581,7 +581,7 @@ func (sr *txnSpanRefresher) appendRefreshSpans(
 // is required.
 //
 // Note that when deciding whether a transaction can be bumped to a particular
-// timestamp, the transaction's deadling must also be taken into account.
+// timestamp, the transaction's deadline must also be taken into account.
 func (sr *txnSpanRefresher) canForwardReadTimestampWithoutRefresh(txn *roachpb.Transaction) bool {
 	return sr.canAutoRetry && !sr.refreshInvalid && sr.refreshFootprint.empty() && !txn.CommitTimestampFixed
 }

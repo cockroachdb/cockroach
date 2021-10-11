@@ -516,7 +516,7 @@ func evaluateCommand(
 // performed any prior reads that need refreshing.
 //
 // deadline, if not nil, specifies the highest timestamp (exclusive) at which
-// the request can be evaluated. If ba is a transactional request, then dealine
+// the request can be evaluated. If ba is a transactional request, then deadline
 // cannot be specified; a transaction's deadline comes from it's EndTxn request.
 //
 // If true is returned, ba and ba.Txn will have been updated with the new
