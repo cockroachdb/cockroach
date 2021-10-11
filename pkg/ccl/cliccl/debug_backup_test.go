@@ -782,7 +782,7 @@ func TestExportDataWithRevisions(t *testing.T) {
 			"",
 		},
 		{
-			"show-data-revisions-after-adding-an-colum",
+			"show-data-revisions-after-adding-a-column",
 			"testDB.public.fooTable",
 			[]string{
 				backupPathWithRev,
@@ -793,7 +793,7 @@ func TestExportDataWithRevisions(t *testing.T) {
 			ts2.AsOfSystemTime(),
 		},
 		{
-			"show-data-revisions-after-dropping-an-colum-and-update-value",
+			"show-data-revisions-after-dropping-a-column-and-update-value",
 			"testDB.public.fooTable",
 			[]string{
 				backupPathWithRev,
