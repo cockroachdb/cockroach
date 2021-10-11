@@ -523,7 +523,7 @@ const (
 	s_zip              CHAR(10),
 	s_country          VARCHAR(20),
 	s_gmt_offset       DECIMAL(5,2),
-	s_tax_precentage   DECIMAL(5,2),
+	s_tax_percentage   DECIMAL(5,2),
 	PRIMARY KEY (s_store_sk)
 )`
 

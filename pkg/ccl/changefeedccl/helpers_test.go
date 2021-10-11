@@ -477,7 +477,7 @@ func withKnobsFn(fn updateKnobsFn) feedTestOption {
 var _ = withKnobsFn(nil /* fn */)
 
 func newTestOptions() feedTestOptions {
-	// percentTenant is the percentange of tests that will be run against
+	// percentTenant is the percentage of tests that will be run against
 	// a SQL-node in a multi-tenant server. 1 for all tests to be run on a
 	// tenant.
 	const percentTenant = 0.25
