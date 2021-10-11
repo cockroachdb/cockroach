@@ -41,7 +41,7 @@ const (
 
 	// splits should be relatively isolated, other than requiring expensive
 	// RocksDB scans over part of the splitting range to recompute stats. We
-	// allow a limitted number of splits to be processed at once.
+	// allow a limited number of splits to be processed at once.
 	splitQueueConcurrency = 4
 )
 
