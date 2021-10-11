@@ -69,7 +69,7 @@ eexpect "database * does not exist"
 eexpect root@
 end_test
 
-start_test "Check that a buit-in command in between tokens of a statement is processed locally."
+start_test "Check that a built-in command in between tokens of a statement is processed locally."
 send "select\r"
 eexpect " ->"
 
