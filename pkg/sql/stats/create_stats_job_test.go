@@ -46,9 +46,9 @@ func TestCreateStatsControlJob(t *testing.T) {
 	// Test with 3 nodes and rowexec.SamplerProgressInterval=100 to ensure
 	// that progress metadata is sent correctly after every 100 input rows.
 	const nodes = 3
-	defer func(oldSamplerInterval int, oldSampleAgggregatorInterval time.Duration) {
+	defer func(oldSamplerInterval int, oldSampleAggregatorInterval time.Duration) {
 		rowexec.SamplerProgressInterval = oldSamplerInterval
-		rowexec.SampleAggregatorProgressInterval = oldSampleAgggregatorInterval
+		rowexec.SampleAggregatorProgressInterval = oldSampleAggregatorInterval
 	}(rowexec.SamplerProgressInterval, rowexec.SampleAggregatorProgressInterval)
 	rowexec.SamplerProgressInterval = 100
 	rowexec.SampleAggregatorProgressInterval = time.Millisecond
