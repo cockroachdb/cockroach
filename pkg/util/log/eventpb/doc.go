@@ -13,7 +13,7 @@
 //
 // The consumers of structured events include:
 //
-// - Instrusion Detection Systems in the CockroachCloud infrastructure.
+// - Intrusion Detection Systems in the CockroachCloud infrastructure.
 //   Check in with the security team before changing or evolving
 //   any payloads related to privilege changes, user management,
 //   authentication or other security-adjacent features.
