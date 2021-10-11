@@ -168,7 +168,7 @@ func TestFormatCrdbV2LongLineBreaks(t *testing.T) {
 			}
 			l = strings.TrimPrefix(l, prefix1)
 			l = strings.TrimPrefix(l, prefix2)
-			// Remove the start or continutation marker
+			// Remove the start or continuation marker
 			if l[0] != ' ' && l[0] != '|' {
 				t.Fatalf("unexpected continuation marker on line %d: %q", i+1, l)
 			}
