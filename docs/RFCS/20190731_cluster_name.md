@@ -72,7 +72,7 @@ There are two scenarios of interest:
   For these the following process is required:
 
   1. restart (possibly with a version upgrade to 19.2) every node in a
-     rolling fashion, specifyfing both `--cluster-name`
+     rolling fashion, specifying both `--cluster-name`
      `--disable-cluster-name-verification` on the command line.
   2. perform another rolling restart, removing `--disable-cluster-name-verification`
      from every node.
