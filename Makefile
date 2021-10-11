@@ -1830,7 +1830,7 @@ endif
 #
 # The additional complexity below handles whitespace and comments.
 #
-# The special comments at the beginning are for Github/Go/Reviewable:
+# The special comments at the beginning are for GitHub/Go/Reviewable:
 # https://github.com/golang/go/issues/13560#issuecomment-277804473
 # https://github.com/Reviewable/Reviewable/wiki/FAQ#how-do-i-tell-reviewable-that-a-file-is-generated-and-should-not-be-reviewed
 # Note how the 'prefix' variable is manually appended. This is required by Homebrew.
