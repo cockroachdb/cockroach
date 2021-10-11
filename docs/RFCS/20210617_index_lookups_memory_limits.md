@@ -753,7 +753,7 @@ Once a particular result is received, the ownership of its memory might be share
 - when the `Result` is returned to the client (through `GetResults()`), the
 client takes a reference
 - if we're buffering results (`InOrder` execution), the buffer takes a reference
-(or possibly multiple references if the `Result` satisifies multiple duplicate
+(or possibly multiple references if the `Result` satisfies multiple duplicate
 requests)
 - if the result is cached, the cache takes a reference
 
