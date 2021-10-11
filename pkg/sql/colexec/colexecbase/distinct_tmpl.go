@@ -139,7 +139,7 @@ type distinct_TYPEOp struct {
 	// other distinct operators in a distinct operator set.
 	outputCol []bool
 
-	// lastVal is the last value seen by the operator, so that the distincting
+	// lastVal is the last value seen by the operator, so that the distinct
 	// still works across batch boundaries.
 	lastVal _GOTYPE
 
