@@ -97,6 +97,7 @@ type TestingKnobs struct {
 	// SessionOverride is used to override the returned session.
 	// If it returns nil, nil the underlying instance will be used.
 	SessionOverride func(ctx context.Context) (Session, error)
+	SessionExpired  bool
 }
 
 var _ base.ModuleTestingKnobs = &TestingKnobs{}

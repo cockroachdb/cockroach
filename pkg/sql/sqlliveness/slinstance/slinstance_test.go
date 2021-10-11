@@ -27,6 +27,50 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestSQLInstance_invokesSessionExpiryCallbacksInGoroutine(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, stopper := context.Background(), stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	mClock := hlc.NewManualClock(hlc.UnixNano())
+	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		true /* initializeVersion */)
+	slinstance.DefaultTTL.Override(ctx, &settings.SV, 1*time.Microsecond)
+	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 1*time.Microsecond)
+
+	testingKnobs := &sqlliveness.TestingKnobs{
+		SessionExpired: true,
+	}
+
+	fakeStorage := slstorage.NewFakeStorage()
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, testingKnobs)
+	sqlInstance.Start(ctx)
+
+	session, err := sqlInstance.Session(ctx)
+	require.NoError(t, err)
+
+	// Simulating what happens in `instanceprovider.shutdownSQLInstance`
+	session.RegisterCallbackForSessionExpiry(func(ctx context.Context) {
+		stopper.Stop(ctx)
+	})
+
+	// Calling clear, will run the callback above, which will have to
+	// wait for async tasks to stop. The async tasks include the
+	// sqlInstance `heartbeatLoop` function.
+	sqlInstance.ClearSessionForTest(ctx)
+	select {
+	case <-time.After(30 * time.Second):
+		t.Fail()
+	case <-stopper.IsStopped():
+		return
+	}
+}
+
 func TestSQLInstance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
