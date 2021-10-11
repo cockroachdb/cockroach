@@ -88,7 +88,7 @@ http://docs.datastax.com/en/archived/cassandra/1.2/cassandra/upgrade/upgradeChan
 # High level design
 
 Bundle all execution methods (everything multiplexed to by `executeCmd`) in a
-collection `ReplicaMethods` which is to be specified (but sementically
+collection `ReplicaMethods` which is to be specified (but semantically
 speaking, it is a map of command to implementation of the command).
 It is this entity which is being versioned. Add `var MaxReplicaVersion int64`
 to the `storage` package. The version stored there is the version of the
