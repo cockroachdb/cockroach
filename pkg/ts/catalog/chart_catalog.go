@@ -850,11 +850,11 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title:   "Cumultative Age of Non-Live Data",
+				Title:   "Cumulative Age of Non-Live Data",
 				Metrics: []string{"gcbytesage"},
 			},
 			{
-				Title:   "Cumultative Intent Age",
+				Title:   "Cumulative Intent Age",
 				Metrics: []string{"intentage"},
 			},
 			{
@@ -2437,11 +2437,11 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title:   "Cumultative Age of Non-Live Data",
+				Title:   "Cumulative Age of Non-Live Data",
 				Metrics: []string{"gcbytesage"},
 			},
 			{
-				Title:   "Cumultative Intent Age",
+				Title:   "Cumulative Intent Age",
 				Metrics: []string{"intentage"},
 			},
 			{
