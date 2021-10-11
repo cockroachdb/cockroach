@@ -64,7 +64,7 @@ include build/defs.mk
 #
 # Note how the actions for this rule are *not* using $(GIT_DIR) which
 # is otherwise defined in defs.mk above. This is because submodules
-# are used in the process of definining the .mk files included by the
+# are used in the process of defining the .mk files included by the
 # Makefile, so it is not yet defined by the time
 # `.submodules-initialized` is needed during a fresh build after a
 # checkout.
