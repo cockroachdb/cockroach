@@ -849,7 +849,7 @@ message CancelSessionRequest {
   bytes session_id = 2 [(gogoproto.customname) = "SessionID"];
   // Username of the user making this cancellation request. This may be omitted
   // if the user is the same as the one issuing the CancelSessionRequest.
-  // The caller is responsiblef or case-folding and NFC normalization.
+  // The caller is responsible or case-folding and NFC normalization.
   string username = 3;
 }
 
