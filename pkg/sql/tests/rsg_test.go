@@ -223,7 +223,7 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 	testRandomSyntax(t, false, "ident", nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		s := r.Generate(rootStmt, 20)
 		// Don't start transactions since closing them is tricky. Just issuing a
-		// ROLLBACK after all queries doesn't work due to the parellel uses of db,
+		// ROLLBACK after all queries doesn't work due to the parallel uses of db,
 		// which can start another immediately after the ROLLBACK and cause problems
 		// for the following statement. The CREATE DATABASE below would fail with
 		// errors about an aborted transaction and thus panic.
