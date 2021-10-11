@@ -108,7 +108,7 @@ mkdir -p "${host_home}"/.yarn-cache
 
 vols=
 # It would be cool to interact with Docker from inside the builder, but the
-# socket is owned by root, and our unpriviledged user can't access it. If we
+# socket is owned by root, and our unprivileged user can't access it. If we
 # could make this work, we could run our acceptance tests from inside the
 # builder, which would be cleaner and simpler than what we do now (which is to
 # build static binaries in the container and then run them on the host).
