@@ -1766,7 +1766,7 @@ func putBatch(key roachpb.Key, value []byte) roachpb.BatchRequest {
 	return ba
 }
 
-// putBatchNoAsyncConsesnsus returns a PutRequest addressed to the default
+// putBatchNoAsyncConsensus returns a PutRequest addressed to the default
 // replica for the specified key / value. The batch also contains a Get, which
 // inhibits the asyncConsensus flag.
 func putBatchNoAsyncConsensus(key roachpb.Key, value []byte) roachpb.BatchRequest {
