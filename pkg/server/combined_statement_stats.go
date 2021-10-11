@@ -148,7 +148,7 @@ func collectCombinedStatements(
 		}
 
 		if row.Len() != expectedNumDatums {
-			return nil, errors.Newf("expected %d columns, receieved %d", expectedNumDatums)
+			return nil, errors.Newf("expected %d columns, received %d", expectedNumDatums)
 		}
 
 		var statementFingerprintID uint64
@@ -241,7 +241,7 @@ func collectCombinedTransactions(
 		}
 
 		if row.Len() != expectedNumDatums {
-			return nil, errors.Newf("expected %d columns, receieved %d", expectedNumDatums, row.Len())
+			return nil, errors.Newf("expected %d columns, received %d", expectedNumDatums, row.Len())
 		}
 
 		app := string(tree.MustBeDString(row[0]))
