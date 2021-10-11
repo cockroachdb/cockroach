@@ -80,9 +80,9 @@ func fetchCockroachVersion(ctx context.Context, c cluster.Cluster, nodeIndex int
 	return version, nil
 }
 
-// maybeAddGithubLink will take the issue and if it is just a number, then it
+// maybeAddGitHubLink will take the issue and if it is just a number, then it
 // will return a full github link.
-func maybeAddGithubLink(issue string) string {
+func maybeAddGitHubLink(issue string) string {
 	if len(issue) == 0 {
 		return ""
 	}

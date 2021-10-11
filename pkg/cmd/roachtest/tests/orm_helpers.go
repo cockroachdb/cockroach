@@ -152,7 +152,7 @@ func (r *ormTestsResults) summarizeAll(
 			continue
 		}
 		r.allTests = append(r.allTests, test)
-		r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (not run)", test, maybeAddGithubLink(issue))
+		r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (not run)", test, maybeAddGitHubLink(issue))
 		notRunCount++
 	}
 

@@ -18,7 +18,7 @@ import (
 )
 
 // An IssueFormatter turns TemplateData for a test failure into markdown
-// that can form a Github issue comment.
+// that can form a GitHub issue comment.
 type IssueFormatter struct {
 	Title func(TemplateData) string
 	Body  func(*Renderer, TemplateData) error
@@ -77,7 +77,7 @@ func (r *Renderer) CodeBlock(typ string, txt string) {
 	r.nl()
 	// NB: the leading newline may be spurious, but quotes
 	// always need to be preceded by a blank line, or at
-	// least Github doesn't interpret the ``` right. The
+	// least GitHub doesn't interpret the ``` right. The
 	// below will misbehave, we need a blank line after `<p>`.
 	//
 	// <details><summary>foo</summary>

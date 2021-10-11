@@ -210,7 +210,7 @@ func (c *SQLIDContainer) OptionalNodeID() (roachpb.NodeID, bool) {
 }
 
 // OptionalNodeIDErr is like OptionalNodeID, but returns an error (referring to
-// the optionally supplied Github issues) if the ID is not present.
+// the optionally supplied GitHub issues) if the ID is not present.
 func (c *SQLIDContainer) OptionalNodeIDErr(issue int) (roachpb.NodeID, error) {
 	v, err := c.w.OptionalErr(issue)
 	if err != nil {

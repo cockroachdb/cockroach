@@ -57,7 +57,7 @@ var (
 	searchLabel = issueLabels[1]
 )
 
-// Replace resolved AuthorGithubHandles according to this map.
+// Replace resolved AuthorGitHubHandles according to this map.
 // Helpful to avoid pinging former employees. The zero value
 // pings nobody.
 var oldFriendsMap = map[string]string{
@@ -85,7 +85,7 @@ func (ctx *postCtx) Printf(format string, args ...interface{}) {
 	fmt.Fprintf(&ctx.Builder, format, args...)
 }
 
-func (p *poster) getAuthorGithubHandle(ctx *postCtx, authorEmail string) string {
+func (p *poster) getAuthorGitHubHandle(ctx *postCtx, authorEmail string) string {
 	if authorEmail == "" {
 		return ""
 	}
@@ -191,7 +191,7 @@ func newPoster(client *github.Client, opts *Options) *poster {
 
 // Options configures the issue poster.
 type Options struct {
-	Token        string // Github API token
+	Token        string // GitHub API token
 	Org          string
 	Repo         string
 	SHA          string
@@ -272,7 +272,7 @@ type TemplateData struct {
 	CondensedMessage CondensedMessage
 	// The commit SHA.
 	Commit string
-	// Link to the commit on Github.
+	// Link to the commit on GitHub.
 	CommitURL string
 	// The branch.
 	Branch string
@@ -312,7 +312,7 @@ func (p *poster) templateData(
 func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req PostRequest) error {
 	ctx := &postCtx{Context: origCtx}
 
-	authorHandle := p.getAuthorGithubHandle(ctx, req.AuthorEmail)
+	authorHandle := p.getAuthorGitHubHandle(ctx, req.AuthorEmail)
 	if authorHandle != "" {
 		// This is intentionally missing an "@" because we don't want
 		// to ping former interns and employees (and haven't done the
@@ -475,11 +475,11 @@ type PostRequest struct {
 	// A path to the test artifacts relative to the artifacts root. If nonempty,
 	// allows the poster formatter to construct a direct URL to this directory.
 	Artifacts string
-	// The email of the author. It will be translated into a Github handle and
+	// The email of the author. It will be translated into a GitHub handle and
 	// appended to the Mention slice below. This increases the chances of the
 	// "right person" seeing the failure early.
 	AuthorEmail string
-	// Mention is a slice of Github handles (@foo, @cockroachdb/some-team, etc)
+	// Mention is a slice of GitHub handles (@foo, @cockroachdb/some-team, etc)
 	// that should be mentioned in the message.
 	Mention []string
 	// The instructions to reproduce the failure.
@@ -495,7 +495,7 @@ type PostRequest struct {
 }
 
 // Post either creates a new issue for a failed test, or posts a comment to an
-// existing open issue. GITHUB_API_TOKEN must be set to a valid Github token
+// existing open issue. GITHUB_API_TOKEN must be set to a valid GitHub token
 // that has permissions to search and create issues and comments or an error
 // will be returned.
 func Post(ctx context.Context, formatter IssueFormatter, req PostRequest) error {

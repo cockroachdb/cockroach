@@ -229,12 +229,12 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 			results.passExpectedCount++
 		case pass && expectedFailure:
 			results.results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
-				test, maybeAddGithubLink(issue),
+				test, maybeAddGitHubLink(issue),
 			)
 			results.passUnexpectedCount++
 		case !pass && expectedFailure:
 			results.results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
-				test, maybeAddGithubLink(issue),
+				test, maybeAddGitHubLink(issue),
 			)
 			results.failExpectedCount++
 			results.currentFailures = append(results.currentFailures, test)

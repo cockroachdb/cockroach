@@ -32,7 +32,7 @@ func main() {
 	flag.StringVar(&tokenPath, "token", "", "Path to GitHub token with repo:public_repo scope")
 	flag.StringVar(&fromRef, "from", "", "From git ref")
 	flag.StringVar(&toRef, "to", "", "To git ref")
-	flag.StringVar(&repository, "repo", "", "Github repository to work on in 'owner/repo")
+	flag.StringVar(&repository, "repo", "", "GitHub repository to work on in 'owner/repo")
 	flag.StringVar(&gitCheckoutDir, "dir", "", "Git checkout directory")
 	flag.BoolVar(&dryRun, "dry-run", false, "Dry run")
 	flag.Parse()

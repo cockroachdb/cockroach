@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// UnexpectedWithIssueErrorf indicates an error with an associated Github issue.
+// UnexpectedWithIssueErrorf indicates an error with an associated GitHub issue.
 // It's supposed to be used for conditions that would otherwise be checked by
 // assertions, except that they fail and we need the public's help for tracking
 // it down.

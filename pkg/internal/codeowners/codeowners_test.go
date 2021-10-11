@@ -108,7 +108,7 @@ func TestLintEverythingIsOwned(t *testing.T) {
 	LintEverythingIsOwned(b, true /* verbose */, co, d, "pkg")
 	require.Equal(t,
 		`unowned packages found, please fill out the below and augment .github/CODEOWNERS:
-Remove the '-noreview' suffix if the team should be requested for Github reviews.
+Remove the '-noreview' suffix if the team should be requested for GitHub reviews.
 
 /pkg/a/                      @cockroachdb/<TODO>-noreview
 /pkg/b/                      @cockroachdb/<TODO>-noreview

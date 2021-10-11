@@ -618,7 +618,7 @@ In the proposed library, we provide the following two features:
 
 - "hint" annotations. This is used to suggest a course of action to
   the user. For example we use this to tell the user to search on
-  Github or open an issue if they encounter an internal error or an
+  GitHub or open an issue if they encounter an internal error or an
   error due to a feature in PostgreSQL that is not supported in
   CockroachDB.
 
@@ -648,7 +648,7 @@ Throughout the SQL package (and presumably over time throughout
 CockroachDB) errors can be annotated with "telemetry keys" to be
 incremented when the error flows out of a server towards a client.
 
-This is used to e.g. link errors to existing issues on Github.
+This is used to e.g. link errors to existing issues on GitHub.
 
 The telemetry keys are stored in the error chain and can be retrieved
 via the accessor `TelemetryKeys() []string`.

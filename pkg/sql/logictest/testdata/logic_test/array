@@ -1178,7 +1178,7 @@ statement ok
 UPDATE x SET a = ARRAY[], b = ARRAY[]
 
 
-# Github Issue 24175: Regression test for error when using ANY with UUID array.
+# GitHub Issue 24175: Regression test for error when using ANY with UUID array.
 statement ok
 CREATE TABLE documents (shared_users UUID[]);
 

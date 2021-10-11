@@ -152,18 +152,18 @@ func (r *ormTestsResults) parseJUnitXML(
 			r.passExpectedCount++
 		case status == statusPass && expectedFailure:
 			r.results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
-				test, maybeAddGithubLink(issue),
+				test, maybeAddGitHubLink(issue),
 			)
 			r.passUnexpectedCount++
 		case status == statusFail && expectedFailure:
 			r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
-				test, maybeAddGithubLink(issue),
+				test, maybeAddGitHubLink(issue),
 			)
 			r.failExpectedCount++
 			r.currentFailures = append(r.currentFailures, test)
 		case status == statusFail && !expectedFailure:
 			r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (unexpected)",
-				test, maybeAddGithubLink(issue))
+				test, maybeAddGitHubLink(issue))
 			r.failUnexpectedCount++
 			r.currentFailures = append(r.currentFailures, test)
 		}

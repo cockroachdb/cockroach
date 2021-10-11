@@ -131,7 +131,7 @@ function would_stress() {
 }
 
 function maybe_stress() {
-   # NB: This code doesn't know about posting Github issues as we don't stress on
+   # NB: This code doesn't know about posting GitHub issues as we don't stress on
    # the release branches.
   if ! would_stress; then
     return 0

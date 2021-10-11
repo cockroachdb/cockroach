@@ -677,7 +677,7 @@ func (r *testRunner) runTest(
 			if t.timedOut() {
 				issueOutput = "test timed out (see artifacts for details)"
 			}
-			r.maybePostGithubIssue(ctx, l, t, stdout, issueOutput)
+			r.maybePostGitHubIssue(ctx, l, t, stdout, issueOutput)
 		} else {
 			shout(ctx, l, stdout, "--- PASS: %s (%s)", runID, durationStr)
 			// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
@@ -887,7 +887,7 @@ func (r *testRunner) runTest(
 	return true, nil
 }
 
-func (r *testRunner) shouldPostGithubIssue(t test.Test) bool {
+func (r *testRunner) shouldPostGitHubIssue(t test.Test) bool {
 	opts := issues.DefaultOptionsFromEnv()
 	return !r.config.disableIssue &&
 		opts.CanPost() &&
@@ -897,10 +897,10 @@ func (r *testRunner) shouldPostGithubIssue(t test.Test) bool {
 		t.Spec().(*registry.TestSpec).Cluster.NodeCount > 0
 }
 
-func (r *testRunner) maybePostGithubIssue(
+func (r *testRunner) maybePostGitHubIssue(
 	ctx context.Context, l *logger.Logger, t test.Test, stdout io.Writer, output string,
 ) {
-	if !r.shouldPostGithubIssue(t) {
+	if !r.shouldPostGitHubIssue(t) {
 		return
 	}
 

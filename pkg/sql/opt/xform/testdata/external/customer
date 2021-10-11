@@ -1,6 +1,6 @@
 # ==============================================================================
 # This file contains schema and queries collected from various customers who
-# have publicly posted their schema and queries, such as in a Github issue or
+# have publicly posted their schema and queries, such as in a GitHub issue or
 # one of our other public support channels. The purpose of collecting these
 # queries is to minimize the chance of performance regression in future versions
 # of Cockroach DB.
@@ -8,7 +8,7 @@
 
 
 # ------------------------------------------------------------------------------
-# Github Issue 20334: Ensure that optimizer uses the secondary
+# GitHub Issue 20334: Ensure that optimizer uses the secondary
 # edges_auto_index_fk_dst_ref_nodes index so it can then merge join.
 # ------------------------------------------------------------------------------
 exec-ddl
@@ -51,7 +51,7 @@ inner-join (merge)
  └── filters (true)
 
 # ------------------------------------------------------------------------------
-# Github Issues 16313/16426: Ensure that STORING index is used to filter unread
+# GitHub Issues 16313/16426: Ensure that STORING index is used to filter unread
 # articles before index joining to the primary index.
 # ------------------------------------------------------------------------------
 exec-ddl
@@ -188,7 +188,7 @@ limit
  └── 5
 
 # ------------------------------------------------------------------------------
-# Github Issue 14241: Ensure that optimizer uses a reverse scan over test_idx
+# GitHub Issue 14241: Ensure that optimizer uses a reverse scan over test_idx
 # with restrictive spans and no explicit sort operator.
 # ------------------------------------------------------------------------------
 exec-ddl
@@ -245,7 +245,7 @@ project
       └── ordering: -9,-14 opt(2,15) [actual: -9,-14]
 
 # ------------------------------------------------------------------------------
-# Github Issue 26444: Ensure that optimizer uses a merge join using the
+# GitHub Issue 26444: Ensure that optimizer uses a merge join using the
 # secondary indexes.
 # ------------------------------------------------------------------------------
 exec-ddl
@@ -304,7 +304,7 @@ group-by
       └── count-rows [as=count_rows:20]
 
 # ------------------------------------------------------------------------------
-# Github Issue 24415: Ensure the optimizer uses the covering index.
+# GitHub Issue 24415: Ensure the optimizer uses the covering index.
 # ------------------------------------------------------------------------------
 exec-ddl
 CREATE TABLE data (
@@ -341,7 +341,7 @@ group-by
            └── value:2
 
 # ------------------------------------------------------------------------------
-# Github Issue 24297: Ensure the optimizer chooses the more selective secondary
+# GitHub Issue 24297: Ensure the optimizer chooses the more selective secondary
 # index that requires an explicit sort (rather than the less selective secondary
 # index that avoids the sort).
 # ------------------------------------------------------------------------------
@@ -403,7 +403,7 @@ top-k
            └── last_sync_id:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
 
 # ------------------------------------------------------------------------------
-# Github Issue 15649: Use order-matching index even with a high offset/limit.
+# GitHub Issue 15649: Use order-matching index even with a high offset/limit.
 # ------------------------------------------------------------------------------
 exec-ddl
 CREATE TABLE test (
@@ -435,7 +435,7 @@ explain
       └── 10000
 
 # ------------------------------------------------------------------------------
-# Github Issue 17270: Use the o_ok index rather than the primary index, since
+# GitHub Issue 17270: Use the o_ok index rather than the primary index, since
 # o_ok has only 2 columns (o_orderkey and rowid).
 # ------------------------------------------------------------------------------
 exec-ddl

@@ -33,7 +33,7 @@ package errorutil
 // This wrapper aids that process by offering two methods corresponding to
 // the categories above:
 //
-// Deprecated() trades in a reference to Github issue (tracking the removal of
+// Deprecated() trades in a reference to GitHub issue (tracking the removal of
 // an essential usage) for the wrapped object; OptionalErr() returns the wrapped
 // object only if the wrapper was set up to allow this.
 //
@@ -72,7 +72,7 @@ func (w TenantSQLDeprecatedWrapper) Optional() (interface{}, bool) {
 }
 
 // OptionalErr calls Optional and returns an error (referring to the optionally
-// supplied Github issues) if the wrapped object is not available.
+// supplied GitHub issues) if the wrapped object is not available.
 func (w TenantSQLDeprecatedWrapper) OptionalErr(issue int) (interface{}, error) {
 	v, ok := w.Optional()
 	if !ok {

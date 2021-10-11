@@ -777,7 +777,7 @@ func testRandomSyntax(
 				if c := (*crasher)(nil); errors.As(err, &c) {
 					// NOTE: Changes to this output format must be kept in-sync
 					// with logic in CondensedMessage.RSGCrash in order for
-					// crashes to be correctly reported to Github.
+					// crashes to be correctly reported to GitHub.
 					t.Errorf("Crash detected: %s\n%s;\n\nStack trace:\n%s", c.Error(), c.sql, c.detail)
 				}
 			}

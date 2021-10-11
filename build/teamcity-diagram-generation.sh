@@ -16,7 +16,7 @@ make bin/docgen
 
 git clone https://github.com/cockroachdb/generated-diagrams.git
 
-# Update diagrams on Github.
+# Update diagrams on GitHub.
 export GIT_AUTHOR_NAME="Cockroach TeamCity"
 export GIT_COMMITTER_NAME="Cockroach TeamCity"
 export GIT_AUTHOR_EMAIL="teamcity@cockroachlabs.com"

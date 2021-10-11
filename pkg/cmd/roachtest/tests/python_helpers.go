@@ -56,12 +56,12 @@ func (r *ormTestsResults) parsePythonUnitTestOutput(
 				r.passExpectedCount++
 			case pass && expectedFailure:
 				r.results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
-					test, maybeAddGithubLink(issue),
+					test, maybeAddGitHubLink(issue),
 				)
 				r.passUnexpectedCount++
 			case !pass && expectedFailure:
 				r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
-					test, maybeAddGithubLink(issue),
+					test, maybeAddGitHubLink(issue),
 				)
 				r.failExpectedCount++
 				r.currentFailures = append(r.currentFailures, test)
