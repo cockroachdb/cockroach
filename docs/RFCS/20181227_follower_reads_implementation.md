@@ -107,7 +107,7 @@ lease holder.
 
 While these changes enable and ease performing individual SELECT queries against
 follower replicas, it does not enable running entire (read-only) transactions at
-a single point in time and thus benefitting from the performance gains offerred
+a single point in time and thus benefitting from the performance gains offered
 by follower reads. This document proposes an extension to the `SET TRANSACTION`
 and `BEGIN TRANSACTION` statements to allow a clause analagous to `AS OF SYSTEM
 TIME` for `SELECT` statements today. This change will ease the multi-statement
