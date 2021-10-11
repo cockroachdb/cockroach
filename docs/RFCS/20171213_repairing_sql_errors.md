@@ -35,7 +35,7 @@ database. While rare, are bound to happen. Many of these errors are
 mentioned in the
 [scrub command RFC motivation section][scrub_command_rfc#motivation].
 
-It's not sufficent to only find errors; we also need to resolve them.
+It's not sufficient to only find errors; we also need to resolve them.
 This is crucial for disaster recovery where errors may cause data to
 become inaccessible. Correctness issues may also surface as a result of
 errors.
