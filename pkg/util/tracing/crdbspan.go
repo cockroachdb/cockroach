@@ -141,9 +141,13 @@ func (c *childSpanRefs) reset() {
 	c.refCount = 0
 }
 
-func newSizeLimitedBuffer(limit int64) sizeLimitedBuffer {
+// scratch, if not nil, represents pre-allocated space that the Buffer takes
+// ownership of. The whole backing array of the provided slice is taken over,
+// included elements and available capacity.
+func newSizeLimitedBuffer(limit int64, scratch []interface{}) sizeLimitedBuffer {
 	return sizeLimitedBuffer{
-		limit: limit,
+		limit:  limit,
+		Buffer: ring.MakeBuffer(scratch),
 	}
 }
 
