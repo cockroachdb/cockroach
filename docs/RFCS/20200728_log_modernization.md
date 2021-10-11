@@ -62,7 +62,7 @@ Table of contents:
     - [Configuration - command-line and YAML format](#configuration---command-line-and-yaml-format)
     - [Configuration - checking and visualization](#configuration---checking-and-visualization)
     - [Suggested best practices](#suggested-best-practices)
-	  - [General best practics](#general-best-practices)
+	  - [General best practices](#general-best-practices)
 	  - [CockroachCloud logging use cases](#cockroachcloud-logging-use-cases)
   - [From the perspective of CockroachDB developers](#from-the-perspective-of-cockroachdb-developers)
   - [From the perspective of documentation writers and readers](#from-the-perspective-of-documentation-writers-and-readers)
