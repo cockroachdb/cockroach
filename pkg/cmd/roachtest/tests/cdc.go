@@ -1110,7 +1110,7 @@ fi
 `, confluentDownloadURL, confluentSHA256, confluentInstallBase, confluentCLIVersion, confluentCLIDownloadURLBase)
 
 const (
-	// kafkaJAASConfig is a JAAS configuration file that creats a
+	// kafkaJAASConfig is a JAAS configuration file that creates a
 	// user called "plain" with password "plain-secret" that can
 	// authenticate via SASL/PLAIN.
 	//
