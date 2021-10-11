@@ -758,7 +758,7 @@ requests)
 - if the result is cached, the cache takes a reference
 
 For its part, the client is responsable for destroying its reference when it's
-done with the `Result`. It does this through the `MemoryToken` encorporated in
+done with the `Result`. It does this through the `MemoryToken` incorporated in
 the `Result`. This is generally expected to happen very soon after the
 `GetResults()` call - the caller will generally take over the results under its
 own accounting/budget quickly. The caller is, however, allowed to delay - but
