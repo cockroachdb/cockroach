@@ -171,7 +171,7 @@ func (s *sqlSink) EmitResolvedTimestamp(
 func (s *sqlSink) emit(
 	ctx context.Context, topic string, partition int32, key, value, resolved []byte,
 ) error {
-	// Generate the message id on the client to match the guaranttees of kafka
+	// Generate the message id on the client to match the guarantees of kafka
 	// (two messages are only guaranteed to keep their order if emitted from the
 	// same producer to the same partition).
 	messageID := builtins.GenerateUniqueInt(base.SQLInstanceID(partition))
