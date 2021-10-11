@@ -419,7 +419,7 @@ func (s *stmtStats) sizeUnsafe() int64 {
 	const stmtStatsShallowSize = int64(unsafe.Sizeof(stmtStats{}))
 	databaseNameSize := int64(len(s.mu.database))
 
-	// s.mu.data might contain pointer tyeps, so we subtract its shallow size and
+	// s.mu.data might contain pointer types, so we subtract its shallow size and
 	// include the actual size.
 	dataSize := -int64(unsafe.Sizeof(roachpb.StatementStatistics{})) +
 		int64(s.mu.data.Size())
