@@ -327,7 +327,7 @@ control disabled. Certain KV roachtests that used to overload IO, but
 were not running long enough to show the bad effects, are worse with
 admission control enabled when comparing the mean throughput. However
 the runs with admission control enabled are arguably better since they
-do not have a steadily worsening througput over the course of the
+do not have a steadily worsening throughput over the course of the
 experimental run.
 
 For some graphs showing before and after effects of enabling admission control see:
