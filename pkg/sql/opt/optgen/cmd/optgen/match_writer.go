@@ -28,7 +28,7 @@ type matchWriter struct {
 // unnestToMarker method returns to that level given the marker.
 type marker int
 
-// nest writes a formatted string with no identation and then increases the
+// nest writes a formatted string with no indentation and then increases the
 // indentation. It returns a marker for the indentation level before the
 // increase. This marker can be passed to unnestToMarker to return to that
 // level.
