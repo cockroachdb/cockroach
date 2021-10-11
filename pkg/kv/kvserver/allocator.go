@@ -1187,7 +1187,7 @@ func (a Allocator) rebalanceTarget(
 // 1. The target on which to add a new replica,
 // 2. An existing replica to remove,
 // 3. a JSON string for use in the range log, and
-// 4. a boolean indicationg whether 1-3 were populated (i.e. whether a rebalance
+// 4. a boolean indicating whether 1-3 were populated (i.e. whether a rebalance
 //    opportunity was found).
 func (a Allocator) RebalanceVoter(
 	ctx context.Context,
