@@ -48,7 +48,7 @@
 //       filter: <severity>    # min severity level for file output, default INFO
 //       redact: <bool>        # whether to remove sensitive info, default false
 //       redactable: <bool>    # whether to strip redaction markers, default false
-//       format: <fmt>         # format to use for log enries, default
+//       format: <fmt>         # format to use for log entries, default
 //                             # crdb-v1 for files, crdb-v1-tty for stderr
 //       exit-on-error: <bool> # whether to terminate upon a write error
 //                             # default true for file+stderr sinks

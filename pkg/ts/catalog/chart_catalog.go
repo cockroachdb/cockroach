@@ -670,7 +670,7 @@ var charts = []sectionDescription{
 				Metrics: []string{"queue.gc.info.intenttxns"},
 			},
 			{
-				Title:   "Enteries in Txn Spans",
+				Title:   "Entries in Txn Spans",
 				Metrics: []string{"queue.gc.info.transactionspanscanned"},
 			},
 			{
