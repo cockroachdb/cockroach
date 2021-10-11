@@ -235,7 +235,7 @@ func rewriteBenchmarkExpectations(t *testing.T, benchmarks []string) {
 	// Verify there aren't any duplicates.
 	for i := 1; i < len(expectations); i++ {
 		if expectations[i-1].name == expectations[i].name {
-			t.Fatalf("duplicate expecatations for Name %s", expectations[i].name)
+			t.Fatalf("duplicate expectations for Name %s", expectations[i].name)
 		}
 	}
 
