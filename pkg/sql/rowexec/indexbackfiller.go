@@ -69,7 +69,7 @@ var backfillerBufferIncrementSize = settings.RegisterByteSizeSetting(
 	"schemachanger.backfiller.buffer_increment", "the size by which the BulkAdder attempts to grow its buffer before flushing", 32<<20,
 )
 
-var backillerSSTSize = settings.RegisterByteSizeSetting(
+var backfillerSSTSize = settings.RegisterByteSizeSetting(
 	"schemachanger.backfiller.max_sst_size", "target size for ingested files during backfills", 16<<20,
 )
 
@@ -186,7 +186,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 
 	minBufferSize := backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
 	maxBufferSize := func() int64 { return backfillerMaxBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
-	sstSize := func() int64 { return backillerSSTSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
+	sstSize := func() int64 { return backfillerSSTSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
 	stepSize := backfillerBufferIncrementSize.Get(&ib.flowCtx.Cfg.Settings.SV)
 	opts := kvserverbase.BulkAdderOptions{
 		SSTSize:        sstSize,
