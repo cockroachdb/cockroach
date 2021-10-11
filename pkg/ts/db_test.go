@@ -54,7 +54,7 @@ import (
 // are dispatched to both the ts.DB instance and the test model. Queries are
 // executed against both, and the results should match exactly.
 //
-// In addition, the test model can be used to generate an expecation of the
+// In addition, the test model can be used to generate an expectation of the
 // on-disk layout in the ts.DB instance; the tests should periodically assert
 // that the expectation matches reality.
 //
