@@ -179,7 +179,7 @@ func ParseINet(s string, dest *IPAddr) error {
 
 	// If no mask suffix was provided, implicitly don't mask.
 	if i < 0 {
-		// Trims IPv4 suffix "." to match postgres compitibility.
+		// Trims IPv4 suffix "." to match postgres compatibility.
 		addr := s
 		if family == IPv4family {
 			addr = strings.TrimRight(addr, ".")
@@ -202,7 +202,7 @@ func ParseINet(s string, dest *IPAddr) error {
 	}
 
 	addr, maskStr := s[:i], s[i+1:]
-	// Trims IPv4 suffix "." to match postgres compitibility.
+	// Trims IPv4 suffix "." to match postgres compatibility.
 	if family == IPv4family {
 		addr = strings.TrimRight(addr, ".")
 	}
