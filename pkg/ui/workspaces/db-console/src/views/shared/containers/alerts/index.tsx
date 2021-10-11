@@ -19,7 +19,7 @@ import { Alert, panelAlertsSelector } from "src/redux/alerts";
 
 interface AlertSectionProps {
   /**
-   * List of alerts to display in the alert secion.
+   * List of alerts to display in the alert section.
    */
   alerts: Alert[];
   /**
