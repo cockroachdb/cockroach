@@ -74,7 +74,7 @@ var (
 	// include the server's uptime as an extra tag.
 	startTime = timeutil.Now()
 
-	// ReportSensitiveDetails enables reporting of unanonymized data.
+	// ReportSensitiveDetails enables reporting of non anonymized data.
 	//
 	// This should not be used by anyone unwilling to share the whole cluster
 	// data with Cockroach Labs and various cloud services.
