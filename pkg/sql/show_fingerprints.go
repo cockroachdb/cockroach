@@ -149,7 +149,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	`, strings.Join(cols, `,`), n.tableDesc.GetID(), index.GetID())
 	// If were'in in an AOST context, propagate it to the inner statement so that
 	// the inner statement gets planned with planner.avoidCachedDescriptors set,
-	// like the outter one.
+	// like the outer one.
 	if params.p.EvalContext().AsOfSystemTime != nil {
 		ts := params.p.txn.ReadTimestamp()
 		sql = sql + " AS OF SYSTEM TIME " + ts.AsOfSystemTime()
