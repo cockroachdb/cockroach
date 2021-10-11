@@ -53,7 +53,7 @@ const (
 	// ParallelUnorderedSynchronizer is in when a drain has been requested through
 	// DrainMeta. All input goroutines will call DrainMeta on its input and exit.
 	parallelUnorderedSynchronizerStateDraining
-	// parallelUnorderedSyncrhonizerStateDone is the state the
+	// parallelUnorderedSynchronizerStateDone is the state the
 	// ParallelUnorderedSynchronizer is in when draining has completed.
 	parallelUnorderedSynchronizerStateDone
 )

@@ -377,7 +377,7 @@ func (f *jobFeed) Close() error {
 	return nil
 }
 
-// sinkSychronizer allows testfeed's Next() method to synchronize itself
+// sinkSynchronizer allows testfeed's Next() method to synchronize itself
 // with the sink operations.
 type sinkSynchronizer struct {
 	syncutil.Mutex
