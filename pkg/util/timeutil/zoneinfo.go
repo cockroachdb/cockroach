@@ -36,7 +36,7 @@ func LoadLocation(name string) (*time.Location, error) {
 	if v, ok := lowercaseTimezones[loweredName]; ok {
 		// If this location is not found, we may have a case where the tzdata names
 		// have different values than the system tz names.
-		// If this is the case, allback onto the default logic, where the name is read
+		// If this is the case, fallback onto the default logic, where the name is read
 		// off other sources before tzdata.
 		if loc, err := time.LoadLocation(v); err == nil {
 			return loc, nil
