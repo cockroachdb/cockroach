@@ -26,7 +26,7 @@ func TestRegistry(t *testing.T) {
 		good = "foo_bar_baz"
 		bad  = "yes/we/do*not*@crash"
 	)
-	r := NewRegistry(10*time.Second, "lorkwoad")
+	r := NewRegistry(10*time.Second, "workload")
 	h := r.GetHandle()
 
 	for i := 0; i < 3; i++ {
