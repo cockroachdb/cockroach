@@ -51,7 +51,7 @@ export class Highlight extends React.Component<SqlBoxProps> {
         </span>
         {secondaryValue && (
           <>
-            <div className={cx("higlight-divider")} />
+            <div className={cx("highlight-divider")} />
             <span className={cx("sql-highlight")} ref={this.preNodeSecondary}>
               {secondaryValue}
             </span>
