@@ -519,7 +519,7 @@ type AlterTableDropStored struct {
 	Column Name
 }
 
-// GetColumn implemnets the ColumnMutationCmd interface.
+// GetColumn implements the ColumnMutationCmd interface.
 func (node *AlterTableDropStored) GetColumn() Name {
 	return node.Column
 }
