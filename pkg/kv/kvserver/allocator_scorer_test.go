@@ -118,7 +118,7 @@ func TestCandidateSelection(t *testing.T) {
 				store: roachpb.StoreDescriptor{
 					StoreID: roachpb.StoreID(i + idShift),
 				},
-				// We want to test here that everything works when the deversity score
+				// We want to test here that everything works when the diversity score
 				// is not the exact value but very close to it. Nextafter will give us
 				// the closest number to the diversity score in the test case,
 				// that isn't equal to it and is either above or below (at random).
