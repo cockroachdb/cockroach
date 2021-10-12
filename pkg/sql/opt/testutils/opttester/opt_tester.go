@@ -994,7 +994,7 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 	case "query-args":
 		f.QueryArgs = arg.Vals
 
-	case "preserve-input-order":
+	case "propagate-input-ordering":
 		f.PropagateInputOrdering = true
 
 	default:
