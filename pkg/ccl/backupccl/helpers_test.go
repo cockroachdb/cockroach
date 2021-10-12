@@ -324,7 +324,7 @@ func makeInsecureHTTPServer(t *testing.T) (string, func()) {
 
 // thresholdBlocker is a small wrapper around channels that are commonly used to
 // block operations during testing.
-// For example, it can be used in conjection with the RunBeforeBackfillChunk and
+// For example, it can be used in conjunction with the RunBeforeBackfillChunk and
 // BulkAdderFlushesEveryBatch cluster settings. The SQLSchemaChanger knob can be
 // used to control the chunk size.
 type thresholdBlocker struct {
