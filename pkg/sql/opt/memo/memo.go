@@ -147,6 +147,7 @@ type Memo struct {
 	intervalStyleEnabled    bool
 	dateStyle               pgdate.DateStyle
 	intervalStyle           duration.IntervalStyle
+	propagateInputOrdering  bool
 	disallowFullTableScans  bool
 	largeFullScanRows       float64
 
@@ -191,6 +192,7 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 		dateStyleEnabled:        evalCtx.SessionData().DateStyleEnabled,
 		dateStyle:               evalCtx.SessionData().GetDateStyle(),
 		intervalStyle:           evalCtx.SessionData().GetIntervalStyle(),
+		propagateInputOrdering:  evalCtx.SessionData().PropagateInputOrdering,
 		disallowFullTableScans:  evalCtx.SessionData().DisallowFullTableScans,
 		largeFullScanRows:       evalCtx.SessionData().LargeFullScanRows,
 	}
@@ -305,6 +307,7 @@ func (m *Memo) IsStale(
 		m.dateStyleEnabled != evalCtx.SessionData().DateStyleEnabled ||
 		m.dateStyle != evalCtx.SessionData().GetDateStyle() ||
 		m.intervalStyle != evalCtx.SessionData().GetIntervalStyle() ||
+		m.propagateInputOrdering != evalCtx.SessionData().PropagateInputOrdering ||
 		m.disallowFullTableScans != evalCtx.SessionData().DisallowFullTableScans ||
 		m.largeFullScanRows != evalCtx.SessionData().LargeFullScanRows {
 		return true, nil

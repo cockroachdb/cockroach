@@ -92,3 +92,20 @@
 )
 =>
 (Explain $input (SimplifyExplainOrdering $input $explainPrivate))
+
+# SimplifyWithBindingOrdering removes redundant columns from the With operator's
+# binding ordering. Note that this ordering is only used with the special
+# propagate_input_ordering flag.
+[SimplifyWithBindingOrdering, Normalize]
+(With
+    $binding:*
+    $main:*
+    $withPrivate:* &
+        (CanSimplifyWithBindingOrdering $binding $withPrivate)
+)
+=>
+(With
+    $binding
+    $main
+    (SimplifyWithBindingOrdering $binding $withPrivate)
+)
