@@ -3651,7 +3651,7 @@ func TestReplicaTxnIdempotency(t *testing.T) {
 			},
 		},
 		{
-			name: "reissued initput",
+			name: "reissued InitPut",
 			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
 				args := iPutArgs(key, val1)
 				args.Sequence = 2
@@ -10367,7 +10367,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			},
 		},
 		{
-			name: "serverside-refresh of write too old on initput",
+			name: "serverside-refresh of write too old on InitPut",
 			setupFn: func() (hlc.Timestamp, error) {
 				// Note there are two different version of the value, but a
 				// non-txnal cput will evaluate the most recent version and
@@ -10432,9 +10432,9 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			},
 			expErr: "write at timestamp .* too old",
 		},
-		// Non-1PC serializable txn initput will fail with write too old error.
+		// Non-1PC serializable txn InitPut will fail with write too old error.
 		{
-			name: "no serverside-refresh of write too old on non-1PC txn initput",
+			name: "no serverside-refresh of write too old on non-1PC txn InitPut",
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("c-iput", "put")
 			},
@@ -10486,7 +10486,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// current behavior; for example since there's nothing to refresh, the
 		// request could be retried.
 		{
-			name: "serverside-refresh of write too old on non-1PC txn initput without prior reads",
+			name: "serverside-refresh of write too old on non-1PC txn InitPut without prior reads",
 			setupFn: func() (hlc.Timestamp, error) {
 				// Note there are two different version of the value, but a
 				// non-txnal cput will evaluate the most recent version and

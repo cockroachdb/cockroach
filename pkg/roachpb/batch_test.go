@@ -286,7 +286,7 @@ func TestRefreshSpanIterate(t *testing.T) {
 	}{
 		{&ConditionalPutRequest{}, &ConditionalPutResponse{}, sp("a", ""), Span{}},
 		{&PutRequest{}, &PutResponse{}, sp("a-put", ""), Span{}},
-		{&InitPutRequest{}, &InitPutResponse{}, sp("a-initput", ""), Span{}},
+		{&InitPutRequest{}, &InitPutResponse{}, sp("a-InitPut", ""), Span{}},
 		{&IncrementRequest{}, &IncrementResponse{}, sp("a-inc", ""), Span{}},
 		{&ScanRequest{}, &ScanResponse{}, sp("a", "c"), sp("b", "c")},
 		{&GetRequest{}, &GetResponse{}, sp("b", ""), Span{}},

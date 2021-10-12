@@ -303,7 +303,7 @@ var charts = []sectionDescription{
 					"distsender.rpc.heartbeattxn.sent",
 					"distsender.rpc.import.sent",
 					"distsender.rpc.increment.sent",
-					"distsender.rpc.initput.sent",
+					"distsender.rpc.InitPut.sent",
 					"distsender.rpc.leaseinfo.sent",
 					"distsender.rpc.merge.sent",
 					"distsender.rpc.migrate.sent",
