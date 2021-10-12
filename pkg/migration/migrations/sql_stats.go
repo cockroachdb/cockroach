@@ -16,22 +16,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/migration"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 )
 
-func sqlStatementStatsTableMigration(
+func sqlStatsTablesMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps, _ *jobs.Job,
 ) error {
-	return startupmigrations.CreateSystemTable(
-		ctx, d.DB, d.Codec, d.Settings, systemschema.StatementStatisticsTable,
-	)
-}
-
-func sqlTransactionStatsTableMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps, _ *jobs.Job,
-) error {
-	return startupmigrations.CreateSystemTable(
-		ctx, d.DB, d.Codec, d.Settings, systemschema.TransactionStatisticsTable,
-	)
+	for _, tab := range []catalog.TableDescriptor{
+		systemschema.StatementStatisticsTable,
+		systemschema.TransactionStatisticsTable,
+	} {
+		if err := startupmigrations.CreateSystemTable(
+			ctx, d.DB, d.Codec, d.Settings, tab,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
