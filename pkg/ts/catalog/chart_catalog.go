@@ -1484,7 +1484,7 @@ var charts = []sectionDescription{
 		Organization: [][]string{{ReplicationLayer, "Ranges"}},
 		Charts: []chartDescription{
 			{
-				Title:   "Backpressued Writes Waiting on Split",
+				Title:   "Backpressured Writes Waiting on Split",
 				Metrics: []string{"requests.backpressure.split"},
 			},
 			{
