@@ -1380,7 +1380,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// The iteration is complete if the iterator's current range
 		// encompasses the remaining span, OR if the next span has
 		// inverted. This can happen if this method is invoked
-		// re-entrantly due to ranges being split or merged. In that case
+		// reentrantly due to ranges being split or merged. In that case
 		// the batch request has all the original requests but the span is
 		// a sub-span of the original, causing next() and prev() methods
 		// to potentially return values which invert the span.
