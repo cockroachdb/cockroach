@@ -549,19 +549,11 @@ type SetAccountingHelper struct {
 }
 
 // Init initializes the helper.
-// - notNeededVecIdxs specifies the indices into typs the corresponding vectors
-// for which will not be set to a non-null value. notNeededVecIdxs must be
-// sorted.
-func (h *SetAccountingHelper) Init(allocator *Allocator, typs []*types.T, notNeededVecIdxs []int) {
+func (h *SetAccountingHelper) Init(allocator *Allocator, typs []*types.T) {
 	h.Allocator = allocator
 
-	curNotNeededPos := 0
 	numDecimalVecs := 0
 	for vecIdx, typ := range typs {
-		if len(notNeededVecIdxs) > curNotNeededPos && vecIdx == notNeededVecIdxs[curNotNeededPos] {
-			curNotNeededPos++
-			continue
-		}
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 		case types.BytesFamily, types.JsonFamily:
 			h.bytesLikeVecIdxs.Add(vecIdx)
