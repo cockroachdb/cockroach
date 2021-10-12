@@ -968,7 +968,7 @@ None found.
 
   Pros of keeping them: backward-compat. No habit changes.
 
-  Cons: makes it harder for engineers to think about optiong into other channels than DEV.
+  Cons: makes it harder for engineers to think about opting into other channels than DEV.
 
   If we were to deprecate the existing API the devs would need to make a call
   about explicitly using the DEV channel or one of the other channels.
