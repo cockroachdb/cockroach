@@ -38,6 +38,7 @@ const (
 	OptKeyInValue               = `key_in_value`
 	OptTopicInValue             = `topic_in_value`
 	OptResolvedTimestamps       = `resolved`
+	OptMinCheckpointFrequency   = `min_checkpoint_frequency`
 	OptUpdatedTimestamps        = `updated`
 	OptMVCCTimestamps           = `mvcc_timestamp`
 	OptDiff                     = `diff`
@@ -152,6 +153,7 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptKeyInValue:               sql.KVStringOptRequireNoValue,
 	OptTopicInValue:             sql.KVStringOptRequireNoValue,
 	OptResolvedTimestamps:       sql.KVStringOptAny,
+	OptMinCheckpointFrequency:   sql.KVStringOptRequireValue,
 	OptUpdatedTimestamps:        sql.KVStringOptRequireNoValue,
 	OptMVCCTimestamps:           sql.KVStringOptRequireNoValue,
 	OptDiff:                     sql.KVStringOptRequireNoValue,
@@ -184,7 +186,8 @@ var CommonOptions = makeStringSet(OptCursor, OptEnvelope,
 	OptMVCCTimestamps, OptDiff,
 	OptSchemaChangeEvents, OptSchemaChangePolicy,
 	OptProtectDataFromGCOnPause, OptOnError,
-	OptInitialScan, OptNoInitialScan)
+	OptInitialScan, OptNoInitialScan,
+	OptMinCheckpointFrequency)
 
 // SQLValidOptions is options exclusive to SQL sink
 var SQLValidOptions map[string]struct{} = nil

@@ -515,6 +515,14 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		}
 	}
 	{
+		const opt = changefeedbase.OptMinCheckpointFrequency
+		if o, ok := details.Opts[opt]; ok && o != `` {
+			if err := validateNonNegativeDuration(opt, o); err != nil {
+				return jobspb.ChangefeedDetails{}, err
+			}
+		}
+	}
+	{
 		const opt = changefeedbase.OptSchemaChangeEvents
 		switch v := changefeedbase.SchemaChangeEventClass(details.Opts[opt]); v {
 		case ``, changefeedbase.OptSchemaChangeEventClassDefault:

@@ -538,7 +538,7 @@ func TestChangefeedTimestamps(t *testing.T) {
 		// Check that we eventually get a resolved timestamp greater than ts1.
 		parsed := parseTimeToHLC(t, ts1)
 		for {
-			if resolved := expectResolvedTimestamp(t, foo); parsed.Less(resolved) {
+			if resolved, _ := expectResolvedTimestamp(t, foo); parsed.Less(resolved) {
 				break
 			}
 		}
@@ -585,33 +585,56 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	var resolvedFreq, checkpointFreq time.Duration
+	durationString := func(duration time.Duration) string {
+		if duration == 0 {
+			return ""
+		}
+		return duration.String()
+	}
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 
-		const freq = 10 * time.Millisecond
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved=$1`, freq.String())
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved=$1, min_checkpoint_frequency=$2`,
+			durationString(resolvedFreq), durationString(checkpointFreq))
 		defer closeFeed(t, foo)
 
 		// We get each resolved timestamp notification once in each partition.
 		// Grab the first `2 * #partitions`, sort because we might get all from
 		// one partition first, and compare the first and last.
 		resolved := make([]hlc.Timestamp, 2*len(foo.Partitions()))
+		receivedPerPartition := make(map[string]time.Time)
+		var partition string
 		for i := range resolved {
-			resolved[i] = expectResolvedTimestamp(t, foo)
+			resolved[i], partition = expectResolvedTimestamp(t, foo)
+			now := timeutil.Now()
+			if lastReceived, ok := receivedPerPartition[partition]; ok {
+				if d := now.Sub(lastReceived); d < checkpointFreq {
+					t.Errorf(`expected %s between two resolved timestamp emission time within same partition, but got %s`, checkpointFreq, d)
+				}
+			}
+			receivedPerPartition[partition] = now
 		}
 		sort.Slice(resolved, func(i, j int) bool { return resolved[i].Less(resolved[j]) })
 		first, last := resolved[0], resolved[len(resolved)-1]
 
-		if d := last.GoTime().Sub(first.GoTime()); d < freq {
-			t.Errorf(`expected %s between resolved timestamps, but got %s`, freq, d)
+		if d := last.GoTime().Sub(first.GoTime()); d < resolvedFreq {
+			t.Errorf(`expected %s between resolved timestamps, but got %s`, resolvedFreq, d)
 		}
 	}
 
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`kafka`, kafkaTest(testFn))
-	t.Run(`webhook`, webhookTest(testFn))
+	runTests := func(testResolvedFreq, testCheckpointFreq time.Duration) {
+		resolvedFreq, checkpointFreq = testResolvedFreq, testCheckpointFreq
+		t.Run(`sinkless`, sinklessTest(testFn))
+		t.Run(`enterprise`, enterpriseTest(testFn))
+		t.Run(`kafka`, kafkaTest(testFn))
+		t.Run(`webhook`, webhookTest(testFn))
+	}
+
+	runTests(1*time.Second, 0)
+	runTests(0, 1*time.Second)
+	runTests(600*time.Millisecond, 1*time.Second)
 }
 
 // Test how Changefeeds react to schema changes that do not require a backfill

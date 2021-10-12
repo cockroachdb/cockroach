@@ -188,7 +188,7 @@ func NewReplicationHelper(t *testing.T) (*ReplicationHelper, func()) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 
 	// Make changefeeds run faster.
-	resetFreq := changefeedbase.TestingSetDefaultFlushFrequency(50 * time.Millisecond)
+	resetFreq := changefeedbase.TestingSetDefaultMinCheckpointFrequency(50 * time.Millisecond)
 
 	// Set required cluster settings.
 	_, err := db.Exec(`
