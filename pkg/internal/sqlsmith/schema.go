@@ -482,15 +482,21 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 		case "pg_sleep":
 			continue
 		}
-		if strings.Contains(def.Name, "stream_ingestion") {
-			// crdb_internal.complete_stream_ingestion_job is a stateful function that
-			// requires a running stream ingestion job. Invoking this against random
-			// parameters is likely to fail and so we skip it.
-			continue
+		skip := false
+		for _, substr := range []string{
+			// crdb_internal.complete_stream_ingestion_job is a stateful
+			// function that requires a running stream ingestion job. Invoking
+			// this against random parameters is likely to fail and so we skip
+			// it.
+			"stream_ingestion",
+			"crdb_internal.force_",
+			"crdb_internal.unsafe_",
+			"crdb_internal.create_join_token",
+			"crdb_internal.reset_multi_region_zone_configs_for_database",
+		} {
+			skip = skip || strings.Contains(def.Name, substr)
 		}
-		if strings.Contains(def.Name, "crdb_internal.force_") ||
-			strings.Contains(def.Name, "crdb_internal.unsafe_") ||
-			strings.Contains(def.Name, "crdb_internal.create_join_token") {
+		if skip {
 			continue
 		}
 		if _, ok := m[def.Class]; !ok {
