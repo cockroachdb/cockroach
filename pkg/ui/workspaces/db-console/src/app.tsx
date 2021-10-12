@@ -179,10 +179,10 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
 
                 {/* statement statistics */}
                 <Route exact path="/statements" component={StatementsPage} />
-                <Route
+                <Redirect
                   exact
-                  path={`/statements/:${appAttr}`}
-                  component={StatementsPage}
+                  from={`/statements/:${appAttr}`}
+                  to={`/statements?${appAttr}=:${appAttr}`}
                 />
                 <Route
                   exact
