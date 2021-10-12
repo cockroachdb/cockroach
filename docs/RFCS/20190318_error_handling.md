@@ -2810,7 +2810,7 @@ network boundaries would evolve as follows:
      use/produce structured errors, we need to take care of the
      following:
 
-     - a `pgerror.Error` (or `roachpb.UhandledRetryableError`) must
+     - a `pgerror.Error` (or `roachpb.UnhandledRetryableError`) must
        still be produced *alongside* the structured error to be picked
        up by old-style clients. Since the client still presumably
        checks for things using the pg error code or error message, any
