@@ -577,8 +577,28 @@ func (r *Registry) CreateStartableJobWithTxn(
 
 // LoadJob loads an existing job with the given jobID from the system.jobs
 // table.
+//
+// WARNING: Avoid new uses of this function. The returned Job allows
+// for mutation even if the instance no longer holds a valid claim on
+// the job.
+//
+// TODO(ssd): Remove this API and replace it with a safer API.
 func (r *Registry) LoadJob(ctx context.Context, jobID jobspb.JobID) (*Job, error) {
 	return r.LoadJobWithTxn(ctx, jobID, nil)
+}
+
+// LoadClaimedJob loads an existing job with the given jobID from the
+// system.jobs table. The job must have already been claimed by this
+// Registry.
+func (r *Registry) LoadClaimedJob(ctx context.Context, jobID jobspb.JobID) (*Job, error) {
+	j, err := r.getClaimedJob(jobID)
+	if err != nil {
+		return nil, err
+	}
+	if err := j.load(ctx, nil); err != nil {
+		return nil, err
+	}
+	return j, nil
 }
 
 // LoadJobWithTxn does the same as above, but using the transaction passed in
@@ -690,7 +710,7 @@ WHERE claim_session_id in (
 SELECT claim_session_id
  WHERE claim_session_id <> $1
    AND status IN `+claimableStatusTupleString+`
-   AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id) FETCH 
+   AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id) FETCH
 	 FIRST `+strconv.Itoa(int(CancellationsUpdateLimitSetting.Get(&r.settings.SV)))+` ROWS ONLY)`,
 				s.ID().UnsafeBytes(),
 			)
@@ -1369,6 +1389,21 @@ func (r *Registry) unregister(jobID jobspb.JobID) {
 		aj.cancel()
 		delete(r.mu.adoptedJobs, jobID)
 	}
+}
+
+func (r *Registry) getClaimedJob(jobID jobspb.JobID) (*Job, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	aj, ok := r.mu.adoptedJobs[jobID]
+	if !ok {
+		return nil, &JobNotFoundError{jobID: jobID}
+	}
+	return &Job{
+		id:        jobID,
+		sessionID: aj.sid,
+		registry:  r,
+	}, nil
 }
 
 // TestingNudgeAdoptionQueue is used by tests to tell the registry that there is
