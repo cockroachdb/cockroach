@@ -81,12 +81,12 @@ type flowWithCtx struct {
 	enqueueTime time.Time
 }
 
-// CleanupBeforeRun cleans up the flow's resources in case this flow will never
+// cleanupBeforeRun cleans up the flow's resources in case this flow will never
 // run.
-func (f *flowWithCtx) CleanupBeforeRun() {
+func (f *flowWithCtx) cleanupBeforeRun() {
 	// Note: passing f.ctx is important; that's the context that has the flow's
 	// span in it, and that span needs Finish()ing.
-	f.flow.CleanupBeforeRun(f.ctx)
+	f.flow.Cleanup(f.ctx)
 }
 
 // NewFlowScheduler creates a new FlowScheduler which must be initialized before
@@ -248,7 +248,7 @@ func (fs *FlowScheduler) CancelDeadFlows(req *execinfrapb.CancelDeadFlowsRequest
 			fs.mu.queue.Remove(e)
 			fs.metrics.FlowsQueued.Dec(1)
 			numCanceled++
-			f.CleanupBeforeRun()
+			f.cleanupBeforeRun()
 		}
 	}
 }
@@ -277,7 +277,7 @@ func (fs *FlowScheduler) Start() {
 					fs.mu.queue.Remove(e)
 					n := e.Value.(*flowWithCtx)
 					// TODO(radu): somehow send an error to whoever is waiting on this flow.
-					n.CleanupBeforeRun()
+					n.cleanupBeforeRun()
 				}
 
 				if atomic.LoadInt32(&fs.atomics.numRunning) == 0 {
