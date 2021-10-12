@@ -242,6 +242,7 @@ DATABASES = {
         'PASSWORD': '',
         'HOST': 'localhost',
         'PORT': 26257,
+				'DISABLE_COCKROACHDB_TELEMETRY': True,
     },
     'other': {
         'ENGINE': 'django_cockroachdb',
@@ -250,6 +251,7 @@ DATABASES = {
         'PASSWORD': '',
         'HOST': 'localhost',
         'PORT': 26257,
+				'DISABLE_COCKROACHDB_TELEMETRY': True,
     },
 }
 SECRET_KEY = 'django_tests_secret_key'
