@@ -229,7 +229,7 @@ func (d Datums) IsDistinctFrom(evalCtx *EvalContext, other Datums) bool {
 // colinfo.HasCompositeKeyEncoding.
 type CompositeDatum interface {
 	Datum
-	// IsComposite returns true if this datum is not round-tripable in a key
+	// IsComposite returns true if this datum is not round-trippable in a key
 	// encoding.
 	IsComposite() bool
 }
