@@ -641,7 +641,7 @@ hold:
   `b` for the aforementioned columns, then a query of the form
   `select * from a.b` must work.
 
-- if `information_schema.schematas` contains a row with values
+- if `information_schema.schemata` contains a row with values
   `unused`, `a` for the catalog and schema name columns, then a
   statement of the form `create table a.b (...)` must work.
 
@@ -654,7 +654,7 @@ constructed:
   `c` for the aforementioned columns, then a query of the form
   `select * from a.b.c` must work.
 
-- if `information_schema.schematas` contains a row with values `a`,
+- if `information_schema.schemata` contains a row with values `a`,
   `b` for the catalog and schema name columns, then a statement of the
   form `create table a.b.c (...)` must work.
 
