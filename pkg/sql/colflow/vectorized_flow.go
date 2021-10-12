@@ -646,6 +646,9 @@ func (s *vectorizedFlowCreator) Release() {
 	for i := range s.releasables {
 		s.releasables[i] = nil
 	}
+	if s.exprHelper != nil {
+		s.exprHelper.SemaCtx = nil
+	}
 	*s = vectorizedFlowCreator{
 		streamIDToInputOp: s.streamIDToInputOp,
 		streamIDToSpecIdx: s.streamIDToSpecIdx,
@@ -1166,6 +1169,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 				FDSemaphore:          s.fdSemaphore,
 				ExprHelper:           s.exprHelper,
 				Factory:              factory,
+			}
+			if args.ExprHelper.SemaCtx == nil {
+				args.ExprHelper.SemaCtx = flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
 			}
 			var result *colexecargs.NewColOperatorResult
 			result, err = colbuilder.NewColOperator(ctx, flowCtx, args)
