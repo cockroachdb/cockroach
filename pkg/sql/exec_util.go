@@ -2343,7 +2343,7 @@ func generateSessionTraceVTable(spans []tracingpb.RecordedSpan) ([]traceRow, err
 		// The result of FindStringSubmatchIndex is a 1D array of pairs
 		// [start, end) of positions in the input string.  The first pair
 		// identifies the entire match; the 2nd pair corresponds to the
-		// 1st parenthetized expression in the regexp, and so on.
+		// 1st parenthesized expression in the regexp, and so on.
 		loc := logMessageRE.FindStringSubmatchIndex(lrr.msg)
 		if loc == nil {
 			return nil, fmt.Errorf("unable to split trace message: %q", lrr.msg)
