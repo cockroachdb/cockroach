@@ -1527,7 +1527,7 @@ Table of contents:
 To support network-agnostic identification of
 causes, the library provides *error markers* used to extend
 the behavior of `errors.Is()`: `Is(err, ref)` will return `true` if
-*either* `err == ref` *or* their markers are qual.
+*either* `err == ref` *or* their markers are equal.
 
 Markers are computed for all error types in a way that aims to be agnostic
 and identify a particular error object. In the common case, a mark is
