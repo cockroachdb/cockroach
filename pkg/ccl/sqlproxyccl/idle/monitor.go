@@ -148,7 +148,7 @@ func (m *Monitor) start(ctx context.Context) {
 
 			// Callback functions are copied to a separate slice outside the
 			// scope of a lock, so there are no concerns with the onIdle callback
-			// function causing re-entrancy deadlocks.
+			// function causing reentrancy deadlocks.
 			for _, onIdle := range idleFuncs {
 				onIdle()
 			}
