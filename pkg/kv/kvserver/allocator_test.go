@@ -2037,7 +2037,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 	// up being fuller than the nodes in the large locality. In the past this has
 	// caused an over-eagerness to rebalance to nodes in the large locality, and
 	// not enough willingness to rebalance within the small localities. This test
-	// verifies that we compare fairly amongst stores that will givve the store
+	// verifies that we compare fairly amongst stores that will give the store
 	// an optimal diversity score, not considering the fullness of those that
 	// will make for worse diversity.
 	stores := []*roachpb.StoreDescriptor{
