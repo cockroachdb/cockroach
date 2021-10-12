@@ -1675,7 +1675,7 @@ func TestChangefeedWorksOnRBRChange(t *testing.T) {
 		})
 	}
 
-	// Tenants skiped because of:
+	// Tenants skipped because of:
 	//
 	// error executing 'ALTER DATABASE d PRIMARY REGION
 	// "us-east-1"': pq: get_live_cluster_regions: unimplemented:
