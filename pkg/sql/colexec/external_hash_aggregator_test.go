@@ -59,91 +59,105 @@ func TestExternalHashAggregator(t *testing.T) {
 	)
 	rng, _ := randutil.NewPseudoRand()
 	numForcedRepartitions := rng.Intn(5)
-	for _, diskSpillingEnabled := range []bool{true, false} {
-		HashAggregationDiskSpillingEnabled.Override(ctx, &flowCtx.Cfg.Settings.SV, diskSpillingEnabled)
-		// Test the case in which the default memory is used as well as the case
-		// in which the hash aggregator spills to disk.
-		for _, spillForced := range []bool{false, true} {
-			if !diskSpillingEnabled && spillForced {
+	for _, cfg := range []struct {
+		diskSpillingEnabled bool
+		spillForced         bool
+		memoryLimitBytes    int64
+	}{
+		{
+			diskSpillingEnabled: true,
+			spillForced:         true,
+		},
+		{
+			diskSpillingEnabled: true,
+			spillForced:         false,
+		},
+		{
+			diskSpillingEnabled: false,
+		},
+		{
+			diskSpillingEnabled: true,
+			spillForced:         false,
+			memoryLimitBytes:    hashAggregatorAllocSize * sizeOfAggBucket,
+		},
+		{
+			diskSpillingEnabled: true,
+			spillForced:         false,
+			memoryLimitBytes:    hashAggregatorAllocSize * sizeOfAggBucket * 2,
+		},
+	} {
+		HashAggregationDiskSpillingEnabled.Override(ctx, &flowCtx.Cfg.Settings.SV, cfg.diskSpillingEnabled)
+		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = cfg.spillForced
+		flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = cfg.memoryLimitBytes
+		for _, tc := range append(aggregatorsTestCases, hashAggregatorTestCases...) {
+			if len(tc.groupCols) == 0 {
+				// If there are no grouping columns, then the ordered
+				// aggregator is planned.
 				continue
 			}
-			flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
-			for _, tc := range append(aggregatorsTestCases, hashAggregatorTestCases...) {
-				if len(tc.groupCols) == 0 {
-					// If there are no grouping columns, then the ordered
-					// aggregator is planned.
-					continue
+			if tc.aggFilter != nil {
+				// Filtering aggregation is not supported with the ordered
+				// aggregation which is required for the external hash
+				// aggregator in the fallback strategy.
+				continue
+			}
+			log.Infof(ctx, "diskSpillingEnabled=%t/spillForced=%t/memoryLimitBytes=%d/numRepartitions=%d/%s", cfg.diskSpillingEnabled, cfg.spillForced, cfg.memoryLimitBytes, numForcedRepartitions, tc.name)
+			constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
+				&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
+			)
+			require.NoError(t, err)
+			verifier := colexectestutils.OrderedVerifier
+			if tc.unorderedInput {
+				verifier = colexectestutils.UnorderedVerifier
+			} else if len(tc.orderedCols) > 0 {
+				verifier = colexectestutils.PartialOrderedVerifier
+			}
+			var numExpectedClosers int
+			if cfg.diskSpillingEnabled {
+				// The external sorter and the disk spiller should be added
+				// as Closers (the latter is responsible for closing the
+				// in-memory hash aggregator as well as the external one).
+				numExpectedClosers = 2
+				if len(tc.spec.OutputOrdering.Columns) > 0 {
+					// When the output ordering is required, we also plan
+					// another external sort.
+					numExpectedClosers++
 				}
-				if tc.aggFilter != nil {
-					// Filtering aggregation is not supported with the ordered
-					// aggregation which is required for the external hash
-					// aggregator in the fallback strategy.
-					continue
-				}
-				log.Infof(ctx, "spillForced=%t/numRepartitions=%d/%s", spillForced, numForcedRepartitions, tc.name)
-				constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
-					&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
-				)
-				require.NoError(t, err)
-				verifier := colexectestutils.OrderedVerifier
-				if tc.unorderedInput {
-					verifier = colexectestutils.UnorderedVerifier
-				}
-				var numExpectedClosers int
-				if diskSpillingEnabled {
-					// The external sorter and the disk spiller should be added
-					// as Closers (the latter is responsible for closing the
-					// in-memory hash aggregator as well as the external one).
-					numExpectedClosers = 2
-					if len(tc.spec.OutputOrdering.Columns) > 0 {
-						// When the output ordering is required, we also plan
-						// another external sort.
-						numExpectedClosers++
-					}
-				} else {
-					// Only the in-memory hash aggregator should be added.
-					numExpectedClosers = 1
-				}
-				var semsToCheck []semaphore.Semaphore
-				colexectestutils.RunTestsWithTyps(
-					t,
-					testAllocator,
-					[]colexectestutils.Tuples{tc.input},
-					[][]*types.T{tc.typs},
-					tc.expected,
-					verifier,
-					func(input []colexecop.Operator) (colexecop.Operator, error) {
-						sem := colexecop.NewTestingSemaphore(ehaNumRequiredFDs)
-						semsToCheck = append(semsToCheck, sem)
-						op, accs, mons, closers, err := createExternalHashAggregator(
-							ctx, flowCtx, &colexecagg.NewAggregatorArgs{
-								Allocator:      testAllocator,
-								MemAccount:     testMemAcc,
-								Input:          input[0],
-								InputTypes:     tc.typs,
-								Spec:           tc.spec,
-								EvalCtx:        &evalCtx,
-								Constructors:   constructors,
-								ConstArguments: constArguments,
-								OutputTypes:    outputTypes,
-							},
-							queueCfg, sem, numForcedRepartitions,
-						)
-						accounts = append(accounts, accs...)
-						monitors = append(monitors, mons...)
-						require.Equal(t, numExpectedClosers, len(closers))
-						if !diskSpillingEnabled {
-							// Sanity check that indeed only the in-memory hash
-							// aggregator was created.
-							_, isHashAgg := MaybeUnwrapInvariantsChecker(op).(*hashAggregator)
-							require.True(t, isHashAgg)
-						}
-						return op, err
+			} else {
+				// Only the in-memory hash aggregator should be added.
+				numExpectedClosers = 1
+			}
+			var semsToCheck []semaphore.Semaphore
+			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
+				sem := colexecop.NewTestingSemaphore(ehaNumRequiredFDs)
+				semsToCheck = append(semsToCheck, sem)
+				op, accs, mons, closers, err := createExternalHashAggregator(
+					ctx, flowCtx, &colexecagg.NewAggregatorArgs{
+						Allocator:      testAllocator,
+						MemAccount:     testMemAcc,
+						Input:          input[0],
+						InputTypes:     tc.typs,
+						Spec:           tc.spec,
+						EvalCtx:        &evalCtx,
+						Constructors:   constructors,
+						ConstArguments: constArguments,
+						OutputTypes:    outputTypes,
 					},
+					queueCfg, sem, numForcedRepartitions,
 				)
-				for i, sem := range semsToCheck {
-					require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
+				accounts = append(accounts, accs...)
+				monitors = append(monitors, mons...)
+				require.Equal(t, numExpectedClosers, len(closers))
+				if !cfg.diskSpillingEnabled {
+					// Sanity check that indeed only the in-memory hash
+					// aggregator was created.
+					_, isHashAgg := MaybeUnwrapInvariantsChecker(op).(*hashAggregator)
+					require.True(t, isHashAgg)
 				}
+				return op, err
+			})
+			for i, sem := range semsToCheck {
+				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 			}
 		}
 	}
@@ -206,9 +220,8 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 						},
 						name: fmt.Sprintf("spilled=%t", spillForced),
 					},
-					aggFn, []*types.T{types.Int}, groupSize,
-					0 /* distinctProb */, numInputRows,
-				)
+					aggFn, []*types.T{types.Int}, 1 /* numGroupCol */, groupSize,
+					0 /* distinctProb */, numInputRows, 0 /* chunkSize */, 0 /* limit */)
 			}
 		}
 	}

@@ -146,20 +146,19 @@ func TestDefaultAggregateFunc(t *testing.T) {
 					&evalCtx, &semaCtx, tc.spec.Aggregations, tc.typs,
 				)
 				require.NoError(t, err)
-				colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.UnorderedVerifier,
-					func(input []colexecop.Operator) (colexecop.Operator, error) {
-						return agg.new(&colexecagg.NewAggregatorArgs{
-							Allocator:      testAllocator,
-							MemAccount:     testMemAcc,
-							Input:          input[0],
-							InputTypes:     tc.typs,
-							Spec:           tc.spec,
-							EvalCtx:        &evalCtx,
-							Constructors:   constructors,
-							ConstArguments: constArguments,
-							OutputTypes:    outputTypes,
-						})
+				colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.UnorderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
+					return agg.new(&colexecagg.NewAggregatorArgs{
+						Allocator:      testAllocator,
+						MemAccount:     testMemAcc,
+						Input:          input[0],
+						InputTypes:     tc.typs,
+						Spec:           tc.spec,
+						EvalCtx:        &evalCtx,
+						Constructors:   constructors,
+						ConstArguments: constArguments,
+						OutputTypes:    outputTypes,
 					})
+				})
 			})
 		}
 	}
@@ -171,9 +170,10 @@ func BenchmarkDefaultAggregateFunction(b *testing.B) {
 		for _, numInputRows := range []int{32, 32 * coldata.BatchSize()} {
 			for _, groupSize := range []int{1, 2, 32, 128, coldata.BatchSize()} {
 				benchmarkAggregateFunction(
-					b, agg, aggFn, []*types.T{types.String, types.String}, groupSize,
+					b, agg, aggFn, []*types.T{types.String, types.String},
+					1 /* numGroupCol */, groupSize,
 					0 /* distinctProb */, numInputRows,
-				)
+					0 /* chunkSize */, 0 /* limit */)
 			}
 		}
 	}

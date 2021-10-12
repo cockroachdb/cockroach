@@ -48,6 +48,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// OrderedDistinctColsToOperators is a test helper that's aliased to
+// colexecbase.OrderedDistinctColsToOperators. We inject this at test time so
+// that tests can use OrderedDistinctColsToOperators without invoking an import
+// dependency cycle.
+var OrderedDistinctColsToOperators func(input colexecop.Operator, distinctCols []uint32, typs []*types.T, nullsAreDistinct bool,
+) (colexecop.ResettableOperator, []bool, error)
+
 // Tuple represents a row with any-type columns.
 type Tuple []interface{}
 
@@ -272,6 +279,13 @@ const (
 	// UnorderedVerifier compares the input and output tuples as sets, returning
 	// an error if they aren't equal by set comparison (irrespective of order).
 	UnorderedVerifier
+	// PartialOrderedVerifier compares the input and output tuples as multiple
+	// sets according to the order of some specified columns, returning an error
+	// if the specified columns are not an order or if the set of tuples for a
+	// distinct group of those columns aren't equal by set comparison
+	// (irrespective of order). If this VerifierType is used, the orderingCols
+	// should be specified in the test runner.
+	PartialOrderedVerifier
 )
 
 // maybeHasNulls is a helper function that returns whether any of the columns in b
@@ -323,7 +337,23 @@ func RunTestsWithTyps(
 	verifier VerifierType,
 	constructor func(inputs []colexecop.Operator) (colexecop.Operator, error),
 ) {
-	RunTestsWithoutAllNullsInjection(t, allocator, tups, typs, expected, verifier, constructor)
+	RunTestsWithOrderedCols(t, allocator, tups, typs, expected, verifier, nil /* orderedCols */, constructor)
+}
+
+// RunTestsWithOrderedCols is a wrapper for
+// RunTestsWithoutAllNullsInjectionWithErrorHandler that has the ability to
+// specify ordered columns.
+func RunTestsWithOrderedCols(
+	t *testing.T,
+	allocator *colmem.Allocator,
+	tups []Tuples,
+	typs [][]*types.T,
+	expected Tuples,
+	verifier VerifierType,
+	orderedCols []uint32,
+	constructor func(inputs []colexecop.Operator) (colexecop.Operator, error),
+) {
+	RunTestsWithoutAllNullsInjectionWithErrorHandler(t, allocator, tups, typs, expected, verifier, constructor, func(err error) { t.Fatal(err) }, orderedCols)
 
 	{
 		ctx := context.Background()
@@ -443,9 +473,7 @@ func RunTestsWithoutAllNullsInjection(
 	verifier VerifierType,
 	constructor func(inputs []colexecop.Operator) (colexecop.Operator, error),
 ) {
-	RunTestsWithoutAllNullsInjectionWithErrorHandler(
-		t, allocator, tups, typs, expected, verifier, constructor, func(err error) { t.Fatal(err) },
-	)
+	RunTestsWithoutAllNullsInjectionWithErrorHandler(t, allocator, tups, typs, expected, verifier, constructor, func(err error) { t.Fatal(err) }, nil /* orderedCols */)
 }
 
 // RunTestsWithoutAllNullsInjectionWithErrorHandler is the same as
@@ -462,6 +490,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 	verifier VerifierType,
 	constructor func(inputs []colexecop.Operator) (colexecop.Operator, error),
 	errorHandler func(error),
+	orderedCols []uint32,
 ) {
 	ctx := context.Background()
 	verifyFn := (*OpTestOutput).VerifyAnyOrder
@@ -472,6 +501,9 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 		// returned in the same order (otherwise the second batch's selection
 		// vector or nulls info can be different and that is totally valid).
 		skipVerifySelAndNullsResets = false
+	} else if verifier == PartialOrderedVerifier {
+		verifyFn = (*OpTestOutput).VerifyPartialOrder
+		skipVerifySelAndNullsResets = false
 	}
 	RunTestsWithFn(t, allocator, tups, typs, func(t *testing.T, inputs []colexecop.Operator) {
 		op, err := constructor(inputs)
@@ -479,6 +511,10 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 			t.Fatal(err)
 		}
 		out := NewOpTestOutput(op, expected)
+		if len(typs) > 0 {
+			out.typs = typs[0]
+		}
+		out.orderedCols = orderedCols
 		if err := verifyFn(out); err != nil {
 			errorHandler(err)
 		}
@@ -1144,8 +1180,10 @@ func (s *opFixedSelTestInput) Reset(context.Context) {
 // match some expected output tuples.
 type OpTestOutput struct {
 	colexecop.OneInputNode
-	expected Tuples
-	evalCtx  *tree.EvalContext
+	expected    Tuples
+	evalCtx     *tree.EvalContext
+	typs        []*types.T
+	orderedCols []uint32
 
 	curIdx int
 	batch  coldata.Batch
@@ -1272,6 +1310,68 @@ func (r *OpTestOutput) VerifyAnyOrder() error {
 		actual = append(actual, tup)
 	}
 	return AssertTuplesSetsEqual(r.expected, actual, r.evalCtx)
+}
+
+// VerifyPartialOrder ensures that the input to this OpTestOutput produced the
+// same results, where the values in the ordered columns are in the same order,
+// but the tuples for each distinct group of ordered column values are in any
+// order (so set comparison behavior is used).
+func (r *OpTestOutput) VerifyPartialOrder() error {
+	distincterInput := &colexecop.FeedOperator{}
+	distincter, distinctOutput, err := OrderedDistinctColsToOperators(
+		distincterInput, r.orderedCols, r.typs, false, /* nullsAreDistinct */
+	)
+	if err != nil {
+		return err
+	}
+	var actual, expected Tuples
+	start := 0
+
+	for {
+		count := 0
+		if err := colexecerror.CatchVectorizedRuntimeError(func() {
+			for {
+				// Get actual batch.
+				if r.batch == nil || r.curIdx >= r.batch.Length() {
+					// Get a fresh batch.
+					r.batch = r.Input.Next()
+					if r.batch.Length() == 0 {
+						break
+					}
+					distincterInput.SetBatch(r.batch)
+					distincter.Next()
+					r.curIdx = 0
+				}
+				if distinctOutput[r.curIdx] && len(actual) > 0 {
+					break
+				}
+				ret := GetTupleFromBatch(r.batch, r.curIdx)
+				actual = append(actual, ret)
+				r.curIdx++
+				count++
+			}
+		}); err != nil {
+			return err
+		}
+		if count == 0 {
+			if len(r.expected) > start {
+				expected = r.expected[start:]
+				return makeError(expected, actual)
+			}
+			return nil
+		}
+		if start+count > len(r.expected) {
+			expected = r.expected[start:]
+			return makeError(expected, actual)
+		}
+		expected = r.expected[start : start+count]
+		start = start + count
+		if err := AssertTuplesSetsEqual(expected, actual, r.evalCtx); err != nil {
+			return err
+		}
+		actual = nil
+		expected = nil
+	}
 }
 
 // tupleEquals checks that two tuples are equal, using a slow,
