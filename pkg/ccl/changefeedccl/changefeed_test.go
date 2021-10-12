@@ -1195,7 +1195,7 @@ func TestChangefeedSchemaChangeBackfillScope(t *testing.T) {
 	}
 
 	// TODO(ssd): tenant tests skipped because of f.Server() use
-	// in fetchDescVerionModificationTime
+	// in fetchDescVersionModificationTime
 	t.Run(`sinkless`, sinklessTest(testFn, feedTestNoTenants))
 	t.Run(`enterprise`, enterpriseTest(testFn, feedTestNoTenants))
 	t.Run(`kafka`, kafkaTest(testFn, feedTestNoTenants))
