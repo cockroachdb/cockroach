@@ -496,10 +496,10 @@ func (s SpanExpressionProtoSpans) End(i int) []byte {
 // tight = false. Say SpanA, SpanB correspond to "a":1 and "b":2
 // respectively). A tight expression would require the following set
 // evaluation:
-// Set(SpanA) \union Set(SpanB) - Set(ComplementSpan(SpanA \spanunion SpanB))
+// Set(SpanA) \union Set(SpanB) - Set(ComplementSpan(SpanA \union SpanB))
 // where ComplementSpan(X) is everything in the inverted index
 // except for X.
-// Since ComplementSpan(SpanA \spanunion SpanB) is likely to
+// Since ComplementSpan(SpanA \union SpanB) is likely to
 // be very wide when SpanA and SpanB are narrow, or vice versa,
 // this tight expression would be very costly to evaluate.
 func ExprForSpan(span Span, tight bool) *SpanExpression {
