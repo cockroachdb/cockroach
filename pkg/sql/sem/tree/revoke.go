@@ -26,7 +26,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/privilege"
 type Revoke struct {
 	Privileges privilege.List
 	Targets    TargetList
-	Grantees   NameList
+	Grantees   RoleSpecList
 }
 
 // Format implements the NodeFormatter interface.
@@ -45,7 +45,7 @@ func (node *Revoke) Format(ctx *FmtCtx) {
 // RevokeRole represents a REVOKE <role> statement.
 type RevokeRole struct {
 	Roles       NameList
-	Members     NameList
+	Members     RoleSpecList
 	AdminOption bool
 }
 

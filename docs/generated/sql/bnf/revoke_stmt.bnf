@@ -1,6 +1,6 @@
 revoke_stmt ::=
-	'REVOKE' 'ALL' 'PRIVILEGES' 'ON' targets 'FROM' name_list
-	| 'REVOKE' 'ALL'  'ON' targets 'FROM' name_list
-	| 'REVOKE' privilege_list 'ON' targets 'FROM' name_list
-	| 'REVOKE' privilege_list 'FROM' name_list
-	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' name_list
+	'REVOKE' 'ALL' 'PRIVILEGES' 'ON' targets 'FROM' role_spec_list
+	| 'REVOKE' 'ALL'  'ON' targets 'FROM' role_spec_list
+	| 'REVOKE' privilege_list 'ON' targets 'FROM' role_spec_list
+	| 'REVOKE' privilege_list 'FROM' role_spec_list
+	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' role_spec_list

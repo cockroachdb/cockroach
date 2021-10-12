@@ -118,7 +118,10 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 			NewSchemaName: newQualifiedSchemaName.String(),
 		})
 	case *tree.AlterSchemaOwner:
-		newOwner := t.Owner
+		newOwner, err := t.Owner.ToSQLUsername(params.p.SessionData())
+		if err != nil {
+			return err
+		}
 		return params.p.alterSchemaOwner(
 			params.ctx, n.desc, newOwner, tree.AsStringWithFQNames(n.n, params.Ann()),
 		)
