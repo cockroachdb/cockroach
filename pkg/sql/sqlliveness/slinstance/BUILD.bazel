@@ -32,6 +32,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slstorage",
+        "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

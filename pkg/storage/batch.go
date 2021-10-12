@@ -12,6 +12,7 @@ package storage
 
 import (
 	"encoding/binary"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -122,8 +123,11 @@ func rocksDBBatchDecodeHeader(repr []byte) (count int, orepr pebble.BatchReader,
 	if seq != 0 {
 		return 0, nil, errors.Errorf("bad sequence: expected 0, but found %d", seq)
 	}
-	count = int(binary.LittleEndian.Uint32(repr[countPos:headerSize]))
-	return count, pebble.MakeBatchReader(repr), nil
+	r, c := pebble.ReadBatch(repr)
+	if c > math.MaxInt32 {
+		return 0, nil, errors.Errorf("count %d would overflow max int", c)
+	}
+	return int(c), r, nil
 }
 
 // RocksDBBatchReader is used to iterate the entries in a RocksDB batch

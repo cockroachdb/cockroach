@@ -150,7 +150,11 @@ export const selectStatement = createSelector(
       statement,
       stats: combineStatementStats(results.map(s => s.stats)),
       byNode: coalesceNodeStats(results),
-      app: _.uniq(results.map(s => s.app)),
+      app: _.uniq(
+        results.map(s =>
+          s.app.startsWith(internalAppNamePrefix) ? "(internal)" : s.app,
+        ),
+      ),
       database: queryByName(props.location, databaseAttr),
       distSQL: fractionMatching(results, s => s.distSQL),
       vec: fractionMatching(results, s => s.vec),
