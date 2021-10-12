@@ -7140,7 +7140,7 @@ func TestImportJobEventLogging(t *testing.T) {
 	backupccl.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "import", "IMPORT")
 }
 
-func TestImportDefautIntSizeSetting(t *testing.T) {
+func TestImportDefaultIntSizeSetting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
