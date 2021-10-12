@@ -1358,9 +1358,9 @@ func TestEvictCacheOnError(t *testing.T) {
 		},
 	}
 
-	rangeMismachErr := roachpb.NewRangeKeyMismatchError(
+	rangeMismatchErr := roachpb.NewRangeKeyMismatchError(
 		context.Background(), nil, nil, &lhs, nil /* lease */)
-	rangeMismachErr.AppendRangeInfo(context.Background(), rhs, roachpb.Lease{})
+	rangeMismatchErr.AppendRangeInfo(context.Background(), rhs, roachpb.Lease{})
 
 	testCases := []struct {
 		canceledCtx            bool
@@ -1369,7 +1369,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		shouldClearReplica     bool
 	}{
 		{false, errors.New(errString), false, false},         // non-retryable replica error
-		{false, rangeMismachErr, false, false},               // RangeKeyMismatch replica error
+		{false, rangeMismatchErr, false, false},               // RangeKeyMismatch replica error
 		{false, &roachpb.RangeNotFoundError{}, false, false}, // RangeNotFound replica error
 		{false, nil, false, false},                           // RPC error
 		{true, nil, false, false},                            // canceled context
