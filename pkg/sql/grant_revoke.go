@@ -47,7 +47,7 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		return nil, err
 	}
 
-	grantees, err := n.Grantees.ToSQLUsernames()
+	grantees, err := n.Grantees.ToSQLUsernames(p.SessionData())
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		return nil, err
 	}
 
-	grantees, err := n.Grantees.ToSQLUsernames()
+	grantees, err := n.Grantees.ToSQLUsernames(p.SessionData())
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ type changePrivilegesNode struct {
 	// granteesNameList is used for creating an AST node for alter default
 	// privileges inside changePrivilegesNode's startExec.
 	// This is required for getting the pre-normalized name to construct the AST.
-	granteesNameList tree.NameList
+	granteesNameList tree.RoleSpecList
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.

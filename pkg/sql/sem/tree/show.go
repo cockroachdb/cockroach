@@ -460,7 +460,7 @@ func (node *ShowConstraints) Format(ctx *FmtCtx) {
 // TargetList is defined in grant.go.
 type ShowGrants struct {
 	Targets  *TargetList
-	Grantees NameList
+	Grantees RoleSpecList
 }
 
 // Format implements the NodeFormatter interface.
@@ -478,8 +478,8 @@ func (node *ShowGrants) Format(ctx *FmtCtx) {
 
 // ShowRoleGrants represents a SHOW GRANTS ON ROLE statement.
 type ShowRoleGrants struct {
-	Roles    NameList
-	Grantees NameList
+	Roles    RoleSpecList
+	Grantees RoleSpecList
 }
 
 // Format implements the NodeFormatter interface.
@@ -855,7 +855,7 @@ func (n *ShowSchedules) Format(ctx *FmtCtx) {
 
 // ShowDefaultPrivileges represents a SHOW DEFAULT PRIVILEGES statement.
 type ShowDefaultPrivileges struct {
-	Roles       NameList
+	Roles       RoleSpecList
 	ForAllRoles bool
 }
 

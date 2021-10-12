@@ -33,7 +33,7 @@ func (d *delegator) delegateShowDefaultPrivileges(
 	if n.ForAllRoles {
 		query += " AND for_all_roles=true"
 	} else if len(n.Roles) > 0 {
-		targetRoles, err := n.Roles.ToSQLUsernames()
+		targetRoles, err := n.Roles.ToSQLUsernames(d.evalCtx.SessionData())
 		if err != nil {
 			return nil, err
 		}
