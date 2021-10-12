@@ -2589,7 +2589,7 @@ Table of contents:
 
 #### `pgerror`: Overview
 
-This package provides a simple wapper that adds a pg code annotation
+This package provides a simple wrapper that adds a pg code annotation
 to an existing error. The wrapper can be constructed using
 `WithCandidateCode()`.
 
