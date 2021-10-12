@@ -35,14 +35,12 @@ func (b *Builder) buildJoin(
 ) (outScope *scope) {
 	leftScope := b.buildDataSource(join.Left, nil /* indexFlags */, locking, inScope)
 
-	isLateral := false
 	inScopeRight := inScope
-	// If this is a lateral join, use leftScope as inScope for the right side.
-	// The right side scope of a LATERAL join includes the columns produced by
-	// the left side.
-	if t, ok := join.Right.(*tree.AliasedTableExpr); ok && t.Lateral {
-		telemetry.Inc(sqltelemetry.LateralJoinUseCounter)
-		isLateral = true
+	isLateral := b.exprIsLateral(join.Right)
+	if isLateral {
+		// If this is a lateral join, use leftScope as inScope for the right side.
+		// The right side scope of a LATERAL join includes the columns produced by
+		// the left side.
 		inScopeRight = leftScope
 		inScopeRight.context = exprKindLateralJoin
 	}
