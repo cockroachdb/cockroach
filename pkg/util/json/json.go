@@ -392,7 +392,7 @@ func (b *ObjectBuilder) Build() JSON {
 // pairSorter sorts and uniquifies JSON pairs. In order to keep
 // the last one for pairs with the same key while sort.Sort is
 // not stable, pairSorter uses []int orders to maintain order and
-// bool hasNonUnique to skip unnecessary uniqueifying.
+// bool hasNonUnique to skip unnecessary uniquifying.
 type pairSorter struct {
 	pairs        []jsonKeyValuePair
 	orders       []int
