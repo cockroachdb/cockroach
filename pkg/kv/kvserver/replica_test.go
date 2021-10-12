@@ -10239,7 +10239,7 @@ func TestReplicaRecomputeStats(t *testing.T) {
 
 // TestConsistencyQueueErrorFromCheckConsistency exercises the case in which
 // the queue receives an error from CheckConsistency.
-func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
+func TestConsistencyQueueErrorFromCheckConsistency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
