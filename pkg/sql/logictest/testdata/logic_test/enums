@@ -1520,8 +1520,8 @@ subtest regression_71388
 
 statement ok
 CREATE TYPE enum_test AS ENUM ('a', 'b');
-CREATE TABLE enum_array_table (id SERIAL PRIMARY KEY, elems enum_test[]);
-INSERT INTO enum_array_table (elems) VALUES (array['a']), (array['b']), (array['a', 'b'])
+CREATE TABLE enum_array_table (id SERIAL PRIMARY KEY, elem enum_test, elems enum_test[]);
+INSERT INTO enum_array_table (elem, elems) VALUES (NULL, NULL), ('a', array['a']), ('b', array['b']), ('a', array['a', 'b'])
 
 query TTBBBB
 SELECT
@@ -1534,12 +1534,43 @@ SELECT
 FROM enum_array_table a, enum_array_table b
 ORDER BY a.id, b.id
 ----
+NULL   NULL   NULL   NULL   NULL   true
+NULL   {a}    NULL   NULL   NULL   false
+NULL   {b}    NULL   NULL   NULL   false
+NULL   {a,b}  NULL   NULL   NULL   false
+{a}    NULL   NULL   NULL   NULL   false
 {a}    {a}    true   false  true   true
 {a}    {b}    false  true   true   false
 {a}    {a,b}  false  true   true   false
+{b}    NULL   NULL   NULL   NULL   false
 {b}    {a}    false  false  false  false
 {b}    {b}    true   false  true   true
 {b}    {a,b}  false  false  false  false
+{a,b}  NULL   NULL   NULL   NULL   false
 {a,b}  {a}    false  false  false  false
 {a,b}  {b}    false  true   true   false
 {a,b}  {a,b}  true   false  true   true
+
+query TT
+SELECT
+  elems || 'a'::enum_test,
+  'b'::enum_test || elems
+FROM enum_array_table
+ORDER BY id
+----
+{a}      {b}
+{a,a}    {b,a}
+{b,a}    {b,b}
+{a,b,a}  {b,a,b}
+
+query TT
+SELECT
+  elem || elems,
+  elems || elem
+FROM enum_array_table
+ORDER BY id
+----
+{NULL}   {NULL}
+{a,a}    {a,a}
+{b,b}    {b,b}
+{a,a,b}  {a,b,a}
