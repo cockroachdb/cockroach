@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -370,7 +371,7 @@ func NewColIndexJoin(
 	fetcherAllocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	evalCtx *tree.EvalContext,
-	semaCtx *tree.SemaContext,
+	helper *colexecargs.ExprHelper,
 	input colexecop.Operator,
 	spec *execinfrapb.JoinReaderSpec,
 	post *execinfrapb.PostProcessSpec,
@@ -414,7 +415,7 @@ func NewColIndexJoin(
 		}
 	} else {
 		proc := &execinfra.ProcOutputHelper{}
-		if err = proc.Init(post, tableArgs.typs, semaCtx, evalCtx); err != nil {
+		if err = proc.Init(post, tableArgs.typs, helper.SemaCtx, evalCtx); err != nil {
 			return nil, err
 		}
 		tableArgs.ValNeededForCol = proc.NeededColumns()
