@@ -229,7 +229,7 @@ func NewDefaultConfig() GeneratorConfig {
 	// TODO(sarkesian): Enable non-transactional DelRange once #69642 is fixed.
 	config.Ops.DB.DeleteRange = 0
 	config.Ops.Batch.Ops.DeleteRange = 0
-	// TODO(sarkesian): Enable DeleteRange in comingled batches once #71236 is fixed.
+	// TODO(sarkesian): Enable DeleteRange in commingled batches once #71236 is fixed.
 	config.Ops.ClosureTxn.CommitBatchOps.DeleteRange = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.DeleteRange = 0
 	// TODO(dan): This fails with a WriteTooOld error if the same key is Put twice
