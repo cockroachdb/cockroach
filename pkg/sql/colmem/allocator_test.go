@@ -277,11 +277,7 @@ func TestSetAccountingHelper(t *testing.T) {
 	}
 
 	var helper colmem.SetAccountingHelper
-	// We don't use notNeededVecIdxs because it is difficult to calculate
-	// expected value for the memory used (the vectors are appropriately
-	// allocated when creating a new batch but then aren't modified - and, thus,
-	// ignored by the helper.
-	helper.Init(testAllocator, typs, nil /* notNeededVecIdxs */)
+	helper.Init(testAllocator, typs)
 
 	numIterations := rng.Intn(10) + 1
 	numRows := rng.Intn(coldata.BatchSize()) + 1

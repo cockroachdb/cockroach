@@ -766,7 +766,7 @@ func NewColOperator(
 			estimatedRowCount := spec.EstimatedRowCount
 			scanOp, err := colfetcher.NewColBatchScan(
 				ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), flowCtx,
-				evalCtx, core.TableReader, post, estimatedRowCount,
+				evalCtx, args.ExprHelper, core.TableReader, post, estimatedRowCount,
 			)
 			if err != nil {
 				return r, err
