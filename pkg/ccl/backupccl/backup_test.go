@@ -8368,7 +8368,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 		makeThresholdBlocker(6),
 	}
 
-	// Separately, make a coule of blockers that block all schema change jobs.
+	// Separately, make a couple of blockers that block all schema change jobs.
 	blockBackfills := make(chan struct{})
 	// By default allow backfills to proceed.
 	close(blockBackfills)
