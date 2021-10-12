@@ -388,7 +388,7 @@ type ExportOptions struct {
 	// timestamp in resumeTs so that subsequent operation can pass it to firstKeyTs.
 	StopMidKey bool
 	// ResourceLimiter limits how long iterator could run until it exhausts allocated
-	// resources. Expot queries limiter in its iteration loop to break out once
+	// resources. Export queries limiter in its iteration loop to break out once
 	// resources are exhausted.
 	ResourceLimiter ResourceLimiter
 	// If UseTBI is true, the backing MVCCIncrementalIterator will initialize a
