@@ -2885,7 +2885,7 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 	sqlDB.ExpectErr(
 		t, `param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, or PLAIN`,
-		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=unsuppported`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=unsupported`,
 	)
 	sqlDB.ExpectErr(
 		t, `client has run out of available brokers`,
