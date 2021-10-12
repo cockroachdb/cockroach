@@ -175,8 +175,12 @@ type Flags struct {
 	PreferLookupJoinsForFKs bool
 
 	// PropagateInputOrdering is the default value for
-	// SessionData.PropagateInputOrdering
+	// SessionData.PropagateInputOrdering.
 	PropagateInputOrdering bool
+
+	// NullOrderedLast is the default value for
+	// SessionData.NullOrderedLast.
+	NullOrderedLast bool
 
 	// Locality specifies the location of the planning node as a set of user-
 	// defined key/value pairs, ordered from most inclusive to least inclusive.
@@ -483,6 +487,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	ot.evalCtx.SessionData().ReorderJoinsLimit = int64(ot.Flags.JoinLimit)
 	ot.evalCtx.SessionData().PreferLookupJoinsForFKs = ot.Flags.PreferLookupJoinsForFKs
 	ot.evalCtx.SessionData().PropagateInputOrdering = ot.Flags.PropagateInputOrdering
+	ot.evalCtx.SessionData().NullOrderedLast = ot.Flags.NullOrderedLast
 
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 	ot.evalCtx.Locality = ot.Flags.Locality
@@ -835,6 +840,12 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 	case "prefer-lookup-joins-for-fks":
 		f.PreferLookupJoinsForFKs = true
+
+	case "null-ordered-last":
+		if len(arg.Vals) > 0 {
+			return fmt.Errorf("unknown vals for null-ordered-last")
+		}
+		f.NullOrderedLast = true
 
 	case "rule":
 		if len(arg.Vals) != 1 {
