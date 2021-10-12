@@ -3740,7 +3740,7 @@ https://go.googlesource.com/proposal/+/master/design/go2draft-error-handling-ove
 - new interface `Wrapper` that does the same as the `causer` interface
   except its method is called `Unwrap()` instead of `Cause()`
 - new primitive `Is()` to check any intermediate error for equality with some reference
-- new primitve `As()` to check castability of any error in the chain
+- new primitive `As()` to check castability of any error in the chain
 - new `Formatter` interface that makes it easier to determine whether to display details
 
 #### Go 1.13: xerrors
