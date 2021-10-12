@@ -75,7 +75,7 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 			// These don't work with IMPORT.
 			continue
 		case `tpch`:
-			// TODO(dan): Implement a timmed down version of TPCH to keep the test
+			// TODO(dan): Implement a trimmed down version of TPCH to keep the test
 			// runtime down.
 			continue
 		}
