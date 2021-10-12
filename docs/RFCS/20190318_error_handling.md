@@ -217,7 +217,7 @@ to human users.
 
 For example, consider the code in `replica_command.go` which does
 different things depending on whether the error message indicates that
-the store is "amost out of disk space" or "busy applying snapshots".
+the store is "almost out of disk space" or "busy applying snapshots".
 
 If (hypothetically) a product management study found out that users
 find the distinction confusing and would be better satisfied by
