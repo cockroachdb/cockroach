@@ -52,7 +52,7 @@ type SampleReservoir struct {
 	ra       rowenc.EncDatumRowAlloc
 	memAcc   *mon.BoundAccount
 
-	// minNumSamples is the minimum capcity (K) needed for sampling to be
+	// minNumSamples is the minimum capacity (K) needed for sampling to be
 	// meaningful. If the reservoir capacity would fall below this, SampleRow will
 	// err instead of decreasing it further.
 	minNumSamples int
