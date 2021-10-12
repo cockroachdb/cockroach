@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -6458,20 +6459,34 @@ func TestImportMultiRegion(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	baseDir := filepath.Join("testdata")
-	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 1 /* numServers */, base.TestingKnobs{}, multiregionccltestutils.WithBaseDirectory(baseDir),
+	tc, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 2 /* numServers */, base.TestingKnobs{}, multiregionccltestutils.WithBaseDirectory(baseDir),
 	)
 	defer cleanup()
 
-	_, err := sqlDB.Exec(`SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
-	require.NoError(t, err)
+	// Set up a hook which we can set to run during the import.
+	// Importantly this happens before the final descriptors have been published.
+	var duringImportFunc atomic.Value
+	noopDuringImportFunc := func() error { return nil }
+	duringImportFunc.Store(noopDuringImportFunc)
+	for i := 0; i < tc.NumServers(); i++ {
+		tc.Server(i).JobRegistry().(*jobs.Registry).
+			TestingResumerCreationKnobs = map[jobspb.Type]func(jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(resumer jobs.Resumer) jobs.Resumer {
+				resumer.(*importResumer).testingKnobs.afterImport = func(summary backupccl.RowCount) error {
+					return duringImportFunc.Load().(func() error)()
+				}
+				return resumer
+			},
+		}
+	}
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 
 	// Create the databases
-	_, err = sqlDB.Exec(`CREATE DATABASE foo`)
-	require.NoError(t, err)
-
-	_, err = sqlDB.Exec(`CREATE DATABASE multi_region PRIMARY REGION "us-east1"`)
-	require.NoError(t, err)
+	tdb.Exec(t, `CREATE DATABASE foo`)
+	tdb.Exec(t, `CREATE DATABASE multi_region PRIMARY REGION "us-east1"`)
 
 	simpleOcf := fmt.Sprintf("nodelocal://0/avro/%s", "simple.ocf")
 
@@ -6515,30 +6530,23 @@ func TestImportMultiRegion(t *testing.T) {
 
 	for _, tc := range viewsAndSequencesTestCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			_, err = sqlDB.Exec(`USE multi_region`)
-			require.NoError(t, err)
-			defer func() {
-				_, err := sqlDB.Exec(`
+			tdb.Exec(t, `USE multi_region`)
+			defer tdb.Exec(t, `
 DROP TABLE IF EXISTS tbl;
 DROP SEQUENCE IF EXISTS s;
 DROP SEQUENCE IF EXISTS table_auto_inc;
 DROP VIEW IF EXISTS v`,
-				)
-				require.NoError(t, err)
-			}()
+			)
 
-			_, err = sqlDB.Exec(tc.importSQL)
-			require.NoError(t, err)
-			rows, err := sqlDB.Query("SELECT table_name, locality FROM [SHOW TABLES] ORDER BY table_name")
-			require.NoError(t, err)
-
+			tdb.Exec(t, tc.importSQL)
+			rows := tdb.Query(t, "SELECT table_name, locality FROM [SHOW TABLES] ORDER BY table_name")
 			results := make(map[string]string)
 			for rows.Next() {
-				require.NoError(t, rows.Err())
 				var tableName, locality string
 				require.NoError(t, rows.Scan(&tableName, &locality))
 				results[tableName] = locality
 			}
+			require.NoError(t, rows.Err())
 			require.Equal(t, tc.expected, results)
 		})
 	}
@@ -6553,6 +6561,7 @@ DROP VIEW IF EXISTS v`,
 			args      []interface{}
 			errString string
 			data      string
+			during    string
 		}{
 			{
 				name:      "import-create-using-multi-region-to-non-multi-region-database",
@@ -6595,6 +6604,45 @@ DROP VIEW IF EXISTS v`,
 				data:   "1,\"foo\",NULL,us-east1\n",
 			},
 			{
+				name:   "import-into-multi-region-regional-by-row-to-multi-region-database-concurrent-table-add",
+				db:     "multi_region",
+				table:  "mr_regional_by_row",
+				create: "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
+				during: "CREATE TABLE mr_regional_by_row2 (i INT8 PRIMARY KEY) LOCALITY REGIONAL BY ROW",
+				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
+				args:   []interface{}{srv.URL},
+				data:   "1,\"foo\",NULL,us-east1\n",
+			},
+			{
+				name:   "import-into-multi-region-regional-by-row-to-multi-region-database-concurrent-add-region",
+				db:     "multi_region",
+				table:  "mr_regional_by_row",
+				create: "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
+				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
+				during: `ALTER DATABASE multi_region ADD REGION "us-east2"`,
+				errString: `type descriptor "crdb_internal_region" \(54\) has been ` +
+					`modified, potentially incompatibly, since import planning; ` +
+					`aborting to avoid possible corruption`,
+				args: []interface{}{srv.URL},
+				data: "1,\"foo\",NULL,us-east1\n",
+			},
+			{
+				name:  "import-into-multi-region-regional-by-row-with-enum-which-has-been-modified",
+				db:    "multi_region",
+				table: "mr_regional_by_row",
+				create: `
+CREATE TYPE typ AS ENUM ('a');
+CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s typ, b bytea) LOCALITY REGIONAL BY ROW;
+`,
+				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
+				during: `ALTER TYPE typ ADD VALUE 'b'`,
+				errString: `type descriptor "typ" \(67\) has been ` +
+					`modified, potentially incompatibly, since import planning; ` +
+					`aborting to avoid possible corruption`,
+				args: []interface{}{srv.URL},
+				data: "1,\"a\",NULL,us-east1\n",
+			},
+			{
 				name:      "import-into-multi-region-regional-by-row-to-multi-region-database-wrong-value",
 				db:        "multi_region",
 				table:     "mr_regional_by_row",
@@ -6616,33 +6664,34 @@ DROP VIEW IF EXISTS v`,
 
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {
-				_, err = sqlDB.Exec(fmt.Sprintf(`SET DATABASE = %q`, test.db))
-				require.NoError(t, err)
-
-				_, err = sqlDB.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %q CASCADE", test.table))
-				require.NoError(t, err)
+				defer duringImportFunc.Store(noopDuringImportFunc)
+				if test.during != "" {
+					duringImportFunc.Store(func() error {
+						q := fmt.Sprintf(`SET DATABASE = %q; %s`, test.db, test.during)
+						_, err := sqlDB.Exec(q)
+						return err
+					})
+				}
+				tdb.Exec(t, fmt.Sprintf(`SET DATABASE = %q`, test.db))
+				tdb.Exec(t, fmt.Sprintf("DROP TABLE IF EXISTS %q CASCADE", test.table))
 
 				if test.data != "" {
 					data = test.data
 				}
 
 				if test.create != "" {
-					_, err = sqlDB.Exec(test.create)
-					require.NoError(t, err)
+					tdb.Exec(t, test.create)
 				}
 
-				_, err = sqlDB.ExecContext(context.Background(), test.sql, test.args...)
+				_, err := sqlDB.ExecContext(context.Background(), test.sql, test.args...)
 				if test.errString != "" {
-					require.True(t, testutils.IsError(err, test.errString))
+					require.Regexp(t, test.errString, err)
 				} else {
 					require.NoError(t, err)
-					res := sqlDB.QueryRow(fmt.Sprintf("SELECT count(*) FROM %q", test.table))
-					require.NoError(t, res.Err())
-
 					var numRows int
-					err = res.Scan(&numRows)
-					require.NoError(t, err)
-
+					tdb.QueryRow(
+						t, fmt.Sprintf("SELECT count(*) FROM %q", test.table),
+					).Scan(&numRows)
 					if numRows == 0 {
 						t.Error("expected some rows after import")
 					}
@@ -7284,6 +7333,18 @@ func TestUDTChangeDuringImport(t *testing.T) {
 			"drop-type",
 			"DROP TYPE d.greeting",
 			"cannot drop type \"greeting\"",
+			false,
+		},
+		{
+			"use-in-table",
+			"CREATE TABLE d.foo (i INT PRIMARY KEY, j d.greeting)",
+			"",
+			false,
+		},
+		{
+			"grant",
+			"CREATE USER u; GRANT USAGE ON TYPE d.greeting TO u;",
+			"",
 			false,
 		},
 	}
