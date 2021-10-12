@@ -371,6 +371,8 @@ func DefaultPebbleOptions() *pebble.Options {
 		}
 		return nil
 	}
+	// Queue sstables for validation upon ingestion.
+	opts.Experimental.ValidateOnIngest = true
 
 	for i := 0; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]
