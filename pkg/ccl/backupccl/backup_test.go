@@ -8645,7 +8645,7 @@ CREATE DATABASE test; USE test;
 	//   t@3 |             |
 	//   t@4 |     xxxxxxxx|xxxxxxxxx
 	//       ----------------------------------------
-	//             t1    gc_tresh    t2            t3
+	//             t1    gc_thresh    t2            t3
 	//
 	// The span-merging optimization will first look at t3, find only 1 index and
 	// continue It will then look at t1 and see a span-merging opportunity over
