@@ -336,7 +336,7 @@ func AppendToMaybeNullArray(typ *types.T, left Datum, right Datum) (Datum, error
 	return result, nil
 }
 
-// PrependToMaybeNullArray prepends an element in the front of an arrray.
+// PrependToMaybeNullArray prepends an element in the front of an array.
 // If the argument is NULL, an array of one element is created.
 func PrependToMaybeNullArray(typ *types.T, left Datum, right Datum) (Datum, error) {
 	result := NewDArray(typ)
