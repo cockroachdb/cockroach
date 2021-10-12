@@ -615,7 +615,7 @@ func (s *Server) SetupConn(
 
 	ex := s.newConnExecutor(
 		ctx, sdMutIterator, stmtBuf, clientComm, memMetrics, &s.Metrics,
-		s.sqlStats.GetApplicationStats(sd.ApplicationName),
+		s.sqlStats.GetApplicationStats(sd.ApplicationName), ExtraTxnState{},
 	)
 	return ConnectionHandler{ex}, nil
 }
@@ -724,6 +724,7 @@ func (s *Server) newConnExecutor(
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
 	applicationStats sqlstats.ApplicationStats,
+	extraTxnState ExtraTxnState,
 ) *connExecutor {
 	// Create the various monitors.
 	// The session monitors are started in activate().
@@ -809,6 +810,12 @@ func (s *Server) newConnExecutor(
 	}
 
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
+	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
+	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
+
+	ex.sessionTracing.ex = ex
+	ex.transitionCtx.sessionTracing = &ex.sessionTracing
+
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
 		prepStmts: make(map[string]*PreparedStatement),
 		portals:   make(map[string]PreparedPortal),
@@ -823,13 +830,11 @@ func (s *Server) newConnExecutor(
 	)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
-	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
-	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
-
-	ex.sessionTracing.ex = ex
-	ex.transitionCtx.sessionTracing = &ex.sessionTracing
-
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
+
+	if extraTxnState.descs != nil {
+		ex.extraTxnState.descCollection = *extraTxnState.descs
+	}
 
 	ex.initPlanner(ctx, &ex.planner)
 
@@ -857,6 +862,7 @@ func (s *Server) newConnExecutorWithTxn(
 	txn *kv.Txn,
 	syntheticDescs []catalog.Descriptor,
 	applicationStats sqlstats.ApplicationStats,
+	extraTxnState ExtraTxnState,
 ) *connExecutor {
 	ex := s.newConnExecutor(
 		ctx,
@@ -866,6 +872,7 @@ func (s *Server) newConnExecutorWithTxn(
 		memMetrics,
 		srvMetrics,
 		applicationStats,
+		extraTxnState,
 	)
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For

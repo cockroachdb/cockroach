@@ -334,7 +334,7 @@ func (ep *DummyEvalPlanner) QueryRowEx(
 	ctx context.Context,
 	opName string,
 	txn *kv.Txn,
-	session sessiondata.InternalExecutorOverride,
+	session *sessiondata.SessionData,
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
@@ -346,7 +346,7 @@ func (ep *DummyEvalPlanner) QueryIteratorEx(
 	ctx context.Context,
 	opName string,
 	txn *kv.Txn,
-	session sessiondata.InternalExecutorOverride,
+	session *sessiondata.SessionData,
 	stmt string,
 	qargs ...interface{},
 ) (tree.InternalRows, error) {

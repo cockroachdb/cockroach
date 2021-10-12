@@ -1165,6 +1165,21 @@ type ExecutorConfig struct {
 	// SpanConfigReconciliationJobDeps are used to drive the span config
 	// reconciliation job.
 	SpanConfigReconciliationJobDeps spanconfig.ReconciliationDependencies
+
+	// InternalExecutorFactory is used to create an InternalExecutor binded with
+	// SessionData and other ExtraTxnState.
+	// This is currently only for builtin functions where we need to execute sql.
+	InternalExecutorFactory InternalExecutorFactory
+}
+
+// InternalExecutorFactory is a function that produces a "session
+// bound" internal executor.
+type InternalExecutorFactory func(
+	context.Context, *sessiondata.SessionData, ExtraTxnState,
+) InternalExecutor
+
+type ExtraTxnState struct {
+	descs *descs.Collection
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

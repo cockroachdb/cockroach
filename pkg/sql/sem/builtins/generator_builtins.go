@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1837,9 +1836,8 @@ func makePayloadsForTraceGenerator(
 		ctx.Ctx(),
 		"crdb_internal.payloads_for_trace",
 		ctx.Txn,
-		sessiondata.InternalExecutorOverride{
-			User: security.RootUserName(),
-		}, query,
+		ctx.SessionData(),
+		query,
 		traceID,
 	)
 	if err != nil {
@@ -1898,7 +1896,7 @@ type showCreateAllTablesGenerator struct {
 	ids         []int64
 	dbName      string
 	acc         mon.BoundAccount
-	user        security.SQLUsername
+	sessionData *sessiondata.SessionData
 
 	// The following variables are updated during
 	// calls to Next() and change throughout the lifecycle of
@@ -1930,7 +1928,7 @@ func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) e
 	// We also account for the memory in the BoundAccount memory monitor in
 	// showCreateAllTablesGenerator.
 	ids, err := getTopologicallySortedTableIDs(
-		ctx, s.evalPlanner, txn, s.dbName, s.user, &s.acc,
+		ctx, s.evalPlanner, txn, s.dbName, s.sessionData, &s.acc,
 	)
 	if err != nil {
 		return err
@@ -1956,7 +1954,7 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 		}
 
 		createStmt, err := getCreateStatement(
-			ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName, s.user,
+			ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName, s.sessionData,
 		)
 		if err != nil {
 			return false, err
@@ -2002,7 +2000,7 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 			statementReturnType = alterValidateFKStatements
 		}
 		alterStmt, err := getAlterStatements(
-			ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName, s.user, statementReturnType,
+			ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName, s.sessionData, statementReturnType,
 		)
 		if err != nil {
 			return false, err
@@ -2043,6 +2041,6 @@ func makeShowCreateAllTablesGenerator(
 		evalPlanner: ctx.Planner,
 		dbName:      dbName,
 		acc:         ctx.Mon.MakeBoundAccount(),
-		user:        ctx.SessionData().User(),
+		sessionData: ctx.SessionData(),
 	}, nil
 }
