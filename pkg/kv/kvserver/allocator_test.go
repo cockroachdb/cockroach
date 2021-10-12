@@ -6556,7 +6556,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		{
 			// Effective replication factor can't dip below three (unless the
 			// span config explicitly asks for that, which it does not), so three
-			// it is and we are under-replicaed.
+			// it is and we are under-replicated.
 			storeList:           []roachpb.StoreID{1, 2},
 			expectedNumReplicas: 3,
 			expectedAction:      AllocatorAddVoter,
