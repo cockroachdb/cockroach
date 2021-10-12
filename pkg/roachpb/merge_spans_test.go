@@ -68,7 +68,7 @@ func TestMergeSpans(t *testing.T) {
 	}
 }
 
-func makeRandomParitialCovering(r *rand.Rand, maxKey int) Spans {
+func makeRandomPartialCovering(r *rand.Rand, maxKey int) Spans {
 	var ret Spans
 	for i := randutil.RandIntInRange(r, 0, maxKey); i < maxKey-1; {
 		var s Span
@@ -116,8 +116,8 @@ func TestSubtractSpans(t *testing.T) {
 			r, s := randutil.NewPseudoRand()
 			t.Logf("random seed: %d", s)
 			const max = 1000
-			before := makeRandomParitialCovering(r, max)
-			covered := makeRandomParitialCovering(r, max)
+			before := makeRandomPartialCovering(r, max)
+			covered := makeRandomPartialCovering(r, max)
 			after := SubtractSpans(append(Spans(nil), before...), append(Spans(nil), covered...))
 			for i := 0; i < max; i++ {
 				k := Key(encoding.EncodeVarintAscending(nil, int64(i)))
