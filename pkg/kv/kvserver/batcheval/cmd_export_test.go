@@ -128,45 +128,38 @@ func TestExportCmd(t *testing.T) {
 		t *testing.T, res ExportAndSlurpResult,
 		mvccLatestFilesLen int, mvccLatestKVsLen int, mvccAllFilesLen int, mvccAllKVsLen int,
 	) {
-		if len(res.mvccLatestFiles) != mvccLatestFilesLen {
-			t.Errorf("expected %d files in latest export got %d", mvccLatestFilesLen, len(res.mvccLatestFiles))
-		}
-		if len(res.mvccLatestKVs) != mvccLatestKVsLen {
-			t.Errorf("expected %d kvs in latest export got %d", mvccLatestKVsLen, len(res.mvccLatestKVs))
-		}
-		if len(res.mvccAllFiles) != mvccAllFilesLen {
-			t.Errorf("expected %d files in all export got %d", mvccAllFilesLen, len(res.mvccAllFiles))
-		}
-		if len(res.mvccAllKVs) != mvccAllKVsLen {
-			t.Errorf("expected %d kvs in all export got %d", mvccAllKVsLen, len(res.mvccAllKVs))
-		}
+		t.Helper()
+		require.Len(t, res.mvccLatestFiles, mvccLatestFilesLen, "unexpected files in latest export")
+		require.Len(t, res.mvccLatestKVs, mvccLatestKVsLen, "unexpected kvs in latest export")
+		require.Len(t, res.mvccAllFiles, mvccAllFilesLen, "unexpected files in all export")
+		require.Len(t, res.mvccAllKVs, mvccAllKVsLen, "unexpected kvs in all export")
 	}
 
 	expectResponseHeader := func(
 		t *testing.T, res ExportAndSlurpResult, mvccLatestResponseHeader roachpb.ResponseHeader,
 		mvccAllResponseHeader roachpb.ResponseHeader) {
-		isSpanEqual := func(spanOne, spanTwo *roachpb.Span) bool {
-			if spanOne == nil || spanTwo == nil {
-				return spanOne == spanTwo
+		t.Helper()
+		requireResumeSpan := func(expect, actual *roachpb.Span, msgAndArgs ...interface{}) {
+			t.Helper()
+			if expect == nil {
+				require.Nil(t, actual, msgAndArgs...)
+			} else {
+				require.NotNil(t, actual, msgAndArgs...)
+				require.Equal(t, expect.String(), actual.String(), msgAndArgs...)
 			}
-			return spanOne.String() == spanTwo.String()
 		}
-		if res.mvccAllResponseHeader.NumBytes != mvccAllResponseHeader.NumBytes {
-			t.Errorf("expected %d NumBytes in all export got %d", mvccAllResponseHeader.NumBytes,
-				res.mvccAllResponseHeader.NumBytes)
-		}
-		if !isSpanEqual(res.mvccAllResponseHeader.ResumeSpan, mvccAllResponseHeader.ResumeSpan) {
-			t.Errorf("expected %s span in all export got %s", mvccAllResponseHeader.ResumeSpan.String(),
-				res.mvccAllResponseHeader.ResumeSpan.String())
-		}
-		if res.mvccLatestResponseHeader.NumBytes != mvccLatestResponseHeader.NumBytes {
-			t.Errorf("expected %d NumBytes in all export got %d", mvccLatestResponseHeader.NumBytes,
-				res.mvccLatestResponseHeader.NumBytes)
-		}
-		if !isSpanEqual(res.mvccLatestResponseHeader.ResumeSpan, mvccLatestResponseHeader.ResumeSpan) {
-			t.Errorf("expected %s span in all export got %s",
-				mvccLatestResponseHeader.ResumeSpan.String(), res.mvccLatestResponseHeader.ResumeSpan.String())
-		}
+		require.Equal(t, mvccLatestResponseHeader.NumBytes, res.mvccLatestResponseHeader.NumBytes,
+			"unexpected NumBytes in latest export")
+		requireResumeSpan(mvccLatestResponseHeader.ResumeSpan, res.mvccLatestResponseHeader.ResumeSpan,
+			"unexpected ResumeSpan in latest export")
+		require.Equal(t, mvccLatestResponseHeader.ResumeReason, res.mvccLatestResponseHeader.ResumeReason,
+			"unexpected ResumeReason in latest export")
+		require.Equal(t, mvccAllResponseHeader.NumBytes, res.mvccAllResponseHeader.NumBytes,
+			"unexpected NumBytes in all export")
+		requireResumeSpan(mvccAllResponseHeader.ResumeSpan, res.mvccAllResponseHeader.ResumeSpan,
+			"unexpected ResumeSpan in all export")
+		require.Equal(t, mvccAllResponseHeader.ResumeReason, res.mvccAllResponseHeader.ResumeReason,
+			"unexpected ResumeReason in latest export")
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
@@ -318,14 +311,10 @@ INTO
 		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
 		expect(t, res7, 2, 100, 2, 100)
 		latestRespHeader := roachpb.ResponseHeader{
-			ResumeSpan:   nil,
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     maxResponseSSTBytes,
+			NumBytes: maxResponseSSTBytes,
 		}
 		allRespHeader := roachpb.ResponseHeader{
-			ResumeSpan:   nil,
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     maxResponseSSTBytes,
+			NumBytes: maxResponseSSTBytes,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
 
@@ -409,14 +398,10 @@ INTO
 		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
 		expect(t, res7, 100, 100, 100, 100)
 		latestRespHeader = roachpb.ResponseHeader{
-			ResumeSpan:   nil,
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     100 * kvByteSize,
+			NumBytes: 100 * kvByteSize,
 		}
 		allRespHeader = roachpb.ResponseHeader{
-			ResumeSpan:   nil,
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     100 * kvByteSize,
+			NumBytes: 100 * kvByteSize,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
 	})
