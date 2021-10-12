@@ -1214,7 +1214,7 @@ Summary of purposes:
 - `report` provides a standalone and intelligent Sentry reporter for error objects.
 - `safedetails` enable the embedding of additional PII-free detail strings in errors.
 - `assert`, `issuelink`, `hintdetail`, `telemetrykey`, `pgcode`, `pgerror` provide feature parity with the original `pgerror` package.
-  Note however that PostreSQL-specific behavior is encapsulated in packages `pgcode` and `pgerror`, and the other sub-packages
+  Note however that PostgreSQL-specific behavior is encapsulated in packages `pgcode` and `pgerror`, and the other sub-packages
   were designed to be relevant for non-SQL code.
 - `withstack`, `errutil` provide feature parity with Go's `errors` and `github.com/pkg/errors`.
 
