@@ -1180,7 +1180,7 @@ type connExecutor struct {
 		// transaction finishes.
 		// Prepared statements are not transactional and so it's a bit weird that
 		// they're part of extraTxnState, but it's convenient to put them here
-		// because they need the same kind of "snapshoting" as the portals (see
+		// because they need the same kind of "snapshotting" as the portals (see
 		// prepStmtsNamespaceAtTxnRewindPos).
 		prepStmtsNamespace prepStmtNamespace
 
