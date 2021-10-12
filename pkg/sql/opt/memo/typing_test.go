@@ -125,11 +125,11 @@ func TestTypingBinaryAssumptions(t *testing.T) {
 						continue
 					}
 
-					if op.LeftType == op2.LeftType && op.ReturnType != op2.ReturnType {
+					if op.LeftType == op2.LeftType && op.ReturnType(nil) != op2.ReturnType(nil) {
 						t.Errorf("found null operand ambiguity for %s:\n%+v\n%+v", name, op, op2)
 					}
 
-					if op.RightType == op2.RightType && op.ReturnType != op2.ReturnType {
+					if op.RightType == op2.RightType && op.ReturnType(nil) != op2.ReturnType(nil) {
 						t.Errorf("found null operand ambiguity for %s:\n%+v\n%+v", name, op, op2)
 					}
 				}

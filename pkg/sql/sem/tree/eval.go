@@ -289,14 +289,13 @@ type TwoArgFn func(*EvalContext, Datum, Datum) (Datum, error)
 type BinOp struct {
 	LeftType          *types.T
 	RightType         *types.T
-	ReturnType        *types.T
+	ReturnType        ReturnTyper
 	NullableArgs      bool
 	Fn                TwoArgFn
 	Volatility        Volatility
 	PreferredOverload bool
 
-	types   TypeList
-	retType ReturnTyper
+	types TypeList
 
 	// counter, if non-nil, should be incremented every time the
 	// operator is type checked.
@@ -312,7 +311,7 @@ func (op *BinOp) matchParams(l, r *types.T) bool {
 }
 
 func (op *BinOp) returnType() ReturnTyper {
-	return op.retType
+	return op.ReturnType
 }
 
 func (op *BinOp) preferred() bool {
@@ -363,7 +362,7 @@ func initArrayElementConcatenation() {
 		BinOps[Concat] = append(BinOps[Concat], &BinOp{
 			LeftType:     types.MakeArray(typ),
 			RightType:    typ,
-			ReturnType:   types.MakeArray(typ),
+			ReturnType:   FixedReturnType(types.MakeArray(typ)),
 			NullableArgs: true,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return AppendToMaybeNullArray(typ, left, right)
@@ -374,7 +373,7 @@ func initArrayElementConcatenation() {
 		BinOps[Concat] = append(BinOps[Concat], &BinOp{
 			LeftType:     typ,
 			RightType:    types.MakeArray(typ),
-			ReturnType:   types.MakeArray(typ),
+			ReturnType:   FixedReturnType(types.MakeArray(typ)),
 			NullableArgs: true,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return PrependToMaybeNullArray(typ, left, right)
@@ -455,7 +454,7 @@ func initArrayToArrayConcatenation() {
 		BinOps[Concat] = append(BinOps[Concat], &BinOp{
 			LeftType:     types.MakeArray(typ),
 			RightType:    types.MakeArray(typ),
-			ReturnType:   types.MakeArray(typ),
+			ReturnType:   FixedReturnType(types.MakeArray(typ)),
 			NullableArgs: true,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return ConcatArrays(typ, left, right)
@@ -472,7 +471,7 @@ func initNonArrayToNonArrayConcatenation() {
 		BinOps[Concat] = append(BinOps[Concat], &BinOp{
 			LeftType:     leftType,
 			RightType:    rightType,
-			ReturnType:   types.String,
+			ReturnType:   FixedReturnType(types.String),
 			NullableArgs: false,
 			Fn: func(evalCtx *EvalContext, left Datum, right Datum) (Datum, error) {
 				if leftType == types.String {
@@ -522,7 +521,6 @@ func init() {
 		for i, impl := range overload {
 			casted := impl.(*BinOp)
 			casted.types = ArgTypes{{"left", casted.LeftType}, {"right", casted.RightType}}
-			casted.retType = FixedReturnType(casted.ReturnType)
 			BinOps[op][i] = casted
 		}
 	}
@@ -561,7 +559,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
-			ReturnType: types.Int,
+			ReturnType: FixedReturnType(types.Int),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) & MustBeDInt(right)), nil
 			},
@@ -570,7 +568,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.VarBit,
 			RightType:  types.VarBit,
-			ReturnType: types.VarBit,
+			ReturnType: FixedReturnType(types.VarBit),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				lhs := MustBeDBitArray(left)
 				rhs := MustBeDBitArray(right)
@@ -586,7 +584,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.INet,
 			RightType:  types.INet,
-			ReturnType: types.INet,
+			ReturnType: FixedReturnType(types.INet),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
@@ -601,7 +599,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
-			ReturnType: types.Int,
+			ReturnType: FixedReturnType(types.Int),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) | MustBeDInt(right)), nil
 			},
@@ -610,7 +608,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.VarBit,
 			RightType:  types.VarBit,
-			ReturnType: types.VarBit,
+			ReturnType: FixedReturnType(types.VarBit),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				lhs := MustBeDBitArray(left)
 				rhs := MustBeDBitArray(right)
@@ -626,7 +624,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.INet,
 			RightType:  types.INet,
-			ReturnType: types.INet,
+			ReturnType: FixedReturnType(types.INet),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
@@ -641,7 +639,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
-			ReturnType: types.Int,
+			ReturnType: FixedReturnType(types.Int),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) ^ MustBeDInt(right)), nil
 			},
@@ -650,7 +648,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.VarBit,
 			RightType:  types.VarBit,
-			ReturnType: types.VarBit,
+			ReturnType: FixedReturnType(types.VarBit),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				lhs := MustBeDBitArray(left)
 				rhs := MustBeDBitArray(right)
@@ -669,7 +667,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
-			ReturnType: types.Int,
+			ReturnType: FixedReturnType(types.Int),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				a, b := MustBeDInt(left), MustBeDInt(right)
 				r, ok := arith.AddWithOverflow(int64(a), int64(b))
@@ -683,7 +681,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Float,
-			ReturnType: types.Float,
+			ReturnType: FixedReturnType(types.Float),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) + *right.(*DFloat)), nil
 			},
@@ -692,7 +690,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
@@ -705,7 +703,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Int,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
@@ -719,7 +717,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
@@ -733,7 +731,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Int,
-			ReturnType: types.Date,
+			ReturnType: FixedReturnType(types.Date),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				d, err := left.(*DDate).AddDays(int64(MustBeDInt(right)))
 				if err != nil {
@@ -746,7 +744,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Date,
-			ReturnType: types.Date,
+			ReturnType: FixedReturnType(types.Date),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				d, err := right.(*DDate).AddDays(int64(MustBeDInt(left)))
 				if err != nil {
@@ -760,7 +758,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Time,
-			ReturnType: types.Timestamp,
+			ReturnType: FixedReturnType(types.Timestamp),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				leftTime, err := left.(*DDate).ToTime()
 				if err != nil {
@@ -774,7 +772,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Time,
 			RightType:  types.Date,
-			ReturnType: types.Timestamp,
+			ReturnType: FixedReturnType(types.Timestamp),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				rightTime, err := right.(*DDate).ToTime()
 				if err != nil {
@@ -788,7 +786,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.TimeTZ,
-			ReturnType: types.TimestampTZ,
+			ReturnType: FixedReturnType(types.TimestampTZ),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				leftTime, err := left.(*DDate).ToTime()
 				if err != nil {
@@ -802,7 +800,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.TimeTZ,
 			RightType:  types.Date,
-			ReturnType: types.TimestampTZ,
+			ReturnType: FixedReturnType(types.TimestampTZ),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				rightTime, err := right.(*DDate).ToTime()
 				if err != nil {
@@ -816,7 +814,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Time,
 			RightType:  types.Interval,
-			ReturnType: types.Time,
+			ReturnType: FixedReturnType(types.Time),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := timeofday.TimeOfDay(*left.(*DTime))
 				return MakeDTime(t.Add(right.(*DInterval).Duration)), nil
@@ -826,7 +824,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Time,
-			ReturnType: types.Time,
+			ReturnType: FixedReturnType(types.Time),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := timeofday.TimeOfDay(*right.(*DTime))
 				return MakeDTime(t.Add(left.(*DInterval).Duration)), nil
@@ -836,7 +834,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.TimeTZ,
 			RightType:  types.Interval,
-			ReturnType: types.TimeTZ,
+			ReturnType: FixedReturnType(types.TimeTZ),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := left.(*DTimeTZ)
 				duration := right.(*DInterval).Duration
@@ -847,7 +845,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.TimeTZ,
-			ReturnType: types.TimeTZ,
+			ReturnType: FixedReturnType(types.TimeTZ),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := right.(*DTimeTZ)
 				duration := left.(*DInterval).Duration
@@ -858,7 +856,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Timestamp,
 			RightType:  types.Interval,
-			ReturnType: types.Timestamp,
+			ReturnType: FixedReturnType(types.Timestamp),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return MakeDTimestamp(duration.Add(
 					left.(*DTimestamp).Time, right.(*DInterval).Duration), time.Microsecond)
@@ -868,7 +866,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Timestamp,
-			ReturnType: types.Timestamp,
+			ReturnType: FixedReturnType(types.Timestamp),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return MakeDTimestamp(duration.Add(
 					right.(*DTimestamp).Time, left.(*DInterval).Duration), time.Microsecond)
@@ -878,7 +876,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.TimestampTZ,
 			RightType:  types.Interval,
-			ReturnType: types.TimestampTZ,
+			ReturnType: FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				// Convert time to be in the given timezone, as math relies on matching timezones..
 				t := duration.Add(left.(*DTimestampTZ).Time.In(ctx.GetLocation()), right.(*DInterval).Duration)
@@ -889,7 +887,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.TimestampTZ,
-			ReturnType: types.TimestampTZ,
+			ReturnType: FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				// Convert time to be in the given timezone, as math relies on matching timezones..
 				t := duration.Add(right.(*DTimestampTZ).Time.In(ctx.GetLocation()), left.(*DInterval).Duration)
@@ -900,7 +898,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Interval,
-			ReturnType: types.Interval,
+			ReturnType: FixedReturnType(types.Interval),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: left.(*DInterval).Duration.Add(right.(*DInterval).Duration)}, nil
 			},
@@ -909,7 +907,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Interval,
-			ReturnType: types.Timestamp,
+			ReturnType: FixedReturnType(types.Timestamp),
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				leftTime, err := left.(*DDate).ToTime()
 				if err != nil {
@@ -923,7 +921,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Date,
-			ReturnType: types.Timestamp,
+			ReturnType: FixedReturnType(types.Timestamp),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				rightTime, err := right.(*DDate).ToTime()
 				if err != nil {
@@ -937,7 +935,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.INet,
 			RightType:  types.Int,
-			ReturnType: types.INet,
+			ReturnType: FixedReturnType(types.INet),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				i := MustBeDInt(right)
@@ -949,7 +947,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.INet,
-			ReturnType: types.INet,
+			ReturnType: FixedReturnType(types.INet),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				i := MustBeDInt(left)
 				ipAddr := MustBeDIPAddr(right).IPAddr
@@ -964,7 +962,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
-			ReturnType: types.Int,
+			ReturnType: FixedReturnType(types.Int),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				a, b := MustBeDInt(left), MustBeDInt(right)
 				r, ok := arith.SubWithOverflow(int64(a), int64(b))
@@ -978,7 +976,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Float,
-			ReturnType: types.Float,
+			ReturnType: FixedReturnType(types.Float),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) - *right.(*DFloat)), nil
 			},
@@ -987,7 +985,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
@@ -1000,7 +998,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Int,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
@@ -1014,7 +1012,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
@@ -1028,7 +1026,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Int,
-			ReturnType: types.Date,
+			ReturnType: FixedReturnType(types.Date),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				d, err := left.(*DDate).SubDays(int64(MustBeDInt(right)))
 				if err != nil {
@@ -1041,7 +1039,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Date,
-			ReturnType: types.Int,
+			ReturnType: FixedReturnType(types.Int),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l, r := left.(*DDate).Date, right.(*DDate).Date
 				if !l.IsFinite() || !r.IsFinite() {
@@ -1057,7 +1055,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Time,
-			ReturnType: types.Timestamp,
+			ReturnType: FixedReturnType(types.Timestamp),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				leftTime, err := left.(*DDate).ToTime()
 				if err != nil {
@@ -1071,7 +1069,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Time,
 			RightType:  types.Time,
-			ReturnType: types.Interval,
+			ReturnType: FixedReturnType(types.Interval),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t1 := timeofday.TimeOfDay(*left.(*DTime))
 				t2 := timeofday.TimeOfDay(*right.(*DTime))
@@ -1083,7 +1081,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Timestamp,
 			RightType:  types.Timestamp,
-			ReturnType: types.Interval,
+			ReturnType: FixedReturnType(types.Interval),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestamp).Sub(right.(*DTimestamp).Time).Nanoseconds()
 				return &DInterval{Duration: duration.MakeDurationJustifyHours(nanos, 0, 0)}, nil
@@ -1093,7 +1091,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.TimestampTZ,
 			RightType:  types.TimestampTZ,
-			ReturnType: types.Interval,
+			ReturnType: FixedReturnType(types.Interval),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestampTZ).Sub(right.(*DTimestampTZ).Time).Nanoseconds()
 				return &DInterval{Duration: duration.MakeDurationJustifyHours(nanos, 0, 0)}, nil
@@ -1103,7 +1101,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Timestamp,
 			RightType:  types.TimestampTZ,
-			ReturnType: types.Interval,
+			ReturnType: FixedReturnType(types.Interval),
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				// These two quantities aren't directly comparable. Convert the
 				// TimestampTZ to a timestamp first.
@@ -1119,7 +1117,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.TimestampTZ,
 			RightType:  types.Timestamp,
-			ReturnType: types.Interval,
+			ReturnType: FixedReturnType(types.Interval),
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				// These two quantities aren't directly comparable. Convert the
 				// TimestampTZ to a timestamp first.
@@ -1135,7 +1133,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Time,
 			RightType:  types.Interval,
-			ReturnType: types.Time,
+			ReturnType: FixedReturnType(types.Time),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := timeofday.TimeOfDay(*left.(*DTime))
 				return MakeDTime(t.Add(right.(*DInterval).Duration.Mul(-1))), nil
@@ -1145,7 +1143,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.TimeTZ,
 			RightType:  types.Interval,
-			ReturnType: types.TimeTZ,
+			ReturnType: FixedReturnType(types.TimeTZ),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := left.(*DTimeTZ)
 				duration := right.(*DInterval).Duration
@@ -1156,7 +1154,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Timestamp,
 			RightType:  types.Interval,
-			ReturnType: types.Timestamp,
+			ReturnType: FixedReturnType(types.Timestamp),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return MakeDTimestamp(duration.Add(
 					left.(*DTimestamp).Time, right.(*DInterval).Duration.Mul(-1)), time.Microsecond)
@@ -1166,7 +1164,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.TimestampTZ,
 			RightType:  types.Interval,
-			ReturnType: types.TimestampTZ,
+			ReturnType: FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := duration.Add(
 					left.(*DTimestampTZ).Time.In(ctx.GetLocation()),
@@ -1179,7 +1177,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Interval,
-			ReturnType: types.Timestamp,
+			ReturnType: FixedReturnType(types.Timestamp),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				leftTime, err := left.(*DDate).ToTime()
 				if err != nil {
@@ -1193,7 +1191,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Interval,
-			ReturnType: types.Interval,
+			ReturnType: FixedReturnType(types.Interval),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: left.(*DInterval).Duration.Sub(right.(*DInterval).Duration)}, nil
 			},
@@ -1202,7 +1200,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.String,
-			ReturnType: types.Jsonb,
+			ReturnType: FixedReturnType(types.Jsonb),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, _, err := left.(*DJSON).JSON.RemoveString(string(MustBeDString(right)))
 				if err != nil {
@@ -1215,7 +1213,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.Int,
-			ReturnType: types.Jsonb,
+			ReturnType: FixedReturnType(types.Jsonb),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, _, err := left.(*DJSON).JSON.RemoveIndex(int(MustBeDInt(right)))
 				if err != nil {
@@ -1228,7 +1226,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.MakeArray(types.String),
-			ReturnType: types.Jsonb,
+			ReturnType: FixedReturnType(types.Jsonb),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j := left.(*DJSON).JSON
 				arr := *MustBeDArray(right)
@@ -1250,7 +1248,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.INet,
 			RightType:  types.INet,
-			ReturnType: types.Int,
+			ReturnType: FixedReturnType(types.Int),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
@@ -1263,7 +1261,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 			// Note: postgres ver 10 does NOT have Int - INet. Throws ERROR: 42883.
 			LeftType:   types.INet,
 			RightType:  types.Int,
-			ReturnType: types.INet,
+			ReturnType: FixedReturnType(types.INet),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				i := MustBeDInt(right)
@@ -1278,7 +1276,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
-			ReturnType: types.Int,
+			ReturnType: FixedReturnType(types.Int),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				// See Rob Pike's implementation from
 				// https://groups.google.com/d/msg/golang-nuts/h5oSN5t3Au4/KaNQREhZh0QJ
@@ -1300,7 +1298,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Float,
-			ReturnType: types.Float,
+			ReturnType: FixedReturnType(types.Float),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) * *right.(*DFloat)), nil
 			},
@@ -1309,7 +1307,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
@@ -1325,7 +1323,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Int,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
@@ -1339,7 +1337,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
@@ -1353,7 +1351,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Interval,
-			ReturnType: types.Interval,
+			ReturnType: FixedReturnType(types.Interval),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: right.(*DInterval).Duration.Mul(int64(MustBeDInt(left)))}, nil
 			},
@@ -1362,7 +1360,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Int,
-			ReturnType: types.Interval,
+			ReturnType: FixedReturnType(types.Interval),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: left.(*DInterval).Duration.Mul(int64(MustBeDInt(right)))}, nil
 			},
@@ -1371,7 +1369,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Float,
-			ReturnType: types.Interval,
+			ReturnType: FixedReturnType(types.Interval),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := float64(*right.(*DFloat))
 				return &DInterval{Duration: left.(*DInterval).Duration.MulFloat(r)}, nil
@@ -1381,7 +1379,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Interval,
-			ReturnType: types.Interval,
+			ReturnType: FixedReturnType(types.Interval),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := float64(*left.(*DFloat))
 				return &DInterval{Duration: right.(*DInterval).Duration.MulFloat(l)}, nil
@@ -1391,7 +1389,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Interval,
-			ReturnType: types.Interval,
+			ReturnType: FixedReturnType(types.Interval),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				t, err := l.Float64()
@@ -1405,7 +1403,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Decimal,
-			ReturnType: types.Interval,
+			ReturnType: FixedReturnType(types.Interval),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := &right.(*DDecimal).Decimal
 				t, err := r.Float64()
@@ -1422,7 +1420,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := MustBeDInt(right)
 				if rInt == 0 {
@@ -1439,7 +1437,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Float,
-			ReturnType: types.Float,
+			ReturnType: FixedReturnType(types.Float),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := *right.(*DFloat)
 				if r == 0.0 {
@@ -1452,7 +1450,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
@@ -1468,7 +1466,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Int,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
@@ -1485,7 +1483,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
@@ -1502,7 +1500,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Int,
-			ReturnType: types.Interval,
+			ReturnType: FixedReturnType(types.Interval),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := MustBeDInt(right)
 				if rInt == 0 {
@@ -1515,7 +1513,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Float,
-			ReturnType: types.Interval,
+			ReturnType: FixedReturnType(types.Interval),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := float64(*right.(*DFloat))
 				if r == 0.0 {
@@ -1531,7 +1529,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
-			ReturnType: types.Int,
+			ReturnType: FixedReturnType(types.Int),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := MustBeDInt(right)
 				if rInt == 0 {
@@ -1544,7 +1542,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Float,
-			ReturnType: types.Float,
+			ReturnType: FixedReturnType(types.Float),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := float64(*left.(*DFloat))
 				r := float64(*right.(*DFloat))
@@ -1558,7 +1556,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
@@ -1574,7 +1572,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Int,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
@@ -1591,7 +1589,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
@@ -1611,7 +1609,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
-			ReturnType: types.Int,
+			ReturnType: FixedReturnType(types.Int),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := MustBeDInt(right)
 				if r == 0 {
@@ -1624,7 +1622,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Float,
-			ReturnType: types.Float,
+			ReturnType: FixedReturnType(types.Float),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := float64(*left.(*DFloat))
 				r := float64(*right.(*DFloat))
@@ -1638,7 +1636,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
@@ -1654,7 +1652,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Int,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
@@ -1671,7 +1669,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
@@ -1691,7 +1689,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.String,
 			RightType:  types.String,
-			ReturnType: types.String,
+			ReturnType: FixedReturnType(types.String),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDString(string(MustBeDString(left) + MustBeDString(right))), nil
 			},
@@ -1700,7 +1698,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Bytes,
 			RightType:  types.Bytes,
-			ReturnType: types.Bytes,
+			ReturnType: FixedReturnType(types.Bytes),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDBytes(*left.(*DBytes) + *right.(*DBytes)), nil
 			},
@@ -1709,7 +1707,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.VarBit,
 			RightType:  types.VarBit,
-			ReturnType: types.VarBit,
+			ReturnType: FixedReturnType(types.VarBit),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				lhs := MustBeDBitArray(left)
 				rhs := MustBeDBitArray(right)
@@ -1722,7 +1720,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.Jsonb,
-			ReturnType: types.Jsonb,
+			ReturnType: FixedReturnType(types.Jsonb),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, err := MustBeDJSON(left).JSON.Concat(MustBeDJSON(right).JSON)
 				if err != nil {
@@ -1739,7 +1737,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
-			ReturnType: types.Int,
+			ReturnType: FixedReturnType(types.Int),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				rval := MustBeDInt(right)
 				if rval < 0 || rval >= 64 {
@@ -1753,7 +1751,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.VarBit,
 			RightType:  types.Int,
-			ReturnType: types.VarBit,
+			ReturnType: FixedReturnType(types.VarBit),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				lhs := MustBeDBitArray(left)
 				rhs := MustBeDInt(right)
@@ -1766,7 +1764,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.INet,
 			RightType:  types.INet,
-			ReturnType: types.Bool,
+			ReturnType: FixedReturnType(types.Bool),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
@@ -1780,7 +1778,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
-			ReturnType: types.Int,
+			ReturnType: FixedReturnType(types.Int),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				rval := MustBeDInt(right)
 				if rval < 0 || rval >= 64 {
@@ -1794,7 +1792,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.VarBit,
 			RightType:  types.Int,
-			ReturnType: types.VarBit,
+			ReturnType: FixedReturnType(types.VarBit),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				lhs := MustBeDBitArray(left)
 				rhs := MustBeDInt(right)
@@ -1807,7 +1805,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.INet,
 			RightType:  types.INet,
-			ReturnType: types.Bool,
+			ReturnType: FixedReturnType(types.Bool),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
@@ -1821,7 +1819,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
-			ReturnType: types.Int,
+			ReturnType: FixedReturnType(types.Int),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return IntPow(MustBeDInt(left), MustBeDInt(right))
 			},
@@ -1830,7 +1828,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Float,
-			ReturnType: types.Float,
+			ReturnType: FixedReturnType(types.Float),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				f := math.Pow(float64(*left.(*DFloat)), float64(*right.(*DFloat)))
 				return NewDFloat(DFloat(f)), nil
@@ -1840,7 +1838,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
@@ -1853,7 +1851,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Int,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
@@ -1867,7 +1865,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
+			ReturnType: FixedReturnType(types.Decimal),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
@@ -1884,7 +1882,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.String,
-			ReturnType: types.Jsonb,
+			ReturnType: FixedReturnType(types.Jsonb),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, err := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
 				if err != nil {
@@ -1901,7 +1899,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.Int,
-			ReturnType: types.Jsonb,
+			ReturnType: FixedReturnType(types.Jsonb),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, err := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
 				if err != nil {
@@ -1920,7 +1918,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.MakeArray(types.String),
-			ReturnType: types.Jsonb,
+			ReturnType: FixedReturnType(types.Jsonb),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				path, err := GetJSONPath(left.(*DJSON).JSON, *MustBeDArray(right))
 				if err != nil {
@@ -1939,7 +1937,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.String,
-			ReturnType: types.String,
+			ReturnType: FixedReturnType(types.String),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				res, err := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
 				if err != nil {
@@ -1963,7 +1961,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.Int,
-			ReturnType: types.String,
+			ReturnType: FixedReturnType(types.String),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				res, err := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
 				if err != nil {
@@ -1989,7 +1987,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.MakeArray(types.String),
-			ReturnType: types.String,
+			ReturnType: FixedReturnType(types.String),
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				res, err := GetJSONPath(left.(*DJSON).JSON, *MustBeDArray(right))
 				if err != nil {
@@ -3931,7 +3929,7 @@ func (expr *BinaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 		return nil, err
 	}
 	if ctx.TestingKnobs.AssertBinaryExprReturnTypes {
-		if err := ensureExpectedType(expr.Fn.ReturnType, res); err != nil {
+		if err := ensureExpectedType(expr.Fn.ReturnType([]TypedExpr{left, right}), res); err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"binary op %q", expr)
 		}

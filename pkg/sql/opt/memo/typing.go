@@ -57,7 +57,10 @@ func InferBinaryType(op opt.Operator, leftType, rightType *types.T) *types.T {
 	if !ok {
 		panic(errors.AssertionFailedf("could not find type for binary expression %s", log.Safe(op)))
 	}
-	return o.ReturnType
+	return o.ReturnType([]tree.TypedExpr{
+		tree.NewTypedCastExpr(tree.DNull, leftType),
+		tree.NewTypedCastExpr(tree.DNull, rightType),
+	})
 }
 
 // InferWhensType returns the type of a CASE expression, which is

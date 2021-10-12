@@ -92,7 +92,10 @@ func (c *CustomFuncs) ArrayType(inCol opt.ColumnID) *types.T {
 // operands.
 func (c *CustomFuncs) BinaryType(op opt.Operator, left, right opt.ScalarExpr) *types.T {
 	o, _ := memo.FindBinaryOverload(op, left.DataType(), right.DataType())
-	return o.ReturnType
+	return o.ReturnType([]tree.TypedExpr{
+		tree.NewTypedCastExpr(tree.DNull, left.DataType()),
+		tree.NewTypedCastExpr(tree.DNull, right.DataType()),
+	})
 }
 
 // TypeOf returns the type of the expression.

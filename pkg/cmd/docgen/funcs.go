@@ -121,7 +121,7 @@ func generateOperators() []byte {
 			ops[op] = append(ops[op], operation{
 				left:  left,
 				right: right,
-				ret:   v.ReturnType.String(),
+				ret:   v.ReturnType(nil).String(),
 				op:    op,
 			})
 		}

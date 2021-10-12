@@ -461,10 +461,13 @@ var operators = func() map[oid.Oid][]operator {
 	for BinaryOperator, overload := range tree.BinOps {
 		for _, ov := range overload {
 			bo := ov.(*tree.BinOp)
-			m[bo.ReturnType.Oid()] = append(m[bo.ReturnType.Oid()], operator{
-				BinOp:    bo,
-				Operator: tree.MakeBinaryOperator(BinaryOperator),
-			})
+			typ := bo.ReturnType(nil)
+			if typ.Family() != types.UnknownFamily {
+				m[typ.Oid()] = append(m[typ.Oid()], operator{
+					BinOp:    bo,
+					Operator: tree.MakeBinaryOperator(BinaryOperator),
+				})
+			}
 		}
 	}
 	return m

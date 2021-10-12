@@ -291,7 +291,7 @@ func (c *CustomFuncs) FoldBinary(
 	if err != nil {
 		return nil, false
 	}
-	return c.f.ConstructConstVal(result, o.ReturnType), true
+	return c.f.ConstructConstVal(result, o.ReturnType([]tree.TypedExpr{lDatum, rDatum})), true
 }
 
 // FoldUnary evaluates a unary expression with a constant input. It returns
