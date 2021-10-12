@@ -75,11 +75,12 @@ statement ok
 ALTER USER foo WITH PASSWORD somepass
 
 statement ok
-PREPARE chpw AS ALTER USER $1 WITH PASSWORD $2;
-  EXECUTE chpw('foo', 'bar')
+PREPARE chpw AS ALTER USER foo WITH PASSWORD $1;
+  EXECUTE chpw('bar')
 
 statement error user blix does not exist
-EXECUTE chpw('blix', 'blah')
+PREPARE chpw2 AS ALTER USER blix WITH PASSWORD $1;
+  EXECUTE chpw2('baz')
 
 query TTT colnames
 SHOW USERS
