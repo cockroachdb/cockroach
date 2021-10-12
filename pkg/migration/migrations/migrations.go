@@ -73,16 +73,10 @@ var migrations = []migration.Migration{
 		fixDescriptorMigration,
 	),
 	migration.NewTenantMigration(
-		"add the system.sql_statement_stats table",
-		toCV(clusterversion.SQLStatsTable),
+		"add the system.statement_statistics and system.transaction_statistics tables",
+		toCV(clusterversion.SQLStatsTables),
 		NoPrecondition,
-		sqlStatementStatsTableMigration,
-	),
-	migration.NewTenantMigration(
-		"add the system.sql_transaction_stats table",
-		toCV(clusterversion.SQLStatsTable),
-		NoPrecondition,
-		sqlTransactionStatsTableMigration,
+		sqlStatsTablesMigration,
 	),
 	migration.NewTenantMigration(
 		"add the system.database_role_settings table",
