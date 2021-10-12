@@ -32,7 +32,7 @@ SELECT * FROM t AS OF SYSTEM TIME cluster_logical_timestamp()
 statement error pq: subqueries are not allowed in AS OF SYSTEM TIME
 SELECT * FROM t AS OF SYSTEM TIME (SELECT '-1h'::INTERVAL)
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 SELECT * FROM t AS OF SYSTEM TIME '-1h'
 
 query T noticetrace
