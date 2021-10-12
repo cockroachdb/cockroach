@@ -366,7 +366,7 @@ $(CLUSTER_UI_JS): $(shell find pkg/ui/workspaces/cluster-ui/src -type f | sed 's
 pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock | bin/.submodules-initialized
 	@# Do not install optional dependencies as far as they are required for UI development only
 	@# and should not be installed for production builds.
-	@# Also some of linux distributives (that are used as development env) don't support some of
+	@# Also some of linux distributions (that are used as development env) don't support some of
 	@# optional dependencies (i.e. cypress) so it is important to make these deps optional.
 	$(NODE_RUN) -C pkg/ui yarn install --ignore-optional --offline
 	@# We remove this broken dependency again in pkg/ui/webpack.config.js.
