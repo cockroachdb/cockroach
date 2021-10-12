@@ -63,7 +63,7 @@ type Sender interface {
 	// concurrent requests, it waits for all of them before returning,
 	// even in error cases.
 	//
-	// Once the request reaches the `transport` module, anothern
+	// Once the request reaches the `transport` module, another
 	// restriction applies (particularly relevant for the case when the
 	// node that the transport is talking to is local, and so there's
 	// not gRPC marshaling/unmarshaling):
