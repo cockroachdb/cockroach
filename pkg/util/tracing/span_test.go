@@ -232,7 +232,11 @@ func TestSpanRecordStructured(t *testing.T) {
 // TestSpanRecordStructuredLimit tests recording behavior when the size of
 // structured data recorded into the span exceeds the configured limit.
 func TestSpanRecordStructuredLimit(t *testing.T) {
+	now := timeutil.Now()
+	clock := timeutil.NewManualTime(now)
 	tr := NewTracer()
+	tr.testing = &testingKnob{clock}
+
 	sp := tr.StartSpan("root", WithForceRealSpan())
 	defer sp.Finish()
 
@@ -241,7 +245,7 @@ func TestSpanRecordStructuredLimit(t *testing.T) {
 	anyPayload, err := types.MarshalAny(payload(42))
 	require.NoError(t, err)
 	structuredRecord := &tracingpb.StructuredRecord{
-		Time:    timeutil.Now(),
+		Time:    now,
 		Payload: anyPayload,
 	}
 
