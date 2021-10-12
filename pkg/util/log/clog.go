@@ -312,7 +312,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 		}
 
 		// Explain to the (human) user that we would like to hear from them.
-		entry.stacks = append(entry.stacks, []byte(fatalErrorPostamble)...)
+		entry.stacks = append(entry.stacks, []byte(fatalErrorSuffix)...)
 
 		// We don't want to hang forever writing our final log message. If
 		// things are broken (for example, if the disk fills up and there
@@ -461,7 +461,7 @@ func setActive() {
 	}
 }
 
-const fatalErrorPostamble = `
+const fatalErrorSuffix = `
 
 ****************************************************************************
 
