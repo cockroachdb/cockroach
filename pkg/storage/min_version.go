@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -46,7 +47,7 @@ func writeMinVersionFile(atomicRenameFS vfs.FS, dir string, version roachpb.Vers
 		return err
 	}
 	filename := atomicRenameFS.PathJoin(dir, MinVersionFilename)
-	if err := SafeWriteToFile(atomicRenameFS, dir, filename, b); err != nil {
+	if err := fs.SafeWriteToFile(atomicRenameFS, dir, filename, b); err != nil {
 		return err
 	}
 	return nil
