@@ -2628,7 +2628,7 @@ func WithCandidateCode(err error, code string) error
 // has a candidate pg error code.
 func IsCandidateCode(err error) bool
 
-// HasCandidateCode returns tue iff the error or one of its causes
+// HasCandidateCode returns true iff the error or one of its causes
 // has a candidate pg error code.
 func HasCandidateCode(err error) bool
 
