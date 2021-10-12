@@ -476,7 +476,7 @@ extern "C" {
 
   /**
    * Initialize a geod_geodesicline object in terms of the direct geodesic
-   * problem spacified in terms of either distance or arc length.
+   * problem specified in terms of either distance or arc length.
    *
    * @param[out] l a pointer to the object to be initialized.
    * @param[in] g a pointer to the geod_geodesic object specifying the
