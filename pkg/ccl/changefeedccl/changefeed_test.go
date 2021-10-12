@@ -3881,7 +3881,7 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	sqlDB.Exec(t, "ALTER TABLE test.foo SCATTER")
 
 	// Create a factory which executes the CREATE CHANGEFEED statement on server 0.
-	// This statement should fail, but the job itself ought to be creaated.
+	// This statement should fail, but the job itself ought to be created.
 	// After some time, that job should be adopted by another node, and executed successfully.
 	f := makeCloudFeedFactory(tc.Server(1), tc.ServerConn(0), sinkDir)
 
