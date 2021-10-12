@@ -6805,7 +6805,7 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='63b'`)
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.max_allowed_overage='0b'`)
 
-	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test'`)
+	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfiles/test'`)
 	require.Equal(t, 1, numExportRequests)
 	startingSpan := roachpb.Span{Key: []byte("/Tenant/10/Table/53/1"), EndKey: []byte("/Tenant/10/Table/53/2")}
 	require.Equal(t, exportRequestSpans, []string{startingSpan.String()})
@@ -6813,7 +6813,7 @@ func TestPaginatedBackupTenant(t *testing.T) {
 
 	// Two ExportRequests with one resume span.
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='50b'`)
-	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test2'`)
+	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfiles/test2'`)
 	require.Equal(t, 2, numExportRequests)
 	startingSpan = roachpb.Span{Key: []byte("/Tenant/10/Table/53/1"),
 		EndKey: []byte("/Tenant/10/Table/53/2")}
@@ -6824,7 +6824,7 @@ func TestPaginatedBackupTenant(t *testing.T) {
 
 	// One ExportRequest for every KV.
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='10b'`)
-	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test3'`)
+	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfiles/test3'`)
 	require.Equal(t, 5, numExportRequests)
 	var expected []string
 	for _, resume := range []exportResumePoint{
@@ -6849,7 +6849,7 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	// Allow mid key breaks for the tennant to verify timestamps on resume.
 	tenant10.Exec(t, `SET CLUSTER SETTING bulkio.backup.split_keys_on_timestamps = true`)
 	tenant10.Exec(t, `UPDATE baz.bar SET v = 'z' WHERE i = 210`)
-	tenant10.Exec(t, `BACKUP DATABASE baz TO 'userfile://defaultdb.myfililes/test4' with revision_history`)
+	tenant10.Exec(t, `BACKUP DATABASE baz TO 'userfile://defaultdb.myfiles/test4' with revision_history`)
 	expected = nil
 	for _, resume := range []exportResumePoint{
 		{[]byte("/Tenant/10/Table/3"), []byte("/Tenant/10/Table/4"), withoutTS},
