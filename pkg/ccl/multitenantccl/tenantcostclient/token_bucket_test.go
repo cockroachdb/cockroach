@@ -189,7 +189,7 @@ func TestTokenBucketTryToFulfill(t *testing.T) {
 			}
 		}
 		if tryAgainAfter == maxTryAgainAfterSeconds*time.Second {
-			// TryToFullfill has a cap; we cannot crosscheck the value if that cap is
+			// TryToFulfill has a cap; we cannot crosscheck the value if that cap is
 			// hit.
 			continue
 		}
