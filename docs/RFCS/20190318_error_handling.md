@@ -845,7 +845,7 @@ Like in the previous section, the introduction of a barrier error
 ensures that any semantic value in the error returned by
 `thisNeverFails` is properly forgotten. This way, any function that
 contains calls to `NewAssertionFailureWithWrappedf` (and other
-variants withous an original error, like `AssertionFailed`) always
+variants without an original error, like `AssertionFailed`) always
 have a simple contract: they either return the errors they were
 predicting to return, or a barrier without (visible) cause. There is
 no way for unexpected errors with arbitrary payloads to come out of
