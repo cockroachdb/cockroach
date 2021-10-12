@@ -5686,7 +5686,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 	}
 }
 
-// TestPushTxnQueryPusheerHasNewerVersion verifies that PushTxn
+// TestPushTxnQueryPusheeHasNewerVersion verifies that PushTxn
 // uses the newer version of the pushee in a push request.
 func TestPushTxnQueryPusheeHasNewerVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
