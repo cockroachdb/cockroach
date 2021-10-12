@@ -195,7 +195,7 @@ func (p *meta2Planner) next(ctx context.Context) (Step, error) {
 // In the happy path, planning is done once a minute.
 //
 // The rate limit calculation below implies that planning can be done max once
-// evey 30 seconds (since 60s / 2 -> 30s).
+// every 30 seconds (since 60s / 2 -> 30s).
 func getRateLimitImpl(interval time.Duration, settings *cluster.Settings) time.Duration {
 	sv := &settings.SV
 	const happyPathIntervalToRateLimitIntervalRatio = 2
