@@ -3362,7 +3362,7 @@ func TestImportIntoCSV(t *testing.T) {
 	})
 
 	// Tests IMPORT INTO without any target columns specified. This implies an
-	// import of all columns in the exisiting table.
+	// import of all columns in the existing table.
 	t.Run("no-target-cols-specified", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
 		defer sqlDB.Exec(t, `DROP TABLE t`)
