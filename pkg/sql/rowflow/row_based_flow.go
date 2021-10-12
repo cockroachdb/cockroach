@@ -440,11 +440,6 @@ func (f *rowBasedFlow) Cleanup(ctx context.Context) {
 	f.Release()
 }
 
-// CleanupBeforeRun is part of the Flow interface.
-func (f *rowBasedFlow) CleanupBeforeRun(ctx context.Context) {
-	f.Cleanup(ctx)
-}
-
 type copyingRowReceiver struct {
 	execinfra.RowReceiver
 	alloc rowenc.EncDatumRowAlloc
