@@ -820,7 +820,7 @@ func (t *TrackedRequestToken) DoneIfNotMoved(ctx context.Context) {
 	t.doneIfNotMovedLocked(ctx)
 }
 
-// doneIfNotMovedLocked untrackes the request. It is idempotent; in particular,
+// doneIfNotMovedLocked untracks the request. It is idempotent; in particular,
 // this is used when wanting to untrack a proposal that might, in fact, be a
 // reproposal.
 func (t *TrackedRequestToken) doneIfNotMovedLocked(ctx context.Context) {
