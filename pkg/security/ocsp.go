@@ -68,12 +68,12 @@ func makeOCSPVerifier(settings TLSSettings) func([][]byte, [][]*x509.Certificate
 // undergoing OCSP validations. This counter exists so that the value
 // of ocspCheckWithOCSPServerInCertCounter can be interpreted as a
 // percentage.
-var ocspChecksCounter = telemetry.GetCounterOnce("server.ocsp.conn-verifications")
+var ocspChecksCounter = telemetry.GetCounterOnce("server.ocsp.conn-verification")
 
 // ocspCheckWithOCSPServerInCert counts the number of certificate
-// verifications performed with a populated OCSPServer field in one of
+// verification performed with a populated OCSPServer field in one of
 // the certs in the validation chain.
-var ocspCheckWithOCSPServerInCertCounter = telemetry.GetCounterOnce("server.ocsp.cert-verifications")
+var ocspCheckWithOCSPServerInCertCounter = telemetry.GetCounterOnce("server.ocsp.cert-verification")
 
 func verifyOCSP(ctx context.Context, settings TLSSettings, cert, issuer *x509.Certificate) error {
 	if len(cert.OCSPServer) == 0 {

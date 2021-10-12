@@ -8200,7 +8200,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	r := tc.repl
 	electionTicks := tc.store.cfg.RaftElectionTimeoutTicks
 	{
-		// The verifications of the reproposal counts below rely on r.mu.ticks
+		// The verification of the reproposal counts below rely on r.mu.ticks
 		// starting with a value of 0 (modulo electionTicks). Move the replica into
 		// that state in case the replica was ticked before we grabbed
 		// processRaftMu.
