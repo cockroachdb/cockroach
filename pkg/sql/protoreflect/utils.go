@@ -64,18 +64,29 @@ func DecodeMessage(name string, data []byte) (protoutil.Message, error) {
 	return msg, nil
 }
 
-// MessageToJSON converts a protocol message into a JSONB object. The
-// emitDefaults flag dictates whether fields with zero values are rendered or
-// not.
-func MessageToJSON(msg protoutil.Message, emitDefaults bool) (jsonb.JSON, error) {
-	// Convert to json.
+// FmtFlags is a struct describing how MessageToJSON ought to format its output.
+type FmtFlags struct {
+	// EmitDefaults flag dictates whether fields with zero values are rendered or not.
+	EmitDefaults bool
+	// EmitRedacted indicates redacted JSON representation is needed.
+	EmitRedacted bool
+}
+
+func marshalToJSON(msg protoutil.Message, emitDefaults bool) (jsonb.JSON, error) {
 	jsonEncoder := jsonpb.Marshaler{EmitDefaults: emitDefaults}
 	msgJSON, err := jsonEncoder.MarshalToString(msg)
 	if err != nil {
 		return nil, errors.Wrapf(err, "marshaling %s; msg=%+v", proto.MessageName(msg), msg)
 	}
-
 	return jsonb.ParseJSON(msgJSON)
+}
+
+// MessageToJSON converts a protocol message into a JSONB object.
+func MessageToJSON(msg protoutil.Message, flags FmtFlags) (jsonb.JSON, error) {
+	if flags.EmitRedacted {
+		return marshalToJSONRedacted(msg, flags.EmitDefaults)
+	}
+	return marshalToJSON(msg, flags.EmitDefaults)
 }
 
 // JSONBMarshalToMessage initializes the target protocol message with
