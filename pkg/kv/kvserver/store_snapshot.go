@@ -835,7 +835,7 @@ var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 	validatePositive,
 ).WithPublic().WithSystemOnly()
 
-// recoverySnapshotRate is the rate at which Raft-initiated spanshots can be
+// recoverySnapshotRate is the rate at which Raft-initiated snapshots can be
 // sent. Ideally, one would never see a Raft-initiated snapshot; we'd like all
 // the snapshots to be preemptive. However, it has proved unfeasible to
 // completely get rid of them.
