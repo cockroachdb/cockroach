@@ -1474,7 +1474,7 @@ implements the `error` interface.
 
 The two types `opaqueLeaf` and `opaqueWrapper` are defined exclusively
 to capture payloads that cannot be decoded, and are used by
-`EncodeError` to support perfect fowarding of error payloads.
+`EncodeError` to support perfect forwarding of error payloads.
 
 #### Discussion: callback registration vs. interfaces
 
