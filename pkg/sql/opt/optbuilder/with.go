@@ -267,6 +267,23 @@ func (b *Builder) buildCTE(
 	initialScope.removeHiddenCols()
 	b.dropOrderingAndExtraCols(initialScope)
 
+	outScope := inScope.push()
+	initialTypes := initialScope.makeColumnTypes()
+
+	// We use the initialScope just to get the names of the columns; we reassign
+	// the IDs below.
+	cteSrc.cols = b.getCTECols(initialScope, cte.Name)
+
+	// Synthesize new output columns (because they contain values from both the
+	// initial and the recursive relations). These columns will also be used to
+	// refer to the working table (from the recursive query); we can't use the
+	// initial columns directly because they might contain duplicate IDs (e.g.
+	// consider initial query SELECT 0, 0).
+	for i, c := range cteSrc.cols {
+		newCol := b.synthesizeColumn(outScope, scopeColName(tree.Name(c.Alias)), initialTypes[i], nil /* expr */, nil /* scalar */)
+		cteSrc.cols[i].ID = newCol.id
+	}
+
 	// The properties of the binding are tricky: the recursive expression is
 	// invoked repeatedly and these must hold each time. We can't use the initial
 	// expression's properties directly, as those only hold the first time the
@@ -274,7 +291,7 @@ func (b *Builder) buildCTE(
 	// working table contains, except that it has at least one row (the recursive
 	// query is never invoked with an empty working table).
 	bindingProps := &props.Relational{}
-	bindingProps.OutputCols = initialScope.colSet()
+	bindingProps.OutputCols = outScope.colSet()
 	bindingProps.Cardinality = props.AnyCardinality.AtLeast(props.OneCardinality)
 	// We don't really know the input row count, except for the first time we run
 	// the recursive query. We don't have anything better though.
@@ -288,22 +305,6 @@ func (b *Builder) buildCTE(
 		Props: bindingProps,
 	})
 	b.factory.Metadata().AddWithBinding(withID, cteSrc.expr)
-
-	cteSrc.cols = b.getCTECols(initialScope, cte.Name)
-
-	outScope := inScope.push()
-
-	initialTypes := initialScope.makeColumnTypes()
-
-	// Synthesize new output columns (because they contain values from both the
-	// initial and the recursive relations). These columns will also be used to
-	// refer to the working table (from the recursive query); we can't use the
-	// initial columns directly because they might contain duplicate IDs (e.g.
-	// consider initial query SELECT 0, 0).
-	for i, c := range cteSrc.cols {
-		newCol := b.synthesizeColumn(outScope, scopeColName(tree.Name(c.Alias)), initialTypes[i], nil /* expr */, nil /* scalar */)
-		cteSrc.cols[i].ID = newCol.id
-	}
 
 	// We want to check if the recursive query is actually recursive. This is for
 	// annoying cases like `SELECT 1 UNION ALL SELECT 2`.
