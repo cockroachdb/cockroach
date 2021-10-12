@@ -98,7 +98,7 @@ func TestSpanFrontier(t *testing.T) {
 		expectFrontier(0).
 		expectEntries(`{a-d}@0`)
 
-	// Forward the entire tracked spanspace.
+	// Forward the entire tracked span space.
 	forwardFrontier(spAD, 1).
 		expectedAdvanced(true).
 		expectFrontier(1).
