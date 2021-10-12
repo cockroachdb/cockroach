@@ -158,12 +158,13 @@ func (b *Builder) analyzeOrderByArg(
 		return
 	}
 
-	// Set NULL order. The default order is nulls first for ascending order and
-	// nulls last for descending order.
+	// Set NULL order. The default order in Cockroach if null_ordered_last=False
+	// is nulls first for ascending order and nulls last for descending order.
 	nullsDefaultOrder := true
-	if order.NullsOrder != tree.DefaultNullsOrder &&
-		((order.NullsOrder == tree.NullsFirst && order.Direction == tree.Descending) ||
-			(order.NullsOrder == tree.NullsLast && order.Direction != tree.Descending)) {
+	if (b.evalCtx.SessionData().NullOrderedLast && order.NullsOrder == tree.DefaultNullsOrder) ||
+		(order.NullsOrder != tree.DefaultNullsOrder &&
+			((order.NullsOrder == tree.NullsFirst && order.Direction == tree.Descending) ||
+				(order.NullsOrder == tree.NullsLast && order.Direction != tree.Descending))) {
 		nullsDefaultOrder = false
 	}
 
