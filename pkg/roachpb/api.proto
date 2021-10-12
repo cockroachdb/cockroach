@@ -1394,7 +1394,7 @@ message ExportRequest {
   // is used as a lower bound and header Timestamp as higher bound or exported
   // entries.
   MVCCFilter mvcc_filter = 4 [(gogoproto.customname) = "MVCCFilter"];
-  // StartTime is only used whe MVCCFilter is set to All.
+  // StartTime is only used when MVCCFilter is set to All.
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
 
   // Split large rows in the middle of key sequence. This option will allow
