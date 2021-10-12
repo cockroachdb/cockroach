@@ -309,7 +309,11 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// This cleans up all the memory and disk monitoring of the vectorized flow.
 	f.creator.cleanup(ctx)
 
-	if util.CrdbTestBuild {
+	if util.CrdbTestBuild && f.FlowBase.Started() {
+		// Check that all closers have been closed. Note that we don't check
+		// this in case the flow was never started in the first place (it is ok
+		// to not check this since closers haven't allocated any resources in
+		// such a case).
 		if numClosed := atomic.LoadInt32(f.testingInfo.numClosed); numClosed != f.testingInfo.numClosers {
 			colexecerror.InternalError(errors.AssertionFailedf("expected %d components to be closed, but found that only %d were", f.testingInfo.numClosers, numClosed))
 		}
@@ -337,18 +341,6 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	}
 	f.FlowBase.Cleanup(ctx)
 	f.Release()
-}
-
-// CleanupBeforeRun is part of the Flow interface.
-func (f *vectorizedFlow) CleanupBeforeRun(ctx context.Context) {
-	// TODO(yuzefovich): Cleanup() does more things. Some of them are probably
-	// relevant even if the flow was not started. For now, this code does the
-	// minimum to avoid obvious leaks.
-
-	// This cleans up all the memory and disk monitoring of the vectorized flow.
-	f.creator.cleanup(ctx)
-	// Among other things, this finishes the flow's span.
-	f.FlowBase.Cleanup(ctx)
 }
 
 // wrapWithVectorizedStatsCollectorBase creates a new
