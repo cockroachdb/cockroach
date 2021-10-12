@@ -6846,7 +6846,7 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='10b'`)
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.max_allowed_overage='10b'`)
 
-	// Allow mid key breaks for the tennant to verify timestamps on resume.
+	// Allow mid key breaks for the tenant to verify timestamps on resume.
 	tenant10.Exec(t, `SET CLUSTER SETTING bulkio.backup.split_keys_on_timestamps = true`)
 	tenant10.Exec(t, `UPDATE baz.bar SET v = 'z' WHERE i = 210`)
 	tenant10.Exec(t, `BACKUP DATABASE baz TO 'userfile://defaultdb.myfiles/test4' with revision_history`)
