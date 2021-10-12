@@ -1501,7 +1501,7 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 	t.Run(`webhook`, webhookTest(testFn, feedTestNoTenants))
 }
 
-func TestChangefeedRestartMutliNode(t *testing.T) {
+func TestChangefeedRestartMultiNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
