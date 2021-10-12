@@ -400,15 +400,11 @@ func assignSequenceOptions(
 		case tree.SeqOptNoCycle:
 			// Do nothing; this is the default.
 		case tree.SeqOptCache:
-			v := *option.IntVal
-			switch {
-			case v < 1:
+			if v := *option.IntVal; v >= 1 {
+				opts.CacheSize = v
+			} else {
 				return pgerror.Newf(pgcode.InvalidParameterValue,
 					"CACHE (%d) must be greater than zero", v)
-			case v == 1:
-				// Do nothing; this is the default.
-			case v > 1:
-				opts.CacheSize = *option.IntVal
 			}
 		case tree.SeqOptIncrement:
 			// Do nothing; this has already been set.

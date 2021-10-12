@@ -1,6 +1,11 @@
 # see also file `sequences`
 
 statement ok
+GRANT admin TO testuser
+
+user testuser
+
+statement ok
 CREATE SEQUENCE foo
 
 query I
@@ -20,3 +25,38 @@ query I
 SELECT nextval('foo')
 ----
 7
+
+statement ok
+ALTER SEQUENCE foo CACHE 100
+
+query I
+SELECT nextval('foo');
+----
+12
+
+user root
+
+query I
+SELECT nextval('foo');
+----
+512
+
+user testuser
+
+query I
+SELECT nextval('foo');
+----
+17
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE foo]
+----
+CREATE SEQUENCE public.foo MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 5 START 1 CACHE 100
+
+statement ok
+ALTER SEQUENCE foo CACHE 1
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE foo]
+----
+CREATE SEQUENCE public.foo MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 5 START 1
