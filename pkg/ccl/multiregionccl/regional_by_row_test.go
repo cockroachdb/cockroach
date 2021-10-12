@@ -570,7 +570,7 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 		t.Run(tc.locality, func(t *testing.T) {
 			knobs := base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					// Disable the merge queue because it makes this test flakey
+					// Disable the merge queue because it makes this test flaky
 					// under stress. Consider changing this when admin commands are
 					// better synchronized leading to less thrashing of the range cache.
 					// We may also need to retry ClearRange operations which bump into

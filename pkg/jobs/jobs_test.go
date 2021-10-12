@@ -2797,7 +2797,7 @@ func TestUnmigratedSchemaChangeJobs(t *testing.T) {
 		case <-time.After(100 * time.Millisecond):
 			// With an adopt interval of 10 ms, within 100ms we can be reasonably sure
 			// that the job was not adopted. At the very least, the test would be
-			// flakey.
+			// flaky.
 		}
 	})
 

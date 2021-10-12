@@ -55,6 +55,6 @@ var psycopgIgnoreList21_1 = psycopgIgnoreList20_2
 
 var psycopgIgnoreList20_2 = blocklist{
 	"tests.test_async.AsyncTests.test_flush_on_write":           "44709",
-	"tests.test_green.GreenTestCase.test_flush_on_write":        "flakey",
+	"tests.test_green.GreenTestCase.test_flush_on_write":        "flaky",
 	"tests.test_connection.TestConnectionInfo.test_backend_pid": "we return -1 for pg_backend_pid()",
 }

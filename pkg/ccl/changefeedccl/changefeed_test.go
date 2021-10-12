@@ -3581,7 +3581,7 @@ func TestManyChangefeedsOneTable(t *testing.T) {
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, func(t *testing.T) {
-		skip.WithIssue(t, 67034, "flakey test")
+		skip.WithIssue(t, 67034, "flaky test")
 		webhookTest(testFn)(t)
 	})
 }
