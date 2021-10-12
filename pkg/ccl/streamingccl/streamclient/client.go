@@ -12,24 +12,86 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
+
+type StreamID uint64
+
+// CheckpointToken is emitted by a stream producer to encode information about
+// what that producer has emitted, including what spans or timestamps it might
+// have resolved. It is typically treated as opaque by a consumer but may be
+// decoded and used by a KVSpanFrontier.
+type CheckpointToken []byte
+
+// SubscriptionToken is an opaque identifier returned by Plan which can be used
+// to subscribe to a given partition.
+type SubscriptionToken []byte
 
 // Client provides a way for the stream ingestion job to consume a
 // specified stream.
 // TODO(57427): The stream client does not yet support the concept of
 //  generations in a stream.
 type Client interface {
-	// GetTopology returns the Topology of a stream.
-	GetTopology(address streamingccl.StreamAddress) (streamingccl.Topology, error)
+	// Create initializes a stream with the source, potentially reserving any
+	// required resources, such as protected timestamps, and returns an ID which
+	// can be used to interact with this stream in the future.
+	Create(ctx context.Context, tenantID roachpb.TenantID) (StreamID, error)
 
-	// ConsumePartition returns a channel on which we can start listening for
-	// events from a given partition that occur after a startTime.
-	//
-	// Canceling the context will stop reading the partition and close the event
-	// channel.
-	ConsumePartition(ctx context.Context, address streamingccl.PartitionAddress, startTime hlc.Timestamp) (chan streamingccl.Event, chan error, error)
+	// Destroy informs the source of the stream that it may terminate production
+	// and release resources such as protected timestamps.
+	// Destroy(ID StreamID) error
+
+	// Heartbeat informs the src cluster that the consumer is live and
+	// that source cluster protected timestamp _may_ be advanced up to the passed ts
+	// (which may be zero if no progress has been made e.g. during backfill).
+	// TODO(dt): ts -> checkpointToken.
+	Heartbeat(ctx context.Context, ID StreamID, consumed hlc.Timestamp) error
+
+	// Plan returns a Topology for this stream.
+	// TODO(dt): separate target arguement from address argument.
+	Plan(ctx context.Context, ID StreamID) (Topology, error)
+
+	// Subscribe opens and returns a subscription for the specified partition from
+	// the specified remote address. This is used by each consumer processor to
+	// open its subscription to its partition of a larger stream.
+	// TODO(dt): ts -> checkpointToken, return -> Subscription.
+	Subscribe(
+		ctx context.Context,
+		stream StreamID,
+		spec SubscriptionToken,
+		checkpoint hlc.Timestamp,
+	) (chan streamingccl.Event, chan error, error)
+}
+
+// Subscribe is a helper for opening a sub
+func Subscribe(
+	ctx context.Context,
+	address streamingccl.StreamAddress,
+	ID StreamID,
+	spec SubscriptionToken,
+	checkpoint hlc.Timestamp,
+) (chan streamingccl.Event, chan error, error) {
+	c, err := NewStreamClient(address)
+	if err != nil {
+		return nil, nil, err
+	}
+	return c.Subscribe(ctx, ID, spec, checkpoint)
+}
+
+// Topology is a configuration of stream partitions. These are particular to a
+// stream. It specifies the number and addresses of partitions of the stream.
+type Topology []PartitionInfo
+
+// PartitionInfo describes a partition of a replication stream, i.e. a set of key
+// spans in a source cluster in which changes will be emitted.
+type PartitionInfo struct {
+	ID string
+	SubscriptionToken
+	SrcInstanceID int
+	SrcAddr       streamingccl.PartitionAddress
+	SrcLocality   roachpb.Locality
 }
 
 // NewStreamClient creates a new stream client based on the stream
@@ -45,7 +107,7 @@ func NewStreamClient(streamAddress streamingccl.StreamAddress) (Client, error) {
 	case "postgres", "postgresql":
 		// The canonical PostgreSQL URL scheme is "postgresql", however our
 		// own client commands also accept "postgres".
-		return &sinklessReplicationClient{}, nil
+		return newPGWireReplicationClient(streamURL)
 	case RandomGenScheme:
 		streamClient, err = newRandomStreamClient(streamURL)
 		if err != nil {
@@ -91,39 +153,6 @@ type KVStream interface {
 
 type CheckpointToken []byte
 
-type ParitioningOptions struct {
-	// Oversplit, if non-zero, splits the spans assigned into a given instance in
-	// the source cluster into that many buckets (i.e. more processors per node).
-  Oversplit int
-}
-
-// ParitionInfo describes a partition of a replication stream, i.e. a set of key
-// spans in a source cluster in which changes will be emitted.
-type ParitionInfo struct {
-	ParitionID int
-
-  // SubscriptionToken is passed to Subscribe to get a KV stream for this
-  // partition. It is created by and meaningful only to the src cluster.
-  SubscriptionToken []byte
-
-  // Src describes an instance in src cluster which it suggests the consumer use
-  // to open a subscription to this partition.
-  Src struct {
-    InstanceID int // src cluster's preferred node/instance for this partition.
-    Addr util.UnresolvedAddr // sql host/port of preferred instance
-    roachpb.Locality
-  }
-}
-
-// Subscribe opens and returns a subscription for the specified partition from
-// the specified remote address. This is used by each consumer processor to open
-// its subscription to its partition of a larger stream.
-func Subscribe(
-	stream StreamID,
-	addr util.UnresolvedAddr,
-	spec SubscriptionToken,
-	checkpoint CheckpointToken,
-) (Subscription, error)
 
 // Subscription represents subscription to a single stream.
 type Subscription interface {
@@ -147,7 +176,6 @@ type StreamKVs interface {
 	TS() hlc.Timestamp
 }
 
-type StreamCheckpoint CheckpointToken
 
 // KVStreamFrontier is used to represent a frontier of span/time processed in a
 // KVStream, and is used only in the coorinator. It wraps a span frontier and

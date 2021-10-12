@@ -8,7 +8,9 @@
 
 package streamingccl
 
-import "net/url"
+import (
+	"net/url"
+)
 
 // StreamAddress is the location of the stream. The topology of a stream should
 // be resolvable given a stream address.
@@ -32,12 +34,4 @@ func (pa PartitionAddress) URL() (*url.URL, error) {
 
 func (pa PartitionAddress) String() string {
 	return string(pa)
-}
-
-// Topology is a configuration of stream partitions. These are particular to a
-// stream. It specifies the number and addresses of partitions of the stream.
-//
-// There are a fixed number of Partitions in a Topology.
-type Topology struct {
-	Partitions []PartitionAddress
 }
