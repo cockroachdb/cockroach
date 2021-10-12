@@ -163,9 +163,9 @@ func newChangeAggregatorProcessor(
 		return nil, err
 	}
 
-	// MinCheckpointFrequency controls how frequent the changeAggregator flushes the sink
+	// MinCheckpointFrequency controls how frequently the changeAggregator flushes the sink
 	// and checkpoints the local frontier to changeFrontier. It is used as a rough
-	// approximation of how latency-sensitive the changefeed user is. For a latency-sensitive
+	// approximation of how latency-sensitive the changefeed user is. For a high latency
 	// user, such as cloud storage sink where flushes can take much longer, it is often set
 	// as the sink's flush frequency so as not to negate the sink's batch config.
 	//
@@ -182,6 +182,8 @@ func newChangeAggregatorProcessor(
 		if err != nil {
 			return nil, err
 		}
+	} else if r == `` {
+		ca.flushFrequency = 0
 	} else {
 		ca.flushFrequency = changefeedbase.DefaultFlushFrequency
 	}

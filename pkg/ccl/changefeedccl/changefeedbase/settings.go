@@ -30,7 +30,7 @@ var TableDescriptorPollInterval = settings.RegisterDurationSetting(
 
 // DefaultFlushFrequency is the default frequency to flush sink.
 // See comment in newChangeAggregatorProcessor for explanation on the value.
-var DefaultFlushFrequency = 5 * time.Second
+var DefaultFlushFrequency = 30 * time.Second
 
 // TestingSetDefaultFlushFrequency changes defaultFlushFrequency for tests.
 // Returns function to restore flush frequency to its original value.
