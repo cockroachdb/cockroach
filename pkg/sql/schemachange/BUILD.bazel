@@ -44,7 +44,7 @@ go_test(
     ],
 )
 
-# Keep this genrule and not ussing common string function due to extra flags eg: trimprefix
+# Keep this genrule and not using common string function due to extra flags eg: trimprefix
 genrule(
     name = "gen-columnconversionkind-stringer",
     srcs = [
