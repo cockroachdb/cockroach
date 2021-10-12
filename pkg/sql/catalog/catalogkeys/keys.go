@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	// DefaultDatabaseName is the name ofthe default CockroachDB database used
+	// DefaultDatabaseName is the name of the default CockroachDB database used
 	// for connections without a current db set.
 	DefaultDatabaseName = "defaultdb"
 
