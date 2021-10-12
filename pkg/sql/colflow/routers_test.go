@@ -729,7 +729,7 @@ func TestHashRouterComputesDestination(t *testing.T) {
 				for _, j := range batch.Selection()[:batch.Length()] {
 					key := batch.ColVec(0).Int64()[j]
 					if _, ok := valsYetToSee[key]; !ok {
-						t.Fatalf("pushed alread seen value to router output: %d", key)
+						t.Fatalf("pushed already seen value to router output: %d", key)
 					}
 					delete(valsYetToSee, key)
 					valsPushed[outputIdx]++
