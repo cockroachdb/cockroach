@@ -2271,7 +2271,7 @@ facility from CockroachDB's `log` package.
 // them using the Safe() function.
 //
 // The annotated strings are not visible in the resulting error's
-// main message rechable via Error().
+// main message reachable via Error().
 func WithSafeDetails(err error, format string, args ...interface{}) error
 
 // A SafeType object can be reported verbatim, i.e. does not leak
