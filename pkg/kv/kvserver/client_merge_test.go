@@ -3029,7 +3029,7 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 		},
 	})
 
-	// Perform the merge. The LHS replica on store2 whon't hear about this merge
+	// Perform the merge. The LHS replica on store2 won't hear about this merge
 	// and thus won't subsume its RHS replica. The RHS replica's merge watcher
 	// goroutine will, however, notice the merge and mark the RHS replica as
 	// destroyed with reason destroyReasonMergePending.
