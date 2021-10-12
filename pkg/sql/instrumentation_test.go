@@ -110,10 +110,10 @@ func TestSampledStatsCollection(t *testing.T) {
 		collectTxnStatsSampleRate.Override(ctx, &st.SV, v)
 	}
 
-	type queryer interface {
+	type querier interface {
 		Query(string, ...interface{}) (*gosql.Rows, error)
 	}
-	queryDB := func(t *testing.T, db queryer, query string) {
+	queryDB := func(t *testing.T, db querier, query string) {
 		t.Helper()
 		r, err := db.Query(query)
 		require.NoError(t, err)
