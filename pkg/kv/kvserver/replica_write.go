@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -747,46 +746,12 @@ func (r *Replica) newBatchedEngine(
 		batch = opLogger
 	}
 	if util.RaceEnabled {
-		// To account for separated intent accesses, we translate the lock spans
-		// to lock table spans.
-		spans := latchSpans.Copy()
-		addLockTableSpan := func(sa spanset.SpanAccess, span spanset.Span) {
-			ltKey, _ := keys.LockTableSingleKey(span.Key, nil)
-			var ltEndKey roachpb.Key
-			if span.EndKey != nil {
-				ltEndKey, _ = keys.LockTableSingleKey(span.EndKey, nil)
-			}
-			spans.AddNonMVCC(sa, roachpb.Span{Key: ltKey, EndKey: ltEndKey})
-		}
-		lockSpans.Iterate(func(sa spanset.SpanAccess, _ spanset.SpanScope, span spanset.Span) {
-			addLockTableSpan(sa, span)
-		})
-		// The lock spans are insufficient for ranged intent resolution, which
-		// does not declare lock spans and directly calls
-		// spanSetBatch.NewEngineIterator.
-		//
-		// TODO(sumeer): we can't keep adding additional cases here -- come up
-		// with something cleaner.
-		for _, union := range ba.Requests {
-			inner := union.GetInner()
-			switch req := inner.(type) {
-			case *roachpb.ResolveIntentRangeRequest:
-				span := req.Span()
-				addLockTableSpan(spanset.SpanReadWrite, spanset.Span{Span: span})
-			case *roachpb.EndTxnRequest:
-				// EndTxnRequest does local intent resolution. We don't know the
-				// spans up front so we just allow everything.
-				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
-					Key: keys.LockTableSingleKeyStart, EndKey: keys.LockTableSingleKeyEnd})
-			}
-		}
-
 		// During writes we may encounter a versioned value newer than the request
 		// timestamp, and may have to retry at a higher timestamp. This is still
 		// safe as we're only ever writing at timestamps higher than the timestamp
 		// any write latch would be declared at. But because of this, we don't
 		// assert on access timestamps using spanset.NewBatchAt.
-		batch = spanset.NewBatch(batch, spans)
+		batch = spanset.NewBatch(batch, latchSpans)
 	}
 	return batch, opLogger
 }
