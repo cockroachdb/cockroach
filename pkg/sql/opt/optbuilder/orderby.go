@@ -13,12 +13,14 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -166,6 +168,7 @@ func (b *Builder) analyzeOrderByArg(
 			((order.NullsOrder == tree.NullsFirst && order.Direction == tree.Descending) ||
 				(order.NullsOrder == tree.NullsLast && order.Direction != tree.Descending))) {
 		nullsDefaultOrder = false
+		telemetry.Inc(sqltelemetry.OrderByNullsNonStandardCounter)
 	}
 
 	// Analyze the ORDER BY column(s).
