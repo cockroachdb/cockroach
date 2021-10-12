@@ -136,7 +136,7 @@ root@:26257/> SHOW SESSIONS
 Note that the `active_queries` field is a delimiter-separated list of all queries currently
 executing under that session, with SQL parallelization taken into account.
 
-Additions to the SQL grammer will be made to support filtering using SELECT statements and
+Additions to the SQL grammar will be made to support filtering using SELECT statements and
 nesting of SHOWs as tables:
 
 ```
