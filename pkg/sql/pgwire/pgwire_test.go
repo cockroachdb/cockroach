@@ -576,9 +576,9 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs("abc", "def"),
 			baseTest.SetArgs("woo", "waa"),
 		}},
-		{"ALTER USER IF EXISTS $1 WITH PASSWORD $2", []preparedQueryTest{
-			baseTest.SetArgs("abc", "def"),
-			baseTest.SetArgs("woo", "waa"),
+		{"ALTER USER IF EXISTS foo WITH PASSWORD $1", []preparedQueryTest{
+			baseTest.SetArgs("def"),
+			baseTest.SetArgs("waa"),
 		}},
 		{"SHOW USERS", []preparedQueryTest{
 			baseTest.Results("abc", "", "{}").

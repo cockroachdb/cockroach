@@ -395,10 +395,10 @@ alter_ddl_stmt ::=
 	| alter_default_privileges_stmt
 
 alter_role_stmt ::=
-	'ALTER' role_or_group_or_user string_or_placeholder opt_role_options
-	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' string_or_placeholder opt_role_options
-	| 'ALTER' role_or_group_or_user string_or_placeholder opt_in_database set_or_reset_clause
-	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' string_or_placeholder opt_in_database set_or_reset_clause
+	'ALTER' role_or_group_or_user role_spec opt_role_options
+	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' role_spec opt_role_options
+	| 'ALTER' role_or_group_or_user role_spec opt_in_database set_or_reset_clause
+	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' role_spec opt_in_database set_or_reset_clause
 	| 'ALTER' 'ROLE_ALL' 'ALL' opt_in_database set_or_reset_clause
 	| 'ALTER' 'USER_ALL' 'ALL' opt_in_database set_or_reset_clause
 
