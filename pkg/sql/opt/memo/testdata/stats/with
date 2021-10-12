@@ -183,7 +183,7 @@ project
  │    ├── recursive columns: c.id:6(string)
  │    ├── stats: [rows=10]
  │    ├── fake-rel
- │    │    ├── columns: test.id:1(string)
+ │    │    ├── columns: id:5(string)
  │    │    ├── cardinality: [1 - ]
  │    │    └── stats: [rows=1]
  │    ├── values

@@ -782,7 +782,7 @@ with &2 (t)
  │    ├── cardinality: [1 - ]
  │    ├── immutable
  │    ├── fake-rel
- │    │    ├── columns: column1:1
+ │    │    ├── columns: n:2
  │    │    └── cardinality: [1 - ]
  │    ├── values
  │    │    ├── columns: column1:1!null
@@ -840,7 +840,7 @@ scalar-group-by
  │    │    ├── cardinality: [1 - ]
  │    │    ├── immutable
  │    │    ├── fake-rel
- │    │    │    ├── columns: column1:1
+ │    │    │    ├── columns: n:2
  │    │    │    └── cardinality: [1 - ]
  │    │    ├── values
  │    │    │    ├── columns: column1:1!null

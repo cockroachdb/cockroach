@@ -827,7 +827,7 @@ with &2 (t)
  │    ├── initial columns: column1:1
  │    ├── recursive columns: "?column?":4
  │    ├── fake-rel
- │    │    └── columns: column1:1
+ │    │    └── columns: n:2
  │    ├── values
  │    │    ├── columns: column1:1!null
  │    │    └── (1,)
@@ -877,7 +877,7 @@ with &2 (included_parts)
  │    ├── initial columns: parts.sub_part:2 parts.part:1 parts.quantity:3
  │    ├── recursive columns: p.sub_part:14 p.part:13 p.quantity:15
  │    ├── fake-rel
- │    │    └── columns: parts.part:1 parts.sub_part:2 parts.quantity:3
+ │    │    └── columns: sub_part:7 part:8 quantity:9
  │    ├── project
  │    │    ├── columns: parts.part:1!null parts.sub_part:2 parts.quantity:3
  │    │    └── select
@@ -946,7 +946,7 @@ with &2 (search_graph)
  │    ├── initial columns: g.id:1 g.link:2 g.data:3 "?column?":6 array:7 bool:8
  │    ├── recursive columns: g.id:15 g.link:16 g.data:17 "?column?":26 "?column?":27 "?column?":28
  │    ├── fake-rel
- │    │    └── columns: g.id:1 g.link:2 g.data:3 "?column?":6 array:7 bool:8
+ │    │    └── columns: id:9 link:10 data:11 depth:12 path:13 cycle:14
  │    ├── project
  │    │    ├── columns: "?column?":6!null array:7!null bool:8!null g.id:1!null g.link:2 g.data:3
  │    │    ├── scan graph [as=g]
@@ -1005,7 +1005,7 @@ with &2 (cte)
  │    ├── initial columns: "?column?":1 "?column?":1
  │    ├── recursive columns: "?column?":6 "?column?":7
  │    ├── fake-rel
- │    │    └── columns: "?column?":1
+ │    │    └── columns: a:2 b:3
  │    ├── project
  │    │    ├── columns: "?column?":1!null
  │    │    ├── values
@@ -1048,7 +1048,7 @@ with &2 (cte)
  │    ├── initial columns: "?column?":1 "?column?":2
  │    ├── recursive columns: "?column?":7 "?column?":7
  │    ├── fake-rel
- │    │    └── columns: "?column?":1 "?column?":2
+ │    │    └── columns: a:3 b:4
  │    ├── project
  │    │    ├── columns: "?column?":1!null "?column?":2!null
  │    │    ├── values
@@ -1216,7 +1216,7 @@ with &3 (cte)
  │    ├── initial columns: "?column?":1 "?column?":2
  │    ├── recursive columns: "?column?":11 "?column?":12
  │    ├── fake-rel
- │    │    └── columns: "?column?":1 "?column?":2
+ │    │    └── columns: a:3 b:4
  │    ├── project
  │    │    ├── columns: "?column?":1!null "?column?":2!null
  │    │    ├── values
@@ -1283,7 +1283,7 @@ with &3 (bar)
       │    ├── initial columns: "?column?":1 "?column?":2
       │    ├── recursive columns: "?column?":13 "?column?":14
       │    ├── fake-rel
-      │    │    └── columns: "?column?":1 "?column?":2
+      │    │    └── columns: a:3 b:4
       │    ├── project
       │    │    ├── columns: "?column?":1!null "?column?":2!null
       │    │    ├── values
@@ -1341,7 +1341,7 @@ with &4 (cte)
  │    ├── initial columns: "?column?":1 "?column?":2
  │    ├── recursive columns: "?column?":15 "?column?":16
  │    ├── fake-rel
- │    │    └── columns: "?column?":1 "?column?":2
+ │    │    └── columns: a:3 b:4
  │    ├── project
  │    │    ├── columns: "?column?":1!null "?column?":2!null
  │    │    ├── values
@@ -1426,7 +1426,7 @@ with &2
       │    ├── initial columns: "?column?":1 "?column?":2
       │    ├── recursive columns: "?column?":17 "?column?":18
       │    ├── fake-rel
-      │    │    └── columns: "?column?":1 "?column?":2
+      │    │    └── columns: x:3 y:4
       │    ├── project
       │    │    ├── columns: "?column?":1!null "?column?":2!null
       │    │    ├── values
@@ -1480,7 +1480,7 @@ with &2 (v)
       │    ├── initial columns: "?column?":4
       │    ├── recursive columns: "?column?":7
       │    ├── fake-rel
-      │    │    └── columns: "?column?":4
+      │    │    └── columns: a:5
       │    ├── project
       │    │    ├── columns: "?column?":4!null
       │    │    ├── inner-join (cross)
@@ -1525,7 +1525,7 @@ with &2 (cte)
  │    ├── initial columns: a:9
  │    ├── recursive columns: x:8
  │    ├── fake-rel
- │    │    └── columns: x.a:1
+ │    │    └── columns: x:6
  │    ├── project
  │    │    ├── columns: a:9
  │    │    ├── project
@@ -1575,7 +1575,7 @@ with &2 (nodes)
  │    ├── initial columns: id:8
  │    ├── recursive columns: graph_node.id:3
  │    ├── fake-rel
- │    │    └── columns: id:1
+ │    │    └── columns: id:2
  │    ├── project
  │    │    ├── columns: id:8!null
  │    │    ├── project
