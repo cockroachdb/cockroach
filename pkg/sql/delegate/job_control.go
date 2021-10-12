@@ -88,7 +88,7 @@ AND jobs.status IN (%s) AND jobs.created_by_id IN (%s)`,
                (
                 crdb_internal.pb_to_json(
                   'cockroach.sql.jobs.jobspb.Payload',
-                  payload
+                  payload, false, true
                 )->'%s'
                ) IS NOT NULL AS correct_type
           FROM system.jobs

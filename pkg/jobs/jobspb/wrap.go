@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 )
@@ -313,14 +314,17 @@ func (Type) SafeValue() {}
 // NumJobTypes is the number of jobs types.
 const NumJobTypes = 15
 
-// MarshalJSONPB redacts sensitive sink URI parameters from ChangefeedDetails.
-func (p ChangefeedDetails) MarshalJSONPB(x *jsonpb.Marshaler) ([]byte, error) {
-	var err error
-	p.SinkURI, err = cloud.SanitizeExternalStorageURI(p.SinkURI, nil)
-	if err != nil {
-		return nil, err
+// MarshalJSONPB implements jsonpb.JSONPBMarshaller to  redact sensitive sink URI
+// parameters from ChangefeedDetails.
+func (m ChangefeedDetails) MarshalJSONPB(marshaller *jsonpb.Marshaler) ([]byte, error) {
+	if protoreflect.ShouldRedact(marshaller) {
+		var err error
+		m.SinkURI, err = cloud.SanitizeExternalStorageURI(m.SinkURI, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return json.Marshal(p)
+	return json.Marshal(m)
 }
 
 func init() {
