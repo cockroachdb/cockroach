@@ -1707,7 +1707,7 @@ func (r *Replica) maybeAcquireSnapshotMergeLock(
 	// command after the merge commits.
 	endKey := r.Desc().EndKey
 	if endKey == nil {
-		// The existing replica is unitialized, in which case we've already
+		// The existing replica is uninitialized, in which case we've already
 		// installed a placeholder for snapshot's keyspace. No merge lock needed.
 		return nil, func() {}
 	}
