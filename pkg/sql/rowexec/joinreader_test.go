@@ -1339,7 +1339,7 @@ func BenchmarkJoinReader(b *testing.B) {
 }
 
 // benchmarkJoinReader benchmarks different lookup join match ratios against a
-// table with a configuratable number of rows. A match ratio specifies how many
+// table with a configurable number of rows. A match ratio specifies how many
 // rows are returned for a single lookup row. Some cases will cause the join
 // reader to spill to disk, in which case the benchmark logs that the join
 // spilled.
