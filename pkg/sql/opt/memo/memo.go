@@ -149,6 +149,7 @@ type Memo struct {
 	intervalStyle           duration.IntervalStyle
 	disallowFullTableScans  bool
 	largeFullScanRows       float64
+	nullOrderedLast         bool
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -193,6 +194,7 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 		intervalStyle:           evalCtx.SessionData().GetIntervalStyle(),
 		disallowFullTableScans:  evalCtx.SessionData().DisallowFullTableScans,
 		largeFullScanRows:       evalCtx.SessionData().LargeFullScanRows,
+		nullOrderedLast:         evalCtx.SessionData().NullOrderedLast,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(evalCtx, m)
@@ -306,7 +308,8 @@ func (m *Memo) IsStale(
 		m.dateStyle != evalCtx.SessionData().GetDateStyle() ||
 		m.intervalStyle != evalCtx.SessionData().GetIntervalStyle() ||
 		m.disallowFullTableScans != evalCtx.SessionData().DisallowFullTableScans ||
-		m.largeFullScanRows != evalCtx.SessionData().LargeFullScanRows {
+		m.largeFullScanRows != evalCtx.SessionData().LargeFullScanRows ||
+		m.nullOrderedLast != evalCtx.SessionData().NullOrderedLast {
 		return true, nil
 	}
 
