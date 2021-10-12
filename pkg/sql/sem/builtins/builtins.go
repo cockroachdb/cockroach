@@ -7101,8 +7101,8 @@ var similarOverloads = []tree.Overload{
 }
 
 func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
-	overloads := make([]tree.Overload, 0, len(types.Scalar)+1)
-	for _, typ := range types.Scalar {
+	overloads := make([]tree.Overload, 0, len(types.Scalar)+2)
+	for _, typ := range append(types.Scalar, types.AnyEnum) {
 		if ok, _ := types.IsValidArrayElementType(typ); ok {
 			overloads = append(overloads, impl(typ))
 		}
