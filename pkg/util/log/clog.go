@@ -84,7 +84,7 @@ type loggingT struct {
 	mu struct {
 		syncutil.Mutex
 
-		// disableDaemons can be used to turn off both the GC and flush deamons.
+		// disableDaemons can be used to turn off both the GC and flush daemons.
 		disableDaemons bool
 
 		// exitOverride is used when shutting down logging.

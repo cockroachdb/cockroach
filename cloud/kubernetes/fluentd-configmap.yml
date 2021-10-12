@@ -1,5 +1,5 @@
 # This ConfigMap is used to ingest logs against new resources like "k8s_container".
-# The configuration instruct Fluentd deamons to correctly parse CockroachDB logs,
+# The configuration instruct Fluentd daemons to correctly parse CockroachDB logs,
 # extracting timestamp, severity and log message into the log output format for follow on output stanzas to process.
 # This is tested on Google Cloud Platform using a custom deployment of Stackdriver:
 # https://cloud.google.com/solutions/customizing-stackdriver-logs-fluentd
