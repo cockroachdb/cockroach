@@ -120,6 +120,11 @@ var ExplainOptVerboseUseCounter = telemetry.GetCounterOnce("sql.plan.explain-opt
 // run of CREATE STATISTICS occurs.
 var CreateStatisticsUseCounter = telemetry.GetCounterOnce("sql.plan.stats.created")
 
+// OrderByNullsNonStandardCounter is to be incremented whenever a non-standard
+// ordering of nulls is used for ORDER BY (either ASC NULLS LAST or DESC NULLS
+// FIRST).
+var OrderByNullsNonStandardCounter = telemetry.GetCounterOnce("sql.plan.opt.order-by-nulls-non-standard")
+
 // TurnAutoStatsOnUseCounter is to be incremented whenever automatic stats
 // collection is explicitly enabled.
 var TurnAutoStatsOnUseCounter = telemetry.GetCounterOnce("sql.plan.automatic-stats.enabled")
