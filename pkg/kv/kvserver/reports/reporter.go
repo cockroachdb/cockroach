@@ -291,7 +291,7 @@ type zoneResolver struct {
 	init bool
 	// curObjectID is the object (i.e. usually table) of the configured range.
 	curObjectID config.SystemTenantObjectID
-	// curRootZone is the lowest zone convering the previously resolved range
+	// curRootZone is the lowest zone covering the previously resolved range
 	// that's not a subzone.
 	// This is used to compute the subzone for a range.
 	curRootZone *zonepb.ZoneConfig
