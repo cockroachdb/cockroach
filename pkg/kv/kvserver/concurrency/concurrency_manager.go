@@ -619,12 +619,6 @@ func (g *Guard) LatchSpans() *spanset.SpanSet {
 	return g.Req.LatchSpans
 }
 
-// LockSpans returns the maximal set of lock spans that the request will access.
-// The returned spanset is not safe for use after the guard has been finished.
-func (g *Guard) LockSpans() *spanset.SpanSet {
-	return g.Req.LockSpans
-}
-
 // TakeSpanSets transfers ownership of the Guard's LatchSpans and LockSpans
 // SpanSets to the caller, ensuring that the SpanSets are not destroyed with the
 // Guard. The method is only safe if called immediately before passing the Guard
