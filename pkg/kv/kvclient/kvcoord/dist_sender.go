@@ -1345,11 +1345,11 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			mightStopEarly := ba.MaxSpanRequestKeys > 0 || ba.TargetBytes > 0
 			// Check whether we've received enough responses to exit query loop.
 			if mightStopEarly {
-				var replyResults int64
+				var replyKeys int64
 				var replyBytes int64
 				for _, r := range resp.reply.Responses {
 					h := r.GetInner().Header()
-					replyResults += h.NumKeys
+					replyKeys += h.NumKeys
 					replyBytes += h.NumBytes
 					if h.ResumeSpan != nil {
 						couldHaveSkippedResponses = true
@@ -1361,11 +1361,10 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				// might be passed recursively to further divideAndSendBatchToRanges()
 				// calls.
 				if ba.MaxSpanRequestKeys > 0 {
-					if replyResults > ba.MaxSpanRequestKeys {
-						log.Fatalf(ctx, "received %d results, limit was %d",
-							replyResults, ba.MaxSpanRequestKeys)
+					if replyKeys > ba.MaxSpanRequestKeys {
+						log.Fatalf(ctx, "received %d results, limit was %d", replyKeys, ba.MaxSpanRequestKeys)
 					}
-					ba.MaxSpanRequestKeys -= replyResults
+					ba.MaxSpanRequestKeys -= replyKeys
 					// Exiting; any missing responses will be filled in via defer().
 					if ba.MaxSpanRequestKeys == 0 {
 						couldHaveSkippedResponses = true
