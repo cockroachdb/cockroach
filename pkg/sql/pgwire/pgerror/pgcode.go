@@ -29,7 +29,7 @@ func WithCandidateCode(err error, code pgcode.Code) error {
 	return &withCandidateCode{cause: err, code: code.String()}
 }
 
-// HasCandidateCode returns tue iff the error or one of its causes
+// HasCandidateCode returns true iff the error or one of its causes
 // has a candidate pg error code.
 func HasCandidateCode(err error) bool {
 	return errors.HasType(err, (*withCandidateCode)(nil))
