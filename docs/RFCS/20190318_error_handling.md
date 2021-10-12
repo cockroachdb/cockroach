@@ -2494,7 +2494,7 @@ package](#report-Standard-and-general-Sentry-reports).
 
 The primary functionality of the `hintdetail` package is to provide
 simple wrappers (`WithHint`, `WithDetail`) to add decorate existing
-errros with additional hint and detail strings.
+errors with additional hint and detail strings.
 
 Additional cleverness is then present in the functions that collect
 them from an error chain:
