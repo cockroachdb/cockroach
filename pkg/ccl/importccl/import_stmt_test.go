@@ -3349,7 +3349,7 @@ func TestImportIntoCSV(t *testing.T) {
 		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1", "2", "today"}})
 	})
 
-	// Tests behvior when the existing table being imported into has fewer columns
+	// Tests behavior when the existing table being imported into has fewer columns
 	// in its schema then the source CSV file.
 	t.Run("fewer-table-cols-than-csv", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT)`)
