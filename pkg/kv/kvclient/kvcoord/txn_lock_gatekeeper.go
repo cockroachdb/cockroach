@@ -29,7 +29,7 @@ type lockedSender interface {
 	// is re-acquired when the response is returned.
 	// WARNING: because the lock is released when calling this method and
 	// re-acquired before it returned, callers cannot rely on a single mutual
-	// exclusion zone mainted across the call.
+	// exclusion zone maintained across the call.
 	SendLocked(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 }
 
