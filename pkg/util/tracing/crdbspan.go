@@ -310,8 +310,15 @@ func (s *crdbSpan) recordStructured(item Structured) {
 		// are unlikely to happen.
 		return
 	}
+
+	var now time.Time
+	if clock := s.testing.Clock; clock != nil {
+		now = clock.Now()
+	} else {
+		now = time.Now()
+	}
 	sr := &tracingpb.StructuredRecord{
-		Time:    time.Now(),
+		Time:    now,
 		Payload: p,
 	}
 	s.recordInternal(sr, &s.mu.recording.structured)

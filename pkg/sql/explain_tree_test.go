@@ -81,7 +81,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			p.curPlan.flags.Set(planFlagExecDone)
 			p.curPlan.close(ctx)
 			if d.Cmd == "plan-string" {
-				ob := ih.buildExplainAnalyzePlan(
+				ob := ih.emitExplainAnalyzePlanToOutputBuilder(
 					explain.Flags{Verbose: true, ShowTypes: true},
 					sessionphase.NewTimes(),
 					&execstats.QueryLevelStats{},
