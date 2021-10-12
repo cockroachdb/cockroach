@@ -389,7 +389,7 @@ func (b *ObjectBuilder) Build() JSON {
 	return jsonObject(sorter.pairs)
 }
 
-// pairSorter sorts and uniqueifies JSON pairs. In order to keep
+// pairSorter sorts and uniquifies JSON pairs. In order to keep
 // the last one for pairs with the same key while sort.Sort is
 // not stable, pairSorter uses []int orders to maintain order and
 // bool hasNonUnique to skip unnecessary uniqueifying.
