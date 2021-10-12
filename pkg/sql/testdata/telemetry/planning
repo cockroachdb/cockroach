@@ -1,7 +1,7 @@
 # This file contains telemetry tests for sql.plan.* counters.
 
 exec
-CREATE TABLE x (a INT PRIMARY KEY)
+CREATE TABLE x (a INT PRIMARY KEY, b INT)
 ----
 
 exec
@@ -261,3 +261,24 @@ SELECT x1.a FROM x x1 INNER LOOKUP JOIN x x2 ON x1.a = x2.a WHERE x2.a > 0
 ----
 sql.plan.opt.partial-index.lookup-join
 sql.plan.opt.partial-index.scan
+
+# Nulls re-ordering tests.
+
+feature-allowlist
+sql.plan.opt.nulls-reordering
+----
+
+feature-usage
+SELECT a FROM x ORDER BY b NULLS LAST
+----
+sql.plan.opt.nulls-reordering
+
+feature-usage
+SELECT a FROM x ORDER BY b DESC NULLS FIRST
+----
+sql.plan.opt.nulls-reordering
+
+# Should not use nulls-reordering here because it's the default order.
+feature-usage
+SELECT a FROM x ORDER BY b ASC NULLS FIRST
+----
