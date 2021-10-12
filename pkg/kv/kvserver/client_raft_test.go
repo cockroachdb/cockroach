@@ -5125,7 +5125,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		// Remove and re-add the RHS to create a new uninitialized replica at
 		// a higher replica ID. This will lead to a tombstone being written.
 		tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
-		// Unsuccessfuly because the RHS will not accept the learner snapshot
+		// Unsuccessfully because the RHS will not accept the learner snapshot
 		// and will be rolled back. Nevertheless it will have learned that it
 		// has been removed at the old replica ID.
 		_, err = tc.Servers[0].DB().AdminChangeReplicas(
@@ -5262,7 +5262,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		// Remove and re-add the RHS to create a new uninitialized replica at
 		// a higher replica ID. This will lead to a tombstone being written.
 		tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
-		// Unsuccessfuly because the RHS will not accept the learner snapshot
+		// Unsuccessfully because the RHS will not accept the learner snapshot
 		// and will be rolled back. Nevertheless it will have learned that it
 		// has been removed at the old replica ID.
 		//
