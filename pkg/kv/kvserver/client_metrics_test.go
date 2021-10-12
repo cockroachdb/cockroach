@@ -242,7 +242,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 		t.Errorf("expected around %d intent aborts, saw %d", exp, act)
 	}
 	if exp, act := resolvePoisonCount, store.Metrics().ResolvePoisonCount.Count(); act < exp || act > exp+50 {
-		t.Errorf("expected arounc %d abort span poisonings, saw %d", exp, act)
+		t.Errorf("expected around %d abort span poisonings, saw %d", exp, act)
 	}
 }
 
