@@ -361,6 +361,11 @@ func GetForDatabase(
 // components because LookupObject retains those components. This is error
 // prone and exists only for backwards compatibility with certain error
 // reporting behaviors.
+//
+// Note also that if the implied current database does not exist and the name
+// is either unqualified or qualified by a virtual schema, an error will be
+// returned to indicate that the database does not exist. This error will be
+// returned regardless of the value set on the Required flag.
 func ResolveExisting(
 	ctx context.Context,
 	u *tree.UnresolvedObjectName,
@@ -387,11 +392,10 @@ func ResolveExisting(
 		// schema name is for a virtual schema.
 		_, isVirtualSchema := catconstants.VirtualSchemaNames[u.Schema()]
 		if isVirtualSchema || curDb != "" {
-			if found, prefix, result, err = r.LookupObject(ctx, lookupFlags, curDb, u.Schema(), u.Object()); found ||
-				err != nil || isVirtualSchema {
-				prefix.ExplicitDatabase = false
-				prefix.ExplicitSchema = true
-				if !found && err == nil && isVirtualSchema && prefix.Database == nil {
+			if found, prefix, result, err = r.LookupObject(
+				ctx, lookupFlags, curDb, u.Schema(), u.Object(),
+			); found || err != nil || isVirtualSchema {
+				if !found && err == nil && prefix.Database == nil { // && isVirtualSchema
 					// If the database was not found during the lookup for a virtual schema
 					// we should return a database not found error. We will use the prefix
 					// information to confirm this, since its possible that someone might
@@ -402,6 +406,10 @@ func ResolveExisting(
 					// or databases.
 					err = sqlerrors.NewUndefinedDatabaseError(curDb)
 				}
+				// Special case the qualification of virtual schema accesses for
+				// backwards compatibility.
+				prefix.ExplicitDatabase = false
+				prefix.ExplicitSchema = true
 				return found, prefix, result, err
 			}
 		}
@@ -417,11 +425,23 @@ func ResolveExisting(
 
 	// This is a naked object name. Use the search path.
 	iter := searchPath.Iter()
+	foundDatabase := false
 	for next, ok := iter.Next(); ok; next, ok = iter.Next() {
-		if found, prefix, result, err = r.LookupObject(ctx, lookupFlags, curDb, next,
-			u.Object()); found || err != nil {
+		if found, prefix, result, err = r.LookupObject(
+			ctx, lookupFlags, curDb, next, u.Object(),
+		); found || err != nil {
 			return found, prefix, result, err
 		}
+		foundDatabase = foundDatabase || prefix.Database != nil
+	}
+
+	// If we have a database, and we didn't find it, then we're never going to
+	// find it because it must not exist. This error return path is a bit of
+	// a rough edge, but it preserves backwards compatibility and makes sure
+	// we return a database does not exist error in cases where the current
+	// database definitely does not exist.
+	if curDb != "" && !foundDatabase {
+		return false, prefix, nil, sqlerrors.NewUndefinedDatabaseError(curDb)
 	}
 	return false, prefix, nil, nil
 }
