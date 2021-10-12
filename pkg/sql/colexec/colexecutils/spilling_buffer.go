@@ -52,7 +52,7 @@ type SpillingBuffer struct {
 	// bufferedTuples is used to store tuples in-memory.
 	bufferedTuples *AppendOnlyBufferedBatch
 
-	// scratch is used when enqueueing into the disk queue to ensure that only the
+	// scratch is used when enqueuing into the disk queue to ensure that only the
 	// desired rows and columns are added. We do not allocate memory for it
 	// because it only provides a window into input data after disk spilling.
 	scratch coldata.Batch

@@ -492,7 +492,7 @@ func (s *externalSorter) Next() coldata.Batch {
 // batch is enqueued and true is returned indicating that the current partition
 // is done.
 //
-// The following observation is what allows us to stop enqueueing into the
+// The following observation is what allows us to stop enqueuing into the
 // current partition once topK number of tuples is reached: `b` is not coming
 // from the input to the sort operation as a whole (when tuples can be in an
 // arbitrary order) - `b` is coming to us either from the in-memory top K sorter

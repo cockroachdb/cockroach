@@ -126,7 +126,7 @@ var _ PartitionedQueue = &PartitionedDiskQueue{}
 
 // NewPartitionedDiskQueue creates a PartitionedDiskQueue whose partitions are
 // all on-disk queues. Note that diskQueues will be lazily created when
-// enqueueing to a new partition. Each new partition will use
+// enqueuing to a new partition. Each new partition will use
 // cfg.BufferSizeBytes, so memory usage may increase in an unbounded fashion if
 // used unmethodically. The file descriptors are acquired through fdSemaphore.
 // If fdSemaphore is nil, the partitioned disk queue will not Acquire or Release

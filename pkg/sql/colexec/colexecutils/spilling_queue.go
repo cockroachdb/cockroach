@@ -473,7 +473,7 @@ func (q *SpillingQueue) maybeSpillToDisk(ctx context.Context) error {
 		tailBatch := q.items[tailBatchIdx]
 		queueTailToMove = append(queueTailToMove, tailBatch)
 		q.items[tailBatchIdx] = nil
-		// We will release the memory a bit early (before enqueueing to the disk
+		// We will release the memory a bit early (before enqueuing to the disk
 		// queue) since it simplifies the calculation of how many batches should
 		// be moved.
 		q.unlimitedAllocator.ReleaseMemory(colmem.GetBatchMemSize(tailBatch))
