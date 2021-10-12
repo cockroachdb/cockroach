@@ -91,7 +91,7 @@ var (
 //              information about the user we expect to receive in the callback.
 //    - state: this is a base64 encoded protobuf value that contains the NodeID of the node that
 //             originated the login request and the state variable that was recorded as being in the
-//             caller's cookie at the time. This value wil be returned back as a parameter to the
+//             caller's cookie at the time. This value will be returned back as a parameter to the
 //             callback URL by the authentication provider. We check to make sure it matches the
 //             cookie and our stored state to ensure we're processing a response to the request
 //             that we triggered.

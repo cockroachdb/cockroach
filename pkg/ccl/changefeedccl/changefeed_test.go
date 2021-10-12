@@ -990,7 +990,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 		// we expect the changefeed level backfill to be triggered at the
 		// `ModificationTime` of version 4 of said descriptor. This is because this is the
 		// descriptor version which makes the schema-change level backfill for the
-		// newly-added column public. This means we wil see row updates resulting from the
+		// newly-added column public. This means we will see row updates resulting from the
 		// schema-change level backfill _before_ the changefeed level backfill.
 
 		t.Run(`add column with default`, func(t *testing.T) {
