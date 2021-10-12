@@ -479,7 +479,7 @@ func (spec WindowerSpec_Frame_Bounds) convertToAST() (tree.WindowFrameBounds, er
 	return bounds, nil
 }
 
-// ConvertToAST produces a tree.WindowFrame given a WindoweSpec_Frame.
+// ConvertToAST produces a tree.WindowFrame given a WindowerSpec_Frame.
 func (spec *WindowerSpec_Frame) ConvertToAST() (*tree.WindowFrame, error) {
 	mode, err := spec.Mode.convertToAST()
 	if err != nil {
