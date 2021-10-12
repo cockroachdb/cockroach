@@ -193,7 +193,7 @@
 /pkg/cmd/urlcheck/           @cockroachdb/docs
 /pkg/cmd/whoownsit/          @cockroachdb/test-eng
 /pkg/cmd/workload/           @cockroachdb/sql-experience
-/pkg/cmd/wraprules/          @cockroachdb/obs-inf-noreview
+/pkg/cmd/wraprules/          @cockroachdb/obs-inf-prs-noreview
 /pkg/cmd/zerosum/            @cockroachdb/kv-noreview
 /pkg/col/                    @cockroachdb/sql-queries
 /pkg/compose/                @cockroachdb/sql-experience
