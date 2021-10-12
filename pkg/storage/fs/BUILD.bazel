@@ -1,8 +1,23 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "fs",
-    srcs = ["fs.go"],
+    srcs = [
+        "fs.go",
+        "safewrite.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/fs",
     visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_pebble//vfs"],
+)
+
+go_test(
+    name = "fs_test",
+    srcs = ["safewrite_test.go"],
+    embed = [":fs"],
+    deps = [
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_stretchr_testify//require",
+    ],
 )

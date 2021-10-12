@@ -309,6 +309,7 @@ ALL_TESTS = [
     "//pkg/startupmigrations/leasemanager:leasemanager_test",
     "//pkg/startupmigrations:startupmigrations_test",
     "//pkg/storage/enginepb:enginepb_test",
+    "//pkg/storage/fs:fs_test",
     "//pkg/storage/metamorphic:metamorphic_test",
     "//pkg/storage:storage_test",
     "//pkg/testutils/floatcmp:floatcmp_test",
