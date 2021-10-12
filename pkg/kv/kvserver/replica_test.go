@@ -7859,7 +7859,7 @@ func TestDiffRange(t *testing.T) {
 		}
 	}
 
-	// Document the stringifed output. This is what the consistency checker
+	// Document the stringified output. This is what the consistency checker
 	// will actually print.
 	stringDiff := append(eDiff[:4],
 		ReplicaSnapshotDiff{Key: []byte("foo"), Value: value},
