@@ -154,7 +154,7 @@ func (tc *txnCommitter) SendLocked(
 		// split into sub-batches and some of them might have evaluated
 		// successfully), there might be intents laying around. If we'd perform a
 		// parallel commit, and the batch gets split again, and the STAGING txn
-		// record were written before we evaluate some of the other sub-batche. We
+		// record were written before we evaluate some of the other sub-batches. We
 		// could technically enter the "implicitly committed" state before all the
 		// sub-batches are evaluated and this is problematic: there's a race between
 		// evaluating those requests and other pushers coming along and
