@@ -201,3 +201,13 @@ user testuser
 # testuser should now be able to refresh the materialized view as the owner.
 statement ok
 REFRESH MATERIALIZED VIEW with_options WITH NO DATA
+
+# Test CREATE MATERIALIZED VIEW referring to a sequence.
+statement ok
+CREATE SEQUENCE seq;
+CREATE MATERIALIZED VIEW view_from_seq AS (SELECT nextval('seq'))
+
+query I
+SELECT * FROM view_from_seq
+----
+1
