@@ -189,7 +189,7 @@ an interface that allows it to use the `ts` code without a dependency.
 intuitively live below `storage`. However, this is likely to be a considerable
 portion of `ts` in order to properly implement rollups.
 
-Tenatively, we will be attempting to use the first method and have `storage`
+Tentatively, we will be attempting to use the first method and have `storage`
 depend on `ts`; if it is indeed trivially possible, this will be the fastest
 method of completing this project.
 
@@ -328,7 +328,7 @@ was also the original design of the time series system.
 Unfortunately, it is not currently possible due to recent changes which were
 required by the replica consistency checker. The engine-level merge component no
 longer aggregates samples, it decimates (discarding only the most recent sample
-for a period). This was necessary to deal with the unforunate reality of raft
+for a period). This was necessary to deal with the unfortunate reality of raft
 command replays.
 
 ### Opportunistic Rollups

@@ -257,7 +257,7 @@ They also have a `DBCC CHECKDB` which does the same and takes the same
 options on a database level.
 
 The last relevant one for us is `DBCC CHECKCONSTRAINTS` which can take a
-constraint name or `ALL_CONSTRANTS`. This is more similar to our `ALTER
+constraint name or `ALL_CONSTRAINTS`. This is more similar to our `ALTER
 TABLE ... VALIDATE` then the check command, as the purpose is to check a
 disabled constraint.
 

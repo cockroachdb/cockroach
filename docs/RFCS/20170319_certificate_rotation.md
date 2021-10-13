@@ -319,10 +319,10 @@ Dropping specific cert flags means that the postgres URL will be built automatic
 requested username.
 
 For example, running the following command: `cockroach sql -u foo -certs-dir=~/.cockroach-certs` will
-generate the URL: `postgresl://foo@localhost:26257/?sslcert=foo.client.crt&sslkey=foo.client.key&...`
+generate the URL: `postgresql://foo@localhost:26257/?sslcert=foo.client.crt&sslkey=foo.client.key&...`
 
 If delegation is allowed (user `root` can act as user `foo`), the command must be run with the
-fully-specified postgres URL `postgresl://foo@localhost:26257/?sslcert=root.client.crt&sslkey=root.client.key&...`
+fully-specified postgres URL `postgresql://foo@localhost:26257/?sslcert=root.client.crt&sslkey=root.client.key&...`
 
 Delegation remains doable, but with an extra hoop to jump through.
 
@@ -379,5 +379,5 @@ Drawbacks:
 * "too much magic"
 
 Advantages:
-* full validation can provide user-friendly error messages on improper files (still obscure without decent knowledge of certficates).
+* full validation can provide user-friendly error messages on improper files (still obscure without decent knowledge of certificates).
 * support for multiple ways of generating/deploying certificates and keys.

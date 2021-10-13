@@ -384,7 +384,7 @@ do? How would it be better than what we're currently doing (casting to string an
 
 A `SHOW CREATE...` statement is supposed to produce syntactically valid SQL and it's
 output must create the exact same table that it was called on (ie. it must be
-_roundtripable_). Given this, how much do we want the user to know about what this new
+_roundtrippable_). Given this, how much do we want the user to know about what this new
 syntax does? Broadly speaking, we have two options:
 
 1. ***Be very explicit about the existence of a computed shard column*** 

@@ -15,7 +15,7 @@ entities. This document describes the technical mechanisms involved.
 The goal of the mechanisms described here is to prevent usage of "enterprise
 features" without a valid license. However the source code of both the Open
 Source and Enterprise portions of CockroachDB is publicly available, according
-to its respective licensing terms, in our published Github repository. Thus
+to its respective licensing terms, in our published GitHub repository. Thus
 there is a limited extent to which it makes sense to add increasingly complex
 technical barriers to circumvention, e.g. signing keys, obfuscation, etc.
 

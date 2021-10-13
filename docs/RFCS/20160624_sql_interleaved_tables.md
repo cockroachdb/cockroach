@@ -53,7 +53,7 @@ secondary index and then dropping the old one.
 
 It is frequently desirable to enforce that there is never a row in an
 interleaved table without a corresponding row in the parent table. This can be
-done with a table-level foreign key constaint, but a shorthand will also be
+done with a table-level foreign key constraint, but a shorthand will also be
 created: `INTERLEAVE IN PARENT customers ON DELETE CASCADE|RESTRICT`. `ON DELETE
 CASCADE` will delete interleaved rows if a parent is deleted. `ON DELETE
 RESTRICT` will allow removal of parent rows with no interleaved rows, but will
@@ -108,7 +108,7 @@ interleaves.
 Interleaving row data of multiple tables inherently adds complexity to scans and
 deletes. Deletes such as `DELETE FROM orders WHERE id < 100` currently rely on a
 fast path which will have to be disabled for interleaved tables, unless the
-table was declared as `ON DELETE CASCASE`. Fortunately, it is expected that
+table was declared as `ON DELETE CASCADE`. Fortunately, it is expected that
 `CASCADE` will be the common case, and so it may not be a problem in practice.
 If it is, a new kv operation with knowledge of sql keys can be created to delete
 a range of data while skipping interleaved rows.
@@ -116,7 +116,7 @@ a range of data while skipping interleaved rows.
 When scanning either a parent or interleaved table, the scan code will have to
 skip over the other table's data. This logic will initially be implemented using
 existing kv operations. One approach is to iterate the entire range and ignore
-the other table's rows. Or, when a key from the other table is enountered, a
+the other table's rows. Or, when a key from the other table is encountered, a
 `Scan` can be constructed to skip past it. The former may overfetch many keys
 and the latter may involve many round-trips, but the two approaches can be
 combined to minimize the worst case behaviors. Additionally, with distributed

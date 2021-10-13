@@ -107,13 +107,13 @@ lease holder.
 
 While these changes enable and ease performing individual SELECT queries against
 follower replicas, it does not enable running entire (read-only) transactions at
-a single point in time and thus benefitting from the performance gains offerred
+a single point in time and thus benefitting from the performance gains offered
 by follower reads. This document proposes an extension to the `SET TRANSACTION`
 and `BEGIN TRANSACTION` statements to allow a clause analagous to `AS OF SYSTEM
 TIME` for `SELECT` statements today. This change will ease the multi-statement
 historical reads, potentially enabling use of existing code which relies on a 
-transaction object, and will provide a mechnaism to run historical reads with
-a HIGH transaction priority, eliminating the posibility of blocking on a
+transaction object, and will provide a mechanism to run historical reads with
+a HIGH transaction priority, eliminating the possibility of blocking on a
 long-running read-write transaction. `SET TRANSACTION` must be the first
 statement following `BEGIN`. Note that `SET TRANSACTION AS OF SYSTEM
 TIME` implies `READ ONLY`. A historical read only transaction thus will look 
@@ -310,7 +310,7 @@ clause.
 
 While it might on some level seem reasonable to allow for arbitrary read-write
 queries to be performed at historical timestamps, due to the mechanisms of
-closed timestamps, write operations could never succesfully commit. Because the
+closed timestamps, write operations could never successfully commit. Because the
 MinProposalTracker would effectively block write operations, we'll enforce that
 `SET TRANSACTION AS OF SYSTEM TIME` implies `SET TRANSACTION READ ONLY`.
 

@@ -83,7 +83,7 @@ Furthermore, while the new column exists and the old column has not been dropped
 yet, we have to validate constraints on both the new and the old column.
 1. On creation of new column, create constraints for new column by applying 
 casts wherever necessary to the old constraint. 
-Each comparison to the column has to be casted to the new type. 
+Each comparison to the column has to be cast to the new type. 
 Comparisons that have the column inside a nested expression must also be converted.
     - For example, if (x INT) has check (x + 5 > 10), 
     after converting x's type to float, 
@@ -120,7 +120,7 @@ This is similar to any other case of a schema change running into a runtime erro
 - **This method is contingent on changing the index backfiller to support 
 column mutations which is currently blocked due an issue with supporting 
 interleaved tables**
-    - Read more in the [Github Issue](https://github.com/cockroachdb/cockroach/issues/47989)
+    - Read more in the [GitHub Issue](https://github.com/cockroachdb/cockroach/issues/47989)
 - The index backfill method is logically the same as the column backfill
 method in how the column is added.
 - The only difference is that, we would always recreate a new primary key
@@ -195,7 +195,7 @@ To solve this problem, we make the old column c a computed column of the new
 column c'.
 
 This brings up another issue where c is a computed column of c', 
-but a value inserted into c' may not necessarily be able to be casted back to 
+but a value inserted into c' may not necessarily be able to be cast back to 
 the data type of c.
 
 Example: When a column is converted from int -> string, 

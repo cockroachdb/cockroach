@@ -206,7 +206,7 @@ predicates are replaced with just `p.col = s.col` so that the query can
 be run using a merge joiner, hence the explicit orders and step 2 in the
 query. The distSQL plan generated from this query has the
 MergeJoinerSpec.NullEquality set to true, to make NULL = NULL evaluate
-to true, making the two predicates equivilant while allowing for a far
+to true, making the two predicates equivalent while allowing for a far
 more efficient execution/
 
 [1]: Relevant index data includes the columns, extra columns, and store
