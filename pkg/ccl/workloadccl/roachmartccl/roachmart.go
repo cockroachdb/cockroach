@@ -131,13 +131,6 @@ func (m *roachmart) Hooks() workload.Hooks {
 			return nil
 		},
 
-		PreCreate: func(db *gosql.DB) error {
-			if _, err := db.Exec(`SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`); err != nil {
-				return err
-			}
-			return nil
-		},
-
 		PreLoad: func(db *gosql.DB) error {
 			if _, err := db.Exec(zoneLocationsStmt); err != nil {
 				return err

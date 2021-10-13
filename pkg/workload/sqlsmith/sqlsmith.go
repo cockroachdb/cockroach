@@ -70,16 +70,7 @@ func (*sqlSmith) Meta() workload.Meta { return sqlSmithMeta }
 func (g *sqlSmith) Flags() workload.Flags { return g.flags }
 
 func (g *sqlSmith) Hooks() workload.Hooks {
-	return workload.Hooks{
-		PreCreate: func(db *gosql.DB) error {
-			if _, err := db.Exec(`
-SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true;
-`); err != nil {
-				return err
-			}
-			return nil
-		},
-	}
+	return workload.Hooks{}
 }
 
 // Tables implements the Generator interface.
