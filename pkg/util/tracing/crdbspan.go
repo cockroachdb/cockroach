@@ -42,7 +42,7 @@ type crdbSpan struct {
 	parentSpanID uint64
 	goroutineID  uint64
 
-	startTime time.Time
+	startTime timeutil.MonotonicTime
 
 	// logTags are set to the log tags that were available when this Span was
 	// created, so that there's no need to eagerly copy all of those log tags
@@ -289,7 +289,7 @@ func (s *crdbSpan) record(msg redact.RedactableString) {
 	if clock := s.testing.Clock; clock != nil {
 		now = clock.Now()
 	} else {
-		now = time.Now()
+		now = timeutil.Now()
 	}
 	logRecord := &tracingpb.LogRecord{
 		Time:    now,
@@ -315,7 +315,7 @@ func (s *crdbSpan) recordStructured(item Structured) {
 	if clock := s.testing.Clock; clock != nil {
 		now = clock.Now()
 	} else {
-		now = time.Now()
+		now = timeutil.Now()
 	}
 	sr := &tracingpb.StructuredRecord{
 		Time:    now,
@@ -401,7 +401,7 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 		ParentSpanID:   s.parentSpanID,
 		GoroutineID:    s.goroutineID,
 		Operation:      s.mu.operation,
-		StartTime:      s.startTime,
+		StartTime:      s.startTime.ToTime(),
 		Duration:       s.mu.duration,
 		RedactableLogs: true,
 	}

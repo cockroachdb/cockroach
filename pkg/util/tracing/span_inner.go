@@ -111,8 +111,7 @@ func (s *spanInner) Finish() {
 	if s.isNoop() {
 		return
 	}
-	finishTime := timeutil.Now()
-	duration := finishTime.Sub(s.crdb.startTime)
+	duration := timeutil.SinceMonotonic(s.crdb.startTime)
 	if duration == 0 {
 		duration = time.Nanosecond
 	}

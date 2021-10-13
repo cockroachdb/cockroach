@@ -18,9 +18,46 @@ import (
 // LibPQTimePrefix is the prefix lib/pq prints time-type datatypes with.
 const LibPQTimePrefix = "0000-01-01"
 
-// Now returns the current UTC time.
+// Now returns the current time with the UTC location.
+//
+// Note: The UTC location is applied because we're afraid of timestamps coming
+// from now leading to Datums, and we want our Datums UTC. We also want
+// timestamps to be UTC when we print them. The UTC conversion, though, clears
+// the monontonic part of the timestamp, which makes Since(t) calls more
+// expensive. If all you want to do with this timestamp is pass it into Since(t)
+// later, then consider using NowMonotonic()/SinceMonotonic().
 func Now() time.Time {
 	return time.Now().UTC()
+}
+
+// MonotonicTime represents a time instant t that's only to be used for
+// timeutil.Since(t) and t1.Sub(t2) - i.e. only for measuring time durations -
+// and not for printing (since it hasn't been converted to UTC and we like our
+// timestamps printed as UTC).
+type MonotonicTime time.Time
+
+// ToTime converts a MonotonicTime to a time.Time by converting it to UTC.
+func (t MonotonicTime) ToTime() time.Time {
+	return time.Time(t).UTC()
+}
+
+// Sub is like time.Sub - returns the delta (t - other).
+func (t MonotonicTime) Sub(other MonotonicTime) time.Duration {
+	return time.Time(t).Sub(time.Time(other))
+}
+
+// NowMonotonic returns a timestamp `t` suitable for using with
+// SinceMonotonic(t) later. SinceMonotonic is more efficient than Since, but in
+// order to do anything else with `t` you have to call t.ToTime() to turn it
+// into a (UTC) timestamp.
+func NowMonotonic() MonotonicTime {
+	return MonotonicTime(time.Now())
+}
+
+// SinceMonotonic is like Since, but operates on Monotonic time and is more
+// efficient.
+func SinceMonotonic(t MonotonicTime) time.Duration {
+	return time.Since(time.Time(t))
 }
 
 // Since returns the time elapsed since t.

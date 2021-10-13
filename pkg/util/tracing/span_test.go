@@ -40,7 +40,7 @@ func TestRecordingString(t *testing.T) {
 	{
 		// Hackily fix the timing on the first log message, so that we can check it later.
 		r := root.i.crdb.mu.recording.logs.GetFirst().(*tracingpb.LogRecord)
-		r.Time = root.i.crdb.startTime.Add(time.Millisecond)
+		r.Time = root.i.crdb.startTime.ToTime().Add(time.Millisecond)
 		root.i.crdb.mu.recording.logs.RemoveFirst()
 		root.i.crdb.mu.recording.logs.AddFirst(r)
 	}
