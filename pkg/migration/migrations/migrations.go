@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/migration"
+	"github.com/cockroachdb/errors"
 )
 
 // GetMigration returns the migration corresponding to this version if
@@ -71,18 +72,6 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.FixDescriptors),
 		NoPrecondition,
 		fixDescriptorMigration,
-	),
-	migration.NewTenantMigration(
-		"add the system.sql_statement_stats table",
-		toCV(clusterversion.SQLStatsTable),
-		NoPrecondition,
-		sqlStatementStatsTableMigration,
-	),
-	migration.NewTenantMigration(
-		"add the system.sql_transaction_stats table",
-		toCV(clusterversion.SQLStatsTable),
-		NoPrecondition,
-		sqlTransactionStatsTableMigration,
 	),
 	migration.NewTenantMigration(
 		"add the system.database_role_settings table",
@@ -145,10 +134,19 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		tenantUsageSingleConsumptionColumn,
 	),
+	migration.NewTenantMigration(
+		"add the system.statement_statistics and system.transaction_statistics tables",
+		toCV(clusterversion.SQLStatsTables),
+		NoPrecondition,
+		sqlStatsTablesMigration,
+	),
 }
 
 func init() {
 	for _, m := range migrations {
+		if _, exists := registry[m.ClusterVersion()]; exists {
+			panic(errors.AssertionFailedf("duplicate migration registration for %v", m.ClusterVersion()))
+		}
 		registry[m.ClusterVersion()] = m
 	}
 }

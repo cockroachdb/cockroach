@@ -80,7 +80,7 @@ func TestTryDecodeValue(t *testing.T) {
 		return s
 	}
 	toJSON := func(pb protoutil.Message) string {
-		j, err := protoreflect.MessageToJSON(pb, true)
+		j, err := protoreflect.MessageToJSON(pb, protoreflect.FmtFlags{EmitDefaults: true})
 		require.NoError(t, err)
 		return j.String()
 	}
