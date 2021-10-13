@@ -2944,6 +2944,10 @@ func (m *sessionDataMutator) SetExperimentalComputedColumnRewrites(val string) {
 	m.data.ExperimentalComputedColumnRewrites = val
 }
 
+func (m *sessionDataMutator) SetNullOrderedLast(b bool) {
+	m.data.NullOrderedLast = b
+}
+
 func (m *sessionDataMutator) SetPropagateInputOrdering(b bool) {
 	m.data.PropagateInputOrdering = b
 }

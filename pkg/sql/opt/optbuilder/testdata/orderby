@@ -1089,6 +1089,62 @@ sort
            ├── b:2 IS NULL [as=nulls_ordering_b:7]
            └── c:3 IS NULL [as=nulls_ordering_c:8]
 
+# Try NULLS ordered last.
+# Next two plans should be the same.
+build null-ordered-last
+SELECT a, b FROM abcd ORDER BY b, c
+----
+sort
+ ├── columns: a:1!null b:2  [hidden: c:3 nulls_ordering_b:7!null nulls_ordering_c:8!null]
+ ├── ordering: +7,+2,+8,+3
+ └── project
+      ├── columns: nulls_ordering_b:7!null nulls_ordering_c:8!null a:1!null b:2 c:3
+      ├── scan abcd
+      │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── projections
+           ├── b:2 IS NULL [as=nulls_ordering_b:7]
+           └── c:3 IS NULL [as=nulls_ordering_c:8]
+
+build null-ordered-last
+SELECT a, b FROM abcd ORDER BY b, c NULLS LAST
+----
+sort
+ ├── columns: a:1!null b:2  [hidden: c:3 nulls_ordering_b:7!null nulls_ordering_c:8!null]
+ ├── ordering: +7,+2,+8,+3
+ └── project
+      ├── columns: nulls_ordering_b:7!null nulls_ordering_c:8!null a:1!null b:2 c:3
+      ├── scan abcd
+      │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── projections
+           ├── b:2 IS NULL [as=nulls_ordering_b:7]
+           └── c:3 IS NULL [as=nulls_ordering_c:8]
+
+# Should be different from the plan above (1 null re-ordering).
+build null-ordered-last
+SELECT a, b FROM abcd ORDER BY b NULLS FIRST, c
+----
+sort
+ ├── columns: a:1!null b:2  [hidden: c:3 nulls_ordering_c:7!null]
+ ├── ordering: +2,+7,+3
+ └── project
+      ├── columns: nulls_ordering_c:7!null a:1!null b:2 c:3
+      ├── scan abcd
+      │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── projections
+           └── c:3 IS NULL [as=nulls_ordering_c:7]
+
+# Should be different from the two plans above (2 null re-orderings).
+build null-ordered-last
+SELECT a, b FROM abcd ORDER BY b NULLS FIRST, c DESC NULLS LAST
+----
+sort
+ ├── columns: a:1!null b:2  [hidden: c:3]
+ ├── ordering: +2,-3
+ └── project
+      ├── columns: a:1!null b:2 c:3
+      └── scan abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+
 build
 SELECT a FROM abcd ORDER BY b, c
 ----
@@ -1159,3 +1215,43 @@ sort
       │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
       └── projections
            └── b:2 IS NULL [as=nulls_ordering_b:7]
+
+# Try with NULL ordered last.
+# Next two plans should be the same.
+build null-ordered-last
+SELECT * FROM abcd ORDER BY b DESC
+----
+sort
+ ├── columns: a:1!null b:2 c:3 d:4  [hidden: nulls_ordering_b:7!null]
+ ├── ordering: -7,-2
+ └── project
+      ├── columns: nulls_ordering_b:7!null a:1!null b:2 c:3 d:4
+      ├── scan abcd
+      │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── projections
+           └── b:2 IS NULL [as=nulls_ordering_b:7]
+
+build null-ordered-last
+SELECT * FROM abcd ORDER BY b DESC NULLS FIRST
+----
+sort
+ ├── columns: a:1!null b:2 c:3 d:4  [hidden: nulls_ordering_b:7!null]
+ ├── ordering: -7,-2
+ └── project
+      ├── columns: nulls_ordering_b:7!null a:1!null b:2 c:3 d:4
+      ├── scan abcd
+      │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── projections
+           └── b:2 IS NULL [as=nulls_ordering_b:7]
+
+# Should be different from the plan above (1 null re-ordering).
+build null-ordered-last
+SELECT * FROM abcd ORDER BY b DESC NULLS LAST
+----
+sort
+ ├── columns: a:1!null b:2 c:3 d:4
+ ├── ordering: -2
+ └── project
+      ├── columns: a:1!null b:2 c:3 d:4
+      └── scan abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6

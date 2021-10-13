@@ -266,6 +266,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().LargeFullScanRows = 0
 	notStale()
 
+	// Stale null ordered last.
+	evalCtx.SessionData().NullOrderedLast = true
+	stale()
+	evalCtx.SessionData().NullOrderedLast = false
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()
