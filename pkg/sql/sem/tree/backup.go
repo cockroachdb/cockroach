@@ -138,7 +138,9 @@ var _ NodeFormatter = &RestoreOptions{}
 
 // Restore represents a RESTORE statement.
 type Restore struct {
-	Targets            TargetList
+	Targets TargetList
+	// Whether this is the RESTORE SYSTEM USERS variant of RESTORE statement.
+	SystemUsers        bool
 	DescriptorCoverage DescriptorCoverage
 
 	// From contains the URIs for the backup(s) we seek to restore.

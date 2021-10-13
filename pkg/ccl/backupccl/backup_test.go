@@ -9456,3 +9456,91 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	_, err = conn.Exec(fmt.Sprintf("BACKUP TABLE foo TO $1 AS OF SYSTEM TIME '%s'", tsBefore), localFoo)
 	require.NoError(t, err)
 }
+
+// TestBackupRestoreSystemUsers tests RESTORE SYSTEM USERS feature which allows user to
+// restore users from a backup into current cluster and regrant roles.
+func TestBackupRestoreSystemUsers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	sqlDB, tempDir, cleanupFn := createEmptyCluster(t, singleNode)
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	defer cleanupFn()
+	defer cleanupEmptyCluster()
+
+	sqlDB.Exec(t, `CREATE USER app; CREATE USER test`)
+	sqlDB.Exec(t, `CREATE ROLE app_role; CREATE ROLE test_role`)
+	sqlDB.Exec(t, `GRANT app_role TO test_role;`) // 'test_role' is a member of 'app_role'
+	sqlDB.Exec(t, `GRANT admin, app_role TO app; GRANT test_role TO test`)
+	sqlDB.Exec(t, `CREATE DATABASE db; CREATE TABLE db.foo (ind INT)`)
+	sqlDB.Exec(t, `BACKUP TO $1`, localFoo+"/1")
+	sqlDB.Exec(t, `BACKUP DATABASE db TO $1`, localFoo+"/2")
+	sqlDB.Exec(t, `BACKUP TABLE system.users TO $1`, localFoo+"/3")
+
+	// User 'test' exists in both clusters but 'app' only exists in the backup
+	sqlDBRestore.Exec(t, `CREATE USER test`)
+	sqlDBRestore.Exec(t, `CREATE DATABASE db`)
+	// Create multiple databases to make max descriptor ID be larger than max descriptor ID
+	// in the backup to test if we correctly generate new descriptor IDs
+	sqlDBRestore.Exec(t, `CREATE DATABASE db1; CREATE DATABASE db2; CREATE DATABASE db3`)
+
+	t.Run("system users", func(t *testing.T) {
+		sqlDBRestore.Exec(t, "RESTORE SYSTEM USERS FROM $1", localFoo+"/1")
+
+		// Role 'app_role' and user 'app' will be added, and 'app' is granted with 'app_role'
+		// User test will remain untouched with no role granted
+		sqlDBRestore.CheckQueryResults(t, "SELECT * FROM system.users", [][]string{
+			{"admin", "", "true"},
+			{"app", "NULL", "false"},
+			{"app_role", "NULL", "true"},
+			{"root", "", "false"},
+			{"test", "NULL", "false"},
+			{"test_role", "NULL", "true"},
+		})
+		sqlDBRestore.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
+			{"admin", "app", "false"},
+			{"admin", "root", "true"},
+			{"app_role", "app", "false"},
+			{"app_role", "test_role", "false"},
+		})
+		sqlDBRestore.CheckQueryResults(t, "SHOW USERS", [][]string{
+			{"admin", "", "{}"},
+			{"app", "", "{admin,app_role}"},
+			{"app_role", "", "{}"},
+			{"root", "", "{admin}"},
+			{"test", "", "{}"},
+			{"test_role", "", "{app_role}"},
+		})
+	})
+
+	t.Run("restore-from-backup-with-no-system-users", func(t *testing.T) {
+		sqlDBRestore.ExpectErr(t, "cannot restore system users as no system.users table in the backup",
+			"RESTORE SYSTEM USERS FROM $1", localFoo+"/2")
+	})
+
+	_, sqlDBRestore1, cleanupEmptyCluster1 := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	defer cleanupEmptyCluster1()
+	t.Run("restore-from-backup-with-no-system-role-members", func(t *testing.T) {
+		sqlDBRestore1.Exec(t, "RESTORE SYSTEM USERS FROM $1", localFoo+"/3")
+
+		sqlDBRestore1.CheckQueryResults(t, "SELECT * FROM system.users", [][]string{
+			{"admin", "", "true"},
+			{"app", "NULL", "false"},
+			{"app_role", "NULL", "true"},
+			{"root", "", "false"},
+			{"test", "NULL", "false"},
+			{"test_role", "NULL", "true"},
+		})
+		sqlDBRestore1.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
+			{"admin", "root", "true"},
+		})
+		sqlDBRestore1.CheckQueryResults(t, "SHOW USERS", [][]string{
+			{"admin", "", "{}"},
+			{"app", "", "{}"},
+			{"app_role", "", "{}"},
+			{"root", "", "{admin}"},
+			{"test", "", "{}"},
+			{"test_role", "", "{}"},
+		})
+	})
+}
