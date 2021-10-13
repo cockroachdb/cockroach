@@ -10359,7 +10359,7 @@ simple_typename:
     // Eventually this clause will be used to parse user-defined types as well,
     // since their names can be quoted.
     if $1 == "char" {
-      $$.val = types.MakeQChar(0)
+      $$.val = types.QChar
     } else if $1 == "serial" {
         switch sqllex.(*lexer).nakedIntType.Width() {
         case 32:
@@ -11635,7 +11635,7 @@ typed_literal:
       // Eventually this clause will be used to parse user-defined types as well,
       // since their names can be quoted.
       if typName == "char" {
-        $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: types.MakeQChar(0), SyntaxMode: tree.CastPrepend}
+        $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: types.QChar, SyntaxMode: tree.CastPrepend}
       } else if typName == "serial" {
         switch sqllex.(*lexer).nakedIntType.Width() {
         case 32:

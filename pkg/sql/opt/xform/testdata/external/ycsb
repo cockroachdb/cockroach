@@ -93,7 +93,7 @@ INSERT INTO usertable VALUES (
 insert usertable
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:14 => ycsb_key:1
+ │    ├── column1:25 => ycsb_key:1
  │    ├── column2:15 => field0:2
  │    ├── column3:16 => field1:3
  │    ├── column4:17 => field2:4
@@ -107,11 +107,24 @@ insert usertable
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column1:14!null column2:15!null column3:16!null column4:17!null column5:18!null column6:19!null column7:20!null column8:21!null column9:22!null column10:23!null column11:24!null
+      ├── columns: column2:15!null column3:16!null column4:17!null column5:18!null column6:19!null column7:20!null column8:21!null column9:22!null column10:23!null column11:24!null column1:25
       ├── cardinality: [1 - 1]
+      ├── immutable
       ├── key: ()
-      ├── fd: ()-->(14-24)
-      └── ('user123', 'field0data', 'field1data', 'field2data', 'field3data', 'field4data', 'field5data', 'field6data', 'field7data', 'field8data', 'field9data')
+      ├── fd: ()-->(15-25)
+      └── tuple
+           ├── 'field0data'
+           ├── 'field1data'
+           ├── 'field2data'
+           ├── 'field3data'
+           ├── 'field4data'
+           ├── 'field5data'
+           ├── 'field6data'
+           ├── 'field7data'
+           ├── 'field8data'
+           ├── 'field9data'
+           └── assignment-cast: VARCHAR(255)
+                └── 'user123'
 
 # --------------------------------------------------
 # Workload E: Short ranges

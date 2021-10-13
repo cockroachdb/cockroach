@@ -364,18 +364,18 @@ insert order_line
  │    ├── column4:16 => ol_number:4
  │    ├── column5:17 => order_line.ol_i_id:5
  │    ├── column6:18 => order_line.ol_supply_w_id:6
- │    ├── ol_delivery_d_default:22 => ol_delivery_d:7
+ │    ├── ol_delivery_d_default:24 => ol_delivery_d:7
  │    ├── column7:19 => ol_quantity:8
- │    ├── ol_amount:23 => order_line.ol_amount:9
- │    └── column9:21 => ol_dist_info:10
+ │    ├── column8:22 => ol_amount:9
+ │    └── column9:23 => ol_dist_info:10
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: ol_amount:23 ol_delivery_d_default:22 column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null column6:18!null column7:19!null column9:21!null
+ │    ├── columns: ol_delivery_d_default:24 column8:22 column9:23 column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null column6:18!null column7:19!null
  │    ├── cardinality: [6 - 6]
  │    ├── immutable
- │    ├── fd: ()-->(22)
+ │    ├── fd: ()-->(24)
  │    ├── values
  │    │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null column6:18!null column7:19!null column8:20!null column9:21!null
  │    │    ├── cardinality: [6 - 6]
@@ -386,34 +386,37 @@ insert order_line
  │    │    ├── (3045, 2, 10, 4, 56624, 0, 6, 273.360000, 'RsaCXoEzmssaF9m9cdLXe0Yh')
  │    │    └── (3045, 2, 10, 6, 92966, 0, 4, 366.760000, 'saCXoEzmssaF9m9cdLXe0Yhg')
  │    └── projections
- │         ├── crdb_internal.round_decimal_values(column8:20, 2) [as=ol_amount:23, outer=(20), immutable]
- │         └── CAST(NULL AS TIMESTAMP) [as=ol_delivery_d_default:22]
+ │         ├── CAST(NULL AS TIMESTAMP) [as=ol_delivery_d_default:24]
+ │         ├── assignment-cast: DECIMAL(6,2) [as=column8:22, outer=(20), immutable]
+ │         │    └── column8:20
+ │         └── assignment-cast: CHAR(24) [as=column9:23, outer=(21), immutable]
+ │              └── column9:21
  └── f-k-checks
       ├── f-k-checks-item: order_line(ol_w_id,ol_d_id,ol_o_id) -> order(o_w_id,o_d_id,o_id)
       │    └── anti-join (lookup order)
-      │         ├── columns: ol_w_id:24!null ol_d_id:25!null ol_o_id:26!null
-      │         ├── key columns: [24 25 26] = [29 28 27]
+      │         ├── columns: ol_w_id:25!null ol_d_id:26!null ol_o_id:27!null
+      │         ├── key columns: [25 26 27] = [30 29 28]
       │         ├── lookup columns are key
       │         ├── cardinality: [0 - 6]
       │         ├── with-scan &1
-      │         │    ├── columns: ol_w_id:24!null ol_d_id:25!null ol_o_id:26!null
+      │         │    ├── columns: ol_w_id:25!null ol_d_id:26!null ol_o_id:27!null
       │         │    ├── mapping:
-      │         │    │    ├──  column3:15 => ol_w_id:24
-      │         │    │    ├──  column2:14 => ol_d_id:25
-      │         │    │    └──  column1:13 => ol_o_id:26
+      │         │    │    ├──  column3:15 => ol_w_id:25
+      │         │    │    ├──  column2:14 => ol_d_id:26
+      │         │    │    └──  column1:13 => ol_o_id:27
       │         │    └── cardinality: [6 - 6]
       │         └── filters (true)
       └── f-k-checks-item: order_line(ol_supply_w_id,ol_i_id) -> stock(s_w_id,s_i_id)
            └── anti-join (lookup stock)
-                ├── columns: ol_supply_w_id:37!null ol_i_id:38!null
-                ├── key columns: [37 38] = [40 39]
+                ├── columns: ol_supply_w_id:38!null ol_i_id:39!null
+                ├── key columns: [38 39] = [41 40]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 6]
                 ├── with-scan &1
-                │    ├── columns: ol_supply_w_id:37!null ol_i_id:38!null
+                │    ├── columns: ol_supply_w_id:38!null ol_i_id:39!null
                 │    ├── mapping:
-                │    │    ├──  column6:18 => ol_supply_w_id:37
-                │    │    └──  column5:17 => ol_i_id:38
+                │    │    ├──  column6:18 => ol_supply_w_id:38
+                │    │    └──  column5:17 => ol_i_id:39
                 │    └── cardinality: [6 - 6]
                 └── filters (true)
 
@@ -600,60 +603,71 @@ VALUES
 insert history
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── rowid_default:20 => rowid:1
+ │    ├── rowid_default:22 => rowid:1
  │    ├── column1:12 => history.h_c_id:2
  │    ├── column2:13 => history.h_c_d_id:3
  │    ├── column3:14 => history.h_c_w_id:4
  │    ├── column4:15 => history.h_d_id:5
  │    ├── column5:16 => history.h_w_id:6
  │    ├── column7:18 => h_date:7
- │    ├── h_amount:21 => history.h_amount:8
- │    └── column8:19 => h_data:9
+ │    ├── column6:20 => h_amount:8
+ │    └── column8:21 => h_data:9
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null column5:16!null column7:18!null column8:19!null rowid_default:20 h_amount:21!null
+ │    ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null column5:16!null column7:18!null column6:20 column8:21 rowid_default:22
  │    ├── cardinality: [1 - 1]
  │    ├── volatile
  │    ├── key: ()
- │    ├── fd: ()-->(12-16,18-21)
- │    └── (1343, 5, 10, 5, 10, '2019-08-26 16:50:41', '8    Kdcgphy3', gen_random_uuid(), 3860.61)
+ │    ├── fd: ()-->(12-16,18,20-22)
+ │    └── tuple
+ │         ├── 1343
+ │         ├── 5
+ │         ├── 10
+ │         ├── 5
+ │         ├── 10
+ │         ├── '2019-08-26 16:50:41'
+ │         ├── assignment-cast: DECIMAL(6,2)
+ │         │    └── 3860.61
+ │         ├── assignment-cast: VARCHAR(24)
+ │         │    └── '8    Kdcgphy3'
+ │         └── gen_random_uuid()
  └── f-k-checks
       ├── f-k-checks-item: history(h_c_w_id,h_c_d_id,h_c_id) -> customer(c_w_id,c_d_id,c_id)
       │    └── anti-join (lookup customer)
-      │         ├── columns: h_c_w_id:22!null h_c_d_id:23!null h_c_id:24!null
-      │         ├── key columns: [22 23 24] = [27 26 25]
+      │         ├── columns: h_c_w_id:23!null h_c_d_id:24!null h_c_id:25!null
+      │         ├── key columns: [23 24 25] = [28 27 26]
       │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
-      │         ├── fd: ()-->(22-24)
+      │         ├── fd: ()-->(23-25)
       │         ├── with-scan &1
-      │         │    ├── columns: h_c_w_id:22!null h_c_d_id:23!null h_c_id:24!null
+      │         │    ├── columns: h_c_w_id:23!null h_c_d_id:24!null h_c_id:25!null
       │         │    ├── mapping:
-      │         │    │    ├──  column3:14 => h_c_w_id:22
-      │         │    │    ├──  column2:13 => h_c_d_id:23
-      │         │    │    └──  column1:12 => h_c_id:24
+      │         │    │    ├──  column3:14 => h_c_w_id:23
+      │         │    │    ├──  column2:13 => h_c_d_id:24
+      │         │    │    └──  column1:12 => h_c_id:25
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(22-24)
+      │         │    └── fd: ()-->(23-25)
       │         └── filters (true)
       └── f-k-checks-item: history(h_w_id,h_d_id) -> district(d_w_id,d_id)
            └── anti-join (lookup district)
-                ├── columns: h_w_id:48!null h_d_id:49!null
-                ├── key columns: [48 49] = [51 50]
+                ├── columns: h_w_id:49!null h_d_id:50!null
+                ├── key columns: [49 50] = [52 51]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
-                ├── fd: ()-->(48,49)
+                ├── fd: ()-->(49,50)
                 ├── with-scan &1
-                │    ├── columns: h_w_id:48!null h_d_id:49!null
+                │    ├── columns: h_w_id:49!null h_d_id:50!null
                 │    ├── mapping:
-                │    │    ├──  column5:16 => h_w_id:48
-                │    │    └──  column4:15 => h_d_id:49
+                │    │    ├──  column5:16 => h_w_id:49
+                │    │    └──  column4:15 => h_d_id:50
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(48,49)
+                │    └── fd: ()-->(49,50)
                 └── filters (true)
 
 # --------------------------------------------------

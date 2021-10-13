@@ -9,8 +9,7 @@
 package throttler
 
 import (
-	"fmt"
-	"math"
+	"context"
 	"testing"
 	"time"
 
@@ -44,101 +43,93 @@ func newTestLocalService(opts ...LocalOption) *testLocalService {
 	return s
 }
 
-func TestReportSuccessReturnsToken(t *testing.T) {
-	policy := BucketPolicy{
-		Capacity:   1,
-		FillPeriod: math.MaxInt64,
-	}
-	s := newTestLocalService(WithPolicy(policy))
+func countGuesses(
+	t *testing.T,
+	connection ConnectionTags,
+	throttle *testLocalService,
+	step time.Duration,
+	period time.Duration,
+) int {
+	count := 0
+	for i := 0; step*time.Duration(i) < period; i++ {
+		throttle.clock.advance(step)
 
-	t1 := ConnectionTags{IP: "0.0.0.0", TenantID: "1"}
-	t2 := ConnectionTags{IP: "0.0.0.0", TenantID: "2"}
-
-	require.NoError(t, s.LoginCheck(t1))
-	require.Equal(t, s.LoginCheck(t2), errRequestDenied)
-	require.Equal(t, s.LoginCheck(t1), errRequestDenied)
-
-	s.ReportSuccess(t1)
-
-	require.NoError(t, s.LoginCheck(t1))
-	require.NoError(t, s.LoginCheck(t2))
-	require.Equal(t, s.LoginCheck(t2), errRequestDenied)
-
-	s.ReportSuccess(t2)
-
-	require.NoError(t, s.LoginCheck(t1))
-	require.NoError(t, s.LoginCheck(t2))
-}
-
-func TestIPHasUniqueBucket(t *testing.T) {
-	policy := BucketPolicy{
-		Capacity:   1,
-		FillPeriod: math.MaxInt64,
-	}
-	s := newTestLocalService(WithPolicy(policy))
-
-	t1 := ConnectionTags{IP: "0.0.0.0", TenantID: "1"}
-	t2 := ConnectionTags{IP: "0.0.0.1", TenantID: "1"}
-
-	require.NoError(t, s.LoginCheck(t1))
-	require.Equal(t, s.LoginCheck(t1), errRequestDenied)
-
-	require.NoError(t, s.LoginCheck(t2))
-	require.Equal(t, s.LoginCheck(t2), errRequestDenied)
-}
-
-func TestPoolRefills(t *testing.T) {
-	policy := BucketPolicy{
-		Capacity:   20,
-		FillPeriod: time.Second,
-	}
-	s := newTestLocalService(WithPolicy(policy))
-
-	tags := ConnectionTags{IP: "0.0.0.0", TenantID: "1"}
-
-	countSuccess := func() int {
-		result := 0
-		for {
-			if err := s.LoginCheck(tags); err != nil {
-				return result
-			}
-			result++
+		throttleTime, err := throttle.LoginCheck(connection)
+		if err != nil {
+			continue
 		}
+
+		err = throttle.ReportAttempt(context.Background(), connection, throttleTime, AttemptInvalidCredentials)
+		require.NoError(t, err, "ReportAttempt should only return errors in the case of racing requests")
+
+		count++
 	}
-
-	// The bucket is initialized to its max size.
-	require.Equal(t, policy.Capacity, countSuccess())
-
-	s.clock.advance(10 * time.Second)
-	require.Equal(t, 10, countSuccess())
-
-	s.clock.advance(time.Minute)
-	require.Equal(t, policy.Capacity, countSuccess())
+	return count
 }
 
-func TestReportSuccessDisablesThrottle(t *testing.T) {
-	emptyBucket := BucketPolicy{Capacity: 0, FillPeriod: time.Minute}
-	s := newTestLocalService(WithPolicy(emptyBucket))
+func TestThrottleLimitsCredentialGuesses(t *testing.T) {
+	throttle := newTestLocalService(WithBaseDelay(time.Second))
+	ip1Tenant1 := ConnectionTags{IP: "1.1.1.1", TenantID: "1"}
+	ip1Tenant2 := ConnectionTags{IP: "1.1.1.1", TenantID: "2"}
+	ip2Tenant1 := ConnectionTags{IP: "1.1.1.2", TenantID: "1"}
 
-	tags := ConnectionTags{IP: "0.0.0.0", TenantID: "1"}
-	require.Error(t, s.LoginCheck(tags))
-	s.ReportSuccess(tags)
-	for i := 0; i < 1000; i++ {
-		require.NoError(t, s.LoginCheck(tags))
-	}
+	require.Equal(t,
+		35,
+		countGuesses(t, ip1Tenant1, throttle, time.Second, time.Hour*24),
+	)
+
+	// Verify throttling logic is tenant specific.
+	require.Equal(t,
+		12,
+		countGuesses(t, ip1Tenant2, throttle, time.Second, time.Hour),
+	)
+	require.Equal(t,
+		12,
+		countGuesses(t, ip2Tenant1, throttle, time.Second, time.Hour),
+	)
 }
 
-func TestLocalService_Eviction(t *testing.T) {
-	s := newTestLocalService()
-	s.maxCacheSize = 10
+func TestReportSuccessDisablesLimiter(t *testing.T) {
+	throttle := newTestLocalService()
+	tenant1 := ConnectionTags{IP: "1.1.1.1", TenantID: "1"}
+	tenant2 := ConnectionTags{IP: "1.1.1.1", TenantID: "2"}
 
-	for i := 0; i < 20; i++ {
-		tags := ConnectionTags{IP: fmt.Sprintf("%d", i)}
-		_ = s.LoginCheck(tags)
-		s.ReportSuccess(tags)
-		require.Less(t, s.mu.ipCache.Len(), 11)
-		require.Less(t, s.mu.successCache.Len(), 11)
+	throttleTime, err := throttle.LoginCheck(tenant1)
+	require.NoError(t, err)
+	require.NoError(t, throttle.ReportAttempt(context.Background(), tenant1, throttleTime, AttemptOK))
+
+	require.Equal(t,
+		int(time.Hour/time.Second),
+		countGuesses(t, tenant1, throttle, time.Second, time.Hour),
+	)
+
+	// Verify the unlimited throttle only applies to the tenant with the
+	// successful connection.
+	require.Equal(t,
+		12,
+		countGuesses(t, tenant2, throttle, time.Second, time.Hour),
+	)
+}
+
+func TestRacingRequests(t *testing.T) {
+	throttle := newTestLocalService()
+	connection := ConnectionTags{IP: "1.1.1.1", TenantID: "1"}
+
+	throttleTime, err := throttle.LoginCheck(connection)
+	require.NoError(t, err)
+
+	require.NoError(t, throttle.ReportAttempt(context.Background(), connection, throttleTime, AttemptInvalidCredentials))
+
+	l := throttle.lockedGetThrottle(connection)
+	nextTime := l.nextTime
+
+	for _, status := range []AttemptStatus{AttemptOK, AttemptInvalidCredentials} {
+		require.Error(t, throttle.ReportAttempt(context.Background(), connection, throttleTime, status))
+
+		// Verify the throttled report has no affect on limiter state.
+		l := throttle.lockedGetThrottle(connection)
+		require.NotNil(t, l)
+		require.NotEqual(t, l.nextBackoff, throttleDisabled)
+		require.Equal(t, l.nextTime, nextTime)
 	}
-	require.Equal(t, s.mu.ipCache.Len(), 10)
-	require.Equal(t, s.mu.successCache.Len(), 10)
 }

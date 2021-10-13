@@ -60,6 +60,7 @@ go_test(
         "//pkg/ccl/sqlproxyccl/denylist",
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",
+        "//pkg/ccl/sqlproxyccl/throttler",
         "//pkg/ccl/utilccl",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",

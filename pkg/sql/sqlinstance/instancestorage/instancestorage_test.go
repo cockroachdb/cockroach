@@ -12,6 +12,7 @@ package instancestorage_test
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"sort"
 	"strings"
@@ -186,6 +187,60 @@ func TestStorage(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestSQLAccess verifies that the sql_instances table is accessible
+// through SQL API.
+func TestSQLAccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	clock := hlc.NewClock(func() int64 {
+		return timeutil.NewTestTimeSource().Now().UnixNano()
+	}, base.DefaultMaxClockOffset)
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+	dbName := t.Name()
+	tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
+	schema := strings.Replace(systemschema.SQLInstancesTableSchema,
+		`CREATE TABLE system.sql_instances`,
+		`CREATE TABLE "`+dbName+`".sql_instances`, 1)
+	tDB.Exec(t, schema)
+	tableID := getTableID(t, tDB, dbName, "sql_instances")
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slstorage.NewFakeStorage())
+	const (
+		sessionID       = sqlliveness.SessionID("session")
+		addr            = "addr"
+		expiration      = time.Minute
+		expectedNumCols = 3
+	)
+	instanceID, err := storage.CreateInstance(ctx, sessionID, clock.Now().Add(expiration.Nanoseconds(), 0), addr)
+	require.NoError(t, err)
+
+	// Query the table through SQL and verify the query completes successfully.
+	rows := tDB.Query(t, fmt.Sprintf("SELECT id, addr, session_id FROM \"%s\".sql_instances", dbName))
+	defer rows.Close()
+	columns, err := rows.Columns()
+	require.NoError(t, err)
+	require.Equal(t, expectedNumCols, len(columns))
+	var parsedInstanceID base.SQLInstanceID
+	var parsedSessionID sqlliveness.SessionID
+	var parsedAddr string
+	rows.Next()
+	err = rows.Scan(&parsedInstanceID, &parsedAddr, &parsedSessionID)
+	require.NoError(t, err)
+	require.Equal(t, instanceID, parsedInstanceID)
+	require.Equal(t, sessionID, parsedSessionID)
+	require.Equal(t, addr, parsedAddr)
+
+	// Verify that the table only contains one row as expected.
+	hasAnotherRow := rows.Next()
+	require.NoError(t, rows.Err())
+	require.False(t, hasAnotherRow)
 }
 
 // TestConcurrentCreateAndRelease verifies that concurrent access to instancestorage

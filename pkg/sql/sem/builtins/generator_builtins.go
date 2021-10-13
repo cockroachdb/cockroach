@@ -434,6 +434,10 @@ var unsuitableUseOfGeneratorFn = func(_ *tree.EvalContext, _ tree.Datums) (tree.
 	return nil, errors.AssertionFailedf("generator functions cannot be evaluated as scalars")
 }
 
+var unsuitableUseOfGeneratorFnWithExprs = func(_ *tree.EvalContext, _ tree.Exprs) (tree.Datum, error) {
+	return nil, errors.AssertionFailedf("generator functions cannot be evaluated as scalars")
+}
+
 func makeGeneratorOverloadWithReturnType(
 	in tree.TypeList,
 	retType tree.ReturnTyper,

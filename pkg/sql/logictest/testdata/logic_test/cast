@@ -1,3 +1,183 @@
+# Tests for assignment casts.
+subtest assignment_casts
+
+statement ok
+CREATE TABLE assn_cast (
+  c CHAR,
+  vc VARCHAR(1),
+  qc "char",
+  b BIT,
+  i INT,
+  t timestamp,
+  d DECIMAL(10, 0),
+  s STRING
+)
+
+statement ok
+INSERT INTO assn_cast(c) VALUES ('a')
+
+statement ok
+INSERT INTO assn_cast(c) VALUES (null), ('b')
+
+statement error value too long for type CHAR
+INSERT INTO assn_cast(c) VALUES ('abc')
+
+query T
+INSERT INTO assn_cast(c) VALUES (1) RETURNING c
+----
+1
+
+statement error value too long for type CHAR
+INSERT INTO assn_cast(c) VALUES (123)
+
+statement ok
+PREPARE insert_c AS INSERT INTO assn_cast(c) VALUES ($1)
+
+statement error value too long for type CHAR
+EXECUTE insert_c('foo')
+
+statement error value too long for type CHAR
+EXECUTE insert_c('foo'::STRING)
+
+statement ok
+DELETE FROM assn_cast
+
+statement
+EXECUTE insert_c(' ')
+
+statement
+EXECUTE insert_c(' '::STRING)
+
+query T
+SELECT concat('"', c, '"') FROM assn_cast
+----
+""
+""
+
+statement ok
+INSERT INTO assn_cast(vc) VALUES ('a')
+
+statement ok
+INSERT INTO assn_cast(vc) VALUES (null), ('b')
+
+statement error value too long for type VARCHAR\(1\)
+INSERT INTO assn_cast(vc) VALUES ('abc')
+
+query T
+INSERT INTO assn_cast(vc) VALUES (1) RETURNING vc
+----
+1
+
+statement error value too long for type VARCHAR\(1\)
+INSERT INTO assn_cast(vc) VALUES (123)
+
+statement ok
+INSERT INTO assn_cast(qc) VALUES ('a')
+
+statement ok
+INSERT INTO assn_cast(qc) VALUES (null), ('b')
+
+query T
+INSERT INTO assn_cast(qc) VALUES ('abc') RETURNING qc
+----
+a
+
+# Note: This statement fails in Postgres because the default integer type is an
+# INT4, and the INT4 -> "char" cast is explicit. Our default integer type
+# is an INT8 and INT8 -> "char" is an assignment cast.
+query T
+INSERT INTO assn_cast(qc) VALUES (123) RETURNING qc
+----
+{
+
+statement error \"char\" out of range
+INSERT INTO assn_cast(qc) VALUES (1234)
+
+statement ok
+PREPARE insert_qc AS INSERT INTO assn_cast(qc) VALUES ($1)
+
+statement ok
+DELETE FROM assn_cast
+
+statement ok
+EXECUTE insert_qc('foo')
+
+statement ok
+EXECUTE insert_qc('foo'::STRING)
+
+query T
+SELECT qc FROM assn_cast
+----
+f
+f
+
+statement ok
+INSERT into assn_cast(b) VALUES ('1')
+
+statement ok
+INSERT INTO assn_cast(b) VALUES (null), ('1')
+
+# TODO(mgartner): To match Postgres behavior, this statement should fail with
+# the message "value too long for type BIT".
+statement ok
+INSERT into assn_cast(b) VALUES ('01')
+
+statement error value type int doesn't match type bit of column \"b\"
+INSERT into assn_cast(b) VALUES (1)
+
+statement ok
+INSERT INTO assn_cast(i) VALUES ('1')
+
+statement ok
+INSERT INTO assn_cast(i) VALUES (null), ('1')
+
+statement ok
+PREPARE insert_i AS INSERT INTO assn_cast(i) VALUES ($1)
+
+statement ok
+EXECUTE insert_i('1')
+
+statement error value type string doesn't match type int of column \"i\"
+INSERT INTO assn_cast(i) VALUES ('1'::STRING)
+
+statement ok
+INSERT INTO assn_cast(t) VALUES ('1970-01-01'::timestamptz)
+
+statement ok
+INSERT INTO assn_cast(d) VALUES (11.22), (88.99)
+
+statement ok
+PREPARE insert_d AS INSERT INTO assn_cast(d) VALUES ($1)
+
+statement ok
+EXECUTE insert_d(123.45)
+
+statement ok
+PREPARE insert_d2 AS INSERT INTO assn_cast(d) SELECT * FROM (VALUES ($1::DECIMAL(10, 2)))
+
+statement ok
+EXECUTE insert_d2(67.89)
+
+query F rowsort
+SELECT d FROM assn_cast WHERE d IS NOT NULL
+----
+11
+89
+123
+68
+
+statement ok
+INSERT INTO assn_cast(s) VALUES (1)
+
+statement ok
+PREPARE insert_s AS INSERT INTO assn_cast(s) VALUES ($1)
+
+# TODO(mgartner): This should succeed to match the behavior of Postgres.
+statement error expected EXECUTE parameter expression to have type string, but \'1\' has type int
+EXECUTE insert_s(1)
+
+subtest regressions
+
 statement ok
 CREATE TABLE t45837 AS SELECT 1.25::decimal AS d
 
