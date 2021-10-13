@@ -174,7 +174,7 @@ func waitQuota(
 ) error {
 	start := timeutil.Now()
 	defer func() {
-		c.Inc(int64(timeutil.Now().Sub(start)))
+		c.Inc(int64(timeutil.Since(start)))
 	}()
 	return limit.WaitN(ctx, n)
 }
