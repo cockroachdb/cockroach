@@ -943,13 +943,13 @@ func (r *testRunner) maybePostGithubIssue(
 		Message:         msg,
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
-		ReproductionCommand: func(renderer *issues.Renderer) {
-			issues.ReproductionAsLink(
+		HelpCommand: func(renderer *issues.Renderer) {
+			issues.HelpCommandAsLink(
 				"roachtest README",
 				"https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md",
 			)(renderer)
 			renderer.Escaped(" | ")
-			issues.ReproductionAsLink(
+			issues.HelpCommandAsLink(
 				"How To Investigate (internal)",
 				"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
 			)(renderer)

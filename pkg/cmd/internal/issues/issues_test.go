@@ -280,16 +280,16 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 					ctx := context.Background()
 					repro := ReproductionCommandFromString(c.reproCmd)
 					if c.reproTitle != "" {
-						repro = ReproductionAsLink(c.reproTitle, c.reproURL)
+						repro = HelpCommandAsLink(c.reproTitle, c.reproURL)
 					}
 					req := PostRequest{
-						PackageName:         c.packageName,
-						TestName:            c.testName,
-						Message:             c.message,
-						Artifacts:           c.artifacts,
-						AuthorEmail:         c.author,
-						ReproductionCommand: repro,
-						ExtraLabels:         []string{"release-blocker"},
+						PackageName: c.packageName,
+						TestName:    c.testName,
+						Message:     c.message,
+						Artifacts:   c.artifacts,
+						AuthorEmail: c.author,
+						HelpCommand: repro,
+						ExtraLabels: []string{"release-blocker"},
 					}
 					require.NoError(t, p.post(ctx, UnitTestFormatter, req))
 					path := filepath.Join("testdata", "post", c.name+"-"+foundIssue+".txt")
