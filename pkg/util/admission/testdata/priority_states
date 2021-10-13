@@ -1,0 +1,90 @@
+init
+----
+
+update priority=127 delay-millis=10
+----
+(pri: 127, delay-millis: 10) 
+
+update priority=-128 delay-millis=101
+----
+(pri: -128, delay-millis: 101) (pri: 127, delay-millis: 10) 
+
+update priority=0 delay-millis=20
+----
+(pri: -128, delay-millis: 101) (pri: 0, delay-millis: 20) (pri: 127, delay-millis: 10) 
+
+get-threshold
+----
+threshold: -127
+
+update priority=-128 delay-millis=11
+----
+(pri: -128, delay-millis: 11) (pri: 0, delay-millis: 0) (pri: 127, delay-millis: 0) 
+
+get-threshold
+----
+threshold: -127
+
+update priority=-128 delay-millis=10
+----
+(pri: -128, delay-millis: 10) (pri: 0, delay-millis: 0) (pri: 127, delay-millis: 0) 
+
+get-threshold
+----
+threshold: -128
+
+update priority=127 delay-millis=101
+----
+(pri: -128, delay-millis: 0) (pri: 0, delay-millis: 0) (pri: 127, delay-millis: 101) 
+
+get-threshold
+----
+threshold: 128
+
+update priority=127 delay-millis=101
+----
+(pri: -128, delay-millis: 0) (pri: 0, delay-millis: 0) (pri: 127, delay-millis: 101) 
+
+update priority=24 delay-millis=102
+----
+(pri: -128, delay-millis: 0) (pri: 0, delay-millis: 0) (pri: 24, delay-millis: 102) (pri: 127, delay-millis: 101) 
+
+get-threshold
+----
+threshold: 128
+
+update priority=20 delay-millis=111
+----
+(pri: -128, delay-millis: 0) (pri: 0, delay-millis: 0) (pri: 20, delay-millis: 111) (pri: 24, delay-millis: 0) (pri: 127, delay-millis: 0) 
+
+update priority=-5 delay-millis=110
+----
+(pri: -128, delay-millis: 0) (pri: -5, delay-millis: 110) (pri: 0, delay-millis: 0) (pri: 20, delay-millis: 111) (pri: 24, delay-millis: 0) (pri: 127, delay-millis: 0) 
+
+get-threshold
+----
+threshold: 21
+
+update priority=0 delay-millis=11
+----
+(pri: -128, delay-millis: 0) (pri: -5, delay-millis: 0) (pri: 0, delay-millis: 11) (pri: 20, delay-millis: 0) (pri: 24, delay-millis: 0) (pri: 127, delay-millis: 0) 
+
+get-threshold
+----
+threshold: 1
+
+update priority=-128 delay-millis=11
+----
+(pri: -128, delay-millis: 11) (pri: -5, delay-millis: 0) (pri: 0, delay-millis: 0) (pri: 20, delay-millis: 0) (pri: 24, delay-millis: 0) (pri: 127, delay-millis: 0) 
+
+get-threshold
+----
+threshold: -127
+
+update priority=-128 delay-millis=9
+----
+(pri: -128, delay-millis: 9) (pri: -5, delay-millis: 0) (pri: 0, delay-millis: 0) (pri: 20, delay-millis: 0) (pri: 24, delay-millis: 0) (pri: 127, delay-millis: 0) 
+
+get-threshold
+----
+threshold: -128

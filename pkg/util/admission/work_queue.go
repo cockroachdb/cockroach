@@ -36,7 +36,7 @@ import (
 var KVAdmissionControlEnabled = settings.RegisterBoolSetting(
 	"admission.kv.enabled",
 	"when true, work performed by the KV layer is subject to admission control",
-	false).WithPublic()
+	true).WithPublic()
 
 // SQLKVResponseAdmissionControlEnabled controls whether response processing
 // in SQL, for KV requests, is enabled.
@@ -44,7 +44,7 @@ var SQLKVResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
 	"admission.sql_kv_response.enabled",
 	"when true, work performed by the SQL layer when receiving a KV response is subject to "+
 		"admission control",
-	false).WithPublic()
+	true).WithPublic()
 
 // SQLSQLResponseAdmissionControlEnabled controls whether response processing
 // in SQL, for DistSQL requests, is enabled.
@@ -52,13 +52,18 @@ var SQLSQLResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
 	"admission.sql_sql_response.enabled",
 	"when true, work performed by the SQL layer when receiving a DistSQL response is subject "+
 		"to admission control",
-	false).WithPublic()
+	true).WithPublic()
 
 var admissionControlEnabledSettings = [numWorkKinds]*settings.BoolSetting{
 	KVWork:             KVAdmissionControlEnabled,
 	SQLKVResponseWork:  SQLKVResponseAdmissionControlEnabled,
 	SQLSQLResponseWork: SQLSQLResponseAdmissionControlEnabled,
 }
+
+var EpochLIFOEnabled = settings.RegisterBoolSetting(
+	"admission.epoch_lifo.enabled",
+	"when true, epoch-LIFO behavior is enabled when there is significant delay in admission",
+	false).WithPublic()
 
 // WorkPriority represents the priority of work. In an WorkQueue, it is only
 // used for ordering within a tenant. High priority work can starve lower
@@ -161,10 +166,14 @@ type WorkQueue struct {
 		tenantHeap tenantHeap
 		// All tenants, including those without waiting work. Periodically cleaned.
 		tenants map[uint64]*tenantInfo
+		// The highest epoch that is closed.
+		closedEpochThreshold int64
 	}
 	metrics       WorkQueueMetrics
 	admittedCount uint64
-	gcStopCh      chan struct{}
+	stopCh        chan struct{}
+
+	timeSource timeutil.TimeSource
 }
 
 var _ requester = &WorkQueue{}
@@ -175,6 +184,11 @@ type workQueueOptions struct {
 	// If non-nil, the WorkQueue should use the supplied metrics instead of
 	// creating its own.
 	metrics *WorkQueueMetrics
+
+	// timeSource can be set to non-nil for tests.
+	timeSource timeutil.TimeSource
+	// The epoch closing goroutine may be disabled for tests.
+	disableEpochClosingGoroutine bool
 }
 
 func makeWorkQueueOptions(workKind WorkKind) workQueueOptions {
@@ -193,7 +207,7 @@ func makeWorkQueueOptions(workKind WorkKind) workQueueOptions {
 func makeWorkQueue(
 	workKind WorkKind, granter granter, settings *cluster.Settings, opts workQueueOptions,
 ) requester {
-	gcStopCh := make(chan struct{})
+	stopCh := make(chan struct{})
 	var metrics WorkQueueMetrics
 	if opts.metrics == nil {
 		metrics = makeWorkQueueMetrics(string(workKindString(workKind)))
@@ -207,7 +221,8 @@ func makeWorkQueue(
 		tiedToRange: opts.tiedToRange,
 		settings:    settings,
 		metrics:     metrics,
-		gcStopCh:    gcStopCh,
+		stopCh:      stopCh,
+		timeSource:  opts.timeSource,
 	}
 	q.mu.tenants = make(map[uint64]*tenantInfo)
 	go func() {
@@ -217,13 +232,82 @@ func makeWorkQueue(
 			select {
 			case <-ticker.C:
 				q.gcTenantsAndResetTokens()
-			case <-gcStopCh:
+			case <-stopCh:
+				// Channel closed.
 				done = true
 			}
 		}
-		close(gcStopCh)
 	}()
+	epochLIFOEnabled := q.settings != nil && EpochLIFOEnabled.Get(&q.settings.SV)
+	q.tryCloseEpoch(epochLIFOEnabled)
+	if !opts.disableEpochClosingGoroutine {
+		go func() {
+			// TODO(sumeer): reduce the ticker frequency after it aligns with epoch
+			// close. We would also need to adjust for drift after we reduce
+			// frequency.
+			ticker := time.NewTicker(time.Millisecond)
+			done := false
+			for !done {
+				select {
+				case <-ticker.C:
+					epochLIFOEnabled := q.settings != nil && EpochLIFOEnabled.Get(&q.settings.SV)
+					q.tryCloseEpoch(epochLIFOEnabled)
+				case <-stopCh:
+					// Channel closed.
+					done = true
+				}
+			}
+		}()
+	}
 	return q
+}
+
+func isInTenantHeap(tenant *tenantInfo) bool {
+	return len(tenant.waitingWorkHeap) > 0 || len(tenant.openEpochsHeap) > 0
+}
+
+func (q *WorkQueue) timeNow() time.Time {
+	if q.timeSource != nil {
+		return q.timeSource.Now()
+	}
+	return timeutil.Now()
+}
+
+func (q *WorkQueue) tryCloseEpoch(epochLIFOEnabled bool) {
+	ec := epochForTimeNanos(q.timeNow().UnixNano() - epochLengthNanos - epochClosingDeltaNanos)
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if ec > q.mu.closedEpochThreshold {
+		q.mu.closedEpochThreshold = ec
+		closedEpoch := q.mu.closedEpochThreshold
+		for _, tenant := range q.mu.tenants {
+			prevThreshold := tenant.fifoPriorityThreshold
+			tenant.fifoPriorityThreshold =
+				tenant.priorityStates.getFIFOPriorityThresholdAndReset(tenant.fifoPriorityThreshold)
+			if !epochLIFOEnabled {
+				tenant.fifoPriorityThreshold = int(LowPri)
+			}
+			if tenant.fifoPriorityThreshold != prevThreshold {
+				// TODO(sumeer): remove after testing?
+				log.Infof(context.Background(), "%s: FIFO threshold for tenant %d changed to %d",
+					string(workKindString(q.workKind)), tenant.id, tenant.fifoPriorityThreshold)
+			}
+			// Note that we are ignoring the new priority threshold and only
+			// dequeueing the ones that are in the closed epoch. It is possible to
+			// have work items that are not in the closed epoch and whose priority
+			// makes them no longer subject to LIFO, but they will need to wait here
+			// until their epochs close. This is considered acceptable since the
+			// priority threshold should not fluctuate rapidly.
+			for len(tenant.openEpochsHeap) > 0 {
+				work := tenant.openEpochsHeap[0]
+				if work.epoch > closedEpoch {
+					break
+				}
+				heap.Pop(&tenant.openEpochsHeap)
+				heap.Push(&tenant.waitingWorkHeap, work)
+			}
+		}
+	}
 }
 
 // Admit is called when requesting admission for some work. If err!=nil, the
@@ -252,7 +336,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	}
 	if info.BypassAdmission && roachpb.IsSystemTenantID(tenantID) && q.workKind == KVWork {
 		tenant.used++
-		if len(tenant.waitingWorkHeap) > 0 {
+		if isInTenantHeap(tenant) {
 			q.mu.tenantHeap.fix(tenant)
 		}
 		q.mu.Unlock()
@@ -294,7 +378,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		tenant.used--
 	}
 	// Check for cancellation.
-	startTime := timeutil.Now()
+	startTime := q.timeNow()
 	doneCh := ctx.Done()
 	if doneCh != nil {
 		select {
@@ -314,9 +398,18 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		}
 	}
 	// Push onto heap(s).
-	work := newWaitingWork(info.Priority, info.CreateTime)
-	heap.Push(&tenant.waitingWorkHeap, work)
-	if len(tenant.waitingWorkHeap) == 1 {
+	ordering := fifoWorkOrdering
+	if int(info.Priority) < tenant.fifoPriorityThreshold {
+		ordering = lifoWorkOrdering
+	}
+	work := newWaitingWork(info.Priority, ordering, info.CreateTime, startTime)
+	inTenantHeap := isInTenantHeap(tenant)
+	if work.epoch <= q.mu.closedEpochThreshold || ordering == fifoWorkOrdering {
+		heap.Push(&tenant.waitingWorkHeap, work)
+	} else {
+		heap.Push(&tenant.openEpochsHeap, work)
+	}
+	if !inTenantHeap {
 		heap.Push(&q.mu.tenantHeap, tenant)
 	}
 	// Else already in tenantHeap.
@@ -329,7 +422,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	defer releaseWaitingWork(work)
 	select {
 	case <-doneCh:
+		waitDur := q.timeNow().Sub(startTime)
 		q.mu.Lock()
+		tenant.priorityStates.updateDelayLocked(work.priority, waitDur)
 		if work.heapIndex == -1 {
 			// No longer in heap. Raced with token/slot grant.
 			tenant.used--
@@ -342,14 +437,17 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			chainID := <-work.ch
 			q.granter.continueGrantChain(chainID)
 		} else {
-			tenant.waitingWorkHeap.remove(work)
-			if len(tenant.waitingWorkHeap) == 0 {
+			if work.inWaitingWorkHeap {
+				tenant.waitingWorkHeap.remove(work)
+			} else {
+				tenant.openEpochsHeap.remove(work)
+			}
+			if !isInTenantHeap(tenant) {
 				q.mu.tenantHeap.remove(tenant)
 			}
 			q.mu.Unlock()
 		}
 		q.metrics.Errored.Inc(1)
-		waitDur := timeutil.Since(startTime)
 		q.metrics.WaitDurationSum.Inc(waitDur.Microseconds())
 		q.metrics.WaitDurations.RecordValue(waitDur.Nanoseconds())
 		q.metrics.WaitQueueLength.Dec(1)
@@ -365,7 +463,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		}
 		q.metrics.Admitted.Inc(1)
 		atomic.AddUint64(&q.admittedCount, 1)
-		waitDur := timeutil.Since(startTime)
+		waitDur := q.timeNow().Sub(startTime)
 		q.metrics.WaitDurationSum.Inc(waitDur.Microseconds())
 		q.metrics.WaitDurations.RecordValue(waitDur.Nanoseconds())
 		q.metrics.WaitQueueLength.Dec(1)
@@ -392,7 +490,7 @@ func (q *WorkQueue) AdmittedWorkDone(tenantID roachpb.TenantID) {
 		panic(errors.AssertionFailedf("tenant not found"))
 	}
 	tenant.used--
-	if len(tenant.waitingWorkHeap) > 0 {
+	if isInTenantHeap(tenant) {
 		q.mu.tenantHeap.fix(tenant)
 	}
 	q.mu.Unlock()
@@ -411,17 +509,23 @@ func (q *WorkQueue) hasWaitingRequests() bool {
 
 func (q *WorkQueue) granted(grantChainID grantChainID) bool {
 	// Reduce critical section by getting time before mutex acquisition.
-	now := timeutil.Now()
+	now := q.timeNow()
 	q.mu.Lock()
 	if len(q.mu.tenantHeap) == 0 {
 		q.mu.Unlock()
 		return false
 	}
 	tenant := q.mu.tenantHeap[0]
-	item := heap.Pop(&tenant.waitingWorkHeap).(*waitingWork)
-	item.grantTime = now
-	tenant.used++
+	var item *waitingWork
 	if len(tenant.waitingWorkHeap) > 0 {
+		item = heap.Pop(&tenant.waitingWorkHeap).(*waitingWork)
+	} else {
+		item = heap.Pop(&tenant.openEpochsHeap).(*waitingWork)
+	}
+	waitDur := now.Sub(item.enqueueingTime)
+	tenant.priorityStates.updateDelayLocked(item.priority, waitDur)
+	tenant.used++
+	if isInTenantHeap(tenant) {
 		q.mu.tenantHeap.fix(tenant)
 	} else {
 		q.mu.tenantHeap.remove(tenant)
@@ -439,7 +543,7 @@ func (q *WorkQueue) gcTenantsAndResetTokens() {
 	// longer than desired. We could break this iteration into smaller parts if
 	// needed.
 	for id, info := range q.mu.tenants {
-		if info.used == 0 && len(info.waitingWorkHeap) == 0 {
+		if info.used == 0 && !isInTenantHeap(info) {
 			delete(q.mu.tenants, id)
 			releaseTenantInfo(info)
 		}
@@ -459,6 +563,7 @@ func (q *WorkQueue) String() string {
 func (q *WorkQueue) SafeFormat(s redact.SafePrinter, verb rune) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	s.Printf("closed epoch: %d ", q.mu.closedEpochThreshold)
 	s.Printf("tenantHeap len: %d", len(q.mu.tenantHeap))
 	if len(q.mu.tenantHeap) > 0 {
 		s.Printf(" top tenant: %d", q.mu.tenantHeap[0].id)
@@ -470,12 +575,30 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, verb rune) {
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	for _, id := range ids {
 		tenant := q.mu.tenants[id]
-		s.Printf("\n tenant-id: %d used: %d", tenant.id, tenant.used)
+		s.Printf("\n tenant-id: %d used: %d, fifo: %d", tenant.id, tenant.used,
+			tenant.fifoPriorityThreshold)
 		if len(tenant.waitingWorkHeap) > 0 {
-			s.Printf(" heap:")
+			s.Printf(" waiting work heap:")
 			for i := range tenant.waitingWorkHeap {
-				s.Printf(" %d: pri: %d, ct: %d", i, tenant.waitingWorkHeap[i].priority,
-					tenant.waitingWorkHeap[i].createTime)
+				var workOrdering string
+				if tenant.waitingWorkHeap[i].arrivalTimeWorkOrdering == lifoWorkOrdering {
+					workOrdering = ", lifo-ordering"
+				}
+				s.Printf(" [%d: pri: %d, ct: %d, epoch: %d, qt: %d%s]", i,
+					tenant.waitingWorkHeap[i].priority,
+					tenant.waitingWorkHeap[i].createTime/int64(time.Millisecond),
+					tenant.waitingWorkHeap[i].epoch,
+					tenant.waitingWorkHeap[i].enqueueingTime.UnixNano()/int64(time.Millisecond), workOrdering)
+			}
+		}
+		if len(tenant.openEpochsHeap) > 0 {
+			s.Printf(" open epochs heap:")
+			for i := range tenant.openEpochsHeap {
+				s.Printf(" [%d: pri: %d, ct: %d, epoch: %d, qt: %d]", i,
+					tenant.openEpochsHeap[i].priority,
+					tenant.openEpochsHeap[i].createTime/int64(time.Millisecond),
+					tenant.openEpochsHeap[i].epoch,
+					tenant.openEpochsHeap[i].enqueueingTime.UnixNano()/int64(time.Millisecond))
 			}
 		}
 	}
@@ -483,7 +606,83 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, verb rune) {
 
 // close tells the gc goroutine to stop.
 func (q *WorkQueue) close() {
-	q.gcStopCh <- struct{}{}
+	close(q.stopCh)
+}
+
+type workOrderingKind int8
+
+const (
+	fifoWorkOrdering workOrderingKind = iota
+	lifoWorkOrdering
+)
+
+type priorityState struct {
+	priority      WorkPriority
+	maxQueueDelay time.Duration
+	count         int
+}
+
+// In increasing order of priority. Expected to not have more than 5 elements,
+// so a linear search is fast.
+type priorityStates []priorityState
+
+// TODO(sumeer): the maxQueueDelay value is incomplete since it does not have
+// visibility into work that is still waiting in the queue.
+func (ps *priorityStates) updateDelayLocked(priority WorkPriority, delay time.Duration) {
+	i := 0
+	n := len(*ps)
+	for ; i < n; i++ {
+		pri := (*ps)[i].priority
+		if pri == priority {
+			(*ps)[i].count++
+			if (*ps)[i].maxQueueDelay < delay {
+				(*ps)[i].maxQueueDelay = delay
+			}
+			return
+		}
+		if pri > priority {
+			break
+		}
+	}
+	state := priorityState{priority: priority, maxQueueDelay: delay, count: 1}
+	*ps = append(*ps, state)
+	if i == n {
+		return
+	}
+	for j := n; j > i; j-- {
+		(*ps)[j] = (*ps)[j-1]
+	}
+	(*ps)[i] = state
+}
+
+func (ps *priorityStates) getFIFOPriorityThresholdAndReset(curPriorityThreshold int) int {
+	priority := int(LowPri)
+	for i := range *ps {
+		p := (*ps)[i]
+		if p.maxQueueDelay > time.Duration(epochLengthNanos) {
+			// LIFO.
+			priority = int(p.priority) + 1
+		} else if int(p.priority) < curPriorityThreshold {
+			// Currently LIFO. Should we continue as LIFO?
+			//
+			// The (p.count == 0 && priority == int(LowPri)) is a hack. We need
+			// visibility into what was received for a certain priority.
+			if p.maxQueueDelay > time.Duration(epochLengthNanos)/10 || (p.count == 0 && priority == int(LowPri)) {
+				priority = int(p.priority) + 1
+			}
+			// Else, can switch to FIFO, at least based on queue delay at this
+			// priority. But we examine the other higher priorities too, since it is
+			// possible that few things were received for this priority and it got
+			// lucky.
+		}
+		if p.count > 0 {
+			log.Infof(context.Background(), "pri: %d, count: %d, delay: %s", p.priority, p.count,
+				p.maxQueueDelay.String())
+		}
+		(*ps)[i].maxQueueDelay = 0
+		(*ps)[i].count = 0
+	}
+	return priority
 }
 
 // tenantInfo is the per-tenant information in the tenantHeap.
@@ -493,6 +692,12 @@ type tenantInfo struct {
 	// interval.
 	used            uint64
 	waitingWorkHeap waitingWorkHeap
+	openEpochsHeap  openEpochsHeap
+
+	priorityStates priorityStates
+	// priority >= fifoPriorityThreshold is FIFO. This uses a larger sized type
+	// than WorkPriority since the threshold can be > MaxPri.
+	fifoPriorityThreshold int
 
 	// The heapIndex is maintained by the heap.Interface methods, and represents
 	// the heapIndex of the item in the heap.
@@ -514,25 +719,33 @@ var tenantInfoPool = sync.Pool{
 func newTenantInfo(id uint64) *tenantInfo {
 	ti := tenantInfoPool.Get().(*tenantInfo)
 	*ti = tenantInfo{
-		id:              id,
-		waitingWorkHeap: ti.waitingWorkHeap,
-		heapIndex:       -1,
+		id:                    id,
+		waitingWorkHeap:       ti.waitingWorkHeap,
+		openEpochsHeap:        ti.openEpochsHeap,
+		priorityStates:        ti.priorityStates[:0],
+		fifoPriorityThreshold: int(LowPri),
+		heapIndex:             -1,
 	}
 	return ti
 }
 
 func releaseTenantInfo(ti *tenantInfo) {
-	if len(ti.waitingWorkHeap) != 0 {
+	if len(ti.waitingWorkHeap) != 0 || len(ti.openEpochsHeap) != 0 {
 		panic("tenantInfo has non-empty heap")
 	}
-	// NB: waitingWorkHeap.Pop nils the slice elements when removing, so we are
-	// not inadvertently holding any references.
+	// NB: {waitingWorkHeap,openEpochsHeap}.Pop nil the slice elements when
+	// removing, so we are not inadvertently holding any references.
 	if cap(ti.waitingWorkHeap) > 100 {
 		ti.waitingWorkHeap = nil
 	}
-	wwh := ti.waitingWorkHeap
+	if cap(ti.openEpochsHeap) > 100 {
+		ti.openEpochsHeap = nil
+	}
+
 	*ti = tenantInfo{
-		waitingWorkHeap: wwh,
+		waitingWorkHeap: ti.waitingWorkHeap,
+		openEpochsHeap:  ti.openEpochsHeap,
+		priorityStates:  ti.priorityStates[:0],
 	}
 	tenantInfoPool.Put(ti)
 }
@@ -578,23 +791,28 @@ func (th *tenantHeap) Pop() interface{} {
 
 // waitingWork is the per-work information in the waitingWorkHeap.
 type waitingWork struct {
-	priority   WorkPriority
-	createTime int64
+	priority WorkPriority
+	// The workOrderingKind for this priority when this work was queued.
+	arrivalTimeWorkOrdering workOrderingKind
+	createTime              int64
+	// epoch is a function of the createTime.
+	epoch int64
+
 	// ch is used to communicate a grant to the waiting goroutine. The
 	// grantChainID is used by the waiting goroutine to call continueGrantChain.
 	ch chan grantChainID
 	// The heapIndex is maintained by the heap.Interface methods, and represents
-	// the heapIndex of the item in the heap. -1 when not in the heap.
+	// the heapIndex of the item in the heap. -1 when not in the heap. The same
+	// heapIndex is used by the waitingWorkHeap and the openEpochsHeap since a
+	// waitingWork is only in one of these.
 	heapIndex int
-	grantTime time.Time
+	// Set to true when added to waitingWorkHeap. Only used to disambiguate
+	// which heap the waitingWork is in, when we know it is in one of the heaps.
+	// So the only state transition is from false => true, and never restored
+	// back to false.
+	inWaitingWorkHeap bool
+	enqueueingTime    time.Time
 }
-
-// waitingWorkHeap is a heap of waiting work within a tenant. It is ordered in
-// decreasing order of priority, and within the same priority in increasing
-// order of createTime (to prefer older work).
-type waitingWorkHeap []*waitingWork
-
-var _ heap.Interface = (*waitingWorkHeap)(nil)
 
 var waitingWorkPool = sync.Pool{
 	New: func() interface{} {
@@ -602,17 +820,68 @@ var waitingWorkPool = sync.Pool{
 	},
 }
 
-func newWaitingWork(priority WorkPriority, createTime int64) *waitingWork {
+// The epoch length for doing epoch-LIFO. The epoch-LIFO scheme relies on
+// clock synchronization and the expectation that transaction/query deadlines
+// will be significantly higher than execution time under low load. A standard
+// LIFO scheme suffers from a severe problem when a single user transaction
+// can result in many lower-level work that get distributed to many nodes, and
+// previous work execution can result in new work being submitted for
+// admission: the later work for a transaction may no longer be the latest
+// seen by the system, so will not be preferred. This means LIFO would do some
+// work items from each transaction and starve the remaining work, so nothing
+// would complete. This is even worse than FIFO which at least prefers the
+// same transactions until they are complete (FIFO and LIFO are using the
+// transaction CreateTime, and not the work arrival time).
+//
+// Consider a case where transaction deadlines are 1s (note this may not
+// necessarily be an actual deadline, and could be a time duration after which
+// the user impact is extremely negative), and typical transaction execution
+// times (under low load) of 10ms. A 100ms epoch will increase transaction
+// latency to at most 100ms + 5ms + 10ms, since execution will not start until
+// the epoch of the transaction's CreateTime is closed. At that time, due to
+// clock synchronization, all nodes will start executing that epoch and will
+// implicitly have the same set of competing transactions. By the time the
+// next epoch closes and the current epoch's transactions are deprioritized,
+// 100ms will have elapsed, which is enough time for most of these
+// transactions that get admitted to have finished all their work.
+//
+// Note that LIFO queueing will only happen at bottleneck nodes, and decided
+// on a (tenant, priority) basis. So if there is even a single bottleneck node
+// for a (tenant, priority), the above delay will occur. When the epoch closes
+// at the bottleneck node, the creation time for this transaction will be
+// sufficiently in the past, so the non-bottleneck nodes (using FIFO) will
+// prioritize it over recent transactions. Note that there is an inversion in
+// that the non-bottleneck nodes are ordering in the opposite way for such
+// closed epochs, but since they are not bottlenecked, the queueing delay
+// should be minimal.
+//
+// TODO(sumeer): make this configurable via a cluster setting.
+const epochLengthNanos = int64(time.Millisecond * 100)
+const epochClosingDeltaNanos = int64(time.Millisecond * 5)
+
+func epochForTimeNanos(t int64) int64 {
+	return t / epochLengthNanos
+}
+
+func newWaitingWork(
+	priority WorkPriority,
+	arrivalTimeWorkOrdering workOrderingKind,
+	createTime int64,
+	enqueueingTime time.Time,
+) *waitingWork {
 	ww := waitingWorkPool.Get().(*waitingWork)
 	ch := ww.ch
 	if ch == nil {
 		ch = make(chan grantChainID, 1)
 	}
 	*ww = waitingWork{
-		priority:   priority,
-		createTime: createTime,
-		ch:         ch,
-		heapIndex:  -1,
+		priority:                priority,
+		arrivalTimeWorkOrdering: arrivalTimeWorkOrdering,
+		createTime:              createTime,
+		epoch:                   epochForTimeNanos(createTime),
+		ch:                      ch,
+		heapIndex:               -1,
+		enqueueingTime:          enqueueingTime,
 	}
 	return ww
 }
@@ -631,14 +900,48 @@ func releaseWaitingWork(ww *waitingWork) {
 	waitingWorkPool.Put(ww)
 }
 
+// waitingWorkHeap is a heap of waiting work within a tenant. It is ordered in
+// decreasing order of priority, and within the same priority in increasing
+// order of createTime (to prefer older work) for FIFO, and in decreasing
+// order of createTime for LIFO. In the LIFO case the heap only contains
+// epochs that are closed.
+type waitingWorkHeap []*waitingWork
+
+var _ heap.Interface = (*waitingWorkHeap)(nil)
+
 func (wwh *waitingWorkHeap) remove(item *waitingWork) {
 	heap.Remove(wwh, item.heapIndex)
 }
 
 func (wwh *waitingWorkHeap) Len() int { return len(*wwh) }
 
+// Less does LIFO or FIFO ordering among work with the same priority. The
+// ordering to use is specified by the arrivalTimeWorkOrdering. When
+// transitioning from LIFO => FIFO or FIFO => LIFO, we can have work with
+// different arrivalTimeWorkOrderings in the heap (for the same priority). In
+// this case we err towards LIFO since this indicates a new or recent overload
+// situation. If it was a recent overload that no longer exists, we will be
+// able to soon drain these LIFO work items from the queue since they will get
+// admitted. Erring towards FIFO has the danger that if we are transitioning
+// to LIFO we will need to wait for those old queued items to be serviced
+// first, which will delay the transition.
+//
+// Less is not strict weak ordering since the transitivity property is not
+// satisfied in the presence of elements that have different values of
+// arrivalTimeWorkOrdering. This is acceptable for heap maintenance.
+// Example: Three work items with the same epoch where t1 < t2 < t3
+//  w3: (fifo, create: t3, epoch: e)
+//  w2: (lifo, create: t2, epoch: e)
+//  w1: (fifo, create: t1, epoch: e)
+//  w1 < w3, w3 < w2, w2 < w1, which is a cycle.
 func (wwh *waitingWorkHeap) Less(i, j int) bool {
 	if (*wwh)[i].priority == (*wwh)[j].priority {
+		if (*wwh)[i].arrivalTimeWorkOrdering == lifoWorkOrdering ||
+			(*wwh)[i].arrivalTimeWorkOrdering != (*wwh)[j].arrivalTimeWorkOrdering {
+			// LIFO, and the epoch is closed, so can simply use createTime.
+			return (*wwh)[i].createTime > (*wwh)[j].createTime
+		}
+		// FIFO.
 		return (*wwh)[i].createTime < (*wwh)[j].createTime
 	}
 	return (*wwh)[i].priority > (*wwh)[j].priority
@@ -654,6 +957,7 @@ func (wwh *waitingWorkHeap) Push(x interface{}) {
 	n := len(*wwh)
 	item := x.(*waitingWork)
 	item.heapIndex = n
+	item.inWaitingWorkHeap = true
 	*wwh = append(*wwh, item)
 }
 
@@ -664,6 +968,63 @@ func (wwh *waitingWorkHeap) Pop() interface{} {
 	old[n-1] = nil
 	item.heapIndex = -1
 	*wwh = old[0 : n-1]
+	return item
+}
+
+type openEpochsHeap []*waitingWork
+
+var _ heap.Interface = (*openEpochsHeap)(nil)
+
+func (oeh *openEpochsHeap) remove(item *waitingWork) {
+	heap.Remove(oeh, item.heapIndex)
+}
+
+func (oeh *openEpochsHeap) Len() int { return len(*oeh) }
+
+// Less orders in increasing order of epoch, and within the same epoch, with
+// decreasing priority and with the same priority with increasing CreateTime.
+// It is not typically dequeued from to admit work, but if it is, it will
+// behave close to the FIFO ordering in the waitingWorkHeap (not exactly FIFO
+// because work items with higher priority can be later than those with lower
+// priority if they have a higher epoch -- but epochs are coarse enough that
+// this should not be a factor). This close-to-FIFO is preferable since
+// dequeuing from this queue may be an indicator that the overload is going
+// away. There is also a risk with this close-to-FIFO behavior if we rapidly
+// fluctuate between overload and normal and doing FIFO here causes
+// transaction work to start but not finish because the rest of the work is
+// done using LIFO ordering. We may need to experiment before making a final
+// decision. When an epoch closes, a prefix of this heap will be dequeued and
+// added to the waitingWorkHeap.
+func (oeh *openEpochsHeap) Less(i, j int) bool {
+	if (*oeh)[i].epoch == (*oeh)[j].epoch {
+		if (*oeh)[i].priority == (*oeh)[j].priority {
+			return (*oeh)[i].createTime < (*oeh)[j].createTime
+		}
+		return (*oeh)[i].priority > (*oeh)[j].priority
+	}
+	return (*oeh)[i].epoch < (*oeh)[j].epoch
+}
+
+func (oeh *openEpochsHeap) Swap(i, j int) {
+	(*oeh)[i], (*oeh)[j] = (*oeh)[j], (*oeh)[i]
+	(*oeh)[i].heapIndex = i
+	(*oeh)[j].heapIndex = j
+}
+
+func (oeh *openEpochsHeap) Push(x interface{}) {
+	n := len(*oeh)
+	item := x.(*waitingWork)
+	item.heapIndex = n
+	*oeh = append(*oeh, item)
+}
+
+func (oeh *openEpochsHeap) Pop() interface{} {
+	old := *oeh
+	n := len(old)
+	item := old[n-1]
+	old[n-1] = nil
+	item.heapIndex = -1
+	*oeh = old[0 : n-1]
 	return item
 }
 
