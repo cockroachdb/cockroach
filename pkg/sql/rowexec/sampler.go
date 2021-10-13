@@ -236,7 +236,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	var da rowenc.DatumAlloc
 	var buf []byte
 	rowCount := 0
-	lastWakeupTime := timeutil.Now()
+	lastWakeupTime := timeutil.NowMonotonic()
 
 	var invKeys [][]byte
 	invRow := rowenc.EncDatumRow{rowenc.EncDatum{}}
@@ -286,7 +286,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 						)
 					}
 
-					elapsed := timeutil.Now().Sub(lastWakeupTime)
+					elapsed := timeutil.SinceMonotonic(lastWakeupTime)
 					// Throttle the processor according to fractionIdle.
 					// Wait time is calculated as follows:
 					//
@@ -306,7 +306,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 						break
 					}
 				}
-				lastWakeupTime = timeutil.Now()
+				lastWakeupTime = timeutil.NowMonotonic()
 			}
 		}
 
