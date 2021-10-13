@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -335,7 +336,19 @@ func runBackupProcessor(
 					// value. The sentinel value of 1 forces the ExportRequest to paginate
 					// after creating a single SST.
 					header.TargetBytes = 1
-
+					admissionHeader := roachpb.AdmissionHeader{
+						// Export requests are currently assigned NormalPri.
+						//
+						// TODO(bulkio): the priority should vary based on the urgency of
+						// these background requests. These exports should get LowPri,
+						// unless they are being retried and need to be completed in a
+						// timely manner for compliance with RPO and data retention
+						// policies. Consider deriving this from the UserPriority field.
+						Priority:                 int32(admission.NormalPri),
+						CreateTime:               timeutil.Now().UnixNano(),
+						Source:                   roachpb.AdmissionHeader_ROOT_KV,
+						NoMemoryReservedAtSource: true,
+					}
 					log.Infof(ctx, "sending ExportRequest for span %s (attempt %d, priority %s)",
 						span.span, span.attempts+1, header.UserPriority.String())
 					var rawRes roachpb.Response
@@ -353,8 +366,8 @@ func runBackupProcessor(
 								ReqSentTime: reqSentTime.String(),
 							})
 
-							rawRes, pErr = kv.SendWrappedWith(ctx, flowCtx.Cfg.DB.NonTransactionalSender(),
-								header, req)
+							rawRes, pErr = kv.SendWrappedWithAdmission(
+								ctx, flowCtx.Cfg.DB.NonTransactionalSender(), header, admissionHeader, req)
 							respReceivedTime = timeutil.Now()
 							if pErr != nil {
 								return pErr.GoError()

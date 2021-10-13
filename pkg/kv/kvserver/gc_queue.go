@@ -25,10 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -404,8 +406,10 @@ func makeGCQueueScoreImpl(
 }
 
 type replicaGCer struct {
-	repl  *Replica
-	count int32 // update atomically
+	repl                *Replica
+	count               int32 // update atomically
+	admissionController KVAdmissionController
+	storeID             roachpb.StoreID
 }
 
 var _ gc.GCer = &replicaGCer{}
@@ -429,8 +433,37 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 	ba.RangeID = r.repl.Desc().RangeID
 	ba.Timestamp = r.repl.Clock().Now()
 	ba.Add(&req)
-
-	if _, pErr := r.repl.Send(ctx, ba); pErr != nil {
+	// Since we are talking directly to the replica, we need to explicitly do
+	// admission control here, as we are bypassing server.Node.
+	var admissionHandle interface{}
+	if r.admissionController != nil {
+		ba.AdmissionHeader = roachpb.AdmissionHeader{
+			// GC is currently assigned NormalPri.
+			//
+			// TODO(kv): GC could be expected to be LowPri, so that it does not
+			// impact user-facing traffic when resources (e.g. CPU, write capacity
+			// of the store) are scarce. However long delays in GC can slow down
+			// user-facing traffic due to more versions in the store, and can
+			// increase write amplification of the store since there is more live
+			// data. Ideally, we should adjust this priority based on how far behind
+			// we are wrt GCing in this range.
+			Priority:                 int32(admission.NormalPri),
+			CreateTime:               timeutil.Now().UnixNano(),
+			Source:                   roachpb.AdmissionHeader_ROOT_KV,
+			NoMemoryReservedAtSource: true,
+		}
+		ba.Replica.StoreID = r.storeID
+		var err error
+		admissionHandle, err = r.admissionController.AdmitKVWork(ctx, roachpb.SystemTenantID, &ba)
+		if err != nil {
+			return err
+		}
+	}
+	_, pErr := r.repl.Send(ctx, ba)
+	if r.admissionController != nil {
+		r.admissionController.AdmittedKVWorkDone(admissionHandle)
+	}
+	if pErr != nil {
 		log.VErrEventf(ctx, 2, "%v", pErr.String())
 		return pErr.GoError()
 	}
@@ -531,7 +564,11 @@ func (gcq *gcQueue) process(
 			IntentCleanupBatchTimeout:              gcQueueIntentBatchTimeout,
 		},
 		conf.TTL(),
-		&replicaGCer{repl: repl},
+		&replicaGCer{
+			repl:                repl,
+			admissionController: gcq.store.cfg.KVAdmissionController,
+			storeID:             gcq.store.StoreID(),
+		},
 		func(ctx context.Context, intents []roachpb.Intent) error {
 			intentCount, err := repl.store.intentResolver.
 				CleanupIntents(ctx, intents, gcTimestamp, roachpb.PUSH_TOUCH)
