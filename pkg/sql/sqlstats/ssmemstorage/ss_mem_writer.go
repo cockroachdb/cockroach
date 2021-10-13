@@ -132,6 +132,7 @@ func (s *Container) RecordStatement(
 	stats.mu.distSQLUsed = key.DistSQL
 	stats.mu.fullScan = key.FullScan
 	stats.mu.database = key.Database
+	stats.mu.querySummary = key.QuerySummary
 
 	if created {
 		// stats size + stmtKey size + hash of the statementKey

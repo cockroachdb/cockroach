@@ -205,6 +205,7 @@ func (ex *connExecutor) prepare(
 		}
 		prepared.Statement = stmt.Statement
 		prepared.StatementNoConstants = stmt.StmtNoConstants
+		prepared.StatementSummary = stmt.StmtSummary
 
 		// Point to the prepared state, which can be further populated during query
 		// preparation.

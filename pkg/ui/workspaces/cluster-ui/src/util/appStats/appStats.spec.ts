@@ -110,6 +110,7 @@ describe("flattenStatementStats", () => {
         key: {
           key_data: {
             query: "SELECT * FROM foobar",
+            query_summary: "SELECT * FROM foobar",
             app: "foobar",
             distSQL: true,
             vec: false,
@@ -125,6 +126,7 @@ describe("flattenStatementStats", () => {
         key: {
           key_data: {
             query: "UPDATE foobar SET name = 'baz' WHERE id = 42",
+            query_summary: "UPDATE foobar SET name = 'baz' WHERE id = 42",
             app: "bazzer",
             distSQL: false,
             vec: false,
@@ -136,6 +138,60 @@ describe("flattenStatementStats", () => {
         },
         stats: {},
       },
+      {
+        key: {
+          key_data: {
+            query:
+              "SELECT app_name, aggregated_ts, fingerprint_id, metadata, statistics FROM system.app_statistics JOIN system.transaction_statistics ON crdb_internal.transaction_statistics.app_name = system.transaction_statistics.app_name",
+            query_summary:
+              "SELECT app_name, aggre... FROM system.app_statistics JOIN sys...",
+            app: "unique_pear",
+            distSQL: false,
+            vec: false,
+            opt: false,
+            full_scan: true,
+            failed: true,
+          },
+          node_id: 3,
+        },
+        stats: {},
+      },
+      {
+        key: {
+          key_data: {
+            query:
+              "INSERT INTO system.public.lease(\"descID\", version, \"nodeID\", expiration) VALUES ('1232', '111', __more2__)",
+            query_summary:
+              'INSERT INTO system.public.lease("descID", versi...)',
+            app: "test_summary",
+            distSQL: false,
+            vec: false,
+            opt: false,
+            full_scan: false,
+            failed: true,
+          },
+          node_id: 4,
+        },
+        stats: {},
+      },
+      {
+        key: {
+          key_data: {
+            query:
+              "UPDATE system.jobs SET status = $2, payload = $3, last_run = $4, num_runs = $5 WHERE internal_table_id = $1",
+            query_summary:
+              "UPDATE system.jobs SET status = $2, pa... WHERE internal_table_...",
+            app: "test1",
+            distSQL: false,
+            vec: false,
+            opt: false,
+            full_scan: false,
+            failed: true,
+          },
+          node_id: 5,
+        },
+        stats: {},
+      },
     ];
 
     const flattened = flattenStatementStats(stats);
@@ -144,6 +200,10 @@ describe("flattenStatementStats", () => {
 
     for (let i = 0; i < flattened.length; i++) {
       assert.equal(flattened[i].statement, stats[i].key.key_data.query);
+      assert.equal(
+        flattened[i].statement_summary,
+        stats[i].key.key_data.query_summary,
+      );
       assert.equal(flattened[i].app, stats[i].key.key_data.app);
       assert.equal(flattened[i].distSQL, stats[i].key.key_data.distSQL);
       assert.equal(flattened[i].vec, stats[i].key.key_data.vec);
