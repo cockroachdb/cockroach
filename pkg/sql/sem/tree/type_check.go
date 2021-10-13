@@ -473,9 +473,9 @@ func resolveCast(
 	}
 }
 
-func isEmptyArray(expr Expr) bool {
-	a, ok := expr.(*Array)
-	return ok && len(a.Exprs) == 0
+func isArrayExpr(expr Expr) bool {
+	_, ok := expr.(*Array)
+	return ok
 }
 
 // TypeCheck implements the Expr interface.
@@ -491,6 +491,7 @@ func (expr *CastExpr) TypeCheck(
 		return nil, err
 	}
 	expr.Type = exprType
+	canElideCast := true
 	switch {
 	case isConstant(expr.Expr):
 		c := expr.Expr.(Constant)
@@ -509,12 +510,21 @@ func (expr *CastExpr) TypeCheck(
 		// type we gave it before is not compatible with the usage here, then
 		// type-checking will fail as desired.
 		desired = exprType
-	case isEmptyArray(expr.Expr):
-		// An empty array can't be type-checked with a desired parameter of
-		// types.Any. If we're going to cast to another array type, which is a
-		// common pattern in SQL (select array[]::int[]), use the cast type as the
-		// the desired type.
+	case isArrayExpr(expr.Expr):
+		// If we're going to cast to another array type, which is a common pattern
+		// in SQL (select array[]::int[], select array[$1]::int[]), use the cast
+		// type as the the desired type.
 		if exprType.Family() == types.ArrayFamily {
+			// We can't elide the cast for arrays if the underlying typmod information
+			// is changed from the base type (e.g. `'{"hello", "world"}'::char(2)[]`
+			// should not be elided or the char(2) is lost).
+			// This needs to be checked here; otherwise the expr.Expr.TypeCheck below
+			// will have the same resolved type as exprType, which forces an incorrect
+			// elision.
+			contents := exprType.ArrayContents()
+			if baseType, ok := types.OidToType[contents.Oid()]; ok && !baseType.Identical(contents) {
+				canElideCast = false
+			}
 			desired = exprType
 		}
 	}
@@ -525,7 +535,7 @@ func (expr *CastExpr) TypeCheck(
 	}
 
 	// Elide the cast if it is a no-op.
-	if typedSubExpr.ResolvedType().Identical(exprType) {
+	if canElideCast && typedSubExpr.ResolvedType().Identical(exprType) {
 		return typedSubExpr, nil
 	}
 
