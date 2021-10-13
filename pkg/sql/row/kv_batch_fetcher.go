@@ -381,6 +381,9 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		f.batchResponseAccountedFor = returnedBytes
 	}
 	// Do admission control after we've accounted for the response bytes.
+	// TODO: remove
+	log.Infof(ctx, "sql-kv-response: br %t, read admission q %t",
+		br != nil, f.responseAdmissionQ != nil)
 	if br != nil && f.responseAdmissionQ != nil {
 		responseAdmission := admission.WorkInfo{
 			TenantID:   roachpb.SystemTenantID,

@@ -235,6 +235,8 @@ func (tb *tableWriterBase) tryDoResponseAdmission(ctx context.Context) error {
 	// Do admission control for response processing. This is the shared write
 	// path for most SQL mutations.
 	responseAdmissionQ := tb.txn.DB().SQLKVResponseAdmissionQ
+	// TODO: remove
+	log.Infof(ctx, "sql-kv-response: write admission q %t", responseAdmissionQ != nil)
 	if responseAdmissionQ != nil {
 		requestAdmissionHeader := tb.txn.AdmissionHeader()
 		responseAdmission := admission.WorkInfo{
