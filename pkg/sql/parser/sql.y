@@ -2995,6 +2995,10 @@ opt_with_schedule_options:
 // RESTORE <targets...> FROM <location...>
 //         [ AS OF SYSTEM TIME <expr> ]
 //         [ WITH <option> [= <value>] [, ...] ]
+// or
+// RESTORE SYSTEM USERS FROM <location...>
+//         [ AS OF SYSTEM TIME <expr> ]
+//         [ WITH <option> [= <value>] [, ...] ]
 //
 // Targets:
 //    TABLE <pattern> [, ...]
@@ -3053,6 +3057,25 @@ restore_stmt:
       From: $6.listOfStringOrPlaceholderOptList(),
       AsOf: $7.asOfClause(),
       Options: *($8.restoreOptions()),
+    }
+  }
+| RESTORE SYSTEM USERS FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+  {
+    $$.val = &tree.Restore{
+      SystemUsers: true,
+      From: $5.listOfStringOrPlaceholderOptList(),
+      AsOf: $6.asOfClause(),
+      Options: *($7.restoreOptions()),
+    }
+  }
+| RESTORE SYSTEM USERS FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+  {
+    $$.val = &tree.Restore{
+      SystemUsers: true,
+      Subdir: $5.expr(),
+      From: $7.listOfStringOrPlaceholderOptList(),
+      AsOf: $8.asOfClause(),
+      Options: *($9.restoreOptions()),
     }
   }
 | RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_of_clause

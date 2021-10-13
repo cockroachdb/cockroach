@@ -44,6 +44,8 @@ type TargetList struct {
 	Types     []*UnresolvedObjectName
 	// If the target is for all tables in a set of schemas.
 	AllTablesInSchema bool
+	// Whether the target is only system users and roles_members table
+	SystemUser bool
 
 	// ForRoles and Roles are used internally in the parser and not used
 	// in the AST. Therefore they do not participate in pretty-printing,

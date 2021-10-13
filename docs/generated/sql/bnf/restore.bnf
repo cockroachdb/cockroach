@@ -23,3 +23,15 @@ restore_stmt ::=
 	| 'RESTORE' ( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' subdirectory 'IN' ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )  'WITH' restore_options_list
 	| 'RESTORE' ( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' subdirectory 'IN' ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )  'WITH' 'OPTIONS' '(' restore_options_list ')'
 	| 'RESTORE' ( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' subdirectory 'IN' ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )  
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' restore_options_list
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' 'OPTIONS' '(' restore_options_list ')'
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )  'WITH' restore_options_list
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )  'WITH' 'OPTIONS' '(' restore_options_list ')'
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )  
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' subdirectory 'IN' ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' restore_options_list
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' subdirectory 'IN' ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' 'OPTIONS' '(' restore_options_list ')'
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' subdirectory 'IN' ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' subdirectory 'IN' ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )  'WITH' restore_options_list
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' subdirectory 'IN' ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )  'WITH' 'OPTIONS' '(' restore_options_list ')'
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' subdirectory 'IN' ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )  
