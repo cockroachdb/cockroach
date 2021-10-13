@@ -506,7 +506,7 @@ project
  ├── values
  │    └── () [type=tuple]
  └── projections
-      └── ARRAY['red','green']::color[] [as=array:1, type=color[]]
+      └── ARRAY['red','green'] [as=array:1, type=color[]]
 
 norm
 SELECT ARRAY['red', 'green']::color[]
@@ -519,19 +519,12 @@ values
 build
 SELECT ARRAY['foo']::color[]
 ----
-project
- ├── columns: array:1(color[]!null)
- ├── values
- │    └── () [type=tuple]
- └── projections
-      └── ARRAY['foo']::color[] [as=array:1, type=color[]]
+error (22P02): invalid input value for enum color: "foo"
 
 norm
 SELECT ARRAY['foo']::color[]
 ----
-values
- ├── columns: array:1(color[])
- └── (ARRAY['foo']::color[],) [type=tuple{color[]}]
+error (22P02): invalid input value for enum color: "foo"
 
 # Regression tests for #68233.
 build

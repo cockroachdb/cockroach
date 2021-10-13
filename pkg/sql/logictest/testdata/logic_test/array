@@ -2019,3 +2019,9 @@ query T
 SELECT array_remove(ARRAY[(1,'cat'),(2,'dog')], (3,'\xc03b4478eb'::BYTEA))
 ----
 {"(1,cat)","(2,dog)"}
+
+query T
+PREPARE regression_71394 AS SELECT ARRAY[$1]::int[];
+EXECUTE regression_71394(71394)
+----
+{71394}

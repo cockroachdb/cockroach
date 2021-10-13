@@ -4655,7 +4655,7 @@ scalar-group-by
  │    │    ├── scan abc
  │    │    │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
  │    │    └── projections
- │    │         └── ARRAY[0.90,0.95]::FLOAT8[] [as=column7:7]
+ │    │         └── ARRAY[0.9,0.95] [as=column7:7]
  │    └── windows
  │         └── percentile-disc [as=percentile_disc:8, frame="range from unbounded to unbounded"]
  │              ├── column7:7
@@ -4676,7 +4676,7 @@ scalar-group-by
  │    │    ├── scan abc
  │    │    │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
  │    │    └── projections
- │    │         └── ARRAY[0.90,0.95]::FLOAT8[] [as=column7:7]
+ │    │         └── ARRAY[0.9,0.95] [as=column7:7]
  │    └── windows
  │         └── percentile-cont [as=percentile_cont:8, frame="range from unbounded to unbounded"]
  │              ├── column7:7
