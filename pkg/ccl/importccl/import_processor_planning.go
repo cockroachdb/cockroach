@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package sql
+package importccl
 
 import (
 	"context"
@@ -21,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -35,168 +34,13 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-// RowResultWriter is a thin wrapper around a RowContainer.
-type RowResultWriter struct {
-	rowContainer *rowContainerHelper
-	rowsAffected int
-	err          error
-}
-
-var _ rowResultWriter = &RowResultWriter{}
-
-// NewRowResultWriter creates a new RowResultWriter.
-func NewRowResultWriter(rowContainer *rowContainerHelper) *RowResultWriter {
-	return &RowResultWriter{rowContainer: rowContainer}
-}
-
-// IncrementRowsAffected implements the rowResultWriter interface.
-func (b *RowResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
-	b.rowsAffected += n
-}
-
-// AddRow implements the rowResultWriter interface.
-func (b *RowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
-	if b.rowContainer != nil {
-		return b.rowContainer.addRow(ctx, row)
-	}
-	return nil
-}
-
-// SetError is part of the rowResultWriter interface.
-func (b *RowResultWriter) SetError(err error) {
-	b.err = err
-}
-
-// Err is part of the rowResultWriter interface.
-func (b *RowResultWriter) Err() error {
-	return b.err
-}
-
-// callbackResultWriter is a rowResultWriter that runs a callback function
-// on AddRow.
-type callbackResultWriter struct {
-	fn           func(ctx context.Context, row tree.Datums) error
-	rowsAffected int
-	err          error
-}
-
-var _ rowResultWriter = &callbackResultWriter{}
-
-// newCallbackResultWriter creates a new callbackResultWriter.
-func newCallbackResultWriter(
-	fn func(ctx context.Context, row tree.Datums) error,
-) *callbackResultWriter {
-	return &callbackResultWriter{fn: fn}
-}
-
-func (c *callbackResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
-	c.rowsAffected += n
-}
-
-func (c *callbackResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
-	return c.fn(ctx, row)
-}
-
-func (c *callbackResultWriter) SetError(err error) {
-	c.err = err
-}
-
-func (c *callbackResultWriter) Err() error {
-	return c.err
-}
-
-func getLastImportSummary(job *jobs.Job) roachpb.BulkOpSummary {
-	progress := job.Progress()
-	importProgress := progress.GetImport()
-	return importProgress.Summary
-}
-
-func makeImportReaderSpecs(
-	job *jobs.Job,
-	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
-	typeDescs []*descpb.TypeDescriptor,
-	from []string,
-	format roachpb.IOFileFormat,
-	nodes []roachpb.NodeID,
-	walltime int64,
-	user security.SQLUsername,
-) []*execinfrapb.ReadImportDataSpec {
-	details := job.Details().(jobspb.ImportDetails)
-	// For each input file, assign it to a node.
-	inputSpecs := make([]*execinfrapb.ReadImportDataSpec, 0, len(nodes))
-	progress := job.Progress()
-	importProgress := progress.GetImport()
-	for i, input := range from {
-		// Round robin assign CSV files to nodes. Files 0 through len(nodes)-1
-		// creates the spec. Future files just add themselves to the Uris.
-		if i < len(nodes) {
-			spec := &execinfrapb.ReadImportDataSpec{
-				Tables: tables,
-				Types:  typeDescs,
-				Format: format,
-				Progress: execinfrapb.JobProgress{
-					JobID: job.ID(),
-					Slot:  int32(i),
-				},
-				WalltimeNanos:         walltime,
-				Uri:                   make(map[int32]string),
-				ResumePos:             make(map[int32]int64),
-				UserProto:             user.EncodeProto(),
-				DatabasePrimaryRegion: details.DatabasePrimaryRegion,
-			}
-			inputSpecs = append(inputSpecs, spec)
-		}
-		n := i % len(nodes)
-		inputSpecs[n].Uri[int32(i)] = input
-		if importProgress.ResumePos != nil {
-			inputSpecs[n].ResumePos[int32(i)] = importProgress.ResumePos[int32(i)]
-		}
-	}
-
-	for i := range inputSpecs {
-		// TODO(mjibson): using the actual file sizes here would improve progress
-		// accuracy.
-		inputSpecs[i].Progress.Contribution = float32(len(inputSpecs[i].Uri)) / float32(len(from))
-	}
-	return inputSpecs
-}
-
-func presplitTableBoundaries(
-	ctx context.Context,
-	cfg *ExecutorConfig,
-	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
-) error {
-	var span *tracing.Span
-	ctx, span = tracing.ChildSpan(ctx, "import-pre-splitting-table-boundaries")
-	defer span.Finish()
-	expirationTime := cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
-	for _, tbl := range tables {
-		// TODO(ajwerner): Consider passing in the wrapped descriptors.
-		tblDesc := tabledesc.NewBuilder(tbl.Desc).BuildImmutableTable()
-		for _, span := range tblDesc.AllIndexSpans(cfg.Codec) {
-			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime); err != nil {
-				return err
-			}
-
-			log.VEventf(ctx, 1, "scattering index range %s", span.Key)
-			scatterReq := &roachpb.AdminScatterRequest{
-				RequestHeader: roachpb.RequestHeaderFromSpan(span),
-			}
-			if _, pErr := kv.SendWrapped(ctx, cfg.DB.NonTransactionalSender(), scatterReq); pErr != nil {
-				log.Errorf(ctx, "failed to scatter span %s: %s", span.Key, pErr)
-			}
-		}
-	}
-	return nil
-}
-
-// DistIngest is used by IMPORT to run a DistSQL flow to ingest data by starting
+// distImport is used by IMPORT to run a DistSQL flow to ingest data by starting
 // reader processes on many nodes that each read and ingest their assigned files
 // and then send back a summary of what they ingested. The combined summary is
 // returned.
-func DistIngest(
+func distImport(
 	ctx context.Context,
-	execCtx JobExecContext,
+	execCtx sql.JobExecContext,
 	job *jobs.Job,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	typeDescs []*descpb.TypeDescriptor,
@@ -318,7 +162,7 @@ func DistIngest(
 	}
 
 	var res roachpb.BulkOpSummary
-	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+	rowResultWriter := sql.NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		var counts roachpb.BulkOpSummary
 		if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
 			return err
@@ -333,9 +177,9 @@ func DistIngest(
 		}
 	}
 
-	recv := MakeDistSQLReceiver(
+	recv := sql.MakeDistSQLReceiver(
 		ctx,
-		&MetadataCallbackWriter{rowResultWriter: rowResultWriter, fn: metaFn},
+		sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
 		tree.Rows,
 		nil, /* rangeCache */
 		nil, /* txn - the flow does not read or write the database */
@@ -379,4 +223,89 @@ func DistIngest(
 	}
 
 	return res, nil
+}
+
+func getLastImportSummary(job *jobs.Job) roachpb.BulkOpSummary {
+	progress := job.Progress()
+	importProgress := progress.GetImport()
+	return importProgress.Summary
+}
+
+func makeImportReaderSpecs(
+	job *jobs.Job,
+	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
+	typeDescs []*descpb.TypeDescriptor,
+	from []string,
+	format roachpb.IOFileFormat,
+	nodes []roachpb.NodeID,
+	walltime int64,
+	user security.SQLUsername,
+) []*execinfrapb.ReadImportDataSpec {
+	details := job.Details().(jobspb.ImportDetails)
+	// For each input file, assign it to a node.
+	inputSpecs := make([]*execinfrapb.ReadImportDataSpec, 0, len(nodes))
+	progress := job.Progress()
+	importProgress := progress.GetImport()
+	for i, input := range from {
+		// Round robin assign CSV files to nodes. Files 0 through len(nodes)-1
+		// creates the spec. Future files just add themselves to the Uris.
+		if i < len(nodes) {
+			spec := &execinfrapb.ReadImportDataSpec{
+				Tables: tables,
+				Types:  typeDescs,
+				Format: format,
+				Progress: execinfrapb.JobProgress{
+					JobID: job.ID(),
+					Slot:  int32(i),
+				},
+				WalltimeNanos:         walltime,
+				Uri:                   make(map[int32]string),
+				ResumePos:             make(map[int32]int64),
+				UserProto:             user.EncodeProto(),
+				DatabasePrimaryRegion: details.DatabasePrimaryRegion,
+			}
+			inputSpecs = append(inputSpecs, spec)
+		}
+		n := i % len(nodes)
+		inputSpecs[n].Uri[int32(i)] = input
+		if importProgress.ResumePos != nil {
+			inputSpecs[n].ResumePos[int32(i)] = importProgress.ResumePos[int32(i)]
+		}
+	}
+
+	for i := range inputSpecs {
+		// TODO(mjibson): using the actual file sizes here would improve progress
+		// accuracy.
+		inputSpecs[i].Progress.Contribution = float32(len(inputSpecs[i].Uri)) / float32(len(from))
+	}
+	return inputSpecs
+}
+
+func presplitTableBoundaries(
+	ctx context.Context,
+	cfg *sql.ExecutorConfig,
+	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
+) error {
+	var span *tracing.Span
+	ctx, span = tracing.ChildSpan(ctx, "import-pre-splitting-table-boundaries")
+	defer span.Finish()
+	expirationTime := cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+	for _, tbl := range tables {
+		// TODO(ajwerner): Consider passing in the wrapped descriptors.
+		tblDesc := tabledesc.NewBuilder(tbl.Desc).BuildImmutableTable()
+		for _, span := range tblDesc.AllIndexSpans(cfg.Codec) {
+			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime); err != nil {
+				return err
+			}
+
+			log.VEventf(ctx, 1, "scattering index range %s", span.Key)
+			scatterReq := &roachpb.AdminScatterRequest{
+				RequestHeader: roachpb.RequestHeaderFromSpan(span),
+			}
+			if _, pErr := kv.SendWrapped(ctx, cfg.DB.NonTransactionalSender(), scatterReq); pErr != nil {
+				log.Errorf(ctx, "failed to scatter span %s: %s", span.Key, pErr)
+			}
+		}
+	}
+	return nil
 }
