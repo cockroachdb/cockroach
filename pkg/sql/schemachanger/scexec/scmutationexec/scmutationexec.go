@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -22,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/descriptorutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -34,6 +37,11 @@ type DescriptorReader interface {
 	GetMutableTableByID(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error)
 	GetAnyDescriptorByID(ctx context.Context, id descpb.ID) (catalog.MutableDescriptor, error)
 	AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo)
+}
+
+type DescriptorCreator interface {
+	AddUncommittedDescriptor(ctx context.Context, desc catalog.MutableDescriptor) error
+	FinalizeAllMutations(ctx context.Context, id descpb.ID) error
 }
 
 // SyntheticDescriptorWriter encapsulates logic for
@@ -60,6 +68,7 @@ type CommentWriter interface {
 // namespaces, comments to help support schema changer mutations.
 type Catalog interface {
 	DescriptorReader
+	DescriptorCreator
 	SyntheticDescriptorWriter
 	NamespaceWriter
 	CommentWriter
@@ -632,6 +641,19 @@ func (m *visitor) DropForeignKeyRef(ctx context.Context, op scop.DropForeignKeyR
 		table.TableDesc().InboundFKs = newFks
 	}
 	return nil
+}
+
+func (m *visitor) CreateEmptyTableDescriptor(
+	ctx context.Context, op scop.CreateEmptyTableDescriptor,
+) error {
+	tableDesc := tabledesc.InitTableDescriptor(op.TableID,
+		op.SchemaID, op.DatabaseID, op.Name, hlc.Timestamp{}, nil, tree.PersistencePermanent)
+	mutableDesc := catalogkv.NewBuilder(tableDesc.DescriptorProto()).BuildCreatedMutable()
+	return m.catalog.AddUncommittedDescriptor(ctx, mutableDesc)
+}
+
+func (m *visitor) FinalizeAllMutations(ctx context.Context, op scop.FinalizeAllMutations) error {
+	return m.catalog.FinalizeAllMutations(ctx, op.TableID)
 }
 
 var _ scop.MutationVisitor = (*visitor)(nil)

@@ -67,8 +67,8 @@ func (n *explainDDLNode) startExec(params runParams) error {
 		}
 	}
 	sc, err := scplan.MakePlan(scNodes.plannedState, scplan.Params{
-		ExecutionPhase: scop.PostCommitPhase,
-		// TODO(ajwerner): Populate created descriptors.
+		ExecutionPhase:       scop.PostCommitPhase,
+		CreatedDescriptorIDs: scNodes.metaData.CreatedDescriptors,
 	})
 	if err != nil {
 		return pgerror.Wrap(err, pgcode.FeatureNotSupported, "new schema changer failed executing this operation.")

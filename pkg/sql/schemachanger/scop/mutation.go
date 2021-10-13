@@ -244,10 +244,27 @@ type RemoveSequenceOwnedBy struct {
 }
 
 // SetColumnName makes a column only to allocate
-// the name and ID
+// the name and ID.
 type SetColumnName struct {
 	mutationOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
 	Name     string
+}
+
+// CreateEmptyTableDescriptor makes an uncommitted empty
+// table descriptor.
+type CreateEmptyTableDescriptor struct {
+	mutationOp
+	Name       string
+	DatabaseID descpb.ID
+	SchemaID   descpb.ID
+	TableID    descpb.ID
+}
+
+// FinalizeAllMutations finalizes all the mutations
+// on a table descriptor.
+type FinalizeAllMutations struct {
+	mutationOp
+	TableID descpb.ID
 }

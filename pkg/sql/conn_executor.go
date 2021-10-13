@@ -2927,6 +2927,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		ctx,
 		scop.PreCommitPhase,
 		ex.extraTxnState.schemaChangerState.state,
+		ex.extraTxnState.schemaChangerState.metaData,
 		executor,
 		scs.stmts,
 	)
@@ -2982,12 +2983,13 @@ func runNewSchemaChanger(
 	ctx context.Context,
 	phase scop.Phase,
 	state scpb.State,
+	metaData scbuild.BuildMetaData,
 	executor *scexec.Executor,
 	stmts []string,
 ) (after scpb.State, _ error) {
 	sc, err := scplan.MakePlan(state, scplan.Params{
-		ExecutionPhase: phase,
-		// TODO(ajwerner): Populate the set of new descriptors
+		ExecutionPhase:       phase,
+		CreatedDescriptorIDs: metaData.CreatedDescriptors,
 	})
 	if err != nil {
 		return nil, err

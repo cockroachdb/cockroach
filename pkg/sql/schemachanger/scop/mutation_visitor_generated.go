@@ -49,6 +49,8 @@ type MutationVisitor interface {
 	DropForeignKeyRef(context.Context, DropForeignKeyRef) error
 	RemoveSequenceOwnedBy(context.Context, RemoveSequenceOwnedBy) error
 	SetColumnName(context.Context, SetColumnName) error
+	CreateEmptyTableDescriptor(context.Context, CreateEmptyTableDescriptor) error
+	FinalizeAllMutations(context.Context, FinalizeAllMutations) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -184,4 +186,14 @@ func (op RemoveSequenceOwnedBy) Visit(ctx context.Context, v MutationVisitor) er
 // Visit is part of the MutationOp interface.
 func (op SetColumnName) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.SetColumnName(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op CreateEmptyTableDescriptor) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.CreateEmptyTableDescriptor(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op FinalizeAllMutations) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.FinalizeAllMutations(ctx, op)
 }

@@ -49,7 +49,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		Descs:        p.Descriptors(),
 		AuthAccessor: p,
 	}
-	outputNodes, err := scbuild.Build(ctx, buildDeps, p.extendedEvalCtx.SchemaChangerState.state, stmt)
+	outputNodes, buildMetaData, err := scbuild.Build(ctx, buildDeps, p.extendedEvalCtx.SchemaChangerState.state, stmt)
 	if scbuild.HasNotImplemented(err) && mode == sessiondatapb.UseNewSchemaChangerOn {
 		return nil, false, nil
 	}
@@ -63,6 +63,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	}
 	return &schemaChangePlanNode{
 		plannedState: outputNodes,
+		metaData:     buildMetaData,
 	}, true, nil
 }
 
@@ -120,6 +121,7 @@ type schemaChangePlanNode struct {
 	// the nodes that existed preceding the current statement with the output of
 	// the built current statement.
 	plannedState scpb.State
+	metaData     scbuild.BuildMetaData
 }
 
 func (s *schemaChangePlanNode) startExec(params runParams) error {
@@ -129,12 +131,13 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		nil /* backfiller */, nil /* jobTracker */, p.ExecCfg().NewSchemaChangerTestingKnobs,
 		params.extendedEvalCtx.ExecCfg.JobRegistry, params.p.execCfg.InternalExecutor)
 	after, err := runNewSchemaChanger(
-		params.ctx, scop.StatementPhase, s.plannedState, executor, scs.stmts,
+		params.ctx, scop.StatementPhase, s.plannedState, s.metaData, executor, scs.stmts,
 	)
 	if err != nil {
 		return err
 	}
 	scs.state = after
+	scs.metaData = s.metaData
 	return nil
 }
 

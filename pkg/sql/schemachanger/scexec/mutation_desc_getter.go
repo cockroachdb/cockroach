@@ -142,4 +142,22 @@ func (m *mutationDescGetter) RemoveObjectComments(ctx context.Context, id descpb
 	return err
 }
 
+func (m *mutationDescGetter) AddUncommittedDescriptor(
+	ctx context.Context, desc catalog.MutableDescriptor,
+) error {
+	return m.descs.AddUncommittedDescriptor(desc)
+}
+
+func (m *mutationDescGetter) FinalizeAllMutations(ctx context.Context, id descpb.ID) error {
+	tableDesc, err := m.descs.GetMutableTableByID(ctx, m.txn, id, tree.ObjectLookupFlagsWithRequired())
+	if err != nil {
+		return err
+	}
+	// Finalize all the mutations
+	for _, mutation := range tableDesc.GetMutations() {
+		tableDesc.MakeMutationComplete(mutation)
+	}
+	return nil
+}
+
 var _ scmutationexec.Catalog = (*mutationDescGetter)(nil)

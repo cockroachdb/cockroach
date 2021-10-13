@@ -14,13 +14,18 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -89,4 +94,98 @@ func (b *buildContext) dropSequence(ctx context.Context, n *tree.DropSequence) {
 		}
 		b.dropSequenceDesc(ctx, table, n.DropBehavior)
 	}
+}
+
+// createSequence builds targets and transforms the provided schema change nodes
+// accordingly, given an CREATE SEQUENCE statement.
+func (b *buildContext) createSequence(ctx context.Context, n *tree.CreateSequence) {
+	_, prefix, err := resolver.ResolveObjectNamePrefix(ctx,
+		b.Res,
+		b.EvalCtx.SessionData().Database,
+		b.EvalCtx.SessionData().SearchPath,
+		&n.Name.ObjectNamePrefix)
+	if err != nil {
+		panic(err)
+	}
+	_, desc, err := resolver.ResolveExistingTableObject(ctx, b.Res, &n.Name,
+		tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				Required: false,
+			},
+		})
+	if err != nil {
+		panic(err)
+	}
+	// FIXME: Support If not exists...
+	if desc != nil {
+		panic(sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), n.Name.FQString()))
+	}
+	// Allocate the namespace and ID for this object.
+	descID, err := catalogkv.GenerateUniqueDescID(ctx, b.EvalCtx.DB, b.EvalCtx.Codec)
+	if err != nil {
+		panic(err)
+	}
+	nameSpaceEntry := scpb.Namespace{
+		DatabaseID:   prefix.Database.GetID(),
+		SchemaID:     prefix.Schema.GetID(),
+		DescriptorID: descID,
+		Name:         n.Name.ObjectName.String(),
+	}
+	b.addNode(scpb.Target_ADD, &nameSpaceEntry)
+	// Create a new sequence element.
+	sequenceEntry := scpb.Sequence{
+		SequenceID: descID,
+	}
+	b.addNode(scpb.Target_ADD, &sequenceEntry)
+	// Loop over any sequence options and pick them up
+	for _, option := range n.Options {
+		/*	SeqOptAs        = "AS"
+			SeqOptCycle     = "CYCLE"
+			SeqOptNoCycle   = "NO CYCLE"
+			SeqOptOwnedBy   = "OWNED BY"
+			SeqOptCache     = "CACHE"
+			SeqOptIncrement = "INCREMENT"
+			SeqOptMinValue  = "MINVALUE"
+			SeqOptMaxValue  = "MAXVALUE"
+			SeqOptStart     = "START"
+			SeqOptVirtual   = "VIRTUAL"*/
+		switch option.Name {
+		default:
+			panic(option)
+		}
+	}
+
+	// Add the column...
+	sequenceColumnName := scpb.ColumnName{
+		TableID:  descID,
+		ColumnID: tabledesc.SequenceColumnID,
+		Name:     tabledesc.SequenceColumnName,
+	}
+	b.addNode(scpb.Target_ADD, &sequenceColumnName)
+	sequenceColumn := scpb.Column{
+		TableID:    descID,
+		ColumnID:   tabledesc.SequenceColumnID,
+		Type:       types.Int,
+		FamilyName: "primary",
+		FamilyID:   keys.SequenceColumnFamilyID,
+	}
+
+	b.addNode(scpb.Target_ADD, &sequenceColumn)
+	b.buildMetaData.CreatedDescriptors.Add(descID)
+	/*	indexDescriptor := scpb.PrimaryIndex{
+			TableID: descID,
+			Index: descpb.IndexDescriptor{
+				ID:                  keys.SequenceIndexID,
+				Name:                tabledesc.PrimaryKeyIndexName,
+				KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
+				KeyColumnNames:      []string{tabledesc.SequenceColumnName},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				EncodingType:        descpb.PrimaryIndexEncoding,
+				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+			},
+		}
+		b.addNode(scpb.Target_ADD, &indexDescriptor)*/
+	// FIXME: Commit the column mutations faster some how...
+	// FIXME: Create a single column...
+	// FIXME: Other information?
 }

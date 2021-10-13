@@ -52,6 +52,14 @@ type Dependencies struct {
 	AuthAccessor AuthorizationAccessor
 }
 
+// FIXME: Stupid hack, we should pick up the event log stuff..
+
+// BuildMetaData metadata for generated nodes, used information not inside
+// the nodes themselves.
+type BuildMetaData struct {
+	CreatedDescriptors catalog.DescriptorIDSet
+}
+
 // buildContext is the entry point for planning schema changes. From AST nodes
 // for DDL statements, it constructs targets which represent schema changes to
 // be performed.
@@ -66,7 +74,8 @@ type buildContext struct {
 
 	// output contains the internal state when building targets for an individual
 	// statement.
-	output scpb.State
+	output        scpb.State
+	buildMetaData BuildMetaData
 }
 
 type notImplementedError struct {
@@ -116,10 +125,11 @@ func (e *ConcurrentSchemaChangeError) DescriptorID() descpb.ID {
 // Build constructs a new set state from an initial state and a statement.
 func Build(
 	ctx context.Context, dependencies Dependencies, initial scpb.State, n tree.Statement,
-) (built scpb.State, err error) {
+) (built scpb.State, metaData BuildMetaData, err error) {
 	buildContext := &buildContext{
-		Dependencies: dependencies,
-		output:       cloneState(initial),
+		Dependencies:  dependencies,
+		output:        cloneState(initial),
+		buildMetaData: metaData,
 	}
 	return buildContext.build(ctx, n)
 }
@@ -137,7 +147,9 @@ func cloneState(state scpb.State) scpb.State {
 
 // build builds targets and transforms the provided schema change nodes
 // accordingly, given a statement.
-func (b *buildContext) build(ctx context.Context, n tree.Statement) (output scpb.State, err error) {
+func (b *buildContext) build(
+	ctx context.Context, n tree.Statement,
+) (output scpb.State, buildMeta BuildMetaData, err error) {
 	defer func() {
 		if recErr := recover(); recErr != nil {
 			if errObj, ok := recErr.(error); ok {
@@ -162,13 +174,15 @@ func (b *buildContext) build(ctx context.Context, n tree.Statement) (output scpb
 		b.dropDatabase(ctx, n)
 	case *tree.AlterTable:
 		b.alterTable(ctx, n)
+	case *tree.CreateSequence:
+		b.createSequence(ctx, n)
 	default:
-		return nil, &notImplementedError{n: n}
+		return nil, b.buildMetaData, &notImplementedError{n: n}
 	}
 	// Optimize the generated nodes to apply simplification
 	// rules to avoid useless operations.
 	b.optimizeNodes(ctx)
-	return b.output, nil
+	return b.output, b.buildMetaData, nil
 }
 
 func (b *buildContext) forEachNodeOfType(
