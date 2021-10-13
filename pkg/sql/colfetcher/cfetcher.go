@@ -536,7 +536,6 @@ func (rf *cFetcher) Init(
 			if ok && neededCols.Contains(int(id)) {
 				if compositeColumnIDs.Contains(int(id)) {
 					table.compositeIndexColOrdinals.Add(colIdx)
-				} else {
 					table.neededValueColsByIdx.Remove(colIdx)
 				}
 			}
