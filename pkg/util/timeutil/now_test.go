@@ -10,10 +10,67 @@
 
 package timeutil
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func BenchmarkNow(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		Now()
+	type test struct {
+		name    string
+		nowFunc func() time.Time
+	}
+	for _, tc := range []test{
+		{name: "stdlib-now",
+			nowFunc: time.Now,
+		},
+		{
+			name:    "timeutil-now",
+			nowFunc: Now,
+		},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				Now()
+			}
+		})
+	}
+}
+
+func BenchmarkSince(b *testing.B) {
+	type test struct {
+		name         string
+		nowFunc      func() time.Time
+		useMonotonic bool
+	}
+	for _, tc := range []test{
+		{name: "stdlib-now",
+			nowFunc: time.Now,
+		},
+		{
+			name:    "timeutil-now",
+			nowFunc: Now,
+		},
+		{
+			name:         "monotonic",
+			useMonotonic: true,
+		},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			var start time.Time
+			var startMonotonic MonotonicTime
+			if !tc.useMonotonic {
+				start = tc.nowFunc()
+			} else {
+				startMonotonic = NowMonotonic()
+			}
+			for i := 0; i < b.N; i++ {
+				if !tc.useMonotonic {
+					Since(start)
+				} else {
+					SinceMonotonic(startMonotonic)
+				}
+			}
+		})
 	}
 }

@@ -536,7 +536,7 @@ func (t *Tracer) startSpanGeneric(
 		opts.LogTags = opts.Parent.i.crdb.logTags
 	}
 
-	startTime := time.Now()
+	startTime := timeutil.NowMonotonic()
 
 	// First, create any external spans that we may need (OpenTelemetry, net/trace).
 	// We do this early so that they are available when we construct the main Span,
@@ -545,7 +545,7 @@ func (t *Tracer) startSpanGeneric(
 	var otelSpan oteltrace.Span
 	if otelTr := t.getOtelTracer(); otelTr != nil {
 		parentSpan, parentContext := opts.otelContext()
-		otelSpan = makeOtelSpan(otelTr, opName, parentSpan, parentContext, opts.RefType, startTime, opts.SpanKind)
+		otelSpan = makeOtelSpan(otelTr, opName, parentSpan, parentContext, opts.RefType, startTime.ToTime(), opts.SpanKind)
 		// If LogTags are given, pass them as tags to the otel span.
 		// Regular tags are populated later, via the top-level Span.
 		if opts.LogTags != nil {
