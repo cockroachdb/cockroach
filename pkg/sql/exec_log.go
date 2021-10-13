@@ -197,7 +197,7 @@ func (p *planner) maybeLogStatementInternal(
 	// The session's application_name.
 	appName := p.EvalContext().SessionData().ApplicationName
 	// The duration of the query so far. Age is the duration expressed in milliseconds.
-	queryDuration := timeutil.Now().Sub(startTime)
+	queryDuration := timeutil.Since(startTime)
 	age := float32(queryDuration.Nanoseconds()) / 1e6
 	// The text of the error encountered, if the query did in fact end
 	// in error.

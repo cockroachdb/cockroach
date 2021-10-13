@@ -170,7 +170,7 @@ GRANT admin TO foo`); err != nil {
 		func() {
 			// Now attempt to connect with a different user. We're expecting a timeout
 			// within 5 seconds.
-			start := timeutil.Now()
+			start := timeutil.NowMonotonic()
 			dbSQL, err := pgxConn(t, barURL)
 			if err == nil {
 				defer func() { _ = dbSQL.Close(ctx) }()
@@ -178,7 +178,7 @@ GRANT admin TO foo`); err != nil {
 			if !testutils.IsError(err, "internal error while retrieving user account") {
 				t.Fatalf("expected error during connection, got %v", err)
 			}
-			timeoutDur := timeutil.Now().Sub(start)
+			timeoutDur := timeutil.SinceMonotonic(start)
 			if timeoutDur > 5*time.Second {
 				t.Fatalf("timeout lasted for more than 5 second (%s)", timeoutDur)
 			}
@@ -218,7 +218,7 @@ GRANT admin TO foo`); err != nil {
 		func() {
 			// Now attempt to connect with foo. We're expecting a timeout within 5
 			// seconds as the membership cache is invalid.
-			start := timeutil.Now()
+			start := timeutil.NowMonotonic()
 			dbSQL, err := pgxConn(t, fooURL)
 			if err == nil {
 				defer func() { _ = dbSQL.Close(ctx) }()
@@ -226,7 +226,7 @@ GRANT admin TO foo`); err != nil {
 			if !testutils.IsError(err, "internal error while retrieving user account memberships") {
 				t.Fatalf("expected error during connection, got %v", err)
 			}
-			timeoutDur := timeutil.Now().Sub(start)
+			timeoutDur := timeutil.SinceMonotonic(start)
 			if timeoutDur > 5*time.Second {
 				t.Fatalf("timeout lasted for more than 5 second (%s)", timeoutDur)
 			}

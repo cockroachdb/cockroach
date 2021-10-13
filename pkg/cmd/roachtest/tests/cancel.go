@@ -97,7 +97,7 @@ func registerCancel(r registry.Registry) {
 				const cancelQuery = `CANCEL QUERIES
 	SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query not like '%SHOW CLUSTER QUERIES%'`
 				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "`+cancelQuery+`"`)
-				cancelStartTime := timeutil.Now()
+				cancelStartTime := timeutil.NowMonotonic()
 
 				select {
 				case err, ok := <-errCh:
@@ -105,7 +105,7 @@ func registerCancel(r registry.Registry) {
 						t.Fatal(err)
 					}
 					// If errCh is closed, then the cancellation was successful.
-					timeToCancel := timeutil.Now().Sub(cancelStartTime)
+					timeToCancel := timeutil.SinceMonotonic(cancelStartTime)
 					fmt.Printf("canceling q%d took %s\n", queryNum, timeToCancel)
 
 				case <-time.After(5 * time.Second):

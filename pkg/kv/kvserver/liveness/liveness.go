@@ -834,13 +834,13 @@ func (nl *NodeLiveness) heartbeatInternal(
 ) (err error) {
 	ctx, sp := tracing.EnsureChildSpan(ctx, nl.ambientCtx.Tracer, "liveness heartbeat")
 	defer sp.Finish()
-	defer func(start time.Time) {
-		dur := timeutil.Now().Sub(start)
+	defer func(start timeutil.MonotonicTime) {
+		dur := timeutil.SinceMonotonic(start)
 		nl.metrics.HeartbeatLatency.RecordValue(dur.Nanoseconds())
 		if dur > time.Second {
 			log.Warningf(ctx, "slow heartbeat took %s; err=%v", dur, err)
 		}
-	}(timeutil.Now())
+	}(timeutil.NowMonotonic())
 
 	// Collect a clock reading from before we begin queuing on the heartbeat
 	// semaphore. This method (attempts to, see [*]) guarantees that, if

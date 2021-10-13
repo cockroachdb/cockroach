@@ -429,7 +429,7 @@ func (ib *indexBackfiller) buildIndexEntryBatch(
 
 	ctx, traceSpan := tracing.ChildSpan(tctx, "indexBatch")
 	defer traceSpan.Finish()
-	start := timeutil.Now()
+	start := timeutil.NowMonotonic()
 	var entries []rowenc.IndexEntry
 	if err := ib.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetFixedTimestamp(ctx, readAsOf); err != nil {
@@ -444,7 +444,7 @@ func (ib *indexBackfiller) buildIndexEntryBatch(
 	}); err != nil {
 		return nil, nil, 0, err
 	}
-	prepTime := timeutil.Now().Sub(start)
+	prepTime := timeutil.SinceMonotonic(start)
 	log.VEventf(ctx, 3, "index backfill stats: entries %d, prepare %+v",
 		len(entries), prepTime)
 
