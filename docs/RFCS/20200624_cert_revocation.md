@@ -194,7 +194,7 @@ to a large interval (default 24 hours).
 To achieve this, we define a new system config key `LastCertificateRevocationRefreshRequestTimestamp`.
 
 Upon triggering the cache refresh, the node where the refresh was
-triggerred writes the current time to this key. Gossip then propagates
+triggered writes the current time to this key. Gossip then propagates
 the update to all other nodes. Eventually all nodes learn of the the
 refresh request.
 
@@ -298,7 +298,7 @@ In practice, CRLs are fed using two mechanisms:
   Services that support `CRLDistributionPoints` should fetch the CRLs
   prior to validating certs signed by that CA.
 
-  A particular pitfall/chalenge with this field is that there may be
+  A particular pitfall/challenge with this field is that there may be
   multiple intermediate CAs, each with its own
   `CRLDistributionPoints`. Some of the CA certificates may be provided
   only during the TLS connection by the client, as part of the TLS
@@ -351,7 +351,7 @@ In practice, CRLs are fed using two mechanisms:
   For each URL in this list it checks if it has an entry in the URL ->
   timestamp map. If it does not (URL not known yet), or if the timestamp
   is older than the configured refresh interval, it fetches that URL
-  psynchronously and updates the cache with the results. If there is an
+  asynchronously and updates the cache with the results. If there is an
   error, the URL -> timestamp map is not updated and the TLS cert
   validation fails.
 

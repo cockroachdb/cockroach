@@ -61,7 +61,7 @@ details are relevant, the RFC can include a link to the prototype
 (which may necessitate cleaning up some of the prototype code at the
 reviewer's request). Note that one of the significant benefits of an
 RFC is that it forces bigger picture thinking which readers can then
-disect. In this respect an RFC is complimentary to a prototype which
+dissect. In this respect an RFC is complimentary to a prototype which
 forces details to be considered.
 
 Writing an RFC is not a necessary outcome for a successful

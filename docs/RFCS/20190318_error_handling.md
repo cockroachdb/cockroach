@@ -84,7 +84,7 @@ Table of contents:
 - [Blindness to error causes in telemetry](#Blindness-to-error-causes-in-telemetry)
 - [Barrier errors with debugging details](#Barrier-errors-with-debugging-details)
 - [Stack traces for troubleshooting](#Stack-traces-for-troubleshooting)
-- [Unexpected errors encoutnered while handling other errors](#Unexpected-errors-encountered-while-handling-other-errors)
+- [Unexpected errors encountered while handling other errors](#Unexpected-errors-encountered-while-handling-other-errors)
 - [Ignored, potentially important errors](#Ignored-potentially-important-errors)
 - [Motivation for a new error library: summary](#Motivation-for-a-new-error-library-summary)
 
@@ -217,7 +217,7 @@ to human users.
 
 For example, consider the code in `replica_command.go` which does
 different things depending on whether the error message indicates that
-the store is "amost out of disk space" or "busy applying snapshots".
+the store is "almost out of disk space" or "busy applying snapshots".
 
 If (hypothetically) a product management study found out that users
 find the distinction confusing and would be better satisfied by
@@ -618,7 +618,7 @@ In the proposed library, we provide the following two features:
 
 - "hint" annotations. This is used to suggest a course of action to
   the user. For example we use this to tell the user to search on
-  Github or open an issue if they encounter an internal error or an
+  GitHub or open an issue if they encounter an internal error or an
   error due to a feature in PostgreSQL that is not supported in
   CockroachDB.
 
@@ -648,7 +648,7 @@ Throughout the SQL package (and presumably over time throughout
 CockroachDB) errors can be annotated with "telemetry keys" to be
 incremented when the error flows out of a server towards a client.
 
-This is used to e.g. link errors to existing issues on Github.
+This is used to e.g. link errors to existing issues on GitHub.
 
 The telemetry keys are stored in the error chain and can be retrieved
 via the accessor `TelemetryKeys() []string`.
@@ -845,7 +845,7 @@ Like in the previous section, the introduction of a barrier error
 ensures that any semantic value in the error returned by
 `thisNeverFails` is properly forgotten. This way, any function that
 contains calls to `NewAssertionFailureWithWrappedf` (and other
-variants withous an original error, like `AssertionFailed`) always
+variants without an original error, like `AssertionFailed`) always
 have a simple contract: they either return the errors they were
 predicting to return, or a barrier without (visible) cause. There is
 no way for unexpected errors with arbitrary payloads to come out of
@@ -1214,7 +1214,7 @@ Summary of purposes:
 - `report` provides a standalone and intelligent Sentry reporter for error objects.
 - `safedetails` enable the embedding of additional PII-free detail strings in errors.
 - `assert`, `issuelink`, `hintdetail`, `telemetrykey`, `pgcode`, `pgerror` provide feature parity with the original `pgerror` package.
-  Note however that PostreSQL-specific behavior is encapsulated in packages `pgcode` and `pgerror`, and the other sub-packages
+  Note however that PostgreSQL-specific behavior is encapsulated in packages `pgcode` and `pgerror`, and the other sub-packages
   were designed to be relevant for non-SQL code.
 - `withstack`, `errutil` provide feature parity with Go's `errors` and `github.com/pkg/errors`.
 
@@ -1424,7 +1424,7 @@ message EncodedErrorDetails {
 message ErrorTypeMark {
   // The family name identifies the error type.
   // This is equal to original_type_name above in the common case, but
-  // can be overriden when e.g. the package that defines the type
+  // can be overridden when e.g. the package that defines the type
   // changes path.
   // This is the field also used for looking up a decode function.
   string family_name = 1;
@@ -1474,7 +1474,7 @@ implements the `error` interface.
 
 The two types `opaqueLeaf` and `opaqueWrapper` are defined exclusively
 to capture payloads that cannot be decoded, and are used by
-`EncodeError` to support perfect fowarding of error payloads.
+`EncodeError` to support perfect forwarding of error payloads.
 
 #### Discussion: callback registration vs. interfaces
 
@@ -1527,7 +1527,7 @@ Table of contents:
 To support network-agnostic identification of
 causes, the library provides *error markers* used to extend
 the behavior of `errors.Is()`: `Is(err, ref)` will return `true` if
-*either* `err == ref` *or* their markers are qual.
+*either* `err == ref` *or* their markers are equal.
 
 Markers are computed for all error types in a way that aims to be agnostic
 and identify a particular error object. In the common case, a mark is
@@ -2271,7 +2271,7 @@ facility from CockroachDB's `log` package.
 // them using the Safe() function.
 //
 // The annotated strings are not visible in the resulting error's
-// main message rechable via Error().
+// main message reachable via Error().
 func WithSafeDetails(err error, format string, args ...interface{}) error
 
 // A SafeType object can be reported verbatim, i.e. does not leak
@@ -2494,7 +2494,7 @@ package](#report-Standard-and-general-Sentry-reports).
 
 The primary functionality of the `hintdetail` package is to provide
 simple wrappers (`WithHint`, `WithDetail`) to add decorate existing
-errros with additional hint and detail strings.
+errors with additional hint and detail strings.
 
 Additional cleverness is then present in the functions that collect
 them from an error chain:
@@ -2589,7 +2589,7 @@ Table of contents:
 
 #### `pgerror`: Overview
 
-This package provides a simple wapper that adds a pg code annotation
+This package provides a simple wrapper that adds a pg code annotation
 to an existing error. The wrapper can be constructed using
 `WithCandidateCode()`.
 
@@ -2628,7 +2628,7 @@ func WithCandidateCode(err error, code string) error
 // has a candidate pg error code.
 func IsCandidateCode(err error) bool
 
-// HasCandidateCode returns tue iff the error or one of its causes
+// HasCandidateCode returns true iff the error or one of its causes
 // has a candidate pg error code.
 func HasCandidateCode(err error) bool
 
@@ -2810,7 +2810,7 @@ network boundaries would evolve as follows:
      use/produce structured errors, we need to take care of the
      following:
 
-     - a `pgerror.Error` (or `roachpb.UhandledRetryableError`) must
+     - a `pgerror.Error` (or `roachpb.UnhandledRetryableError`) must
        still be produced *alongside* the structured error to be picked
        up by old-style clients. Since the client still presumably
        checks for things using the pg error code or error message, any
@@ -3702,7 +3702,7 @@ Standard packages:
 - `errors.fundamental` stack trace is not exposed on its own (embedded via `%+v` formatting)
 - messages not directly exposed, `Error()` and formats will always embed the rest of the chain in the result string
   - it's possible to "extract" the message by rendering the wrapper and its cause separately,
-    and "substracting" one from the other.
+    and "subtracting" one from the other.
 
 ### `github.com/hashicorp/errwrap`
 
@@ -3740,7 +3740,7 @@ https://go.googlesource.com/proposal/+/master/design/go2draft-error-handling-ove
 - new interface `Wrapper` that does the same as the `causer` interface
   except its method is called `Unwrap()` instead of `Cause()`
 - new primitive `Is()` to check any intermediate error for equality with some reference
-- new primitve `As()` to check castability of any error in the chain
+- new primitive `As()` to check castability of any error in the chain
 - new `Formatter` interface that makes it easier to determine whether to display details
 
 #### Go 1.13: xerrors

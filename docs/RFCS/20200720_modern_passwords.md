@@ -58,7 +58,7 @@ Table of contents:
   - [Decomposition of the algorithm into methods](#decomposition-of-the-algorithm-into-methods)
   - [PostgreSQL authentication methods](#postgresql-authentication-methods)
   - [Separate storage and authentication methods](#separate-storage-and-authentication-methods)
-  - [CockroachDB's password methods](#cockroahcdb-s-password-methods)
+  - [CockroachDB's password methods](#cockroachdb-s-password-methods)
   - [Security considerations](#security-considerations)
 - [Guide-level explanation](#guide-level-explanation)
   - [Storage method configuration](#storage-method-configuration)
@@ -92,7 +92,7 @@ Table of contents:
 - [Decomposition of the algorithm into methods](#decomposition-of-the-algorithm-into-methods)
 - [PostgreSQL authentication methods](#postgresql-authentication-methods)
 - [Separate storage and authentication methods](#separate-storage-and-authentication-methods)
-- [CockroachDB's password methods](#cockroahcdb-s-password-methods)
+- [CockroachDB's password methods](#cockroachdb-s-password-methods)
 - [Security considerations](#security-considerations)
 
 
