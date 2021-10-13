@@ -158,6 +158,7 @@ go_library(
         "//pkg/startupmigrations",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/fs",
         "//pkg/testutils/serverutils",
         "//pkg/ts",
         "//pkg/ts/catalog",
