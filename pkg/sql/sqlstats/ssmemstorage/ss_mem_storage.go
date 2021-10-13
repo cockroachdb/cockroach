@@ -45,10 +45,11 @@ type stmtKey struct {
 }
 
 type planKey struct {
-	anonymizedStmt string
-	failed         bool
-	implicitTxn    bool
-	database       string
+	anonymizedStmt        string
+	failed                bool
+	implicitTxn           bool
+	database              string
+	anonymizedStmtSummary string
 }
 
 func (p planKey) size() int64 {
@@ -251,10 +252,11 @@ func NewTempContainerFromExistingStmtStats(
 		}
 		key := stmtKey{
 			planKey: planKey{
-				anonymizedStmt: statistics[i].Key.KeyData.Query,
-				failed:         statistics[i].Key.KeyData.Failed,
-				implicitTxn:    statistics[i].Key.KeyData.ImplicitTxn,
-				database:       statistics[i].Key.KeyData.Database,
+				anonymizedStmt:        statistics[i].Key.KeyData.Query,
+				anonymizedStmtSummary: statistics[i].Key.KeyData.QuerySummary,
+				failed:                statistics[i].Key.KeyData.Failed,
+				implicitTxn:           statistics[i].Key.KeyData.ImplicitTxn,
+				database:              statistics[i].Key.KeyData.Database,
 			},
 			transactionFingerprintID: statistics[i].Key.KeyData.TransactionFingerprintID,
 		}
@@ -465,6 +467,7 @@ func (s *stmtStats) mergeStatsLocked(statistics *roachpb.CollectedStatementStati
 // for the given stmt.
 func (s *Container) getStatsForStmt(
 	anonymizedStmt string,
+	anonymizedStmtSummary string,
 	implicitTxn bool,
 	database string,
 	failed bool,
@@ -481,10 +484,11 @@ func (s *Container) getStatsForStmt(
 	// that we use separate buckets for the different situations.
 	key = stmtKey{
 		planKey: planKey{
-			anonymizedStmt: anonymizedStmt,
-			failed:         failed,
-			implicitTxn:    implicitTxn,
-			database:       database,
+			anonymizedStmt:        anonymizedStmt,
+			anonymizedStmtSummary: anonymizedStmtSummary,
+			failed:                failed,
+			implicitTxn:           implicitTxn,
+			database:              database,
 		},
 		transactionFingerprintID: transactionFingerprintID,
 	}
@@ -654,10 +658,11 @@ func (s *Container) MergeApplicationStatementStats(
 			}
 			key := stmtKey{
 				planKey: planKey{
-					anonymizedStmt: statistics.Key.Query,
-					failed:         statistics.Key.Failed,
-					implicitTxn:    statistics.Key.ImplicitTxn,
-					database:       statistics.Key.Database,
+					anonymizedStmt:        statistics.Key.Query,
+					anonymizedStmtSummary: statistics.Key.QuerySummary,
+					failed:                statistics.Key.Failed,
+					implicitTxn:           statistics.Key.ImplicitTxn,
+					database:              statistics.Key.Database,
 				},
 				transactionFingerprintID: statistics.Key.TransactionFingerprintID,
 			}

@@ -71,6 +71,7 @@ func (s *Container) RecordStatement(
 	// Get the statistics object.
 	stats, statementKey, stmtFingerprintID, created, throttled := s.getStatsForStmt(
 		key.Query,
+		key.QuerySummary,
 		key.ImplicitTxn,
 		key.Database,
 		key.Failed,
@@ -166,6 +167,7 @@ func (s *Container) RecordStatementExecStats(
 	stmtStats, _, _, _, _ :=
 		s.getStatsForStmt(
 			key.Query,
+			key.QuerySummary,
 			key.ImplicitTxn,
 			key.Database,
 			key.Failed,

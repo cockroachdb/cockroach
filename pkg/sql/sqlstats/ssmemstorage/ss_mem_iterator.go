@@ -85,6 +85,7 @@ func (s *StmtStatsIterator) Next() bool {
 	s.currentValue = &roachpb.CollectedStatementStatistics{
 		Key: roachpb.StatementStatisticsKey{
 			Query:                    stmtKey.anonymizedStmt,
+			QuerySummary:             stmtKey.anonymizedStmtSummary,
 			DistSQL:                  distSQLUsed,
 			Vec:                      vectorized,
 			ImplicitTxn:              stmtKey.implicitTxn,
