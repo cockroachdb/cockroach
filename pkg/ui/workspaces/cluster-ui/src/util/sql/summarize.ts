@@ -20,6 +20,7 @@ const keywords: { [key: string]: RegExp } = {
   update: /^update\s+(\S+)/i,
   select: /^select.+from\s+(\S+)/i,
   insert: /^insert\s+into\s+([^ \t(]+)/i,
+  upsert: /^upsert\s+into\s+([^ \t(]+)/i,
   delete: /^delete\s+from\s+(\S+)/i,
   create: /^create\s+table\s+(\S+)/i,
   set: /^set\s+((cluster\s+setting\s+)?\S+)/i,

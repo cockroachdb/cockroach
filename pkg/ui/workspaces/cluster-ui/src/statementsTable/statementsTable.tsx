@@ -203,6 +203,7 @@ function makeCommonColumns(
 export interface AggregateStatistics {
   // label is either shortStatement (StatementsPage) or nodeId (StatementDetails).
   label: string;
+  summary: string;
   aggregatedTs: number;
   implicitTxn: boolean;
   fullScan: boolean;

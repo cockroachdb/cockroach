@@ -98,6 +98,7 @@ function coalesceNodeStats(
     const stmt = statsKey[key];
     return {
       label: stmt.nodeId.toString(),
+      summary: stmt.nodeId.toString(),
       aggregatedTs: stmt.aggregatedTs,
       implicitTxn: stmt.implicitTxn,
       fullScan: stmt.fullScan,
