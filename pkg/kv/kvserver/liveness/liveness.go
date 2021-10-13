@@ -862,7 +862,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 	ctx, sp := tracing.EnsureChildSpan(ctx, nl.ambientCtx.Tracer, "liveness heartbeat")
 	defer sp.Finish()
 	defer func(start time.Time) {
-		dur := timeutil.Now().Sub(start)
+		dur := timeutil.Since(start)
 		nl.metrics.HeartbeatLatency.RecordValue(dur.Nanoseconds())
 		if dur > time.Second {
 			log.Warningf(ctx, "slow heartbeat took %s; err=%v", dur, err)

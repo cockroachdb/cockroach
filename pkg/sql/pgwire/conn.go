@@ -432,7 +432,7 @@ func (c *conn) serveImpl(
 
 				// We count the connection establish latency until we are ready to
 				// serve a SQL query. It includes the time it takes to authenticate.
-				duration := timeutil.Now().Sub(c.startTime).Nanoseconds()
+				duration := timeutil.Since(c.startTime).Nanoseconds()
 				c.metrics.ConnLatency.RecordValue(duration)
 			}
 

@@ -177,7 +177,7 @@ func (stats *Reporter) update(
 	log.VEventf(ctx, 2, "updating replication reports...")
 	defer func() {
 		log.VEventf(ctx, 2, "updating replication reports... done. Generation took: %s.",
-			timeutil.Now().Sub(start))
+			timeutil.Since(start))
 	}()
 	stats.updateLatestConfig()
 	if stats.latestConfig == nil {
