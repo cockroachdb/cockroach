@@ -53,6 +53,7 @@ func makeStatementFromPrepared(prepared *PreparedStatement, queryID ClusterWideI
 		Prepared:        prepared,
 		ExpectedTypes:   prepared.Columns,
 		StmtNoConstants: prepared.StatementNoConstants,
+		StmtSummary:     prepared.StatementSummary,
 		QueryID:         queryID,
 	}
 }
