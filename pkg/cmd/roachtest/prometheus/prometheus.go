@@ -71,7 +71,7 @@ func Init(
 		cfg.PrometheusNode,
 		"download prometheus",
 		`rm -rf /tmp/prometheus && mkdir /tmp/prometheus && cd /tmp/prometheus &&
-			curl -fsSL prometheus.tar.gz https://github.com/prometheus/prometheus/releases/download/v2.27.1/prometheus-2.27.1.linux-amd64.tar.gz | tar zxv --strip-components=1`,
+			curl -fsSL https://storage.googleapis.com/cockroach-fixtures/prometheus/prometheus-2.27.1.linux-amd64.tar.gz | tar zxv --strip-components=1`,
 	); err != nil {
 		return nil, err
 	}
