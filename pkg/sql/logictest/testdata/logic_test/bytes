@@ -154,3 +154,12 @@ query T
 EXECUTE r1('abc')
 ----
 \0226\012\011defaultdb\0202\032\035\012\011\012\005admin\020\002\012\010\012\004root\020\002\022\004root\030\002"\000(\001@\000J\000Z\000
+
+statement ok
+create table regression_71444 (col bytes[]);
+insert into regression_71444 VALUES ('{"a"}'), ('{"b", "c"}')
+
+query T
+SELECT * FROM regression_71444 WHERE col = '{"a"}'
+----
+{"\\x61"}

@@ -514,6 +514,10 @@ var (
 	StringArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: String, Oid: oid.T__text, Locale: &emptyLocale}}
 
+	// BytesArray is the type of an array value having Byte-typed elements.
+	BytesArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Bytes, Oid: oid.T__bytea, Locale: &emptyLocale}}
+
 	// IntArray is the type of an array value having Int-typed elements.
 	IntArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: Int, Oid: oid.T__int8, Locale: &emptyLocale}}
