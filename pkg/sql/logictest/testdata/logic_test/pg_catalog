@@ -3288,6 +3288,24 @@ indexes_include_idx  {a,c,d}    false        false         {ASC,ASC,ASC}  prefix
 primary              {id}       true         true          {ASC}          prefix  NULL     NULL
 
 statement ok
+CREATE TABLE partial_index (
+    a INT,
+    b INT,
+    INDEX (a, b) WHERE (a >= 0)
+)
+
+query OOBBTTTTTT colnames
+SELECT indexrelid, indrelid, indislive, indisreplident, indkey, indcollation, indclass, indoption, indexprs, indpred
+FROM pg_catalog.pg_index
+WHERE indpred LIKE 'a >= 0%'
+----
+indexrelid  indrelid  indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs  indpred
+2955071326  113       true       false           1 2     0 0           0 0       2 2        NULL      a >= 0:::INT8
+
+statement ok
+DROP TABLE partial_index
+
+statement ok
 SET stub_catalog_tables=false
 
 statement error pq: unimplemented: virtual schema table not implemented: pg_catalog.pg_seclabel
