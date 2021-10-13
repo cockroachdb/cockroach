@@ -67,9 +67,9 @@ var UnitTestFormatter = IssueFormatter{
 			r.CodeBlock("", data.CondensedMessage.Digest(50))
 		}
 
-		r.Collapsed("Reproduce", func() {
-			if data.ReproductionCommand != nil {
-				data.ReproductionCommand(r)
+		r.Collapsed("Help", func() {
+			if data.HelpCommand != nil {
+				data.HelpCommand(r)
 			}
 
 			if len(data.Parameters) != 0 {
