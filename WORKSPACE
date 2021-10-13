@@ -143,3 +143,10 @@ filegroup(
     commit = "96138842571462ed9a697bff590828d8f6356a2f",
     remote = "https://github.com/cockroachdb/sqllogictest",
 )
+
+http_archive(
+    name = "railroadjar",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/java/railroad/rr-1.63-java8.zip"],
+    sha256 = "d2791cd7a44ea5be862f33f5a9b3d40aaad9858455828ebade7007ad7113fb41",
+    build_file_content = """exports_files(["rr.war"])""",
+)
