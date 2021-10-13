@@ -382,6 +382,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 					val.TableStatsRowCount = 1
 				}
 				val.TableStatsCreatedAt = stat.CreatedAt()
+				val.LimitHint = scan.RequiredPhysical().LimitHint
 			}
 		}
 		ef.AnnotateNode(ep.root, exec.EstimatedStatsID, &val)
