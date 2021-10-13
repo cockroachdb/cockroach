@@ -1,4 +1,5 @@
 Setting	Type	Default	Description
+admission.epoch_lifo.enabled	boolean	false	when true, epoch-LIFO behavior is enabled when there is significant delay in admission
 admission.kv.enabled	boolean	true	when true, work performed by the KV layer is subject to admission control
 admission.sql_kv_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a KV response is subject to admission control
 admission.sql_sql_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control
