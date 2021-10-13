@@ -172,9 +172,9 @@ func (m Metrics) MetricStruct() {}
 func waitQuota(
 	ctx context.Context, n int64, limit *quotapool.RateLimiter, c *metric.Counter,
 ) error {
-	start := timeutil.Now()
+	start := timeutil.NowMonotonic()
 	defer func() {
-		c.Inc(int64(timeutil.Now().Sub(start)))
+		c.Inc(int64(timeutil.SinceMonotonic(start)))
 	}()
 	return limit.WaitN(ctx, n)
 }

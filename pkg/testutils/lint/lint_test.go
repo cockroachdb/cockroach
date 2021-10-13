@@ -751,6 +751,40 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestNowSub", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`\btime(util)?\.Now\(\)\.Sub\(`,
+			"--",
+			"*.go",
+			":!cmd/dev/**",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; use 'timeutil.Since() or timeutil.SinceMonotonic()' instead "+
+				"because they're more efficient", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestOsErrorIs", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(

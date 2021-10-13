@@ -173,11 +173,11 @@ func (stats *Reporter) update(
 	replStatsSaver *replicationStatsReportSaver,
 	locSaver *replicationCriticalLocalitiesReportSaver,
 ) error {
-	start := timeutil.Now()
+	start := timeutil.NowMonotonic()
 	log.VEventf(ctx, 2, "updating replication reports...")
 	defer func() {
 		log.VEventf(ctx, 2, "updating replication reports... done. Generation took: %s.",
-			timeutil.Now().Sub(start))
+			timeutil.SinceMonotonic(start))
 	}()
 	stats.updateLatestConfig()
 	if stats.latestConfig == nil {

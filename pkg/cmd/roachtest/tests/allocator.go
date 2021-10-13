@@ -336,7 +336,7 @@ func runWideReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// Stop the cluster and restart 2/3 of the nodes.
 	c.Stop(ctx)
-	tBeginDown := timeutil.Now()
+	tBeginDown := timeutil.NowMonotonic()
 	c.Start(ctx, c.Range(1, 6), args)
 
 	waitForUnderReplicated := func(count int) {
@@ -387,7 +387,7 @@ FROM crdb_internal.kv_store_status
 	run(`SET CLUSTER SETTING server.time_until_store_dead = '90s'`)
 	// Sleep until the node is dead so that when we actually wait for replication,
 	// we can expect things to move swiftly.
-	time.Sleep(90*time.Second - timeutil.Now().Sub(tBeginDown))
+	time.Sleep(90*time.Second - timeutil.SinceMonotonic(tBeginDown))
 
 	setReplication(5)
 	waitForReplication(5)

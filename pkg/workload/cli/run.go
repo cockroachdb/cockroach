@@ -410,7 +410,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}()
 
 	var ops workload.QueryLoad
-	prepareStart := timeutil.Now()
+	prepareStart := timeutil.NowMonotonic()
 	log.Infof(ctx, "creating load generator...")
 	const prepareTimeout = 60 * time.Minute
 	prepareCtx, cancel := context.WithTimeout(ctx, prepareTimeout)
@@ -442,7 +442,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}(prepareCtx); prepareErr != nil {
 		return prepareErr
 	}
-	log.Infof(ctx, "creating load generator... done (took %s)", timeutil.Now().Sub(prepareStart))
+	log.Infof(ctx, "creating load generator... done (took %s)", timeutil.SinceMonotonic(prepareStart))
 
 	start := timeutil.Now()
 	errCh := make(chan error)

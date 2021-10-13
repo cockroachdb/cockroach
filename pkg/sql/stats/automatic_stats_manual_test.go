@@ -74,9 +74,9 @@ func TestAdaptiveThrottling(t *testing.T) {
 
 	step := func(msg string, fn func()) {
 		fmt.Println(msg)
-		before := timeutil.Now()
+		before := timeutil.NowMonotonic()
 		fn()
-		log(fmt.Sprintf("%s took %s", msg, timeutil.Now().Sub(before)))
+		log(fmt.Sprintf("%s took %s", msg, timeutil.SinceMonotonic(before)))
 	}
 
 	step("Populate table", func() {

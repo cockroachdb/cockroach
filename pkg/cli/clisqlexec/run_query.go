@@ -43,7 +43,7 @@ func (sqlExecCtx *Context) RunQuery(
 func (sqlExecCtx *Context) RunQueryAndFormatResults(
 	conn clisqlclient.Conn, w, ew io.Writer, fn clisqlclient.QueryFn,
 ) (err error) {
-	startTime := timeutil.Now()
+	startTime := timeutil.NowMonotonic()
 	rows, isMultiStatementQuery, err := fn(conn)
 	if err != nil {
 		return err
@@ -123,8 +123,8 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 			return err
 		}
 
-		var queryCompleteTime time.Time
-		completedHook := func() { queryCompleteTime = timeutil.Now() }
+		var queryCompleteTime timeutil.MonotonicTime
+		completedHook := func() { queryCompleteTime = timeutil.NowMonotonic() }
 
 		if err := func() error {
 			if cleanup != nil {
@@ -150,7 +150,7 @@ func (sqlExecCtx *Context) maybeShowTimes(
 	conn clisqlclient.Conn,
 	w, ew io.Writer,
 	isMultiStatementQuery bool,
-	startTime, queryCompleteTime time.Time,
+	startTime, queryCompleteTime timeutil.MonotonicTime,
 ) {
 	if !sqlExecCtx.ShowTimes {
 		return
@@ -158,7 +158,7 @@ func (sqlExecCtx *Context) maybeShowTimes(
 
 	defer func() {
 		// If there was noticeable overhead, let the user know.
-		renderDelay := timeutil.Now().Sub(queryCompleteTime)
+		renderDelay := timeutil.SinceMonotonic(queryCompleteTime)
 		if renderDelay >= 1*time.Second && sqlExecCtx.IsInteractive() {
 			fmt.Fprintf(ew,
 				"\nNote: an additional delay of %s was spent formatting the results.\n"+
