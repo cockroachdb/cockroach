@@ -110,6 +110,7 @@ describe("flattenStatementStats", () => {
         key: {
           key_data: {
             query: "SELECT * FROM foobar",
+            query_summary: "SELECT * FROM foobar",
             app: "foobar",
             distSQL: true,
             vec: false,
@@ -125,6 +126,7 @@ describe("flattenStatementStats", () => {
         key: {
           key_data: {
             query: "UPDATE foobar SET name = 'baz' WHERE id = 42",
+            query_summary: "UPDATE foobar SET name = 'baz' WHERE id = 42",
             app: "bazzer",
             distSQL: false,
             vec: false,
@@ -144,6 +146,10 @@ describe("flattenStatementStats", () => {
 
     for (let i = 0; i < flattened.length; i++) {
       assert.equal(flattened[i].statement, stats[i].key.key_data.query);
+      assert.equal(
+        flattened[i].statement_summary,
+        stats[i].key.key_data.query_summary,
+      );
       assert.equal(flattened[i].app, stats[i].key.key_data.app);
       assert.equal(flattened[i].distSQL, stats[i].key.key_data.distSQL);
       assert.equal(flattened[i].vec, stats[i].key.key_data.vec);

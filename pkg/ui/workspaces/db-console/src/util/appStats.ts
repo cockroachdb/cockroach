@@ -188,6 +188,7 @@ export function aggregateStatementStats(
 
 export interface ExecutionStatistics {
   statement: string;
+  statement_summary: string;
   aggregated_ts: number;
   app: string;
   database: string;
@@ -205,6 +206,7 @@ export function flattenStatementStats(
 ): ExecutionStatistics[] {
   return statementStats.map(stmt => ({
     statement: stmt.key.key_data.query,
+    statement_summary: stmt.key.key_data.query_summary,
     aggregated_ts: TimestampToNumber(stmt.key.aggregated_ts),
     app: stmt.key.key_data.app,
     database: stmt.key.key_data.database,
