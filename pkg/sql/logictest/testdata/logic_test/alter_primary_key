@@ -1159,3 +1159,36 @@ SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
 ----
 primary  i                        ASC
 primary  crdb_internal_i_shard_2  N/A
+
+# Regression tests for incorrectly reading from the unique secondary index that
+# used be a primary index in the vectorized engine (#71553). Note that this
+# reproduction only works on 21.1 and before (because it relies on a bug with
+# incorrectly marking the secondary index as having a primary index encoding
+# #71552).
+statement ok
+CREATE TABLE t71553 (a INT PRIMARY KEY, b INT NOT NULL);
+INSERT INTO t71553 VALUES (1, 1);
+ALTER TABLE t71553 ALTER PRIMARY KEY USING COLUMNS (b);
+
+query II
+SELECT * FROM t71553
+----
+1  1
+
+statement ok
+ALTER TABLE t71553 ALTER PRIMARY KEY USING COLUMNS (a);
+
+query II
+SELECT * FROM t71553
+----
+1  1
+
+query II
+SELECT * FROM t71553@t71553_a_key
+----
+1  1
+
+query II
+SELECT * FROM t71553@t71553_b_key
+----
+1  1
