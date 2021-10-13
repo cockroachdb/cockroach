@@ -467,6 +467,7 @@ var (
 		types.Decimal,
 		types.Date,
 		types.StringArray,
+		types.BytesArray,
 		types.IntArray,
 		types.FloatArray,
 		types.DecimalArray,
