@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -123,11 +124,12 @@ func (m *workMap) get(id int) (work testWork, ok bool) {
 /*
 TestWorkQueueBasic is a datadriven test with the following commands:
 init
-admit id=<int> tenant=<int> priority=<int> create-time=<int> bypass=<bool>
+admit id=<int> tenant=<int> priority=<int> create-time-millis=<int> bypass=<bool>
 set-try-get-return-value v=<bool>
 granted chain-id=<int>
 cancel-work id=<int>
 work-done id=<int>
+advance-time millis=<int>
 print
 */
 func TestWorkQueueBasic(t *testing.T) {
@@ -135,15 +137,29 @@ func TestWorkQueueBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var q *WorkQueue
+	closeFn := func() {
+		if q != nil {
+			q.close()
+		}
+	}
+	defer closeFn()
 	var tg *testGranter
 	var wrkMap workMap
 	var buf builderWithMu
+	// 100ms after epoch.
+	initialTime := timeutil.FromUnixMicros(int64(100) * int64(time.Millisecond/time.Microsecond))
+	var timeSource *timeutil.ManualTime
 	datadriven.RunTest(t, "testdata/work_queue",
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
+				closeFn()
 				tg = &testGranter{buf: &buf}
-				q = makeWorkQueue(KVWork, tg, nil, makeWorkQueueOptions(KVWork)).(*WorkQueue)
+				opts := makeWorkQueueOptions(KVWork)
+				timeSource = timeutil.NewManualTime(initialTime)
+				opts.timeSource = timeSource
+				opts.disableEpochClosingGoroutine = true
+				q = makeWorkQueue(KVWork, tg, nil, opts).(*WorkQueue)
 				tg.r = q
 				wrkMap.workMap = make(map[int]*testWork)
 				return ""
@@ -157,7 +173,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				tenant := scanTenantID(t, d)
 				var priority, createTime int
 				d.ScanArgs(t, "priority", &priority)
-				d.ScanArgs(t, "create-time", &createTime)
+				d.ScanArgs(t, "create-time-millis", &createTime)
 				var bypass bool
 				d.ScanArgs(t, "bypass", &bypass)
 				ctx, cancel := context.WithCancel(context.Background())
@@ -165,7 +181,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				workInfo := WorkInfo{
 					TenantID:        tenant,
 					Priority:        WorkPriority(priority),
-					CreateTime:      int64(createTime),
+					CreateTime:      int64(createTime) * int64(time.Millisecond),
 					BypassAdmission: bypass,
 				}
 				go func(ctx context.Context, info WorkInfo, id int) {
@@ -229,19 +245,61 @@ func TestWorkQueueBasic(t *testing.T) {
 			case "print":
 				return q.String()
 
+			case "advance-time":
+				var millis int
+				d.ScanArgs(t, "millis", &millis)
+				timeSource.Advance(time.Duration(millis) * time.Millisecond)
+				q.tryCloseEpoch(true)
+				return q.String()
+
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
 		})
-	if q != nil {
-		q.close()
-	}
 }
 
 func scanTenantID(t *testing.T, d *datadriven.TestData) roachpb.TenantID {
 	var id int
 	d.ScanArgs(t, "tenant", &id)
 	return roachpb.MakeTenantID(uint64(id))
+}
+
+func TestPriorityStates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var ps priorityStates
+	curThreshold := int(LowPri)
+	printFunc := func() string {
+		var b strings.Builder
+		for _, state := range ps {
+			fmt.Fprintf(&b, "(pri: %d, delay-millis: %d) ",
+				state.priority, state.maxQueueDelay/time.Millisecond)
+		}
+		return b.String()
+	}
+	datadriven.RunTest(t, "testdata/priority_states",
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "init":
+				ps = ps[:0]
+				return ""
+
+			case "update":
+				var priority, delayMillis int
+				d.ScanArgs(t, "priority", &priority)
+				d.ScanArgs(t, "delay-millis", &delayMillis)
+				ps.updateDelayLocked(WorkPriority(priority), time.Duration(delayMillis)*time.Millisecond)
+				return printFunc()
+
+			case "get-threshold":
+				curThreshold = ps.getFIFOPriorityThresholdAndReset(curThreshold)
+				return fmt.Sprintf("threshold: %d", curThreshold)
+
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
 }
 
 // TODO(sumeer):
