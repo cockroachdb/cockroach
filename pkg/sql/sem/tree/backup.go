@@ -125,6 +125,7 @@ var _ NodeFormatter = &RestoreOptions{}
 // Restore represents a RESTORE statement.
 type Restore struct {
 	Targets            TargetList
+	SystemUsers        bool
 	DescriptorCoverage DescriptorCoverage
 	From               []StringOrPlaceholderOptList
 	AsOf               AsOfClause
