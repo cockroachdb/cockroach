@@ -72,7 +72,7 @@ export const contentionTime = docsURL(
 );
 export const readsAndWrites = docsURL("architecture/reads-and-writes-overview");
 export const capacityMetrics = docsURL(
-  "ui-cluster-overview.html#capacity-metrics",
+  "ui-cluster-overview-page.html#capacity-metrics",
 );
 export const nodeLivenessIssues = docsURL(
   "cluster-setup-troubleshooting.html#node-liveness-issues",
