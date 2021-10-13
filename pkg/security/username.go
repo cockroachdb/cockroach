@@ -111,7 +111,7 @@ func (s SQLUsername) IsPublicRole() bool { return s.u == PublicRole }
 // IsReserved is true if the given username is reserved.
 // Matches Postgres and also includes crdb_internal_.
 func (s SQLUsername) IsReserved() bool {
-	return s.IsPublicRole() || s.u == NoneRole ||
+	return s.IsPublicRole() || s.u == NoneRole || s.IsNodeUser() ||
 		strings.HasPrefix(s.u, "pg_") ||
 		strings.HasPrefix(s.u, "crdb_internal_")
 }

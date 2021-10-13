@@ -11,9 +11,14 @@
 package tree
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/errors"
 )
 
 // RoleSpecType represents whether the RoleSpec is represented by
@@ -29,6 +34,19 @@ const (
 	// SessionUser represents if a RoleSpec is defined using SESSION_USER.
 	SessionUser
 )
+
+func (r RoleSpecType) String() string {
+	switch r {
+	case RoleName:
+		return "ROLE_NAME"
+	case CurrentUser:
+		return "CURRENT_USER"
+	case SessionUser:
+		return "SESSION_USER"
+	default:
+		panic(fmt.Sprintf("unknown role spec type: %d", r))
+	}
+}
 
 // RoleSpecList is a list of RoleSpec.
 type RoleSpecList []RoleSpec
@@ -49,12 +67,29 @@ func MakeRoleSpecWithRoleName(name string) RoleSpec {
 func (r RoleSpec) ToSQLUsername(
 	sessionData *sessiondata.SessionData,
 ) (security.SQLUsername, error) {
+	return r.ToSQLUsernameWithPurpose(sessionData, security.UsernameValidation)
+}
+
+// ToSQLUsernameWithPurpose converts a RoleSpec to a security.SQLUsername
+// using the given purpose.
+func (r RoleSpec) ToSQLUsernameWithPurpose(
+	sessionData *sessiondata.SessionData, purpose security.UsernamePurpose,
+) (security.SQLUsername, error) {
 	if r.RoleSpecType == CurrentUser {
 		return sessionData.User(), nil
 	} else if r.RoleSpecType == SessionUser {
 		return sessionData.SessionUser(), nil
 	}
-	return security.MakeSQLUsernameFromUserInput(r.Name, security.UsernameValidation)
+	username, err := security.MakeSQLUsernameFromUserInput(r.Name, purpose)
+	if err != nil {
+		if errors.Is(err, security.ErrUsernameTooLong) {
+			err = pgerror.WithCandidateCode(err, pgcode.NameTooLong)
+		} else if errors.IsAny(err, security.ErrUsernameInvalid, security.ErrUsernameEmpty) {
+			err = pgerror.WithCandidateCode(err, pgcode.InvalidName)
+		}
+		return security.SQLUsername{}, err
+	}
+	return username, nil
 }
 
 // ToSQLUsernames converts a RoleSpecList to a slice of security.SQLUsername.
@@ -87,10 +122,8 @@ func (r *RoleSpec) Format(ctx *FmtCtx) {
 		case RoleName:
 			lexbase.EncodeRestrictedSQLIdent(&ctx.Buffer, r.Name, f.EncodeFlags())
 			return
-		case CurrentUser:
-			ctx.WriteString("CURRENT_USER")
-		case SessionUser:
-			ctx.WriteString("SESSION_USER")
+		case CurrentUser, SessionUser:
+			ctx.WriteString(r.RoleSpecType.String())
 		}
 	}
 }
