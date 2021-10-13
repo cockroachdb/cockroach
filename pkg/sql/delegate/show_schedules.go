@@ -20,7 +20,7 @@ import (
 )
 
 // commandColumn converts executor execution arguments into jsonb representation.
-const commandColumn = `crdb_internal.pb_to_json('cockroach.jobs.jobspb.ExecutionArguments', execution_args)->'args'`
+const commandColumn = `crdb_internal.pb_to_json('cockroach.jobs.jobspb.ExecutionArguments', execution_args, false, true)->'args'`
 
 func (d *delegator) delegateShowSchedules(n *tree.ShowSchedules) (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Schedules)

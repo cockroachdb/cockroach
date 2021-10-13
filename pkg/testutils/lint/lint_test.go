@@ -1155,6 +1155,7 @@ func TestLint(t *testing.T) {
 			":!sql/pgwire/pgerror/severity.go",
 			":!sql/pgwire/pgerror/with_candidate_code.go",
 			":!sql/pgwire/pgwirebase/too_big_error.go",
+			":!sql/protoreflect/redact.go",
 			":!sql/colexecerror/error.go",
 			":!util/contextutil/timeout_error.go",
 			":!util/protoutil/jsonpb_marshal.go",

@@ -212,9 +212,6 @@ const (
 	DeleteDeprecatedNamespaceTableDescriptorMigration
 	// FixDescriptors is for the migration to fix all descriptors.
 	FixDescriptors
-	// SQLStatsTable adds the system tables for storing persisted SQL statistics
-	// for statements and transactions.
-	SQLStatsTable
 	// DatabaseRoleSettings adds the system table for storing per-user and
 	// per-role default session settings.
 	DatabaseRoleSettings
@@ -269,10 +266,6 @@ const (
 	SpanConfigurationsTable
 	// BoundedStaleness adds capabilities to perform bounded staleness reads.
 	BoundedStaleness
-	// SQLStatsCompactionScheduledJob creates a ScheduledJob for SQL Stats
-	// compaction on cluster startup and ensures that there is only one entry for
-	// the schedule.
-	SQLStatsCompactionScheduledJob
 	// DateAndIntervalStyle enables DateStyle and IntervalStyle to be changed.
 	DateAndIntervalStyle
 	// PebbleFormatVersioned ratchets Pebble's format major version to
@@ -289,6 +282,13 @@ const (
 	// TenantUsageSingleConsumptionColumn changes the tenant_usage system table to
 	// use a single consumption column (encoding a proto).
 	TenantUsageSingleConsumptionColumn
+	// SQLStatsTables adds the system table for storing persisted SQL statistics
+	// for statements.
+	SQLStatsTables
+	// SQLStatsCompactionScheduledJob creates a ScheduledJob for SQL Stats
+	// compaction on cluster startup and ensures that there is only one entry for
+	// the schedule.
+	SQLStatsCompactionScheduledJob
 	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 	V21_2
 
@@ -383,10 +383,6 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1114},
 	},
 	{
-		Key:     SQLStatsTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1116},
-	},
-	{
 		Key:     DatabaseRoleSettings,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1118},
 	},
@@ -466,10 +462,6 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1156},
 	},
 	{
-		Key:     SQLStatsCompactionScheduledJob,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1158},
-	},
-	{
 		Key:     DateAndIntervalStyle,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1160},
 	},
@@ -488,6 +480,14 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TenantUsageSingleConsumptionColumn,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1168},
+	},
+	{
+		Key:     SQLStatsTables,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1170},
+	},
+	{
+		Key:     SQLStatsCompactionScheduledJob,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1172},
 	},
 	{
 		// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
