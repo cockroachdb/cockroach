@@ -513,3 +513,62 @@ SELECT x, y FROM xy ORDER BY x NULLS LAST, y DESC NULLS FIRST
 4     8
 NULL  NULL
 NULL  6
+
+# Ensure null_ordered_last works by default, but respects NULLS FIRST
+# if it is explicitly mentioned.
+statement ok
+SET null_ordered_last = true
+
+query II
+SELECT x, y FROM xy ORDER BY x, y
+----
+2     5
+2     NULL
+4     8
+NULL  6
+NULL  NULL
+
+query II
+SELECT x, y FROM xy ORDER BY x, y DESC NULLS FIRST
+----
+2     NULL
+2     5
+4     8
+NULL  NULL
+NULL  6
+
+query II
+SELECT x, y FROM xy ORDER BY x NULLS LAST, y DESC NULLS FIRST
+----
+2     NULL
+2     5
+4     8
+NULL  NULL
+NULL  6
+
+query II
+SELECT x, y FROM xy ORDER BY x NULLS FIRST, y DESC NULLS LAST
+----
+NULL  6
+NULL  NULL
+2     5
+2     NULL
+4     8
+
+query II
+SELECT x, y FROM xy ORDER BY x NULLS FIRST, y DESC
+----
+NULL  NULL
+NULL  6
+2     NULL
+2     5
+4     8
+
+query II
+SELECT x, y FROM xy ORDER BY x NULLS FIRST, y DESC NULLS FIRST
+----
+NULL  NULL
+NULL  6
+2     NULL
+2     5
+4     8
