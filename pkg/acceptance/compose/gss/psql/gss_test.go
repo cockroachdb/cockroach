@@ -103,7 +103,7 @@ func TestGSS(t *testing.T) {
 			if tc.hbaErr != "" {
 				return
 			}
-			if _, err := db.Exec(fmt.Sprintf(`CREATE USER IF NOT EXISTS '%s'`, tc.user)); err != nil {
+			if _, err := db.Exec(fmt.Sprintf(`CREATE USER IF NOT EXISTS %s`, tc.user)); err != nil {
 				t.Fatal(err)
 			}
 			t.Run("libpq", func(t *testing.T) {
@@ -164,7 +164,7 @@ func TestGSSFileDescriptorCount(t *testing.T) {
 		t.Fatal(err)
 	}
 	const user = "tester"
-	if _, err := rootDB.Exec(fmt.Sprintf(`CREATE USER IF NOT EXISTS '%s'`, user)); err != nil {
+	if _, err := rootDB.Exec(fmt.Sprintf(`CREATE USER IF NOT EXISTS %s`, user)); err != nil {
 		t.Fatal(err)
 	}
 

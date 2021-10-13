@@ -478,6 +478,12 @@ REVOKE ADMIN OPTION FOR admin FROM unknownuser
 statement error pq: role/user unknownrole does not exist
 REVOKE ADMIN OPTION FOR unknownrole FROM root
 
+statement error pgcode 42939 CURRENT_USER cannot be used as a role name here
+CREATE ROLE CURRENT_USER
+
+statement error pgcode 42939 SESSION_USER cannot be used as a role name here
+CREATE ROLE SESSION_USER
+
 statement ok
 CREATE ROLE rolea
 
@@ -785,13 +791,16 @@ statement error role name "public" is reserved
 CREATE ROLE public
 
 statement error role name "none" is reserved
-CREATE ROLE none
+CREATE ROLE "none"
 
 statement error role name "pg_otan" is reserved
 CREATE ROLE pg_otan
 
 statement error role name "crdb_internal_otan" is reserved
 CREATE ROLE crdb_internal_otan
+
+statement error "foo☂": username is invalid
+CREATE ROLE foo☂
 
 statement error cannot drop role/user public: grants still exist on system.public.comments
 DROP USER public

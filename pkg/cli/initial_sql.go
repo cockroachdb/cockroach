@@ -63,7 +63,11 @@ func runInitialSQL(
 func createAdminUser(ctx context.Context, s *server.Server, adminUser, adminPassword string) error {
 	return s.RunLocalSQL(ctx,
 		func(ctx context.Context, ie *sql.InternalExecutor) error {
-			_, err := ie.Exec(ctx, "admin-user", nil, "CREATE USER $1 WITH PASSWORD $2", adminUser, adminPassword)
+			_, err := ie.Exec(
+				ctx, "admin-user", nil,
+				fmt.Sprintf("CREATE USER %s WITH PASSWORD $1", adminUser),
+				adminPassword,
+			)
 			if err != nil {
 				return err
 			}

@@ -43,8 +43,14 @@ CREATE USER UsEr1
 statement ok
 CREATE USER Ομηρος
 
-statement error username "node" reserved
+statement error pgcode 42939 role name "node" is reserved
 CREATE USER node
+
+statement error pgcode 42939 role name "public" is reserved
+CREATE USER public
+
+statement error pgcode 42939 role name "none" is reserved
+CREATE USER none
 
 statement error empty passwords are not permitted
 CREATE USER test WITH PASSWORD ''
@@ -68,8 +74,8 @@ statement ok
 CREATE USER "foo-bar"
 
 statement ok
-PREPARE pcu AS CREATE USER $1 WITH PASSWORD $2;
-  EXECUTE pcu('foo','bar')
+PREPARE pcu AS CREATE USER foo WITH PASSWORD $1;
+  EXECUTE pcu('bar')
 
 statement ok
 ALTER USER foo WITH PASSWORD somepass

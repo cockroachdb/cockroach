@@ -1870,7 +1870,7 @@ func (o *KVOptions) formatAsRoleOptions(ctx *FmtCtx) {
 
 // CreateRole represents a CREATE ROLE statement.
 type CreateRole struct {
-	Name        Expr
+	Name        RoleSpec
 	IfNotExists bool
 	IsRole      bool
 	KVOptions   KVOptions
@@ -1887,7 +1887,7 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
-	ctx.FormatNode(node.Name)
+	ctx.FormatNode(&node.Name)
 
 	if len(node.KVOptions) > 0 {
 		ctx.WriteString(" WITH")
