@@ -127,7 +127,7 @@ func (dsp *DistSQLPlanner) Exec(
 	if err := p.makeOptimizerPlan(ctx); err != nil {
 		return err
 	}
-	rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+	rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		return nil
 	})
 	execCfg := p.ExecCfg()
