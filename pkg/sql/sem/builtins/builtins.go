@@ -5300,6 +5300,34 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"crdb_internal.assignment_cast": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+			// The idiomatic usage of this function is to "pass" a target type T
+			// by passing NULL::T, so we must allow NULL arguments.
+			NullableArgs: true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"val", types.Any},
+				{"type", types.Any},
+			},
+			ReturnType: tree.IdentityReturnType(1),
+			FnWithExprs: func(evalCtx *tree.EvalContext, args tree.Exprs) (tree.Datum, error) {
+				targetType := args[1].(tree.TypedExpr).ResolvedType()
+				val, err := args[0].(tree.TypedExpr).Eval(evalCtx)
+				if err != nil {
+					return nil, err
+				}
+				return tree.PerformAssignmentCast(evalCtx, val, targetType)
+			},
+			Info: "This function is used internally to perform assignment casts during mutations.",
+			// The volatility of an assignment cast depends on the argument
+			// types, so we set it to the maximum volatility of all casts.
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
 	"crdb_internal.round_decimal_values": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,

@@ -312,6 +312,15 @@ var (
 	VarChar = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_varchar, Locale: &emptyLocale}}
 
+	// QChar is the special "char" type that is a single-character column type.
+	// It's used by system tables. It is reported as "char" (with double quotes
+	// included) in SHOW CREATE and "char" in introspection for compatibility
+	// with PostgreSQL.
+	//
+	// See https://www.postgresql.org/docs/9.1/static/datatype-character.html
+	QChar = &T{InternalType: InternalType{
+		Family: StringFamily, Oid: oid.T_char, Width: 1, Locale: &emptyLocale}}
+
 	// Name is a type-alias for String with a different OID (T_name). It is
 	// reported as NAME in SHOW CREATE and "name" in introspection for
 	// compatibility with PostgreSQL.
@@ -587,7 +596,7 @@ var (
 
 	// typeBpChar is the "standard SQL" string type of fixed length, where "bp"
 	// stands for "blank padded". It is not exported to avoid confusion with
-	// typeQChar, as well as confusion over its default width.
+	// QChar, as well as confusion over its default width.
 	//
 	// It is reported as CHAR in SHOW CREATE and "character" in introspection for
 	// compatibility with PostgreSQL.
@@ -595,16 +604,6 @@ var (
 	// Its default maximum with is 1. It always has a maximum width.
 	typeBpChar = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_bpchar, Locale: &emptyLocale}}
-
-	// typeQChar is a special PostgreSQL-only type supported for compatibility.
-	// It behaves like VARCHAR, its maximum width cannot be modified, and has a
-	// peculiar name in the syntax and introspection. It is not exported to avoid
-	// confusion with typeBpChar, as well as confusion over its default width.
-	//
-	// It is reported as "char" (with double quotes included) in SHOW CREATE and
-	// "char" in introspection for compatibility with PostgreSQL.
-	typeQChar = &T{InternalType: InternalType{
-		Family: StringFamily, Oid: oid.T_char, Locale: &emptyLocale}}
 )
 
 const (
@@ -802,26 +801,13 @@ func MakeVarChar(width int32) *T {
 }
 
 // MakeChar constructs a new instance of the CHAR type (oid = T_bpchar) having
-// the given max # characters (0 = unspecified number).
+// the given max number of characters.
 func MakeChar(width int32) *T {
-	if width == 0 {
-		return typeBpChar
-	}
-	if width < 0 {
-		panic(errors.AssertionFailedf("width %d cannot be negative", width))
+	if width <= 0 {
+		panic(errors.AssertionFailedf("width for type char must be at least 1"))
 	}
 	return &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_bpchar, Width: width, Locale: &emptyLocale}}
-}
-
-// MakeQChar constructs a new instance of the "char" type (oid = T_char) having
-// the given max # characters (0 = unspecified number).
-func MakeQChar(width int32) *T {
-	if width == 0 {
-		return typeQChar
-	}
-	return &T{InternalType: InternalType{
-		Family: StringFamily, Oid: oid.T_char, Width: width, Locale: &emptyLocale}}
 }
 
 // MakeCollatedString constructs a new instance of a CollatedStringFamily type
@@ -1194,27 +1180,30 @@ func (t *T) Precision() int32 {
 // Array types have the same type modifier as the contents of the array.
 // The value will be -1 for types that do not need atttypmod.
 func (t *T) TypeModifier() int32 {
-	typeModifier := int32(-1)
 	if t.Family() == ArrayFamily {
 		return t.ArrayContents().TypeModifier()
+	}
+	// The type modifier for "char" is always -1.
+	if t.Oid() == oid.T_char {
+		return int32(-1)
 	}
 	if width := t.Width(); width != 0 {
 		switch t.Family() {
 		case StringFamily, CollatedStringFamily:
 			// Postgres adds 4 to the attypmod for bounded string types, the
 			// var header size.
-			typeModifier = width + 4
+			return width + 4
 		case BitFamily:
-			typeModifier = width
+			return width
 		case DecimalFamily:
 			// attTypMod is calculated by putting the precision in the upper
 			// bits and the scale in the lower bits of a 32-bit int, and adding
 			// 4 (the var header size). We mock this for clients' sake. See
 			// numeric.c.
-			typeModifier = ((t.Precision() << 16) | width) + 4
+			return ((t.Precision() << 16) | width) + 4
 		}
 	}
-	return typeModifier
+	return int32(-1)
 }
 
 // Scale is an alias method for Width, used for clarity for types in
@@ -1318,6 +1307,71 @@ func (f Family) Name() string {
 		panic(errors.AssertionFailedf("unexpected Family: %d", f))
 	}
 	return ret
+}
+
+// CanonicalType returns the canonical type of the given type's family. If the
+// family does not have a canonical type, the original type is returned.
+func (t *T) CanonicalType() *T {
+	switch t.Family() {
+	case BoolFamily:
+		return Bool
+	case IntFamily:
+		return Int
+	case FloatFamily:
+		return Float
+	case DecimalFamily:
+		return Decimal
+	case DateFamily:
+		return Date
+	case TimestampFamily:
+		return Timestamp
+	case IntervalFamily:
+		return Interval
+	case StringFamily:
+		return String
+	case BytesFamily:
+		return Bytes
+	case TimestampTZFamily:
+		return TimestampTZ
+	case CollatedStringFamily:
+		// CollatedStringFamily has no canonical type.
+		return t
+	case OidFamily:
+		return Oid
+	case UnknownFamily:
+		return Unknown
+	case UuidFamily:
+		return Uuid
+	case ArrayFamily:
+		// ArrayFamily has no canonical type.
+		return t
+	case INetFamily:
+		return INet
+	case TimeFamily:
+		return Time
+	case JsonFamily:
+		return Jsonb
+	case TimeTZFamily:
+		return TimeTZ
+	case TupleFamily:
+		// TupleFamily has no canonical type.
+		return t
+	case BitFamily:
+		return VarBit
+	case GeometryFamily:
+		return Geometry
+	case GeographyFamily:
+		return Geography
+	case EnumFamily:
+		// EnumFamily has no canonical type.
+		return t
+	case Box2DFamily:
+		return Box2D
+	case AnyFamily:
+		return Any
+	default:
+		panic(errors.AssertionFailedf("unexpected type family: %v", errors.Safe(t.Family())))
+	}
 }
 
 // Name returns a single word description of the type that describes it

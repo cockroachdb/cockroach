@@ -4194,6 +4194,10 @@ func (expr *FuncExpr) MaybeWrapError(err error) error {
 
 // Eval implements the TypedExpr interface.
 func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
+	if expr.fn.FnWithExprs != nil {
+		return expr.fn.FnWithExprs(ctx, expr.Exprs)
+	}
+
 	nullResult, args, err := expr.evalArgs(ctx)
 	if err != nil {
 		return nil, err
@@ -4679,7 +4683,8 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 		// checking, since the placeholder's type hint didn't match the desired
 		// type for the placeholder. In this case, we cast the expression to
 		// the desired type.
-		// TODO(jordan): introduce a restriction on what casts are allowed here.
+		// TODO(jordan,mgartner): Introduce a restriction on what casts are
+		// allowed here. Most likely, only implicit casts should be allowed.
 		cast := NewTypedCastExpr(e, typ)
 		return cast.Eval(ctx)
 	}
