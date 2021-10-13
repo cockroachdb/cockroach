@@ -461,6 +461,7 @@ var (
 		// assertions.
 		types.String,
 		types.Bytes,
+		types.BytesArray,
 		types.Bool,
 		types.Int,
 		types.Float,
