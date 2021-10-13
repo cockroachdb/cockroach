@@ -216,7 +216,6 @@ CREATE TABLE public.t60019 (
 # Regression test for #60699. Do not allow creation of interleaved partitioned
 # indexes.
 statement ok
-SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true;
 CREATE TABLE t60699_a (a INT PRIMARY KEY);
 CREATE TABLE t60699_b (b INT PRIMARY KEY, a INT REFERENCES t60699_a (a));
 

@@ -631,9 +631,6 @@ func interleavedTableDeprecationAction(params runParams) (ignoreInterleave bool,
 		)
 		return true, nil
 	}
-	if !InterleavedTablesEnabled.Get(params.p.execCfg.SV()) {
-		return false, interleavedTableDisabledError
-	}
 	params.p.BufferClientNotice(
 		params.ctx,
 		interleavedTableDeprecationError,
