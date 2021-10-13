@@ -1,6 +1,7 @@
 <table>
 <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><code>admission.epoch_lifo.enabled</code></td><td>boolean</td><td><code>false</code></td><td>when true, epoch-LIFO behavior is enabled when there is significant delay in admission</td></tr>
 <tr><td><code>admission.kv.enabled</code></td><td>boolean</td><td><code>true</code></td><td>when true, work performed by the KV layer is subject to admission control</td></tr>
 <tr><td><code>admission.sql_kv_response.enabled</code></td><td>boolean</td><td><code>true</code></td><td>when true, work performed by the SQL layer when receiving a KV response is subject to admission control</td></tr>
 <tr><td><code>admission.sql_sql_response.enabled</code></td><td>boolean</td><td><code>true</code></td><td>when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control</td></tr>
