@@ -22,6 +22,7 @@ export const sessionAttr = "session";
 export const tableNameAttr = "table_name";
 export const aggregatedTsAttr = "aggregated_ts";
 export const tabAttr = "tab";
+export const aggregationIntervalAttr = "aggregation_interval";
 
 export const REMOTE_DEBUGGING_ERROR_TEXT =
   "This information is not available due to the current value of the 'server.remote_debugging.mode' setting.";

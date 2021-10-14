@@ -26,6 +26,7 @@ import {
   TimestampToNumber,
   addStatementStats,
   flattenStatementStats,
+  DurationToNumber,
 } from "../util";
 
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -85,6 +86,7 @@ export const aggregateStatements = (
       statsKey[key] = {
         label: s.statement,
         aggregatedTs: s.aggregated_ts,
+        aggregationInterval: s.aggregation_interval,
         implicitTxn: s.implicit_txn,
         database: s.database,
         fullScan: s.full_scan,
@@ -359,7 +361,8 @@ export const aggregateAcrossNodeIDs = function(
       t =>
         t.fingerprint +
         t.stats_data.app +
-        TimestampToNumber(t.stats_data.aggregated_ts),
+        TimestampToNumber(t.stats_data.aggregated_ts) +
+        DurationToNumber(t.stats_data.aggregation_interval),
     )
     .mapValues(mergeTransactionStats)
     .values()

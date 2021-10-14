@@ -29,6 +29,7 @@ import {
   propsToQueryString,
   summarize,
   TimestampToMoment,
+  aggregationIntervalAttr,
 } from "src/util";
 import { shortStatement } from "./statementsTable";
 import styles from "./statementsTableContent.module.scss";
@@ -49,6 +50,7 @@ export const StatementTableCell = {
     <StatementLink
       statement={stmt.label}
       aggregatedTs={stmt.aggregatedTs}
+      aggregationInterval={stmt.aggregationInterval}
       database={stmt.database}
       implicitTxn={stmt.implicitTxn}
       search={search}
@@ -134,6 +136,7 @@ export const StatementTableCell = {
 type StatementLinkTargetProps = {
   statement: string;
   aggregatedTs?: number;
+  aggregationInterval?: number;
   app: string;
   implicitTxn: boolean;
   statementNoConstants?: string;
@@ -152,6 +155,7 @@ export const StatementLinkTarget = (
     [databaseAttr]: props.database,
     [appAttr]: props.app,
     [aggregatedTsAttr]: props.aggregatedTs,
+    [aggregationIntervalAttr]: props.aggregationInterval,
   });
 
   return `${base}/${encodeURIComponent(linkStatement)}?${searchParams}`;
@@ -159,6 +163,7 @@ export const StatementLinkTarget = (
 
 interface StatementLinkProps {
   aggregatedTs?: number;
+  aggregationInterval?: number;
   statement: string;
   app: string;
   implicitTxn: boolean;
@@ -170,6 +175,7 @@ interface StatementLinkProps {
 
 export const StatementLink = ({
   aggregatedTs,
+  aggregationInterval,
   statement,
   app,
   implicitTxn,
@@ -187,6 +193,7 @@ export const StatementLink = ({
 
   const linkProps = {
     aggregatedTs,
+    aggregationInterval,
     statement,
     app,
     implicitTxn,
