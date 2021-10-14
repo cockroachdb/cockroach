@@ -682,8 +682,7 @@ func checkPrivilegesForBackup(
 			}
 		}
 	}
-	knobs := p.ExecCfg().BackupRestoreTestingKnobs
-	if knobs != nil && knobs.AllowImplicitAccess {
+	if p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
 		return nil
 	}
 	// Check that none of the destinations require an admin role.

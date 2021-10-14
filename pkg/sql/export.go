@@ -135,7 +135,7 @@ func (ef *execFactory) ConstructExport(
 	if err != nil {
 		panic(err)
 	}
-	if !admin {
+	if !admin && !ef.planner.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
 		hasExplicitAuth, _, err := cloud.AccessIsWithExplicitAuth(string(*destination))
 		if err != nil {
 			panic(err)
