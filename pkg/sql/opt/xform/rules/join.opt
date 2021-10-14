@@ -93,7 +93,7 @@
 
 # ConvertSemiToInnerJoin applies in the cases where CommuteSemiJoin does not:
 # when the ON condition is not a simple equality. In this case, we must perform
-# a DisinctOn operation *after* the inner join, followed by a project to remove
+# a DistinctOn operation *after* the inner join, followed by a project to remove
 # the right-side columns.
 #
 # Similar to CommuteSemiJoin, this rule allows semi joins to be commuted. This

@@ -75,7 +75,7 @@ load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
 
 gazelle_dependencies()
 
-# Load the protobuf depedency.
+# Load the protobuf dependency.
 #
 # Ref: https://github.com/bazelbuild/rules_go/blob/0.19.0/go/workspace.rst#proto-dependencies
 #      https://github.com/bazelbuild/bazel-gazelle/issues/591

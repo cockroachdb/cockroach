@@ -4,7 +4,7 @@
 # starting with "NOTE" or "TODO".
 #
 # Beware that this configuration is quite insecure. By default, it will make
-# CockroachDB accesible on port 26257 on your Kubernetes nodes' network
+# CockroachDB accessible on port 26257 on your Kubernetes nodes' network
 # interfaces, meaning that if your nodes are reachable from the Internet, then
 # this CockroachDB cluster will be too. To disable this behavior, remove the 
 # `hostNetwork` configuration field below.
