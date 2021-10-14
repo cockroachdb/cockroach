@@ -107,6 +107,10 @@ func getSink(
 			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
 				return makeWebhookSink(ctx, sinkURL{URL: u}, feedCfg.Opts, defaultWorkerCount(), timeutil.DefaultTimeSource{})
 			})
+		case isPubsubSink(u):
+			return validateOptionsAndMakeSink(changefeedbase.PubsubValidOptions, func() (Sink, error) {
+				return MakePubsubSink(u, feedCfg.Opts)
+			})
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
 				return makeCloudStorageSink(

@@ -198,6 +198,8 @@ var CloudStorageValidOptions = makeStringSet(OptCompression)
 // WebhookValidOptions is options exclusive to webhook sink
 var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig)
 
+var PubsubValidOptions = makeStringSet()
+
 // CaseInsensitiveOpts options which supports case Insensitive value
 var CaseInsensitiveOpts = makeStringSet(OptFormat, OptEnvelope, OptCompression, OptSchemaChangeEvents, OptSchemaChangePolicy, OptOnError)
 

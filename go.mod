@@ -3,14 +3,14 @@ module github.com/cockroachdb/cockroach
 go 1.16
 
 require (
-	cloud.google.com/go v0.90.0 // indirect
-	cloud.google.com/go/storage v1.16.0
-	github.com/Azure/azure-sdk-for-go v33.4.0+incompatible
+	cloud.google.com/go v0.97.0 // indirect
+	cloud.google.com/go/pubsub v1.17.0
+	cloud.google.com/go/storage v1.16.1
+	github.com/Azure/azure-sdk-for-go v57.0.0+incompatible
 	github.com/Azure/azure-storage-blob-go v0.14.0
-	github.com/Azure/go-autorest/autorest v0.11.1
-	github.com/Azure/go-autorest/autorest/azure/auth v0.4.2
-	github.com/Azure/go-autorest/autorest/to v0.3.0
-	github.com/Azure/go-autorest/autorest/validation v0.2.0 // indirect
+	github.com/Azure/go-autorest/autorest v0.11.20
+	github.com/Azure/go-autorest/autorest/azure/auth v0.5.8
+	github.com/Azure/go-autorest/autorest/to v0.4.0
 	github.com/BurntSushi/toml v0.3.1
 	github.com/DataDog/zstd v1.4.8 // indirect
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
@@ -26,7 +26,7 @@ require (
 	github.com/andybalholm/cascadia v1.2.0 // indirect
 	github.com/apache/arrow/go/arrow v0.0.0-20200610220642-670890229854
 	github.com/armon/circbuf v0.0.0-20150827004946-bbbad097214e
-	github.com/aws/aws-sdk-go v1.38.69
+	github.com/aws/aws-sdk-go v1.40.34
 	github.com/aws/aws-sdk-go-v2 v1.9.1
 	github.com/aws/aws-sdk-go-v2/config v1.8.2
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.18.0
@@ -68,7 +68,7 @@ require (
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
 	github.com/go-ole/go-ole v1.2.4 // indirect
-	github.com/go-sql-driver/mysql v1.5.0
+	github.com/go-sql-driver/mysql v1.6.0
 	github.com/go-swagger/go-swagger v0.26.1
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang-commonmark/html v0.0.0-20180910111043-7d7c804e1d46 // indirect
@@ -78,7 +78,6 @@ require (
 	github.com/golang-commonmark/puny v0.0.0-20180910110745-050be392d8b8 // indirect
 	github.com/golang/geo v0.0.0-20200319012246-673a6f80352d
 	github.com/golang/glog v0.0.0-20210429001901-424d2337a529 // indirect
-	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
 	github.com/golang/snappy v0.0.4
@@ -160,21 +159,22 @@ require (
 	go.opentelemetry.io/otel/exporters/zipkin v1.0.0-RC3
 	go.opentelemetry.io/otel/sdk v1.0.0-RC3
 	go.opentelemetry.io/otel/trace v1.0.0-RC3
-	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97
+	gocloud.dev v0.24.0
+	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5
 	golang.org/x/exp v0.0.0-20210514180818-737f94c0881e
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
-	golang.org/x/net v0.0.0-20210913180222-943fd674d43e
-	golang.org/x/oauth2 v0.0.0-20210810183815-faf39c7919d5
+	golang.org/x/net v0.0.0-20211013171255-e13a2654a71e
+	golang.org/x/oauth2 v0.0.0-20211005180243-6b3c2da341f1
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20210910150752-751e447fb3d0
+	golang.org/x/sys v0.0.0-20211013075003-97ac67df715c
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
 	golang.org/x/text v0.3.7
-	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
+	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
 	golang.org/x/tools v0.1.5
-	google.golang.org/api v0.52.0
-	google.golang.org/genproto v0.0.0-20210909211513-a8c4777a87af
-	google.golang.org/grpc v1.40.0
+	google.golang.org/api v0.58.0
+	google.golang.org/genproto v0.0.0-20211013025323-ce878158c4d4
+	google.golang.org/grpc v1.41.0
 	google.golang.org/grpc/examples v0.0.0-20210324172016-702608ffae4d // indirect
 	google.golang.org/protobuf v1.27.1
 	gopkg.in/yaml.v2 v2.4.0
