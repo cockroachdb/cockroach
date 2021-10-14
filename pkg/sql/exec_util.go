@@ -1352,10 +1352,6 @@ func (*TenantTestingKnobs) ModuleTestingKnobs() {}
 
 // BackupRestoreTestingKnobs contains knobs for backup and restore behavior.
 type BackupRestoreTestingKnobs struct {
-	// AllowImplicitAccess allows implicit access to data sources for non-admin
-	// users. This enables using nodelocal for testing BACKUP/RESTORE permissions.
-	AllowImplicitAccess bool
-
 	// CaptureResolvedTableDescSpans allows for intercepting the spans which are
 	// resolved during backup planning, and will eventually be backed up during
 	// execution.
