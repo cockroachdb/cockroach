@@ -19,6 +19,7 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",
         "//pkg/util/syncutil",
+        "//pkg/util/sysutil",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_pebble//:pebble",

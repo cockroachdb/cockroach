@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
@@ -168,7 +169,7 @@ The resulting key file will be 32 bytes (random key ID) + key_size in bytes.
 			openMode |= os.O_EXCL
 		}
 
-		f, err := os.OpenFile(encryptionKeyPath, openMode, 0600)
+		f, err := sysutil.OpenFile(encryptionKeyPath, openMode, 0600)
 		if err != nil {
 			return err
 		}

@@ -1551,6 +1551,123 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	// Test for the use of file IO functions that should be wrapped by `sysutil`'s file io
+	// functions.
+	t.Run("TestNoFileIOInCode", func(t *testing.T) {
+		t.Parallel()
+
+		forbiddenIOFuncs := map[string]string{
+			"os.OpenFile":      "sysutil.OpenFile",
+			"os.Create":        "sysutil.Create",
+			"ioutil.WriteFile": "sysutil.WriteFile",
+		}
+
+		// grepBuf creates a grep string that matches any forbidden import pkgs.
+		var grepBuf bytes.Buffer
+		grepBuf.WriteByte('(')
+		i := 0
+		for forbiddenFunc := range forbiddenIOFuncs {
+			if i != 0 {
+				grepBuf.WriteByte('|')
+			}
+			grepBuf.WriteString(regexp.QuoteMeta(forbiddenFunc))
+			i++
+		}
+		grepBuf.WriteString(")")
+
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			grepBuf.String(),
+			"--",
+			"*.go",
+			// Test-only code is not subject to server-side restrictions on file permissions.
+			":!testutils/",
+			":!*/*_test.go",
+			":!acceptance/",
+			":!bench/",
+			":!*test/*",
+			// Standalone helper commands are not subject to the server-side constraints on file permissions.
+			":!cli/",
+			":!cmd/generate-metadata-tables/main.go",
+			":!cmd/generate-spatial-ref-sys/main.go",
+			":!cmd/github-post/main.go",
+			":!cmd/gossipsim/main.go",
+			":!cmd/roachprod/cloud/gc.go",
+			":!cmd/roachprod/hosts.go",
+			":!cmd/roachprod/install/cluster_synced.go",
+			":!cmd/roachprod/main.go",
+			":!cmd/roachprod/vm/aws/terraformgen/terraformgen.go",
+			":!cmd/roachprod/vm/local/local.go",
+			":!cmd/wraprules/wraprules.go",
+			":!cmd/bazci/",
+			":!cmd/dev/",
+			":!cmd/docgen/",
+			":!sql/opt/optgen/cmd/",
+			":!sql/schemachanger/scop/generate_visitor.go",
+			":!util/binfetcher/binfetcher.go",
+			// The "workload" package is intended for client-side code and is not subject to the server-side restrictions.
+			":!workload/",
+			// Log files implements its own file permission logic.
+			":!util/log/",
+			// The fileutil package implements file copying and moving, and changing file permissions during those operations would result in unexpected behavior.
+			":!util/fileutil/",
+			// These two files implement the server-side restrictions and contain the logic wrapping the standard library IO functions.
+			":!util/sysutil/io.go",
+			":!util/sysutil/io_*.go",
+			// (TODO catj: update the functions in these these packages)
+			":!roachpb/gen/main.go",
+			":!server/goroutinedumper/goroutinedumper.go",
+			":!server/heapprofiler/heapprofiler.go",
+			":!server/heapprofiler/statsprofiler.go",
+			":!server/tracedumper/tracedumper.go",
+			":!sql/opt_catalog.go",
+			":!sql/pg_metadata_diff.go",
+			":!util/timeutil/gen/main.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			if strings.HasPrefix(s, "Binary file") {
+				return
+			}
+
+			found := false
+			errPieces := strings.Split(s, ":")
+			if len(errPieces) >= 3 {
+				file, number, line := errPieces[0], errPieces[1], errPieces[2]
+				for forbiddenFunc, expectedFunc := range forbiddenIOFuncs {
+					if strings.HasPrefix(line, "//") {
+						found = true
+						continue
+					}
+					if strings.Contains(line, forbiddenFunc) {
+						found = true
+						t.Errorf("\n%s:%s using %s, please use sysutil.%s instead", file, number, forbiddenFunc, expectedFunc)
+					}
+				}
+			}
+			if !found {
+				t.Errorf("\n%s <- using an unsupported File IO function, please use sysutil equivalent instead", s)
+			}
+		}); err != nil {
+			t.Error(err)
+		}
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	// TODO(tamird): replace this with errcheck.NewChecker() when
 	// https://github.com/dominikh/go-tools/issues/57 is fixed.
 	t.Run("TestErrCheck", func(t *testing.T) {
