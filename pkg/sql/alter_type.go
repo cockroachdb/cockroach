@@ -111,7 +111,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		// See https://github.com/cockroachdb/cockroach/issues/57741
 		err = params.p.setTypeSchema(params.ctx, n, string(t.Schema))
 	case *tree.AlterTypeOwner:
-		owner, err := t.Owner.ToSQLUsername(params.SessionData())
+		owner, err := t.Owner.ToSQLUsername(params.SessionData(), security.UsernameValidation)
 		if err != nil {
 			return err
 		}

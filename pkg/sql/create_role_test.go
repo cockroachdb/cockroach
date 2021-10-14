@@ -13,9 +13,11 @@ package sql_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -51,7 +53,8 @@ func TestUserName(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		normalized, err := sql.NormalizeAndValidateUsername(tc.username)
+		roleSpec := tree.RoleSpec{RoleSpecType: tree.RoleName, Name: tc.username}
+		normalized, err := roleSpec.ToSQLUsername(&sessiondata.SessionData{}, security.UsernameCreation)
 		if !testutils.IsError(err, tc.err) {
 			t.Errorf("%q: expected %q, got %v", tc.username, tc.err, err)
 			continue

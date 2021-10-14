@@ -65,14 +65,6 @@ func MakeRoleSpecWithRoleName(name string) RoleSpec {
 
 // ToSQLUsername converts a RoleSpec to a security.SQLUsername.
 func (r RoleSpec) ToSQLUsername(
-	sessionData *sessiondata.SessionData,
-) (security.SQLUsername, error) {
-	return r.ToSQLUsernameWithPurpose(sessionData, security.UsernameValidation)
-}
-
-// ToSQLUsernameWithPurpose converts a RoleSpec to a security.SQLUsername
-// using the given purpose.
-func (r RoleSpec) ToSQLUsernameWithPurpose(
 	sessionData *sessiondata.SessionData, purpose security.UsernamePurpose,
 ) (security.SQLUsername, error) {
 	if r.RoleSpecType == CurrentUser {
@@ -87,18 +79,18 @@ func (r RoleSpec) ToSQLUsernameWithPurpose(
 		} else if errors.IsAny(err, security.ErrUsernameInvalid, security.ErrUsernameEmpty) {
 			err = pgerror.WithCandidateCode(err, pgcode.InvalidName)
 		}
-		return security.SQLUsername{}, err
+		return security.SQLUsername{}, errors.Wrapf(err, "%q", username)
 	}
 	return username, nil
 }
 
 // ToSQLUsernames converts a RoleSpecList to a slice of security.SQLUsername.
 func (l RoleSpecList) ToSQLUsernames(
-	sessionData *sessiondata.SessionData,
+	sessionData *sessiondata.SessionData, purpose security.UsernamePurpose,
 ) ([]security.SQLUsername, error) {
 	targetRoles := make([]security.SQLUsername, len(l))
 	for i, role := range l {
-		user, err := role.ToSQLUsername(sessionData)
+		user, err := role.ToSQLUsername(sessionData, purpose)
 		if err != nil {
 			return nil, err
 		}

@@ -802,10 +802,10 @@ CREATE ROLE crdb_internal_otan
 statement error "foo☂": username is invalid
 CREATE ROLE foo☂
 
-statement error cannot drop role/user public: grants still exist on system.public.comments
+statement error role name "public" is reserved
 DROP USER public
 
-statement error cannot drop role/user public: grants still exist on system.public.comments
+statement error role name "public" is reserved
 DROP ROLE public
 
 statement error role/user public does not exist
@@ -1104,7 +1104,7 @@ role_name  member  is_admin
 statement error role name "public" is reserved
 CREATE USER public
 
-statement error cannot drop role/user public: grants still exist on system.public.comments
+statement error role name "public" is reserved
 DROP USER public
 
 statement ok

@@ -142,7 +142,7 @@ DROP USER IF EXISTS user1,user3
 
 statement ok
 PREPARE du AS DROP USER user4;
-EXECUTE du()
+EXECUTE du
 
 query TTT colnames
 SHOW USERS
