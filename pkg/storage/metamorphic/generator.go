@@ -143,6 +143,7 @@ type metaTestRunner struct {
 	rwGenerator     *readWriterGenerator
 	iterGenerator   *iteratorGenerator
 	keyGenerator    *keyGenerator
+	txnKeyGenerator *txnKeyGenerator
 	valueGenerator  *valueGenerator
 	pastTSGenerator *pastTSGenerator
 	nextTSGenerator *nextTSGenerator
@@ -162,6 +163,7 @@ func (m *metaTestRunner) init() {
 	m.rng = rand.New(rand.NewSource(m.seed))
 	m.tsGenerator.init(m.rng)
 	m.curEngine = 0
+	m.printComment(fmt.Sprintf("seed: %d", m.seed))
 
 	var err error
 	m.engine, err = m.engineSeq.configs[0].create(m.path, m.engineFS)
@@ -178,6 +180,7 @@ func (m *metaTestRunner) init() {
 		tsGenerator:    &m.tsGenerator,
 		txnIDMap:       make(map[txnID]*roachpb.Transaction),
 		openBatches:    make(map[txnID]map[readWriterID]struct{}),
+		inUseKeys:      make(map[txnID][]writtenKey),
 		openSavepoints: make(map[txnID]int),
 		testRunner:     m,
 	}
@@ -211,17 +214,22 @@ func (m *metaTestRunner) init() {
 		},
 	}
 	m.floatGenerator = &floatGenerator{rng: m.rng}
+	m.txnKeyGenerator = &txnKeyGenerator{
+		txns: m.txnGenerator,
+		keys: m.keyGenerator,
+	}
 
 	m.opGenerators = map[operandType]operandGenerator{
-		operandTransaction: m.txnGenerator,
-		operandReadWriter:  m.rwGenerator,
-		operandMVCCKey:     m.keyGenerator,
-		operandPastTS:      m.pastTSGenerator,
-		operandNextTS:      m.nextTSGenerator,
-		operandValue:       m.valueGenerator,
-		operandIterator:    m.iterGenerator,
-		operandFloat:       m.floatGenerator,
-		operandSavepoint:   m.spGenerator,
+		operandTransaction:   m.txnGenerator,
+		operandReadWriter:    m.rwGenerator,
+		operandMVCCKey:       m.keyGenerator,
+		operandUnusedMVCCKey: m.txnKeyGenerator,
+		operandPastTS:        m.pastTSGenerator,
+		operandNextTS:        m.nextTSGenerator,
+		operandValue:         m.valueGenerator,
+		operandIterator:      m.iterGenerator,
+		operandFloat:         m.floatGenerator,
+		operandSavepoint:     m.spGenerator,
 	}
 
 	m.nameToGenerator = make(map[string]*opGenerator)
@@ -442,7 +450,7 @@ func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
 			if strings.Contains(op.expectedOutput, "error") && strings.Contains(actualOutput, "error") {
 				continue
 			}
-			m.t.Fatalf("mismatching output at line %d: expected %s, got %s", op.lineNum, op.expectedOutput, actualOutput)
+			m.t.Fatalf("mismatching output at line %d, operation index %d: expected %s, got %s", op.lineNum, i, op.expectedOutput, actualOutput)
 		}
 	}
 }

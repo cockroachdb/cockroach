@@ -66,6 +66,8 @@ func runMetaTestForEngines(run testRunForEngines) {
 	var fs vfs.FS
 	if run.inMem && !*keep {
 		fs = vfs.NewMem()
+	} else {
+		fs = vfs.Default
 	}
 
 	testRunner := metaTestRunner{
@@ -211,9 +213,13 @@ func TestPebbleRestarts(t *testing.T) {
 	// This test times out with the race detector enabled.
 	skip.UnderRace(t)
 
-	engineConfigs := make([]engineConfig, 0, numStandardOptions + numRandomOptions)
+	engineConfigs := make([]engineConfig, 0, numStandardOptions + numRandomOptions - 1)
 	// Create one config sequence that contains all options.
 	for i := 0; i < numStandardOptions; i++ {
+		// Skip standard config at index 9 as it's incompatible with restarts.
+		if i == 9 {
+			continue
+		}
 		engineConfigs = append(engineConfigs, engineConfig{
 			name:   fmt.Sprintf("standard=%d", i),
 			opts:   standardOptions(i),
@@ -237,7 +243,7 @@ func TestPebbleRestarts(t *testing.T) {
 		engineSequences: []engineSequence{
 			{name: "standard", configs: []engineConfig{engineConfigStandard}},
 			{
-				name: fmt.Sprintf("standards=%d,randoms=%d", numStandardOptions, numRandomOptions),
+				name: fmt.Sprintf("standards=%d,randoms=%d", numStandardOptions-1, numRandomOptions),
 				configs: engineConfigs,
 			},
 		},
@@ -258,15 +264,37 @@ func TestPebbleCheck(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		engineSeqs := make([]engineSequence, 0, numStandardOptions + numRandomOptions)
+
+		for i := 0; i < numStandardOptions; i++ {
+			engineSeq := engineSequence{
+				configs: []engineConfig{{
+					name:   fmt.Sprintf("standard=%d", i),
+					opts:   standardOptions(i),
+				}},
+			}
+			engineSeq.name = engineSeq.configs[0].name
+			engineSeqs = append(engineSeqs, engineSeq)
+		}
+
+		for i := 0; i < numRandomOptions; i++ {
+			engineSeq := engineSequence{
+				configs: []engineConfig{{
+					name:   fmt.Sprintf("random=%d", i),
+					opts:   randomOptions(i, *seed),
+				}},
+			}
+			engineSeq.name = engineSeq.configs[0].name
+			engineSeqs = append(engineSeqs, engineSeq)
+		}
+
 		run := testRun{
 			ctx:       ctx,
 			t:         t,
 			checkFile: *check,
 			restarts:  true,
-			inMem:     true,
-			engineSequences: []engineSequence{
-				{name: "standard", configs: []engineConfig{engineConfigStandard}},
-			},
+			inMem:     false,
+			engineSequences: engineSeqs,
 		}
 		runMetaTest(run)
 	}
