@@ -18,7 +18,7 @@ type ReactProps = {
 };
 
 export default {
-  title: "Notfication Message",
+  title: "Notification Message",
   component: NotificationMessage,
 };
 
