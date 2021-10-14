@@ -48,13 +48,13 @@ INSERT INTO grandchild VALUES (100, 10), (101, 10), (110, 11);
 statement ok
 DELETE FROM parent WHERE p = 2
 
-statement error delete on table "child" violates foreign key constraint "fk_c_ref_child" on table "grandchild"\nDETAIL: Key \(c\)\=\(1[01]\) is still referenced from table "grandchild"
+statement error delete on table "child" violates foreign key constraint "grandchild_c_fkey" on table "grandchild"\nDETAIL: Key \(c\)\=\(1[01]\) is still referenced from table "grandchild"
 DELETE FROM parent WHERE p = 1
 
 statement ok
 DELETE FROM grandchild WHERE c = 10
 
-statement error delete on table "child" violates foreign key constraint "fk_c_ref_child" on table "grandchild"\nDETAIL: Key \(c\)=\(11\) is still referenced from table "grandchild"
+statement error delete on table "child" violates foreign key constraint "grandchild_c_fkey" on table "grandchild"\nDETAIL: Key \(c\)=\(11\) is still referenced from table "grandchild"
 DELETE FROM parent WHERE p = 1
 
 statement ok
@@ -293,19 +293,19 @@ SELECT * FROM b;
 1 2 3 4 5 6 7 8 9 10
 
 # 1. ON DELETE NO ACTION
-statement error pq: delete on table "a" violates foreign key constraint "fk_delete_no_action_ref_a" on table "b"\nDETAIL: Key \(id\)=\(1\) is still referenced from table "b"\.
+statement error pq: delete on table "a" violates foreign key constraint "b_delete_no_action_fkey" on table "b"\nDETAIL: Key \(id\)=\(1\) is still referenced from table "b"\.
 DELETE FROM a WHERE id = 1;
 
 # 2. ON UPDATE NO ACTION
-statement error pq: update on table "a" violates foreign key constraint "fk_update_no_action_ref_a" on table "b"\nDETAIL: Key \(id\)=\(2\) is still referenced from table "b"\.
+statement error pq: update on table "a" violates foreign key constraint "b_update_no_action_fkey" on table "b"\nDETAIL: Key \(id\)=\(2\) is still referenced from table "b"\.
 UPDATE a SET id = 1000 WHERE id = 2;
 
 # 3. ON DELETE RESTRICT
-statement error pq: delete on table "a" violates foreign key constraint "fk_delete_restrict_ref_a" on table "b"\nDETAIL: Key \(id\)=\(3\) is still referenced from table "b"\.
+statement error pq: delete on table "a" violates foreign key constraint "b_delete_restrict_fkey" on table "b"\nDETAIL: Key \(id\)=\(3\) is still referenced from table "b"\.
 DELETE FROM a WHERE id = 3;
 
 # 4. ON UPDATE RESTRICT
-statement error pq: update on table "a" violates foreign key constraint "fk_update_restrict_ref_a" on table "b"\nDETAIL: Key \(id\)=\(4\) is still referenced from table "b"\.
+statement error pq: update on table "a" violates foreign key constraint "b_update_restrict_fkey" on table "b"\nDETAIL: Key \(id\)=\(4\) is still referenced from table "b"\.
 UPDATE a SET id = 1000 WHERE id = 4;
 
 # 5. ON DELETE CASCADE
@@ -755,7 +755,7 @@ INSERT INTO c2 VALUES
 INSERT INTO d VALUES ('d-pk1-c2-pk4-b1-pk2', 'c2-pk4-b1-pk2');
 
 # ON DELETE CASCADE
-statement error delete on table "c2" violates foreign key constraint "fk_delete_restrict_ref_c2" on table "d"\nDETAIL: Key \(id\)=\('c2-pk4-b1-pk2'\) is still referenced from table "d"\.
+statement error delete on table "c2" violates foreign key constraint "d_delete_restrict_fkey" on table "d"\nDETAIL: Key \(id\)=\('c2-pk4-b1-pk2'\) is still referenced from table "d"\.
 DELETE FROM a WHERE id = 'a-pk1';
 
 # Clean up after the test.
@@ -1494,7 +1494,7 @@ statement ok
 INSERT INTO d1 VALUES ('d1-pk1', 'original');
 
 # ON UPDATE CASCADE
-statement error pq: update on table "c2" violates foreign key constraint "fk_update_restrict_ref_c2" on table "d1"\nDETAIL: Key \(update_cascade\)=\('original'\) is still referenced from table "d1"\.
+statement error pq: update on table "c2" violates foreign key constraint "d1_update_restrict_fkey" on table "d1"\nDETAIL: Key \(update_cascade\)=\('original'\) is still referenced from table "d1"\.
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 statement ok
@@ -1505,7 +1505,7 @@ statement ok
 INSERT INTO d2 VALUES ('original');
 
 # ON UPDATE CASCADE
-statement error pq: update on table "c3" violates foreign key constraint "fk_id_ref_c3" on table "d2"\nDETAIL: Key \(id\)=\('original'\) is still referenced from table "d2"\.
+statement error pq: update on table "c3" violates foreign key constraint "d2_id_fkey" on table "d2"\nDETAIL: Key \(id\)=\('original'\) is still referenced from table "d2"\.
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.
@@ -2612,7 +2612,7 @@ INSERT INTO b3 VALUES ('b3-pk1', 'delete_me'), ('b3-pk2', 'untouched');
 INSERT INTO b4 VALUES ('b4-pk1', 'delete_me'), ('b4-pk2', 'delete_me');
 
 # ON DELETE CASCADE, which should fail since the value 'missing' is not in a.
-statement error pq: update on table "b3" violates foreign key constraint "fk_delete_set_default_ref_a"\nDETAIL: Key \(delete_set_default\)=\('missing'\) is not present in table "a"\.
+statement error pq: update on table "b3" violates foreign key constraint "b3_delete_set_default_fkey"\nDETAIL: Key \(delete_set_default\)=\('missing'\) is not present in table "a"\.
 DELETE FROM a WHERE id = 'delete_me';
 
 # Clean up after the test.
@@ -2777,7 +2777,7 @@ INSERT INTO c3 VALUES
 # This query expects to cascade the deletion in a into b1 and b2, but not into
 # the c tables which have ON DELETE SET DEFAULT instead. And ultimately fail
 # since the default value 'missing' is not present in b1.
-statement error pq: update on table "c2" violates foreign key constraint "fk_delete_set_default_ref_b1"\nDETAIL: Key \(delete_set_default\)=\('missing'\) is not present in table "b1"\.
+statement error pq: update on table "c2" violates foreign key constraint "c2_delete_set_default_fkey"\nDETAIL: Key \(delete_set_default\)=\('missing'\) is not present in table "b1"\.
 DELETE FROM a WHERE id = 'a-pk1';
 
 # Clean up after the test.
@@ -3060,7 +3060,7 @@ INSERT INTO b3 VALUES ('b3-pk1', 'original'), ('b3-pk2', 'untouched');
 INSERT INTO b3 VALUES ('b4-pk1', 'original'), ('b4-pk2', 'original');
 
 # ON UPDATE CASCADE, which should fail since the value 'missing' is not in a.
-statement error update on table "b3" violates foreign key constraint "fk_update_set_null_ref_a"\nDETAIL: Key \(update_set_null\)=\('missing'\) is not present in table "a"\.
+statement error update on table "b3" violates foreign key constraint "b3_update_set_null_fkey"\nDETAIL: Key \(update_set_null\)=\('missing'\) is not present in table "a"\.
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.
@@ -3221,7 +3221,7 @@ INSERT INTO c3 VALUES
 
 # ON UPDATE CASCADE all b tables into the c tables, but fail due to a default
 # value that does not exist.
-statement error update on table "c2" violates foreign key constraint "fk_update_set_null_ref_b1"\nDETAIL: Key \(update_set_null\)=\('missing'\) is not present in table "b1"\.
+statement error update on table "c2" violates foreign key constraint "c2_update_set_null_fkey"\nDETAIL: Key \(update_set_null\)=\('missing'\) is not present in table "b1"\.
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.
@@ -3549,11 +3549,11 @@ INSERT INTO b VALUES (2,2);
 INSERT INTO c VALUES (2,2);
 
 # C's MATCH FULL should reject this.
-statement error pq: update on table "c" violates foreign key constraint "fk_x_ref_b"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values
+statement error pq: update on table "c" violates foreign key constraint "c_x_y_fkey"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values
 DELETE FROM a;
 
 # Again, for the same reason.
-statement error update on table "c" violates foreign key constraint "fk_x_ref_b"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values
+statement error update on table "c" violates foreign key constraint "c_x_y_fkey"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values
 UPDATE a SET x = 3 WHERE x = 2;
 
 # Ensure nothing has changed.
@@ -3601,10 +3601,10 @@ statement ok
 DELETE FROM a WHERE x = 2;
 
 # We can't cascade the null value though to c, since it would break MATCH FULL.
-statement error update on table "c" violates foreign key constraint "fk_x_ref_b"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values\.
+statement error update on table "c" violates foreign key constraint "c_x_y_fkey"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values\.
 UPDATE a SET x = NULL WHERE x = 3;
 
-statement error update on table "c" violates foreign key constraint "fk_x_ref_b"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values\.
+statement error update on table "c" violates foreign key constraint "c_x_y_fkey"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values\.
 UPDATE a SET y = NULL WHERE y = 3;
 
 # Now update (3,3) to (null, null) which should cascade.
@@ -3902,7 +3902,7 @@ SELECT * FROM child
 3  1
 4  1
 
-statement error update on table "child" violates foreign key constraint "fk_p_ref_parent"\nDETAIL: Key \(p\)=\(1\) is not present in table "parent"\.
+statement error update on table "child" violates foreign key constraint "child_p_fkey"\nDETAIL: Key \(p\)=\(1\) is not present in table "parent"\.
 INSERT INTO parent VALUES (100, 1) ON CONFLICT(p) DO UPDATE SET p = 50
 
 statement ok
