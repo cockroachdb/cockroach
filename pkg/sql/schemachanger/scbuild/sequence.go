@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -172,19 +173,20 @@ func (b *buildContext) createSequence(ctx context.Context, n *tree.CreateSequenc
 
 	b.addNode(scpb.Target_ADD, &sequenceColumn)
 	b.buildMetaData.CreatedDescriptors.Add(descID)
-	/*	indexDescriptor := scpb.PrimaryIndex{
-			TableID: descID,
-			Index: descpb.IndexDescriptor{
-				ID:                  keys.SequenceIndexID,
-				Name:                tabledesc.PrimaryKeyIndexName,
-				KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
-				KeyColumnNames:      []string{tabledesc.SequenceColumnName},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-				EncodingType:        descpb.PrimaryIndexEncoding,
-				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
-			},
-		}
-		b.addNode(scpb.Target_ADD, &indexDescriptor)*/
+	// FIXME: Need to omit certain ops...
+	indexDescriptor := scpb.PrimaryIndex{
+		TableID: descID,
+		Index: descpb.IndexDescriptor{
+			ID:                  keys.SequenceIndexID,
+			Name:                tabledesc.PrimaryKeyIndexName(n.Name.ObjectName.String()),
+			KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
+			KeyColumnNames:      []string{tabledesc.SequenceColumnName},
+			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+			EncodingType:        descpb.PrimaryIndexEncoding,
+			Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+		},
+	}
+	b.addNode(scpb.Target_ADD, &indexDescriptor)
 	// FIXME: Commit the column mutations faster some how...
 	// FIXME: Create a single column...
 	// FIXME: Other information?

@@ -11,12 +11,15 @@
 package scplan
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/deprules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/opgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
@@ -75,7 +78,7 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 	if err := deprules.Apply(g); err != nil {
 		return Plan{}, err
 	}
-
+	optimizeEdges(initial, g, params)
 	stages := buildStages(initial, g, params)
 	return Plan{
 		Params:  params,
@@ -96,6 +99,35 @@ func validateStages(stages []Stage) {
 		if stage.Revertible && !revertibleAllowed {
 			panic(errors.AssertionFailedf(
 				"invalid execution plan revertability flipped at stage (%d): %v", idx, stage))
+		}
+	}
+}
+
+func optimizeEdges(init scpb.State, g *scgraph.Graph, params Params) {
+	// Starting the from the initial state, see if we can collapse all
+	// edges...
+	edgesReduced := true
+	for edgesReduced {
+		edgesReduced = false
+		for _, cur := range init {
+			edge, ok := g.GetOpEdgeFrom(cur)
+			if !ok {
+				continue
+			}
+			// For newly created descriptors we can
+			// get to the next state directly now.
+			if !params.CreatedDescriptorIDs.Contains(screl.GetDescID(cur.Element())) {
+				continue
+			}
+			// Combine the current and next edge together,
+			// since the descriptors are all newly created.
+			nextEdge, ok := g.GetOpEdgeFrom(edge.To())
+			if !ok {
+				continue
+			}
+			// FIXME: Move into the graph...
+			g.MergeOpEdges(edge, nextEdge)
+			edgesReduced = true
 		}
 	}
 }
@@ -147,29 +179,42 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 		return edges, false
 	}
 	buildStageType := func(edges []*scgraph.OpEdge) (Stage, bool) {
-		edges, ok := filterUnsatisfiedEdges(edges)
-		if !ok {
-			return Stage{}, false
-		}
+		completeEdges := make(map[*scgraph.OpEdge]struct{})
+		newOpsAdded := true
 		next := append(cur[:0:0], cur...)
 		isStageRevertible := true
 		var ops []scop.Op
-		for revertible := 1; revertible >= 0; revertible-- {
-			isStageRevertible = revertible == 1
-			for i, ts := range cur {
-				for _, e := range edges {
-					if e.From() == ts && isStageRevertible == e.Revertible() {
-						next[i] = e.To()
-						ops = append(ops, e.Op()...)
-						break
+		// Keep on
+		for newOpsAdded == true {
+			edges, ok := filterUnsatisfiedEdges(edges)
+			if !ok {
+				return Stage{}, false
+			}
+			newOpsAdded = false
+			for revertible := 1; revertible >= 0; revertible-- {
+				isStageRevertible = revertible == 1
+				for i, ts := range cur {
+					for _, e := range edges {
+						if _, ok := completeEdges[e]; ok {
+							continue
+						}
+						if e.From() == ts && isStageRevertible == e.Revertible() {
+							next[i] = e.To()
+							ops = append(ops, e.Op()...)
+							// Mark the edge as satisfied
+							fulfilled[e.To()] = struct{}{}
+							completeEdges[e] = struct{}{}
+							newOpsAdded = true
+							break
+						}
 					}
 				}
 			}
 			// If we added non-revertible stages
 			// then this stage is done
-			if len(ops) != 0 {
+			/*if len(ops) != 0 {
 				break
-			}
+			}*/
 		}
 		return Stage{
 			Before:     cur,
@@ -223,7 +268,10 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 			break
 		}
 		// Sort ops based on graph dependencies.
+		fmt.Printf("OPS:----%v\n", s.Ops.Slice())
+		// FIXME: Sort has to account for our merging :(
 		sortOps(g, s.Ops.Slice())
+		fmt.Printf("OPS:-----%v\n", s.Ops.Slice())
 		stages = append(stages, s)
 		cur = s.After
 	}
@@ -248,7 +296,7 @@ func doesPathExistToNode(graph *scgraph.Graph, start *scpb.Node, target *scpb.No
 			if !ok {
 				continue
 			}
-			// Append all of the nodes to visit
+			// Append all the nodes to visit
 			for _, currEdge := range edges {
 				nodesToVisit = append(nodesToVisit, currEdge.To())
 			}

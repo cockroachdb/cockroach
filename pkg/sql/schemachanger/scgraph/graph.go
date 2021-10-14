@@ -11,6 +11,8 @@
 package scgraph
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -202,6 +204,74 @@ func (g *Graph) AddDepEdge(
 	return nil
 }
 
+func (g *Graph) MergeOpEdges(oe *OpEdge, next *OpEdge) {
+	if oe.To().Status == scpb.Status_DELETE_AND_WRITE_ONLY {
+		fmt.Println("HERE\n")
+	}
+
+	// FIXME: Move existing edges over too..
+	for _, depEdges := range g.nodeDepEdges {
+		for _, edge := range depEdges {
+			if edge.To() == oe.To() {
+				edge.to = next.to
+			}
+			if edge.From() == oe.To() {
+				edge.from = next.to
+			}
+		}
+	}
+	for _, edge := range g.nodeOpEdges {
+		if edge == next {
+			continue
+		}
+		if edge.To() == oe.To() {
+			edge.to = next.to
+		}
+		if edge.From() == oe.To() {
+			edge.from = next.to
+		}
+	}
+	oe.mergeNextOpEdge(next)
+	// FIXME: Ordering?
+	// Merge any dep edges over, we need them for
+	// the transitions here.
+	// FIXME: Clean up old objects..
+	for _, nextDepEdge := range g.nodeDepEdges[next.from] {
+		g.AddDepEdge("hack", oe.To().Target, oe.To().Status, nextDepEdge.To().Target, nextDepEdge.To().Status)
+	}
+	newEdges := make([]Edge, 0, len(g.edges))
+	for _, edge := range g.edges {
+		found := false
+		for _, matchEdge := range g.nodeDepEdges[next.From()] {
+			if matchEdge == edge {
+				found = true
+				break
+			}
+		}
+		if found {
+			continue
+		}
+		newEdges = append(newEdges, edge)
+	}
+	g.edges = newEdges
+	delete(g.nodeDepEdges, next.from)
+	delete(g.nodeOpEdges, next.from)
+	// Fix reverse references
+	for _, values := range g.nodeDepEdges {
+		for _, edge := range values {
+			if edge.To() == next.From() {
+				edge.to = oe.to
+			}
+		}
+	}
+	// Update the mapping for the edges.
+	for _, nextOp := range next.Op() {
+		g.opToNode[nextOp] = oe.From()
+	}
+	// Remove the the nodes?...
+	//g.targetNodes
+}
+
 // Edge represents a relationship between two Nodes.
 //
 // TODO(ajwerner): Consider hiding Node pointers behind an interface to clarify
@@ -226,6 +296,18 @@ func (oe *OpEdge) To() *scpb.Node { return oe.to }
 
 // Op returns the scop.Op for execution that is associated with the op edge.
 func (oe *OpEdge) Op() []scop.Op { return oe.op }
+
+func (oe *OpEdge) mergeNextOpEdge(next *OpEdge) {
+	oe.to = next.to
+	oe.revertible = oe.revertible || next.revertible
+
+	// FIXME: Stupid hack back fill ops are skipped
+	for _, newOp := range next.op {
+		if newOp.Type() != scop.BackfillType {
+			oe.op = append(oe.op, newOp)
+		}
+	}
+}
 
 // Revertible returns if the dependency edge is revertible
 func (oe *OpEdge) Revertible() bool { return oe.revertible }
