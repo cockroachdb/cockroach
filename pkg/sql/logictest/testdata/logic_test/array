@@ -2020,8 +2020,161 @@ SELECT array_remove(ARRAY[(1,'cat'),(2,'dog')], (3,'\xc03b4478eb'::BYTEA))
 ----
 {"(1,cat)","(2,dog)"}
 
+subtest regression_71394
+
 query T
 PREPARE regression_71394 AS SELECT ARRAY[$1]::int[];
 EXECUTE regression_71394(71394)
 ----
 {71394}
+
+subtest array_enums
+
+# Able to distribute queries with arrays of tuples.
+
+statement ok
+CREATE TYPE letter AS ENUM ('a', 'b', 'c');
+CREATE TABLE kv_enum (
+  k INT PRIMARY KEY,
+  v letter
+);
+INSERT INTO kv_enum VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, NULL)
+
+query T rowsort
+SELECT ARRAY[v] FROM kv_enum
+----
+{a}
+{b}
+{c}
+{NULL}
+
+# Test array builtins on enum types
+
+query T rowsort
+SELECT array_cat(ARRAY['a'::letter, 'b'], ARRAY[v]) FROM kv_enum
+----
+{a,b,a}
+{a,b,b}
+{a,b,c}
+{a,b,NULL}
+
+query T rowsort
+SELECT array_cat(ARRAY[NULL::letter], ARRAY[v]) FROM kv_enum
+----
+{NULL,a}
+{NULL,b}
+{NULL,c}
+{NULL,NULL}
+
+query T
+SELECT array_cat(ARRAY['a'::letter], ARRAY[NULL::letter])
+----
+{a,NULL}
+
+query T
+SELECT array_agg('a'::letter)
+----
+{a}
+
+query T
+SELECT array_agg(v ORDER BY k) FROM kv_enum
+----
+{a,b,c,NULL}
+
+query T rowsort
+SELECT array_append(ARRAY['a'::letter], v) FROM kv_enum
+----
+{a,a}
+{a,b}
+{a,c}
+{a,NULL}
+
+query T
+SELECT array_append(ARRAY['a'::letter], NULL::letter)
+----
+{a,NULL}
+
+query T rowsort
+SELECT array_append(NULL::letter[], v) FROM kv_enum
+----
+{a}
+{b}
+{c}
+{NULL}
+
+query T
+SELECT array_append(NULL::letter[], NULL::letter)
+----
+{NULL}
+
+query T rowsort
+SELECT array_prepend(v, ARRAY['a'::letter, 'b']) FROM kv_enum
+----
+{a,a,b}
+{b,a,b}
+{c,a,b}
+{NULL,a,b}
+
+query T
+SELECT array_prepend(NULL::letter, ARRAY['a'::letter])
+----
+{NULL,a}
+
+query T
+SELECT array_prepend('a'::letter, NULL::letter[])
+----
+{a}
+
+query T
+SELECT array_prepend(NULL::letter, NULL::letter[])
+----
+{NULL}
+
+query T
+SELECT array_remove(ARRAY['a'::letter, 'b'], 'a'::letter)
+----
+{b}
+
+query T
+SELECT array_remove(ARRAY['a'::letter, 'b', NULL], NULL::letter)
+----
+{a,b}
+
+query T
+SELECT array_remove(NULL::letter[], NULL::letter)
+----
+NULL
+
+query T
+SELECT array_replace(ARRAY['a'::letter, 'b'], 'b'::letter, 'c'::letter)
+----
+{a,c}
+
+query TT
+SELECT array_replace(ARRAY['a'::letter, NULL], NULL::letter, 'c'::letter), array_replace(NULL::letter[], 'a'::letter, 'b'::letter)
+----
+{a,c}  NULL
+
+# ARRAY_POSITION function
+
+query I
+SELECT array_position(ARRAY['a'::letter, 'b', 'c'], 'c'::letter)
+----
+3
+
+query I
+SELECT array_position(NULL::letter[], 'a'::letter)
+----
+NULL
+
+# ARRAY_POSITIONS function
+
+query T
+SELECT array_positions(ARRAY['a'::letter, 'b', 'a'], 'a'::letter)
+----
+{1,3}
+
+query T
+SELECT array_positions(NULL::letter[], 'b'::letter)
+----
+NULL

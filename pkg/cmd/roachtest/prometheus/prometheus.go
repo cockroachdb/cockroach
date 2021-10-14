@@ -66,6 +66,15 @@ func Init(
 	c cluster,
 	repeatFunc func(context.Context, option.NodeListOption, string, ...string) error,
 ) (*Prometheus, error) {
+	if err := c.RunE(
+		ctx,
+		cfg.PrometheusNode,
+		"terminate existing prometheus instance, if exists",
+		"sudo systemctl stop prometheus || echo 'no prometheus is running'",
+	); err != nil {
+		return nil, err
+	}
+
 	if err := repeatFunc(
 		ctx,
 		cfg.PrometheusNode,
