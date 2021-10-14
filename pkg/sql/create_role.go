@@ -251,8 +251,6 @@ func (*CreateRoleNode) Values() tree.Datums { return tree.Datums{} }
 // Close implements the planNode interface.
 func (*CreateRoleNode) Close(context.Context) {}
 
-var errNoUserNameSpecified = errors.New("no username specified")
-
 func (p *planner) checkPasswordAndGetHash(
 	ctx context.Context, password string,
 ) (hashedPassword []byte, err error) {
