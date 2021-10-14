@@ -84,6 +84,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -461,7 +462,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			// also remove the record after the temp directory is
 			// removed.
 			recordPath := filepath.Join(useStore.Path, TempDirsRecordFilename)
-			err = storage.CleanupTempDirs(recordPath)
+			err = fs.CleanupTempDirs(recordPath)
 		}
 		if err != nil {
 			log.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())

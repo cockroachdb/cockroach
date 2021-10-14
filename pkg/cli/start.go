@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -221,7 +222,7 @@ func initTempStorageConfig(
 			continue
 		}
 		recordPath := filepath.Join(spec.Path, server.TempDirsRecordFilename)
-		if err := storage.CleanupTempDirs(recordPath); err != nil {
+		if err := fs.CleanupTempDirs(recordPath); err != nil {
 			return base.TempStorageConfig{}, errors.Wrap(err,
 				"could not cleanup temporary directories from record file")
 		}
@@ -288,7 +289,7 @@ func initTempStorageConfig(
 	// Create the temporary subdirectory for the temp engine.
 	{
 		var err error
-		if tempStorageConfig.Path, err = storage.CreateTempDir(tempDir, server.TempDirPrefix, stopper); err != nil {
+		if tempStorageConfig.Path, err = fs.CreateTempDir(tempDir, server.TempDirPrefix, stopper); err != nil {
 			return base.TempStorageConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
 		}
 	}
@@ -296,7 +297,7 @@ func initTempStorageConfig(
 	// We record the new temporary directory in the record file (if it
 	// exists) for cleanup in case the node crashes.
 	if recordPath != "" {
-		if err := storage.RecordTempDir(recordPath, tempStorageConfig.Path); err != nil {
+		if err := fs.RecordTempDir(recordPath, tempStorageConfig.Path); err != nil {
 			return base.TempStorageConfig{}, errors.Wrapf(
 				err,
 				"could not record temporary directory path to record file: %s",
