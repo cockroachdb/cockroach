@@ -1,13 +1,13 @@
-# The CODEOWNERS file is used by Github to automate assigning code reviews, see
+# The CODEOWNERS file is used by GitHub to automate assigning code reviews, see
 # [1] and [2]. We also use it in our internal tooling (see [3]) to automate test
 # failure issue routing. To do this efficiently, we are enforcing a few rules in
 # this file via linting. They are:
 #
 # - every file under ./pkg has to have at least one owner, and each owner must
 #   be present in TEAMS.yaml (either as a map key or an alias).
-# - you can opt out of Github-requested code review assignments (while
+# - you can opt out of GitHub-requested code review assignments (while
 #   maintaining team ownership) by suffixing the handle with `-noreview`.
-#   (This will essentially make it an unknown team to Github, but our internal
+#   (This will essentially make it an unknown team to GitHub, but our internal
 #   tooling continues to recognize the original team).
 #
 # Remember, *the last rule to match wins*, and you need a trailing slash to get

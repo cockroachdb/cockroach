@@ -1097,7 +1097,7 @@ PostgreSQL, although it also diverges in significant ways:
   implementation simple and efficient, capitalizing on the observation
   that 1) most SQL code in clients is automatically generated with
   coherent typing already and 2) existing SQL code for other databases
-  will need to be massaged for CockroachDB anyways.
+  will need to be massaged for CockroachDB anyway.
 
 ## SQL architecture
 
