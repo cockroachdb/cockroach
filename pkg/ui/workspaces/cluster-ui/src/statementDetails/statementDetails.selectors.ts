@@ -117,7 +117,7 @@ function filterByRouterParamsPredicate(
     app = "";
   }
 
-  if (app === "(internal)") {
+  if (app === internalAppNamePrefix) {
     return (stmt: ExecutionStatistics) =>
       filterByKeys(stmt) && stmt.app.startsWith(internalAppNamePrefix);
   }
@@ -152,7 +152,9 @@ export const selectStatement = createSelector(
       byNode: coalesceNodeStats(results),
       app: _.uniq(
         results.map(s =>
-          s.app.startsWith(internalAppNamePrefix) ? "(internal)" : s.app,
+          s.app.startsWith(internalAppNamePrefix)
+            ? internalAppNamePrefix
+            : s.app,
         ),
       ),
       database: queryByName(props.location, databaseAttr),
