@@ -550,8 +550,8 @@ func (a *Allocator) computeAction(
 	// stores to be unavailable, just because their nodes have failed a liveness
 	// heartbeat in the recent past. This means we won't move those replicas
 	// elsewhere (for a regular rebalance or for decommissioning).
-	const includeSuspectStores = true
-	liveVoters, deadVoters := a.storePool.liveAndDeadReplicas(voterReplicas, includeSuspectStores)
+	const includeSuspectAndDrainingStores = true
+	liveVoters, deadVoters := a.storePool.liveAndDeadReplicas(voterReplicas, includeSuspectAndDrainingStores)
 
 	if len(liveVoters) < quorum {
 		// Do not take any replacement/removal action if we do not have a quorum of
@@ -631,7 +631,7 @@ func (a *Allocator) computeAction(
 	}
 
 	liveNonVoters, deadNonVoters := a.storePool.liveAndDeadReplicas(
-		nonVoterReplicas, includeSuspectStores,
+		nonVoterReplicas, includeSuspectAndDrainingStores,
 	)
 	if haveNonVoters == neededNonVoters && len(deadNonVoters) > 0 {
 		// The range has non-voter(s) on a dead node that we should replace.
@@ -1323,7 +1323,7 @@ func (a *Allocator) TransferLeaseTarget(
 			return roachpb.ReplicaDescriptor{}
 		}
 		// Verify that the preferred replica is eligible to receive the lease.
-		preferred, _ = a.storePool.liveAndDeadReplicas(preferred, false /* includeSuspectStores */)
+		preferred, _ = a.storePool.liveAndDeadReplicas(preferred, false /* includeSuspectAndDrainingStores */)
 		if len(preferred) == 1 {
 			return preferred[0]
 		}
@@ -1338,7 +1338,7 @@ func (a *Allocator) TransferLeaseTarget(
 	}
 
 	// Only consider live, non-draining, non-suspect replicas.
-	existing, _ = a.storePool.liveAndDeadReplicas(existing, false /* includeSuspectStores */)
+	existing, _ = a.storePool.liveAndDeadReplicas(existing, false /* includeSuspectAndDrainingStores */)
 
 	// Only proceed with the lease transfer if we are also the raft leader (we
 	// already know we are the leaseholder at this point), and only consider
