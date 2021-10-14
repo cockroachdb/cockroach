@@ -88,7 +88,7 @@ export const selectStatements = createSelector(
       let showInternal = false;
       if (criteria === "(unset)") {
         criteria = "";
-      } else if (criteria === "(internal)") {
+      } else if (criteria === state.data.internal_app_name_prefix) {
         showInternal = true;
       }
 
@@ -160,7 +160,7 @@ export const selectApps = createSelector(
       },
     );
     return []
-      .concat(sawInternal ? ["(internal)"] : [])
+      .concat(sawInternal ? [state.data.internal_app_name_prefix] : [])
       .concat(sawBlank ? ["(unset)"] : [])
       .concat(Object.keys(apps));
   },
