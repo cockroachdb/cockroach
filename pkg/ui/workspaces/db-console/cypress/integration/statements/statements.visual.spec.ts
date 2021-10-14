@@ -33,7 +33,7 @@ describe("Statements - can successfully activate diagnostics", () => {
       "Check whether the queries contain 'Activate' button and then click"
     );
     cy.findByText("Activate").eq(0).click().should("exist");
-    cy.log("Click the button for the diagonistics");
+    cy.log("Click the button for the diagnostics");
     cy.findAllByText("Activate").eq(1).click();
     cy.findAllByText("WAITING").should("exist");
     cy.exec(
@@ -44,4 +44,4 @@ describe("Statements - can successfully activate diagnostics", () => {
   });
 });
 
-// TODO: Download and check the downloaded diagonistics file
+// TODO: Download and check the downloaded diagnostics file
