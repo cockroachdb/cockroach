@@ -7,13 +7,13 @@ INSERT INTO t VALUES (2)
 # Verify that transacations can be used for historical reads using BEGIN
 # or SET TRANSACTION
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 BEGIN AS OF SYSTEM TIME '-1h'; SELECT * FROM t
 
 statement ok
 COMMIT
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 BEGIN; SET TRANSACTION AS OF SYSTEM TIME '-1h'; SELECT * FROM t
 
 statement ok
@@ -59,13 +59,13 @@ BEGIN AS OF SYSTEM TIME '-1h'; SELECT * FROM t AS OF SYSTEM TIME '-1h'
 statement ok
 COMMIT
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 BEGIN AS OF SYSTEM TIME '2018-12-30'; SELECT * FROM t AS OF SYSTEM TIME '2018-12-30'
 
 statement ok
 COMMIT
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 BEGIN; SET TRANSACTION AS OF SYSTEM TIME '2018-12-30'; SELECT * FROM t AS OF SYSTEM TIME '2018-12-30'
 
 statement ok
@@ -111,7 +111,7 @@ COMMIT
 statement ok
 BEGIN AS OF SYSTEM TIME '-1h'; SET TRANSACTION PRIORITY HIGH;
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 SELECT * FROM t
 
 statement ok

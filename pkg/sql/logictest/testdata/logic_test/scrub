@@ -111,13 +111,13 @@ EXPERIMENTAL SCRUB TABLE test.fk_parent WITH OPTIONS CONSTRAINT (fkey)
 
 # Test AS OF SYSTEM TIME
 
-statement error pgcode 42P01 relation "xz" does not exist
+statement error pgcode 3D000 database "test" does not exist
 EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS PHYSICAL
 
-statement error pgcode 42P01 relation "xz" does not exist
+statement error pgcode 3D000 database "test" does not exist
 EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS INDEX ALL
 
-statement error pgcode 42P01 relation "xz" does not exist
+statement error pgcode 3D000 database "test" does not exist
 EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS CONSTRAINT ALL
 
 # Test scrubbing sequences.
