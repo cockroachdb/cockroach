@@ -153,13 +153,13 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
 
   dropdownRef: React.RefObject<HTMLDivElement> = React.createRef();
 
-  componentDidMount() {
+  componentDidMount(): void {
     window.addEventListener("click", this.outsideClick, false);
   }
-  componentWillUnmount() {
+  componentWillUnmount(): void {
     window.removeEventListener("click", this.outsideClick, false);
   }
-  componentDidUpdate(prevProps: QueryFilter) {
+  componentDidUpdate(prevProps: QueryFilter): void {
     if (prevProps.filters !== this.props.filters) {
       this.setState({
         filters: {
@@ -168,21 +168,21 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       });
     }
   }
-  outsideClick = (event: any) => {
+  outsideClick = (event: any): void => {
     this.setState({ hide: true });
   };
 
-  insideClick = (event: any) => {
+  insideClick = (event: any): void => {
     event.stopPropagation();
   };
 
-  toggleFilters = () => {
+  toggleFilters = (): void => {
     this.setState({
       hide: !this.state.hide,
     });
   };
 
-  handleSubmit = () => {
+  handleSubmit = (): void => {
     this.props.onSubmitFilters(this.state.filters);
     this.setState({ hide: true });
   };
@@ -220,14 +220,14 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
   };
 
-  validateInput = (value: string) => {
+  validateInput = (value: string): string => {
     const isInteger = /^[0-9]+$/;
     return (value === "" || isInteger.test(value)) && value.length <= 3
       ? value
       : this.state.filters.timeNumber;
   };
 
-  clearInput = () => {
+  clearInput = (): void => {
     this.setState({
       filters: {
         ...this.state.filters,
@@ -238,11 +238,10 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
 
   isOptionSelected = (option: string, field: string) => {
     const selection = field.split(",");
-    if (selection.length > 0 && selection.includes(option)) return true;
-    return false;
+    return selection.length > 0 && selection.includes(option);
   };
 
-  render() {
+  render(): React.ReactElement {
     const { hide, filters } = this.state;
     const {
       appNames,
