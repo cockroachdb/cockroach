@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -87,7 +88,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	}
 
 	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(
-		ctx, serverCfg.Settings, stopper, serverCfg.Stores,
+		ctx, serverCfg.Settings, stopper, base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true}}},
 	); err != nil {
 		return err
 	}
