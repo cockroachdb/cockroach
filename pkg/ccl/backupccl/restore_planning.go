@@ -1683,6 +1683,9 @@ func checkPrivilegesForRestore(
 	if knobs != nil && knobs.AllowImplicitAccess {
 		return nil
 	}
+	if p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
+		return nil
+	}
 	// Check that none of the sources rely on implicit access.
 	for i := range from {
 		for j := range from[i] {

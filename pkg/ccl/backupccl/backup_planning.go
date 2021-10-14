@@ -700,6 +700,9 @@ func checkPrivilegesForBackup(
 	if knobs != nil && knobs.AllowImplicitAccess {
 		return nil
 	}
+	if p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
+		return nil
+	}
 	// Check that none of the destinations require an admin role.
 	for _, uri := range to {
 		conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())
