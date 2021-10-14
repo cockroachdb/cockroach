@@ -210,7 +210,7 @@ throttles the latter kinds of work.
 We monitor the following state of the goroutine scheduler: the number
 of processors, and the number of goroutines that are runnable (i.e.,
 they are ready to run, but not running). The latter represents
-queueing inside the goroutine scheduler, since these groutines are
+queueing inside the goroutine scheduler, since these goroutines are
 waiting to be scheduled.  KV work concurrency slots are adjusted by
 gradually decreasing or increasing the total slots (additive
 decrements or increments), when the runnable count, normalized by the
@@ -218,7 +218,7 @@ number of processors, is too high or too low. The adjustment also
 takes into account current usage of slots. The exact heuristic can be
 found in `admission.kvSlotAdjuster`. It monitors the runnable count at
 1ms intervals. The motivation for this high frequency is that sudden
-shifts in CPU/IO ratio or lock cotention can cause the current slot
+shifts in CPU/IO ratio or lock contention can cause the current slot
 count to be inadequate, while leaving the CPU underutilized, which is
 undesirable.
 
@@ -327,7 +327,7 @@ control disabled. Certain KV roachtests that used to overload IO, but
 were not running long enough to show the bad effects, are worse with
 admission control enabled when comparing the mean throughput. However
 the runs with admission control enabled are arguably better since they
-do not have a steadily worsening througput over the course of the
+do not have a steadily worsening throughput over the course of the
 experimental run.
 
 For some graphs showing before and after effects of enabling admission control see:
