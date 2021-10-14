@@ -580,6 +580,15 @@ type ExternalIODirConfig struct {
 	// DisableOutbound disables the use of any external-io that dials out such as
 	// to s3, gcs, or even `nodelocal` as it may need to dial another node.
 	DisableOutbound bool
+
+	// EnableNonAdminImplicitAndArbitraryOutbound removes the usual restriction to
+	// only admin users placed on usage of node-granted access, such as to the
+	// implicit auth via the machine account for the node or to arbitrary network
+	// addresses (which are accessed from the node and might otherwise not be
+	// reachable). Instead, all users can use implicit auth, http addresses and
+	// configure custom endpoints. This should only be used if all users with SQL
+	// access should have access to anything the node has access to.
+	EnableNonAdminImplicitAndArbitraryOutbound bool
 }
 
 // TempStorageConfigFromEnv creates a TempStorageConfig.

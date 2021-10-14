@@ -1646,8 +1646,7 @@ func checkPrivilegesForRestore(
 				"only users with the CREATEDB privilege can restore databases")
 		}
 	}
-	knobs := p.ExecCfg().BackupRestoreTestingKnobs
-	if knobs != nil && knobs.AllowImplicitAccess {
+	if p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
 		return nil
 	}
 	// Check that none of the sources rely on implicit access.

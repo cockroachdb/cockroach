@@ -26,6 +26,8 @@ BACKUP TABLE d.t TO 'nodelocal://0/test-nonroot-table';
 ----
 
 # Start a new cluster with the same IO dir.
+# nodelocal IO is a form of implicit access (since it is accessed as the node,
+# so we require the allow-implicit-access flag.
 new-server name=s2 allow-implicit-access
 ----
 
@@ -105,7 +107,12 @@ BACKUP DATABASE d2 TO 'nodelocal://0/d2';
 BACKUP TABLE d2.t TO 'nodelocal://0/d2-table';
 ----
 
-# Test that implicit access is disallowed when the testing knob isn't set.
+exec-sql server=s2 user=testuser
+SHOW BACKUP 'http://COCKROACH_TEST_HTTP_SERVER/'
+----
+pq: http storage file does not exist: error response from server: 404 Not Found "404 page not found\n": external_storage: file doesn't exist
+
+# Test that implicit access is disallowed when the testing knob is not set.
 new-server name=s3 share-io-dir=s1
 ----
 
@@ -118,7 +125,25 @@ NOTICE: GRANT SELECT ON DATABASE is deprecated.
 This statement was automatically converted to USE d; ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO testuser;
 Please use ALTER DEFAULT PRIVILEGES going forward
 
+exec-sql server=s3 user=testuser
+SHOW BACKUP 'http://COCKROACH_TEST_HTTP_SERVER/'
+----
+pq: only users with the admin role are allowed to SHOW BACKUP from the specified http URI
+
 exec-sql user=testuser
 BACKUP DATABASE d TO 'nodelocal://0/test3'
 ----
 pq: user testuser does not have CONNECT privilege on database d
+
+# Test that http access is disallowed by disable http even if allow-non-admin is on.
+new-server name=s4 allow-implicit-access disable-http
+----
+
+exec-sql server=s4
+CREATE USER testuser
+----
+
+exec-sql server=s4 user=testuser
+SHOW BACKUP 'http://COCKROACH_TEST_HTTP_SERVER/'
+----
+pq: make storage: external http access disabled
