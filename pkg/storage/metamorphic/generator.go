@@ -38,58 +38,13 @@ func makeStorageConfig(path string) base.StorageConfig {
 	}
 }
 
-
 func rngIntRange(rng *rand.Rand, min int64, max int64) int64 {
 	return min + rng.Int63n(max-min)
 }
 
-func createTestPebbleVarOpts(path string, seed int64, fs vfs.FS) (storage.Engine, error) {
-	opts := storage.DefaultPebbleOptions()
-
-	if fs != nil {
-		opts.FS = fs
-	}
-	rng := rand.New(rand.NewSource(seed))
-	opts.BytesPerSync = 1 << rngIntRange(rng, 8, 30)
-	opts.FlushSplitBytes = 1 << rng.Intn(20)
-	opts.LBaseMaxBytes = 1 << rngIntRange(rng, 8, 30)
-	opts.L0CompactionThreshold = int(rngIntRange(rng, 1, 10))
-	opts.L0StopWritesThreshold = int(rngIntRange(rng, 1, 32))
-	if opts.L0StopWritesThreshold < opts.L0CompactionThreshold {
-		opts.L0StopWritesThreshold = opts.L0CompactionThreshold
-	}
-	for i := range opts.Levels {
-		if i == 0 {
-			opts.Levels[i].BlockRestartInterval = int(rngIntRange(rng, 1, 64))
-			opts.Levels[i].BlockSize = 1 << rngIntRange(rng, 1, 20)
-			opts.Levels[i].BlockSizeThreshold = int(rngIntRange(rng, 50, 100))
-			opts.Levels[i].IndexBlockSize = opts.Levels[i].BlockSize
-			opts.Levels[i].TargetFileSize = 1 << rngIntRange(rng, 1, 20)
-		} else {
-			opts.Levels[i] = opts.Levels[i-1]
-			opts.Levels[i].TargetFileSize = opts.Levels[i-1].TargetFileSize * 2
-		}
-	}
-	opts.MaxManifestFileSize = 1 << rngIntRange(rng, 1, 28)
-	opts.MaxOpenFiles = int(rngIntRange(rng, 20, 2000))
-	opts.MemTableSize = 1 << rngIntRange(rng, 10, 28)
-	opts.MemTableStopWritesThreshold = int(rngIntRange(rng, 2, 7))
-	opts.MaxConcurrentCompactions = int(rngIntRange(rng, 1, 4))
-
-	opts.Cache = pebble.NewCache(1 << rngIntRange(rng, 1, 30))
-	defer opts.Cache.Unref()
-
-	pebbleConfig := storage.PebbleConfig{
-		StorageConfig: makeStorageConfig(path),
-		Opts:          opts,
-	}
-
-	return storage.NewPebble(context.Background(), pebbleConfig)
-}
-
 type engineConfig struct {
-	name   string
-	opts   *pebble.Options
+	name string
+	opts *pebble.Options
 }
 
 func (e *engineConfig) create(path string, fs vfs.FS) (storage.Engine, error) {
@@ -143,6 +98,7 @@ type metaTestRunner struct {
 	rwGenerator     *readWriterGenerator
 	iterGenerator   *iteratorGenerator
 	keyGenerator    *keyGenerator
+	txnKeyGenerator *txnKeyGenerator
 	valueGenerator  *valueGenerator
 	pastTSGenerator *pastTSGenerator
 	nextTSGenerator *nextTSGenerator
@@ -163,6 +119,7 @@ func (m *metaTestRunner) init() {
 	m.rng = rand.New(rand.NewSource(m.seed))
 	m.tsGenerator.init(m.rng)
 	m.curEngine = 0
+	m.printComment(fmt.Sprintf("seed: %d", m.seed))
 
 	var err error
 	m.engine, err = m.engineSeq.configs[0].create(m.path, m.engineFS)
@@ -179,6 +136,7 @@ func (m *metaTestRunner) init() {
 		tsGenerator:    &m.tsGenerator,
 		txnIDMap:       make(map[txnID]*roachpb.Transaction),
 		openBatches:    make(map[txnID]map[readWriterID]struct{}),
+		inUseKeys:      make(map[txnID][]writtenKey),
 		openSavepoints: make(map[txnID]int),
 		testRunner:     m,
 	}
@@ -200,6 +158,10 @@ func (m *metaTestRunner) init() {
 		rng:         m.rng,
 		tsGenerator: &m.tsGenerator,
 	}
+	m.txnKeyGenerator = &txnKeyGenerator{
+		txns: m.txnGenerator,
+		keys: m.keyGenerator,
+	}
 	m.valueGenerator = &valueGenerator{m.rng}
 	m.pastTSGenerator = &pastTSGenerator{
 		rng:         m.rng,
@@ -215,16 +177,17 @@ func (m *metaTestRunner) init() {
 	m.boolGenerator = &boolGenerator{rng: m.rng}
 
 	m.opGenerators = map[operandType]operandGenerator{
-		operandTransaction: m.txnGenerator,
-		operandReadWriter:  m.rwGenerator,
-		operandMVCCKey:     m.keyGenerator,
-		operandPastTS:      m.pastTSGenerator,
-		operandNextTS:      m.nextTSGenerator,
-		operandValue:       m.valueGenerator,
-		operandIterator:    m.iterGenerator,
-		operandFloat:       m.floatGenerator,
-		operandBool:        m.boolGenerator,
-		operandSavepoint:   m.spGenerator,
+		operandTransaction:   m.txnGenerator,
+		operandReadWriter:    m.rwGenerator,
+		operandMVCCKey:       m.keyGenerator,
+		operandUnusedMVCCKey: m.txnKeyGenerator,
+		operandPastTS:        m.pastTSGenerator,
+		operandNextTS:        m.nextTSGenerator,
+		operandValue:         m.valueGenerator,
+		operandIterator:      m.iterGenerator,
+		operandFloat:         m.floatGenerator,
+		operandBool:          m.boolGenerator,
+		operandSavepoint:     m.spGenerator,
 	}
 
 	m.nameToGenerator = make(map[string]*opGenerator)
@@ -445,7 +408,7 @@ func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
 			if strings.Contains(op.expectedOutput, "error") && strings.Contains(actualOutput, "error") {
 				continue
 			}
-			m.t.Fatalf("mismatching output at line %d: expected %s, got %s", op.lineNum, op.expectedOutput, actualOutput)
+			m.t.Fatalf("mismatching output at line %d, operation index %d: expected %s, got %s", op.lineNum, i, op.expectedOutput, actualOutput)
 		}
 	}
 }
