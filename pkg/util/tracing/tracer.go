@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/petermattis/goid"
@@ -186,18 +187,18 @@ type Tracer struct {
 type spanRegistry struct {
 	mu struct {
 		syncutil.Mutex
-		m map[uint64]*crdbSpan
+		m map[tracingpb.SpanID]*crdbSpan
 	}
 }
 
 func makeSpanRegistry() *spanRegistry {
 	r := &spanRegistry{}
-	r.mu.m = make(map[uint64]*crdbSpan)
+	r.mu.m = make(map[tracingpb.SpanID]*crdbSpan)
 	return r
 }
 
-func (r *spanRegistry) removeSpanLocked(spanID uint64) {
-	delete(r.mu.m, spanID)
+func (r *spanRegistry) removeSpanLocked(id tracingpb.SpanID) {
+	delete(r.mu.m, id)
 }
 
 func (r *spanRegistry) addSpan(s *crdbSpan) {
@@ -221,10 +222,10 @@ func (r *spanRegistry) addSpanLocked(s *crdbSpan) {
 }
 
 // getSpanByID looks up a span in the registry. Returns nil if not found.
-func (r *spanRegistry) getSpanByID(spanID uint64) RegistrySpan {
+func (r *spanRegistry) getSpanByID(id tracingpb.SpanID) RegistrySpan {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	crdbSpan, ok := r.mu.m[spanID]
+	crdbSpan, ok := r.mu.m[id]
 	if !ok {
 		// Avoid returning a typed nil pointer.
 		return nil
@@ -269,10 +270,10 @@ func (r *spanRegistry) testingAll() []*crdbSpan {
 // removing the parent from the registry, the children are accessible in the
 // registry through that parent; if we didn't do this swap when the parent is
 // removed, the children would not be part of the registry anymore.
-func (r *spanRegistry) swap(parentSpanID uint64, children []*crdbSpan) {
+func (r *spanRegistry) swap(parentID tracingpb.SpanID, children []*crdbSpan) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.removeSpanLocked(parentSpanID)
+	r.removeSpanLocked(parentID)
 	for _, c := range children {
 		c.withLock(func() {
 			if !c.mu.finished {
@@ -662,9 +663,9 @@ func (t *Tracer) startSpanGeneric(
 
 	traceID := opts.parentTraceID()
 	if traceID == 0 {
-		traceID = uint64(rand.Int63())
+		traceID = tracingpb.TraceID(rand.Int63())
 	}
-	spanID := uint64(rand.Int63())
+	spanID := tracingpb.SpanID(rand.Int63())
 	goroutineID := uint64(goid.Get())
 
 	// Now allocate the main *Span and contained crdbSpan.
@@ -800,8 +801,8 @@ func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) error {
 		return nil
 	}
 
-	carrier.Set(fieldNameTraceID, strconv.FormatUint(sm.traceID, 16))
-	carrier.Set(fieldNameSpanID, strconv.FormatUint(sm.spanID, 16))
+	carrier.Set(fieldNameTraceID, strconv.FormatUint(uint64(sm.traceID), 16))
+	carrier.Set(fieldNameSpanID, strconv.FormatUint(uint64(sm.spanID), 16))
 
 	for k, v := range sm.Baggage {
 		carrier.Set(prefixBaggage+k, v)
@@ -820,8 +821,8 @@ var noopSpanMeta = SpanMeta{}
 // given Carrier. This, alongside InjectMetaFrom, can be used to carry span
 // metadata across process boundaries. See serializationFormat for more details.
 func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
-	var traceID uint64
-	var spanID uint64
+	var traceID tracingpb.TraceID
+	var spanID tracingpb.SpanID
 	var otelTraceID oteltrace.TraceID
 	var otelSpanID oteltrace.SpanID
 	var baggage map[string]string
@@ -830,16 +831,18 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 		switch k = strings.ToLower(k); k {
 		case fieldNameTraceID:
 			var err error
-			traceID, err = strconv.ParseUint(v, 16, 64)
+			id, err := strconv.ParseUint(v, 16, 64)
 			if err != nil {
 				return errors.Errorf("invalid trace id: %s", v)
 			}
+			traceID = tracingpb.TraceID(id)
 		case fieldNameSpanID:
 			var err error
-			spanID, err = strconv.ParseUint(v, 16, 64)
+			id, err := strconv.ParseUint(v, 16, 64)
 			if err != nil {
 				return errors.Errorf("invalid span id: %s", v)
 			}
+			spanID = tracingpb.SpanID(id)
 		case fieldNameOtelTraceID:
 			var err error
 			otelTraceID, err = oteltrace.TraceIDFromHex(v)
@@ -908,7 +911,7 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 // RegistrySpan is the interface used by clients of the active span registry.
 type RegistrySpan interface {
 	// TraceID returns an identifier for the trace that this span is part of.
-	TraceID() uint64
+	TraceID() tracingpb.TraceID
 
 	// GetRecording returns the recording of the trace rooted at this span.
 	GetRecording() Recording
@@ -921,7 +924,7 @@ type RegistrySpan interface {
 var _ RegistrySpan = &crdbSpan{}
 
 // GetActiveSpanByID retrieves any active root span given its ID.
-func (t *Tracer) GetActiveSpanByID(spanID uint64) RegistrySpan {
+func (t *Tracer) GetActiveSpanByID(spanID tracingpb.SpanID) RegistrySpan {
 	return t.activeSpansRegistry.getSpanByID(spanID)
 }
 

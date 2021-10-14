@@ -19,6 +19,12 @@ import (
 	types "github.com/gogo/protobuf/types"
 )
 
+// TraceID is a probabilistically-unique id, shared by all spans in a trace.
+type TraceID uint64
+
+// SpanID is a probabilistically-unique span id.
+type SpanID uint64
+
 // LogMessageField is the field name used for the log message in a LogRecord.
 const LogMessageField = "event"
 

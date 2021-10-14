@@ -15,6 +15,7 @@ go_library(
         "//pkg/rpc/nodedialer",
         "//pkg/util/log",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
         "//pkg/util/tracing/tracingservicepb:tracingservicepb_go_proto",
     ],
 )
@@ -40,6 +41,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
         "@com_github_gogo_protobuf//types",
         "@com_github_stretchr_testify//require",
     ],

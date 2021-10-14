@@ -213,7 +213,7 @@ func (sp *Span) SetBaggageItem(restrictedKey, value string) {
 }
 
 // TraceID retrieves a span's trace ID.
-func (sp *Span) TraceID() uint64 {
+func (sp *Span) TraceID() tracingpb.TraceID {
 	return sp.i.TraceID()
 }
 
@@ -237,8 +237,8 @@ func (sp *Span) IsSterile() bool {
 // child finishes, so that the caller can inductively construct the
 // entire trace.
 type SpanMeta struct {
-	traceID uint64
-	spanID  uint64
+	traceID tracingpb.TraceID
+	spanID  tracingpb.SpanID
 
 	// otelCtx is the OpenTelemetry span context. This is only populated when the
 	// remote Span is reporting to an external OpenTelemetry tracer. Setting this

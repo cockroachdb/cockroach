@@ -818,7 +818,7 @@ message Progress {
     AutoSQLStatsCompactionProgress autoSQLStatsCompaction = 23;
   }
 
-  uint64 trace_id = 21 [(gogoproto.customname) = "TraceID"];
+  uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
 }
 
 enum Type {

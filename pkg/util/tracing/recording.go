@@ -115,7 +115,7 @@ func (r Recording) String() string {
 
 // OrphanSpans returns the spans with parents missing from the recording.
 func (r Recording) OrphanSpans() []tracingpb.RecordedSpan {
-	spanIDs := make(map[uint64]struct{})
+	spanIDs := make(map[tracingpb.SpanID]struct{})
 	for _, sp := range r {
 		spanIDs[sp.SpanID] = struct{}{}
 	}
@@ -293,8 +293,8 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 	tagsCopy["statement"] = stmt
 	r[0].Tags = tagsCopy
 
-	toJaegerSpanID := func(spanID uint64) jaegerjson.SpanID {
-		return jaegerjson.SpanID(strconv.FormatUint(spanID, 10))
+	toJaegerSpanID := func(spanID tracingpb.SpanID) jaegerjson.SpanID {
+		return jaegerjson.SpanID(strconv.FormatUint(uint64(spanID), 10))
 	}
 
 	// Each Span in Jaeger belongs to a "process" that generated it. Spans
@@ -327,7 +327,7 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 	}
 
 	var t jaegerjson.Trace
-	t.TraceID = jaegerjson.TraceID(strconv.FormatUint(r[0].TraceID, 10))
+	t.TraceID = jaegerjson.TraceID(strconv.FormatUint(uint64(r[0].TraceID), 10))
 	t.Processes = processes
 
 	for _, sp := range r {

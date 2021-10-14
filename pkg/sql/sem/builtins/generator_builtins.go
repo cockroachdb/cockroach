@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -1727,7 +1728,7 @@ func makePayloadsForSpanGenerator(
 			"only users with the admin role are allowed to use crdb_internal.payloads_for_span",
 		)
 	}
-	spanID := uint64(*(args[0].(*tree.DInt)))
+	spanID := tracingpb.SpanID(*(args[0].(*tree.DInt)))
 	span := ctx.Tracer.GetActiveSpanByID(spanID)
 	if span == nil {
 		return nil, nil
