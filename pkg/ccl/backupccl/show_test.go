@@ -212,7 +212,7 @@ ORDER BY object_type, object_name`, full)
 		expectedCreateTable := `CREATE TABLE tablea (
 		a INT8 NOT NULL,
 		b INT8 NULL,
-		CONSTRAINT "primary" PRIMARY KEY (a ASC),
+		CONSTRAINT tablea_pkey PRIMARY KEY (a ASC),
 		INDEX tablea_b_idx (b ASC),
 		FAMILY "primary" (a, b)
 	)`
@@ -247,14 +247,14 @@ ORDER BY object_type, object_name`, full)
 		wantSameDB := `CREATE TABLE fkreftable (
 				a INT8 NOT NULL,
 				b INT8 NULL,
-				CONSTRAINT "primary" PRIMARY KEY (a ASC),
+				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC),
 				CONSTRAINT fk_b_ref_fksrc FOREIGN KEY (b) REFERENCES public.fksrc(a),
 				FAMILY "primary" (a, b)
 			)`
 		wantDiffDB := `CREATE TABLE fkreftable (
 				a INT8 NOT NULL,
 				b INT8 NULL,
-				CONSTRAINT "primary" PRIMARY KEY (a ASC),
+				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC),
 				CONSTRAINT fk_b_ref_fksrc FOREIGN KEY (b) REFERENCES data.public.fksrc(a),
 				FAMILY "primary" (a, b)
 			)`
@@ -280,7 +280,7 @@ ORDER BY object_type, object_name`, full)
 		want := `CREATE TABLE fkreftable (
 				a INT8 NOT NULL,
 				b INT8 NULL,
-				CONSTRAINT "primary" PRIMARY KEY (a ASC),
+				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC),
 				FAMILY "primary" (a, b)
 			)`
 

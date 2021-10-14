@@ -77,7 +77,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE geom_table_negative_values]
 CREATE TABLE public.geom_table_negative_values (
    a GEOMETRY(GEOMETRY) NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT geom_table_negative_values_pkey PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, rowid)
 )
 
@@ -92,7 +92,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE geog_table_negative_values]
 CREATE TABLE public.geog_table_negative_values (
    a GEOGRAPHY(GEOMETRY) NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT geog_table_negative_values_pkey PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, rowid)
 )
 
@@ -114,10 +114,10 @@ SELECT orphan FROM geo_table
 query TTBTTTB rowsort
 SHOW COLUMNS FROM geo_table
 ----
-id      INT8                      false  NULL  ·  {geo_table_geog_idx,geo_table_geom_idx,primary}  false
-geog    GEOGRAPHY(GEOMETRY,4326)  true   NULL  ·  {geo_table_geog_idx,primary}                     false
-geom    GEOMETRY(POINT)           true   NULL  ·  {geo_table_geom_idx,primary}                     false
-orphan  GEOGRAPHY                 true   NULL  ·  {primary}                                        false
+id      INT8                      false  NULL  ·  {geo_table_geog_idx,geo_table_geom_idx,geo_table_pkey}  false
+geog    GEOGRAPHY(GEOMETRY,4326)  true   NULL  ·  {geo_table_geog_idx,geo_table_pkey}                     false
+geom    GEOMETRY(POINT)           true   NULL  ·  {geo_table_geom_idx,geo_table_pkey}                     false
+orphan  GEOGRAPHY                 true   NULL  ·  {geo_table_pkey}                                        false
 
 statement error column bad_pk is of type geography and thus is not indexable
 CREATE TABLE bad_geog_table(bad_pk geography primary key)

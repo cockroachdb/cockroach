@@ -22,12 +22,12 @@ ALTER TABLE t ALTER s TYPE STRING, ALTER sl TYPE STRING(6), ALTER ts TYPE TIMEST
 query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type    is_nullable  column_default  generation_expression  indices    is_hidden
-s            STRING       true         NULL            ·                      {primary}  false
-sl           STRING(6)    true         NULL            ·                      {primary}  false
-t            TIME         true         NULL            ·                      {primary}  false
-ts           TIMESTAMPTZ  true         NULL            ·                      {primary}  false
-rowid        INT8         false        unique_rowid()  ·                      {primary}  true
+column_name  data_type    is_nullable  column_default  generation_expression  indices   is_hidden
+s            STRING       true         NULL            ·                      {t_pkey}  false
+sl           STRING(6)    true         NULL            ·                      {t_pkey}  false
+t            TIME         true         NULL            ·                      {t_pkey}  false
+ts           TIMESTAMPTZ  true         NULL            ·                      {t_pkey}  false
+rowid        INT8         false        unique_rowid()  ·                      {t_pkey}  true
 
 query TTTT
 SELECT * FROM t
@@ -74,7 +74,7 @@ table_name  create_statement
 t           CREATE TABLE public.t (
             a INT8 NOT NULL,
             i INT8 NULL,
-            CONSTRAINT "primary" PRIMARY KEY (a ASC),
+            CONSTRAINT t_pkey PRIMARY KEY (a ASC),
             INDEX idx2 (i ASC),
             FAMILY "primary" (a, i)
 )
@@ -106,9 +106,9 @@ CREATE TABLE t (a INT)
 query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-a            INT8       true         NULL            ·                      {primary}  false
-rowid        INT8       false        unique_rowid()  ·                      {primary}  true
+column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
+a            INT8       true         NULL            ·                      {t_pkey}  false
+rowid        INT8       false        unique_rowid()  ·                      {t_pkey}  true
 
 statement ok
 ALTER TABLE t ALTER a TYPE INTEGER
@@ -116,9 +116,9 @@ ALTER TABLE t ALTER a TYPE INTEGER
 query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-a            INT8       true         NULL            ·                      {primary}  false
-rowid        INT8       false        unique_rowid()  ·                      {primary}  true
+column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
+a            INT8       true         NULL            ·                      {t_pkey}  false
+rowid        INT8       false        unique_rowid()  ·                      {t_pkey}  true
 
 statement ok
 DROP TABLE t
@@ -194,8 +194,8 @@ ALTER TABLE t2 ALTER COLUMN id TYPE STRING
 query TTBTTTB
 SHOW COLUMNS FROM t2
 ----
-id     STRING  true   NULL            ·  {primary}  false
-rowid  INT8    false  unique_rowid()  ·  {primary}  true
+id     STRING  true   NULL            ·  {t2_pkey}  false
+rowid  INT8    false  unique_rowid()  ·  {t2_pkey}  true
 
 statement ok
 INSERT INTO t2 VALUES ('5')
@@ -214,10 +214,10 @@ ALTER TABLE t3 ALTER COLUMN id2 TYPE string
 query TTBTTTB
 SHOW COLUMNS FROM t3
 ----
-id     INT8    true   NULL            ·  {primary}  false
-id2    STRING  true   NULL            ·  {primary}  false
-id3    INT8    true   NULL            ·  {primary}  false
-rowid  INT8    false  unique_rowid()  ·  {primary}  true
+id     INT8    true   NULL            ·  {t3_pkey}  false
+id2    STRING  true   NULL            ·  {t3_pkey}  false
+id3    INT8    true   NULL            ·  {t3_pkey}  false
+rowid  INT8    false  unique_rowid()  ·  {t3_pkey}  true
 
 statement ok
 INSERT INTO t3 VALUES (4,'4',4)
@@ -258,7 +258,7 @@ t6  CREATE TABLE public.t6 (
     id INT8 NULL,
     id2 STRING NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
     FAMILY f1 (id, rowid),
     FAMILY f2 (id2)
 )
@@ -294,7 +294,7 @@ SHOW CREATE TABLE t8
 t8  CREATE TABLE public.t8 (
     x STRING NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC),
     FAMILY "primary" (x, rowid)
 )
 
@@ -381,7 +381,7 @@ table_name  create_statement
 t17         CREATE TABLE public.t17 (
             x STRING NULL DEFAULT 'HELLO':::STRING,
             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-            CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+            CONSTRAINT t17_pkey PRIMARY KEY (rowid ASC),
             FAMILY "primary" (x, rowid)
 )
 
@@ -454,7 +454,7 @@ table_name  create_statement
 t24         CREATE TABLE public.t24 (
             x STRING NULL,
             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-            CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+            CONSTRAINT t24_pkey PRIMARY KEY (rowid ASC),
             FAMILY "primary" (x, rowid)
 )
 

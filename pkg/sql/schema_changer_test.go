@@ -2297,7 +2297,7 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 	x INT8 NOT NULL,
 	y INT8 NOT NULL,
 	z INT8 NULL,
-	CONSTRAINT "primary" PRIMARY KEY (x ASC),
+	CONSTRAINT test_pkey PRIMARY KEY (x ASC),
 	INDEX i (z ASC),
 	FAMILY "primary" (x, y, z)
 )`
@@ -2318,7 +2318,7 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 	x INT8 NOT NULL,
 	y INT8 NOT NULL,
 	z INT8 NULL,
-	CONSTRAINT "primary" PRIMARY KEY (y ASC),
+	CONSTRAINT test_pkey PRIMARY KEY (y ASC),
 	UNIQUE INDEX test_x_key (x ASC),
 	INDEX i (z ASC),
 	FAMILY "primary" (x, y, z)
@@ -2725,7 +2725,7 @@ UPDATE t.test SET z = NULL, a = $1, b = NULL, c = NULL, d = $1 WHERE y = $2`, 2*
 
 	// Ensure that the count of rows is correct along both indexes.
 	var count int
-	row := sqlDB.QueryRow(`SELECT count(*) FROM t.test@primary`)
+	row := sqlDB.QueryRow(`SELECT count(*) FROM t.test@test_pkey`)
 	if err := row.Scan(&count); err != nil {
 		t.Fatal(err)
 	}

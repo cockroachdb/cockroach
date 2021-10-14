@@ -23,7 +23,7 @@ db.public.rbr               CREATE TABLE public.rbr (
                             p INT8 NOT NULL,
                             s STRING NULL,
                             crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
-                            CONSTRAINT "primary" PRIMARY KEY (p ASC),
+                            CONSTRAINT rbr_pkey PRIMARY KEY (p ASC),
                             FAMILY "primary" (p, s, crdb_region)
 ) LOCALITY REGIONAL BY ROW
 
@@ -40,6 +40,6 @@ SHOW CREATE TABLE db.rbr_altered
 db.public.rbr_altered       CREATE TABLE public.rbr_altered (
                             p INT8 NOT NULL,
                             crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
-                            CONSTRAINT "primary" PRIMARY KEY (p ASC),
+                            CONSTRAINT rbr_altered_pkey PRIMARY KEY (p ASC),
                             FAMILY "primary" (p, crdb_region)
 ) LOCALITY REGIONAL BY ROW

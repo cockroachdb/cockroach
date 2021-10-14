@@ -22,7 +22,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -35,7 +35,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for no key update
 
@@ -48,7 +48,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for share
 
@@ -61,7 +61,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for key share
 
@@ -74,7 +74,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for share
 
@@ -87,7 +87,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for no key update
 
@@ -100,7 +100,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -113,7 +113,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -134,7 +134,7 @@ vectorized: true
 └── • scan
       columns: ()
       estimated row count: 1,000 (missing stats)
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
       locking strength: for update
 
@@ -147,7 +147,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for update
 
@@ -160,7 +160,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for no key update
 
@@ -173,7 +173,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for share
 
@@ -186,7 +186,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for key share
 
@@ -199,7 +199,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for share
 
@@ -212,7 +212,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for no key update
 
@@ -225,7 +225,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for update
 
@@ -238,7 +238,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for update
 
@@ -259,7 +259,7 @@ vectorized: true
 └── • scan
       columns: (a)
       estimated row count: 1 (missing stats)
-      table: t@primary
+      table: t@t_pkey
       spans: /1/0
       locking strength: for update
 
@@ -276,7 +276,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -292,7 +292,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -310,7 +310,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -323,7 +323,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -343,7 +343,7 @@ vectorized: true
 • scan
   columns: (a)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -356,7 +356,7 @@ vectorized: true
 • scan
   columns: (a)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -382,7 +382,7 @@ vectorized: true
 • scan
   columns: (a)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -398,7 +398,7 @@ vectorized: true
 • scan
   columns: (a)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -419,7 +419,7 @@ vectorized: true
 • scan
   columns: (a)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -432,7 +432,7 @@ vectorized: true
 • scan
   columns: (a)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -445,7 +445,7 @@ vectorized: true
 • scan
   columns: (a)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for no key update
 
@@ -458,7 +458,7 @@ vectorized: true
 • scan
   columns: (a)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for no key update
 
@@ -474,7 +474,7 @@ vectorized: true
 • scan
   columns: (a)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -487,7 +487,7 @@ vectorized: true
 • scan
   columns: (a)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -500,7 +500,7 @@ vectorized: true
 • scan
   columns: (a)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -516,7 +516,7 @@ vectorized: true
 • scan
   columns: (a)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
 
@@ -546,7 +546,7 @@ vectorized: true
         └── • scan
               columns: (a)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
 
 query T
@@ -575,7 +575,7 @@ vectorized: true
         └── • scan
               columns: (a)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
 
@@ -608,7 +608,7 @@ vectorized: true
         └── • scan
               columns: (a)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
 
@@ -638,7 +638,7 @@ vectorized: true
         └── • scan
               columns: (a)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
 
 query T
@@ -667,7 +667,7 @@ vectorized: true
         └── • scan
               columns: (a)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
 
@@ -700,7 +700,7 @@ vectorized: true
         └── • scan
               columns: (a)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
 
@@ -717,7 +717,7 @@ vectorized: true
 └── • lookup join (inner)
     │ columns: (b, a, b)
     │ estimated row count: 99 (missing stats)
-    │ table: t@primary
+    │ table: t@t_pkey
     │ equality: (b) = (a)
     │ equality cols are key
     │
@@ -729,7 +729,7 @@ vectorized: true
         └── • scan
               columns: (b)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
 
 query T
@@ -745,7 +745,7 @@ vectorized: true
 └── • lookup join (inner)
     │ columns: (b, a, b)
     │ estimated row count: 99 (missing stats)
-    │ table: t@primary
+    │ table: t@t_pkey
     │ equality: (b) = (a)
     │ equality cols are key
     │
@@ -757,7 +757,7 @@ vectorized: true
         └── • scan
               columns: (b)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
 
@@ -774,7 +774,7 @@ vectorized: true
 └── • lookup join (inner)
     │ columns: (b, a, b)
     │ estimated row count: 99 (missing stats)
-    │ table: t@primary
+    │ table: t@t_pkey
     │ equality: (b) = (a)
     │ equality cols are key
     │
@@ -786,7 +786,7 @@ vectorized: true
         └── • scan
               columns: (b)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
 
 query T
@@ -802,7 +802,7 @@ vectorized: true
 └── • lookup join (inner)
     │ columns: (b, a, b)
     │ estimated row count: 99 (missing stats)
-    │ table: t@primary
+    │ table: t@t_pkey
     │ equality: (b) = (a)
     │ equality cols are key
     │
@@ -814,7 +814,7 @@ vectorized: true
         └── • scan
               columns: (b)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
 
@@ -843,7 +843,7 @@ vectorized: true
 └── • scan
       columns: (a)
       estimated row count: 1,000 (missing stats)
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
 
 query T
@@ -860,7 +860,7 @@ vectorized: true
 └── • scan
       columns: (a)
       estimated row count: 1,000 (missing stats)
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
 
 query T
@@ -889,7 +889,7 @@ vectorized: true
         └── • scan
               columns: (a)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
 
@@ -919,7 +919,7 @@ vectorized: true
         └── • scan
               columns: (a)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
 
@@ -938,7 +938,7 @@ vectorized: true
 ├── • scan
 │     columns: (c)
 │     estimated row count: 1,000 (missing stats)
-│     table: u@primary
+│     table: u@u_pkey
 │     spans: FULL SCAN
 │
 └── • subquery
@@ -953,7 +953,7 @@ vectorized: true
         └── • scan
               columns: (a)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
 
@@ -983,7 +983,7 @@ vectorized: true
     │     columns: (a, b)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: t@primary
+    │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
     │
@@ -991,7 +991,7 @@ vectorized: true
           columns: (a, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: u@primary
+          table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
 
@@ -1017,7 +1017,7 @@ vectorized: true
     │     columns: (a, b)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: t@primary
+    │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
     │
@@ -1025,7 +1025,7 @@ vectorized: true
           columns: (a, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: u@primary
+          table: u@u_pkey
           spans: FULL SCAN
 
 query T
@@ -1050,14 +1050,14 @@ vectorized: true
     │     columns: (a, b)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: t@primary
+    │     table: t@t_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: u@primary
+          table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
 
@@ -1083,7 +1083,7 @@ vectorized: true
     │     columns: (a, b)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: t@primary
+    │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
     │
@@ -1091,7 +1091,7 @@ vectorized: true
           columns: (a, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: u@primary
+          table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
 
@@ -1117,7 +1117,7 @@ vectorized: true
     │     columns: (a, b)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: t@primary
+    │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
     │
@@ -1125,7 +1125,7 @@ vectorized: true
           columns: (a, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: u@primary
+          table: u@u_pkey
           spans: FULL SCAN
           locking strength: for share
 
@@ -1154,7 +1154,7 @@ vectorized: true
     │     columns: (a, b)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: t@primary
+    │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
     │
@@ -1162,7 +1162,7 @@ vectorized: true
           columns: (a, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: u@primary
+          table: u@u_pkey
           spans: FULL SCAN
           locking strength: for share
 
@@ -1188,7 +1188,7 @@ vectorized: true
     │     columns: (a, b)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: t@primary
+    │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
     │
@@ -1196,7 +1196,7 @@ vectorized: true
           columns: (a, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: u@primary
+          table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
 
@@ -1222,7 +1222,7 @@ vectorized: true
     │     columns: (a, b)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: t@primary
+    │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for no key update
     │
@@ -1230,7 +1230,7 @@ vectorized: true
           columns: (a, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: u@primary
+          table: u@u_pkey
           spans: FULL SCAN
           locking strength: for key share
 
@@ -1256,7 +1256,7 @@ vectorized: true
     │     columns: (a, b)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: t@primary
+    │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for no key update
     │
@@ -1264,7 +1264,7 @@ vectorized: true
           columns: (a, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: u@primary
+          table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
 
@@ -1294,7 +1294,7 @@ vectorized: true
     │     columns: (a, b)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: t@primary
+    │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
     │
@@ -1302,7 +1302,7 @@ vectorized: true
           columns: (a, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: u@primary
+          table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
 
@@ -1337,7 +1337,7 @@ vectorized: true
     │     columns: (a, b)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: t@primary
+    │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
     │
@@ -1345,7 +1345,7 @@ vectorized: true
           columns: (a, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: u@primary
+          table: u@u_pkey
           spans: FULL SCAN
 
 query T
@@ -1370,14 +1370,14 @@ vectorized: true
     │     columns: (a, b)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: t@primary
+    │     table: t@t_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: u@primary
+          table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
 
@@ -1403,7 +1403,7 @@ vectorized: true
     │     columns: (a, b)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: t@primary
+    │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
     │
@@ -1411,7 +1411,7 @@ vectorized: true
           columns: (a, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: u@primary
+          table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
 
@@ -1441,7 +1441,7 @@ vectorized: true
     │     columns: (a, b)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: t@primary
+    │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
     │
@@ -1449,7 +1449,7 @@ vectorized: true
           columns: (a, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: u@primary
+          table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
 
@@ -1484,7 +1484,7 @@ vectorized: true
     │     columns: (a, b)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: t@primary
+    │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
     │
@@ -1492,7 +1492,7 @@ vectorized: true
           columns: (a, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: u@primary
+          table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
 
@@ -1513,14 +1513,14 @@ vectorized: true
 ├── • scan
 │     columns: (a, b)
 │     estimated row count: 1,000 (missing stats)
-│     table: t@primary
+│     table: t@t_pkey
 │     spans: FULL SCAN
 │     locking strength: for update
 │
 └── • scan
       columns: (a, c)
       estimated row count: 1,000 (missing stats)
-      table: u@primary
+      table: u@u_pkey
       spans: FULL SCAN
       locking strength: for update
 
@@ -1537,14 +1537,14 @@ vectorized: true
 ├── • scan
 │     columns: (a, b)
 │     estimated row count: 1,000 (missing stats)
-│     table: t@primary
+│     table: t@t_pkey
 │     spans: FULL SCAN
 │     locking strength: for update
 │
 └── • scan
       columns: (a, c)
       estimated row count: 1,000 (missing stats)
-      table: u@primary
+      table: u@u_pkey
       spans: FULL SCAN
 
 query T
@@ -1560,14 +1560,14 @@ vectorized: true
 ├── • scan
 │     columns: (a, b)
 │     estimated row count: 1,000 (missing stats)
-│     table: t@primary
+│     table: t@t_pkey
 │     spans: FULL SCAN
 │     locking strength: for share
 │
 └── • scan
       columns: (a, c)
       estimated row count: 1,000 (missing stats)
-      table: u@primary
+      table: u@u_pkey
       spans: FULL SCAN
       locking strength: for update
 
@@ -1584,14 +1584,14 @@ vectorized: true
 ├── • scan
 │     columns: (a, b)
 │     estimated row count: 1,000 (missing stats)
-│     table: t@primary
+│     table: t@t_pkey
 │     spans: FULL SCAN
 │     locking strength: for update
 │
 └── • scan
       columns: (a, c)
       estimated row count: 1,000 (missing stats)
-      table: u@primary
+      table: u@u_pkey
       spans: FULL SCAN
       locking strength: for update
 
@@ -1611,13 +1611,13 @@ vectorized: true
 ├── • scan
 │     columns: (a, b)
 │     estimated row count: 1,000 (missing stats)
-│     table: t@primary
+│     table: t@t_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (a, c)
       estimated row count: 1,000 (missing stats)
-      table: u@primary
+      table: u@u_pkey
       spans: FULL SCAN
       locking strength: for update
 
@@ -1634,7 +1634,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
   locking wait policy: nowait
@@ -1648,7 +1648,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for no key update
   locking wait policy: nowait
@@ -1662,7 +1662,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for share
   locking wait policy: nowait
@@ -1676,7 +1676,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for key share
   locking wait policy: nowait
@@ -1690,7 +1690,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for share
   locking wait policy: nowait
@@ -1704,7 +1704,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for no key update
   locking wait policy: nowait
@@ -1718,7 +1718,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
   locking wait policy: nowait
@@ -1732,7 +1732,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1,000 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
   locking wait policy: nowait
@@ -1754,7 +1754,7 @@ vectorized: true
 └── • scan
       columns: ()
       estimated row count: 1,000 (missing stats)
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
       locking strength: for update
       locking wait policy: nowait
@@ -1768,7 +1768,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for update
   locking wait policy: nowait
@@ -1782,7 +1782,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for no key update
   locking wait policy: nowait
@@ -1796,7 +1796,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for share
   locking wait policy: nowait
@@ -1810,7 +1810,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for key share
   locking wait policy: nowait
@@ -1824,7 +1824,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for share
   locking wait policy: nowait
@@ -1838,7 +1838,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for no key update
   locking wait policy: nowait
@@ -1852,7 +1852,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for update
   locking wait policy: nowait
@@ -1866,7 +1866,7 @@ vectorized: true
 • scan
   columns: (a, b)
   estimated row count: 1 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: /1/0
   locking strength: for update
   locking wait policy: nowait
@@ -1888,7 +1888,7 @@ vectorized: true
 └── • scan
       columns: (a)
       estimated row count: 1 (missing stats)
-      table: t@primary
+      table: t@t_pkey
       spans: /1/0
       locking strength: for update
       locking wait policy: nowait

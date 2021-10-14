@@ -44,7 +44,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
       version: 4
     otherPrimaryIndexId: 1
     tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+- DROP PrimaryIndex:{DescID: 52, ElementName: "foo_pkey", IndexID: 1}
   state: PUBLIC
   details:
     index:
@@ -59,7 +59,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
       - 1
       keyColumnNames:
       - i
-      name: primary
+      name: foo_pkey
       partitioning: {}
       sharded: {}
       unique: true
@@ -110,7 +110,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
       version: 4
     otherPrimaryIndexId: 1
     tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+- DROP PrimaryIndex:{DescID: 52, ElementName: "foo_pkey", IndexID: 1}
   state: PUBLIC
   details:
     index:
@@ -125,7 +125,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
       - 1
       keyColumnNames:
       - i
-      name: primary
+      name: foo_pkey
       partitioning: {}
       sharded: {}
       unique: true
@@ -193,7 +193,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
       version: 4
     otherPrimaryIndexId: 1
     tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+- DROP PrimaryIndex:{DescID: 52, ElementName: "foo_pkey", IndexID: 1}
   state: PUBLIC
   details:
     index:
@@ -208,7 +208,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
       - 1
       keyColumnNames:
       - i
-      name: primary
+      name: foo_pkey
       partitioning: {}
       sharded: {}
       unique: true
@@ -259,7 +259,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
       version: 4
     otherPrimaryIndexId: 1
     tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+- DROP PrimaryIndex:{DescID: 52, ElementName: "foo_pkey", IndexID: 1}
   state: PUBLIC
   details:
     index:
@@ -274,7 +274,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
       - 1
       keyColumnNames:
       - i
-      name: primary
+      name: foo_pkey
       partitioning: {}
       sharded: {}
       unique: true
@@ -370,7 +370,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       version: 4
     otherPrimaryIndexId: 1
     tableId: 53
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+- DROP PrimaryIndex:{DescID: 52, ElementName: "foo_pkey", IndexID: 1}
   state: PUBLIC
   details:
     index:
@@ -385,14 +385,14 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       - 1
       keyColumnNames:
       - i
-      name: primary
+      name: foo_pkey
       partitioning: {}
       sharded: {}
       unique: true
       version: 4
     otherPrimaryIndexId: 2
     tableId: 52
-- DROP PrimaryIndex:{DescID: 53, ElementName: "primary", IndexID: 1}
+- DROP PrimaryIndex:{DescID: 53, ElementName: "bar_pkey", IndexID: 1}
   state: PUBLIC
   details:
     index:
@@ -407,7 +407,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       - 2
       keyColumnNames:
       - rowid
-      name: primary
+      name: bar_pkey
       partitioning: {}
       sharded: {}
       storeColumnIds:

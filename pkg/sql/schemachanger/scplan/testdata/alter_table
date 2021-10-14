@@ -84,7 +84,7 @@ Stage 5
       - 1
       KeyColumnNames:
       - i
-      Name: primary
+      Name: foo_pkey
       Unique: true
       Version: 4
     TableID: 52
@@ -180,7 +180,7 @@ Stage 5
       - 1
       KeyColumnNames:
       - i
-      Name: primary
+      Name: foo_pkey
       Unique: true
       Version: 4
     TableID: 52
@@ -296,7 +296,7 @@ Stage 5
       - 1
       KeyColumnNames:
       - i
-      Name: primary
+      Name: foo_pkey
       Unique: true
       Version: 4
     TableID: 52
@@ -395,7 +395,7 @@ Stage 5
       - 1
       KeyColumnNames:
       - i
-      Name: primary
+      Name: foo_pkey
       Unique: true
       Version: 4
     TableID: 52
@@ -540,7 +540,7 @@ Stage 5
       - 1
       KeyColumnNames:
       - i
-      Name: primary
+      Name: foo_pkey
       Unique: true
       Version: 4
     TableID: 52
@@ -577,7 +577,7 @@ Stage 5
       - 2
       KeyColumnNames:
       - rowid
-      Name: primary
+      Name: bar_pkey
       StoreColumnIDs:
       - 1
       StoreColumnNames:

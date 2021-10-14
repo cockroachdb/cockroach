@@ -534,29 +534,29 @@ WHERE n.nspname = 'public'
 ----
 oid         relname            relnamespace  reltype  reloftype  relowner    relam       relfilenode  reltablespace
 55          t1                 2332901747    100055   0          1546506610  2631952481  0            0
-450499963   primary            2332901747    0        0          1546506610  2631952481  0            0
+450499963   t1_pkey            2332901747    0        0          1546506610  2631952481  0            0
 450499960   t1_a_key           2332901747    0        0          1546506610  2631952481  0            0
 450499961   index_key          2332901747    0        0          1546506610  2631952481  0            0
 56          t1_m_seq           2332901747    100056   0          1546506610  0           0            0
 57          t1_n_seq           2332901747    100057   0          1546506610  0           0            0
 58          t2                 2332901747    100058   0          1546506610  2631952481  0            0
-710236230   primary            2332901747    0        0          1546506610  2631952481  0            0
+710236230   t2_pkey            2332901747    0        0          1546506610  2631952481  0            0
 710236229   t2_t1_id_idx       2332901747    0        0          1546506610  2631952481  0            0
 59          t3                 2332901747    100059   0          1546506610  2631952481  0            0
-3660126519  primary            2332901747    0        0          1546506610  2631952481  0            0
+3660126519  t3_pkey            2332901747    0        0          1546506610  2631952481  0            0
 3660126516  t3_a_b_idx         2332901747    0        0          1546506610  2631952481  0            0
 60          v1                 2332901747    100060   0          1546506610  0           0            0
 61          t4                 2332901747    100061   0          1546506610  2631952481  0            0
-4179599057  primary            2332901747    0        0          1546506610  2631952481  0            0
+4179599057  t4_pkey            2332901747    0        0          1546506610  2631952481  0            0
 62          t5                 2332901747    100062   0          1546506610  2631952481  0            0
-3919862786  primary            2332901747    0        0          1546506610  2631952481  0            0
+3919862786  t5_pkey            2332901747    0        0          1546506610  2631952481  0            0
 63          t6                 2332901747    100063   0          1546506610  2631952481  0            0
-2574785779  primary            2332901747    0        0          1546506610  2631952481  0            0
+2574785779  t6_pkey            2332901747    0        0          1546506610  2631952481  0            0
 2574785776  t6_expr_idx        2332901747    0        0          1546506610  2631952481  0            0
 2574785777  t6_expr_expr1_idx  2332901747    0        0          1546506610  2631952481  0            0
 2574785782  t6_expr_key        2332901747    0        0          1546506610  2631952481  0            0
 64          mv1                2332901747    100064   0          1546506610  0           0            0
-51576700    primary            2332901747    0        0          1546506610  2631952481  0            0
+51576700    mv1_pkey           2332901747    0        0          1546506610  2631952481  0            0
 
 query TIRIOBBT colnames
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence
@@ -566,29 +566,29 @@ WHERE n.nspname = 'public'
 ----
 relname            relpages  reltuples  relallvisible  reltoastrelid  relhasindex  relisshared  relpersistence
 t1                 NULL      NULL       0              0              true         false        p
-primary            NULL      NULL       0              0              false        false        p
+t1_pkey            NULL      NULL       0              0              false        false        p
 t1_a_key           NULL      NULL       0              0              false        false        p
 index_key          NULL      NULL       0              0              false        false        p
 t1_m_seq           NULL      NULL       0              0              true         false        p
 t1_n_seq           NULL      NULL       0              0              true         false        p
 t2                 NULL      NULL       0              0              true         false        p
-primary            NULL      NULL       0              0              false        false        p
+t2_pkey            NULL      NULL       0              0              false        false        p
 t2_t1_id_idx       NULL      NULL       0              0              false        false        p
 t3                 NULL      NULL       0              0              true         false        p
-primary            NULL      NULL       0              0              false        false        p
+t3_pkey            NULL      NULL       0              0              false        false        p
 t3_a_b_idx         NULL      NULL       0              0              false        false        p
 v1                 NULL      NULL       0              0              false        false        p
 t4                 NULL      NULL       0              0              true         false        p
-primary            NULL      NULL       0              0              false        false        p
+t4_pkey            NULL      NULL       0              0              false        false        p
 t5                 NULL      NULL       0              0              true         false        p
-primary            NULL      NULL       0              0              false        false        p
+t5_pkey            NULL      NULL       0              0              false        false        p
 t6                 NULL      NULL       0              0              true         false        p
-primary            NULL      NULL       0              0              false        false        p
+t6_pkey            NULL      NULL       0              0              false        false        p
 t6_expr_idx        NULL      NULL       0              0              false        false        p
 t6_expr_expr1_idx  NULL      NULL       0              0              false        false        p
 t6_expr_key        NULL      NULL       0              0              false        false        p
 mv1                NULL      NULL       0              0              true         false        p
-primary            NULL      NULL       0              0              false        false        p
+mv1_pkey           NULL      NULL       0              0              false        false        p
 
 query TBTIIBB colnames
 SELECT relname, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey
@@ -598,29 +598,29 @@ WHERE n.nspname = 'public'
 ----
 relname            relistemp  relkind  relnatts  relchecks  relhasoids  relhaspkey
 t1                 false      r        15        0          false       true
-primary            false      i        1         0          false       false
+t1_pkey            false      i        1         0          false       false
 t1_a_key           false      i        1         0          false       false
 index_key          false      i        2         0          false       false
 t1_m_seq           false      S        1         0          false       true
 t1_n_seq           false      S        1         0          false       true
 t2                 false      r        2         0          false       true
-primary            false      i        1         0          false       false
+t2_pkey            false      i        1         0          false       false
 t2_t1_id_idx       false      i        1         0          false       false
 t3                 false      r        4         2          false       true
-primary            false      i        1         0          false       false
+t3_pkey            false      i        1         0          false       false
 t3_a_b_idx         false      i        2         0          false       false
 v1                 false      v        4         0          false       false
 t4                 false      r        4         0          false       true
-primary            false      i        1         0          false       false
+t4_pkey            false      i        1         0          false       false
 t5                 false      r        4         0          false       true
-primary            false      i        1         0          false       false
+t5_pkey            false      i        1         0          false       false
 t6                 false      r        4         0          false       true
-primary            false      i        1         0          false       false
+t6_pkey            false      i        1         0          false       false
 t6_expr_idx        false      i        1         0          false       false
 t6_expr_expr1_idx  false      i        2         0          false       false
 t6_expr_key        false      i        1         0          false       false
 mv1                false      m        2         0          false       true
-primary            false      i        1         0          false       false
+mv1_pkey           false      i        1         0          false       false
 
 query TBBBITT colnames
 SELECT relname, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions
@@ -630,29 +630,29 @@ WHERE n.nspname = 'public'
 ----
 relname            relhasrules  relhastriggers  relhassubclass  relfrozenxid  relacl  reloptions
 t1                 false        false           false           0             NULL    NULL
-primary            false        false           false           0             NULL    NULL
+t1_pkey            false        false           false           0             NULL    NULL
 t1_a_key           false        false           false           0             NULL    NULL
 index_key          false        false           false           0             NULL    NULL
 t1_m_seq           false        false           false           0             NULL    NULL
 t1_n_seq           false        false           false           0             NULL    NULL
 t2                 false        false           false           0             NULL    NULL
-primary            false        false           false           0             NULL    NULL
+t2_pkey            false        false           false           0             NULL    NULL
 t2_t1_id_idx       false        false           false           0             NULL    NULL
 t3                 false        false           false           0             NULL    NULL
-primary            false        false           false           0             NULL    NULL
+t3_pkey            false        false           false           0             NULL    NULL
 t3_a_b_idx         false        false           false           0             NULL    NULL
 v1                 false        false           false           0             NULL    NULL
 t4                 false        false           false           0             NULL    NULL
-primary            false        false           false           0             NULL    NULL
+t4_pkey            false        false           false           0             NULL    NULL
 t5                 false        false           false           0             NULL    NULL
-primary            false        false           false           0             NULL    NULL
+t5_pkey            false        false           false           0             NULL    NULL
 t6                 false        false           false           0             NULL    NULL
-primary            false        false           false           0             NULL    NULL
+t6_pkey            false        false           false           0             NULL    NULL
 t6_expr_idx        false        false           false           0             NULL    NULL
 t6_expr_expr1_idx  false        false           false           0             NULL    NULL
 t6_expr_key        false        false           false           0             NULL    NULL
 mv1                false        false           false           0             NULL    NULL
-primary            false        false           false           0             NULL    NULL
+mv1_pkey           false        false           false           0             NULL    NULL
 
 ## pg_catalog.pg_attribute
 
@@ -679,7 +679,7 @@ attrelid    relname            attname                   atttypid  attstattarget
 55          t1                 l                         20        0              8       13      0         -1
 55          t1                 m                         20        0              8       14      0         -1
 55          t1                 n                         20        0              8       15      0         -1
-450499963   primary            p                         701       0              8       1       0         -1
+450499963   t1_pkey            p                         701       0              8       1       0         -1
 450499960   t1_a_key           a                         20        0              8       2       0         -1
 450499961   index_key          b                         20        0              8       3       0         -1
 450499961   index_key          c                         20        0              8       4       0         -1
@@ -687,13 +687,13 @@ attrelid    relname            attname                   atttypid  attstattarget
 57          t1_n_seq           value                     20        0              8       1       0         -1
 58          t2                 t1_id                     20        0              8       1       0         -1
 58          t2                 rowid                     20        0              8       2       0         -1
-710236230   primary            rowid                     20        0              8       2       0         -1
+710236230   t2_pkey            rowid                     20        0              8       2       0         -1
 710236229   t2_t1_id_idx       t1_id                     20        0              8       1       0         -1
 59          t3                 a                         20        0              8       1       0         -1
 59          t3                 b                         20        0              8       2       0         -1
 59          t3                 c                         25        0              -1      3       0         -1
 59          t3                 rowid                     20        0              8       4       0         -1
-3660126519  primary            rowid                     20        0              8       4       0         -1
+3660126519  t3_pkey            rowid                     20        0              8       4       0         -1
 3660126516  t3_a_b_idx         a                         20        0              8       1       0         -1
 3660126516  t3_a_b_idx         b                         20        0              8       2       0         -1
 60          v1                 p                         701       0              8       1       0         -1
@@ -704,24 +704,24 @@ attrelid    relname            attname                   atttypid  attstattarget
 61          t4                 b                         701       0              8       2       0         -1
 61          t4                 c                         25        0              -1      3       0         -1
 61          t4                 rowid                     20        0              8       4       0         -1
-4179599057  primary            rowid                     20        0              8       4       0         -1
+4179599057  t4_pkey            rowid                     20        0              8       4       0         -1
 62          t5                 a                         20        0              8       1       0         -1
 62          t5                 b                         701       0              8       2       0         -1
 62          t5                 c                         25        0              -1      3       0         -1
 62          t5                 rowid                     20        0              8       4       0         -1
-3919862786  primary            rowid                     20        0              8       4       0         -1
+3919862786  t5_pkey            rowid                     20        0              8       4       0         -1
 63          t6                 a                         20        0              8       1       0         -1
 63          t6                 b                         20        0              8       2       0         -1
 63          t6                 c                         25        0              -1      3       0         -1
 63          t6                 rowid                     20        0              8       5       0         -1
-2574785779  primary            rowid                     20        0              8       5       0         -1
+2574785779  t6_pkey            rowid                     20        0              8       5       0         -1
 2574785776  t6_expr_idx        crdb_internal_idx_expr    20        0              8       4       0         -1
 2574785777  t6_expr_expr1_idx  crdb_internal_idx_expr_1  25        0              -1      6       0         -1
 2574785777  t6_expr_expr1_idx  crdb_internal_idx_expr_2  20        0              8       7       0         -1
 2574785782  t6_expr_key        crdb_internal_idx_expr_3  25        0              -1      8       0         -1
 64          mv1                ?column?                  20        0              8       1       0         -1
 64          mv1                rowid                     20        0              8       2       0         -1
-51576700    primary            rowid                     20        0              8       2       0         -1
+51576700    mv1_pkey           rowid                     20        0              8       2       0         -1
 
 query TTIBTTBBTT colnames
 SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated
@@ -746,7 +746,7 @@ t1                 k                         14         NULL      NULL        NU
 t1                 l                         -1         NULL      NULL        NULL      false       false      ·            v
 t1                 m                         -1         NULL      NULL        NULL      true        true       a            ·
 t1                 n                         -1         NULL      NULL        NULL      true        true       b            ·
-primary            p                         -1         NULL      NULL        NULL      true        false      ·            ·
+t1_pkey            p                         -1         NULL      NULL        NULL      true        false      ·            ·
 t1_a_key           a                         -1         NULL      NULL        NULL      false       false      ·            ·
 index_key          b                         -1         NULL      NULL        NULL      false       false      ·            ·
 index_key          c                         -1         NULL      NULL        NULL      false       true       ·            ·
@@ -754,13 +754,13 @@ t1_m_seq           value                     -1         NULL      NULL        NU
 t1_n_seq           value                     -1         NULL      NULL        NULL      true        false      ·            ·
 t2                 t1_id                     -1         NULL      NULL        NULL      false       false      ·            ·
 t2                 rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-primary            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+t2_pkey            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 t2_t1_id_idx       t1_id                     -1         NULL      NULL        NULL      false       false      ·            ·
 t3                 a                         -1         NULL      NULL        NULL      false       false      ·            ·
 t3                 b                         -1         NULL      NULL        NULL      false       false      ·            ·
 t3                 c                         -1         NULL      NULL        NULL      false       true       ·            ·
 t3                 rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-primary            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+t3_pkey            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 t3_a_b_idx         a                         -1         NULL      NULL        NULL      false       false      ·            ·
 t3_a_b_idx         b                         -1         NULL      NULL        NULL      false       false      ·            ·
 v1                 p                         -1         NULL      NULL        NULL      false       false      ·            ·
@@ -771,24 +771,24 @@ t4                 a                         -1         NULL      NULL        NU
 t4                 b                         -1         NULL      NULL        NULL      false       false      ·            ·
 t4                 c                         -1         NULL      NULL        NULL      false       false      ·            ·
 t4                 rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-primary            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+t4_pkey            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 t5                 a                         -1         NULL      NULL        NULL      false       false      ·            ·
 t5                 b                         -1         NULL      NULL        NULL      false       false      ·            ·
 t5                 c                         -1         NULL      NULL        NULL      false       false      ·            ·
 t5                 rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-primary            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+t5_pkey            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 t6                 a                         -1         NULL      NULL        NULL      false       false      ·            ·
 t6                 b                         -1         NULL      NULL        NULL      false       false      ·            ·
 t6                 c                         -1         NULL      NULL        NULL      false       false      ·            ·
 t6                 rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-primary            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+t6_pkey            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 t6_expr_idx        crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       false      ·            v
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  -1         NULL      NULL        NULL      false       false      ·            v
 t6_expr_expr1_idx  crdb_internal_idx_expr_2  -1         NULL      NULL        NULL      false       false      ·            v
 t6_expr_key        crdb_internal_idx_expr_3  -1         NULL      NULL        NULL      false       false      ·            v
 mv1                ?column?                  -1         NULL      NULL        NULL      false       false      ·            ·
 mv1                rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-primary            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+mv1_pkey           rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 
 query TTBBITTT colnames
 SELECT c.relname, attname, attisdropped, attislocal, attinhcount, attacl, attoptions, attfdwoptions
@@ -813,7 +813,7 @@ t1                 k                         false         true        0        
 t1                 l                         false         true        0            NULL    NULL        NULL
 t1                 m                         false         true        0            NULL    NULL        NULL
 t1                 n                         false         true        0            NULL    NULL        NULL
-primary            p                         false         true        0            NULL    NULL        NULL
+t1_pkey            p                         false         true        0            NULL    NULL        NULL
 t1_a_key           a                         false         true        0            NULL    NULL        NULL
 index_key          b                         false         true        0            NULL    NULL        NULL
 index_key          c                         false         true        0            NULL    NULL        NULL
@@ -821,13 +821,13 @@ t1_m_seq           value                     false         true        0        
 t1_n_seq           value                     false         true        0            NULL    NULL        NULL
 t2                 t1_id                     false         true        0            NULL    NULL        NULL
 t2                 rowid                     false         true        0            NULL    NULL        NULL
-primary            rowid                     false         true        0            NULL    NULL        NULL
+t2_pkey            rowid                     false         true        0            NULL    NULL        NULL
 t2_t1_id_idx       t1_id                     false         true        0            NULL    NULL        NULL
 t3                 a                         false         true        0            NULL    NULL        NULL
 t3                 b                         false         true        0            NULL    NULL        NULL
 t3                 c                         false         true        0            NULL    NULL        NULL
 t3                 rowid                     false         true        0            NULL    NULL        NULL
-primary            rowid                     false         true        0            NULL    NULL        NULL
+t3_pkey            rowid                     false         true        0            NULL    NULL        NULL
 t3_a_b_idx         a                         false         true        0            NULL    NULL        NULL
 t3_a_b_idx         b                         false         true        0            NULL    NULL        NULL
 v1                 p                         false         true        0            NULL    NULL        NULL
@@ -838,24 +838,24 @@ t4                 a                         false         true        0        
 t4                 b                         false         true        0            NULL    NULL        NULL
 t4                 c                         false         true        0            NULL    NULL        NULL
 t4                 rowid                     false         true        0            NULL    NULL        NULL
-primary            rowid                     false         true        0            NULL    NULL        NULL
+t4_pkey            rowid                     false         true        0            NULL    NULL        NULL
 t5                 a                         false         true        0            NULL    NULL        NULL
 t5                 b                         false         true        0            NULL    NULL        NULL
 t5                 c                         false         true        0            NULL    NULL        NULL
 t5                 rowid                     false         true        0            NULL    NULL        NULL
-primary            rowid                     false         true        0            NULL    NULL        NULL
+t5_pkey            rowid                     false         true        0            NULL    NULL        NULL
 t6                 a                         false         true        0            NULL    NULL        NULL
 t6                 b                         false         true        0            NULL    NULL        NULL
 t6                 c                         false         true        0            NULL    NULL        NULL
 t6                 rowid                     false         true        0            NULL    NULL        NULL
-primary            rowid                     false         true        0            NULL    NULL        NULL
+t6_pkey            rowid                     false         true        0            NULL    NULL        NULL
 t6_expr_idx        crdb_internal_idx_expr    false         true        0            NULL    NULL        NULL
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  false         true        0            NULL    NULL        NULL
 t6_expr_expr1_idx  crdb_internal_idx_expr_2  false         true        0            NULL    NULL        NULL
 t6_expr_key        crdb_internal_idx_expr_3  false         true        0            NULL    NULL        NULL
 mv1                ?column?                  false         true        0            NULL    NULL        NULL
 mv1                rowid                     false         true        0            NULL    NULL        NULL
-primary            rowid                     false         true        0            NULL    NULL        NULL
+mv1_pkey           rowid                     false         true        0            NULL    NULL        NULL
 
 # Check relkind codes.
 statement ok
@@ -887,10 +887,10 @@ WHERE n.nspname = 'public'
 ORDER BY relname
 ----
 mv_test         m
-primary         i
-primary         i
+mv_test_pkey    i
 seq_test        S
 tbl_test        r
+tbl_test_pkey   i
 tbl_test_v_idx  i
 view_test       v
 
@@ -963,22 +963,22 @@ FROM pg_catalog.pg_indexes
 WHERE schemaname = 'public'
 ----
 crdb_oid    schemaname  tablename  indexname          tablespace
-450499963   public      t1         primary            NULL
+450499963   public      t1         t1_pkey            NULL
 450499960   public      t1         t1_a_key           NULL
 450499961   public      t1         index_key          NULL
 2315049508  public      t1_m_seq   primary            NULL
 969972501   public      t1_n_seq   primary            NULL
-710236230   public      t2         primary            NULL
+710236230   public      t2         t2_pkey            NULL
 710236229   public      t2         t2_t1_id_idx       NULL
-3660126519  public      t3         primary            NULL
+3660126519  public      t3         t3_pkey            NULL
 3660126516  public      t3         t3_a_b_idx         NULL
-4179599057  public      t4         primary            NULL
-3919862786  public      t5         primary            NULL
-2574785779  public      t6         primary            NULL
+4179599057  public      t4         t4_pkey            NULL
+3919862786  public      t5         t5_pkey            NULL
+2574785779  public      t6         t6_pkey            NULL
 2574785776  public      t6         t6_expr_idx        NULL
 2574785777  public      t6         t6_expr_expr1_idx  NULL
 2574785782  public      t6         t6_expr_key        NULL
-51576700    public      mv1        primary            NULL
+51576700    public      mv1        mv1_pkey           NULL
 
 query OTTT colnames
 SELECT crdb_oid, tablename, indexname, indexdef
@@ -986,22 +986,22 @@ FROM pg_catalog.pg_indexes
 WHERE schemaname = 'public'
 ----
 crdb_oid    tablename  indexname          indexdef
-450499963   t1         primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.t1 USING btree (p ASC)
+450499963   t1         t1_pkey            CREATE UNIQUE INDEX t1_pkey ON constraint_db.public.t1 USING btree (p ASC)
 450499960   t1         t1_a_key           CREATE UNIQUE INDEX t1_a_key ON constraint_db.public.t1 USING btree (a ASC)
 450499961   t1         index_key          CREATE UNIQUE INDEX index_key ON constraint_db.public.t1 USING btree (b ASC, c ASC)
 2315049508  t1_m_seq   primary            CREATE INDEX "primary" ON constraint_db.public.t1_m_seq USING btree (value ASC)
 969972501   t1_n_seq   primary            CREATE INDEX "primary" ON constraint_db.public.t1_n_seq USING btree (value ASC)
-710236230   t2         primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.t2 USING btree (rowid ASC)
+710236230   t2         t2_pkey            CREATE UNIQUE INDEX t2_pkey ON constraint_db.public.t2 USING btree (rowid ASC)
 710236229   t2         t2_t1_id_idx       CREATE INDEX t2_t1_id_idx ON constraint_db.public.t2 USING btree (t1_id ASC)
-3660126519  t3         primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.t3 USING btree (rowid ASC)
+3660126519  t3         t3_pkey            CREATE UNIQUE INDEX t3_pkey ON constraint_db.public.t3 USING btree (rowid ASC)
 3660126516  t3         t3_a_b_idx         CREATE INDEX t3_a_b_idx ON constraint_db.public.t3 USING btree (a ASC, b DESC) STORING (c)
-4179599057  t4         primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.t4 USING btree (rowid ASC)
-3919862786  t5         primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.t5 USING btree (rowid ASC)
-2574785779  t6         primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.t6 USING btree (rowid ASC)
+4179599057  t4         t4_pkey            CREATE UNIQUE INDEX t4_pkey ON constraint_db.public.t4 USING btree (rowid ASC)
+3919862786  t5         t5_pkey            CREATE UNIQUE INDEX t5_pkey ON constraint_db.public.t5 USING btree (rowid ASC)
+2574785779  t6         t6_pkey            CREATE UNIQUE INDEX t6_pkey ON constraint_db.public.t6 USING btree (rowid ASC)
 2574785776  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree ((a + b) ASC)
 2574785777  t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON constraint_db.public.t6 USING btree (lower(c) ASC, (a + b) ASC)
 2574785782  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
-51576700    mv1        primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.mv1 USING btree (rowid ASC)
+51576700    mv1        mv1_pkey           CREATE UNIQUE INDEX mv1_pkey ON constraint_db.public.mv1 USING btree (rowid ASC)
 
 ## pg_catalog.pg_index
 
@@ -1238,7 +1238,7 @@ oid         conname        connamespace  contype  condef
 2119068666  t6_expr_key    2332901747    u        UNIQUE (lower(c) ASC)
 2897367075  uwi_b_partial  2332901747    u        UNIQUE WITHOUT INDEX (b) WHERE (c = 'foo'::STRING)
 3173756726  fk_a_ref_t4    2332901747    f        FOREIGN KEY (a) REFERENCES t4(a) ON DELETE CASCADE
-3572320190  primary        2332901747    p        PRIMARY KEY (p ASC)
+3572320190  t1_pkey        2332901747    p        PRIMARY KEY (p ASC)
 3989820597  check_b        2332901747    c        CHECK ((b > 11))
 4243354484  t1_a_key       2332901747    u        UNIQUE (a ASC)
 4243354485  index_key      2332901747    u        UNIQUE (b ASC, c ASC)
@@ -1262,7 +1262,7 @@ primary        p        false          false        true          57        0   
 t6_expr_key    u        false          false        true          63        0         2574785782
 uwi_b_partial  u        false          false        true          61        0         0
 fk_a_ref_t4    f        false          false        true          62        0         0
-primary        p        false          false        true          55        0         450499963
+t1_pkey        p        false          false        true          55        0         450499963
 check_b        c        false          false        true          59        0         0
 t1_a_key       u        false          false        true          55        0         450499960
 index_key      u        false          false        true          55        0         450499961
@@ -1290,7 +1290,7 @@ uwi_b_c        0          NULL         NULL         NULL
 primary        0          NULL         NULL         NULL
 t6_expr_key    0          NULL         NULL         NULL
 uwi_b_partial  0          NULL         NULL         NULL
-primary        0          NULL         NULL         NULL
+t1_pkey        0          NULL         NULL         NULL
 check_b        0          NULL         NULL         NULL
 t1_a_key       0          NULL         NULL         NULL
 index_key      0          NULL         NULL         NULL
@@ -1327,7 +1327,7 @@ primary        true        0            true          {1}
 t6_expr_key    true        0            true          {8}
 uwi_b_partial  true        0            true          NULL
 fk_a_ref_t4    true        0            true          {1}
-primary        true        0            true          {1}
+t1_pkey        true        0            true          {1}
 check_b        true        0            true          {2}
 t1_a_key       true        0            true          {2}
 index_key      true        0            true          {3,4}
@@ -1347,7 +1347,7 @@ uwi_b_c        NULL     NULL       NULL       NULL       NULL       NULL        
 primary        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (value ASC)
 t6_expr_key    NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (lower(c) ASC)
 uwi_b_partial  NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (b) WHERE (c = 'foo'::STRING)
-primary        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (p ASC)
+t1_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (p ASC)
 check_b        NULL     NULL       NULL       NULL       NULL       (b > 11)           (b > 11)           CHECK ((b > 11))
 t1_a_key       NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (a ASC)
 index_key      NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (b ASC, c ASC)
@@ -4677,7 +4677,7 @@ SELECT schemaname, tablename, indexname, indexdef
 FROM pg_indexes WHERE schemaname='test_schema' and tablename='test'
 ----
 schemaname   tablename  indexname   indexdef
-test_schema  test       primary     CREATE UNIQUE INDEX "primary" ON test.test_schema.test USING btree (a ASC)
+test_schema  test       test_pkey   CREATE UNIQUE INDEX test_pkey ON test.test_schema.test USING btree (a ASC)
 test_schema  test       test_b_idx  CREATE INDEX test_b_idx ON test.test_schema.test USING btree (b ASC)
 
 # Make sure that selecting from vtables with indexes in other dbs properly
@@ -4717,10 +4717,10 @@ SELECT indexname, indexdef
 FROM pg_catalog.pg_indexes
 WHERE tablename = 'geospatial_table'
 ----
-indexname  indexdef
-primary    CREATE UNIQUE INDEX "primary" ON test.public.geospatial_table USING btree (id ASC)
-idxa       CREATE INDEX idxa ON test.public.geospatial_table USING gin (a ASC)
-idxb       CREATE INDEX idxb ON test.public.geospatial_table USING gin (b ASC)
+indexname              indexdef
+geospatial_table_pkey  CREATE UNIQUE INDEX geospatial_table_pkey ON test.public.geospatial_table USING btree (id ASC)
+idxa                   CREATE INDEX idxa ON test.public.geospatial_table USING gin (a ASC)
+idxb                   CREATE INDEX idxb ON test.public.geospatial_table USING gin (b ASC)
 
 subtest partial_index
 
@@ -4746,7 +4746,7 @@ FROM pg_catalog.pg_indexes
 WHERE tablename = 'partial_index_table'
 ----
 indexname                   indexdef
-primary                     CREATE UNIQUE INDEX "primary" ON test.public.partial_index_table USING btree (rowid ASC)
+partial_index_table_pkey    CREATE UNIQUE INDEX partial_index_table_pkey ON test.public.partial_index_table USING btree (rowid ASC)
 partial_index_table_a_key   CREATE UNIQUE INDEX partial_index_table_a_key ON test.public.partial_index_table USING btree (a ASC) WHERE (a > 0)
 partial_index_table_a_key1  CREATE UNIQUE INDEX partial_index_table_a_key1 ON test.public.partial_index_table USING btree (a ASC) WHERE (b IN ('foo'::public.testenum, 'bar'::public.testenum))
 
@@ -5126,7 +5126,7 @@ GROUP BY indexname, indisunique, indisprimary, amname, exprdef, attoptions
 ----
 indexname            array_agg  indisunique  indisprimary  array_agg      amname  exprdef  attoptions
 indexes_include_idx  {a,c,d}    false        false         {ASC,ASC,ASC}  prefix  NULL     NULL
-primary              {id}       true         true          {ASC}          prefix  NULL     NULL
+indexes_table_pkey   {id}       true         true          {ASC}          prefix  NULL     NULL
 
 statement ok
 SET stub_catalog_tables=false

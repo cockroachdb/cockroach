@@ -1159,7 +1159,7 @@ SELECT min(v) FROM opt_test
 
 # Cross-check against a query without this optimization.
 query I
-SELECT min(v) FROM opt_test@primary
+SELECT min(v) FROM opt_test@opt_test_pkey
 ----
 5
 
