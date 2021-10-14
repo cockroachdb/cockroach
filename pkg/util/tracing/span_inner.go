@@ -42,7 +42,7 @@ type spanInner struct {
 	sterile bool
 }
 
-func (s *spanInner) TraceID() uint64 {
+func (s *spanInner) TraceID() tracingpb.TraceID {
 	if s.isNoop() {
 		return 0
 	}
@@ -121,8 +121,8 @@ func (s *spanInner) Finish() {
 }
 
 func (s *spanInner) Meta() SpanMeta {
-	var traceID uint64
-	var spanID uint64
+	var traceID tracingpb.TraceID
+	var spanID tracingpb.SpanID
 	var recordingType RecordingType
 	var baggage map[string]string
 	var sterile bool

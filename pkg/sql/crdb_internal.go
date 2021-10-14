@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1275,14 +1276,14 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
 )`,
 	indexes: []virtualIndex{{populate: func(ctx context.Context, constraint tree.Datum, p *planner,
 		db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-		var traceID uint64
+		var traceID tracingpb.TraceID
 		d := tree.UnwrapDatum(p.EvalContext(), constraint)
 		if d == tree.DNull {
 			return false, nil
 		}
 		switch t := d.(type) {
 		case *tree.DInt:
-			traceID = uint64(*t)
+			traceID = tracingpb.TraceID(*t)
 		default:
 			return false, errors.AssertionFailedf(
 				"unexpected type %T for trace_id column in virtual table crdb_internal.cluster_inflight_traces", d)

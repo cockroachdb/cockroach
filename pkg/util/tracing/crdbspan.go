@@ -31,9 +31,9 @@ import (
 type crdbSpan struct {
 	tracer *Tracer
 
-	traceID      uint64 // probabilistically unique
-	spanID       uint64 // probabilistically unique
-	parentSpanID uint64
+	traceID      tracingpb.TraceID // probabilistically unique
+	spanID       tracingpb.SpanID  // probabilistically unique
+	parentSpanID tracingpb.SpanID
 	goroutineID  uint64
 
 	startTime time.Time
@@ -244,7 +244,7 @@ func (s *crdbSpan) disableRecording() {
 }
 
 // TraceID is part of the RegistrySpan interface.
-func (s *crdbSpan) TraceID() uint64 {
+func (s *crdbSpan) TraceID() tracingpb.TraceID {
 	return s.traceID
 }
 
