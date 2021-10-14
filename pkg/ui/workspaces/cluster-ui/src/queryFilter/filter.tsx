@@ -69,7 +69,7 @@ const timeUnit = [
 ];
 
 export const defaultFilters: Filters = {
-  app: "",
+  app: "All",
   timeNumber: "0",
   timeUnit: "seconds",
   fullScan: false,
@@ -116,7 +116,7 @@ export const getFiltersFromQueryString = (
  * we want to consider 0 active Filters
  */
 export const inactiveFiltersState: Filters = {
-  app: "",
+  app: "All",
   timeNumber: "0",
   fullScan: false,
   sqlType: "",
