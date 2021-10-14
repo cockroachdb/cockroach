@@ -148,8 +148,8 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		sqltelemetry.IncIAMAlterCounter(sqltelemetry.User)
 		opName = "alter-user"
 	}
-	if n.roleName.Normalized() == "" {
-		return errNoUserNameSpecified
+	if n.roleName.Undefined() {
+		return pgerror.New(pgcode.InvalidParameterValue, "no username specified")
 	}
 	if n.roleName.IsAdminRole() {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
@@ -172,7 +172,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		if n.ifExists {
 			return nil
 		}
-		return errors.Newf("role/user %s does not exist", n.roleName)
+		return pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", n.roleName)
 	}
 
 	isAdmin, err := params.p.UserHasAdminRole(params.ctx, n.roleName)
@@ -540,8 +540,8 @@ func (n *alterRoleSetNode) getRoleName(
 	if n.allRoles {
 		return true, security.MakeSQLUsernameFromPreNormalizedString(""), nil
 	}
-	if n.roleName.Normalized() == "" {
-		return false, security.SQLUsername{}, errNoUserNameSpecified
+	if n.roleName.Undefined() {
+		return false, security.SQLUsername{}, pgerror.New(pgcode.InvalidParameterValue, "no username specified")
 	}
 	if n.roleName.IsAdminRole() {
 		return false, security.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit admin role")
