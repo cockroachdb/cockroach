@@ -30,9 +30,14 @@ import (
 // be one version behind, in which case it's possible (and legitimate) that
 // those are missing back-references which would cause validation to fail.
 func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *kv.Txn) (err error) {
-	if tc.skipValidationOnWrite || !ValidateOnWriteEnabled.Get(&tc.settings.SV) {
+	if tc.skipValidationOnWrite {
+		tc.skipValidationOnWrite = false
 		return nil
 	}
+	if !ValidateOnWriteEnabled.Get(&tc.settings.SV) {
+		return nil
+	}
+
 	descs := tc.uncommitted.getUncommittedDescriptorsForValidation()
 	if len(descs) == 0 {
 		return nil
