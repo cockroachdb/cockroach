@@ -275,6 +275,7 @@ func (f *RangeFeed) maybeRunInitialScan(
 		// indicating that the value was previously deleted.
 		if f.withDiff {
 			v.PrevValue = v.Value
+			v.PrevValue.Timestamp = hlc.Timestamp{}
 		}
 
 		// It's something of a bummer that we must allocate a new value for each

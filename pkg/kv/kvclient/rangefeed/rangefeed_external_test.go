@@ -88,8 +88,9 @@ func TestRangeFeedIntegration(t *testing.T) {
 		v1 := <-rows
 		require.Equal(t, mkKey("a"), v1.Key)
 		// Ensure the initial scan contract is fulfilled when WithDiff is specified.
-		require.Equal(t, v1.Value, v1.PrevValue)
+		require.Equal(t, v1.Value.RawBytes, v1.PrevValue.RawBytes)
 		require.Equal(t, v1.Value.Timestamp, afterB)
+		require.True(t, v1.PrevValue.Timestamp.IsEmpty())
 	}
 	{
 		v2 := <-rows
