@@ -140,14 +140,14 @@ CREATE SEQUENCE show_create_test
 query ITTITTTTTTTBBBB colnames
 SELECT * FROM crdb_internal.create_statements WHERE descriptor_name = 'show_create_test'
 ----
-database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                                     state   create_nofks                                                                                         alter_statements  validate_statements  has_partitions  is_multi_region  is_virtual  is_temporary
-52           test           public       63             sequence         show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  {}                {}                   false           false            false       false
+database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                                             state   create_nofks                                                                                                 alter_statements  validate_statements  has_partitions  is_multi_region  is_virtual  is_temporary
+52           test           public       63             sequence         show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 CACHE 1  PUBLIC  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 CACHE 1  {}                {}                   false           false            false       false
 
 query TT colnames
 SHOW CREATE SEQUENCE show_create_test
 ----
 table_name        create_statement
-show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 CACHE 1
 
 # DML ERRORS
 
@@ -972,7 +972,7 @@ CREATE SEQUENCE sv VIRTUAL
 query T
 SELECT create_statement FROM [SHOW CREATE SEQUENCE sv]
 ----
-CREATE SEQUENCE public.sv MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL
+CREATE SEQUENCE public.sv MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL CACHE 1
 
 statement ok
 CREATE TABLE svals(x INT)

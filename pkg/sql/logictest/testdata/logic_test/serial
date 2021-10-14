@@ -128,7 +128,7 @@ serial  CREATE TABLE public.serial (
 query TT
 SHOW CREATE SEQUENCE serial_a_seq
 ----
-serial_a_seq  CREATE SEQUENCE public.serial_a_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL
+serial_a_seq  CREATE SEQUENCE public.serial_a_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL CACHE 1
 
 statement ok
 INSERT INTO serial (a, b) VALUES (1, 2), (DEFAULT, DEFAULT), (DEFAULT, 3)
@@ -233,7 +233,7 @@ serial  CREATE TABLE public.serial (
 query TT
 SHOW CREATE SEQUENCE serial_a_seq1
 ----
-serial_a_seq1  CREATE SEQUENCE public.serial_a_seq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+serial_a_seq1  CREATE SEQUENCE public.serial_a_seq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 CACHE 1
 
 query TT
 SELECT pg_get_serial_sequence('serial', 'a'), pg_get_serial_sequence('serial', 'b')
