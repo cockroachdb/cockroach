@@ -485,6 +485,7 @@
 <table><thead>
 <tr><td><code>||</code></td><td>Return</td></tr>
 </thead><tbody>
+<tr><td>anyenum <code>||</code> anyenum</td><td>anyenum</td></tr>
 <tr><td><a href="bool.html">bool</a> <code>||</code> <a href="bool.html">bool[]</a></td><td><a href="bool.html">bool[]</a></td></tr>
 <tr><td><a href="bool.html">bool</a> <code>||</code> <a href="string.html">string</a></td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="bool.html">bool[]</a> <code>||</code> <a href="bool.html">bool</a></td><td><a href="bool.html">bool[]</a></td></tr>

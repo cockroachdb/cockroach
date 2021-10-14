@@ -381,6 +381,38 @@ func initArrayElementConcatenation() {
 			Volatility: VolatilityImmutable,
 		})
 	}
+
+	BinOps[Concat] = append(BinOps[Concat], &BinOp{
+		LeftType:  types.MakeArray(types.AnyEnum),
+		RightType: types.AnyEnum,
+		ReturnType: func(args []TypedExpr) *types.T {
+			if args == nil {
+				return types.AnyEnum
+			}
+			return args[0].ResolvedType()
+		},
+		NullableArgs: true,
+		Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			return AppendToMaybeNullArray(right.ResolvedType(), left, right)
+		},
+		Volatility: VolatilityImmutable,
+	})
+
+	BinOps[Concat] = append(BinOps[Concat], &BinOp{
+		LeftType:  types.AnyEnum,
+		RightType: types.MakeArray(types.AnyEnum),
+		ReturnType: func(args []TypedExpr) *types.T {
+			if args == nil {
+				return types.AnyEnum
+			}
+			return args[1].ResolvedType()
+		},
+		NullableArgs: true,
+		Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			return PrependToMaybeNullArray(left.ResolvedType(), left, right)
+		},
+		Volatility: VolatilityImmutable,
+	})
 }
 
 // ConcatArrays concatenates two arrays.
