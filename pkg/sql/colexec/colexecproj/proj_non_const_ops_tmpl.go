@@ -130,7 +130,7 @@ func (p _OP_NAME) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+		if !_overloadHelper.NullableArgs && (vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls()) {
 			_SET_PROJECTION(true)
 		} else {
 			_SET_PROJECTION(false)
@@ -254,6 +254,7 @@ func GetProjectionOperator(
 	evalCtx *tree.EvalContext,
 	binFn tree.TwoArgFn,
 	cmpExpr *tree.ComparisonExpr,
+	nullableArgs bool,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
@@ -262,7 +263,7 @@ func GetProjectionOperator(
 		col1Idx:        col1Idx,
 		col2Idx:        col2Idx,
 		outputIdx:      outputIdx,
-		overloadHelper: execgen.OverloadHelper{BinFn: binFn, EvalCtx: evalCtx},
+		overloadHelper: execgen.OverloadHelper{BinFn: binFn, EvalCtx: evalCtx, NullableArgs: nullableArgs},
 	}
 
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]

@@ -53,9 +53,6 @@ func (p projBitandInt16ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -80,7 +77,7 @@ func (p projBitandInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -155,9 +152,6 @@ func (p projBitandInt16ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -182,7 +176,7 @@ func (p projBitandInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -257,9 +251,6 @@ func (p projBitandInt16ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -284,7 +275,7 @@ func (p projBitandInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -359,9 +350,6 @@ func (p projBitandInt32ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -386,7 +374,7 @@ func (p projBitandInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -461,9 +449,6 @@ func (p projBitandInt32ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -488,7 +473,7 @@ func (p projBitandInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -563,9 +548,6 @@ func (p projBitandInt32ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -590,7 +572,7 @@ func (p projBitandInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -665,9 +647,6 @@ func (p projBitandInt64ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -692,7 +671,7 @@ func (p projBitandInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -767,9 +746,6 @@ func (p projBitandInt64ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -794,7 +770,7 @@ func (p projBitandInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -869,9 +845,6 @@ func (p projBitandInt64ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -896,7 +869,7 @@ func (p projBitandInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -971,9 +944,6 @@ func (p projBitandDatumConstDatumOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -998,7 +968,7 @@ func (p projBitandDatumConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1099,9 +1069,6 @@ func (p projBitorInt16ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1126,7 +1093,7 @@ func (p projBitorInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1201,9 +1168,6 @@ func (p projBitorInt16ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1228,7 +1192,7 @@ func (p projBitorInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1303,9 +1267,6 @@ func (p projBitorInt16ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1330,7 +1291,7 @@ func (p projBitorInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1405,9 +1366,6 @@ func (p projBitorInt32ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1432,7 +1390,7 @@ func (p projBitorInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1507,9 +1465,6 @@ func (p projBitorInt32ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1534,7 +1489,7 @@ func (p projBitorInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1609,9 +1564,6 @@ func (p projBitorInt32ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1636,7 +1588,7 @@ func (p projBitorInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1711,9 +1663,6 @@ func (p projBitorInt64ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1738,7 +1687,7 @@ func (p projBitorInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1813,9 +1762,6 @@ func (p projBitorInt64ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1840,7 +1786,7 @@ func (p projBitorInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1915,9 +1861,6 @@ func (p projBitorInt64ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1942,7 +1885,7 @@ func (p projBitorInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2017,9 +1960,6 @@ func (p projBitorDatumConstDatumOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2044,7 +1984,7 @@ func (p projBitorDatumConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2145,9 +2085,6 @@ func (p projBitxorInt16ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2172,7 +2109,7 @@ func (p projBitxorInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2247,9 +2184,6 @@ func (p projBitxorInt16ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2274,7 +2208,7 @@ func (p projBitxorInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2349,9 +2283,6 @@ func (p projBitxorInt16ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2376,7 +2307,7 @@ func (p projBitxorInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2451,9 +2382,6 @@ func (p projBitxorInt32ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2478,7 +2406,7 @@ func (p projBitxorInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2553,9 +2481,6 @@ func (p projBitxorInt32ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2580,7 +2505,7 @@ func (p projBitxorInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2655,9 +2580,6 @@ func (p projBitxorInt32ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2682,7 +2604,7 @@ func (p projBitxorInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2757,9 +2679,6 @@ func (p projBitxorInt64ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2784,7 +2703,7 @@ func (p projBitxorInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2859,9 +2778,6 @@ func (p projBitxorInt64ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2886,7 +2802,7 @@ func (p projBitxorInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2961,9 +2877,6 @@ func (p projBitxorInt64ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2988,7 +2901,7 @@ func (p projBitxorInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3063,9 +2976,6 @@ func (p projBitxorDatumConstDatumOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3090,7 +3000,7 @@ func (p projBitxorDatumConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3191,9 +3101,6 @@ func (p projPlusDecimalConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3218,7 +3125,7 @@ func (p projPlusDecimalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3321,9 +3228,6 @@ func (p projPlusDecimalConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3348,7 +3252,7 @@ func (p projPlusDecimalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3451,9 +3355,6 @@ func (p projPlusDecimalConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3478,7 +3379,7 @@ func (p projPlusDecimalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3581,9 +3482,6 @@ func (p projPlusDecimalConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3608,7 +3506,7 @@ func (p projPlusDecimalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3707,9 +3605,6 @@ func (p projPlusInt16ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3734,7 +3629,7 @@ func (p projPlusInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3833,9 +3728,6 @@ func (p projPlusInt16ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3860,7 +3752,7 @@ func (p projPlusInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3959,9 +3851,6 @@ func (p projPlusInt16ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3986,7 +3875,7 @@ func (p projPlusInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4085,9 +3974,6 @@ func (p projPlusInt16ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4112,7 +3998,7 @@ func (p projPlusInt16ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4219,9 +4105,6 @@ func (p projPlusInt16ConstDatumOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4246,7 +4129,7 @@ func (p projPlusInt16ConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4365,9 +4248,6 @@ func (p projPlusInt32ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4392,7 +4272,7 @@ func (p projPlusInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4491,9 +4371,6 @@ func (p projPlusInt32ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4518,7 +4395,7 @@ func (p projPlusInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4617,9 +4494,6 @@ func (p projPlusInt32ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4644,7 +4518,7 @@ func (p projPlusInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4743,9 +4617,6 @@ func (p projPlusInt32ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4770,7 +4641,7 @@ func (p projPlusInt32ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4877,9 +4748,6 @@ func (p projPlusInt32ConstDatumOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4904,7 +4772,7 @@ func (p projPlusInt32ConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5023,9 +4891,6 @@ func (p projPlusInt64ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5050,7 +4915,7 @@ func (p projPlusInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5149,9 +5014,6 @@ func (p projPlusInt64ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5176,7 +5038,7 @@ func (p projPlusInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5275,9 +5137,6 @@ func (p projPlusInt64ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5302,7 +5161,7 @@ func (p projPlusInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5401,9 +5260,6 @@ func (p projPlusInt64ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5428,7 +5284,7 @@ func (p projPlusInt64ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5535,9 +5391,6 @@ func (p projPlusInt64ConstDatumOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5562,7 +5415,7 @@ func (p projPlusInt64ConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5681,9 +5534,6 @@ func (p projPlusFloat64ConstFloat64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5708,7 +5558,7 @@ func (p projPlusFloat64ConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5795,9 +5645,6 @@ func (p projPlusTimestampConstIntervalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5822,7 +5669,7 @@ func (p projPlusTimestampConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5909,9 +5756,6 @@ func (p projPlusIntervalConstTimestampOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5936,7 +5780,7 @@ func (p projPlusIntervalConstTimestampOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6023,9 +5867,6 @@ func (p projPlusIntervalConstIntervalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6050,7 +5891,7 @@ func (p projPlusIntervalConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6117,9 +5958,6 @@ func (p projPlusIntervalConstDatumOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6144,7 +5982,7 @@ func (p projPlusIntervalConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6263,9 +6101,6 @@ func (p projPlusDatumConstIntervalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6290,7 +6125,7 @@ func (p projPlusDatumConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6407,9 +6242,6 @@ func (p projPlusDatumConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6434,7 +6266,7 @@ func (p projPlusDatumConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6551,9 +6383,6 @@ func (p projPlusDatumConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6578,7 +6407,7 @@ func (p projPlusDatumConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6695,9 +6524,6 @@ func (p projPlusDatumConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6722,7 +6548,7 @@ func (p projPlusDatumConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6839,9 +6665,6 @@ func (p projMinusDecimalConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6866,7 +6689,7 @@ func (p projMinusDecimalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6969,9 +6792,6 @@ func (p projMinusDecimalConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6996,7 +6816,7 @@ func (p projMinusDecimalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7099,9 +6919,6 @@ func (p projMinusDecimalConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7126,7 +6943,7 @@ func (p projMinusDecimalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7229,9 +7046,6 @@ func (p projMinusDecimalConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7256,7 +7070,7 @@ func (p projMinusDecimalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7355,9 +7169,6 @@ func (p projMinusInt16ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7382,7 +7193,7 @@ func (p projMinusInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7481,9 +7292,6 @@ func (p projMinusInt16ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7508,7 +7316,7 @@ func (p projMinusInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7607,9 +7415,6 @@ func (p projMinusInt16ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7634,7 +7439,7 @@ func (p projMinusInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7733,9 +7538,6 @@ func (p projMinusInt16ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7760,7 +7562,7 @@ func (p projMinusInt16ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7867,9 +7669,6 @@ func (p projMinusInt16ConstDatumOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7894,7 +7693,7 @@ func (p projMinusInt16ConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8013,9 +7812,6 @@ func (p projMinusInt32ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8040,7 +7836,7 @@ func (p projMinusInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8139,9 +7935,6 @@ func (p projMinusInt32ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8166,7 +7959,7 @@ func (p projMinusInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8265,9 +8058,6 @@ func (p projMinusInt32ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8292,7 +8082,7 @@ func (p projMinusInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8391,9 +8181,6 @@ func (p projMinusInt32ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8418,7 +8205,7 @@ func (p projMinusInt32ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8525,9 +8312,6 @@ func (p projMinusInt32ConstDatumOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8552,7 +8336,7 @@ func (p projMinusInt32ConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8671,9 +8455,6 @@ func (p projMinusInt64ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8698,7 +8479,7 @@ func (p projMinusInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8797,9 +8578,6 @@ func (p projMinusInt64ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8824,7 +8602,7 @@ func (p projMinusInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8923,9 +8701,6 @@ func (p projMinusInt64ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8950,7 +8725,7 @@ func (p projMinusInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9049,9 +8824,6 @@ func (p projMinusInt64ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9076,7 +8848,7 @@ func (p projMinusInt64ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9183,9 +8955,6 @@ func (p projMinusInt64ConstDatumOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9210,7 +8979,7 @@ func (p projMinusInt64ConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9329,9 +9098,6 @@ func (p projMinusFloat64ConstFloat64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9356,7 +9122,7 @@ func (p projMinusFloat64ConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9443,9 +9209,6 @@ func (p projMinusTimestampConstTimestampOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9470,7 +9233,7 @@ func (p projMinusTimestampConstTimestampOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9549,9 +9312,6 @@ func (p projMinusTimestampConstIntervalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9576,7 +9336,7 @@ func (p projMinusTimestampConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9663,9 +9423,6 @@ func (p projMinusIntervalConstIntervalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9690,7 +9447,7 @@ func (p projMinusIntervalConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9757,9 +9514,6 @@ func (p projMinusIntervalConstDatumOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9784,7 +9538,7 @@ func (p projMinusIntervalConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9903,9 +9657,6 @@ func (p projMinusJSONConstBytesOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9930,7 +9681,7 @@ func (p projMinusJSONConstBytesOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10031,9 +9782,6 @@ func (p projMinusJSONConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10058,7 +9806,7 @@ func (p projMinusJSONConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10143,9 +9891,6 @@ func (p projMinusJSONConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10170,7 +9915,7 @@ func (p projMinusJSONConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10255,9 +10000,6 @@ func (p projMinusJSONConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10282,7 +10024,7 @@ func (p projMinusJSONConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10367,9 +10109,6 @@ func (p projMinusDatumConstDatumOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10394,7 +10133,7 @@ func (p projMinusDatumConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10495,9 +10234,6 @@ func (p projMinusDatumConstIntervalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10522,7 +10258,7 @@ func (p projMinusDatumConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10639,9 +10375,6 @@ func (p projMinusDatumConstBytesOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10666,7 +10399,7 @@ func (p projMinusDatumConstBytesOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10783,9 +10516,6 @@ func (p projMinusDatumConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10810,7 +10540,7 @@ func (p projMinusDatumConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10927,9 +10657,6 @@ func (p projMinusDatumConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10954,7 +10681,7 @@ func (p projMinusDatumConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11071,9 +10798,6 @@ func (p projMinusDatumConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11098,7 +10822,7 @@ func (p projMinusDatumConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11215,9 +10939,6 @@ func (p projMultDecimalConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11242,7 +10963,7 @@ func (p projMultDecimalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11345,9 +11066,6 @@ func (p projMultDecimalConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11372,7 +11090,7 @@ func (p projMultDecimalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11475,9 +11193,6 @@ func (p projMultDecimalConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11502,7 +11217,7 @@ func (p projMultDecimalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11605,9 +11320,6 @@ func (p projMultDecimalConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11632,7 +11344,7 @@ func (p projMultDecimalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11731,9 +11443,6 @@ func (p projMultDecimalConstIntervalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11758,7 +11467,7 @@ func (p projMultDecimalConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11845,9 +11554,6 @@ func (p projMultInt16ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11872,7 +11578,7 @@ func (p projMultInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12003,9 +11709,6 @@ func (p projMultInt16ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12030,7 +11733,7 @@ func (p projMultInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12161,9 +11864,6 @@ func (p projMultInt16ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12188,7 +11888,7 @@ func (p projMultInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12319,9 +12019,6 @@ func (p projMultInt16ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12346,7 +12043,7 @@ func (p projMultInt16ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12453,9 +12150,6 @@ func (p projMultInt16ConstIntervalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12480,7 +12174,7 @@ func (p projMultInt16ConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12547,9 +12241,6 @@ func (p projMultInt32ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12574,7 +12265,7 @@ func (p projMultInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12705,9 +12396,6 @@ func (p projMultInt32ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12732,7 +12420,7 @@ func (p projMultInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12863,9 +12551,6 @@ func (p projMultInt32ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12890,7 +12575,7 @@ func (p projMultInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13021,9 +12706,6 @@ func (p projMultInt32ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13048,7 +12730,7 @@ func (p projMultInt32ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13155,9 +12837,6 @@ func (p projMultInt32ConstIntervalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13182,7 +12861,7 @@ func (p projMultInt32ConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13249,9 +12928,6 @@ func (p projMultInt64ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13276,7 +12952,7 @@ func (p projMultInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13407,9 +13083,6 @@ func (p projMultInt64ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13434,7 +13107,7 @@ func (p projMultInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13565,9 +13238,6 @@ func (p projMultInt64ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13592,7 +13262,7 @@ func (p projMultInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13723,9 +13393,6 @@ func (p projMultInt64ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13750,7 +13417,7 @@ func (p projMultInt64ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13857,9 +13524,6 @@ func (p projMultInt64ConstIntervalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13884,7 +13548,7 @@ func (p projMultInt64ConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13951,9 +13615,6 @@ func (p projMultFloat64ConstFloat64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13978,7 +13639,7 @@ func (p projMultFloat64ConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14065,9 +13726,6 @@ func (p projMultFloat64ConstIntervalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14092,7 +13750,7 @@ func (p projMultFloat64ConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14159,9 +13817,6 @@ func (p projMultIntervalConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14186,7 +13841,7 @@ func (p projMultIntervalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14253,9 +13908,6 @@ func (p projMultIntervalConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14280,7 +13932,7 @@ func (p projMultIntervalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14347,9 +13999,6 @@ func (p projMultIntervalConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14374,7 +14023,7 @@ func (p projMultIntervalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14441,9 +14090,6 @@ func (p projMultIntervalConstFloat64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14468,7 +14114,7 @@ func (p projMultIntervalConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14535,9 +14181,6 @@ func (p projMultIntervalConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14562,7 +14205,7 @@ func (p projMultIntervalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14649,9 +14292,6 @@ func (p projDivDecimalConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14676,7 +14316,7 @@ func (p projDivDecimalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14795,9 +14435,6 @@ func (p projDivDecimalConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14822,7 +14459,7 @@ func (p projDivDecimalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14941,9 +14578,6 @@ func (p projDivDecimalConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14968,7 +14602,7 @@ func (p projDivDecimalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15087,9 +14721,6 @@ func (p projDivDecimalConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15114,7 +14745,7 @@ func (p projDivDecimalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15229,9 +14860,6 @@ func (p projDivInt16ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15256,7 +14884,7 @@ func (p projDivInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15371,9 +14999,6 @@ func (p projDivInt16ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15398,7 +15023,7 @@ func (p projDivInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15513,9 +15138,6 @@ func (p projDivInt16ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15540,7 +15162,7 @@ func (p projDivInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15655,9 +15277,6 @@ func (p projDivInt16ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15682,7 +15301,7 @@ func (p projDivInt16ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15805,9 +15424,6 @@ func (p projDivInt32ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15832,7 +15448,7 @@ func (p projDivInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15947,9 +15563,6 @@ func (p projDivInt32ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15974,7 +15587,7 @@ func (p projDivInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16089,9 +15702,6 @@ func (p projDivInt32ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16116,7 +15726,7 @@ func (p projDivInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16231,9 +15841,6 @@ func (p projDivInt32ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16258,7 +15865,7 @@ func (p projDivInt32ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16381,9 +15988,6 @@ func (p projDivInt64ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16408,7 +16012,7 @@ func (p projDivInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16523,9 +16127,6 @@ func (p projDivInt64ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16550,7 +16151,7 @@ func (p projDivInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16665,9 +16266,6 @@ func (p projDivInt64ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16692,7 +16290,7 @@ func (p projDivInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16807,9 +16405,6 @@ func (p projDivInt64ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16834,7 +16429,7 @@ func (p projDivInt64ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16957,9 +16552,6 @@ func (p projDivFloat64ConstFloat64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16984,7 +16576,7 @@ func (p projDivFloat64ConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17087,9 +16679,6 @@ func (p projDivIntervalConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17114,7 +16703,7 @@ func (p projDivIntervalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17197,9 +16786,6 @@ func (p projDivIntervalConstFloat64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17224,7 +16810,7 @@ func (p projDivIntervalConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17307,9 +16893,6 @@ func (p projFloorDivDecimalConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17334,7 +16917,7 @@ func (p projFloorDivDecimalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17453,9 +17036,6 @@ func (p projFloorDivDecimalConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17480,7 +17060,7 @@ func (p projFloorDivDecimalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17599,9 +17179,6 @@ func (p projFloorDivDecimalConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17626,7 +17203,7 @@ func (p projFloorDivDecimalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17745,9 +17322,6 @@ func (p projFloorDivDecimalConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17772,7 +17346,7 @@ func (p projFloorDivDecimalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17887,9 +17461,6 @@ func (p projFloorDivInt16ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17914,7 +17485,7 @@ func (p projFloorDivInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18009,9 +17580,6 @@ func (p projFloorDivInt16ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18036,7 +17604,7 @@ func (p projFloorDivInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18131,9 +17699,6 @@ func (p projFloorDivInt16ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18158,7 +17723,7 @@ func (p projFloorDivInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18253,9 +17818,6 @@ func (p projFloorDivInt16ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18280,7 +17842,7 @@ func (p projFloorDivInt16ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18403,9 +17965,6 @@ func (p projFloorDivInt32ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18430,7 +17989,7 @@ func (p projFloorDivInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18525,9 +18084,6 @@ func (p projFloorDivInt32ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18552,7 +18108,7 @@ func (p projFloorDivInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18647,9 +18203,6 @@ func (p projFloorDivInt32ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18674,7 +18227,7 @@ func (p projFloorDivInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18769,9 +18322,6 @@ func (p projFloorDivInt32ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18796,7 +18346,7 @@ func (p projFloorDivInt32ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18919,9 +18469,6 @@ func (p projFloorDivInt64ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18946,7 +18493,7 @@ func (p projFloorDivInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19041,9 +18588,6 @@ func (p projFloorDivInt64ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19068,7 +18612,7 @@ func (p projFloorDivInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19163,9 +18707,6 @@ func (p projFloorDivInt64ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19190,7 +18731,7 @@ func (p projFloorDivInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19285,9 +18826,6 @@ func (p projFloorDivInt64ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19312,7 +18850,7 @@ func (p projFloorDivInt64ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19435,9 +18973,6 @@ func (p projFloorDivFloat64ConstFloat64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19462,7 +18997,7 @@ func (p projFloorDivFloat64ConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19565,9 +19100,6 @@ func (p projModDecimalConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19592,7 +19124,7 @@ func (p projModDecimalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19711,9 +19243,6 @@ func (p projModDecimalConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19738,7 +19267,7 @@ func (p projModDecimalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19857,9 +19386,6 @@ func (p projModDecimalConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19884,7 +19410,7 @@ func (p projModDecimalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20003,9 +19529,6 @@ func (p projModDecimalConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20030,7 +19553,7 @@ func (p projModDecimalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20145,9 +19668,6 @@ func (p projModInt16ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20172,7 +19692,7 @@ func (p projModInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20267,9 +19787,6 @@ func (p projModInt16ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20294,7 +19811,7 @@ func (p projModInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20389,9 +19906,6 @@ func (p projModInt16ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20416,7 +19930,7 @@ func (p projModInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20511,9 +20025,6 @@ func (p projModInt16ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20538,7 +20049,7 @@ func (p projModInt16ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20661,9 +20172,6 @@ func (p projModInt32ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20688,7 +20196,7 @@ func (p projModInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20783,9 +20291,6 @@ func (p projModInt32ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20810,7 +20315,7 @@ func (p projModInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20905,9 +20410,6 @@ func (p projModInt32ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20932,7 +20434,7 @@ func (p projModInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21027,9 +20529,6 @@ func (p projModInt32ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21054,7 +20553,7 @@ func (p projModInt32ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21177,9 +20676,6 @@ func (p projModInt64ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21204,7 +20700,7 @@ func (p projModInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21299,9 +20795,6 @@ func (p projModInt64ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21326,7 +20819,7 @@ func (p projModInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21421,9 +20914,6 @@ func (p projModInt64ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21448,7 +20938,7 @@ func (p projModInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21543,9 +21033,6 @@ func (p projModInt64ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21570,7 +21057,7 @@ func (p projModInt64ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21693,9 +21180,6 @@ func (p projModFloat64ConstFloat64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21720,7 +21204,7 @@ func (p projModFloat64ConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21823,9 +21307,6 @@ func (p projPowDecimalConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21850,7 +21331,7 @@ func (p projPowDecimalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21953,9 +21434,6 @@ func (p projPowDecimalConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21980,7 +21458,7 @@ func (p projPowDecimalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22083,9 +21561,6 @@ func (p projPowDecimalConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22110,7 +21585,7 @@ func (p projPowDecimalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22213,9 +21688,6 @@ func (p projPowDecimalConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22240,7 +21712,7 @@ func (p projPowDecimalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22339,9 +21811,6 @@ func (p projPowInt16ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22366,7 +21835,7 @@ func (p projPowInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22489,9 +21958,6 @@ func (p projPowInt16ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22516,7 +21982,7 @@ func (p projPowInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22639,9 +22105,6 @@ func (p projPowInt16ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22666,7 +22129,7 @@ func (p projPowInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22789,9 +22252,6 @@ func (p projPowInt16ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22816,7 +22276,7 @@ func (p projPowInt16ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22923,9 +22383,6 @@ func (p projPowInt32ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22950,7 +22407,7 @@ func (p projPowInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23073,9 +22530,6 @@ func (p projPowInt32ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23100,7 +22554,7 @@ func (p projPowInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23223,9 +22677,6 @@ func (p projPowInt32ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23250,7 +22701,7 @@ func (p projPowInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23373,9 +22824,6 @@ func (p projPowInt32ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23400,7 +22848,7 @@ func (p projPowInt32ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23507,9 +22955,6 @@ func (p projPowInt64ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23534,7 +22979,7 @@ func (p projPowInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23657,9 +23102,6 @@ func (p projPowInt64ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23684,7 +23126,7 @@ func (p projPowInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23807,9 +23249,6 @@ func (p projPowInt64ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23834,7 +23273,7 @@ func (p projPowInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23957,9 +23396,6 @@ func (p projPowInt64ConstDecimalOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23984,7 +23420,7 @@ func (p projPowInt64ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24091,9 +23527,6 @@ func (p projPowFloat64ConstFloat64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24118,7 +23551,7 @@ func (p projPowFloat64ConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24205,9 +23638,6 @@ func (p projConcatBytesConstBytesOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24232,7 +23662,7 @@ func (p projConcatBytesConstBytesOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24325,9 +23755,6 @@ func (p projConcatJSONConstJSONOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24352,7 +23779,7 @@ func (p projConcatJSONConstJSONOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24441,9 +23868,6 @@ func (p projConcatDatumConstDatumOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24468,7 +23892,7 @@ func (p projConcatDatumConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24569,9 +23993,6 @@ func (p projLShiftInt16ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24596,7 +24017,7 @@ func (p projLShiftInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24695,9 +24116,6 @@ func (p projLShiftInt16ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24722,7 +24140,7 @@ func (p projLShiftInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24821,9 +24239,6 @@ func (p projLShiftInt16ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24848,7 +24263,7 @@ func (p projLShiftInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24947,9 +24362,6 @@ func (p projLShiftInt32ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24974,7 +24386,7 @@ func (p projLShiftInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25073,9 +24485,6 @@ func (p projLShiftInt32ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25100,7 +24509,7 @@ func (p projLShiftInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25199,9 +24608,6 @@ func (p projLShiftInt32ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25226,7 +24632,7 @@ func (p projLShiftInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25325,9 +24731,6 @@ func (p projLShiftInt64ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25352,7 +24755,7 @@ func (p projLShiftInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25451,9 +24854,6 @@ func (p projLShiftInt64ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25478,7 +24878,7 @@ func (p projLShiftInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25577,9 +24977,6 @@ func (p projLShiftInt64ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25604,7 +25001,7 @@ func (p projLShiftInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25703,9 +25100,6 @@ func (p projLShiftDatumConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25730,7 +25124,7 @@ func (p projLShiftDatumConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25847,9 +25241,6 @@ func (p projLShiftDatumConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25874,7 +25265,7 @@ func (p projLShiftDatumConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25991,9 +25382,6 @@ func (p projLShiftDatumConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26018,7 +25406,7 @@ func (p projLShiftDatumConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26135,9 +25523,6 @@ func (p projRShiftInt16ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26162,7 +25547,7 @@ func (p projRShiftInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26261,9 +25646,6 @@ func (p projRShiftInt16ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26288,7 +25670,7 @@ func (p projRShiftInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26387,9 +25769,6 @@ func (p projRShiftInt16ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26414,7 +25793,7 @@ func (p projRShiftInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26513,9 +25892,6 @@ func (p projRShiftInt32ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26540,7 +25916,7 @@ func (p projRShiftInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26639,9 +26015,6 @@ func (p projRShiftInt32ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26666,7 +26039,7 @@ func (p projRShiftInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26765,9 +26138,6 @@ func (p projRShiftInt32ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26792,7 +26162,7 @@ func (p projRShiftInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26891,9 +26261,6 @@ func (p projRShiftInt64ConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26918,7 +26285,7 @@ func (p projRShiftInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27017,9 +26384,6 @@ func (p projRShiftInt64ConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27044,7 +26408,7 @@ func (p projRShiftInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27143,9 +26507,6 @@ func (p projRShiftInt64ConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27170,7 +26531,7 @@ func (p projRShiftInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27269,9 +26630,6 @@ func (p projRShiftDatumConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27296,7 +26654,7 @@ func (p projRShiftDatumConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27413,9 +26771,6 @@ func (p projRShiftDatumConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27440,7 +26795,7 @@ func (p projRShiftDatumConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27557,9 +26912,6 @@ func (p projRShiftDatumConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27584,7 +26936,7 @@ func (p projRShiftDatumConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27701,9 +27053,6 @@ func (p projJSONFetchValJSONConstBytesOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27728,7 +27077,7 @@ func (p projJSONFetchValJSONConstBytesOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27841,9 +27190,6 @@ func (p projJSONFetchValJSONConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27868,7 +27214,7 @@ func (p projJSONFetchValJSONConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27969,9 +27315,6 @@ func (p projJSONFetchValJSONConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27996,7 +27339,7 @@ func (p projJSONFetchValJSONConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28097,9 +27440,6 @@ func (p projJSONFetchValJSONConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28124,7 +27464,7 @@ func (p projJSONFetchValJSONConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28225,9 +27565,6 @@ func (p projJSONFetchTextJSONConstBytesOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28252,7 +27589,7 @@ func (p projJSONFetchTextJSONConstBytesOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28401,9 +27738,6 @@ func (p projJSONFetchTextJSONConstInt16Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28428,7 +27762,7 @@ func (p projJSONFetchTextJSONConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28565,9 +27899,6 @@ func (p projJSONFetchTextJSONConstInt32Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28592,7 +27923,7 @@ func (p projJSONFetchTextJSONConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28729,9 +28060,6 @@ func (p projJSONFetchTextJSONConstInt64Op) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28756,7 +28084,7 @@ func (p projJSONFetchTextJSONConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28893,9 +28221,6 @@ func (p projJSONFetchValPathJSONConstDatumOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28920,7 +28245,7 @@ func (p projJSONFetchValPathJSONConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29021,9 +28346,6 @@ func (p projJSONFetchTextPathJSONConstDatumOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -29048,7 +28370,7 @@ func (p projJSONFetchTextPathJSONConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !_overloadHelper.NullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29195,6 +28517,7 @@ func GetProjectionLConstOperator(
 	evalCtx *tree.EvalContext,
 	binFn tree.TwoArgFn,
 	cmpExpr *tree.ComparisonExpr,
+	nullableArgs bool,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
@@ -29202,7 +28525,7 @@ func GetProjectionLConstOperator(
 		allocator:      allocator,
 		colIdx:         colIdx,
 		outputIdx:      outputIdx,
-		overloadHelper: execgen.OverloadHelper{BinFn: binFn, EvalCtx: evalCtx},
+		overloadHelper: execgen.OverloadHelper{BinFn: binFn, EvalCtx: evalCtx, NullableArgs: nullableArgs},
 	}
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	leftType, rightType := constType, inputTypes[colIdx]
