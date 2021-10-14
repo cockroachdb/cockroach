@@ -572,13 +572,15 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SHOW TIME ZONE", []preparedQueryTest{
 			baseTest.Results("UTC"),
 		}},
-		{"CREATE USER IF NOT EXISTS $1 WITH PASSWORD $2", []preparedQueryTest{
-			baseTest.SetArgs("abc", "def"),
-			baseTest.SetArgs("woo", "waa"),
+		{"CREATE USER IF NOT EXISTS abc WITH PASSWORD $1", []preparedQueryTest{
+			baseTest.SetArgs("def"),
 		}},
-		{"ALTER USER IF EXISTS $1 WITH PASSWORD $2", []preparedQueryTest{
-			baseTest.SetArgs("abc", "def"),
-			baseTest.SetArgs("woo", "waa"),
+		{"CREATE USER IF NOT EXISTS woo WITH PASSWORD $1", []preparedQueryTest{
+			baseTest.SetArgs("waa"),
+		}},
+		{"ALTER USER IF EXISTS foo WITH PASSWORD $1", []preparedQueryTest{
+			baseTest.SetArgs("def"),
+			baseTest.SetArgs("waa"),
 		}},
 		{"SHOW USERS", []preparedQueryTest{
 			baseTest.Results("abc", "", "{}").
@@ -586,9 +588,8 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("root", "", "{admin}").
 				Results("woo", "", "{}"),
 		}},
-		{"DROP USER $1", []preparedQueryTest{
-			baseTest.SetArgs("abc"),
-			baseTest.SetArgs("woo"),
+		{"DROP USER abc, woo", []preparedQueryTest{
+			baseTest.SetArgs(),
 		}},
 		{"SELECT (SELECT 1+$1)", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(2),

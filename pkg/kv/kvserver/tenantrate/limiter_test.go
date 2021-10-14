@@ -372,6 +372,17 @@ func (ts *testState) metrics(t *testing.T, d *datadriven.TestData) string {
 		d.Fatalf(t, "failed to compile pattern: %v", err)
 	}
 
+	// If we are rewriting the test, just sleep a bit before returning the
+	// metrics.
+	if d.Rewrite {
+		time.Sleep(time.Second)
+		result, err := metrictestutils.GetMetricsText(ts.m, re)
+		if err != nil {
+			d.Fatalf(t, "failed to scrape metrics: %v", err)
+		}
+		return result
+	}
+
 	exp := strings.TrimSpace(d.Expected)
 	if err := testutils.SucceedsSoonError(func() error {
 		got, err := metrictestutils.GetMetricsText(ts.m, re)
@@ -402,12 +413,18 @@ func (ts *testState) metrics(t *testing.T, d *datadriven.TestData) string {
 //  00:00:02.000
 //
 func (ts *testState) timers(t *testing.T, d *datadriven.TestData) string {
+	// If we are rewriting the test, just sleep a bit before returning the
+	// timers.
+	if d.Rewrite {
+		time.Sleep(time.Second)
+		return timesToString(ts.clock.Timers())
+	}
+
 	exp := strings.TrimSpace(d.Expected)
 	if err := testutils.SucceedsSoonError(func() error {
-		got := timesToStrings(ts.clock.Timers())
-		gotStr := strings.Join(got, "\n")
-		if gotStr != exp {
-			return errors.Errorf("got: %q, exp: %q", gotStr, exp)
+		got := timesToString(ts.clock.Timers())
+		if got != exp {
+			return errors.Errorf("got: %q, exp: %q", got, exp)
 		}
 		return nil
 	}); err != nil {
@@ -416,12 +433,12 @@ func (ts *testState) timers(t *testing.T, d *datadriven.TestData) string {
 	return d.Expected
 }
 
-func timesToStrings(times []time.Time) []string {
+func timesToString(times []time.Time) string {
 	strs := make([]string, len(times))
 	for i, t := range times {
 		strs[i] = t.Format(timeFormat)
 	}
-	return strs
+	return strings.Join(strs, "\n")
 }
 
 // getTenants acquires references to tenants. It is a prerequisite to launching

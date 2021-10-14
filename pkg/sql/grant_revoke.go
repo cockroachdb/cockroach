@@ -47,7 +47,7 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		return nil, err
 	}
 
-	grantees, err := n.Grantees.ToSQLUsernames(p.SessionData())
+	grantees, err := n.Grantees.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		return nil, err
 	}
 
-	grantees, err := n.Grantees.ToSQLUsernames(p.SessionData())
+	grantees, err := n.Grantees.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return nil, err
 	}

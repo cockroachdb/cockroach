@@ -18,7 +18,7 @@ CREATE ROLE public
 statement error pgcode 22023 role public does not exist
 SET ROLE public
 
-statement error username "node" reserved
+statement error role name "node" is reserved
 CREATE ROLE node
 
 statement error pgcode 22023 role node does not exist

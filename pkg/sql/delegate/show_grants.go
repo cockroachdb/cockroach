@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -227,7 +228,7 @@ FROM "".information_schema.type_privileges`
 
 	if n.Grantees != nil {
 		params = params[:0]
-		grantees, err := n.Grantees.ToSQLUsernames(d.evalCtx.SessionData())
+		grantees, err := n.Grantees.ToSQLUsernames(d.evalCtx.SessionData(), security.UsernameValidation)
 		if err != nil {
 			return nil, err
 		}
@@ -243,7 +244,7 @@ FROM "".information_schema.type_privileges`
 	// Terminate on invalid users.
 	for _, p := range n.Grantees {
 
-		user, err := p.ToSQLUsername(d.evalCtx.SessionData())
+		user, err := p.ToSQLUsername(d.evalCtx.SessionData(), security.UsernameValidation)
 		if err != nil {
 			return nil, err
 		}

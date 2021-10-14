@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -76,7 +77,7 @@ func (p *planner) alterDefaultPrivileges(
 }
 
 func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
-	targetRoles, err := n.n.Roles.ToSQLUsernames(params.SessionData())
+	targetRoles, err := n.n.Roles.ToSQLUsernames(params.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return err
 	}
@@ -98,7 +99,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		objectType = n.n.Revoke.Target
 	}
 
-	granteeSQLUsernames, err := grantees.ToSQLUsernames(params.p.SessionData())
+	granteeSQLUsernames, err := grantees.ToSQLUsernames(params.p.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return err
 	}
@@ -157,7 +158,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	}
 
 	var events []eventLogEntry
-	granteeSQLUsernames, err = grantees.ToSQLUsernames(params.SessionData())
+	granteeSQLUsernames, err = grantees.ToSQLUsernames(params.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return err
 	}

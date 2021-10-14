@@ -205,6 +205,7 @@ go_test(
         "parse_array_test.go",
         "placeholders_test.go",
         "pretty_test.go",
+        "role_spec_test.go",
         "table_name_test.go",
         "time_test.go",
         "timeconv_test.go",

@@ -375,12 +375,18 @@ func (ts *testState) waitForEvent(t *testing.T, d *datadriven.TestData, args cmd
 //  00:00:02.000
 //
 func (ts *testState) timers(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+	// If we are rewriting the test, just sleep a bit before returning the
+	// timers.
+	if d.Rewrite {
+		time.Sleep(time.Second)
+		return timesToString(ts.timeSrc.Timers())
+	}
+
 	exp := strings.TrimSpace(d.Expected)
 	if err := testutils.SucceedsSoonError(func() error {
-		got := timesToStrings(ts.timeSrc.Timers())
-		gotStr := strings.Join(got, "\n")
-		if gotStr != exp {
-			return errors.Errorf("got: %q, exp: %q", gotStr, exp)
+		got := timesToString(ts.timeSrc.Timers())
+		if got != exp {
+			return errors.Errorf("got: %q, exp: %q", got, exp)
 		}
 		return nil
 	}); err != nil {
@@ -389,12 +395,12 @@ func (ts *testState) timers(t *testing.T, d *datadriven.TestData, args cmdArgs) 
 	return d.Expected
 }
 
-func timesToStrings(times []time.Time) []string {
+func timesToString(times []time.Time) string {
 	strs := make([]string, len(times))
 	for i, t := range times {
 		strs[i] = t.Format(timeFormat)
 	}
-	return strs
+	return strings.Join(strs, "\n")
 }
 
 // configure the test provider.

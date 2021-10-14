@@ -843,7 +843,7 @@ func (ts *TestServer) createAuthUser(userName security.SQLUsername, isAdmin bool
 	if _, err := ts.Server.sqlServer.internalExecutor.ExecEx(context.TODO(),
 		"create-auth-user", nil,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		"CREATE USER $1", userName.Normalized(),
+		fmt.Sprintf("CREATE USER %s", userName.Normalized()),
 	); err != nil {
 		return err
 	}
