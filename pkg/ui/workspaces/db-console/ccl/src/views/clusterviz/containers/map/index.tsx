@@ -55,7 +55,7 @@ export class ClusterVisualization extends React.Component<
   render() {
     const tiers = this.getTiers();
 
-    // TODO(couchand): integrate with license swapper
+    // TODO(couchand): integrate with license swrapper
     const showingLicensePage =
       this.props.licenseDataExists && !this.props.enterpriseEnabled;
 

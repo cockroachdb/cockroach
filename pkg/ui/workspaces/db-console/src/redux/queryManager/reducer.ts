@@ -103,7 +103,7 @@ export class ManagedQueryState {
   // If the previous attempt to run this query ended with an error, this field
   // contains that error.
   lastError: Error = null;
-  // Contains the timestamp when the query last compeleted, regardless of
+  // Contains the timestamp when the query last completed, regardless of
   // whether it succeeded or encountered an error.
   completedAt: moment.Moment = null;
 }
