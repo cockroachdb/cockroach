@@ -20,7 +20,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: abcd@primary
+  table: abcd@abcd_pkey
   spans: [/20 - /30]
 
 # No hint, reverse scan.
@@ -32,48 +32,48 @@ vectorized: true
 ·
 • revscan
   missing stats
-  table: abcd@primary
+  table: abcd@abcd_pkey
   spans: [/20 - /30]
 
 # Force primary
 query T
-EXPLAIN SELECT * FROM abcd@primary WHERE a >= 20 AND a <= 30
+EXPLAIN SELECT * FROM abcd@abcd_pkey WHERE a >= 20 AND a <= 30
 ----
 distribution: local
 vectorized: true
 ·
 • scan
   missing stats
-  table: abcd@primary
+  table: abcd@abcd_pkey
   spans: [/20 - /30]
 
 # Force primary, reverse scan.
 query T
-EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=primary,DESC} WHERE a >= 20 AND a <= 30
+EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=abcd_pkey,DESC} WHERE a >= 20 AND a <= 30
 ----
 distribution: local
 vectorized: true
 ·
 • revscan
   missing stats
-  table: abcd@primary
+  table: abcd@abcd_pkey
   spans: [/20 - /30]
 
 # Force primary, allow reverse scan.
 query T
-EXPLAIN SELECT * FROM abcd@primary WHERE a >= 20 AND a <= 30 ORDER BY a DESC
+EXPLAIN SELECT * FROM abcd@abcd_pkey WHERE a >= 20 AND a <= 30 ORDER BY a DESC
 ----
 distribution: local
 vectorized: true
 ·
 • revscan
   missing stats
-  table: abcd@primary
+  table: abcd@abcd_pkey
   spans: [/20 - /30]
 
 # Force primary, forward scan.
 query T
-EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=primary,ASC} WHERE a >= 20 AND a <= 30 ORDER BY a DESC
+EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=abcd_pkey,ASC} WHERE a >= 20 AND a <= 30 ORDER BY a DESC
 ----
 distribution: local
 vectorized: true
@@ -83,7 +83,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: abcd@primary
+      table: abcd@abcd_pkey
       spans: [/20 - /30]
 
 # Force index b
@@ -97,7 +97,7 @@ vectorized: true
 │ filter: (a >= 20) AND (a <= 30)
 │
 └── • index join
-    │ table: abcd@primary
+    │ table: abcd@abcd_pkey
     │
     └── • scan
           missing stats
@@ -115,7 +115,7 @@ vectorized: true
 │ filter: (a >= 20) AND (a <= 30)
 │
 └── • index join
-    │ table: abcd@primary
+    │ table: abcd@abcd_pkey
     │
     └── • revscan
           missing stats
@@ -130,7 +130,7 @@ distribution: local
 vectorized: true
 ·
 • index join
-│ table: abcd@primary
+│ table: abcd@abcd_pkey
 │
 └── • revscan
       missing stats
@@ -146,7 +146,7 @@ distribution: local
 vectorized: true
 ·
 • index join
-│ table: abcd@primary
+│ table: abcd@abcd_pkey
 │
 └── • revscan
       missing stats
@@ -163,7 +163,7 @@ distribution: local
 vectorized: true
 ·
 • index join
-│ table: abcd@primary
+│ table: abcd@abcd_pkey
 │
 └── • top-k
     │ order: -b
@@ -185,7 +185,7 @@ vectorized: true
 │ filter: (a >= 20) AND (a <= 30)
 │
 └── • index join
-    │ table: abcd@primary
+    │ table: abcd@abcd_pkey
     │
     └── • scan
           missing stats
@@ -233,7 +233,7 @@ vectorized: true
 │ filter: (c >= 20) AND (c <= 30)
 │
 └── • index join
-    │ table: abcd@primary
+    │ table: abcd@abcd_pkey
     │
     └── • scan
           missing stats
@@ -254,7 +254,7 @@ vectorized: true
 
 # Force primary index
 query T
-EXPLAIN SELECT c, d FROM abcd@primary WHERE c >= 20 AND c < 40
+EXPLAIN SELECT c, d FROM abcd@abcd_pkey WHERE c >= 20 AND c < 40
 ----
 distribution: local
 vectorized: true
@@ -264,7 +264,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: abcd@primary
+      table: abcd@abcd_pkey
       spans: FULL SCAN
 
 # Force index b
@@ -278,7 +278,7 @@ vectorized: true
 │ filter: (c >= 20) AND (c < 40)
 │
 └── • index join
-    │ table: abcd@primary
+    │ table: abcd@abcd_pkey
     │
     └── • scan
           missing stats
@@ -295,7 +295,7 @@ vectorized: true
 │ filter: (a >= 20) AND (a <= 30)
 │
 └── • index join
-    │ table: abcd@primary
+    │ table: abcd@abcd_pkey
     │
     └── • scan
           missing stats
@@ -309,7 +309,7 @@ distribution: local
 vectorized: true
 ·
 • index join
-│ table: abcd@primary
+│ table: abcd@abcd_pkey
 │
 └── • scan
       missing stats
@@ -327,7 +327,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: abcd@primary
+      table: abcd@abcd_pkey
       spans: FULL SCAN
 
 query T
@@ -345,7 +345,7 @@ vectorized: true
       spans: FULL SCAN
 
 query T
-EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=primary} WHERE c = 10
+EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=abcd_pkey} WHERE c = 10
 ----
 distribution: local
 vectorized: true
@@ -355,5 +355,5 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: abcd@primary
+      table: abcd@abcd_pkey
       spans: FULL SCAN

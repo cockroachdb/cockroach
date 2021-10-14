@@ -29,7 +29,7 @@ SHOW CREATE TABLE t
 t  CREATE TABLE public.t (
    x INT8 NOT VISIBLE NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
    FAMILY "primary" (x, rowid)
 )
 
@@ -85,7 +85,7 @@ CREATE TABLE t5(b INT NOT VISIBLE, c INT, d INT, PRIMARY KEY (d), FOREIGN KEY(b)
 query TTTTB
 SHOW CONSTRAINTS FROM t2
 ----
-t2 primary PRIMARY KEY PRIMARY KEY (d ASC) true
+t2  t2_pkey  PRIMARY KEY  PRIMARY KEY (d ASC)  true
 
 statement ok
 ALTER TABLE t2 ADD FOREIGN KEY (b) REFERENCES t2
@@ -93,8 +93,8 @@ ALTER TABLE t2 ADD FOREIGN KEY (b) REFERENCES t2
 query TTTTB
 SHOW CONSTRAINTS FROM t2
 ----
-t2 fk_b_ref_t2 FOREIGN KEY  FOREIGN KEY (b) REFERENCES t2(d) true
-t2 primary     PRIMARY KEY  PRIMARY KEY (d ASC)              true
+t2  fk_b_ref_t2  FOREIGN KEY  FOREIGN KEY (b) REFERENCES t2(d)  true
+t2  t2_pkey      PRIMARY KEY  PRIMARY KEY (d ASC)               true
 
 # adding a foreign key constraint that references a hidden column
 
@@ -111,12 +111,12 @@ ALTER TABLE t3 ALTER PRIMARY KEY USING COLUMNS(b);
 query TTTTB
 SHOW CONSTRAINTS FROM t3
 ----
-t3 primary PRIMARY KEY PRIMARY KEY (b ASC) true
+t3  t3_pkey  PRIMARY KEY  PRIMARY KEY (b ASC)  true
 
 query TTTTB
 SHOW CONSTRAINTS FROM t4
 ----
-t4 primary PRIMARY KEY PRIMARY KEY (d ASC) true
+t4  t4_pkey  PRIMARY KEY  PRIMARY KEY (d ASC)  true
 
 statement ok
 ALTER TABLE t4 ALTER PRIMARY KEY USING COLUMNS(e);

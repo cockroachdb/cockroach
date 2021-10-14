@@ -191,7 +191,7 @@ SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2 WHERE j1.b @> j2.b ORDER BY
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM json_tab@primary AS j1 CROSS HASH JOIN json_tab AS j2 WHERE j1.b @> j2.b ORDER BY j1.a, j2.a
+SELECT * FROM json_tab@json_tab_pkey AS j1 CROSS HASH JOIN json_tab AS j2 WHERE j1.b @> j2.b ORDER BY j1.a, j2.a
 ----
 1   {"a": "b"}                             1   {"a": "b"}
 1   {"a": "b"}                             17  {}
@@ -321,7 +321,7 @@ query IIII
 SELECT * FROM
 (SELECT j1.a, j2.a FROM json_tab@foo_inv AS j1, json_tab AS j2 WHERE j1.b @> j2.b) AS inv_join(a1, a2)
 FULL OUTER JOIN
-(SELECT j1.a, j2.a FROM json_tab@primary AS j1, json_tab AS j2 WHERE j1.b @> j2.b) AS cross_join(a1, a2)
+(SELECT j1.a, j2.a FROM json_tab@json_tab_pkey AS j1, json_tab AS j2 WHERE j1.b @> j2.b) AS cross_join(a1, a2)
 ON inv_join.a1 = cross_join.a1 AND inv_join.a2 = cross_join.a2
 WHERE inv_join.a1 IS NULL OR cross_join.a1 IS NULL
 ----
@@ -454,7 +454,7 @@ SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2 WHERE j1.b <@ j2.b ORDER BY
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM json_tab@primary AS j1 CROSS HASH JOIN json_tab AS j2 WHERE j1.b <@ j2.b ORDER BY j1.a, j2.a
+SELECT * FROM json_tab@json_tab_pkey AS j1 CROSS HASH JOIN json_tab AS j2 WHERE j1.b <@ j2.b ORDER BY j1.a, j2.a
 ----
 1   {"a": "b"}                             1   {"a": "b"}
 1   {"a": "b"}                             7   {"a": "b", "c": "d"}
@@ -584,7 +584,7 @@ query IIII
 SELECT * FROM
 (SELECT j1.a, j2.a FROM json_tab@foo_inv AS j1, json_tab AS j2 WHERE j1.b <@ j2.b) AS inv_join(a1, a2)
 FULL OUTER JOIN
-(SELECT j1.a, j2.a FROM json_tab@primary AS j1, json_tab AS j2 WHERE j1.b <@ j2.b) AS cross_join(a1, a2)
+(SELECT j1.a, j2.a FROM json_tab@json_tab_pkey AS j1, json_tab AS j2 WHERE j1.b <@ j2.b) AS cross_join(a1, a2)
 ON inv_join.a1 = cross_join.a1 AND inv_join.a2 = cross_join.a2
 WHERE inv_join.a1 IS NULL OR cross_join.a1 IS NULL
 ----
@@ -615,7 +615,7 @@ ORDER BY j1.a, j2.a
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM json_tab@primary AS j1 CROSS HASH JOIN json_tab AS j2
+SELECT * FROM json_tab@json_tab_pkey AS j1 CROSS HASH JOIN json_tab AS j2
 WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
 ORDER BY j1.a, j2.a
 ----
@@ -647,7 +647,7 @@ SELECT * FROM
 ) AS inv_join(a1, a2)
 FULL OUTER JOIN
 (
-  SELECT j1.a, j2.a FROM json_tab@primary AS j1, json_tab AS j2
+  SELECT j1.a, j2.a FROM json_tab@json_tab_pkey AS j1, json_tab AS j2
   WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
 ) AS cross_join(a1, a2)
 ON inv_join.a1 = cross_join.a1 AND inv_join.a2 = cross_join.a2
@@ -678,7 +678,7 @@ ORDER BY j1.a, j2.a
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM json_tab@primary AS j1 CROSS HASH JOIN json_tab AS j2
+SELECT * FROM json_tab@json_tab_pkey AS j1 CROSS HASH JOIN json_tab AS j2
 WHERE j1.b <@ j2.b AND j1.b <@ '{"a": {}}' AND j2.a < 20
 ORDER BY j1.a, j2.a
 ----
@@ -708,7 +708,7 @@ SELECT * FROM
 ) AS inv_join(a1, a2)
 FULL OUTER JOIN
 (
-  SELECT j1.a, j2.a FROM json_tab@primary AS j1, json_tab AS j2
+  SELECT j1.a, j2.a FROM json_tab@json_tab_pkey AS j1, json_tab AS j2
   WHERE j1.b <@ j2.b AND j1.b <@ '{"a": {}}' AND j2.a < 20
 ) AS cross_join(a1, a2)
 ON inv_join.a1 = cross_join.a1 AND inv_join.a2 = cross_join.a2
@@ -994,7 +994,7 @@ SELECT * FROM array_tab@foo_inv AS a1, array_tab AS a2 WHERE a1.b @> a2.b ORDER 
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM array_tab@primary AS a1 CROSS HASH JOIN array_tab AS a2 WHERE a1.b @> a2.b ORDER BY a1.a, a2.a
+SELECT * FROM array_tab@array_tab_pkey AS a1 CROSS HASH JOIN array_tab AS a2 WHERE a1.b @> a2.b ORDER BY a1.a, a2.a
 ----
 1  {}         1  {}
 2  {1}        1  {}
@@ -1022,7 +1022,7 @@ query IIII
 SELECT * FROM
 (SELECT a1.a, a2.a FROM array_tab@foo_inv AS a1, array_tab AS a2 WHERE a1.b @> a2.b) AS inv_join(a1, a2)
 FULL OUTER JOIN
-(SELECT a1.a, a2.a FROM array_tab@primary AS a1, array_tab AS a2 WHERE a1.b @> a2.b) AS cross_join(a1, a2)
+(SELECT a1.a, a2.a FROM array_tab@array_tab_pkey AS a1, array_tab AS a2 WHERE a1.b @> a2.b) AS cross_join(a1, a2)
 ON inv_join.a1 = cross_join.a1 AND inv_join.a2 = cross_join.a2
 WHERE inv_join.a1 IS NULL OR cross_join.a1 IS NULL
 ----
@@ -1053,7 +1053,7 @@ SELECT * FROM array_tab@foo_inv AS a1, array_tab AS a2 WHERE a1.b <@ a2.b ORDER 
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM array_tab@primary AS a1 CROSS HASH JOIN array_tab AS a2 WHERE a1.b <@ a2.b ORDER BY a1.a, a2.a
+SELECT * FROM array_tab@array_tab_pkey AS a1 CROSS HASH JOIN array_tab AS a2 WHERE a1.b <@ a2.b ORDER BY a1.a, a2.a
 ----
 1  {}         1  {}
 1  {}         2  {1}
@@ -1081,14 +1081,14 @@ query IIII
 SELECT * FROM
 (SELECT a1.a, a2.a FROM array_tab@foo_inv AS a1, array_tab AS a2 WHERE a1.b <@ a2.b) AS inv_join(a1, a2)
 FULL OUTER JOIN
-(SELECT a1.a, a2.a FROM array_tab@primary AS a1, array_tab AS a2 WHERE a1.b <@ a2.b) AS cross_join(a1, a2)
+(SELECT a1.a, a2.a FROM array_tab@array_tab_pkey AS a1, array_tab AS a2 WHERE a1.b <@ a2.b) AS cross_join(a1, a2)
 ON inv_join.a1 = cross_join.a1 AND inv_join.a2 = cross_join.a2
 WHERE inv_join.a1 IS NULL OR cross_join.a1 IS NULL
 ----
 
 # This query performs an inverted join with an additional filter.
 query ITIT
-SELECT a1.*, a2.* FROM array_tab@primary AS a2
+SELECT a1.*, a2.* FROM array_tab@array_tab_pkey AS a2
 INNER INVERTED JOIN array_tab@foo_inv AS a1
 ON a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
 ORDER BY a1.a, a2.a
@@ -1108,7 +1108,7 @@ ORDER BY a1.a, a2.a
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM array_tab@primary AS a1 CROSS HASH JOIN array_tab AS a2
+SELECT * FROM array_tab@array_tab_pkey AS a1 CROSS HASH JOIN array_tab AS a2
 WHERE a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
 ORDER BY a1.a, a2.a
 ----
@@ -1130,13 +1130,13 @@ ORDER BY a1.a, a2.a
 query IIII
 SELECT * FROM
 (
-  SELECT a1.a, a2.a FROM array_tab@primary AS a2
+  SELECT a1.a, a2.a FROM array_tab@array_tab_pkey AS a2
   INNER INVERTED JOIN array_tab@foo_inv AS a1
   ON a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
 ) AS inv_join(a1, a2)
 FULL OUTER JOIN
 (
-  SELECT a1.a, a2.a FROM array_tab@primary AS a1, array_tab AS a2
+  SELECT a1.a, a2.a FROM array_tab@array_tab_pkey AS a1, array_tab AS a2
   WHERE a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
 ) AS cross_join(a1, a2)
 ON inv_join.a1 = cross_join.a1 AND inv_join.a2 = cross_join.a2
@@ -1145,7 +1145,7 @@ WHERE inv_join.a1 IS NULL OR cross_join.a1 IS NULL
 
 # This query performs an inverted join with an additional filter.
 query ITIT
-SELECT a1.*, a2.* FROM array_tab@primary AS a2
+SELECT a1.*, a2.* FROM array_tab@array_tab_pkey AS a2
 INNER INVERTED JOIN array_tab@foo_inv AS a1
 ON a1.b <@ a2.b AND a1.b <@ '{1}' AND a2.a < 5
 ORDER BY a1.a, a2.a
@@ -1159,7 +1159,7 @@ ORDER BY a1.a, a2.a
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM array_tab@primary AS a1 CROSS HASH JOIN array_tab AS a2
+SELECT * FROM array_tab@array_tab_pkey AS a1 CROSS HASH JOIN array_tab AS a2
 WHERE a1.b <@ a2.b AND a1.b <@ '{1}' AND a2.a < 5
 ORDER BY a1.a, a2.a
 ----
@@ -1175,13 +1175,13 @@ ORDER BY a1.a, a2.a
 query IIII
 SELECT * FROM
 (
-  SELECT a1.a, a2.a FROM array_tab@primary AS a2
+  SELECT a1.a, a2.a FROM array_tab@array_tab_pkey AS a2
   INNER INVERTED JOIN array_tab@foo_inv AS a1
   ON a1.b <@ a2.b AND a1.b <@ '{1}' AND a2.a < 5
 ) AS inv_join(a1, a2)
 FULL OUTER JOIN
 (
-  SELECT a1.a, a2.a FROM array_tab@primary AS a1, array_tab AS a2
+  SELECT a1.a, a2.a FROM array_tab@array_tab_pkey AS a1, array_tab AS a2
   WHERE a1.b <@ a2.b AND a1.b <@ '{1}' AND a2.a < 5
 ) AS cross_join(a1, a2)
 ON inv_join.a1 = cross_join.a1 AND inv_join.a2 = cross_join.a2
@@ -1190,7 +1190,7 @@ WHERE inv_join.a1 IS NULL OR cross_join.a1 IS NULL
 
 # This query performs a left inverted join with an additional filter.
 query ITIT
-SELECT a1.*, a2.* FROM array_tab@primary AS a2
+SELECT a1.*, a2.* FROM array_tab@array_tab_pkey AS a2
 LEFT INVERTED JOIN array_tab@foo_inv AS a1
 ON a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
 ORDER BY a1.a, a2.a
@@ -1214,7 +1214,7 @@ NULL  NULL       8  NULL
 
 # This query performs a left inverted join with an additional filter.
 query ITIT
-SELECT a1.*, a2.* FROM array_tab@primary AS a2
+SELECT a1.*, a2.* FROM array_tab@array_tab_pkey AS a2
 LEFT INVERTED JOIN array_tab@foo_inv AS a1
 ON a1.b <@ a2.b AND a1.b <@ '{1}' AND a2.a < 5
 ORDER BY a1.a, a2.a
@@ -1232,7 +1232,7 @@ NULL  NULL  8  NULL
 
 # This query performs a semi inverted join.
 query IT
-SELECT a2.* FROM array_tab@primary AS a2 WHERE EXISTS (
+SELECT a2.* FROM array_tab@array_tab_pkey AS a2 WHERE EXISTS (
   SELECT * FROM array_tab@foo_inv AS a1
   WHERE a1.b @> a2.b
 )
@@ -1247,7 +1247,7 @@ ORDER BY a2.a
 
 # This query performs a semi inverted join.
 query IT
-SELECT a2.* FROM array_tab@primary AS a2 WHERE EXISTS (
+SELECT a2.* FROM array_tab@array_tab_pkey AS a2 WHERE EXISTS (
   SELECT * FROM array_tab@foo_inv AS a1
   WHERE a1.b <@ a2.b
 )
@@ -1263,7 +1263,7 @@ ORDER BY a2.a
 
 # This query performs an anti inverted join.
 query IT
-SELECT a2.* FROM array_tab@primary AS a2 WHERE NOT EXISTS (
+SELECT a2.* FROM array_tab@array_tab_pkey AS a2 WHERE NOT EXISTS (
   SELECT * FROM array_tab@foo_inv AS a1
   WHERE a1.b @> a2.b
 )
@@ -1274,7 +1274,7 @@ ORDER BY a2.a
 
 # This query performs an anti inverted join.
 query IT
-SELECT a2.* FROM array_tab@primary AS a2 WHERE NOT EXISTS (
+SELECT a2.* FROM array_tab@array_tab_pkey AS a2 WHERE NOT EXISTS (
   SELECT * FROM array_tab@foo_inv AS a1
   WHERE a1.b <@ a2.b
 )

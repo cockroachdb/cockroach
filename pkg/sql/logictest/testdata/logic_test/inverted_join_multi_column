@@ -78,7 +78,7 @@ query IIII
 SELECT * FROM
 (SELECT j1.k, j2.rowid FROM j1, j2@ij_idx WHERE i IN (10, 20) AND j2.j @> j1.j) AS inv_join(k1, k2)
 FULL OUTER JOIN
-(SELECT j1.k, j2.rowid FROM j1, j2@primary WHERE i IN (10, 20) AND j2.j @> j1.j) AS cross_join(k1, k2)
+(SELECT j1.k, j2.rowid FROM j1, j2@j2_pkey WHERE i IN (10, 20) AND j2.j @> j1.j) AS cross_join(k1, k2)
 ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
 WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
 ----
@@ -90,7 +90,7 @@ query IIII
 SELECT * FROM
 (SELECT j1.k, j2.rowid FROM j1, j2@isj_idx WHERE i IN (10, 20) AND s IN ('foo', 'bar') AND j2.j @> j1.j) AS inv_join(k1, k2)
 FULL OUTER JOIN
-(SELECT j1.k, j2.rowid FROM j1, j2@primary WHERE i IN (10, 20) AND s IN ('foo', 'bar') AND j2.j @> j1.j) AS cross_join(k1, k2)
+(SELECT j1.k, j2.rowid FROM j1, j2@j2_pkey WHERE i IN (10, 20) AND s IN ('foo', 'bar') AND j2.j @> j1.j) AS cross_join(k1, k2)
 ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
 WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
 ----
@@ -102,7 +102,7 @@ query IIII
 SELECT * FROM
 (SELECT j1.k, j2.rowid FROM j1 INNER INVERTED JOIN j2@ij_idx ON i IN (10, 20) AND j2.j @> j1.j AND j2.j @> '{"a": {}}') AS inv_join(k1, k2)
 FULL OUTER JOIN
-(SELECT j1.k, j2.rowid FROM j1, j2@primary WHERE i IN (10, 20) AND j2.j @> j1.j AND j2.j @> '{"a": {}}') AS cross_join(k1, k2)
+(SELECT j1.k, j2.rowid FROM j1, j2@j2_pkey WHERE i IN (10, 20) AND j2.j @> j1.j AND j2.j @> '{"a": {}}') AS cross_join(k1, k2)
 ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
 WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
 ----
@@ -266,7 +266,7 @@ query IIII
 SELECT * FROM
 (SELECT a1.k, a2.rowid FROM a1, a2@ia_idx WHERE i IN (10, 20) AND a2.a @> a1.a) AS inv_join(k1, k2)
 FULL OUTER JOIN
-(SELECT a1.k, a2.rowid FROM a1, a2@primary WHERE i IN (10, 20) AND a2.a @> a1.a) AS cross_join(k1, k2)
+(SELECT a1.k, a2.rowid FROM a1, a2@a2_pkey WHERE i IN (10, 20) AND a2.a @> a1.a) AS cross_join(k1, k2)
 ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
 WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
 ----
@@ -278,14 +278,14 @@ query IIII
 SELECT * FROM
 (SELECT a1.k, a2.rowid FROM a1, a2@ia_idx WHERE i IN (10, 20) AND a2.a @> a1.a AND a1.a @> '{1}') AS inv_join(k1, k2)
 FULL OUTER JOIN
-(SELECT a1.k, a2.rowid FROM a1, a2@primary WHERE i IN (10, 20) AND a2.a @> a1.a AND a1.a @> '{1}') AS cross_join(k1, k2)
+(SELECT a1.k, a2.rowid FROM a1, a2@a2_pkey WHERE i IN (10, 20) AND a2.a @> a1.a AND a1.a @> '{1}') AS cross_join(k1, k2)
 ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
 WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
 ----
 
 # This query performs a left inverted join with an additional filter.
 query ITIT
-SELECT a1.*, a2.* FROM a1@primary
+SELECT a1.*, a2.* FROM a1@a1_pkey
 LEFT INVERTED JOIN a2@ia_idx
 ON a2.a @> a1.a AND a2.a @> '{1}' AND a2.i = 10
 ORDER BY a1.a, a2.a
@@ -311,7 +311,7 @@ ORDER BY a1.a, a2.a
 # This query performs a left inverted join on ij_idx with no matching rows on
 # the right.
 query ITIT
-SELECT a1.*, a2.* FROM a1@primary
+SELECT a1.*, a2.* FROM a1@a1_pkey
 LEFT INVERTED JOIN a2@ia_idx
 ON a2.a @> a1.a AND a2.a = '{100}' AND a2.i = 10
 ORDER BY a1.a, a2.a
@@ -327,7 +327,7 @@ ORDER BY a1.a, a2.a
 
 # This query performs a semi inverted join.
 query IT
-SELECT a1.* FROM a1@primary WHERE EXISTS (
+SELECT a1.* FROM a1@a1_pkey WHERE EXISTS (
   SELECT * FROM a2@ia_idx
   WHERE a2.a @> a1.a AND a2.i = 10
 )
@@ -342,7 +342,7 @@ ORDER BY a1.k
 
 # This query performs an anti inverted join.
 query IT
-SELECT a1.* FROM a1@primary WHERE NOT EXISTS (
+SELECT a1.* FROM a1@a1_pkey WHERE NOT EXISTS (
   SELECT * FROM a2@ia_idx
   WHERE a2.a @> a1.a AND a2.i = 10
 )
@@ -382,7 +382,7 @@ query IIII
 SELECT * FROM
 (SELECT g1.k, g2.rowid FROM g1, g2@igeom_idx WHERE i IN (10, 20) AND ST_Contains(g2.geom, g1.geom)) AS inv_join(k1, k2)
 FULL OUTER JOIN
-(SELECT g1.k, g2.rowid FROM g1, g2@primary WHERE i IN (10, 20) AND ST_Contains(g2.geom, g1.geom)) AS cross_join(k1, k2)
+(SELECT g1.k, g2.rowid FROM g1, g2@g2_pkey WHERE i IN (10, 20) AND ST_Contains(g2.geom, g1.geom)) AS cross_join(k1, k2)
 ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
 WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
 ----

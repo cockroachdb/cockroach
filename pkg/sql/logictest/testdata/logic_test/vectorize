@@ -458,7 +458,7 @@ CREATE TABLE composite (d DECIMAL, INDEX d_idx (d));
 INSERT INTO composite VALUES (NULL), (1), (1.0), (1.00);
 
 query T rowsort
-SELECT d FROM composite@primary
+SELECT d FROM composite@composite_pkey
 ----
 NULL
 1

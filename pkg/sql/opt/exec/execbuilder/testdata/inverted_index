@@ -174,7 +174,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 110 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • scan
@@ -192,7 +192,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 110 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • scan
@@ -210,7 +210,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 110 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • scan
@@ -228,7 +228,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 110 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • scan
@@ -246,7 +246,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 110 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • scan
@@ -264,7 +264,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 110 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • scan
@@ -284,7 +284,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 110 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • project
@@ -314,7 +314,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 110 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • project
@@ -341,7 +341,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 111 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • scan
@@ -359,7 +359,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 111 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • scan
@@ -386,7 +386,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 111 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • project
@@ -413,7 +413,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 111 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • project
@@ -447,7 +447,7 @@ vectorized: true
 └── • index join
     │ columns: (a, b)
     │ estimated row count: 111 (missing stats)
-    │ table: d@primary
+    │ table: d@d_pkey
     │ key columns: a
     │
     └── • project
@@ -479,7 +479,7 @@ vectorized: true
 └── • index join
     │ columns: (a, b)
     │ estimated row count: 111 (missing stats)
-    │ table: d@primary
+    │ table: d@d_pkey
     │ key columns: a
     │
     └── • project
@@ -506,7 +506,7 @@ vectorized: true
 • lookup join (inner)
 │ columns: (a, b)
 │ estimated row count: 12 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: (b->'a') @> '[1, 2]'
@@ -535,7 +535,7 @@ vectorized: true
 └── • index join
     │ columns: (a, b)
     │ estimated row count: 111 (missing stats)
-    │ table: d@primary
+    │ table: d@d_pkey
     │ key columns: a
     │
     └── • project
@@ -562,7 +562,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 111 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • scan
@@ -585,7 +585,7 @@ vectorized: true
 └── • index join
     │ columns: (a, b)
     │ estimated row count: 111 (missing stats)
-    │ table: d@primary
+    │ table: d@d_pkey
     │ key columns: a
     │
     └── • project
@@ -617,7 +617,7 @@ vectorized: true
 └── • scan
       columns: (a, b)
       estimated row count: 1,000 (missing stats)
-      table: d@primary
+      table: d@d_pkey
       spans: FULL SCAN
 
 query T
@@ -634,7 +634,7 @@ vectorized: true
 └── • index join
     │ columns: (a, b)
     │ estimated row count: 111 (missing stats)
-    │ table: d@primary
+    │ table: d@d_pkey
     │ key columns: a
     │
     └── • project
@@ -661,7 +661,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 111 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • scan
@@ -685,7 +685,7 @@ vectorized: true
 └── • scan
       columns: (a, b)
       estimated row count: 1,000 (missing stats)
-      table: d@primary
+      table: d@d_pkey
       spans: FULL SCAN
 
 query T
@@ -695,7 +695,7 @@ distribution: local
 vectorized: true
 ·
 • index join
-│ table: d@primary
+│ table: d@d_pkey
 │
 └── • sort
     │ order: +a
@@ -716,7 +716,7 @@ distribution: local
 vectorized: true
 ·
 • index join
-│ table: d@primary
+│ table: d@d_pkey
 │
 └── • sort
     │ order: +a
@@ -741,7 +741,7 @@ vectorized: true
 • lookup join (inner)
 │ columns: (a, b)
 │ estimated row count: 12 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c"}, "f": "g"}'
@@ -765,7 +765,7 @@ vectorized: true
 • lookup join (inner)
 │ columns: (a, b)
 │ estimated row count: 1 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
@@ -789,7 +789,7 @@ vectorized: true
 • lookup join (inner)
 │ columns: (a, b)
 │ estimated row count: 12 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: b @> '[{"a": {"b": [[2]]}}, "d"]'
@@ -816,7 +816,7 @@ vectorized: true
 • lookup join (inner)
 │ columns: (a, b)
 │ estimated row count: 12 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c"}, "f": "g"}'
@@ -840,7 +840,7 @@ vectorized: true
 • lookup join (inner)
 │ columns: (a, b)
 │ estimated row count: 1 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
@@ -864,7 +864,7 @@ vectorized: true
 • lookup join (inner)
 │ columns: (a, b)
 │ estimated row count: 12 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: b @> '[{"a": {"b": [[2]]}}, "d"]'
@@ -891,7 +891,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 12 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • project
@@ -918,7 +918,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 12 (missing stats)
-│ table: d@primary
+│ table: d@d_pkey
 │ key columns: a
 │
 └── • project
@@ -947,7 +947,7 @@ vectorized: true
 │ order: +a
 │
 └── • lookup join
-    │ table: d@primary
+    │ table: d@d_pkey
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b @> '[1, 2]'
@@ -972,7 +972,7 @@ vectorized: true
 │ order: +a
 │
 └── • lookup join
-    │ table: d@primary
+    │ table: d@d_pkey
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: (b @> '[1]') AND (b @> '[2]')
@@ -997,7 +997,7 @@ vectorized: true
 │ order: +a
 │
 └── • lookup join
-    │ table: d@primary
+    │ table: d@d_pkey
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b @> '[[1, 2]]'
@@ -1022,7 +1022,7 @@ vectorized: true
 • index join
 │ columns: (a, b)
 │ estimated row count: 110 (missing stats)
-│ table: e@primary
+│ table: e@e_pkey
 │ key columns: a
 │
 └── • scan
@@ -1045,7 +1045,7 @@ vectorized: true
 └── • scan
       columns: (a, b)
       estimated row count: 1,000 (missing stats)
-      table: e@primary
+      table: e@e_pkey
       spans: FULL SCAN
 
 # Test that searching for a NULL element using the inverted index.
@@ -1063,7 +1063,7 @@ vectorized: true
 └── • scan
       columns: (a, b)
       estimated row count: 1,000 (missing stats)
-      table: e@primary
+      table: e@e_pkey
       spans: FULL SCAN
 
 query T
@@ -1089,7 +1089,7 @@ vectorized: true
 └── • scan
       columns: (a, b)
       estimated row count: 1,000 (missing stats)
-      table: e@primary
+      table: e@e_pkey
       spans: FULL SCAN
 
 # This should use a zigzag join.
@@ -1102,7 +1102,7 @@ vectorized: true
 • lookup join (inner)
 │ columns: (a, b)
 │ estimated row count: 12 (missing stats)
-│ table: e@primary
+│ table: e@e_pkey
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: b @> ARRAY[1,2]
@@ -1126,7 +1126,7 @@ vectorized: true
 • lookup join (inner)
 │ columns: (a, b)
 │ estimated row count: 12 (missing stats)
-│ table: e@primary
+│ table: e@e_pkey
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: (b @> ARRAY[1]) AND (b @> ARRAY[2])
@@ -1156,7 +1156,7 @@ vectorized: true
 └── • index join
     │ columns: (a, b)
     │ estimated row count: 111 (missing stats)
-    │ table: e@primary
+    │ table: e@e_pkey
     │ key columns: a
     │
     └── • scan
@@ -1179,7 +1179,7 @@ vectorized: true
 └── • index join
     │ columns: (a, b)
     │ estimated row count: 111 (missing stats)
-    │ table: e@primary
+    │ table: e@e_pkey
     │ key columns: a
     │
     └── • project
@@ -1211,7 +1211,7 @@ vectorized: true
 └── • index join
     │ columns: (a, b)
     │ estimated row count: 111 (missing stats)
-    │ table: e@primary
+    │ table: e@e_pkey
     │ key columns: a
     │
     └── • scan
@@ -1234,7 +1234,7 @@ vectorized: true
 └── • index join
     │ columns: (a, b)
     │ estimated row count: 111 (missing stats)
-    │ table: e@primary
+    │ table: e@e_pkey
     │ key columns: a
     │
     └── • project
@@ -1266,7 +1266,7 @@ vectorized: true
 └── • index join
     │ columns: (a, b)
     │ estimated row count: 111 (missing stats)
-    │ table: d@primary
+    │ table: d@d_pkey
     │ key columns: a
     │
     └── • scan
@@ -1290,7 +1290,7 @@ vectorized: true
 └── • index join
     │ columns: (a, b)
     │ estimated row count: 111 (missing stats)
-    │ table: d@primary
+    │ table: d@d_pkey
     │ key columns: a
     │
     └── • project
@@ -1322,7 +1322,7 @@ vectorized: true
 └── • index join
     │ columns: (a, b)
     │ estimated row count: 111 (missing stats)
-    │ table: d@primary
+    │ table: d@d_pkey
     │ key columns: a
     │
     └── • scan
@@ -1345,7 +1345,7 @@ vectorized: true
 └── • index join
     │ columns: (a, b)
     │ estimated row count: 111 (missing stats)
-    │ table: d@primary
+    │ table: d@d_pkey
     │ key columns: a
     │
     └── • project
@@ -1377,7 +1377,7 @@ vectorized: true
 └── • index join
     │ columns: (a, b)
     │ estimated row count: 111 (missing stats)
-    │ table: d@primary
+    │ table: d@d_pkey
     │ key columns: a
     │
     └── • project
@@ -1434,7 +1434,7 @@ vectorized: true
     └── • index join
         │ columns: (k, geom)
         │ estimated row count: 111 (missing stats)
-        │ table: geo_table@primary
+        │ table: geo_table@geo_table_pkey
         │ key columns: k
         │
         └── • project
@@ -1505,7 +1505,7 @@ vectorized: true
 │
 └── • lookup join (inner)
     │ columns: (k, geom, k, k, geom)
-    │ table: geo_table@primary
+    │ table: geo_table@geo_table_pkey
     │ equality: (k) = (k)
     │ equality cols are key
     │ pred: st_intersects(geom, geom)
@@ -1522,7 +1522,7 @@ vectorized: true
             └── • scan
                   columns: (k, geom)
                   estimated row count: 1,000 (missing stats)
-                  table: geo_table2@primary
+                  table: geo_table2@geo_table2_pkey
                   spans: FULL SCAN
 
 # Do not use the index when using a _ prefixed builtin.
@@ -1544,7 +1544,7 @@ vectorized: true
     └── • scan
           columns: (k, geom)
           estimated row count: 1,000 (missing stats)
-          table: geo_table@primary
+          table: geo_table@geo_table_pkey
           spans: FULL SCAN
 
 query T

@@ -48,7 +48,7 @@ foo  CREATE TABLE public.foo (
      j INT8 NOT NULL DEFAULT nextval('public.test_seq'::REGCLASS),
      k INT8 NOT NULL DEFAULT nextval('public.foo_k_seq'::REGCLASS),
      l INT8 NOT NULL DEFAULT currval('diff_db.public.test_seq'::REGCLASS),
-     CONSTRAINT "primary" PRIMARY KEY (i ASC),
+     CONSTRAINT foo_pkey PRIMARY KEY (i ASC),
      FAMILY "primary" (i, j, k, l)
 )
 
@@ -139,7 +139,7 @@ bar  CREATE TABLE public.bar (
      i INT8 NOT NULL DEFAULT nextval('public.new_bar_i_seq'::REGCLASS),
      j INT8 NOT NULL DEFAULT currval('public.new_s1'::REGCLASS),
      k INT8 NOT NULL DEFAULT nextval('public.new_s2'::REGCLASS),
-     CONSTRAINT "primary" PRIMARY KEY (i ASC),
+     CONSTRAINT bar_pkey PRIMARY KEY (i ASC),
      FAMILY fam_0_i_j_k (i, j, k)
 )
 
@@ -196,7 +196,7 @@ new_other_db.public.t  CREATE TABLE public.t (
                        i INT8 NOT NULL DEFAULT nextval('new_other_db.public.s'::REGCLASS),
                        j INT8 NOT NULL DEFAULT currval('new_other_db.public.s2'::REGCLASS),
                        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                       CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                       CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
                        FAMILY fam_0_i_j_rowid (i, j, rowid)
 )
 
@@ -260,7 +260,7 @@ tb  CREATE TABLE public.tb (
     i INT8 NOT NULL DEFAULT nextval('test_schema.tb_i_seq'::REGCLASS),
     j INT8 NOT NULL DEFAULT nextval('test_schema.sc_s1'::REGCLASS),
     k INT8 NOT NULL DEFAULT currval('test_schema.sc_s2'::REGCLASS),
-    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    CONSTRAINT tb_pkey PRIMARY KEY (i ASC),
     FAMILY fam_0_i_j_k (i, j, k)
 )
 
@@ -315,7 +315,7 @@ new_test_schema.foo  CREATE TABLE new_test_schema.foo (
                      i INT8 NOT NULL DEFAULT nextval('new_test_schema.foo_i_seq'::REGCLASS),
                      j INT8 NOT NULL DEFAULT nextval('new_test_schema.s3'::REGCLASS),
                      k INT8 NOT NULL DEFAULT currval('new_test_schema.s4'::REGCLASS),
-                     CONSTRAINT "primary" PRIMARY KEY (i ASC),
+                     CONSTRAINT foo_pkey PRIMARY KEY (i ASC),
                      FAMILY fam_0_i_j_k (i, j, k)
 )
 
@@ -381,7 +381,7 @@ t2  CREATE TABLE public.t2 (
     i INT8 NOT NULL DEFAULT nextval('public.s5_new'::REGCLASS),
     j INT8 NOT NULL DEFAULT nextval('public.s5_new'::REGCLASS),
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
     FAMILY fam_0_i_j_rowid (i, j, rowid)
 )
 

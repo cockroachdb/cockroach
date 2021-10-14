@@ -19,12 +19,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: onecolumn@primary
+│     table: onecolumn@onecolumn_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: twocolumn@primary
+      table: twocolumn@twocolumn_pkey
       spans: FULL SCAN
 
 query T
@@ -38,12 +38,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: twocolumn@primary
+│     table: twocolumn@twocolumn_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: twocolumn@primary
+      table: twocolumn@twocolumn_pkey
       spans: FULL SCAN
 
 query T
@@ -56,7 +56,7 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: twocolumn@primary
+│     table: twocolumn@twocolumn_pkey
 │     spans: FULL SCAN
 │
 └── • filter
@@ -64,7 +64,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: twocolumn@primary
+          table: twocolumn@twocolumn_pkey
           spans: FULL SCAN
 
 query T
@@ -78,12 +78,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: onecolumn@primary
+│     table: onecolumn@onecolumn_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: twocolumn@primary
+      table: twocolumn@twocolumn_pkey
       spans: FULL SCAN
 
 query T
@@ -97,12 +97,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: onecolumn@primary
+│     table: onecolumn@onecolumn_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: twocolumn@primary
+      table: twocolumn@twocolumn_pkey
       spans: FULL SCAN
 
 query T
@@ -127,12 +127,12 @@ vectorized: true
     │   │
     │   ├── • scan
     │   │     missing stats
-    │   │     table: onecolumn@primary
+    │   │     table: onecolumn@onecolumn_pkey
     │   │     spans: FULL SCAN
     │   │
     │   └── • scan
     │         missing stats
-    │         table: twocolumn@primary
+    │         table: twocolumn@twocolumn_pkey
     │         spans: FULL SCAN
     │
     └── • hash join
@@ -140,12 +140,12 @@ vectorized: true
         │
         ├── • scan
         │     missing stats
-        │     table: onecolumn@primary
+        │     table: onecolumn@onecolumn_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               missing stats
-              table: twocolumn@primary
+              table: twocolumn@twocolumn_pkey
               spans: FULL SCAN
 
 # The following queries verify that only the necessary columns are scanned.
@@ -162,13 +162,13 @@ vectorized: true
 ├── • scan
 │     columns: (x)
 │     estimated row count: 1,000 (missing stats)
-│     table: twocolumn@primary
+│     table: twocolumn@twocolumn_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (y)
       estimated row count: 1,000 (missing stats)
-      table: twocolumn@primary
+      table: twocolumn@twocolumn_pkey
       spans: FULL SCAN
 
 query T
@@ -189,13 +189,13 @@ vectorized: true
     ├── • scan
     │     columns: (x)
     │     estimated row count: 1,000 (missing stats)
-    │     table: twocolumn@primary
+    │     table: twocolumn@twocolumn_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (x, y)
           estimated row count: 1,000 (missing stats)
-          table: twocolumn@primary
+          table: twocolumn@twocolumn_pkey
           spans: FULL SCAN
 
 query T
@@ -216,13 +216,13 @@ vectorized: true
     ├── • scan
     │     columns: (x)
     │     estimated row count: 1,000 (missing stats)
-    │     table: twocolumn@primary
+    │     table: twocolumn@twocolumn_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (x, y)
           estimated row count: 1,000 (missing stats)
-          table: twocolumn@primary
+          table: twocolumn@twocolumn_pkey
           spans: FULL SCAN
 
 query T
@@ -243,13 +243,13 @@ vectorized: true
     ├── • scan
     │     columns: (x)
     │     estimated row count: 1,000 (missing stats)
-    │     table: twocolumn@primary
+    │     table: twocolumn@twocolumn_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (y)
           estimated row count: 1,000 (missing stats)
-          table: twocolumn@primary
+          table: twocolumn@twocolumn_pkey
           spans: FULL SCAN
 
 query T
@@ -279,7 +279,7 @@ vectorized: true
     │   └── • scan
     │         columns: (x)
     │         estimated row count: 1,000 (missing stats)
-    │         table: onecolumn@primary
+    │         table: onecolumn@onecolumn_pkey
     │         spans: FULL SCAN
     │
     └── • render
@@ -291,7 +291,7 @@ vectorized: true
         └── • scan
               columns: (x, y)
               estimated row count: 1,000 (missing stats)
-              table: twocolumn@primary
+              table: twocolumn@twocolumn_pkey
               spans: FULL SCAN
 
 # Ensure that the ordering information for the result of joins is sane. (#12037)
@@ -567,7 +567,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: customers@primary
+      table: customers@customers_pkey
       spans: FULL SCAN
 
 # Tests for filter propagation through joins.
@@ -591,12 +591,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: pairs@primary
+│     table: pairs@pairs_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: square@primary
+      table: square@square_pkey
       spans: FULL SCAN
 
 # The filter expression becomes an ON predicate.
@@ -625,13 +625,13 @@ vectorized: true
     │   └── • scan
     │         columns: (a, b)
     │         estimated row count: 1,000 (missing stats)
-    │         table: pairs@primary
+    │         table: pairs@pairs_pkey
     │         spans: FULL SCAN
     │
     └── • scan
           columns: (n, sq)
           estimated row count: 1,000 (missing stats)
-          table: square@primary
+          table: square@square_pkey
           spans: FULL SCAN
 
 # Query similar to the one above, but the filter refers to a rendered
@@ -667,13 +667,13 @@ vectorized: true
             ├── • scan
             │     columns: (a, b)
             │     estimated row count: 1,000 (missing stats)
-            │     table: pairs@primary
+            │     table: pairs@pairs_pkey
             │     spans: FULL SCAN
             │
             └── • scan
                   columns: (n, sq)
                   estimated row count: 1,000 (missing stats)
-                  table: square@primary
+                  table: square@square_pkey
                   spans: FULL SCAN
 
 # The filter expression must stay on top of the outer join.
@@ -702,13 +702,13 @@ vectorized: true
     │   └── • scan
     │         columns: (a, b)
     │         estimated row count: 1,000 (missing stats)
-    │         table: pairs@primary
+    │         table: pairs@pairs_pkey
     │         spans: FULL SCAN
     │
     └── • scan
           columns: (n, sq)
           estimated row count: 1,000 (missing stats)
-          table: square@primary
+          table: square@square_pkey
           spans: FULL SCAN
 
 query T
@@ -741,13 +741,13 @@ vectorized: true
         │   └── • scan
         │         columns: (a, b)
         │         estimated row count: 1,000 (missing stats)
-        │         table: pairs@primary
+        │         table: pairs@pairs_pkey
         │         spans: FULL SCAN
         │
         └── • scan
               columns: (n, sq)
               estimated row count: 1,000 (missing stats)
-              table: square@primary
+              table: square@square_pkey
               spans: FULL SCAN
 
 # Filter propagation through outer joins.
@@ -780,7 +780,7 @@ vectorized: true
     │   └── • scan
     │         columns: (a, b)
     │         estimated row count: 1,000 (missing stats)
-    │         table: pairs@primary
+    │         table: pairs@pairs_pkey
     │         spans: FULL SCAN
     │
     └── • filter
@@ -791,7 +791,7 @@ vectorized: true
         └── • scan
               columns: (n, sq)
               estimated row count: 333 (missing stats)
-              table: square@primary
+              table: square@square_pkey
               spans: -/5/#
 
 query T
@@ -817,7 +817,7 @@ vectorized: true
     ├── • scan
     │     columns: (n, sq)
     │     estimated row count: 333 (missing stats)
-    │     table: square@primary
+    │     table: square@square_pkey
     │     spans: /2-
     │
     └── • filter
@@ -828,7 +828,7 @@ vectorized: true
         └── • scan
               columns: (a, b)
               estimated row count: 1,000 (missing stats)
-              table: pairs@primary
+              table: pairs@pairs_pkey
               spans: FULL SCAN
 
 # The simpler plan for an inner join, to compare.
@@ -854,13 +854,13 @@ vectorized: true
 │   └── • scan
 │         columns: (a, b)
 │         estimated row count: 1,000 (missing stats)
-│         table: pairs@primary
+│         table: pairs@pairs_pkey
 │         spans: FULL SCAN
 │
 └── • scan
       columns: (n, sq)
       estimated row count: 4 (missing stats)
-      table: square@primary
+      table: square@square_pkey
       spans: /2-/5/#
       parallel
 
@@ -889,13 +889,13 @@ vectorized: true
     ├── • scan
     │     columns: (x, y)
     │     estimated row count: 1,000 (missing stats)
-    │     table: t1@primary
+    │     table: t1@t1_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (y, x)
           estimated row count: 1,000 (missing stats)
-          table: t2@primary
+          table: t2@t2_pkey
           spans: FULL SCAN
 
 # Tests for merge join ordering information.
@@ -927,13 +927,13 @@ vectorized: true
 ├── • scan
 │     columns: (a, b, c, d)
 │     estimated row count: 1,000 (missing stats)
-│     table: pkba@primary
+│     table: pkba@pkba_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (a, b, c, d)
       estimated row count: 1,000 (missing stats)
-      table: pkbc@primary
+      table: pkbc@pkbc_pkey
       spans: FULL SCAN
 
 query T
@@ -958,14 +958,14 @@ vectorized: true
     │     columns: (a, b, c, d)
     │     ordering: +b,+a,+d
     │     estimated row count: 1,000 (missing stats)
-    │     table: pkbad@primary
+    │     table: pkbad@pkbad_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, b, c, d)
           ordering: +b,+a
           estimated row count: 1,000 (missing stats)
-          table: pkba@primary
+          table: pkba@pkba_pkey
           spans: FULL SCAN
 
 query T
@@ -990,14 +990,14 @@ vectorized: true
     │     columns: (a, b, c, d)
     │     ordering: +b,+a,+c
     │     estimated row count: 1,000 (missing stats)
-    │     table: pkbac@primary
+    │     table: pkbac@pkbac_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, b, c, d)
           ordering: +b,+a,+c
           estimated row count: 1,000 (missing stats)
-          table: pkbac@primary
+          table: pkbac@pkbac_pkey
           spans: FULL SCAN
 
 query T
@@ -1018,14 +1018,14 @@ vectorized: true
 │     columns: (a, b, c, d)
 │     ordering: +b,+a,+c
 │     estimated row count: 1,000 (missing stats)
-│     table: pkbac@primary
+│     table: pkbac@pkbac_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (a, b, c, d)
       ordering: +b,+a,+d
       estimated row count: 1,000 (missing stats)
-      table: pkbad@primary
+      table: pkbad@pkbad_pkey
       spans: FULL SCAN
 
 # Tests with joins with merged columns of collated string type.
@@ -1052,13 +1052,13 @@ vectorized: true
     ├── • scan
     │     columns: (s)
     │     estimated row count: 1,000 (missing stats)
-    │     table: str1@primary
+    │     table: str1@str1_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (s)
           estimated row count: 1,000 (missing stats)
-          table: str2@primary
+          table: str2@str2_pkey
           spans: FULL SCAN
 
 query T
@@ -1078,13 +1078,13 @@ vectorized: true
     ├── • scan
     │     columns: (s)
     │     estimated row count: 1,000 (missing stats)
-    │     table: str1@primary
+    │     table: str1@str1_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (s)
           estimated row count: 1,000 (missing stats)
-          table: str2@primary
+          table: str2@str2_pkey
           spans: FULL SCAN
 
 query T
@@ -1108,13 +1108,13 @@ vectorized: true
     ├── • scan
     │     columns: (s)
     │     estimated row count: 1,000 (missing stats)
-    │     table: str2@primary
+    │     table: str2@str2_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (s)
           estimated row count: 1,000 (missing stats)
-          table: str1@primary
+          table: str1@str1_pkey
           spans: FULL SCAN
 
 query T
@@ -1138,13 +1138,13 @@ vectorized: true
     ├── • scan
     │     columns: (s)
     │     estimated row count: 1,000 (missing stats)
-    │     table: str1@primary
+    │     table: str1@str1_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (s)
           estimated row count: 1,000 (missing stats)
-          table: str2@primary
+          table: str2@str2_pkey
           spans: FULL SCAN
 
 # Verify that we resolve the merged column a to str2.a but use IFNULL for
@@ -1173,14 +1173,14 @@ vectorized: true
     │     columns: (a, s)
     │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
-    │     table: str2@primary
+    │     table: str2@str2_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, s)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: str1@primary
+          table: str1@str1_pkey
           spans: FULL SCAN
 
 
@@ -1210,14 +1210,14 @@ vectorized: true
     │     columns: (x, y, u)
     │     ordering: +x,+y
     │     estimated row count: 333 (missing stats)
-    │     table: xyu@primary
+    │     table: xyu@xyu_pkey
     │     spans: /3-
     │
     └── • scan
           columns: (x, y, v)
           ordering: +x,+y
           estimated row count: 333 (missing stats)
-          table: xyv@primary
+          table: xyv@xyv_pkey
           spans: /3-
 
 query T
@@ -1240,14 +1240,14 @@ vectorized: true
     │     columns: (x, y, u)
     │     ordering: +x,+y
     │     estimated row count: 333 (missing stats)
-    │     table: xyu@primary
+    │     table: xyu@xyu_pkey
     │     spans: /3-
     │
     └── • scan
           columns: (x, y, v)
           ordering: +x,+y
           estimated row count: 333 (missing stats)
-          table: xyv@primary
+          table: xyv@xyv_pkey
           spans: /3-
 
 query T
@@ -1270,14 +1270,14 @@ vectorized: true
     │     columns: (x, y, v)
     │     ordering: +x,+y
     │     estimated row count: 333 (missing stats)
-    │     table: xyv@primary
+    │     table: xyv@xyv_pkey
     │     spans: /3-
     │
     └── • scan
           columns: (x, y, u)
           ordering: +x,+y
           estimated row count: 333 (missing stats)
-          table: xyu@primary
+          table: xyu@xyu_pkey
           spans: /3-
 
 query T
@@ -1309,14 +1309,14 @@ vectorized: true
         │     columns: (x, y, u)
         │     ordering: +x,+y
         │     estimated row count: 1,000 (missing stats)
-        │     table: xyu@primary
+        │     table: xyu@xyu_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (x, y, v)
               ordering: +x,+y
               estimated row count: 1,000 (missing stats)
-              table: xyv@primary
+              table: xyv@xyv_pkey
               spans: FULL SCAN
 
 # Verify that we transfer constraints between the two sides.
@@ -1336,14 +1336,14 @@ vectorized: true
 │     columns: (x, y, u)
 │     ordering: +y
 │     estimated row count: 9 (missing stats)
-│     table: xyu@primary
+│     table: xyu@xyu_pkey
 │     spans: /1-/1/10
 │
 └── • scan
       columns: (x, y, v)
       ordering: +y
       estimated row count: 9 (missing stats)
-      table: xyv@primary
+      table: xyv@xyv_pkey
       spans: /1-/1/10
 
 query T
@@ -1362,14 +1362,14 @@ vectorized: true
 │     columns: (x, y, u)
 │     ordering: +y
 │     estimated row count: 9 (missing stats)
-│     table: xyu@primary
+│     table: xyu@xyu_pkey
 │     spans: /1-/1/10
 │
 └── • scan
       columns: (x, y, v)
       ordering: +y
       estimated row count: 9 (missing stats)
-      table: xyv@primary
+      table: xyv@xyv_pkey
       spans: /1-/1/10
 
 query T
@@ -1388,14 +1388,14 @@ vectorized: true
 │     columns: (x, y, u)
 │     ordering: +x,+y
 │     estimated row count: 1,000 (missing stats)
-│     table: xyu@primary
+│     table: xyu@xyu_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (x, y, v)
       ordering: +y
       estimated row count: 9 (missing stats)
-      table: xyv@primary
+      table: xyv@xyv_pkey
       spans: /1-/1/10
 
 query T
@@ -1414,14 +1414,14 @@ vectorized: true
 │     columns: (x, y, v)
 │     ordering: +x,+y
 │     estimated row count: 1,000 (missing stats)
-│     table: xyv@primary
+│     table: xyv@xyv_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (x, y, u)
       ordering: +y
       estimated row count: 9 (missing stats)
-      table: xyu@primary
+      table: xyu@xyu_pkey
       spans: /1-/1/10
 
 
@@ -1447,14 +1447,14 @@ vectorized: true
     │     columns: (x, y, u)
     │     ordering: +x,+y
     │     estimated row count: 333 (missing stats)
-    │     table: xyu@primary
+    │     table: xyu@xyu_pkey
     │     spans: /3-
     │
     └── • scan
           columns: (x, y, v)
           ordering: +x,+y
           estimated row count: 333 (missing stats)
-          table: xyv@primary
+          table: xyv@xyv_pkey
           spans: /3-
 
 query T
@@ -1477,14 +1477,14 @@ vectorized: true
     │     columns: (x, y, v)
     │     ordering: +x,+y
     │     estimated row count: 333 (missing stats)
-    │     table: xyv@primary
+    │     table: xyv@xyv_pkey
     │     spans: /3-
     │
     └── • scan
           columns: (x, y, u)
           ordering: +x,+y
           estimated row count: 333 (missing stats)
-          table: xyu@primary
+          table: xyu@xyu_pkey
           spans: /3-
 
 query T
@@ -1516,14 +1516,14 @@ vectorized: true
         │     columns: (x, y, u)
         │     ordering: +x,+y
         │     estimated row count: 1,000 (missing stats)
-        │     table: xyu@primary
+        │     table: xyu@xyu_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (x, y, v)
               ordering: +x,+y
               estimated row count: 1,000 (missing stats)
-              table: xyv@primary
+              table: xyv@xyv_pkey
               spans: FULL SCAN
 
 query T
@@ -1542,14 +1542,14 @@ vectorized: true
 │     columns: (x, y, u)
 │     ordering: +x,+y
 │     estimated row count: 1,000 (missing stats)
-│     table: xyu@primary
+│     table: xyu@xyu_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (x, y, v)
       ordering: +y
       estimated row count: 9 (missing stats)
-      table: xyv@primary
+      table: xyv@xyv_pkey
       spans: /1-/1/10
 
 query T
@@ -1568,14 +1568,14 @@ vectorized: true
 │     columns: (x, y, v)
 │     ordering: +x,+y
 │     estimated row count: 1,000 (missing stats)
-│     table: xyv@primary
+│     table: xyv@xyv_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (x, y, u)
       ordering: +y
       estimated row count: 9 (missing stats)
-      table: xyu@primary
+      table: xyu@xyu_pkey
       spans: /1-/1/10
 
 # Regression test for #20472: break up tuple inequalities.
@@ -1599,14 +1599,14 @@ vectorized: true
     │     columns: (x, y, u)
     │     ordering: +x,+y
     │     estimated row count: 333 (missing stats)
-    │     table: xyu@primary
+    │     table: xyu@xyu_pkey
     │     spans: /1/2/4-
     │
     └── • scan
           columns: (x, y, v)
           ordering: +x,+y
           estimated row count: 1,000 (missing stats)
-          table: xyv@primary
+          table: xyv@xyv_pkey
           spans: FULL SCAN
 
 
@@ -1641,13 +1641,13 @@ vectorized: true
     ├── • scan
     │     columns: (a, b1)
     │     estimated row count: 1 (missing stats)
-    │     table: l@primary
+    │     table: l@l_pkey
     │     spans: /3/0
     │
     └── • scan
           columns: (a, b2)
           estimated row count: 1 (missing stats)
-          table: r@primary
+          table: r@r_pkey
           spans: /3/0
 
 query T
@@ -1667,13 +1667,13 @@ vectorized: true
 ├── • scan
 │     columns: (a, b1)
 │     estimated row count: 1 (missing stats)
-│     table: l@primary
+│     table: l@l_pkey
 │     spans: /3/0
 │
 └── • scan
       columns: (a, b2)
       estimated row count: 1 (missing stats)
-      table: r@primary
+      table: r@r_pkey
       spans: /3/0
 
 query T
@@ -1697,13 +1697,13 @@ vectorized: true
     ├── • scan
     │     columns: (a, b2)
     │     estimated row count: 1 (missing stats)
-    │     table: r@primary
+    │     table: r@r_pkey
     │     spans: /3/0
     │
     └── • scan
           columns: (a, b1)
           estimated row count: 1 (missing stats)
-          table: l@primary
+          table: l@l_pkey
           spans: /3/0
 
 query T
@@ -1723,13 +1723,13 @@ vectorized: true
 ├── • scan
 │     columns: (a, b2)
 │     estimated row count: 1 (missing stats)
-│     table: r@primary
+│     table: r@r_pkey
 │     spans: /3/0
 │
 └── • scan
       columns: (a, b1)
       estimated row count: 1 (missing stats)
-      table: l@primary
+      table: l@l_pkey
       spans: /3/0
 
 # Regression tests for #21243
@@ -1764,12 +1764,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: abcdef@primary
+│     table: abcdef@abcdef_pkey
 │     spans: [/1/2/6/9 - ]
 │
 └── • scan
       missing stats
-      table: abg@primary
+      table: abg@abg_pkey
       spans: FULL SCAN
 
 # Regression tests for mixed-type equality columns (#22514).
@@ -1809,13 +1809,13 @@ vectorized: true
     ├── • scan
     │     columns: (a, b, c, d)
     │     estimated row count: 1,000 (missing stats)
-    │     table: foo@primary
+    │     table: foo@foo_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, b, c, d)
           estimated row count: 1,000 (missing stats)
-          table: bar@primary
+          table: bar@bar_pkey
           spans: FULL SCAN
 
 # b can't be an equality column.
@@ -1837,13 +1837,13 @@ vectorized: true
     ├── • scan
     │     columns: (a, b, c, d)
     │     estimated row count: 1,000 (missing stats)
-    │     table: foo@primary
+    │     table: foo@foo_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, b, c, d)
           estimated row count: 1,000 (missing stats)
-          table: bar@primary
+          table: bar@bar_pkey
           spans: FULL SCAN
 
 # Only a can be an equality column.
@@ -1866,13 +1866,13 @@ vectorized: true
     ├── • scan
     │     columns: (a, b, c, d)
     │     estimated row count: 1,000 (missing stats)
-    │     table: foo@primary
+    │     table: foo@foo_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, b, c, d)
           estimated row count: 1,000 (missing stats)
-          table: bar@primary
+          table: bar@bar_pkey
           spans: FULL SCAN
 
 # Only a and c can be equality columns.
@@ -1895,13 +1895,13 @@ vectorized: true
     ├── • scan
     │     columns: (a, b, c, d)
     │     estimated row count: 1,000 (missing stats)
-    │     table: foo@primary
+    │     table: foo@foo_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, b, c, d)
           estimated row count: 1,000 (missing stats)
-          table: bar@primary
+          table: bar@bar_pkey
           spans: FULL SCAN
 
 # b can't be an equality column.
@@ -1919,13 +1919,13 @@ vectorized: true
 ├── • scan
 │     columns: (a, b, c, d)
 │     estimated row count: 1,000 (missing stats)
-│     table: foo@primary
+│     table: foo@foo_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (a, b, c, d)
       estimated row count: 1,000 (missing stats)
-      table: bar@primary
+      table: bar@bar_pkey
       spans: FULL SCAN
 
 # Only a can be an equality column.
@@ -1944,13 +1944,13 @@ vectorized: true
 ├── • scan
 │     columns: (a, b, c, d)
 │     estimated row count: 1,000 (missing stats)
-│     table: foo@primary
+│     table: foo@foo_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (a, b, c, d)
       estimated row count: 1,000 (missing stats)
-      table: bar@primary
+      table: bar@bar_pkey
       spans: FULL SCAN
 
 query T
@@ -1967,13 +1967,13 @@ vectorized: true
 ├── • scan
 │     columns: (a, b, c, d)
 │     estimated row count: 1,000 (missing stats)
-│     table: foo@primary
+│     table: foo@foo_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (a, b, c, d)
       estimated row count: 1,000 (missing stats)
-      table: bar@primary
+      table: bar@bar_pkey
       spans: FULL SCAN
 
 # Only a can be an equality column.
@@ -1992,13 +1992,13 @@ vectorized: true
 ├── • scan
 │     columns: (a, b, c, d)
 │     estimated row count: 1,000 (missing stats)
-│     table: foo@primary
+│     table: foo@foo_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (a, b, c, d)
       estimated row count: 1,000 (missing stats)
-      table: bar@primary
+      table: bar@bar_pkey
       spans: FULL SCAN
 
 # Only a and c can be equality columns.
@@ -2014,12 +2014,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: foo@primary
+│     table: foo@foo_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: bar@primary
+      table: bar@bar_pkey
       spans: FULL SCAN
 
 # Zigzag join tests.
@@ -2045,7 +2045,7 @@ vectorized: true
 │ filter: c = 6.0
 │
 └── • index join
-    │ table: zigzag@primary
+    │ table: zigzag@zigzag_pkey
     │
     └── • scan
           missing stats
@@ -2065,7 +2065,7 @@ vectorized: true
 │ filter: c = 6.0
 │
 └── • index join
-    │ table: zigzag@primary
+    │ table: zigzag@zigzag_pkey
     │
     └── • scan
           missing stats
@@ -2101,7 +2101,7 @@ distribution: local
 vectorized: true
 ·
 • lookup join
-│ table: zigzag@primary
+│ table: zigzag@zigzag_pkey
 │ equality: (a) = (a)
 │ equality cols are key
 │
@@ -2122,7 +2122,7 @@ distribution: local
 vectorized: true
 ·
 • lookup join
-│ table: zigzag@primary
+│ table: zigzag@zigzag_pkey
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: d > 4.0
@@ -2160,7 +2160,7 @@ vectorized: true
 │ filter: c IS NULL
 │
 └── • index join
-    │ table: zigzag2@primary
+    │ table: zigzag2@zigzag2_pkey
     │
     └── • scan
           missing stats
@@ -2182,7 +2182,7 @@ vectorized: true
 │   │
 │   └── • scan
 │         missing stats
-│         table: onecolumn@primary
+│         table: onecolumn@onecolumn_pkey
 │         spans: FULL SCAN
 │
 └── • sort
@@ -2190,7 +2190,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: twocolumn@primary
+          table: twocolumn@twocolumn_pkey
           spans: FULL SCAN
 
 # Test that we can force a merge join using the NATURAL syntax.
@@ -2208,7 +2208,7 @@ vectorized: true
 │   │
 │   └── • scan
 │         missing stats
-│         table: onecolumn@primary
+│         table: onecolumn@onecolumn_pkey
 │         spans: FULL SCAN
 │
 └── • sort
@@ -2216,7 +2216,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: twocolumn@primary
+          table: twocolumn@twocolumn_pkey
           spans: FULL SCAN
 
 # Test that we can force a merge join using the CROSS syntax.
@@ -2234,7 +2234,7 @@ vectorized: true
 │   │
 │   └── • scan
 │         missing stats
-│         table: onecolumn@primary
+│         table: onecolumn@onecolumn_pkey
 │         spans: FULL SCAN
 │
 └── • sort
@@ -2242,7 +2242,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: twocolumn@primary
+          table: twocolumn@twocolumn_pkey
           spans: FULL SCAN
 
 statement error LOOKUP can only be used with INNER or LEFT joins
@@ -2267,10 +2267,10 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: cards@primary
+│     table: cards@cards_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: customers@primary
+      table: customers@customers_pkey
       spans: FULL SCAN

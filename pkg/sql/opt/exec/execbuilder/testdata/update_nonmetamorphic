@@ -32,7 +32,7 @@ vectorized: true
     └── • scan
           columns: (a, c, d)
           estimated row count: 1,000 (missing stats)
-          table: tu@primary
+          table: tu@tu_pkey
           spans: FULL SCAN
           locking strength: for update
 
@@ -44,9 +44,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
 Scan /Table/53/{1-2}
-fetched: /tu/primary/1 -> NULL
-fetched: /tu/primary/1/b -> 2
-fetched: /tu/primary/1/c/d -> /3/4
+fetched: /tu/tu_pkey/1 -> NULL
+fetched: /tu/tu_pkey/1/b -> 2
+fetched: /tu/tu_pkey/1/c/d -> /3/4
 Put /Table/53/1/1/2/1 -> /TUPLE/3:3:Int/4/1:4:Int/4
 fast path completed
 rows affected: 1
@@ -59,9 +59,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
 Scan /Table/53/{1-2}
-fetched: /tu/primary/1 -> NULL
-fetched: /tu/primary/1/b -> 2
-fetched: /tu/primary/1/c/d -> /4/4
+fetched: /tu/tu_pkey/1 -> NULL
+fetched: /tu/tu_pkey/1/b -> 2
+fetched: /tu/tu_pkey/1/c/d -> /4/4
 Del /Table/53/1/1/1/1
 Del /Table/53/1/1/2/1
 fast path completed
@@ -91,7 +91,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: tu@primary
+          table: tu@tu_pkey
           spans: FULL SCAN
 
 # Reset for rest of test.

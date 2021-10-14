@@ -19,7 +19,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: ab@primary
+      table: ab@ab_pkey
       spans: FULL SCAN
 
 statement ok
@@ -50,7 +50,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: ab@primary
+      table: ab@ab_pkey
       spans: FULL SCAN
 
 ## Statistics change: Create statistics and ensure that the plan is recalculated.
@@ -73,12 +73,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: ab@primary
+│     table: ab@ab_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: cd@primary
+      table: cd@cd_pkey
       spans: FULL SCAN
 
 statement ok
@@ -94,13 +94,13 @@ distribution: local
 vectorized: true
 ·
 • lookup join
-│ table: cd@primary
+│ table: cd@cd_pkey
 │ equality: (a) = (c)
 │ equality cols are key
 │
 └── • scan
       estimated row count: 1 (100% of the table; stats collected <hidden> ago)
-      table: ab@primary
+      table: ab@ab_pkey
       spans: FULL SCAN
 
 # Verify the plan of a very simple query which should be using the placeholder
@@ -129,7 +129,7 @@ regions: <hidden>
   KV rows read: 1
   KV bytes read: 8 B
   estimated row count: 0
-  table: ab@primary
+  table: ab@ab_pkey
   spans: [/1 - /1]
 
 query T
@@ -152,5 +152,5 @@ regions: <hidden>
   KV rows read: 0
   KV bytes read: 0 B
   estimated row count: 0
-  table: ab@primary
+  table: ab@ab_pkey
   spans: [/2 - /2]

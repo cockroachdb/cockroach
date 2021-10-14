@@ -18,7 +18,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: v@primary
+  table: v@v_pkey
   spans: FULL SCAN
 
 # Create an index on a materialized view, and ensure that we use it.
@@ -32,7 +32,7 @@ distribution: local
 vectorized: true
 ·
 • index join
-│ table: v@primary
+│ table: v@v_pkey
 │
 └── • scan
       missing stats

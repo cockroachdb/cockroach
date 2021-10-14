@@ -25,7 +25,7 @@ vectorized: true
         │ columns: (k, v, w)
         │ ordering: +v
         │ estimated row count: 30 (missing stats)
-        │ table: t@primary
+        │ table: t@t_pkey
         │ key columns: k
         │
         └── • scan
@@ -66,7 +66,7 @@ vectorized: true
         └── • scan
               columns: (w)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
 
 query T
@@ -79,7 +79,7 @@ vectorized: true
   columns: (k, v)
   ordering: +k
   estimated row count: 5 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: LIMITED SCAN
   limit: 5
 
@@ -98,7 +98,7 @@ vectorized: true
       columns: (k, v)
       ordering: +k
       estimated row count: 1,000 (missing stats)
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
 
 query T
@@ -172,7 +172,7 @@ vectorized: true
                   columns: (k, v, w)
                   ordering: +k
                   estimated row count: 1,000 (missing stats)
-                  table: t@primary
+                  table: t@t_pkey
                   spans: FULL SCAN
 
 query T
@@ -250,7 +250,7 @@ vectorized: true
         └── • scan
               columns: (k, v, w)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
 
 query T
@@ -266,7 +266,7 @@ vectorized: true
     │ columns: (k, v, w)
     │ ordering: +v
     │ estimated row count: 10 (missing stats)
-    │ table: t@primary
+    │ table: t@t_pkey
     │ key columns: k
     │
     └── • scan
@@ -307,7 +307,7 @@ vectorized: true
                   columns: (k, v, w)
                   ordering: +k
                   estimated row count: 1,000 (missing stats)
-                  table: t@primary
+                  table: t@t_pkey
                   spans: FULL SCAN
 
 # Regression test for #47283: scan with both hard limit and soft limit.
@@ -334,7 +334,7 @@ vectorized: true
     └── • scan
           columns: (k, a)
           estimated row count: 4 (missing stats)
-          table: t_47283@primary
+          table: t_47283@t_47283_pkey
           spans: LIMITED SCAN
           limit: 4
 
@@ -488,7 +488,7 @@ vectorized: true
 └── • scan
       columns: (k, v, w)
       estimated row count: 1,000 (missing stats)
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
 
 

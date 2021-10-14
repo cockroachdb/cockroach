@@ -23,7 +23,7 @@ SELECT * FROM [
 ----
 ·
 • index join
-│ table: t@primary
+│ table: t@t_pkey
 │
 └── • scan
       missing stats
@@ -37,7 +37,7 @@ SELECT * FROM [
 ----
 ·
 • index join
-│ table: t@primary
+│ table: t@t_pkey
 │
 └── • scan
       missing stats
@@ -51,7 +51,7 @@ SELECT * FROM [
 ----
 ·
 • index join
-│ table: t@primary
+│ table: t@t_pkey
 │
 └── • scan
       missing stats
@@ -65,7 +65,7 @@ SELECT * FROM [
 ----
 ·
 • index join
-│ table: t@primary
+│ table: t@t_pkey
 │
 └── • scan
       missing stats
@@ -79,7 +79,7 @@ SELECT * FROM [
 ----
 ·
 • index join
-│ table: t@primary
+│ table: t@t_pkey
 │
 └── • scan
       missing stats

@@ -144,10 +144,10 @@ z      comm"en"t2
 query TT rowsort
 SELECT distinct(index_name), comment FROM [SHOW INDEXES FROM t WITH COMMENT]
 ----
-primary  NULL
-i1       NULL
-i2       comm'ent3
-i3       NULL
+t_pkey  NULL
+i1      NULL
+i2      comm'ent3
+i3      NULL
 
 # Ensure that truncate comment reasignment works when index and column IDs
 # don't all start from 1.
@@ -177,5 +177,5 @@ z      NULL
 query TT rowsort
 SELECT distinct(index_name), comment FROM [SHOW INDEXES FROM t WITH COMMENT]
 ----
-primary  NULL
-i        hello2
+t_pkey  NULL
+i       hello2
