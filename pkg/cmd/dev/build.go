@@ -65,6 +65,8 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 // above, and in usage docs.
 
 var buildTargetMapping = map[string]string{
+	"buildifier":       "@com_github_bazelbuild_buildtools//buildifier:buildifier",
+	"buildozer":        "@com_github_bazelbuild_buildtools//buildozer:buildozer",
 	"cockroach":        "//pkg/cmd/cockroach:cockroach",
 	"cockroach-oss":    "//pkg/cmd/cockroach-oss:cockroach-oss",
 	"cockroach-short":  "//pkg/cmd/cockroach-short:cockroach-short",
