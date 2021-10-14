@@ -219,7 +219,7 @@
 /pkg/roachpb/index*          @cockroachdb/sql-observability
 /pkg/rpc/                    @cockroachdb/server-prs
 /pkg/scheduledjobs/          @cockroachdb/bulk-prs
-/pkg/security/               @cockroachdb/server-prs
+/pkg/security/               @cockroachdb/server-prs @cockroachdb/prodsec
 /pkg/settings/               @cockroachdb/server-prs
 /pkg/spanconfig/             @cockroachdb/multiregion
 /pkg/startupmigrations/      @cockroachdb/server-prs @cockroachdb/sql-schema
@@ -235,6 +235,14 @@
 /pkg/util/stop               @cockroachdb/server-prs
 /pkg/util/tracing            @cockroachdb/obs-inf-prs
 /pkg/workload/               @cockroachdb/sql-experience
+
+# Allow the security team to have insight into changes to
+# authn/authz code.
+/pkg/cmd/roachprod/vm/azure/auth.go    @cockroachdb/prodsec
+/pkg/cli/auth.go                       @cockroachdb/prodsec
+/pkg/rpc/auth.go                       @cockroachdb/prodsec
+/pkg/sql/pgwire/auth.go                @cockroachdb/prodsec
+               
 
 # Own all bazel files to dev-inf, but don't request reviews for them
 # as they are mostly - but not only - generated code that changes with
