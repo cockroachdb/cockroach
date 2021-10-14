@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -80,6 +81,8 @@ func TestZeroDurationDisablesFollowerReadOffset(t *testing.T) {
 
 func TestCanSendToFollower(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t, "test is flaky under deadlock+stress")
+
 	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, base.DefaultMaxClockOffset)
 	stale := clock.Now().Add(2*expectedFollowerReadOffset.Nanoseconds(), 0)
