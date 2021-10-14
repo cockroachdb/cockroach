@@ -697,8 +697,8 @@ def go_deps():
         name = "com_github_cockroachdb_datadriven",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/datadriven",
-        sum = "h1:BHgxdYByzfRUAykFACqyzt014mS8RzwbfuW36NmkG/E=",
-        version = "v1.0.1-0.20201212195501-e89bf9ee1861",
+        sum = "h1:a197bPNBWPgSksS9OFr1vOLmp0KnLkDRYMchdA8g+Fk=",
+        version = "v1.0.1-0.20211007161720-b558070c3be0",
     )
     go_repository(
         name = "com_github_cockroachdb_errors",

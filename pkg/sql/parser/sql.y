@@ -4006,13 +4006,13 @@ drop_schema_stmt:
 // %Text: DROP ROLE [IF EXISTS] <user> [, ...]
 // %SeeAlso: CREATE ROLE, SHOW ROLE
 drop_role_stmt:
-  DROP role_or_group_or_user string_or_placeholder_list
+  DROP role_or_group_or_user role_spec_list
   {
-    $$.val = &tree.DropRole{Names: $3.exprs(), IfExists: false, IsRole: $2.bool()}
+    $$.val = &tree.DropRole{Names: $3.roleSpecList(), IfExists: false, IsRole: $2.bool()}
   }
-| DROP role_or_group_or_user IF EXISTS string_or_placeholder_list
+| DROP role_or_group_or_user IF EXISTS role_spec_list
   {
-    $$.val = &tree.DropRole{Names: $5.exprs(), IfExists: true, IsRole: $2.bool()}
+    $$.val = &tree.DropRole{Names: $5.roleSpecList(), IfExists: true, IsRole: $2.bool()}
   }
 | DROP role_or_group_or_user error // SHOW HELP: DROP ROLE
 
@@ -7398,13 +7398,13 @@ password_clause:
 // %Text: CREATE ROLE [IF NOT EXISTS] <name> [ [WITH] <OPTIONS...> ]
 // %SeeAlso: ALTER ROLE, DROP ROLE, SHOW ROLES
 create_role_stmt:
-  CREATE role_or_group_or_user string_or_placeholder opt_role_options
+  CREATE role_or_group_or_user role_spec opt_role_options
   {
-    $$.val = &tree.CreateRole{Name: $3.expr(), KVOptions: $4.kvOptions(), IsRole: $2.bool()}
+    $$.val = &tree.CreateRole{Name: $3.roleSpec(), KVOptions: $4.kvOptions(), IsRole: $2.bool()}
   }
-| CREATE role_or_group_or_user IF NOT EXISTS string_or_placeholder opt_role_options
+| CREATE role_or_group_or_user IF NOT EXISTS role_spec opt_role_options
   {
-    $$.val = &tree.CreateRole{Name: $6.expr(), IfNotExists: true, KVOptions: $7.kvOptions(), IsRole: $2.bool()}
+    $$.val = &tree.CreateRole{Name: $6.roleSpec(), IfNotExists: true, KVOptions: $7.kvOptions(), IsRole: $2.bool()}
   }
 | CREATE role_or_group_or_user error // SHOW HELP: CREATE ROLE
 
@@ -7416,21 +7416,21 @@ create_role_stmt:
 // ALTER ROLE { name | ALL } [ IN DATABASE database_name ] RESET { var | ALL }
 // %SeeAlso: CREATE ROLE, DROP ROLE, SHOW ROLES
 alter_role_stmt:
-  ALTER role_or_group_or_user string_or_placeholder opt_role_options
+  ALTER role_or_group_or_user role_spec opt_role_options
 {
-  $$.val = &tree.AlterRole{Name: $3.expr(), KVOptions: $4.kvOptions(), IsRole: $2.bool()}
+  $$.val = &tree.AlterRole{Name: $3.roleSpec(), KVOptions: $4.kvOptions(), IsRole: $2.bool()}
 }
-| ALTER role_or_group_or_user IF EXISTS string_or_placeholder opt_role_options
+| ALTER role_or_group_or_user IF EXISTS role_spec opt_role_options
 {
-  $$.val = &tree.AlterRole{Name: $5.expr(), IfExists: true, KVOptions: $6.kvOptions(), IsRole: $2.bool()}
+  $$.val = &tree.AlterRole{Name: $5.roleSpec(), IfExists: true, KVOptions: $6.kvOptions(), IsRole: $2.bool()}
 }
-| ALTER role_or_group_or_user string_or_placeholder opt_in_database set_or_reset_clause
+| ALTER role_or_group_or_user role_spec opt_in_database set_or_reset_clause
   {
-    $$.val = &tree.AlterRoleSet{RoleName: $3.expr(), DatabaseName: tree.Name($4), IsRole: $2.bool(), SetOrReset: $5.setVar()}
+    $$.val = &tree.AlterRoleSet{RoleName: $3.roleSpec(), DatabaseName: tree.Name($4), IsRole: $2.bool(), SetOrReset: $5.setVar()}
   }
-| ALTER role_or_group_or_user IF EXISTS string_or_placeholder opt_in_database set_or_reset_clause
+| ALTER role_or_group_or_user IF EXISTS role_spec opt_in_database set_or_reset_clause
   {
-    $$.val = &tree.AlterRoleSet{RoleName: $5.expr(), IfExists: true, DatabaseName: tree.Name($6), IsRole: $2.bool(), SetOrReset: $7.setVar()}
+    $$.val = &tree.AlterRoleSet{RoleName: $5.roleSpec(), IfExists: true, DatabaseName: tree.Name($6), IsRole: $2.bool(), SetOrReset: $7.setVar()}
   }
 | ALTER ROLE_ALL ALL opt_in_database set_or_reset_clause
   {

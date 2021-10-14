@@ -511,7 +511,7 @@ ANALYZE a;
 statement ok
 ANALYZE b;
 
-query T
+query T retry
 EXPLAIN ANALYZE SELECT * FROM a INNER LOOKUP JOIN b ON k = j ORDER BY i LIMIT 5;
 ----
 planning time: 10µs

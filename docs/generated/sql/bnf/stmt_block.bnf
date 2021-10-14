@@ -395,10 +395,10 @@ alter_ddl_stmt ::=
 	| alter_default_privileges_stmt
 
 alter_role_stmt ::=
-	'ALTER' role_or_group_or_user string_or_placeholder opt_role_options
-	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' string_or_placeholder opt_role_options
-	| 'ALTER' role_or_group_or_user string_or_placeholder opt_in_database set_or_reset_clause
-	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' string_or_placeholder opt_in_database set_or_reset_clause
+	'ALTER' role_or_group_or_user role_spec opt_role_options
+	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' role_spec opt_role_options
+	| 'ALTER' role_or_group_or_user role_spec opt_in_database set_or_reset_clause
+	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' role_spec opt_in_database set_or_reset_clause
 	| 'ALTER' 'ROLE_ALL' 'ALL' opt_in_database set_or_reset_clause
 	| 'ALTER' 'USER_ALL' 'ALL' opt_in_database set_or_reset_clause
 
@@ -447,8 +447,8 @@ cancel_all_jobs_stmt ::=
 	'CANCEL' 'ALL' name 'JOBS'
 
 create_role_stmt ::=
-	'CREATE' role_or_group_or_user string_or_placeholder opt_role_options
-	| 'CREATE' role_or_group_or_user 'IF' 'NOT' 'EXISTS' string_or_placeholder opt_role_options
+	'CREATE' role_or_group_or_user role_spec opt_role_options
+	| 'CREATE' role_or_group_or_user 'IF' 'NOT' 'EXISTS' role_spec opt_role_options
 
 create_ddl_stmt ::=
 	create_database_stmt
@@ -508,8 +508,8 @@ drop_ddl_stmt ::=
 	| drop_type_stmt
 
 drop_role_stmt ::=
-	'DROP' role_or_group_or_user string_or_placeholder_list
-	| 'DROP' role_or_group_or_user 'IF' 'EXISTS' string_or_placeholder_list
+	'DROP' role_or_group_or_user role_spec_list
+	| 'DROP' role_or_group_or_user 'IF' 'EXISTS' role_spec_list
 
 drop_schedule_stmt ::=
 	'DROP' 'SCHEDULE' a_expr

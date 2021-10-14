@@ -24,12 +24,12 @@ FROM system.eventlog
 WHERE "eventType" IN ('create_role', 'drop_role', 'alter_role')
 ORDER BY "timestamp", info
 ----
-1  create_role  {"EventType": "create_role", "RoleName": "testuser", "Statement": "CREATE USER 'testuser'", "Tag": "CREATE ROLE", "User": "root"}
-1  create_role  {"EventType": "create_role", "RoleName": "r", "Statement": "CREATE ROLE 'r'", "Tag": "CREATE ROLE", "User": "root"}
-1  create_role  {"EventType": "create_role", "RoleName": "r2", "Statement": "CREATE ROLE IF NOT EXISTS 'r2'", "Tag": "CREATE ROLE", "User": "root"}
-1  alter_role   {"EventType": "alter_role", "Options": ["CONTROLCHANGEFEED"], "RoleName": "r", "Statement": "ALTER ROLE 'r' WITH CONTROLCHANGEFEED", "Tag": "ALTER ROLE", "User": "root"}
-1  drop_role    {"EventType": "drop_role", "RoleName": "r", "Statement": "DROP ROLE 'r', 'r2'", "Tag": "DROP ROLE", "User": "root"}
-1  drop_role    {"EventType": "drop_role", "RoleName": "r2", "Statement": "DROP ROLE 'r', 'r2'", "Tag": "DROP ROLE", "User": "root"}
+1  create_role  {"EventType": "create_role", "RoleName": "testuser", "Statement": "CREATE USER testuser", "Tag": "CREATE ROLE", "User": "root"}
+1  create_role  {"EventType": "create_role", "RoleName": "r", "Statement": "CREATE ROLE r", "Tag": "CREATE ROLE", "User": "root"}
+1  create_role  {"EventType": "create_role", "RoleName": "r2", "Statement": "CREATE ROLE IF NOT EXISTS r2", "Tag": "CREATE ROLE", "User": "root"}
+1  alter_role   {"EventType": "alter_role", "Options": ["CONTROLCHANGEFEED"], "RoleName": "r", "Statement": "ALTER ROLE r WITH CONTROLCHANGEFEED", "Tag": "ALTER ROLE", "User": "root"}
+1  drop_role    {"EventType": "drop_role", "RoleName": "r", "Statement": "DROP ROLE r, r2", "Tag": "DROP ROLE", "User": "root"}
+1  drop_role    {"EventType": "drop_role", "RoleName": "r2", "Statement": "DROP ROLE r, r2", "Tag": "DROP ROLE", "User": "root"}
 
 # Create two tables + superfluous "IF NOT EXISTS"
 ##################
