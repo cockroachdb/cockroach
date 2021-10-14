@@ -93,13 +93,13 @@ descriptor_id  descriptor_name  index_id  index_name            column_type  col
 query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, dependson_type, dependson_id, dependson_index_id
 ----
-descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name            dependson_details
-54             test_kvr1        NULL      NULL       53            fk              1                   fk_k_ref_test_kv          NULL
-55             test_kvr2        NULL      NULL       53            fk              1                   fk_v_ref_test_kv          NULL
-56             test_kvr3        NULL      NULL       53            fk              2                   fk_v_ref_test_kv          NULL
-59             test_v1          NULL      NULL       53            view            NULL                NULL                      NULL
-60             test_v2          NULL      NULL       59            view            NULL                NULL                      NULL
-62             test_uwi_child   NULL      NULL       61            fk              0                   fk_a_ref_test_uwi_parent  NULL
+descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name         dependson_details
+54             test_kvr1        NULL      NULL       53            fk              1                   test_kvr1_k_fkey       NULL
+55             test_kvr2        NULL      NULL       53            fk              1                   test_kvr2_v_fkey       NULL
+56             test_kvr3        NULL      NULL       53            fk              2                   test_kvr3_v_fkey       NULL
+59             test_v1          NULL      NULL       53            view            NULL                NULL                   NULL
+60             test_v2          NULL      NULL       59            view            NULL                NULL                   NULL
+62             test_uwi_child   NULL      NULL       61            fk              0                   test_uwi_child_a_fkey  NULL
 
 query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, dependedonby_type, dependedonby_id, dependedonby_index_id

@@ -281,7 +281,7 @@ b  CREATE TABLE public.b (
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    d INT8 NULL DEFAULT 23:::INT8,
    CONSTRAINT b_pkey PRIMARY KEY (rowid ASC),
-   CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES public.parent(id),
+   CONSTRAINT b_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.parent(id),
    INDEX foo (parent_id ASC),
    UNIQUE INDEX bar (parent_id ASC),
    FAMILY "primary" (parent_id, rowid, d)
@@ -612,7 +612,7 @@ statement ok
 INSERT INTO student (k,v) VALUES ('a', 'b')
 
 statement ok
-ALTER TABLE student DROP CONSTRAINT fk_v_ref_class
+ALTER TABLE student DROP CONSTRAINT student_v_fkey
 
 statement ok
 ALTER TABLE student ADD FOREIGN KEY (v) REFERENCES class
@@ -812,7 +812,7 @@ statement ok
 ALTER TABLE orders2 ADD CHECK (id > 0)
 
 statement ok
-ALTER TABLE orders2 VALIDATE CONSTRAINT fk_product_ref_products
+ALTER TABLE orders2 VALIDATE CONSTRAINT orders2_product_fkey
 
 statement ok
 COMMIT
@@ -839,8 +839,8 @@ BEGIN
 statement ok
 ALTER TABLE orders2 ADD FOREIGN KEY (product) REFERENCES products
 
-statement error constraint "fk_product_ref_products" in the middle of being added, try again later
-ALTER TABLE orders2 VALIDATE CONSTRAINT fk_product_ref_products
+statement error constraint "orders2_product_fkey" in the middle of being added, try again later
+ALTER TABLE orders2 VALIDATE CONSTRAINT orders2_product_fkey
 
 statement ok
 COMMIT
@@ -852,7 +852,7 @@ BEGIN
 statement ok
 ALTER TABLE orders2 ADD FOREIGN KEY (product) REFERENCES products
 
-statement error constraint "fk_product_ref_products" in the middle of being added, try again later
+statement error constraint "orders2_product_fkey" in the middle of being added, try again later
 ALTER TABLE orders2 DROP COLUMN product
 
 statement ok
@@ -865,7 +865,7 @@ BEGIN
 statement ok
 ALTER TABLE orders2 ADD FOREIGN KEY (product) REFERENCES products
 
-statement error constraint "fk_product_ref_products" in the middle of being added, try again later
+statement error constraint "orders2_product_fkey" in the middle of being added, try again later
 DROP INDEX orders2@orders2_product_idx
 
 statement ok
@@ -1505,8 +1505,8 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM y
 ----
-y  fk_b_ref_x  FOREIGN KEY  FOREIGN KEY (b) REFERENCES x(b)  true
-y  y_pkey      PRIMARY KEY  PRIMARY KEY (a ASC)              true
+y  y_b_fkey  FOREIGN KEY  FOREIGN KEY (b) REFERENCES x(b)  true
+y  y_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)              true
 
 # Also test dropping the index on the referenced side
 statement ok
@@ -1886,7 +1886,7 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM child_54265
 ----
-child_54265  fk_a_ref_parent_54265  FOREIGN KEY  FOREIGN KEY (a) REFERENCES parent_54265(a) NOT VALID  false
+child_54265  child_54265_a_fkey  FOREIGN KEY  FOREIGN KEY (a) REFERENCES parent_54265(a) NOT VALID  false
 
 # Test that dropping a unique index used by a foreign key reference causes the
 # foreign key addition to fail.

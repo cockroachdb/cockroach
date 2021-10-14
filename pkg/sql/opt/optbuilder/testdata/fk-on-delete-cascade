@@ -15,7 +15,7 @@ root
  │    ├── columns: <none>
  │    ├── fetch columns: p:4
  │    ├── cascades
- │    │    └── fk_p_ref_parent
+ │    │    └── child_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
@@ -43,7 +43,7 @@ root
  │    ├── fetch columns: p:4
  │    ├── input binding: &1
  │    ├── cascades
- │    │    └── fk_p_ref_parent
+ │    │    └── child_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
@@ -75,7 +75,7 @@ root
  │    ├── fetch columns: p:4
  │    ├── input binding: &1
  │    ├── cascades
- │    │    └── fk_p_ref_parent
+ │    │    └── child_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
@@ -110,7 +110,7 @@ root
  │    ├── columns: <none>
  │    ├── fetch columns: p:4
  │    ├── cascades
- │    │    └── fk_p_ref_parent
+ │    │    └── child_p_fkey
  │    └── scan parent
  │         └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  └── cascade
@@ -133,7 +133,7 @@ root
  │    ├── columns: <none>
  │    ├── fetch columns: p:4
  │    ├── cascades
- │    │    └── fk_p_ref_parent
+ │    │    └── child_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
@@ -146,7 +146,7 @@ root
       │    ├── fetch columns: c:11 child.p:12
       │    ├── input binding: &1
       │    ├── cascades
-      │    │    └── fk_c_ref_child
+      │    │    └── grandchild_c_fkey
       │    └── select
       │         ├── columns: c:11!null child.p:12!null
       │         ├── scan child
@@ -178,7 +178,7 @@ root
  │    ├── fetch columns: p:4
  │    ├── input binding: &1
  │    ├── cascades
- │    │    └── fk_p_ref_parent
+ │    │    └── child_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
@@ -191,7 +191,7 @@ root
       │    ├── fetch columns: c:11 child.p:12
       │    ├── input binding: &2
       │    ├── cascades
-      │    │    └── fk_c_ref_child
+      │    │    └── grandchild_c_fkey
       │    └── semi-join (hash)
       │         ├── columns: c:11!null child.p:12!null
       │         ├── scan child
@@ -226,7 +226,7 @@ root
  │    ├── columns: <none>
  │    ├── fetch columns: p:4
  │    ├── cascades
- │    │    └── fk_p_ref_parent
+ │    │    └── child_p_fkey
  │    └── scan parent
  │         └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  └── cascade
@@ -234,7 +234,7 @@ root
       │    ├── columns: <none>
       │    ├── fetch columns: c:11 child.p:12
       │    ├── cascades
-      │    │    └── fk_c_ref_child
+      │    │    └── grandchild_c_fkey
       │    └── scan child
       │         └── columns: c:11!null child.p:12!null
       └── cascade
@@ -265,7 +265,7 @@ root
  │    ├── columns: <none>
  │    ├── fetch columns: p:4
  │    ├── cascades
- │    │    └── fk_p_ref_parent
+ │    │    └── child_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
@@ -305,7 +305,7 @@ root
  │    ├── fetch columns: p:4
  │    ├── input binding: &1
  │    ├── cascades
- │    │    └── fk_p_ref_parent
+ │    │    └── child_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
@@ -354,7 +354,7 @@ root
  │    ├── fetch columns: a:5 b:6
  │    ├── input binding: &1
  │    ├── cascades
- │    │    └── fk_b_ref_self
+ │    │    └── self_b_fkey
  │    └── select
  │         ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │         ├── scan self
@@ -367,7 +367,7 @@ root
       │    ├── fetch columns: self.a:13 b:14
       │    ├── input binding: &2
       │    ├── cascades
-      │    │    └── fk_b_ref_self
+      │    │    └── self_b_fkey
       │    └── semi-join (hash)
       │         ├── columns: self.a:13!null b:14
       │         ├── scan self
@@ -384,7 +384,7 @@ root
            │    ├── fetch columns: self.a:22 b:23
            │    ├── input binding: &3
            │    ├── cascades
-           │    │    └── fk_b_ref_self
+           │    │    └── self_b_fkey
            │    └── semi-join (hash)
            │         ├── columns: self.a:22!null b:23
            │         ├── scan self
@@ -401,7 +401,7 @@ root
                      ├── fetch columns: self.a:31 b:32
                      ├── input binding: &4
                      ├── cascades
-                     │    └── fk_b_ref_self
+                     │    └── self_b_fkey
                      └── semi-join (hash)
                           ├── columns: self.a:31!null b:32
                           ├── scan self
@@ -642,8 +642,8 @@ root
  │    ├── fetch columns: a:6 b:7 rowid:8
  │    ├── input binding: &1
  │    ├── cascades
- │    │    ├── fk_a_ref_g1
- │    │    └── fk_b_ref_g1
+ │    │    ├── g2a_a_fkey
+ │    │    └── g2b_b_fkey
  │    └── select
  │         ├── columns: a:6!null b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
  │         ├── scan g1
@@ -685,8 +685,8 @@ root
  │    ├── fetch columns: a:6 b:7 rowid:8
  │    ├── input binding: &1
  │    ├── cascades
- │    │    ├── fk_a_ref_g1
- │    │    └── fk_b_ref_g1
+ │    │    ├── g2a_a_fkey
+ │    │    └── g2b_b_fkey
  │    └── select
  │         ├── columns: a:6 b:7!null rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
  │         ├── scan g1
@@ -739,7 +739,7 @@ root
  │    ├── fetch columns: p:4
  │    ├── input binding: &1
  │    ├── cascades
- │    │    └── fk_p_ref_h1
+ │    │    └── h2_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan h1
@@ -770,7 +770,7 @@ root
  │    ├── columns: <none>
  │    ├── fetch columns: p:4
  │    ├── cascades
- │    │    └── fk_p_ref_h1
+ │    │    └── h2_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan h1
@@ -816,7 +816,7 @@ root
  │    ├── columns: <none>
  │    ├── fetch columns: a:7 b:8 c:9 rowid:10
  │    ├── cascades
- │    │    └── fk_a_ref_m1
+ │    │    └── m2_a_b_c_fkey
  │    └── select
  │         ├── columns: a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
  │         ├── scan m1
@@ -845,7 +845,7 @@ root
  │    ├── columns: <none>
  │    ├── fetch columns: a:7 b:8 c:9 rowid:10
  │    ├── cascades
- │    │    └── fk_a_ref_m1
+ │    │    └── m2_a_b_c_fkey
  │    └── select
  │         ├── columns: a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
  │         ├── scan m1
@@ -889,7 +889,7 @@ root
  │    ├── columns: <none>
  │    ├── fetch columns: p:4
  │    ├── cascades
- │    │    └── fk_p_ref_parent_partial
+ │    │    └── child_partial_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent_partial
@@ -929,7 +929,7 @@ root
  │    ├── fetch columns: p:4
  │    ├── input binding: &1
  │    ├── cascades
- │    │    └── fk_p_ref_parent_partial
+ │    │    └── child_partial_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent_partial
@@ -971,7 +971,7 @@ root
  │    ├── columns: <none>
  │    ├── fetch columns: p:4
  │    ├── cascades
- │    │    └── fk_p_ref_parent_partial
+ │    │    └── child_partial_p_fkey
  │    └── scan parent_partial
  │         └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  └── cascade
@@ -1018,7 +1018,7 @@ root
  │    ├── columns: <none>
  │    ├── fetch columns: p:4
  │    ├── cascades
- │    │    └── fk_p_ref_parent_virt
+ │    │    └── child_virt_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent_virt
@@ -1050,7 +1050,7 @@ root
  │    ├── fetch columns: p:4
  │    ├── input binding: &1
  │    ├── cascades
- │    │    └── fk_p_ref_parent_virt
+ │    │    └── child_virt_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent_virt

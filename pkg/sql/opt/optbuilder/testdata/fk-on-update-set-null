@@ -17,7 +17,7 @@ root
  │    │    └── p_new:7 => p:1
  │    ├── input binding: &1
  │    ├── cascades
- │    │    └── fk_p_ref_parent
+ │    │    └── child_p_fkey
  │    └── project
  │         ├── columns: p_new:7!null p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── select
@@ -618,7 +618,7 @@ root
  │    │    └── p_new:7 => p:1
  │    ├── input binding: &1
  │    ├── cascades
- │    │    └── fk_p_ref_parent_partial
+ │    │    └── child_partial_p_fkey
  │    └── project
  │         ├── columns: p_new:7!null p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── select
@@ -692,7 +692,7 @@ root
  │    │    └── p_new:7 => p:1
  │    ├── input binding: &1
  │    ├── cascades
- │    │    └── fk_p_ref_parent_virt
+ │    │    └── child_virt_p_fkey
  │    └── project
  │         ├── columns: p_new:7!null p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── select

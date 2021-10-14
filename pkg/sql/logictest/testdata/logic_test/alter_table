@@ -96,8 +96,8 @@ SHOW CONSTRAINTS FROM t
 ----
 table_name  constraint_name  constraint_type  details                              validated
 t           check_a          CHECK            CHECK ((a > 0))                      true
-t           fk_f_ref_other   FOREIGN KEY      FOREIGN KEY (f) REFERENCES other(b)  true
 t           foo              UNIQUE           UNIQUE (b ASC)                       true
+t           t_f_fkey         FOREIGN KEY      FOREIGN KEY (f) REFERENCES other(b)  true
 t           t_pkey           PRIMARY KEY      PRIMARY KEY (a ASC)                  true
 
 statement error CHECK
@@ -124,16 +124,16 @@ INSERT INTO t (a) VALUES (-3)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK ((a > 0))                      true
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                       true
-t  t_pkey          PRIMARY KEY  PRIMARY KEY (a ASC)                  true
+t  check_a   CHECK        CHECK ((a > 0))                      true
+t  foo       UNIQUE       UNIQUE (b ASC)                       true
+t  t_f_fkey  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
+t  t_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
 
 statement error duplicate constraint name
-ALTER TABLE t ADD CONSTRAINT fk_f_ref_other FOREIGN KEY (a) REFERENCES other (b)
+ALTER TABLE t ADD CONSTRAINT t_f_fkey FOREIGN KEY (a) REFERENCES other (b)
 
 # added constraints with generated names avoid name collisions.
 statement ok
@@ -142,11 +142,11 @@ ALTER TABLE t ADD CHECK (a > 0)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK ((a > 0))                      true
-t  check_a1        CHECK        CHECK ((a > 0))                      true
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                       true
-t  t_pkey          PRIMARY KEY  PRIMARY KEY (a ASC)                  true
+t  check_a   CHECK        CHECK ((a > 0))                      true
+t  check_a1  CHECK        CHECK ((a > 0))                      true
+t  foo       UNIQUE       UNIQUE (b ASC)                       true
+t  t_f_fkey  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
+t  t_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
 statement error constraint "typo" of relation "t" does not exist
 ALTER TABLE t VALIDATE CONSTRAINT typo
@@ -164,11 +164,11 @@ ALTER TABLE t VALIDATE CONSTRAINT check_a
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK ((a > 0))                      true
-t  check_a1        CHECK        CHECK ((a > 0))                      true
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                       true
-t  t_pkey          PRIMARY KEY  PRIMARY KEY (a ASC)                  true
+t  check_a   CHECK        CHECK ((a > 0))                      true
+t  check_a1  CHECK        CHECK ((a > 0))                      true
+t  foo       UNIQUE       UNIQUE (b ASC)                       true
+t  t_f_fkey  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
+t  t_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
 statement ok
 ALTER TABLE t DROP CONSTRAINT check_a, DROP CONSTRAINT check_a1
@@ -268,7 +268,7 @@ statement error foreign key
 INSERT INTO t VALUES (31, 7, 32)
 
 statement ok
-ALTER TABLE t DROP CONSTRAINT fk_f_ref_other
+ALTER TABLE t DROP CONSTRAINT t_f_fkey
 
 statement  ok
 INSERT INTO t VALUES (31, 7, 32)
@@ -1122,7 +1122,7 @@ ALTER TABLE t2 ADD COLUMN x INT REFERENCES t1 (x)
 statement ok
 INSERT INTO t1 VALUES (1)
 
-statement error pq: insert on table "t2" violates foreign key constraint "fk_x_ref_t1"
+statement error pq: insert on table "t2" violates foreign key constraint "t2_x_fkey"
 INSERT INTO t2 VALUES (2, 2)
 
 statement ok
@@ -1137,7 +1137,7 @@ t2  CREATE TABLE public.t2 (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     x INT8 NULL,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
     FAMILY "primary" (y, rowid, x)
 )
 
@@ -1157,7 +1157,7 @@ t3  CREATE TABLE public.t3 (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     x INT8 NULL,
     CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    CONSTRAINT t3_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
     UNIQUE INDEX t3_x_key (x ASC),
     FAMILY "primary" (y, rowid, x)
 )
@@ -1194,11 +1194,11 @@ t1  CREATE TABLE public.t1 (
     x INT8 NOT NULL,
     x2 INT8 NULL,
     CONSTRAINT t1_pkey PRIMARY KEY (x ASC),
-    CONSTRAINT fk_x2_ref_t1 FOREIGN KEY (x2) REFERENCES public.t1(x),
+    CONSTRAINT t1_x2_fkey FOREIGN KEY (x2) REFERENCES public.t1(x),
     FAMILY "primary" (x, x2)
 )
 
-statement error pq: insert on table "t1" violates foreign key constraint "fk_x2_ref_t1"
+statement error pq: insert on table "t1" violates foreign key constraint "t1_x2_fkey"
 INSERT INTO t1 VALUES (1, 2)
 
 # Test ADD COL REFERENCES on a new table in the same txn.
@@ -1220,7 +1220,7 @@ t2  CREATE TABLE public.t2 (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     x INT8 NULL,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
+    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
     FAMILY "primary" (y, rowid, x)
 )
 
@@ -1244,7 +1244,7 @@ t2  CREATE TABLE public.t2 (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     x INT8 NULL,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
+    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
     FAMILY "primary" (y, rowid, x)
 )
 
@@ -1271,7 +1271,7 @@ t2  CREATE TABLE public.t2 (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     x INT8 NULL,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
+    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
     INDEX t2_x_idx (x ASC),
     FAMILY "primary" (y, rowid, x)
 )
@@ -1297,7 +1297,7 @@ t2  CREATE TABLE public.t2 (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     x INT8 NULL,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
     INDEX t2_x_idx (x ASC),
     FAMILY "primary" (y, rowid, x)
 )
@@ -1321,7 +1321,7 @@ t2  CREATE TABLE public.t2 (
     x INT8 NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
     INDEX t2_x_idx (x ASC),
     FAMILY "primary" (x, rowid)
 )
@@ -1351,7 +1351,7 @@ t2  CREATE TABLE public.t2 (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     x INT8 NULL DEFAULT 1:::INT8,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
     UNIQUE INDEX t2_x_key (x ASC),
     FAMILY "primary" (y, rowid, x)
 )
@@ -1648,9 +1648,9 @@ unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)        
 query TTTTB
 SHOW CONSTRAINTS FROM uwi_child
 ----
-uwi_child  fk_d_e                         FOREIGN KEY  FOREIGN KEY (d, e) REFERENCES unique_without_index(d, e)  true
-uwi_child  fk_d_ref_unique_without_index  FOREIGN KEY  FOREIGN KEY (d) REFERENCES unique_without_index(d)        true
-uwi_child  fk_e_d                         FOREIGN KEY  FOREIGN KEY (e, d) REFERENCES unique_without_index(e, d)  true
+uwi_child  fk_d_e            FOREIGN KEY  FOREIGN KEY (d, e) REFERENCES unique_without_index(d, e)  true
+uwi_child  fk_e_d            FOREIGN KEY  FOREIGN KEY (e, d) REFERENCES unique_without_index(e, d)  true
+uwi_child  uwi_child_d_fkey  FOREIGN KEY  FOREIGN KEY (d) REFERENCES unique_without_index(d)        true
 
 # Attempting to drop a column with a foreign key reference fails.
 statement error pq: "unique_d" is referenced by foreign key from table "uwi_child"
