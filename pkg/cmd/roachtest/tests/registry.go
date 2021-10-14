@@ -51,6 +51,7 @@ func RegisterTests(r registry.Registry) {
 	registerImportNodeShutdown(r)
 	registerInconsistency(r)
 	registerIndexes(r)
+	registerJasyncSql(r)
 	RegisterJepsen(r)
 	registerJobsMixedVersions(r)
 	registerKV(r)
