@@ -94,9 +94,9 @@ func TestRedactRecordingForTenant(t *testing.T) {
 		// that may leak from the KV layer to tenants. If it does, update
 		// redactRecordingForTenant appropriately.
 		type calcifiedRecordedSpan struct {
-			TraceID           uint64
-			SpanID            uint64
-			ParentSpanID      uint64
+			TraceID           tracingpb.TraceID
+			SpanID            tracingpb.SpanID
+			ParentSpanID      tracingpb.SpanID
 			Operation         string
 			Baggage           map[string]string
 			Tags              map[string]string

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +27,7 @@ func TestTracingServiceGetSpanRecordings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tracer1 := tracing.NewTracer()
-	setupTraces := func() (uint64, func()) {
+	setupTraces := func() (tracingpb.TraceID, func()) {
 		// Start a root span.
 		root1 := tracer1.StartSpan("root1", tracing.WithForceRealSpan())
 		root1.SetVerbose(true)

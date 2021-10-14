@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
 )
 
@@ -57,7 +58,7 @@ type Iterator struct {
 
 	ctx context.Context
 
-	traceID uint64
+	traceID tracingpb.TraceID
 
 	// liveNodes represents all the nodes in the cluster that are considered live,
 	// and will be contacted for inflight trace spans by the iterator.
@@ -87,7 +88,9 @@ type Iterator struct {
 
 // StartIter fetches the live nodes in the cluster, and configures the underlying
 // Iterator that is used to access recorded spans in a streaming fashion.
-func (t *TraceCollector) StartIter(ctx context.Context, traceID uint64) (*Iterator, error) {
+func (t *TraceCollector) StartIter(
+	ctx context.Context, traceID tracingpb.TraceID,
+) (*Iterator, error) {
 	tc := &Iterator{ctx: ctx, traceID: traceID, collector: t}
 	var err error
 	tc.liveNodes, err = nodesFromNodeLiveness(ctx, t.nodeliveness)
@@ -170,7 +173,7 @@ func (i *Iterator) Error() error {
 // This method does not distinguish between requests for local and remote
 // inflight spans, and relies on gRPC short circuiting local requests.
 func (t *TraceCollector) getTraceSpanRecordingsForNode(
-	ctx context.Context, traceID uint64, nodeID roachpb.NodeID,
+	ctx context.Context, traceID tracingpb.TraceID, nodeID roachpb.NodeID,
 ) ([]tracing.Recording, error) {
 	log.Infof(ctx, "getting span recordings from node %s", nodeID.String())
 	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)

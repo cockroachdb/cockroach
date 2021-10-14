@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 )
@@ -63,7 +64,7 @@ func newTestStructured(i string) *testStructuredImpl {
 // root.child.remotechilddone		<-- traceID1
 // root2												<-- traceID2
 // 		root2.child								<-- traceID2
-func setupTraces(t1, t2 *tracing.Tracer) (uint64, uint64, func()) {
+func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, tracingpb.TraceID, func()) {
 	// Start a root span on "node 1".
 	root := t1.StartSpan("root", tracing.WithForceRealSpan())
 	root.SetVerbose(true)
@@ -129,7 +130,7 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	localTraceID, remoteTraceID, cleanup := setupTraces(localTracer, remoteTracer)
 	defer cleanup()
 
-	getSpansFromAllNodes := func(traceID uint64) map[roachpb.NodeID][]tracing.Recording {
+	getSpansFromAllNodes := func(traceID tracingpb.TraceID) map[roachpb.NodeID][]tracing.Recording {
 		res := make(map[roachpb.NodeID][]tracing.Recording)
 
 		var iter *collector.Iterator
