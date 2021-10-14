@@ -438,7 +438,7 @@ CREATE TABLE defaultdb.shipments (
     CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES defaultdb.orders(customer)
  );
 
-statement error "fk_customer_ref_customers" is referenced by foreign key from table "orders"
+statement error "orders_customer_fkey" is referenced by foreign key from table "orders"
 DROP TABLE defaultdb.customers;
 
 statement ok

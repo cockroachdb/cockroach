@@ -947,7 +947,7 @@ INSERT INTO enum_referenced VALUES ('hello');
 ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
 
 # Try a foreign key insert that fails validation.
-statement error pq: insert on table "enum_origin" violates foreign key constraint "fk_x_ref_enum_referenced"
+statement error pq: insert on table "enum_origin" violates foreign key constraint "enum_origin_x_fkey"
 INSERT INTO enum_origin VALUES ('howdy')
 
 # Try the above, but in a transaction.
@@ -960,7 +960,7 @@ INSERT INTO enum_origin VALUES ('hello');
 INSERT INTO enum_referenced VALUES ('hello');
 ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
 
-statement error pq: insert on table "enum_origin" violates foreign key constraint "fk_x_ref_enum_referenced"
+statement error pq: insert on table "enum_origin" violates foreign key constraint "enum_origin_x_fkey"
 INSERT INTO enum_origin VALUES ('howdy')
 
 statement ok

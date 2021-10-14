@@ -2549,7 +2549,7 @@ constraint_column   public             unique_b_c       constraint_column  publi
 constraint_column   public             unique_b_c       constraint_column  public        t4          c            2                 NULL
 constraint_column   public             fk3              constraint_column  public        t5          b            1                 1
 constraint_column   public             fk3              constraint_column  public        t5          c            2                 2
-constraint_column   public             fk_a_ref_t4      constraint_column  public        t5          a            1                 1
+constraint_column   public             t5_a_fkey        constraint_column  public        t5          a            1                 1
 
 query TTTTTTTTTTT colnames
 SELECT * FROM information_schema.referential_constraints WHERE constraint_schema = 'public' ORDER BY TABLE_NAME, CONSTRAINT_NAME
@@ -2558,7 +2558,7 @@ constraint_catalog  constraint_schema  constraint_name  unique_constraint_catalo
 constraint_column   public             fk               constraint_column          public                    t1_a_key                NONE          NO ACTION    RESTRICT     t2          t1
 constraint_column   public             fk2              constraint_column          public                    index_key               NONE          CASCADE      NO ACTION    t3          t1
 constraint_column   public             fk3              constraint_column          public                    unique_b_c              FULL          RESTRICT     NO ACTION    t5          t4
-constraint_column   public             fk_a_ref_t4      constraint_column          public                    unique_a                NONE          NO ACTION    CASCADE      t5          t4
+constraint_column   public             t5_a_fkey        constraint_column          public                    unique_a                NONE          NO ACTION    CASCADE      t5          t4
 
 statement ok
 DROP DATABASE constraint_column CASCADE
@@ -4312,8 +4312,8 @@ query TTTT
 SELECT constraint_name, table_name, referenced_table_name, match_option
   FROM information_schema.referential_constraints
 ----
-fk_a_ref_v  w  v  FULL
-fk_c_ref_v  w  v  NONE
+w_a_b_fkey  w  v  FULL
+w_c_d_fkey  w  v  NONE
 
 statement ok
 SET database = test
