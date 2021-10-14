@@ -776,7 +776,7 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 			}
 		}
 		sysCfgBuilder.addDBDesc(dbID,
-			dbdesc.NewInitial(descpb.ID(dbID), db.name, security.AdminRoleName(), 0))
+			dbdesc.NewInitial(descpb.ID(dbID), db.name, security.AdminRoleName(), descpb.InvalidID))
 
 		for _, table := range db.tables {
 			tableID := objectCounter

@@ -1104,7 +1104,7 @@ func createImportingDescriptors(
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		tempSystemDBID = getTempSystemDBID(details)
 		databases = append(databases, dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDB,
-			security.AdminRoleName(), 0))
+			security.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID)))
 	}
 
 	// We get the spans of the restoring tables _as they appear in the backup_,

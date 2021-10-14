@@ -655,11 +655,7 @@ SELECT has_schema_privilege('bar', 'public', 'CREATE'),
        has_schema_privilege('bar', 'public', 'USAGE'),
        has_schema_privilege('bar', 'public', 'CREATE, USAGE')
 ----
-<<<<<<< HEAD
-true  false  true
-=======
 true  true  true
->>>>>>> 79e2e299cb (sql: update tests resulting from public schema being an explicit schema)
 
 query BBB
 SELECT has_schema_privilege('bar', 'public', 'CREATE WITH GRANT OPTION'),

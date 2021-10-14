@@ -129,8 +129,8 @@ func (p *planner) createDatabase(
 		id,
 		string(database.Name),
 		p.SessionData().User(),
-		publicSchemaID,
 		dbdesc.MaybeWithDatabaseRegionConfig(regionConfig),
+		dbdesc.WithPublicSchemaID(publicSchemaID),
 	)
 
 	if err := p.createDescriptorWithID(ctx, dKey, id, desc, nil, jobDesc); err != nil {
@@ -147,13 +147,13 @@ func (p *planner) createDatabase(
 	return desc, true, nil
 }
 
-func (p *planner) createPublicSchema(
+func (p *planner) maybeCreatePublicSchemaWithDescriptor(
 	ctx context.Context, dbID descpb.ID, database *tree.CreateDatabase,
 ) (descpb.ID, error) {
 	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
 		publicSchemaID, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 		if err != nil {
-			return 0, err
+			return descpb.InvalidID, err
 		}
 
 		// Every database must be initialized with the public schema.
@@ -180,12 +180,25 @@ func (p *planner) createPublicSchema(
 			p.ExecCfg().Settings,
 			tree.AsStringWithFQNames(database, p.Ann()),
 		); err != nil {
-			return 0, err
+			return descpb.InvalidID, err
 		}
 
 		return publicSchemaID, nil
 	}
 
+	return descpb.InvalidID, nil
+}
+
+func (p *planner) createPublicSchema(
+	ctx context.Context, dbID descpb.ID, database *tree.CreateDatabase,
+) (descpb.ID, error) {
+	publicSchemaID, err := p.maybeCreatePublicSchemaWithDescriptor(ctx, dbID, database)
+	if err != nil {
+		return descpb.InvalidID, err
+	}
+	if publicSchemaID != descpb.InvalidID {
+		return publicSchemaID, nil
+	}
 	// Every database must be initialized with the public schema.
 	key := catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbID, tree.PublicSchema)
 	if err := p.CreateSchemaNamespaceEntry(ctx, key, keys.PublicSchemaID); err != nil {

@@ -2197,8 +2197,7 @@ func forEachTypeDesc(
 		return err
 	}
 	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
-		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec),
-		p.ExecCfg().Settings.Version)
+		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
 	for _, id := range lCtx.typIDs {
 		typ := lCtx.typDescs[id]
 		dbDesc, err := lCtx.getDatabaseByID(typ.GetParentID())
@@ -2377,8 +2376,7 @@ func forEachTypeDescWithTableLookupInternalFromDescriptors(
 	fn func(catalog.DatabaseDescriptor, string, catalog.TypeDescriptor, tableLookupFn) error,
 ) error {
 	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
-		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec),
-		p.ExecCfg().Settings.Version)
+		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
 
 	for _, typID := range lCtx.typIDs {
 		typDesc := lCtx.typDescs[typID]
@@ -2417,8 +2415,7 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
 	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
-		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec),
-		p.ExecCfg().Settings.Version)
+		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
 
 	if virtualOpts == virtualMany || virtualOpts == virtualCurrentDB {
 		// Virtual descriptors first.
