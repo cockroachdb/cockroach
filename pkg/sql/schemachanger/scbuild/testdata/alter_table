@@ -109,13 +109,8 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
       unique: true
       version: 4
     otherPrimaryIndexId: 1
-<<<<<<< HEAD
-    tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "foo_pkey", IndexID: 1}
-=======
     tableId: 54
-- DROP PrimaryIndex:{DescID: 54, ElementName: "primary", IndexID: 1}
->>>>>>> 79e2e299cb (sql: update tests resulting from public schema being an explicit schema)
+- DROP PrimaryIndex:{DescID: 54, ElementName: "foo_pkey", IndexID: 1}
   state: PUBLIC
   details:
     index:
@@ -197,13 +192,8 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
       unique: true
       version: 4
     otherPrimaryIndexId: 1
-<<<<<<< HEAD
-    tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "foo_pkey", IndexID: 1}
-=======
     tableId: 54
 - DROP PrimaryIndex:{DescID: 54, ElementName: "primary", IndexID: 1}
->>>>>>> 79e2e299cb (sql: update tests resulting from public schema being an explicit schema)
   state: PUBLIC
   details:
     index:
@@ -268,13 +258,8 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
       unique: true
       version: 4
     otherPrimaryIndexId: 1
-<<<<<<< HEAD
-    tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "foo_pkey", IndexID: 1}
-=======
     tableId: 54
-- DROP PrimaryIndex:{DescID: 54, ElementName: "primary", IndexID: 1}
->>>>>>> 79e2e299cb (sql: update tests resulting from public schema being an explicit schema)
+- DROP PrimaryIndex:{DescID: 54, ElementName: "foo_pkey", IndexID: 1}
   state: PUBLIC
   details:
     index:
@@ -384,13 +369,8 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       unique: true
       version: 4
     otherPrimaryIndexId: 1
-<<<<<<< HEAD
-    tableId: 53
-- DROP PrimaryIndex:{DescID: 52, ElementName: "foo_pkey", IndexID: 1}
-=======
     tableId: 55
-- DROP PrimaryIndex:{DescID: 54, ElementName: "primary", IndexID: 1}
->>>>>>> 79e2e299cb (sql: update tests resulting from public schema being an explicit schema)
+- DROP PrimaryIndex:{DescID: 54, ElementName: "foo_pkey", IndexID: 1}
   state: PUBLIC
   details:
     index:
@@ -411,13 +391,8 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       unique: true
       version: 4
     otherPrimaryIndexId: 2
-<<<<<<< HEAD
-    tableId: 52
-- DROP PrimaryIndex:{DescID: 53, ElementName: "bar_pkey", IndexID: 1}
-=======
     tableId: 54
-- DROP PrimaryIndex:{DescID: 55, ElementName: "primary", IndexID: 1}
->>>>>>> 79e2e299cb (sql: update tests resulting from public schema being an explicit schema)
+- DROP PrimaryIndex:{DescID: 55, ElementName: "bar_pkey", IndexID: 1}
   state: PUBLIC
   details:
     index:

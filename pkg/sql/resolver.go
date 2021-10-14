@@ -1126,6 +1126,10 @@ func newInternalLookupCtx(
 	tbDescs := make(map[descpb.ID]catalog.TableDescriptor)
 	typDescs := make(map[descpb.ID]catalog.TypeDescriptor)
 	var tbIDs, typIDs, dbIDs, schemaIDs []descpb.ID
+
+	// The system database's public schema is always 29.
+	schemaNames[keys.SystemPublicSchemaID] = tree.PublicSchema
+
 	// Record descriptors for name lookups.
 	for i := range descs {
 		switch desc := descs[i].(type) {
@@ -1155,15 +1159,6 @@ func newInternalLookupCtx(
 				schemaIDs = append(schemaIDs, desc.GetID())
 				schemaNames[desc.GetID()] = desc.GetName()
 			}
-		}
-	}
-
-	// Check for the absence of a Public schema, if there is not a
-	// public schema backed by a descriptor, we need to map public to 29,
-	// this is needed for public schemas created on versions 21.2 and prior.
-	for _, schemaDesc := range schemaDescs {
-		if schemaDesc.GetName() == tree.PublicSchema {
-			schemaNames[keys.PublicSchemaID] = tree.PublicSchema
 		}
 	}
 
