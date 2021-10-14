@@ -13,7 +13,6 @@ package stats
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,8 +51,9 @@ func InsertNewStats(
 }
 
 // InsertNewStat inserts a new statistic in the system table.
-// The caller is responsible for calling GossipTableStatAdded to notify the stat
-// caches.
+//
+// The stats cache will automatically update asynchronously (as well as the
+// stats caches on all other nodes).
 func InsertNewStat(
 	ctx context.Context,
 	executor sqlutil.InternalExecutor,
@@ -104,22 +104,4 @@ func InsertNewStat(
 		histogramVal,
 	)
 	return err
-}
-
-// GossipTableStatAdded causes the statistic caches for this table to be
-// invalidated.
-//
-// Note that we no longer use gossip to keep the cache up-to-date, but we still
-// send the updates for mixed-version clusters during upgrade.
-//
-// TODO(radu): remove this in 22.1.
-func GossipTableStatAdded(g *gossip.Gossip, tableID descpb.ID) error {
-	// TODO(radu): perhaps use a TTL here to avoid having a key per table floating
-	// around forever (we would need the stat cache to evict old entries
-	// automatically though).
-	return g.AddInfo(
-		gossip.MakeTableStatAddedKey(uint32(tableID)),
-		nil, /* value */
-		0,   /* ttl */
-	)
 }
