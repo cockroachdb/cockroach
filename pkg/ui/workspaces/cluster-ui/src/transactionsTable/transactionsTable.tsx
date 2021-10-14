@@ -28,12 +28,17 @@ import {
   transactionsRetryBarChart,
 } from "./transactionsBarCharts";
 import {
-  formatStartIntervalColumn,
+  formatAggregationIntervalColumn,
   statisticsTableTitles,
 } from "../statsTableUtil/statsTableUtil";
 import { tableClasses } from "./transactionsTableClasses";
 import { textCell } from "./transactionsCells";
-import { FixLong, longToInt, TimestampToNumber } from "src/util";
+import {
+  FixLong,
+  longToInt,
+  TimestampToNumber,
+  DurationToNumber,
+} from "src/util";
 import { SortSetting } from "../sortedtable";
 import {
   getStatementsByFingerprintIdAndTime,
@@ -139,11 +144,12 @@ export function makeTransactionsColumns(
       alwaysShow: true,
     },
     {
-      name: "intervalStartTime",
-      title: statisticsTableTitles.intervalStartTime("transaction"),
+      name: "aggregationInterval",
+      title: statisticsTableTitles.aggregationInterval("transaction"),
       cell: (item: TransactionInfo) =>
-        formatStartIntervalColumn(
+        formatAggregationIntervalColumn(
           TimestampToNumber(item.stats_data?.aggregated_ts),
+          DurationToNumber(item.stats_data?.aggregation_interval),
         ),
       sort: (item: TransactionInfo) =>
         TimestampToNumber(item.stats_data?.aggregated_ts),

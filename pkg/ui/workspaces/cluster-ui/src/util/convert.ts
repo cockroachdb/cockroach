@@ -75,3 +75,18 @@ export function LongToMoment(timestamp: Long): moment.Moment {
   }
   return moment.utc(NanoToMilli(timestamp.toNumber()));
 }
+
+/**
+ * DurationToNumber converts a Duration object, as seen in wire.proto, to
+ * a number representing the duration in seconds. If timestamp is null,
+ * it returns the `defaultIfNull` value which is by default 0.
+ */
+export function DurationToNumber(
+  duration?: protos.google.protobuf.IDuration,
+  defaultIfNull = 0,
+): number {
+  if (!duration) {
+    return defaultIfNull;
+  }
+  return duration.seconds.toNumber() + NanoToMilli(duration.nanos) * 1e-3;
+}
