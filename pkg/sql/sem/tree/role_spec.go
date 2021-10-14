@@ -79,7 +79,7 @@ func (r RoleSpec) ToSQLUsername(
 		} else if errors.IsAny(err, security.ErrUsernameInvalid, security.ErrUsernameEmpty) {
 			err = pgerror.WithCandidateCode(err, pgcode.InvalidName)
 		}
-		return security.SQLUsername{}, errors.Wrapf(err, "%q", username)
+		return username, errors.Wrapf(err, "%q", username)
 	}
 	return username, nil
 }
