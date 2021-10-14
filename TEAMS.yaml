@@ -51,6 +51,8 @@ cockroachdb/test-eng:
   triage_column_id: 14041337
 cockroachdb/security:
   triage_column_id: 0 # TODO
+cockroachdb/prodsec:
+  triage_column_id: 0 # TODO as well
 cockroachdb/bulk-io:
   aliases:
     cockroachdb/bulk-prs: other
