@@ -4761,7 +4761,6 @@ func (s *memoryHoggingSink) Close() error {
 func TestChangefeedFlushesSinkToReleaseMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDeadlockWithIssue(t, 71364)
 
 	s, db, stopServer := startTestServer(t, newTestOptions())
 	defer stopServer()
