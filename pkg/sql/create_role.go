@@ -86,7 +86,7 @@ func (p *planner) CreateRoleNode(
 		return nil, err
 	}
 
-	roleName, err := roleSpec.ToSQLUsernameWithPurpose(p.SessionData(), security.UsernameCreation)
+	roleName, err := roleSpec.ToSQLUsername(p.SessionData(), security.UsernameCreation)
 	if err != nil {
 		return nil, err
 	}
@@ -250,36 +250,6 @@ func (*CreateRoleNode) Values() tree.Datums { return tree.Datums{} }
 
 // Close implements the planNode interface.
 func (*CreateRoleNode) Close(context.Context) {}
-
-var blocklistedUsernames = map[security.SQLUsername]struct{}{
-	security.NodeUserName(): {},
-}
-
-// NormalizeAndValidateUsername case folds the specified username and verifies
-// it validates according to the usernameRE regular expression.
-// It rejects reserved user names.
-func NormalizeAndValidateUsername(input string) (security.SQLUsername, error) {
-	username, err := NormalizeAndValidateUsernameNoBlocklist(input)
-	if err != nil {
-		return username, err
-	}
-	if _, ok := blocklistedUsernames[username]; ok {
-		return username, pgerror.Newf(pgcode.ReservedName, "username %q reserved", username)
-	}
-	return username, nil
-}
-
-// NormalizeAndValidateUsernameNoBlocklist case folds the specified username and verifies
-// it validates according to the usernameRE regular expression.
-func NormalizeAndValidateUsernameNoBlocklist(input string) (security.SQLUsername, error) {
-	username, err := security.MakeSQLUsernameFromUserInput(input, security.UsernameCreation)
-	if errors.Is(err, security.ErrUsernameTooLong) {
-		err = pgerror.WithCandidateCode(err, pgcode.NameTooLong)
-	} else if errors.IsAny(err, security.ErrUsernameInvalid, security.ErrUsernameEmpty) {
-		err = pgerror.WithCandidateCode(err, pgcode.InvalidName)
-	}
-	return username, errors.Wrapf(err, "%q", username)
-}
 
 var errNoUserNameSpecified = errors.New("no username specified")
 

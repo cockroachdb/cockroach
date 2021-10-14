@@ -57,7 +57,7 @@ func (p *planner) DropRoleNode(
 			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "cannot use special role specifier in DROP ROLE")
 		}
 	}
-	roleNames, err := roleSpecs.ToSQLUsernames(p.SessionData())
+	roleNames, err := roleSpecs.ToSQLUsernames(p.SessionData(), security.UsernameCreation)
 	if err != nil {
 		return nil, err
 	}

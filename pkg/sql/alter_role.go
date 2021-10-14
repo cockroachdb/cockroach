@@ -103,7 +103,7 @@ func (p *planner) AlterRoleNode(
 		return nil, err
 	}
 
-	roleName, err := roleSpec.ToSQLUsername(p.SessionData())
+	roleName, err := roleSpec.ToSQLUsername(p.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +330,7 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 	var roleName security.SQLUsername
 	if !n.AllRoles {
 		var err error
-		roleName, err = n.RoleName.ToSQLUsername(p.SessionData())
+		roleName, err = n.RoleName.ToSQLUsername(p.SessionData(), security.UsernameValidation)
 		if err != nil {
 			return nil, err
 		}

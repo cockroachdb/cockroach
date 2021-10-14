@@ -50,7 +50,7 @@ statement error pgcode 42939 role name "public" is reserved
 CREATE USER public
 
 statement error pgcode 42939 role name "none" is reserved
-CREATE USER none
+CREATE USER "none"
 
 statement error empty passwords are not permitted
 CREATE USER test WITH PASSWORD ''
@@ -102,7 +102,7 @@ user2     ·        {}
 user3     ·        {}
 ομηρος    ·        {}
 
-statement error no username specified
+statement error "": username is empty
 CREATE USER ""
 
 query TTTTT

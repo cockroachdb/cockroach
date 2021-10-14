@@ -63,7 +63,7 @@ func (p *planner) AlterTableOwner(ctx context.Context, n *tree.AlterTableOwner) 
 		return nil, err
 	}
 
-	owner, err := n.Owner.ToSQLUsername(p.SessionData())
+	owner, err := n.Owner.ToSQLUsername(p.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return nil, err
 	}
