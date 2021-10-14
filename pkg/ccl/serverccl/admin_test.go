@@ -59,8 +59,8 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 
 	// Assert that we get all roachblog zone configs back.
 	expectedZoneConfigNames := map[string]struct{}{
-		"PARTITION eu OF INDEX roachblog.public.comments@primary": {},
-		"PARTITION us OF INDEX roachblog.public.comments@primary": {},
+		"PARTITION eu OF INDEX roachblog.public.comments@comments_pkey": {},
+		"PARTITION us OF INDEX roachblog.public.comments@comments_pkey": {},
 	}
 
 	var resp serverpb.DataDistributionResponse

@@ -34,7 +34,7 @@ vectorized: true
     └── • error if rows
         │
         └── • lookup join (anti)
-            │ table: parent@primary
+            │ table: parent@parent_pkey
             │ equality: (column2) = (p)
             │ equality cols are key
             │
@@ -61,7 +61,7 @@ vectorized: true
 │       │
 │       └── • scan
 │             missing stats
-│             table: xy@primary
+│             table: xy@xy_pkey
 │             spans: FULL SCAN
 │
 └── • constraint-check
@@ -77,7 +77,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: parent@primary
+                  table: parent@parent_pkey
                   spans: FULL SCAN
 
 statement ok
@@ -107,7 +107,7 @@ vectorized: true
     └── • error if rows
         │
         └── • lookup join (anti)
-            │ table: parent@primary
+            │ table: parent@parent_pkey
             │ equality: (column2) = (p)
             │ equality cols are key
             │
@@ -152,7 +152,7 @@ vectorized: true
     └── • error if rows
         │
         └── • lookup join (anti)
-            │ table: multi_col_parent@primary
+            │ table: multi_col_parent@multi_col_parent_pkey
             │ equality: (column2, column3, column4) = (p,q,r)
             │ equality cols are key
             │
@@ -201,7 +201,7 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • lookup join (anti)
-│           │ table: multi_ref_parent_a@primary
+│           │ table: multi_ref_parent_a@multi_ref_parent_a_pkey
 │           │ equality: (column2) = (a)
 │           │ equality cols are key
 │           │
@@ -217,7 +217,7 @@ vectorized: true
     └── • error if rows
         │
         └── • lookup join (anti)
-            │ table: multi_ref_parent_bc@primary
+            │ table: multi_ref_parent_bc@multi_ref_parent_bc_pkey
             │ equality: (column3, column4) = (b,c)
             │ equality cols are key
             │
@@ -260,7 +260,7 @@ vectorized: true
 │       │
 │       └── • scan
 │             missing stats
-│             table: parent@primary
+│             table: parent@parent_pkey
 │             spans: [/3 - /3]
 │
 ├── • constraint-check
@@ -304,7 +304,7 @@ vectorized: true
 │       │
 │       └── • scan
 │             missing stats
-│             table: parent@primary
+│             table: parent@parent_pkey
 │             spans: [/3 - /3]
 │
 ├── • constraint-check
@@ -368,7 +368,7 @@ vectorized: true
 │       │
 │       └── • scan
 │             missing stats
-│             table: doubleparent@primary
+│             table: doubleparent@doubleparent_pkey
 │             spans: [/10 - /10]
 │
 └── • constraint-check
@@ -403,7 +403,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: child@primary
+│                 table: child@child_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -420,7 +420,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: parent@primary
+                  table: parent@parent_pkey
                   spans: FULL SCAN
 
 query T
@@ -442,7 +442,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: child@primary
+│                 table: child@child_pkey
 │                 spans: [/10 - /10]
 │                 locking strength: for update
 │
@@ -451,7 +451,7 @@ vectorized: true
     └── • error if rows
         │
         └── • lookup join (anti)
-            │ table: parent@primary
+            │ table: parent@parent_pkey
             │ equality: (p_new) = (p)
             │ equality cols are key
             │
@@ -477,7 +477,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: parent@primary
+│                 table: parent@parent_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -610,7 +610,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: child@primary
+│                 table: child@child_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -636,7 +636,7 @@ vectorized: true
                 │
                 └── • scan
                       missing stats
-                      table: grandchild@primary
+                      table: grandchild@grandchild_pkey
                       spans: FULL SCAN
 
 # This update shouldn't emit checks for c, since it's unchanged.
@@ -659,7 +659,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: child@primary
+│                 table: child@child_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -676,7 +676,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: parent@primary
+                  table: parent@parent_pkey
                   spans: FULL SCAN
 
 query T
@@ -696,7 +696,7 @@ vectorized: true
 │       │
 │       └── • scan
 │             missing stats
-│             table: child@primary
+│             table: child@child_pkey
 │             spans: FULL SCAN
 │             locking strength: for update
 │
@@ -713,7 +713,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: parent@primary
+                  table: parent@parent_pkey
                   spans: FULL SCAN
 
 query T
@@ -735,7 +735,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: child@primary
+│                 table: child@child_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -752,7 +752,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: parent@primary
+│                 table: parent@parent_pkey
 │                 spans: FULL SCAN
 │
 └── • constraint-check
@@ -777,7 +777,7 @@ vectorized: true
                 │
                 └── • scan
                       missing stats
-                      table: grandchild@primary
+                      table: grandchild@grandchild_pkey
                       spans: FULL SCAN
 
 # Multiple grandchild tables
@@ -803,7 +803,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: child@primary
+│                 table: child@child_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -820,7 +820,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: parent@primary
+                  table: parent@parent_pkey
                   spans: FULL SCAN
 
 statement ok
@@ -845,7 +845,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: self@primary
+│                 table: self@self_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -862,7 +862,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: self@primary
+                  table: self@self_pkey
                   spans: FULL SCAN
 
 query T
@@ -884,7 +884,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: self@primary
+│                 table: self@self_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -910,7 +910,7 @@ vectorized: true
                 │
                 └── • scan
                       missing stats
-                      table: self@primary
+                      table: self@self_pkey
                       spans: FULL SCAN
 
 # Tests for the insert fast path.
@@ -929,7 +929,7 @@ vectorized: true
   estimated row count: 0 (missing stats)
   into: child(c, p)
   auto commit
-  FK check: parent@primary
+  FK check: parent@parent_pkey
   size: 2 columns, 2 rows
   row 0, expr 0: 1
   row 0, expr 1: 1
@@ -1088,7 +1088,7 @@ vectorized: true
 │           └── • scan
 │                 columns: (p, data)
 │                 estimated row count: 333 (missing stats)
-│                 table: cascadeparent@primary
+│                 table: cascadeparent@cascadeparent_pkey
 │                 spans: /2-
 │
 └── • fk-cascade
@@ -1200,7 +1200,7 @@ vectorized: true
 • insert fast path
   into: c(c, p)
   auto commit
-  FK check: p@primary
+  FK check: p@p_pkey
   size: 2 columns, 2 rows
 
 # These queries should not be using lookup joins (we're inserting more rows
@@ -1236,7 +1236,7 @@ vectorized: true
             │
             └── • scan
                   estimated row count: 1 (100% of the table; stats collected <hidden> ago)
-                  table: p@primary
+                  table: p@p_pkey
                   spans: FULL SCAN
 
 query T
@@ -1259,7 +1259,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 estimated row count: 33 (33% of the table; stats collected <hidden> ago)
-│                 table: c@primary
+│                 table: c@c_pkey
 │                 spans: [/1 - ]
 │                 locking strength: for update
 │
@@ -1281,7 +1281,7 @@ vectorized: true
             │
             └── • scan
                   estimated row count: 1 (100% of the table; stats collected <hidden> ago)
-                  table: p@primary
+                  table: p@p_pkey
                   spans: FULL SCAN
 
 
@@ -1301,7 +1301,7 @@ vectorized: true
 │       │
 │       └── • scan
 │             estimated row count: 1 (100% of the table; stats collected <hidden> ago)
-│             table: p@primary
+│             table: p@p_pkey
 │             spans: [/1 - ]
 │
 └── • constraint-check
@@ -1330,7 +1330,7 @@ vectorized: true
 • insert fast path
   into: c(c, p)
   auto commit
-  FK check: p@primary
+  FK check: p@p_pkey
   size: 2 columns, 10 rows
 
 query T
@@ -1353,7 +1353,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 estimated row count: 33 (33% of the table; stats collected <hidden> ago)
-│                 table: c@primary
+│                 table: c@c_pkey
 │                 spans: [/1 - ]
 │                 locking strength: for update
 │
@@ -1363,7 +1363,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ estimated row count: 32
-            │ table: p@primary
+            │ table: p@p_pkey
             │ equality: (p_new) = (p)
             │ equality cols are key
             │
@@ -1390,7 +1390,7 @@ vectorized: true
 │       │
 │       └── • scan
 │             estimated row count: 1 (100% of the table; stats collected <hidden> ago)
-│             table: p@primary
+│             table: p@p_pkey
 │             spans: [/1 - ]
 │
 └── • constraint-check
@@ -1462,7 +1462,7 @@ vectorized: true
             │
             └── • scan
                   estimated row count: 10 (100% of the table; stats collected <hidden> ago)
-                  table: small_parent@primary
+                  table: small_parent@small_parent_pkey
                   spans: FULL SCAN
 
 # Test that partial indexes with IS NOT NULL predicates are used for performing
@@ -1498,7 +1498,7 @@ vectorized: true
 │       │
 │       └── • scan
 │             missing stats
-│             table: partial_parent@primary
+│             table: partial_parent@partial_parent_pkey
 │             spans: [/1 - /1]
 │
 └── • constraint-check
@@ -1531,7 +1531,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: partial_parent@primary
+│                 table: partial_parent@partial_parent_pkey
 │                 spans: [/1 - /1]
 │                 locking strength: for update
 │

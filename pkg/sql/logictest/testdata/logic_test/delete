@@ -239,7 +239,7 @@ SELECT create_statement FROM [SHOW CREATE t29494]
 ----
 CREATE TABLE public.t29494 (
    x INT8 NOT NULL,
-   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   CONSTRAINT t29494_pkey PRIMARY KEY (x ASC),
    FAMILY "primary" (x)
 )
 

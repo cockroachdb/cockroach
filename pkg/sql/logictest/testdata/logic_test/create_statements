@@ -6103,20 +6103,20 @@ CREATE TABLE pg_extension.spatial_ref_sys (
 CREATE TABLE public.t (
    a INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
    CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES public.t(rowid),
    FAMILY "primary" (a, rowid)
 )  CREATE TABLE public.t (
    a INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, rowid)
 )  {"ALTER TABLE public.t ADD CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES public.t(rowid)"}  {"ALTER TABLE public.t VALIDATE CONSTRAINT fk_a_ref_t"}
 CREATE TABLE public.v (
    "'" INT8 NULL,
    s STRING NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT v_pkey PRIMARY KEY (rowid ASC),
    CONSTRAINT "fk_'_ref_t" FOREIGN KEY ("'") REFERENCES public.t(rowid),
    CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES public.v(s),
    UNIQUE INDEX v_s_key (s ASC),
@@ -6125,7 +6125,7 @@ CREATE TABLE public.v (
    "'" INT8 NULL,
    s STRING NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT v_pkey PRIMARY KEY (rowid ASC),
    UNIQUE INDEX v_s_key (s ASC),
    FAMILY "primary" ("'", s, rowid)
 )  {"ALTER TABLE public.v ADD CONSTRAINT \"fk_'_ref_t\" FOREIGN KEY (\"'\") REFERENCES public.t(rowid)","ALTER TABLE public.v ADD CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES public.v(s)"}  {"ALTER TABLE public.v VALIDATE CONSTRAINT \"fk_'_ref_t\"","ALTER TABLE public.v VALIDATE CONSTRAINT fk_s_ref_v"}
@@ -6133,7 +6133,7 @@ CREATE TABLE public.c (
   a INT8 NOT NULL,
   b INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+  CONSTRAINT c_pkey PRIMARY KEY (rowid ASC),
   INDEX c_a_b_idx (a ASC, b ASC),
   FAMILY fam_0_a_rowid (a, rowid),
   FAMILY fam_1_b (b)
@@ -6144,7 +6144,7 @@ COMMENT ON INDEX public.c@c_a_b_idx IS 'index'  CREATE TABLE public.c (
                                                 a INT8 NOT NULL,
                                                 b INT8 NULL,
                                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                                                CONSTRAINT c_pkey PRIMARY KEY (rowid ASC),
                                                 INDEX c_a_b_idx (a ASC, b ASC),
                                                 FAMILY fam_0_a_rowid (a, rowid),
                                                 FAMILY fam_1_b (b)
@@ -6163,7 +6163,7 @@ SHOW CREATE TABLE unlogged_tbl
 ----
 unlogged_tbl  CREATE TABLE public.unlogged_tbl (
               col INT8 NOT NULL,
-              CONSTRAINT "primary" PRIMARY KEY (col ASC),
+              CONSTRAINT unlogged_tbl_pkey PRIMARY KEY (col ASC),
               FAMILY "primary" (col)
 )
 

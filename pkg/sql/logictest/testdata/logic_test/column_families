@@ -63,9 +63,9 @@ SET tracing=off
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-message LIKE 'fetched: /t/primary/%'
+message LIKE 'fetched: /t/t_pkey/%'
 ORDER BY message
 ----
-fetched: /t/primary/1/2.00/x -> /1.00
-fetched: /t/primary/1/2/y -> /2.00
-fetched: /t/primary/1/2/z -> /1
+fetched: /t/t_pkey/1/2.00/x -> /1.00
+fetched: /t/t_pkey/1/2/y -> /2.00
+fetched: /t/t_pkey/1/2/z -> /1

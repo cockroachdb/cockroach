@@ -105,6 +105,14 @@ type partitioningTest struct {
 
 		// subzones are the `configs` shorthand parsed into Subzones.
 		subzones []zonepb.Subzone
+
+		// generatedSpans are the `generatedSpans` with @primary replaced with
+		// the actual primary key name.
+		generatedSpans []string
+
+		// scans are the `scans` with @primary replaced with
+		// the actual primary key name.
+		scans map[string]string
 	}
 }
 
@@ -146,9 +154,22 @@ func (pt *partitioningTest) parse() error {
 		}
 	}
 
+	replPK := func(s string) string {
+		return strings.ReplaceAll(s, "@primary", fmt.Sprintf("@%s_pkey", pt.parsed.tableDesc.Name))
+	}
+	pt.parsed.generatedSpans = make([]string, len(pt.generatedSpans))
+	for i, gs := range pt.generatedSpans {
+		pt.parsed.generatedSpans[i] = replPK(gs)
+	}
+	pt.parsed.scans = make(map[string]string, len(pt.scans))
+	for k, v := range pt.scans {
+		pt.parsed.scans[replPK(k)] = replPK(v)
+	}
+
 	var zoneConfigStmts bytes.Buffer
 	// TODO(dan): Can we run all the zoneConfigStmts in a txn?
 	for _, c := range pt.configs {
+		c = replPK(c)
 		var subzoneShort, constraints string
 		configParts := strings.Split(c, `:`)
 		switch len(configParts) {
@@ -168,7 +189,7 @@ func (pt *partitioningTest) parse() error {
 			indexName = subzoneParts[0]
 		case 2:
 			if subzoneParts[0] == "" {
-				indexName = "@primary"
+				indexName = fmt.Sprintf("@%s", pt.parsed.tableDesc.Name+"_pkey")
 			} else {
 				indexName = subzoneParts[0]
 			}
@@ -220,7 +241,7 @@ func (pt *partitioningTest) verifyScansFn(
 	ctx context.Context, t *testing.T, db *gosql.DB,
 ) func() error {
 	return func() error {
-		for where, expectedNodes := range pt.scans {
+		for where, expectedNodes := range pt.parsed.scans {
 			query := fmt.Sprintf(`SELECT count(*) FROM %s WHERE %s`, tree.NameStringP(&pt.name), where)
 			log.Infof(ctx, "query: %s", query)
 			if err := verifyScansOnNode(ctx, t, db, query, expectedNodes); err != nil {
@@ -1483,7 +1504,7 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	)`)
 	sqlDB.Exec(t, `ALTER PARTITION p1 OF TABLE t CONFIGURE ZONE USING DEFAULT`)
 	sqlDB.Exec(t, `ALTER PARTITION p34 OF INDEX t@i CONFIGURE ZONE USING DEFAULT`)
-	sqlDB.Exec(t, `ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`)
+	sqlDB.Exec(t, `ALTER INDEX t@t_pkey CONFIGURE ZONE USING DEFAULT`)
 	sqlDB.Exec(t, `ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`)
 
 	// Remove the enterprise license.
@@ -1501,18 +1522,18 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	expectErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`, partitionErr)
 	expectErr(`ALTER PARTITION p1 OF TABLE t CONFIGURE ZONE USING DEFAULT`, zoneErr)
 	expectErr(`ALTER PARTITION p34 OF INDEX t@i CONFIGURE ZONE USING DEFAULT`, zoneErr)
-	expectErr(`ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`, zoneErr)
+	expectErr(`ALTER INDEX t@t_pkey CONFIGURE ZONE USING DEFAULT`, zoneErr)
 	expectErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`, zoneErr)
 
 	// But they can be removed.
 	sqlDB.Exec(t, `ALTER TABLE t PARTITION BY NOTHING`)
 	sqlDB.Exec(t, `ALTER INDEX t@i PARTITION BY NOTHING`)
-	sqlDB.Exec(t, `ALTER INDEX t@primary CONFIGURE ZONE DISCARD`)
+	sqlDB.Exec(t, `ALTER INDEX t@t_pkey CONFIGURE ZONE DISCARD`)
 	sqlDB.Exec(t, `ALTER INDEX t@i CONFIGURE ZONE DISCARD`)
 
 	// Once removed, they cannot be added back.
 	expectErr(`ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`, partitionErr)
 	expectErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`, partitionErr)
-	expectErr(`ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`, zoneErr)
+	expectErr(`ALTER INDEX t@t_pkey CONFIGURE ZONE USING DEFAULT`, zoneErr)
 	expectErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`, zoneErr)
 }

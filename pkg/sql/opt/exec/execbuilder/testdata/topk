@@ -20,7 +20,7 @@ vectorized: true
 └── • scan
       columns: (k, v, w)
       estimated row count: 1,000 (missing stats)
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
 
 # No TopK when ordering by an index.
@@ -34,7 +34,7 @@ vectorized: true
 │ columns: (k, v, w)
 │ ordering: +v
 │ estimated row count: 10 (missing stats)
-│ table: t@primary
+│ table: t@t_pkey
 │ key columns: k
 │
 └── • scan
@@ -62,7 +62,7 @@ vectorized: true
 └── • scan
       columns: (k, v, w)
       estimated row count: 1,000 (missing stats)
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
 
 # TopK added in subquery.
@@ -86,7 +86,7 @@ vectorized: true
     └── • scan
           columns: (k, w)
           estimated row count: 1,000 (missing stats)
-          table: t@primary
+          table: t@t_pkey
           spans: FULL SCAN
 
 # TopK with filter.
@@ -111,7 +111,7 @@ vectorized: true
     └── • scan
           columns: (k, v, w)
           estimated row count: 1,000 (missing stats)
-          table: t@primary
+          table: t@t_pkey
           spans: FULL SCAN
 
 # When partial ordering is available, choose topk.
@@ -131,7 +131,7 @@ vectorized: true
 └── • index join
     │ columns: (k, v, w)
     │ estimated row count: 1,000 (missing stats)
-    │ table: t@primary
+    │ table: t@t_pkey
     │ key columns: k
     │
     └── • scan

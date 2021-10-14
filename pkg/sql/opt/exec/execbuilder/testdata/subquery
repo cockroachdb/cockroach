@@ -48,7 +48,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: abc@primary
+          table: abc@abc_pkey
           spans: LIMITED SCAN
           limit: 1
 
@@ -69,7 +69,7 @@ vectorized: true
 │   └── • scan
 │         columns: (a, b, c)
 │         estimated row count: 1,000 (missing stats)
-│         table: abc@primary
+│         table: abc@abc_pkey
 │         spans: FULL SCAN
 │
 ├── • subquery
@@ -90,7 +90,7 @@ vectorized: true
 │           └── • scan
 │                 columns: (a, b, c)
 │                 estimated row count: 1,000 (missing stats)
-│                 table: abc@primary
+│                 table: abc@abc_pkey
 │                 spans: FULL SCAN
 │
 └── • subquery
@@ -118,7 +118,7 @@ vectorized: true
                       columns: (a)
                       ordering: -a
                       estimated row count: 1,000 (missing stats)
-                      table: abc@primary
+                      table: abc@abc_pkey
                       spans: FULL SCAN
 
 # IN expression transformed into semi-join.
@@ -140,7 +140,7 @@ vectorized: true
 │     columns: (a)
 │     ordering: +a
 │     estimated row count: 1,000 (missing stats)
-│     table: abc@primary
+│     table: abc@abc_pkey
 │     spans: FULL SCAN
 │
 └── • filter
@@ -153,7 +153,7 @@ vectorized: true
           columns: (a, b)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: abc@primary
+          table: abc@abc_pkey
           spans: FULL SCAN
 
 query T
@@ -234,7 +234,7 @@ vectorized: true
             └── • scan
                   columns: (col0, col3, col4, rowid)
                   estimated row count: 1,000 (missing stats)
-                  table: tab4@primary
+                  table: tab4@tab4_pkey
                   spans: FULL SCAN
 
 # ------------------------------------------------------------------------------
@@ -262,14 +262,14 @@ vectorized: true
 │     columns: (x, y)
 │     ordering: +x
 │     estimated row count: 1,000 (missing stats)
-│     table: a@primary
+│     table: a@a_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (x)
       ordering: +x
       estimated row count: 1,000 (missing stats)
-      table: b@primary
+      table: b@b_pkey
       spans: FULL SCAN
 
 query T
@@ -287,7 +287,7 @@ vectorized: true
 ├── • scan
 │     columns: (x, y)
 │     estimated row count: 1,000 (missing stats)
-│     table: a@primary
+│     table: a@a_pkey
 │     spans: FULL SCAN
 │
 └── • render
@@ -298,7 +298,7 @@ vectorized: true
     └── • scan
           columns: (x)
           estimated row count: 1,000 (missing stats)
-          table: b@primary
+          table: b@b_pkey
           spans: FULL SCAN
 
 query T
@@ -319,14 +319,14 @@ vectorized: true
 │     columns: (x, y)
 │     ordering: +x
 │     estimated row count: 1,000 (missing stats)
-│     table: a@primary
+│     table: a@a_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (x)
       ordering: +x
       estimated row count: 1,000 (missing stats)
-      table: b@primary
+      table: b@b_pkey
       spans: FULL SCAN
 
 query T
@@ -344,7 +344,7 @@ vectorized: true
 ├── • scan
 │     columns: (x, z)
 │     estimated row count: 1,000 (missing stats)
-│     table: b@primary
+│     table: b@b_pkey
 │     spans: FULL SCAN
 │
 └── • render
@@ -355,7 +355,7 @@ vectorized: true
     └── • scan
           columns: (x)
           estimated row count: 1,000 (missing stats)
-          table: a@primary
+          table: a@a_pkey
           spans: FULL SCAN
 
 query T
@@ -380,7 +380,7 @@ vectorized: true
     └── • scan
           columns: (x)
           estimated row count: 1,000 (missing stats)
-          table: b@primary
+          table: b@b_pkey
           spans: FULL SCAN
 
 # Case where the plan has an apply join.
@@ -398,5 +398,5 @@ vectorized: true
 └── • scan
       columns: (a, b, c)
       estimated row count: 1,000 (missing stats)
-      table: abc@primary
+      table: abc@abc_pkey
       spans: FULL SCAN

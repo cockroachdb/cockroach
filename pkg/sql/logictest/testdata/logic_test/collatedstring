@@ -218,7 +218,7 @@ SHOW CREATE TABLE t
 t  CREATE TABLE public.t (
    a STRING COLLATE en NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, rowid)
 )
 
@@ -368,7 +368,7 @@ quoted_coll  CREATE TABLE public.quoted_coll (
              d STRING COLLATE en_u_ks_level1 NULL DEFAULT 'd':::STRING COLLATE en_u_ks_level1,
              e STRING COLLATE en_US NULL AS (a COLLATE en_US) STORED,
              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-             CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+             CONSTRAINT quoted_coll_pkey PRIMARY KEY (rowid ASC),
              FAMILY "primary" (a, b, c, d, e, rowid)
 )
 
@@ -471,7 +471,7 @@ SHOW CREATE TABLE collation_name_case
 collation_name_case  CREATE TABLE public.collation_name_case (
                      s STRING COLLATE en_US_u_ks_level2 NULL,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                     CONSTRAINT collation_name_case_pkey PRIMARY KEY (rowid ASC),
                      FAMILY "primary" (s, rowid)
 )
 

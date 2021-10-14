@@ -467,7 +467,7 @@ SHOW CREATE TABLE a
 a  CREATE TABLE public.a (
    b INT8[] NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT a_pkey PRIMARY KEY (rowid ASC),
    FAMILY "primary" (b, rowid)
 )
 
@@ -528,7 +528,7 @@ SHOW CREATE TABLE a
 a  CREATE TABLE public.a (
    b INT8[] NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT a_pkey PRIMARY KEY (rowid ASC),
    FAMILY "primary" (b, rowid)
 )
 
@@ -601,7 +601,7 @@ SHOW CREATE TABLE a
 a  CREATE TABLE public.a (
    b INT2[] NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT a_pkey PRIMARY KEY (rowid ASC),
    FAMILY "primary" (b, rowid)
 )
 

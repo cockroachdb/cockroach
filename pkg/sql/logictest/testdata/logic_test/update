@@ -255,7 +255,7 @@ SELECT * FROM abc
 statement count 1
 INSERT INTO abc VALUES (4, 5, 6)
 
-statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(a\)=\(4\) already exists\.
+statement error duplicate key value violates unique constraint "abc_pkey"\nDETAIL: Key \(a\)=\(4\) already exists\.
 UPDATE abc SET a = 4, b = 3
 
 statement error duplicate key value violates unique constraint "d"\nDETAIL: Key \(c\)=\(6\) already exists\.
@@ -472,7 +472,7 @@ SELECT create_statement FROM [SHOW CREATE t29494]
 ----
 CREATE TABLE public.t29494 (
    x INT8 NOT NULL,
-   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   CONSTRAINT t29494_pkey PRIMARY KEY (x ASC),
    FAMILY "primary" (x)
 )
 

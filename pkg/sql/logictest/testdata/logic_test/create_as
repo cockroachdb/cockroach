@@ -158,7 +158,7 @@ foo5  CREATE TABLE public.foo5 (
       a INT8 NULL,
       b INT8 NOT NULL,
       c INT8 NULL,
-      CONSTRAINT "primary" PRIMARY KEY (b ASC),
+      CONSTRAINT foo5_pkey PRIMARY KEY (b ASC),
       FAMILY "primary" (a, b, c)
 )
 
@@ -176,7 +176,7 @@ foo6  CREATE TABLE public.foo6 (
       a INT8 NOT NULL,
       b INT8 NULL,
       c INT8 NULL,
-      CONSTRAINT "primary" PRIMARY KEY (a ASC),
+      CONSTRAINT foo6_pkey PRIMARY KEY (a ASC),
       FAMILY "primary" (a, b, c)
 )
 
@@ -192,7 +192,7 @@ SHOW CREATE TABLE foo8
 foo8  CREATE TABLE public.foo8 (
       item STRING NOT NULL,
       qty INT8 NULL,
-      CONSTRAINT "primary" PRIMARY KEY (item ASC),
+      CONSTRAINT foo8_pkey PRIMARY KEY (item ASC),
       FAMILY "primary" (item, qty)
 )
 
@@ -212,7 +212,7 @@ foo9  CREATE TABLE public.foo9 (
       a INT8 NOT NULL,
       b INT8 NULL,
       c INT8 NOT NULL,
-      CONSTRAINT "primary" PRIMARY KEY (a ASC, c ASC),
+      CONSTRAINT foo9_pkey PRIMARY KEY (a ASC, c ASC),
       FAMILY "primary" (a, b, c)
 )
 
@@ -226,7 +226,7 @@ foo10  CREATE TABLE public.foo10 (
        a INT8 NOT NULL,
        b INT8 NOT NULL,
        c INT8 NOT NULL,
-       CONSTRAINT "primary" PRIMARY KEY (c ASC, b ASC, a ASC),
+       CONSTRAINT foo10_pkey PRIMARY KEY (c ASC, b ASC, a ASC),
        FAMILY "primary" (a, b, c)
 )
 
@@ -245,7 +245,7 @@ foo11  CREATE TABLE public.foo11 (
        x INT8 NOT NULL,
        y INT8 NULL,
        z INT8 NOT NULL,
-       CONSTRAINT "primary" PRIMARY KEY (x ASC, z ASC),
+       CONSTRAINT foo11_pkey PRIMARY KEY (x ASC, z ASC),
        FAMILY "primary" (x, y, z)
 )
 
@@ -273,7 +273,7 @@ foo12  CREATE TABLE public.foo12 (
        b INT8 NULL,
        c INT8 NULL,
        d INT8 NULL,
-       CONSTRAINT "primary" PRIMARY KEY (a ASC),
+       CONSTRAINT foo12_pkey PRIMARY KEY (a ASC),
        FAMILY f1 (a, b, d),
        FAMILY fam_1_c (c)
 )
@@ -290,7 +290,7 @@ foo13  CREATE TABLE public.foo13 (
        b INT8 NOT NULL,
        c INT8 NULL,
        d INT8 NULL,
-       CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+       CONSTRAINT foo13_pkey PRIMARY KEY (a ASC, b ASC),
        FAMILY pk (a, b),
        FAMILY fam_1_c_d (c, d)
 )
@@ -310,7 +310,7 @@ foo13  CREATE TABLE public.foo13 (
        b INT8 NOT NULL,
        e INT8 NULL,
        z INT8 NULL,
-       CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+       CONSTRAINT foo13_pkey PRIMARY KEY (a ASC, b ASC),
        FAMILY pk (a, b),
        FAMILY fam_1_c_d (e, z)
 )

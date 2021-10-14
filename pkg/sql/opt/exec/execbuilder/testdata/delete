@@ -85,7 +85,7 @@ vectorized: true
         │
         └── • scan
               missing stats
-              table: unindexed@primary
+              table: unindexed@unindexed_pkey
               spans: FULL SCAN
 
 # Check DELETE with LIMIT clause (MySQL extension)
@@ -107,7 +107,7 @@ vectorized: true
         │
         └── • scan
               missing stats
-              table: unindexed@primary
+              table: unindexed@unindexed_pkey
               spans: FULL SCAN
 
 # Check fast DELETE.
@@ -138,7 +138,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: unindexed@primary
+      table: unindexed@unindexed_pkey
       spans: [/1 - ]
       limit: 1
 
@@ -286,7 +286,7 @@ vectorized: true
         └── • scan
               columns: (x, y, z)
               estimated row count: 1,000 (missing stats)
-              table: xyz@primary
+              table: xyz@xyz_pkey
               spans: FULL SCAN
 
 # With the hint, we use a constrained scan.
@@ -309,7 +309,7 @@ vectorized: true
     └── • index join
         │ columns: (x, y, z)
         │ estimated row count: 990 (missing stats)
-        │ table: xyz@primary
+        │ table: xyz@xyz_pkey
         │ key columns: x
         │
         └── • scan
