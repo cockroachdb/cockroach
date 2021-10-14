@@ -516,10 +516,6 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 		return err
 	}
 
-	if g, ok := s.FlowCtx.Cfg.Gossip.Optional(47925); ok {
-		// Gossip refresh of the stat caches for this table.
-		return stats.GossipTableStatAdded(g, s.tableID)
-	}
 	return nil
 }
 

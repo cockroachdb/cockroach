@@ -75,11 +75,6 @@ const (
 	// draining state.
 	KeyDistSQLDrainingPrefix = "distsql-draining"
 
-	// KeyTableStatAddedPrefix is the prefix for keys that indicate a new table
-	// statistic was computed. The statistics themselves are not stored in gossip;
-	// the keys are used to notify nodes to invalidate table statistic caches.
-	KeyTableStatAddedPrefix = "table-stat-added"
-
 	// KeyGossipClientsPrefix is the prefix for keys that indicate which gossip
 	// client connections a node has open. This is used by other nodes in the
 	// cluster to build a map of the gossip network.
@@ -178,12 +173,6 @@ func MakeDistSQLNodeVersionKey(nodeID roachpb.NodeID) string {
 // draining state.
 func MakeDistSQLDrainingKey(nodeID roachpb.NodeID) string {
 	return MakeKey(KeyDistSQLDrainingPrefix, nodeID.String())
-}
-
-// MakeTableStatAddedKey returns the gossip key used to notify that a new
-// statistic is available for the given table.
-func MakeTableStatAddedKey(tableID uint32) string {
-	return MakeKey(KeyTableStatAddedPrefix, strconv.FormatUint(uint64(tableID), 10 /* base */))
 }
 
 // removePrefixFromKey removes the key prefix and separator and returns what's
