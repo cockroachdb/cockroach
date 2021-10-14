@@ -20,7 +20,7 @@ which is populated from
 1. a new cluster setting `version`, and
 1. a persisted version on the Store's engines.
 
-The main concern in designing the mechanism here is operator friendlyness. We
+The main concern in designing the mechanism here is operator friendliness. We
 don't want to make the process more complicated; it should be scriptable; it
 should be hard to get wrong (and if you do, it shouldn't matter).
 
@@ -598,7 +598,7 @@ deemed worth the extra complexity.
 
 ## Rationale and Alternatives
 
-The main concern in designing the mechanism here is operator friendlyness. We
+The main concern in designing the mechanism here is operator friendliness. We
 don't want to make the process more complicated; it should be scriptable; it
 should be hard to get wrong (and if you do, it shouldn't matter).
 
