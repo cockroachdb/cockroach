@@ -77,7 +77,7 @@ DROP TABLE pg_type; RESET search_path; SET database = test
 
 # Unqualified index name resolution.
 statement ok
-ALTER INDEX "primary" RENAME TO a_pk
+ALTER INDEX a_pkey RENAME TO a_pk
 
 # Schema-qualified index name resolution.
 statement ok
@@ -91,12 +91,12 @@ statement ok
 CREATE DATABASE public; CREATE TABLE public.public.t(a INT)
 
 # We can't see the DB "public" with DB-qualified index name resolution.
-statement error index "primary" does not exist
-ALTER INDEX public."primary" RENAME TO t_pk
+statement error index "t_pkey" does not exist
+ALTER INDEX public.t_pkey RENAME TO t_pk
 
 # But we can see it with sufficient qualification.
 statement ok
-ALTER INDEX public.public."primary" RENAME TO t_pk
+ALTER INDEX public.public.t_pkey RENAME TO t_pk
 
 # If the search path is invalid, we get a special error.
 statement ok

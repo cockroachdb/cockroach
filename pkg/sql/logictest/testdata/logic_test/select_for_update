@@ -305,16 +305,16 @@ BEGIN; UPDATE t SET v = 2 WHERE k = 1
 
 user testuser
 
-query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 SELECT * FROM t FOR UPDATE NOWAIT
 
-query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 SELECT * FROM t FOR SHARE FOR UPDATE OF t NOWAIT
 
-query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 SELECT * FROM t FOR SHARE NOWAIT FOR UPDATE OF t
 
-query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 BEGIN; SELECT * FROM t FOR UPDATE NOWAIT
 
 statement ok
@@ -344,16 +344,16 @@ BEGIN; UPDATE t SET v = 2 WHERE k = 1
 
 user testuser
 
-query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE FOR SHARE OF t NOWAIT
 
-query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE OF t2 FOR SHARE OF t NOWAIT
 
-query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE NOWAIT FOR SHARE OF t
 
-query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE NOWAIT FOR SHARE OF t2
 
 statement ok

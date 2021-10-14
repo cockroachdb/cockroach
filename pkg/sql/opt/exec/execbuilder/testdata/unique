@@ -267,7 +267,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq@primary
+│           │     table: uniq@uniq_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -283,7 +283,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq@primary
+            │     table: uniq@uniq_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -318,7 +318,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq@primary
+            │     table: uniq@uniq_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -337,7 +337,7 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: uniq(k, v, w, x, y)
 │ auto commit
-│ arbiter indexes: primary, uniq_v_key
+│ arbiter indexes: uniq_pkey, uniq_v_key
 │ arbiter constraints: unique_w, unique_x_y
 │
 └── • cross join (right anti)
@@ -347,7 +347,7 @@ vectorized: true
     ├── • scan
     │     columns: (k)
     │     estimated row count: 1 (missing stats)
-    │     table: uniq@primary
+    │     table: uniq@uniq_pkey
     │     spans: /1/0
     │
     └── • hash join (right anti)
@@ -359,7 +359,7 @@ vectorized: true
         ├── • scan
         │     columns: (w)
         │     estimated row count: 1,000 (missing stats)
-        │     table: uniq@primary
+        │     table: uniq@uniq_pkey
         │     spans: FULL SCAN
         │
         └── • lookup join (anti)
@@ -378,7 +378,7 @@ vectorized: true
                 ├── • scan
                 │     columns: (x, y)
                 │     estimated row count: 1,000 (missing stats)
-                │     table: uniq@primary
+                │     table: uniq@uniq_pkey
                 │     spans: FULL SCAN
                 │
                 └── • values
@@ -407,7 +407,7 @@ vectorized: true
 │       │
 │       └── • scan
 │             missing stats
-│             table: other@primary
+│             table: other@other_pkey
 │             spans: FULL SCAN
 │
 ├── • constraint-check
@@ -423,7 +423,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq@primary
+│                 table: uniq@uniq_pkey
 │                 spans: FULL SCAN
 │
 └── • constraint-check
@@ -439,7 +439,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq@primary
+                  table: uniq@uniq_pkey
                   spans: FULL SCAN
 
 # Add inequality filters for the primary key columns that are not part of each
@@ -471,7 +471,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq_overlaps_pk@primary
+│           │     table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -482,7 +482,7 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • lookup join (semi)
-│           │ table: uniq_overlaps_pk@primary
+│           │ table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
 │           │ equality: (column1) = (a)
 │           │ pred: column2 != b
 │           │
@@ -499,7 +499,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq_overlaps_pk@primary
+            │     table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -526,7 +526,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: other@primary
+│                 table: other@other_pkey
 │                 spans: FULL SCAN
 │
 ├── • constraint-check
@@ -542,7 +542,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_hidden_pk@primary
+│                 table: uniq_hidden_pk@uniq_hidden_pk_pkey
 │                 spans: FULL SCAN
 │
 ├── • constraint-check
@@ -558,7 +558,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_hidden_pk@primary
+│                 table: uniq_hidden_pk@uniq_hidden_pk_pkey
 │                 spans: FULL SCAN
 │
 └── • constraint-check
@@ -574,7 +574,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq_hidden_pk@primary
+                  table: uniq_hidden_pk@uniq_hidden_pk_pkey
                   spans: FULL SCAN
 
 # Combine unique checks with foreign keys.
@@ -608,7 +608,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq_fk_parent@primary
+│           │     table: uniq_fk_parent@uniq_fk_parent_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -624,7 +624,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq_fk_parent@primary
+            │     table: uniq_fk_parent@uniq_fk_parent_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -662,7 +662,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq_fk_child@primary
+│           │     table: uniq_fk_child@uniq_fk_child_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -677,7 +677,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq_fk_parent@primary
+│           │     table: uniq_fk_parent@uniq_fk_parent_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -692,7 +692,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq_fk_parent@primary
+            │     table: uniq_fk_parent@uniq_fk_parent_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -753,7 +753,7 @@ vectorized: true
 │               │
 │               └── • lookup join (semi)
 │                   │ columns: ("lookup_join_const_col_@12", column1, column3)
-│                   │ table: uniq_enum@primary
+│                   │ table: uniq_enum@uniq_enum_pkey
 │                   │ equality: (lookup_join_const_col_@12, column3) = (r,i)
 │                   │ equality cols are key
 │                   │ pred: column1 != r
@@ -876,7 +876,7 @@ vectorized: true
                 │
                 └── • lookup join (semi)
                     │ columns: ("lookup_join_const_col_@12", r_default, column2)
-                    │ table: uniq_enum@primary
+                    │ table: uniq_enum@uniq_enum_pkey
                     │ equality: (lookup_join_const_col_@12, column2) = (r,i)
                     │ equality cols are key
                     │ pred: r_default != r
@@ -914,7 +914,7 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: uniq_enum(r, s, i, j)
 │ auto commit
-│ arbiter indexes: primary, uniq_enum_r_s_j_key
+│ arbiter indexes: uniq_enum_pkey, uniq_enum_r_s_j_key
 │ arbiter constraints: unique_i, unique_s_j
 │
 └── • render
@@ -936,14 +936,14 @@ vectorized: true
         └── • lookup join (anti)
             │ columns: (column1, column2, column3, column4)
             │ estimated row count: 0 (missing stats)
-            │ table: uniq_enum@primary
+            │ table: uniq_enum@uniq_enum_pkey
             │ equality cols are key
             │ lookup condition: (column3 = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
             │
             └── • lookup join (anti)
                 │ columns: (column1, column2, column3, column4)
                 │ estimated row count: 0 (missing stats)
-                │ table: uniq_enum@primary
+                │ table: uniq_enum@uniq_enum_pkey
                 │ equality: (column1, column3) = (r,i)
                 │ equality cols are key
                 │
@@ -997,7 +997,7 @@ vectorized: true
 │           │   │
 │           │   └── • scan
 │           │         missing stats
-│           │         table: uniq_partial@primary
+│           │         table: uniq_partial@uniq_partial_pkey
 │           │         spans: FULL SCAN
 │           │
 │           └── • filter
@@ -1021,7 +1021,7 @@ vectorized: true
             │   │
             │   └── • scan
             │         missing stats
-            │         table: uniq_partial@primary
+            │         table: uniq_partial@uniq_partial_pkey
             │         spans: FULL SCAN
             │
             └── • filter
@@ -1062,7 +1062,7 @@ vectorized: true
             │   │
             │   └── • scan
             │         missing stats
-            │         table: uniq_partial@primary
+            │         table: uniq_partial@uniq_partial_pkey
             │         spans: FULL SCAN
             │
             └── • filter
@@ -1085,7 +1085,7 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: uniq_partial(k, a, b)
 │ auto commit
-│ arbiter indexes: primary
+│ arbiter indexes: uniq_partial_pkey
 │ arbiter constraints: unique_a, unique_b
 │
 └── • project
@@ -1134,7 +1134,7 @@ vectorized: true
                         │   └── • scan
                         │         columns: (b)
                         │         estimated row count: 1,000 (missing stats)
-                        │         table: uniq_partial@primary
+                        │         table: uniq_partial@uniq_partial_pkey
                         │         spans: FULL SCAN
                         │
                         └── • hash join (right anti)
@@ -1152,7 +1152,7 @@ vectorized: true
                             │   └── • scan
                             │         columns: (a, b)
                             │         estimated row count: 1,000 (missing stats)
-                            │         table: uniq_partial@primary
+                            │         table: uniq_partial@uniq_partial_pkey
                             │         spans: FULL SCAN
                             │
                             └── • cross join (anti)
@@ -1169,7 +1169,7 @@ vectorized: true
                                 └── • scan
                                       columns: (k)
                                       estimated row count: 1 (missing stats)
-                                      table: uniq_partial@primary
+                                      table: uniq_partial@uniq_partial_pkey
                                       spans: /1/0
 
 # Insert with non-constant input.
@@ -1189,7 +1189,7 @@ vectorized: true
 │       │
 │       └── • scan
 │             missing stats
-│             table: other@primary
+│             table: other@other_pkey
 │             spans: FULL SCAN
 │
 ├── • constraint-check
@@ -1205,7 +1205,7 @@ vectorized: true
 │           │   │
 │           │   └── • scan
 │           │         missing stats
-│           │         table: uniq_partial@primary
+│           │         table: uniq_partial@uniq_partial_pkey
 │           │         spans: FULL SCAN
 │           │
 │           └── • filter
@@ -1227,7 +1227,7 @@ vectorized: true
             │   │
             │   └── • scan
             │         missing stats
-            │         table: uniq_partial@primary
+            │         table: uniq_partial@uniq_partial_pkey
             │         spans: FULL SCAN
             │
             └── • filter
@@ -1269,7 +1269,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: other@primary
+│                 table: other@other_pkey
 │                 spans: FULL SCAN
 │
 └── • constraint-check
@@ -1291,7 +1291,7 @@ vectorized: true
                 │
                 └── • scan
                       missing stats
-                      table: uniq_partial_hidden_pk@primary
+                      table: uniq_partial_hidden_pk@uniq_partial_hidden_pk_pkey
                       spans: FULL SCAN
 
 # Test that we use the partial index when available for the insert checks.
@@ -1392,7 +1392,7 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: uniq_partial_enum(r, a, b, c)
 │ auto commit
-│ arbiter indexes: primary
+│ arbiter indexes: uniq_partial_enum_pkey
 │ arbiter constraints: unique_b
 │
 └── • render
@@ -1430,7 +1430,7 @@ vectorized: true
                 └── • lookup join (anti)
                     │ columns: (column1, column2, column3, column4)
                     │ estimated row count: 0
-                    │ table: uniq_partial_enum@primary
+                    │ table: uniq_partial_enum@uniq_partial_enum_pkey
                     │ equality: (column1, column2) = (r,a)
                     │ equality cols are key
                     │
@@ -1515,7 +1515,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq_uuid@primary
+            │     table: uniq_uuid@uniq_uuid_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -1552,7 +1552,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq_uuid@primary
+            │     table: uniq_uuid@uniq_uuid_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -1577,7 +1577,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: other@primary
+│                 table: other@other_pkey
 │                 spans: FULL SCAN
 │
 └── • constraint-check
@@ -1593,7 +1593,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq_uuid@primary
+                  table: uniq_uuid@uniq_uuid_pkey
                   spans: FULL SCAN
 
 statement ok
@@ -1628,7 +1628,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq_uuid@primary
+│           │     table: uniq_uuid@uniq_uuid_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -1645,7 +1645,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq_uuid@primary
+            │     table: uniq_uuid@uniq_uuid_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -1678,7 +1678,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq@primary
+│                 table: uniq@uniq_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -1695,7 +1695,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq@primary
+│                 table: uniq@uniq_pkey
 │                 spans: FULL SCAN
 │
 └── • constraint-check
@@ -1711,7 +1711,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq@primary
+                  table: uniq@uniq_pkey
                   spans: FULL SCAN
 
 # No need to plan checks for x,y since x is always null.
@@ -1735,7 +1735,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq@primary
+│                 table: uniq@uniq_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -1752,7 +1752,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq@primary
+                  table: uniq@uniq_pkey
                   spans: FULL SCAN
 
 # No need to plan checks since none of the columns requiring checks are updated.
@@ -1771,7 +1771,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: uniq@primary
+          table: uniq@uniq_pkey
           spans: FULL SCAN
           locking strength: for update
 
@@ -1796,7 +1796,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_overlaps_pk@primary
+│                 table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
 │                 spans: [/5 - /5]
 │                 locking strength: for update
 │
@@ -1810,7 +1810,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq_overlaps_pk@primary
+│           │     table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -1821,7 +1821,7 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • lookup join (semi)
-│           │ table: uniq_overlaps_pk@primary
+│           │ table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
 │           │ equality: (a_new) = (a)
 │           │ pred: b_new != b
 │           │
@@ -1838,7 +1838,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq_overlaps_pk@primary
+            │     table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -1868,7 +1868,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_overlaps_pk@primary
+│                 table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
 │                 spans: [/5 - /5]
 │                 locking strength: for update
 │
@@ -1883,7 +1883,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq_overlaps_pk@primary
+│           │     table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -1894,7 +1894,7 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • lookup join (semi)
-│           │ table: uniq_overlaps_pk@primary
+│           │ table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
 │           │ equality: (a_new) = (a)
 │           │ pred: b_new != b
 │           │
@@ -1912,7 +1912,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq_overlaps_pk@primary
+            │     table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -1940,12 +1940,12 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq_hidden_pk@primary
+│           │     table: uniq_hidden_pk@uniq_hidden_pk_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: other@primary
+│                 table: other@other_pkey
 │                 spans: FULL SCAN
 │
 ├── • constraint-check
@@ -1961,7 +1961,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_hidden_pk@primary
+│                 table: uniq_hidden_pk@uniq_hidden_pk_pkey
 │                 spans: FULL SCAN
 │
 └── • constraint-check
@@ -1977,7 +1977,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq_hidden_pk@primary
+                  table: uniq_hidden_pk@uniq_hidden_pk_pkey
                   spans: FULL SCAN
 
 # Combine unique checks with foreign keys.
@@ -2001,7 +2001,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_fk_parent@primary
+│                 table: uniq_fk_parent@uniq_fk_parent_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -2022,7 +2022,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq_fk_parent@primary
+                  table: uniq_fk_parent@uniq_fk_parent_pkey
                   spans: FULL SCAN
 
 # Combine unique checks with foreign keys.
@@ -2046,7 +2046,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_fk_child@primary
+│                 table: uniq_fk_child@uniq_fk_child_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -2060,7 +2060,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq_fk_parent@primary
+│           │     table: uniq_fk_parent@uniq_fk_parent_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • filter
@@ -2081,7 +2081,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq_fk_parent@primary
+                  table: uniq_fk_parent@uniq_fk_parent_pkey
                   spans: FULL SCAN
 
 # Combine unique checks with foreign keys.
@@ -2105,7 +2105,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_fk_child@primary
+│                 table: uniq_fk_child@uniq_fk_child_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -2122,7 +2122,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_fk_child@primary
+│                 table: uniq_fk_child@uniq_fk_child_pkey
 │                 spans: FULL SCAN
 │
 └── • constraint-check
@@ -2137,7 +2137,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq_fk_parent@primary
+                  table: uniq_fk_parent@uniq_fk_parent_pkey
                   spans: FULL SCAN
 
 # Test that we use the index when available for the update checks.
@@ -2186,7 +2186,7 @@ vectorized: true
 │               └── • scan
 │                     columns: (r, s, i, j)
 │                     estimated row count: 9 (missing stats)
-│                     table: uniq_enum@primary
+│                     table: uniq_enum@uniq_enum_pkey
 │                     spans: /"\xc0"/11-/"\xc0"/20/#
 │                     parallel
 │                     locking strength: for update
@@ -2206,7 +2206,7 @@ vectorized: true
 │               │
 │               └── • lookup join (semi)
 │                   │ columns: (r_new, i_new, "lookup_join_const_col_@17")
-│                   │ table: uniq_enum@primary
+│                   │ table: uniq_enum@uniq_enum_pkey
 │                   │ equality: (lookup_join_const_col_@17, i_new) = (r,i)
 │                   │ equality cols are key
 │                   │ pred: r_new != r
@@ -2289,7 +2289,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_partial@primary
+│                 table: uniq_partial@uniq_partial_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -2312,7 +2312,7 @@ vectorized: true
 │               │
 │               └── • scan
 │                     missing stats
-│                     table: uniq_partial@primary
+│                     table: uniq_partial@uniq_partial_pkey
 │                     spans: FULL SCAN
 │
 └── • constraint-check
@@ -2334,7 +2334,7 @@ vectorized: true
                 │
                 └── • scan
                       missing stats
-                      table: uniq_partial@primary
+                      table: uniq_partial@uniq_partial_pkey
                       spans: FULL SCAN
 
 # No need to plan checks for a since a is always null.
@@ -2358,7 +2358,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_partial@primary
+│                 table: uniq_partial@uniq_partial_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -2381,7 +2381,7 @@ vectorized: true
                 │
                 └── • scan
                       missing stats
-                      table: uniq_partial@primary
+                      table: uniq_partial@uniq_partial_pkey
                       spans: FULL SCAN
 
 # No need to plan checks since none of the columns requiring checks are updated.
@@ -2400,7 +2400,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: uniq_partial@primary
+          table: uniq_partial@uniq_partial_pkey
           spans: FULL SCAN
           locking strength: for update
 
@@ -2424,7 +2424,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_partial@primary
+│                 table: uniq_partial@uniq_partial_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -2447,7 +2447,7 @@ vectorized: true
 │               │
 │               └── • scan
 │                     missing stats
-│                     table: uniq_partial@primary
+│                     table: uniq_partial@uniq_partial_pkey
 │                     spans: FULL SCAN
 │
 └── • constraint-check
@@ -2469,7 +2469,7 @@ vectorized: true
                 │
                 └── • scan
                       missing stats
-                      table: uniq_partial@primary
+                      table: uniq_partial@uniq_partial_pkey
                       spans: FULL SCAN
 
 # Test that we use the index when available for the update checks.
@@ -2508,7 +2508,7 @@ vectorized: true
 │               └── • scan
 │                     columns: (r, a, b, c)
 │                     estimated row count: 1 (0.10% of the table; stats collected <hidden> ago)
-│                     table: uniq_partial_enum@primary
+│                     table: uniq_partial_enum@uniq_partial_enum_pkey
 │                     spans: /"@"/2/0 /"@"/2/2/1-/"@"/2/3/2 /"\x80"/2/0 /"\x80"/2/2/1-/"\x80"/2/3/2 /"\xc0"/2/0 /"\xc0"/2/2/1-/"\xc0"/2/3/2
 │                     parallel
 │                     locking strength: for update
@@ -2577,7 +2577,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_uuid@primary
+│                 table: uniq_uuid@uniq_uuid_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -2594,7 +2594,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq_uuid@primary
+                  table: uniq_uuid@uniq_uuid_pkey
                   spans: FULL SCAN
 
 statement ok
@@ -2620,7 +2620,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_uuid@primary
+│                 table: uniq_uuid@uniq_uuid_pkey
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
@@ -2637,7 +2637,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_uuid@primary
+│                 table: uniq_uuid@uniq_uuid_pkey
 │                 spans: FULL SCAN
 │
 └── • constraint-check
@@ -2653,7 +2653,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq_uuid@primary
+                  table: uniq_uuid@uniq_uuid_pkey
                   spans: FULL SCAN
 
 statement ok
@@ -2674,7 +2674,7 @@ vectorized: true
 │
 ├── • upsert
 │   │ into: uniq(k, v, w, x, y)
-│   │ arbiter indexes: primary
+│   │ arbiter indexes: uniq_pkey
 │   │
 │   └── • buffer
 │       │ label: buffer 1
@@ -2682,7 +2682,7 @@ vectorized: true
 │       └── • render
 │           │
 │           └── • lookup join (left outer)
-│               │ table: uniq@primary
+│               │ table: uniq@uniq_pkey
 │               │ equality: (column1) = (k)
 │               │ equality cols are key
 │               │ locking strength: for update
@@ -2700,7 +2700,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq@primary
+│           │     table: uniq@uniq_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -2716,7 +2716,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq@primary
+            │     table: uniq@uniq_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -2734,7 +2734,7 @@ vectorized: true
 │
 ├── • upsert
 │   │ into: uniq(k, v, w, x, y)
-│   │ arbiter indexes: primary
+│   │ arbiter indexes: uniq_pkey
 │   │
 │   └── • buffer
 │       │ label: buffer 1
@@ -2742,7 +2742,7 @@ vectorized: true
 │       └── • render
 │           │
 │           └── • lookup join (left outer)
-│               │ table: uniq@primary
+│               │ table: uniq@uniq_pkey
 │               │ equality: (column1) = (k)
 │               │ equality cols are key
 │               │ locking strength: for update
@@ -2763,7 +2763,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq@primary
+│           │     table: uniq@uniq_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -2779,7 +2779,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq@primary
+            │     table: uniq@uniq_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -2797,7 +2797,7 @@ vectorized: true
 │
 ├── • upsert
 │   │ into: uniq(k, v, w, x, y)
-│   │ arbiter indexes: primary
+│   │ arbiter indexes: uniq_pkey
 │   │
 │   └── • buffer
 │       │ label: buffer 1
@@ -2805,7 +2805,7 @@ vectorized: true
 │       └── • render
 │           │
 │           └── • lookup join (left outer)
-│               │ table: uniq@primary
+│               │ table: uniq@uniq_pkey
 │               │ equality: (column1) = (k)
 │               │ equality cols are key
 │               │ locking strength: for update
@@ -2826,7 +2826,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq@primary
+│           │     table: uniq@uniq_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -2842,7 +2842,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq@primary
+            │     table: uniq@uniq_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -2861,7 +2861,7 @@ vectorized: true
 │
 ├── • upsert
 │   │ into: uniq(k, v, w, x, y)
-│   │ arbiter indexes: primary
+│   │ arbiter indexes: uniq_pkey
 │   │
 │   └── • buffer
 │       │ label: buffer 1
@@ -2869,7 +2869,7 @@ vectorized: true
 │       └── • render
 │           │
 │           └── • lookup join (left outer)
-│               │ table: uniq@primary
+│               │ table: uniq@uniq_pkey
 │               │ equality: (column1) = (k)
 │               │ equality cols are key
 │               │ locking strength: for update
@@ -2890,7 +2890,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq@primary
+│           │     table: uniq@uniq_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -2906,7 +2906,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq@primary
+            │     table: uniq@uniq_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -2944,12 +2944,12 @@ vectorized: true
 │               │       │
 │               │       └── • scan
 │               │             missing stats
-│               │             table: other@primary
+│               │             table: other@other_pkey
 │               │             spans: FULL SCAN
 │               │
 │               └── • scan
 │                     missing stats
-│                     table: uniq@primary
+│                     table: uniq@uniq_pkey
 │                     spans: FULL SCAN
 │
 ├── • constraint-check
@@ -2965,7 +2965,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq@primary
+│                 table: uniq@uniq_pkey
 │                 spans: FULL SCAN
 │
 └── • constraint-check
@@ -2981,7 +2981,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq@primary
+                  table: uniq@uniq_pkey
                   spans: FULL SCAN
 
 # On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
@@ -3008,7 +3008,7 @@ vectorized: true
 │               │
 │               ├── • scan
 │               │     missing stats
-│               │     table: uniq@primary
+│               │     table: uniq@uniq_pkey
 │               │     spans: FULL SCAN
 │               │
 │               └── • render
@@ -3027,7 +3027,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq@primary
+│           │     table: uniq@uniq_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -3043,7 +3043,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq@primary
+            │     table: uniq@uniq_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -3071,7 +3071,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: other@primary
+│                 table: other@other_pkey
 │                 spans: FULL SCAN
 │
 ├── • constraint-check
@@ -3087,7 +3087,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_overlaps_pk@primary
+│                 table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
 │                 spans: FULL SCAN
 │
 └── • constraint-check
@@ -3103,7 +3103,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq_overlaps_pk@primary
+                  table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
                   spans: FULL SCAN
 
 # Upsert with non-constant input.
@@ -3126,7 +3126,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: other@primary
+│                 table: other@other_pkey
 │                 spans: FULL SCAN
 │
 ├── • constraint-check
@@ -3142,7 +3142,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_hidden_pk@primary
+│                 table: uniq_hidden_pk@uniq_hidden_pk_pkey
 │                 spans: FULL SCAN
 │
 ├── • constraint-check
@@ -3158,7 +3158,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: uniq_hidden_pk@primary
+│                 table: uniq_hidden_pk@uniq_hidden_pk_pkey
 │                 spans: FULL SCAN
 │
 └── • constraint-check
@@ -3174,7 +3174,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq_hidden_pk@primary
+                  table: uniq_hidden_pk@uniq_hidden_pk_pkey
                   spans: FULL SCAN
 
 # Combine unique checks with foreign keys.
@@ -3189,7 +3189,7 @@ vectorized: true
 │
 ├── • upsert
 │   │ into: uniq_fk_parent(a, b, c, rowid)
-│   │ arbiter indexes: primary
+│   │ arbiter indexes: uniq_fk_parent_pkey
 │   │
 │   └── • buffer
 │       │ label: buffer 1
@@ -3197,7 +3197,7 @@ vectorized: true
 │       └── • render
 │           │
 │           └── • lookup join (left outer)
-│               │ table: uniq_fk_parent@primary
+│               │ table: uniq_fk_parent@uniq_fk_parent_pkey
 │               │ equality: (rowid_default) = (rowid)
 │               │ equality cols are key
 │               │
@@ -3227,7 +3227,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq_fk_parent@primary
+│           │     table: uniq_fk_parent@uniq_fk_parent_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -3243,7 +3243,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq_fk_parent@primary
+│           │     table: uniq_fk_parent@uniq_fk_parent_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -3259,7 +3259,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq_fk_child@primary
+            │     table: uniq_fk_child@uniq_fk_child_pkey
             │     spans: FULL SCAN
             │
             └── • except
@@ -3301,7 +3301,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq_fk_child@primary
+│           │     table: uniq_fk_child@uniq_fk_child_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -3316,7 +3316,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq_fk_parent@primary
+│           │     table: uniq_fk_parent@uniq_fk_parent_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -3331,7 +3331,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq_fk_parent@primary
+            │     table: uniq_fk_parent@uniq_fk_parent_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -3351,7 +3351,7 @@ vectorized: true
 │   │ columns: ()
 │   │ estimated row count: 0 (missing stats)
 │   │ into: uniq_enum(r, s, i, j)
-│   │ arbiter indexes: primary
+│   │ arbiter indexes: uniq_enum_pkey
 │   │
 │   └── • buffer
 │       │ columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
@@ -3392,7 +3392,7 @@ vectorized: true
 │                   └── • lookup join (left outer)
 │                       │ columns: (column1, column2, column3, column4, r, s, i, j)
 │                       │ estimated row count: 2 (missing stats)
-│                       │ table: uniq_enum@primary
+│                       │ table: uniq_enum@uniq_enum_pkey
 │                       │ equality: (column1, column3) = (r,i)
 │                       │ equality cols are key
 │                       │ locking strength: for update
@@ -3424,7 +3424,7 @@ vectorized: true
 │               │
 │               └── • lookup join (semi)
 │                   │ columns: ("lookup_join_const_col_@20", upsert_r, upsert_i)
-│                   │ table: uniq_enum@primary
+│                   │ table: uniq_enum@uniq_enum_pkey
 │                   │ equality: (lookup_join_const_col_@20, upsert_i) = (r,i)
 │                   │ equality cols are key
 │                   │ pred: upsert_r != r
@@ -3575,7 +3575,7 @@ vectorized: true
                 │
                 └── • lookup join (semi)
                     │ columns: ("lookup_join_const_col_@23", upsert_r, upsert_i)
-                    │ table: uniq_enum@primary
+                    │ table: uniq_enum@uniq_enum_pkey
                     │ equality: (lookup_join_const_col_@23, upsert_i) = (r,i)
                     │ equality cols are key
                     │ pred: upsert_r != r
@@ -3630,7 +3630,7 @@ vectorized: true
 │           │   │
 │           │   └── • scan
 │           │         missing stats
-│           │         table: uniq_partial@primary
+│           │         table: uniq_partial@uniq_partial_pkey
 │           │         spans: FULL SCAN
 │           │
 │           └── • filter
@@ -3653,7 +3653,7 @@ vectorized: true
             │   │
             │   └── • scan
             │         missing stats
-            │         table: uniq_partial@primary
+            │         table: uniq_partial@uniq_partial_pkey
             │         spans: FULL SCAN
             │
             └── • filter
@@ -3675,7 +3675,7 @@ vectorized: true
 │
 ├── • upsert
 │   │ into: uniq_partial(k, a, b)
-│   │ arbiter indexes: primary
+│   │ arbiter indexes: uniq_partial_pkey
 │   │
 │   └── • buffer
 │       │ label: buffer 1
@@ -3683,7 +3683,7 @@ vectorized: true
 │       └── • render
 │           │
 │           └── • lookup join (left outer)
-│               │ table: uniq_partial@primary
+│               │ table: uniq_partial@uniq_partial_pkey
 │               │ equality: (column1) = (k)
 │               │ equality cols are key
 │               │ locking strength: for update
@@ -3707,7 +3707,7 @@ vectorized: true
 │           │   │
 │           │   └── • scan
 │           │         missing stats
-│           │         table: uniq_partial@primary
+│           │         table: uniq_partial@uniq_partial_pkey
 │           │         spans: FULL SCAN
 │           │
 │           └── • filter
@@ -3729,7 +3729,7 @@ vectorized: true
             │   │
             │   └── • scan
             │         missing stats
-            │         table: uniq_partial@primary
+            │         table: uniq_partial@uniq_partial_pkey
             │         spans: FULL SCAN
             │
             └── • filter
@@ -3769,7 +3769,7 @@ vectorized: true
             │   │
             │   └── • scan
             │         missing stats
-            │         table: uniq_partial@primary
+            │         table: uniq_partial@uniq_partial_pkey
             │         spans: FULL SCAN
             │
             └── • filter
@@ -3808,7 +3808,7 @@ vectorized: true
 │               │   │
 │               │   └── • scan
 │               │         missing stats
-│               │         table: uniq_partial@primary
+│               │         table: uniq_partial@uniq_partial_pkey
 │               │         spans: FULL SCAN
 │               │
 │               └── • distinct
@@ -3836,7 +3836,7 @@ vectorized: true
 │           │   │
 │           │   └── • scan
 │           │         missing stats
-│           │         table: uniq_partial@primary
+│           │         table: uniq_partial@uniq_partial_pkey
 │           │         spans: FULL SCAN
 │           │
 │           └── • filter
@@ -3858,7 +3858,7 @@ vectorized: true
             │   │
             │   └── • scan
             │         missing stats
-            │         table: uniq_partial@primary
+            │         table: uniq_partial@uniq_partial_pkey
             │         spans: FULL SCAN
             │
             └── • filter
@@ -3900,7 +3900,7 @@ vectorized: true
 │               │       │
 │               │       └── • scan
 │               │             missing stats
-│               │             table: other@primary
+│               │             table: other@other_pkey
 │               │             spans: FULL SCAN
 │               │
 │               └── • filter
@@ -3908,7 +3908,7 @@ vectorized: true
 │                   │
 │                   └── • scan
 │                         missing stats
-│                         table: uniq_partial@primary
+│                         table: uniq_partial@uniq_partial_pkey
 │                         spans: FULL SCAN
 │
 ├── • constraint-check
@@ -3930,7 +3930,7 @@ vectorized: true
 │               │
 │               └── • scan
 │                     missing stats
-│                     table: uniq_partial@primary
+│                     table: uniq_partial@uniq_partial_pkey
 │                     spans: FULL SCAN
 │
 └── • constraint-check
@@ -3952,7 +3952,7 @@ vectorized: true
                 │
                 └── • scan
                       missing stats
-                      table: uniq_partial@primary
+                      table: uniq_partial@uniq_partial_pkey
                       spans: FULL SCAN
 
 # No need to build uniqueness checks when the primary key columns are a subset
@@ -3990,7 +3990,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: other@primary
+│                 table: other@other_pkey
 │                 spans: FULL SCAN
 │
 └── • constraint-check
@@ -4012,7 +4012,7 @@ vectorized: true
                 │
                 └── • scan
                       missing stats
-                      table: uniq_partial_hidden_pk@primary
+                      table: uniq_partial_hidden_pk@uniq_partial_hidden_pk_pkey
                       spans: FULL SCAN
 
 # Test that we use the index when available for the upsert checks.
@@ -4029,7 +4029,7 @@ vectorized: true
 │   │ columns: ()
 │   │ estimated row count: 0 (missing stats)
 │   │ into: uniq_partial_enum(r, a, b, c)
-│   │ arbiter indexes: primary
+│   │ arbiter indexes: uniq_partial_enum_pkey
 │   │
 │   └── • buffer
 │       │ columns: (column1, column2, column3, column4, r, a, b, c, column3, column4, r, check1, partial_index_put1, partial_index_del1, upsert_r, upsert_a)
@@ -4072,7 +4072,7 @@ vectorized: true
 │                   └── • lookup join (left outer)
 │                       │ columns: (column1, column2, column3, column4, r, a, b, c)
 │                       │ estimated row count: 2
-│                       │ table: uniq_partial_enum@primary
+│                       │ table: uniq_partial_enum@uniq_partial_enum_pkey
 │                       │ equality: (column1, column2) = (r,a)
 │                       │ equality cols are key
 │                       │ locking strength: for update
@@ -4170,7 +4170,7 @@ vectorized: true
         └── • lookup join (left outer)
             │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4, r, a, b, c)
             │ estimated row count: 2
-            │ table: uniq_partial_enum@primary
+            │ table: uniq_partial_enum@uniq_partial_enum_pkey
             │ equality: (r, a) = (r,a)
             │ equality cols are key
             │
@@ -4239,7 +4239,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq_uuid@primary
+            │     table: uniq_uuid@uniq_uuid_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -4277,7 +4277,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq_uuid@primary
+│           │     table: uniq_uuid@uniq_uuid_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -4294,7 +4294,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: uniq_uuid@primary
+            │     table: uniq_uuid@uniq_uuid_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer

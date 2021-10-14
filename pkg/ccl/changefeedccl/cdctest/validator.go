@@ -708,7 +708,7 @@ func fetchPrimaryKeyCols(sqlDB *gosql.DB, tableStr string) ([]string, error) {
 		SELECT column_name
 		FROM %sinformation_schema.key_column_usage
 		WHERE table_name=$1
-			AND constraint_name='primary'
+			AND constraint_name=($1||'_pkey')
 		ORDER BY ordinal_position`, db),
 		table,
 	)

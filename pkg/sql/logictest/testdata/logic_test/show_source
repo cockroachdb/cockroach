@@ -455,8 +455,8 @@ CREATE TABLE showdbindexestest.table2 (key2 INT PRIMARY KEY);
 query TTBITTBB
 SHOW INDEXES FROM DATABASE showdbindexestest;
 ----
-table1 primary false 1 key1 ASC false false
-table2 primary false 1 key2 ASC false false
+table1  table1_pkey  false  1  key1  ASC  false  false
+table2  table2_pkey  false  1  key2  ASC  false  false
 
 statement ok
 CREATE DATABASE "$peci@l";
@@ -470,8 +470,8 @@ CREATE TABLE "$peci@l".table2 (key2 INT PRIMARY KEY);
 query TTBITTBB
 SHOW INDEXES FROM DATABASE "$peci@l";
 ----
-table1 primary false 1 key1 ASC false false
-table2 primary false 1 key2 ASC false false
+table1  table1_pkey  false  1  key1  ASC  false  false
+table2  table2_pkey  false  1  key2  ASC  false  false
 
 # Test SHOW LOCALITY telemetry.
 query T
@@ -546,16 +546,16 @@ COMMENT ON INDEX t@i2 IS 'comm''ent3'
 query TTBITTBBT
 SHOW INDEXES FROM t WITH COMMENT
 ----
-t  i1       true   1  x      ASC  false  false  NULL
-t  i1       true   2  rowid  ASC  false  true   NULL
-t  i2       true   1  y      ASC  false  false  comm'ent3
-t  i2       true   2  rowid  ASC  false  true   comm'ent3
-t  i3       true   1  z      ASC  false  false  NULL
-t  i3       true   2  rowid  ASC  false  true   NULL
-t  primary  false  1  rowid  ASC  false  false  NULL
-t  primary  false  2  x      N/A  true   false  NULL
-t  primary  false  3  y      N/A  true   false  NULL
-t  primary  false  4  z      N/A  true   false  NULL
+t  i1      true   1  x      ASC  false  false  NULL
+t  i1      true   2  rowid  ASC  false  true   NULL
+t  i2      true   1  y      ASC  false  false  comm'ent3
+t  i2      true   2  rowid  ASC  false  true   comm'ent3
+t  i3      true   1  z      ASC  false  false  NULL
+t  i3      true   2  rowid  ASC  false  true   NULL
+t  t_pkey  false  1  rowid  ASC  false  false  NULL
+t  t_pkey  false  2  x      N/A  true   false  NULL
+t  t_pkey  false  3  y      N/A  true   false  NULL
+t  t_pkey  false  4  z      N/A  true   false  NULL
 
 query TTBITTBBT
 SHOW INDEXES FROM t2 WITH COMMENT
@@ -566,7 +566,7 @@ t2  i2       true   1  y      ASC  false  false  NULL
 t2  i2       true   2  rowid  ASC  false  true   NULL
 t2  i3       true   1  z      ASC  false  false  NULL
 t2  i3       true   2  rowid  ASC  false  true   NULL
-t2  primary  false  1  rowid  ASC  false  false  NULL
-t2  primary  false  2  x      N/A  true   false  NULL
-t2  primary  false  3  y      N/A  true   false  NULL
-t2  primary  false  4  z      N/A  true   false  NULL
+t2  t2_pkey  false  1  rowid  ASC  false  false  NULL
+t2  t2_pkey  false  2  x      N/A  true   false  NULL
+t2  t2_pkey  false  3  y      N/A  true   false  NULL
+t2  t2_pkey  false  4  z      N/A  true   false  NULL

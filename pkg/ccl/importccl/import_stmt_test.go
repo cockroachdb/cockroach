@@ -993,7 +993,7 @@ END;
 						`CREATE TABLE public.t (
 	a INT8 NOT NULL,
 	b INT8 NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	CONSTRAINT t_pkey PRIMARY KEY (a ASC),
 	FAMILY "primary" (a, b)
 )`,
 					},
@@ -1016,7 +1016,7 @@ END;
 	a INT8 NOT NULL,
 	b INT8 NOT VISIBLE NULL,
 	c INT8 NULL,
-	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	CONSTRAINT t_pkey PRIMARY KEY (a ASC),
 	FAMILY "primary" (a, b, c)
 )`,
 					},
@@ -1037,7 +1037,7 @@ END;
 						`CREATE TABLE public.t (
 	a INT8 NOT NULL,
 	b INT8 NULL DEFAULT 8:::INT8,
-	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	CONSTRAINT t_pkey PRIMARY KEY (a ASC),
 	FAMILY "primary" (a, b)
 )`,
 					},
@@ -1463,7 +1463,7 @@ const (
 	prcp FLOAT4 NULL,
 	date DATE NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+	CONSTRAINT weather_pkey PRIMARY KEY (rowid ASC),
 	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES public.cities(city) NOT VALID,
 	FAMILY "primary" (city, temp_lo, temp_hi, prcp, date, rowid)
 )`
@@ -5614,7 +5614,7 @@ func TestImportPgDump(t *testing.T) {
 	a INT8 NULL DEFAULT nextval('public.a_seq'::REGCLASS),
 	b INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+	CONSTRAINT seqtable_pkey PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (a, b, rowid)
 )`,
 				}})

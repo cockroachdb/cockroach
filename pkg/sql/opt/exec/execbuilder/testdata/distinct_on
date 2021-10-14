@@ -38,7 +38,7 @@ vectorized: true
 └── • scan
       columns: (x, y, z)
       estimated row count: 1,000 (missing stats)
-      table: xyz@primary
+      table: xyz@xyz_pkey
       spans: FULL SCAN
 
 query T
@@ -58,7 +58,7 @@ vectorized: true
     └── • scan
           columns: (x, y, z)
           estimated row count: 1,000 (missing stats)
-          table: xyz@primary
+          table: xyz@xyz_pkey
           spans: FULL SCAN
 
 query T
@@ -70,7 +70,7 @@ vectorized: true
 • scan
   columns: (a, c, b)
   estimated row count: 1,000 (missing stats)
-  table: abc@primary
+  table: abc@abc_pkey
   spans: FULL SCAN
 
 # Distinct node should be elided since we have a strong key.
@@ -83,7 +83,7 @@ vectorized: true
 • scan
   columns: (a)
   estimated row count: 1,000 (missing stats)
-  table: abc@primary
+  table: abc@abc_pkey
   spans: FULL SCAN
 
 # Distinct node should be elided since we have a strong key.
@@ -102,7 +102,7 @@ vectorized: true
 └── • scan
       columns: (b)
       estimated row count: 1,000 (missing stats)
-      table: abc@primary
+      table: abc@abc_pkey
       spans: FULL SCAN
 
 
@@ -122,7 +122,7 @@ vectorized: true
 └── • scan
       columns: (x, y)
       estimated row count: 1,000 (missing stats)
-      table: xyz@primary
+      table: xyz@xyz_pkey
       spans: FULL SCAN
 
 query T
@@ -142,7 +142,7 @@ vectorized: true
     └── • scan
           columns: (x, y)
           estimated row count: 1,000 (missing stats)
-          table: xyz@primary
+          table: xyz@xyz_pkey
           spans: FULL SCAN
 
 query T
@@ -159,7 +159,7 @@ vectorized: true
 └── • scan
       columns: (x, y)
       estimated row count: 1,000 (missing stats)
-      table: xyz@primary
+      table: xyz@xyz_pkey
       spans: FULL SCAN
 
 query T
@@ -179,7 +179,7 @@ vectorized: true
       columns: (x, pk1)
       ordering: +pk1
       estimated row count: 1,000 (missing stats)
-      table: xyz@primary
+      table: xyz@xyz_pkey
       spans: FULL SCAN
 
 query T
@@ -199,7 +199,7 @@ vectorized: true
     └── • scan
           columns: (a, b, c)
           estimated row count: 1,000 (missing stats)
-          table: abc@primary
+          table: abc@abc_pkey
           spans: FULL SCAN
 
 query T
@@ -216,7 +216,7 @@ vectorized: true
 └── • scan
       columns: (a, b, c)
       estimated row count: 1,000 (missing stats)
-      table: abc@primary
+      table: abc@abc_pkey
       spans: FULL SCAN
 
 
@@ -240,7 +240,7 @@ vectorized: true
       columns: (pk1, pk2)
       ordering: +pk1
       estimated row count: 1,000 (missing stats)
-      table: xyz@primary
+      table: xyz@xyz_pkey
       spans: FULL SCAN
 
 # Ensure the distinctNode advertises an a+ ordering.
@@ -273,7 +273,7 @@ vectorized: true
               columns: (a, b, c)
               ordering: +a
               estimated row count: 1,000 (missing stats)
-              table: abc@primary
+              table: abc@abc_pkey
               spans: FULL SCAN
 
 #################
@@ -300,7 +300,7 @@ vectorized: true
     └── • scan
           columns: (x)
           estimated row count: 1,000 (missing stats)
-          table: xyz@primary
+          table: xyz@xyz_pkey
           spans: FULL SCAN
 
 query T
@@ -323,7 +323,7 @@ vectorized: true
     └── • scan
           columns: (x, y, z)
           estimated row count: 1,000 (missing stats)
-          table: xyz@primary
+          table: xyz@xyz_pkey
           spans: FULL SCAN
 
 query T
@@ -348,7 +348,7 @@ vectorized: true
     └── • scan
           columns: (x, y, z)
           estimated row count: 1,000 (missing stats)
-          table: xyz@primary
+          table: xyz@xyz_pkey
           spans: FULL SCAN
 
 #####################
@@ -369,7 +369,7 @@ vectorized: true
 └── • scan
       columns: (x)
       estimated row count: 1,000 (missing stats)
-      table: xyz@primary
+      table: xyz@xyz_pkey
       spans: FULL SCAN
 
 query T
@@ -386,7 +386,7 @@ vectorized: true
 └── • revscan
       columns: (a)
       estimated row count: 1 (missing stats)
-      table: abc@primary
+      table: abc@abc_pkey
       spans: LIMITED SCAN
       limit: 1
 
@@ -413,7 +413,7 @@ vectorized: true
     └── • scan
           columns: (x, y)
           estimated row count: 1,000 (missing stats)
-          table: xyz@primary
+          table: xyz@xyz_pkey
           spans: FULL SCAN
 
 query T
@@ -445,7 +445,7 @@ vectorized: true
             └── • scan
                   columns: (x, y)
                   estimated row count: 1,000 (missing stats)
-                  table: xyz@primary
+                  table: xyz@xyz_pkey
                   spans: FULL SCAN
 
 #########################
@@ -474,7 +474,7 @@ vectorized: true
         └── • scan
               columns: (y)
               estimated row count: 1,000 (missing stats)
-              table: xyz@primary
+              table: xyz@xyz_pkey
               spans: FULL SCAN
 
 ###########################
@@ -495,7 +495,7 @@ vectorized: true
 └── • scan
       columns: (x, y, z)
       estimated row count: 1,000 (missing stats)
-      table: xyz@primary
+      table: xyz@xyz_pkey
       spans: FULL SCAN
 
 # Distinct node elided because of strong key.
@@ -508,7 +508,7 @@ vectorized: true
 • scan
   columns: (a, b, c)
   estimated row count: 1,000 (missing stats)
-  table: abc@primary
+  table: abc@abc_pkey
   spans: FULL SCAN
 
 #########################
@@ -530,7 +530,7 @@ vectorized: true
 └── • scan
       columns: (x, y)
       estimated row count: 1,000 (missing stats)
-      table: xyz@primary
+      table: xyz@xyz_pkey
       spans: FULL SCAN
 
 # Ignores the alias.
@@ -548,7 +548,7 @@ vectorized: true
 └── • scan
       columns: (x)
       estimated row count: 1,000 (missing stats)
-      table: xyz@primary
+      table: xyz@xyz_pkey
       spans: FULL SCAN
 
 ##################################
@@ -569,7 +569,7 @@ vectorized: true
 └── • scan
       columns: (x, y)
       estimated row count: 1,000 (missing stats)
-      table: xyz@primary
+      table: xyz@xyz_pkey
       spans: FULL SCAN
 
 ################################
@@ -592,7 +592,7 @@ vectorized: true
 └── • scan
       columns: (x, y, z)
       estimated row count: 1,000 (missing stats)
-      table: xyz@primary
+      table: xyz@xyz_pkey
       spans: FULL SCAN
 
 query T
@@ -618,7 +618,7 @@ vectorized: true
         └── • scan
               columns: (x, y, z, pk1)
               estimated row count: 1,000 (missing stats)
-              table: xyz@primary
+              table: xyz@xyz_pkey
               spans: FULL SCAN
 
 # Regression tests for #34112: distinct on constant column.
@@ -643,7 +643,7 @@ vectorized: true
     └── • scan
           columns: (x, y)
           estimated row count: 1,000 (missing stats)
-          table: xyz@primary
+          table: xyz@xyz_pkey
           spans: FULL SCAN
 
 query T
@@ -675,5 +675,5 @@ vectorized: true
             └── • scan
                   columns: (x, y)
                   estimated row count: 1,000 (missing stats)
-                  table: xyz@primary
+                  table: xyz@xyz_pkey
                   spans: FULL SCAN

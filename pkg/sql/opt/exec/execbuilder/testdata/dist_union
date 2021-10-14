@@ -16,12 +16,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: uniontest@primary
+│     table: uniontest@uniontest_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: uniontest@primary
+      table: uniontest@uniontest_pkey
       spans: FULL SCAN
 
 query T
@@ -34,12 +34,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: uniontest@primary
+│     table: uniontest@uniontest_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: uniontest@primary
+      table: uniontest@uniontest_pkey
       spans: FULL SCAN
 
 # Check that EXPLAIN properly releases memory for virtual tables.
@@ -82,7 +82,7 @@ vectorized: true
     │   └── • scan
     │         columns: (a, b)
     │         estimated row count: 1,000 (missing stats)
-    │         table: abc@primary
+    │         table: abc@abc_pkey
     │         spans: FULL SCAN
     │
     └── • project
@@ -91,7 +91,7 @@ vectorized: true
         └── • scan
               columns: (a, c)
               estimated row count: 1,000 (missing stats)
-              table: abc@primary
+              table: abc@abc_pkey
               spans: FULL SCAN
 
 # Regression test for #32723.

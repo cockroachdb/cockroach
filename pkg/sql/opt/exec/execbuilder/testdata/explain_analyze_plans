@@ -93,7 +93,7 @@ regions: <hidden>
     │     KV rows read: 5
     │     KV bytes read: 40 B
     │     missing stats
-    │     table: kv@primary
+    │     table: kv@kv_pkey
     │     spans: FULL SCAN
     │
     └── • scan
@@ -105,7 +105,7 @@ regions: <hidden>
           KV rows read: 5
           KV bytes read: 40 B
           missing stats
-          table: kw@primary
+          table: kw@kw_pkey
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsm99u4rgXx-9_T2H5qqMJE5yElkYaiZlqfqvOtjDqn5FGK1Sl5CyNgIRJTGm36mPtC-yTrRLKFAjYMdNZu9h3JI6Tk4-Pzzc-Pjzg7PsQ-_j808mnows0uH03sFBw298bTN8N3qD_n3VO0eAWfe4ct9Fgijrt4hL0HuXt6LezzuUX9PFbcRJbOE5CaAcjyLD_BybYwg62sIst7GELN3DXwuM06UGWJWl-yUPR4Ti8w37dwlE8ntD8dNfCvSQF7D9gGtEhYB9fBNdDOIMghNSuYwuHQINoWDxmcNsap9EoSO-xhc_HQZz5qGbnD-5MqI9auRm_f0U0GoGP6v_8nc2Oe0lMIaZREpea0mSaoRSC0EdPna_vKcxPNdFHbOHTr0dHKKMwRr1kElO0B3fUjmL6xkf1wsLZBQCDTReMgjs0glGS3qNgOEx6AYXQR_Xi7tcB7d1AhpIJHecvkV9fWDU_QXD30cKzoxnJOanre3QTZDfLjFr59V0LZzToA_bJo7Ud-v0V9NMyepsY-Ez4zkb4z_dJ0hBSCFfv8zZ_cKWr1ozjKaR9-JxEMaQ2WZlDQ_iT7rXI2zfv06h_M_v5PIZWKx9QuIPepDxkLJJ5W_Z9iCiMxiiMsgGaZEEftgb9DNEV8eAP_X4K_YAmqU0apbGxcGfG8cldP7S_XbU7F1fty5OTvRbJOZxfnu61nPzXUeeyffH0ewOQX-w-3s-5DxuPU_85POeXp1fHOSA3PzqDOIS08CDUcuyW-4LQnoE0KgCZxOuQrKXRTmrJ2HZW_GRbsxsbzd5fMptUj8GEL3-2U7NdE4OrCqAA_IMKAmjgiwggkSOAZKcEkOPBiwK4v1sCKOw-HAEkr10AnerBzKmgJG7N9kwwq6okAvCbFZTEwBdREkeOkjg7pSQcD15UkoPdUhJh9-EoifPalcStHszcCkri1eyGCWZVlUQA_mEFJTHwRZTElaMk7k4pCceDF5WkuVtKIuw-HCVxX7uSeNWDmVdBSRo1E8qq6ogA-gZfR2o2QUEcIoISegOpGYaqiuLJURRvpxSF48uLinK4W4oi7D4cRfFeu6JwdvzOIBsncQYr2z3r71zPaUHYhxndLJmkPfiSJr3iMbPDTtGvSDeGkNFZqzM7OI7nTRkNKGu76FdOovosaFS3vrnR-hjoNEkHaBhQiHv3P8yfn58GEV1-sRAySKNgGP0VlN963u0p5Pcgui1ee6FpHvt_tBXvPG8dQZajWO388kiIK5kJYTBpvggTIszE-El54sv2EylMiEAwdJQLhmzrmxut13ZAV4Lhf89ESjDkMDF-wguGmjBxVpnUF5ksI6mvdnaZQD2VPivXTBG29aSuozZymDQMk1LYMH5SZqKln3jMULqCZLVzg9nZ2V8OxMp9le5vmWDYYXdgI9m8Gn0NAyo9waDgiOqZYOBMfNl-ImXtdbBlgmGH3YSNZPNqVI1gyLZeeoJBwRHVM8HAmfiy_URKMGwyP2wP2QmGwy0TDDvsY2wkjKyFGkkXjvlaLhzZTPRMMHCYaOknpLSbx8ow6CEvRGQ3Txc_EdkjNEw4CQ01liA8-2UPqpKTX3b2QY6nl7b0TPqBw0TLxSqHCSOroUhE5Ngve1DlRETO5JedgpDj6aXdyqXvZuKxkxCktLFnshAcJnoWT_CgbF6gqZGb4divZyKCB0X2qlsOFHa5gmwmcqTX1ECIMtFz0WpKK8ShqF4uw5v8eg6qKYQQZaLnotXUV4hDUb1mhjf59RxUdjUE4ZRDEFMPUUa6dUGExlBkL9BUhMJIbyiSnjE1EWv-v2ZqIspM1K6JUJGJ7EyEnLmzdU2ExlCMpwilN9RYjDhq10TIiYimJkKUiZ6ZCB4U4ylC6Q1FIiK7JsLh1EQ4piaijNTURIhDkb1AUxGKnoUWPCiqV884piai-9h9_N-_AQAA___Lkw6x
@@ -151,7 +151,7 @@ regions: <hidden>
         │     KV rows read: 5
         │     KV bytes read: 40 B
         │     missing stats
-        │     table: kv@primary
+        │     table: kv@kv_pkey
         │     spans: FULL SCAN
         │
         └── • scan
@@ -163,7 +163,7 @@ regions: <hidden>
               KV rows read: 5
               KV bytes read: 40 B
               missing stats
-              table: kw@primary
+              table: kw@kw_pkey
               spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsm9Fuo0YUhu_7FKO52lXxwgzYcZBWijZJ1Wy7cZVEK1WVLwhMY2QbvMw4ThrlsfoCfbIKvKyDMXMg2Yaph7vYgHPmO2fOP_wDD5h_mWEXX57-enp8hU7OLq_Ozo-v0Jvp6t3qLfrpYvQJTW_Rx9HZOZqu0OgcTW_fTdF7lB5Ho4uT0wv04ffsEzZwFAfs3Jszjt0_MMEGptjANjawgw3cx2MDL5LYZ5zHSXrKQ3bBWXCHXcvAYbRYivTrsYH9OGHYfcAiFDOGXXzlXc_YBfMClpgWNnDAhBfOsn8zvT1aJOHcS-6xgS8XXsRd1DPTfzxaChcdpWH88hmJcM5cZP3zN19_9uNIsEiEcVQ6lMQrjhLmBS76evH1vWD5V0P0ARv40-fjY8QFWyA_XkYCvWF3wgwj8dZFVhbh-gTGplUnzL07NGfzOLlH3mwW-55ggYus7NevPeFPGEfxUizSQaTnZ1HlXxA8fjTw-tOaZE7q-h5NPD4pMjpKzx8bmAvvhmGXPBrPQz_YQr8qozfJU_i0g78Nn1bC3_zOMoqTgCUsKPzSOL0SOmVHBn_2-ORjHEYsMcnW5JmxP8WbI_L2fRLeTLK_Cqljd8xfltMko5ce419mSLD5AgUhn6Il927Ys-FuwNlNqvYk5CKMfGGSfikbSoyrWdE4LygaGR1qqUlnM_J-k6xfxolgiUlLOf9RtWENaiR0VzqzsezM6XncixemvZXQikGDkfcrIz8oRE7qiweBddukPdPulLuucjeAf1BDuQvwO-UGlJu8snKTfVFuoGo3yj1QU5teotzNikaq3ERNOlXKDWQ9V-5SzhVXblq_BdMa-mf3TKfTv7r61wD-sIb-FeB3-gfoH31l_aP7on9A1W7070DNDv8S_WtWNFL9o2rSqdI_IOu5_pVyrrj-2fVbsF1D_5ye2e_0r67-NYB_WEP_CvA7_QP0z35l_bP3Rf-Aqt3o31DNDv8S_WtWNFL9s9WkU6V_QNZz_SvlXHH9c-q3YKeG_vV7nfrVVb8G6Puw-vVMgrwoQATFYsKSTgfr6qDzyjro7IsOAvW70cFDNTv9S3SwWdFIddBRk06VDgJZz3WwlHPFdRDYmL1gfBFHnG13g52_bKUJZ8ENW1cHj5eJz35LYj_7N-uPo-y6zFYOGBfro3T94SzKD3HhCdk26H9JzsJZt6sf_WFl9BETqziZopknWOTffws__37lhaI4sIBxloTeLPzLK486v-yrUPksvM2G_eRQrljfjmVjzo_OGU9RbF_8_ZGQfstMiITJ8LswIU2ZUNLVSYnJgY5MSINmSJVrhvLoDyuj1zahW83w9Zm00gyBIiddnQDNUBMmdJuJ9ZSJXUBibV9sS4E6Ki0rd0wRefREy_UCwETL9YKcCbU7JiUmWt6TOdJW2pe30r704kGR5_bFA3kTL3YyS7kl7cEz3Yk9riU5kurp9X9IaOvuhIIZ1dOdAJi0vdpo5cZt-Ex3Yo_LRI6k2vJQoxnKo2_dnVAwo3q6EwCTtt2JVprhoXRhSyz5mprI3e9qf2KPqwxgInE91DBtoPjbXjOomFQ9LQoIipYeBSl54MWOSoGOKreLBzou2AnghWlZZnImek49wFuvdkXUuI-B6rxtB0PJya_ncqTkhHceBsBEz-c25Ewk1ogiHRGo87ZtjHY6IgClbR-jnUqXb--RAbDsLm3wdUYGwETPxzcgKNXLEUXcHXn8mhoZABQ976ZKe4fFjjoEOmrJbe-MDFJy2zsjA2DS9tRTsU70fLwDmjxK7as8I34tjQza5L05TW5lACZtGxmtdESAiZ7PeECTp9odUaMjQvFraWRQ-f4hBfYPaWn_sDMyACZ6GhkQFD2XI3IoEndEDXcHir_tu6l2klraQSx2VAfoqPK3TrQ0MmjJbVfKyFCRiZ5TT85ETyMDmjx6LkcAKErtq-yKH9hC0PKmXc6kbSOjnToH9g_1NDKAydP2Yx5KQql2RxTpiPL9QwrsH1L52zp6GhnAm256rhwAKHoaGcC7blo-5gFBUeql_13rKfnLejbwsp5dsts1NDLGjz_8GwAA__8EUOFJ
@@ -200,7 +200,7 @@ regions: <hidden>
 │         KV rows read: 5
 │         KV bytes read: 40 B
 │         missing stats
-│         table: kv@primary
+│         table: kv@kv_pkey
 │         spans: FULL SCAN
 │
 └── • ordinality
@@ -217,7 +217,7 @@ regions: <hidden>
           KV rows read: 5
           KV bytes read: 40 B
           missing stats
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsUcFu00AQvfMVozkBWhTbcTjsySUUNdA2KImKEMph4x2lq9i77u66JIryWfwAX4bspaJJm9CAuHGcN_Nm3ry3RndTIMfx6flpfwIv4d1oeAGLW_g0mJzBcPR2cHlyPph8hpMxCLanMUOG2ki6FCU55F8wxinDypqcnDO2gdbtwEAukUcMla5q38BThrmxhHyNXvmCkONEzAoakZBkOxEylOSFKtq1i9ussqoUdoUMx5XQjsMrZPjhCrwqiUP0_ZsLdW60J-2V0Q9a1nx1YElIDr2AzFae7qA0gjfI8OKq3wfnqYLc1NrDc1r6jtL-BYeolRUGiBb7BkqxhJJKY1cgisLkwpPkELbPhM-vyYGpfVV7Ds18K-sO6OF0wzBUP31yXswJebxhT_dyaKXSolB-1Ym3raQl5fVDe_5CWHKMsPshJ_9D3vWy-4chd_91yOleYb_01NpYSZbklphpw_zdyCPfnQl3_d4oTbaTbn83bKRmMcsSlnVZlrKsx7LXyPa9fSirpuduCvBUViCVW0DtxJyeHGWy37LeMVmOyFVGO9q17tHNUeMXyTkF_52pbU4frcnbM6EctrwWkOR86MahGOjQagTeJ8cHyekWOd4lJwfJ3cOXu0dcTnbJ6UFyb-fydPPsRwAAAP__PmxHoQ==
@@ -270,7 +270,7 @@ regions: <hidden>
       KV rows read: 5
       KV bytes read: 40 B
       missing stats
-      table: kv@primary
+      table: kv@kv_pkey
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzslctu2zoQhvfnKQazsgEaknw5KLhKG6RF0KYunMBdFF4w4sAlLJEKSfnSwI_VF-iTFaKsNHYuVfdacmZ-zczn35h7dHcZcry--HRxfgNiveyt-jCdX8yg14f3s-kVrNbIUBtJn0VODvk3TJDhEBmOkOEYGU5wwbCwJiXnjK1K7oPgUm6RxwyVLkpfhRcMU2MJ-T165TNCjjfiNqMZCUk2ipGhJC9UFtqs1meFVbmwO2R4XQjtOAyiqvG09BzOqjE-zsGrnDjEv366-p0a7Ul7ZfSTlDUbB5aE5HAQ3-48NaE38A4ZXs3Pz8F5KiA1pfbQo62PlPZ9DnGYsC4gWr1UkIst5JQbuwORZSYVniSHOHz9Vvj0OzkwpS-qJar6MFUTSHCxZ1i_DsicF0tCnuzZC1j_0Cy1sZIsySOSi_0z4L8qLc2GbDQ5pv52_qF3lvQfKFe8aUtp-ZToa4tWOXeXgae8AKncCkonltSaw-RFDsMjDkl7eyV_t1c0HESjzmAV2GF7sMMWYEeDaNyBrcCO2oMdtQA7HoR_cAeWj9uDHbcAOxl0WFsc8Bm5wmhHJxfn-S_H1SUiuaT6bDlT2pS-WJOGNvVzGnQhIMn5OpvUj0sdUmHAx-LkVfH_R-L4VDz8l85hlbAVavIbY1eQCU863T38_E18I5Q_NoYkR1aJTP0QT13TyA7WSUmt6WCfJtV4qMnVPmqyObnqxD4uiFsb4RjJqENyimTcITlFMumQ7Bf7_34HAAD__-kfW5M=
@@ -297,7 +297,7 @@ regions: <hidden>
   KV rows read: 0
   KV bytes read: 0 B
   missing stats
-  table: kv@primary
+  table: kv@kv_pkey
   spans: [/0 - /0]
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUc1q4zAQvu9TDHPaBUHsq2AhbPDSkKYpTkgPxQdFHlJjW3KlcZoQ_Fh9gT5ZsVRSSgn0-P3oG803Z_TPDUpcZ7fZbAM1_M9XS6gP8HCT5RnU8BcSFGhsSXeqJY_yEVMsBHbOavLeupE6B8O8PKJMBFam63mkC4HaOkJ5Rq64IZS4UbuGclIluckYXBKrqgmx9WHauapV7oQC150yXsIkCa5VzxKmKQpcbIGrliQkb68-Ym0Nk-HKmm-Ssy8eHKlShi0WW9idmC4U_EOBy-1sBp6pA217w_CbjjypDP-REIdHA1F9zdCqI7TUWncC1TRWK6ZL-k6xfiIPtuduXGL0h199EsUgMKKPzjyrPaFMB_HzXnPynTWevlR6LTkZCoFU7ineztveabp3VocxEa7Cu0CU5DmqaQRzE6WhGH69BwAA__821Lg1
@@ -353,7 +353,7 @@ regions: <hidden>
 │             KV rows read: 1
 │             KV bytes read: 8 B
 │             missing stats
-│             table: parent@primary
+│             table: parent@parent_pkey
 │             spans: LIMITED SCAN
 │             limit: 1
 │
@@ -372,7 +372,7 @@ regions: <hidden>
             │ KV contention time: 0µs
             │ KV rows read: 1
             │ KV bytes read: 8 B
-            │ table: parent@primary
+            │ table: parent@parent_pkey
             │ equality: (column2) = (p)
             │ equality cols are key
             │

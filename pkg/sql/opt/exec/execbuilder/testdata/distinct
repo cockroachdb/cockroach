@@ -91,7 +91,7 @@ vectorized: true
         │
         └── • scan
               missing stats
-              table: xyz@primary
+              table: xyz@xyz_pkey
               spans: FULL SCAN
 
 query T
@@ -123,7 +123,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: xyz@primary
+          table: xyz@xyz_pkey
           spans: FULL SCAN
 
 query T
@@ -135,7 +135,7 @@ vectorized: true
 • scan
   columns: (x)
   estimated row count: 1,000 (missing stats)
-  table: xyz@primary
+  table: xyz@xyz_pkey
   spans: FULL SCAN
 
 query T
@@ -147,7 +147,7 @@ vectorized: true
 • scan
   columns: (x, y, z)
   estimated row count: 1,000 (missing stats)
-  table: xyz@primary
+  table: xyz@xyz_pkey
   spans: FULL SCAN
 
 # Test the case when the DistinctOn operator is projecting away a column.
@@ -227,7 +227,7 @@ vectorized: true
       columns: (a, b)
       ordering: +a,+b
       estimated row count: 1,000 (missing stats)
-      table: abcd@primary
+      table: abcd@abcd_pkey
       spans: FULL SCAN
 
 query T
@@ -239,7 +239,7 @@ vectorized: true
 • scan
   columns: (a, b, c)
   estimated row count: 1,000 (missing stats)
-  table: abcd@primary
+  table: abcd@abcd_pkey
   spans: FULL SCAN
 
 query T
@@ -251,7 +251,7 @@ vectorized: true
 • scan
   columns: (a, b, c, d)
   estimated row count: 1,000 (missing stats)
-  table: abcd@primary
+  table: abcd@abcd_pkey
   spans: FULL SCAN
 
 statement ok

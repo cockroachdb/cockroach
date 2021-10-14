@@ -29,8 +29,8 @@ SHOW INDEXES FROM t
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 t           foo         true        1             b            ASC        false    false
 t           foo         true        2             a            ASC        false    true
-t           primary     false       1             a            ASC        false    false
-t           primary     false       2             b            N/A        true     false
+t           t_pkey      false       1             a            ASC        false    false
+t           t_pkey      false       2             b            N/A        true     false
 
 statement ok
 INSERT INTO t VALUES (2,1)
@@ -44,8 +44,8 @@ SHOW INDEXES FROM t
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 t           foo         true        1             b            ASC        false    false
 t           foo         true        2             a            ASC        false    true
-t           primary     false       1             a            ASC        false    false
-t           primary     false       2             b            N/A        true     false
+t           t_pkey      false       1             a            ASC        false    false
+t           t_pkey      false       2             b            N/A        true     false
 
 # test for DESC index
 
@@ -77,9 +77,9 @@ t           b_asc       true        2             c            DESC       false 
 t           b_asc       true        3             a            ASC        false    true
 t           b_desc      true        1             b            DESC       false    false
 t           b_desc      true        2             a            ASC        false    true
-t           primary     false       1             a            ASC        false    false
-t           primary     false       2             b            N/A        true     false
-t           primary     false       3             c            N/A        true     false
+t           t_pkey      false       1             a            ASC        false    false
+t           t_pkey      false       2             b            N/A        true     false
+t           t_pkey      false       3             c            N/A        true     false
 
 statement error pgcode 42P01 relation "foo" does not exist
 CREATE INDEX fail ON foo (b DESC)
@@ -104,8 +104,8 @@ query TTBITTBB colnames
 SHOW INDEXES FROM privs
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-privs       primary     false       1             a            ASC        false    false
-privs       primary     false       2             b            N/A        true     false
+privs       privs_pkey  false       1             a            ASC        false    false
+privs       privs_pkey  false       2             b            N/A        true     false
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -121,8 +121,8 @@ SHOW INDEXES FROM privs
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 privs       foo         true        1             b            ASC        false    false
 privs       foo         true        2             a            ASC        false    true
-privs       primary     false       1             a            ASC        false    false
-privs       primary     false       2             b            N/A        true     false
+privs       privs_pkey  false       1             a            ASC        false    false
+privs       privs_pkey  false       2             b            N/A        true     false
 
 
 user root
@@ -169,7 +169,7 @@ SHOW CREATE TABLE create_index_concurrently_tbl
 create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl (
                                a INT8 NULL,
                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                               CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                               CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC),
                                INDEX create_index_concurrently_idx (a ASC),
                                FAMILY "primary" (a, rowid)
 )
@@ -192,7 +192,7 @@ SHOW CREATE TABLE create_index_concurrently_tbl
 create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl (
                                a INT8 NULL,
                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                               CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                               CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC),
                                FAMILY "primary" (a, rowid)
 )
 

@@ -145,12 +145,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: parent1@primary
+│     table: parent1@parent1_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: child1@primary
+      table: child1@child1_pkey
       spans: FULL SCAN
 
 # Select over two ranges for parent/child with split at children key.
@@ -175,7 +175,7 @@ vectorized: true
     │     columns: (pid1, pa1)
     │     ordering: +pid1
     │     estimated row count: 3 (missing stats)
-    │     table: parent1@primary
+    │     table: parent1@parent1_pkey
     │     spans: /3-/5/#
     │     parallel
     │
@@ -183,7 +183,7 @@ vectorized: true
           columns: (pid1, cid1, ca1)
           ordering: +pid1
           estimated row count: 30 (missing stats)
-          table: child1@primary
+          table: child1@child1_pkey
           spans: /3-/6
 
 query T
@@ -198,12 +198,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: parent1@primary
+│     table: parent1@parent1_pkey
 │     spans: [/3 - /5]
 │
 └── • scan
       missing stats
-      table: child1@primary
+      table: child1@child1_pkey
       spans: [/3 - /5]
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckdGL00AQxt_9K4bxpdGVZBPrQ6CQw4uao5eeTUVB87Bmx95CbjfubkAp_d-liXCXo1V6b5lv5zfffJMdup8tpph_uVleFCXMLotqU31cBlDly_ztBl7Au_XqGjphSXsOV6uihOZWtZLDp6oo38OsU5IH8PlDvs7HAr71UZTQApIALsrLh2KzgHmADLWRVIo7cph-RY41w86ahpwz9iDthoZC_sI0Yqh01_uDXDNsjCVMd-iVbwlT3IjvLa1JSLJhhAwleaHaYezflbPOqjthfyPDqhPapRAmr8J5-BzrPUPT-_vhzostYcr37GkL8OkC45mO-7856R6fdL837bWxkizJiWF9IP_XciTCNdktXRmlyYbxNEJLP_ws4y-DhVXb2_ETGa56n0LGWRaz7DXL5ifDJOecck2uM9rR41BHJ0eHJCS3NF7Gmd42dGNNM9iM5WrgBkGS8-NrPBaFHp6Gf_0Q5mfA8WM4_iecTOBoX--f_QkAAP__lvUemA==
@@ -230,14 +230,14 @@ vectorized: true
     │     columns: (pid1, cid1, ca1)
     │     ordering: +pid1
     │     estimated row count: 30 (missing stats)
-    │     table: child1@primary
+    │     table: child1@child1_pkey
     │     spans: /3-/6
     │
     └── • scan
           columns: (pid1, pa1)
           ordering: +pid1
           estimated row count: 3 (missing stats)
-          table: parent1@primary
+          table: parent1@parent1_pkey
           spans: /3-/5/#
           parallel
 
@@ -253,12 +253,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: child1@primary
+│     table: child1@child1_pkey
 │     spans: [/3 - /5]
 │
 └── • scan
       missing stats
-      table: parent1@primary
+      table: parent1@parent1_pkey
       spans: [/3 - /5]
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckdGL00AQxt_9K4bxpdGVZBPqw0Ihhxc1Ry89m4qC5mHNjr2F3G7c3YBS-r9LE-GuR6ucb5lv5zfffJMd-h8dCiw-3ywvygpml2W9qT8sI6iLZfFmAy_g7Xp1De2t7hSHq1VZQS8dmcDhY11W72DWa8Uj-PS-WBdTAV-HJMloAVkEF9XlQ7FdwDxChsYqquQdeRRfkGPDsHe2Je-tO0i7saFUP1EkDLXph3CQG4atdYRih0GHjlDgRn7raE1SkYsTZKgoSN2NY6eV897pO-l-IcO6l8YLiLNX8Wts9gztEO4n-yC3hILv2f-582P3P0c6bT-Pn59dID27wL3vYKxT5EgdeTYH8l8tJ1Jck9vSldWGXJwep-joe5jl_GW0cHp7O30iw9UQBOSc5SnLM5bPz4bJnnLNNfneGk-PQ52cnBySkNrSdBlvB9fSjbPtaDOVq5EbBUU-TK_pVJRmfBp_90OYPwFOH8PpX-HsCE72zf7Z7wAAAP__oz4elw==
@@ -284,7 +284,7 @@ vectorized: true
 │     columns: (pid1, pa1)
 │     ordering: +pid1
 │     estimated row count: 3 (missing stats)
-│     table: parent1@primary
+│     table: parent1@parent1_pkey
 │     spans: /29-/31/#
 │     parallel
 │
@@ -292,7 +292,7 @@ vectorized: true
       columns: (pid1, cid1, ca1)
       ordering: +pid1
       estimated row count: 30 (missing stats)
-      table: child1@primary
+      table: child1@child1_pkey
       spans: /29-/32
 
 query T
@@ -307,12 +307,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: parent1@primary
+│     table: parent1@parent1_pkey
 │     spans: [/29 - /31]
 │
 └── • scan
       missing stats
-      table: child1@primary
+      table: child1@child1_pkey
       spans: [/29 - /31]
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycUVFv0zAQfudXnI6XFgyJHXhYpEoZNIhMXTLSSoAgDyE-OkuZHWxHAlX976jJ0MjUgrY33_fdd9995x26Hy3GmH66Wp1nOcyW2Xqz_rCawzpdpW838AzelcUldLUl7TlcFFkOzbVqJYci_wO_7JTksLglxurj-7RMYTbp-NqHYUQLEGdzOM-Xx9hmARGfQ1Eu0xLefJ44IENtJOX1DTmMvyDHimFnTUPOGXuAdkNDJn9iHDJUuuv9Aa4YNsYSxjv0yreEMW7qby2VVEuyQYgMJflatcPYW8uks-qmtr-Q4bqrtYshEGcvgogHT7HaMzS9vxvvfL0ljPmePW4FPl1hPOSpDcRJf3HS_86218ZKsiQnltVB-b-WIyEuyW7pwihNNhDTEC1997OEP58vrNpej09kWPQ-hoSzRLAkYskrlrw-mSd6yD1Lcp3Rju7nOjo5PIQhuaXxOM70tqEra5rBZiyLQTcAkpwfWTEWmR6o4cP_FvMHiMV9sfinOJqIw321f_I7AAD___2CMwk=
@@ -347,14 +347,14 @@ vectorized: true
     │     columns: (pid1, pa1)
     │     ordering: +pid1
     │     estimated row count: 333 (missing stats)
-    │     table: parent1@primary
+    │     table: parent1@parent1_pkey
     │     spans: /12-
     │
     └── • scan
           columns: (pid1, cid2, cid3, ca2)
           ordering: +pid1
           estimated row count: 333 (missing stats)
-          table: child2@primary
+          table: child2@child2_pkey
           spans: /12-
 
 query T
@@ -369,12 +369,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: parent1@primary
+│     table: parent1@parent1_pkey
 │     spans: [/12 - ]
 │
 └── • scan
       missing stats
-      table: child2@primary
+      table: child2@child2_pkey
       spans: [/12 - ]
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckd9v0zAQx9_5K0731IJRYxd4iDQpwAJk6pqRFAGCPJj46CxldrAdCVT1f0dxkEanFdS93a_vffw979D_6DDF_NPV6mWxhtl5UW_q96s51Pkqf72Bx_CmKi-hl45M4HBRFmtor3WnBHyoi_VbmPVa8Tl8fJdXOYwxfB2SZElnwAWU1XlewavPsYEMjVW0ljfkMf2CHBuGvbMteW_dWNrFgUL9xDRhqE0_hLHcMGytI0x3GHToCFPcyG8dVSQVuUWCDBUFqbu49s9Ts97pG-l-IcO6l8ansODiKTZ7hnYIt5t9kFvClO_Zw-j8kD7d5kS4OAq_ZQ7GOkWO1AGvGZX_G7nHwSW5LV1YbcgtxKGDjr6HWcafzM-c3l5PITIsh5BCxlkmWPaMZc9Z9uKon-Upx6zI99Z4uuvr3s3JaIbUlqbjeDu4lq6cbSNmSsuoiwVFPkxdMSWFia3423-L-QlicVcs_ileHoiTfbN_9DsAAP__2Kgc-g==
@@ -403,7 +403,7 @@ vectorized: true
     │     columns: (pid1, pa1)
     │     ordering: +pid1
     │     estimated row count: 4 (missing stats)
-    │     table: parent1@primary
+    │     table: parent1@parent1_pkey
     │     spans: /1/0 /11/0 /21/0 /31/0
     │     parallel
     │
@@ -411,7 +411,7 @@ vectorized: true
           columns: (pid1, cid2, cid3, ca2)
           ordering: +pid1
           estimated row count: 40 (missing stats)
-          table: child2@primary
+          table: child2@child2_pkey
           spans: /1-/2 /11-/12 /21-/22 /31-/32
 
 query T
@@ -426,12 +426,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: parent1@primary
+│     table: parent1@parent1_pkey
 │     spans: [/1 - /1] [/11 - /11] [/21 - /21] [/31 - /31]
 │
 └── • scan
       missing stats
-      table: child2@primary
+      table: child2@child2_pkey
       spans: [/1 - /1] [/11 - /11] [/21 - /21] [/31 - /31]
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckc-O0zAQxu88xWhOLRgldoFDJKQAGyCrbrMkRYBQDiYe2khZO9iOBKr67igO0pJVFyg3z59v5veND-i-dZhg9vF6_SLfwOIir7bVu_USqmydvdrCQ3hdFlfQS0vac7gs8g00-7ZTAt5X-eYNLPpW8SV8eJuVGYxvGMdwBpwzEJzBii-hKC-yEl5-Cg3IUBtFG3lDDpPPyLFm2FvTkHPGjqlDaMjVd0xihq3uBz-ma4aNsYTJAX3rO8IEt_JLRyVJRTaKkaEiL9sujP2FnPa2vZH2BzKseqldAhGPYpBawQqM35N1WB8ZmsHfrnFe7ggTfmT_h8LnKNPBTpE8jsS_oYh7UW4JBm2sIktqtr0elX9rOeHniuyOLk2ryUZi7qejr36R8kfL57bd7acnMiwGn0DKWSpY-oSlT1n67F4_q3NOW5LrjXZ019fJyfFohtSOpuM4M9iGrq1pwpopLIIuJBQ5P1XFFOQ6lMLf_y7mZ4jFXbH4o3g1E8fH-vjgZwAAAP__o_gmnA==
@@ -470,14 +470,14 @@ vectorized: true
     │         columns: (pid1, pa1)
     │         ordering: +pid1
     │         estimated row count: 1,000 (missing stats)
-    │         table: parent1@primary
+    │         table: parent1@parent1_pkey
     │         spans: FULL SCAN
     │
     └── • scan
           columns: (pid1, cid2, cid3, gcid2, gca2)
           ordering: +pid1
           estimated row count: 1,000 (missing stats)
-          table: grandchild2@primary
+          table: grandchild2@grandchild2_pkey
           spans: FULL SCAN
 
 query T
@@ -500,12 +500,12 @@ vectorized: true
 │   │
 │   └── • scan
 │         missing stats
-│         table: parent1@primary
+│         table: parent1@parent1_pkey
 │         spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: grandchild2@primary
+      table: grandchild2@grandchild2_pkey
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElVGPozYUhd_7K6z7lHQdmWsDwyCNxKqbbbOaTbbJVK3U5oENboKUBWqI1NVo_nsFTDYkw9hBNNkXFPD9fOxzruNHyP_Zgg_jPz7dv51MyeDdZPGw-PV-SBbj-_FPD-RH8n4--0iyUMmkQPJhNpmStQqTaLWJtxEnvy0m05_JIIsjHJLffxnPx2QwGFTv5K-dZQl5RxCH5O30HWl8Xd0RFMMhmc3JafFtWzHHYWu1aJ1aiH11Fu5riTUECkkayWn4Rebg_wkIFDhQEEDBBgoOLClkKl3JPE9VWfJYAZPoX_AtCnGS7Yry85LCKlUS_Eco4mIrwYeH8PNWzmUYScUsoBDJIoy3lcyzd0Gm4i-h-goUFlmY5D4ZwfKJQrorDtPmRbiW4OMTPV_6fbwtpJKK4bFu_d2v8giaafi-P5k-eM_OBc1I9kPPXjex21cx_m3GFk68LifECRfwb2HtR04sOuz681eyCfPN8ZYDhOXTwUbexcZmgvx42kbDt6TIOLM544yTMIkIkrTYSNVr3eLVdR_m2SWpiqSS0dFMy5Lcl7QVQIBvaq3T_X-Uai0_pHEiFbs5Zrby72IQ4JvhnYrXm_onUJjtCp8ESANOA5sGDg1cGty82tR2j121rHeajtKMIT_df6u2c6SN53eC06ETGFrMsconWiOGNnPs8on2hRoDr98YaF2-M_j56Ygu6eyP6Yi5zHaZy9wL5cKvn4t3-VjE-bG4nQ7N4ZyMGHrM8conehcKR3yHQ4OXT8c-Px27Szr7ozJq_rlV0fA6mvx_zMa-fja3173pWlYzl3mWJrk86x6zyv3IaC1ri_J0p1byk0pXlUz9Oqu46kMk86IexfplktRD5QKbMJ7C2ITFEYzdYK8PjLwP7faStvQ072AZ7wZ7feATyzrSbi9pS08LbYvaer9tfX8LfYM7fdLSw4a09LApLT1tSMsgbUjL7ZPWTR-_9bDBbz1s8ltPG_w2SBv89vr4fdvHbz1s8FsPm_zW0wa_DdIGv1F_YxoMxy5X5kvtLndmV9rkuQE3mG4SN7n-4grRur58-uG_AAAA__8gZppK
@@ -536,7 +536,7 @@ vectorized: true
     │     columns: (pid1, cid2, cid3, gcid2, gca2)
     │     ordering: +pid1
     │     estimated row count: 1,000 (missing stats)
-    │     table: grandchild2@primary
+    │     table: grandchild2@grandchild2_pkey
     │     spans: FULL SCAN
     │
     └── • filter
@@ -549,7 +549,7 @@ vectorized: true
               columns: (pid1, pa1)
               ordering: +pid1
               estimated row count: 1,000 (missing stats)
-              table: parent1@primary
+              table: parent1@parent1_pkey
               spans: FULL SCAN
 
 query T
@@ -569,7 +569,7 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: grandchild2@primary
+│     table: grandchild2@grandchild2_pkey
 │     spans: FULL SCAN
 │
 └── • filter
@@ -577,7 +577,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: parent1@primary
+          table: parent1@parent1_pkey
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEldGvokYUxt_7V0zOk3THDDMDXCS5CZuu27q5q1u1aZPWB1amSuICHTDpzY3_ewPoVbk4I6XaFyJwfvON33cO8wLZXxvwYPjbl6f3ozHqfRjN5rOfnww0Gz4Nf5ij79HH6eQzWskgDpfraBMy9GkyGqM0kCLOKfplNhr_iHppFFID_frTcDpEvV6vvEd_bE2Ti0dEqYHejz-gk6fLR0S5YaDJFNWLB03FjBqN1bxxac4P1WlwqEWmARjiJBTj4JvIwPsdKGBggIEDBgsw2LDAkMpkKbIskUXJSwmMwr_BMzFEcbrNi8cLDMtECvBeII_yjQAP5sHXjZiKIBSSmIAhFHkQbUqZE-_8VEbfAvkMGGZpEGce6hNGLEYYYSiIQ0RRkq-FhMUOQ7LN93pHma_PaB1k63MBn8Jit8CQ5cFKgEd3-N_t2z5fdh9xw55r2ztKszbSH6NNLqSQxDnXrZ57ZR_5p13ked5oPHf3ifunrXR4te-RU2xwEWOvKzZw_LIc5zXOZ69NdnjTKUF-0cbjOokMhRRhfZ13hfCxahs31ZVa9Tg-C7kSn5IoFpI8nC-7EX_mPZ--Mx5ltFpXPwHDZJt7yKfYZ9jn2Lewb2P_4WJzWFf8qxb7HSf9JCWU1Sqbte0zbXr9TPAWs0yoSWyzuFKzT6hFbKu4UutGo03v3xjUvH1nsOvToW3SOXxo-8QhlkMc4twoF3b_XNzbx8Kvj8VqNTTHOekT6hLbLa7UvVE4_H8YGnr7dKzr02Ft0jmMSv_041ZGw6posv8wG-v-2Qzue9I17GYqsjSJM3HVOWYW_0eEK1FZlCVbuRRfZLIsZarbScmVx0Mosrx6y6ubUVy9KjZ4Pex2gSnrQjudpE01Teu0eUqf79usw6yF36wd7HaBa363pJ1O0qaa5kq_LXVYlhKmXJ2W3WU61LBmOtSwbjrUtGY6NNKa6XC6pPXQxW81rPFbDev8VtMavzXSGr_dLn4PuvithjV-q2Gd32pa47dGWvf1f3N4tDGcvjk82jiuoTWWa2id5xpcY7pOXOf6myNE6fpi990_AQAA__9NRpoc
@@ -598,7 +598,7 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: grandchild2@primary
+│     table: grandchild2@grandchild2_pkey
 │     spans: FULL SCAN
 │
 └── • filter
@@ -606,7 +606,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: parent1@primary
+          table: parent1@parent1_pkey
           spans: FULL SCAN
 
 # Join on multiple interleaved columns with an overarching ancestor (parent1).
@@ -632,7 +632,7 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: child2@primary
+│     table: child2@child2_pkey
 │     spans: FULL SCAN
 │
 └── • filter
@@ -640,7 +640,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: grandchild2@primary
+          table: grandchild2@grandchild2_pkey
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsll1vo0YUhu_7K0bnKjTjDjMM2EaKxKrrbb1K8NaJ1EqtL1gztZG84AKWuory3yuMsfnwckyokr3IDYqZeeZ8vO-c8AjJPxuwYfLHp9t3U5dcvZ_eP9z_dquR-8nt5OcH8iP5MJ_dkeU62PiCTF13Mid3k_kvE_JxNnXJKvZC_7A4c8nVVf73T9vA5-SmvLx_pZF37ntSbFoGvqhtyl5pjV1Gc5ehkd9_ncwn5Koa86-drhvqhpjVQ05ryxsy1DQym5-S3edRgFycSbIgudQKdlWh5PhArSr7Ta5pQCGMfOV6X1QC9p_AgYIACgZQkEDBhAWFbRwtVZJEcbblcQ9M_X_B1ikE4XaXZq8XFJZRrMB-hDRINwpsePA-b9Rceb6KmQ4UfJV6wWYfJk_f2cbBFy_-ChTut16Y2GQAiycK0S49nHo67PNXsvaSdfUYh1NHUMeAxdOCQpJ6KwU2f6LPy5FXDy9peiZRJpgUTDBBvNAnnETpWsW17E85iS45fQg2qYpVzKxqQvl7OzOVU_KSbdtT92F0kNgpOalYOZjCKfuoRpVddMQKTpacVONkyU1H7n8Q0fhmw06n7cIo9lWs_Mp5i4wstpzbAA6_po64po5xncesC3Cn4pX6GAVhZoqaKzbq7_SqdIJ2EwerdfUVUJjtUpsUlVFHUsekjkWdIXVG1Bl_0yiyR91nKnGjQbRl3Kp36GxssxKbX35xZIeLw7jOTD17cn3AuGSmzJ5cPuMeISke79H47R41G_bS90i-4j0Sl3tZdPFy8T9gwCwmLWYx6xkuRpI7unj45uJmw17axeIVXWxc7mKz00Q-DeEB4yNmjrInHz3Dy0iKRy9z_c3MzY69tJnNVzSzvNzMRhczF4N4UP7Q2DtZ5E5OLrQykuDRyqM3Jzcb9tJONr6Tj_Qzec5Vso3CRF30Ca5nlSp_pfImJtEuXqpPcbTch8l_zvbc_mPOV0marxr5j2mYL2UJXg5zvRdt9aGHvUIjZfM6rZdpUYH1Oiw6NFx0g2sN70pbfehhr9BI2UZrw2W7WrIV5sN2ucxW2mqHrT5at8OY1giNaN1OI1ojoZGyh320HrXC43a1xn3UaocxtRAaUaudRtRCQiNl88Yk7SIXb5-kHBmlvNcsRWhMMgxHNENwRDQsOFZ6r4HKkYlqIqo1Rmon1dppVDUEx1RrxzHVkOBY6Y3B2qra4umH_wIAAP__jH5T_g==
@@ -665,7 +665,7 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: child2@primary
+│     table: child2@child2_pkey
 │     spans: FULL SCAN
 │
 └── • filter
@@ -673,7 +673,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: grandchild2@primary
+          table: grandchild2@grandchild2_pkey
           spans: FULL SCAN
 
 # Aggregation over parent and child keys.
@@ -693,12 +693,12 @@ vectorized: true
     │
     ├── • scan
     │     missing stats
-    │     table: parent1@primary
+    │     table: parent1@parent1_pkey
     │     spans: [/10 - /39]
     │
     └── • scan
           missing stats
-          table: child1@primary
+          table: child1@child1_pkey
           spans: [/10 - /39]
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckkGPmzAQhe_9Fdb0Aqq7YMhlkSIRdWnLKiHbkFUrtRwonrJIBFPbSK2i_PcKs1JCtKTK3uw38_m9GdiD-l1DANG3h-UiToh1F6fb9MvSJmm0jD5siep2VptLbDS7aSvObGqk4qmqObspeoV83KxX5LmJ3K_jhAxl8pjGySdiGY58_RxtouFCfnSu6-OcMNcmi-TuVC3mxL-1gUIjOCb5DhUE34FBRqGVokClhOylvWmI-R8IXApV03a6lzMKhZAIwR50pWuEALb5zxo3mHOUjgsUOOq8qs2zz6HDVla7XP4FCmmbNyogDnPfO_6t8xYorDsdkJBBdqAgOn00UjovEQJ2oK8Lw8ZhhqVNZJm5xyQ09CbDeJNhjhm6RkiOEvnIP-vJ_7W8MNEKZYn3ompQOt54ohp_aStk7-y5rMqn4Xg6hj85hn_NThdlKbHMtZCOPw6QPq6skPWe5uTZk4azaww3qFrRKDzf34svu_3SkJc4fAQlOlnggxSFsRmua8MZgaPSQ9UbLnFjSuYvO4XZFbB3DnsXYX8Eu-ewfxGencHZ4c2_AAAA___MwGdW
@@ -798,14 +798,14 @@ vectorized: true
     │     columns: (pid1, pa1)
     │     ordering: +pid1
     │     estimated row count: 1,000 (missing stats)
-    │     table: outer_p1@primary
+    │     table: outer_p1@outer_p1_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (pid1, cid1, cid2, ca1)
           ordering: +pid1
           estimated row count: 1,000 (missing stats)
-          table: outer_c1@primary
+          table: outer_c1@outer_c1_pkey
           spans: FULL SCAN
 
 query T
@@ -822,12 +822,12 @@ vectorized: true
     │
     ├── • scan
     │     missing stats
-    │     table: outer_p1@primary
+    │     table: outer_p1@outer_p1_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           missing stats
-          table: outer_c1@primary
+          table: outer_c1@outer_c1_pkey
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMll1r4kwUx--fTzGcK306kkxerA0spHTtYrHaVQsLS1jS5KwGbCY7ibCl-N2XJC6uwWYSBsU7k5zfefn_T5y8Q_prDQ4Mvz2Nb0cT0vk8mi_mX8ddMh-Oh3cL8j-5n00fCd9kKH4kjNw_j8fkYTqa7G4FjDzPR5MvpJNEIesChZiHOPFfMQXnOzCgYAAFEyhYQMEGj0IieIBpykUe8l4Ao_A3ODqFKE42WX7boxBwgeC8QxZlawQHFv7LGmfohyi0PG-ImR-tizJ_23MTEb364g0ozBM_Th2i6T3NJn4cEkZ4tkIB3pbm8bs6-_Qvb2Tlp6vDxC4Db-tRSDN_ieCwLf2g330eLkIUGFbzXOWF91Gb-FhcUas69yOKJT7wKEahXR-mXbwl6JSeTJ8Xw1nhDFBY48-s47Kr7icRLVflT6AwwzhE4ZC76e14OL8bdlxGXbNLiWtQ4lqUuDYlbr8i0X58s8H4LQab8B5PNMYqkcdrWwe1WfNVMRqvit3TmH6iXWHn35XBBe2K0dwvs7FfTO9p7FQvt3F-w24uyDCzuWFWc8Psnmac6g0zz28Y0y_IMau5Y3pTx3raqdxq0a19rNvgWLdK_Rkf9nembepf0DJJPsVmmCY8TrHRya3ng2O4xFLLlG9EgE-CB0WZ8nJacMUxGWKalU_Z7moUl8_yDlvQKrClAvdV4EE9zKqw_i9s1MNGLcwOab1Km0pmSWgVWGJWPSwxqx6WmGWpmGUryS2hVWCJ3PWwRO56WCJ3X0XuayW5JbQKLJG7HpbIXQ9L5B6oyH2jJLeEVoElctfDErnrYdk_f6vD0miLK9GWEt1XogcSut2J6W3_-xMAAP__LoMzBQ==
@@ -859,14 +859,14 @@ vectorized: true
     │     columns: (pid1, cid1, cid2, gcid1, gca1)
     │     ordering: +pid1,+cid1,+cid2
     │     estimated row count: 1,000 (missing stats)
-    │     table: outer_gc1@primary
+    │     table: outer_gc1@outer_gc1_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (pid1, cid1, cid2, ca1)
           ordering: +pid1,+cid1,+cid2
           estimated row count: 1,000 (missing stats)
-          table: outer_c1@primary
+          table: outer_c1@outer_c1_pkey
           spans: FULL SCAN
 
 query T
@@ -883,12 +883,12 @@ vectorized: true
     │
     ├── • scan
     │     missing stats
-    │     table: outer_gc1@primary
+    │     table: outer_gc1@outer_gc1_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           missing stats
-          table: outer_c1@primary
+          table: outer_c1@outer_c1_pkey
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckm-Lm0AQxt_3UyzzKjZzJKu5_hEKe6Re8fD0qgYKJRTrTq3guXZXoUfIdy_RthfDJdf0zcI-O795dh5mA-ZHBS54n-6CKz9kk_d-kiYfA4slXuAtU_aSXcfRLVNdS_pLkXN2vQoCdhP54W8t52yV-OEHNmlKyZHlf07bAoRaSQqzezLgfgYOCJewRmi0yskYpXfypi_y5U9w5whl3XTtTl4j5EoTuBtoy7YicCFUF6qZOYAgqc3Kqi_bIqiufYRMmxUE7mKLe4356cZp9rWimDJJejYftYe_g4tGl_eZfgCEpMlq47ILOGbO_9ecP2V-nrd91PvRsquVlqRJHkb5fMkTA9ySLuhGlTXpmT0eIH1oyB1WJlqlXtwvDiBU9K2dCD5FYU9ROFPrnS6L72MJEGKqJWmXLaOrwEuW3kRwFK8s3BNsFK9HgoPijYVMLJCJS2Ti7dGknFFSz-xeTKZRtaF_Wr75LiaSBQ2xG9XpnO60ynub4Rr1XC9IMu3wuhgufj087T64D_OTsDOC-SFsnwHbh7BzEp4ffHu9ffErAAD__4rhYh0=
@@ -914,14 +914,14 @@ vectorized: true
     │     columns: (pid1, cid1, cid2, ca1)
     │     ordering: +pid1
     │     estimated row count: 400 (missing stats)
-    │     table: outer_c1@primary
+    │     table: outer_c1@outer_c1_pkey
     │     spans: /0-/40
     │
     └── • scan
           columns: (pid1, pa1)
           ordering: +pid1
           estimated row count: 40 (missing stats)
-          table: outer_p1@primary
+          table: outer_p1@outer_p1_pkey
           spans: /0-/39/#
           parallel
 
@@ -937,12 +937,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: outer_c1@primary
+│     table: outer_c1@outer_c1_pkey
 │     spans: [/0 - /39]
 │
 └── • scan
       missing stats
-      table: outer_p1@primary
+      table: outer_p1@outer_p1_pkey
       spans: [/0 - /39]
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlWFP2zwQx98_n8K6V_TBVewkLSUSUtAIW1FpWVu0SVs0heTWRipx5qTSEOp3n5qAIFmJgyzK3sWOf3e-__-su4fs1woc8L5ejU6HY3JwNpzNZ59HHTLzRt6HOfmfnE8nl0Ssc5Q_Qk5G3vmcXEyG44etlJPr2XD8kRykccQ75Msnb-qVC_J9zZiFJ4R1yOn47PlmSGzWAQqJiHAc3GIGzjfgQMEEChZQsIFCD3wKqRQhZpmQ2yP3BTCMfoPDKMRJus632z6FUEgE5x7yOF8hODAPblY4xSBCaWzjRpgH8apI83hvN5XxbSDvgMIsDZLMIQbrGj0SJBHhRORLlOBv6Pb8Q56n8Dd3ZBlky2pgl4O_8SlkebBAcMwNfeG-T3HWiZARSowqkfwt-Xhk1wFw-WGZq173JcoFXog4QWn0q8z8LkWn9G9yPfemhYtAYYU_8wOXH3ZOZLxYlp9AYbLOHeJy6prUtahrU7dfk-OpVEuj1B1FjEVXpAZndVF25rYruXn7tjBbt0Wva3D2Rn3B998XR-_UF2Z7b6zW3nDWNfhbPVpz_-YM3skcq705dntzel3DfKuXY-3fnON3Msdubw7bZU74wrCzmZYf_MVL7smP3j8w4XZccYpZKpIMW80vti0SowWWumViLUO8kiIs0pTLScEVwyLCLC__clauhknxr3gcr6B1YFsH7uvAg2aY12H2HDYrMK_DZiPMq4qxOm1pmaWgdWCFWc2wwqxmWGGWrWNWT0tuBa0DK-RuhhVyN8MKufs6ch9pya2gdWCF3M2wQu5mWCH3QEfu49fI_VpaB7Z14L4OPGiG-V9zo1Fvf_PfnwAAAP__8S6FSg==
@@ -968,14 +968,14 @@ vectorized: true
     │     columns: (pid1, cid1, cid2, gcid1, gca1)
     │     ordering: +pid1
     │     estimated row count: 200 (missing stats)
-    │     table: outer_gc1@primary
+    │     table: outer_gc1@outer_gc1_pkey
     │     spans: /1-/21
     │
     └── • scan
           columns: (pid1, pa1)
           ordering: +pid1
           estimated row count: 20 (missing stats)
-          table: outer_p1@primary
+          table: outer_p1@outer_p1_pkey
           spans: /1-/20/#
           parallel
 
@@ -991,12 +991,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: outer_gc1@primary
+│     table: outer_gc1@outer_gc1_pkey
 │     spans: [/1 - /20]
 │
 └── • scan
       missing stats
-      table: outer_p1@primary
+      table: outer_p1@outer_p1_pkey
       spans: [/1 - /20]
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlW9Po04Qx5__XsVmHtmf28Dyp1YSE8yJiqmt12LukjtyQZhrSSrLLTQ5Y_reL4BGy1XArGnvGbvsZ2fm-53NPEL2awkWOF9vRqfumBycuTNv9nnUIzNn5HzyyP_kfDq5JnyVo_iRMjJ1Ly49cjVxx09785CR25k7viAHaRyxHvly6UydakG-r1RVxxPCeuR0fPZ6MzwhmtoDCgmPcBzcYwbWN2BAQQMKOlAwgIIJPoVU8BCzjIviyGMJuNFvsFQKcZKu8mLbpxBygWA9Qh7nSwQLvOBuiVMMIhRKcW-EeRAvyzDP1dipiO8D8QAUZmmQZBZRWF8xSZBEhBGeL1CAv6bF-ac4L9ffPZBFkC02L7YZ-GufQpYHcwRLW9M38n25Z5VwEaHAaOMmvyCfj2w7ADY7rGLV675GMccrHicolMEm4z2kaJGRc-6Rya3nTEsfgcISf-YHNjvsnYh4vqg-gcJklVvEZtQ-orZGbZ3aBrXNmiIv1eoS1W6pY8z7PFWYWtdla2xjIzbr3hla584w-0UyH9cObPftcLS_dtC6W6J3f6xqX2H1DGQ80XbvyXB_nujdPTG6e2L2Fe0j34m-e0-O9-eJ0d0TdZsn8_CNqaYxKU_Ym1nuyBPz3xhlW7KcYpbyJMNOg0ot6sRojpV0GV-JEG8ED8sw1XJScuWEiDDLq79MrVZuUv4r38g7aBnYkIEHMvCwGWZ1WH0Naxswq8NaI8w2FVPrtC5lVgstA7eY1Qy3mNUMt5hlyJhlSsndQsvALXI3wy1yN8Mtcg9k5D6SkruFloFb5G6GW-RuhlvkHsrIffweud9Ly8CGDDyQgYfNMPtrbjTq7a__-xMAAP__uZt-IA==
@@ -1012,12 +1012,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: child1@primary
+│     table: child1@child1_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: child2@primary
+      table: child2@child2_pkey
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckVFr2zAQgN_3K8Q9JZtGLIVtIBhobNlwSOwsTqFQ_OBaV0fgWK4kQ0vwfy-2H9KEpCV9k0733Xd32oN7LEHA7Ha1-BVGZPQnTDbJ_8WYJLPF7PeGfCZ_1_GS5FtdKkbmcRgNZ05ukjD6R0a1VmwMFCqjMMp26EDcAYOUQm1Njs4Z24X2fUKonkAEFHRVN74LpxRyYxHEHrz2JYKATXZf4hozhXYSAAWFPtNlX3boQtZW7zL7DBSSOqucIF8hbSmYxh-qOp8VCIK19GNmdsbMrzHzi-aDsKmMVWhRHcnSjnwv5Uz7S7QFzo2u0E74cfslPviRZF_GP60utsMRKMSNF0QyKjmVUyq_Ufmdyh8XR5pes8w1utpUDk9HO1s56OZBVeCwH2cam-PKmrzXDNe45_qAQueHVz5cwqp_6n_7NcyugPkpzN-Ep0dw0Kbtp5cAAAD__6kxEbU=
@@ -1035,12 +1035,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: parent1@primary
+│     table: parent1@parent1_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: parent2@primary
+      table: parent2@parent2_pkey
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckVFr2zAQgN_3K8Q9JZtGLGVPgoDHloFDYmdxHgrFD6p1dQ2O5EoytAT_92I7kCYkLemTfSd9992d9uCeKxAwv1svf0cxGf2N0m36fzkm6Xw5_7Ml38m_TbIitbSoPSOLJIoPASdJTOpSMTLrPhwoaKMwljt0IO6BQUahtiZH54ztUvv-QqReQAQUSl03vktnFHJjEcQefOkrBAFb-VDhBqVCOwmAgkIvy6ove-gkrG25k_YVKKS11E6Qn5C1FEzjj2WdlwWCYC39mppdUvNb1Pyq-mhstLEKLaoTW9aRn1250P8KbYELU2q0E37af4WPfhSyH-OZLYun4RcoJI0XJGQ05DSc0vDX1WGmt-xxg6422uH5UBcrB90kqAocNuNMY3NcW5P3miFMeq5PKHR-OOVDEOn-qH_o9zC7AebnMP8Qnp7AQZu1394CAAD__9KKEzk=
@@ -1057,12 +1057,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: parent1@primary
+│     table: parent1@parent1_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: child1@primary
+      table: child1@child1_pkey
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckUFr2zAUx-_7FOKdkqERy94ugoDGljGHzM7iHAbDB9V6TQyO5EoytAR_92K7kDokLelRT_q93_s_HcE9VMBh8W-9-h4nZPIzzrbZ39WUZIvV4seWfCa_NukfUkuL2jOyTOOEFPuyUoykCaklI3NSSAYUtFGYyAM64P-BQU6htqZA54ztSsf-QawegQcUSl03vivnFApjEfgRfOkrBA5beVfhBqVCOwuAgkIvy6pv-zKGqG15kPYJKGS11I6TL5C3FEzjT22dlzsEzlr6MTUbq4fQt5jDq-aTsNHGKrSoRrK8I997cmH839Ltl6bUaGfhePoK7_1EhNO5LXd7PxHRFCikjedEMCpCKiIqvlLx7WqY6JY1btDVRjs8D3Wxc9AlQbXDYTPONLbAtTVFrxmOac_1BYXOD7fhcIh1f9X_82uY3QCH53D4JhyN4KDN20_PAQAA__-cfREn
@@ -1078,12 +1078,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: child2@primary
+│     table: child2@child2_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: grandchild2@primary
+      table: grandchild2@grandchild2_pkey
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV1r2zwUx--fTyHOVftUQZZs58Uw8Ni6kdImXdPBYPjCjbTEkFqe7MBKyXcftlvSpJkUTWtyY_DLTzr6_SWfRyh_LiCC82_Xl--HI3TycTi5nXy5PEWT88vzD7fof_TpZnyFpvNswRm6GA9HaKbSnD89-DoZjj6jkyLjFKNpxtkpYMglF6P0XpQQfQcKGBhg8AFDABhCSDAUSk5FWUpVf_LYAEP-CyIPQ5YXy6p-nGCYSiUgeoQqqxYCIrhN7xbiRqRcKOIBBi6qNFs007T1xIXK7lP1ABgmRZqXEepAssIgl9XTqOvB7h7QPC3nm8PEFMcMklWCoazSmYCIrvDfFUg3R35hbUeVhJGAEUYYSnOOKJLVXCjX0tkfS18Ptcyl4kIJvjFYUpPPn-z6AGJ6hmN21s63reFKqJm4kFkuFOlucgvxozp5gk_fqWw2X98ChvGyilCzEhz7OA5w3MNxH8eDLRfrRfoOi9xR-kh2ZEEo3daxc-5gY266_94ILPYGoR4JvfpKvQ6hAQmD-kqDt9sq9DhbZXDQrcL2j4vZxPV8kjukS4Iu6ZLu2wXFjhNU76BB-fsHFVqdq_VR6hDaJ2G_vtL-28XlHycu6h00r2D_vHybvJ6PU-flH7EJi7Vhlf82reA4afWP1jB3FHYjykLmpdirHXr10gSfidZYKZdqKq6VnDbTtLfjhmtaDBdl1b5l7c0wb1_VBe4P91xgSl3o0AUe6GFqYYzZwT0XeMuYJR26wAM9zLZh7yXs63X7Wphu-va26cAlLD1sCEsPm8LS04aw9LAhrNAlrK6Lbj1s0K2HTbr1tEG3Hjbo7rno7rvo1sMG3XrYpFtPG3TrYYPugYtuatMsX_9CbbqlLW38-dv0S1va4Jy-ah5a6cnqv98BAAD__2JnI1g=
@@ -1100,12 +1100,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: child2@primary
+│     table: child2@child2_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: grandchild2@primary
+      table: grandchild2@grandchild2_pkey
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV9r2zAUxd_3KcR9aoeCLNnOH8PAY-u2lC7pmg4Gww9upCWG1PIkB1ZKvvuw3ZImzaR4Wr0Xg2z_ro7OkXTvQf9cQQRn3y4v3o4n6OT9eHY9-3JximZnF2fvrtFr9OFq-hnNl9mKM3Q-HU_QQqU5f3jxdTaefEQnRcYpRvOM-6eAIZdcTNJboSH6DhQwMMDgA4YAMISQYCiUnAutpap-ua-BMf8FkYchy4t1Wb1OMMylEhDdQ5mVKwERXKc3K3ElUi4U8QADF2WareppGj1xobLbVN0BhlmR5jpCPUg2GOS6fKi6LXZzh5apXu6WiSmOfUg2CQZdpgsBEd3gvxNIdys_ce2ASsJIwAgjDKU5RxTJcimUq3T2R-nbUutcKi6U4DvFkoq0_XJg_Z9SvTyXWS4U6e-qW4kf5Ukt8fSNyhbLxwFgmK7LCNUjHDMcBzju43iI49He-rcL8x0WdkD1RPZkQSjdt-Dg3MHO3PT4_RC02A-EeiT0qif1eoQGJAyqJw1ebnvQbrfHqLPtwY6PiLWJ6PHE9kifBH3SJ_2XC4d1G86gs3D848MJW52f7ZHpETok4bB60uHLReR3GxH1OssoOD4jv01Gj8em9_S2qwNiTUD63yYUdJvQ8L80wAOaroQuZK7FUe3Nq1Yl-EI0Lmm5VnNxqeS8nqYZTmuubhlc6LL5yprBOG8-VQKPhwcuMKUudOgCj8wwbeEYawcPXOA9x1rSoQs8MsNsH_aewr7Zbt8I012_vX06cAnLDFvCMsO2sMy0JSwzbAkrdAmr72K3GbbYbYZtdptpi91m2GL3wMXuoYvdZthitxm22W2mLXabYYvdIxe7aZtm-fwKbdMt29LWy79Nv2xLWzynz5qH0fRk8-p3AAAA__8tKxoO
@@ -1123,7 +1123,7 @@ distribution: local
 vectorized: true
 ·
 • lookup join
-│ table: parent1@primary
+│ table: parent1@parent1_pkey
 │ equality: (pid1) = (pid1)
 │ equality cols are key
 │
@@ -1133,12 +1133,12 @@ vectorized: true
     │
     ├── • scan
     │     missing stats
-    │     table: grandchild1@primary
+    │     table: grandchild1@grandchild1_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           missing stats
-          table: child1@primary
+          table: child1@child1_pkey
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycktFv0zAQxt_5K6x7atmhNWlhIhKSgRWUqWtGUiQQyoOJj8yQ2cF2JFDV_x0lqdSmaoe6t9ydf_d9-ew1uN8VRDD_crd4Gy_Z6DrOVtmnxZhl88X8_Yo9Zx_S5JaVVmhZ3KtKBuwmiZds-_05i5cf2ahWMkBWKBmM-3EtLGk_mI9Zkl7PU_buK2tLQNBG0lI8kIPoGwSQI9TWFOScsW1r3R2I5R-IJghK141v2zlCYSxBtAavfEUQwUp8ryglIcleTgBBkheq6tbuGee1VQ_C_gWErBbaRewF5BsE0_jdaudFSRAFG3yafDCUP185PKm8E2y0sZIsyYFY3pL_O3LE_i3Zkm6M0mQvw6H9in74EQ8ukIcX4zdWlfe7EhCSxkeMB8hD5FPkM-Qvkb9CfnXy76bn5Np62sY6HfraPq-9XBfG_Gpq9tMozYxuXR31d4X89Ulzs3PMpeRqox0dXsHRzZM2d5Il9ffoTGMLurOm6GT6Mum4riHJ-X4a9kWsu1H3Kvfh4Aw4PITDR-HpAJ4cwtNH4dkBnG-e_QsAAP__pZ1rJA==
@@ -1155,7 +1155,7 @@ distribution: local
 vectorized: true
 ·
 • lookup join
-│ table: parent1@primary
+│ table: parent1@parent1_pkey
 │ equality: (pid1) = (pid1)
 │ equality cols are key
 │
@@ -1165,12 +1165,12 @@ vectorized: true
     │
     ├── • scan
     │     missing stats
-    │     table: child1@primary
+    │     table: child1@child1_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           missing stats
-          table: grandchild1@primary
+          table: grandchild1@grandchild1_pkey
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckk2P0zAQhu_8CmtOLTtom6R8RUIygoKy6rZLUyQklIOJh6whawfbkUBV_zuKs6JN2RaV43w8874z9gbcjxpSmH26mb_OFmz0NsvX-Yf5mOWz-ezNmj1m71bLa9YIS9pH7GqZLVh5q2oZsY95tnjPRo2S0bgvVFZo-XcVWdn1AII2khbijhyknyGCAqGxpiTnjO1Sm9CQyZ-QThCUblrfpQuE0liCdANe-ZoghbX4UtOKhCR7OQEESV6oOozt9Xlj1Z2wvwAhb4R2KXsCxRbBtH431XlREaTRFv9PORoq761_jnx8VH6n2mpjJVmSA8WiI__V8sAO12QrujJKk72MhzvU9NWPeHSBPL4Yv7Kqut2FgLBsfcp4hDxGniCfIn-K_Bny50e3S845bufp_rbJ0Nf9B9y769yY723DvhmlmdGdqz_-XgR_L4PFk-am55hbkWuMdnT4BA9OnnR3J1lR_47OtLakG2vKINOHy8CFhCTn-2rcB5kOpfA19-HoDDg-hOOTcDKAJ4dwchKeHsDF9tHvAAAA__9MQGdI

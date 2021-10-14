@@ -205,7 +205,7 @@ Infinity
 
 # Just test the NaN-ness of the values.
 query RBBB
-SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=primary} ORDER BY d, d::TEXT
+SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=s_pkey} ORDER BY d, d::TEXT
 ----
 NULL       NULL   NULL   NULL
 NaN        true   true   true
@@ -240,7 +240,7 @@ NaN        true   true   true
 Infinity   false  false  false
 
 query RB
-select d, d > 'NaN' from s@{FORCE_INDEX=primary} where d > 'NaN' ORDER BY d, d::TEXT
+select d, d > 'NaN' from s@{FORCE_INDEX=s_pkey} where d > 'NaN' ORDER BY d, d::TEXT
 ----
 -Infinity  true
 -1         true
@@ -292,7 +292,7 @@ INSERT INTO s VALUES
   ('1.0000000E+1'::decimal)
 
 query R rowsort
-SELECT * FROM s@primary WHERE d = 10
+SELECT * FROM s@s_pkey WHERE d = 10
 ----
 10
 10.0

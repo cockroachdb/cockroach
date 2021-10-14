@@ -18,7 +18,7 @@ abcd  CREATE TABLE public.abcd (
       b INT8 NULL,
       c INT8 NULL,
       d INT8 NULL,
-      CONSTRAINT "primary" PRIMARY KEY (a ASC),
+      CONSTRAINT abcd_pkey PRIMARY KEY (a ASC),
       FAMILY f1 (a, b),
       FAMILY fam_1_c_d (c, d)
 )
@@ -158,7 +158,7 @@ abcd  CREATE TABLE public.abcd (
       h INT8 NULL,
       i INT8 NULL,
       j INT8 NULL,
-      CONSTRAINT "primary" PRIMARY KEY (a ASC),
+      CONSTRAINT abcd_pkey PRIMARY KEY (a ASC),
       INDEX d_idx (d ASC),
       FAMILY f1 (a, b, e, f),
       FAMILY fam_1_c_d (c, d),
@@ -178,7 +178,7 @@ abcd  CREATE TABLE public.abcd (
       b INT8 NULL,
       f DECIMAL NULL,
       g INT8 NULL,
-      CONSTRAINT "primary" PRIMARY KEY (a ASC),
+      CONSTRAINT abcd_pkey PRIMARY KEY (a ASC),
       FAMILY f1 (a, b, f),
       FAMILY fam_2_g (g)
 )
@@ -196,7 +196,7 @@ f1  CREATE TABLE public.f1 (
     a INT8 NOT NULL,
     b STRING NULL,
     c STRING NULL,
-    CONSTRAINT "primary" PRIMARY KEY (a ASC),
+    CONSTRAINT f1_pkey PRIMARY KEY (a ASC),
     FAMILY "primary" (a, b, c)
 )
 
@@ -210,7 +210,7 @@ assign_at_create  CREATE TABLE public.assign_at_create (
                   a INT8 NOT NULL,
                   b INT8 NULL,
                   c INT8 NULL,
-                  CONSTRAINT "primary" PRIMARY KEY (a ASC),
+                  CONSTRAINT assign_at_create_pkey PRIMARY KEY (a ASC),
                   FAMILY pri (a),
                   FAMILY foo (b),
                   FAMILY fam_2_c (c)
@@ -248,7 +248,7 @@ rename_col  CREATE TABLE public.rename_col (
             a INT8 NOT NULL,
             d INT8 NULL,
             e STRING NULL,
-            CONSTRAINT "primary" PRIMARY KEY (a ASC),
+            CONSTRAINT rename_col_pkey PRIMARY KEY (a ASC),
             FAMILY fam_0_a_b (a, d),
             FAMILY fam_1_c (e)
 )
@@ -297,7 +297,7 @@ SELECT a FROM t1 WHERE a = 10
 query T
 SELECT info FROM [EXPLAIN SELECT a FROM t1 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-  table: t1@primary
+  table: t1@t1_pkey
   spans: [/10 - /10]
 
 # A point lookup on a non-nullable column allows us to scan only that column
@@ -310,7 +310,7 @@ SELECT b FROM t1 WHERE a = 10
 query T
 SELECT info FROM [EXPLAIN SELECT b FROM t1 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-  table: t1@primary
+  table: t1@t1_pkey
   spans: [/10 - /10]
 
 # Even if we also select the primary key column, we can still scan the single
@@ -323,7 +323,7 @@ SELECT a, b FROM t1 WHERE a = 10
 query T
 SELECT info FROM [EXPLAIN SELECT a, b FROM t1 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-  table: t1@primary
+  table: t1@t1_pkey
   spans: [/10 - /10]
 
 # A point lookup on a nullable column requires also scanning column family 0 as
@@ -336,7 +336,7 @@ SELECT c FROM t1 WHERE a = 10
 query T
 SELECT info FROM [EXPLAIN SELECT c FROM t1 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-  table: t1@primary
+  table: t1@t1_pkey
   spans: [/10 - /10]
 
 # A point lookup on two columns in non-adjacent column families results in two
@@ -349,7 +349,7 @@ SELECT b, d FROM t1 WHERE a = 10
 query T
 SELECT info FROM [EXPLAIN SELECT b, d FROM t1 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-  table: t1@primary
+  table: t1@t1_pkey
   spans: [/10 - /10]
 
 # Unique secondary indexes store non-indexed primary key columns in column
@@ -386,7 +386,7 @@ SELECT a FROM t2 WHERE a = 10
 query T
 SELECT info FROM [EXPLAIN SELECT a FROM t2 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-  table: t2@primary
+  table: t2@t2_pkey
   spans: [/10 - /10]
 
 # A point lookup on `a` and `b` should scan both of their families.
@@ -398,7 +398,7 @@ SELECT a, b FROM t2 WHERE a = 10
 query T
 SELECT info FROM [EXPLAIN SELECT a, b FROM t2 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-  table: t2@primary
+  table: t2@t2_pkey
   spans: [/10 - /10]
 
 # Secondary indexes always store their composite values in column family 0.

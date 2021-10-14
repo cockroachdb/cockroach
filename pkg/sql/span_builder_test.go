@@ -47,21 +47,21 @@ func TestSpanBuilderCanSplitSpan(t *testing.T) {
 	}{
 		{
 			sql:               "a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), FAMILY (a, b, c), FAMILY (d)",
-			index:             "primary",
+			index:             "t_pkey",
 			prefixLen:         2,
 			numNeededFamilies: 1,
 			canSplit:          true,
 		},
 		{
 			sql:               "a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), FAMILY (a, b, c), FAMILY (d)",
-			index:             "primary",
+			index:             "t_pkey",
 			prefixLen:         1,
 			numNeededFamilies: 1,
 			canSplit:          false,
 		},
 		{
 			sql:               "a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), FAMILY (a, b, c, d)",
-			index:             "primary",
+			index:             "t_pkey",
 			prefixLen:         2,
 			numNeededFamilies: 1,
 			canSplit:          true,

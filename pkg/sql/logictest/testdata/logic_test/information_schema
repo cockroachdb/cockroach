@@ -1904,7 +1904,7 @@ constraint_catalog  constraint_schema  constraint_name           table_catalog  
 constraint_db       public             3753077756_62_1_not_null  constraint_db  public        t1          CHECK            NO             NO
 constraint_db       public             c2                        constraint_db  public        t1          CHECK            NO             NO
 constraint_db       public             check_a                   constraint_db  public        t1          CHECK            NO             NO
-constraint_db       public             primary                   constraint_db  public        t1          PRIMARY KEY      NO             NO
+constraint_db       public             t1_pkey                   constraint_db  public        t1          PRIMARY KEY      NO             NO
 constraint_db       public             t1_a_key                  constraint_db  public        t1          UNIQUE           NO             NO
 constraint_db       public             3753077756_63_2_not_null  constraint_db  public        t2          CHECK            NO             NO
 constraint_db       public             fk                        constraint_db  public        t2          FOREIGN KEY      NO             NO
@@ -1930,7 +1930,7 @@ constraint_db  public        t1          a            constraint_db       public
 constraint_db  public        t1          a            constraint_db       public             check_a
 constraint_db  public        t1          a            constraint_db       public             fk
 constraint_db  public        t1          a            constraint_db       public             t1_a_key
-constraint_db  public        t1          p            constraint_db       public             primary
+constraint_db  public        t1          p            constraint_db       public             t1_pkey
 
 # Query issued by jOOQ in PostgresDatabase.loadCheckConstraints.
 query TTTT colnames
@@ -2538,10 +2538,10 @@ SELECT * FROM information_schema.key_column_usage WHERE constraint_schema = 'pub
 constraint_catalog  constraint_schema  constraint_name  table_catalog      table_schema  table_name  column_name  ordinal_position  position_in_unique_constraint
 constraint_column   public             index_key        constraint_column  public        t1          b            1                 NULL
 constraint_column   public             index_key        constraint_column  public        t1          c            2                 NULL
-constraint_column   public             primary          constraint_column  public        t1          p            1                 NULL
 constraint_column   public             t1_a_key         constraint_column  public        t1          a            1                 NULL
+constraint_column   public             t1_pkey          constraint_column  public        t1          p            1                 NULL
 constraint_column   public             fk               constraint_column  public        t2          t1_id        1                 1
-constraint_column   public             primary          constraint_column  public        t2          t1_id        1                 NULL
+constraint_column   public             t2_pkey          constraint_column  public        t2          t1_id        1                 NULL
 constraint_column   public             fk2              constraint_column  public        t3          a            1                 1
 constraint_column   public             fk2              constraint_column  public        t3          b            2                 2
 constraint_column   public             unique_a         constraint_column  public        t4          a            1                 NULL
@@ -3942,16 +3942,16 @@ CREATE TABLE other_db.teststatics(id INT PRIMARY KEY, c INT, d INT, e STRING, IN
 query TTTTTTITIITTT colnames
 SELECT * FROM other_db.information_schema.statistics WHERE table_schema='public' AND table_name='teststatics' ORDER BY INDEX_SCHEMA,INDEX_NAME,SEQ_IN_INDEX
 ----
-table_catalog  table_schema  table_name   non_unique  index_schema  index_name  seq_in_index  column_name  COLLATION  cardinality  direction  storing  implicit
-other_db       public        teststatics  YES         public        idx_c       1             c            NULL       NULL         ASC        NO       NO
-other_db       public        teststatics  YES         public        idx_c       2             id           NULL       NULL         ASC        NO       YES
-other_db       public        teststatics  NO          public        idx_cd      1             c            NULL       NULL         ASC        NO       NO
-other_db       public        teststatics  NO          public        idx_cd      2             d            NULL       NULL         ASC        NO       NO
-other_db       public        teststatics  NO          public        idx_cd      3             id           NULL       NULL         ASC        NO       YES
-other_db       public        teststatics  NO          public        primary     1             id           NULL       NULL         ASC        NO       NO
-other_db       public        teststatics  NO          public        primary     2             c            NULL       NULL         N/A        YES      NO
-other_db       public        teststatics  NO          public        primary     3             d            NULL       NULL         N/A        YES      NO
-other_db       public        teststatics  NO          public        primary     4             e            NULL       NULL         N/A        YES      NO
+table_catalog  table_schema  table_name   non_unique  index_schema  index_name        seq_in_index  column_name  COLLATION  cardinality  direction  storing  implicit
+other_db       public        teststatics  YES         public        idx_c             1             c            NULL       NULL         ASC        NO       NO
+other_db       public        teststatics  YES         public        idx_c             2             id           NULL       NULL         ASC        NO       YES
+other_db       public        teststatics  NO          public        idx_cd            1             c            NULL       NULL         ASC        NO       NO
+other_db       public        teststatics  NO          public        idx_cd            2             d            NULL       NULL         ASC        NO       NO
+other_db       public        teststatics  NO          public        idx_cd            3             id           NULL       NULL         ASC        NO       YES
+other_db       public        teststatics  NO          public        teststatics_pkey  1             id           NULL       NULL         ASC        NO       NO
+other_db       public        teststatics  NO          public        teststatics_pkey  2             c            NULL       NULL         N/A        YES      NO
+other_db       public        teststatics  NO          public        teststatics_pkey  3             d            NULL       NULL         N/A        YES      NO
+other_db       public        teststatics  NO          public        teststatics_pkey  4             e            NULL       NULL         N/A        YES      NO
 
 # Verify information_schema.views
 statement ok
