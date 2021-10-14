@@ -1431,8 +1431,8 @@ regional_by_row_fk          CREATE TABLE public.regional_by_row_fk (
                             crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
                             CONSTRAINT regional_by_row_fk_pkey PRIMARY KEY (f ASC),
                             CONSTRAINT ij_fk FOREIGN KEY (i, j) REFERENCES public.regional_by_row_unique_in_column(e, d),
-                            CONSTRAINT fk_g_ref_regional_by_row_unique_in_column FOREIGN KEY (g) REFERENCES public.regional_by_row_unique_in_column(a),
-                            CONSTRAINT fk_h_ref_regional_by_row_unique_in_column FOREIGN KEY (h) REFERENCES public.regional_by_row_unique_in_column(b),
+                            CONSTRAINT regional_by_row_fk_g_fkey FOREIGN KEY (g) REFERENCES public.regional_by_row_unique_in_column(a),
+                            CONSTRAINT regional_by_row_fk_h_fkey FOREIGN KEY (h) REFERENCES public.regional_by_row_unique_in_column(b),
                             UNIQUE INDEX regional_by_row_fk_g_key (g ASC),
                             UNIQUE INDEX regional_by_row_fk_h_key (h ASC),
                             FAMILY fam_0_f_g_h_i_j_crdb_region (f, g, h, i, j, crdb_region)

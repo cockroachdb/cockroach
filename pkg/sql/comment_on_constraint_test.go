@@ -69,13 +69,13 @@ func TestCommentOnConstraint(t *testing.T) {
 			gosql.NullString{String: `primary_comment`, Valid: true},
 		},
 		{
-			`COMMENT ON CONSTRAINT fk_b_ref_t ON t2 IS 'fk_comment'`,
-			`SELECT obj_description(oid, 'pg_constraint') FROM pg_constraint WHERE conname='fk_b_ref_t'`,
+			`COMMENT ON CONSTRAINT t2_b_fkey ON t2 IS 'fk_comment'`,
+			`SELECT obj_description(oid, 'pg_constraint') FROM pg_constraint WHERE conname='t2_b_fkey'`,
 			gosql.NullString{String: `fk_comment`, Valid: true},
 		},
 		{
-			`COMMENT ON CONSTRAINT fk_b_ref_t ON t2 IS 'fk_comment'; COMMENT ON CONSTRAINT fk_b_ref_t ON t2 IS NULL`,
-			`SELECT obj_description(oid, 'pg_constraint') FROM pg_constraint WHERE conname='fk_b_ref_t'`,
+			`COMMENT ON CONSTRAINT t2_b_fkey ON t2 IS 'fk_comment'; COMMENT ON CONSTRAINT t2_b_fkey ON t2 IS NULL`,
+			`SELECT obj_description(oid, 'pg_constraint') FROM pg_constraint WHERE conname='t2_b_fkey'`,
 			gosql.NullString{Valid: false},
 		},
 	}

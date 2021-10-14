@@ -93,8 +93,8 @@ ALTER TABLE t2 ADD FOREIGN KEY (b) REFERENCES t2
 query TTTTB
 SHOW CONSTRAINTS FROM t2
 ----
-t2  fk_b_ref_t2  FOREIGN KEY  FOREIGN KEY (b) REFERENCES t2(d)  true
-t2  t2_pkey      PRIMARY KEY  PRIMARY KEY (d ASC)               true
+t2  t2_b_fkey  FOREIGN KEY  FOREIGN KEY (b) REFERENCES t2(d)  true
+t2  t2_pkey    PRIMARY KEY  PRIMARY KEY (d ASC)               true
 
 # adding a foreign key constraint that references a hidden column
 

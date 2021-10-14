@@ -26,7 +26,7 @@ SELECT 'schema'::pgdatabase.pgschema.typ
 ----
 schema
 
-statement error pq: insert on table "t3" violates foreign key constraint "fk_x_ref_t1"
+statement error pq: insert on table "t3" violates foreign key constraint "t3_x_fkey"
 INSERT INTO pgdatabase.pgschema.t3 VALUES (1)
 
 # Assert there aren't any namespace entries left with the old parentID.

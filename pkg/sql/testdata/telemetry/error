@@ -20,7 +20,7 @@ REVOKE node FROM root;
 DELETE FROM system.users WHERE username = 'node';
 SELECT * FROM tbl;
 ----
-error: pq: internal error: relation "tbl" (53): missing fk back reference "fk_customer_ref_fktbl" to "tbl" from "fktbl"
+error: pq: internal error: relation "tbl" (53): missing fk back reference "tbl_customer_fkey" to "tbl" from "fktbl"
 errorcodes.XX000
 sql.schema.validation_errors.read.cross_references.relation
 

@@ -248,14 +248,14 @@ ORDER BY object_type, object_name`, full)
 				a INT8 NOT NULL,
 				b INT8 NULL,
 				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC),
-				CONSTRAINT fk_b_ref_fksrc FOREIGN KEY (b) REFERENCES public.fksrc(a),
+				CONSTRAINT fkreftable_b_fkey FOREIGN KEY (b) REFERENCES public.fksrc(a),
 				FAMILY "primary" (a, b)
 			)`
 		wantDiffDB := `CREATE TABLE fkreftable (
 				a INT8 NOT NULL,
 				b INT8 NULL,
 				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC),
-				CONSTRAINT fk_b_ref_fksrc FOREIGN KEY (b) REFERENCES data.public.fksrc(a),
+				CONSTRAINT fkreftable_b_fkey FOREIGN KEY (b) REFERENCES data.public.fksrc(a),
 				FAMILY "primary" (a, b)
 			)`
 
