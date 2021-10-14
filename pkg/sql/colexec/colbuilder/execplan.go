@@ -2064,7 +2064,7 @@ func planProjectionOperators(
 	case *tree.ComparisonExpr:
 		return planProjectionExpr(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
-			columnTypes, input, acc, factory, nil /* binFn */, t, releasables,
+			columnTypes, input, acc, factory, nil /* binFn */, t, t.Fn.NullableArgs, releasables,
 		)
 	case *tree.BinaryExpr:
 		if err = checkSupportedBinaryExpr(t.TypedLeft(), t.TypedRight(), t.ResolvedType()); err != nil {
@@ -2072,7 +2072,7 @@ func planProjectionOperators(
 		}
 		return planProjectionExpr(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
-			columnTypes, input, acc, factory, t.Fn.Fn, nil /* cmpExpr */, releasables,
+			columnTypes, input, acc, factory, t.Fn.Fn, nil /* cmpExpr */, t.Fn.NullableArgs, releasables,
 		)
 	case *tree.IsNullExpr:
 		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, false /* negate */, factory, releasables)
@@ -2301,6 +2301,7 @@ func planProjectionExpr(
 	factory coldata.ColumnFactory,
 	binFn tree.TwoArgFn,
 	cmpExpr *tree.ComparisonExpr,
+	nullableArgs bool,
 	releasables *[]execinfra.Releasable,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	if err := checkSupportedProjectionExpr(left, right); err != nil {
@@ -2338,7 +2339,7 @@ func planProjectionExpr(
 		// appended to the input batch.
 		op, err = colexecproj.GetProjectionLConstOperator(
 			allocator, typs, left.ResolvedType(), outputType, projOp, input,
-			rightIdx, lConstArg, resultIdx, evalCtx, binFn, cmpExpr,
+			rightIdx, lConstArg, resultIdx, evalCtx, binFn, cmpExpr, nullableArgs,
 		)
 	} else {
 		var leftIdx int
@@ -2415,7 +2416,7 @@ func planProjectionExpr(
 				// all other projection operators.
 				op, err = colexecproj.GetProjectionRConstOperator(
 					allocator, typs, right.ResolvedType(), outputType, projOp,
-					input, leftIdx, rConstArg, resultIdx, evalCtx, binFn, cmpExpr,
+					input, leftIdx, rConstArg, resultIdx, evalCtx, binFn, cmpExpr, nullableArgs,
 				)
 			}
 		} else {

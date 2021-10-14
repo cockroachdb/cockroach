@@ -25,6 +25,7 @@ import (
 type OverloadHelper struct {
 	TmpDec1, TmpDec2 apd.Decimal
 	BinFn            tree.TwoArgFn
+	NullableArgs     bool
 	EvalCtx          *tree.EvalContext
 	ByteScratch      []byte
 }

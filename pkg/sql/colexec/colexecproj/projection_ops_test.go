@@ -115,6 +115,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	op, err := GetProjectionRConstOperator(
 		testAllocator, inputTypes, types.Float, types.Float, binOp, input, colIdx,
 		constArg, outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil, /* cmpExpr */
+		false, /* nullableArgs */
 	)
 	if err != nil {
 		t.Error(err)
@@ -147,6 +148,7 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	op, err := GetProjectionRConstOperator(
 		testAllocator, inputTypes, types.Int2, types.Int, cmpOp, input, colIdx,
 		constArg, outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil, /* cmpExpr */
+		false, /* nullableArgs */
 	)
 	if err != nil {
 		t.Error(err)
