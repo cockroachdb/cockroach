@@ -1235,9 +1235,9 @@ oid         conname        connamespace  contype  condef
 1652586190  fk             2332901747    f        FOREIGN KEY (a, b) REFERENCES t1(b, c)
 1729749923  uwi_b_c        2332901747    u        UNIQUE WITHOUT INDEX (b, c)
 1921111248  primary        2332901747    p        PRIMARY KEY (value ASC)
+2093076183  t5_a_fkey      2332901747    f        FOREIGN KEY (a) REFERENCES t4(a) ON DELETE CASCADE
 2119068666  t6_expr_key    2332901747    u        UNIQUE (lower(c) ASC)
 2897367075  uwi_b_partial  2332901747    u        UNIQUE WITHOUT INDEX (b) WHERE (c = 'foo'::STRING)
-3173756726  fk_a_ref_t4    2332901747    f        FOREIGN KEY (a) REFERENCES t4(a) ON DELETE CASCADE
 3572320190  t1_pkey        2332901747    p        PRIMARY KEY (p ASC)
 3989820597  check_b        2332901747    c        CHECK ((b > 11))
 4243354484  t1_a_key       2332901747    u        UNIQUE (a ASC)
@@ -1259,9 +1259,9 @@ check_c        c        false          false        true          59        0   
 fk             f        false          false        true          59        0         450499961
 uwi_b_c        u        false          false        true          61        0         0
 primary        p        false          false        true          57        0         969972501
+t5_a_fkey      f        false          false        true          62        0         0
 t6_expr_key    u        false          false        true          63        0         2574785782
 uwi_b_partial  u        false          false        true          61        0         0
-fk_a_ref_t4    f        false          false        true          62        0         0
 t1_pkey        p        false          false        true          55        0         450499963
 check_b        c        false          false        true          59        0         0
 t1_a_key       u        false          false        true          55        0         450499960
@@ -1303,11 +1303,11 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public' AND contype = 'f'
 ORDER BY con.oid
 ----
-conname      confrelid  confupdtype  confdeltype  confmatchtype
-fk           55         a            a            s
-fk_b_c       61         r            a            f
-fk           55         a            a            s
-fk_a_ref_t4  61         a            c            s
+conname    confrelid  confupdtype  confdeltype  confmatchtype
+fk         55         a            a            s
+fk_b_c     61         r            a            f
+fk         55         a            a            s
+t5_a_fkey  61         a            c            s
 
 query TBIBT colnames
 SELECT conname, conislocal, coninhcount, connoinherit, conkey
@@ -1324,9 +1324,9 @@ check_c        true        0            true          {3}
 fk             true        0            true          {1,2}
 uwi_b_c        true        0            true          NULL
 primary        true        0            true          {1}
+t5_a_fkey      true        0            true          {1}
 t6_expr_key    true        0            true          {8}
 uwi_b_partial  true        0            true          NULL
-fk_a_ref_t4    true        0            true          {1}
 t1_pkey        true        0            true          {1}
 check_b        true        0            true          {2}
 t1_a_key       true        0            true          {2}
@@ -1360,11 +1360,11 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public' AND contype = 'f'
 ORDER BY con.oid
 ----
-conname      confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin  consrc
-fk           {2}      NULL       NULL       NULL       NULL       NULL    NULL
-fk_b_c       {2,3}    NULL       NULL       NULL       NULL       NULL    NULL
-fk           {3,4}    NULL       NULL       NULL       NULL       NULL    NULL
-fk_a_ref_t4  {1}      NULL       NULL       NULL       NULL       NULL    NULL
+conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin  consrc
+fk         {2}      NULL       NULL       NULL       NULL       NULL    NULL
+fk_b_c     {2,3}    NULL       NULL       NULL       NULL       NULL    NULL
+fk         {3,4}    NULL       NULL       NULL       NULL       NULL    NULL
+t5_a_fkey  {1}      NULL       NULL       NULL       NULL       NULL    NULL
 
 ## pg_catalog.pg_depend
 
@@ -1377,7 +1377,7 @@ classid     objid       objsubid  refclassid  refobjid   refobjsubid  deptype
 4294967128  109163875   0         4294967131  450499960  0            n
 4294967128  1329876328  0         4294967131  0          0            n
 4294967128  1652586190  0         4294967131  450499961  0            n
-4294967128  3173756726  0         4294967131  0          0            n
+4294967128  2093076183  0         4294967131  0          0            n
 4294967085  4079785833  0         4294967131  55         3            n
 4294967085  4079785833  0         4294967131  55         4            n
 4294967085  4079785833  0         4294967131  55         1            n
@@ -4613,18 +4613,18 @@ CREATE TABLE t(x INT UNIQUE);
 query TTT
 SELECT conname, confupdtype, confdeltype FROM pg_constraint ORDER BY conname
 ----
-fk_a_ref_t  a     a
-fk_b_ref_t  a     r
-fk_c_ref_t  a     n
-fk_d_ref_t  a     d
-fk_e_ref_t  a     c
-fk_f_ref_t  a     a
-fk_g_ref_t  r     a
-fk_h_ref_t  n     a
-fk_i_ref_t  d     a
-fk_j_ref_t  c     a
-fk_k_ref_t  n     r
-t_x_key     NULL  NULL
+t_x_key   NULL  NULL
+u_a_fkey  a     a
+u_b_fkey  a     r
+u_c_fkey  a     n
+u_d_fkey  a     d
+u_e_fkey  a     c
+u_f_fkey  a     a
+u_g_fkey  r     a
+u_h_fkey  n     a
+u_i_fkey  d     a
+u_j_fkey  c     a
+u_k_fkey  n     r
 
 statement ok
 DROP TABLE u; DROP TABLE t
@@ -4642,9 +4642,9 @@ CREATE TABLE w(
 query TT
 SELECT conname, confmatchtype FROM pg_constraint ORDER BY conname
 ----
-fk_a_ref_v  f
-fk_c_ref_v  s
 v_x_y_key   NULL
+w_a_b_fkey  f
+w_c_d_fkey  s
 
 statement ok
 DROP DATABASE d34862 CASCADE; SET database=test

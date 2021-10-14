@@ -6104,21 +6104,21 @@ CREATE TABLE public.t (
    a INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-   CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES public.t(rowid),
+   CONSTRAINT t_a_fkey FOREIGN KEY (a) REFERENCES public.t(rowid),
    FAMILY "primary" (a, rowid)
 )  CREATE TABLE public.t (
    a INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, rowid)
-)  {"ALTER TABLE public.t ADD CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES public.t(rowid)"}  {"ALTER TABLE public.t VALIDATE CONSTRAINT fk_a_ref_t"}
+)  {"ALTER TABLE public.t ADD CONSTRAINT t_a_fkey FOREIGN KEY (a) REFERENCES public.t(rowid)"}  {"ALTER TABLE public.t VALIDATE CONSTRAINT t_a_fkey"}
 CREATE TABLE public.v (
    "'" INT8 NULL,
    s STRING NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT v_pkey PRIMARY KEY (rowid ASC),
-   CONSTRAINT "fk_'_ref_t" FOREIGN KEY ("'") REFERENCES public.t(rowid),
-   CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES public.v(s),
+   CONSTRAINT "v_'_fkey" FOREIGN KEY ("'") REFERENCES public.t(rowid),
+   CONSTRAINT v_s_fkey FOREIGN KEY (s) REFERENCES public.v(s),
    UNIQUE INDEX v_s_key (s ASC),
    FAMILY "primary" ("'", s, rowid)
 )  CREATE TABLE public.v (
@@ -6128,7 +6128,7 @@ CREATE TABLE public.v (
    CONSTRAINT v_pkey PRIMARY KEY (rowid ASC),
    UNIQUE INDEX v_s_key (s ASC),
    FAMILY "primary" ("'", s, rowid)
-)  {"ALTER TABLE public.v ADD CONSTRAINT \"fk_'_ref_t\" FOREIGN KEY (\"'\") REFERENCES public.t(rowid)","ALTER TABLE public.v ADD CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES public.v(s)"}  {"ALTER TABLE public.v VALIDATE CONSTRAINT \"fk_'_ref_t\"","ALTER TABLE public.v VALIDATE CONSTRAINT fk_s_ref_v"}
+)  {"ALTER TABLE public.v ADD CONSTRAINT \"v_'_fkey\" FOREIGN KEY (\"'\") REFERENCES public.t(rowid)","ALTER TABLE public.v ADD CONSTRAINT v_s_fkey FOREIGN KEY (s) REFERENCES public.v(s)"}  {"ALTER TABLE public.v VALIDATE CONSTRAINT \"v_'_fkey\"","ALTER TABLE public.v VALIDATE CONSTRAINT v_s_fkey"}
 CREATE TABLE public.c (
   a INT8 NOT NULL,
   b INT8 NULL,
