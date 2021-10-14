@@ -414,6 +414,19 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				},
 			},
 		},
+		{ // 12
+			// Upsert a descriptor with the force flag set to skip descriptor
+			// validation at txn commit time, then check that subsequently upserting
+			// an invalid descriptor with the force flag unset correctly triggers a
+			// validation error.
+			before: []string{
+				`CREATE DATABASE test`,
+				`CREATE TABLE test.foo ()`,
+				`SELECT crdb_internal.unsafe_upsert_descriptor(id, descriptor, true) FROM system.descriptor WHERE id = 'test.foo'::REGCLASS::OID`,
+			},
+			op:       upsertInvalidNameInTestFooNoForce,
+			expErrRE: `pq: crdb_internal.unsafe_upsert_descriptor\(\): relation \"\" \(53\): empty table name`,
+		},
 	} {
 		t.Run(fmt.Sprintf("case #%d: %s", caseIdx+1, tc.op), func(t *testing.T) {
 			s, db, cleanup := setup(t)
@@ -642,6 +655,59 @@ SELECT crdb_internal.unsafe_upsert_descriptor(53,
 SELECT crdb_internal.unsafe_upsert_descriptor(53,
 	crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', ` +
 		repairedDescriptor + `), true)`
+
+	upsertInvalidNameInTestFooNoForce = `
+WITH
+	as_json
+		AS (
+			SELECT
+				id,
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor,
+					false
+				)
+					AS d
+			FROM
+				system.descriptor
+			WHERE
+				id = 'test.foo'::REGCLASS::OID
+		),
+	updated
+		AS (
+			SELECT
+				id,
+				crdb_internal.json_to_pb(
+					'cockroach.sql.sqlbase.Descriptor',
+					json_set(
+						json_set(
+							json_set(
+								d,
+								ARRAY['table', 'name'],
+								'""'::JSONB
+							),
+							ARRAY['table', 'version'],
+							((d->'table'->>'version')::INT8 + 1)::STRING::JSONB
+						),
+						ARRAY['table', 'modificationTime'],
+						json_build_object(
+							'wallTime',
+							(
+								(extract('epoch', now()) * 1000000)::INT8
+								* 1000
+							)::STRING
+						)
+					)
+				)
+					AS descriptor
+			FROM
+				as_json
+		)
+SELECT
+	crdb_internal.unsafe_upsert_descriptor(id, descriptor, false)
+FROM
+	updated
+`
 
 	// This is a statement to update the above descriptor's privileges.
 	// It will change the table owner, add privileges for a new user,
