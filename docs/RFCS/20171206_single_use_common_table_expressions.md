@@ -43,7 +43,7 @@ by adding some syntactic sugar and new access patterns:
    subqueries into named, top-level CTE clauses
 2. The results of `INSERT/UPSERT/UPDATE/DELETE` statements that use `RETURNING`
    can be captured in a named result set, which is not possible with ordinary
-   subuqeries
+   subqueries
 3. Recursive statements for tasks like graph traversal can be written with a CTE
    clause that references itself, using the `WITH RECURSIVE` syntax
 4. Statements can reference a named CTE clause more than once, enabling patterns

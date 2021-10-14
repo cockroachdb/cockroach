@@ -162,7 +162,7 @@ type TenantConsumption struct {
 type TokenBucketRequest struct {
   InstanceID uint32
 
-  // Uniqely identifies this instance (in light of instance ID reuse).
+  // Uniquely identifies this instance (in light of instance ID reuse).
   InstanceLease string
 
   // Sequence number used to detect duplicate requests.
@@ -177,7 +177,7 @@ type TokenBucketRequest struct {
   // TargetRequestPeriod configuration knob.
   TargetRequestPeriod time.Duration `protobuf:"bytes,6,opt,name=target_request_period,json=targetRequestPeriod,proto3,stdduration" json:"target_request_period"`
 
-  // Consumption that occured since this node's last request.
+  // Consumption that occurred since this node's last request.
   ConsumptionSinceLastRequest TenantConsumption
 }
 ```

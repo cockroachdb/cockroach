@@ -257,7 +257,7 @@ It is important to provide metrics for monitoring the health of the replicating 
 - RP: how far back is the latest ingested consistent timestamp? This is the timestamp we would rollback to on cut-over.
   - What range or ranges are the lagging ones that are holding it back? Is it ingestion delay or is the stream lagging?
 - What is the size of the pending ingestion buffers?
-- How far behind are the ingested timestamps vs the recieved timestamps?
+- How far behind are the ingested timestamps vs the received timestamps?
 - What is the size of the unconsumed portion of the outboxes in the producing cluster i.e. how far behind is the stream consumer?
 - For file-based streams, what's the latest flushed consistent timestamp/how far behind is it?
 - If/when we integrate with BACKUPs (e.g. restore+replay), what's the size of the stream since last backup?

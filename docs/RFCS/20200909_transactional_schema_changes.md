@@ -898,7 +898,7 @@ discussion below).
 One arguably nice property of Cockroach's schema changes today is that they
 will proceed even if the client connection breaks before the operation finishes.
 Determining when a schema change has reached the point at which it will proceed
-is not an easy thing to programatically determine, but, in practice, most schema
+is not an easy thing to programmatically determine, but, in practice, most schema
 changes enter this phase quite soon after statement execution (or `COMMIT` in
 the case of explicit transactions). The hope of this RFC is to retain this behavior
 for single statement schema changes. In the future work section there is a

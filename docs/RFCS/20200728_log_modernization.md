@@ -62,7 +62,7 @@ Table of contents:
     - [Configuration - command-line and YAML format](#configuration---command-line-and-yaml-format)
     - [Configuration - checking and visualization](#configuration---checking-and-visualization)
     - [Suggested best practices](#suggested-best-practices)
-	  - [General best practics](#general-best-practices)
+	  - [General best practices](#general-best-practices)
 	  - [CockroachCloud logging use cases](#cockroachcloud-logging-use-cases)
   - [From the perspective of CockroachDB developers](#from-the-perspective-of-cockroachdb-developers)
   - [From the perspective of documentation writers and readers](#from-the-perspective-of-documentation-writers-and-readers)
@@ -545,7 +545,7 @@ The following sinks are supported:
   - `max-group-size`: approximate max combined size of all files
     generated for the channel before old files are automatically
     deleted. Can be set to zero to disable removal of old files.
-  - `sync-writes`: disable buffering and synchronzie writes. This flag
+  - `sync-writes`: disable buffering and synchronize writes. This flag
     is useful to define audit logs but can incur a performance overhead
 	and higher disk IOPS consumption.
 
@@ -648,7 +648,7 @@ configuration](#default-configuration) is visualized as follows:
   - enable the `redact` parameter on log channels that are centrally collected.
   - avoid exposing data from the USER_ADMIN and SENSITIVE_ACCESS
     channels, even when `redact` is enabled: the patterns of
-    behavior may themselves be sensitive. It is best to restric data
+    behavior may themselves be sensitive. It is best to restrict data
     mining to e.g. the `SQL_PERF`, `OPS` and `HEALTH` channels.
 
 - To make `cockroach` more robust to its standard error stream getting
@@ -744,7 +744,7 @@ list or *documentation* of channels and severities is modified in
 
 The list of supported channels and severities is now auto-generated in
 the source tree at location `docs/generated/logging.md`, ready to be
-embeded in the reference documentation.
+embedded in the reference documentation.
 
 It is also advised to use `cockroach debug check-log-config` with the
 `--only-channels` parameter to simplify diagrams for inclusion in
@@ -823,7 +823,7 @@ capture-stray-errors: # optional
   filter: <severity>    # min severity level for file output, default INFO
   redact: <bool>        # whether to remove sensitive info, default false
   redactable: <bool>    # whether to strip redaction markers, default false
-  format: <fmt>         # format to use for log enries, default
+  format: <fmt>         # format to use for log entries, default
                         # crdb-v1 for files, crdb-v1-tty for stderr
                         # and json-fluent-compact for fluent sinks
   exit-on-error: <bool> # whether to terminate upon a write error
@@ -879,7 +879,7 @@ sinks:
     sql-perf:
       channels: SQL_PERF
     sql-perf-internal-only:
-      channeks: SQL_INTERNAL_PERF
+      channels: SQL_INTERNAL_PERF
 stray-error-capture:
   # dir inherited from file-defaults
   # max-group-size inherited from file-defaults
@@ -906,11 +906,11 @@ to achieve the semantics described above.
 - log writes are redirected to the appropriate logger based on the provided channel.
 
 - each `*loggerT` is associated with zero or more `logSinks`. Each
-  logging event is writen to all sinks associated with its channel
+  logging event is written to all sinks associated with its channel
   logger.
 
 - the [API explained
-  above](#from-the-perspective-of-cockroachdb-develoeprs) is
+  above](#from-the-perspective-of-cockroachdb-developers) is
   auto-generated via a script, to provide the severity and channel as
   separate arguments to the (internal, non-exported) logging code.
 
@@ -968,7 +968,7 @@ None found.
 
   Pros of keeping them: backward-compat. No habit changes.
 
-  Cons: makes it harder for engineers to think about optiong into other channels than DEV.
+  Cons: makes it harder for engineers to think about opting into other channels than DEV.
 
   If we were to deprecate the existing API the devs would need to make a call
   about explicitly using the DEV channel or one of the other channels.
