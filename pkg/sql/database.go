@@ -111,8 +111,7 @@ func (p *planner) forEachMutableTableInDatabase(
 		return err
 	}
 
-	lCtx := newInternalLookupCtx(ctx, allDescs, dbDesc, nil, /* fallback */
-		p.ExecCfg().Settings.Version)
+	lCtx := newInternalLookupCtx(ctx, allDescs, dbDesc, nil /* fallback */)
 	for _, tbID := range lCtx.tbIDs {
 		desc := lCtx.tbDescs[tbID]
 		if desc.Dropped() {

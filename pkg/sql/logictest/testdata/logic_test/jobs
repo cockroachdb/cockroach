@@ -24,18 +24,10 @@ SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)        root
 query TTT
 SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name = 'root'
 ----
-<<<<<<< HEAD
 SCHEMA CHANGE  updating version for users table         root
 SCHEMA CHANGE  updating version for role options table  root
-SCHEMA CHANGE  updating privileges for database 52      root
+SCHEMA CHANGE  updating privileges for database 54      root
 SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)        root
-=======
-AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations          root
-SCHEMA CHANGE                    updating version for users table         root
-SCHEMA CHANGE                    updating version for role options table  root
-SCHEMA CHANGE                    updating privileges for database 54      root
-SCHEMA CHANGE                    CREATE INDEX ON test.public.t (x)        root
->>>>>>> 79e2e299cb (sql: update tests resulting from public schema being an explicit schema)
 
 user testuser
 
@@ -81,20 +73,11 @@ SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)        testuser
 query TTT
 SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name IN ('root', 'testuser')
 ----
-<<<<<<< HEAD
 SCHEMA CHANGE  updating version for users table         root
 SCHEMA CHANGE  updating version for role options table  root
-SCHEMA CHANGE  updating privileges for database 52      root
+SCHEMA CHANGE  updating privileges for database 54      root
 SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)        root
 SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)        testuser
-=======
-AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations          root
-SCHEMA CHANGE                    updating version for users table         root
-SCHEMA CHANGE                    updating version for role options table  root
-SCHEMA CHANGE                    updating privileges for database 54      root
-SCHEMA CHANGE                    CREATE INDEX ON test.public.t (x)        root
-SCHEMA CHANGE                    CREATE INDEX ON test.public.u (x)        testuser
->>>>>>> 79e2e299cb (sql: update tests resulting from public schema being an explicit schema)
 
 statement ok
 CREATE USER testuser2

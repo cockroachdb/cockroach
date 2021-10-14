@@ -123,8 +123,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 	}
 
 	lCtx := newInternalLookupCtx(params.ctx, allDescs,
-		currentDbDesc.ImmutableCopy().(catalog.DatabaseDescriptor), nil, /* fallback */
-		params.ExecCfg().Settings.Version)
+		currentDbDesc.ImmutableCopy().(catalog.DatabaseDescriptor), nil /* fallback */)
 
 	// Iterate through each object, check for ownership by an old role.
 	for _, oldRole := range n.normalizedOldRoles {

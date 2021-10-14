@@ -322,14 +322,8 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 22  RANGE liveness
 25  TABLE system.public.replication_constraint_stats
 27  TABLE system.public.replication_stats
-<<<<<<< HEAD
 45  TABLE system.public.tenant_usage
-53  DATABASE testdb
-54  TABLE testdb.public.foo
-57  TABLE test.schema.bar
-=======
 54  DATABASE test
->>>>>>> 79e2e299cb (sql: update tests resulting from public schema being an explicit schema)
 
 query T
 SELECT quote_literal(raw_config_yaml) FROM crdb_internal.zones WHERE zone_id = 0

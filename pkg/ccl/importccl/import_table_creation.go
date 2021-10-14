@@ -102,7 +102,7 @@ func MakeTestingSimpleTableDescriptor(
 	fks fkHandler,
 	walltime int64,
 ) (*tabledesc.Mutable, error) {
-	db := dbdesc.NewInitial(parentID, "foo", security.RootUserName(), 0)
+	db := dbdesc.NewInitial(parentID, "foo", security.RootUserName())
 	sc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		Name:     "foo",
 		ID:       parentSchemaID,

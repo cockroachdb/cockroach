@@ -507,6 +507,9 @@ func (e *virtualDefEntry) getPlanInfo(
 			if err != nil {
 				return nil, err
 			}
+			if dbDesc == nil {
+				return nil, errors.Newf("no database desc found for db %s", dbName)
+			}
 		} else {
 			if !e.validWithNoDatabaseContext {
 				return nil, errInvalidDbPrefix

@@ -143,21 +143,34 @@ func MaybeWithDatabaseRegionConfig(regionConfig *multiregion.RegionConfig) NewIn
 	}
 }
 
+// WithPublicSchemaID is used to create a DatabaseDescriptor with a
+// publicSchemaID.
+func WithPublicSchemaID(publicSchemaID descpb.ID) NewInitialOption {
+	return func(desc *descpb.DatabaseDescriptor) {
+		// TODO(richardjcai): Remove this in 22.2. If the public schema id is
+		// keys.PublicSchemaID, we do not add an entry as the public schema does
+		// not have a descriptor.
+		if publicSchemaID != keys.PublicSchemaID {
+			desc.Schemas = map[string]descpb.DatabaseDescriptor_SchemaInfo{
+				tree.PublicSchema: {
+					ID:      publicSchemaID,
+					Dropped: false,
+				},
+			}
+		}
+	}
+}
+
 // NewInitial constructs a new Mutable for an initial version from an id and
 // name with default privileges.
 func NewInitial(
-	id descpb.ID,
-	name string,
-	owner security.SQLUsername,
-	publicSchemaID descpb.ID,
-	options ...NewInitialOption,
+	id descpb.ID, name string, owner security.SQLUsername, options ...NewInitialOption,
 ) *Mutable {
 	return NewInitialWithPrivileges(
 		id,
 		name,
 		descpb.NewDefaultPrivilegeDescriptor(owner),
 		catprivilege.MakeNewDefaultPrivilegeDescriptor(),
-		publicSchemaID,
 		options...,
 	)
 }
@@ -169,7 +182,6 @@ func NewInitialWithPrivileges(
 	name string,
 	privileges *descpb.PrivilegeDescriptor,
 	defaultPrivileges *descpb.DefaultPrivilegeDescriptor,
-	publicSchemaID descpb.ID,
 	options ...NewInitialOption,
 ) *Mutable {
 	ret := descpb.DatabaseDescriptor{
@@ -178,17 +190,6 @@ func NewInitialWithPrivileges(
 		Version:           1,
 		Privileges:        privileges,
 		DefaultPrivileges: defaultPrivileges,
-	}
-	// TODO(richardjcai): Remove this in 22.2. If the public schema id is
-	// keys.PublicSchemaID, we do not add an entry as the public schema does
-	// not have a descriptor.
-	if publicSchemaID != keys.PublicSchemaID {
-		ret.Schemas = map[string]descpb.DatabaseDescriptor_SchemaInfo{
-			tree.PublicSchema: {
-				ID:      publicSchemaID,
-				Dropped: false,
-			},
-		}
 	}
 	for _, option := range options {
 		option(&ret)

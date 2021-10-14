@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -1093,16 +1092,13 @@ type tableLookupFn = *internalLookupCtx
 // internalLookupCtx. It also hydrates any table descriptors with enum
 // information. It is intended only for use when dealing with backups.
 func newInternalLookupCtxFromDescriptors(
-	ctx context.Context,
-	rawDescs []descpb.Descriptor,
-	prefix catalog.DatabaseDescriptor,
-	version clusterversion.Handle,
+	ctx context.Context, rawDescs []descpb.Descriptor, prefix catalog.DatabaseDescriptor,
 ) (*internalLookupCtx, error) {
 	descriptors := make([]catalog.Descriptor, len(rawDescs))
 	for i := range rawDescs {
 		descriptors[i] = catalogkv.NewBuilder(&rawDescs[i]).BuildImmutable()
 	}
-	lCtx := newInternalLookupCtx(ctx, descriptors, prefix, nil /* fallback */, version)
+	lCtx := newInternalLookupCtx(ctx, descriptors, prefix, nil /* fallback */)
 	if err := descs.HydrateGivenDescriptors(ctx, descriptors); err != nil {
 		return nil, err
 	}
@@ -1116,7 +1112,6 @@ func newInternalLookupCtx(
 	descs []catalog.Descriptor,
 	prefix catalog.DatabaseDescriptor,
 	fallback catalog.DescGetter,
-	version clusterversion.Handle,
 ) *internalLookupCtx {
 	dbNames := make(map[descpb.ID]string)
 	dbDescs := make(map[descpb.ID]catalog.DatabaseDescriptor)
@@ -1126,6 +1121,10 @@ func newInternalLookupCtx(
 	tbDescs := make(map[descpb.ID]catalog.TableDescriptor)
 	typDescs := make(map[descpb.ID]catalog.TypeDescriptor)
 	var tbIDs, typIDs, dbIDs, schemaIDs []descpb.ID
+
+	// The system database's public schema is always 29.
+	schemaNames[keys.SystemPublicSchemaID] = tree.PublicSchema
+
 	// Record descriptors for name lookups.
 	for i := range descs {
 		switch desc := descs[i].(type) {
@@ -1155,15 +1154,6 @@ func newInternalLookupCtx(
 				schemaIDs = append(schemaIDs, desc.GetID())
 				schemaNames[desc.GetID()] = desc.GetName()
 			}
-		}
-	}
-
-	// Check for the absence of a Public schema, if there is not a
-	// public schema backed by a descriptor, we need to map public to 29,
-	// this is needed for public schemas created on versions 21.2 and prior.
-	for _, schemaDesc := range schemaDescs {
-		if schemaDesc.GetName() == tree.PublicSchema {
-			schemaNames[keys.PublicSchemaID] = tree.PublicSchema
 		}
 	}
 

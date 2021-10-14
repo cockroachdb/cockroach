@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
@@ -177,12 +176,6 @@ func MakePublicObjectNameKey(codec keys.SQLCodec, parentID descpb.ID, name strin
 // under the given database.
 func MakeSchemaNameKey(codec keys.SQLCodec, parentID descpb.ID, name string) roachpb.Key {
 	return EncodeNameKey(codec, NewNameKeyComponents(parentID, keys.RootNamespaceID, name))
-}
-
-// MakePublicSchemaNameKey returns the roachpb.Key corresponding to the public
-// schema scoped under the given database.
-func MakePublicSchemaNameKey(codec keys.SQLCodec, parentID descpb.ID) roachpb.Key {
-	return EncodeNameKey(codec, NewNameKeyComponents(parentID, keys.RootNamespaceID, tree.PublicSchema))
 }
 
 // MakeDatabaseNameKey returns the roachpb.Key corresponding to the database

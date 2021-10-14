@@ -2294,6 +2294,12 @@ CREATE TABLE crdb_internal.create_schema_statements (
 )
 `,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// The crdb_internal virtualSchema has validWithNoDatabaseContext set to
+		// meaning it should be valid to select from this table without a db,
+		// however if no db is passed in we should not return any rows.
+		if db == nil {
+			return nil
+		}
 		return forEachSchema(ctx, p, db, func(schemaDesc catalog.SchemaDescriptor) error {
 			switch schemaDesc.SchemaKind() {
 			case catalog.SchemaUserDefined:
