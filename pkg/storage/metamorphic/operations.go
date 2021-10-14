@@ -14,10 +14,10 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -198,9 +198,12 @@ func (m mvccPutOp) run(ctx context.Context) string {
 	}
 
 	// Update the txn's lock spans to account for this intent being written.
-	txn.LockSpans = append(txn.LockSpans, roachpb.Span{
+	newLockSpans := make([]roachpb.Span, 0, len(txn.LockSpans)+1)
+	newLockSpans = append(newLockSpans, txn.LockSpans...)
+	newLockSpans = append(newLockSpans, roachpb.Span{
 		Key: m.key,
 	})
+	txn.LockSpans, _ = roachpb.MergeSpans(&newLockSpans)
 	return "ok"
 }
 
@@ -224,9 +227,12 @@ func (m mvccCPutOp) run(ctx context.Context) string {
 	}
 
 	// Update the txn's lock spans to account for this intent being written.
-	txn.LockSpans = append(txn.LockSpans, roachpb.Span{
+	newLockSpans := make([]roachpb.Span, 0, len(txn.LockSpans)+1)
+	newLockSpans = append(newLockSpans, txn.LockSpans...)
+	newLockSpans = append(newLockSpans, roachpb.Span{
 		Key: m.key,
 	})
+	txn.LockSpans, _ = roachpb.MergeSpans(&newLockSpans)
 	return "ok"
 }
 
@@ -249,9 +255,12 @@ func (m mvccInitPutOp) run(ctx context.Context) string {
 	}
 
 	// Update the txn's lock spans to account for this intent being written.
-	txn.LockSpans = append(txn.LockSpans, roachpb.Span{
+	newLockSpans := make([]roachpb.Span, 0, len(txn.LockSpans)+1)
+	newLockSpans = append(newLockSpans, txn.LockSpans...)
+	newLockSpans = append(newLockSpans, roachpb.Span{
 		Key: m.key,
 	})
+	txn.LockSpans, _ = roachpb.MergeSpans(&newLockSpans)
 	return "ok"
 }
 
@@ -275,11 +284,22 @@ func (m mvccDeleteRangeOp) run(ctx context.Context) string {
 
 	// Update the txn's lock spans to account for this intent being written.
 	for _, key := range keys {
-		txn.LockSpans = append(txn.LockSpans, roachpb.Span{
+		newLockSpans := make([]roachpb.Span, 0, len(txn.LockSpans)+1)
+		newLockSpans = append(newLockSpans, txn.LockSpans...)
+		newLockSpans = append(newLockSpans, roachpb.Span{
 			Key: key,
 		})
+		txn.LockSpans, _ = roachpb.MergeSpans(&newLockSpans)
 	}
-	return "ok"
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "truncated range to delete = %s - %s, deleted keys = ", m.key, m.endKey)
+	for i, key := range keys {
+		fmt.Fprintf(&builder, "%s", key)
+		if i < len(keys)-1 {
+			fmt.Fprintf(&builder, ", ")
+		}
+	}
+	return builder.String()
 }
 
 type mvccClearTimeRangeOp struct {
@@ -320,9 +340,12 @@ func (m mvccDeleteOp) run(ctx context.Context) string {
 	}
 
 	// Update the txn's lock spans to account for this intent being written.
-	txn.LockSpans = append(txn.LockSpans, roachpb.Span{
+	newLockSpans := make([]roachpb.Span, 0, len(txn.LockSpans)+1)
+	newLockSpans = append(newLockSpans, txn.LockSpans...)
+	newLockSpans = append(newLockSpans, roachpb.Span{
 		Key: m.key,
 	})
+	txn.LockSpans, _ = roachpb.MergeSpans(&newLockSpans)
 	return "ok"
 }
 
@@ -688,11 +711,10 @@ type ingestOp struct {
 
 func (i ingestOp) run(ctx context.Context) string {
 	sstPath := filepath.Join(i.m.path, "ingest.sst")
-	f, err := os.Create(sstPath)
+	f, err := i.m.engineFS.Create(sstPath)
 	if err != nil {
 		return fmt.Sprintf("error = %s", err.Error())
 	}
-	defer f.Close()
 
 	sstWriter := storage.MakeIngestionSSTWriter(f)
 	for _, key := range i.keys {
@@ -732,7 +754,6 @@ func (r restartOp) run(ctx context.Context) string {
 //  - MVCCBlindPut
 //  - MVCCMerge
 //  - MVCCIncrement
-//  - MVCCResolveWriteIntent in the aborted case
 //  - and any others that would be important to test.
 var opGenerators = []opGenerator{
 	{
@@ -780,13 +801,13 @@ var opGenerators = []opGenerator{
 		name: "mvcc_put",
 		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
 			writer := readWriterID(args[0])
-			key := m.keyGenerator.parse(args[1])
-			value := roachpb.MakeValueFromBytes(m.valueGenerator.parse(args[2]))
-			txn := txnID(args[3])
+			txn := txnID(args[1])
+			key := m.txnKeyGenerator.parse(args[2])
+			value := roachpb.MakeValueFromBytes(m.valueGenerator.parse(args[3]))
 
 			// Track this write in the txn generator. This ensures the batch will be
 			// committed before the transaction is committed
-			m.txnGenerator.trackWriteOnBatch(writer, txn)
+			m.txnGenerator.trackWriteOnBatch(writer, txn, key.Key, nil)
 			return &mvccPutOp{
 				m:      m,
 				writer: writer,
@@ -797,9 +818,9 @@ var opGenerators = []opGenerator{
 		},
 		operands: []operandType{
 			operandReadWriter,
-			operandMVCCKey,
-			operandValue,
 			operandTransaction,
+			operandUnusedMVCCKey,
+			operandValue,
 		},
 		weight: 500,
 	},
@@ -807,14 +828,14 @@ var opGenerators = []opGenerator{
 		name: "mvcc_conditional_put",
 		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
 			writer := readWriterID(args[0])
-			key := m.keyGenerator.parse(args[1])
-			value := roachpb.MakeValueFromBytes(m.valueGenerator.parse(args[2]))
-			expVal := m.valueGenerator.parse(args[3])
-			txn := txnID(args[4])
+			txn := txnID(args[1])
+			key := m.txnKeyGenerator.parse(args[2])
+			value := roachpb.MakeValueFromBytes(m.valueGenerator.parse(args[3]))
+			expVal := m.valueGenerator.parse(args[4])
 
 			// Track this write in the txn generator. This ensures the batch will be
 			// committed before the transaction is committed
-			m.txnGenerator.trackWriteOnBatch(writer, txn)
+			m.txnGenerator.trackWriteOnBatch(writer, txn, key.Key, nil)
 			return &mvccCPutOp{
 				m:      m,
 				writer: writer,
@@ -826,10 +847,10 @@ var opGenerators = []opGenerator{
 		},
 		operands: []operandType{
 			operandReadWriter,
-			operandMVCCKey,
-			operandValue,
-			operandValue,
 			operandTransaction,
+			operandUnusedMVCCKey,
+			operandValue,
+			operandValue,
 		},
 		weight: 50,
 	},
@@ -837,13 +858,13 @@ var opGenerators = []opGenerator{
 		name: "mvcc_init_put",
 		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
 			writer := readWriterID(args[0])
-			key := m.keyGenerator.parse(args[1])
-			value := roachpb.MakeValueFromBytes(m.valueGenerator.parse(args[2]))
-			txn := txnID(args[3])
+			txn := txnID(args[1])
+			key := m.txnKeyGenerator.parse(args[2])
+			value := roachpb.MakeValueFromBytes(m.valueGenerator.parse(args[3]))
 
 			// Track this write in the txn generator. This ensures the batch will be
 			// committed before the transaction is committed
-			m.txnGenerator.trackWriteOnBatch(writer, txn)
+			m.txnGenerator.trackWriteOnBatch(writer, txn, key.Key, nil)
 			return &mvccInitPutOp{
 				m:      m,
 				writer: writer,
@@ -854,9 +875,9 @@ var opGenerators = []opGenerator{
 		},
 		operands: []operandType{
 			operandReadWriter,
-			operandMVCCKey,
-			operandValue,
 			operandTransaction,
+			operandUnusedMVCCKey,
+			operandValue,
 		},
 		weight: 50,
 	},
@@ -864,17 +885,22 @@ var opGenerators = []opGenerator{
 		name: "mvcc_delete_range",
 		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
 			writer := readWriterID(args[0])
-			key := m.keyGenerator.parse(args[1]).Key
-			endKey := m.keyGenerator.parse(args[2]).Key
-			txn := txnID(args[3])
+			txn := txnID(args[1])
+			key := m.keyGenerator.parse(args[2]).Key
+			endKey := m.keyGenerator.parse(args[3]).Key
 
 			if endKey.Compare(key) < 0 {
 				key, endKey = endKey, key
 			}
+			// forEachConflict is guaranteed to iterate
+			m.txnGenerator.forEachConflict(writer, txn, key, endKey, func(conflict roachpb.Span) bool {
+				endKey = conflict.Key
+				return false
+			})
 
 			// Track this write in the txn generator. This ensures the batch will be
 			// committed before the transaction is committed
-			m.txnGenerator.trackWriteOnBatch(writer, txn)
+			m.txnGenerator.trackWriteOnBatch(writer, txn, key, endKey)
 			return &mvccDeleteRangeOp{
 				m:      m,
 				writer: writer,
@@ -888,9 +914,9 @@ var opGenerators = []opGenerator{
 		},
 		operands: []operandType{
 			operandReadWriter,
-			operandMVCCKey,
-			operandMVCCKey,
 			operandTransaction,
+			operandUnusedMVCCKey,
+			operandUnusedMVCCKey,
 		},
 		weight: 20,
 	},
@@ -934,12 +960,12 @@ var opGenerators = []opGenerator{
 		name: "mvcc_delete",
 		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
 			writer := readWriterID(args[0])
-			key := m.keyGenerator.parse(args[1])
-			txn := txnID(args[2])
+			txn := txnID(args[1])
+			key := m.txnKeyGenerator.parse(args[2])
 
 			// Track this write in the txn generator. This ensures the batch will be
 			// committed before the transaction is committed
-			m.txnGenerator.trackWriteOnBatch(writer, txn)
+			m.txnGenerator.trackWriteOnBatch(writer, txn, key.Key, nil)
 			return &mvccDeleteOp{
 				m:      m,
 				writer: writer,
@@ -949,8 +975,8 @@ var opGenerators = []opGenerator{
 		},
 		operands: []operandType{
 			operandReadWriter,
-			operandMVCCKey,
 			operandTransaction,
+			operandUnusedMVCCKey,
 		},
 		weight: 100,
 	},
@@ -1104,7 +1130,7 @@ var opGenerators = []opGenerator{
 			operandSavepoint,
 		},
 		isOpener: true,
-		weight: 10,
+		weight:   10,
 	},
 	{
 		name: "txn_rollback_savepoint",
