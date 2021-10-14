@@ -8,6 +8,7 @@ go_library(
         "activerecord_blocklist.go",
         "allocator.go",
         "alterpk.go",
+        "asyncpg.go",
         "autoupgrade.go",
         "backup.go",
         "build_info.go",
