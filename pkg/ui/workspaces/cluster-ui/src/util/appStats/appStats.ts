@@ -10,7 +10,12 @@
 
 import _ from "lodash";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { FixLong, TimestampToNumber, uniqueLong } from "src/util";
+import {
+  FixLong,
+  TimestampToNumber,
+  DurationToNumber,
+  uniqueLong,
+} from "src/util";
 
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
 export type ExecStats = protos.cockroach.sql.IExecStats;
@@ -199,6 +204,7 @@ export function aggregateStatementStats(
 export interface ExecutionStatistics {
   statement: string;
   aggregated_ts: number;
+  aggregation_interval: number;
   app: string;
   database: string;
   distSQL: boolean;
@@ -216,6 +222,7 @@ export function flattenStatementStats(
   return statementStats.map(stmt => ({
     statement: stmt.key.key_data.query,
     aggregated_ts: TimestampToNumber(stmt.key.aggregated_ts),
+    aggregation_interval: DurationToNumber(stmt.key.aggregation_interval),
     app: stmt.key.key_data.app,
     database: stmt.key.key_data.database,
     distSQL: stmt.key.key_data.distSQL,
@@ -245,6 +252,10 @@ export const getSearchParams = (searchParams: string) => {
 // Parameters being used: query, implicit_txn, database, and aggregated_ts.
 export function statementKey(stmt: ExecutionStatistics): string {
   return (
-    stmt.statement + stmt.implicit_txn + stmt.database + stmt.aggregated_ts
+    stmt.statement +
+    stmt.implicit_txn +
+    stmt.database +
+    stmt.aggregated_ts +
+    stmt.aggregation_interval
   );
 }

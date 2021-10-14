@@ -26,6 +26,7 @@ import {
   StatementStatistics,
   statementKey,
   aggregatedTsAttr,
+  aggregationIntervalAttr,
   queryByName,
 } from "../util";
 import { AggregateStatistics } from "../statementsTable";
@@ -34,6 +35,7 @@ import { Fraction } from "./statementDetails";
 interface StatementDetailsData {
   nodeId: number;
   aggregatedTs: number;
+  aggregationInterval: number;
   implicitTxn: boolean;
   fullScan: boolean;
   database: string;
@@ -51,6 +53,7 @@ function coalesceNodeStats(
       statsKey[key] = {
         nodeId: stmt.node_id,
         aggregatedTs: stmt.aggregated_ts,
+        aggregationInterval: stmt.aggregation_interval,
         implicitTxn: stmt.implicit_txn,
         fullScan: stmt.full_scan,
         database: stmt.database,
@@ -65,6 +68,7 @@ function coalesceNodeStats(
     return {
       label: stmt.nodeId.toString(),
       aggregatedTs: stmt.aggregatedTs,
+      aggregationInterval: stmt.aggregationInterval,
       implicitTxn: stmt.implicitTxn,
       fullScan: stmt.fullScan,
       database: stmt.database,
@@ -102,10 +106,13 @@ function filterByRouterParamsPredicate(
   let app = queryByName(location, appAttr);
   // If the aggregatedTs is unset, we will aggregate across the current date range.
   const aggregatedTs = queryByName(location, aggregatedTsAttr);
+  const aggInterval = queryByName(location, aggregationIntervalAttr);
 
   const filterByKeys = (stmt: ExecutionStatistics) =>
     stmt.statement === statement &&
     (aggregatedTs == null || stmt.aggregated_ts.toString() === aggregatedTs) &&
+    (aggInterval == null ||
+      stmt.aggregation_interval.toString() === aggInterval) &&
     stmt.implicit_txn === implicitTxn &&
     (stmt.database === database || database === null);
 

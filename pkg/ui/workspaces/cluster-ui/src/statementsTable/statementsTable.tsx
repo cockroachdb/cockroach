@@ -43,7 +43,7 @@ import {
   statisticsTableTitles,
   NodeNames,
   StatisticType,
-  formatStartIntervalColumn,
+  formatAggregationIntervalColumn,
 } from "../statsTableUtil/statsTableUtil";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -94,11 +94,14 @@ function makeCommonColumns(
 
   return [
     {
-      name: "intervalStartTime",
-      title: statisticsTableTitles.intervalStartTime(statType),
+      name: "aggregationInterval",
+      title: statisticsTableTitles.aggregationInterval(statType),
       className: cx("statements-table__interval_time"),
       cell: (stmt: AggregateStatistics) =>
-        formatStartIntervalColumn(stmt.aggregatedTs),
+        formatAggregationIntervalColumn(
+          stmt.aggregatedTs,
+          stmt.aggregationInterval,
+        ),
       sort: (stmt: AggregateStatistics) => stmt.aggregatedTs,
     },
     {
@@ -204,6 +207,7 @@ export interface AggregateStatistics {
   // label is either shortStatement (StatementsPage) or nodeId (StatementDetails).
   label: string;
   aggregatedTs: number;
+  aggregationInterval: number;
   implicitTxn: boolean;
   fullScan: boolean;
   database: string;
