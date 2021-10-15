@@ -770,15 +770,20 @@ func BenchmarkLogEntry_String(b *testing.B) {
 }
 
 func BenchmarkEventf_WithVerboseTraceSpan(b *testing.B) {
-	b.ReportAllocs()
-	tagbuf := logtags.SingleTagBuffer("hello", "there")
-	ctx := logtags.WithTags(context.Background(), tagbuf)
-	tracer := tracing.NewTracer()
-	ctx, sp := tracer.StartSpanCtx(ctx, "benchspan", tracing.WithForceRealSpan())
-	b.ResetTimer()
-	defer sp.Finish()
-	sp.SetVerbose(true)
-	for i := 0; i < b.N; i++ {
-		Eventf(ctx, "%s %s %s", "foo", "bar", "baz")
+	for _, redactable := range []bool{false, true} {
+		b.Run(fmt.Sprintf("redactable=%t", redactable), func(b *testing.B) {
+			b.ReportAllocs()
+			tagbuf := logtags.SingleTagBuffer("hello", "there")
+			ctx := logtags.WithTags(context.Background(), tagbuf)
+			tracer := tracing.NewTracer()
+			tracer.SetRedactable(redactable)
+			ctx, sp := tracer.StartSpanCtx(ctx, "benchspan", tracing.WithForceRealSpan())
+			defer sp.Finish()
+			b.ResetTimer()
+			sp.SetVerbose(true)
+			for i := 0; i < b.N; i++ {
+				Eventf(ctx, "%s %s %s", "foo", "bar", "baz")
+			}
+		})
 	}
 }
