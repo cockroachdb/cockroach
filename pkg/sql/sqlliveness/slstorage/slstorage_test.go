@@ -155,9 +155,15 @@ func TestStorage(t *testing.T) {
 
 		// Advance time to nextGC, wait for there to be a new timer.
 		timeSource.Advance(gcInterval)
-		storage.DeleteExpiredSessions(ctx, clock.Now())
-		// Ensure that we saw the second gc run and the deletion.
+		// Run a deletion run but exclude id1.
+		storage.DeleteExpiredSessions(ctx, clock.Now(), id1)
+		// Ensure that we saw the second gc run and not a deletion.
 		require.Equal(t, int64(1), metrics.SessionDeletionsRuns.Count())
+		require.Equal(t, int64(0), metrics.SessionsDeleted.Count())
+		// Run a deletion run.
+		storage.DeleteExpiredSessions(ctx, clock.Now(), "")
+		// Ensure that we saw the second gc run and the deletion.
+		require.Equal(t, int64(2), metrics.SessionDeletionsRuns.Count())
 		require.Equal(t, int64(1), metrics.SessionsDeleted.Count())
 
 		// Ensure that we now see the id1 as dead.

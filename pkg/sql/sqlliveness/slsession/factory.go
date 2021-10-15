@@ -290,7 +290,11 @@ func (sf *Factory) deleteSessionsLoop(ctx context.Context) {
 			return
 		case <-t.Ch():
 			t.MarkRead()
-			sf.storage.DeleteExpiredSessions(ctx, sf.clock.Now())
+			var excluded sqlliveness.SessionID
+			if s, _ := sf.getSessionOrBlockCh(); s != nil {
+				excluded = s.id
+			}
+			sf.storage.DeleteExpiredSessions(ctx, sf.clock.Now(), excluded)
 			t.Reset(sf.gcInterval())
 		}
 	}

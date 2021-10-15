@@ -11,6 +11,7 @@
 package slstorage
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -54,21 +55,22 @@ type Writer interface {
 	// the storage and if found replaces it with the input returning true.
 	// Otherwise it returns false to indicate that the session does not exist.
 	Update(ctx context.Context, id sqlliveness.SessionID, expiration hlc.Timestamp) (bool, error)
-	// DeleteExpiredSessions will delete all discovered sessions with an expiration less than now.
-	// Any errors encountered will be recorded into logging and metrics.
-	DeleteExpiredSessions(ctx context.Context, now hlc.Timestamp)
+	// DeleteExpiredSessions will delete all discovered sessions with an
+	// expiration before now. Any errors encountered will be recorded into
+	// logging and metrics. The passed excluded session will not be removed.
+	DeleteExpiredSessions(ctx context.Context, now hlc.Timestamp, excluded sqlliveness.SessionID)
 }
 
 // Storage implements sqlliveness.Storage.
 type Storage struct {
-	settings *cluster.Settings
-	stopper  *stop.Stopper
-	clock    *hlc.Clock
-	db       *kv.DB
-	codec    keys.SQLCodec
-	metrics  Metrics
-	g        singleflight.Group
-	tableID  descpb.ID
+	settings    *cluster.Settings
+	stopper     *stop.Stopper
+	clock       *hlc.Clock
+	db          *kv.DB
+	codec       keys.SQLCodec
+	metrics     Metrics
+	g           singleflight.Group
+	indexPrefix roachpb.Key
 
 	mu struct {
 		syncutil.Mutex
@@ -98,13 +100,13 @@ func NewStorage(
 		tableID = knobs.SQLLivenessTableID
 	}
 	s := &Storage{
-		settings: settings,
-		stopper:  stopper,
-		clock:    clock,
-		db:       db,
-		codec:    codec,
-		tableID:  tableID,
-		metrics:  makeMetrics(),
+		settings:    settings,
+		stopper:     stopper,
+		clock:       clock,
+		db:          db,
+		codec:       codec,
+		indexPrefix: codec.IndexPrefix(uint32(tableID), 1),
+		metrics:     makeMetrics(),
 	}
 	cacheConfig := cache.Config{
 		Policy: cache.CacheLRU,
@@ -262,7 +264,9 @@ func (s *Storage) deleteOrFetchSession(
 }
 
 // DeleteExpiredSessions is part of the Writer interface.
-func (s *Storage) DeleteExpiredSessions(ctx context.Context, now hlc.Timestamp) {
+func (s *Storage) DeleteExpiredSessions(
+	ctx context.Context, now hlc.Timestamp, excluded sqlliveness.SessionID,
+) {
 
 	// TODO(ajwerner): find a way to utilize this table scan to update the
 	// expirations stored in the in-memory cache or remove it altogether. As it
@@ -275,7 +279,7 @@ func (s *Storage) DeleteExpiredSessions(ctx context.Context, now hlc.Timestamp) 
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		deleted = 0 // reset for restarts
-		start := s.makeTablePrefix()
+		start := s.indexPrefix
 		end := start.PrefixEnd()
 		const maxRows = 1024 // arbitrary but plenty
 		for {
@@ -288,11 +292,17 @@ func (s *Storage) DeleteExpiredSessions(ctx context.Context, now hlc.Timestamp) 
 			}
 			var toDel []interface{}
 			for i := range rows {
+				id, err := decodeSessionID(s.indexPrefix, rows[i].Key)
+				if err != nil {
+					log.Warningf(ctx, "failed to decode row %s: %v", rows[i].Key.String(), err)
+					continue
+				}
 				exp, err := decodeValue(rows[i])
 				if err != nil {
 					log.Warningf(ctx, "failed to decode row %s: %v", rows[i].Key.String(), err)
+					continue
 				}
-				if exp.Less(now) {
+				if exp.Less(now) && id != excluded {
 					toDel = append(toDel, rows[i].Key)
 					deleted++
 				}
@@ -381,12 +391,16 @@ func (s *cachedStorage) IsAlive(
 	return (*Storage)(s).isAlive(ctx, sid, async)
 }
 
-func (s *Storage) makeTablePrefix() roachpb.Key {
-	return s.codec.IndexPrefix(uint32(s.tableID), 1)
+func (s *Storage) makeSessionKey(id sqlliveness.SessionID) roachpb.Key {
+	return keys.MakeFamilyKey(encoding.EncodeBytesAscending(s.indexPrefix, id.UnsafeBytes()), 0)
 }
 
-func (s *Storage) makeSessionKey(id sqlliveness.SessionID) roachpb.Key {
-	return keys.MakeFamilyKey(encoding.EncodeBytesAscending(s.makeTablePrefix(), id.UnsafeBytes()), 0)
+func decodeSessionID(prefix, key roachpb.Key) (sqlliveness.SessionID, error) {
+	_, r, err := encoding.DecodeBytesAscending(bytes.TrimPrefix(key, prefix), nil)
+	if err != nil {
+		return "", err
+	}
+	return sqlliveness.SessionID(r), nil
 }
 
 func decodeValue(kv kv.KeyValue) (hlc.Timestamp, error) {
