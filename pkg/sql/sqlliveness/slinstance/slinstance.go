@@ -35,7 +35,7 @@ var (
 	DefaultTTL = settings.RegisterDurationSetting(
 		"server.sqlliveness.ttl",
 		"default sqlliveness session ttl",
-		40*time.Second,
+		120*time.Second,
 		settings.NonNegativeDuration,
 	)
 	// DefaultHeartBeat specifies the period between attempts to extend a session.
@@ -153,9 +153,7 @@ func (l *Instance) clearSession(ctx context.Context) {
 // only if the heart beat loop should exit.
 func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	id := sqlliveness.SessionID(uuid.MakeV4().GetBytes())
-	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
 	s := &session{id: id}
-	s.mu.exp = exp
 
 	opts := retry.Options{
 		InitialBackoff: 10 * time.Millisecond,
@@ -165,6 +163,8 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	everySecond := log.Every(time.Second)
 	var err error
 	for i, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
+		exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
+		s.mu.exp = exp
 		i++
 		if err = l.storage.Insert(ctx, s.id, s.Expiration()); err != nil {
 			if ctx.Err() != nil {
@@ -185,7 +185,6 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 }
 
 func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) {
-	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
 
 	opts := retry.Options{
 		InitialBackoff: 10 * time.Millisecond,
@@ -194,7 +193,9 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	}
 	var err error
 	var found bool
+	var exp hlc.Timestamp
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		exp = l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
 		if found, err = l.storage.Update(ctx, s.ID(), exp); err != nil {
 			if ctx.Err() != nil {
 				break
