@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
 
@@ -732,5 +733,37 @@ func TestLogEntryPropagation(t *testing.T) {
 
 	if !contains(specialMessage, t) {
 		t.Fatalf("expected special message in file, got:\n%s", contents())
+	}
+}
+
+func BenchmarkLogEntry_String(b *testing.B) {
+	tagbuf := logtags.SingleTagBuffer("foo", "bar")
+	entry := &logEntry{
+		idPayload: idPayload{
+			clusterID:     "fooo",
+			nodeID:        10,
+			tenantID:      "12",
+			sqlInstanceID: 9,
+		},
+		ts:         timeutil.Now().UnixNano(),
+		header:     false,
+		sev:        logpb.Severity_INFO,
+		ch:         1,
+		gid:        2,
+		file:       "foo.go",
+		line:       192,
+		counter:    12,
+		tags:       tagbuf,
+		stacks:     nil,
+		structured: false,
+		payload: entryPayload{
+			redactable: false,
+			message:    "hello there",
+		},
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = entry.String()
 	}
 }
