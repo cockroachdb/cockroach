@@ -12,7 +12,6 @@ package slsession_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -26,10 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSQLInstance_invokesSessionExpiryCallbacksInGoroutine(t *testing.T) {
+func TestFactory_invokesSessionExpiryCallbacksInGoroutine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -41,10 +42,10 @@ func TestSQLInstance_invokesSessionExpiryCallbacksInGoroutine(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 
 	fakeStorage := slstorage.NewFakeStorage()
-	sqlInstance := slsession.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
-	sqlInstance.Start(ctx)
+	sf := slsession.NewFactory(stopper, clock, fakeStorage, settings, nil)
+	sf.Start(ctx)
 
-	session, err := sqlInstance.Session(ctx)
+	session, err := sf.Session(ctx)
 	require.NoError(t, err)
 
 	// Simulating what happens in `instanceprovider.shutdownSQLInstance`
@@ -54,7 +55,7 @@ func TestSQLInstance_invokesSessionExpiryCallbacksInGoroutine(t *testing.T) {
 
 	// Removing the session will run the callback above, which will have to
 	// wait for async tasks to stop. The async tasks include the
-	// sqlInstance `heartbeatLoop` function.
+	// sf `heartbeatLoop` function.
 	require.NoError(t, fakeStorage.Delete(ctx, session.ID()))
 
 	// Clock needs to advance for expiry we trigger below to be valid
@@ -70,7 +71,7 @@ func TestSQLInstance_invokesSessionExpiryCallbacksInGoroutine(t *testing.T) {
 	})
 }
 
-func TestSQLInstance(t *testing.T) {
+func TestFactory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -87,20 +88,20 @@ func TestSQLInstance(t *testing.T) {
 	slsession.DefaultHeartBeat.Override(ctx, &settings.SV, time.Microsecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
-	sqlInstance := slsession.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
-	sqlInstance.Start(ctx)
+	sf := slsession.NewFactory(stopper, clock, fakeStorage, settings, nil)
+	sf.Start(ctx)
 
-	// Add one more instance to introduce concurrent access to storage.
-	dummy := slsession.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	// Add one more factory to introduce concurrent access to storage.
+	dummy := slsession.NewFactory(stopper, clock, fakeStorage, settings, nil)
 	dummy.Start(ctx)
 
-	s1, err := sqlInstance.Session(ctx)
+	s1, err := sf.Session(ctx)
 	require.NoError(t, err)
 	a, err := fakeStorage.IsAlive(ctx, s1.ID())
 	require.NoError(t, err)
 	require.True(t, a)
 
-	s2, err := sqlInstance.Session(ctx)
+	s2, err := sf.Session(ctx)
 	require.NoError(t, err)
 	require.Equal(t, s1.ID(), s2.ID())
 
@@ -114,7 +115,7 @@ func TestSQLInstance(t *testing.T) {
 	require.Eventually(
 		t,
 		func() bool {
-			s3, err = sqlInstance.Session(ctx)
+			s3, err = sf.Session(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -130,7 +131,48 @@ func TestSQLInstance(t *testing.T) {
 
 	// Force next call to Session to fail.
 	stopper.Stop(ctx)
-	sqlInstance.ClearSessionForTest(ctx)
-	_, err = sqlInstance.Session(ctx)
+	sf.ClearSessionForTest(ctx)
+	_, err = sf.Session(ctx)
 	require.Error(t, err)
+}
+
+// We want to test that the GC runs a number of times but is jitterred.
+func TestJitter(t *testing.T) {
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	timeSource := timeutil.NewManualTime(t0)
+	clock := hlc.NewClock(func() int64 { return timeSource.Now().UnixNano() }, 0)
+	fs := slstorage.NewFakeStorage()
+	settings := cluster.MakeTestingClusterSettings()
+	sf := slsession.NewFactory(stopper, clock, fs, settings, &sqlliveness.TestingKnobs{
+		NewTimer: timeSource.NewTimer,
+	})
+	sf.Start(ctx)
+	waitForGCTimer := func() (timer time.Time) {
+		testutils.SucceedsSoon(t, func() error {
+			timers := timeSource.Timers()
+			if len(timers) != 1 {
+				return errors.Errorf("expected 1 timer, saw %d", len(timers))
+			}
+			timer = timers[0]
+			return nil
+		})
+		return timer
+	}
+	const N = 10
+	for i := 0; i < N; i++ {
+		timer := waitForGCTimer()
+		timeSource.Advance(timer.Sub(timeSource.Now()))
+	}
+	jitter := slsession.GCJitter.Get(&settings.SV)
+	interval := slsession.GCInterval.Get(&settings.SV)
+	minTime := t0.Add(time.Duration((1 - jitter) * float64(interval.Nanoseconds()) * N))
+	maxTime := t0.Add(time.Duration((1 + jitter) * float64(interval.Nanoseconds()) * N))
+	noJitterTime := t0.Add(interval * N)
+	now := timeSource.Now()
+	require.Truef(t, now.After(minTime), "%v > %v", now, minTime)
+	require.Truef(t, now.Before(maxTime), "%v < %v", now, maxTime)
+	require.Truef(t, !now.Equal(noJitterTime), "%v != %v", now, noJitterTime)
 }

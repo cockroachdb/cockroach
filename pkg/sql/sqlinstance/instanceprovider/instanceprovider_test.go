@@ -51,7 +51,7 @@ func TestInstanceProvider(t *testing.T) {
 			true /* initializeVersion */)
 		stopper := stop.NewStopper()
 		fakeStorage := slstorage.NewFakeStorage()
-		slInstance := slsession.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+		slInstance := slsession.NewFactory(stopper, clock, fakeStorage, settings, nil)
 		return stopper, slInstance, clock
 	}
 

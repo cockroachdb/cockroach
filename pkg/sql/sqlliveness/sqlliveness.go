@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -101,6 +102,8 @@ type TestingKnobs struct {
 	// SessionOverride is used to override the returned session.
 	// If it returns nil, nil the underlying instance will be used.
 	SessionOverride func(ctx context.Context) (Session, error)
+	// NewTimer is used to override the construction of new timers.
+	NewTimer func() timeutil.TimerI
 }
 
 var _ base.ModuleTestingKnobs = &TestingKnobs{}

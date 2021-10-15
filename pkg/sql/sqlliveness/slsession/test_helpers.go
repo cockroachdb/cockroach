@@ -14,6 +14,6 @@ import "context"
 
 // ClearSessionForTest is used in test to
 // immediately delete the current session.
-func (l *Factory) ClearSessionForTest(ctx context.Context) {
-	l.clearSession(ctx)
+func (sf *Factory) ClearSessionForTest(ctx context.Context) {
+	sf.clearSession(ctx)
 }

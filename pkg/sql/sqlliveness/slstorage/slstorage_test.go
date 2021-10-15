@@ -73,13 +73,12 @@ func TestStorage(t *testing.T) {
 		settings := cluster.MakeTestingClusterSettings()
 		stopper := stop.NewStopper()
 		storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
-			tableID, timeSource.NewTimer)
+			tableID)
 		return clock, timeSource, settings, stopper, storage
 	}
 
 	t.Run("basic-insert-is-alive", func(t *testing.T) {
 		clock, _, _, stopper, storage := setup(t)
-		storage.Start(ctx)
 		defer stopper.Stop(ctx)
 
 		exp := clock.Now().Add(time.Second.Nanoseconds(), 0)
@@ -106,24 +105,13 @@ func TestStorage(t *testing.T) {
 		}
 	})
 	t.Run("delete-update", func(t *testing.T) {
-		clock, timeSource, settings, stopper, storage := setup(t)
+		clock, timeSource, _, stopper, storage := setup(t)
 		defer stopper.Stop(ctx)
-		slstorage.GCJitter.Override(ctx, &settings.SV, 0)
-		storage.Start(ctx)
 		metrics := storage.Metrics()
 
 		// GC will run some time after startup.
-		gcInterval := slstorage.GCInterval.Get(&settings.SV)
+		gcInterval := time.Minute
 		nextGC := timeSource.Now().Add(gcInterval)
-		testutils.SucceedsSoon(t, func() error {
-			timers := timeSource.Timers()
-			if len(timers) != 1 {
-				return errors.Errorf("expected 1 timer, saw %d", len(timers))
-			}
-			require.Equal(t, []time.Time{nextGC}, timers)
-			return nil
-		})
-		require.Equal(t, int64(0), metrics.SessionDeletionsRuns.Count())
 
 		// Create two records which will expire before nextGC.
 		exp := clock.Now().Add(gcInterval.Nanoseconds()-1, 0)
@@ -166,17 +154,7 @@ func TestStorage(t *testing.T) {
 
 		// Advance time to nextGC, wait for there to be a new timer.
 		timeSource.Advance(gcInterval)
-		followingGC := nextGC.Add(gcInterval)
-		testutils.SucceedsSoon(t, func() error {
-			timers := timeSource.Timers()
-			if len(timers) != 1 {
-				return errors.Errorf("expected 1 timer, saw %d", len(timers))
-			}
-			if timers[0].Equal(followingGC) {
-				return nil
-			}
-			return errors.Errorf("expected %v, saw %v", followingGC, timers[0])
-		})
+		storage.DeleteExpiredSessions(ctx, clock.Now())
 		// Ensure that we saw the second gc run and the deletion.
 		require.Equal(t, int64(1), metrics.SessionDeletionsRuns.Count())
 		require.Equal(t, int64(1), metrics.SessionsDeleted.Count())
@@ -225,7 +203,6 @@ func TestStorage(t *testing.T) {
 	t.Run("delete-expired-on-is-alive", func(t *testing.T) {
 		clock, timeSource, _, stopper, storage := setup(t)
 		defer stopper.Stop(ctx)
-		storage.Start(ctx)
 
 		exp := clock.Now().Add(time.Second.Nanoseconds(), 0)
 		const id = "asdf"
@@ -271,38 +248,6 @@ func TestStorage(t *testing.T) {
 			require.Equal(t, int64(1), metrics.WriteFailures.Count())
 		}
 	})
-	t.Run("test-jitter", func(t *testing.T) {
-		// We want to test that the GC runs a number of times but is jitterred.
-		_, timeSource, settings, stopper, storage := setup(t)
-		defer stopper.Stop(ctx)
-		storage.Start(ctx)
-		waitForGCTimer := func() (timer time.Time) {
-			testutils.SucceedsSoon(t, func() error {
-				timers := timeSource.Timers()
-				if len(timers) != 1 {
-					return errors.Errorf("expected 1 timer, saw %d", len(timers))
-				}
-				timer = timers[0]
-				return nil
-			})
-			return timer
-		}
-		const N = 10
-		for i := 0; i < N; i++ {
-			timer := waitForGCTimer()
-			timeSource.Advance(timer.Sub(timeSource.Now()))
-		}
-		jitter := slstorage.GCJitter.Get(&settings.SV)
-		interval := slstorage.GCInterval.Get(&settings.SV)
-		storage.Start(ctx)
-		minTime := t0.Add(time.Duration((1 - jitter) * float64(interval.Nanoseconds()) * N))
-		maxTime := t0.Add(time.Duration((1 + jitter) * float64(interval.Nanoseconds()) * N))
-		noJitterTime := t0.Add(interval * N)
-		now := timeSource.Now()
-		require.Truef(t, now.After(minTime), "%v > %v", now, minTime)
-		require.Truef(t, now.Before(maxTime), "%v < %v", now, maxTime)
-		require.Truef(t, !now.Equal(noJitterTime), "%v != %v", now, noJitterTime)
-	})
 }
 
 func TestConcurrentAccessesAndEvictions(t *testing.T) {
@@ -331,8 +276,7 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
 	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
-		tableID, timeSource.NewTimer)
-	storage.Start(ctx)
+		tableID)
 
 	const (
 		runsPerWorker   = 100
@@ -495,8 +439,7 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
 	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
-		tableID, timeSource.NewTimer)
-	storage.Start(ctx)
+		tableID)
 
 	// Synchronize reading from the store with the blocked channel by detecting
 	// a Get to the table.
@@ -687,7 +630,7 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 
 	storage := slstorage.NewTestingStorage(
 		s.Stopper(), s.Clock(), kvDB, keys.SystemSQLCodec, s.ClusterSettings(),
-		tableID, timeutil.DefaultTimeSource{}.NewTimer,
+		tableID,
 	)
 
 	// Insert a session.

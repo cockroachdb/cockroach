@@ -34,6 +34,19 @@ func NewFakeStorage() *FakeStorage {
 	return fs
 }
 
+var _ Writer = (*FakeStorage)(nil)
+
+// DeleteExpiredSessions implements the slstorage.Writer interface.
+func (s *FakeStorage) DeleteExpiredSessions(ctx context.Context, now hlc.Timestamp) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for sid, exp := range s.mu.sessions {
+		if exp.Less(now) {
+			delete(s.mu.sessions, sid)
+		}
+	}
+}
+
 // IsAlive implements the sqlliveness.Storage interface.
 func (s *FakeStorage) IsAlive(
 	_ context.Context, sid sqlliveness.SessionID,

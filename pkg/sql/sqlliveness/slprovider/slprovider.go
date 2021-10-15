@@ -36,7 +36,9 @@ func New(
 	testingKnobs *sqlliveness.TestingKnobs,
 ) sqlliveness.Provider {
 	storage := slstorage.NewStorage(stopper, clock, db, codec, settings)
-	instance := slsession.NewSQLInstance(stopper, clock, storage, settings, testingKnobs)
+	instance := slsession.NewFactory(
+		stopper, clock, storage, settings, testingKnobs,
+	)
 	return &provider{
 		Storage: storage,
 		Factory: instance,
@@ -44,7 +46,6 @@ func New(
 }
 
 func (p *provider) Start(ctx context.Context) {
-	p.Storage.Start(ctx)
 	p.Factory.Start(ctx)
 }
 
