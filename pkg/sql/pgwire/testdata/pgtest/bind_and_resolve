@@ -38,7 +38,7 @@ ReadyForQuery
 # planner transaction but never set it. This was pretty much the only
 # way you could do such a thing.
 
-send
+send crdb_only
 Query {"String": "BEGIN AS OF SYSTEM TIME '1s'"}
 Sync
 ----
@@ -46,7 +46,7 @@ Sync
 
 # TODO(ajwerner): Why are there two ReadyForQuery?
 
-until
+until crdb_only
 ErrorResponse
 ReadyForQuery
 ReadyForQuery
@@ -55,13 +55,14 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-send
+# This checks the OID of a table using a cast, which will differ between CRDB and Postgres.
+send crdb_only
 Bind {"DestinationPortal": "p7", "PreparedStatement": "s7", "ParameterFormatCodes": [0], "Parameters": [{"text":"T"}]}
 Execute {"Portal": "p7"}
 Sync
 ----
 
-until
+until crdb_only
 ReadyForQuery
 ----
 {"Type":"BindComplete"}

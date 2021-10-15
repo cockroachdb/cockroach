@@ -113,3 +113,41 @@ ReadyForQuery
 ----
 {"Type":"ErrorResponse","Code":"42P18"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DROP TABLE IF EXISTS tab2 CASCADE"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Query {"String": "CREATE TABLE tab2 (a INT2)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# 'S' for Statement
+send
+Parse {"Name": "s7", "Query": "SELECT a FROM tab2 WHERE a = $1"}
+Describe {"ObjectType": "S", "Name": "s7"}
+Sync
+----
+
+# Make sure the ParameterDescription shows OID 21 (INT2). Drivers
+# (e.g. rust-postgres) rely on this matching the column type.
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[21]}
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":21,"DataTypeSize":2,"TypeModifier":-1,"Format":0}]}
+{"Type":"ReadyForQuery","TxStatus":"I"}
