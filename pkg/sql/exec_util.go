@@ -2716,6 +2716,10 @@ func (m *sessionDataMutator) SetSynchronousCommit(val bool) {
 	m.data.SynchronousCommit = val
 }
 
+func (m *sessionDataMutator) SetDisablePlanGists(val bool) {
+	m.data.DisablePlanGists = val
+}
+
 func (m *sessionDataMutator) SetDistSQLMode(val sessiondatapb.DistSQLExecMode) {
 	m.data.DistSQLMode = val
 }
