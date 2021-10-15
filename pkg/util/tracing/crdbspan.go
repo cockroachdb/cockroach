@@ -40,6 +40,7 @@ type crdbSpan struct {
 	traceID      uint64 // probabilistically unique
 	spanID       uint64 // probabilistically unique
 	parentSpanID uint64
+	redactable   bool // are verbose logs redactable?
 	goroutineID  uint64
 
 	startTime time.Time
@@ -285,7 +286,7 @@ func (s *crdbSpan) setTagLocked(key string, value interface{}) {
 	s.mu.tags[key] = value
 }
 
-func (s *crdbSpan) record(msg redact.RedactableString) {
+func (s *crdbSpan) record(redactableString redact.RedactableString) {
 	if s.recordingType() != RecordingVerbose {
 		return
 	}
@@ -299,7 +300,7 @@ func (s *crdbSpan) record(msg redact.RedactableString) {
 	logRecord := &tracingpb.LogRecord{
 		Time: now,
 		Fields: []tracingpb.LogRecord_Field{
-			{Key: tracingpb.LogMessageField, Value: msg},
+			{Key: tracingpb.LogMessageField, Value: redactableString},
 		},
 	}
 

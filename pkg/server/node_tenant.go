@@ -17,8 +17,13 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-var sRedactedMarker = redact.RedactableString(redact.EscapeBytes(nil))
+var sRedactedMarker = redact.RedactableString("verbose trace message redacted")
 
+// maybeRedactRecording will inspect all entries in the `Logs` field of
+// the recording and redact them if the recorded span has
+// `RedactableLogs` enabled. Otherwise, the field value is replaced with
+// a static marker.
+// The function also clears all tags.
 func maybeRedactRecording(tenID roachpb.TenantID, rec tracing.Recording) {
 	if tenID == roachpb.SystemTenantID {
 		return
@@ -32,18 +37,15 @@ func maybeRedactRecording(tenID roachpb.TenantID, rec tracing.Recording) {
 			record := &sp.Logs[j]
 			for k := range record.Fields {
 				field := &record.Fields[k]
-				if field.Key != tracingpb.LogMessageField {
-					// We don't have any of these fields, but let's not take any
-					// chances (our dependencies might slip them in).
+
+				if !sp.RedactableLogs {
+					// If we're handling a span that does not support redactability, all
+					// the containing information will be stripped.
 					field.Value = sRedactedMarker
 					continue
-				}
-				if !sp.RedactableLogs {
-					// If we're handling a span that originated from an (early patch
-					// release) 22.1 node, all the containing information will be
-					// stripped. Note that this is not the common path here, as most
-					// information in the trace will be from the local node, which
-					// always creates redactable logs.
+				} else if field.Key != tracingpb.LogMessageField {
+					// We don't have any of these fields, but let's not take any
+					// chances (our dependencies might slip them in).
 					field.Value = sRedactedMarker
 					continue
 				}

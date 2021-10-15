@@ -58,7 +58,7 @@ func (l LogRecord) Msg() string {
 			return f.Value.StripMarkers()
 		}
 		if key == "error" {
-			return fmt.Sprint("error:", f.Value)
+			return fmt.Sprint("error:", f.Value.StripMarkers())
 		}
 	}
 	return ""

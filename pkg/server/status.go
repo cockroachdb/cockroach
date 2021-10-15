@@ -677,7 +677,7 @@ func recordedSpansToTraceEvents(spans []tracingpb.RecordedSpan) []*serverpb.Trac
 					if i != 0 {
 						buf.WriteByte(' ')
 					}
-					fmt.Fprintf(&buf, "%s:%v", f.Key, f.Value)
+					fmt.Fprintf(&buf, "%s:%v", f.Key, f.Value.StripMarkers())
 				}
 				event.Message = buf.String()
 			}
