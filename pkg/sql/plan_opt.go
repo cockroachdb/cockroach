@@ -564,9 +564,13 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var containsLargeFullTableScan bool
 	var containsLargeFullIndexScan bool
 	var containsMutation bool
-	gf := explain.NewPlanGistFactory(f)
+	var gf *explain.PlanGistFactory
+	if !opc.p.SessionData().DisablePlanGists {
+		gf = explain.NewPlanGistFactory(f)
+		f = gf
+	}
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
-		bld := execbuilder.New(gf, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
+		bld := execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
 		plan, err := bld.Build()
 		if err != nil {
 			return err
@@ -580,7 +584,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 		containsMutation = bld.ContainsMutation
 	} else {
 		// Create an explain factory and record the explain.Plan.
-		explainFactory := explain.NewFactory(gf)
+		explainFactory := explain.NewFactory(f)
 		bld := execbuilder.New(
 			explainFactory, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit,
 		)
@@ -599,7 +603,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
-	planTop.instrumentation.planGist = gf.PlanGist()
+	if gf != nil {
+		planTop.instrumentation.planGist = gf.PlanGist()
+	}
 
 	if stmt.ExpectedTypes != nil {
 		cols := result.main.planColumns()

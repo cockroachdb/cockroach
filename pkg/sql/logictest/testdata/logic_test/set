@@ -560,3 +560,9 @@ SET cluster setting sql.trace.txn.enable_threshold='1s'
 
 statement ok
 SET cluster setting sql.trace.txn.enable_threshold='0s'
+
+statement ok
+SET disable_plan_gists = 'true'
+
+statement ok
+SET disable_plan_gists = 'false'

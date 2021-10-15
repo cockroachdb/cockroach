@@ -455,6 +455,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`disable_plan_gists`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`disable_plan_gists`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("disable_plan_gists", s)
+			if err != nil {
+				return err
+			}
+			m.SetDisablePlanGists(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DisablePlanGists)
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`distsql`: {
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
 			mode, ok := sessiondatapb.DistSQLExecModeFromString(s)
