@@ -211,6 +211,8 @@ message LocalOnlySessionData {
   // NULLS FIRST for ascending order by default, whereas postgres defaults
   // to NULLS LAST.
   bool null_ordered_last = 55;
+  // DisablePlanGists indicates whether we should disable automatic gists.
+  bool disable_plan_gists = 56;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
