@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -127,6 +128,45 @@ func (e *logEntry) SafeFormat(w interfaces.SafePrinter, _ rune) {
 	} else {
 		w.Print(redact.RedactableString(e.payload.message))
 	}
+}
+
+// LegacyString is an old implementation of String(). It is still around
+// because it is significantly faster and sits in the hot path of verbose
+// tracing.
+func (e *logEntry) LegacyString() string {
+	entry := e.convertToLegacy()
+	if len(entry.Tags) == 0 && len(entry.File) == 0 && !entry.Redactable {
+		// Shortcut.
+		return entry.Message
+	}
+
+	var buf strings.Builder
+	if len(entry.File) != 0 {
+		buf.WriteString(entry.File)
+		buf.WriteByte(':')
+		// TODO(knz): The "canonical" way to represent a file/line prefix
+		// is: <file>:<line>: msg
+		// with a colon between the line number and the message.
+		// However, some location filter deep inside SQL doesn't
+		// understand a colon after the line number.
+		buf.WriteString(strconv.FormatInt(entry.Line, 10))
+		buf.WriteByte(' ')
+	}
+	if len(entry.Tags) > 0 {
+		buf.WriteByte('[')
+		buf.WriteString(entry.Tags)
+		buf.WriteString("] ")
+	}
+	buf.WriteString(entry.Message)
+	msg := buf.String()
+
+	if entry.Redactable {
+		// This is true when eventInternal is called from logfDepth(),
+		// ie. a regular log call. In this case, the tags and message may contain
+		// redaction markers. We remove them here.
+		msg = redact.RedactableString(msg).StripMarkers()
+	}
+	return msg
 }
 
 func (e *logEntry) String() string {
