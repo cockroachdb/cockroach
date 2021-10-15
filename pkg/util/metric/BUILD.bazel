@@ -10,6 +10,8 @@ go_library(
         "metric.go",
         "prometheus_exporter.go",
         "registry.go",
+        "rule.go",
+        "rule_registry.go",
         "sliding_histogram.go",
     ],
     embed = [":metric_go_proto"],
@@ -26,6 +28,7 @@ go_library(
         "@com_github_prometheus_client_golang//prometheus/graphite",
         "@com_github_prometheus_client_model//go",
         "@com_github_prometheus_common//expfmt",
+        "@com_github_prometheus_prometheus//promql/parser",
         "@com_github_rcrowley_go_metrics//:go-metrics",
         "@com_github_vividcortex_ewma//:ewma",
     ],
@@ -38,12 +41,14 @@ go_test(
         "metric_test.go",
         "prometheus_exporter_test.go",
         "registry_test.go",
+        "rule_test.go",
     ],
     embed = [":metric"],
     deps = [
         "//pkg/util/log",
         "@com_github_kr_pretty//:pretty",
         "@com_github_prometheus_client_model//go",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
