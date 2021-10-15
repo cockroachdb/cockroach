@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"container/list"
 	"context"
+	"runtime/pprof"
 	"sync/atomic"
 	"time"
 
@@ -495,7 +496,18 @@ func (q *Queue) MaybeWaitForPush(
 		req.PusheeTxn.ID.Short(),
 		waitingPushesCount,
 	)
+	var res *roachpb.PushTxnResponse
+	var err *roachpb.Error
+	labels := pprof.Labels("pushee", req.PusheeTxn.ID.String(), "pusher", pusherStr)
+	pprof.Do(ctx, labels, func(ctx context.Context) {
+		res, err = q.waitForPush(ctx, req, push, pending)
+	})
+	return res, err
+}
 
+func (q *Queue) waitForPush(
+	ctx context.Context, req *roachpb.PushTxnRequest, push *waitingPush, pending *pendingTxn,
+) (*roachpb.PushTxnResponse, *roachpb.Error) {
 	// Wait for any updates to the pusher txn to be notified when
 	// status, priority, or dependents (for deadlock detection) have
 	// changed.
