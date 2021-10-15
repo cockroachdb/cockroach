@@ -1545,3 +1545,27 @@ ORDER BY a.id, b.id
 {a,b}  {a}    false  false  false  false
 {a,b}  {b}    false  true   true   false
 {a,b}  {a,b}  true   false  true   true
+
+# Make sure that adding a new enum value works well with PREPARE/EXECUTE.
+subtest regression_70378
+
+statement ok
+CREATE TYPE enum_70378 AS ENUM ('a', 'b');
+CREATE TABLE enum_table (a enum_70378);
+PREPARE q AS INSERT INTO enum_table VALUES($1);
+EXECUTE q('a')
+
+query T
+SELECT * FROM enum_table
+----
+a
+
+statement ok
+ALTER TYPE enum_70378 ADD VALUE 'c';
+EXECUTE q('c')
+
+query T rowsort
+SELECT * FROM enum_table
+----
+a
+c
