@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
-	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/types"
 	"github.com/opentracing/opentracing-go"
 )
@@ -40,6 +39,7 @@ type crdbSpan struct {
 	traceID      uint64 // probabilistically unique
 	spanID       uint64 // probabilistically unique
 	parentSpanID uint64
+	redactable   bool // are verbose logs redactable?
 	goroutineID  uint64
 
 	startTime time.Time
@@ -291,7 +291,7 @@ func (s *crdbSpan) setTagLocked(key string, value interface{}) {
 	s.mu.tags[key] = value
 }
 
-func (s *crdbSpan) record(msg redact.RedactableString) {
+func (s *crdbSpan) record(maybeRedactableString string) {
 	if s.recordingType() != RecordingVerbose {
 		return
 	}
@@ -305,7 +305,7 @@ func (s *crdbSpan) record(msg redact.RedactableString) {
 	logRecord := &tracingpb.LogRecord{
 		Time: now,
 		Fields: []tracingpb.LogRecord_Field{
-			{Key: tracingpb.LogMessageField, Value: msg},
+			{Key: tracingpb.LogMessageField, Value: tracingpb.MaybeRedactableString(maybeRedactableString)},
 		},
 	}
 
@@ -405,7 +405,7 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 		Operation:      s.mu.operation,
 		StartTime:      s.startTime,
 		Duration:       s.mu.duration,
-		RedactableLogs: true,
+		RedactableLogs: s.redactable,
 	}
 
 	if rs.Duration == -1 {

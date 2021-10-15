@@ -131,6 +131,8 @@ type Tracer struct {
 	// True if tracing to the debug/requests endpoint. Accessed via t.useNetTrace().
 	_useNetTrace int32 // updated atomically
 
+	_redactable int32 // updated atomically
+
 	// Pointer to shadowTracer, if using one.
 	shadowTracer unsafe.Pointer
 
@@ -159,6 +161,22 @@ type Tracer struct {
 	testingRecordAsyncSpans bool           // see TestingRecordAsyncSpans
 
 	testing *testingKnob
+}
+
+// Redactable returns true if the tracer is configured to emit
+// redactable logs.
+func (t *Tracer) Redactable() bool {
+	return atomic.LoadInt32(&t._redactable) != 0
+}
+
+// SetRedactable changes the redactability of the Tracer. This
+// affects any future trace spans created.
+func (t *Tracer) SetRedactable(to bool) {
+	var n int32
+	if to {
+		n = 1
+	}
+	atomic.StoreInt32(&t._redactable, n)
 }
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
@@ -371,6 +389,7 @@ func (t *Tracer) startSpanGeneric(
 	helper.crdbSpan = crdbSpan{
 		traceID:      traceID,
 		spanID:       spanID,
+		redactable:   t.Redactable(),
 		goroutineID:  goroutineID,
 		startTime:    startTime,
 		parentSpanID: opts.parentSpanID(),
