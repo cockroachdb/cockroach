@@ -75,7 +75,7 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 	c.Start(ctx)
 
-	setup := sqlsmith.Setups["rand-tables"](rnd)
+	setup := sqlsmith.Setups[sqlsmith.RandTableSetupName](rnd)
 
 	t.Status("executing setup")
 	t.L().Printf("setup:\n%s", setup)
