@@ -12,7 +12,6 @@ package sqlsmith
 
 import (
 	"fmt"
-	"math/rand"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -20,11 +19,12 @@ import (
 )
 
 // GenerateTLP returns two SQL queries as strings that can be used for Ternary
-// Logic Partitioning (TLP). TLP is a method for logically testing DBMSs which
-// is based on the logical guarantee that for a given predicate p, all rows must
-// satisfy exactly one of the following three predicates: p, NOT p, p IS NULL.
-// TLP can find bugs when an unpartitioned query and a query partitioned into
-// three sub-queries do not yield the same results.
+// Logic Partitioning (TLP). It also returns any placeholder arguments necessary
+// for the second partitioned query. TLP is a method for logically testing DBMSs
+// which is based on the logical guarantee that for a given predicate p, all
+// rows must satisfy exactly one of the following three predicates: p, NOT p, p
+// IS NULL. TLP can find bugs when an unpartitioned query and a query
+// partitioned into three sub-queries do not yield the same results.
 //
 // More information on TLP: https://www.manuelrigger.at/preprints/TLP.pdf.
 //
@@ -33,7 +33,7 @@ import (
 // possible to use TLP to test other aggregations, GROUP BY, and HAVING, which
 // have all been implemented in SQLancer. See:
 // https://github.com/sqlancer/sqlancer/tree/1.1.0/src/sqlancer/cockroachdb/oracle/tlp.
-func (s *Smither) GenerateTLP() (unpartitioned, partitioned string) {
+func (s *Smither) GenerateTLP() (unpartitioned, partitioned string, args []interface{}) {
 	// Set disableImpureFns to true so that generated predicates are immutable.
 	originalDisableImpureFns := s.disableImpureFns
 	s.disableImpureFns = true
@@ -41,21 +41,24 @@ func (s *Smither) GenerateTLP() (unpartitioned, partitioned string) {
 		s.disableImpureFns = originalDisableImpureFns
 	}()
 
-	switch tlpType := rand.Intn(4); tlpType {
+	switch tlpType := s.rnd.Intn(4); tlpType {
 	case 0:
 		return s.generateWhereTLP()
 	case 1:
-		return s.generateOuterJoinTLP()
+		partitioned, unpartitioned = s.generateOuterJoinTLP()
 	case 2:
-		return s.generateInnerJoinTLP()
+		partitioned, unpartitioned = s.generateInnerJoinTLP()
 	default:
-		return s.generateAggregationTLP()
+		partitioned, unpartitioned = s.generateAggregationTLP()
 	}
+	return partitioned, unpartitioned, nil
 }
 
 // generateWhereTLP returns two SQL queries as strings that can be used by the
 // GenerateTLP function. These queries make use of the WHERE clause to partition
-// the original query into three.
+// the original query into three. This function also returns a list of arguments
+// if the predicate contains placeholders. These arguments can be read
+// sequentially to match the placeholders.
 //
 // The first query returned is an unpartitioned query of the form:
 //
@@ -71,7 +74,7 @@ func (s *Smither) GenerateTLP() (unpartitioned, partitioned string) {
 //
 // If the resulting values of the two queries are not equal, there is a logical
 // bug.
-func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string) {
+func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string, args []interface{}) {
 	f := tree.NewFmtCtx(tree.FmtParsable)
 
 	table, _, _, cols, ok := s.getSchemaTable()
@@ -83,7 +86,12 @@ func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string) {
 
 	unpartitioned = fmt.Sprintf("SELECT * FROM %s", tableName)
 
-	pred := makeBoolExpr(s, cols)
+	var pred tree.Expr
+	if s.coin() {
+		pred = makeBoolExpr(s, cols)
+	} else {
+		pred, args = makeBoolExprWithPlaceholders(s, cols)
+	}
 	pred.Format(f)
 	predicate := f.CloseAndGetString()
 
@@ -96,7 +104,7 @@ func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string) {
 		part1, part2, part3,
 	)
 
-	return unpartitioned, partitioned
+	return unpartitioned, partitioned, args
 }
 
 // generateOuterJoinTLP returns two SQL queries as strings that can be used by the
@@ -304,7 +312,7 @@ func (s *Smither) generateAggregationTLP() (unpartitioned, partitioned string) {
 	tableNameAlias := strings.TrimSpace(strings.Split(tableName, "AS")[1])
 
 	var innerAgg, outerAgg string
-	switch aggType := rand.Intn(3); aggType {
+	switch aggType := s.rnd.Intn(3); aggType {
 	case 0:
 		innerAgg, outerAgg = "MAX", "MAX"
 	case 1:
