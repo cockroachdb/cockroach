@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
@@ -765,5 +766,19 @@ func BenchmarkLogEntry_String(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_ = entry.String()
+	}
+}
+
+func BenchmarkEventf_WithVerboseTraceSpan(b *testing.B) {
+	b.ReportAllocs()
+	tagbuf := logtags.SingleTagBuffer("hello", "there")
+	ctx := logtags.WithTags(context.Background(), tagbuf)
+	tracer := tracing.NewTracer()
+	ctx, sp := tracer.StartSpanCtx(ctx, "benchspan", tracing.WithForceRealSpan())
+	b.ResetTimer()
+	defer sp.Finish()
+	sp.SetVerbose(true)
+	for i := 0; i < b.N; i++ {
+		Eventf(ctx, "%s %s %s", "foo", "bar", "baz")
 	}
 }
