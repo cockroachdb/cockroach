@@ -101,10 +101,17 @@ func getSpanOrEventLog(ctx context.Context) (*tracing.Span, *ctxEventLog, bool) 
 }
 
 // eventInternal is the common code for logging an event to trace and/or event
-// logs. All entries passed to this method should be redactable.
+// logs. Entries passed to this method may or may not be redactable. However,
+// if sp.Redactable() is true then ideally they are for best results.
 func eventInternal(sp *tracing.Span, el *ctxEventLog, isErr bool, entry *logEntry) {
 	if sp != nil {
-		sp.Recordf("%s", entry)
+		if sp.Redactable() {
+			sp.Recordf("%s", entry)
+		} else {
+			// LegacyString is significantly faster than String since the latter
+			// round-trips through redaction. See BenchmarkEventf_WithVerboseTraceSpan.
+			sp.Recordf("%s", entry.LegacyString())
+		}
 		// TODO(obs-inf): figure out a way to signal that this is an error. We could
 		// use a different "error" key (provided it shows up in LightStep). Things
 		// like NetTraceIntegrator would need to be modified to understand the
@@ -162,7 +169,7 @@ func Event(ctx context.Context, msg string) {
 		severity.INFO, /* unused for trace events */
 		channel.DEV,   /* unused for trace events */
 		1,             /* depth */
-		true,          /* redactable */
+		sp.Redactable(),
 		msg)
 	eventInternal(sp, el, false /* isErr */, &entry)
 }
@@ -182,7 +189,7 @@ func Eventf(ctx context.Context, format string, args ...interface{}) {
 		severity.INFO, /* unused for trace events */
 		channel.DEV,   /* unused for trace events */
 		1,             /* depth */
-		true,          /* redactable */
+		sp.Redactable(),
 		format, args...)
 	eventInternal(sp, el, false /* isErr */, &entry)
 }
@@ -207,7 +214,7 @@ func vEventf(
 			severity.INFO, /* unused for trace events */
 			channel.DEV,   /* unused for trace events */
 			depth+1,
-			true, /* redactable */
+			sp.Redactable(),
 			format, args...)
 		eventInternal(sp, el, isErr, &entry)
 	}

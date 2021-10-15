@@ -143,7 +143,7 @@ func (r Recording) FindLogMessage(pattern string) (string, bool) {
 	re := regexp.MustCompile(pattern)
 	for _, sp := range r {
 		for _, l := range sp.Logs {
-			msg := l.Msg()
+			msg := l.Msg(sp.RedactableLogs)
 			if re.MatchString(msg) {
 				return msg, true
 			}
@@ -211,7 +211,7 @@ func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogDat
 			// TODO(obs-inf): the use of opentracing data structures here seems
 			// like detritus and prevents good redactability of the result.
 			// It looks like this is only used for Recording.String() though.
-			lr.Fields[i] = otlog.String(f.Key, f.Value.StripMarkers())
+			lr.Fields[i] = otlog.String(f.Key, f.Value.StripMarkers(sp.RedactableLogs))
 		}
 		lastLog := ownLogs[len(ownLogs)-1]
 		ownLogs = append(ownLogs, conv(lr, lastLog.Timestamp))
@@ -510,7 +510,7 @@ func TestingCheckRecordedSpans(rec Recording, expected string) error {
 		for _, l := range rs.Logs {
 			var msg string
 			for _, f := range l.Fields {
-				msg = msg + fmt.Sprintf("    %s: %v", f.Key, f.Value.StripMarkers())
+				msg = msg + fmt.Sprintf("    %s: %v", f.Key, f.Value)
 			}
 			row(d, "%s", msg)
 		}
