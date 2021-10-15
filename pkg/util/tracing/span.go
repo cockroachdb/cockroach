@@ -74,6 +74,14 @@ func (sp *Span) Tracer() *Tracer {
 	return sp.i.Tracer()
 }
 
+// Redactable returns true if this Span's tracer is marked redactable
+func (sp *Span) Redactable() bool {
+	if sp == nil || sp.i.isNoop() {
+		return false
+	}
+	return sp.Tracer().Redactable()
+}
+
 // Finish idempotently marks the Span as completed (at which point it will
 // silently drop any new data added to it). Finishing a nil *Span is a noop.
 func (sp *Span) Finish() {

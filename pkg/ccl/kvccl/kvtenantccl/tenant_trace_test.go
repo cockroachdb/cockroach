@@ -19,10 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,6 +32,12 @@ import (
 // `kvserver.TestMaybeRedactRecording`.
 func TestTenantTracesAreRedacted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutils.RunTrueAndFalse(t, "redactable", func(t *testing.T, redactable bool) {
+		testTenantTracesAreRedactedImpl(t, redactable)
+	})
+}
+
+func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -61,6 +69,7 @@ SET tracing = off;
 	var args base.TestClusterArgs
 	args.ServerArgs.Knobs.Store = knobs
 	tc := serverutils.StartNewTestCluster(t, 1, args)
+	tc.Server(0).TracerI().(*tracing.Tracer).SetRedactable(redactable)
 	defer tc.Stopper().Stop(ctx)
 
 	t.Run("system-tenant", func(t *testing.T) {
@@ -88,7 +97,9 @@ SET tracing = off;
 		defer tenDB.Close()
 		results := getTrace(t, tenDB)
 
+		const redactedMarkerString = "verbose trace message redacted"
 		var found bool
+		var foundRedactedMarker bool
 		for _, sl := range results {
 			for _, s := range sl {
 				if strings.Contains(s, sensitiveString) {
@@ -100,9 +111,26 @@ SET tracing = off;
 				if strings.Contains(s, visibleString) {
 					found = true
 				}
+				if strings.Contains(s, redactedMarkerString) {
+					foundRedactedMarker = true
+				}
 			}
 		}
-		require.True(t, found, "trace for tenant missing trace message '%q':\n%s",
-			visibleString, sqlutils.MatrixToStr(results))
+
+		if redactable {
+			// If redaction was on, we expect the tenant to see safe information in its
+			// trace.
+			require.True(t, found, "did not see expected trace message '%q':\n%s",
+				visibleString, sqlutils.MatrixToStr(results))
+			require.False(t, foundRedactedMarker, "unexpectedly found '%q':\n%s",
+				redactedMarkerString, sqlutils.MatrixToStr(results))
+		} else {
+			// Otherwise, expect the opposite: not even safe information makes it through,
+			// because it gets replaced with foundRedactedMarker.
+			require.False(t, found, "unexpectedly saw message '%q':\n%s",
+				visibleString, sqlutils.MatrixToStr(results))
+			require.True(t, foundRedactedMarker, "not not find expected message '%q':\n%s",
+				redactedMarkerString, sqlutils.MatrixToStr(results))
+		}
 	})
 }
