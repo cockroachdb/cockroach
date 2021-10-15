@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -129,8 +130,39 @@ func (e *logEntry) SafeFormat(w interfaces.SafePrinter, _ rune) {
 	}
 }
 
+// String is a faster implementation than `SafeFormat` which is why we
+// don't follow the usual convention of implementing `String` via a call
+// to `redact.StringWithoutMarkers()`. This implementation is still
+// around because it sits in the hot path of verbose tracing.
 func (e *logEntry) String() string {
-	return redact.StringWithoutMarkers(e)
+	entry := e.convertToLegacy()
+	if len(entry.Tags) == 0 && len(entry.File) == 0 && !entry.Redactable {
+		// Shortcut.
+		return entry.Message
+	}
+
+	var buf strings.Builder
+	if len(entry.File) != 0 {
+		buf.WriteString(entry.File)
+		buf.WriteByte(':')
+		buf.WriteString(strconv.FormatInt(entry.Line, 10))
+		buf.WriteByte(' ')
+	}
+	if len(entry.Tags) > 0 {
+		buf.WriteByte('[')
+		buf.WriteString(entry.Tags)
+		buf.WriteString("] ")
+	}
+	buf.WriteString(entry.Message)
+	msg := buf.String()
+
+	if entry.Redactable {
+		// This is true when eventInternal is called from logfDepth(),
+		// ie. a regular log call. In this case, the tags and message may contain
+		// redaction markers. We remove them here.
+		msg = redact.RedactableString(msg).StripMarkers()
+	}
+	return msg
 }
 
 type entryPayload struct {
