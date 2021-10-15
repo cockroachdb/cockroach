@@ -169,6 +169,13 @@ type Tracer struct {
 	// True if tracing to the debug/requests endpoint. Accessed via t.useNetTrace().
 	_useNetTrace int32 // updated atomically
 
+	// True if we would like spans created from this tracer to be marked
+	// as redactable. This will make unstructured events logged to those
+	// spans redactable.
+	// Currently, this is used to mark tenant-bound spans as redactable
+	// and to redact them at the network boundary from KV.
+	_redactable int32 // accessed atomically
+
 	// Pointer to an OpenTelemetry tracer used as a "shadow tracer", if any. If
 	// not nil, the respective *otel.Tracer will be used to create mirror spans
 	// for all spans that the parent Tracer creates.
@@ -302,6 +309,22 @@ type TracerTestingKnobs struct {
 	// UseNetTrace, if set, forces the Traces to always create spans which record
 	// to net.Trace objects.
 	UseNetTrace bool
+}
+
+// Redactable returns true if the tracer is configured to emit
+// redactable logs.
+func (t *Tracer) Redactable() bool {
+	return atomic.LoadInt32(&t._redactable) != 0
+}
+
+// SetRedactable changes the redactability of the Tracer. This
+// affects any future trace spans created.
+func (t *Tracer) SetRedactable(to bool) {
+	var n int32
+	if to {
+		n = 1
+	}
+	atomic.StoreInt32(&t._redactable, n)
 }
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
