@@ -75,7 +75,7 @@ export const statementFingerprintIdsToText = (
   statements: Statement[],
 ): string => {
   return statementFingerprintIds
-    .map(s => statements.find(stmt => stmt.id.eq(s)).key.key_data.query)
+    .map(s => statements.find(stmt => stmt.id.eq(s))?.key.key_data.query)
     .join("\n");
 };
 
