@@ -12,6 +12,7 @@ package concurrency
 
 import (
 	"context"
+	"runtime/pprof"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -327,7 +328,12 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 		// If necessary, wait in the txnWaitQueue for the pushee transaction to
 		// expire or to move to a finalized state.
 		t := req.Requests[0].GetPushTxn()
-		resp, err := m.twq.MaybeWaitForPush(ctx, t)
+		var resp *roachpb.PushTxnResponse
+		var err *roachpb.Error
+		labels := pprof.Labels("pushee", t.PusheeTxn.ID.String(), "pusher", t.PusherTxn.ID.String())
+		pprof.Do(ctx, labels, func(ctx context.Context) {
+			resp, err = m.twq.MaybeWaitForPush(ctx, t)
+		})
 		if err != nil {
 			return nil, err
 		} else if resp != nil {
