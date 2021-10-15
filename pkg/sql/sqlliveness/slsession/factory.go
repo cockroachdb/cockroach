@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -45,7 +46,7 @@ type Factory struct {
 	hb         func() time.Duration
 	gcInterval func() time.Duration
 
-	testKnobs sqlliveness.TestingKnobs
+	testKnobs slbase.TestingKnobs
 	mu        struct {
 		started bool
 		syncutil.Mutex
@@ -61,7 +62,7 @@ func NewFactory(
 	clock *hlc.Clock,
 	storage slstorage.Writer,
 	settings *cluster.Settings,
-	testKnobs *sqlliveness.TestingKnobs,
+	testKnobs *slbase.TestingKnobs,
 ) *Factory {
 	l := &Factory{
 		clock:    clock,

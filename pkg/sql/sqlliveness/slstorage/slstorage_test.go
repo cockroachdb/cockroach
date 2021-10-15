@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -72,8 +73,8 @@ func TestStorage(t *testing.T) {
 		}, base.DefaultMaxClockOffset)
 		settings := cluster.MakeTestingClusterSettings()
 		stopper := stop.NewStopper()
-		storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
-			tableID)
+		storage := slstorage.NewStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+			&slbase.TestingKnobs{SQLLivenessTableID: tableID})
 		return clock, timeSource, settings, stopper, storage
 	}
 
@@ -275,8 +276,8 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
-	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
-		tableID)
+	storage := slstorage.NewStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+		&slbase.TestingKnobs{SQLLivenessTableID: tableID})
 
 	const (
 		runsPerWorker   = 100
@@ -438,8 +439,8 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
-	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
-		tableID)
+	storage := slstorage.NewStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+		&slbase.TestingKnobs{SQLLivenessTableID: tableID})
 
 	// Synchronize reading from the store with the blocked channel by detecting
 	// a Get to the table.
@@ -628,9 +629,9 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 	tdb.Exec(t, schema)
 	tableID := getTableID(t, tdb, dbName, "sqlliveness")
 
-	storage := slstorage.NewTestingStorage(
+	storage := slstorage.NewStorage(
 		s.Stopper(), s.Clock(), kvDB, keys.SystemSQLCodec, s.ClusterSettings(),
-		tableID,
+		&slbase.TestingKnobs{SQLLivenessTableID: tableID},
 	)
 
 	// Insert a session.

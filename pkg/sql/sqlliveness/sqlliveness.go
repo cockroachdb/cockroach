@@ -19,11 +19,9 @@ import (
 	"context"
 	"encoding/hex"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -96,20 +94,6 @@ type Reader interface {
 	// SessionFactory that is attempting to claim expired resources.
 	IsAlive(context.Context, SessionID) (alive bool, err error)
 }
-
-// TestingKnobs contains test knobs for sqlliveness system behavior.
-type TestingKnobs struct {
-	// SessionOverride is used to override the returned session.
-	// If it returns nil, nil the underlying instance will be used.
-	SessionOverride func(ctx context.Context) (Session, error)
-	// NewTimer is used to override the construction of new timers.
-	NewTimer func() timeutil.TimerI
-}
-
-var _ base.ModuleTestingKnobs = &TestingKnobs{}
-
-// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
-func (*TestingKnobs) ModuleTestingKnobs() {}
 
 // NotStartedError can be returned from calls to the sqlliveness subsystem
 // prior to its being started.

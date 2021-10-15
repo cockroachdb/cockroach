@@ -18,8 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slsession"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sltest"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,7 +42,7 @@ func TestFactory_invokesSessionExpiryCallbacksInGoroutine(t *testing.T) {
 	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
 	settings := cluster.MakeTestingClusterSettings()
 
-	fakeStorage := slstorage.NewFakeStorage()
+	fakeStorage := sltest.NewFakeStorage()
 	sf := slsession.NewFactory(stopper, clock, fakeStorage, settings, nil)
 	sf.Start(ctx)
 
@@ -87,7 +88,7 @@ func TestFactory(t *testing.T) {
 	slsession.DefaultTTL.Override(ctx, &settings.SV, 2*time.Microsecond)
 	slsession.DefaultHeartBeat.Override(ctx, &settings.SV, time.Microsecond)
 
-	fakeStorage := slstorage.NewFakeStorage()
+	fakeStorage := sltest.NewFakeStorage()
 	sf := slsession.NewFactory(stopper, clock, fakeStorage, settings, nil)
 	sf.Start(ctx)
 
@@ -144,9 +145,9 @@ func TestJitter(t *testing.T) {
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	timeSource := timeutil.NewManualTime(t0)
 	clock := hlc.NewClock(func() int64 { return timeSource.Now().UnixNano() }, 0)
-	fs := slstorage.NewFakeStorage()
+	fs := sltest.NewFakeStorage()
 	settings := cluster.MakeTestingClusterSettings()
-	sf := slsession.NewFactory(stopper, clock, fs, settings, &sqlliveness.TestingKnobs{
+	sf := slsession.NewFactory(stopper, clock, fs, settings, &slbase.TestingKnobs{
 		NewTimer: timeSource.NewTimer,
 	})
 	sf.Start(ctx)

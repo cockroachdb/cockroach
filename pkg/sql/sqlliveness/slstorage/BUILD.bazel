@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "metrics.go",
         "slstorage.go",
-        "test_helpers.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage",
     visibility = ["//visibility:public"],
@@ -19,6 +18,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlliveness",
+        "//pkg/sql/sqlliveness/slbase",
         "//pkg/util/cache",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
@@ -54,6 +54,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/sqlliveness",
+        "//pkg/sql/sqlliveness/slbase",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

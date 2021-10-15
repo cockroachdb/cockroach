@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -83,23 +84,26 @@ type Storage struct {
 	}
 }
 
-// NewTestingStorage constructs a new storage with control for the database
-// in which the `sqlliveness` table should exist.
-func NewTestingStorage(
+// NewStorage creates a new storage struct.
+func NewStorage(
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
 	db *kv.DB,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
-	sqllivenessTableID descpb.ID,
+	knobs *slbase.TestingKnobs,
 ) *Storage {
+	tableID := descpb.ID(keys.SqllivenessID)
+	if knobs != nil {
+		tableID = knobs.SQLLivenessTableID
+	}
 	s := &Storage{
 		settings: settings,
 		stopper:  stopper,
 		clock:    clock,
 		db:       db,
 		codec:    codec,
-		tableID:  sqllivenessTableID,
+		tableID:  tableID,
 		metrics:  makeMetrics(),
 	}
 	cacheConfig := cache.Config{
@@ -111,17 +115,6 @@ func NewTestingStorage(
 	s.mu.liveSessions = cache.NewUnorderedCache(cacheConfig)
 	s.mu.deadSessions = cache.NewUnorderedCache(cacheConfig)
 	return s
-}
-
-// NewStorage creates a new storage struct.
-func NewStorage(
-	stopper *stop.Stopper,
-	clock *hlc.Clock,
-	db *kv.DB,
-	codec keys.SQLCodec,
-	settings *cluster.Settings,
-) *Storage {
-	return NewTestingStorage(stopper, clock, db, codec, settings, keys.SqllivenessID)
 }
 
 // Metrics returns the associated metrics struct.

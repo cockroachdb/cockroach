@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sltest",
+    srcs = ["fake_storage.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sltest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/sqlliveness",
+        "//pkg/sql/sqlliveness/slstorage",
+        "//pkg/util/hlc",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

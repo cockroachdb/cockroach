@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package slstorage
+package sltest
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -34,7 +35,7 @@ func NewFakeStorage() *FakeStorage {
 	return fs
 }
 
-var _ Writer = (*FakeStorage)(nil)
+var _ slstorage.Writer = (*FakeStorage)(nil)
 
 // DeleteExpiredSessions implements the slstorage.Writer interface.
 func (s *FakeStorage) DeleteExpiredSessions(ctx context.Context, now hlc.Timestamp) {
