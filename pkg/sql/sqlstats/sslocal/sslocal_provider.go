@@ -38,12 +38,11 @@ func New(
 	curMemoryBytesCount *metric.Gauge,
 	maxMemoryBytesHist *metric.Histogram,
 	pool *mon.BytesMonitor,
-	resetInterval *settings.DurationSetting,
 	reportingSink Sink,
 	knobs *sqlstats.TestingKnobs,
 ) *SQLStats {
 	return newSQLStats(settings, maxStmtFingerprints, maxTxnFingerprints,
-		curMemoryBytesCount, maxMemoryBytesHist, pool, resetInterval,
+		curMemoryBytesCount, maxMemoryBytesHist, pool,
 		reportingSink, knobs)
 }
 
@@ -59,18 +58,6 @@ func (s *SQLStats) GetController(
 
 // Start implements sqlstats.Provider interface.
 func (s *SQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
-	if s.resetInterval != nil {
-		s.periodicallyClearSQLStats(ctx, stopper, s.resetInterval)
-	}
-	// Start a loop to clear SQL stats at the max reset interval. This is
-	// to ensure that we always have some worker clearing SQL stats to avoid
-	// continually allocating space for the SQL stats.
-	s.periodicallyClearSQLStats(ctx, stopper, sqlstats.MaxSQLStatReset)
-}
-
-func (s *SQLStats) periodicallyClearSQLStats(
-	ctx context.Context, stopper *stop.Stopper, resetInterval *settings.DurationSetting,
-) {
 	// We run a periodic async job to clean up the in-memory stats.
 	_ = stopper.RunAsyncTask(ctx, "sql-stats-clearer", func(ctx context.Context) {
 		var timer timeutil.Timer
@@ -79,13 +66,13 @@ func (s *SQLStats) periodicallyClearSQLStats(
 			last := s.mu.lastReset
 			s.mu.Unlock()
 
-			next := last.Add(resetInterval.Get(&s.st.SV))
+			next := last.Add(sqlstats.MaxSQLStatReset.Get(&s.st.SV))
 			wait := next.Sub(timeutil.Now())
 			if wait < 0 {
 				err := s.Reset(ctx)
 				if err != nil {
 					if log.V(1) {
-						log.Warningf(ctx, "reported SQL stats memory limit has been exceeded, some fingerprints stats are discarded: %s", err)
+						log.Warningf(ctx, "unexpected error: %s", err)
 					}
 				}
 			} else {

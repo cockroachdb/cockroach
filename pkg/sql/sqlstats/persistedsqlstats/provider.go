@@ -110,7 +110,6 @@ func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 
 // Start implements sqlstats.Provider interface.
 func (s *PersistedSQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
-	s.SQLStats.Start(ctx, stopper)
 	s.startSQLStatsFlushLoop(ctx, stopper)
 	s.jobMonitor.start(ctx, stopper)
 }
