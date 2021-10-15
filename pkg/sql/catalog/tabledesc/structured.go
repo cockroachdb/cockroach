@@ -993,33 +993,6 @@ func (desc *wrapper) ValidateIndexNameIsUnique(indexName string) error {
 	return nil
 }
 
-// PrimaryKeyString implements the TableDescriptor interface.
-func (desc *wrapper) PrimaryKeyString() string {
-	primaryIdx := &desc.PrimaryIndex
-	f := tree.NewFmtCtx(tree.FmtSimple)
-	f.WriteString("PRIMARY KEY (")
-	startIdx := primaryIdx.ExplicitColumnStartIdx()
-	for i, n := startIdx, len(primaryIdx.KeyColumnNames); i < n; i++ {
-		if i > startIdx {
-			f.WriteString(", ")
-		}
-		// Primary key columns cannot be inaccessible computed columns, so it is
-		// safe to always print the column name. For secondary indexes, we have
-		// to print inaccessible computed column expressions. See
-		// catformat.FormatIndexElements.
-		f.FormatNameP(&primaryIdx.KeyColumnNames[i])
-		f.WriteByte(' ')
-		f.WriteString(primaryIdx.KeyColumnDirections[i].String())
-	}
-	f.WriteByte(')')
-	if desc.PrimaryIndex.IsSharded() {
-		f.WriteString(
-			fmt.Sprintf(" USING HASH WITH BUCKET_COUNT = %v", primaryIdx.Sharded.ShardBuckets),
-		)
-	}
-	return f.CloseAndGetString()
-}
-
 // FamilyHeuristicTargetBytes is the target total byte size of columns that the
 // current heuristic will assign to a family.
 const FamilyHeuristicTargetBytes = 256
