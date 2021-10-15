@@ -3759,10 +3759,7 @@ func TestManyChangefeedsOneTable(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
-	t.Run(`webhook`, func(t *testing.T) {
-		skip.WithIssue(t, 67034, "flakey test")
-		webhookTest(testFn)(t)
-	})
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestUnspecifiedPrimaryKey(t *testing.T) {
