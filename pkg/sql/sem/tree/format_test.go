@@ -430,6 +430,90 @@ func TestFormatPgwireText(t *testing.T) {
 	}
 }
 
+func TestFormatNodeSummary(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testData := []struct {
+		stmt     string
+		expected string
+	}{
+		{
+			stmt:     `SELECT (SELECT count(*) FROM system.jobs) AS j, num_running, s.* FROM system.scheduled_jobs AS s WHERE next_run < current_timestamp() ORDER BY random() LIMIT 10 FOR UPDATE`,
+			expected: `SELECT (SELECT FROM sy...)... FROM system.scheduled_jobs AS s`,
+		},
+		{
+			stmt:     `SELECT status AS s, app_name FROM system.apps, system.transaction_statistics AS OF SYSTEM TIME follower_read_timestamp() WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 = $1`,
+			expected: `SELECT status AS s, ap... FROM system.apps, system.transactio...`,
+		},
+		{
+			stmt:     `SELECT app_name, aggregated_ts, fingerprint_id, metadata, statistics FROM system.app_statistics JOIN system.transaction_statistics ON crdb_internal.transaction_statistics.app_name = system.transaction_statistics.app_name`,
+			expected: `SELECT app_name, aggre... FROM system.app_statistics JOIN sys...`,
+		},
+		{
+			stmt:     `SELECT id FROM system.jobs, (SELECT $3::TIMESTAMP AS ts, $4::FLOAT8 AS initial_delay, $5::FLOAT8 AS max_delay) AS args WHERE ((status IN ('_', '_')) AND ((claim_session_id = $1) AND (claim_instance_id = $2))) AND (args.ts >= (COALESCE(last_run, created) + least(IF((args.initial_delay * (power(_, least(_, COALESCE(num_runs, _))) - _)::FLOAT8) >= _, args.initial_delay * (power(_, least(_, COALESCE(num_runs, _))) - _)::FLOAT8, args.max_delay), args.max_delay)::INTERVAL))`,
+			expected: `SELECT id FROM system.jobs, (SELECT) AS args`,
+		},
+		{
+			stmt:     `INSERT INTO system.public.lease("descID", version, "nodeID", expiration) VALUES ('1232', '111', __more2__)`,
+			expected: `INSERT INTO system.public.lease("descID", versi...)`,
+		},
+		{
+			stmt:     `INSERT INTO vehicles VALUES ($1, $2, __more6__)`,
+			expected: `INSERT INTO vehicles`,
+		},
+		{
+			stmt:     `UPSERT INTO system.reports_meta(id, "generated") VALUES ($1, $2)`,
+			expected: `UPSERT INTO system.reports_meta(id, "generated")`,
+		},
+		{
+			stmt:     `INSERT INTO system.table_statistics("tableID", name) SELECT 'cockroach', app_names FROM system.apps`,
+			expected: `INSERT INTO system.table_statistics SELECT '_', app_names FROM system.apps`,
+		},
+		{
+			stmt:     `INSERT INTO system.settings(name, value, "lastUpdated", "valueType") SELECT 'unique_pear', value, "lastUpdated", "valueType" FROM system.settings JOIN system.internal_tables ON system.settings.id = system.internal_tables.id WHERE name = '_' ON CONFLICT (name) DO NOTHING`,
+			expected: `INSERT INTO system.settings SELECT '_', value, "la... FROM system.settings JOIN system.in...`,
+		},
+		{
+			stmt:     `UPDATE system.jobs SET progress = 'value' WHERE id = '12312'`,
+			expected: `UPDATE system.jobs SET progress = '_' WHERE id = '_'`,
+		},
+		{
+			stmt:     `UPDATE system.jobs SET status = $2, payload = $3, last_run = $4, num_runs = $5 WHERE internal_table_id = $1`,
+			expected: `UPDATE system.jobs SET status = $2, pa... WHERE internal_table_...`,
+		},
+		{
+			stmt:     `UPDATE system.extra_extra_long_table_name SET (schedule_state, next_run) = ($1, $2) WHERE schedule_id = 'name'`,
+			expected: `UPDATE system.extra_extra_long_table_... SET (schedule_state...)... WHERE schedule_id = '...`,
+		},
+		{
+			stmt:     `SELECT (SELECT job_id FROM (SELECT * FROM system.jobs)) AS j, name, app_name FROM system.apps`,
+			expected: `SELECT (SELECT FROM (S...))... FROM system.apps`,
+		},
+		{
+			stmt:     `SELECT (SELECT job_id FROM system.jobs) FROM system.apps`,
+			expected: `SELECT (SELECT FROM sy...) FROM system.apps`,
+		},
+		{
+			stmt:     `SELECT (SELECT job_id FROM (SELECT * FROM system.jobs) AS c) AS j, name, app_name FROM system.apps`,
+			expected: `SELECT (SELECT FROM (S...)...)... FROM system.apps`,
+		},
+	}
+
+	for i, test := range testData {
+		t.Run(fmt.Sprintf("%d %s", i, test.stmt), func(t *testing.T) {
+			stmt, err := parser.ParseOne(test.stmt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fmtFlags := tree.FmtSummary | tree.FmtHideConstants
+			exprStr := tree.AsStringWithFlags(stmt.AST, fmtFlags)
+			if exprStr != test.expected {
+				t.Fatalf("expected %s, got %s", test.expected, exprStr)
+			}
+		})
+	}
+}
+
 // BenchmarkFormatRandomStatements measures the time needed to format
 // 1000 random statements.
 func BenchmarkFormatRandomStatements(b *testing.B) {
