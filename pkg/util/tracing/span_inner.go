@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -181,13 +182,18 @@ func (s *spanInner) Recordf(format string, args ...interface{}) {
 	if !s.hasVerboseSink() {
 		return
 	}
-	str := redact.Sprintf(format, args...)
+	var str string
+	if s.crdb.redactable {
+		str = string(redact.Sprintf(format, args...))
+	} else {
+		str = fmt.Sprintf(format, args...)
+	}
 	if s.otelSpan != nil {
 		// TODO(obs-inf): depending on the situation it may be more appropriate to
 		// redact the string here.
 		// See:
 		// https://github.com/cockroachdb/cockroach/issues/58610#issuecomment-926093901
-		s.otelSpan.AddEvent(str.StripMarkers(), oteltrace.WithTimestamp(timeutil.Now()))
+		s.otelSpan.AddEvent(str, oteltrace.WithTimestamp(timeutil.Now()))
 	}
 	if s.netTr != nil {
 		s.netTr.LazyPrintf(format, args)

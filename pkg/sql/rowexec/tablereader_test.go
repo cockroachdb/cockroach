@@ -460,7 +460,7 @@ func TestLimitScans(t *testing.T) {
 			}
 		}
 		for _, l := range span.Logs {
-			match := re.FindStringSubmatch(l.Msg().StripMarkers())
+			match := re.FindStringSubmatch(l.Msg(span.RedactableLogs))
 			if match == nil {
 				continue
 			}

@@ -1028,7 +1028,7 @@ func (m *monitor) collectRecordings() string {
 					continue
 				}
 				logs = append(logs, logRecord{
-					g: g, value: log.Msg().StripMarkers(),
+					g: g, value: log.Msg().StripMarkers(span.RedactableLogs),
 				})
 				g.prevEvents++
 			}

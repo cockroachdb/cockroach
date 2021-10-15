@@ -24,14 +24,14 @@ message LogRecord {
                                      (gogoproto.stdtime) = true];
   message Field {
     string key = 1;
-    string value = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+    string value = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "MaybeRedactableString"];
   }
   // Fields with values converted to strings. In 22.1, the `message` field
   // contains the log message, and this field is only used for compatibility
   // with 21.2 nodes.
   repeated Field deprecated_fields = 2 [(gogoproto.nullable) = false];
   // The log message.
-  string message = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+  string message = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "MaybeRedactableString"];
 }
 
 // StructuredRecord is a structured message recorded in a traced span.
@@ -72,8 +72,6 @@ message RecordedSpan {
                                          (gogoproto.stdduration) = true];
 
   // RedactableLogs determines whether the verbose log messages are redactable.
-  // This field was introduced in the 22.1 cycle. It can be removed in the 22.2
-  // cycle.
   bool redactable_logs = 15;
   // Events logged in the span.
   repeated LogRecord logs = 9 [(gogoproto.nullable) = false];

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
-	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/types"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -35,6 +34,7 @@ type crdbSpan struct {
 	traceID      tracingpb.TraceID // probabilistically unique
 	spanID       tracingpb.SpanID  // probabilistically unique
 	parentSpanID tracingpb.SpanID
+	redactable   bool // are verbose logs redactable?
 	goroutineID  uint64
 	operation    string // name of operation associated with the span
 
@@ -380,8 +380,7 @@ func (s *crdbSpan) setTagLocked(key string, value attribute.Value) {
 	s.mu.tags = append(s.mu.tags, attribute.KeyValue{Key: k, Value: value})
 }
 
-// record includes a log message in s' recording.
-func (s *crdbSpan) record(msg redact.RedactableString) {
+func (s *crdbSpan) record(maybeRedactableString string) {
 	if s.recordingType() != RecordingVerbose {
 		return
 	}
@@ -394,10 +393,10 @@ func (s *crdbSpan) record(msg redact.RedactableString) {
 	}
 	logRecord := &tracingpb.LogRecord{
 		Time:    now,
-		Message: msg,
+		Message: tracingpb.MaybeRedactableString(maybeRedactableString),
 		// Compatibility with 21.2.
 		DeprecatedFields: []tracingpb.LogRecord_Field{
-			{Key: tracingpb.LogMessageField, Value: msg},
+			{Key: tracingpb.LogMessageField, Value: tracingpb.MaybeRedactableString(maybeRedactableString)},
 		},
 	}
 
@@ -517,7 +516,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		Operation:      s.operation,
 		StartTime:      s.startTime,
 		Duration:       s.mu.duration,
-		RedactableLogs: true,
+		RedactableLogs: s.redactable,
 		Verbose:        s.recordingType() == RecordingVerbose,
 	}
 

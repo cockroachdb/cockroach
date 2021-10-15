@@ -676,7 +676,7 @@ func recordedSpansToTraceEvents(spans []tracingpb.RecordedSpan) []*serverpb.Trac
 		for _, entry := range sp.Logs {
 			event := &serverpb.TraceEvent{
 				Time:    entry.Time,
-				Message: entry.Msg().StripMarkers(),
+				Message: entry.Msg(sp.RedactableLogs),
 			}
 			output = append(output, event)
 		}

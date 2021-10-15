@@ -175,7 +175,7 @@ func (r Recording) FindLogMessage(pattern string) (string, bool) {
 	re := regexp.MustCompile(pattern)
 	for _, sp := range r {
 		for _, l := range sp.Logs {
-			msg := l.Msg().StripMarkers()
+			msg := l.Msg(sp.RedactableLogs)
 			if re.MatchString(msg) {
 				return msg, true
 			}
@@ -243,7 +243,7 @@ func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogDat
 	for _, l := range sp.Logs {
 		lastLog := ownLogs[len(ownLogs)-1]
 		var sb redact.StringBuilder
-		sb.Printf("event:%s", l.Msg())
+		sb.Printf("event:%s", l.Msg(sp.RedactableLogs))
 		ownLogs = append(ownLogs, conv(sb.RedactableString(), l.Time, lastLog.Timestamp))
 	}
 
@@ -393,7 +393,7 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 				Timestamp: uint64(l.Time.UnixNano() / 1000),
 				Fields: []jaegerjson.KeyValue{{
 					Key:   "event",
-					Value: l.Msg(),
+					Value: l.Msg(sp.RedactableLogs),
 					Type:  "STRING",
 				}},
 			}

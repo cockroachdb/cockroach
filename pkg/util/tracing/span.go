@@ -74,6 +74,25 @@ func (sp *Span) Tracer() *Tracer {
 	return sp.i.Tracer()
 }
 
+// Redactable returns true if this Span records
+// redactable logs.
+func (sp *Span) Redactable() bool {
+	if sp == nil || sp.i.isNoop() {
+		return false
+	}
+	// NB: doesn't matter what sp.Tracer().Redactable() returns now, this Span's
+	// redactability is constant across its lifetime.
+	return sp.i.crdb.redactable
+}
+
+// SetOperationName sets the name of the operation.
+func (sp *Span) SetOperationName(operationName string) {
+	if sp.done() {
+		return
+	}
+	sp.i.SetOperationName(operationName)
+}
+
 // Finish idempotently marks the Span as completed (at which point it will
 // silently drop any new data added to it). Finishing a nil *Span is a noop.
 func (sp *Span) Finish() {
