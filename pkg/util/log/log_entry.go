@@ -97,7 +97,9 @@ func (e *logEntry) SafeFormat(w interfaces.SafePrinter, _ rune) {
 		// with a colon between the line number and the message.
 		// However, some location filter deep inside SQL doesn't
 		// understand a colon after the line number.
-		w.Printf("%s:%d ", redact.Safe(e.file), redact.Safe(e.line))
+		w.SafeString(redact.SafeString(e.file))
+		w.SafeRune(':')
+		w.SafeInt(redact.SafeInt(e.line))
 	}
 	if e.tags != nil {
 		w.SafeString("[")
@@ -110,10 +112,10 @@ func (e *logEntry) SafeFormat(w interfaces.SafePrinter, _ rune) {
 			// that the format strings for `log.Infof` etc are const strings.
 			k := redact.SafeString(tag.Key())
 			v := tag.Value()
+			w.SafeString(k)
 			if v != nil {
-				w.Printf("%s=%v", k, tag.Value())
-			} else {
-				w.Printf("%s", k)
+				w.SafeRune('=')
+				w.Print(tag.Value())
 			}
 		}
 		w.SafeString("] ")
