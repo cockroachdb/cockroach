@@ -11,6 +11,8 @@
 package sqlsmith
 
 import (
+	"strconv"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -71,6 +73,15 @@ func makeScalarContext(s *Smither, ctx Context, typ *types.T, refs colRefs) tree
 
 func makeBoolExpr(s *Smither, refs colRefs) tree.TypedExpr {
 	return makeBoolExprContext(s, emptyCtx, refs)
+}
+
+func makeBoolExprWithPlaceholders(s *Smither, refs colRefs) (tree.Expr, []interface{}) {
+	expr := makeBoolExprContext(s, emptyCtx, refs)
+
+	// Replace constants with placeholders if the type is numeric or bool.
+	visitor := replaceDatumPlaceholderVisitor{}
+	exprFmt := expr.Walk(&visitor)
+	return exprFmt, visitor.Args
 }
 
 func makeBoolExprContext(s *Smither, ctx Context, refs colRefs) tree.TypedExpr {
@@ -693,3 +704,31 @@ func makeScalarSubquery(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr,
 
 	return subq, true
 }
+
+// replaceDatumPlaceholderVisitor replaces occurrences of numeric and bool Datum
+// expressions with placeholders, and updates Args with the corresponding Datum
+// values. This is used to prepare and execute a statement with placeholders.
+type replaceDatumPlaceholderVisitor struct {
+	Args []interface{}
+}
+
+var _ tree.Visitor = &replaceDatumPlaceholderVisitor{}
+
+// VisitPre satisfies the tree.Visitor interface.
+func (v *replaceDatumPlaceholderVisitor) VisitPre(
+	expr tree.Expr,
+) (recurse bool, newExpr tree.Expr) {
+	switch t := expr.(type) {
+	case tree.Datum:
+		if t.ResolvedType().IsNumeric() || t.ResolvedType() == types.Bool {
+			v.Args = append(v.Args, expr)
+			placeholder, _ := tree.NewPlaceholder(strconv.Itoa(len(v.Args)))
+			return false, placeholder
+		}
+		return false, expr
+	}
+	return true, expr
+}
+
+// VisitPost satisfies the Visitor interface.
+func (*replaceDatumPlaceholderVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
