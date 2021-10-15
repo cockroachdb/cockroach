@@ -2793,13 +2793,17 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 		resume <- struct{}{}
 
 		// Verify that the third call to Next() returns an error (the first is the
-		// initial row, the second is the first change. The third should detect the
-		// GC interval mismatch).
-		_, _ = dataExpiredRows.Next()
-		_, _ = dataExpiredRows.Next()
-		if _, err := dataExpiredRows.Next(); !testutils.IsError(err, `GC threshold`) {
-			t.Errorf(`expected "GC threshold" error got: %+v`, err)
+		// initial row, the second is the first change.
+		// Note: rows, and the error message may arrive in any order, so we just loop
+		// until we see an error.
+		for {
+			_, err := dataExpiredRows.Next()
+			if err != nil {
+				require.Regexp(t, `GC threshold`, err)
+				break
+			}
 		}
+
 	}
 	// TODO(ssd): tenant tests skipped because of f.Server() use
 	// in forceTableGC
@@ -2807,10 +2811,7 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 	t.Run("enterprise", enterpriseTest(testFn, feedTestNoTenants))
 	t.Run("cloudstorage", cloudStorageTest(testFn, feedTestNoTenants))
 	t.Run("kafka", kafkaTest(testFn, feedTestNoTenants))
-	t.Run(`webhook`, func(t *testing.T) {
-		skip.WithIssue(t, 66991, "flaky test")
-		webhookTest(testFn, feedTestNoTenants)(t)
-	})
+	t.Run(`webhook`, webhookTest(testFn, feedTestNoTenants))
 }
 
 func TestChangefeedErrors(t *testing.T) {
