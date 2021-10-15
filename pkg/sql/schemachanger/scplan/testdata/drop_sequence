@@ -5,7 +5,7 @@ CREATE SEQUENCE defaultdb.SQ1
 ops
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-Stage 0
+Stage 0 (non-revertible)
   *scop.MarkDescriptorAsDropped
     TableID: 52
   *scop.DrainDescriptorName
@@ -35,7 +35,7 @@ Stage 0
     TableID: 54
   *scop.UpdateRelationDeps
     TableID: 54
-Stage 1
+Stage 1 (non-revertible)
   *scop.MarkDescriptorAsDropped
     TableID: 52
   *scop.DrainDescriptorName

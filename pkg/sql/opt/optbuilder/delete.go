@@ -49,6 +49,9 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	// Check Select permission as well, since existing values must be read.
 	b.checkPrivilege(depName, tab, privilege.SELECT)
 
+	// Check if this table has already been mutated in another subquery.
+	b.checkMultipleMutations(tab, false /* simpleInsert */)
+
 	var mb mutationBuilder
 	mb.init(b, "delete", tab, alias)
 

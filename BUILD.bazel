@@ -122,6 +122,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/sql/schemachanger/scop/backfill_visitor_generated.go
 # gazelle:exclude pkg/sql/schemachanger/scop/mutation_visitor_generated.go
 # gazelle:exclude pkg/sql/schemachanger/scop/validation_visitor_generated.go
+# gazelle:exclude pkg/sql/schemachanger/scpb/elements_generated.go
 # gazelle:exclude pkg/ui/distccl/distccl_no_bazel.go
 # gazelle:exclude pkg/ui/distoss/distoss_no_bazel.go
 # gazelle:exclude pkg/util/log/channel/channel_generated.go
