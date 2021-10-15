@@ -19,6 +19,31 @@ SELECT crdb_internal.decode_plan_gist('$gist')
   table: t@t_pkey
   spans: FULL SCAN
 
+# test that EXPLAIN (GIST) still works if automatic gists are disabled.
+statement ok
+SET disable_plan_gists = 'true'
+
+let $gist
+EXPLAIN (GIST) SELECT count(*) FROM t
+
+query T
+SELECT * FROM crdb_internal.decode_plan_gist('$gist')
+----
+• group (scalar)
+│
+└── • scan
+      table: t@t_pkey
+      spans: FULL SCAN
+
+query T
+SELECT crdb_internal.decode_plan_gist('$gist')
+----
+• group (scalar)
+│
+└── • scan
+      table: t@t_pkey
+      spans: FULL SCAN
+
 statement error pq: unknown signature: crdb_internal\.decode_plan_gist\(int\)
 SELECT * FROM crdb_internal.decode_plan_gist(10)
 
