@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -181,7 +182,14 @@ func (s *spanInner) Recordf(format string, args ...interface{}) {
 	if !s.hasVerboseSink() {
 		return
 	}
-	str := redact.Sprintf(format, args...)
+	var str redact.RedactableString
+	if s.Tracer().Redactable() {
+		str = redact.Sprintf(format, args...)
+	} else {
+		// Format is considered safe but here we want to make sure the
+		// resulting string has redaction markers around it.
+		str = redact.Sprintf("%s", fmt.Sprintf(format, args...))
+	}
 	if s.otelSpan != nil {
 		// TODO(obs-inf): depending on the situation it may be more appropriate to
 		// redact the string here.

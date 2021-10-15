@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-var sRedactedMarker = redact.RedactableString(redact.EscapeBytes(nil))
+const sRedactedMarker = redact.RedactableString("verbose trace message redacted")
 
 // redactRecordingForTenant redacts the sensitive parts of log messages in the
 // recording if the tenant to which this recording is intended is not the system
