@@ -12,7 +12,6 @@ package log
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -25,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"github.com/cockroachdb/redact/interfaces"
 	"github.com/petermattis/goid"
 )
 
@@ -85,49 +83,6 @@ type logEntry struct {
 
 	// The entry payload.
 	payload entryPayload
-}
-
-var _ redact.SafeFormatter = (*logEntry)(nil)
-var _ fmt.Stringer = (*logEntry)(nil)
-
-func (e *logEntry) SafeFormat(w interfaces.SafePrinter, _ rune) {
-	if len(e.file) != 0 {
-		// TODO(knz): The "canonical" way to represent a file/line prefix
-		// is: <file>:<line>: msg
-		// with a colon between the line number and the message.
-		// However, some location filter deep inside SQL doesn't
-		// understand a colon after the line number.
-		w.Printf("%s:%d ", redact.Safe(e.file), redact.Safe(e.line))
-	}
-	if e.tags != nil {
-		w.SafeString("[")
-		for i, tag := range e.tags.Get() {
-			if i > 0 {
-				w.SafeString(",")
-			}
-			// TODO(obs-inf/server): this assumes that log tag keys are safe, but this
-			// is not enforced. We could lint that it is true similar to how we lint
-			// that the format strings for `log.Infof` etc are const strings.
-			k := redact.SafeString(tag.Key())
-			v := tag.Value()
-			if v != nil {
-				w.Printf("%s=%v", k, tag.Value())
-			} else {
-				w.Printf("%s", k)
-			}
-		}
-		w.SafeString("] ")
-	}
-
-	if !e.payload.redactable {
-		w.Print(e.payload.message)
-	} else {
-		w.Print(redact.RedactableString(e.payload.message))
-	}
-}
-
-func (e *logEntry) String() string {
-	return redact.StringWithoutMarkers(e)
 }
 
 type entryPayload struct {
