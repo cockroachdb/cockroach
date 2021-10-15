@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -204,35 +205,46 @@ func NewCallResolver(re *regexp.Regexp) *CallResolver {
 	}
 }
 
+var uintptrSlPool = sync.Pool{
+	New: func() interface{} {
+		sl := make([]uintptr, 1)
+		return &sl
+	},
+}
+
 // Lookup returns the (reduced) file, line and function of the caller at the
 // requested depth.
-func (cr *CallResolver) Lookup(depth int) (file string, line int, fun string) {
-	pc, file, line, ok := runtime.Caller(depth + 1)
+func (cr *CallResolver) Lookup(depth int) (_file string, _line int, _fun string) {
+	sl := uintptrSlPool.Get().(*[]uintptr)
+	// NB: +2 for Callers, +1 for Caller (historical reasons)
+	ok := runtime.Callers(depth+2, *sl) == 1
+	pc := (*sl)[0]
+	uintptrSlPool.Put(sl)
+	sl = nil // prevent reuse
 	if !ok || cr == nil {
 		return dummyLookup.file, dummyLookup.line, dummyLookup.fun
 	}
+
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
 	if v, okCache := cr.cache[pc]; okCache {
 		return v.file, v.line, v.fun
 	}
-	if matches := cr.re.FindStringSubmatch(file); matches != nil {
+	// Now do the expensive thing which we intend to cache.
+	frame, _ := runtime.CallersFrames([]uintptr{pc}).Next()
+	if matches := cr.re.FindStringSubmatch(frame.File); matches != nil {
 		if len(matches) == 1 {
-			file = matches[0]
+			frame.File = matches[0]
 		} else {
 			// NB: "path" is used here (and elsewhere in this file) over
 			// "path/filepath" because runtime.Caller always returns unix paths.
-			file = path.Join(matches[1:]...)
+			frame.File = path.Join(matches[1:]...)
 		}
 	}
 
-	cr.cache[pc] = &cachedLookup{file: file, line: line, fun: dummyLookup.fun}
-	if f := runtime.FuncForPC(pc); f != nil {
-		fun = f.Name()
-		if indDot := strings.LastIndexByte(fun, '.'); indDot != -1 {
-			fun = fun[indDot+1:]
-		}
-		cr.cache[pc].fun = fun
+	if indDot := strings.LastIndexByte(frame.Function, '.'); indDot != -1 {
+		frame.Function = frame.Function[indDot+1:]
 	}
-	return file, line, fun
+	cr.cache[pc] = &cachedLookup{file: frame.File, line: frame.Line, fun: frame.Function}
+	return frame.File, frame.Line, frame.Function
 }
