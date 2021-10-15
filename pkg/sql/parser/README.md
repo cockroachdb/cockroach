@@ -227,10 +227,10 @@ yacc to shift. The particular mechanism is to tell yacc that one rule
 has a *higher priority* than another.
 
 It just so happens however that the yacc language only allows us to
-set relative priorites of *tokens*, not rules. And here we have a
+set relative priorities of *tokens*, not rules. And here we have a
 problem, of the two rules that need to be prioritized, only one has a
 token to work with (the one with HELPTOKEN). Which token should we
-prioritze for the other?
+prioritize for the other?
 
 Conveniently yacc knows about this trouble and offers us an awkward,
 but working solution: we can tell it "use for this rule the same
