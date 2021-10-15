@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package slinstance
+package slsession
 
 import "context"
 
 // ClearSessionForTest is used in test to
 // immediately delete the current session.
-func (l *Instance) ClearSessionForTest(ctx context.Context) {
+func (l *Factory) ClearSessionForTest(ctx context.Context) {
 	l.clearSession(ctx)
 }

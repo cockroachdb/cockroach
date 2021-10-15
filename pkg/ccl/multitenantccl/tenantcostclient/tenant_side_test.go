@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slsession"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -652,8 +652,8 @@ func TestSQLLivenessExemption(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	// Make the tenant heartbeat like crazy.
 	ctx := context.Background()
-	//slinstance.DefaultTTL.Override(ctx, &st.SV, 20*time.Millisecond)
-	slinstance.DefaultHeartBeat.Override(ctx, &st.SV, time.Millisecond)
+	//slsession.DefaultTTL.Override(ctx, &st.SV, 20*time.Millisecond)
+	slsession.DefaultHeartBeat.Override(ctx, &st.SV, time.Millisecond)
 
 	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
 		Existing:                    true,

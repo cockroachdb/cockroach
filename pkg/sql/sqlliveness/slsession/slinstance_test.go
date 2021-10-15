@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package slinstance_test
+package slsession_test
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slsession"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -41,7 +41,7 @@ func TestSQLInstance_invokesSessionExpiryCallbacksInGoroutine(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 
 	fakeStorage := slstorage.NewFakeStorage()
-	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	sqlInstance := slsession.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
 	sqlInstance.Start(ctx)
 
 	session, err := sqlInstance.Session(ctx)
@@ -58,7 +58,7 @@ func TestSQLInstance_invokesSessionExpiryCallbacksInGoroutine(t *testing.T) {
 	require.NoError(t, fakeStorage.Delete(ctx, session.ID()))
 
 	// Clock needs to advance for expiry we trigger below to be valid
-	mClock.Increment(int64(slinstance.DefaultTTL.Get(&settings.SV)))
+	mClock.Increment(int64(slsession.DefaultTTL.Get(&settings.SV)))
 
 	testutils.SucceedsSoon(t, func() error {
 		select {
@@ -83,15 +83,15 @@ func TestSQLInstance(t *testing.T) {
 		clusterversion.TestingBinaryVersion,
 		clusterversion.TestingBinaryMinSupportedVersion,
 		true /* initializeVersion */)
-	slinstance.DefaultTTL.Override(ctx, &settings.SV, 2*time.Microsecond)
-	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, time.Microsecond)
+	slsession.DefaultTTL.Override(ctx, &settings.SV, 2*time.Microsecond)
+	slsession.DefaultHeartBeat.Override(ctx, &settings.SV, time.Microsecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
-	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	sqlInstance := slsession.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
 	sqlInstance.Start(ctx)
 
 	// Add one more instance to introduce concurrent access to storage.
-	dummy := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	dummy := slsession.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
 	dummy.Start(ctx)
 
 	s1, err := sqlInstance.Session(ctx)

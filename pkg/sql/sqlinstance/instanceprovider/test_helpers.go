@@ -29,7 +29,7 @@ type TestInstanceProvider interface {
 // NewTestInstanceProvider initializes a instanceprovider.provider
 // for test purposes
 func NewTestInstanceProvider(
-	stopper *stop.Stopper, session sqlliveness.Instance, addr string,
+	stopper *stop.Stopper, session sqlliveness.SessionFactory, addr string,
 ) TestInstanceProvider {
 	storage := instancestorage.NewFakeStorage()
 	p := &provider{

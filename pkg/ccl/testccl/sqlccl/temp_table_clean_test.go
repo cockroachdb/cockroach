@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slsession"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,8 +35,8 @@ func TestTenantTempTableCleanup(t *testing.T) {
 	sql.TempObjectWaitInterval.Override(ctx, &settings.SV, time.Second*0)
 	// Set up sessions to expire within 5 seconds of a
 	// nodes death.
-	slinstance.DefaultTTL.Override(ctx, &settings.SV, 5*time.Second)
-	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, time.Second)
+	slsession.DefaultTTL.Override(ctx, &settings.SV, 5*time.Second)
+	slsession.DefaultHeartBeat.Override(ctx, &settings.SV, time.Second)
 	// Knob state is used to track when temporary object clean up
 	// is executed.
 	var (

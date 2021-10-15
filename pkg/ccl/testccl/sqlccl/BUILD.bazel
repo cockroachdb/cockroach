@@ -15,7 +15,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql",
-        "//pkg/sql/sqlliveness/slinstance",
+        "//pkg/sql/sqlliveness/slsession",
         "//pkg/sql/sqltestutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

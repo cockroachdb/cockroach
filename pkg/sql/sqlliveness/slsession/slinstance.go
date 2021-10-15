@@ -8,11 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package slinstance provides functionality for acquiring sqlliveness leases
+// Package slsession provides functionality for acquiring sqlliveness leases
 // via sessions that have a unique id and expiration. The creation and
-// maintenance of session liveness is entrusted to the Instance. Each SQL
+// maintenance of session liveness is entrusted to the Factory. Each SQL
 // server will have a handle to an instance.
-package slinstance
+package slsession
 
 import (
 	"context"
@@ -99,12 +99,11 @@ func (s *session) setExpiration(exp hlc.Timestamp) {
 	s.mu.exp = exp
 }
 
-// Instance implements the sqlliveness.Instance interface by storing the
+// Factory implements the sqlliveness.SessionFactory interface by storing the
 // liveness sessions in table system.sqlliveness and relying on a heart beat
 // loop to extend the existing sessions' expirations or creating a new session
 // to replace a session that has expired and deleted from the table.
-// TODO(rima): Rename Instance to avoid confusion with sqlinstance.SQLInstance.
-type Instance struct {
+type Factory struct {
 	clock     *hlc.Clock
 	settings  *cluster.Settings
 	stopper   *stop.Stopper
@@ -120,7 +119,7 @@ type Instance struct {
 	}
 }
 
-func (l *Instance) getSessionOrBlockCh() (*session, chan struct{}) {
+func (l *Factory) getSessionOrBlockCh() (*session, chan struct{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.mu.s != nil {
@@ -129,7 +128,7 @@ func (l *Instance) getSessionOrBlockCh() (*session, chan struct{}) {
 	return nil, l.mu.blockCh
 }
 
-func (l *Instance) setSession(s *session) {
+func (l *Factory) setSession(s *session) {
 	l.mu.Lock()
 	l.mu.s = s
 	// Notify all calls to Session that a non-nil session is available.
@@ -137,7 +136,7 @@ func (l *Instance) setSession(s *session) {
 	l.mu.Unlock()
 }
 
-func (l *Instance) clearSession(ctx context.Context) {
+func (l *Factory) clearSession(ctx context.Context) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if expiration := l.mu.s.Expiration(); expiration.Less(l.clock.Now()) {
@@ -151,7 +150,7 @@ func (l *Instance) clearSession(ctx context.Context) {
 
 // createSession tries until it can create a new session and returns an error
 // only if the heart beat loop should exit.
-func (l *Instance) createSession(ctx context.Context) (*session, error) {
+func (l *Factory) createSession(ctx context.Context) (*session, error) {
 	id := sqlliveness.SessionID(uuid.MakeV4().GetBytes())
 	s := &session{id: id}
 
@@ -184,7 +183,7 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	return s, nil
 }
 
-func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) {
+func (l *Factory) extendSession(ctx context.Context, s *session) (bool, error) {
 
 	opts := retry.Options{
 		InitialBackoff: 10 * time.Millisecond,
@@ -216,7 +215,7 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	return true, nil
 }
 
-func (l *Instance) heartbeatLoop(ctx context.Context) {
+func (l *Factory) heartbeatLoop(ctx context.Context) {
 	defer func() {
 		log.Warning(ctx, "exiting heartbeat loop")
 	}()
@@ -259,7 +258,7 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 	}
 }
 
-// NewSQLInstance returns a new Instance struct and starts its heartbeating
+// NewSQLInstance returns a new Factory struct and starts its heartbeating
 // loop.
 func NewSQLInstance(
 	stopper *stop.Stopper,
@@ -267,8 +266,8 @@ func NewSQLInstance(
 	storage Writer,
 	settings *cluster.Settings,
 	testKnobs *sqlliveness.TestingKnobs,
-) *Instance {
-	l := &Instance{
+) *Factory {
+	l := &Factory{
 		clock:    clock,
 		settings: settings,
 		storage:  storage,
@@ -288,21 +287,21 @@ func NewSQLInstance(
 }
 
 // Start runs the hearbeat loop.
-func (l *Instance) Start(ctx context.Context) {
+func (l *Factory) Start(ctx context.Context) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.mu.started {
 		return
 	}
 	log.Infof(ctx, "starting SQL liveness instance")
-	_ = l.stopper.RunAsyncTask(ctx, "slinstance", l.heartbeatLoop)
+	_ = l.stopper.RunAsyncTask(ctx, "slsession", l.heartbeatLoop)
 	l.mu.started = true
 }
 
-// Session returns a live session id. For each Sqlliveness instance the
+// Session returns a live session id. For each sqlliveness SessionFactory the
 // invariant is that there exists at most one live session at any point in time.
 // If the current one has expired then a new one is created.
-func (l *Instance) Session(ctx context.Context) (sqlliveness.Session, error) {
+func (l *Factory) Session(ctx context.Context) (sqlliveness.Session, error) {
 	if l.testKnobs.SessionOverride != nil {
 		if s, err := l.testKnobs.SessionOverride(ctx); s != nil || err != nil {
 			return s, err
