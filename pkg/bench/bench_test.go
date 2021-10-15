@@ -474,6 +474,7 @@ func benchmarkMultinodeCockroachWithRealSpans(b *testing.B, realSpans bool, f Be
 				},
 			},
 		})
+	tc.Conns[0].Exec(`SET CLUSTER SETTING trace.debug.enable = true`)
 	if _, err := tc.Conns[0].Exec(`CREATE DATABASE bench`); err != nil {
 		b.Fatal(err)
 	}
