@@ -617,7 +617,7 @@ These three values are synchronized as follows:
   - every read gets a copy of the seqnum of the last write.
 - The `Sequence` field in the request header of individual KV
   operations is also copied to same-name field in `TxnMeta` of the
-  batch header in certain circumstnaces (most notably by another later
+  batch header in certain circumstances (most notably by another later
   interceptor, the `txnPipeliner`) for use during txn conflict
   resolution and write reordering.
 - When a TCS is instantiated from a LeafTxnInputState (e.g. forking a

@@ -1115,7 +1115,7 @@ leaseholder.
 #### Read Request Path
 
 Once the lease situation has been settled, `Replica.executeReadOnlyBatch()`
-is ready to actually start reading. It [grabs](https://github.cm/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_read.go#L57)
+is ready to actually start reading. It [grabs](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_read.go#L57)
 a storage engine handle and [executes](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_read.go#L83)
 the batch on it, eventually moving control to
 [`Replica.evaluateBatch()`](https://github.com/cockroachdb/cockroach/blob/759fdac56ec59c75aa872e8e00d0a614bcc593a3/pkg/kv/kvserver/replica_evaluate.go#L146)
