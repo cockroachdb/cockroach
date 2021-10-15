@@ -326,7 +326,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		metrics.StatsMetrics.ReportedSQLStatsMemoryCurBytesCount,
 		metrics.StatsMetrics.ReportedSQLStatsMemoryMaxBytesHist,
 		pool,
-		nil, /* resetInterval */
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
 	)
@@ -339,7 +338,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		metrics.StatsMetrics.SQLStatsMemoryCurBytesCount,
 		metrics.StatsMetrics.SQLStatsMemoryMaxBytesHist,
 		pool,
-		sqlstats.SQLStatReset,
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
 	)
@@ -446,12 +444,11 @@ func makeMetrics(cfg *ExecutorConfig, internal bool) Metrics {
 // Start starts the Server's background processing.
 func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.indexUsageStats.Start(ctx, stopper)
-	// Start a loop to clear SQL stats at the max reset interval. This is
-	// to ensure that we always have some worker clearing SQL stats to avoid
-	// continually allocating space for the SQL stats. Additionally, spawn
-	// a loop to clear the reported stats at the same large interval just
-	// in case the telemetry worker fails.
 	s.sqlStats.Start(ctx, stopper)
+
+	// reportedStats is periodically cleared to prevent too many SQL Stats
+	// accumulated in the reporter when the telemetry server fails.
+	// Usually it is telemetry's reporter's job to clear the reporting SQL Stats.
 	s.reportedStats.Start(ctx, stopper)
 }
 

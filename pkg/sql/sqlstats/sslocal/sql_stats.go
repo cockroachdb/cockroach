@@ -38,10 +38,6 @@ type SQLStats struct {
 	// fingerprints we can store in memory.
 	uniqueTxnFingerprintLimit *settings.IntSetting
 
-	// resetInterval is the interval of how long before the in-memory stats are
-	// being reset.
-	resetInterval *settings.DurationSetting
-
 	mu struct {
 		syncutil.Mutex
 
@@ -78,7 +74,6 @@ func newSQLStats(
 	curMemBytesCount *metric.Gauge,
 	maxMemBytesHist *metric.Histogram,
 	parentMon *mon.BytesMonitor,
-	resetInterval *settings.DurationSetting,
 	flushTarget Sink,
 	knobs *sqlstats.TestingKnobs,
 ) *SQLStats {
@@ -95,7 +90,6 @@ func newSQLStats(
 		st:                         st,
 		uniqueStmtFingerprintLimit: uniqueStmtFingerprintLimit,
 		uniqueTxnFingerprintLimit:  uniqueTxnFingerprintLimit,
-		resetInterval:              resetInterval,
 		flushTarget:                flushTarget,
 		knobs:                      knobs,
 	}
