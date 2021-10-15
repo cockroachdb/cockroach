@@ -23,7 +23,7 @@ export class Duration extends React.PureComponent<{ job: Job }> {
   render() {
     const { job } = this.props;
     // Parse timestamp to default value NULL instead of Date.now.
-    // Conversion dates to Date.now causes traling dates and constant
+    // Conversion dates to Date.now causes trailing dates and constant
     // duration increase even when job is finished.
     const startedAt = TimestampToMoment(job.started, null);
     const modifiedAt = TimestampToMoment(job.modified, null);

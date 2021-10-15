@@ -93,7 +93,7 @@ export class Axis extends React.Component<AxisProps, {}> {
 }
 
 /**
- * MetricProps reperesents the properties of a Metric being selected as part of
+ * MetricProps represents the properties of a Metric being selected as part of
  * a query.
  *
  * Note that there are redundant specifiers for several of the options
