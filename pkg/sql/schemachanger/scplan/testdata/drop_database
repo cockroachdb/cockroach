@@ -120,7 +120,7 @@ Stage 0
 Stage 1
   *scop.MarkDescriptorAsDropped
     TableID: 53
-Stage 2
+Stage 2 (non-revertible)
   *scop.MarkDescriptorAsDropped
     TableID: 54
   *scop.DrainDescriptorName
@@ -232,9 +232,9 @@ DROP DATABASE db1 CASCADE
 - from: [Table:{DescID: 57}, PUBLIC]
   to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 57}, ABSENT]
 - from: [Type:{DescID: 62}, PUBLIC]
-  to:   [TypeReference:{DescID: 64, ReferencedDescID: 62}, DELETE_ONLY]
+  to:   [TypeReference:{DescID: 64, ReferencedDescID: 62}, ABSENT]
 - from: [Type:{DescID: 63}, PUBLIC]
-  to:   [TypeReference:{DescID: 64, ReferencedDescID: 63}, DELETE_ONLY]
+  to:   [TypeReference:{DescID: 64, ReferencedDescID: 63}, ABSENT]
 - from: [View:{DescID: 58}, ABSENT]
   to:   [View:{DescID: 59}, ABSENT]
 - from: [View:{DescID: 58}, ABSENT]

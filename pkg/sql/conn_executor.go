@@ -40,8 +40,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -2923,7 +2925,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	)
 	after, err := runNewSchemaChanger(
 		ctx,
-		scplan.PreCommitPhase,
+		scop.PreCommitPhase,
 		ex.extraTxnState.schemaChangerState.state,
 		executor,
 		scs.stmts,
@@ -2946,7 +2948,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		states[i] = scs.state[i].Status
 		// Depending on the element type either a single descriptor ID
 		// will exist or multiple (i.e. foreign keys).
-		if id := scpb.GetDescID(scs.state[i].Element()); id != descpb.InvalidID {
+		if id := screl.GetDescID(scs.state[i].Element()); id != descpb.InvalidID {
 			descIDSet.Add(id)
 		}
 	}
@@ -2978,7 +2980,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 
 func runNewSchemaChanger(
 	ctx context.Context,
-	phase scplan.Phase,
+	phase scop.Phase,
 	state scpb.State,
 	executor *scexec.Executor,
 	stmts []string,

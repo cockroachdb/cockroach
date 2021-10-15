@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -150,7 +151,7 @@ func marshalNodes(t *testing.T, nodes scpb.State) string {
 		entry.WriteString("- ")
 		entry.WriteString(node.Target.Direction.String())
 		entry.WriteString(" ")
-		scpb.FormatAttributes(node.Element(), &entry)
+		entry.WriteString(screl.ElementString(node.Element()))
 		entry.WriteString("\n")
 		entry.WriteString(indentText(fmt.Sprintf("state: %s\n", node.Status.String()), "  "))
 		entry.WriteString(indentText("details:\n", "  "))

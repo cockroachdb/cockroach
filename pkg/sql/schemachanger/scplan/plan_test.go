@@ -30,8 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -102,7 +104,7 @@ func TestPlanAlterTable(t *testing.T) {
 
 				plan, err := scplan.MakePlan(outputNodes,
 					scplan.Params{
-						ExecutionPhase: scplan.PostCommitPhase,
+						ExecutionPhase: scop.PostCommitPhase,
 					})
 				require.NoError(t, err)
 
@@ -154,9 +156,9 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 		return plan.Graph.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
 			var deps strings.Builder
 			fmt.Fprintf(&deps, "- from: [%s, %s]\n",
-				scpb.AttributesString(de.From().Element()), de.From().Status)
+				screl.ElementString(de.From().Element()), de.From().Status)
 			fmt.Fprintf(&deps, "  to:   [%s, %s]\n",
-				scpb.AttributesString(de.To().Element()), de.To().Status)
+				screl.ElementString(de.To().Element()), de.To().Status)
 			sortedDeps = append(sortedDeps, deps.String())
 			return nil
 		})
@@ -176,9 +178,13 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 
 // marshalOps marshals operations in scplan.Plan to a string.
 func marshalOps(t *testing.T, plan *scplan.Plan) string {
-	stages := ""
+	var stages strings.Builder
 	for stageIdx, stage := range plan.Stages {
-		stages += fmt.Sprintf("Stage %d\n", stageIdx)
+		_, _ = fmt.Fprintf(&stages, "Stage %d", stageIdx)
+		if !stage.Revertible {
+			stages.WriteString(" (non-revertible)")
+		}
+		stages.WriteString("\n")
 		stageOps := ""
 		for _, op := range stage.Ops.Slice() {
 			opMap, err := scgraphviz.ToMap(op)
@@ -187,9 +193,9 @@ func marshalOps(t *testing.T, plan *scplan.Plan) string {
 			require.NoError(t, err)
 			stageOps += fmt.Sprintf("%T\n%s", op, indentText(string(data), "  "))
 		}
-		stages += indentText(stageOps, "  ")
+		stages.WriteString(indentText(stageOps, "  "))
 	}
-	return stages
+	return stages.String()
 }
 
 func newTestingPlanDeps(s serverutils.TestServerInterface) (*scbuild.Dependencies, func()) {

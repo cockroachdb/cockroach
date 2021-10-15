@@ -1,0 +1,34 @@
+name: comparetest
+data:
+    e1: {i8: 1, i16: 1, pi8: 1}
+    e2: {i8: 2, i16: 2, pi16: 2}
+    e3: {i8: 3, i16: 3, pi16: 3}
+    e4: {puint: 4, uint: 4}
+attributes:
+    e1: {_uintptr: 0, i: 0, i16: 1, i32: 0, i64: 0, i8: 1, pi8: 1, str: "", ui: 0, ui16: 0, ui32: 0, ui64: 0, ui8: 0}
+queries: []
+comparisons:
+    - entities: [e2, e3, e1]
+      tests:
+        - attrs: [i8]
+          order: [[e1], [e2], [e3]]
+        - attrs: [pstr]
+          order: [[e1, e2, e3]]
+        - attrs: [pi8]
+          order: [[e1], [e2, e3]]
+        - attrs: [pi8, pi16]
+          order: [[e1], [e2], [e3]]
+        - attrs: [pi16]
+          order: [[e2], [e3], [e1]]
+    - entities: [e2, e3, e1, e4]
+      tests:
+        - attrs: [ui]
+          order: [[e1, e2, e3, e4]]
+        - attrs: [pstr]
+          order: [[e1, e2, e3, e4]]
+        - attrs: [pi8]
+          order: [[e1], [e2, e3, e4]]
+        - attrs: [pi8, pi16]
+          order: [[e1], [e2], [e3], [e4]]
+        - attrs: [pi16]
+          order: [[e2], [e3], [e1, e4]]

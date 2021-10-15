@@ -239,50 +239,41 @@ error (42703): statement source "DELETE FROM abcde WHERE a = 1" does not return 
 
 # Non-referenced CTE with mutation.
 build
-WITH cte AS (SELECT b FROM [DELETE FROM abcde WHERE a=b RETURNING *]) DELETE FROM abcde WHERE a=b
+WITH cte AS (SELECT y FROM [DELETE FROM xyz WHERE z > 0 RETURNING *]) DELETE FROM abcde WHERE a=b
 ----
 with &1
- ├── project
- │    ├── columns: abcde.a:1!null abcde.b:2!null abcde.c:3 abcde.d:4 abcde.e:5
- │    └── delete abcde
- │         ├── columns: abcde.a:1!null abcde.b:2!null abcde.c:3 abcde.d:4 abcde.e:5 rowid:6!null
- │         ├── fetch columns: abcde.a:9 abcde.b:10 abcde.c:11 abcde.d:12 abcde.e:13 rowid:14
- │         └── select
- │              ├── columns: abcde.a:9!null abcde.b:10!null abcde.c:11 abcde.d:12 abcde.e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
- │              ├── scan abcde
- │              │    ├── columns: abcde.a:9!null abcde.b:10 abcde.c:11 abcde.d:12 abcde.e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
- │              │    └── computed column expressions
- │              │         ├── abcde.d:12
- │              │         │    └── (abcde.b:10 + abcde.c:11) + 1
- │              │         └── abcde.e:13
- │              │              └── abcde.a:9
- │              └── filters
- │                   └── abcde.a:9 = abcde.b:10
+ ├── delete xyz
+ │    ├── columns: xyz.x:1!null xyz.y:2 xyz.z:3!null
+ │    ├── fetch columns: xyz.x:6 xyz.y:7 xyz.z:8
+ │    └── select
+ │         ├── columns: xyz.x:6!null xyz.y:7 xyz.z:8!null xyz.crdb_internal_mvcc_timestamp:9 xyz.tableoid:10
+ │         ├── scan xyz
+ │         │    └── columns: xyz.x:6!null xyz.y:7 xyz.z:8 xyz.crdb_internal_mvcc_timestamp:9 xyz.tableoid:10
+ │         └── filters
+ │              └── xyz.z:8 > 0.0
  └── with &2 (cte)
       ├── project
-      │    ├── columns: b:18!null
+      │    ├── columns: y:12
       │    └── with-scan &1
-      │         ├── columns: a:17!null b:18!null c:19 d:20 e:21
+      │         ├── columns: x:11!null y:12 z:13!null
       │         └── mapping:
-      │              ├──  abcde.a:1 => a:17
-      │              ├──  abcde.b:2 => b:18
-      │              ├──  abcde.c:3 => c:19
-      │              ├──  abcde.d:4 => d:20
-      │              └──  abcde.e:5 => e:21
+      │              ├──  xyz.x:1 => x:11
+      │              ├──  xyz.y:2 => y:12
+      │              └──  xyz.z:3 => z:13
       └── delete abcde
            ├── columns: <none>
-           ├── fetch columns: abcde.a:30 abcde.b:31 abcde.c:32 abcde.d:33 abcde.e:34 rowid:35
+           ├── fetch columns: a:22 b:23 c:24 d:25 e:26 rowid:27
            └── select
-                ├── columns: abcde.a:30!null abcde.b:31!null abcde.c:32 abcde.d:33 abcde.e:34 rowid:35!null crdb_internal_mvcc_timestamp:36 tableoid:37
+                ├── columns: a:22!null b:23!null c:24 d:25 e:26 rowid:27!null abcde.crdb_internal_mvcc_timestamp:28 abcde.tableoid:29
                 ├── scan abcde
-                │    ├── columns: abcde.a:30!null abcde.b:31 abcde.c:32 abcde.d:33 abcde.e:34 rowid:35!null crdb_internal_mvcc_timestamp:36 tableoid:37
+                │    ├── columns: a:22!null b:23 c:24 d:25 e:26 rowid:27!null abcde.crdb_internal_mvcc_timestamp:28 abcde.tableoid:29
                 │    └── computed column expressions
-                │         ├── abcde.d:33
-                │         │    └── (abcde.b:31 + abcde.c:32) + 1
-                │         └── abcde.e:34
-                │              └── abcde.a:30
+                │         ├── d:25
+                │         │    └── (b:23 + c:24) + 1
+                │         └── e:26
+                │              └── a:22
                 └── filters
-                     └── abcde.a:30 = abcde.b:31
+                     └── a:22 = b:23
 
 # With alias, original table name should be inaccessible.
 build

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package scplan
+package deprules
 
 import "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 
@@ -21,6 +21,15 @@ func indexContainsColumn(idx *descpb.IndexDescriptor, colID descpb.ColumnID) boo
 func columnsContainsID(haystack []descpb.ColumnID, needle descpb.ColumnID) bool {
 	for _, id := range haystack {
 		if id == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func idInIDs(objects []descpb.ID, id descpb.ID) bool {
+	for _, other := range objects {
+		if other == id {
 			return true
 		}
 	}
