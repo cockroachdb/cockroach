@@ -8,10 +8,9 @@ cloudstorage.http.custom_ca	string		custom root CA (appended to system's default
 cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operations
 cluster.organization	string		organization name
 cluster.preserve_downgrade_option	string		disable (automatic or manual) cluster version upgrade from the specified version until reset
-diagnostics.forced_sql_stat_reset.interval	duration	2h0m0s	interval after which SQL statement statistics are refreshed even if not collected (should be more than diagnostics.sql_stat_reset.interval). It has a max value of 24H.
+diagnostics.forced_sql_stat_reset.interval	duration	2h0m0s	interval after which the reported SQL Stats are reset even if not collected by telemetry reporter. It has a max value of 24H.
 diagnostics.reporting.enabled	boolean	true	enable reporting diagnostic metrics to cockroach labs
 diagnostics.reporting.interval	duration	1h0m0s	interval at which diagnostics data should be reported
-diagnostics.sql_stat_reset.interval	duration	1h0m0s	interval controlling how often SQL statement statistics should be reset (should be less than diagnostics.forced_sql_stat_reset.interval). It has a max value of 24H.
 enterprise.license	string		the encoded cluster license
 external.graphite.endpoint	string		if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port
 external.graphite.interval	duration	10s	the interval at which metrics are pushed to Graphite (if enabled)

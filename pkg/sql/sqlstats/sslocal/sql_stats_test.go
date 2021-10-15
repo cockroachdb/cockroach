@@ -437,7 +437,6 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		nil, /* curMemoryBytesCount */
 		nil, /* maxMemoryBytesHist */
 		monitor,
-		nil, /* resetInterval */
 		nil, /* reportingSink */
 		nil, /* knobs */
 	)
