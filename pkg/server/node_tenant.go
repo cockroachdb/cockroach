@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-var sRedactedMarker = redact.RedactableString(redact.EscapeBytes(nil))
+const sRedactedMarker = redact.RedactableString("verbose trace message redacted")
 
 func maybeRedactRecording(tenID roachpb.TenantID, rec tracing.Recording) {
 	if tenID == roachpb.SystemTenantID {

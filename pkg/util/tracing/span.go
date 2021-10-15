@@ -65,6 +65,14 @@ func (sp *Span) Tracer() *Tracer {
 	return sp.i.Tracer()
 }
 
+// Redactable returns true if this Span's tracer is marked redactable
+func (sp *Span) Redactable() bool {
+	if sp == nil || sp.i.isNoop() {
+		return false
+	}
+	return sp.Tracer().Redactable()
+}
+
 // SetOperationName sets the name of the operation.
 func (sp *Span) SetOperationName(operationName string) {
 	if sp.done() {

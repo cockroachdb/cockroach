@@ -71,8 +71,8 @@ message RecordedSpan {
                                          (gogoproto.stdduration) = true];
 
   // RedactableLogs determines whether the verbose log messages are redactable.
-  // This field was introduced in the 22.1 cycle. It can be removed in the 22.2
-  // cycle.
+  // This field was introduced in the 22.1 release. It can be removed in the 22.2
+  // release. On 22.1 this is always set to `true`.
   bool redactable_logs = 15;
   // Events logged in the span.
   repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
