@@ -453,6 +453,7 @@ func benchmarkCockroachWithRealSpans(b *testing.B, realSpans bool, f BenchmarkFn
 		})
 	defer s.Stopper().Stop(context.Background())
 
+	db.Exec(`SET CLUSTER SETTING trace.debug.enable = true`)
 	if _, err := db.Exec(`CREATE DATABASE bench`); err != nil {
 		b.Fatal(err)
 	}
