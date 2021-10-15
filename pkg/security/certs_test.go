@@ -11,7 +11,9 @@
 package security_test
 
 import (
+	"bytes"
 	"context"
+	"crypto/x509"
 	gosql "database/sql"
 	"fmt"
 	"io/ioutil"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -632,6 +635,46 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 		_, err = goDB.Exec("SELECT 1")
 		if !testutils.IsError(err, tc.expectedError) {
 			t.Errorf("#%d: expected error %v, got %v", i, tc.expectedError, err)
+		}
+	}
+}
+
+func TestAppendCertificateToBlob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	caBlob, err := securitytest.Asset(filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert))
+	if err != nil {
+		t.Fatal(err)
+	}
+	testCertPool := x509.NewCertPool()
+
+	certsToAdd := make([][]byte, 0, 3)
+
+	for _, certFilename := range []string{
+		//		security.EmbeddedClientCACert,
+		//		security.EmbeddedUICACert,
+		security.EmbeddedTenantCACert,
+	} {
+		newCertBlob, err := securitytest.Asset(filepath.Join(security.EmbeddedCertsDir, certFilename))
+		if err != nil {
+			t.Errorf("failed to read certificate \"%s\": %s", certFilename, err)
+			continue
+		}
+
+		certsToAdd = append(certsToAdd, bytes.TrimRight(newCertBlob, "\n"))
+
+	}
+
+	caBlob = security.AppendCertificatesToBlob(
+		bytes.TrimRight(caBlob, "\n"),
+		certsToAdd...,
+	)
+
+	if !testCertPool.AppendCertsFromPEM(caBlob) {
+		if testing.Verbose() {
+			t.Fatalf("appendCertificatesToBlob failed to properly concatenate the test certificates together:\n===\n%s===\n", caBlob)
+		} else {
+			t.Fatal("appendCertificatesToBlob failed to properly concatenate the test certificates together. Run with the verbose flag set to see the output.")
 		}
 	}
 }

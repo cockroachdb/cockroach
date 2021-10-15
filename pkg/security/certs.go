@@ -11,6 +11,7 @@
 package security
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/rand"
@@ -560,4 +561,17 @@ func PEMContentsToX509(contents []byte) ([]*x509.Certificate, error) {
 	}
 
 	return certs, nil
+}
+
+// AppendCertificatesToBlob adds the passed PEM encoded certificates to the existing
+// byte slice containing PEM encoded certificates, ensuring that there is a newline
+// separating the original byte slice and each subsequent certificate byte slices.
+func AppendCertificatesToBlob(certBlob []byte, newCerts ...[]byte) []byte {
+	return bytes.Join(
+		append(
+			[][]byte{certBlob},
+			newCerts...,
+		),
+		[]byte{'\n'},
+	)
 }
