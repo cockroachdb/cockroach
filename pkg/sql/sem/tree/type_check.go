@@ -417,6 +417,10 @@ func (expr *CaseExpr) TypeCheck(
 	return expr, nil
 }
 
+func invalidCastError(castFrom, castTo *types.T) error {
+	return pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, castTo)
+}
+
 // resolveCast checks that the cast from the two types is valid. If allowStable
 // is false, it also checks that the cast has VolatilityImmutable.
 //
@@ -450,16 +454,42 @@ func resolveCast(
 		// Casts from ENUM to ENUM type can only succeed if the two types are the
 		// same.
 		if !castFrom.Equivalent(castTo) {
-			return pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, castTo)
+			return invalidCastError(castFrom, castTo)
 		}
 		telemetry.Inc(sqltelemetry.EnumCastCounter)
+		return nil
+
+	case toFamily == types.TupleFamily && fromFamily == types.TupleFamily:
+		// Casts from tuple to tuple type succeed if the lengths of the tuples are
+		// the same, and if there are casts resolvable across all of the elements
+		// pointwise.
+		fromTuple := castFrom.TupleContents()
+		toTuple := castTo.TupleContents()
+		if len(fromTuple) != len(toTuple) {
+			return invalidCastError(castFrom, castTo)
+		}
+		for i, from := range fromTuple {
+			to := toTuple[i]
+			err := resolveCast(
+				context,
+				from,
+				to,
+				allowStable,
+				intervalStyleEnabled,
+				dateStyleEnabled,
+			)
+			if err != nil {
+				return err
+			}
+		}
+		telemetry.Inc(sqltelemetry.TupleCastCounter)
 		return nil
 
 	default:
 		// TODO(mgartner): Use OID cast map.
 		cast := lookupCastInfo(fromFamily, toFamily, intervalStyleEnabled, dateStyleEnabled)
 		if cast == nil {
-			return pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, castTo)
+			return invalidCastError(castFrom, castTo)
 		}
 		if !allowStable && cast.volatility >= VolatilityStable {
 			err := NewContextDependentOpsNotAllowedError(context)

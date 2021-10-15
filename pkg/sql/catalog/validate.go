@@ -395,7 +395,11 @@ func (vdg *validationDescGetterImpl) GetTypeDescriptor(id descpb.ID) (TypeDescri
 	if !found || desc == nil {
 		return nil, WrapTypeDescRefErr(id, ErrDescriptorNotFound)
 	}
-	return AsTypeDescriptor(desc)
+	descriptor, err := AsTypeDescriptor(desc)
+	if err != nil {
+		return nil, err
+	}
+	return descriptor, err
 }
 
 func (vdg *validationDescGetterImpl) addNamespaceEntries(
