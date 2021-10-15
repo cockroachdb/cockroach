@@ -1287,7 +1287,9 @@ CREATE TYPE IF NOT EXISTS ifne AS ENUM ('hi')
 statement ok
 CREATE TABLE table_ifne (x INT)
 
-statement error pq: relation "test_57196.public.table_ifne" already exists
+# This doesn't fail because there *is* already type with this name, which is
+# the implicit type with the same name as the table.
+statement ok
 CREATE TYPE IF NOT EXISTS table_ifne AS ENUM ('hi')
 
 # Regression test for incorrectly serializing NULL expression type annotation in

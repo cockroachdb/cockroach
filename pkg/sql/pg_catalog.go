@@ -2943,8 +2943,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					typDesc = nil
 				}
 
-				// If it is not a type, it has to be a table.
 				if typDesc == nil {
+					return false, nil
+				}
+
+				// It's an entry for the implicit record type created on behalf of each
+				// table. We have special logic for this case.
+				if typDesc.GetKind() == descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE {
 					table, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
 					if err != nil {
 						if errors.Is(err, catalog.ErrDescriptorNotFound) || pgerror.GetPGCode(err) == pgcode.UndefinedObject {

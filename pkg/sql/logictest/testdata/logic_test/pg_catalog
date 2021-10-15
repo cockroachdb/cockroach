@@ -3433,6 +3433,35 @@ WHERE oid = 1
 ----
 oid     typname        typnamespace  typowner  typlen  typbyval  typtype
 
+query OTOOIBT colnames
+SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
+FROM pg_catalog.pg_type
+WHERE oid = 9999999
+----
+oid     typname        typnamespace  typowner  typlen  typbyval  typtype
+
+query OTOOIBT colnames
+SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
+FROM pg_catalog.pg_type
+WHERE typname = 'source_table'
+----
+oid     typname       typnamespace  typowner    typlen  typbyval  typtype
+100070  source_table  2332901747    1546506610  -1      false     c
+
+let $sourceid
+SELECT oid
+FROM pg_catalog.pg_type
+WHERE typname = 'source_table'
+
+## Exercise the virtual index on pg_type.oid.
+query OTOOIBT colnames
+SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
+FROM pg_catalog.pg_type
+WHERE oid = $sourceid
+----
+oid     typname       typnamespace  typowner    typlen  typbyval  typtype
+100070  source_table  2332901747    1546506610  -1      false     c
+
 ## pg_catalog.pg_proc
 
 query TOOOTTO colnames

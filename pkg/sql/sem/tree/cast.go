@@ -1215,6 +1215,7 @@ var validCasts = []castInfo{
 
 	// Casts to TupleFamily.
 	{from: types.UnknownFamily, to: types.TupleFamily, volatility: VolatilityImmutable},
+	{from: types.TupleFamily, to: types.TupleFamily, volatility: VolatilityStable},
 }
 
 type castsMapKey struct {
@@ -2345,6 +2346,26 @@ func performCastWithoutPrecisionTruncation(
 			return performIntToOidCast(ctx, t, i)
 		case *DString:
 			return ParseDOid(ctx, string(*v), t)
+		}
+	case types.TupleFamily:
+		switch v := d.(type) {
+		case *DTuple:
+			// To cast a Tuple to a Tuple, the lengths must be the same on both sides.
+			// Then, each element is casted to the other element type. The labels of
+			// the target type are kept.
+			if len(v.D) != len(t.TupleContents()) {
+				return nil, pgerror.New(
+					pgcode.CannotCoerce, "cannot cast tuple; wrong number of columns")
+			}
+			ret := NewDTupleWithLen(t, len(v.D))
+			for i := range v.D {
+				var err error
+				ret.D[i], err = PerformCast(ctx, v.D[i], t.TupleContents()[i])
+				if err != nil {
+					return nil, err
+				}
+			}
+			return ret, nil
 		}
 	}
 
