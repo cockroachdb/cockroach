@@ -28,6 +28,7 @@ go_library(
         "//pkg/util/errorutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/netutil/addr",
         "//pkg/util/retry",

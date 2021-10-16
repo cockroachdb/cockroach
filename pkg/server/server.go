@@ -1650,6 +1650,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.cfg.SQLAdvertiseAddr,
 	)
 
+	// TODO(davidh): where to place this that makes sense?
+	s.registry.AddMetric(base.LicenseTTL)
+
 	// Begin recording runtime statistics.
 	if err := startSampleEnvironment(s.AnnotateCtx(ctx), sampleEnvironmentCfg{
 		st:                   s.ClusterSettings(),
@@ -2620,6 +2623,7 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 					curStats := goMemStats.Load().(*status.GoMemStats)
 					cgoStats := status.GetCGoMemStats(ctx)
 					cfg.runtime.SampleEnvironment(ctx, curStats, cgoStats)
+					base.UpdateTimeToLicenseExpiry(ctx, cfg.st, timeutil.Now())
 					if goroutineDumper != nil {
 						goroutineDumper.MaybeDump(ctx, cfg.st, cfg.runtime.Goroutines.Value())
 					}

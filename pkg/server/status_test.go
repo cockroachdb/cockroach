@@ -2625,41 +2625,38 @@ func TestLicenseExpiryMetricNoLicense(t *testing.T) {
 
 	for _, tc := range []struct {
 		name       string
-		expected   string
+		expected   int64
+		asOf       time.Time
 		expiryFunc func(context.Context, *cluster.Settings, time.Time) (time.Duration, error)
 	}{
-		{"No License", "seconds_until_enterprise_license_expiry 0\n", nil},
-		{"Valid 1 second License", "seconds_until_enterprise_license_expiry 1\n", func(
+		{"No License", 0, timeutil.Unix(0, 0), nil},
+		{"Valid 1 second License", 1, timeutil.Unix(0, 0), func(
 			_ context.Context, _ *cluster.Settings, _ time.Time,
 		) (time.Duration, error) {
 			return time.Second, nil
 		}},
-		{"Valid Long License", "seconds_until_enterprise_license_expiry 1603926294\n", func(
-			_ context.Context, _ *cluster.Settings, _ time.Time,
+		{"Valid Long License", 1603926294, timeutil.Unix(0, 0), func(
+			_ context.Context, _ *cluster.Settings, t time.Time,
 		) (time.Duration, error) {
-			return timeutil.Unix(1603926294, 0).Sub(timeutil.Unix(0, 0)), nil
+			return timeutil.Unix(1603926294, 0).Sub(t), nil
 		}},
-		{"Valid Long Past License", "seconds_until_enterprise_license_expiry -1603926294\n", func(
-			_ context.Context, _ *cluster.Settings, _ time.Time,
+		{"Valid Long Past License", -1603926294, timeutil.Unix(1603926294, 0), func(
+			_ context.Context, _ *cluster.Settings, t time.Time,
 		) (time.Duration, error) {
-			return timeutil.Unix(0, 0).Sub(timeutil.Unix(1603926294, 0)), nil
+			return timeutil.Unix(0, 0).Sub(t), nil
 		}},
-		{"Error License", "", func(
+		{"Error License", 0, timeutil.Unix(0, 0), func(
 			_ context.Context, _ *cluster.Settings, _ time.Time,
 		) (time.Duration, error) {
 			return 0, errors.New("bad license")
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			vh := varsHandler{ts.status.metricSource, ts.status.st}
 			if tc.expiryFunc != nil {
 				base.TimeToEnterpriseLicenseExpiry = tc.expiryFunc
 			}
-
-			buf := new(bytes.Buffer)
-			vh.appendLicenseExpiryMetric(context.Background(), buf)
-
-			require.Equal(t, tc.expected, buf.String())
+			base.UpdateTimeToLicenseExpiry(context.Background(), ts.status.st, tc.asOf /* asOf ignored by fn we define in test */)
+			require.Equal(t, tc.expected, base.LicenseTTL.Value())
 		})
 	}
 }
