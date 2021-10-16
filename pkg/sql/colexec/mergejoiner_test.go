@@ -1612,6 +1612,33 @@ func getMJTestCases() []*joinTestCase {
 			rightEqColsAreKey: true,
 			expected:          colexectestutils.Tuples{{1}},
 		},
+		{
+			description: "LEFT SEMI join with non-unique eq column",
+			joinType:    descpb.LeftSemiJoin,
+			leftTypes:   []*types.T{types.Int, types.Int},
+			rightTypes:  []*types.T{types.Int, types.Int},
+			leftTuples:  colexectestutils.Tuples{{nil, 4}, {nil, 2}, {0, nil}, {0, 3}, {0, nil}, {1, nil}, {3, 3}, {3, nil}, {3, 0}, {4, 0}},
+			rightTuples: colexectestutils.Tuples{{1, nil}, {nil, nil}, {nil, 0}, {3, 1}, {3, 1}, {1, 1}, {nil, 2}, {2, 2}, {3, 3}, {2, 4}},
+			leftEqCols:  []uint32{0},
+			rightEqCols: []uint32{1},
+			leftOutCols: []uint32{0, 1},
+			expected:    colexectestutils.Tuples{{0, nil}, {0, 3}, {0, nil}, {1, nil}, {3, 3}, {3, nil}, {3, 0}, {4, 0}},
+		},
+		{
+			description:     "FULL OUTER join with nulls and DESC",
+			joinType:        descpb.FullOuterJoin,
+			leftTypes:       []*types.T{types.Int, types.Int},
+			rightTypes:      []*types.T{types.Int, types.Int},
+			leftTuples:      colexectestutils.Tuples{{0, 4}, {nil, 0}, {3, 0}},
+			rightTuples:     colexectestutils.Tuples{{0, 1}, {nil, 0}, {4, nil}},
+			leftOutCols:     []uint32{0, 1},
+			rightOutCols:    []uint32{0, 1},
+			leftEqCols:      []uint32{1},
+			rightEqCols:     []uint32{1},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
+			expected:        colexectestutils.Tuples{{0, 4, nil, nil}, {nil, nil, 0, 1}, {nil, 0, nil, 0}, {3, 0, nil, 0}, {nil, nil, 4, nil}},
+		},
 	}
 	return withMirrors(mjTestCases)
 }
