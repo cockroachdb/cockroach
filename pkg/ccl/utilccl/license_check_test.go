@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -164,15 +165,17 @@ func TestTimeToEnterpriseLicenseExpiry(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	updater := st.MakeUpdater()
 
+	RegisterLicenseExpiryCallback(st, timeutil.NewManualTime(t0))
+
 	for _, tc := range []struct {
-		desc     string
-		lic      string
-		ttlHours float64
+		desc       string
+		lic        string
+		ttlSeconds float64
 	}{
-		{"One Month", lic1M, 24 * 31},
-		{"Two Month", lic2M, 24*31 + 24*30},
+		{"One Month", lic1M, 24 * 31 * 3600},
+		{"Two Month", lic2M, (24*31 + 24*30) * 3600},
 		{"Zero Month", lic0M, 0},
-		{"Expired", licExpired, -24 * 30},
+		{"Expired", licExpired, (-24 * 30) * 3600},
 		{"No License", "", 0},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -180,12 +183,13 @@ func TestTimeToEnterpriseLicenseExpiry(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			actual, err := TimeToEnterpriseLicenseExpiry(context.Background(), st, t0)
+			actual, err := secondsToEnterpriseLicenseExpiry(st, t0)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			require.Equal(t, tc.ttlHours, actual.Hours())
+			require.Equal(t, tc.ttlSeconds, actual)
+			require.Equal(t, int64(tc.ttlSeconds), base.LicenseTTL.Value())
 		})
 	}
 }

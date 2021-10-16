@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -122,23 +123,32 @@ func IsEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, feature s
 func init() {
 	base.CheckEnterpriseEnabled = CheckEnterpriseEnabled
 	base.LicenseType = getLicenseType
-	base.TimeToEnterpriseLicenseExpiry = TimeToEnterpriseLicenseExpiry
+	base.RegisterLicenseExpiryCallback = RegisterLicenseExpiryCallback
 	server.ApplyTenantLicense = ApplyTenantLicense
 }
 
-// TimeToEnterpriseLicenseExpiry returns a Duration from `asOf` until the current
-// enterprise license expires. If a license does not exist, we return a
-// zero duration.
-func TimeToEnterpriseLicenseExpiry(
-	ctx context.Context, st *cluster.Settings, asOf time.Time,
-) (time.Duration, error) {
+func RegisterLicenseExpiryCallback(st *cluster.Settings, ts timeutil.TimeSource) {
+	enterpriseLicense.SetOnChange(&st.SV, func(ctx context.Context) {
+		sec, err := secondsToEnterpriseLicenseExpiry(st, ts.Now())
+		if err != nil {
+			log.Errorf(ctx, "unable to update license expiry metric: %v", err)
+			return
+		}
+		base.LicenseTTL.Update(int64(sec))
+	})
+}
+
+// secondsToEnterpriseLicenseExpiry returns a Duration from `asOf` until
+// the current enterprise license expires. If a license does not exist,
+// we return a zero duration.
+func secondsToEnterpriseLicenseExpiry(st *cluster.Settings, asOf time.Time) (float64, error) {
 	license, err := getLicense(st)
 	if err != nil || license == nil {
 		return 0, err
 	}
 
 	expiration := timeutil.Unix(license.ValidUntilUnixSec, 0)
-	return expiration.Sub(asOf), nil
+	return expiration.Sub(asOf).Seconds(), nil
 }
 
 func checkEnterpriseEnabledAt(
