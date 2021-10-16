@@ -663,6 +663,12 @@ func (rf *cFetcher) Init(
 
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
+//
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly. The caller can only reuse the
+// spans slice after the fetcher has been closed (which happens when the fetcher
+// emits the first zero batch), and if the caller does, it becomes responsible
+// for the memory accounting.
 func (rf *cFetcher) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -1158,14 +1164,13 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 
 		case stateEmitLastBatch:
-			// Close the fetcher eagerly so that its memory could be GCed.
-			rf.fetcher.Close(ctx)
-			rf.fetcher = nil
 			rf.machine.state[0] = stateFinished
 			rf.finalizeBatch()
 			return rf.machine.batch, nil
 
 		case stateFinished:
+			// Close the fetcher eagerly so that its memory could be GCed.
+			rf.Close(ctx)
 			return coldata.ZeroBatch, nil
 		}
 	}
@@ -1648,5 +1653,6 @@ func initCFetcher(
 func (rf *cFetcher) Close(ctx context.Context) {
 	if rf != nil && rf.fetcher != nil {
 		rf.fetcher.Close(ctx)
+		rf.fetcher = nil
 	}
 }

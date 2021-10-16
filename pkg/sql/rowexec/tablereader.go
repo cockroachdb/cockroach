@@ -34,8 +34,8 @@ import (
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
 	execinfra.ProcessorBase
+	execinfra.SpansWithCopy
 
-	spans           roachpb.Spans
 	limitHint       rowinfra.RowLimit
 	parallelize     bool
 	batchBytesLimit rowinfra.BytesLimit
@@ -166,13 +166,18 @@ func newTableReader(
 	}
 
 	nSpans := len(spec.Spans)
-	if cap(tr.spans) >= nSpans {
-		tr.spans = tr.spans[:nSpans]
+	if cap(tr.Spans) >= nSpans {
+		tr.Spans = tr.Spans[:nSpans]
 	} else {
-		tr.spans = make(roachpb.Spans, nSpans)
+		tr.Spans = make(roachpb.Spans, nSpans)
 	}
 	for i, s := range spec.Spans {
-		tr.spans[i] = s.Span
+		tr.Spans[i] = s.Span
+	}
+	if !tr.ignoreMisplannedRanges {
+		// Make a copy of the spans so that we could get the misplanned ranges
+		// info.
+		tr.MakeSpansCopy()
 	}
 
 	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
@@ -217,14 +222,14 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 	var err error
 	if tr.maxTimestampAge == 0 {
 		err = tr.fetcher.StartScan(
-			ctx, tr.FlowCtx.Txn, tr.spans, bytesLimit, tr.limitHint,
+			ctx, tr.FlowCtx.Txn, tr.Spans, bytesLimit, tr.limitHint,
 			tr.FlowCtx.TraceKV,
 			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 	} else {
 		initialTS := tr.FlowCtx.Txn.ReadTimestamp()
 		err = tr.fetcher.StartInconsistentScan(
-			ctx, tr.FlowCtx.Cfg.DB, initialTS, tr.maxTimestampAge, tr.spans,
+			ctx, tr.FlowCtx.Cfg.DB, initialTS, tr.maxTimestampAge, tr.Spans,
 			bytesLimit, tr.limitHint, tr.FlowCtx.TraceKV,
 			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
@@ -238,13 +243,11 @@ func (tr *tableReader) Release() {
 	tr.ProcessorBase.Reset()
 	tr.fetcher.Reset()
 	// Deeply reset the spans so that we don't hold onto the keys of the spans.
-	for i := range tr.spans {
-		tr.spans[i] = roachpb.Span{}
-	}
+	tr.SpansWithCopy.Reset()
 	*tr = tableReader{
 		ProcessorBase: tr.ProcessorBase,
+		SpansWithCopy: tr.SpansWithCopy,
 		fetcher:       tr.fetcher,
-		spans:         tr.spans[:0],
 		rowsRead:      0,
 	}
 	trPool.Put(tr)
@@ -335,7 +338,7 @@ func (tr *tableReader) generateMeta() []execinfrapb.ProducerMetadata {
 	if !tr.ignoreMisplannedRanges {
 		nodeID, ok := tr.FlowCtx.NodeID.OptionalNodeID()
 		if ok {
-			ranges := execinfra.MisplannedRanges(tr.Ctx, tr.spans, nodeID, tr.FlowCtx.Cfg.RangeCache)
+			ranges := execinfra.MisplannedRanges(tr.Ctx, tr.SpansCopy, nodeID, tr.FlowCtx.Cfg.RangeCache)
 			if ranges != nil {
 				trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 			}
