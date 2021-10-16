@@ -447,3 +447,28 @@ EXPLAIN (VEC) DELETE FROM t70438 WHERE k=3 OR v=6
       └ *colexec.SerialUnorderedSynchronizer
         ├ *colfetcher.ColBatchScan
         └ *colfetcher.ColBatchScan
+
+# Some tests for set-op cross joins.
+statement ok
+CREATE TABLE t ();
+CREATE TABLE u ();
+INSERT INTO t (rowid) VALUES (1), (2);
+INSERT INTO u (rowid) VALUES (1);
+
+query T
+EXPLAIN (VEC) SELECT * FROM t INTERSECT ALL SELECT * FROM u
+----
+│
+└ Node 1
+  └ *colexecjoin.crossJoiner
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (VEC) SELECT * FROM t EXCEPT ALL SELECT * FROM u
+----
+│
+└ Node 1
+  └ *colexecjoin.crossJoiner
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
