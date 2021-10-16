@@ -2,7 +2,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "lex",
-    srcs = ["encode.go"],
+    srcs = [
+        "encode.go",
+        "keywords.go",
+        "tokens.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/lex",
     visibility = ["//visibility:public"],
     deps = [
