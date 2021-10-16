@@ -13,10 +13,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -163,29 +165,30 @@ func TestTimeToEnterpriseLicenseExpiry(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	updater := st.MakeUpdater()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	manualTime := timeutil.NewManualTime(t0)
+
+	err := UpdateMetricOnLicenseChange(context.Background(), st, base.LicenseTTL, manualTime, stopper)
+	require.NoError(t, err)
 
 	for _, tc := range []struct {
-		desc     string
-		lic      string
-		ttlHours float64
+		desc       string
+		lic        string
+		ttlSeconds int64
 	}{
-		{"One Month", lic1M, 24 * 31},
-		{"Two Month", lic2M, 24*31 + 24*30},
+		{"One Month", lic1M, 24 * 31 * 3600},
+		{"Two Month", lic2M, (24*31 + 24*30) * 3600},
 		{"Zero Month", lic0M, 0},
-		{"Expired", licExpired, -24 * 30},
+		{"Expired", licExpired, (-24 * 30) * 3600},
 		{"No License", "", 0},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			if err := updater.Set(ctx, "enterprise.license", tc.lic, "s"); err != nil {
 				t.Fatal(err)
 			}
-
-			actual, err := TimeToEnterpriseLicenseExpiry(context.Background(), st, t0)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			require.Equal(t, tc.ttlHours, actual.Hours())
+			actual := base.LicenseTTL.Value()
+			require.Equal(t, tc.ttlSeconds, actual)
 		})
 	}
 }
