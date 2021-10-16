@@ -29,10 +29,10 @@ func main() {
 	var tokenPath, fromRef, toRef, repository, gitCheckoutDir string
 	var dryRun bool
 
-	flag.StringVar(&tokenPath, "token", "", "Path to GitHub token with repo:public_repo scope")
+	flag.StringVar(&tokenPath, "token", "", "Path to a file containing the GitHub token with repo:public_repo scope")
 	flag.StringVar(&fromRef, "from", "", "From git ref")
 	flag.StringVar(&toRef, "to", "", "To git ref")
-	flag.StringVar(&repository, "repo", "", "Github repository to work on in 'owner/repo")
+	flag.StringVar(&repository, "repo", "", "Github \"owner/repo\" to work on. Default: cockroachdb/cockroach")
 	flag.StringVar(&gitCheckoutDir, "dir", "", "Git checkout directory")
 	flag.BoolVar(&dryRun, "dry-run", false, "Dry run")
 	flag.Parse()
@@ -51,17 +51,18 @@ func main() {
 		allRequiredFlagsSet = false
 		log.Println("missing required --to argument/flag")
 	}
-	if repository == "" {
-		allRequiredFlagsSet = false
-		log.Println("missing required --repo argument/flag")
-	}
 	if gitCheckoutDir == "" {
 		allRequiredFlagsSet = false
 		log.Println("missing required --dir argument/flag")
 	}
 
 	if !allRequiredFlagsSet {
-		log.Fatal("Please provide all required parameters")
+		log.Fatal("Try running with `-h` for help\nPlease provide all required parameters")
+	}
+
+	if repository == "" {
+		repository = "cockroachdb/cockroach"
+		log.Printf("No repository specified. Using %s\n", repository)
 	}
 
 	if gitCheckoutDir != "" {
@@ -79,21 +80,21 @@ func main() {
 	}
 
 	for _, ref := range refList {
-		tag, err := getTag(ref)
+		tag, err := getFirstTagContainingRef(ref)
 		if err != nil {
-			log.Fatalf("Cannot get tag for ref %s: %+v\n", ref, err)
+			log.Fatalf("Error getting first tag containing ref %s: %+v\n", ref, err)
 		}
 		pr, err := getPrInfo(ref)
 		if err != nil {
 			log.Fatalf("Cannot find PR for ref %s: %+v\n", ref, err)
 		}
-		log.Printf("Labeling PR#%s (ref %s) using tag %s", pr, ref, tag)
+		log.Printf("Labeling PR#%s (ref %s) using git tag %s", pr, ref, tag)
 		if dryRun {
 			log.Println("DRY RUN: skipping labeling")
 			continue
 		}
 		if err := labelPR(http.DefaultClient, repository, token, pr, tag); err != nil {
-			log.Fatalf("Failed on tag creation for Pull Request %s, error : '%s'\n", pr, err)
+			log.Fatalf("Failed on label creation for Pull Request %s: '%s'\n", pr, err)
 		}
 	}
 }
@@ -160,7 +161,7 @@ func matchVersion(text string) string {
 	return ""
 }
 
-func getTag(ref string) (string, error) {
+func getFirstTagContainingRef(ref string) (string, error) {
 	cmd := exec.Command("git", "tag", "--contains", ref)
 	out, err := cmd.Output()
 	if err != nil {
