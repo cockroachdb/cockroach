@@ -378,23 +378,31 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p = rangefeed.NewProcessor(cfg)
 
 	// Start it with an iterator to initialize the resolved timestamp.
-	rtsIter := func() storage.SimpleMVCCIterator {
+	rtsIter := func() rangefeed.IntentScanner {
 		// Assert that we still hold the raftMu when this is called to ensure
 		// that the rtsIter reads from the current snapshot. The replica
 		// synchronizes with the rangefeed Processor calling this function by
 		// waiting for the Register call below to return.
 		r.raftMu.AssertHeld()
-		return r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+
+		onlySeparatedIntents := r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.PostSeparatedIntentsMigration)
+
+		if onlySeparatedIntents {
+			lowerBound, _ := keys.LockTableSingleKey(desc.StartKey.AsRawKey(), nil)
+			upperBound, _ := keys.LockTableSingleKey(desc.EndKey.AsRawKey(), nil)
+			iter := r.Engine().NewEngineIterator(storage.IterOptions{
+				LowerBound: lowerBound,
+				UpperBound: upperBound,
+			})
+			return rangefeed.NewSeparatedIntentScanner(iter)
+
+		}
+		iter := r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 			UpperBound: desc.EndKey.AsRawKey(),
-			// TODO(nvanbenschoten): To facilitate fast restarts of rangefeed
-			// we should periodically persist the resolved timestamp so that we
-			// can initialize the rangefeed using an iterator that only needs to
-			// observe timestamps back to the last recorded resolved timestamp.
-			// This is safe because we know that there are no unresolved intents
-			// at times before a resolved timestamp.
-			// MinTimestampHint: r.ResolvedTimestamp,
 		})
+		return rangefeed.NewLegacyIntentScanner(iter)
 	}
+
 	p.Start(r.store.Stopper(), rtsIter)
 
 	// Register with the processor *before* we attach its reference to the
