@@ -403,6 +403,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	runtimeSampler := status.NewRuntimeStatSampler(ctx, clock)
 	registry.AddMetricStruct(runtimeSampler)
 
+	registry.AddMetric(base.LicenseTTL)
+	base.UpdateMetricOnLicenseChange(cfg.Settings, base.LicenseTTL, timeutil.DefaultTimeSource{})
+
 	// A custom RetryOptions is created which uses stopper.ShouldQuiesce() as
 	// the Closer. This prevents infinite retry loops from occurring during
 	// graceful server shutdown
@@ -2655,6 +2658,7 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 					curStats := goMemStats.Load().(*status.GoMemStats)
 					cgoStats := status.GetCGoMemStats(ctx)
 					cfg.runtime.SampleEnvironment(ctx, curStats, cgoStats)
+
 					if goroutineDumper != nil {
 						goroutineDumper.MaybeDump(ctx, cfg.st, cfg.runtime.Goroutines.Value())
 					}

@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/envutil",
         "//pkg/util/grpcutil",
+        "//pkg/util/log",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
@@ -40,6 +41,7 @@ go_test(
     ],
     embed = [":utilccl"],
     deps = [
+        "//pkg/base",
         "//pkg/ccl/utilccl/licenseccl",
         "//pkg/settings/cluster",
         "//pkg/testutils",
