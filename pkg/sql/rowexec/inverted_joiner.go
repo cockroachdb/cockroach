@@ -147,6 +147,13 @@ type invertedJoiner struct {
 	// columns are functionally dependent on the PK.
 	indexRows *rowcontainer.DiskBackedNumberedRowContainer
 
+	// indexSpans are the roachpb.Spans generated based on the inverted spans.
+	// The slice is reused between different input batches.
+	// NB: the row fetcher takes ownership of the slice and deeply resets each
+	// element of the slice once the fetcher is done with it, so we don't need
+	// to do ourselves.
+	indexSpans roachpb.Spans
+
 	// emitCursor contains information about where the next row to emit is within
 	// joinedRowIdx.
 	emitCursor struct {
@@ -487,16 +494,16 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 		return ijEmittingRows, nil
 	}
 	// NB: spans is already sorted, and that sorting is preserved when
-	// generating indexSpans.
-	indexSpans, err := ij.spanBuilder.SpansFromInvertedSpans(spans, nil /* constraint */)
+	// generating ij.indexSpans.
+	ij.indexSpans, err = ij.spanBuilder.SpansFromInvertedSpans(spans, nil /* constraint */, ij.indexSpans)
 	if err != nil {
 		ij.MoveToDraining(err)
 		return ijStateUnknown, ij.DrainHelper()
 	}
 
-	log.VEventf(ij.Ctx, 1, "scanning %d spans", len(indexSpans))
+	log.VEventf(ij.Ctx, 1, "scanning %d spans", len(ij.indexSpans))
 	if err = ij.fetcher.StartScan(
-		ij.Ctx, ij.FlowCtx.Txn, indexSpans, rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
+		ij.Ctx, ij.FlowCtx.Txn, ij.indexSpans, rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
 		ij.FlowCtx.TraceKV, ij.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		ij.MoveToDraining(err)

@@ -47,8 +47,8 @@ import (
 type ColBatchScan struct {
 	colexecop.ZeroInputNode
 	colexecop.InitHelper
+	execinfra.SpansWithCopy
 
-	spans           roachpb.Spans
 	flowCtx         *execinfra.FlowCtx
 	bsHeader        *roachpb.BoundedStalenessHeader
 	rf              *cFetcher
@@ -94,7 +94,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	if err := s.rf.StartScan(
 		s.Ctx,
 		s.flowCtx.Txn,
-		s.spans,
+		s.Spans,
 		s.bsHeader,
 		limitBatches,
 		s.batchBytesLimit,
@@ -126,7 +126,7 @@ func (s *ColBatchScan) DrainMeta() []execinfrapb.ProducerMetadata {
 	if !s.flowCtx.Local {
 		nodeID, ok := s.flowCtx.NodeID.OptionalNodeID()
 		if ok {
-			ranges := execinfra.MisplannedRanges(s.Ctx, s.spans, nodeID, s.flowCtx.Cfg.RangeCache)
+			ranges := execinfra.MisplannedRanges(s.Ctx, s.SpansCopy, nodeID, s.flowCtx.Cfg.RangeCache)
 			if ranges != nil {
 				trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 			}
@@ -252,11 +252,17 @@ func NewColBatchScan(
 	}
 
 	s := colBatchScanPool.Get().(*ColBatchScan)
-	spans := s.spans[:0]
+	s.Spans = s.Spans[:0]
 	specSpans := spec.Spans
 	for i := range specSpans {
 		//gcassert:bce
-		spans = append(spans, specSpans[i].Span)
+		s.Spans = append(s.Spans, specSpans[i].Span)
+	}
+	if !flowCtx.Local {
+		// Make a copy of the spans so that we could get the misplanned ranges
+		// info.
+		allocator.AdjustMemoryUsage(s.Spans.MemUsage())
+		s.MakeSpansCopy()
 	}
 
 	if spec.LimitHint > 0 || spec.BatchBytesLimit > 0 {
@@ -273,7 +279,7 @@ func NewColBatchScan(
 	}
 
 	*s = ColBatchScan{
-		spans:           spans,
+		SpansWithCopy:   s.SpansWithCopy,
 		flowCtx:         flowCtx,
 		bsHeader:        bsHeader,
 		rf:              fetcher,
@@ -328,11 +334,9 @@ func retrieveTypsAndColOrds(
 func (s *ColBatchScan) Release() {
 	s.rf.Release()
 	// Deeply reset the spans so that we don't hold onto the keys of the spans.
-	for i := range s.spans {
-		s.spans[i] = roachpb.Span{}
-	}
+	s.SpansWithCopy.Reset()
 	*s = ColBatchScan{
-		spans: s.spans[:0],
+		SpansWithCopy: s.SpansWithCopy,
 	}
 	colBatchScanPool.Put(s)
 }
