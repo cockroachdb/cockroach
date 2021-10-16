@@ -1788,29 +1788,7 @@ func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
-	h.appendLicenseExpiryMetric(ctx, w)
 	telemetry.Inc(telemetryPrometheusVars)
-}
-
-// appendLicenseExpiryMetric computes the seconds until the enterprise licence
-// expires on this clusters. the license expiry metric is computed on-demand
-// since it's not regularly computed as part of running the cluster unless
-// enterprise features are accessed.
-func (h varsHandler) appendLicenseExpiryMetric(ctx context.Context, w io.Writer) {
-	durationToExpiry, err := base.TimeToEnterpriseLicenseExpiry(ctx, h.st, timeutil.Now())
-	if err != nil {
-		log.Errorf(ctx, "unable to generate time to license expiry: %v", err)
-		return
-	}
-
-	secondsToExpiry := int64(durationToExpiry / time.Second)
-
-	_, err = w.Write([]byte(
-		fmt.Sprintf("seconds_until_enterprise_license_expiry %d\n", secondsToExpiry),
-	))
-	if err != nil {
-		log.Errorf(ctx, "problem writing license expiry metric: %v", err)
-	}
 }
 
 func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
