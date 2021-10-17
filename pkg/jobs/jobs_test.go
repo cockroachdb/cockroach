@@ -809,7 +809,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		// Inject an error in the update to move the job to "succeeeded" one time.
+		// Inject an error in the update to move the job to "succeeded" one time.
 		var failed atomic.Value
 		failed.Store(false)
 		rts.beforeUpdate = func(orig, updated jobs.JobMetadata) error {
@@ -2416,7 +2416,7 @@ func TestJobInTxn(t *testing.T) {
 
 		txn, err := sqlDB.Begin()
 		require.NoError(t, err)
-		_, err = txn.Exec("BACKUP tobeaborted TO doesnotmattter")
+		_, err = txn.Exec("BACKUP tobeaborted TO doesnotmattereither")
 		require.NoError(t, err)
 
 		// If we rollback then the job should not run
@@ -2464,7 +2464,7 @@ func TestJobInTxn(t *testing.T) {
 		require.NoError(t, err)
 
 		// Add a succeeding job.
-		_, err = txn.Exec("BACKUP doesnotmatter TO doesnotmattter")
+		_, err = txn.Exec("BACKUP doesnotmatter TO doesnotmattereither")
 		require.NoError(t, err)
 		// We hooked up a failing test job to RESTORE.
 		_, err = txn.Exec("RESTORE TABLE tbl FROM somewhere")
@@ -2797,7 +2797,7 @@ func TestUnmigratedSchemaChangeJobs(t *testing.T) {
 		case <-time.After(100 * time.Millisecond):
 			// With an adopt interval of 10 ms, within 100ms we can be reasonably sure
 			// that the job was not adopted. At the very least, the test would be
-			// flakey.
+			// flaky.
 		}
 	})
 

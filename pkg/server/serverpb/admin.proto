@@ -190,7 +190,7 @@ message TableDetailsResponse {
   // is more accurate than this one; TableDetails calculates this number using
   // a potentially faster method that is subject to cache staleness. We should
   // consider removing or renaming this field to reflect that difference. See
-  // Github issue #5435 for more information.
+  // GitHub issue #5435 for more information.
   int64 range_count = 4;
   // create_table_statement is the output of "SHOW CREATE" for this table;
   // it is a SQL statement that would re-create the table's current schema if
@@ -711,7 +711,7 @@ message DataDistributionResponse {
 message MetricMetadataRequest {
 }
 
-// MetricMetadataResponse contains the metadata for all metics.
+// MetricMetadataResponse contains the metadata for all metrics.
 message MetricMetadataResponse {
   map<string, cockroach.util.metric.Metadata> metadata = 1 [(gogoproto.nullable) = false];
 }
@@ -770,7 +770,7 @@ message CertBundleRequest {
     bytes shared_secret = 2;
  }
 
-// CertBundleResponse contains a copy of all CAs needed to intialize TLS for
+// CertBundleResponse contains a copy of all CAs needed to initialize TLS for
 // a new node.
 message CertBundleResponse {
   bytes bundle = 1;

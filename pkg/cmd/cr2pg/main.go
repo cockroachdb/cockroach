@@ -89,7 +89,7 @@ func main() {
 								def.Columns[i].Direction = tree.DefaultDirection
 							}
 							// Unset Name here because
-							// constaint names cannot
+							// constraint names cannot
 							// be shared among tables,
 							// so multiple PK constraints
 							// named "primary" is an error.

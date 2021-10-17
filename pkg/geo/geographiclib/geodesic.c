@@ -839,7 +839,7 @@ static real geod_geninverse_int(const struct geod_geodesic* g,
    *     -90 <= lat1 <= 0
    *     lat1 <= lat2 <= -lat1
    *
-   * longsign, swapp, latsign register the transformation to bring the
+   * lonsign, swapp, latsign register the transformation to bring the
    * coordinates to this canonical form.  In all cases, 1 means no change was
    * made.  We make these transformations so that there are few cases to
    * check, e.g., on verifying quadrants in atan2.  In addition, this

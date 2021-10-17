@@ -189,7 +189,7 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 
 // swagger:model logoutResponse
 type logoutResponse struct {
-	// Indicates whether logout was succeessful.
+	// Indicates whether logout was successful.
 	LoggedOut bool `json:"logged_out"`
 }
 

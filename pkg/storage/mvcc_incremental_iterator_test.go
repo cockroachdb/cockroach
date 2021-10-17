@@ -1393,7 +1393,7 @@ func runIncrementalBenchmark(
 	eng, _ := setupMVCCData(context.Background(), b, emk, opts)
 	{
 		// Pull all of the sstables into the cache.  This
-		// probably defeates a lot of the benefits of the
+		// probably defeats a lot of the benefits of the
 		// time-based optimization.
 		iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 		_, _ = iter.ComputeStats(keys.LocalMax, roachpb.KeyMax, 0)
