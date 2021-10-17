@@ -269,7 +269,7 @@ type ZoneConfig struct {
 	// compatible if none of the "prohibitive" constraints in `Constraints` are
 	// "required" constraints in `VoterConstraints`.
 	VoterConstraints []ConstraintsConjunction `protobuf:"bytes,14,rep,name=voter_constraints,json=voterConstraints" json:"voter_constraints" yaml:"voter_constraints,flow"`
-	// InheritedContraints specifies if the value in the Constraints field was
+	// InheritedConstraints specifies if the value in the Constraints field was
 	// inherited from the zone's parent or specified explicitly by the user.
 	//
 	// NB: We need this extra field because the non-nullable nature of

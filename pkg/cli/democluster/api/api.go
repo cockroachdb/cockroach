@@ -22,7 +22,7 @@ import (
 type DemoCluster interface {
 	// ListDemoNodes produces a listing of servers on the specified
 	// writer. If justOne is specified, only the first node is listed.
-	// Listing is printed to 'w'. Errors/wranings are printed to 'ew'.
+	// Listing is printed to 'w'. Errors/warnings are printed to 'ew'.
 	ListDemoNodes(w, ew io.Writer, justOne bool)
 
 	// AddNode creates a new node with the given locality string.

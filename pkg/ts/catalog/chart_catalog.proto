@@ -105,7 +105,7 @@ message IndividualChart {
   // percentiles specifies whether the chart should have its metrics broken
   // out into percentiles; applies only to histograms.
   required bool percentiles = 9 [(gogoproto.nullable) = false];
-  // metrics specifies the metics the chart should display.
+  // metrics specifies the metrics the chart should display.
   repeated ChartMetric metrics = 10 [(gogoproto.nullable) = false];
 }
 

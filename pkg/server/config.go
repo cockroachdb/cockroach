@@ -282,7 +282,7 @@ type KVConfig struct {
 	// do nontrivial work.
 	ReadyFn func(waitForInit bool)
 
-	// DelayedBootstrapFn is called if the boostrap process does not complete
+	// DelayedBootstrapFn is called if the bootstrap process does not complete
 	// in a timely fashion, typically 30s after the server starts listening.
 	DelayedBootstrapFn func()
 

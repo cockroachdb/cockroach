@@ -552,7 +552,7 @@ func (sc StoreCapacity) FractionUsed() float64 {
 	// cost, not truly part of the disk's capacity. This means that the disk's
 	// capacity is really just the available space plus cockroach's usage.
 	//
-	// Fall back to a more pessimistic calcuation of disk usage if we don't know
+	// Fall back to a more pessimistic calculation of disk usage if we don't know
 	// how much space the store's data is taking up.
 	if sc.Used == 0 {
 		return float64(sc.Capacity-sc.Available) / float64(sc.Capacity)

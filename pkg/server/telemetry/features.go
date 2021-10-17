@@ -192,7 +192,7 @@ const (
 	ReadOnly ResetCounters = false
 )
 
-// GetRawFeatureCounts returns current raw, un-quanitzed feature counter values.
+// GetRawFeatureCounts returns current raw, un-quantized feature counter values.
 func GetRawFeatureCounts() map[string]int32 {
 	return GetFeatureCounts(Raw, ReadOnly)
 }
