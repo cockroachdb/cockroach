@@ -696,7 +696,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 
 	owner := r.job.Payload().UsernameProto.Decode()
 
-	p.ExtendedEvalContext().SessionMutatorIterator.SetSessionDefaultIntSize(details.DefaultIntSize)
+	p.SessionDataMutatorIterator().SetSessionDefaultIntSize(details.DefaultIntSize)
 
 	if details.ParseBundleSchema {
 		var span *tracing.Span
