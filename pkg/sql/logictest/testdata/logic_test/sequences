@@ -1878,3 +1878,48 @@ query I
 SELECT nextval('seq71135')
 ----
 500
+
+subtest sequence_in_txn
+
+# Make sure that setval and next work even if the transaction is rolled back;
+# they do not respect transaction boundaries.
+
+statement ok
+CREATE SEQUENCE seq_txn
+
+statement ok
+BEGIN
+
+query I
+SELECT setval('seq_txn', 600, true)
+----
+600
+
+statement ok
+ROLLBACK
+
+query I
+SELECT nextval('seq_txn')
+----
+601
+
+statement ok
+BEGIN
+
+query I
+SELECT setval('seq_txn', 610, true)
+----
+610
+
+query I
+SELECT nextval('seq_txn')
+----
+611
+
+statement ok
+ROLLBACK
+
+query I
+SELECT nextval('seq_txn')
+----
+612
