@@ -461,7 +461,7 @@ func makeSchemaChangeDuringTPCC(
 
 						// The FK constraint on tpcc.district referencing tpcc.warehouse is
 						// unvalidated, thus this operation will not be a noop.
-						`ALTER TABLE tpcc.district VALIDATE CONSTRAINT fk_d_w_id_ref_warehouse;`,
+						`ALTER TABLE tpcc.district VALIDATE CONSTRAINT district_d_w_id_fkey;`,
 
 						`ALTER TABLE tpcc.orderpks RENAME TO tpcc.readytodrop;`,
 						`TRUNCATE TABLE tpcc.readytodrop CASCADE;`,
