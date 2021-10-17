@@ -374,7 +374,7 @@ func (ic *IndividualChart) addNames(organization []string) {
 	nondashDelimiters := regexp.MustCompile("( )|/|,")
 
 	// LongTitles look like "SQL Layer | SQL | Connections".
-	// CollectionTitless look like "sql-layer-sql-connections".
+	// CollectionTitles look like "sql-layer-sql-connections".
 	for _, n := range organization {
 		ic.LongTitle += n + string(" | ")
 		ic.CollectionTitle += nondashDelimiters.ReplaceAllString(strings.ToLower(n), "-") + "-"

@@ -584,7 +584,7 @@ func isValidSplitKey(key roachpb.Key, noSplitSpans []roachpb.Span) bool {
 	if key.Equal(keys.Meta2KeyMax) {
 		// We do not allow splits at Meta2KeyMax. The reason for this is that range
 		// descriptors are stored at RangeMetaKey(range.EndKey), so the new range
-		// that ends at Meta2KeyMax would naturally store its decriptor at
+		// that ends at Meta2KeyMax would naturally store its descriptor at
 		// RangeMetaKey(Meta2KeyMax) = Meta1KeyMax. However, Meta1KeyMax already
 		// serves a different role of holding a second copy of the descriptor for
 		// the range that spans the meta2/userspace boundary (see case 3a in

@@ -262,7 +262,7 @@ type IndividualChart struct {
 	// percentiles specifies whether the chart should have its metrics broken
 	// out into percentiles; applies only to histograms.
 	Percentiles bool `protobuf:"varint,9,req,name=percentiles" json:"percentiles"`
-	// metrics specifies the metics the chart should display.
+	// metrics specifies the metrics the chart should display.
 	Metrics []ChartMetric `protobuf:"bytes,10,rep,name=metrics" json:"metrics"`
 }
 

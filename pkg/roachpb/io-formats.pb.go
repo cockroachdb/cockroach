@@ -310,7 +310,7 @@ type MySQLOutfileOptions struct {
 	FieldSeparator int32 `protobuf:"varint,2,opt,name=field_separator,json=fieldSeparator" json:"field_separator"`
 	// enclose is the enclosing (quoting) behavior (i.e. if specified and if optional).
 	Enclose MySQLOutfileOptions_Enclose `protobuf:"varint,3,opt,name=enclose,enum=cockroach.roachpb.MySQLOutfileOptions_Enclose" json:"enclose"`
-	// encloser is the character used to enclose (qupte) fields (--fields-enclosed-by)
+	// encloser is the character used to enclose (quote) fields (--fields-enclosed-by)
 	Encloser int32 `protobuf:"varint,4,opt,name=encloser" json:"encloser"`
 	// has_escape indicates that an escape character is set (mysql's default is not).
 	HasEscape bool `protobuf:"varint,5,opt,name=has_escape,json=hasEscape" json:"has_escape"`
@@ -355,7 +355,7 @@ var xxx_messageInfo_MySQLOutfileOptions proto.InternalMessageInfo
 
 // PgCopyOptions describe the format of postgresql's COPY TO STDOUT.
 type PgCopyOptions struct {
-	// delimiter is the delimitor between columns (DELIMITER)
+	// delimiter is the delimiter between columns (DELIMITER)
 	Delimiter int32 `protobuf:"varint,1,opt,name=delimiter" json:"delimiter"`
 	// null is the NULL value (NULL)
 	Null string `protobuf:"bytes,2,opt,name=null" json:"null"`

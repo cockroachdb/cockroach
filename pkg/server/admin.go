@@ -1096,7 +1096,7 @@ func (s *adminServer) statsForSpan(
 		// TableStats' meta2 query through the DistSender so that it will share
 		// the advantage of populating the cache (without the disadvantage of
 		// potentially returning stale data).
-		// See Github #5435 for some discussion.
+		// See GitHub #5435 for some discussion.
 		RangeCount: int64(len(rangeDescKVs)),
 	}
 	type nodeResponse struct {

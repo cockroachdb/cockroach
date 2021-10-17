@@ -65,7 +65,7 @@ func WalkWithNewServer(
 // messages.
 //
 // If the argument crdb_only is given and the server is non-crdb (e.g.
-// posrgres), then the exchange is skipped. With noncrdb_only, the inverse
+// postgres), then the exchange is skipped. With noncrdb_only, the inverse
 // happens.
 func RunTest(t *testing.T, path, addr, user string) {
 	p, err := NewPGTest(context.Background(), addr, user)
