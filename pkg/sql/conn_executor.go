@@ -879,7 +879,7 @@ func (s *Server) newConnExecutorWithTxn(
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
 		// sanity, set read only on the session.
-		ex.dataMutatorIterator.applyForEachMutator(func(m sessionDataMutator) {
+		ex.dataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
 			m.SetReadOnly(true)
 		})
 	}
@@ -2460,7 +2460,6 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SQLStatsController:     ex.server.sqlStatsController,
 			CompactEngineSpan:      ex.server.cfg.CompactEngineSpanFunc,
 		},
-		SessionMutatorIterator: ex.dataMutatorIterator,
 		VirtualSchemas:         ex.server.cfg.VirtualSchemas,
 		Tracing:                &ex.sessionTracing,
 		NodesStatusServer:      ex.server.cfg.NodesStatusServer,

@@ -73,6 +73,7 @@ type PlanHookState interface {
 	SemaCtx() *tree.SemaContext
 	ExtendedEvalContext() *extendedEvalContext
 	SessionData() *sessiondata.SessionData
+	SessionDataMutatorIterator() *sessionDataMutatorIterator
 	ExecCfg() *ExecutorConfig
 	DistSQLPlanner() *DistSQLPlanner
 	LeaseMgr() *lease.Manager
