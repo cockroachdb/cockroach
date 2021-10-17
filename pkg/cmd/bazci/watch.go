@@ -352,7 +352,7 @@ func (w *cancelableWriter) Close() error {
 // we're not finalizing, especially if we read an artifact while it's in the
 // process of being written.)
 //
-// In the intialCachingPhase, NO artifacts will be staged, but
+// In the initialCachingPhase, NO artifacts will be staged, but
 // maybeStageArtifact will still stat the source file and cache its metadata.
 // This is important because Bazel aggressively caches build and test artifacts,
 // so just because a file exists, doesn't necessarily mean that it should be

@@ -213,7 +213,7 @@ func (t *testImpl) progress(id int64, frac float64) {
 }
 
 // Progress sets the progress (a fraction in the range [0,1]) associated with
-// the main test status messasge. When called from the main test goroutine
+// the main test status message. When called from the main test goroutine
 // (i.e. the goroutine on which TestSpec.Run is invoked), this is equivalent to
 // calling WorkerProgress.
 func (t *testImpl) Progress(frac float64) {
@@ -221,7 +221,7 @@ func (t *testImpl) Progress(frac float64) {
 }
 
 // WorkerProgress sets the progress (a fraction in the range [0,1]) associated
-// with the a worker status messasge.
+// with the a worker status message.
 func (t *testImpl) WorkerProgress(frac float64) {
 	t.progress(goid.Get(), frac)
 }

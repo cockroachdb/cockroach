@@ -640,7 +640,7 @@ var cachedHostsCmd = &cobra.Command{
 				continue
 			}
 			fmt.Print(c.Name)
-			// when invokved by bash-completion, cachedHostsCluster is what the user
+			// when invoked by bash-completion, cachedHostsCluster is what the user
 			// has currently typed -- if this cluster matches that, expand its hosts.
 			if strings.HasPrefix(cachedHostsCluster, c.Name) {
 				for i := range c.VMs {

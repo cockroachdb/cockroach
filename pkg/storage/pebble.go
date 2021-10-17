@@ -610,7 +610,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	}
 	ballastPath := base.EmergencyBallastFile(cfg.Opts.FS.PathJoin, cfg.Dir)
 
-	// For some purposes, we want to always use an unecrypted
+	// For some purposes, we want to always use an unencrypted
 	// filesystem. The call below to ResolveEncryptedEnvOptions will
 	// replace cfg.Opts.FS with a VFS wrapped with encryption-at-rest if
 	// necessary. Before we do that, save a handle on the unencrypted

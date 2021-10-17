@@ -415,7 +415,7 @@ type RangeDescriptor struct {
 	// merged by the merge queue. Previous, we threw an error when a user
 	// attempted to execute ALTER TABLE/INDEX ... SPLIT AT ... when the merge
 	// queue is enabled. With sticky_bit, users can manually split ranges without
-	// diabling the merge queue.
+	// disabling the merge queue.
 	StickyBit *hlc.Timestamp `protobuf:"bytes,7,opt,name=sticky_bit,json=stickyBit" json:"sticky_bit,omitempty"`
 }
 

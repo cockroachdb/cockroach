@@ -118,7 +118,7 @@ func NewDB(db *kv.DB, settings *cluster.Settings) *DB {
 	}
 }
 
-// A DataSource can be queryied for a slice of time series data.
+// A DataSource can be queried for a slice of time series data.
 type DataSource interface {
 	GetTimeSeriesData() []tspb.TimeSeriesData
 }

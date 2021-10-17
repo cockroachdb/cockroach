@@ -459,7 +459,7 @@ message TxnAlreadyEncounteredErrorError{
 }
 
 // An IntegerOverflowError indicates that an operation was aborted because
-// it would have caused an integeter overflow.
+// it would have caused an integer overflow.
 message IntegerOverflowError {
   optional bytes key = 1 [(gogoproto.casttype) = "Key"];
   optional int64 current_value = 2 [(gogoproto.nullable) = false];

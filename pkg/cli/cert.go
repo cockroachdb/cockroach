@@ -126,7 +126,7 @@ Creation fails if the CA expiration time is before the desired certificate expir
 // runCreateNodeCert generates key pair and CA certificate and writes them
 // to their corresponding files.
 // TODO(marc): there is currently no way to specify which CA cert to use if more
-// than one is present. We shoult try to load each certificate along with the key
+// than one is present. We should try to load each certificate along with the key
 // and pick the one that works. That way, the key specifies the certificate.
 func runCreateNodeCert(cmd *cobra.Command, args []string) error {
 	return errors.Wrap(

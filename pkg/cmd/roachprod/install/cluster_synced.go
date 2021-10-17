@@ -598,7 +598,7 @@ func (c *SyncedCluster) Wait() error {
 // SetupSSH configures the cluster for use with SSH. This is generally run after
 // the cloud.Cluster has been synced which resets the SSH credentials on the
 // machines and sets them up for the current user. This method enables the
-// hosts to talk to eachother and optionally confiures additional keys to be
+// hosts to talk to eachother and optionally configures additional keys to be
 // added to the hosts via the c.AuthorizedKeys field. It does so in the following
 // steps:
 //
@@ -1580,7 +1580,7 @@ func (c *SyncedCluster) pghosts(nodes []int) map[int]string {
 // SSH TODO(peter): document
 func (c *SyncedCluster) SSH(sshArgs, args []string) error {
 	if len(c.Nodes) != 1 && len(args) == 0 {
-		// If trying to ssh to more than 1 node and the ssh session is interative,
+		// If trying to ssh to more than 1 node and the ssh session is interactive,
 		// try sshing with an iTerm2 split screen configuration.
 		sshed, err := maybeSplitScreenSSHITerm2(c)
 		if sshed {

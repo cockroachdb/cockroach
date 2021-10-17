@@ -21,7 +21,7 @@ import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 var (
 	// The below gauges store the current state of running heartbeat loops.
-	// Gauges are useful for examing the current state of a system but can hide
+	// Gauges are useful for examining the current state of a system but can hide
 	// information is the face of rapidly changing values. The context
 	// additionally keeps counters for the number of heartbeat loops started
 	// and completed as well as a counter for the number of heartbeat failures.

@@ -47,8 +47,7 @@ const (
 	// MinimumMaxOpenFiles is the minimum value that RocksDB's max_open_files
 	// option can be set to. While this should be set as high as possible, the
 	// minimum total for a single store node must be under 2048 for Windows
-	// compatibility. See:
-	// https://wpdev.uservoice.com/forums/266908-command-prompt-console-bash-on-ubuntu-on-windo/suggestions/17310124-add-ability-to-change-max-number-of-open-files-for
+	// compatibility.
 	MinimumMaxOpenFiles = 1700
 	// Default value for maximum number of intents reported by ExportToSST
 	// and Scan operations in WriteIntentError is set to half of the maximum
@@ -1208,7 +1207,7 @@ func MVCCPut(
 // existence in updating the stats.
 //
 // Note that, when writing transactionally, the txn's timestamps
-// dictate the timestamp of the operation, and the timestamp paramater is
+// dictate the timestamp of the operation, and the timestamp parameter is
 // confusing and redundant. See the comment on mvccPutInternal for details.
 func MVCCBlindPut(
 	ctx context.Context,
@@ -1226,7 +1225,7 @@ func MVCCBlindPut(
 // future get responses.
 //
 // Note that, when writing transactionally, the txn's timestamps
-// dictate the timestamp of the operation, and the timestamp paramater is
+// dictate the timestamp of the operation, and the timestamp parameter is
 // confusing and redundant. See the comment on mvccPutInternal for details.
 func MVCCDelete(
 	ctx context.Context,
@@ -1857,7 +1856,7 @@ func mvccPutInternal(
 // timestamp as we use to write a value.
 //
 // Note that, when writing transactionally, the txn's timestamps
-// dictate the timestamp of the operation, and the timestamp paramater is
+// dictate the timestamp of the operation, and the timestamp parameter is
 // confusing and redundant. See the comment on mvccPutInternal for details.
 func MVCCIncrement(
 	ctx context.Context,
@@ -1923,7 +1922,7 @@ const (
 // timestamp as we use to write a value.
 //
 // Note that, when writing transactionally, the txn's timestamps
-// dictate the timestamp of the operation, and the timestamp paramater is
+// dictate the timestamp of the operation, and the timestamp parameter is
 // confusing and redundant. See the comment on mvccPutInternal for details.
 //
 // An empty expVal means that the key is expected to not exist. If not empty,
@@ -1953,7 +1952,7 @@ func MVCCConditionalPut(
 // currently exist.
 //
 // Note that, when writing transactionally, the txn's timestamps
-// dictate the timestamp of the operation, and the timestamp paramater is
+// dictate the timestamp of the operation, and the timestamp parameter is
 // confusing and redundant. See the comment on mvccPutInternal for details.
 func MVCCBlindConditionalPut(
 	ctx context.Context,
@@ -2006,7 +2005,7 @@ func mvccConditionalPutUsingIter(
 // will cause a ConditionFailedError.
 //
 // Note that, when writing transactionally, the txn's timestamps
-// dictate the timestamp of the operation, and the timestamp paramater is
+// dictate the timestamp of the operation, and the timestamp parameter is
 // confusing and redundant. See the comment on mvccPutInternal for details.
 func MVCCInitPut(
 	ctx context.Context,

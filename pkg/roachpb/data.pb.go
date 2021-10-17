@@ -524,7 +524,7 @@ type MergeTrigger struct {
 	// RaftCommand.WriteBatch. The persisted summary may be identical to the
 	// summary in this field, but it does not have to be. Notably, we intended for
 	// the summary included in the ReplicatedEvalResult.Merge.Trigger to
-	// eventually be a much higher-resolution version of the ReadSummmary than the
+	// eventually be a much higher-resolution version of the ReadSummary than the
 	// version persisted. This scheme of persisting a compressed ReadSummary
 	// indefinitely and including a higher-resolution ReadSummary on the
 	// RaftCommand allows us to optimize for the common case where the merge is
@@ -1095,7 +1095,7 @@ func (m *Intent) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Intent proto.InternalMessageInfo
 
-// SingleKeySpan preseves wire compatibility with an earlier version of this
+// SingleKeySpan preserves wire compatibility with an earlier version of this
 // proto which used a Span. An Intent never spans keys, so there was no need
 // for this to contain an EndKey.
 type Intent_SingleKeySpan struct {
@@ -1133,7 +1133,7 @@ func (m *Intent_SingleKeySpan) XXX_DiscardUnknown() {
 var xxx_messageInfo_Intent_SingleKeySpan proto.InternalMessageInfo
 
 // A LockAcquisition represents the action of a Transaction acquiring a lock
-// with a specified durbility level over a Span of keys.
+// with a specified durability level over a Span of keys.
 type LockAcquisition struct {
 	Span       `protobuf:"bytes,1,opt,name=span,proto3,embedded=span" json:"span"`
 	Txn        enginepb.TxnMeta `protobuf:"bytes,2,opt,name=txn,proto3" json:"txn"`

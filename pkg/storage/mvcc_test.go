@@ -2757,7 +2757,7 @@ func TestMVCCReverseScanFirstKeyInFuture(t *testing.T) {
 			defer engine.Close()
 
 			// The value at key2 will be at a lower timestamp than the ReverseScan, but
-			// the value at key3 will be at a larger timetamp. The ReverseScan should
+			// the value at key3 will be at a larger timestamp. The ReverseScan should
 			// see key3 and ignore it because none of it versions are at a low enough
 			// timestamp to read. It should then continue scanning backwards and find a
 			// value at key2.
@@ -2952,7 +2952,7 @@ func TestMVCCResolveNewerIntent(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Now, put down an intent which should return a write too old error
-			// (but will still write the intent at tx1Commit.Timestmap+1.
+			// (but will still write the intent at tx1Commit.Timestamp+1.
 			err := MVCCPut(ctx, engine, nil, testKey1, txn1.ReadTimestamp, value2, txn1)
 			if !errors.HasType(err, (*roachpb.WriteTooOldError)(nil)) {
 				t.Fatalf("expected write too old error; got %s", err)

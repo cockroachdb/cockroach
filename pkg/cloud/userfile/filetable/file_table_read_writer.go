@@ -242,7 +242,7 @@ func NewFileToTableSystem(
 	username security.SQLUsername,
 ) (*FileToTableSystem, error) {
 	// Check the qualifiedTableName is parseable, so that we can return a useful
-	// error pre-emptively.
+	// error preemptively.
 	_, err := parser.ParseQualifiedTableName(qualifiedTableName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to parse qualified table name %s supplied to userfile",

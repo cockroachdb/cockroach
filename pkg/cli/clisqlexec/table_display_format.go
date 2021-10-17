@@ -39,7 +39,7 @@ const (
 	// the creation of a SQL table containing the result values.
 	TableDisplaySQL
 	// TableDisplayHTML reports the results using a HTML table.  HTML
-	// special characters inside the values are escapde.
+	// special characters inside the values are escaped.
 	TableDisplayHTML
 	// TableDisplayRawHTML is a variant of the HTML output format
 	// supported specifically to generate CockroachDB's documentation.

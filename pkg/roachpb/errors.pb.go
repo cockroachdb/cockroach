@@ -1375,7 +1375,7 @@ func (m *TxnAlreadyEncounteredErrorError) XXX_DiscardUnknown() {
 var xxx_messageInfo_TxnAlreadyEncounteredErrorError proto.InternalMessageInfo
 
 // An IntegerOverflowError indicates that an operation was aborted because
-// it would have caused an integeter overflow.
+// it would have caused an integer overflow.
 type IntegerOverflowError struct {
 	Key            Key   `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
 	CurrentValue   int64 `protobuf:"varint,2,opt,name=current_value,json=currentValue" json:"current_value"`

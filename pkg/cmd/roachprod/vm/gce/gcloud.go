@@ -188,7 +188,7 @@ type providerOpts struct {
 	// useSharedUser indicates that the shared user rather than the personal
 	// user should be used to ssh into the remote machines.
 	useSharedUser bool
-	// use preemptible insances
+	// use preemptible instances
 	preemptible bool
 }
 

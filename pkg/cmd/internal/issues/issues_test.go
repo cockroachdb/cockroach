@@ -28,7 +28,7 @@ import (
 
 func TestPost(t *testing.T) {
 	const (
-		assignee    = "hodor" // fake Github handle we're returning as assignee
+		assignee    = "hodor" // fake GitHub handle we're returning as assignee
 		milestone   = 2       // fake milestone we're using here
 		issueID     = 1337    // issue ID returned in select test cases
 		issueNumber = 30      // issue # returned in select test cases

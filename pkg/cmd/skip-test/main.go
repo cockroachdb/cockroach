@@ -182,7 +182,7 @@ Release note: None
 
 	// The shorthand for opening a web browser with Python, `python -m
 	// webbrowser URL`, does not set the status code appropriately.
-	// TODO(mgartner): A Github username should be used instead of remote in the
+	// TODO(mgartner): A GitHub username should be used instead of remote in the
 	// URL. A remote might not be the same as the username, in which case an
 	// incorrect URL is opened. For example, the remote might be named "origin"
 	// but the username is "mgartner".
