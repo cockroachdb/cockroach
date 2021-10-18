@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -29,7 +30,23 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.AddSSTable, DefaultDeclareKeys, EvalAddSSTable)
+	RegisterReadWriteCommand(roachpb.AddSSTable, declareKeysAddSSTable, EvalAddSSTable)
+}
+
+func declareKeysAddSSTable(
+	rs ImmutableRangeState,
+	header roachpb.Header,
+	req roachpb.Request,
+	latchSpans, lockSpans *spanset.SpanSet,
+) {
+	args := req.(*roachpb.AddSSTableRequest)
+	// DisallowShadowing may encounter intents while checking for key collisions,
+	// particularly in the case of IMPORT INTO.
+	if args.DisallowShadowing {
+		DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans)
+	} else {
+		DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans)
+	}
 }
 
 // EvalAddSSTable evaluates an AddSSTable command.
