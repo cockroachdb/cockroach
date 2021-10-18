@@ -173,7 +173,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		}
 	}
 
-	// The sampler outputs the original columns plus a rank column, four
+	// The sampler outputs the original columns plus a rank column, five
 	// sketch columns, and two inverted histogram columns.
 	outTypes := make([]*types.T, 0, len(p.GetResultTypes())+5)
 	outTypes = append(outTypes, p.GetResultTypes()...)
@@ -185,6 +185,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	outTypes = append(outTypes, types.Int)
 	// An INT column indicating the number of rows that have a NULL in any sketch
 	// column.
+	outTypes = append(outTypes, types.Int)
+	// An INT column indicating the size of the columns in this sketch.
 	outTypes = append(outTypes, types.Int)
 	// A BYTES column with the sketch data.
 	outTypes = append(outTypes, types.Bytes)
