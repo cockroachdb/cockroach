@@ -26,11 +26,15 @@ go_library(
 go_test(
     name = "spanset_test",
     size = "small",
-    srcs = ["spanset_test.go"],
+    srcs = [
+        "batch_test.go",
+        "spanset_test.go",
+    ],
     embed = [":spanset"],
     deps = [
         "//pkg/keys",
         "//pkg/roachpb:with-mocks",
+        "//pkg/storage",
         "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
