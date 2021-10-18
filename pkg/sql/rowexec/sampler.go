@@ -40,6 +40,7 @@ type sketchInfo struct {
 	sketch   *hyperloglog.Sketch
 	numNulls int64
 	numRows  int64
+	size     int64
 }
 
 // A sampler processor returns a random sample of rows, as well as "global"
@@ -65,6 +66,7 @@ type samplerProcessor struct {
 	sketchIdxCol int
 	numRowsCol   int
 	numNullsCol  int
+	sizeCol      int
 	sketchCol    int
 	invColIdxCol int
 	invIdxKeyCol int
@@ -181,6 +183,10 @@ func newSamplerProcessor(
 	// An INT column indicating the number of rows that have a NULL in all sketch
 	// columns.
 	s.numNullsCol = len(outTypes)
+	outTypes = append(outTypes, types.Int)
+
+	// An INT column indicating the size of all rows in the sketch columns.
+	s.sizeCol = len(outTypes)
 	outTypes = append(outTypes, types.Int)
 
 	// A BYTES column with the sketch data.
@@ -424,6 +430,7 @@ func (s *samplerProcessor) emitSketchRow(
 ) (earlyExit bool, err error) {
 	outRow[s.numRowsCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(si.numRows))}
 	outRow[s.numNullsCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(si.numNulls))}
+	outRow[s.sizeCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(si.size))}
 	data, err := si.sketch.MarshalBinary()
 	if err != nil {
 		return false, err
@@ -513,6 +520,8 @@ func (s *sketchInfo) addRow(
 			*buf = (*buf)[:8]
 		}
 
+		s.size += int64(row[col].DiskSize())
+
 		// Note: this encoding is not identical with the one in the general path
 		// below, but it achieves the same thing (we want equal integers to
 		// encode to equal []bytes). The only caveat is that all samplers must
@@ -537,6 +546,7 @@ func (s *sketchInfo) addRow(
 			return err
 		}
 		isNull = isNull && row[col].IsNull()
+		s.size += int64(row[col].DiskSize())
 	}
 	if isNull {
 		s.numNulls++
