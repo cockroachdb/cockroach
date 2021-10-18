@@ -117,11 +117,11 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/cmd/prereqs/testdata
 # gazelle:exclude pkg/testutils/**/testdata/**
 # gazelle:exclude pkg/security/securitytest/embedded.go
-# gazelle:exclude pkg/cmd/roachprod/vm/aws/embedded.go
 # gazelle:exclude pkg/cmd/roachtest/prometheus/mock_generated.go
 # gazelle:exclude pkg/cmd/roachtest/tests/drt_generated.go
 # gazelle:exclude pkg/**/*_string.go
 # gazelle:exclude pkg/geo/wkt/wkt_generated.go
+# gazelle:exclude pkg/roachprod/vm/aws/embedded.go
 # gazelle:exclude pkg/sql/schemachanger/scop/backfill_visitor_generated.go
 # gazelle:exclude pkg/sql/schemachanger/scop/mutation_visitor_generated.go
 # gazelle:exclude pkg/sql/schemachanger/scop/validation_visitor_generated.go
