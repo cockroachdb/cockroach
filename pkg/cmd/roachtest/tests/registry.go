@@ -100,6 +100,7 @@ func RegisterTests(r registry.Registry) {
 	registerSequelize(r)
 	registerSQLAlchemy(r)
 	registerSQLSmith(r)
+	registerSSTableCorruption(r)
 	registerSyncTest(r)
 	registerSysbench(r)
 	registerTLP(r)
