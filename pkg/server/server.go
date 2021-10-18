@@ -616,7 +616,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	var spanConfigAccessor spanconfig.KVAccessor
 	if cfg.SpanConfigsEnabled {
 		storeCfg.SpanConfigsEnabled = true
-		storeCfg.SpanConfigWatcher = spanconfigkvwatcher.New(stopper, db, clock, rangeFeedFactory, keys.SpanConfigurationsTableID)
+		storeCfg.SpanConfigWatcher = spanconfigkvwatcher.New(
+			stopper,
+			db,
+			clock,
+			rangeFeedFactory,
+			keys.SpanConfigurationsTableID,
+			1<<20, /* 1 MB */
+		)
 		storeCfg.SpanConfigStore = spanconfigstore.New(storeCfg.DefaultSpanConfig)
 		spanConfigAccessor = spanconfigkvaccessor.New(
 			db, internalExecutor, cfg.Settings,

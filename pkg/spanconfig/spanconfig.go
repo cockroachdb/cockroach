@@ -42,7 +42,27 @@ type KVAccessor interface {
 
 // KVWatcher emits KV span configuration updates.
 type KVWatcher interface {
+	// XXX: Could retry internally, re-establish rangefeed after closing old.
+	// Could be opaque to caller, updates could basically be repeated. Could
+	// also allow let callers provide hooks (init func()) to be called before
+	// doing any work. Could be as options for the method, like we do for Rangefeed.
+	// (kvwatcher.WithOnRetry, WithInitialScanDone, WithOnUpdate.
+	// Alternatively, we could provide an OnError callback, or a channel
+	// returning an error that could be waited on -- would return nil if
+	// successfully closed, etc. If error does occur,
+
 	WatchForKVUpdates(ctx context.Context) (<-chan Update, error)
+	WatchForKVUpdatesNew(context.Context, func(Update)) error
+}
+
+type X interface {
+	// XXX: Internally maintains a StoreWriter. Timestamps preserved when
+	// updating the StoreWriter, and when retried (also takes in
+	// retry.Options?), a new StoreWriter is instantiated, filled using initial
+	// scan, and when done, swapped over opaquely. Update callback is invoked
+	// for all spans (or if we care about being selective, diffed against the
+	// last spanconfig.Store.
+	Subscribe(context.Context, func(roachpb.Span)) StoreReader
 }
 
 // ReconciliationDependencies captures what's needed by the span config

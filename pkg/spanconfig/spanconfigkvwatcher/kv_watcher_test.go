@@ -75,12 +75,10 @@ func TestKVWatcher(t *testing.T) {
 		{
 			span:   span("a", "c"),
 			config: roachpb.SpanConfig{NumReplicas: 3},
-			delete: false,
 		},
 		{
 			span:   span("d", "f"),
 			config: roachpb.SpanConfig{NumReplicas: 5, NumVoters: 3},
-			delete: false,
 		},
 		{
 			span:   span("d", "f"),
@@ -98,7 +96,9 @@ func TestKVWatcher(t *testing.T) {
 		ts.Clock(),
 		ts.RangeFeedFactory().(*rangefeed.Factory),
 		dummyTableID,
+		10<<20, /* 10 MB */
 	)
+	// XXX: Change these to be callback oriented.
 	initialUpdateCh, err := initialWatcher.WatchForKVUpdates(ctx)
 	require.NoError(t, err)
 
@@ -134,6 +134,7 @@ func TestKVWatcher(t *testing.T) {
 		ts.Clock(),
 		ts.RangeFeedFactory().(*rangefeed.Factory),
 		dummyTableID,
+		10<<20, /* 10 MB */
 	)
 	finalUpdateCh, err := finalWatcher.WatchForKVUpdates(ctx)
 	require.NoError(t, err)
