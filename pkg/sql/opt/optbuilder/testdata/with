@@ -853,6 +853,49 @@ with &2 (t)
            └── sum [as=sum:6]
                 └── n:5
 
+build
+WITH RECURSIVE t(n) AS (
+    VALUES (1)
+  UNION
+    SELECT n+1 FROM t WHERE n < 100
+)
+SELECT sum(n) FROM t
+----
+with &2 (t)
+ ├── columns: sum:6
+ ├── recursive-c-t-e
+ │    ├── columns: n:2
+ │    ├── deduplicate
+ │    ├── working table binding: &1
+ │    ├── initial columns: column1:1
+ │    ├── recursive columns: "?column?":4
+ │    ├── fake-rel
+ │    │    └── columns: n:2
+ │    ├── values
+ │    │    ├── columns: column1:1!null
+ │    │    └── (1,)
+ │    └── project
+ │         ├── columns: "?column?":4!null
+ │         ├── select
+ │         │    ├── columns: n:3!null
+ │         │    ├── with-scan &1 (t)
+ │         │    │    ├── columns: n:3
+ │         │    │    └── mapping:
+ │         │    │         └──  n:2 => n:3
+ │         │    └── filters
+ │         │         └── n:3 < 100
+ │         └── projections
+ │              └── n:3 + 1 [as="?column?":4]
+ └── scalar-group-by
+      ├── columns: sum:6
+      ├── with-scan &2 (t)
+      │    ├── columns: n:5
+      │    └── mapping:
+      │         └──  n:2 => n:5
+      └── aggregations
+           └── sum [as=sum:6]
+                └── n:5
+
 exec-ddl
 CREATE TABLE parts (part STRING, sub_part STRING, quantity INT)
 ----
@@ -1139,11 +1182,11 @@ WITH RECURSIVE cte(a, b) AS (
 ) SELECT * FROM cte;
 ----
 with &2 (cte)
- ├── columns: a:7!null b:8!null
+ ├── columns: a:9!null b:10!null
  ├── union
- │    ├── columns: "?column?":5!null "?column?":6!null
+ │    ├── columns: "?column?":7!null "?column?":8!null
  │    ├── left columns: "?column?":1 "?column?":2
- │    ├── right columns: "?column?":3 "?column?":4
+ │    ├── right columns: "?column?":5 "?column?":6
  │    ├── project
  │    │    ├── columns: "?column?":1!null "?column?":2!null
  │    │    ├── values
@@ -1152,17 +1195,17 @@ with &2 (cte)
  │    │         ├── 1 [as="?column?":1]
  │    │         └── 2 [as="?column?":2]
  │    └── project
- │         ├── columns: "?column?":3!null "?column?":4!null
+ │         ├── columns: "?column?":5!null "?column?":6!null
  │         ├── values
  │         │    └── ()
  │         └── projections
- │              ├── 3 [as="?column?":3]
- │              └── 4 [as="?column?":4]
+ │              ├── 3 [as="?column?":5]
+ │              └── 4 [as="?column?":6]
  └── with-scan &2 (cte)
-      ├── columns: a:7!null b:8!null
+      ├── columns: a:9!null b:10!null
       └── mapping:
-           ├──  "?column?":5 => a:7
-           └──  "?column?":6 => b:8
+           ├──  "?column?":7 => a:9
+           └──  "?column?":8 => b:10
 
 # Error cases.
 build
@@ -1170,16 +1213,7 @@ WITH RECURSIVE cte(a, b) AS (
   SELECT 1+a, 1+b FROM cte
 ) SELECT * FROM cte;
 ----
-error (42601): recursive query "cte" does not have the form non-recursive-term UNION ALL recursive-term
-
-build
-WITH RECURSIVE cte(a, b) AS (
-    SELECT 1, 2
-  UNION
-    SELECT 1+a, 1+b FROM cte
-) SELECT * FROM cte;
-----
-error (0A000): unimplemented: recursive query "cte" uses UNION which is not implemented (only UNION ALL is supported)
+error (42601): recursive query "cte" does not have the form non-recursive-term UNION [ALL] recursive-term
 
 build
 WITH RECURSIVE cte(a, b) AS (

@@ -689,11 +689,13 @@ define ScanBuffer {
 #       function. The returned plan uses this reference with a
 #       ConstructScanBuffer call.
 #     - the plan is executed; the results are emitted and also saved in a new
-#       buffer for the next iteration.
+#       buffer for the next iteration. If Deduplicate is true, only rows that
+#       haven't been returned yet are emitted and saved.
 define RecursiveCTE {
     Initial exec.Node
     Fn exec.RecursiveCTEIterationFn
     Label string
+    Deduplicate bool
 }
 
 # ControlJobs implements PAUSE/CANCEL/RESUME JOBS.

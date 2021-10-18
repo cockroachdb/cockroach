@@ -20,28 +20,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // rowContainerHelper is a wrapper around a disk-backed row container that
 // should be used by planNodes (or similar components) whenever they need to
-// buffer data. init must be called before the first use.
+// buffer data. init or initWithDedup must be called before the first use.
 type rowContainerHelper struct {
-	rows        *rowcontainer.DiskBackedRowContainer
-	scratch     rowenc.EncDatumRow
 	memMonitor  *mon.BytesMonitor
 	diskMonitor *mon.BytesMonitor
+	rows        *rowcontainer.DiskBackedRowContainer
+	scratch     rowenc.EncDatumRow
 }
 
 func (c *rowContainerHelper) init(
 	typs []*types.T, evalContext *extendedEvalContext, opName string,
 ) {
+	c.initMonitors(evalContext, opName)
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
-	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
-		evalContext.Context, evalContext.Mon, distSQLCfg, evalContext.SessionData(),
-		fmt.Sprintf("%s-limited", opName),
-	)
-	c.diskMonitor = execinfra.NewMonitor(evalContext.Context, distSQLCfg.ParentDiskMonitor, fmt.Sprintf("%s-disk", opName))
 	c.rows = &rowcontainer.DiskBackedRowContainer{}
 	c.rows.Init(
 		colinfo.NoOrdering, typs, &evalContext.EvalContext,
@@ -50,12 +47,59 @@ func (c *rowContainerHelper) init(
 	c.scratch = make(rowenc.EncDatumRow, len(typs))
 }
 
-// addRow adds a given row to the helper and returns any error it encounters.
+// initWithDedup is a variant of init that is used if row deduplication
+// functionality is needed (see addRowWithDedup).
+func (c *rowContainerHelper) initWithDedup(
+	typs []*types.T, evalContext *extendedEvalContext, opName string,
+) {
+	c.initMonitors(evalContext, opName)
+	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
+	c.rows = &rowcontainer.DiskBackedRowContainer{}
+	ordering := make(colinfo.ColumnOrdering, len(typs))
+	for i := range ordering {
+		ordering[i].ColIdx = i
+		ordering[i].Direction = encoding.Ascending
+	}
+	c.rows.Init(
+		ordering, typs, &evalContext.EvalContext,
+		distSQLCfg.TempStorage, c.memMonitor, c.diskMonitor,
+	)
+	c.rows.DoDeDuplicate()
+	c.scratch = make(rowenc.EncDatumRow, len(typs))
+}
+
+func (c *rowContainerHelper) initMonitors(evalContext *extendedEvalContext, opName string) {
+	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
+	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
+		evalContext.Context, evalContext.Mon, distSQLCfg, evalContext.SessionData(),
+		fmt.Sprintf("%s-limited", opName),
+	)
+	c.diskMonitor = execinfra.NewMonitor(
+		evalContext.Context, distSQLCfg.ParentDiskMonitor, fmt.Sprintf("%s-disk", opName),
+	)
+}
+
+// addRow adds the given row to the container.
 func (c *rowContainerHelper) addRow(ctx context.Context, row tree.Datums) error {
 	for i := range row {
 		c.scratch[i].Datum = row[i]
 	}
 	return c.rows.AddRow(ctx, c.scratch)
+}
+
+// addRowWithDedup adds the given row if not already present in the container.
+// To use this method, initWithDedup must be used first.
+func (c *rowContainerHelper) addRowWithDedup(
+	ctx context.Context, row tree.Datums,
+) (added bool, _ error) {
+	for i := range row {
+		c.scratch[i].Datum = row[i]
+	}
+	lenBefore := c.rows.Len()
+	if _, err := c.rows.AddRowWithDeDup(ctx, c.scratch); err != nil {
+		return false, err
+	}
+	return c.rows.Len() > lenBefore, nil
 }
 
 // len returns the number of rows buffered so far.

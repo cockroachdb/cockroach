@@ -243,21 +243,19 @@ func (a *applyJoinNode) clearRightRows(params runParams) error {
 // wrong during execution of the right hand side of the join, and that we should
 // completely give up on the outer join.
 func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planComponents) error {
-	if err := runPlanInsidePlan(params, plan, &a.run.rightRows); err != nil {
+	rowResultWriter := NewRowResultWriter(&a.run.rightRows)
+	if err := runPlanInsidePlan(params, plan, rowResultWriter); err != nil {
 		return err
 	}
 	a.run.rightRowsIterator = newRowContainerIterator(params.ctx, a.run.rightRows, a.rightTypes)
 	return nil
 }
 
-// runPlanInsidePlan is used to run a plan and gather the results in a row
-// container, as part of the execution of an "outer" plan.
-func runPlanInsidePlan(
-	params runParams, plan *planComponents, rowContainer *rowContainerHelper,
-) error {
-	rowResultWriter := NewRowResultWriter(rowContainer)
+// runPlanInsidePlan is used to run a plan and gather the results in the
+// resultWriter, as part of the execution of an "outer" plan.
+func runPlanInsidePlan(params runParams, plan *planComponents, resultWriter rowResultWriter) error {
 	recv := MakeDistSQLReceiver(
-		params.ctx, rowResultWriter, tree.Rows,
+		params.ctx, resultWriter, tree.Rows,
 		params.ExecCfg().RangeDescriptorCache,
 		params.p.Txn(),
 		params.ExecCfg().Clock,
@@ -298,7 +296,7 @@ func runPlanInsidePlan(
 			recv,
 			&subqueryResultMemAcc,
 		) {
-			return rowResultWriter.Err()
+			return resultWriter.Err()
 		}
 	}
 
@@ -318,7 +316,7 @@ func runPlanInsidePlan(
 	params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRun(
 		params.ctx, evalCtx, planCtx, params.p.Txn(), plan.main, recv,
 	)()
-	return rowResultWriter.Err()
+	return resultWriter.Err()
 }
 
 func (a *applyJoinNode) Values() tree.Datums {

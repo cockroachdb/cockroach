@@ -166,6 +166,38 @@ vectorized: true
               size: 1 column, 1 row
               row 0, expr 0: 1
 
+query T
+EXPLAIN (VERBOSE)
+  WITH RECURSIVE t(n) AS (
+      VALUES (1)
+    UNION
+      SELECT n+1 FROM t WHERE n < 100
+  )
+  SELECT sum(n) FROM t
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (sum)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: sum(n)
+│
+└── • render
+    │ columns: (n)
+    │ estimated row count: 10 (missing stats)
+    │ render n: column1
+    │
+    └── • recursive cte
+        │ columns: (column1)
+        │ estimated row count: 10 (missing stats)
+        │ deduplicate
+        │
+        └── • values
+              columns: (column1)
+              size: 1 column, 1 row
+              row 0, expr 0: 1
+
 # Tests with correlated CTEs.
 query T
 EXPLAIN
