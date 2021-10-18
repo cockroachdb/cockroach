@@ -435,6 +435,7 @@ const (
 	rowCountIndex
 	distinctCountIndex
 	nullCountIndex
+	avgSizeIndex
 	histogramIndex
 	statsLen
 )
@@ -468,6 +469,7 @@ func (sc *TableStatisticsCache) parseStats(
 		{"rowCount", rowCountIndex, types.Int, false},
 		{"distinctCount", distinctCountIndex, types.Int, false},
 		{"nullCount", nullCountIndex, types.Int, false},
+		{"avgSize", avgSizeIndex, types.Int, false},
 		{"histogram", histogramIndex, types.Bytes, true},
 	}
 	for _, v := range expectedTypes {
@@ -487,6 +489,7 @@ func (sc *TableStatisticsCache) parseStats(
 			RowCount:      (uint64)(*datums[rowCountIndex].(*tree.DInt)),
 			DistinctCount: (uint64)(*datums[distinctCountIndex].(*tree.DInt)),
 			NullCount:     (uint64)(*datums[nullCountIndex].(*tree.DInt)),
+			AvgSize:       (uint64)(*datums[avgSizeIndex].(*tree.DInt)),
 		},
 	}
 	columnIDs := datums[columnIDsIndex].(*tree.DArray)
@@ -589,6 +592,7 @@ SELECT
 	"rowCount",
 	"distinctCount",
 	"nullCount",
+	"avgSize",
 	histogram
 FROM system.table_statistics
 WHERE "tableID" = $1

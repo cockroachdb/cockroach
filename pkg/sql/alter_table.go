@@ -1520,8 +1520,9 @@ func injectTableStats(
 					"rowCount",
 					"distinctCount",
 					"nullCount",
+					"avgSize",
 					histogram
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 			desc.GetID(),
 			name,
 			columnIDs,
@@ -1529,6 +1530,7 @@ func injectTableStats(
 			s.RowCount,
 			s.DistinctCount,
 			s.NullCount,
+			s.AvgSize,
 			histogram,
 		); err != nil {
 			return errors.Wrapf(err, "failed to insert stats")
