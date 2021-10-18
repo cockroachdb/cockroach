@@ -5073,8 +5073,6 @@ var crdbInternalActiveRangeFeedsTable = virtualSchemaTable{
 CREATE TABLE crdb_internal.active_range_feeds (
   id INT,
   tags STRING,
-  span_start STRING,
-  span_end STRING,
   startTS STRING,
   diff BOOL,
   node_id INT,
@@ -5097,8 +5095,6 @@ CREATE TABLE crdb_internal.active_range_feeds (
 				return addRow(
 					tree.NewDInt(tree.DInt(rfCtx.ID)),
 					tree.NewDString(rfCtx.CtxTags),
-					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rfCtx.Span.Key)),
-					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rfCtx.Span.EndKey)),
 					tree.NewDString(rfCtx.StartFrom.AsOfSystemTime()),
 					tree.MakeDBool(tree.DBool(rfCtx.WithDiff)),
 					tree.NewDInt(tree.DInt(rf.NodeID)),
