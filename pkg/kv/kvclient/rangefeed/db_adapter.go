@@ -66,7 +66,7 @@ func (dbc *dbAdapter) RangeFeed(
 	withDiff bool,
 	eventC chan<- *roachpb.RangeFeedEvent,
 ) error {
-	return dbc.distSender.RangeFeed(ctx, span, startFrom, withDiff, eventC)
+	return dbc.distSender.RangeFeed(ctx, []roachpb.Span{span}, startFrom, withDiff, eventC)
 }
 
 // Scan is part of the kvDB interface.
