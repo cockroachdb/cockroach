@@ -260,7 +260,7 @@ EXPLAIN ALTER TABLE kv RENAME TO kv2
 distribution: local
 vectorized: true
 ·
-• rename table
+• alter table
 
 statement ok
 RESET vectorize

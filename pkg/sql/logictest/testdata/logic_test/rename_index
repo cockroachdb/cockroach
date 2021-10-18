@@ -157,7 +157,7 @@ EXPLAIN ALTER INDEX users@bar RENAME TO woo
 distribution: local
 vectorized: true
 ·
-• rename index
+• alter index
 
 statement ok
 RESET vectorize
