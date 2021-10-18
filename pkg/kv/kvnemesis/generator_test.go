@@ -69,8 +69,8 @@ func TestRandStep(t *testing.T) {
 	config := newAllOperationsConfig()
 	config.NumNodes, config.NumReplicas = 2, 1
 	rng, _ := randutil.NewPseudoRand()
-	getReplicasFn := func(_ roachpb.Key) []roachpb.ReplicationTarget {
-		return make([]roachpb.ReplicationTarget, rng.Intn(2)+1)
+	getReplicasFn := func(_ roachpb.Key) []roachpb.ReplicaDescriptor {
+		return make([]roachpb.ReplicaDescriptor, rng.Intn(2)+1)
 	}
 	g, err := MakeGenerator(config, getReplicasFn)
 	require.NoError(t, err)
