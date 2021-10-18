@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -337,6 +338,10 @@ type cFetcher struct {
 	accountingHelper colmem.SetAccountingHelper
 	memoryLimit      int64
 
+	// kvFetcherMemAcc is a memory account that will be used by the underlying
+	// KV fetcher.
+	kvFetcherMemAcc *mon.BoundAccount
+
 	// maxCapacity if non-zero indicates the target capacity of the output
 	// batch. It is set when at the row finalization we realize that the output
 	// batch has exceeded the memory limit.
@@ -395,6 +400,7 @@ func (rf *cFetcher) resetBatch() {
 func (rf *cFetcher) Init(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
+	kvFetcherMemAcc *mon.BoundAccount,
 	memoryLimit int64,
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
@@ -403,6 +409,7 @@ func (rf *cFetcher) Init(
 	tableArgs row.FetcherTableArgs,
 	traceKV bool,
 ) error {
+	rf.kvFetcherMemAcc = kvFetcherMemAcc
 	rf.memoryLimit = memoryLimit
 	rf.reverse = reverse
 	rf.lockStrength = lockStrength
@@ -711,7 +718,7 @@ func (rf *cFetcher) StartScan(
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.lockTimeout,
-		rf.accountingHelper.Allocator.GetMonitor(),
+		rf.kvFetcherMemAcc,
 		forceProductionKVBatchSize,
 	)
 	if err != nil {
@@ -1620,6 +1627,7 @@ type cFetcherArgs struct {
 func initCFetcher(
 	flowCtx *execinfra.FlowCtx,
 	allocator *colmem.Allocator,
+	kvFetcherMemAcc *mon.BoundAccount,
 	desc catalog.TableDescriptor,
 	index catalog.Index,
 	neededCols util.FastIntSet,
@@ -1641,7 +1649,7 @@ func initCFetcher(
 	tableArgs.InitCols(desc, args.visibility, args.hasSystemColumns, invertedCol)
 
 	if err := fetcher.Init(
-		flowCtx.Codec(), allocator, args.memoryLimit, args.reverse, args.lockingStrength,
+		flowCtx.Codec(), allocator, kvFetcherMemAcc, args.memoryLimit, args.reverse, args.lockingStrength,
 		args.lockingWaitPolicy, flowCtx.EvalCtx.SessionData().LockTimeout, tableArgs, flowCtx.TraceKV,
 	); err != nil {
 		return nil, err

@@ -119,12 +119,6 @@ func NewAllocator(
 	}
 }
 
-// GetMonitor returns the bytes monitor which the allocator's memory account is
-// bound to.
-func (a *Allocator) GetMonitor() *mon.BytesMonitor {
-	return a.acc.Monitor()
-}
-
 // NewMemBatchWithFixedCapacity allocates a new in-memory coldata.Batch with the
 // given vector capacity.
 // Note: consider whether you want the dynamic batch size behavior (in which
