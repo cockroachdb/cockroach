@@ -2604,7 +2604,7 @@ func (it *sessionDataMutatorIterator) mutator(
 // SetSessionDefaultIntSize sets the default int size for the session.
 // It is exported for use in import which is a CCL package.
 func (it *sessionDataMutatorIterator) SetSessionDefaultIntSize(size int32) {
-	it.applyForEachMutator(func(m sessionDataMutator) {
+	it.applyOnEachMutator(func(m sessionDataMutator) {
 		m.SetDefaultIntSize(size)
 	})
 }
@@ -2617,17 +2617,17 @@ func (it *sessionDataMutatorIterator) applyOnTopMutator(
 	return applyFunc(it.mutator(true /* applyCallbacks */, it.sds.Top()))
 }
 
-// applyForEachMutator iterates over each mutator over all SessionData elements
+// applyOnEachMutator iterates over each mutator over all SessionData elements
 // in the stack and applies the given function to them.
 // It is the equivalent of SET SESSION x = y.
-func (it *sessionDataMutatorIterator) applyForEachMutator(applyFunc func(m sessionDataMutator)) {
+func (it *sessionDataMutatorIterator) applyOnEachMutator(applyFunc func(m sessionDataMutator)) {
 	elems := it.sds.Elems()
 	for i, sd := range elems {
 		applyFunc(it.mutator(i == 0, sd))
 	}
 }
 
-// applyOnEachMutatorError is the same as applyForEachMutator, but takes in a function
+// applyOnEachMutatorError is the same as applyOnEachMutator, but takes in a function
 // that can return an error, erroring if any of applications error.
 func (it *sessionDataMutatorIterator) applyOnEachMutatorError(
 	applyFunc func(m sessionDataMutator) error,
