@@ -12,12 +12,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -25,10 +23,8 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -37,12 +33,12 @@ import (
 	rperrors "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/aws"
 	_ "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/local"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -444,7 +440,12 @@ if the user would like to update the keys on the remote hosts.
 		if err != nil {
 			return err
 		}
-		return setupSSH(clusterName)
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: clusterName, Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
+		}
+		return roachprod.SetupSSH(newClusterOpts, quiet)
 	}),
 }
 
@@ -624,30 +625,12 @@ var cachedHostsCmd = &cobra.Command{
 	Short: "list all clusters (and optionally their host numbers) from local cache",
 	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		if err := loadClusters(); err != nil {
+		cachedHosts, err := roachprod.CachedHosts(cachedHostsCluster)
+		if err != nil {
 			return err
 		}
-
-		names := make([]string, 0, len(install.Clusters))
-		for name := range install.Clusters {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-
-		for _, name := range names {
-			c := install.Clusters[name]
-			if strings.HasPrefix(c.Name, "teamcity") {
-				continue
-			}
-			fmt.Print(c.Name)
-			// when invokved by bash-completion, cachedHostsCluster is what the user
-			// has currently typed -- if this cluster matches that, expand its hosts.
-			if strings.HasPrefix(cachedHostsCluster, c.Name) {
-				for i := range c.VMs {
-					fmt.Printf(" %s:%d", c.Name, i+1)
-				}
-			}
-			fmt.Println()
+		for _, host := range cachedHosts {
+			fmt.Println(host)
 		}
 		return nil
 	}),
@@ -700,94 +683,7 @@ hosts file.
 `,
 	Args: cobra.RangeArgs(0, 1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		listPattern := regexp.MustCompile(".*")
-		switch len(args) {
-		case 0:
-			if listMine {
-				var err error
-				listPattern, err = userClusterNameRegexp()
-				if err != nil {
-					return err
-				}
-			}
-		case 1:
-			if listMine {
-				return errors.New("--mine cannot be combined with a pattern")
-			}
-			var err error
-			listPattern, err = regexp.Compile(args[0])
-			if err != nil {
-				return errors.Wrapf(err, "could not compile regex pattern: %s", args[0])
-			}
-		default:
-			return errors.New("only a single pattern may be listed")
-		}
-
-		cloud, err := syncCloud(quiet)
-		if err != nil {
-			return err
-		}
-
-		// Filter and sort by cluster names for stable output.
-		var names []string
-		filteredCloud := cloud.Clone()
-		for name := range cloud.Clusters {
-			if listPattern.MatchString(name) {
-				names = append(names, name)
-			} else {
-				delete(filteredCloud.Clusters, name)
-			}
-		}
-		sort.Strings(names)
-
-		if listJSON {
-			if listDetails {
-				return errors.New("--json cannot be combined with --detail")
-			}
-
-			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", "  ")
-			if err := enc.Encode(filteredCloud); err != nil {
-				return err
-			}
-		} else {
-			// Align columns left and separate with at least two spaces.
-			tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
-			for _, name := range names {
-				c := filteredCloud.Clusters[name]
-				if listDetails {
-					c.PrintDetails()
-				} else {
-					fmt.Fprintf(tw, "%s:\t%s\t%d", c.Name, c.Clouds(), len(c.VMs))
-					if !c.IsLocal() {
-						fmt.Fprintf(tw, "\t(%s)", c.LifetimeRemaining().Round(time.Second))
-					} else {
-						fmt.Fprintf(tw, "\t(-)")
-					}
-					fmt.Fprintf(tw, "\n")
-				}
-			}
-			if err := tw.Flush(); err != nil {
-				return err
-			}
-
-			// Optionally print any dangling instances with errors
-			if listDetails {
-				collated := filteredCloud.BadInstanceErrors()
-
-				// Sort by Error() value for stable output
-				var errors ui.ErrorsByError
-				for err := range collated {
-					errors = append(errors, err)
-				}
-				sort.Sort(errors)
-
-				for _, e := range errors {
-					fmt.Printf("%s: %s\n", e, collated[e].Names())
-				}
-			}
-		}
-		return nil
+		return roachprod.List(quiet, listMine, listDetails, listJSON, args)
 	}),
 }
 
@@ -816,6 +712,8 @@ func userClusterNameRegexp() (*regexp.Regexp, error) {
 	return regexp.Compile(pattern)
 }
 
+var bashCompletion = os.ExpandEnv("$HOME/.roachprod/bash-completion.sh")
+
 // TODO(peter): Do we need this command given that the "list" command syncs as
 // a side-effect. If you don't care about the list output, just "roachprod list
 // &>/dev/null".
@@ -825,14 +723,13 @@ var syncCmd = &cobra.Command{
 	Long:  ``,
 	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		_, err := syncCloud(quiet)
+		_, err := roachprod.Sync(quiet)
+		_ = rootCmd.GenBashCompletionFile(bashCompletion)
 		return err
 	}),
 }
 
 var lockFile = os.ExpandEnv("$HOME/.roachprod/LOCK")
-
-var bashCompletion = os.ExpandEnv("$HOME/.roachprod/bash-completion.sh")
 
 // syncCloud grabs an exclusive lock on the roachprod state and then proceeds to
 // read the current state from the cloud and write it out to disk. The locking
@@ -951,38 +848,12 @@ destroyed:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterName, err := verifyClusterName(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-
-		cloud, err := cld.ListCloud()
-		if err != nil {
-			return err
-		}
-
-		c, ok := cloud.Clusters[clusterName]
-		if !ok {
-			return fmt.Errorf("cluster %s does not exist", clusterName)
-		}
-
-		if err := cld.ExtendCluster(c, extendLifetime); err != nil {
-			return err
-		}
-
-		// Reload the clusters and print details.
-		cloud, err = cld.ListCloud()
-		if err != nil {
-			return err
-		}
-
-		c, ok = cloud.Clusters[clusterName]
-		if !ok {
-			return fmt.Errorf("cluster %s does not exist", clusterName)
-		}
-
-		c.PrintDetails()
-		return nil
+		return roachprod.Extend(newClusterOpts, extendLifetime, username)
 	}),
 }
 
@@ -1026,12 +897,12 @@ cluster setting will be set to its value.
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-		c.Start()
-		return nil
+		return roachprod.Start(newClusterOpts)
 	}),
 }
 
@@ -1057,16 +928,16 @@ other signals.
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args[0])
-		if err != nil {
-			return err
-		}
 		wait := waitFlag
 		if sig == 9 /* SIGKILL */ && !cmd.Flags().Changed("wait") {
 			wait = true
 		}
-		c.Stop(sig, wait)
-		return nil
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
+		}
+		return roachprod.Stop(newClusterOpts, sig, wait)
 	}),
 }
 
@@ -1081,17 +952,12 @@ default cluster settings. It's intended to be used in conjunction with
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterName, err := verifyClusterName(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-
-		c, err := newCluster(clusterName)
-		if err != nil {
-			return err
-		}
-		c.Init()
-		return nil
+		return roachprod.Init(newClusterOpts, username)
 	}),
 }
 
@@ -1111,12 +977,12 @@ The "status" command outputs the binary and PID for the specified nodes:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-		c.Status()
-		return nil
+		return roachprod.Status(newClusterOpts)
 	}),
 }
 
@@ -1164,21 +1030,12 @@ of nodes, outputting a line whenever a change is detected:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-		for msg := range c.Monitor(monitorIgnoreEmptyNodes, monitorOneShot) {
-			if msg.Err != nil {
-				msg.Msg += "error: " + msg.Err.Error()
-			}
-			thisError := errors.Newf("%d: %s", msg.Index, msg.Msg)
-			if msg.Err != nil || strings.Contains(msg.Msg, "dead") {
-				err = errors.CombineErrors(err, thisError)
-			}
-			fmt.Println(thisError.Error())
-		}
-		return err
+		return roachprod.Monitor(newClusterOpts, monitorIgnoreEmptyNodes, monitorOneShot)
 	}),
 }
 
@@ -1193,12 +1050,12 @@ nodes.
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-		c.Wipe(wipePreserveCerts)
-		return nil
+		return roachprod.Wipe(newClusterOpts, wipePreserveCerts)
 	}),
 }
 
@@ -1228,39 +1085,12 @@ the 'zfs rollback' command:
 
 	Args: cobra.ExactArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-
-		var fsCmd string
-		switch fs := args[1]; fs {
-		case vm.Zfs:
-			if err := install.Install(c, []string{vm.Zfs}); err != nil {
-				return err
-			}
-			fsCmd = `sudo zpool create -f data1 -m /mnt/data1 /dev/sdb`
-		case vm.Ext4:
-			fsCmd = `sudo mkfs.ext4 -F /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
-		default:
-			return fmt.Errorf("unknown filesystem %q", fs)
-		}
-
-		err = c.Run(os.Stdout, os.Stderr, c.Nodes, "reformatting", fmt.Sprintf(`
-set -euo pipefail
-if sudo zpool list -Ho name 2>/dev/null | grep ^data1$; then
-  sudo zpool destroy -f data1
-fi
-if mountpoint -q /mnt/data1; then
-  sudo umount -f /mnt/data1
-fi
-%s
-sudo chmod 777 /mnt/data1
-`, fsCmd))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s\n", err)
-		}
-		return nil
+		return roachprod.Reformat(newClusterOpts, args[1])
 	}),
 }
 
@@ -1272,23 +1102,12 @@ var runCmd = &cobra.Command{
 `,
 	Args: cobra.MinimumNArgs(1),
 	Run: wrap(func(_ *cobra.Command, args []string) error {
-		c, err := newCluster(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-
-		// Use "ssh" if an interactive session was requested (i.e. there is no
-		// remote command to run).
-		if len(args) == 1 {
-			return c.SSH(strings.Split(extraSSHOptions, " "), args[1:])
-		}
-
-		cmd := strings.TrimSpace(strings.Join(args[1:], " "))
-		title := cmd
-		if len(title) > 30 {
-			title = title[:27] + "..."
-		}
-		return c.Run(os.Stdout, os.Stderr, c.Nodes, title, cmd)
+		return roachprod.Run(newClusterOpts, extraSSHOptions, args[1:])
 	}),
 }
 
@@ -1299,32 +1118,12 @@ var resetCmd = &cobra.Command{
 environments and will fall back to a no-op.`,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
-		if numNodes <= 0 || numNodes >= 1000 {
-			// Upper limit is just for safety.
-			return fmt.Errorf("number of nodes must be in [1..999]")
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-
-		clusterName, err := verifyClusterName(args[0])
-		if err != nil {
-			return err
-		}
-
-		if clusterName == config.Local {
-			return nil
-		}
-
-		cloud, err := cld.ListCloud()
-		if err != nil {
-			return err
-		}
-		c, ok := cloud.Clusters[clusterName]
-		if !ok {
-			return errors.New("cluster not found")
-		}
-
-		return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
-			return p.Reset(vms)
-		})
+		return roachprod.Reset(newClusterOpts, numNodes, username)
 	}),
 }
 
@@ -1337,11 +1136,12 @@ var installCmd = &cobra.Command{
 `,
 	Args: cobra.MinimumNArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-		return install.Install(c, args[1:])
+		return roachprod.Install(newClusterOpts, args[1:])
 	}),
 }
 
@@ -1388,73 +1188,16 @@ Some examples of usage:
 `,
 	Args: cobra.RangeArgs(2, 3),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-
-		os := "linux"
-		if stageOS != "" {
-			os = stageOS
-		} else if c.IsLocal() {
-			os = runtime.GOOS
-		}
-		var debugArch, releaseArch, libExt string
-		switch os {
-		case "linux":
-			debugArch, releaseArch, libExt = "linux-gnu-amd64", "linux-amd64", ".so"
-		case "darwin":
-			debugArch, releaseArch, libExt = "darwin-amd64", "darwin-10.9-amd64", ".dylib"
-		case "windows":
-			debugArch, releaseArch, libExt = "windows-amd64", "windows-6.2-amd64", ".dll"
-		default:
-			return errors.Errorf("cannot stage binary on %s", os)
-		}
-
-		dir := "."
-		if stageDir != "" {
-			dir = stageDir
-		}
-
-		applicationName := args[1]
 		versionArg := ""
 		if len(args) == 3 {
 			versionArg = args[2]
 		}
-		switch applicationName {
-		case "cockroach":
-			sha, err := install.StageRemoteBinary(
-				c, applicationName, "cockroach/cockroach", versionArg, debugArch, dir,
-			)
-			if err != nil {
-				return err
-			}
-			// NOTE: libraries may not be present in older versions.
-			// Use the sha for the binary to download the same remote library.
-			for _, library := range []string{"libgeos", "libgeos_c"} {
-				if err := install.StageOptionalRemoteLibrary(
-					c,
-					library,
-					fmt.Sprintf("cockroach/lib/%s", library),
-					sha,
-					debugArch,
-					libExt,
-					dir,
-				); err != nil {
-					return err
-				}
-			}
-			return nil
-		case "workload":
-			_, err := install.StageRemoteBinary(
-				c, applicationName, "cockroach/workload", versionArg, "" /* arch */, dir,
-			)
-			return err
-		case "release":
-			return install.StageCockroachRelease(c, versionArg, releaseArch, dir)
-		default:
-			return fmt.Errorf("unknown application %s", applicationName)
-		}
+		return roachprod.Stage(newClusterOpts, stageOS, stageDir, args[1], versionArg)
 	}),
 }
 
@@ -1468,12 +1211,12 @@ start."
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-		c.DistributeCerts()
-		return nil
+		return roachprod.DistributeCerts(newClusterOpts)
 	}),
 }
 
@@ -1489,12 +1232,12 @@ var putCmd = &cobra.Command{
 		if len(args) == 3 {
 			dest = args[2]
 		}
-		c, err := newCluster(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-		c.Put(src, dest)
-		return nil
+		return roachprod.Put(newClusterOpts, src, dest)
 	}),
 }
 
@@ -1511,12 +1254,12 @@ multiple nodes the destination file name will be prefixed with the node number.
 		if len(args) == 3 {
 			dest = args[2]
 		}
-		c, err := newCluster(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-		c.Get(src, dest)
-		return nil
+		return roachprod.Get(newClusterOpts, src, dest)
 	}),
 }
 
@@ -1526,15 +1269,12 @@ var sqlCmd = &cobra.Command{
 	Long:  "Run `cockroach sql` on a remote cluster.\n",
 	Args:  cobra.MinimumNArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-		cockroach, ok := c.Impl.(install.Cockroach)
-		if !ok {
-			return errors.New("sql is only valid on cockroach clusters")
-		}
-		return cockroach.SQL(c, args[1:])
+		return roachprod.SQL(newClusterOpts, args[1:])
 	}),
 }
 
@@ -1545,37 +1285,12 @@ var pgurlCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-		nodes := c.ServerNodes()
-		ips := make([]string, len(nodes))
-
-		if external {
-			for i := 0; i < len(nodes); i++ {
-				ips[i] = c.VMs[nodes[i]-1]
-			}
-		} else {
-			c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
-				var err error
-				ips[i], err = c.GetInternalIP(nodes[i])
-				return nil, err
-			})
-		}
-
-		var urls []string
-		for i, ip := range ips {
-			if ip == "" {
-				return errors.Errorf("empty ip: %v", ips)
-			}
-			urls = append(urls, c.Impl.NodeURL(c, ip, c.Impl.NodePort(c, nodes[i])))
-		}
-		fmt.Println(strings.Join(urls, " "))
-		if len(urls) != len(nodes) {
-			return errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)
-		}
-		return nil
+		return roachprod.PgURL(newClusterOpts, external)
 	}),
 }
 
@@ -1731,43 +1446,12 @@ var adminurlCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args[0])
-		if err != nil {
-			return err
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-
-		for i, node := range c.ServerNodes() {
-			host := vm.Name(c.Name, node) + "." + gce.Subdomain
-
-			// verify DNS is working / fallback to IPs if not.
-			if i == 0 && !adminurlIPs {
-				if _, err := net.LookupHost(host); err != nil {
-					fmt.Fprintf(os.Stderr, "no valid DNS (yet?). might need to re-run `sync`?\n")
-					adminurlIPs = true
-				}
-			}
-
-			if adminurlIPs {
-				host = c.VMs[node-1]
-			}
-			port := install.GetAdminUIPort(c.Impl.NodePort(c, node))
-			scheme := "http"
-			if c.Secure {
-				scheme = "https"
-			}
-			if !strings.HasPrefix(adminurlPath, "/") {
-				adminurlPath = "/" + adminurlPath
-			}
-			url := fmt.Sprintf("%s://%s:%d%s", scheme, host, port, adminurlPath)
-			if adminurlOpen {
-				if err := exec.Command("python", "-m", "webbrowser", url).Run(); err != nil {
-					return err
-				}
-			} else {
-				fmt.Println(url)
-			}
-		}
-		return nil
+		return roachprod.AdminUrl(newClusterOpts, adminurlIPs, adminurlOpen, adminurlPath)
 	}),
 }
 
@@ -1778,26 +1462,15 @@ var ipCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args[0])
+		newClusterOpts := roachprod.NewClusterOpts{
+			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
+			Quiet: quiet, UseTreeDist: useTreeDist, NodeArgs: nodeArgs,
+			NodeEnv: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
+		}
+		ips, err := roachprod.IP(newClusterOpts, external)
 		if err != nil {
 			return err
 		}
-
-		nodes := c.ServerNodes()
-		ips := make([]string, len(nodes))
-
-		if external {
-			for i := 0; i < len(nodes); i++ {
-				ips[i] = c.VMs[nodes[i]-1]
-			}
-		} else {
-			c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
-				var err error
-				ips[i], err = c.GetInternalIP(nodes[i])
-				return nil, err
-			})
-		}
-
 		for _, ip := range ips {
 			fmt.Println(ip)
 		}
@@ -1809,8 +1482,7 @@ var versionCmd = &cobra.Command{
 	Use:   `version`,
 	Short: `print version information`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		info := build.GetInfo()
-		fmt.Println(info.Long())
+		fmt.Println(roachprod.Version())
 		return nil
 	},
 }

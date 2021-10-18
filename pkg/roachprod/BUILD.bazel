@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "roachprod",
+    srcs = [
+        "hosts.go",
+        "roachprod.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//pkg/cmd/roachprod/cloud",
+        "//pkg/cmd/roachprod/config",
+        "//pkg/cmd/roachprod/install",
+        "//pkg/cmd/roachprod/ui",
+        "//pkg/cmd/roachprod/vm",
+        "//pkg/cmd/roachprod/vm/aws",
+        "//pkg/cmd/roachprod/vm/gce",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_sys//unix",
+        "@org_golang_x_term//:term",
+    ],
+)
