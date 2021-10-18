@@ -247,9 +247,10 @@ CREATE TABLE system.table_statistics (
 	"rowCount"      INT8       NOT NULL,
 	"distinctCount" INT8       NOT NULL,
 	"nullCount"     INT8       NOT NULL,
+  "avgSize"       INT8       NOT NULL,
 	histogram       BYTES,
 	CONSTRAINT "primary" PRIMARY KEY ("tableID", "statisticID"),
-	FAMILY ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram)
+	FAMILY ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", "avgSize", histogram)
 );`
 
 	// locations are used to map a locality specified by a node to geographic
@@ -1261,7 +1262,8 @@ var (
 				{Name: "rowCount", ID: 6, Type: types.Int},
 				{Name: "distinctCount", ID: 7, Type: types.Int},
 				{Name: "nullCount", ID: 8, Type: types.Int},
-				{Name: "histogram", ID: 9, Type: types.Bytes, Nullable: true},
+				{Name: "avgSize", ID: 9, Type: types.Int},
+				{Name: "histogram", ID: 10, Type: types.Bytes, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -1276,9 +1278,10 @@ var (
 						"rowCount",
 						"distinctCount",
 						"nullCount",
+						"avgSize",
 						"histogram",
 					},
-					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 				},
 			},
 			descpb.IndexDescriptor{

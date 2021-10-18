@@ -593,6 +593,7 @@ SELECT
 	"rowCount",
 	"distinctCount",
 	"nullCount",
+	"avgSize",
 	histogram
 FROM system.table_statistics
 WHERE "tableID" = $1
