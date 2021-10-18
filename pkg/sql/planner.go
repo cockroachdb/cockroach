@@ -52,8 +52,6 @@ import (
 type extendedEvalContext struct {
 	tree.EvalContext
 
-	SessionMutatorIterator *sessionDataMutatorIterator
-
 	// SessionID for this connection.
 	SessionID ClusterWideID
 
@@ -356,17 +354,7 @@ func newInternalPlanner(
 		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
 	}
 
-	p.extendedEvalCtx = internalExtendedEvalCtx(
-		ctx,
-		sds,
-		smi,
-		params.collection,
-		txn,
-		ts,
-		ts,
-		execCfg,
-		plannerMon,
-	)
+	p.extendedEvalCtx = internalExtendedEvalCtx(ctx, sds, params.collection, txn, ts, ts, execCfg, plannerMon)
 	p.extendedEvalCtx.Planner = p
 	p.extendedEvalCtx.PrivilegedAccessor = p
 	p.extendedEvalCtx.SessionAccessor = p
@@ -380,7 +368,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.NodeID = execCfg.NodeID
 	p.extendedEvalCtx.Locality = execCfg.Locality
 
-	p.sessionDataMutatorIterator = p.extendedEvalCtx.SessionMutatorIterator
+	p.sessionDataMutatorIterator = smi
 	p.autoCommit = false
 
 	p.extendedEvalCtx.MemMetrics = memMetrics
@@ -418,7 +406,6 @@ func newInternalPlanner(
 func internalExtendedEvalCtx(
 	ctx context.Context,
 	sds *sessiondata.Stack,
-	smi *sessionDataMutatorIterator,
 	tables *descs.Collection,
 	txn *kv.Txn,
 	txnTimestamp time.Time,
@@ -461,15 +448,14 @@ func internalExtendedEvalCtx(
 			InternalExecutor:   execCfg.InternalExecutor,
 			SQLStatsController: sqlStatsController,
 		},
-		SessionMutatorIterator: smi,
-		VirtualSchemas:         execCfg.VirtualSchemas,
-		Tracing:                &SessionTracing{},
-		NodesStatusServer:      execCfg.NodesStatusServer,
-		RegionsServer:          execCfg.RegionsServer,
-		Descs:                  tables,
-		ExecCfg:                execCfg,
-		DistSQLPlanner:         execCfg.DistSQLPlanner,
-		indexUsageStats:        indexUsageStats,
+		VirtualSchemas:    execCfg.VirtualSchemas,
+		Tracing:           &SessionTracing{},
+		NodesStatusServer: execCfg.NodesStatusServer,
+		RegionsServer:     execCfg.RegionsServer,
+		Descs:             tables,
+		ExecCfg:           execCfg,
+		DistSQLPlanner:    execCfg.DistSQLPlanner,
+		indexUsageStats:   indexUsageStats,
 	}
 }
 
@@ -516,16 +502,12 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 	return p.extendedEvalCtx.ExecCfg
 }
 
-func (p *planner) applyOnEachMutatorError(applyFunc func(m sessionDataMutator) error) error {
-	return p.sessionDataMutatorIterator.applyOnEachMutatorError(applyFunc)
-}
-
 // GetOrInitSequenceCache returns the sequence cache for the session.
 // If the sequence cache has not been used yet, it initializes the cache
 // inside the session data.
 func (p *planner) GetOrInitSequenceCache() sessiondatapb.SequenceCache {
 	if p.SessionData().SequenceCache == nil {
-		p.ExtendedEvalContext().SessionMutatorIterator.applyForEachMutator(
+		p.sessionDataMutatorIterator.applyOnEachMutator(
 			func(m sessionDataMutator) {
 				m.initSequenceCache()
 			},
@@ -793,6 +775,11 @@ func (p *planner) TypeAsStringArray(
 // SessionData is part of the PlanHookState interface.
 func (p *planner) SessionData() *sessiondata.SessionData {
 	return p.EvalContext().SessionData()
+}
+
+// SessionDataMutatorIterator is part of the PlanHookState interface.
+func (p *planner) SessionDataMutatorIterator() *sessionDataMutatorIterator {
+	return p.sessionDataMutatorIterator
 }
 
 // Ann is a shortcut for the Annotations from the eval context.
