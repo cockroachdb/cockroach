@@ -2246,7 +2246,7 @@ var (
 				},
 			},
 			descpb.IndexDescriptor{
-				Name:                tabledesc.PrimaryKeyIndexName,
+				Name:                "primary",
 				ID:                  keys.SpanConfigurationsTablePrimaryKeyIndexID,
 				Unique:              true,
 				KeyColumnNames:      []string{"start_key"},

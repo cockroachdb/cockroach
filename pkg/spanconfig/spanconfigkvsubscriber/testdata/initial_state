@@ -1,0 +1,30 @@
+# Ensure that subscribers started after certain span configs have been
+# deleted/overwritten never observe earlier state.
+
+kvaccessor-update
+upsert [a,c):A
+upsert [d,f):D
+----
+ok
+
+kvaccessor-update
+delete [d,f)
+upsert [a,c):B
+----
+ok
+
+kvsubscriber-start
+----
+ok
+
+kvsubscriber-updates
+----
+/M{in-ax}
+
+kvsubscriber-reader key=a
+----
+conf=B
+
+kvsubscriber-reader key=d
+----
+conf=MISSING
