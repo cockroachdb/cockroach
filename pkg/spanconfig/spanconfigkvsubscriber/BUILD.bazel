@@ -1,19 +1,21 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "spanconfigkvwatcher",
+    name = "spanconfigkvsubscriber",
     srcs = [
-        "kv_watcher.go",
+        "kvsubscriber.go",
         "span_config_decoder.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvwatcher",
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed:with-mocks",
+        "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
         "//pkg/roachpb:with-mocks",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigstore",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
@@ -27,19 +29,21 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
-    name = "spanconfigkvwatcher_test",
+    name = "spanconfigkvsubscriber_test",
     srcs = [
-        "kv_watcher_test.go",
+        "kvsubscriber_test.go",
         "main_test.go",
         "span_config_decoder_test.go",
     ],
+    data = glob(["testdata/**"]),
     deps = [
-        ":spanconfigkvwatcher",
+        ":spanconfigkvsubscriber",
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed:with-mocks",
@@ -47,14 +51,21 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigkvaccessor",
+        "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/sql/sqlutil",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

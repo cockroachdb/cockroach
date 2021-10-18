@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfigkvwatcher_test
+package spanconfigkvsubscriber_test
 
 import (
 	"os"

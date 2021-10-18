@@ -13,6 +13,9 @@ package keys
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 var (
+	// EverythingSpan is a span that covers everything.
+	EverythingSpan = roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}
+
 	// Meta1Span holds all first level addressing records.
 	Meta1Span = roachpb.Span{Key: roachpb.KeyMin, EndKey: Meta2Prefix}
 

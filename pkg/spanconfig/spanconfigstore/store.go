@@ -35,7 +35,7 @@ var EnabledSetting = settings.RegisterBoolSetting(
 
 // Store is an in-memory data structure to store and retrieve span configs.
 // Internally it makes use of an interval tree to store non-overlapping span
-// configs.
+// configs. It's safe for concurrent use.
 type Store struct {
 	mu struct {
 		syncutil.RWMutex
