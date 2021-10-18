@@ -712,6 +712,8 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	// Direct use of time.Now() and friends is prohibited because we might want to
+	// mock the time source. Use timeutil.Now() instead.
 	t.Run("TestTimeutil", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
@@ -725,9 +727,9 @@ func TestLint(t *testing.T) {
 			":!**/embedded.go",
 			":!util/timeutil/time.go",
 			":!util/timeutil/zoneinfo.go",
-			":!util/tracing/span.go",
-			":!util/tracing/crdbspan.go",
-			":!util/tracing/tracer.go",
+			// gorm_helpers.go is excluded because
+			// gormTestHelperGoFile uses Now(). gormTestHelperGoFile is not part
+			// of the cockroachdb package and does not have timeutil.
 			":!cmd/roachtest/tests/gorm_helpers.go",
 		)
 		if err != nil {

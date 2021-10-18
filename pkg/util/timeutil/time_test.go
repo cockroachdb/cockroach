@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUnixMicros(t *testing.T) {
@@ -69,4 +70,10 @@ func TestUnixMicrosRounding(t *testing.T) {
 func TestReplaceLibPQTimePrefix(t *testing.T) {
 	assert.Equal(t, "1970-02-02 11:00", ReplaceLibPQTimePrefix("1970-02-02 11:00"))
 	assert.Equal(t, "1970-01-01 11:00", ReplaceLibPQTimePrefix("0000-01-01 11:00"))
+}
+
+// Test that timestamps returned by timeutil.Now() are UTC. See the package
+// init() function for details.
+func TestNowIsUTC(t *testing.T) {
+	require.Equal(t, time.UTC, Now().Location())
 }

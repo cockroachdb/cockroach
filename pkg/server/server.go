@@ -1220,6 +1220,13 @@ func (s *Server) Start(ctx context.Context) error {
 func (s *Server) PreStart(ctx context.Context) error {
 	ctx = s.AnnotateCtx(ctx)
 
+	if time.Local != time.UTC {
+		// Sanity check that no 3rd-party library messes the global that our
+		// timeutil library messes with.
+		return errors.AssertionFailedf("expected time.Local to be set to UTC. " +
+			"Did you include a 3rd party package that overwrites that global?")
+	}
+
 	// Start the time sanity checker.
 	s.startTime = timeutil.Now()
 	if err := s.startMonitoringForwardClockJumps(ctx); err != nil {

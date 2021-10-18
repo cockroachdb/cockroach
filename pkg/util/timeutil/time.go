@@ -15,12 +15,29 @@ import (
 	"time"
 )
 
+func init() {
+	// Set time.Local so that time.Now() returns timestamps localized as UTC.
+	// We like our timestamps UTC because:
+	// 1) Timestamps might leak into Datums, and we don't want different nodes
+	// using different timestamps.
+	// 2) We want timestamps to print in the same timezone across the cluster.
+	//
+	// Setting the time.Local global is a fairly brutal thing to do. Before this,
+	// we had timeutil.Now() return time.Now().UTC(). That UTC() call had the
+	// unfortunate side effect of stripping the monotonic part of the clock
+	// reading, which makes future time.Since(t) calls more expensive.
+	time.Local = time.UTC
+}
+
 // LibPQTimePrefix is the prefix lib/pq prints time-type datatypes with.
 const LibPQTimePrefix = "0000-01-01"
 
-// Now returns the current UTC time.
+// Now returns the current time.
+//
+// The timestamp returned will have the locality set to UTC, courtesy of the
+// init() above.
 func Now() time.Time {
-	return time.Now().UTC()
+	return time.Now()
 }
 
 // Since returns the time elapsed since t.

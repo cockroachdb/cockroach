@@ -4,6 +4,10 @@ build --symlink_prefix=_bazel/ --ui_event_filters=-DEBUG --define gotags=bazel,c
 test --config=test
 build:with_ui --define cockroach_with_ui=y
 build:test --define gotags=bazel,crdb_test,gss
+# Certain time based fail if UTC isn't the default timezone (see #25064).
+# CRDB sets time.Local=time.UTC, which should also satisfy these tests (plus I
+# couldn't reproduce the failure years later), but let's not rely on that - so
+# we set the TZ to UTC explicitly.
 build:race --@io_bazel_rules_go//go/config:race --test_env=GORACE=halt_on_error=1 --test_sharding_strategy=disabled
 test:test --test_env=TZ=
 query --ui_event_filters=-DEBUG
