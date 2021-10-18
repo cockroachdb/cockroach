@@ -121,12 +121,12 @@ denylist:
 			Denylist: []*DenyEntry{
 				{
 					DenyEntity{"63", ClusterType},
-					timeutil.Now(),
+					timeutil.StripMonotonic(timeutil.Now()),
 					"over usage",
 				},
 				{
 					DenyEntity{"8.8.8.8", IPAddrType},
-					timeutil.Now().Add(1 * time.Hour),
+					timeutil.StripMonotonic(timeutil.Now().Add(1 * time.Hour)),
 					"malicious IP",
 				},
 			},

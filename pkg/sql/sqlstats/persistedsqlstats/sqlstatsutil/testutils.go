@@ -67,7 +67,7 @@ func genRandomData() randomData {
 		r.IntArray[i] = rand.Int63()
 	}
 
-	r.Time = timeutil.Now()
+	r.Time = timeutil.StripMonotonic(timeutil.Now())
 	return r
 }
 

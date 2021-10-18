@@ -15,12 +15,38 @@ import (
 	"time"
 )
 
+func init() {
+	// Set time.Local so that time.Now() returns timestamps localized as UTC.
+	// We like our timestamps UTC because:
+	// 1) Timestamps might leak into Datums, and we don't want different nodes
+	// using different timestamps.
+	// 2) We want timestamps to print in the same timezone across the cluster.
+	//
+	// Setting the time.Local global is a fairly brutal thing to do. Before this,
+	// we had timeutil.Now() return time.Now().UTC(). That UTC() call had the
+	// unfortunate side effect of stripping the monotonic part of the clock
+	// reading, which makes future time.Since(t) calls more expensive.
+	//
+	// Setting time.Local to nil makes it UTC. We don't set time.Local = time.UTC
+	// because that breaks the time library's documented expectation that, in a
+	// time.Time, a nil location is only ever represented as nil. I don't think
+	// violating that invariant actually breaks anything inside the standard
+	// library, but it is a pain for some of our tests that marshall/unmarshall
+	// time.Time instances in various ways (yaml, json) and expect them to
+	// round-trip. Having two representations for a UTC roundtrip (one with the
+	// location set to time.UTC, one with a nil location) confuses these tests.
+	time.Local = nil
+}
+
 // LibPQTimePrefix is the prefix lib/pq prints time-type datatypes with.
 const LibPQTimePrefix = "0000-01-01"
 
-// Now returns the current UTC time.
+// Now returns the current time.
+//
+// The timestamp returned will have the locality set to UTC, courtesy of the
+// init() above.
 func Now() time.Time {
-	return time.Now().UTC()
+	return time.Now()
 }
 
 // Since returns the time elapsed since t.
@@ -65,4 +91,15 @@ func ReplaceLibPQTimePrefix(s string) string {
 		return "1970-01-01" + s[len(LibPQTimePrefix):]
 	}
 	return s
+}
+
+// StripMonotonic strips the monotonic part(*) of the timestamp. This is useful
+// when we want a time.Time that round-trips through marshalling/unmarshalling
+// that loses the monotonic part (e.g. json, yaml). In particular, various tests
+// check that larger structs containing time.Time round-trip.
+//
+// (*) Go time.Time can have two clock readings in them: a wall-clock and a
+// monotonic clock.
+func StripMonotonic(t time.Time) time.Time {
+	return t.Round(0)
 }

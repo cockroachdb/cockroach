@@ -222,7 +222,10 @@ LDFLAGS ?=
 CGO_CFLAGS = $(filter-out -g%,$(CFLAGS))
 CGO_CXXFLAGS = $(CXXFLAGS)
 CGO_LDFLAGS = $(filter-out -static,$(LDFLAGS))
-# certain time based fail if UTC isn't the default timezone
+# Certain time based fail if UTC isn't the default timezone (see #25064).
+# CRDB sets time.Local=time.UTC, which should also satisfy these tests (plus I
+# couldn't reproduce the failure years later), but let's not rely on that - so
+# we set the TZ to UTC explicitly.
 TZ=""
 
 export CFLAGS CXXFLAGS LDFLAGS CGO_CFLAGS CGO_CXXFLAGS CGO_LDFLAGS TZ

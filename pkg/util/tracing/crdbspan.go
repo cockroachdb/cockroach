@@ -423,7 +423,7 @@ func (s *crdbSpan) recordStructured(item Structured) {
 	if clock := s.tracer.testing.Clock; clock != nil {
 		now = clock.Now()
 	} else {
-		now = time.Now()
+		now = timeutil.Now()
 	}
 	sr := &tracingpb.StructuredRecord{
 		Time:    now,
@@ -525,7 +525,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		// -1 indicates an unfinished Span. For a recording it's better to put some
 		// duration in it, otherwise tools get confused. For example, we export
 		// recordings to Jaeger, and spans with a zero duration don't look nice.
-		rs.Duration = time.Since(rs.StartTime)
+		rs.Duration = timeutil.Since(rs.StartTime)
 		rs.Finished = false
 	} else {
 		rs.Finished = true

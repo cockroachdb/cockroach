@@ -10,10 +10,52 @@
 
 package timeutil
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func BenchmarkNow(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		Now()
+	type test struct {
+		name    string
+		nowFunc func() time.Time
+	}
+	for _, tc := range []test{
+		{name: "stdlib-now",
+			nowFunc: time.Now,
+		},
+		{
+			name:    "timeutil-now",
+			nowFunc: Now,
+		},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				Now()
+			}
+		})
+	}
+}
+
+func BenchmarkSince(b *testing.B) {
+	type test struct {
+		name    string
+		nowFunc func() time.Time
+	}
+	for _, tc := range []test{
+		{name: "stdlib-now",
+			nowFunc: time.Now,
+		},
+		{
+			name:    "timeutil-now",
+			nowFunc: Now,
+		},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			start := tc.nowFunc()
+			for i := 0; i < b.N; i++ {
+				Since(start)
+			}
+		})
 	}
 }
