@@ -12,13 +12,9 @@ package cli
 
 import (
 	"bytes"
-	"database/sql/driver"
 	"fmt"
-	"io"
-	"os"
 	"strconv"
 	"text/tabwriter"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
@@ -54,82 +50,42 @@ func runStmtDiagList(cmd *cobra.Command, args []string) (resErr error) {
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	// -- List bundles --
-
-	rows, err := conn.Query(
-		`SELECT id, statement_fingerprint, collected_at
-		 FROM system.statement_diagnostics
-		 WHERE error IS NULL
-		 ORDER BY collected_at DESC`,
-		nil, /* args */
-	)
+	bundles, err := clisqlclient.StmtDiagListBundles(conn)
 	if err != nil {
 		return err
 	}
-	vals := make([]driver.Value, 3)
+
 	var buf bytes.Buffer
-	w := tabwriter.NewWriter(&buf, 4, 0, 2, ' ', 0)
-	fmt.Fprint(w, "  ID\tCollection time\tStatement\n")
-	num := 0
-	for {
-		if err := rows.Next(vals); err == io.EOF {
-			break
-		} else if err != nil {
-			return err
-		}
-		id := vals[0].(int64)
-		stmt := vals[1].(string)
-		t := vals[2].(time.Time)
-		fmt.Fprintf(w, "  %d\t%s\t%s\n", id, t.UTC().Format(timeFmt), stmt)
-		num++
-	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
-	if num == 0 {
+	if len(bundles) == 0 {
 		fmt.Printf("No statement diagnostics bundles available.\n")
 	} else {
 		fmt.Printf("Statement diagnostics bundles:\n")
+		w := tabwriter.NewWriter(&buf, 4, 0, 2, ' ', 0)
+		fmt.Fprint(w, "  ID\tCollection time\tStatement\n")
+		for _, b := range bundles {
+			fmt.Fprintf(w, "  %d\t%s\t%s\n", b.ID, b.CollectedAt.UTC().Format(timeFmt), b.Statement)
+		}
 		_ = w.Flush()
 		// When we show a list of bundles, we want an extra blank line.
 		fmt.Println(buf.String())
 	}
 
 	// -- List outstanding activation requests --
-
-	rows, err = conn.Query(
-		`SELECT id, statement_fingerprint, requested_at
-		 FROM system.statement_diagnostics_requests
-		 WHERE NOT completed
-		 ORDER BY requested_at DESC`,
-		nil, /* args */
-	)
+	reqs, err := clisqlclient.StmtDiagListOutstandingRequests(conn)
 	if err != nil {
 		return err
 	}
 
 	buf.Reset()
-	w = tabwriter.NewWriter(&buf, 4, 0, 2, ' ', 0)
-	fmt.Fprint(w, "  ID\tActivation time\tStatement\n")
-	num = 0
-	for {
-		if err := rows.Next(vals); err == io.EOF {
-			break
-		} else if err != nil {
-			return err
-		}
-		id := vals[0].(int64)
-		stmt := vals[1].(string)
-		t := vals[2].(time.Time)
-		fmt.Fprintf(w, "  %d\t%s\t%s\n", id, t.UTC().Format(timeFmt), stmt)
-		num++
-	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
-	if num == 0 {
+	if len(reqs) == 0 {
 		fmt.Printf("No outstanding activation requests.\n")
 	} else {
 		fmt.Printf("Outstanding activation requests:\n")
+		w := tabwriter.NewWriter(&buf, 4, 0, 2, ' ', 0)
+		fmt.Fprint(w, "  ID\tActivation time\tStatement\n")
+		for _, r := range reqs {
+			fmt.Fprintf(w, "  %d\t%s\t%s\n", r.ID, r.RequestedAt.UTC().Format(timeFmt), r.Statement)
+		}
 		_ = w.Flush()
 		fmt.Print(buf.String())
 	}
@@ -159,54 +115,7 @@ func runStmtDiagDownload(cmd *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
-	// Retrieve the chunk IDs; these are stored in an INT ARRAY column.
-	rows, err := conn.Query(
-		"SELECT unnest(bundle_chunks) FROM system.statement_diagnostics WHERE id = $1",
-		[]driver.Value{id},
-	)
-	if err != nil {
-		return err
-	}
-	var chunkIDs []int64
-	vals := make([]driver.Value, 1)
-	for {
-		if err := rows.Next(vals); err == io.EOF {
-			break
-		} else if err != nil {
-			return err
-		}
-		chunkIDs = append(chunkIDs, vals[0].(int64))
-	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
-
-	if len(chunkIDs) == 0 {
-		return errors.Newf("no statement diagnostics bundle with ID %d", id)
-	}
-
-	// Create the file and write out the chunks.
-	out, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-
-	for _, chunkID := range chunkIDs {
-		data, err := conn.QueryRow(
-			"SELECT data FROM system.statement_bundle_chunks WHERE id = $1",
-			[]driver.Value{chunkID},
-		)
-		if err != nil {
-			_ = out.Close()
-			return err
-		}
-		if _, err := out.Write(data[0].([]byte)); err != nil {
-			_ = out.Close()
-			return err
-		}
-	}
-
-	return out.Close()
+	return clisqlclient.StmtDiagDownloadBundle(conn, id, filename)
 }
 
 var stmtDiagDeleteCmd = &cobra.Command{
@@ -229,7 +138,7 @@ func runStmtDiagDelete(cmd *cobra.Command, args []string) (resErr error) {
 		if len(args) > 0 {
 			return errors.New("extra arguments with --all")
 		}
-		return runStmtDiagDeleteAll(conn)
+		return clisqlclient.StmtDiagDeleteAllBundles(conn)
 	}
 	if len(args) != 1 {
 		return fmt.Errorf("accepts 1 arg, received %d", len(args))
@@ -240,65 +149,7 @@ func runStmtDiagDelete(cmd *cobra.Command, args []string) (resErr error) {
 		return errors.New("invalid id")
 	}
 
-	_, err = conn.QueryRow(
-		"SELECT 1 FROM system.statement_diagnostics WHERE id = $1",
-		[]driver.Value{id},
-	)
-	if err != nil {
-		if err == io.EOF {
-			return errors.Newf("no statement diagnostics bundle with ID %d", id)
-		}
-		return err
-	}
-
-	return conn.ExecTxn(func(conn clisqlclient.TxBoundConn) error {
-		// Delete the request metadata.
-		if err := conn.Exec(
-			"DELETE FROM system.statement_diagnostics_requests WHERE statement_diagnostics_id = $1",
-			[]driver.Value{id},
-		); err != nil {
-			return err
-		}
-		// Delete the bundle chunks.
-		if err := conn.Exec(
-			`DELETE FROM system.statement_bundle_chunks
-			  WHERE id IN (
-				  SELECT unnest(bundle_chunks) FROM system.statement_diagnostics WHERE id = $1
-				)`,
-			[]driver.Value{id},
-		); err != nil {
-			return err
-		}
-		// Finally, delete the diagnostics entry.
-		return conn.Exec(
-			"DELETE FROM system.statement_diagnostics WHERE id = $1",
-			[]driver.Value{id},
-		)
-	})
-}
-
-func runStmtDiagDeleteAll(conn clisqlclient.Conn) error {
-	return conn.ExecTxn(func(conn clisqlclient.TxBoundConn) error {
-		// Delete the request metadata.
-		if err := conn.Exec(
-			"DELETE FROM system.statement_diagnostics_requests WHERE completed",
-			nil,
-		); err != nil {
-			return err
-		}
-		// Delete all bundle chunks.
-		if err := conn.Exec(
-			`DELETE FROM system.statement_bundle_chunks WHERE true`,
-			nil,
-		); err != nil {
-			return err
-		}
-		// Finally, delete the diagnostics entry.
-		return conn.Exec(
-			"DELETE FROM system.statement_diagnostics WHERE true",
-			nil,
-		)
-	})
+	return clisqlclient.StmtDiagDeleteBundle(conn, id)
 }
 
 var stmtDiagCancelCmd = &cobra.Command{
@@ -321,10 +172,7 @@ func runStmtDiagCancel(cmd *cobra.Command, args []string) (resErr error) {
 		if len(args) > 0 {
 			return errors.New("extra arguments with --all")
 		}
-		return conn.Exec(
-			"DELETE FROM system.statement_diagnostics_requests WHERE NOT completed",
-			nil,
-		)
+		return clisqlclient.StmtDiagCancelAllOutstandingRequests(conn)
 	}
 	if len(args) != 1 {
 		return fmt.Errorf("accepts 1 arg, received %d", len(args))
@@ -335,17 +183,7 @@ func runStmtDiagCancel(cmd *cobra.Command, args []string) (resErr error) {
 		return errors.New("invalid id")
 	}
 
-	_, err = conn.QueryRow(
-		"DELETE FROM system.statement_diagnostics_requests WHERE id = $1 RETURNING id",
-		[]driver.Value{id},
-	)
-	if err != nil {
-		if err == io.EOF {
-			return errors.Newf("no outstanding activation requests with ID %d", id)
-		}
-		return err
-	}
-	return nil
+	return clisqlclient.StmtDiagCancelOutstandingRequest(conn, id)
 }
 
 var stmtDiagCmds = []*cobra.Command{
