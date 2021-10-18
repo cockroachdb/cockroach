@@ -184,3 +184,35 @@ query IT
 SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
 16  [{"a": {"b": [1, [2]]}}, "d"]
+
+# Regression tests for not fetching columns that are only needed by the ON
+# expression (#71093).
+statement ok
+CREATE TABLE t71093 (a INT, b INT, c INT, d INT, INDEX a_idx(a) STORING (b), INDEX c_idx(c) STORING (d));
+INSERT INTO t71093 VALUES (0, 1, 2, 3)
+
+# ON expr needs the stored column from the left side.
+query I
+SELECT count(*) FROM t71093 WHERE a = 0 AND b = 1 AND c = 2
+----
+1
+
+# ON expr needs the stored column from the right side.
+query I
+SELECT count(*) FROM t71093 WHERE a = 0 AND c = 2 AND d = 3
+----
+1
+
+# ON expr needs the stored columns from both sides.
+query I
+SELECT count(*) FROM t71093 WHERE a = 0 AND b = 1 AND c = 2 AND d = 3
+----
+1
+
+# Regression test for mistakenly attempting to fetch columns not needed by ON
+# expr that are not in the index (#71271).
+statement ok
+CREATE TABLE t71271(a INT, b INT, c INT, d INT, INDEX (c), INDEX (d))
+
+statement ok
+SELECT d FROM t71271 WHERE c = 3 AND d = 4
