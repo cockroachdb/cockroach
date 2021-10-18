@@ -1724,17 +1724,17 @@ func (c *clusterImpl) GitClone(
 	ctx context.Context, l *logger.Logger, src, dest, branch string, node option.NodeListOption,
 ) error {
 	return c.RunL(ctx, l, node, "bash", "-e", "-c", fmt.Sprintf(`'
-if ! test -d %s; then
-  git clone -b %s --depth 1 %s %s
+if ! test -d %[1]s; then
+  git clone -b %[2]s --depth 1 %[3]s %[1]s
 else
-  cd %s
+  cd %[1]s
   git fetch origin
-  git checkout origin/%s
+  git checkout origin/%[2]s
 fi
 '`, dest,
-		branch, src, dest,
-		dest,
-		branch))
+		branch,
+		src,
+	))
 }
 
 func roachprodArgs(opts []option.Option) []string {
