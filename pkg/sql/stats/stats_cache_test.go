@@ -45,8 +45,8 @@ func insertTableStat(
 ) error {
 	insertStatStmt := `
 INSERT INTO system.table_statistics ("tableID", "statisticID", name, "columnIDs", "createdAt",
-	"rowCount", "distinctCount", "nullCount", histogram)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	"rowCount", "distinctCount", "nullCount", "avgSize", histogram)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 `
 	columnIDs := tree.NewDArray(types.Int)
 	for _, id := range stat.ColumnIDs {
@@ -64,6 +64,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		stat.RowCount,
 		stat.DistinctCount,
 		stat.NullCount,
+		stat.AvgSize,
 		nil, // histogram
 	}
 	if len(stat.Name) != 0 {
@@ -74,7 +75,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		if err != nil {
 			return err
 		}
-		args[8] = histogramBytes
+		args[9] = histogramBytes
 	}
 
 	var rows int
@@ -156,6 +157,7 @@ func initTestData(
 			RowCount:      32,
 			DistinctCount: 30,
 			NullCount:     0,
+			AvgSize:       4,
 			HistogramData: &HistogramData{ColumnType: types.Int, Buckets: []HistogramData_Bucket{
 				{NumEq: 3, NumRange: 30, UpperBound: encoding.EncodeVarintAscending(nil, 3000)}},
 			},
@@ -168,6 +170,7 @@ func initTestData(
 			RowCount:      32,
 			DistinctCount: 5,
 			NullCount:     5,
+			AvgSize:       4,
 		},
 		{
 			TableID:       descpb.ID(101),
@@ -177,6 +180,7 @@ func initTestData(
 			RowCount:      320000,
 			DistinctCount: 300000,
 			NullCount:     100,
+			AvgSize:       2,
 		},
 		{
 			TableID:       descpb.ID(102),
@@ -187,6 +191,7 @@ func initTestData(
 			RowCount:      0,
 			DistinctCount: 0,
 			NullCount:     0,
+			AvgSize:       0,
 		},
 	}
 
