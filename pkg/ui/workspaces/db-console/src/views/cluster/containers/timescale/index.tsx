@@ -293,7 +293,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
       key: "Custom",
     });
     setTimeRange({
-      ...window,
+      ...currentWindow,
       start,
       end,
     });
