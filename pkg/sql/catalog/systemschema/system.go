@@ -231,12 +231,15 @@ CREATE TABLE system.web_sessions (
 	FAMILY (id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo")
 );`
 
-	// table_statistics is used to track statistics collected about individual columns
-	// or groups of columns from every table in the database. Each row contains the
-	// number of distinct values of the column group and (optionally) a histogram if there
-	// is only one column in columnIDs.
+	// table_statistics is used to track statistics collected about individual
+	// columns or groups of columns from every table in the database. Each row
+	// contains the number of distinct values of the column group, the number of
+	// null values, the average size of the column(s), and (optionally) a
+	// histogram if there is only one column in columnIDs.
 	//
 	// Design outlined in /docs/RFCS/20170908_sql_optimizer_statistics.md
+	// Note: avgSize is a newer statistic than the RFC above. It contains the
+	// average size of the column group in bytes.
 	TableStatisticsTableSchema = `
 CREATE TABLE system.table_statistics (
 	"tableID"       INT8       NOT NULL,
@@ -247,9 +250,10 @@ CREATE TABLE system.table_statistics (
 	"rowCount"      INT8       NOT NULL,
 	"distinctCount" INT8       NOT NULL,
 	"nullCount"     INT8       NOT NULL,
+	"avgSize"       INT8       NOT NULL DEFAULT 0,
 	histogram       BYTES,
 	CONSTRAINT "primary" PRIMARY KEY ("tableID", "statisticID"),
-	FAMILY ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram)
+	FAMILY ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", "avgSize", histogram)
 );`
 
 	// locations are used to map a locality specified by a node to geographic
@@ -833,6 +837,7 @@ var (
 
 	falseBoolString = "false"
 	trueBoolString  = "true"
+	zeroIntString   = "0:::INT8"
 
 	// UsersTable is the descriptor for the users table.
 	UsersTable = registerSystemTable(
@@ -1261,11 +1266,12 @@ var (
 				{Name: "rowCount", ID: 6, Type: types.Int},
 				{Name: "distinctCount", ID: 7, Type: types.Int},
 				{Name: "nullCount", ID: 8, Type: types.Int},
-				{Name: "histogram", ID: 9, Type: types.Bytes, Nullable: true},
+				{Name: "avgSize", ID: 9, Type: types.Int, DefaultExpr: &zeroIntString},
+				{Name: "histogram", ID: 10, Type: types.Bytes, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
-					Name: "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram",
+					Name: "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_avgSize_histogram",
 					ID:   0,
 					ColumnNames: []string{
 						"tableID",
@@ -1276,9 +1282,10 @@ var (
 						"rowCount",
 						"distinctCount",
 						"nullCount",
+						"avgSize",
 						"histogram",
 					},
-					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 				},
 			},
 			descpb.IndexDescriptor{

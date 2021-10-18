@@ -149,6 +149,8 @@ var xxx_messageInfo_SketchSpec proto.InternalMessageInfo
 //       - an INT column indicating the number of rows processed
 //       - an INT column indicating the number of rows with NULL values
 //         on all columns of the sketch.
+//       - an INT column indicating the sum of the size of all columns of the
+//         sketch in bytes.
 //       - a BYTES column with the binary sketch data (format
 //         dependent on the sketch type).
 //   3. inverted columns:
@@ -221,6 +223,7 @@ var xxx_messageInfo_SamplerSpec proto.InternalMessageInfo
 //    - sketch index
 //    - number of rows processed
 //    - number of rows encountered with NULL values on all columns of the sketch
+//    - average size of the columns of the sketch in bytes
 //    - binary sketch data
 //  3. inverted columns:
 //    - column index for inverted sample
