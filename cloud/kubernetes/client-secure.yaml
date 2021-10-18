@@ -6,29 +6,6 @@ metadata:
     app: cockroachdb-client
 spec:
   serviceAccountName: cockroachdb
-  initContainers:
-  # The init-certs container sends a certificate signing request to the
-  # kubernetes cluster.
-  # You can see pending requests using: kubectl get csr
-  # CSRs can be approved using:         kubectl certificate approve <csr name>
-  #
-  # In addition to the client certificate and key, the init-certs entrypoint will symlink
-  # the cluster CA to the certs directory.
-  - name: init-certs
-    image: cockroachdb/cockroach-k8s-request-cert:0.4
-    imagePullPolicy: IfNotPresent
-    command:
-    - "/bin/ash"
-    - "-ecx"
-    - "/request-cert -namespace=${POD_NAMESPACE} -certs-dir=/cockroach-certs -type=client -user=root -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-    env:
-    - name: POD_NAMESPACE
-      valueFrom:
-        fieldRef:
-          fieldPath: metadata.namespace
-    volumeMounts:
-    - name: client-certs
-      mountPath: /cockroach-certs
   containers:
   - name: cockroachdb-client
     image: cockroachdb/cockroach:v21.2.2
@@ -45,4 +22,15 @@ spec:
   terminationGracePeriodSeconds: 0
   volumes:
   - name: client-certs
-    emptyDir: {}
+    projected:
+        sources:
+          - secret:
+              name: crdb-cockroachdb-client-secret
+              items:
+                - key: tls.crt
+                  path: client.root.crt
+                - key: tls.key
+                  path: client.root.key
+                - key: ca.crt
+                  path: ca.crt
+        defaultMode: 256
