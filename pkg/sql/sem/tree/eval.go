@@ -381,6 +381,48 @@ func initArrayElementConcatenation() {
 			Volatility: VolatilityImmutable,
 		})
 	}
+
+	BinOps[Concat] = append(BinOps[Concat], &BinOp{
+		LeftType:  types.MakeArray(types.AnyEnum),
+		RightType: types.AnyEnum,
+		ReturnType: func(args []TypedExpr) *types.T {
+			if args == nil {
+				return types.MakeArray(types.AnyEnum)
+			}
+			return inferBinReturnTypeForAnyEnumConcat(args[0], args[1])
+		},
+		NullableArgs: true,
+		Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			return AppendToMaybeNullArray(right.ResolvedType(), left, right)
+		},
+		Volatility: VolatilityImmutable,
+	})
+
+	BinOps[Concat] = append(BinOps[Concat], &BinOp{
+		LeftType:  types.AnyEnum,
+		RightType: types.MakeArray(types.AnyEnum),
+		ReturnType: func(args []TypedExpr) *types.T {
+			if args == nil {
+				return types.MakeArray(types.AnyEnum)
+			}
+			return inferBinReturnTypeForAnyEnumConcat(args[1], args[0])
+		},
+		NullableArgs: true,
+		Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			return PrependToMaybeNullArray(left.ResolvedType(), left, right)
+		},
+		Volatility: VolatilityImmutable,
+	})
+}
+
+func inferBinReturnTypeForAnyEnumConcat(arr, con TypedExpr) *types.T {
+	if rt := arr.ResolvedType(); rt.Family() != types.UnknownFamily {
+		return rt
+	}
+	if rt := con.ResolvedType(); rt.Family() != types.UnknownFamily {
+		return types.MakeArray(rt)
+	}
+	return types.MakeArray(types.AnyEnum)
 }
 
 // ConcatArrays concatenates two arrays.
