@@ -90,6 +90,7 @@ export const aggregateStatements = (
     if (!(key in statsKey)) {
       statsKey[key] = {
         label: s.statement,
+        summary: s.statement_summary,
         aggregatedTs: s.aggregated_ts,
         implicitTxn: s.implicit_txn,
         database: s.database,

@@ -57,6 +57,7 @@ type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDi
 
 interface StatementsSummaryData {
   statement: string;
+  statementSummary: string;
   aggregatedTs: number;
   implicitTxn: boolean;
   fullScan: boolean;
@@ -106,6 +107,7 @@ export const selectStatements = createSelector(
       if (!(key in statsByStatementKey)) {
         statsByStatementKey[key] = {
           statement: stmt.statement,
+          statementSummary: stmt.statement_summary,
           aggregatedTs: stmt.aggregated_ts,
           implicitTxn: stmt.implicit_txn,
           fullScan: stmt.full_scan,
@@ -120,6 +122,7 @@ export const selectStatements = createSelector(
       const stmt = statsByStatementKey[key];
       return {
         label: stmt.statement,
+        summary: stmt.statementSummary,
         aggregatedTs: stmt.aggregatedTs,
         implicitTxn: stmt.implicitTxn,
         fullScan: stmt.fullScan,
