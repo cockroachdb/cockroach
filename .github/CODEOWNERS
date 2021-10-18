@@ -236,6 +236,7 @@
 /pkg/roachpb/string_test.go  @cockroachdb/kv-prs
 /pkg/roachpb/tenant*         @cockroachdb/kv-prs
 /pkg/roachpb/version*        @cockroachdb/server
+/pkg/roachprod/              @cockroachdb/dev-inf
 /pkg/rpc/                    @cockroachdb/server-prs
 /pkg/scheduledjobs/          @cockroachdb/bulk-prs
 /pkg/security/               @cockroachdb/server-prs @cockroachdb/prodsec
