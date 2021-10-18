@@ -147,7 +147,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 				Lease: cachedLease,
 			})
 
-			err := ds.RangeFeed(ctx, roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey}, hlc.Timestamp{}, false, nil)
+			err := ds.RangeFeed(ctx, []roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}}, hlc.Timestamp{}, false, nil)
 			require.Error(t, err)
 		})
 	}
