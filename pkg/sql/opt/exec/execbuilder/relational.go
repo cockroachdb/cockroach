@@ -2055,7 +2055,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 
 	label := fmt.Sprintf("working buffer (%s)", rec.Name)
 	var ep execPlan
-	ep.root, err = b.factory.ConstructRecursiveCTE(initial.root, fn, label)
+	ep.root, err = b.factory.ConstructRecursiveCTE(initial.root, fn, label, rec.Deduplicate)
 	if err != nil {
 		return execPlan{}, err
 	}

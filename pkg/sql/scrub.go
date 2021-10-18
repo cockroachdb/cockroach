@@ -475,7 +475,7 @@ func scrubRunDistSQL(
 	ctx context.Context, planCtx *PlanningCtx, p *planner, plan *PhysicalPlan, columnTypes []*types.T,
 ) (*rowContainerHelper, error) {
 	var rowContainer rowContainerHelper
-	rowContainer.init(columnTypes, &p.extendedEvalCtx, "scrub" /* opName */)
+	rowContainer.init(columnTypes, &p.extendedEvalCtx, "scrub" /* opName */, false /* enableDeduplication */)
 	rowResultWriter := NewRowResultWriter(&rowContainer)
 	recv := MakeDistSQLReceiver(
 		ctx,

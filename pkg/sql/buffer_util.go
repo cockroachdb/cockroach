@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -34,28 +35,56 @@ type rowContainerHelper struct {
 }
 
 func (c *rowContainerHelper) init(
-	typs []*types.T, evalContext *extendedEvalContext, opName string,
+	typs []*types.T, evalContext *extendedEvalContext, opName string, enableDeduplication bool,
 ) {
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
 	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
 		evalContext.Context, evalContext.Mon, distSQLCfg, evalContext.SessionData(),
 		fmt.Sprintf("%s-limited", opName),
 	)
-	c.diskMonitor = execinfra.NewMonitor(evalContext.Context, distSQLCfg.ParentDiskMonitor, fmt.Sprintf("%s-disk", opName))
+	c.diskMonitor = execinfra.NewMonitor(
+		evalContext.Context, distSQLCfg.ParentDiskMonitor, fmt.Sprintf("%s-disk", opName),
+	)
 	c.rows = &rowcontainer.DiskBackedRowContainer{}
+	ordering := colinfo.NoOrdering
+	if enableDeduplication {
+		ordering = make(colinfo.ColumnOrdering, len(typs))
+		for i := range ordering {
+			ordering[i].ColIdx = i
+			ordering[i].Direction = encoding.Ascending
+		}
+	}
 	c.rows.Init(
-		colinfo.NoOrdering, typs, &evalContext.EvalContext,
+		ordering, typs, &evalContext.EvalContext,
 		distSQLCfg.TempStorage, c.memMonitor, c.diskMonitor,
 	)
+	if enableDeduplication {
+		c.rows.DoDeDuplicate()
+	}
 	c.scratch = make(rowenc.EncDatumRow, len(typs))
 }
 
-// addRow adds a given row to the helper and returns any error it encounters.
+// addRow adds a given row to the container.
 func (c *rowContainerHelper) addRow(ctx context.Context, row tree.Datums) error {
 	for i := range row {
 		c.scratch[i].Datum = row[i]
 	}
 	return c.rows.AddRow(ctx, c.scratch)
+}
+
+// addRowWithDedup adds a given row if not already present in the container.
+// To use this method, init must have been called with enableDeduplication=true.
+func (c *rowContainerHelper) addRowWithDedup(
+	ctx context.Context, row tree.Datums,
+) (ok bool, _ error) {
+	for i := range row {
+		c.scratch[i].Datum = row[i]
+	}
+	lenBefore := c.rows.Len()
+	if _, err := c.rows.AddRowWithDeDup(ctx, c.scratch); err != nil {
+		return false, err
+	}
+	return c.rows.Len() > lenBefore, nil
 }
 
 // len returns the number of rows buffered so far.

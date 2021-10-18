@@ -1231,7 +1231,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		typs = subqueryPhysPlan.GetResultTypes()
 	}
 	var rows rowContainerHelper
-	rows.init(typs, evalCtx, "subquery" /* opName */)
+	rows.init(typs, evalCtx, "subquery" /* opName */, false /* enableDeduplication */)
 	defer rows.close(ctx)
 
 	// TODO(yuzefovich): consider implementing batch receiving result writer.

@@ -34,7 +34,7 @@ type bufferNode struct {
 
 func (n *bufferNode) startExec(params runParams) error {
 	n.typs = planTypes(n.plan)
-	n.rows.init(n.typs, params.extendedEvalCtx, n.label)
+	n.rows.init(n.typs, params.extendedEvalCtx, n.label, false /* enableDeduplication */)
 	return nil
 }
 
