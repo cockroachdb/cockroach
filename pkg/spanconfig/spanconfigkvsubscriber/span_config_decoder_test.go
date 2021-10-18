@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfigkvwatcher_test
+package spanconfigkvsubscriber_test
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvwatcher"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -73,7 +73,7 @@ func TestSpanConfigDecoder(t *testing.T) {
 	require.Len(t, rows, initialCount+1)
 
 	last := rows[len(rows)-1]
-	got, err := spanconfigkvwatcher.TestingDecoderFn()(
+	got, err := spanconfigkvsubscriber.TestingDecoderFn()(
 		roachpb.KeyValue{
 			Key:   last.Key,
 			Value: *last.Value,
@@ -116,7 +116,7 @@ func BenchmarkSpanConfigDecoder(b *testing.B) {
 	rows, err := s.DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 	require.NoError(b, err)
 	last := rows[len(rows)-1]
-	decoderFn := spanconfigkvwatcher.TestingDecoderFn()
+	decoderFn := spanconfigkvsubscriber.TestingDecoderFn()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

@@ -759,10 +759,10 @@ type StoreConfig struct {
 	// SpanConfigsEnabled determines whether we're able to use the span configs
 	// infrastructure.
 	SpanConfigsEnabled bool
-	// Used to watch for span configuration changes.
-	SpanConfigWatcher spanconfig.KVWatcher
-	// SpanConfigStore is used to store and retrieve span configs.
-	SpanConfigStore spanconfig.Store
+	// Used to subscribe to span configuration changes, keeping up-to-date a
+	// data structure useful for retrieving span configs. Only available if
+	// SpanConfigsEnabled.
+	SpanConfigSubscriber spanconfig.KVSubscriber
 
 	// KVAdmissionController is an optional field used for admission control.
 	KVAdmissionController KVAdmissionController
@@ -965,6 +965,25 @@ func NewStore(
 	}
 	queueAdditionOnSystemConfigUpdateRate.SetOnChange(&cfg.Settings.SV,
 		updateSystemConfigUpdateQueueLimits)
+	queueAdditionOnSystemConfigUpdateBurst.SetOnChange(&cfg.Settings.SV,
+		updateSystemConfigUpdateQueueLimits)
+
+	// TODO(irfansharif): Here we're re-using (read: abusing) the existing
+	// system config cluster settings to also drive the span configs
+	// infrastructure. Very likely we want different knobs (or perhaps none at
+	// all). Worth evaluating when we strip out the system config span entirely
+	// in https://github.com/cockroachdb/cockroach/issues/70560.
+	s.spanConfigUpdateQueueRateLimiter = quotapool.NewRateLimiter(
+		"SpanConfigUpdateQueue",
+		quotapool.Limit(queueAdditionOnSystemConfigUpdateRate.Get(&cfg.Settings.SV)),
+		queueAdditionOnSystemConfigUpdateBurst.Get(&cfg.Settings.SV))
+	updateSpanConfigUpdateQueueLimits := func(ctx context.Context) {
+		s.spanConfigUpdateQueueRateLimiter.UpdateLimit(
+			quotapool.Limit(queueAdditionOnSystemConfigUpdateRate.Get(&cfg.Settings.SV)),
+			queueAdditionOnSystemConfigUpdateBurst.Get(&cfg.Settings.SV))
+	}
+	queueAdditionOnSystemConfigUpdateRate.SetOnChange(&cfg.Settings.SV,
+		updateSpanConfigUpdateQueueLimits)
 	queueAdditionOnSystemConfigUpdateBurst.SetOnChange(&cfg.Settings.SV,
 		updateSystemConfigUpdateQueueLimits)
 
@@ -1601,22 +1620,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.cfg.NodeLiveness.RegisterCallback(s.nodeIsLiveCallback)
 	}
 
-	if s.cfg.SpanConfigsEnabled {
-		// When toggling between the system config span and the span configs
-		// infrastructure, we want to re-apply configs on all replicas from
-		// whatever the new source is.
-		spanconfigstore.EnabledSetting.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
-			enabled := spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV)
-			if enabled {
-				s.applyAllFromSpanConfigStore(ctx)
-			} else {
-				if s.cfg.Gossip != nil && s.cfg.Gossip.GetSystemConfig() != nil {
-					s.systemGossipUpdate(s.cfg.Gossip.GetSystemConfig())
-				}
-			}
-		})
-	}
-
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
 	if s.cfg.Gossip != nil {
@@ -1655,38 +1658,24 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		})
 	}
 
-	// SpanConfigWatcher is nil unless COCKROACH_EXPERIMENTAL_SPAN_CONFIGS
-	// is set, and in unit tests.
-	if s.cfg.SpanConfigsEnabled && s.cfg.SpanConfigWatcher != nil {
-		// Start the watcher process to listen in on span config updates and
-		// propagate said updates to the underlying store.
-		spanConfigUpdateC, err := s.cfg.SpanConfigWatcher.WatchForKVUpdates(ctx)
-		if err != nil {
-			return err
-		}
-		if err := s.stopper.RunAsyncTask(ctx, "spanconfig-watcher", func(context.Context) {
-			for {
-				select {
-				case update := <-spanConfigUpdateC:
-					if interceptor := s.TestingKnobs().SpanConfigUpdateInterceptor; interceptor != nil {
-						interceptor(update)
-					}
+	if s.cfg.SpanConfigsEnabled {
+		s.cfg.SpanConfigSubscriber.SubscribeToKVUpdates(ctx, func(update roachpb.Span) {
+			s.onSpanConfigUpdate(ctx, update)
+		})
 
-					// TODO(irfansharif): These are raw rangefeed updates, and
-					// it's possible that we're receiving them out of timestamp
-					// order for different keys. This matters for when a span
-					// config gets split -- we don't want to process the
-					// post-split right-hand side write before the deletion
-					// event. To order these events, we'll want something like
-					// https://github.com/cockroachdb/cockroach/pull/71225.
-					s.onSpanConfigUpdate(ctx, update)
-				case <-s.stopper.ShouldQuiesce():
-					return
+		// When toggling between the system config span and the span configs
+		// infrastructure, we want to re-apply configs on all replicas from
+		// whatever the new source is.
+		spanconfigstore.EnabledSetting.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
+			enabled := spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV)
+			if enabled {
+				s.applyAllFromSpanConfigStore(ctx)
+			} else {
+				if s.cfg.Gossip != nil && s.cfg.Gossip.GetSystemConfig() != nil {
+					s.systemGossipUpdate(s.cfg.Gossip.GetSystemConfig())
 				}
 			}
-		}); err != nil {
-			return err
-		}
+		})
 	}
 
 	if !s.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
@@ -1831,7 +1820,7 @@ func (s *Store) GetConfReader() (spanconfig.StoreReader, error) {
 	}
 
 	if s.cfg.SpanConfigsEnabled && spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
-		return spanconfigstore.NewShadowReader(s.cfg.SpanConfigStore, sysCfg), nil
+		return spanconfigstore.NewShadowReader(s.cfg.SpanConfigSubscriber, sysCfg), nil
 	}
 
 	return sysCfg, nil
@@ -2017,20 +2006,10 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 
 // onSpanConfigUpdate is the callback invoked whenever this store learns of a
 // span config update.
-func (s *Store) onSpanConfigUpdate(ctx context.Context, update spanconfig.Update) {
-	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.Infof(ctx, "received update span=%s conf=%s deleted=%t", update.Span, update.Config.String(), update.Deletion())
-	}
-
-	// We're intentional about applying update to the span config store even if
-	// the store is disabled. The cluster setting
-	// (spanconfig.experimental_store.enabled) toggling between the two
-	// subsystems simply switches the source consulted for span configs -- we're
-	// still responsible for maintaining the disabled source. With the gossiped
-	// system config span, that's already a given. Here we have to do it
-	// ourselves.
-	s.cfg.SpanConfigStore.Apply(ctx, update, false /* dryrun */)
-
+//
+// XXX: We're missing tests that make sure the right span config is
+// applied/ignored on a store's replicas.
+func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 	if !spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
 		return
 	}
@@ -2040,84 +2019,75 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, update spanconfig.Update
 
 	now := s.cfg.Clock.NowAsClockTimestamp()
 	shouldQueue := s.spanConfigUpdateQueueRateLimiter.AdmitN(1)
-	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		replicaSpan := repl.Desc().RSpan().AsRawSpanWithNoLocals()
+	if err := s.mu.replicasByKey.VisitKeyRange(
+		ctx,
+		keys.MustAddr(updated.Key),
+		keys.MustAddr(updated.EndKey),
+		AscendingKeyOrder,
+		func(ctx context.Context, it replicaOrPlaceholder) error {
+			repl := it.repl
+			if repl == nil {
+				return nil // placeholder; ignore
+			}
 
-		if !update.Span.Overlaps(replicaSpan) {
-			return true // ignore
-		}
+			replicaSpan := repl.Desc().RSpan().AsRawSpanWithNoLocals()
+			if !updated.ContainsKey(replicaSpan.Key) {
+				// It's possible that the update we're receiving here is the
+				// right-hand side of a span config getting split. Think of
+				// installing a zone config on some partition of an index where
+				// previously there was none on any of the partitions. The range
+				// spanning the entire index would have to split on the
+				// partition boundary, and before it does so, it's possible that
+				// it would receive a span config update for just the partition.
+				//
+				// To avoid clobbering the pre-split range's embedded span
+				// config with the partition's config, we'll ensure that the
+				// range's start key is part of the update. We don't have to
+				// enqueue the range in the split queue here, that takes place
+				// when processing the left-hand side span config update.
 
-		if !update.Span.ContainsKey(replicaSpan.Key) {
-			// It's possible that the update we're receiving here is the
-			// right-hand side of a span config getting split. Think of
-			// installing a zone config on some partition of an index where
-			// previously there was none on any of the partitions. The range
-			// spanning the entire index would have to split on the partition
-			// boundary, and before it does so, it's possible that it would
-			// receive a span config update for just the partition.
+				return nil // ignore
+			}
+
+			// TODO(irfansharif): It's possible for a config to be applied over an
+			// entire range when it only pertains to the first half of the range.
+			// This will be corrected shortly -- we enqueue the range for a split
+			// below where we then apply the right config on each half. But still,
+			// it's surprising behavior and gets in the way of a desirable
+			// consistency guarantee: a key's config at any point in time is one
+			// that was explicitly declared over it, or the default config.
 			//
-			// To avoid clobbering the pre-split range's embedded span config
-			// with the partition's config, we'll ensure that the range's start
-			// key is part of the update. We don't have to enqueue the range in
-			// the split queue here, that takes place when processing the
-			// left-hand side span config update.
+			// We can do better, we can skip applying the config entirely and
+			// enqueue the split, then relying on the split trigger to install
+			// the right configs on each half. The current structure is as it is
+			// to maintain parity with the system config span variant.
 
-			// TODO(irfansharif): A span config getting split raises the
-			// question of what happens when we apply a span config deletion
-			// update before applying the write updates for the constituent span
-			// configs. We want to process both updates in tandem, given they
-			// occur transactionally. For reasons stated elsewhere, we need to
-			// integrate with the rangefeed buffer introduced in
-			// https://github.com/cockroachdb/cockroach/pull/71225. Given that
-			// we can flush a batch of updates in timestamp order, as the
-			// rangefeed frontier timestamp is bumped, we'll want to process
-			// them en-masse instead of the one-at-a-time approach we've taken
-			// currently.
+			replCtx := repl.AnnotateCtx(ctx)
+			key := repl.Desc().StartKey
 
-			return true // ignore
-		}
+			conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, key)
+			if err != nil {
+				log.Fatalf(replCtx, "%v", err)
+			}
+			repl.SetSpanConfig(conf)
 
-		// TODO(irfansharif): It's possible for a config to be applied over an
-		// entire range when it only pertains to the first half of the range.
-		// This will be corrected shortly -- we enqueue the range for a split
-		// below where we then apply the right config on each half. But still,
-		// it's surprising behavior and gets in the way of a desirable
-		// consistency guarantee: a key's config at any point in time is one
-		// that was explicitly declared over it, or the default config.
-		//
-		// We can do better, we can skip applying the config entirely and
-		// enqueue the split, then relying on the split to install the right
-		// configs on each half. The current structure is as it is to maintain
-		// parity with the system config span variant.
-
-		// TODO(irfansharif): Similar to above, it's also possible for us to be
-		// clearing out the span configs for the range to later install two
-		// spans. So temporarily, the span installed on this range is the
-		// fallback one, which is surprising. XXX:
-
-		replCtx := repl.AnnotateCtx(ctx)
-		key := repl.Desc().StartKey
-
-		conf, err := s.cfg.SpanConfigStore.GetSpanConfigForKey(replCtx, key)
-		if err != nil {
-			log.Fatalf(replCtx, "%v", err)
-		}
-		repl.SetSpanConfig(conf)
-
-		// TODO(irfansharif): For symmetry with the system config span variant,
-		// we queue blindly; we could instead only queue it if we knew the
-		// range's keyspans has a split in there somewhere, or was now part of a
-		// larger range and eligible for a merge.
-		if shouldQueue {
-			s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
-			s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
-		}
-		return true // more
-	})
+			// TODO(irfansharif): For symmetry with the system config span variant,
+			// we queue blindly; we could instead only queue it if we knew the
+			// range's keyspans has a split in there somewhere, or was now part of a
+			// larger range and eligible for a merge.
+			if shouldQueue {
+				s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+					h.MaybeAdd(ctx, repl, now)
+				})
+				s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+					h.MaybeAdd(ctx, repl, now)
+				})
+			}
+			return nil // more
+		},
+	); err != nil {
+		log.Fatalf(ctx, "%v", err)
+	}
 }
 
 // applyAllFromSpanConfigStore applies, on each replica, span configs from the
@@ -2128,7 +2098,7 @@ func (s *Store) applyAllFromSpanConfigStore(ctx context.Context) {
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		replCtx := repl.AnnotateCtx(ctx)
 		key := repl.Desc().StartKey
-		conf, err := s.cfg.SpanConfigStore.GetSpanConfigForKey(replCtx, key)
+		conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, key)
 		if err != nil {
 			log.Fatalf(ctx, "%v", err)
 		}

@@ -43,9 +43,29 @@ type KVAccessor interface {
 	) error
 }
 
-// KVWatcher emits KV span configuration updates.
-type KVWatcher interface {
-	WatchForKVUpdates(ctx context.Context) (<-chan Update, error)
+// KVSubscriber presents a consistent snapshot of a StoreReader that's backed by
+// the global state of all span configs (typically a view over
+// system.span_configurations). It allows installing callbacks that are invoked
+// whenever a span has seen a config update. Consulting the embedded StoreReader
+// for a given a span, after being notified, would retrieve an up-to-date config
+// for it.
+type KVSubscriber interface {
+	StoreReader
+	SubscribeToKVUpdates(context context.Context, callback func(update roachpb.Span))
+
+	// When a callback is installed, it's first invoked with the [min,max)
+	// span -- a shorthand to indicate that callers should consult the
+	// StoreReader for all spans of interest. Subsequently more incremental
+	// updates are generated.
+	//
+	// Internally we may re-establish the rangefeed when errors occur.
+	// Underneath the hood, when re-establishing a rangefeed, we'll populate the
+	// a new StoreWriter with updates from the initial scan. Once the initial
+	// scan is done, we'll transparently swap out the StoreReader exported by
+	// the interface to point to the new one. We'll also notify the callback
+	// using the sam "refresh everything" [min,max) span. As an optimization we
+	// could also diff the two stores and emit updates for just the spans that
+	// have changed.
 }
 
 // SQLTranslator translates SQL descriptors and their corresponding zone
@@ -60,20 +80,20 @@ type KVWatcher interface {
 // against RANGE DEFAULT for brevity):
 // 		Table/5{3-4}                  num_replicas=7 num_voters=5
 type SQLTranslator interface {
-	// Translate generates the implied span configuration state given a list of
 	// Translate generates the span configuration state given a list of
-	// {descriptor, named zone} IDs. No entry is returned for an ID if it doesn't
-	// exist or has been dropped. The timestamp at which the translation is valid
-	// is also returned.
+	// {descriptor, named zone} IDs. No entry is returned for an ID if it
+	// doesn't exist or if it's dropped. The timestamp at which the translation
+	// is valid is also returned.
 	//
-	// For every ID we first descend the zone configuration hierarchy with the ID
-	// as the root to accumulate IDs of all leaf objects. Leaf objects are tables
-	// and named zones (other than RANGE DEFAULT) which have actual span
-	// configurations associated with them (as opposed to non-leaf nodes that only
-	// serve to hold zone configurations for inheritance purposes). Then, for
-	// for every one of these accumulated IDs, we generate <span, span config>
-	// tuples by following up the inheritance chain to fully hydrate the span
-	// configuration. Translate also accounts for and negotiates subzone spans.
+	// For every ID we first descend the zone configuration hierarchy with the
+	// ID as the root to accumulate IDs of all leaf objects. Leaf objects are
+	// tables and named zones (other than RANGE DEFAULT) which have actual span
+	// configurations associated with them (as opposed to non-leaf nodes that
+	// only serve to hold zone configurations for inheritance purposes). Then,
+	// for for every one of these accumulated IDs, we generate <span, span
+	// config> tuples by following up the inheritance chain to fully hydrate the
+	// span configuration. Translate also accounts for and negotiates subzone
+	// spans.
 	Translate(ctx context.Context, ids descpb.IDs) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error)
 }
 
@@ -190,8 +210,8 @@ type StoreReader interface {
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 }
 
-// Update captures what span has seen a config change. It's the unit of what a
-// KVWatcher emits, and what can be applied to a StoreWriter.
+// Update captures a span and the corresponding config change. It's the unit of
+// what can be applied to a StoreWriter.
 type Update struct {
 	// Span captures the key span being updated.
 	Span roachpb.Span

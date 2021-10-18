@@ -71,8 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	_ "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvwatcher"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -178,6 +177,8 @@ type Server struct {
 	replicationReporter   *reports.Reporter
 	protectedtsProvider   protectedts.Provider
 	protectedtsReconciler *ptreconcile.Reconciler
+
+	spanConfigSubscriber *spanconfigkvsubscriber.KVSubscriber
 
 	sqlServer    *SQLServer
 	drainSleepFn func(time.Duration)
@@ -614,10 +615,20 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	var spanConfigAccessor spanconfig.KVAccessor
+	var spanConfigSubscriber *spanconfigkvsubscriber.KVSubscriber
 	if cfg.SpanConfigsEnabled {
 		storeCfg.SpanConfigsEnabled = true
-		storeCfg.SpanConfigWatcher = spanconfigkvwatcher.New(stopper, db, clock, rangeFeedFactory, keys.SpanConfigurationsTableID)
-		storeCfg.SpanConfigStore = spanconfigstore.New(storeCfg.DefaultSpanConfig)
+		spanConfigSubscriber = spanconfigkvsubscriber.New(
+			stopper,
+			db,
+			clock,
+			rangeFeedFactory,
+			keys.SpanConfigurationsTableID,
+			1<<20, /* 1 MB */
+			storeCfg.DefaultSpanConfig,
+		)
+		storeCfg.SpanConfigSubscriber = spanConfigSubscriber
+
 		spanConfigAccessor = spanconfigkvaccessor.New(
 			db, internalExecutor, cfg.Settings,
 			systemschema.SpanConfigurationsTableName.FQString(),
@@ -812,6 +823,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		replicationReporter:    replicationReporter,
 		protectedtsProvider:    protectedtsProvider,
 		protectedtsReconciler:  protectedtsReconciler,
+		spanConfigSubscriber:   spanConfigSubscriber,
 		sqlServer:              sqlServer,
 		drainSleepFn:           drainSleepFn,
 		externalStorageBuilder: externalStorageBuilder,
@@ -1728,6 +1740,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 	}
 	if err := s.protectedtsReconciler.Start(ctx, s.stopper); err != nil {
 		return err
+	}
+
+	if s.cfg.SpanConfigsEnabled {
+		if err := s.spanConfigSubscriber.Start(ctx); err != nil {
+			return err
+		}
 	}
 
 	// Start garbage collecting system events.
