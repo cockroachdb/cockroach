@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -49,6 +50,13 @@ const (
 	NormalUserPriority UserPriority = 1
 	// MaxUserPriority is the maximum allowed user priority.
 	MaxUserPriority UserPriority = 1000
+)
+
+var (
+	// PlaceholderTimestamp is a placeholder timestamp that can be used e.g. with
+	// AddSSTable to replace SSTable timestamps with the evaluation timestamp such
+	// that MVCC writes get an appropriate timestamp.
+	PlaceholderTimestamp = hlc.Timestamp{WallTime: 1, Logical: 1}
 )
 
 // SupportsBatch determines whether the methods in the provided batch

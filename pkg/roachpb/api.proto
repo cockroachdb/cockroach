@@ -1580,6 +1580,14 @@ message AddSSTableRequest {
   // the usual write pipeline (on-disk raft log, WAL, etc).
   // TODO(dt): https://github.com/cockroachdb/cockroach/issues/34579#issuecomment-544627193
   bool ingest_as_writes = 5;
+
+  // PlaceholderTimestamp causes any MVCC timestamps with the given value to be
+  // replaced with the request evalution timestamp. Most callers should set this
+  // to comply with the immutable MVCC history invariant. The global variable
+  // PlaceholderTimestamp can be used as a value.
+  //
+  // FIXME: This needs a version gate.
+  util.hlc.Timestamp placeholder_timestamp = 6 [(gogoproto.nullable) = false];
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.

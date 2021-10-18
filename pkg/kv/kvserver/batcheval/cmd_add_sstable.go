@@ -48,6 +48,20 @@ func EvalAddSSTable(
 	defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
+	// FIXME: We may want to check for conflicting intents or newer values here.
+	// Also, AddSSTable should take out locks (DefaultDeclareIsolatedKeys), see:
+	// https://cockroachlabs.slack.com/archives/C2C5FKPPB/p1634244884054000.
+	//
+	// FIXME: The only reason we need PlaceholderTimestamp is because
+	// pebble.ReplaceSuffix takes it as input, even though it's already encoded as
+	// a property in the SSTable. See if we can remove it.
+	if !args.PlaceholderTimestamp.IsEmpty() {
+		err := storage.ReplaceTimestamp(args.Data, args.PlaceholderTimestamp, h.WriteTimestamp())
+		if err != nil {
+			return result.Result{}, err
+		}
+	}
+
 	// IMPORT INTO should not proceed if any KVs from the SST shadow existing data
 	// entries - #38044.
 	var skippedKVStats enginepb.MVCCStats
@@ -201,7 +215,10 @@ func EvalAddSSTable(
 					return result.Result{}, err
 				}
 			} else {
-				if err := readWriter.PutMVCC(dataIter.UnsafeKey(), dataIter.UnsafeValue()); err != nil {
+				if !args.PlaceholderTimestamp.IsEmpty() && args.PlaceholderTimestamp.EqOrdering(k.Timestamp) {
+					k.Timestamp = h.Timestamp
+				}
+				if err := readWriter.PutMVCC(k, dataIter.UnsafeValue()); err != nil {
 					return result.Result{}, err
 				}
 			}

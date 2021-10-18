@@ -849,6 +849,8 @@ func (r *Replica) evaluateProposal(
 
 		// Set the proposal's replicated result, which contains metadata and
 		// side-effects that are to be replicated to all replicas.
+		//
+		// FIXME: Do we need to handle AddSSTableRequest.PlaceholderTimestamp here?
 		res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
 		if ba.IsIntentWrite() {
 			res.Replicated.WriteTimestamp = ba.WriteTimestamp()
