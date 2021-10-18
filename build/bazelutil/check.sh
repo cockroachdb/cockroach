@@ -6,10 +6,10 @@ EXISTING_GO_GENERATE_COMMENTS="
 pkg/ccl/sqlproxyccl/throttler/service.go://go:generate mockgen -package=throttler -destination=mocks_generated.go -source=service.go . Service
 pkg/ccl/sqlproxyccl/denylist/service.go://go:generate mockgen -package=denylist -destination=mocks_generated.go -source=service.go . Service
 pkg/ccl/sqlproxyccl/tenant/directory.go://go:generate mockgen -package=tenant -destination=mocks_generated.go . DirectoryClient,Directory_WatchEndpointsClient
-pkg/cmd/roachprod/vm/aws/config.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg aws -o embedded.go config.json old.json
-pkg/cmd/roachprod/vm/aws/config.go://go:generate gofmt -s -w embedded.go
-pkg/cmd/roachprod/vm/aws/config.go://go:generate goimports -w embedded.go
-pkg/cmd/roachprod/vm/aws/config.go://go:generate terraformgen -o terraform/main.tf
+pkg/roachprod/vm/aws/config.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg aws -o embedded.go config.json old.json
+pkg/roachprod/vm/aws/config.go://go:generate gofmt -s -w embedded.go
+pkg/roachprod/vm/aws/config.go://go:generate goimports -w embedded.go
+pkg/roachprod/vm/aws/config.go://go:generate terraformgen -o terraform/main.tf
 pkg/geo/wkt/wkt.go://go:generate sh generate.sh
 pkg/kv/kvserver/concurrency/lock_table.go://go:generate ../../../util/interval/generic/gen.sh *lockState concurrency
 pkg/kv/kvserver/spanlatch/manager.go://go:generate ../../../util/interval/generic/gen.sh *latch spanlatch
