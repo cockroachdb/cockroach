@@ -104,7 +104,9 @@ type Key int
 // When introducing a version constant, you'll want to:
 //   (1) Add it at the end of this block. For versions introduced during and
 //       after the 21.1 release, Internal versions must be even-numbered. The
-//       odd versions are used for internal book-keeping.
+//       odd versions are used for internal book-keeping. The Internal version
+//       should be the previous Internal version for the same minor release plus
+//       two.
 //   (2) Add it at the end of the `versionsSingleton` block below.
 //
 // Migrations
@@ -276,6 +278,10 @@ const (
 	// DrainingNamesMigration adds the migration which guarantees that no
 	// descriptors have draining names.
 	DrainingNamesMigration
+
+	// AlterSystemTableStatisticsAddAvgSizeCol adds the column avgSize to the
+	// table system.table_statistics that contains a new statistic.
+	AlterSystemTableStatisticsAddAvgSizeCol
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -472,6 +478,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DrainingNamesMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 8},
+	},
+	{
+		Key:     AlterSystemTableStatisticsAddAvgSizeCol,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 10},
 	},
 
 	// *************************************************
