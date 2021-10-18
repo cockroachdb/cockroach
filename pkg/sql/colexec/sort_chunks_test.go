@@ -197,7 +197,7 @@ func TestSortChunks(t *testing.T) {
 func TestSortChunksRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	nTups := 8
 	maxCols := 5
 	// TODO(yuzefovich): randomize types as well.
@@ -240,7 +240,7 @@ func TestSortChunksRandomized(t *testing.T) {
 
 func BenchmarkSortChunks(b *testing.B) {
 	defer log.Scope(b).Close(b)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
 
 	sorterConstructors := []func(*colmem.Allocator, colexecop.Operator, []*types.T, []execinfrapb.Ordering_Column, int, int64) (colexecop.Operator, error){

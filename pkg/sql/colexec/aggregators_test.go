@@ -829,7 +829,7 @@ func TestAggregatorRandom(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	// This test aggregates random inputs, keeping track of the expected results
 	// to make sure the aggregations are correct.
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for _, groupSize := range []int{1, 2, coldata.BatchSize() / 4, coldata.BatchSize() / 2} {
 		if groupSize == 0 {
 			// We might be varying coldata.BatchSize() so that when it is divided by
@@ -1001,7 +1001,7 @@ func benchmarkAggregateFunction(
 			return
 		}
 	}
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
