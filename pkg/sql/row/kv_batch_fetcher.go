@@ -107,7 +107,7 @@ type txnKVFetcher struct {
 	responses        []roachpb.ResponseUnion
 	remainingBatches [][]byte
 
-	acc mon.BoundAccount
+	acc *mon.BoundAccount
 	// spansAccountedFor and batchResponseAccountedFor track the number of bytes
 	// that we've already registered with acc in regards to spans and the batch
 	// response, respectively.
@@ -240,11 +240,15 @@ func makeKVBatchFetcherDefaultSendFunc(txn *kv.Txn) sendFunc {
 // 0) to ProductionKVBatchSize.
 //
 // The fetcher takes ownership of the spans slice - it can modify the slice and
-// will perform the memory accounting accordingly (if mon is non-nil). The
+// will perform the memory accounting accordingly (if acc is non-nil). The
 // caller can only reuse the spans slice after the fetcher has been closed, and
 // if the caller does, it becomes responsible for the memory accounting.
 //
 // Batch limits can only be used if the spans are ordered.
+//
+// The passed-in memory account is owned by the fetcher throughout its lifetime
+// but is **not** closed - it is the caller's responsibility to close acc if it
+// is non-nil.
 func makeKVBatchFetcher(
 	ctx context.Context,
 	sendFn sendFunc,
@@ -255,7 +259,7 @@ func makeKVBatchFetcher(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockTimeout time.Duration,
-	mon *mon.BytesMonitor,
+	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 	requestAdmissionHeader roachpb.AdmissionHeader,
 	responseAdmissionQ *admission.WorkQueue,
@@ -316,14 +320,14 @@ func makeKVBatchFetcher(
 		lockStrength:               lockStrength,
 		lockWaitPolicy:             lockWaitPolicy,
 		lockTimeout:                lockTimeout,
-		acc:                        mon.MakeBoundAccount(),
+		acc:                        acc,
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
 		requestAdmissionHeader:     requestAdmissionHeader,
 		responseAdmissionQ:         responseAdmissionQ,
 	}
 
 	// Account for the memory of the spans that we're taking the ownership of.
-	if f.acc.Monitor() != nil {
+	if f.acc != nil {
 		f.spansAccountedFor = spans.MemUsage()
 		if err := f.acc.Grow(ctx, f.spansAccountedFor); err != nil {
 			return txnKVFetcher{}, err
@@ -437,7 +441,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		log.VEventf(ctx, 2, "Scan %s", buf.String())
 	}
 
-	monitoring := f.acc.Monitor() != nil
+	monitoring := f.acc != nil
 
 	const tokenFetchAllocation = 1 << 10
 	if !monitoring || f.batchResponseAccountedFor < tokenFetchAllocation {
@@ -606,7 +610,7 @@ func (f *txnKVFetcher) nextBatch(
 		}
 		// We have some resume spans.
 		f.spans = f.spansScratch[:f.newFetchSpansIdx]
-		if f.acc.Monitor() != nil {
+		if f.acc != nil {
 			used := f.acc.Used()
 			delta := f.spans.MemUsage() - f.spansAccountedFor
 			if err := f.acc.Resize(ctx, used, used+delta); err != nil {
@@ -629,5 +633,5 @@ func (f *txnKVFetcher) close(ctx context.Context) {
 	f.remainingBatches = nil
 	f.spans = nil
 	f.spansScratch = nil
-	f.acc.Close(ctx)
+	f.acc.Clear(ctx)
 }
