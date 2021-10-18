@@ -97,7 +97,7 @@ func TestStopWatchConcurrentUsage(t *testing.T) {
 		// concurrently.
 		go func() {
 			defer wg.Done()
-			rng, _ := randutil.NewPseudoRand()
+			rng, _ := randutil.NewTestRand()
 			var timeSpent time.Duration
 			for timeSpent < testDuration {
 				// Sleep some random time, up to maxSleepTime.

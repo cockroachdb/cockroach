@@ -71,7 +71,7 @@ func (t *parallelTest) processTestFile(path string, nodeIdx int, db *gosql.DB, c
 	}
 
 	// Set up a dummy logicTest structure to use that code.
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	l := &logicTest{
 		rootT:   t.T,
 		cluster: t.cluster,

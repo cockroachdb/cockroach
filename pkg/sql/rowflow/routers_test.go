@@ -79,7 +79,7 @@ func TestRouters(t *testing.T) {
 	const numCols = 6
 	const numRows = 200
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	alloc := &rowenc.DatumAlloc{}
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -354,7 +354,7 @@ func TestConsumerStatus(t *testing.T) {
 				d = tree.NewDInt(math.MaxInt32)
 				row1 = rowenc.EncDatumRow{rowenc.DatumToEncDatum(colTypes[0], d)}
 			default:
-				rng, _ := randutil.NewPseudoRand()
+				rng, _ := randutil.NewTestRand()
 				vals := randgen.RandEncDatumRowsOfTypes(rng, 1 /* numRows */, colTypes)
 				row0 = vals[0]
 				row1 = row0
@@ -431,7 +431,7 @@ func TestConsumerStatus(t *testing.T) {
 func preimageAttack(
 	colTypes []*types.T, hr *hashRouter, streamIdx int, numStreams int,
 ) (rowenc.EncDatumRow, error) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for {
 		vals := randgen.RandEncDatumRowOfTypes(rng, colTypes)
 		curStreamIdx, err := hr.computeDestination(vals)
@@ -686,7 +686,7 @@ func TestRouterBlocks(t *testing.T) {
 			var numRowsSent uint32
 			stop := make(chan struct{})
 			go func() {
-				rng, _ := randutil.NewPseudoRand()
+				rng, _ := randutil.NewTestRand()
 			Loop:
 				for {
 					select {

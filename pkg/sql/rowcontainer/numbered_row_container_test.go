@@ -51,7 +51,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 	numRows := 20
 	const numCols = 2
 	const smallMemoryBudget = 40
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	memoryMonitor := mon.NewMonitor(
 		"test-mem",
@@ -160,7 +160,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	defer memoryMonitor.Stop(ctx)
 
 	// Use random types and random rows.
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	types := randgen.RandSortingTypes(rng, numCols)
 	ordering := colinfo.ColumnOrdering{
@@ -226,7 +226,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -556,7 +556,7 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 	for i := 0; i < 10; i++ {
 		typs = append(typs, types.String)
 	}
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rows := make([]rowenc.EncDatumRow, numRows)
 	for i := 0; i < numRows; i++ {
 		rows[i] = make([]rowenc.EncDatum, len(typs))

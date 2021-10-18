@@ -146,7 +146,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 		ctx    = context.Background()
 		typs   = []*types.T{types.Int}
 		batch  = testAllocator.NewMemBatchWithMaxCapacity(typs)
-		rng, _ = randutil.NewPseudoRand()
+		rng, _ = randutil.NewTestRand()
 		// maxPartitions is in [1, 10]. The maximum partitions on a single level.
 		maxPartitions = 1 + rng.Intn(10)
 		// numRepartitions is in [1, 5].

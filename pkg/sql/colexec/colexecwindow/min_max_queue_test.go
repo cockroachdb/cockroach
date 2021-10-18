@@ -25,7 +25,7 @@ func TestMinMaxQueue(t *testing.T) {
 		maxValuesToAdd = 1000
 	)
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	var queue minMaxQueue
 	var oracle []uint32

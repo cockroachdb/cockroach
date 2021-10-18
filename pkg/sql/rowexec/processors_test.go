@@ -641,7 +641,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 				UseDatabase: "test",
 			},
 		}
-		rng, _ = randutil.NewPseudoRand()
+		rng, _ = randutil.NewTestRand()
 	)
 
 	filters := make([]struct {

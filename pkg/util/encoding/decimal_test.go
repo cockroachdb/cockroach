@@ -179,7 +179,7 @@ func TestEncodeDecimal(t *testing.T) {
 		{&apd.Decimal{Form: apd.Infinite}, []byte{0x35}},
 	}
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	var lastEncoded []byte
 	for _, dir := range []Direction{Ascending, Descending} {
@@ -240,7 +240,7 @@ func TestEncodeDecimal(t *testing.T) {
 }
 
 func TestEncodeDecimalRand(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	// Test both directions.
 	for _, dir := range []Direction{Ascending, Descending} {
 		var prev *apd.Decimal
@@ -349,7 +349,7 @@ func TestNonsortingEncodeDecimal(t *testing.T) {
 		{mustDecimalString("142378208485490985369999605144727062141206925976498256305323716858805588894693616552055968571135475510700810219028167653516982373238641332965927953273383572708760984694356069974208844865675206339235758647159337463780100273189720943242182911961627806424621091859596571173867825568394327041453823674373002756096"), []byte{0x34, 0xf7, 0x01, 0x35, 0xca, 0xc0, 0xd8, 0x34, 0x68, 0x5d, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
 	}
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	for _, tmp := range [][]byte{nil, make([]byte, 0, 100)} {
 		for i, c := range testCases {
@@ -401,7 +401,7 @@ func TestNonsortingEncodeDecimal(t *testing.T) {
 }
 
 func TestNonsortingEncodeDecimalRand(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	const randomTrials = 200000
 	for i := 0; i < randomTrials; i++ {
 		var tmp, appendTo []byte
@@ -538,7 +538,7 @@ func randDecimal(rng *rand.Rand, minExp, maxExp int) *apd.Decimal {
 // makeDecimalVals creates decimal values with exponents in
 // the range [minExp, maxExp].
 func makeDecimalVals(minExp, maxExp int) []*apd.Decimal {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	vals := make([]*apd.Decimal, 10000)
 	for i := range vals {
 		vals[i] = randDecimal(rng, minExp, maxExp)
@@ -547,7 +547,7 @@ func makeDecimalVals(minExp, maxExp int) []*apd.Decimal {
 }
 
 func makeEncodedVals(minExp, maxExp int) [][]byte {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	vals := make([][]byte, 10000)
 	for i := range vals {
 		vals[i] = EncodeDecimalAscending(nil, randDecimal(rng, minExp, maxExp))
@@ -635,7 +635,7 @@ func BenchmarkNonsortingEncodeDecimal(b *testing.B) {
 }
 
 func BenchmarkNonsortingDecodeDecimal(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {

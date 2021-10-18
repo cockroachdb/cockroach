@@ -2355,7 +2355,7 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	ctx := context.Background()
 

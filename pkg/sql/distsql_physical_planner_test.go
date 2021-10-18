@@ -156,7 +156,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 
 	// Start a worker that continuously performs splits in the background.
 	_ = tc.Stopper().RunAsyncTask(context.Background(), "splitter", func(ctx context.Context) {
-		rng, _ := randutil.NewPseudoRand()
+		rng, _ := randutil.NewTestRand()
 		cdb := tc.Server(0).DB()
 		for {
 			select {

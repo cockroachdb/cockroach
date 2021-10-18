@@ -33,7 +33,7 @@ func TestCastMap(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	rng, _ := randutil.NewTestPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	evalCtx.Planner = &faketreeeval.DummyEvalPlanner{}
 
 	tree.ForEachCast(func(src, tgt oid.Oid) {

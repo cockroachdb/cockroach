@@ -434,7 +434,7 @@ func TestDistAggregationTable(t *testing.T) {
 	//  - random bool value (mostly true)
 	//  - random decimals
 	//  - random decimals (with some NULLs)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	sqlutils.CreateTable(
 		t, tc.ServerConn(0), "t",
 		"k INT PRIMARY KEY, int1 INT, int2 INT, int3 INT, bool1 BOOL, bool2 BOOL, dec1 DECIMAL, dec2 DECIMAL, float1 FLOAT, float2 FLOAT, b BYTES",

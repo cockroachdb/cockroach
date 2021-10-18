@@ -182,7 +182,7 @@ func TestRandomComparisons(t *testing.T) {
 		},
 	}
 	const numTuples = 2048
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	expected := make([]bool, numTuples)
 	var da rowenc.DatumAlloc
@@ -303,7 +303,7 @@ func benchmarkProjOp(
 	hasNulls bool,
 ) {
 	ctx := context.Background()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	batch := testAllocator.NewMemBatchWithMaxCapacity(inputTypes)
 	nullProb := 0.0
 	if hasNulls {

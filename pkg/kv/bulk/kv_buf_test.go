@@ -28,7 +28,7 @@ type kvPair struct {
 
 func makeTestData(num int) (kvs []kvPair, totalSize int) {
 	kvs = make([]kvPair, num)
-	r, _ := randutil.NewPseudoRand()
+	r, _ := randutil.NewTestRand()
 	alloc := make([]byte, num*500)
 	randutil.ReadTestdataBytes(r, alloc)
 	for i := range kvs {

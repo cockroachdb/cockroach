@@ -55,7 +55,7 @@ func TestSpanAssembler(t *testing.T) {
 	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
 	testAllocator := colmem.NewAllocator(ctx, testMemAcc, testColumnFactory)
 	defer testMemAcc.Close(ctx)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	typs := []*types.T{types.Int, types.Bytes, types.Decimal}
 
 	for _, useColFamilies := range []bool{true, false} {
