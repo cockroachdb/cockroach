@@ -81,6 +81,15 @@ func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 	return false
 }
 
+// RowCountIfAvailable returns the RowCount if the stats were available and a
+// negative number otherwise.
+func (s *Statistics) RowCountIfAvailable() float64 {
+	if s.Available {
+		return s.RowCount
+	}
+	return -1
+}
+
 // CopyFrom copies a Statistics object which can then be modified independently.
 func (s *Statistics) CopyFrom(other *Statistics) {
 	s.Available = other.Available
@@ -99,17 +108,25 @@ func (s *Statistics) ApplySelectivity(selectivity Selectivity) {
 	s.Selectivity.Multiply(selectivity)
 }
 
-// UnapplySelectivity divides the statistics by the given selectivity.
-// RowCount and Selectivity are updated. Note that DistinctCounts, NullCounts,
-// and Histograms are not updated.
-func (s *Statistics) UnapplySelectivity(selectivity Selectivity) {
+// ApplySelectivityRatio multiplies the statistics by the given numerator, and
+// divides by the denominator. RowCount and Selectivity are updated. Note that
+// DistinctCounts, NullCounts, and Histograms are not updated.
+func (s *Statistics) ApplySelectivityRatio(numerator, denominator Selectivity) {
+	ratio := numerator.AsFloat() / denominator.AsFloat()
+
 	// Make sure that we don't increase the row count to something larger than it
 	// was at the beginning. Selectivity will never exceed 1, so use that fact to
 	// update the RowCount.
-	adjustedSelectivity := s.Selectivity
-	s.Selectivity.Divide(selectivity)
-	adjustedSelectivity.Divide(s.Selectivity)
-	s.RowCount /= adjustedSelectivity.AsFloat()
+	if ratio > 1 {
+		oldSelectivity := s.Selectivity
+		// MakeSelectivity ensures that newSelectivity is <= 1.
+		newSelectivity := MakeSelectivity(oldSelectivity.AsFloat() * ratio)
+		s.RowCount *= newSelectivity.AsFloat() / oldSelectivity.AsFloat()
+		s.Selectivity = newSelectivity
+	} else {
+		s.RowCount *= ratio
+		s.Selectivity = MakeSelectivity(s.Selectivity.AsFloat() * ratio)
+	}
 }
 
 // LimitSelectivity limits the Selectivity to the given max selectivity.

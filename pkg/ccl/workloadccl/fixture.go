@@ -401,6 +401,19 @@ func ImportFixture(
 		pathPrefix = `workload://`
 	}
 
+	// Pre-create tables. It's required that we pre-create the tables before we
+	// parallelize the IMPORT because for multi-region setups, the create table
+	// will end up modifying the crdb_internal_region type (to install back
+	// references). If create table is done in parallel with IMPORT, some IMPORT
+	// jobs may fail because the type is being modified concurrently with the
+	// IMPORT. Removing the need to pre-create is being tracked with #70987.
+	for _, table := range tables {
+		err := createFixtureTable(sqlDB, dbName, table)
+		if err != nil {
+			return 0, errors.Wrapf(err, `creating table %s`, table.Name)
+		}
+	}
+
 	for _, t := range tables {
 		table := t
 		paths := csvServerPaths(pathPrefix, gen, table, numNodes*filesPerNode)
@@ -417,6 +430,16 @@ func ImportFixture(
 	return atomic.LoadInt64(&bytesAtomic), nil
 }
 
+func createFixtureTable(sqlDB *gosql.DB, dbName string, table workload.Table) error {
+	qualifiedTableName := makeQualifiedTableName(dbName, &table)
+	createTable := fmt.Sprintf(
+		`CREATE TABLE IF NOT EXISTS %s %s`,
+		qualifiedTableName,
+		table.Schema)
+	_, err := sqlDB.Exec(createTable)
+	return err
+}
+
 func importFixtureTable(
 	ctx context.Context,
 	sqlDB *gosql.DB,
@@ -429,8 +452,9 @@ func importFixtureTable(
 	start := timeutil.Now()
 	var buf bytes.Buffer
 	var params []interface{}
+
 	qualifiedTableName := makeQualifiedTableName(dbName, &table)
-	fmt.Fprintf(&buf, `IMPORT TABLE %s %s CSV DATA (`, qualifiedTableName, table.Schema)
+	fmt.Fprintf(&buf, `IMPORT INTO %s CSV DATA (`, qualifiedTableName)
 	// Generate $1,...,$N-1, where N is the number of csv paths.
 	for _, path := range paths {
 		params = append(params, path)

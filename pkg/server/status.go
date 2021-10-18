@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -86,6 +87,9 @@ const (
 
 	// statusVars exposes prometheus metrics for monitoring consumption.
 	statusVars = statusPrefix + "vars"
+
+	// loadStatusVars exposes prometheus metrics for instant monitoring of CPU load.
+	loadStatusVars = statusPrefix + "load"
 
 	// raftStateDormant is used when there is no known raft state.
 	raftStateDormant = "StateDormant"
@@ -659,23 +663,11 @@ func (s *statusServer) Allocator(
 
 func recordedSpansToTraceEvents(spans []tracingpb.RecordedSpan) []*serverpb.TraceEvent {
 	var output []*serverpb.TraceEvent
-	var buf bytes.Buffer
 	for _, sp := range spans {
 		for _, entry := range sp.Logs {
 			event := &serverpb.TraceEvent{
-				Time: entry.Time,
-			}
-			if len(entry.Fields) == 1 {
-				event.Message = entry.Fields[0].Value
-			} else {
-				buf.Reset()
-				for i, f := range entry.Fields {
-					if i != 0 {
-						buf.WriteByte(' ')
-					}
-					fmt.Fprintf(&buf, "%s:%v", f.Key, f.Value)
-				}
-				event.Message = buf.String()
+				Time:    entry.Time,
+				Message: entry.Msg().StripMarkers(),
 			}
 			output = append(output, event)
 		}
@@ -1003,6 +995,24 @@ func checkFilePattern(pattern string) error {
 }
 
 // LogFilesList returns a list of available log files.
+//
+// Note that even though the FileInfo struct does not store the path
+// to the log file(s), each file can be mapped back to its directory
+// reliably via LogFile(), thanks to the unique file group names in
+// the log configuration. For example, consider the following config:
+//
+// file-groups:
+//    groupA:
+//      dir: dir1
+//    groupB:
+//      dir: dir2
+//
+// The result of ListLogFiles on this config will return the list
+// {cockroach-groupA.XXX.log, cockroach-groupB.XXX.log}, without
+// directory information. This can be mapped back to dir1 and dir2 via the
+// configuration. We know that groupA files cannot be in dir2 because
+// the group names are unique under file-groups and so there cannot be
+// two different groups with the same name and different directories.
 func (s *statusServer) LogFilesList(
 	ctx context.Context, req *serverpb.LogFilesListRequest,
 ) (*serverpb.LogFilesListResponse, error) {
@@ -1033,6 +1043,9 @@ func (s *statusServer) LogFilesList(
 }
 
 // LogFile returns a single log file.
+//
+// See the comment on LogfilesList() to understand why+how log file
+// names are mapped to their full path.
 func (s *statusServer) LogFile(
 	ctx context.Context, req *serverpb.LogFileRequest,
 ) (*serverpb.LogEntriesResponse, error) {
@@ -1062,7 +1075,7 @@ func (s *statusServer) LogFile(
 	log.Flush()
 
 	// Read the logs.
-	reader, err := log.GetLogReader(req.File, true /* restricted */)
+	reader, err := log.GetLogReader(req.File)
 	if err != nil {
 		return nil, errors.Wrapf(err, "log file %q could not be opened", req.File)
 	}
@@ -1237,7 +1250,8 @@ func (s *statusServer) Stacks(
 // TODO(tschottdorf): significant overlap with /debug/pprof/heap, except that
 // this one allows querying by NodeID.
 //
-// Profile returns a heap profile.
+// Profile returns a heap profile. This endpoint is used by the
+// `pprofui` package to satisfy local and remote pprof requests.
 func (s *statusServer) Profile(
 	ctx context.Context, req *serverpb.ProfileRequest,
 ) (*serverpb.JSONResponse, error) {
@@ -1261,20 +1275,20 @@ func (s *statusServer) Profile(
 		return status.Profile(ctx, req)
 	}
 
+	return profileLocal(ctx, req, s.st)
+}
+
+func profileLocal(
+	ctx context.Context, req *serverpb.ProfileRequest, st *cluster.Settings,
+) (*serverpb.JSONResponse, error) {
 	switch req.Type {
-	case serverpb.ProfileRequest_HEAP:
-		p := pprof.Lookup("heap")
-		if p == nil {
-			return nil, status.Errorf(codes.InvalidArgument, "unable to find profile: heap")
-		}
-		var buf bytes.Buffer
-		if err := p.WriteTo(&buf, 0); err != nil {
-			return nil, status.Errorf(codes.Internal, err.Error())
-		}
-		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 	case serverpb.ProfileRequest_CPU:
 		var buf bytes.Buffer
-		if err := debug.CPUProfileDo(s.st, cluster.CPUProfileWithLabels, func() error {
+		profileType := cluster.CPUProfileDefault
+		if req.Labels {
+			profileType = cluster.CPUProfileWithLabels
+		}
+		if err := debug.CPUProfileDo(st, profileType, func() error {
 			duration := 30 * time.Second
 			if req.Seconds != 0 {
 				duration = time.Duration(req.Seconds) * time.Second
@@ -1294,7 +1308,20 @@ func (s *statusServer) Profile(
 		}
 		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 	default:
-		return nil, status.Errorf(codes.InvalidArgument, "unknown profile: %s", req.Type)
+		name, ok := serverpb.ProfileRequest_Type_name[int32(req.Type)]
+		if !ok {
+			return nil, status.Errorf(codes.InvalidArgument, "unknown profile: %d", req.Type)
+		}
+		name = strings.ToLower(name)
+		p := pprof.Lookup(name)
+		if p == nil {
+			return nil, status.Errorf(codes.InvalidArgument, "unable to find profile: %s", name)
+		}
+		var buf bytes.Buffer
+		if err := p.WriteTo(&buf, 0); err != nil {
+			return nil, status.Errorf(codes.Internal, err.Error())
+		}
+		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 	}
 }
 
@@ -1370,6 +1397,110 @@ func (s *statusServer) Nodes(
 
 	resp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
 	return resp, err
+}
+
+func (s *statusServer) NodesUI(
+	ctx context.Context, req *serverpb.NodesRequest,
+) (*serverpb.NodesResponseExternal, error) {
+	// The node status contains details about the command line, network
+	// addresses, env vars etc which are admin-only.
+
+	_, isAdmin, err := s.privilegeChecker.getUserAndRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	internalResp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
+	resp := &serverpb.NodesResponseExternal{
+		Nodes:            make([]serverpb.NodeResponse, len(internalResp.Nodes)),
+		LivenessByNodeID: internalResp.LivenessByNodeID,
+	}
+	for i, nodeStatus := range internalResp.Nodes {
+		resp.Nodes[i] = nodeStatusToResp(&nodeStatus, isAdmin)
+	}
+
+	return resp, err
+}
+
+func nodeStatusToResp(n *statuspb.NodeStatus, isAdmin bool) serverpb.NodeResponse {
+	tiers := make([]serverpb.Tier, len(n.Desc.Locality.Tiers))
+	for j, t := range n.Desc.Locality.Tiers {
+		tiers[j] = serverpb.Tier{
+			Key:   t.Key,
+			Value: t.Value,
+		}
+	}
+
+	activity := make(map[roachpb.NodeID]serverpb.NodeResponse_NetworkActivity, len(n.Activity))
+	for k, v := range n.Activity {
+		activity[k] = serverpb.NodeResponse_NetworkActivity{
+			Incoming: v.Incoming,
+			Outgoing: v.Outgoing,
+			Latency:  v.Latency,
+		}
+	}
+
+	nodeDescriptor := serverpb.NodeDescriptor{
+		NodeID:  n.Desc.NodeID,
+		Address: util.UnresolvedAddr{},
+		Attrs:   roachpb.Attributes{},
+		Locality: serverpb.Locality{
+			Tiers: tiers,
+		},
+		ServerVersion: serverpb.Version{
+			Major:    n.Desc.ServerVersion.Major,
+			Minor:    n.Desc.ServerVersion.Minor,
+			Patch:    n.Desc.ServerVersion.Patch,
+			Internal: n.Desc.ServerVersion.Internal,
+		},
+		BuildTag:        n.Desc.BuildTag,
+		StartedAt:       n.Desc.StartedAt,
+		LocalityAddress: nil,
+		ClusterName:     n.Desc.ClusterName,
+		SQLAddress:      util.UnresolvedAddr{},
+	}
+
+	statuses := make([]serverpb.StoreStatus, len(n.StoreStatuses))
+	for i, ss := range n.StoreStatuses {
+		statuses[i] = serverpb.StoreStatus{
+			Desc: serverpb.StoreDescriptor{
+				StoreID:  ss.Desc.StoreID,
+				Attrs:    ss.Desc.Attrs,
+				Node:     nodeDescriptor,
+				Capacity: ss.Desc.Capacity,
+			},
+			Metrics: ss.Metrics,
+		}
+	}
+
+	resp := serverpb.NodeResponse{
+		Desc:              nodeDescriptor,
+		BuildInfo:         n.BuildInfo,
+		StartedAt:         n.StartedAt,
+		UpdatedAt:         n.UpdatedAt,
+		Metrics:           n.Metrics,
+		StoreStatuses:     statuses,
+		Args:              nil,
+		Env:               nil,
+		Latencies:         n.Latencies,
+		Activity:          activity,
+		TotalSystemMemory: n.TotalSystemMemory,
+		NumCpus:           n.NumCpus,
+	}
+
+	if isAdmin {
+		resp.Args = n.Args
+		resp.Env = n.Env
+		resp.Desc.Attrs = n.Desc.Attrs
+		resp.Desc.Address = n.Desc.Address
+		resp.Desc.LocalityAddress = n.Desc.LocalityAddress
+		resp.Desc.SQLAddress = n.Desc.SQLAddress
+		for _, n := range resp.StoreStatuses {
+			n.Desc.Node = resp.Desc
+		}
+	}
+
+	return resp
 }
 
 // ListNodesInternal is a helper function for the benefit of SQL exclusively.
@@ -1466,6 +1597,12 @@ func (s *statusServer) Node(
 		return nil, err
 	}
 
+	return s.nodeStatus(ctx, req)
+}
+
+func (s *statusServer) nodeStatus(
+	ctx context.Context, req *serverpb.NodeRequest,
+) (*statuspb.NodeStatus, error) {
 	nodeID, _, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
@@ -1486,6 +1623,27 @@ func (s *statusServer) Node(
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 	return &nodeStatus, nil
+}
+
+func (s *statusServer) NodeUI(
+	ctx context.Context, req *serverpb.NodeRequest,
+) (*serverpb.NodeResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	// The node status contains details about the command line, network
+	// addresses, env vars etc which are admin-only.
+	_, isAdmin, err := s.privilegeChecker.getUserAndRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	nodeStatus, err := s.nodeStatus(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	resp := nodeStatusToResp(nodeStatus, isAdmin)
+	return &resp, nil
 }
 
 // Metrics return metrics information for the server specified.

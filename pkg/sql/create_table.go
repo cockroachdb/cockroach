@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -209,9 +210,73 @@ func getSchemaForCreateTable(
 
 	return schema, nil
 }
+func hasPrimaryKeySerialType(params runParams, colDef *tree.ColumnTableDef) (bool, error) {
+	if colDef.IsSerial || colDef.GeneratedIdentity.IsGeneratedAsIdentity {
+		return true, nil
+	}
+
+	if funcExpr, ok := colDef.DefaultExpr.Expr.(*tree.FuncExpr); ok {
+		var name string
+
+		switch t := funcExpr.Func.FunctionReference.(type) {
+		case *tree.FunctionDefinition:
+			name = t.Name
+		case *tree.UnresolvedName:
+			fn, err := t.ResolveFunction(params.SessionData().SearchPath)
+			if err != nil {
+				return false, err
+			}
+			name = fn.Name
+		}
+
+		if name == "nextval" {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
 
 func (n *createTableNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("table"))
+
+	colsWithPrimaryKeyConstraint := make(map[tree.Name]bool)
+
+	for _, def := range n.n.Defs {
+		switch v := def.(type) {
+		case *tree.UniqueConstraintTableDef:
+			if v.PrimaryKey {
+				for _, indexEle := range v.IndexTableDef.Columns {
+					colsWithPrimaryKeyConstraint[indexEle.Column] = true
+				}
+			}
+
+		case *tree.ColumnTableDef:
+			if v.PrimaryKey.IsPrimaryKey {
+				colsWithPrimaryKeyConstraint[v.Name] = true
+			}
+		}
+	}
+
+	for _, def := range n.n.Defs {
+		switch v := def.(type) {
+		case *tree.ColumnTableDef:
+			if _, ok := colsWithPrimaryKeyConstraint[v.Name]; ok {
+				primaryKeySerial, err := hasPrimaryKeySerialType(params, v)
+				if err != nil {
+					return err
+				}
+
+				if primaryKeySerial {
+					params.p.BufferClientNotice(
+						params.ctx,
+						pgnotice.Newf("using sequential values in a primary key does not perform as well as using random UUIDs. See %s", docs.URL("serial.html")),
+					)
+					break
+				}
+			}
+		}
+	}
 
 	schema, err := getSchemaForCreateTable(params, n.dbDesc, n.n.Persistence, &n.n.Table,
 		tree.ResolveRequireTableDesc, n.n.IfNotExists)
@@ -227,8 +292,12 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 	if n.n.Interleave != nil {
 		telemetry.Inc(sqltelemetry.CreateInterleavedTableCounter)
-		if err := interleavedTableDeprecationAction(params); err != nil {
+		interleaveIgnored, err := interleavedTableDeprecationAction(params)
+		if err != nil {
 			return err
+		}
+		if interleaveIgnored {
+			n.n.Interleave = nil
 		}
 	}
 	if n.n.Persistence.IsTemporary() {
@@ -452,6 +521,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 			// Instantiate a row inserter and table writer. It has a 1-1
 			// mapping to the definitions in the descriptor.
+			internal := params.p.SessionData().Internal
 			ri, err := row.MakeInserter(
 				params.ctx,
 				params.p.txn,
@@ -460,7 +530,8 @@ func (n *createTableNode) startExec(params runParams) error {
 				desc.PublicColumns(),
 				params.p.alloc,
 				&params.ExecCfg().Settings.SV,
-				params.p.SessionData().Internal,
+				internal,
+				params.ExecCfg().GetRowMetrics(internal),
 			)
 			if err != nil {
 				return err
@@ -473,7 +544,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				*ti = tableInserter{}
 				tableInserterPool.Put(ti)
 			}()
-			if err := tw.init(params.ctx, params.p.txn, params.p.EvalContext()); err != nil {
+			if err := tw.init(params.ctx, params.p.txn, params.p.EvalContext(), &params.p.EvalContext().Settings.SV); err != nil {
 				return err
 			}
 
@@ -889,7 +960,7 @@ func ResolveFK(
 	constraintName := string(d.Name)
 	if constraintName == "" {
 		constraintName = tabledesc.GenerateUniqueName(
-			fmt.Sprintf("fk_%s_ref_%s", string(d.FromCols[0]), target.Name),
+			tabledesc.ForeignKeyConstraintName(tbl.GetName(), d.FromCols.ToStrings()),
 			func(p string) bool {
 				_, ok := constraintInfo[p]
 				return ok
@@ -1184,7 +1255,9 @@ var CreatePartitioningCCL = func(
 		"creating or manipulating partitions requires a CCL binary"))
 }
 
-func getFinalSourceQuery(source *tree.Select, evalCtx *tree.EvalContext) string {
+func getFinalSourceQuery(
+	params runParams, source *tree.Select, evalCtx *tree.EvalContext,
+) (string, error) {
 	// Ensure that all the table names pretty-print as fully qualified, so we
 	// store that in the table descriptor.
 	//
@@ -1223,7 +1296,13 @@ func getFinalSourceQuery(source *tree.Select, evalCtx *tree.EvalContext) string 
 	)
 	ctx.FormatNode(source)
 
-	return ctx.CloseAndGetString()
+	// Use IDs instead of sequence names because name resolution depends on
+	// session data, and the internal executor has different session data.
+	sequenceReplacedQuery, err := replaceSeqNamesWithIDs(params.ctx, params.p, ctx.CloseAndGetString())
+	if err != nil {
+		return "", err
+	}
+	return sequenceReplacedQuery, nil
 }
 
 // newTableDescIfAs is the NewTableDesc method for when we have a table
@@ -1282,7 +1361,11 @@ func newTableDescIfAs(
 	if err != nil {
 		return nil, err
 	}
-	desc.CreateQuery = getFinalSourceQuery(p.AsSource, evalContext)
+	createQuery, err := getFinalSourceQuery(params, p.AsSource, evalContext)
+	if err != nil {
+		return nil, err
+	}
+	desc.CreateQuery = createQuery
 	return desc, nil
 }
 
@@ -1324,7 +1407,7 @@ func NewTableDescOptionBypassLocalityOnNonMultiRegionDatabaseCheck() NewTableDes
 //
 // If the table definition *may* use the SERIAL type, the caller is
 // also responsible for processing serial types using
-// processSerialInColumnDef() on every column definition, and creating
+// processSerialLikeInColumnDef() on every column definition, and creating
 // the necessary sequences in KV before calling NewTableDesc().
 func NewTableDesc(
 	ctx context.Context,
@@ -1486,7 +1569,11 @@ func NewTableDesc(
 			oid := typedesc.TypeIDToOID(regionConfig.RegionEnumID())
 			n.Defs = append(
 				n.Defs,
-				regionalByRowDefaultColDef(oid, regionalByRowGatewayRegionDefaultExpr(oid)),
+				regionalByRowDefaultColDef(
+					oid,
+					regionalByRowGatewayRegionDefaultExpr(oid),
+					maybeRegionalByRowOnUpdateExpr(evalCtx, oid),
+				),
 			)
 			columnDefaultExprs = append(columnDefaultExprs, nil)
 		}
@@ -1565,6 +1652,9 @@ func NewTableDesc(
 						"VECTOR column types are unsupported",
 					)
 				}
+			}
+			if err := checkTypeIsSupported(ctx, st, defType); err != nil {
+				return nil, err
 			}
 			if d.PrimaryKey.Sharded {
 				if !sessionData.HashShardedIndexesEnabled {
@@ -2214,8 +2304,12 @@ func NewTableDesc(
 	// constructing the table descriptor so that we can check all foreign key
 	// constraints in on place as opposed to traversing the input and finding all
 	// inline/explicit foreign key constraints.
-	if err := tabledesc.ValidateOnUpdate(desc.AllColumns(), desc.GetOutboundFKs()); err != nil {
-		return nil, err
+	var onUpdateErr error
+	tabledesc.ValidateOnUpdate(&desc, func(err error) {
+		onUpdateErr = err
+	})
+	if onUpdateErr != nil {
+		return nil, onUpdateErr
 	}
 
 	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
@@ -2325,7 +2419,7 @@ func newTableDesc(
 		if !ok {
 			continue
 		}
-		newDef, prefix, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, &tn)
+		newDef, prefix, seqName, seqOpts, err := params.p.processSerialLikeInColumnDef(params.ctx, d, &tn)
 		if err != nil {
 			return nil, err
 		}
@@ -2478,6 +2572,14 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					def.Computed.Computed = true
 					def.Computed.Virtual = c.Virtual
 					def.Computed.Expr, err = parser.ParseExpr(*c.ComputeExpr)
+					if err != nil {
+						return nil, err
+					}
+				}
+			}
+			if c.OnUpdateExpr != nil {
+				if opts.Has(tree.LikeTableOptDefaults) {
+					def.OnUpdateExpr.Expr, err = parser.ParseExpr(*c.OnUpdateExpr)
 					if err != nil {
 						return nil, err
 					}
@@ -2792,7 +2894,25 @@ func regionalByRowGatewayRegionDefaultExpr(oid oid.Oid) tree.Expr {
 	}
 }
 
-func regionalByRowDefaultColDef(oid oid.Oid, defaultExpr tree.Expr) *tree.ColumnTableDef {
+// maybeRegionalByRowOnUpdateExpr returns a gateway region default statement if
+// the auto rehoming session setting is enabled, nil otherwise.
+func maybeRegionalByRowOnUpdateExpr(evalCtx *tree.EvalContext, enumOid oid.Oid) tree.Expr {
+	if evalCtx.SessionData().AutoRehomingEnabled &&
+		evalCtx.Settings.Version.IsActive(evalCtx.Ctx(), clusterversion.OnUpdateExpressions) {
+		return &tree.CastExpr{
+			Expr: &tree.FuncExpr{
+				Func: tree.WrapFunction(builtins.RehomeRowBuiltinName),
+			},
+			Type:       &tree.OIDTypeReference{OID: enumOid},
+			SyntaxMode: tree.CastShort,
+		}
+	}
+	return nil
+}
+
+func regionalByRowDefaultColDef(
+	oid oid.Oid, defaultExpr tree.Expr, onUpdateExpr tree.Expr,
+) *tree.ColumnTableDef {
 	c := &tree.ColumnTableDef{
 		Name:   tree.RegionalByRowRegionDefaultColName,
 		Type:   &tree.OIDTypeReference{OID: oid},
@@ -2800,6 +2920,8 @@ func regionalByRowDefaultColDef(oid oid.Oid, defaultExpr tree.Expr) *tree.Column
 	}
 	c.Nullable.Nullability = tree.NotNull
 	c.DefaultExpr.Expr = defaultExpr
+	c.OnUpdateExpr.Expr = onUpdateExpr
+
 	return c
 }
 
@@ -2809,4 +2931,16 @@ func hashShardedIndexesOnRegionalByRowError() error {
 
 func interleaveOnRegionalByRowError() error {
 	return pgerror.New(pgcode.FeatureNotSupported, "interleaved tables are not compatible with REGIONAL BY ROW tables")
+}
+
+func checkTypeIsSupported(ctx context.Context, settings *cluster.Settings, typ *types.T) error {
+	version := settings.Version.ActiveVersionOrEmpty(ctx)
+	if supported := types.IsTypeSupportedInVersion(version, typ); !supported {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"type %s is not supported until version upgrade is finalized",
+			typ.SQLString(),
+		)
+	}
+	return nil
 }

@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -39,8 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
@@ -51,11 +50,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
@@ -477,6 +476,7 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
+
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -619,7 +619,7 @@ func TestQueryProgress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	require.Regexp(t, `executing \(51\.20%\)`, progress)
+	require.Regexp(t, `executing \(..\...%\)`, progress)
 }
 
 // This test ensures that when in an explicit transaction, statement preparation
@@ -860,6 +860,36 @@ func TestTrimFlushedStatements(t *testing.T) {
 	require.NoError(t, tx.Commit())
 }
 
+// TestUnqualifiedIntSizeRace makes sure there is no data race using the
+// default_int_size session variable during statement parsing.
+// Regression test for https://github.com/cockroachdb/cockroach/issues/69451.
+func TestUnqualifiedIntSizeRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: true,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// Connect to the cluster via the PGWire client.
+	p, err := pgtest.NewPGTest(ctx, s.SQLAddr(), security.RootUser)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "SET default_int_size = 8"}`))
+	require.NoError(t, p.SendOneLine(`Query {"String": "SET default_int_size = 4"}`))
+	require.NoError(t, p.SendOneLine(`Parse {"Query": "SELECT generate_series(1, 10)"}`))
+
+	// wait for ready
+	for i := 0; i < 2; i++ {
+		until := pgtest.ParseMessages("ReadyForQuery")
+		_, err = p.Until(false /* keepErrMsg */, until...)
+		require.NoError(t, err)
+	}
+}
+
 func TestTrimSuspendedPortals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -902,8 +932,11 @@ func TestTrimSuspendedPortals(t *testing.T) {
 	p, err := pgtest.NewPGTest(ctx, s.SQLAddr(), security.RootUser)
 	require.NoError(t, err)
 
-	// setup the portal
+	// Setup the portal.
+	// Note: This also makes sure that modifying the sessionDataStack with
+	// PushTopClone does not have a race condition.
 	require.NoError(t, p.SendOneLine(`Query {"String": "BEGIN"}`))
+
 	require.NoError(t, p.SendOneLine(fmt.Sprintf(`Parse {"Query": "%s"}`, selectStmt)))
 	require.NoError(t, p.SendOneLine(fmt.Sprintf(`Bind {"DestinationPortal": "%s"}`, portalName)))
 
@@ -940,7 +973,6 @@ func TestTrimSuspendedPortals(t *testing.T) {
 	msg, _ := p.Until(false /* keepErrMsg */, until...)
 	received := pgtest.MsgsToJSONWithIgnore(msg, &datadriven.TestData{})
 	require.Equal(t, 1, strings.Count(received, `"Type":"CommandComplete","CommandTag":"COMMIT"`))
-
 }
 
 func TestShowLastQueryStatisticsUnknown(t *testing.T) {
@@ -988,7 +1020,6 @@ func TestShowLastQueryStatisticsUnknown(t *testing.T) {
 //   min(sqlliveness.Session expiry, lease descriptor expiration).
 func TestTransactionDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	var mu struct {
@@ -1021,26 +1052,44 @@ func TestTransactionDeadline(t *testing.T) {
 		return nil
 	}
 
-	// Set up a sqlliveness.Session override for the cluster with a small default session duration.
-	// We will use this to test that the sqlliveness.Session expiration does not override
-	// the lease duration on system tenants.
-	timeSource := timeutil.NewTestTimeSource()
-	clock := hlc.NewClock(func() int64 {
-		return timeSource.Now().UnixNano()
-	}, base.DefaultMaxClockOffset)
-	clusterSQLLiveness, clusterLivenessStopper := setupTestSQLLiveness(t, ctx, clock, time.Minute)
-	defer clusterLivenessStopper.Stop(ctx)
-
+	// Set up a sqlliveness.Session override hook so that fake sessions can be
+	// injected during the execution of client transactions.
+	var sessionOverride atomic.Value
+	type sessionOverrideFunc = func(ctx context.Context) (sqlliveness.Session, error)
+	noopSessionOverrideFunc := func(ctx context.Context) (sqlliveness.Session, error) {
+		return nil, nil
+	}
+	sessionOverrideKnob := func(ctx context.Context) (sqlliveness.Session, error) {
+		return sessionOverride.Load().(sessionOverrideFunc)(ctx)
+	}
+	sessionOverride.Store(noopSessionOverrideFunc)
+	// setClientSessionOverride takes a session to return in the case that
+	// the context is due to a client connection. It returns a closure to
+	// reset the session override hook.
+	setClientSessionOverride := func(fs sqlliveness.Session) (reset func()) {
+		sessionOverride.Store(func(ctx context.Context) (sqlliveness.Session, error) {
+			// This somewhat hacky approach allows the hook to itentify contexts
+			// due to client connections. Client connections carry logtags which
+			// look like: [sql,client=127.0.0.1:63305,hostssl,user=root].
+			if tags := logtags.FromContext(ctx); tags == nil ||
+				!strings.Contains(tags.String(), "client=") {
+				return nil, nil
+			}
+			return fs, nil
+		})
+		return func() { sessionOverride.Store(noopSessionOverrideFunc) }
+	}
+	knobs := base.TestingKnobs{
+		Store: &kvserver.StoreTestingKnobs{
+			TestingRequestFilter: checkTransactionDeadlineFilter,
+		},
+		SQLLivenessKnobs: &sqlliveness.TestingKnobs{
+			SessionOverride: sessionOverrideKnob,
+		},
+	}
 	testClusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					TestingRequestFilter: checkTransactionDeadlineFilter,
-				},
-				SQLLivenessKnobs: &sqlliveness.TestingKnobs{
-					SessionOverride: clusterSQLLiveness.Session,
-				},
-			},
+			Knobs: knobs,
 		},
 	}
 	tc := serverutils.StartNewTestCluster(t, 1, testClusterArgs)
@@ -1049,32 +1098,26 @@ func TestTransactionDeadline(t *testing.T) {
 
 	// Setup a dynamic session override which will be used in subsequent tests to ensure the transaction
 	// deadline is set accurately. Use clusterSQLLiveness for bootstrapping the tenant.
-	dynamicSession := newDynamicSessionOverride(clusterSQLLiveness)
 	_, sqlConn := serverutils.StartTenant(t, s,
 		base.TestTenantArgs{
-			TenantID: serverutils.TestTenantID(),
-			TestingKnobs: base.TestingKnobs{
-				SQLLivenessKnobs: &sqlliveness.TestingKnobs{SessionOverride: dynamicSession.dynamicSession},
-			},
+			TenantID:     serverutils.TestTenantID(),
+			TestingKnobs: knobs,
 		})
-	defer sqlConn.Close()
+	tdb := sqlutils.MakeSQLRunner(sqlConn)
+	// Set up a dummy database and table in the tenant to write to.
+	tdb.Exec(t, `
+CREATE DATABASE t1;
+CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
+`)
 
 	t.Run("session_expiry_overrides_lease_deadline", func(t *testing.T) {
 		// Deliberately set the sessionDuration to be less than the lease duration
 		// to confirm that the sessionDuration overrides the lease duration while
 		// setting the transaction deadline.
 		sessionDuration := base.DefaultDescriptorLeaseDuration - time.Minute
-		// Override the injected SQLLiveness instance with the new session duration.
-		sqlLiveness, stopper := setupTestSQLLiveness(t, ctx, clock, sessionDuration)
-		defer stopper.Stop(ctx)
-		dynamicSession.setLiveness(sqlLiveness)
+		fs := fakeSession{exp: s.Clock().Now().Add(sessionDuration.Nanoseconds(), 0)}
+		defer setClientSessionOverride(&fs)()
 
-		// Set up a dummy database and table to insert into for the transaction.
-		if _, err := sqlConn.Exec(`CREATE DATABASE t1;
-	CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
-	`); err != nil {
-			t.Fatal(err)
-		}
 		txn, err := sqlConn.Begin()
 		if err != nil {
 			t.Fatal(err)
@@ -1087,11 +1130,7 @@ func TestTransactionDeadline(t *testing.T) {
 		}
 		err = txn.Commit()
 		require.NoError(t, err)
-		session, err := sqlLiveness.Session(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		locked(func() { require.True(t, session.Expiration().EqOrdering(mu.txnDeadline)) })
+		locked(func() { require.True(t, fs.Expiration().EqOrdering(mu.txnDeadline)) })
 	})
 
 	t.Run("lease_deadline_overrides_session_expiry", func(t *testing.T) {
@@ -1099,34 +1138,39 @@ func TestTransactionDeadline(t *testing.T) {
 		// to confirm that the lease duration overrides the session duration while
 		// setting the transaction deadline
 		sessionDuration := base.DefaultDescriptorLeaseDuration + time.Minute
-		// Override the injected SQLLiveness instance with the updated session duration.
-		sqlLiveness, stopper := setupTestSQLLiveness(t, ctx, clock, sessionDuration)
-		defer stopper.Stop(ctx)
-		dynamicSession.setLiveness(sqlLiveness)
+		fs := fakeSession{exp: s.Clock().Now().Add(sessionDuration.Nanoseconds(), 0)}
+		defer setClientSessionOverride(&fs)()
 
-		// Set up a dummy database and table to write into for the test.
-		if _, err := sqlConn.Exec(`CREATE DATABASE t2;
-	CREATE TABLE t2.test (k INT PRIMARY KEY, v TEXT);
-	`); err != nil {
-			t.Fatal(err)
-		}
 		txn, err := sqlConn.Begin()
 		if err != nil {
 			t.Fatal(err)
 		}
 		txnID := getTxnID(t, txn)
 		locked(func() { mu.txnID = txnID })
-		_, err = txn.ExecContext(ctx, "INSERT INTO t2.test(k, v) VALUES (1, 'abc')")
+		_, err = txn.ExecContext(ctx, "UPSERT INTO t1.test(k, v) VALUES (1, 'abc')")
 		if err != nil {
 			t.Fatal(err)
 		}
 		err = txn.Commit()
 		require.NoError(t, err)
-		session, err := sqlLiveness.Session(ctx)
+
+		locked(func() { require.True(t, mu.txnDeadline.Less(fs.Expiration())) })
+	})
+
+	t.Run("expired session leads to clear error", func(t *testing.T) {
+		// In this test we use an intentionally expired session in the tenant
+		// and observe that we get a clear error indicating that the session
+		// was expired.
+		sessionDuration := -time.Nanosecond
+		fs := fakeSession{exp: s.Clock().Now().Add(sessionDuration.Nanoseconds(), 0)}
+		defer setClientSessionOverride(&fs)()
+		txn, err := sqlConn.Begin()
 		if err != nil {
 			t.Fatal(err)
 		}
-		locked(func() { require.True(t, mu.txnDeadline.Less(session.Expiration())) })
+		_, err = txn.ExecContext(ctx, "UPSERT INTO t1.test(k, v) VALUES (1, 'abc')")
+		require.Regexp(t, `liveness session expired (\S+) before transaction`, err)
+		require.NoError(t, txn.Rollback())
 	})
 
 	t.Run("single_tenant_ignore_session_expiry", func(t *testing.T) {
@@ -1141,29 +1185,30 @@ func TestTransactionDeadline(t *testing.T) {
 		dbConn := serverutils.OpenDBConn(t, s.ServingSQLAddr(), "" /* useDatabase */, false /* insecure */, s.Stopper())
 		defer dbConn.Close()
 		// Set up a dummy database and table to write into for the test.
-		if _, err := dbConn.Exec(`CREATE DATABASE t3;
-	CREATE TABLE t3.test (k INT PRIMARY KEY, v TEXT);
+		if _, err := dbConn.Exec(`CREATE DATABASE t1;
+	CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 	`); err != nil {
 			t.Fatal(err)
 		}
+
+		// Inject an already expired session to observe that it has no effect.
+		fs := &fakeSession{exp: s.Clock().Now().Add(-time.Minute.Nanoseconds(), 0)}
+		defer setClientSessionOverride(fs)()
 		txn, err := dbConn.Begin()
 		if err != nil {
 			t.Fatal(err)
 		}
 		txnID := getTxnID(t, txn)
 		locked(func() { mu.txnID = txnID })
-		_, err = txn.ExecContext(ctx, "INSERT INTO t3.test(k, v) VALUES (1, 'abc')")
+		_, err = txn.ExecContext(ctx, "INSERT INTO t1.test(k, v) VALUES (1, 'abc')")
 		if err != nil {
 			t.Fatal(err)
 		}
 		err = txn.Commit()
 		require.NoError(t, err)
-		session, err := clusterSQLLiveness.Session(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
+
 		// Confirm that the txnDeadline is not equal to the session expiration.
-		locked(func() { require.True(t, session.Expiration().Less(mu.txnDeadline)) })
+		locked(func() { require.True(t, fs.Expiration().Less(mu.txnDeadline)) })
 	})
 }
 
@@ -1290,6 +1335,63 @@ ALTER TABLE t1 ADD COLUMN b INT DEFAULT 1`,
 	}
 }
 
+func TestInjectRetryErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	defer db.Close()
+
+	_, err := db.Exec("SET inject_retry_errors_enabled = 'true'")
+	require.NoError(t, err)
+
+	t.Run("with_savepoints", func(t *testing.T) {
+		// The crdb.ExecuteTx wrapper uses SAVEPOINTs to retry the transaction,
+		// so it will automatically succeed.
+		var txRes, attemptCount int
+		err = crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
+			attemptCount++
+			if txErr := tx.QueryRow("SELECT $1::int8", attemptCount).Scan(&txRes); txErr != nil {
+				return txErr
+			}
+			return nil
+		})
+		require.NoError(t, err)
+		// numTxnRetryErrors is set to 3 in conn_executor_exec, so the 4th attempt
+		// should be the one that succeeds.
+		require.Equal(t, 4, txRes)
+	})
+
+	t.Run("without_savepoints", func(t *testing.T) {
+		// Without SAVEPOINTs, the caller must keep track of the retry count
+		// and disable the error injection.
+		var txRes int
+		for attemptCount := 1; attemptCount <= 10; attemptCount++ {
+			tx, err := db.BeginTx(ctx, nil)
+			require.NoError(t, err)
+
+			if attemptCount == 5 {
+				_, err = tx.Exec("SET LOCAL inject_retry_errors_enabled = 'false'")
+				require.NoError(t, err)
+			}
+
+			err = tx.QueryRow("SELECT $1::int8", attemptCount).Scan(&txRes)
+			if err == nil {
+				require.NoError(t, tx.Commit())
+				break
+			}
+			pqErr := (*pq.Error)(nil)
+			require.ErrorAs(t, err, &pqErr)
+			require.Equal(t, "40001", string(pqErr.Code), "expected a transaction retry error code. got %v", pqErr)
+			require.NoError(t, tx.Rollback())
+		}
+		require.Equal(t, 5, txRes)
+	})
+}
+
 // dynamicRequestFilter exposes a filter method which is a
 // kvserverbase.ReplicaRequestFilter but can be set dynamically.
 type dynamicRequestFilter struct {
@@ -1322,30 +1424,15 @@ func noopRequestFilter(ctx context.Context, request roachpb.BatchRequest) *roach
 	return nil
 }
 
-// dynamicSessionOverride exposes a thread safe dynamicSession method
-// which can be set dynamically to override the sqlliveness.Session.
-type dynamicSessionOverride struct {
-	v atomic.Value
+type fakeSession struct{ exp hlc.Timestamp }
+
+func (f fakeSession) ID() sqlliveness.SessionID { return "foo" }
+func (f fakeSession) Expiration() hlc.Timestamp { return f.exp }
+func (f fakeSession) RegisterCallbackForSessionExpiry(func(ctx context.Context)) {
+	panic("unimplemented")
 }
 
-func (d *dynamicSessionOverride) dynamicSession(ctx context.Context) (sqlliveness.Session, error) {
-	value := d.v.Load()
-	if value == nil {
-		return nil, errors.Newf("uninitialized sqlliveness")
-	}
-	liveness := value.(sqlliveness.Liveness)
-	return liveness.Session(ctx)
-}
-
-func (d *dynamicSessionOverride) setLiveness(liveness sqlliveness.Liveness) {
-	d.v.Store(liveness)
-}
-
-func newDynamicSessionOverride(sqlLiveness sqlliveness.Liveness) *dynamicSessionOverride {
-	d := &dynamicSessionOverride{}
-	d.v.Store(sqlLiveness)
-	return d
-}
+var _ sqlliveness.Session = (*fakeSession)(nil)
 
 func getTxnID(t *testing.T, tx *gosql.Tx) (id string) {
 	t.Helper()
@@ -1355,17 +1442,4 @@ SELECT id
  WHERE session_id = (SELECT * FROM [SHOW session_id])`,
 	).Scan(&id)
 	return id
-}
-
-func setupTestSQLLiveness(
-	t *testing.T, ctx context.Context, clock *hlc.Clock, sessionDuration time.Duration,
-) (sqlliveness.Liveness, *stop.Stopper) {
-	t.Helper()
-	settings := cluster.MakeTestingClusterSettings()
-	slinstance.DefaultTTL.Override(ctx, &settings.SV, sessionDuration)
-	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 10*sessionDuration)
-	stopper := stop.NewStopper()
-	sqlLiveness := slprovider.NewTestSQLLiveness(stopper, clock, settings)
-	sqlLiveness.Start(ctx)
-	return sqlLiveness, stopper
 }

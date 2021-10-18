@@ -12,6 +12,7 @@ import React from "react";
 import { Col, Row, Tabs } from "antd";
 import classNames from "classnames/bind";
 import _ from "lodash";
+import { Tooltip } from "antd";
 
 import { Breadcrumbs } from "src/breadcrumbs";
 import { CaretRight } from "src/icon/caretRight";
@@ -54,6 +55,7 @@ const { TabPane } = Tabs;
 //       loaded: boolean;
 //       sizeInBytes: number;
 //       rangeCount: number;
+//       nodesByRegionString: string;
 //     };
 //   }
 export interface DatabaseTablePageData {
@@ -61,6 +63,7 @@ export interface DatabaseTablePageData {
   name: string;
   details: DatabaseTablePageDataDetails;
   stats: DatabaseTablePageDataStats;
+  showNodeRegionsSection?: boolean;
 }
 
 export interface DatabaseTablePageDataDetails {
@@ -82,11 +85,13 @@ export interface DatabaseTablePageDataStats {
   loaded: boolean;
   sizeInBytes: number;
   rangeCount: number;
+  nodesByRegionString?: string;
 }
 
 export interface DatabaseTablePageActions {
   refreshTableDetails: (database: string, table: string) => void;
   refreshTableStats: (databse: string, table: string) => void;
+  refreshNodes?: () => void;
 }
 
 export type DatabaseTablePageProps = DatabaseTablePageData &
@@ -121,6 +126,9 @@ export class DatabaseTablePage extends React.Component<
   }
 
   private refresh() {
+    if (this.props.refreshNodes != null) {
+      this.props.refreshNodes();
+    }
     if (!this.props.details.loaded && !this.props.details.loading) {
       return this.props.refreshTableDetails(
         this.props.databaseName,
@@ -143,13 +151,21 @@ export class DatabaseTablePage extends React.Component<
   private columns: ColumnDescriptor<Grant>[] = [
     {
       name: "user",
-      title: "User",
+      title: (
+        <Tooltip placement="bottom" title="The user name.">
+          User
+        </Tooltip>
+      ),
       cell: grant => grant.user,
       sort: grant => grant.user,
     },
     {
       name: "privilege",
-      title: "Grants",
+      title: (
+        <Tooltip placement="bottom" title="The list of grants for the user.">
+          Grants
+        </Tooltip>
+      ),
       cell: grant => grant.privilege,
       sort: grant => grant.privilege,
     },
@@ -173,14 +189,14 @@ export class DatabaseTablePage extends React.Component<
             }
           />
 
-          <h1
+          <h3
             className={`${baseHeadingClasses.tableName} ${cx(
               "icon__container",
             )}`}
           >
             <StackIcon className={cx("icon--md", "icon--title")} />
             {this.props.name}
-          </h1>
+          </h3>
         </section>
 
         <section className={baseHeadingClasses.wrapper}>
@@ -212,6 +228,12 @@ export class DatabaseTablePage extends React.Component<
 
                 <Col span={14}>
                   <SummaryCard className={cx("summary-card")}>
+                    {this.props.showNodeRegionsSection && (
+                      <SummaryCardItem
+                        label="Regions/nodes"
+                        value={this.props.stats.nodesByRegionString}
+                      />
+                    )}
                     <SummaryCardItem
                       label="Database"
                       value={this.props.databaseName}

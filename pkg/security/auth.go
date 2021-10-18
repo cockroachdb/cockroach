@@ -128,21 +128,24 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 		// The client certificate should not be a tenant client type. For now just
 		// check that it doesn't have OU=Tenants. It would make sense to add
 		// explicit OU=Users to all client certificates and to check for match.
-		ous := tlsState.PeerCertificates[0].Subject.OrganizationalUnit
-		if Contains(ous, TenantsOU) {
+		if IsTenantCertificate(tlsState.PeerCertificates[0]) {
 			return nil,
 				errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
-		// The client certificate user must match the requested user,
-		// except if the certificate user is NodeUser, which is allowed to
-		// act on behalf of all other users.
-		if !Contains(certUsers, requestedUser.Normalized()) && !Contains(certUsers, NodeUser) {
+		// The client certificate user must match the requested user.
+		if !Contains(certUsers, requestedUser.Normalized()) {
 			return nil, errors.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUsers)
 		}
 
 		return nil, nil
 	}, nil
+}
+
+// IsTenantCertificate returns true if the passed certificate indicates an
+// inbound Tenant connection.
+func IsTenantCertificate(cert *x509.Certificate) bool {
+	return Contains(cert.Subject.OrganizationalUnit, TenantsOU)
 }
 
 // UserAuthPasswordHook builds an authentication hook based on the security

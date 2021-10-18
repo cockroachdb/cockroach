@@ -18,11 +18,7 @@ import {
   AxisUnits,
 } from "src/views/shared/components/metricQuery";
 
-import {
-  GraphDashboardProps,
-  nodeDisplayName,
-  storeIDsForNode,
-} from "./dashboardUtils";
+import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
 export default function(props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, tooltipSelection } = props;
@@ -158,7 +154,7 @@ export default function(props: GraphDashboardProps) {
             key={nid}
             name="cr.node.clock-offset.meannanos"
             title={nodeDisplayName(nodesSummary, nid)}
-            sources={storeIDsForNode(nodesSummary, nid)}
+            sources={[nid]}
           />
         ))}
       </Axis>

@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//go:build crdb_test
 // +build crdb_test
 
 package memo
@@ -308,6 +309,21 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			panic(errors.AssertionFailedf("false values should always use FalseSingleton, not ConstExpr"))
 		}
 
+	case *WithExpr:
+		if !t.BindingOrdering.Any() && (!t.Mtr.Set || !t.Mtr.Materialize) {
+			panic(errors.AssertionFailedf("with ordering can only be specified with forced materialization"))
+		}
+
+	case *WithScanExpr:
+		// Verify the input columns exist in the binding.
+		binding := m.Metadata().WithBinding(t.With)
+		if binding == nil {
+			panic(errors.AssertionFailedf("WithScan binding missing"))
+		}
+		if !t.InCols.ToSet().SubsetOf(binding.(RelExpr).Relational().OutputCols) {
+			panic(errors.AssertionFailedf("invalid WithScan input columns %v", t.InCols))
+		}
+
 	default:
 		if opt.IsJoinOp(e) {
 			left := e.Child(0).(RelExpr)
@@ -370,8 +386,20 @@ func checkExprOrdering(e opt.Expr) {
 		ordering = t.Ordering
 	case GroupingPrivate:
 		ordering = t.Ordering
-	case SetPrivate:
+	case *SetPrivate:
 		ordering = t.Ordering
+		switch e.Op() {
+		case opt.ExceptOp, opt.ExceptAllOp, opt.IntersectOp, opt.IntersectAllOp, opt.UnionOp:
+			// For these operators, the ordering must include all output columns.
+			if !ordering.Any() {
+				if outCols := e.(RelExpr).Relational().OutputCols; !outCols.SubsetOf(ordering.ColSet()) {
+					panic(errors.AssertionFailedf(
+						"ordering for streaming set ops must include all output columns %v (op: %s, outcols: %v)",
+						log.Safe(ordering), log.Safe(e.Op()), log.Safe(outCols),
+					))
+				}
+			}
+		}
 	default:
 		return
 	}

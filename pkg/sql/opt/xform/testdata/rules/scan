@@ -21,24 +21,18 @@ CREATE TABLE a
 opt
 SELECT k,f FROM a ORDER BY f DESC, k ASC LIMIT 10
 ----
-limit
+top-k
  ├── columns: k:1!null f:3
  ├── internal-ordering: -3,+1
+ ├── k: 10
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(3)
  ├── ordering: -3,+1
- ├── sort
- │    ├── columns: k:1!null f:3
- │    ├── key: (1)
- │    ├── fd: (1)-->(3)
- │    ├── ordering: -3,+1
- │    ├── limit hint: 10.00
- │    └── scan a@s_idx
- │         ├── columns: k:1!null f:3
- │         ├── key: (1)
- │         └── fd: (1)-->(3)
- └── 10
+ └── scan a@s_idx
+      ├── columns: k:1!null f:3
+      ├── key: (1)
+      └── fd: (1)-->(3)
 
 opt
 SELECT k,f from a ORDER BY k DESC LIMIT 10
@@ -53,8 +47,8 @@ scan a,rev
 memo
 SELECT k,f FROM a ORDER BY k DESC LIMIT 10
 ----
-memo (optimized, ~3KB, required=[presentation: k:1,f:3] [ordering: -1])
- ├── G1: (limit G2 G3 ordering=-1) (scan a,rev,cols=(1,3),lim=10(rev))
+memo (optimized, ~4KB, required=[presentation: k:1,f:3] [ordering: -1])
+ ├── G1: (limit G2 G3 ordering=-1) (scan a,rev,cols=(1,3),lim=10(rev)) (top-k G2 &{10 -1})
  │    ├── [presentation: k:1,f:3] [ordering: -1]
  │    │    ├── best: (scan a,rev,cols=(1,3),lim=10(rev))
  │    │    └── cost: 15.04
@@ -64,10 +58,10 @@ memo (optimized, ~3KB, required=[presentation: k:1,f:3] [ordering: -1])
  ├── G2: (scan a,cols=(1,3)) (scan a@s_idx,cols=(1,3))
  │    ├── [ordering: -1] [limit hint: 10.00]
  │    │    ├── best: (scan a,rev,cols=(1,3))
- │    │    └── cost: 25.71
+ │    │    └── cost: 25.72
  │    └── []
  │         ├── best: (scan a@s_idx,cols=(1,3))
- │         └── cost: 1084.61
+ │         └── cost: 1084.62
  └── G3: (const 10)
 
 
@@ -153,10 +147,10 @@ memo (optimized, ~2KB, required=[presentation: k:1] [ordering: +1])
  └── G1: (scan a,cols=(1)) (scan a@s_idx,cols=(1)) (scan a@si_idx,cols=(1))
       ├── [presentation: k:1] [ordering: +1]
       │    ├── best: (scan a,cols=(1))
-      │    └── cost: 1084.61
+      │    └── cost: 1084.62
       └── []
            ├── best: (scan a@s_idx,cols=(1))
-           └── cost: 1074.51
+           └── cost: 1074.52
 
 # Scan of secondary index is lowest cost.
 opt
@@ -175,10 +169,10 @@ memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: +4,+1])
  └── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4))
       ├── [presentation: s:4,i:2,f:3] [ordering: +4,+1]
       │    ├── best: (scan a@s_idx,cols=(1-4))
-      │    └── cost: 1104.81
+      │    └── cost: 1104.82
       └── []
            ├── best: (scan a@s_idx,cols=(1-4))
-           └── cost: 1104.81
+           └── cost: 1104.82
 
 # No index-join should be generated for a@si_idx, since it is not constrained.
 exploretrace rule=GenerateIndexScans
@@ -229,10 +223,10 @@ memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: +3])
  └── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
       ├── [presentation: s:4,i:2,f:3] [ordering: +3]
       │    ├── best: (sort G1)
-      │    └── cost: 1344.18
+      │    └── cost: 1344.20
       └── []
            ├── best: (scan a@s_idx,cols=(2-4))
-           └── cost: 1094.71
+           └── cost: 1094.72
 
 memo
 SELECT s, i, f FROM a ORDER BY s DESC, i
@@ -241,13 +235,13 @@ memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: -4,+2])
  └── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
       ├── [presentation: s:4,i:2,f:3] [ordering: -4,+2]
       │    ├── best: (sort G1="[ordering: -4]")
-      │    └── cost: 1321.81
+      │    └── cost: 1321.83
       ├── [ordering: -4]
       │    ├── best: (scan a@s_idx,rev,cols=(2-4))
-      │    └── cost: 1195.36
+      │    └── cost: 1195.37
       └── []
            ├── best: (scan a@s_idx,cols=(2-4))
-           └── cost: 1094.71
+           └── cost: 1094.72
 
 # Force an index in order to ensure that an index join is created.
 opt
@@ -284,14 +278,14 @@ memo (optimized, ~3KB, required=[presentation: d:4] [ordering: +7])
  ├── G1: (project G2 G3 d)
  │    ├── [presentation: d:4] [ordering: +7]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1333.99
+ │    │    └── cost: 1334.02
  │    └── []
  │         ├── best: (project G2 G3 d)
- │         └── cost: 1094.52
+ │         └── cost: 1094.54
  ├── G2: (scan abc,cols=(4))
  │    └── []
  │         ├── best: (scan abc,cols=(4))
- │         └── cost: 1074.51
+ │         └── cost: 1074.52
  ├── G3: (projections G4)
  ├── G4: (function G5 lower)
  ├── G5: (scalar-list G6)
@@ -314,10 +308,10 @@ memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: +1])
  └── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4))
       ├── [presentation: s:4,i:2,f:3] [ordering: +1]
       │    ├── best: (scan a,cols=(1-4))
-      │    └── cost: 1114.91
+      │    └── cost: 1114.92
       └── []
            ├── best: (scan a@s_idx,cols=(1-4))
-           └── cost: 1104.81
+           └── cost: 1104.82
 
 # Secondary index has right order
 opt
@@ -334,10 +328,10 @@ memo (optimized, ~2KB, required=[presentation: s:4,j:5] [ordering: +4])
  └── G1: (scan a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
       ├── [presentation: s:4,j:5] [ordering: +4]
       │    ├── best: (scan a@si_idx,rev,cols=(4,5))
-      │    └── cost: 1185.26
+      │    └── cost: 1185.27
       └── []
            ├── best: (scan a@si_idx,cols=(4,5))
-           └── cost: 1084.61
+           └── cost: 1084.62
 
 # Consider three different indexes, and pick index with multiple keys.
 opt
@@ -361,13 +355,13 @@ memo (optimized, ~2KB, required=[presentation: i:2,k:1] [ordering: -4,+2,+1])
  └── G1: (scan a,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4))
       ├── [presentation: i:2,k:1] [ordering: -4,+2,+1]
       │    ├── best: (sort G1="[ordering: -4]")
-      │    └── cost: 1225.48
+      │    └── cost: 1225.50
       ├── [ordering: -4]
       │    ├── best: (scan a@si_idx,cols=(1,2,4))
-      │    └── cost: 1094.71
+      │    └── cost: 1094.72
       └── []
            ├── best: (scan a@s_idx,cols=(1,2,4))
-           └── cost: 1094.71
+           └── cost: 1094.72
 
 # GenerateIndexScans propagates row-level locking information.
 opt
@@ -725,23 +719,62 @@ index-join abc_part
            ├── key: ()
            └── fd: ()-->(17-19,21)
 
-# b is not constrained to a single value.
-opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
+# b is constrained to multiple values.
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
 SELECT a FROM abc_part WHERE b IN (1, 2)
 ----
 project
  ├── columns: a:3!null
  ├── cardinality: [0 - 2]
  ├── key: (3)
- └── scan abc_part@b_idx
+ └── locality-optimized-search
       ├── columns: a:3!null b:4!null
-      ├── constraint: /1/4
-      │    ├── [/'central'/1 - /'central'/2]
-      │    ├── [/'east'/1 - /'east'/2]
-      │    └── [/'west'/1 - /'west'/2]
+      ├── left columns: a:11 b:12
+      ├── right columns: a:19 b:20
       ├── cardinality: [0 - 2]
       ├── key: (3)
-      └── fd: (3)-->(4), (4)-->(3)
+      ├── fd: (3)-->(4), (4)-->(3)
+      ├── scan abc_part@b_idx
+      │    ├── columns: a:11!null b:12!null
+      │    ├── constraint: /9/12: [/'east'/1 - /'east'/2]
+      │    ├── cardinality: [0 - 2]
+      │    ├── key: (11)
+      │    └── fd: (11)-->(12), (12)-->(11)
+      └── scan abc_part@b_idx
+           ├── columns: a:19!null b:20!null
+           ├── constraint: /17/20
+           │    ├── [/'central'/1 - /'central'/2]
+           │    └── [/'west'/1 - /'west'/2]
+           ├── cardinality: [0 - 4]
+           ├── key: (19)
+           └── fd: (19)-->(20), (20)-->(19)
+
+# b is constrained to more than 100000 values (the kv batch size).
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part WHERE b >= 0 AND b < 100001
+----
+project
+ ├── columns: a:3!null
+ ├── cardinality: [0 - 100001]
+ ├── key: (3)
+ └── select
+      ├── columns: a:3!null b:4!null
+      ├── cardinality: [0 - 100001]
+      ├── key: (3)
+      ├── fd: (3)-->(4), (4)-->(3)
+      ├── index-join abc_part
+      │    ├── columns: a:3!null b:4
+      │    ├── key: (3)
+      │    ├── fd: (3)-->(4), (4)~~>(3)
+      │    └── scan abc_part@c_idx
+      │         ├── columns: a:3!null
+      │         ├── constraint: /1/2/5
+      │         │    ├── [/'central'/1 - /'central'/3]
+      │         │    ├── [/'east'/1 - /'east'/3]
+      │         │    └── [/'west'/1 - /'west'/3]
+      │         └── key: (3)
+      └── filters
+           └── (b:4 >= 0) AND (b:4 < 100001) [outer=(4), constraints=(/4: [/0 - /100000]; tight)]
 
 # The spans target all remote partitions.
 opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan

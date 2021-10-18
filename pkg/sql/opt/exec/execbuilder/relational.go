@@ -222,6 +222,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		*memo.EnsureUpsertDistinctOnExpr:
 		ep, err = b.buildDistinct(t)
 
+	case *memo.TopKExpr:
+		ep, err = b.buildTopK(t)
+
 	case *memo.LimitExpr, *memo.OffsetExpr:
 		ep, err = b.buildLimitOffset(e)
 
@@ -379,6 +382,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 					val.TableStatsRowCount = 1
 				}
 				val.TableStatsCreatedAt = stat.CreatedAt()
+				val.LimitHint = scan.RequiredPhysical().LimitHint
 			}
 		}
 		ef.AnnotateNode(ep.root, exec.EstimatedStatsID, &val)
@@ -534,8 +538,13 @@ func (b *Builder) scanParams(
 				idx.Name(),
 			)
 		default:
-			// This should never happen.
 			err = fmt.Errorf("index \"%s\" cannot be used for this query", idx.Name())
+			if b.evalCtx.SessionData().DisallowFullTableScans &&
+				(b.ContainsLargeFullTableScan || b.ContainsLargeFullIndexScan) {
+				err = errors.WithHint(err,
+					"try overriding the `disallow_full_table_scans` or increasing the `large_full_scan_rows` cluster/session settings",
+				)
+			}
 		}
 
 		return exec.ScanParams{}, opt.ColMap{}, err
@@ -645,6 +654,35 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		telemetry.Inc(sqltelemetry.PartialIndexScanUseCounter)
 	}
 
+	if scan.Flags.ForceZigzag {
+		return execPlan{}, fmt.Errorf("could not produce a query plan conforming to the FORCE_ZIGZAG hint")
+	}
+
+	isUnfiltered := scan.IsUnfiltered(md)
+	if scan.Flags.NoFullScan {
+		// Normally a full scan of a partial index would be allowed with the
+		// NO_FULL_SCAN hint (isUnfiltered is false for partial indexes), but if the
+		// user has explicitly forced the partial index *and* used NO_FULL_SCAN, we
+		// disallow the full index scan.
+		if isUnfiltered || (scan.Flags.ForceIndex && scan.IsFullIndexScan(md)) {
+			return execPlan{}, fmt.Errorf("could not produce a query plan conforming to the NO_FULL_SCAN hint")
+		}
+	}
+
+	// Save if we planned a full table/index scan on the builder so that the
+	// planner can be made aware later. We only do this for non-virtual tables.
+	if !tab.IsVirtualTable() && isUnfiltered {
+		stats := scan.Relational().Stats
+		large := !stats.Available || stats.RowCount > b.evalCtx.SessionData().LargeFullScanRows
+		if scan.Index == cat.PrimaryIndex {
+			b.ContainsFullTableScan = true
+			b.ContainsLargeFullTableScan = b.ContainsLargeFullTableScan || large
+		} else {
+			b.ContainsFullIndexScan = true
+			b.ContainsLargeFullIndexScan = b.ContainsLargeFullIndexScan || large
+		}
+	}
+
 	params, outputCols, err := b.scanParams(tab, &scan.ScanPrivate, scan.Relational(), scan.RequiredPhysical())
 	if err != nil {
 		return execPlan{}, err
@@ -658,16 +696,6 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	)
 	if err != nil {
 		return execPlan{}, err
-	}
-
-	// Save if we planned a full table/index scan on the builder so that the
-	// planner can be made aware later. We only do this for non-virtual tables.
-	if !tab.IsVirtualTable() && scan.Constraint == nil && scan.InvertedConstraint == nil && !scan.HardLimit.IsSet() {
-		if scan.Index == cat.PrimaryIndex {
-			b.ContainsFullTableScan = true
-		} else {
-			b.ContainsFullIndexScan = true
-		}
 	}
 
 	res.root = root
@@ -1485,11 +1513,6 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 		// child.
 		// TODO(rytaft): Store the limit in the expression.
 		hardLimit = uint64(set.Relational().Cardinality.Max)
-		if hardLimit > 1 {
-			panic(errors.AssertionFailedf(
-				"locality optimized search is not yet supported for more than one row at a time",
-			))
-		}
 	}
 
 	ep := execPlan{}
@@ -1515,6 +1538,36 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 	return ep, nil
+}
+
+// buildTopK builds a plan for a TopKOp, which is like a combined SortOp and LimitOp.
+func (b *Builder) buildTopK(e *memo.TopKExpr) (execPlan, error) {
+	inputExpr := e.Input
+	input, err := b.buildRelational(inputExpr)
+	if err != nil {
+		return execPlan{}, err
+	}
+	ordering := e.Ordering.ToOrdering()
+	inputOrdering := e.Input.ProvidedPhysical().Ordering
+	alreadyOrderedPrefix := 0
+	for i := range inputOrdering {
+		if i == len(ordering) {
+			return execPlan{}, errors.AssertionFailedf("sort ordering already provided by input")
+		}
+		if inputOrdering[i] != ordering[i] {
+			break
+		}
+		alreadyOrderedPrefix = i + 1
+	}
+	node, err := b.factory.ConstructTopK(
+		input.root,
+		e.K,
+		exec.OutputOrdering(input.sqlOrdering(ordering)),
+		alreadyOrderedPrefix)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return execPlan{root: node, outputCols: input.outputCols}, nil
 }
 
 // buildLimitOffset builds a plan for a LimitOp or OffsetOp
@@ -1940,8 +1993,9 @@ func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
 		// subquery mode that reads and discards all rows. This could possibly also
 		// be fixed by ensuring that bufferNode exhausts its input (and forcing it
 		// to behave like a spoolNode) and using the EXISTS mode.
-		Mode: exec.SubqueryAllRows,
-		Root: buffer,
+		Mode:     exec.SubqueryAllRows,
+		Root:     buffer,
+		RowCount: int64(with.Relational().Stats.RowCountIfAvailable()),
 	})
 
 	b.addBuiltWithExpr(with.ID, value.outputCols, buffer)
@@ -1995,7 +2049,8 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 		if err != nil {
 			return nil, err
 		}
-		return innerBld.factory.ConstructPlan(plan.root, innerBld.subqueries, innerBld.cascades, innerBld.checks)
+		rootRowCount := int64(rec.Recursive.Relational().Stats.RowCountIfAvailable())
+		return innerBld.factory.ConstructPlan(plan.root, innerBld.subqueries, innerBld.cascades, innerBld.checks, rootRowCount)
 	}
 
 	label := fmt.Sprintf("working buffer (%s)", rec.Name)

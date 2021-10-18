@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"encoding/csv"
 	"fmt"
@@ -29,21 +30,31 @@ import (
 // TODO(knz): this struct belongs elsewhere.
 // See: https://github.com/cockroachdb/cockroach/issues/49509
 var debugTimeSeriesDumpOpts = struct {
-	format tsDumpFormat
+	format   tsDumpFormat
+	from, to timestampValue
 }{
 	format: tsDumpText,
+	from:   timestampValue{},
+	to:     timestampValue(timeutil.Now().Add(24 * time.Hour)),
 }
 
 var debugTimeSeriesDumpCmd = &cobra.Command{
 	Use:   "tsdump",
 	Short: "dump all the raw timeseries values in a cluster",
 	Long: `
-Dumps all of the raw timeseries values in a cluster.
+Dumps all of the raw timeseries values in a cluster. Only the default resolution
+is retrieved, i.e. typically datapoints older than the value of the
+'timeseries.storage.resolution_10s.ttl' cluster setting will be absent from the
+output.
 `,
 	RunE: clierrorplus.MaybeDecorateError(func(cmd *cobra.Command, args []string) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
+		req := &tspb.DumpRequest{
+			StartNanos: time.Time(debugTimeSeriesDumpOpts.from).UnixNano(),
+			EndNanos:   time.Time(debugTimeSeriesDumpOpts.to).UnixNano(),
+		}
 		var w tsWriter
 		switch debugTimeSeriesDumpOpts.format {
 		case tsDumpRaw:
@@ -55,16 +66,18 @@ Dumps all of the raw timeseries values in a cluster.
 			defer finish()
 
 			tsClient := tspb.NewTimeSeriesClient(conn)
-			stream, err := tsClient.DumpRaw(context.Background(), &tspb.DumpRequest{})
+			stream, err := tsClient.DumpRaw(context.Background(), req)
 			if err != nil {
 				return err
 			}
 
-			if err := ts.DumpRawTo(stream, os.Stdout); err != nil {
+			// Buffer the writes to os.Stdout since we're going to
+			// be writing potentially a lot of data to it.
+			w := bufio.NewWriter(os.Stdout)
+			if err := ts.DumpRawTo(stream, w); err != nil {
 				return err
 			}
-			return os.Stdout.Sync()
-
+			return w.Flush()
 		case tsDumpCSV:
 			w = csvTSWriter{w: csv.NewWriter(os.Stdout)}
 		case tsDumpTSV:
@@ -84,7 +97,7 @@ Dumps all of the raw timeseries values in a cluster.
 		defer finish()
 
 		tsClient := tspb.NewTimeSeriesClient(conn)
-		stream, err := tsClient.Dump(context.Background(), &tspb.DumpRequest{})
+		stream, err := tsClient.Dump(context.Background(), req)
 		if err != nil {
 			return err
 		}

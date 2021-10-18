@@ -299,6 +299,11 @@ func (h *hasher) HashInt(val int) {
 	h.hash *= prime64
 }
 
+func (h *hasher) HashInt64(val int64) {
+	h.hash ^= internHash(val)
+	h.hash *= prime64
+}
+
 func (h *hasher) HashUint64(val uint64) {
 	h.hash ^= internHash(val)
 	h.hash *= prime64
@@ -488,9 +493,17 @@ func (h *hasher) HashScanLimit(val ScanLimit) {
 func (h *hasher) HashScanFlags(val ScanFlags) {
 	h.HashBool(val.NoIndexJoin)
 	h.HashBool(val.NoZigzagJoin)
+	h.HashBool(val.NoFullScan)
 	h.HashBool(val.ForceIndex)
+	h.HashBool(val.ForceZigzag)
 	h.HashInt(int(val.Direction))
 	h.HashUint64(uint64(val.Index))
+	if !val.ZigzagIndexes.Empty() {
+		s := val.ZigzagIndexes
+		for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
+			h.HashInt(i)
+		}
+	}
 }
 
 func (h *hasher) HashJoinFlags(val JoinFlags) {
@@ -724,6 +737,10 @@ func (h *hasher) IsBoolEqual(l, r bool) bool {
 }
 
 func (h *hasher) IsIntEqual(l, r int) bool {
+	return l == r
+}
+
+func (h *hasher) IsInt64Equal(l, r int64) bool {
 	return l == r
 }
 

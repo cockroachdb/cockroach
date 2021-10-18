@@ -19,6 +19,16 @@ import (
 // StmtFingerprintID is the type of a Statement's fingerprint ID.
 type StmtFingerprintID uint64
 
+// FingerprintID returns the FingerprintID of the StatementStatisticsKey.
+func (m *StatementStatisticsKey) FingerprintID() StmtFingerprintID {
+	return ConstructStatementFingerprintID(
+		m.Query,
+		m.Failed,
+		m.ImplicitTxn,
+		m.Database,
+	)
+}
+
 // ConstructStatementFingerprintID constructs an ID by hashing an anonymized query, its database
 // and failure status, and if it was part of an implicit txn. At the time of writing,
 // these are the axis' we use to bucket queries for stats collection
@@ -127,6 +137,7 @@ func (t *TransactionStatistics) Add(other *TransactionStatistics) {
 	t.NumRows.Add(other.NumRows, t.Count, other.Count)
 	t.RowsRead.Add(other.RowsRead, t.Count, other.Count)
 	t.BytesRead.Add(other.BytesRead, t.Count, other.Count)
+	t.RowsWritten.Add(other.RowsWritten, t.Count, other.Count)
 
 	t.ExecStats.Add(other.ExecStats)
 
@@ -148,6 +159,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.OverheadLat.Add(other.OverheadLat, s.Count, other.Count)
 	s.BytesRead.Add(other.BytesRead, s.Count, other.Count)
 	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
+	s.RowsWritten.Add(other.RowsWritten, s.Count, other.Count)
 	s.Nodes = util.CombineUniqueInt64(s.Nodes, other.Nodes)
 
 	s.ExecStats.Add(other.ExecStats)
@@ -181,7 +193,8 @@ func (s *StatementStatistics) AlmostEqual(other *StatementStatistics, eps float6
 		s.OverheadLat.AlmostEqual(other.OverheadLat, eps) &&
 		s.SensitiveInfo.Equal(other.SensitiveInfo) &&
 		s.BytesRead.AlmostEqual(other.BytesRead, eps) &&
-		s.RowsRead.AlmostEqual(other.RowsRead, eps)
+		s.RowsRead.AlmostEqual(other.RowsRead, eps) &&
+		s.RowsWritten.AlmostEqual(other.RowsWritten, eps)
 	// s.ExecStats are deliberately ignored since they are subject to sampling
 	// probability and are not fully deterministic (e.g. the number of network
 	// messages depends on the range cache state).

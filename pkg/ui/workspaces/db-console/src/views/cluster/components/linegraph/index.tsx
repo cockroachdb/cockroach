@@ -54,6 +54,7 @@ export interface LineGraphProps extends MetricsDataComponentProps {
   hoverOn?: typeof hoverOn;
   hoverOff?: typeof hoverOff;
   hoverState?: HoverState;
+  preCalcGraphSize?: boolean;
 }
 
 interface LineGraphStateOld {
@@ -409,7 +410,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       start: moment.unix(start),
       end: moment.unix(end),
     });
-    const newTimeScale = findClosestTimeScale(end - start);
+    const newTimeScale = findClosestTimeScale(end - start, start);
     this.props.setTimeScale(newTimeScale);
     const { pathname, search } = this.props.history.location;
     const urlParams = new URLSearchParams(search);
@@ -517,7 +518,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   render() {
-    const { title, subtitle, tooltip, data } = this.props;
+    const { title, subtitle, tooltip, data, preCalcGraphSize } = this.props;
 
     return (
       <Visualization
@@ -525,6 +526,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         subtitle={subtitle}
         tooltip={tooltip}
         loading={!data}
+        preCalcGraphSize={preCalcGraphSize}
       >
         <div className="linegraph">
           <div ref={this.el} />

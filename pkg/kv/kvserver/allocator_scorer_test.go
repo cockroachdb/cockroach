@@ -20,12 +20,10 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 )
 
@@ -551,15 +549,15 @@ func TestConstraintsCheck(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		constraints []zonepb.ConstraintsConjunction
+		constraints []roachpb.ConstraintsConjunction
 		expected    map[roachpb.StoreID]bool
 	}{
 		{
 			name: "required constraint",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_REQUIRED},
 					},
 				},
 			},
@@ -570,10 +568,10 @@ func TestConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "required locality constraints",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Key: "datacenter", Value: "us", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Key: "datacenter", Value: "us", Type: roachpb.Constraint_REQUIRED},
 					},
 				},
 			},
@@ -586,10 +584,10 @@ func TestConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "prohibited constraints",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_PROHIBITED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_PROHIBITED},
 					},
 				},
 			},
@@ -601,10 +599,10 @@ func TestConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "prohibited locality constraints",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Key: "datacenter", Value: "us", Type: zonepb.Constraint_PROHIBITED},
+					Constraints: []roachpb.Constraint{
+						{Key: "datacenter", Value: "us", Type: roachpb.Constraint_PROHIBITED},
 					},
 				},
 			},
@@ -613,47 +611,11 @@ func TestConstraintsCheck(t *testing.T) {
 			},
 		},
 		{
-			name: "positive constraints are ignored",
-			constraints: []zonepb.ConstraintsConjunction{
-				{
-					Constraints: []zonepb.Constraint{
-						{Value: "a", Type: zonepb.Constraint_DEPRECATED_POSITIVE},
-						{Value: "b", Type: zonepb.Constraint_DEPRECATED_POSITIVE},
-						{Value: "c", Type: zonepb.Constraint_DEPRECATED_POSITIVE},
-					},
-				},
-			},
-			expected: map[roachpb.StoreID]bool{
-				testStoreUSa15:     true,
-				testStoreUSa15Dupe: true,
-				testStoreUSa1:      true,
-				testStoreUSb:       true,
-				testStoreEurope:    true,
-			},
-		},
-		{
-			name: "positive locality constraints are ignored",
-			constraints: []zonepb.ConstraintsConjunction{
-				{
-					Constraints: []zonepb.Constraint{
-						{Key: "datacenter", Value: "eur", Type: zonepb.Constraint_DEPRECATED_POSITIVE},
-					},
-				},
-			},
-			expected: map[roachpb.StoreID]bool{
-				testStoreUSa15:     true,
-				testStoreUSa15Dupe: true,
-				testStoreUSa1:      true,
-				testStoreUSb:       true,
-				testStoreEurope:    true,
-			},
-		},
-		{
 			name: "NumReplicas doesn't affect constraint checking",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Key: "datacenter", Value: "eur", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Key: "datacenter", Value: "eur", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 1,
 				},
@@ -664,16 +626,16 @@ func TestConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "multiple per-replica constraints are respected",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Key: "datacenter", Value: "eur", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Key: "datacenter", Value: "eur", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 1,
 				},
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 1,
 				},
@@ -689,7 +651,7 @@ func TestConstraintsCheck(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, s := range testStores {
-				valid := constraintsCheck(s, tc.constraints)
+				valid := isStoreValid(s, tc.constraints)
 				ok := tc.expected[s.StoreID]
 				if valid != ok {
 					t.Errorf("expected store %d to be %t, but got %t", s.StoreID, ok, valid)
@@ -706,18 +668,18 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 
 	testCases := []struct {
 		name              string
-		constraints       []zonepb.ConstraintsConjunction
-		zoneNumReplicas   int32
+		constraints       []roachpb.ConstraintsConjunction
+		numReplicas       int32
 		existing          []roachpb.StoreID
 		expectedValid     map[roachpb.StoreID]bool
 		expectedNecessary map[roachpb.StoreID]bool
 	}{
 		{
 			name: "prohibited constraint",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_PROHIBITED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_PROHIBITED},
 					},
 				},
 			},
@@ -731,10 +693,10 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "required constraint",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_REQUIRED},
 					},
 				},
 			},
@@ -747,10 +709,10 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "required constraint with NumReplicas",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 3,
 				},
@@ -767,16 +729,16 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "multiple required constraints with NumReplicas",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "a", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "a", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 1,
 				},
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 1,
 				},
@@ -797,16 +759,16 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "multiple required constraints with NumReplicas and existing replicas",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "a", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "a", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 1,
 				},
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 1,
 				},
@@ -822,16 +784,16 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "multiple required constraints with NumReplicas and not enough existing replicas",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "a", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "a", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 1,
 				},
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 2,
 				},
@@ -849,23 +811,23 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 			},
 		},
 		{
-			name: "multiple required constraints with NumReplicas and sum(NumReplicas) < zone.NumReplicas",
-			constraints: []zonepb.ConstraintsConjunction{
+			name: "multiple required constraints with NumReplicas and sum(NumReplicas) < conf.NumReplicas",
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "a", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "a", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 1,
 				},
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 1,
 				},
 			},
-			zoneNumReplicas: 3,
-			existing:        nil,
+			numReplicas: 3,
+			existing:    nil,
 			expectedValid: map[roachpb.StoreID]bool{
 				testStoreUSa15:     true,
 				testStoreUSa15Dupe: true,
@@ -881,23 +843,23 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 			},
 		},
 		{
-			name: "multiple required constraints with sum(NumReplicas) < zone.NumReplicas and not enough existing replicas",
-			constraints: []zonepb.ConstraintsConjunction{
+			name: "multiple required constraints with sum(NumReplicas) < conf.NumReplicas and not enough existing replicas",
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "a", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "a", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 1,
 				},
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 2,
 				},
 			},
-			zoneNumReplicas: 5,
-			existing:        []roachpb.StoreID{testStoreUSa1},
+			numReplicas: 5,
+			existing:    []roachpb.StoreID{testStoreUSa1},
 			expectedValid: map[roachpb.StoreID]bool{
 				testStoreUSa15:     true,
 				testStoreUSa15Dupe: true,
@@ -914,13 +876,13 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			zone := &zonepb.ZoneConfig{
+			conf := roachpb.SpanConfig{
 				Constraints: tc.constraints,
-				NumReplicas: proto.Int32(tc.zoneNumReplicas),
+				NumReplicas: tc.numReplicas,
 			}
 			analyzed := constraint.AnalyzeConstraints(
 				context.Background(), getTestStoreDesc, testStoreReplicas(tc.existing),
-				*zone.NumReplicas, zone.Constraints)
+				conf.NumReplicas, conf.Constraints)
 			for _, s := range testStores {
 				valid, necessary := allocateConstraintsCheck(s, analyzed)
 				if e, a := tc.expectedValid[s.StoreID], valid; e != a {
@@ -944,17 +906,17 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 		valid, necessary bool
 	}
 	testCases := []struct {
-		name            string
-		constraints     []zonepb.ConstraintsConjunction
-		zoneNumReplicas int32
-		expected        map[roachpb.StoreID]expected
+		name        string
+		constraints []roachpb.ConstraintsConjunction
+		numReplicas int32
+		expected    map[roachpb.StoreID]expected
 	}{
 		{
 			name: "prohibited constraint",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_PROHIBITED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_PROHIBITED},
 					},
 				},
 			},
@@ -967,10 +929,10 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "required constraint",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_REQUIRED},
 					},
 				},
 			},
@@ -983,10 +945,10 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "required constraint with NumReplicas",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 2,
 				},
@@ -1000,16 +962,16 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "multiple required constraints with NumReplicas",
-			constraints: []zonepb.ConstraintsConjunction{
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "a", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "a", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 1,
 				},
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 1,
 				},
@@ -1021,16 +983,16 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 			},
 		},
 		{
-			name: "required constraint with NumReplicas and sum(NumReplicas) < zone.NumReplicas",
-			constraints: []zonepb.ConstraintsConjunction{
+			name: "required constraint with NumReplicas and sum(NumReplicas) < conf.NumReplicas",
+			constraints: []roachpb.ConstraintsConjunction{
 				{
-					Constraints: []zonepb.Constraint{
-						{Value: "b", Type: zonepb.Constraint_REQUIRED},
+					Constraints: []roachpb.Constraint{
+						{Value: "b", Type: roachpb.Constraint_REQUIRED},
 					},
 					NumReplicas: 2,
 				},
 			},
-			zoneNumReplicas: 3,
+			numReplicas: 3,
 			expected: map[roachpb.StoreID]expected{
 				testStoreUSa15:  {true, false},
 				testStoreEurope: {true, false},
@@ -1049,12 +1011,12 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 					StoreID: storeID,
 				})
 			}
-			zone := &zonepb.ZoneConfig{
+			conf := roachpb.SpanConfig{
 				Constraints: tc.constraints,
-				NumReplicas: proto.Int32(tc.zoneNumReplicas),
+				NumReplicas: tc.numReplicas,
 			}
 			analyzed := constraint.AnalyzeConstraints(
-				context.Background(), getTestStoreDesc, existing, *zone.NumReplicas, zone.Constraints)
+				context.Background(), getTestStoreDesc, existing, conf.NumReplicas, conf.Constraints)
 			for storeID, expected := range tc.expected {
 				valid, necessary := removeConstraintsCheck(testStores[storeID], analyzed)
 				if e, a := expected.valid, valid; e != a {
@@ -1074,7 +1036,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	options := scorerOptions{}
+	options := rangeCountScorerOptions{}
 	newStore := func(id int, locality roachpb.Locality) roachpb.StoreDescriptor {
 		return roachpb.StoreDescriptor{
 			StoreID: roachpb.StoreID(id),
@@ -1231,7 +1193,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 		actual := len(targets) > 0
 		if actual != tc.expected {
 			t.Errorf(
-				"%d: shouldRebalanceBasedOnRangeCount on s%d with replicas on %v got %t, expected %t",
+				"%d: shouldRebalanceBasedOnThresholds on s%d with replicas on %v got %t, expected %t",
 				i,
 				tc.s.StoreID,
 				tc.existingNodeIDs,
@@ -1500,11 +1462,13 @@ func TestDiversityScoreEquivalence(t *testing.T) {
 	}
 }
 
-func TestBalanceScore(t *testing.T) {
+func TestBalanceScoreByRangeCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	options := scorerOptions{}
+	options := rangeCountScorerOptions{
+		rangeRebalanceThreshold: 0.1,
+	}
 	storeList := StoreList{
 		candidateRanges: stat{mean: 1000},
 	}
@@ -1524,24 +1488,68 @@ func TestBalanceScore(t *testing.T) {
 	sRangesOverfull.RangeCount = 1500
 	sRangesUnderfull := sMean
 	sRangesUnderfull.RangeCount = 500
+	sRangesLessThanMean := sMean
+	sRangesLessThanMean.RangeCount = 900
+	sRangesMoreThanMean := sMean
+	sRangesMoreThanMean.RangeCount = 1099
 
 	testCases := []struct {
 		sc       roachpb.StoreCapacity
-		expected float64
+		expected balanceStatus
 	}{
-		{sEmpty, 1},
-		{sMean, 0},
-		{sRangesOverfull, -1},
-		{sRangesUnderfull, 1},
+		{sEmpty, underfull},
+		{sRangesLessThanMean, lessThanEqualToMean},
+		{sMean, lessThanEqualToMean},
+		{sRangesMoreThanMean, moreThanMean},
+		{sRangesOverfull, overfull},
+		{sRangesUnderfull, underfull},
 	}
 	for i, tc := range testCases {
-		if a, e := balanceScore(storeList, tc.sc, options), tc.expected; a.totalScore() != e {
-			t.Errorf("%d: balanceScore(storeList, %+v) got %s; want %.2f", i, tc.sc, a, e)
+		if a, e := options.balanceScore(storeList, tc.sc), tc.expected; a != e {
+			t.Errorf("%d: balanceScore(storeList, %+v) got %d; want %d", i, tc.sc, a, e)
 		}
 	}
 }
 
-func TestRebalanceConvergesOnMean(t *testing.T) {
+func TestRebalanceBalanceScoreOnQPS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	storeList := StoreList{
+		candidateQueriesPerSecond: stat{mean: 1000},
+	}
+
+	testCases := []struct {
+		QPS             float64
+		expBalanceScore balanceStatus
+	}{
+		{0, underfull},
+		{900, lessThanEqualToMean},
+		{999, lessThanEqualToMean},
+		{1000, lessThanEqualToMean},
+		{1001, moreThanMean},
+		{2000, overfull},
+	}
+
+	for i, tc := range testCases {
+		sc := roachpb.StoreCapacity{
+			QueriesPerSecond: tc.QPS,
+		}
+		options := qpsScorerOptions{
+			qpsRebalanceThreshold: 0.1,
+		}
+		if a, e := options.balanceScore(storeList, sc), tc.expBalanceScore; a != e {
+			t.Errorf("%d: rebalanceToConvergesScore(storeList, %+v) got %d; want %d", i, sc, a, e)
+		}
+		// NB: Any replica whose removal would not converge the QPS to the mean is
+		// given a score of 1 to make it less attractive for removal.
+		if a, e := options.balanceScore(storeList, sc), tc.expBalanceScore; a != e {
+			t.Errorf("%d: rebalanceFromConvergesScore(storeList, %+v) got %d; want %d", i, sc, a, e)
+		}
+	}
+}
+
+func TestRebalanceConvergesRangeCountOnMean(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1556,23 +1564,28 @@ func TestRebalanceConvergesOnMean(t *testing.T) {
 	}{
 		{0, true, false},
 		{900, true, false},
-		{900, true, false},
 		{999, true, false},
 		{1000, false, false},
 		{1001, false, true},
 		{2000, false, true},
-		{900, true, false},
 	}
 
+	options := rangeCountScorerOptions{}
 	for i, tc := range testCases {
 		sc := roachpb.StoreCapacity{
 			RangeCount: tc.rangeCount,
 		}
-		if a, e := rebalanceToConvergesOnMean(storeList, sc), tc.toConverges; a != e {
-			t.Errorf("%d: rebalanceToConvergesOnMean(storeList, %+v) got %t; want %t", i, sc, a, e)
+		if a, e := options.rebalanceToConvergesScore(
+			storeList, sc,
+		) == 1, tc.toConverges; a != e {
+			t.Errorf("%d: rebalanceToConvergesScore(storeList, %+v) got %t; want %t", i, sc, a, e)
 		}
-		if a, e := rebalanceFromConvergesOnMean(storeList, sc), tc.fromConverges; a != e {
-			t.Errorf("%d: rebalanceFromConvergesOnMean(storeList, %+v) got %t; want %t", i, sc, a, e)
+		// NB: Any replica whose removal would not converge the range count to the
+		// mean is given a score of 1 to make it less attractive for removal.
+		if a, e := options.rebalanceFromConvergesScore(
+			storeList, sc,
+		) == 0, tc.fromConverges; a != e {
+			t.Errorf("%d: rebalanceFromConvergesScore(storeList, %+v) got %t; want %t", i, sc, a, e)
 		}
 	}
 }

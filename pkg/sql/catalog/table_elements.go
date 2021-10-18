@@ -174,7 +174,7 @@ type Index interface {
 	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
 }
 
-// Column is an interface around the index descriptor types.
+// Column is an interface around the column descriptor types.
 type Column interface {
 	TableElementMaybeMutation
 
@@ -304,6 +304,15 @@ type Column interface {
 	// it will return descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT;
 	// otherwise, returns descpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN.
 	GetGeneratedAsIdentityType() descpb.GeneratedAsIdentityType
+
+	// HasGeneratedAsIdentitySequenceOption returns true if there is a
+	// customized sequence option when this column is created as a
+	// `GENERATED AS IDENTITY` column.
+	HasGeneratedAsIdentitySequenceOption() bool
+
+	// GetGeneratedAsIdentitySequenceOption returns the column's `GENERATED AS
+	// IDENTITY` sequence option if it exists, empty string otherwise.
+	GetGeneratedAsIdentitySequenceOption() string
 }
 
 // ConstraintToUpdate is an interface around a constraint mutation.
@@ -653,18 +662,18 @@ func ColumnIDToOrdinalMap(columns []Column) TableColMap {
 
 // ColumnTypes returns the types of the given columns
 func ColumnTypes(columns []Column) []*types.T {
-	return ColumnTypesWithVirtualCol(columns, nil)
+	return ColumnTypesWithInvertedCol(columns, nil /* invertedCol */)
 }
 
-// ColumnTypesWithVirtualCol returns the types of all given columns,
-// If virtualCol is non-nil, substitutes the type of the virtual
+// ColumnTypesWithInvertedCol returns the types of all given columns,
+// If invertedCol is non-nil, substitutes the type of the inverted
 // column instead of the column with the same ID.
-func ColumnTypesWithVirtualCol(columns []Column, virtualCol Column) []*types.T {
+func ColumnTypesWithInvertedCol(columns []Column, invertedCol Column) []*types.T {
 	t := make([]*types.T, len(columns))
 	for i, col := range columns {
 		t[i] = col.GetType()
-		if virtualCol != nil && col.GetID() == virtualCol.GetID() {
-			t[i] = virtualCol.GetType()
+		if invertedCol != nil && col.GetID() == invertedCol.GetID() {
+			t[i] = invertedCol.GetType()
 		}
 	}
 	return t

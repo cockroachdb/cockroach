@@ -227,7 +227,7 @@ func (m *migrationServer) DeprecateBaseEncryptionRegistry(
 		m.server.node.waitForAdditionalStoreInit()
 
 		for _, eng := range m.server.engines {
-			if err := eng.DeprecateBaseEncryptionRegistry(req.Version); err != nil {
+			if err := eng.SetMinVersion(*req.Version); err != nil {
 				return err
 			}
 		}

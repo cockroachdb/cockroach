@@ -28,6 +28,7 @@ crdb_internal  cluster_queries              table  NULL  NULL  NULL
 crdb_internal  cluster_sessions             table  NULL  NULL  NULL
 crdb_internal  cluster_settings             table  NULL  NULL  NULL
 crdb_internal  cluster_transactions         table  NULL  NULL  NULL
+crdb_internal  create_schema_statements     table  NULL  NULL  NULL
 crdb_internal  create_statements            table  NULL  NULL  NULL
 crdb_internal  create_type_statements       table  NULL  NULL  NULL
 crdb_internal  cross_db_references          table  NULL  NULL  NULL
@@ -74,6 +75,7 @@ crdb_internal  table_columns                table  NULL  NULL  NULL
 crdb_internal  table_indexes                table  NULL  NULL  NULL
 crdb_internal  table_row_statistics         table  NULL  NULL  NULL
 crdb_internal  tables                       table  NULL  NULL  NULL
+crdb_internal  tenant_usage_details         view   NULL  NULL  NULL
 crdb_internal  transaction_statistics       table  NULL  NULL  NULL
 crdb_internal  zones                        table  NULL  NULL  NULL
 
@@ -155,7 +157,7 @@ Channel
 query ITTTTTTTTTTTRTTIITTIT colnames
 SELECT * FROM crdb_internal.jobs WHERE false
 ----
-job_id  job_type  description  statement  user_name  descriptor_ids  status  running_status  created  started  finished  modified  fraction_completed  high_water_timestamp  error  coordinator_id  trace_id last_run next_run num_runs execution_log
+job_id  job_type  description  statement  user_name  descriptor_ids  status  running_status  created  started  finished  modified  fraction_completed  high_water_timestamp  error  coordinator_id  trace_id  last_run  next_run  num_runs  execution_errors
 
 query IITTITTT colnames
 SELECT * FROM crdb_internal.schema_changes WHERE table_id < 0
@@ -320,6 +322,7 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 22  RANGE liveness
 25  TABLE system.public.replication_constraint_stats
 27  TABLE system.public.replication_stats
+45  TABLE system.public.tenant_usage
 53  DATABASE testdb
 54  TABLE testdb.public.foo
 57  TABLE test.schema.bar
@@ -377,7 +380,7 @@ select crdb_internal.get_vmodule()
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
 ----
-21.1
+21.2
 
 query ITTT colnames
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
@@ -536,7 +539,7 @@ select * from crdb_internal.node_inflight_trace_spans
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
 ----
-21.1
+21.2
 
 user root
 
@@ -904,3 +907,10 @@ query TT
 SELECT * FROM crdb_internal.regions ORDER BY 1
 ----
 test  {}
+
+# Regression test for incorrectly handling tree.DOidWrappers by some builtins
+# (#69684).
+statement ok
+CREATE TABLE t69684(a NAME);
+INSERT INTO t69684 VALUES ('foo');
+SELECT * FROM t69684 WHERE crdb_internal.increment_feature_counter(a)

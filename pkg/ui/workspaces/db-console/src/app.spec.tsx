@@ -319,14 +319,14 @@ describe("Routing to", () => {
 
   describe("'/statements/:${appAttr}' path", () => {
     it("routes to <StatementsPage> component", () => {
-      navigateToPath("/statements/(internal)");
+      navigateToPath("/statements/%24+internal");
       assert.lengthOf(appWrapper.find(StatementsPage), 1);
     });
   });
 
   describe("'/statements/:${appAttr}/:${statementAttr}' path", () => {
     it("routes to <StatementDetails> component", () => {
-      navigateToPath("/statements/(internal)/true");
+      navigateToPath("/statements/%24+internal/true");
       assert.lengthOf(appWrapper.find(StatementDetails), 1);
     });
   });
@@ -343,13 +343,6 @@ describe("Routing to", () => {
       navigateToPath("/statement");
       const location = history.location;
       assert.equal(location.pathname, "/statements");
-    });
-  });
-
-  describe("'/statement/:${statementAttr}' path", () => {
-    it("routes to <StatementDetails> component", () => {
-      navigateToPath("/statement/statement-attr");
-      assert.lengthOf(appWrapper.find(StatementDetails), 1);
     });
   });
 

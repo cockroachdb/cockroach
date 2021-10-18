@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment";
 import Long from "long";
 import { createMemoryHistory } from "history";
 import { noop } from "lodash";
@@ -76,6 +77,10 @@ const statementStats: any = {
     mean: 7,
     squared_diffs: 1000000,
   },
+  rows_written: {
+    mean: 1,
+    squared_diffs: 10,
+  },
   last_exec_timestamp: {
     seconds: Long.fromInt(1599670292),
     nanos: 111613000,
@@ -117,6 +122,8 @@ const statementStats: any = {
   exec_stats: execStats,
 };
 
+const aggregatedTs = Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3;
+
 export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
   history,
   location: {
@@ -137,6 +144,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       database: "defaultdb",
     },
   },
+  dateRange: [moment.utc("2021.08.08"), moment.utc("2021.08.12")],
   statement: {
     statement: "SELECT city, id FROM vehicles WHERE city = $1",
     stats: statementStats,
@@ -144,6 +152,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
     byNode: [
       {
         label: "4",
+        aggregatedTs,
         implicitTxn: true,
         database: "defaultdb",
         fullScan: true,
@@ -151,6 +160,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       },
       {
         label: "3",
+        aggregatedTs,
         implicitTxn: true,
         database: "defaultdb",
         fullScan: true,
@@ -158,6 +168,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       },
       {
         label: "2",
+        aggregatedTs,
         implicitTxn: true,
         database: "defaultdb",
         fullScan: true,
@@ -165,6 +176,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       },
       {
         label: "1",
+        aggregatedTs,
         implicitTxn: true,
         database: "defaultdb",
         fullScan: true,
@@ -177,10 +189,6 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       denominator: 36958,
     },
     vec: {
-      numerator: 36958,
-      denominator: 36958,
-    },
-    opt: {
       numerator: 36958,
       denominator: 36958,
     },
@@ -217,4 +225,5 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
   uiConfig: {
     showStatementDiagnosticsLink: true,
   },
+  isTenant: false,
 });

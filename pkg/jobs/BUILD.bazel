@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "adopt.go",
         "config.go",
+        "errors.go",
         "executor_impl.go",
         "helpers.go",
         "job_scheduler.go",
@@ -68,6 +69,7 @@ go_test(
     name = "jobs_test",
     size = "medium",
     srcs = [
+        "delegate_control_test.go",
         "executor_impl_test.go",
         "helpers_test.go",
         "job_scheduler_test.go",
@@ -76,7 +78,6 @@ go_test(
         "main_test.go",
         "registry_external_test.go",
         "registry_test.go",
-        "schedule_control_test.go",
         "scheduled_job_executor_test.go",
         "scheduled_job_test.go",
         "testutils_test.go",
@@ -122,7 +123,6 @@ go_test(
         "//pkg/util/metric",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
-        "//pkg/util/retry",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",

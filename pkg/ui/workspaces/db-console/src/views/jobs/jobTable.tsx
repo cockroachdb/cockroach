@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import React, { MouseEvent } from "react";
-import _ from "lodash";
 import { cockroach } from "src/js/protos";
 import { TimestampToMoment } from "src/util/convert";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
@@ -25,46 +24,123 @@ import {
   Pagination,
   ResultsPerPageLabel,
 } from "@cockroachlabs/cluster-ui";
-import { jobTable } from "src/util/docs";
+import {
+  jobsCancel,
+  jobsPause,
+  jobsResume,
+  jobStatus,
+  jobTable,
+} from "src/util/docs";
 import { trackDocsLink } from "src/util/analytics";
-import { EmptyTable } from "@cockroachlabs/cluster-ui";
+import { EmptyTable, SortedTable } from "@cockroachlabs/cluster-ui";
 import { Anchor } from "src/components";
 import emptyTableResultsIcon from "assets/emptyState/empty-table-results.svg";
 import magnifyingGlassIcon from "assets/emptyState/magnifying-glass.svg";
-import { SortedTable } from "../shared/components/sortedtable";
+import { Tooltip } from "@cockroachlabs/ui-components";
 
 class JobsSortedTable extends SortedTable<Job> {}
 
 const jobsTableColumns: ColumnDescriptor<Job>[] = [
   {
     name: "description",
-    title: "Description",
+    title: (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <p>
+            The description of the job, if set, or the SQL statement if there is
+            no job description.
+          </p>
+        }
+      >
+        {"Description"}
+      </Tooltip>
+    ),
     className: "cl-table__col-query-text",
     cell: job => <JobDescriptionCell job={job} />,
     sort: job => job.statement || job.description || job.type,
   },
   {
     name: "jobId",
-    title: "Job ID",
+    title: (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <p>
+            {"Unique job ID. This value is used to "}
+            <Anchor href={jobsPause} target="_blank">
+              pause
+            </Anchor>
+            {", "}
+            <Anchor href={jobsResume} target="_blank">
+              resume
+            </Anchor>
+            {", or "}
+            <Anchor href={jobsCancel} target="_blank">
+              cancel
+            </Anchor>
+            {" jobs."}
+          </p>
+        }
+      >
+        {"Job ID"}
+      </Tooltip>
+    ),
     titleAlign: "right",
     cell: job => String(job.id),
     sort: job => job.id?.toNumber(),
   },
   {
     name: "users",
-    title: "Users",
+    title: (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={<p>User that created the job.</p>}
+      >
+        {"User"}
+      </Tooltip>
+    ),
     cell: job => job.username,
     sort: job => job.username,
   },
   {
     name: "creationTime",
-    title: "Creation Time",
+    title: (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={<p>Date and time the job was created.</p>}
+      >
+        {"Creation Time"}
+      </Tooltip>
+    ),
     cell: job => TimestampToMoment(job?.created).format(DATE_FORMAT_24_UTC),
     sort: job => TimestampToMoment(job?.created).valueOf(),
   },
   {
     name: "status",
-    title: "Status",
+    title: (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <p>
+            {"Current "}
+            <Anchor href={jobStatus} target="_blank">
+              job status
+            </Anchor>
+            {
+              " or completion progress, and the total time the job took to complete."
+            }
+          </p>
+        }
+      >
+        {"Status"}
+      </Tooltip>
+    ),
     cell: job => <JobStatusCell job={job} compact />,
     sort: job => job.fraction_completed,
   },

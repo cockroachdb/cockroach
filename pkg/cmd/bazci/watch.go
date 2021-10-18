@@ -146,7 +146,7 @@ func (w watcher) stageTestArtifacts(phase Phase) error {
 			{path.Join(relDir, "test.xml"), mungeTestXML},
 			{path.Join(relDir, "*", "test.xml"), mungeTestXML},
 		} {
-			err := w.maybeStageArtifact(testlogsSourceDir, tup.relPath, 0666, phase,
+			err := w.maybeStageArtifact(testlogsSourceDir, tup.relPath, 0644, phase,
 				tup.stagefn)
 			if err != nil {
 				return err
@@ -204,7 +204,7 @@ func (w watcher) stageBinaryArtifacts() error {
 		if usingCrossWindowsConfig() {
 			relBinPath = relBinPath + ".exe"
 		}
-		err := w.maybeStageArtifact(binSourceDir, relBinPath, 0777, finalizePhase,
+		err := w.maybeStageArtifact(binSourceDir, relBinPath, 0755, finalizePhase,
 			copyContentTo)
 		if err != nil {
 			return err
@@ -221,7 +221,7 @@ func (w watcher) stageBinaryArtifacts() error {
 			return err
 		}
 		for _, relBinPath := range outs {
-			err := w.maybeStageArtifact(binSourceDir, relBinPath, 0666, finalizePhase, copyContentTo)
+			err := w.maybeStageArtifact(binSourceDir, relBinPath, 0644, finalizePhase, copyContentTo)
 			if err != nil {
 				return err
 			}
@@ -244,7 +244,7 @@ func (w watcher) stageBinaryArtifacts() error {
 				fmt.Sprintf("c-deps/libgeos/lib/libgeos_c.%s", ext),
 				fmt.Sprintf("c-deps/libgeos/lib/libgeos.%s", ext),
 			} {
-				err := w.maybeStageArtifact(binSourceDir, relBinPath, 0666, finalizePhase, copyContentTo)
+				err := w.maybeStageArtifact(binSourceDir, relBinPath, 0644, finalizePhase, copyContentTo)
 				if err != nil {
 					return err
 				}
@@ -321,7 +321,7 @@ func (w *cancelableWriter) Write(p []byte) (n int, err error) {
 
 func (w *cancelableWriter) Close() error {
 	if !w.Canceled {
-		err := os.MkdirAll(path.Dir(w.filename), 0777)
+		err := os.MkdirAll(path.Dir(w.filename), 0755)
 		if err != nil {
 			return err
 		}
@@ -367,7 +367,7 @@ func (w *cancelableWriter) Close() error {
 //
 // For example, one might stage a set of log files with a call like:
 // w.maybeStageArtifact(testlogsSourceDir, "pkg/server/server_test/*/test.log",
-//                      0666, incrementalUpdatePhase, copycontentTo)
+//                      0644, incrementalUpdatePhase, copycontentTo)
 func (w watcher) maybeStageArtifact(
 	root SourceDir,
 	pattern string,

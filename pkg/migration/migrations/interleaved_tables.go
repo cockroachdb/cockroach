@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -22,6 +23,12 @@ import (
 )
 
 func interleavedTablesRemovedMigration(
+	ctx context.Context, cv clusterversion.ClusterVersion, d migration.TenantDeps, _ *jobs.Job,
+) error {
+	return interleavedTablesRemovedCheck(ctx, cv, d)
+}
+
+func interleavedTablesRemovedCheck(
 	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
 ) error {
 	rows, err := d.InternalExecutor.QueryRowEx(ctx, "check-for-interleaved",

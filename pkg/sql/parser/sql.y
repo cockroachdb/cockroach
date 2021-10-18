@@ -266,6 +266,12 @@ func (u *sqlSymUnion) strPtr() *string {
 func (u *sqlSymUnion) strs() []string {
     return u.val.([]string)
 }
+func (u *sqlSymUnion) roleSpec() tree.RoleSpec {
+    return u.val.(tree.RoleSpec)
+}
+func (u *sqlSymUnion) roleSpecList() tree.RoleSpecList {
+    return u.val.(tree.RoleSpecList)
+}
 func (u *sqlSymUnion) user() security.SQLUsername {
     return u.val.(security.SQLUsername)
 }
@@ -675,6 +681,11 @@ func (u *sqlSymUnion) listOfStringOrPlaceholderOptList() []tree.StringOrPlacehol
 func (u *sqlSymUnion) fullBackupClause() *tree.FullBackupClause {
     return u.val.(*tree.FullBackupClause)
 }
+
+func (u *sqlSymUnion) scheduleLabelSpec() *tree.ScheduleLabelSpec {
+    return u.val.(*tree.ScheduleLabelSpec)
+}
+
 func (u *sqlSymUnion) geoShapeType() geopb.ShapeType {
   return u.val.(geopb.ShapeType)
 }
@@ -763,7 +774,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CURSOR CYCLE
 
-%token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT DEFAULTS
+%token <str> DATA DATABASE DATABASES DATE DAY DEBUG_PAUSE_ON DEC DECIMAL DEFAULT DEFAULTS
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DESC DESTINATION DETACHED
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
@@ -775,7 +786,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
-%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FOREIGN FROM FULL FUNCTION FUNCTIONS
+%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_ZIGZAG FOREIGN FROM FULL FUNCTION FUNCTIONS
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
@@ -804,9 +815,10 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
 
-%token <str> NAN NAME NAMES NATURAL NEVER NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED NOCONTROLJOB
-%token <str> NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING NO_INDEX_JOIN NO_ZIGZAG_JOIN
-%token <str> NONE NON_VOTERS NORMAL NOT NOTHING NOTNULL NOVIEWACTIVITY NOWAIT NULL NULLIF NULLS NUMERIC
+%token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
+%token <str> NOCONTROLJOB NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING
+%token <str> NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NON_VOTERS NORMAL NOT NOTHING NOTNULL
+%token <str> NOVIEWACTIVITY NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
@@ -953,6 +965,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> cancel_jobs_stmt
 %type <tree.Statement> cancel_queries_stmt
 %type <tree.Statement> cancel_sessions_stmt
+%type <tree.Statement> cancel_all_jobs_stmt
 
 // SCRUB
 %type <tree.Statement> scrub_stmt
@@ -1012,13 +1025,13 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> grant_stmt
 %type <tree.Statement> insert_stmt
 %type <tree.Statement> import_stmt
-%type <tree.Statement> pause_stmt pause_jobs_stmt pause_schedules_stmt
+%type <tree.Statement> pause_stmt pause_jobs_stmt pause_schedules_stmt pause_all_jobs_stmt
 %type <*tree.Select>   for_schedules_clause
 %type <tree.Statement> reassign_owned_by_stmt
 %type <tree.Statement> drop_owned_by_stmt
 %type <tree.Statement> release_stmt
 %type <tree.Statement> reset_stmt reset_session_stmt reset_csetting_stmt
-%type <tree.Statement> resume_stmt resume_jobs_stmt resume_schedules_stmt
+%type <tree.Statement> resume_stmt resume_jobs_stmt resume_schedules_stmt resume_all_jobs_stmt
 %type <tree.Statement> drop_schedule_stmt
 %type <tree.Statement> restore_stmt
 %type <tree.StringOrPlaceholderOptList> string_or_placeholder_opt_list
@@ -1031,6 +1044,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> savepoint_stmt
 
 %type <tree.Statement> preparable_set_stmt nonpreparable_set_stmt
+%type <tree.Statement> set_local_stmt
 %type <tree.Statement> set_session_stmt
 %type <tree.Statement> set_csetting_stmt
 %type <tree.Statement> set_transaction_stmt
@@ -1318,10 +1332,8 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <str> unrestricted_name type_function_name type_function_name_no_crdb_extra
 %type <str> non_reserved_word
 %type <str> non_reserved_word_or_sconst
-%type <security.SQLUsername> username_or_sconst
-// TODO(solon): The type for role_spec needs to be updated to fix
-// https://github.com/cockroachdb/cockroach/issues/54696
-%type <security.SQLUsername> role_spec
+%type <tree.RoleSpec> role_spec
+%type <tree.RoleSpecList> role_spec_list
 %type <tree.Expr> zone_value
 %type <tree.Expr> string_or_placeholder
 %type <tree.Expr> string_or_placeholder_list
@@ -1366,7 +1378,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %type <tree.TargetList> targets targets_roles target_types changefeed_targets
 %type <*tree.TargetList> opt_on_targets_roles opt_backup_targets
-%type <tree.NameList> for_grantee_clause
+%type <tree.RoleSpecList> for_grantee_clause
 %type <privilege.List> privileges
 %type <[]tree.KVOption> opt_role_options role_options
 %type <tree.AuditMode> audit_mode
@@ -1382,7 +1394,8 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Persistence> opt_persistence_temp_table
 %type <bool> role_or_group_or_user
 
-%type <tree.Expr>  cron_expr opt_description sconst_or_placeholder
+%type <*tree.ScheduleLabelSpec> schedule_label_spec
+%type <tree.Expr>  cron_expr sconst_or_placeholder
 %type <*tree.FullBackupClause> opt_full_backup_clause
 %type <tree.ScheduleState> schedule_state
 %type <tree.ScheduledJobExecutorType> opt_schedule_executor_type
@@ -1528,6 +1541,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... DROP [COLUMN] [IF EXISTS] <colname> [RESTRICT | CASCADE]
 //   ALTER TABLE ... DROP CONSTRAINT [IF EXISTS] <constraintname> [RESTRICT | CASCADE]
 //   ALTER TABLE ... ALTER [COLUMN] <colname> {SET DEFAULT <expr> | DROP DEFAULT}
+//   ALTER TABLE ... ALTER [COLUMN] <colname> {SET ON UPDATE <expr> | DROP ON UPDATE}
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP NOT NULL
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP STORED
 //   ALTER TABLE ... ALTER [COLUMN] <colname> [SET DATA] TYPE <type> [COLLATE <collation>]
@@ -1675,7 +1689,7 @@ alter_database_stmt:
 alter_database_owner:
   ALTER DATABASE database_name OWNER TO role_spec
   {
-    $$.val = &tree.AlterDatabaseOwner{Name: tree.Name($3), Owner: $6.user()}
+    $$.val = &tree.AlterDatabaseOwner{Name: tree.Name($3), Owner: $6.roleSpec()}
   }
 
 // This form is an alias for ALTER ROLE ALL IN DATABASE <db> SET ...
@@ -2140,7 +2154,7 @@ alter_table_cmd:
   {
     $$.val = &tree.AlterTableSetDefault{Column: tree.Name($3), Default: $4.expr()}
   }
-  // ALTER TABLE <name> ALTER [COLUMN] <colname> {ON UPDATE <expr>|DROP ON UPDATE}
+  // ALTER TABLE <name> ALTER [COLUMN] <colname> {SET ON UPDATE <expr>|DROP ON UPDATE}
 | ALTER opt_column column_name alter_column_on_update
   {
     $$.val = &tree.AlterTableSetOnUpdate{Column: tree.Name($3), Expr: $4.expr()}
@@ -2448,7 +2462,7 @@ alter_type_stmt:
     $$.val = &tree.AlterType{
       Type: $3.unresolvedObjectName(),
       Cmd: &tree.AlterTypeOwner{
-        Owner: $6.user(),
+        Owner: $6.roleSpec(),
       },
     }
   }
@@ -2483,33 +2497,41 @@ opt_add_val_placement:
   }
 
 role_spec:
-  username_or_sconst { $$.val = $1.user() }
+  IDENT
+  {
+    $$.val = tree.RoleSpec{
+      RoleSpecType: tree.RoleName,
+      Name: $1,
+    }
+  }
+| unreserved_keyword
+  {
+    $$.val = tree.RoleSpec{
+      RoleSpecType: tree.RoleName,
+      Name: $1,
+    }
+  }
 | CURRENT_USER
   {
-   // This is incorrect, see https://github.com/cockroachdb/cockroach/issues/54696
-   $$.val = security.MakeSQLUsernameFromPreNormalizedString($1)
+    $$.val = tree.RoleSpec{
+      RoleSpecType: tree.CurrentUser,
+    }
   }
 | SESSION_USER
   {
-   // This is incorrect, see https://github.com/cockroachdb/cockroach/issues/54696
-     $$.val = security.MakeSQLUsernameFromPreNormalizedString($1)
+    $$.val = tree.RoleSpec{
+      RoleSpecType: tree.SessionUser,
+     }
   }
 
-username_or_sconst:
-  non_reserved_word
+role_spec_list:
+  role_spec
   {
-    // Username was entered as a SQL keyword, or as a SQL identifier
-    // already subject to case normalization and NFC reduction.
-    // (or is it? In fact, there is a bug here: https://github.com/cockroachdb/cockroach/issues/55396
-    // which needs to be fixed to make this fully correct.)
-    $$.val = security.MakeSQLUsernameFromPreNormalizedString($1)
+    $$.val = tree.RoleSpecList{$1.roleSpec()}
   }
-| SCONST
+| role_spec_list ',' role_spec
   {
-    // We use UsernameValidation because username_or_sconst and role_spec
-    // are only used for usernames of existing accounts, not when
-    // creating new users or roles.
-    $$.val, _ = security.MakeSQLUsernameFromUserInput($1, security.UsernameValidation)
+    $$.val = append($1.roleSpecList(), $3.roleSpec())
   }
 
 alter_attribute_action_list:
@@ -2688,7 +2710,8 @@ backup_options:
 // %Help: CREATE SCHEDULE FOR BACKUP - backup data periodically
 // %Category: CCL
 // %Text:
-// CREATE SCHEDULE [<description>]
+// CREATE SCHEDULE [IF NOT EXISTS]
+// [<description>]
 // FOR BACKUP [<targets>] INTO <location...>
 // [WITH <backup_option>[=<value>] [, ...]]
 // RECURRING [crontab|NEVER] [FULL BACKUP <crontab|ALWAYS>]
@@ -2758,29 +2781,21 @@ backup_options:
 //
 // %SeeAlso: BACKUP
 create_schedule_for_backup_stmt:
-  CREATE SCHEDULE /*$3=*/opt_description FOR BACKUP /*$6=*/opt_backup_targets INTO
+ CREATE SCHEDULE /*$3=*/schedule_label_spec FOR BACKUP /*$6=*/opt_backup_targets INTO
   /*$8=*/string_or_placeholder_opt_list /*$9=*/opt_with_backup_options
   /*$10=*/cron_expr /*$11=*/opt_full_backup_clause /*$12=*/opt_with_schedule_options
   {
-    $$.val = &tree.ScheduledBackup{
-      ScheduleLabel:    $3.expr(),
-      Recurrence:       $10.expr(),
-      FullBackup:       $11.fullBackupClause(),
-      To:               $8.stringOrPlaceholderOptList(),
-      Targets:          $6.targetListPtr(),
-      BackupOptions:    *($9.backupOptions()),
-      ScheduleOptions:  $12.kvOptions(),
-    }
+  $$.val = &tree.ScheduledBackup{
+        ScheduleLabelSpec:    *($3.scheduleLabelSpec()),
+        Recurrence:           $10.expr(),
+        FullBackup:           $11.fullBackupClause(),
+        To:                   $8.stringOrPlaceholderOptList(),
+        Targets:              $6.targetListPtr(),
+        BackupOptions:        *($9.backupOptions()),
+        ScheduleOptions:      $12.kvOptions(),
+      }
   }
-| CREATE SCHEDULE error  // SHOW HELP: CREATE SCHEDULE FOR BACKUP
-
-opt_description:
-  string_or_placeholder
-| /* EMPTY */
-  {
-     $$.val = nil
-  }
-
+ | CREATE SCHEDULE error  // SHOW HELP: CREATE SCHEDULE FOR BACKUP
 
 // sconst_or_placeholder matches a simple string, or a placeholder.
 sconst_or_placeholder:
@@ -2802,6 +2817,21 @@ cron_expr:
   {
     $$.val = $2.expr()
   }
+
+schedule_label_spec:
+  string_or_placeholder
+  {
+      $$.val = &tree.ScheduleLabelSpec{Label: $1.expr(), IfNotExists: false}
+  }
+| IF NOT EXISTS string_or_placeholder
+  {
+      $$.val = &tree.ScheduleLabelSpec{Label: $4.expr(), IfNotExists: true}
+  }
+| /* EMPTY */
+  {
+      $$.val = &tree.ScheduleLabelSpec{IfNotExists: false}
+  }
+
 
 opt_full_backup_clause:
   FULL BACKUP sconst_or_placeholder
@@ -2858,6 +2888,8 @@ opt_with_schedule_options:
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : decrypt backups using KMS
 //    detached: execute restore job asynchronously, without waiting for its completion
 //    skip_localities_check: ignore difference of zone configuration between restore cluster and backup cluster
+//    debug_pause_on: describes the events that the job should pause itself on for debugging purposes.
+//    new_db_name: renames the restored database. only applies to database restores
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
   RESTORE FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
@@ -2993,6 +3025,14 @@ restore_options:
 | SKIP_LOCALITIES_CHECK
   {
     $$.val = &tree.RestoreOptions{SkipLocalitiesCheck: true}
+  }
+| DEBUG_PAUSE_ON '=' string_or_placeholder
+  {
+    $$.val = &tree.RestoreOptions{DebugPauseOn: $3.expr()}
+  }
+| NEW_DB_NAME '=' string_or_placeholder
+  {
+    $$.val = &tree.RestoreOptions{NewDBName: $3.expr()}
   }
 
 import_format:
@@ -3256,10 +3296,11 @@ copy_options:
 // %Category: Group
 // %Text: CANCEL JOBS, CANCEL QUERIES, CANCEL SESSIONS
 cancel_stmt:
-  cancel_jobs_stmt     // EXTEND WITH HELP: CANCEL JOBS
-| cancel_queries_stmt  // EXTEND WITH HELP: CANCEL QUERIES
-| cancel_sessions_stmt // EXTEND WITH HELP: CANCEL SESSIONS
-| CANCEL error         // SHOW HELP: CANCEL
+  cancel_jobs_stmt      // EXTEND WITH HELP: CANCEL JOBS
+| cancel_queries_stmt   // EXTEND WITH HELP: CANCEL QUERIES
+| cancel_sessions_stmt  // EXTEND WITH HELP: CANCEL SESSIONS
+| cancel_all_jobs_stmt  // EXTEND WITH HELP: CANCEL ALL JOBS
+| CANCEL error          // SHOW HELP: CANCEL
 
 // %Help: CANCEL JOBS - cancel background jobs
 // %Category: Misc
@@ -3360,6 +3401,17 @@ cancel_sessions_stmt:
   }
 | CANCEL SESSIONS error // SHOW HELP: CANCEL SESSIONS
 
+// %Help: CANCEL ALL JOBS
+// %Category: Misc
+// %Text:
+// CANCEL ALL {BACKUP|CHANGEFEED|IMPORT|RESTORE} JOBS
+cancel_all_jobs_stmt:
+  CANCEL ALL name JOBS
+  {
+    $$.val = &tree.ControlJobsOfType{Type: $3, Command: tree.CancelJob}
+  }
+| CANCEL ALL error // SHOW HELP: CANCEL ALL JOBS
+
 comment_stmt:
   COMMENT ON DATABASE database_name IS comment_text
   {
@@ -3389,6 +3441,11 @@ comment_stmt:
 | COMMENT ON INDEX table_index_name IS comment_text
   {
     $$.val = &tree.CommentOnIndex{Index: $4.tableIndexName(), Comment: $6.strPtr()}
+  }
+
+| COMMENT ON CONSTRAINT constraint_name ON table_name IS comment_text
+  {
+    $$.val = &tree.CommentOnConstraint{Constraint:tree.Name($4), Table: $6.unresolvedObjectName(), Comment: $8.strPtr()}
   }
 | COMMENT ON EXTENSION error { return unimplemented(sqllex, "comment on extension") }
 
@@ -3949,13 +4006,13 @@ drop_schema_stmt:
 // %Text: DROP ROLE [IF EXISTS] <user> [, ...]
 // %SeeAlso: CREATE ROLE, SHOW ROLE
 drop_role_stmt:
-  DROP role_or_group_or_user string_or_placeholder_list
+  DROP role_or_group_or_user role_spec_list
   {
-    $$.val = &tree.DropRole{Names: $3.exprs(), IfExists: false, IsRole: $2.bool()}
+    $$.val = &tree.DropRole{Names: $3.roleSpecList(), IfExists: false, IsRole: $2.bool()}
   }
-| DROP role_or_group_or_user IF EXISTS string_or_placeholder_list
+| DROP role_or_group_or_user IF EXISTS role_spec_list
   {
-    $$.val = &tree.DropRole{Names: $5.exprs(), IfExists: true, IsRole: $2.bool()}
+    $$.val = &tree.DropRole{Names: $5.roleSpecList(), IfExists: true, IsRole: $2.bool()}
   }
 | DROP role_or_group_or_user error // SHOW HELP: DROP ROLE
 
@@ -4236,37 +4293,37 @@ deallocate_stmt:
 //
 // %SeeAlso: REVOKE, WEBDOCS/grant.html
 grant_stmt:
-  GRANT privileges ON targets TO name_list
+  GRANT privileges ON targets TO role_spec_list
   {
-    $$.val = &tree.Grant{Privileges: $2.privilegeList(), Grantees: $6.nameList(), Targets: $4.targetList()}
+    $$.val = &tree.Grant{Privileges: $2.privilegeList(), Grantees: $6.roleSpecList(), Targets: $4.targetList()}
   }
-| GRANT privilege_list TO name_list
+| GRANT privilege_list TO role_spec_list
   {
-    $$.val = &tree.GrantRole{Roles: $2.nameList(), Members: $4.nameList(), AdminOption: false}
+    $$.val = &tree.GrantRole{Roles: $2.nameList(), Members: $4.roleSpecList(), AdminOption: false}
   }
-| GRANT privilege_list TO name_list WITH ADMIN OPTION
+| GRANT privilege_list TO role_spec_list WITH ADMIN OPTION
   {
-    $$.val = &tree.GrantRole{Roles: $2.nameList(), Members: $4.nameList(), AdminOption: true}
+    $$.val = &tree.GrantRole{Roles: $2.nameList(), Members: $4.roleSpecList(), AdminOption: true}
   }
-| GRANT privileges ON TYPE target_types TO name_list
+| GRANT privileges ON TYPE target_types TO role_spec_list
   {
-    $$.val = &tree.Grant{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.nameList()}
+    $$.val = &tree.Grant{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.roleSpecList()}
   }
-| GRANT privileges ON SCHEMA schema_name_list TO name_list
+| GRANT privileges ON SCHEMA schema_name_list TO role_spec_list
   {
     $$.val = &tree.Grant{
       Privileges: $2.privilegeList(),
       Targets: tree.TargetList{
         Schemas: $5.objectNamePrefixList(),
       },
-      Grantees: $7.nameList(),
+      Grantees: $7.roleSpecList(),
     }
   }
-| GRANT privileges ON SCHEMA schema_name_list TO name_list WITH error
+| GRANT privileges ON SCHEMA schema_name_list TO role_spec_list WITH error
   {
     return unimplemented(sqllex, "grant privileges on schema with")
   }
-| GRANT privileges ON ALL TABLES IN SCHEMA schema_name_list TO name_list
+| GRANT privileges ON ALL TABLES IN SCHEMA schema_name_list TO role_spec_list
   {
     $$.val = &tree.Grant{
       Privileges: $2.privilegeList(),
@@ -4274,7 +4331,7 @@ grant_stmt:
         Schemas: $8.objectNamePrefixList(),
         AllTablesInSchema: true,
       },
-      Grantees: $10.nameList(),
+      Grantees: $10.roleSpecList(),
     }
   }
 | GRANT privileges ON SEQUENCE error
@@ -4303,33 +4360,33 @@ grant_stmt:
 //
 // %SeeAlso: GRANT, WEBDOCS/revoke.html
 revoke_stmt:
-  REVOKE privileges ON targets FROM name_list
+  REVOKE privileges ON targets FROM role_spec_list
   {
-    $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Grantees: $6.nameList(), Targets: $4.targetList()}
+    $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Grantees: $6.roleSpecList(), Targets: $4.targetList()}
   }
-| REVOKE privilege_list FROM name_list
+| REVOKE privilege_list FROM role_spec_list
   {
-    $$.val = &tree.RevokeRole{Roles: $2.nameList(), Members: $4.nameList(), AdminOption: false }
+    $$.val = &tree.RevokeRole{Roles: $2.nameList(), Members: $4.roleSpecList(), AdminOption: false }
   }
-| REVOKE ADMIN OPTION FOR privilege_list FROM name_list
+| REVOKE ADMIN OPTION FOR privilege_list FROM role_spec_list
   {
-    $$.val = &tree.RevokeRole{Roles: $5.nameList(), Members: $7.nameList(), AdminOption: true }
+    $$.val = &tree.RevokeRole{Roles: $5.nameList(), Members: $7.roleSpecList(), AdminOption: true }
   }
-| REVOKE privileges ON TYPE target_types FROM name_list
+| REVOKE privileges ON TYPE target_types FROM role_spec_list
   {
-    $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.nameList()}
+    $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.roleSpecList()}
   }
-| REVOKE privileges ON SCHEMA schema_name_list FROM name_list
+| REVOKE privileges ON SCHEMA schema_name_list FROM role_spec_list
   {
     $$.val = &tree.Revoke{
       Privileges: $2.privilegeList(),
       Targets: tree.TargetList{
         Schemas: $5.objectNamePrefixList(),
       },
-      Grantees: $7.nameList(),
+      Grantees: $7.roleSpecList(),
     }
   }
-| REVOKE privileges ON ALL TABLES IN SCHEMA schema_name_list FROM name_list
+| REVOKE privileges ON ALL TABLES IN SCHEMA schema_name_list FROM role_spec_list
   {
     $$.val = &tree.Revoke{
       Privileges: $2.privilegeList(),
@@ -4337,7 +4394,7 @@ revoke_stmt:
         Schemas: $8.objectNamePrefixList(),
         AllTablesInSchema: true,
       },
-      Grantees: $10.nameList(),
+      Grantees: $10.roleSpecList(),
     }
   }
 | REVOKE privileges ON SEQUENCE error
@@ -4429,11 +4486,11 @@ nonpreparable_set_stmt:
   set_transaction_stmt // EXTEND WITH HELP: SET TRANSACTION
 | set_exprs_internal   { /* SKIP DOC */ }
 | SET CONSTRAINTS error { return unimplemented(sqllex, "set constraints") }
-| SET LOCAL error { return unimplementedWithIssue(sqllex, 32562) }
 
-// SET SESSION / SET CLUSTER SETTING
+// SET SESSION / SET LOCAL / SET CLUSTER SETTING
 preparable_set_stmt:
   set_session_stmt     // EXTEND WITH HELP: SET SESSION
+| set_local_stmt       // EXTEND WITH HELP: SET LOCAL
 | set_csetting_stmt    // EXTEND WITH HELP: SET CLUSTER SETTING
 | use_stmt             // EXTEND WITH HELP: USE
 
@@ -4542,7 +4599,7 @@ scrub_option:
 // %Help: SET CLUSTER SETTING - change a cluster setting
 // %Category: Cfg
 // %Text: SET CLUSTER SETTING <var> { TO | = } <value>
-// %SeeAlso: SHOW CLUSTER SETTING, RESET CLUSTER SETTING, SET SESSION,
+// %SeeAlso: SHOW CLUSTER SETTING, RESET CLUSTER SETTING, SET SESSION, SET LOCAL
 // WEBDOCS/cluster-settings.html
 set_csetting_stmt:
   SET CLUSTER SETTING var_name to_or_eq var_value
@@ -4571,22 +4628,41 @@ set_exprs_internal:
 // SET [SESSION] CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL { SNAPSHOT | SERIALIZABLE }
 // SET [SESSION] TRACING { TO | = } { on | off | cluster | kv | results } [,...]
 //
-// %SeeAlso: SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION,
+// %SeeAlso: SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION, SET LOCAL
 // WEBDOCS/set-vars.html
 set_session_stmt:
   SET SESSION set_rest_more
   {
     $$.val = $3.stmt()
   }
+| SET SESSION error  // SHOW HELP: SET SESSION
 | SET set_rest_more
   {
     $$.val = $2.stmt()
   }
+| SET error  // SHOW HELP: SET SESSION
 // Special form for pg compatibility:
 | SET SESSION CHARACTERISTICS AS TRANSACTION transaction_mode_list
   {
     $$.val = &tree.SetSessionCharacteristics{Modes: $6.transactionModes()}
   }
+
+// %Help: SET LOCAL - change a session variable scoped to the current transaction
+// %Category: Cfg
+// %Text:
+// SET LOCAL <var> { TO | = } <values...>
+// SET LOCAL TIME ZONE <tz>
+//
+// %SeeAlso: SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION, SET SESSION
+// WEBDOCS/set-vars.html
+set_local_stmt:
+  SET LOCAL set_rest
+  {
+    ret := $3.setVar()
+    ret.Local = true
+    $$.val = ret
+  }
+| SET LOCAL error  // SHOW HELP: SET LOCAL
 
 // %Help: SET TRANSACTION - configure the transaction settings
 // %Category: Txn
@@ -4599,7 +4675,7 @@ set_session_stmt:
 //    AS OF SYSTEM TIME <expr>
 //    [NOT] DEFERRABLE
 //
-// %SeeAlso: SHOW TRANSACTION, SET SESSION,
+// %SeeAlso: SHOW TRANSACTION, SET SESSION, SET LOCAL
 // WEBDOCS/set-transaction.html
 set_transaction_stmt:
   SET TRANSACTION transaction_mode_list
@@ -4660,13 +4736,16 @@ set_rest_more:
     /* SKIP DOC */
     $$.val = &tree.SetSessionAuthorizationDefault{}
   }
-| SESSION AUTHORIZATION username_or_sconst
+| SESSION AUTHORIZATION IDENT
+  {
+    return unimplementedWithIssue(sqllex, 40283)
+  }
+| SESSION AUTHORIZATION SCONST
   {
     return unimplementedWithIssue(sqllex, 40283)
   }
 // See comment for the non-terminal for SET NAMES below.
 | set_names
-| error // SHOW HELP: SET SESSION
 
 // SET NAMES is the SQL standard syntax for SET client_encoding.
 // "SET NAMES value is an alias for SET client_encoding TO value."
@@ -5093,7 +5172,7 @@ show_databases_stmt:
 show_default_privileges_stmt:
   SHOW DEFAULT PRIVILEGES opt_for_roles {
     $$.val = &tree.ShowDefaultPrivileges{
-      Roles: $4.nameList(),
+      Roles: $4.roleSpecList(),
     }
   }
 | SHOW DEFAULT PRIVILEGES FOR ALL ROLES {
@@ -5157,9 +5236,9 @@ show_grants_stmt:
   {
     lst := $3.targetListPtr()
     if lst != nil && lst.ForRoles {
-      $$.val = &tree.ShowRoleGrants{Roles: lst.Roles, Grantees: $4.nameList()}
+      $$.val = &tree.ShowRoleGrants{Roles: lst.Roles, Grantees: $4.roleSpecList()}
     } else {
-      $$.val = &tree.ShowGrants{Targets: lst, Grantees: $4.nameList()}
+      $$.val = &tree.ShowGrants{Targets: lst, Grantees: $4.roleSpecList()}
     }
   }
 | SHOW GRANTS error // SHOW HELP: SHOW GRANTS
@@ -5202,14 +5281,14 @@ show_indexes_stmt:
 // %Text: SHOW CONSTRAINTS FROM <tablename>
 // %SeeAlso: WEBDOCS/show-constraints.html
 show_constraints_stmt:
-  SHOW CONSTRAINT FROM table_name
+  SHOW CONSTRAINT FROM table_name with_comment
   {
-    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName()}
+    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
 | SHOW CONSTRAINT error // SHOW HELP: SHOW CONSTRAINTS
-| SHOW CONSTRAINTS FROM table_name
+| SHOW CONSTRAINTS FROM table_name with_comment
   {
-    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName()}
+    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
 | SHOW CONSTRAINTS error // SHOW HELP: SHOW CONSTRAINTS
 
@@ -5361,6 +5440,10 @@ opt_schedule_executor_type:
 | FOR BACKUP
   {
     $$.val = tree.ScheduledBackupExecutor
+  }
+| FOR SQL STATISTICS
+  {
+    $$.val = tree.ScheduledSQLStatsCompactionExecutor
   }
 
 // %Help: SHOW TRACE - display an execution trace
@@ -5551,6 +5634,7 @@ show_transaction_stmt:
 // %Text:
 // SHOW CREATE [ TABLE | SEQUENCE | VIEW | DATABASE ] <object_name>
 // SHOW CREATE ALL TABLES
+// SHOW CREATE ALL SCHEMAS
 // %SeeAlso: WEBDOCS/show-create.html
 show_create_stmt:
   SHOW CREATE table_name
@@ -5581,6 +5665,10 @@ show_create_stmt:
   {
     $$.val = &tree.ShowCreateAllTables{}
   }
+| SHOW CREATE ALL SCHEMAS
+  {
+    $$.val = &tree.ShowCreateAllSchemas{}
+  }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
 
 // %Help: SHOW CREATE SCHEDULES - list CREATE statements for scheduled jobs
@@ -5592,13 +5680,11 @@ show_create_stmt:
 show_create_schedules_stmt:
   SHOW CREATE ALL SCHEDULES
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowCreateSchedules{}
   }
 | SHOW CREATE ALL SCHEDULES error // SHOW HELP: SHOW CREATE SCHEDULES
 | SHOW CREATE SCHEDULE a_expr
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowCreateSchedules{ScheduleID: $4.expr()}
   }
 | SHOW CREATE SCHEDULE error // SHOW HELP: SHOW CREATE SCHEDULES
@@ -5805,7 +5891,6 @@ show_fingerprints_stmt:
 show_full_scans_stmt:
   SHOW FULL TABLE SCANS
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowFullTableScans{}
   }
 
@@ -6012,9 +6097,9 @@ targets:
 // with a name list. This cannot be included in targets directly
 // because some statements must not recognize this syntax.
 targets_roles:
-  ROLE name_list
+  ROLE role_spec_list
   {
-     $$.val = tree.TargetList{ForRoles: true, Roles: $2.nameList()}
+     $$.val = tree.TargetList{ForRoles: true, Roles: $2.roleSpecList()}
   }
 | SCHEMA schema_name_list
   {
@@ -6027,13 +6112,13 @@ targets_roles:
 | targets
 
 for_grantee_clause:
-  FOR name_list
+  FOR role_spec_list
   {
-    $$.val = $2.nameList()
+    $$.val = $2.roleSpecList()
   }
 | /* EMPTY */
   {
-    $$.val = tree.NameList(nil)
+    $$.val = tree.RoleSpecList(nil)
   }
 
 
@@ -6047,6 +6132,7 @@ for_grantee_clause:
 pause_stmt:
   pause_jobs_stmt       // EXTEND WITH HELP: PAUSE JOBS
 | pause_schedules_stmt  // EXTEND WITH HELP: PAUSE SCHEDULES
+| pause_all_jobs_stmt  // EXTEND WITH HELP: PAUSE ALL JOBS
 | PAUSE error           // SHOW HELP: PAUSE
 
 // %Help: RESUME
@@ -6055,11 +6141,23 @@ pause_stmt:
 //
 // Resume various background tasks and activities.
 //
-// RESUME JOBS, RESUME SCHEDULES
+// RESUME JOBS, RESUME SCHEDULES, RESUME ALL BACKUP JOBS
 resume_stmt:
   resume_jobs_stmt       // EXTEND WITH HELP: RESUME JOBS
 | resume_schedules_stmt  // EXTEND WITH HELP: RESUME SCHEDULES
+| resume_all_jobs_stmt  // EXTEND WITH HELP: RESUME ALL JOBS
 | RESUME error           // SHOW HELP: RESUME
+
+// %Help: RESUME ALL JOBS
+// %Category: Misc
+// %Text:
+// RESUME ALL {BACKUP|CHANGEFEED|IMPORT|RESTORE} JOBS
+resume_all_jobs_stmt:
+  RESUME ALL name JOBS
+  {
+    $$.val = &tree.ControlJobsOfType{Type: $3, Command: tree.ResumeJob}
+  }
+| RESUME ALL error // SHOW HELP: RESUME ALL JOBS
 
 // %Help: PAUSE JOBS - pause background jobs
 // %Category: Misc
@@ -6142,6 +6240,18 @@ pause_schedules_stmt:
   }
 | PAUSE SCHEDULES error // SHOW HELP: PAUSE SCHEDULES
 
+// %Help: PAUSE ALL JOBS
+// %Category: Misc
+// %Text:
+// PAUSE ALL {BACKUP|CHANGEFEED|IMPORT|RESTORE} JOBS
+pause_all_jobs_stmt:
+  PAUSE ALL name JOBS
+  {
+    $$.val = &tree.ControlJobsOfType{Type: $3, Command: tree.PauseJob}
+  }
+| PAUSE ALL error // SHOW HELP: PAUSE ALL JOBS
+
+
 // %Help: CREATE SCHEMA - create a new schema
 // %Category: DDL
 // %Text:
@@ -6164,7 +6274,7 @@ create_schema_stmt:
   {
     $$.val = &tree.CreateSchema{
       Schema: $3.objectNamePrefix(),
-      AuthRole: $5.user(),
+      AuthRole: $5.roleSpec(),
     }
   }
 | CREATE SCHEMA IF NOT EXISTS opt_schema_name AUTHORIZATION role_spec
@@ -6172,7 +6282,7 @@ create_schema_stmt:
     $$.val = &tree.CreateSchema{
       Schema: $6.objectNamePrefix(),
       IfNotExists: true,
-      AuthRole: $8.user(),
+      AuthRole: $8.roleSpec(),
     }
   }
 | CREATE SCHEMA error // SHOW HELP: CREATE SCHEMA
@@ -6199,7 +6309,7 @@ alter_schema_stmt:
     $$.val = &tree.AlterSchema{
       Schema: $3.objectNamePrefix(),
       Cmd: &tree.AlterSchemaOwner{
-        Owner: $6.user(),
+        Owner: $6.roleSpec(),
       },
     }
   }
@@ -6225,7 +6335,7 @@ alter_schema_stmt:
 //    CHECK ( <expr> )
 //
 // Column qualifiers:
-//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | NOT VISIBLE | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr> | GENERATED { ALWAYS | BY DEFAULT } AS IDENTITY [( <opt_sequence_option_list> )]}
+//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | NOT VISIBLE | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr> | ON UPDATE <expr> | GENERATED { ALWAYS | BY DEFAULT } AS IDENTITY [( <opt_sequence_option_list> )]}
 //   FAMILY <familyname>, CREATE [IF NOT EXISTS] FAMILY [<familyname>]
 //   REFERENCES <tablename> [( <colnames...> )] [ON DELETE {NO ACTION | RESTRICT}] [ON UPDATE {NO ACTION | RESTRICT}]
 //   COLLATE <collationname>
@@ -6782,6 +6892,18 @@ col_qualification_elem:
     sqllex.Error("use AS ( <expr> ) STORED or AS ( <expr> ) VIRTUAL")
     return 1
   }
+| generated_always_as IDENTITY '(' opt_sequence_option_list ')'
+  {
+    $$.val = &tree.GeneratedAlwaysAsIdentity{
+       SeqOptions: $4.seqOpts(),
+    }
+  }
+| generated_by_default_as IDENTITY '(' opt_sequence_option_list ')'
+  {
+    $$.val = &tree.GeneratedByDefAsIdentity{
+        SeqOptions: $4.seqOpts(),
+    }
+  }
 | generated_always_as IDENTITY
   {
     $$.val = &tree.GeneratedAlwaysAsIdentity{}
@@ -7276,13 +7398,13 @@ password_clause:
 // %Text: CREATE ROLE [IF NOT EXISTS] <name> [ [WITH] <OPTIONS...> ]
 // %SeeAlso: ALTER ROLE, DROP ROLE, SHOW ROLES
 create_role_stmt:
-  CREATE role_or_group_or_user string_or_placeholder opt_role_options
+  CREATE role_or_group_or_user role_spec opt_role_options
   {
-    $$.val = &tree.CreateRole{Name: $3.expr(), KVOptions: $4.kvOptions(), IsRole: $2.bool()}
+    $$.val = &tree.CreateRole{Name: $3.roleSpec(), KVOptions: $4.kvOptions(), IsRole: $2.bool()}
   }
-| CREATE role_or_group_or_user IF NOT EXISTS string_or_placeholder opt_role_options
+| CREATE role_or_group_or_user IF NOT EXISTS role_spec opt_role_options
   {
-    $$.val = &tree.CreateRole{Name: $6.expr(), IfNotExists: true, KVOptions: $7.kvOptions(), IsRole: $2.bool()}
+    $$.val = &tree.CreateRole{Name: $6.roleSpec(), IfNotExists: true, KVOptions: $7.kvOptions(), IsRole: $2.bool()}
   }
 | CREATE role_or_group_or_user error // SHOW HELP: CREATE ROLE
 
@@ -7294,21 +7416,21 @@ create_role_stmt:
 // ALTER ROLE { name | ALL } [ IN DATABASE database_name ] RESET { var | ALL }
 // %SeeAlso: CREATE ROLE, DROP ROLE, SHOW ROLES
 alter_role_stmt:
-  ALTER role_or_group_or_user string_or_placeholder opt_role_options
+  ALTER role_or_group_or_user role_spec opt_role_options
 {
-  $$.val = &tree.AlterRole{Name: $3.expr(), KVOptions: $4.kvOptions(), IsRole: $2.bool()}
+  $$.val = &tree.AlterRole{Name: $3.roleSpec(), KVOptions: $4.kvOptions(), IsRole: $2.bool()}
 }
-| ALTER role_or_group_or_user IF EXISTS string_or_placeholder opt_role_options
+| ALTER role_or_group_or_user IF EXISTS role_spec opt_role_options
 {
-  $$.val = &tree.AlterRole{Name: $5.expr(), IfExists: true, KVOptions: $6.kvOptions(), IsRole: $2.bool()}
+  $$.val = &tree.AlterRole{Name: $5.roleSpec(), IfExists: true, KVOptions: $6.kvOptions(), IsRole: $2.bool()}
 }
-| ALTER role_or_group_or_user string_or_placeholder opt_in_database set_or_reset_clause
+| ALTER role_or_group_or_user role_spec opt_in_database set_or_reset_clause
   {
-    $$.val = &tree.AlterRoleSet{RoleName: $3.expr(), DatabaseName: tree.Name($4), IsRole: $2.bool(), SetOrReset: $5.setVar()}
+    $$.val = &tree.AlterRoleSet{RoleName: $3.roleSpec(), DatabaseName: tree.Name($4), IsRole: $2.bool(), SetOrReset: $5.setVar()}
   }
-| ALTER role_or_group_or_user IF EXISTS string_or_placeholder opt_in_database set_or_reset_clause
+| ALTER role_or_group_or_user IF EXISTS role_spec opt_in_database set_or_reset_clause
   {
-    $$.val = &tree.AlterRoleSet{RoleName: $5.expr(), IfExists: true, DatabaseName: tree.Name($6), IsRole: $2.bool(), SetOrReset: $7.setVar()}
+    $$.val = &tree.AlterRoleSet{RoleName: $5.roleSpec(), IfExists: true, DatabaseName: tree.Name($6), IsRole: $2.bool(), SetOrReset: $7.setVar()}
   }
 | ALTER ROLE_ALL ALL opt_in_database set_or_reset_clause
   {
@@ -7925,7 +8047,7 @@ alter_table_owner_stmt:
   {
     $$.val = &tree.AlterTableOwner{
       Name: $3.unresolvedObjectName(),
-      Owner: $6.user(),
+      Owner: $6.roleSpec(),
       IfExists: false,
     }
   }
@@ -7933,7 +8055,7 @@ alter_table_owner_stmt:
   {
     $$.val = &tree.AlterTableOwner{
       Name: $5.unresolvedObjectName(),
-      Owner: $8.user(),
+      Owner: $8.roleSpec(),
       IfExists: true,
     }
   }
@@ -7977,7 +8099,7 @@ alter_view_owner_stmt:
   {
     $$.val = &tree.AlterTableOwner{
       Name: $3.unresolvedObjectName(),
-      Owner: $6.user(),
+      Owner: $6.roleSpec(),
       IfExists: false,
       IsView: true,
     }
@@ -7986,7 +8108,7 @@ alter_view_owner_stmt:
   {
     $$.val = &tree.AlterTableOwner{
       Name: $4.unresolvedObjectName(),
-      Owner: $7.user(),
+      Owner: $7.roleSpec(),
       IfExists: false,
       IsView: true,
       IsMaterialized: true,
@@ -7996,7 +8118,7 @@ alter_view_owner_stmt:
   {
     $$.val = &tree.AlterTableOwner{
       Name: $5.unresolvedObjectName(),
-      Owner: $8.user(),
+      Owner: $8.roleSpec(),
       IfExists: true,
       IsView: true,
     }
@@ -8005,7 +8127,7 @@ alter_view_owner_stmt:
   {
     $$.val = &tree.AlterTableOwner{
       Name: $6.unresolvedObjectName(),
-      Owner: $9.user(),
+      Owner: $9.roleSpec(),
       IfExists: true,
       IsView: true,
       IsMaterialized: true,
@@ -8031,7 +8153,7 @@ alter_sequence_owner_stmt:
 	{
 		$$.val = &tree.AlterTableOwner{
 			Name: $3.unresolvedObjectName(),
-			Owner: $6.user(),
+			Owner: $6.roleSpec(),
 			IfExists: false,
 			IsSequence: true,
 		}
@@ -8040,7 +8162,7 @@ alter_sequence_owner_stmt:
 	{
 		$$.val = &tree.AlterTableOwner{
 			Name: $5.unresolvedObjectName(),
-			Owner: $8.user(),
+			Owner: $8.roleSpec(),
 			IfExists: true,
 			IsSequence: true,
 		}
@@ -8118,7 +8240,7 @@ alter_default_privileges_stmt:
  ALTER DEFAULT PRIVILEGES opt_for_roles opt_in_schemas abbreviated_grant_stmt
  {
    $$.val = &tree.AlterDefaultPrivileges{
-     Roles: $4.nameList(),
+     Roles: $4.roleSpecList(),
      Schemas: $5.objectNamePrefixList(),
      Grant: $6.abbreviatedGrant(),
      IsGrant: true,
@@ -8127,7 +8249,7 @@ alter_default_privileges_stmt:
 | ALTER DEFAULT PRIVILEGES opt_for_roles opt_in_schemas abbreviated_revoke_stmt
  {
    $$.val = &tree.AlterDefaultPrivileges{
-     Roles: $4.nameList(),
+     Roles: $4.roleSpecList(),
      Schemas: $5.objectNamePrefixList(),
      Revoke: $6.abbreviatedRevoke(),
      IsGrant: false,
@@ -8154,12 +8276,12 @@ alter_default_privileges_stmt:
 | ALTER DEFAULT PRIVILEGES error // SHOW HELP: ALTER DEFAULT PRIVILEGES
 
 abbreviated_grant_stmt:
-  GRANT privileges ON alter_default_privileges_target_object TO name_list opt_with_grant_option
+  GRANT privileges ON alter_default_privileges_target_object TO role_spec_list opt_with_grant_option
   {
     $$.val = tree.AbbreviatedGrant{
       Privileges: $2.privilegeList(),
       Target: $4.alterDefaultPrivilegesTargetObject(),
-      Grantees: $6.nameList(),
+      Grantees: $6.roleSpecList(),
       WithGrantOption: $7.bool(),
     }
   }
@@ -8175,20 +8297,20 @@ opt_with_grant_option:
   }
 
 abbreviated_revoke_stmt:
-  REVOKE privileges ON alter_default_privileges_target_object FROM name_list opt_drop_behavior
+  REVOKE privileges ON alter_default_privileges_target_object FROM role_spec_list opt_drop_behavior
   {
     $$.val = tree.AbbreviatedRevoke{
       Privileges: $2.privilegeList(),
       Target: $4.alterDefaultPrivilegesTargetObject(),
-      Grantees: $6.nameList(),
+      Grantees: $6.roleSpecList(),
     }
   }
-| REVOKE GRANT OPTION FOR privileges ON alter_default_privileges_target_object FROM name_list opt_drop_behavior
+| REVOKE GRANT OPTION FOR privileges ON alter_default_privileges_target_object FROM role_spec_list opt_drop_behavior
   {
     $$.val = tree.AbbreviatedRevoke{
       Privileges: $5.privilegeList(),
       Target: $7.alterDefaultPrivilegesTargetObject(),
-      Grantees: $9.nameList(),
+      Grantees: $9.roleSpecList(),
       GrantOptionFor: true,
     }
   }
@@ -8220,12 +8342,12 @@ alter_default_privileges_target_object:
   }
 
 opt_for_roles:
- FOR role_or_group_or_user name_list
+ FOR role_or_group_or_user role_spec_list
  {
-   $$.val = $3.nameList()
+   $$.val = $3.roleSpecList()
  }
 | /* EMPTY */ {
-   $$.val = tree.NameList(nil)
+   $$.val = tree.RoleSpecList(nil)
 }
 
 opt_in_schemas:
@@ -8920,11 +9042,11 @@ multiple_set_clause:
 // TO {<name> | CURRENT_USER | SESSION_USER}
 // %SeeAlso: DROP OWNED BY
 reassign_owned_by_stmt:
-  REASSIGN OWNED BY name_list TO role_spec
+  REASSIGN OWNED BY role_spec_list TO role_spec
   {
     $$.val = &tree.ReassignOwnedBy{
-      OldRoles: $4.nameList(),
-      NewRole: $6.user(),
+      OldRoles: $4.roleSpecList(),
+      NewRole: $6.roleSpec(),
     }
   }
 | REASSIGN OWNED BY error // SHOW HELP: REASSIGN OWNED BY
@@ -8935,10 +9057,10 @@ reassign_owned_by_stmt:
 // [RESTRICT | CASCADE]
 // %SeeAlso: REASSIGN OWNED BY
 drop_owned_by_stmt:
-  DROP OWNED BY name_list opt_drop_behavior
+  DROP OWNED BY role_spec_list opt_drop_behavior
   {
     $$.val = &tree.DropOwnedBy{
-      Roles: $4.nameList(),
+      Roles: $4.roleSpecList(),
       DropBehavior: $5.dropBehavior(),
     }
   }
@@ -9391,15 +9513,6 @@ sortby:
     /* FORCE DOC */
     dir := $2.dir()
     nullsOrder := $3.nullsOrder()
-    // We currently only support the opposite of Postgres defaults.
-    if nullsOrder != tree.DefaultNullsOrder {
-      if dir == tree.Descending && nullsOrder == tree.NullsFirst {
-        return unimplementedWithIssue(sqllex, 6224)
-      }
-      if dir != tree.Descending && nullsOrder == tree.NullsLast {
-        return unimplementedWithIssue(sqllex, 6224)
-      }
-    }
     $$.val = &tree.Order{
       OrderType:  tree.OrderByColumn,
       Expr:       $1.expr(),
@@ -9662,10 +9775,31 @@ index_flags_param:
     $$.val = &tree.IndexFlags{NoZigzagJoin: true}
   }
 |
+  NO_FULL_SCAN
+  {
+    $$.val = &tree.IndexFlags{NoFullScan: true}
+  }
+|
   IGNORE_FOREIGN_KEYS
   {
     /* SKIP DOC */
     $$.val = &tree.IndexFlags{IgnoreForeignKeys: true}
+  }
+|
+  FORCE_ZIGZAG
+  {
+     $$.val = &tree.IndexFlags{ForceZigzag: true}
+  }
+|
+  FORCE_ZIGZAG '=' index_name
+  {
+     $$.val = &tree.IndexFlags{ZigzagIndexes: []tree.UnrestrictedName{tree.UnrestrictedName($3)}}
+  }
+|
+  FORCE_ZIGZAG '=' '[' iconst64 ']'
+  {
+    /* SKIP DOC */
+     $$.val = &tree.IndexFlags{ZigzagIndexIDs: []tree.IndexID{tree.IndexID($4.int64())}}
   }
 
 index_flags_param_list:
@@ -9726,7 +9860,9 @@ opt_index_flags:
 //   '{' FORCE_INDEX = <idxname> [, ...] '}'
 //   '{' NO_INDEX_JOIN [, ...] '}'
 //   '{' NO_ZIGZAG_JOIN [, ...] '}'
+//   '{' NO_FULL_SCAN [, ...] '}'
 //   '{' IGNORE_FOREIGN_KEYS [, ...] '}'
+//   '{' FORCE_ZIGZAG = <idxname> [, ...]  '}'
 //
 // Join types:
 //   { INNER | { LEFT | RIGHT | FULL } [OUTER] } [ { HASH | MERGE | LOOKUP | INVERTED } ]
@@ -10223,7 +10359,7 @@ simple_typename:
     // Eventually this clause will be used to parse user-defined types as well,
     // since their names can be quoted.
     if $1 == "char" {
-      $$.val = types.MakeQChar(0)
+      $$.val = types.QChar
     } else if $1 == "serial" {
         switch sqllex.(*lexer).nakedIntType.Width() {
         case 32:
@@ -11499,7 +11635,7 @@ typed_literal:
       // Eventually this clause will be used to parse user-defined types as well,
       // since their names can be quoted.
       if typName == "char" {
-        $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: types.MakeQChar(0), SyntaxMode: tree.CastPrepend}
+        $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: types.QChar, SyntaxMode: tree.CastPrepend}
       } else if typName == "serial" {
         switch sqllex.(*lexer).nakedIntType.Width() {
         case 32:
@@ -11626,7 +11762,7 @@ func_expr_common_subexpr:
   }
 | SESSION_USER
   {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("current_user")}
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("session_user")}
   }
 | USER
   {
@@ -13050,6 +13186,7 @@ unreserved_keyword:
 | DATABASES
 | DAY
 | DEALLOCATE
+| DEBUG_PAUSE_ON
 | DECLARE
 | DELETE
 | DEFAULTS
@@ -13086,6 +13223,7 @@ unreserved_keyword:
 | FOLLOWING
 | FORCE
 | FORCE_INDEX
+| FORCE_ZIGZAG
 | FUNCTION
 | FUNCTIONS
 | GENERATED
@@ -13136,6 +13274,9 @@ unreserved_keyword:
 | LESS
 | LEVEL
 | LINESTRING
+| LINESTRINGM
+| LINESTRINGZ
+| LINESTRINGZM
 | LIST
 | LOCAL
 | LOCKED
@@ -13167,11 +13308,13 @@ unreserved_keyword:
 | NAMES
 | NAN
 | NEVER
+| NEW_DB_NAME
 | NEXT
 | NO
 | NORMAL
 | NO_INDEX_JOIN
 | NO_ZIGZAG_JOIN
+| NO_FULL_SCAN
 | NOCREATEDB
 | NOCREATELOGIN
 | NOCANCELQUERY
@@ -13339,6 +13482,7 @@ unreserved_keyword:
 | VARYING
 | VIEW
 | VIEWACTIVITY
+| VISIBLE
 | VOTERS
 | WITHIN
 | WITHOUT
@@ -13544,7 +13688,6 @@ reserved_keyword:
 | USER
 | USING
 | VARIADIC
-| VISIBLE
 | WHEN
 | WHERE
 | WINDOW

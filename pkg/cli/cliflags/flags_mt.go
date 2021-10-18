@@ -34,14 +34,9 @@ var (
 		Description: "Listen address for incoming connections.",
 	}
 
-	TokenBucketPeriod = FlagInfo{
-		Name:        "token-bucket-period",
-		Description: "Number of miliseconds before a token is added to the connection attempt bucket.",
-	}
-
-	TokenBucketSize = FlagInfo{
-		Name:        "token-bucket-size",
-		Description: "Size of the token bucket used to throttle connection attempts.",
+	ThrottleBaseDelay = FlagInfo{
+		Name:        "throttle-base-delay",
+		Description: "Initial value for the exponential backoff used to throttle connection attempts.",
 	}
 
 	ListenCert = FlagInfo{
@@ -71,6 +66,8 @@ This rule must include the port of the SQL pod.`,
 		Description: "Directory address of the service doing resolution from backend id to IP.",
 	}
 
+	// TODO(chrisseto): Remove skip-verify as a CLI option. It should only be
+	// set internally for testing, rather than being exposed to consumers.
 	SkipVerify = FlagInfo{
 		Name:        "skip-verify",
 		Description: "If true, skip identity verification of backend. For testing only.",

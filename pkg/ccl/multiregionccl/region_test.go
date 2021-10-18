@@ -9,6 +9,7 @@
 package multiregionccl_test
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"testing"
@@ -119,7 +120,7 @@ func TestConcurrentAddDropRegions(t *testing.T) {
 
 			knobs := base.TestingKnobs{
 				SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-					RunBeforeEnumMemberPromotion: func() error {
+					RunBeforeEnumMemberPromotion: func(context.Context) error {
 						mu.Lock()
 						if firstOp {
 							firstOp = false
@@ -244,7 +245,7 @@ func TestRegionAddDropEnclosingRegionalByRowOps(t *testing.T) {
 		{
 			name:            "create-rbr-table",
 			op:              `DROP TABLE IF EXISTS db.rbr; CREATE TABLE db.rbr() LOCALITY REGIONAL BY ROW`,
-			expectedIndexes: []string{"rbr@primary"},
+			expectedIndexes: []string{"rbr@rbr_pkey"},
 		},
 	}
 
@@ -258,14 +259,14 @@ func TestRegionAddDropEnclosingRegionalByRowOps(t *testing.T) {
 
 				knobs := base.TestingKnobs{
 					SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-						RunBeforeEnumMemberPromotion: func() error {
+						RunBeforeEnumMemberPromotion: func(ctx context.Context) error {
 							mu.Lock()
 							defer mu.Unlock()
 							close(typeChangeStarted)
 							<-rbrOpFinished
 							if !regionAlterCmd.shouldSucceed {
 								// Trigger a roll-back.
-								return errors.New("boom")
+								return jobs.MarkAsPermanentJobError(errors.New("boom"))
 							}
 							// Trod on.
 							return nil
@@ -383,7 +384,7 @@ ALTER TABLE db.public.global CONFIGURE ZONE USING
 
 			knobs := base.TestingKnobs{
 				SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-					RunBeforeEnumMemberPromotion: func() error {
+					RunBeforeEnumMemberPromotion: func(context.Context) error {
 						close(regionOpStarted)
 						<-placementOpFinished
 						return nil
@@ -444,7 +445,7 @@ func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 	dropRegionFinished := make(chan struct{})
 	knobs := base.TestingKnobs{
 		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-			RunBeforeEnumMemberPromotion: func() error {
+			RunBeforeEnumMemberPromotion: func(context.Context) error {
 				mu.Lock()
 				defer mu.Unlock()
 				if dropRegionStarted != nil {
@@ -543,7 +544,7 @@ func TestDroppingPrimaryRegionAsyncJobFailure(t *testing.T) {
 	knobs := base.TestingKnobs{
 		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
 			RunBeforeExec: func() error {
-				return errors.New("yikes")
+				return jobs.MarkAsPermanentJobError(errors.New("yikes"))
 			},
 			RunAfterOnFailOrCancel: func() error {
 				mu.Lock()
@@ -608,7 +609,7 @@ func TestRollbackDuringAddDropRegionAsyncJobFailure(t *testing.T) {
 	knobs := base.TestingKnobs{
 		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
 			RunBeforeMultiRegionUpdates: func() error {
-				return errors.New("boom")
+				return jobs.MarkAsPermanentJobError(errors.New("boom"))
 			},
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
@@ -691,7 +692,7 @@ func TestRollbackDuringAddDropRegionPlacementRestricted(t *testing.T) {
 	knobs := base.TestingKnobs{
 		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
 			RunBeforeMultiRegionUpdates: func() error {
-				return errors.New("boom")
+				return jobs.MarkAsPermanentJobError(errors.New("boom"))
 			},
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
@@ -845,7 +846,7 @@ func TestRegionAddDropWithConcurrentBackupOps(t *testing.T) {
 
 				backupKnobs := base.TestingKnobs{
 					SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-						RunBeforeEnumMemberPromotion: func() error {
+						RunBeforeEnumMemberPromotion: func(ctx context.Context) error {
 							mu.Lock()
 							defer mu.Unlock()
 							if waitInTypeSchemaChangerDuringBackup {
@@ -902,7 +903,7 @@ INSERT INTO db.rbr VALUES (1,1),(2,2),(3,3);
 
 				restoreKnobs := base.TestingKnobs{
 					SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-						RunBeforeEnumMemberPromotion: func() error {
+						RunBeforeEnumMemberPromotion: func(context.Context) error {
 							mu.Lock()
 							defer mu.Unlock()
 							if !regionAlterCmd.shouldSucceed {
@@ -981,7 +982,7 @@ INSERT INTO db.rbr VALUES (1,1),(2,2),(3,3);
 						sqlDBRestore,
 						"db",
 						"rbr",
-						[]string{"rbr@primary"},
+						[]string{"rbr@rbr_pkey"},
 					)
 				})
 			})

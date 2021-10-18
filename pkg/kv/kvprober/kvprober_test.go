@@ -18,15 +18,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
 )
 
-// TODO(josh): If I have some extra time, would folks want me to look into
-// setting up gomock? We use it a lot in CC; it is quite nice; I think it makes
-// for more readable tests than ones that use a custom mock. I see this issue:
-// https://github.com/cockroachdb/cockroach/issues/6933
 func TestReadProbe(t *testing.T) {
 	ctx := context.Background()
 
@@ -162,9 +157,7 @@ func TestWriteProbe(t *testing.T) {
 
 func initTestProber(m *mock) *Prober {
 	p := NewProber(Opts{
-		AmbientCtx: log.AmbientContext{
-			Tracer: tracing.NewTracer(),
-		},
+		Tracer:                  tracing.NewTracer(),
 		HistogramWindowInterval: time.Minute, // actual value not important to test
 		Settings:                cluster.MakeTestingClusterSettings(),
 	})
@@ -199,47 +192,4 @@ func (m *mock) Get(ctx context.Context, key interface{}) (kv.KeyValue, error) {
 
 func (m *mock) Txn(ctx context.Context, f func(ctx context.Context, txn *kv.Txn) error) error {
 	return m.txnErr
-}
-
-func TestWithJitter(t *testing.T) {
-	cases := []struct {
-		desc string
-		in   time.Duration
-		intn func(n int64) int64
-		want time.Duration
-	}{
-		{
-			"no jitter added",
-			time.Minute,
-			func(n int64) int64 {
-				return 0
-			},
-			time.Minute,
-		},
-		{
-			"max jitter added",
-			time.Minute,
-			func(n int64) int64 {
-				return n - 1
-			},
-			72 * time.Second,
-		},
-		{
-			"max jitter subtracted",
-			time.Minute,
-			func(n int64) int64 {
-				if n == 2 {
-					return 0
-				}
-				return n - 1
-			},
-			48 * time.Second,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.desc, func(t *testing.T) {
-			got := withJitter(tc.in, tc.intn)
-			require.InEpsilon(t, tc.want, got, 0.01)
-		})
-	}
 }

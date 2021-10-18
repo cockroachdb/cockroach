@@ -42,7 +42,7 @@ vectorized: true
         └── • scan
               columns: (a)
               estimated row count: 1,000 (missing stats)
-              table: y@primary
+              table: y@y_pkey
               spans: FULL SCAN
 
 query T
@@ -60,7 +60,7 @@ vectorized: true
 └── • scan
       columns: (a)
       estimated row count: 1,000 (missing stats)
-      table: y@primary
+      table: y@y_pkey
       spans: FULL SCAN
 
 query T
@@ -126,13 +126,13 @@ vectorized: true
 ├── • scan
 │     columns: ()
 │     estimated row count: 1,000 (missing stats)
-│     table: table39010@primary
+│     table: table39010@table39010_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (col)
       estimated row count: 1,000 (missing stats)
-      table: table39010@primary
+      table: table39010@table39010_pkey
       spans: FULL SCAN
 
 query T
@@ -187,7 +187,7 @@ vectorized: true
         │
         └── • scan
               missing stats
-              table: y@primary
+              table: y@y_pkey
               spans: FULL SCAN
 
 query T

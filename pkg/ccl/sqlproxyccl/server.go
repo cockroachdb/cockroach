@@ -12,6 +12,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -72,6 +73,14 @@ func NewServer(ctx context.Context, stopper *stop.Stopper, options ProxyOptions)
 	mux.HandleFunc("/_status/vars/", s.handleVars)
 	mux.HandleFunc("/_status/healthz/", s.handleHealth)
 
+	// Taken from pprof's `init()` method. See:
+	// https://golang.org/src/net/http/pprof/pprof.go
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
 	return s, nil
 }
 
@@ -108,8 +117,9 @@ func (s *Server) handleVars(w http.ResponseWriter, r *http.Request) {
 }
 
 // ServeHTTP starts the proxy's HTTP server on the given listener.
-// The server provides Prometheus metrics at /_status/vars
-// and a health check endpoint at /_status/healthz.
+// The server provides Prometheus metrics at /_status/vars,
+// a health check endpoint at /_status/healthz, and pprof debug
+// endpoints at /debug/pprof.
 func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 	srv := http.Server{
 		Handler: s.mux,

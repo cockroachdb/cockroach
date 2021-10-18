@@ -11,22 +11,26 @@
 import { assert } from "chai";
 import {
   filterTransactions,
-  getStatementsByFingerprintId,
+  getStatementsByFingerprintIdAndTime,
   statementFingerprintIdsToText,
 } from "./utils";
 import { Filters } from "../queryFilter/filter";
-import { data, nodeRegions } from "./transactions.fixture";
+import { data, nodeRegions, timestamp } from "./transactions.fixture";
 import Long from "long";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 
-describe("getStatementsByFingerprintId", () => {
-  it("filters statements by fingerprint id", () => {
-    const selectedStatements = getStatementsByFingerprintId(
+describe("getStatementsByFingerprintIdAndTime", () => {
+  it("filters statements by fingerprint id and time", () => {
+    const selectedStatements = getStatementsByFingerprintIdAndTime(
       [Long.fromInt(4104049045071304794), Long.fromInt(3334049045071304794)],
+      timestamp,
       [
-        { id: Long.fromInt(4104049045071304794) },
+        {
+          id: Long.fromInt(4104049045071304794),
+          key: { aggregated_ts: timestamp },
+        },
         { id: Long.fromInt(5554049045071304794) },
       ],
     );
@@ -55,6 +59,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       11,
     );
@@ -75,6 +80,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       3,
     );
@@ -95,6 +101,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       1,
     );
@@ -115,6 +122,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       7,
     );
@@ -135,6 +143,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       8,
     );
@@ -155,6 +164,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       6,
     );
@@ -175,6 +185,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       8,
     );
@@ -195,6 +206,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       4,
     );
@@ -215,6 +227,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       9,
     );

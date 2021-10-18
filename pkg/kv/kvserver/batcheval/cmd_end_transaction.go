@@ -189,10 +189,9 @@ func EndTxn(
 	}
 	if args.Require1PC {
 		// If a 1PC txn was required and we're in EndTxn, we've failed to evaluate
-		// the batch as a 1PC. We're returning early instead of preferring a
-		// possible retriable error because we might want to leave locks behind in
-		// case of retriable errors - which Require1PC does not want.
-		return result.Result{}, roachpb.NewTransactionStatusError("could not commit in one phase as requested")
+		// the batch as a 1PC. We shouldn't have gotten here; if we couldn't
+		// evaluate as 1PC, evaluateWriteBatch() was supposed to short-circuit.
+		return result.Result{}, errors.AssertionFailedf("unexpectedly trying to evaluate EndTxn with the Require1PC flag set")
 	}
 	if args.Commit && args.Poison {
 		return result.Result{}, errors.AssertionFailedf("cannot poison during a committing EndTxn request")
@@ -239,7 +238,9 @@ func EndTxn(
 			// meantime. The TransactionStatusError is going to be handled by the
 			// txnCommitter interceptor.
 			log.VEventf(ctx, 2, "transaction found to be already committed")
-			return result.Result{}, roachpb.NewTransactionCommittedStatusError()
+			return result.Result{}, roachpb.NewTransactionStatusError(
+				roachpb.TransactionStatusError_REASON_TXN_COMMITTED,
+				"already committed")
 
 		case roachpb.ABORTED:
 			if !args.Commit {
@@ -456,6 +457,13 @@ func resolveLocalLocks(
 		// These transactions rely on having their locks resolved synchronously.
 		resolveAllowance = math.MaxInt64
 	}
+	onlySeparatedIntents := false
+	st := evalCtx.ClusterSettings()
+	// Some tests have st == nil.
+	if st != nil {
+		onlySeparatedIntents = st.Version.ActiveVersionOrEmpty(ctx).IsActive(
+			clusterversion.PostSeparatedIntentsMigration)
+	}
 	for _, span := range args.LockSpans {
 		if err := func() error {
 			if resolveAllowance == 0 {
@@ -496,7 +504,7 @@ func resolveLocalLocks(
 			if inSpan != nil {
 				update.Span = *inSpan
 				num, resumeSpan, err := storage.MVCCResolveWriteIntentRange(
-					ctx, readWriter, ms, update, resolveAllowance)
+					ctx, readWriter, ms, update, resolveAllowance, onlySeparatedIntents)
 				if err != nil {
 					return err
 				}
@@ -924,15 +932,6 @@ func splitTriggerHelper(
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
 
-	if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.AbortSpanBytes) {
-		// Since the stats here is used to seed the initial state for the RHS
-		// replicas, we need to be careful about zero-ing out the abort span
-		// bytes if the cluster version introducing it is not yet active. Not
-		// doing so can result in inconsistencies in MVCCStats across replicas
-		// in a mixed-version cluster.
-		h.AbsPostSplitRight().AbortSpanBytes = 0
-	}
-
 	// Note: we don't copy the queue last processed times. This means
 	// we'll process the RHS range in consistency and time series
 	// maintenance queues again possibly sooner than if we copied. The
@@ -1110,8 +1109,7 @@ func mergeTrigger(
 	// directly in this method. The primary reason why these are different is
 	// because the RHS's persistent read summary may not be up-to-date, as it is
 	// not updated by the SubsumeRequest.
-	readSumActive := rec.ClusterSettings().Version.IsActive(ctx, clusterversion.PriorReadSummaries)
-	if merge.RightReadSummary != nil && readSumActive {
+	if merge.RightReadSummary != nil {
 		mergedSum := merge.RightReadSummary.Clone()
 		if priorSum, err := readsummary.Load(ctx, batch, rec.GetRangeID()); err != nil {
 			return result.Result{}, err

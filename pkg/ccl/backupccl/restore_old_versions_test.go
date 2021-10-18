@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -69,6 +70,7 @@ func TestRestoreOldVersions(t *testing.T) {
 		exceptionalDirs             = testdataBase + "/exceptional"
 		privilegeDirs               = testdataBase + "/privileges"
 		interleavedDirs             = testdataBase + "/interleaved"
+		multiRegionDirs             = testdataBase + "/multi-region"
 	)
 
 	t.Run("interleaved", func(t *testing.T) {
@@ -126,10 +128,65 @@ func TestRestoreOldVersions(t *testing.T) {
 		}
 	})
 
+	t.Run("multi-region-restore", func(t *testing.T) {
+		skip.UnderRace(t, "very slow as it starts multiple servers")
+		dirs, err := ioutil.ReadDir(multiRegionDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(multiRegionDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), runOldVersionMultiRegionTest(exportDir))
+		}
+	})
+
 	// exceptional backups are backups that were possible to generate on old
 	// versions, but are now disallowed, but we should check that we fail
 	// gracefully with them.
 	t.Run("exceptional-backups", func(t *testing.T) {
+		t.Run("duplicate-db-desc", func(t *testing.T) {
+			backupUnderTest := "doubleDB"
+			/*
+					This backup was generated with the following SQL on (v21.1.6):
+
+				  CREATE DATABASE db1;
+				  DROP DATABASE db1;
+				  CREATE DATABASE db1;
+				  BACKUP TO 'nodelocal://1/doubleDB' WITH revision_history;
+			*/
+			dir, err := os.Stat(filepath.Join(exceptionalDirs, backupUnderTest))
+			require.NoError(t, err)
+			require.True(t, dir.IsDir())
+
+			// We could create tables which reference types in another database on
+			// 20.2 release candidates.
+			exportDir, err := filepath.Abs(filepath.Join(exceptionalDirs, dir.Name()))
+			require.NoError(t, err)
+
+			externalDir, dirCleanup := testutils.TempDir(t)
+			ctx := context.Background()
+			tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					ExternalIODir: externalDir,
+				},
+			})
+			sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+			defer func() {
+				tc.Stopper().Stop(ctx)
+				dirCleanup()
+			}()
+			err = os.Symlink(exportDir, filepath.Join(externalDir, "foo"))
+			require.NoError(t, err)
+
+			sqlDB.Exec(t, `RESTORE FROM $1`, LocalFoo)
+			sqlDB.Exec(t, `DROP DATABASE db1;`)
+			sqlDB.Exec(t, `RESTORE DATABASE db1 FROM $1`, LocalFoo)
+			sqlDB.CheckQueryResults(t,
+				`SELECT count(*) FROM [SHOW DATABASES] WHERE database_name = 'db1'`,
+				[][]string{{"1"}},
+			)
+		})
+
 		t.Run("x-db-type-reference", func(t *testing.T) {
 			backupUnderTest := "xDbRef"
 			/*
@@ -275,6 +332,86 @@ func restoreOldVersionTestWithInterleave(exportDir string) func(t *testing.T) {
 		sqlDB.ExpectErr(t,
 			"pq: restoring interleaved tables is no longer allowed. table t3 was found to be interleaved",
 			`RESTORE test.* FROM $1`, LocalFoo)
+	}
+}
+
+func runOldVersionMultiRegionTest(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		const numNodes = 9
+		dir, dirCleanupFn := testutils.TempDir(t)
+		defer dirCleanupFn()
+		ctx := context.Background()
+
+		params := make(map[int]base.TestServerArgs, numNodes)
+		for i := 0; i < 9; i++ {
+			var region string
+			switch i / 3 {
+			case 0:
+				region = "europe-west2"
+			case 1:
+				region = "us-east1"
+			case 2:
+				region = "us-west1"
+			}
+			params[i] = base.TestServerArgs{
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "region", Value: region},
+					},
+				},
+				ExternalIODir: dir,
+			}
+		}
+
+		tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+			ServerArgsPerNode: params,
+		})
+		defer tc.Stopper().Stop(ctx)
+		require.NoError(t, os.Symlink(exportDir, filepath.Join(dir, "external_backup_dir")))
+
+		sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+		var unused string
+		var importedRows int
+		sqlDB.QueryRow(t, `RESTORE DATABASE multi_region_db FROM $1`, `nodelocal://0/external_backup_dir`).Scan(
+			&unused, &unused, &unused, &importedRows, &unused, &unused,
+		)
+		const totalRows = 12
+		if importedRows != totalRows {
+			t.Fatalf("expected %d rows, got %d", totalRows, importedRows)
+		}
+		sqlDB.Exec(t, `USE multi_region_db`)
+		sqlDB.CheckQueryResults(t, `select table_name, locality FROM [show tables] ORDER BY table_name;`, [][]string{
+			{`tbl_global`, `GLOBAL`},
+			{`tbl_primary_region`, `REGIONAL BY TABLE IN PRIMARY REGION`},
+			{`tbl_regional_by_row`, `REGIONAL BY ROW`},
+			{`tbl_regional_by_table`, `REGIONAL BY TABLE IN "us-east1"`},
+		})
+		sqlDB.CheckQueryResults(t, `SELECT region FROM [SHOW REGIONS FROM DATABASE] ORDER BY region`, [][]string{
+			{`europe-west2`},
+			{`us-east1`},
+			{`us-west1`},
+		})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM tbl_primary_region ORDER BY pk`, [][]string{
+			{`1`, `a`},
+			{`2`, `b`},
+			{`3`, `c`},
+		})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM tbl_global ORDER BY pk`, [][]string{
+			{`4`, `d`},
+			{`5`, `e`},
+			{`6`, `f`},
+		})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM tbl_regional_by_table ORDER BY pk`, [][]string{
+			{`7`, `g`},
+			{`8`, `h`},
+			{`9`, `i`},
+		})
+		sqlDB.CheckQueryResults(t, `SELECT crdb_region, * FROM tbl_regional_by_row ORDER BY pk`, [][]string{
+			{`europe-west2`, `10`, `j`},
+			{`us-east1`, `11`, `k`},
+			{`us-west1`, `12`, `l`},
+		})
 	}
 }
 

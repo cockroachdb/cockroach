@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -70,8 +71,8 @@ func TestSQLStatsFlush(t *testing.T) {
 	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				SQLStatsKnobs: &persistedsqlstats.TestingKnobs{
-					StubTimeNow: fakeTime.StubTimeNow,
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					StubTimeNow: fakeTime.Now,
 				},
 			},
 		},
@@ -169,7 +170,7 @@ func TestSQLStatsFlush(t *testing.T) {
 
 	// We change the time to be in a different aggregation window.
 	{
-		fakeTime.setTime(fakeTime.StubTimeNow().Add(time.Hour * 3))
+		fakeTime.setTime(fakeTime.Now().Add(time.Hour * 3))
 
 		for _, tc := range testQueries {
 			for i := int64(0); i < tc.count; i++ {
@@ -220,16 +221,41 @@ func TestSQLStatsFlush(t *testing.T) {
 	}
 }
 
+func TestSQLStatsInitialDelay(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	s, _, _ := serverutils.StartServer(t, params)
+
+	defer s.Stopper().Stop(context.Background())
+
+	initialNextFlushAt := s.SQLServer().(*sql.Server).
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).GetNextFlushAt()
+
+	// Since we introduced jitter in our flush interval, the next flush time
+	// is not entirely deterministic. However, we can still have an upperbound
+	// on this value.
+	maxNextRunAt :=
+		timeutil.Now().Add(persistedsqlstats.SQLStatsFlushInterval.Default() * 2)
+
+	require.True(t, maxNextRunAt.After(initialNextFlushAt),
+		"expected latest nextFlushAt to be %s, but found %s", maxNextRunAt, initialNextFlushAt)
+}
+
 type stubTime struct {
 	syncutil.RWMutex
 	t           time.Time
 	aggInterval time.Duration
+	timeStubbed bool
 }
 
 func (s *stubTime) setTime(t time.Time) {
 	s.RWMutex.Lock()
 	defer s.RWMutex.Unlock()
+
 	s.t = t
+	s.timeStubbed = true
 }
 
 func (s *stubTime) getAggTimeTs() time.Time {
@@ -238,11 +264,16 @@ func (s *stubTime) getAggTimeTs() time.Time {
 	return s.t.Truncate(s.aggInterval)
 }
 
-// StubTimeNow implements the testing knob interface for persistedsqlstats.Provider.
-func (s *stubTime) StubTimeNow() time.Time {
+// Now implements the testing knob interface for persistedsqlstats.Provider.
+func (s *stubTime) Now() time.Time {
 	s.RWMutex.RLock()
 	defer s.RWMutex.RUnlock()
-	return s.t
+
+	if s.timeStubbed {
+		return s.t
+	}
+
+	return timeutil.Now()
 }
 
 func verifyInsertedFingerprintExecCount(

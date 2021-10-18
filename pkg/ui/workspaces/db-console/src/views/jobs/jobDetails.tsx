@@ -104,12 +104,13 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
             size="small"
             icon={<ArrowLeft fontSize={"10px"} />}
             iconPosition="left"
+            className="small-margin"
           >
             Jobs
           </Button>
-          <h1 className="page--header__title">{`Job ID: ${String(
+          <h3 className="page--header__title">{`Job ID: ${String(
             getMatchParamByName(match, "id"),
-          )}`}</h1>
+          )}`}</h3>
         </div>
         <section className="section section--container">
           <Loading loading={_.isNil(job)} render={this.renderContent} />

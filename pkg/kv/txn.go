@@ -15,7 +15,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -214,20 +216,31 @@ func (txn *Txn) Epoch() enginepb.TxnEpoch {
 	return txn.mu.sender.Epoch()
 }
 
-// status returns the txn proto status field.
-func (txn *Txn) status() roachpb.TransactionStatus {
+// statusLocked returns the txn proto status field.
+func (txn *Txn) statusLocked() roachpb.TransactionStatus {
 	return txn.mu.sender.TxnStatus()
 }
 
 // IsCommitted returns true iff the transaction has the committed status.
 func (txn *Txn) IsCommitted() bool {
-	return txn.status() == roachpb.COMMITTED
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.statusLocked() == roachpb.COMMITTED
+}
+
+// IsAborted returns true iff the transaction has the aborted status.
+func (txn *Txn) IsAborted() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.statusLocked() == roachpb.ABORTED
 }
 
 // IsOpen returns true iff the transaction is in the open state where
 // it can accept further commands.
 func (txn *Txn) IsOpen() bool {
-	return txn.status() == roachpb.PENDING
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.statusLocked() == roachpb.PENDING
 }
 
 // SetUserPriority sets the transaction's user priority. Transactions default to
@@ -616,14 +629,18 @@ func (txn *Txn) Del(ctx context.Context, keys ...interface{}) error {
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
 //
-// The returned Result will contain 0 rows and Result.Err will indicate success
-// or failure.
+// The returned []roachpb.Key will contain the keys deleted if the returnKeys
+// parameter is true, or will be nil if the parameter is false, and Result.Err
+// will indicate success or failure.
 //
 // key can be either a byte slice or a string.
-func (txn *Txn) DelRange(ctx context.Context, begin, end interface{}) error {
+func (txn *Txn) DelRange(
+	ctx context.Context, begin, end interface{}, returnKeys bool,
+) ([]roachpb.Key, error) {
 	b := txn.NewBatch()
-	b.DelRange(begin, end, false)
-	return getOneErr(txn.Run(ctx, b), b)
+	b.DelRange(begin, end, returnKeys)
+	r, err := getOneResult(txn.Run(ctx, b), b)
+	return r.Keys, err
 }
 
 // Run executes the operations queued up within a batch. Before executing any
@@ -670,7 +687,7 @@ func (txn *Txn) CleanupOnError(ctx context.Context, err error) {
 		panic(errors.WithContextTags(errors.AssertionFailedf("CleanupOnError() called with nil error"), ctx))
 	}
 	if replyErr := txn.rollback(ctx); replyErr != nil {
-		if _, ok := replyErr.GetDetail().(*roachpb.TransactionStatusError); ok || txn.status() == roachpb.ABORTED {
+		if _, ok := replyErr.GetDetail().(*roachpb.TransactionStatusError); ok || txn.IsAborted() {
 			log.Eventf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 		} else {
 			log.Warningf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
@@ -748,6 +765,53 @@ func (txn *Txn) UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) erro
 	txn.mu.deadline = new(hlc.Timestamp)
 	*txn.mu.deadline = deadline
 	return nil
+}
+
+// DeadlineLikelySufficient returns true if there currently is a deadline and
+// that deadline is earlier than either the ProvisionalCommitTimestamp or
+// the current reading of the node's HLC clock. The second condition is a
+// conservative optimization to deal with the fact that the provisional
+// commit timestamp may not represent  the true commit timestamp; the
+// transaction may have been pushed but not yet discovered that fact.
+// Transactions that write from now on can still get pushed, versus
+// transactions which are done writing where it will be less clear
+// how those get pushed.
+// Deadlines, in general, should not commonly be at risk of expiring near
+// the current time, except in extraordinary circumstances. In cases where
+// considering it helps, it helps a lot. In cases where considering it
+// does not help, it does not hurt much.
+func (txn *Txn) DeadlineLikelySufficient(sv *settings.Values) bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	// Instead of using the current HLC clock we will
+	// use the current time with a fudge factor because:
+	// 1) The clocks are desynchronized, so we may have
+	//		been pushed above the current time.
+	// 2) There is a potential to race against concurrent pushes,
+	//    which a future timestamp will help against.
+	// 3) If we are writing to non-blocking ranges than any
+	//    push will be into the future.
+	getTargetTS := func() hlc.Timestamp {
+		now := txn.db.Clock().NowAsClockTimestamp()
+		maxClockOffset := txn.db.Clock().MaxOffset()
+		lagTargetDuration := closedts.TargetDuration.Get(sv)
+		leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(sv)
+		sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(sv)
+		return closedts.TargetForPolicy(now, maxClockOffset,
+			lagTargetDuration, leadTargetOverride, sideTransportCloseInterval,
+			roachpb.LEAD_FOR_GLOBAL_READS).Add(int64(time.Second), 0)
+	}
+
+	return txn.mu.deadline != nil &&
+		!txn.mu.deadline.IsEmpty() &&
+		// Avoid trying to get get the txn mutex again by directly
+		// invoking ProvisionalCommitTimestamp versus calling
+		// ProvisionalCommitTimestampLocked on the Txn.
+		(txn.mu.deadline.Less(txn.mu.sender.ProvisionalCommitTimestamp()) ||
+			// In case the transaction gets pushed and the push is not observed,
+			// we cautiously also indicate that the deadline maybe expired if
+			// the current HLC clock (with a fudge factor) exceeds the deadline.
+			txn.mu.deadline.Less(getTargetTS()))
 }
 
 // resetDeadlineLocked resets the deadline.
@@ -881,7 +945,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		// Commit on success, unless the txn has already been committed by the
 		// closure. We allow that, as closure might want to run 1PC transactions.
 		if err == nil {
-			if txn.status() != roachpb.COMMITTED {
+			if !txn.IsCommitted() {
 				err = txn.Commit(ctx)
 				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v\n", err)
 				if err != nil {
@@ -1044,6 +1108,14 @@ func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
 // successfully, the transaction will have been given a fixed timestamp equal to
 // the timestamp that the read-only request was evaluated at.
 //
+// If the read-only request hits a key or byte limit and returns a resume span,
+// meaning that it was paginated and did not return all desired results, the
+// transaction's timestamp will have still been fixed to a timestamp that was
+// negotiated over the entire set of read spans in the provided batch. As such,
+// it is safe for callers to resume reading at the bounded-staleness timestamp
+// by using Send. Future calls to Send must not include a BoundedStaleness
+// header, but may still specify the same routing policy.
+//
 // The method accepts requests with min_timestamp_bound_strict set to either
 // true or false, which dictates whether a bounded staleness read whose
 // min_timestamp_bound cannot be satisfied by the first replica it visits
@@ -1063,7 +1135,12 @@ func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
 func (txn *Txn) NegotiateAndSend(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	txn.checkNegotiateAndSendPreconditions(ctx, ba)
+	if err := txn.checkNegotiateAndSendPreconditions(ctx, ba); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	if err := txn.applyDeadlineToBoundedStaleness(ctx, ba.BoundedStaleness); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	// Attempt to hit the server-side negotiation fast-path. This fast-path
 	// allows a bounded staleness read request that lands on a single range
@@ -1118,19 +1195,24 @@ func (txn *Txn) NegotiateAndSend(
 }
 
 // checks preconditions on BatchRequest and Txn for NegotiateAndSend.
-func (txn *Txn) checkNegotiateAndSendPreconditions(ctx context.Context, ba roachpb.BatchRequest) {
+func (txn *Txn) checkNegotiateAndSendPreconditions(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (err error) {
 	assert := func(b bool, s string) {
 		if !b {
-			err := errors.AssertionFailedf("%s: ba=%s, txn=%s", s, ba.String(), txn.String())
-			err = errors.WithContextTags(err, ctx)
-			panic(err)
+			err = errors.CombineErrors(err,
+				errors.WithContextTags(errors.AssertionFailedf(
+					"%s: ba=%s, txn=%s", s, ba.String(), txn.String()), ctx),
+			)
 		}
 	}
-	assert(ba.BoundedStaleness != nil, "bounded_staleness configuration must be set")
-	assert(!ba.BoundedStaleness.MinTimestampBound.IsEmpty(), "min_timestamp_bound must be set")
-	assert(ba.BoundedStaleness.MaxTimestampBound.IsEmpty() ||
-		ba.BoundedStaleness.MinTimestampBound.LessEq(ba.BoundedStaleness.MaxTimestampBound),
-		"max_timestamp_bound, if set, must be equal to or greater than min_timestamp_bound")
+	if cfg := ba.BoundedStaleness; cfg == nil {
+		assert(false, "bounded_staleness configuration must be set")
+	} else {
+		assert(!cfg.MinTimestampBound.IsEmpty(), "min_timestamp_bound must be set")
+		assert(cfg.MaxTimestampBound.IsEmpty() || cfg.MinTimestampBound.Less(cfg.MaxTimestampBound),
+			"max_timestamp_bound, if set, must be greater than min_timestamp_bound")
+	}
 	assert(ba.Timestamp.IsEmpty(), "timestamp must not be set")
 	assert(ba.Txn == nil, "txn must not be set")
 	assert(ba.ReadConsistency == roachpb.CONSISTENT, "read consistency must be set to CONSISTENT")
@@ -1138,6 +1220,29 @@ func (txn *Txn) checkNegotiateAndSendPreconditions(ctx context.Context, ba roach
 	assert(!ba.IsLocking(), "batch must not be locking")
 	assert(txn.typ == RootTxn, "txn must be root")
 	assert(!txn.CommitTimestampFixed(), "txn commit timestamp must not be fixed")
+	return err
+}
+
+// applyDeadlineToBoundedStaleness modifies the bounded staleness header to
+// ensure that the negotiated timestamp respects the transaction deadline.
+func (txn *Txn) applyDeadlineToBoundedStaleness(
+	ctx context.Context, bs *roachpb.BoundedStalenessHeader,
+) error {
+	d := txn.deadline()
+	if d == nil {
+		return nil
+	}
+	if d.LessEq(bs.MinTimestampBound) {
+		return errors.WithContextTags(errors.AssertionFailedf(
+			"transaction deadline %s equal to or below min_timestamp_bound %s",
+			*d, bs.MinTimestampBound), ctx)
+	}
+	if bs.MaxTimestampBound.IsEmpty() {
+		bs.MaxTimestampBound = *d
+	} else {
+		bs.MaxTimestampBound.Backward(*d)
+	}
+	return nil
 }
 
 // GetLeafTxnInputState returns the LeafTxnInputState information for this

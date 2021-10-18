@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -82,9 +81,9 @@ type AsOfSystemTime struct {
 	// Timestamp is the HLC timestamp evaluated from the AS OF SYSTEM TIME clause.
 	Timestamp hlc.Timestamp
 	// BoundedStaleness is true if the AS OF SYSTEM TIME clause specifies bounded
-	// staleness should be used. If true, Timestamp specifies a minimum bound
-	// to read from - data can be read from a time later than Timestamp.
-	// If false, data is returned at the exact Timestamp specified.
+	// staleness should be used. If true, Timestamp specifies an (inclusive) lower
+	// bound to read from - data can be read from a time later than Timestamp. If
+	// false, data is returned at the exact Timestamp specified.
 	BoundedStaleness bool
 	// If this is a bounded staleness read, ensures we only read from the nearest
 	// replica. The query will error if this constraint could not be satisfied.
@@ -93,7 +92,7 @@ type AsOfSystemTime struct {
 	// we failed to satisfy a bounded staleness read with a nearby replica as we
 	// have no followers with an up-to-date schema.
 	// This is be zero if there is no maximum bound.
-	// In non-zero, we want a read t where Timestamp <= t <= MaxTimestampBound.
+	// In non-zero, we want a read t where Timestamp <= t < MaxTimestampBound.
 	MaxTimestampBound hlc.Timestamp
 }
 
@@ -227,9 +226,7 @@ func DatumToHLC(evalCtx *EvalContext, stmtTimestamp time.Time, d Datum) (hlc.Tim
 		s := string(*d)
 		// Parse synthetic flag.
 		syn := false
-		if strings.HasSuffix(s, "?") && evalCtx.Settings.Version.IsActive(evalCtx.Context, clusterversion.PriorReadSummaries) {
-			// NOTE: we don't parse this in mixed-version clusters because v20.2
-			// nodes will not know how to handle synthetic timestamps.
+		if strings.HasSuffix(s, "?") {
 			s = s[:len(s)-1]
 			syn = true
 		}

@@ -12,7 +12,6 @@ package kvfollowerreadsccl
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"time"
 
@@ -32,22 +31,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// followerReadMultiple is the multiple of kv.closed_timestmap.target_duration
-// which the implementation of the follower read capable replica policy ought
-// to use to determine if a request can be used for reading.
-var followerReadMultiple = settings.RegisterFloatSetting(
-	"kv.follower_read.target_multiple",
-	"if above 1, encourages the distsender to perform a read against the "+
-		"closest replica if a request is older than kv.closed_timestamp.target_duration"+
-		" * (1 + kv.closed_timestamp.close_fraction * this) less a clock uncertainty "+
-		"interval. This value also is used to create follower_timestamp().",
-	3,
-	func(v float64) error {
-		if v < 1 {
-			return fmt.Errorf("%v is not >= 1", v)
-		}
-		return nil
-	},
+// ClosedTimestampPropagationSlack is used by follower_read_timestamp() as a
+// measure of how long closed timestamp updates are supposed to take from the
+// leaseholder to the followers.
+var ClosedTimestampPropagationSlack = settings.RegisterDurationSetting(
+	"kv.closed_timestamp.propagation_slack",
+	"a conservative estimate of the amount of time expect for closed timestamps to "+
+		"propagate from a leaseholder to followers. This is taken into account by "+
+		"follower_read_timestamp().",
+	time.Second,
+	settings.NonNegativeDuration,
 )
 
 // getFollowerReadLag returns the (negative) offset duration from hlc.Now()
@@ -55,17 +48,16 @@ var followerReadMultiple = settings.RegisterFloatSetting(
 // determine at the kv layer if a query can use a follower read for ranges with
 // the default LAG_BY_CLUSTER_SETTING closed timestamp policy.
 func getFollowerReadLag(st *cluster.Settings) time.Duration {
-	targetMultiple := followerReadMultiple.Get(&st.SV)
 	targetDuration := closedts.TargetDuration.Get(&st.SV)
-	closeFraction := closedts.CloseFraction.Get(&st.SV)
+	sideTransportInterval := closedts.SideTransportCloseInterval.Get(&st.SV)
+	slack := ClosedTimestampPropagationSlack.Get(&st.SV)
 	// Zero targetDuration means follower reads are disabled.
 	if targetDuration == 0 {
 		// Returning an infinitely large negative value would push safe
 		// request timestamp into the distant past thus disabling follower reads.
 		return math.MinInt64
 	}
-	return -1 * time.Duration(float64(targetDuration)*
-		(1+closeFraction*targetMultiple))
+	return -targetDuration - sideTransportInterval - slack
 }
 
 // getGlobalReadsLead returns the (positive) offset duration from hlc.Now()

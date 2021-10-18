@@ -16,8 +16,8 @@ const pageCx = classNames.bind(statementsPageStyles);
 const sortedTableCx = classNames.bind(sortedTableStyles);
 
 export const baseHeadingClasses = {
-  wrapper: pageCx("section"),
-  tableName: pageCx("base-heading"),
+  wrapper: pageCx("section--heading"),
+  tableName: pageCx("base-heading", "no-margin-bottom"),
 };
 
 export const statisticsClasses = {

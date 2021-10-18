@@ -71,11 +71,16 @@ const (
 	restoreOptSkipMissingSequenceOwners = "skip_missing_sequence_owners"
 	restoreOptSkipMissingViews          = "skip_missing_views"
 	restoreOptSkipLocalitiesCheck       = "skip_localities_check"
+	restoreOptDebugPauseOn              = "debug_pause_on"
 
 	// The temporary database system tables will be restored into for full
 	// cluster backups.
 	restoreTempSystemDB = "crdb_temp_system"
 )
+
+var allowedDebugPauseOnValues = map[string]struct{}{
+	"error": {},
+}
 
 // featureRestoreEnabled is used to enable and disable the RESTORE feature.
 var featureRestoreEnabled = settings.RegisterBoolSetting(
@@ -315,21 +320,16 @@ func allocateDescriptorRewrites(
 	descriptorCoverage tree.DescriptorCoverage,
 	opts tree.RestoreOptions,
 	intoDB string,
+	newDBName string,
 ) (DescRewriteMap, error) {
 	descriptorRewrites := make(DescRewriteMap)
-	var overrideDB string
-	var renaming bool
-	if opts.IntoDB != nil {
-		overrideDB = intoDB
-		renaming = true
-	}
 
 	restoreDBNames := make(map[string]catalog.DatabaseDescriptor, len(restoreDBs))
 	for _, db := range restoreDBs {
 		restoreDBNames[db.GetName()] = db
 	}
 
-	if len(restoreDBNames) > 0 && renaming {
+	if len(restoreDBNames) > 0 && intoDB != "" {
 		return nil, errors.Errorf("cannot use %q option when restoring database(s)", restoreOptIntoDB)
 	}
 
@@ -556,8 +556,7 @@ func allocateDescriptorRewrites(
 				continue
 			}
 
-			targetDB, err := resolveTargetDB(ctx, txn, p, databasesByID, renaming, overrideDB,
-				descriptorCoverage, sc)
+			targetDB, err := resolveTargetDB(ctx, txn, p, databasesByID, intoDB, descriptorCoverage, sc)
 			if err != nil {
 				return err
 			}
@@ -614,8 +613,8 @@ func allocateDescriptorRewrites(
 				continue
 			}
 
-			targetDB, err := resolveTargetDB(ctx, txn, p, databasesByID, renaming, overrideDB,
-				descriptorCoverage, table)
+			targetDB, err := resolveTargetDB(ctx, txn, p, databasesByID, intoDB, descriptorCoverage,
+				table)
 			if err != nil {
 				return err
 			}
@@ -659,13 +658,11 @@ func allocateDescriptorRewrites(
 					return err
 				}
 
-				if parentDB.IsMultiRegion() && table.GetLocalityConfig() != nil {
-					// We're restoring a table and not its parent database. We may block
-					// restoring multi-region tables to multi-region databases since regions
-					// may mismatch.
-					if err := checkMultiRegionCompatible(ctx, txn, p.ExecCfg().Codec, table, parentDB); err != nil {
-						return pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
-					}
+				// We're restoring a table and not its parent database. We may block
+				// restoring multi-region tables to multi-region databases since
+				// regions may mismatch.
+				if err := checkMultiRegionCompatible(ctx, txn, p.ExecCfg().Codec, table, parentDB); err != nil {
+					return pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
 				}
 
 				// Create the table rewrite with the new parent ID. We've done all the
@@ -681,8 +678,7 @@ func allocateDescriptorRewrites(
 				continue
 			}
 
-			targetDB, err := resolveTargetDB(ctx, txn, p, databasesByID, renaming, overrideDB,
-				descriptorCoverage, typ)
+			targetDB, err := resolveTargetDB(ctx, txn, p, databasesByID, intoDB, descriptorCoverage, typ)
 			if err != nil {
 				return err
 			}
@@ -713,12 +709,20 @@ func allocateDescriptorRewrites(
 				}
 
 				// See if there is an existing type with the same name.
+				getParentSchemaID := func(typ *typedesc.Mutable) (parentSchemaID descpb.ID) {
+					parentSchemaID = typ.GetParentSchemaID()
+					// If we find UDS with same name defined in the restoring DB, use its ID instead.
+					if rewrite, ok := descriptorRewrites[parentSchemaID]; ok && rewrite.ID != 0 {
+						parentSchemaID = rewrite.ID
+					}
+					return
+				}
 				desc, err := catalogkv.GetDescriptorCollidingWithObject(
 					ctx,
 					txn,
 					p.ExecCfg().Codec,
 					parentID,
-					typ.GetParentSchemaID(),
+					getParentSchemaID(typ),
 					typ.Name,
 				)
 				if err != nil {
@@ -739,7 +743,7 @@ func allocateDescriptorRewrites(
 					// Ensure that there isn't a collision with the array type name.
 					arrTyp := typesByID[typ.ArrayTypeID]
 					typeName := tree.NewUnqualifiedTypeName(arrTyp.GetName())
-					err := catalogkv.CheckObjectCollision(ctx, txn, p.ExecCfg().Codec, parentID, typ.GetParentSchemaID(), typeName)
+					err = catalogkv.CheckObjectCollision(ctx, txn, p.ExecCfg().Codec, parentID, getParentSchemaID(typ), typeName)
 					if err != nil {
 						return errors.Wrapf(err, "name collision for %q's array type", typ.Name)
 					}
@@ -812,6 +816,13 @@ func allocateDescriptorRewrites(
 		}
 
 		descriptorRewrites[db.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ID: newID}
+
+		// If a database restore has specified a new name for the restored database,
+		// then populate the rewrite with the newDBName, else the restored database name is preserved.
+		if newDBName != "" {
+			descriptorRewrites[db.GetID()].NewDBName = newDBName
+		}
+
 		for _, tableID := range needsNewParentIDs[db.GetName()] {
 			descriptorRewrites[tableID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: newID}
 		}
@@ -883,13 +894,12 @@ func resolveTargetDB(
 	txn *kv.Txn,
 	p sql.PlanHookState,
 	databasesByID map[descpb.ID]*dbdesc.Mutable,
-	renaming bool,
-	overrideDB string,
+	intoDB string,
 	descriptorCoverage tree.DescriptorCoverage,
 	descriptor catalog.Descriptor,
 ) (string, error) {
-	if renaming {
-		return overrideDB, nil
+	if intoDB != "" {
+		return intoDB, nil
 	}
 
 	if descriptorCoverage == tree.AllDescriptors && descriptor.GetParentID() < catalogkeys.MaxDefaultDescriptorID {
@@ -1006,6 +1016,10 @@ func rewriteDatabaseDescs(databases []*dbdesc.Mutable, descriptorRewrites DescRe
 			return errors.Errorf("missing rewrite for database %d", db.ID)
 		}
 		db.ID = rewrite.ID
+
+		if rewrite.NewDBName != "" {
+			db.Name = rewrite.NewDBName
+		}
 
 		db.Version = 1
 		db.ModificationTime = hlc.Timestamp{}
@@ -1384,8 +1398,12 @@ func getUserDescriptorNames(
 	return allNames, nil
 }
 
+// resolveOptionsForRestoreJobDescription creates a copy of
+// the options specified during a restore, after processing
+// them to be suitable for displaying in the jobs' description.
+// This includes redacting secrets from external storage URIs.
 func resolveOptionsForRestoreJobDescription(
-	opts tree.RestoreOptions, intoDB string, kmsURIs []string,
+	opts tree.RestoreOptions, intoDB string, newDBName string, kmsURIs []string,
 ) (tree.RestoreOptions, error) {
 	if opts.IsDefault() {
 		return opts, nil
@@ -1407,6 +1425,10 @@ func resolveOptionsForRestoreJobDescription(
 		newOpts.IntoDB = tree.NewDString(intoDB)
 	}
 
+	if opts.NewDBName != nil {
+		newOpts.NewDBName = tree.NewDString(newDBName)
+	}
+
 	for _, uri := range kmsURIs {
 		redactedURI, err := cloud.RedactKMSURI(uri)
 		if err != nil {
@@ -1424,6 +1446,7 @@ func restoreJobDescription(
 	from [][]string,
 	opts tree.RestoreOptions,
 	intoDB string,
+	newDBName string,
 	kmsURIs []string,
 ) (string, error) {
 	r := &tree.Restore{
@@ -1435,7 +1458,8 @@ func restoreJobDescription(
 
 	var options tree.RestoreOptions
 	var err error
-	if options, err = resolveOptionsForRestoreJobDescription(opts, intoDB, kmsURIs); err != nil {
+	if options, err = resolveOptionsForRestoreJobDescription(opts, intoDB, newDBName,
+		kmsURIs); err != nil {
 		return "", err
 	}
 	r.Options = options
@@ -1519,6 +1543,19 @@ func restorePlanHook(
 		}
 	}
 
+	var newDBNameFn func() (string, error)
+	if restoreStmt.Options.NewDBName != nil {
+		if restoreStmt.DescriptorCoverage == tree.AllDescriptors || len(restoreStmt.Targets.Databases) != 1 {
+			err = errors.New("new_db_name can only be used for RESTORE DATABASE with a single target" +
+				" database")
+			return nil, nil, nil, false, err
+		}
+		newDBNameFn, err = p.TypeAsString(ctx, restoreStmt.Options.NewDBName, "RESTORE")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+	}
+
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
@@ -1591,7 +1628,15 @@ func restorePlanHook(
 			}
 		}
 
-		return doRestorePlan(ctx, restoreStmt, p, from, passphrase, kms, intoDB, endTime, resultsCh)
+		var newDBName string
+		if newDBNameFn != nil {
+			newDBName, err = newDBNameFn()
+			if err != nil {
+				return err
+			}
+		}
+		return doRestorePlan(ctx, restoreStmt, p, from, passphrase, kms, intoDB, newDBName, endTime,
+			resultsCh)
 	}
 
 	if restoreStmt.Options.Detached {
@@ -1714,6 +1759,7 @@ func doRestorePlan(
 	passphrase string,
 	kms []string,
 	intoDB string,
+	newDBName string,
 	endTime hlc.Timestamp,
 	resultsCh chan<- tree.Datums,
 ) error {
@@ -1840,7 +1886,9 @@ func doRestorePlan(
 		}
 	}
 
-	sqlDescs, restoreDBs, tenants, err := selectTargets(ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime)
+	sqlDescs, restoreDBs, tenants, err := selectTargets(
+		ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime,
+	)
 	if err != nil {
 		return errors.Wrap(err,
 			"failed to resolve targets in the BACKUP location specified by the RESTORE stmt, "+
@@ -1870,6 +1918,12 @@ func doRestorePlan(
 
 	if err := maybeUpgradeDescriptors(ctx, sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
 		return err
+	}
+
+	if restoreStmt.Options.NewDBName != nil {
+		if err := renameTargetDatabaseDescriptor(sqlDescs, restoreDBs, newDBName); err != nil {
+			return err
+		}
 	}
 
 	if len(tenants) > 0 {
@@ -1914,6 +1968,23 @@ func doRestorePlan(
 		}
 	}
 
+	var debugPauseOn string
+	if restoreStmt.Options.DebugPauseOn != nil {
+		pauseOnFn, err := p.TypeAsString(ctx, restoreStmt.Options.DebugPauseOn, "RESTORE")
+		if err != nil {
+			return err
+		}
+
+		debugPauseOn, err = pauseOnFn()
+		if err != nil {
+			return err
+		}
+
+		if _, ok := allowedDebugPauseOnValues[debugPauseOn]; len(debugPauseOn) > 0 && !ok {
+			return errors.Newf("%s cannot be set with the value %s", restoreOptDebugPauseOn, debugPauseOn)
+		}
+	}
+
 	filteredTablesByID, err := maybeFilterMissingViews(
 		tablesByID,
 		typesByID,
@@ -1932,11 +2003,12 @@ func doRestorePlan(
 		restoreStmt.DescriptorCoverage,
 		restoreStmt.Options,
 		intoDB,
-	)
+		newDBName)
 	if err != nil {
 		return err
 	}
-	description, err := restoreJobDescription(p, restoreStmt, from, restoreStmt.Options, intoDB, kms)
+	description, err := restoreJobDescription(p, restoreStmt, from, restoreStmt.Options, intoDB,
+		newDBName, kms)
 	if err != nil {
 		return err
 	}
@@ -2011,6 +2083,7 @@ func doRestorePlan(
 			Encryption:         encryption,
 			RevalidateIndexes:  revalidateIndexes,
 			DatabaseModifiers:  databaseModifiers,
+			DebugPauseOn:       debugPauseOn,
 		},
 		Progress: jobspb.RestoreProgress{},
 	}
@@ -2058,7 +2131,6 @@ func doRestorePlan(
 	}(); err != nil {
 		return err
 	}
-
 	collectTelemetry()
 	if err := sj.Start(ctx); err != nil {
 		return err
@@ -2067,6 +2139,37 @@ func doRestorePlan(
 		return err
 	}
 	return sj.ReportExecutionResults(ctx, resultsCh)
+}
+
+// renameTargetDatabaseDescriptor updates the name in the target database
+// descriptor to the user specified new_db_name. We update the database
+// descriptor in both sqlDescs that contains all the descriptors being restored,
+// and restoreDBs that contains just the target database descriptor. Renaming
+// the target descriptor ensures accurate name resolution during restore.
+func renameTargetDatabaseDescriptor(
+	sqlDescs []catalog.Descriptor, restoreDBs []catalog.DatabaseDescriptor, newDBName string,
+) error {
+	if len(restoreDBs) != 1 {
+		return errors.NewAssertionErrorWithWrappedErrf(errors.Newf(
+			"expected restoreDBs to have a single entry but found %d entries when renaming the target"+
+				" database", len(restoreDBs)), "assertion failed")
+	}
+
+	for _, desc := range sqlDescs {
+		// Only process database descriptors.
+		db, isDB := desc.(*dbdesc.Mutable)
+		if !isDB {
+			continue
+		}
+		db.SetName(newDBName)
+	}
+	db, ok := restoreDBs[0].(*dbdesc.Mutable)
+	if !ok {
+		return errors.NewAssertionErrorWithWrappedErrf(errors.Newf(
+			"expected db desc but found %T", db), "assertion failed")
+	}
+	db.SetName(newDBName)
+	return nil
 }
 
 func planDatabaseModifiersForRestore(

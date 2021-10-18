@@ -25,7 +25,8 @@ import (
 type Metrics struct {
 	JobMetrics [jobspb.NumJobTypes]*JobTypeMetrics
 
-	Changefeed metric.Struct
+	Changefeed   metric.Struct
+	StreamIngest metric.Struct
 
 	// AdoptIterations counts the number of adopt loops executed by Registry.
 	AdoptIterations *metric.Counter
@@ -47,7 +48,9 @@ type JobTypeMetrics struct {
 	ResumeFailed           *metric.Counter
 	FailOrCancelCompleted  *metric.Counter
 	FailOrCancelRetryError *metric.Counter
-	FailOrCancelFailed     *metric.Counter
+	// TODO (sajjad): FailOrCancelFailed metric is not updated after the modification
+	// of retrying all reverting jobs. Remove this metric in v22.1.
+	FailOrCancelFailed *metric.Counter
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -167,6 +170,9 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 	if MakeChangefeedMetricsHook != nil {
 		m.Changefeed = MakeChangefeedMetricsHook(histogramWindowInterval)
 	}
+	if MakeStreamIngestMetricsHook != nil {
+		m.StreamIngest = MakeStreamIngestMetricsHook(histogramWindowInterval)
+	}
 	m.AdoptIterations = metric.NewCounter(metaAdoptIterations)
 	m.ClaimedJobs = metric.NewCounter(metaClaimedJobs)
 	m.ResumedJobs = metric.NewCounter(metaResumedClaimedJobs)
@@ -191,6 +197,10 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 // MakeChangefeedMetricsHook allows for registration of changefeed metrics from
 // ccl code.
 var MakeChangefeedMetricsHook func(time.Duration) metric.Struct
+
+// MakeStreamIngestMetricsHook allows for registration of streaming metrics from
+// ccl code.
+var MakeStreamIngestMetricsHook func(duration time.Duration) metric.Struct
 
 // JobTelemetryMetrics is a telemetry metrics for individual job types.
 type JobTelemetryMetrics struct {

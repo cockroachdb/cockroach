@@ -17,12 +17,11 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/errors"
+	"github.com/alessio/shellescape"
 	"github.com/spf13/cobra"
 )
 
@@ -33,8 +32,14 @@ const (
 	shortFlag   = "short"
 )
 
-// To be turned on for tests. Turns off some deeper checks for reproducibility.
-var isTesting bool
+var (
+	// Shared flags.
+	remoteCacheAddr string
+	numCPUs         int
+
+	// To be turned on for tests. Turns off some deeper checks for reproducibility.
+	isTesting bool
+)
 
 func mustGetFlagString(cmd *cobra.Command, name string) string {
 	val, err := cmd.Flags().GetString(name)
@@ -83,7 +88,7 @@ func parseAddr(addr string) (string, error) {
 
 	ip := net.ParseIP(host)
 	if ip == nil {
-		return "", errors.Newf("invalid address %s", addr)
+		return "", fmt.Errorf("invalid address %s", addr)
 	}
 
 	return fmt.Sprintf("%s:%s", ip, port), nil
@@ -91,7 +96,6 @@ func parseAddr(addr string) (string, error) {
 
 func (d *dev) getBazelInfo(ctx context.Context, key string) (string, error) {
 	args := []string{"info", key, "--color=no"}
-	args = append(args, getConfigFlags()...)
 	out, err := d.exec.CommandContextSilent(ctx, "bazel", args...)
 	if err != nil {
 		return "", err
@@ -108,14 +112,14 @@ func (d *dev) getBazelBin(ctx context.Context) (string, error) {
 	return d.getBazelInfo(ctx, "bazel-bin")
 }
 
-func getConfigFlags() []string {
-	if skipDevConfig {
-		return []string{}
-	}
-	if !isTesting && runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
-		return []string{"--config=devdarwinx86_64"}
-	}
-	return []string{"--config=dev"}
+func addCommonBuildFlags(cmd *cobra.Command) {
+	cmd.Flags().IntVar(&numCPUs, "cpus", 0, "cap the number of cpu cores used")
+	// This points to the grpc endpoint of a running `buchr/bazel-remote`
+	// instance. We're tying ourselves to the one implementation, but that
+	// seems fine for now. It seems mature, and has (very experimental)
+	// support for the  Remote Asset API, which helps speed things up when
+	// the cache sits across the network boundary.
+	cmd.Flags().StringVar(&remoteCacheAddr, "remote-cache", "", "remote caching grpc endpoint to use")
 }
 
 func addCommonTestFlags(cmd *cobra.Command) {
@@ -127,7 +131,7 @@ func addCommonTestFlags(cmd *cobra.Command) {
 func (d *dev) ensureBinaryInPath(bin string) error {
 	if !isTesting {
 		if _, err := d.exec.LookPath(bin); err != nil {
-			return errors.Newf("Could not find %s in PATH", bin)
+			return fmt.Errorf("could not find %s in PATH", bin)
 		}
 	}
 	return nil
@@ -193,4 +197,25 @@ func setupPathReal(dev *dev) error {
 		return nil
 	}
 	return nil
+}
+
+func splitArgsAtDash(cmd *cobra.Command, args []string) (before, after []string) {
+	argsLenAtDash := cmd.ArgsLenAtDash()
+	if argsLenAtDash < 0 {
+		// If there's no dash, the value of this is -1.
+		before = args[:len(args):len(args)]
+	} else {
+		// NB: Have to do this verbose slicing to force Go to copy the
+		// memory. Otherwise later `append`s will break stuff.
+		before = args[0:argsLenAtDash:argsLenAtDash]
+		after = args[argsLenAtDash : len(args) : len(args)-argsLenAtDash+1]
+	}
+	return
+}
+
+func logCommand(cmd string, args ...string) {
+	var fullArgs []string
+	fullArgs = append(fullArgs, cmd)
+	fullArgs = append(fullArgs, args...)
+	log.Printf("$ %s", shellescape.QuoteCommand(fullArgs))
 }

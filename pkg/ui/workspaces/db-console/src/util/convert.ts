@@ -62,6 +62,21 @@ export function TimestampToMoment(
 }
 
 /**
+ * TimestampToNumber converts a Timestamp$Properties object, as seen in wire.proto, to
+ * its unix time. If timestamp is null, it returns the `defaultIfNull` value which is
+ * by default is current time.
+ */
+export function TimestampToNumber(
+  timestamp?: protos.google.protobuf.ITimestamp,
+  defaultIfNull = moment.utc().unix(),
+): number {
+  if (!timestamp) {
+    return defaultIfNull;
+  }
+  return timestamp.seconds.toNumber() + NanoToMilli(timestamp.nanos) * 1e-3;
+}
+
+/**
  * LongToMoment converts a Long, representing nanos since the epoch, to a Moment
  * object. If timestamp is null, it returns the current time.
  */

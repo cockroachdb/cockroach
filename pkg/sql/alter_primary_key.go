@@ -72,8 +72,12 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	if alterPKNode.Interleave != nil {
-		if err := interleavedTableDeprecationAction(p.RunParams(ctx)); err != nil {
+		interleaveIgnored, err := interleavedTableDeprecationAction(p.RunParams(ctx))
+		if err != nil {
 			return err
+		}
+		if interleaveIgnored {
+			alterPKNode.Interleave = nil
 		}
 	}
 
@@ -403,6 +407,16 @@ func (p *planner) AlterPrimaryKey(
 		newUniqueIdx.EncodingType = descpb.SecondaryIndexEncoding
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newUniqueIdx, newPrimaryIndexDesc); err != nil {
 			return err
+		}
+		// Copy the old zone configuration into the newly created unique index for PARTITION ALL BY.
+		if tableDesc.IsLocalityRegionalByRow() {
+			if err := p.configureZoneConfigForNewIndexPartitioning(
+				ctx,
+				tableDesc,
+				newUniqueIdx,
+			); err != nil {
+				return err
+			}
 		}
 	}
 

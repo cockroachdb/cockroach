@@ -311,6 +311,9 @@ func (s *SorterSpec) summary() (string, []string) {
 	if s.OrderingMatchLen != 0 {
 		details = append(details, fmt.Sprintf("match len: %d", s.OrderingMatchLen))
 	}
+	if s.Limit > 0 {
+		details = append(details, fmt.Sprintf("TopK: %d", s.Limit))
+	}
 	return "Sorter", details
 }
 

@@ -521,3 +521,7 @@ query O
 SELECT $regression_62205_oid::regclass
 ----
 regression_62205
+
+# Check we error as appropriate if the OID type is not legit.
+statement error pgcode 22P02 invalid input syntax for type oid: "regression_69907"
+SELECT 'regression_69907'::oid

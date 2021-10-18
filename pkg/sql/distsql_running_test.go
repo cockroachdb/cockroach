@@ -122,7 +122,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 	iter := 0
 	// We'll trace to make sure the test isn't fooling itself.
-	tr := s.Tracer().(*tracing.Tracer)
+	tr := s.TracerI().(*tracing.Tracer)
 	runningCtx, getRec, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test")
 	defer cancel()
 	err = shortDB.Txn(runningCtx, func(ctx context.Context, txn *kv.Txn) error {
@@ -148,7 +148,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		}
 
 		// Create and run a DistSQL plan.
-		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			return nil
 		})
 		recv := MakeDistSQLReceiver(

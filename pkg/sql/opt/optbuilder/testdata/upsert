@@ -2181,10 +2181,6 @@ upsert on_update_with_default
            ├── CASE WHEN a:9 IS NULL THEN b_default:7 ELSE b:10 END [as=upsert_b:17]
            └── CASE WHEN a:9 IS NULL THEN v_default:8 ELSE v_on_update:15 END [as=upsert_v:18]
 
-# TODO(janexing): Right now the GENERATED ... AS IDENTITY columns are
-# projected to be NULL, which is incorrect, and will be fixed once the default
-# expression for a GENERATED ... AS IDENTITY column is implemented.
-
 # Test with columns created with GENERATED AS IDENTITY syntax.
 exec-ddl
 CREATE TABLE generated_as_identity (
@@ -2215,43 +2211,46 @@ UPSERT INTO generated_as_identity (a) VALUES (2)
 upsert generated_as_identity
  ├── columns: <none>
  ├── arbiter indexes: primary
- ├── canary column: rowid:13
- ├── fetch columns: a:10 b:11 c:12 rowid:13
+ ├── canary column: rowid:14
+ ├── fetch columns: a:11 b:12 c:13 rowid:14
  ├── insert-mapping:
  │    ├── column1:7 => a:1
  │    ├── b_default:8 => b:2
- │    ├── b_default:8 => c:3
- │    └── rowid_default:9 => rowid:4
+ │    ├── c_default:9 => c:3
+ │    └── rowid_default:10 => rowid:4
  ├── update-mapping:
  │    └── column1:7 => a:1
  └── project
-      ├── columns: upsert_b:16 upsert_c:17 upsert_rowid:18 column1:7!null b_default:8 rowid_default:9 a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+      ├── columns: upsert_b:17 upsert_c:18 upsert_rowid:19 column1:7!null b_default:8 c_default:9 rowid_default:10 a:11 b:12 c:13 rowid:14 crdb_internal_mvcc_timestamp:15 tableoid:16
       ├── left-join (hash)
-      │    ├── columns: column1:7!null b_default:8 rowid_default:9 a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+      │    ├── columns: column1:7!null b_default:8 c_default:9 rowid_default:10 a:11 b:12 c:13 rowid:14 crdb_internal_mvcc_timestamp:15 tableoid:16
       │    ├── ensure-upsert-distinct-on
-      │    │    ├── columns: column1:7!null b_default:8 rowid_default:9
-      │    │    ├── grouping columns: rowid_default:9
+      │    │    ├── columns: column1:7!null b_default:8 c_default:9 rowid_default:10
+      │    │    ├── grouping columns: rowid_default:10
       │    │    ├── project
-      │    │    │    ├── columns: b_default:8 rowid_default:9 column1:7!null
+      │    │    │    ├── columns: b_default:8 c_default:9 rowid_default:10 column1:7!null
       │    │    │    ├── values
       │    │    │    │    ├── columns: column1:7!null
       │    │    │    │    └── (2,)
       │    │    │    └── projections
-      │    │    │         ├── NULL::INT8 [as=b_default:8]
-      │    │    │         └── unique_rowid() [as=rowid_default:9]
+      │    │    │         ├── nextval('t.public.generated_as_identity_b_seq') [as=b_default:8]
+      │    │    │         ├── nextval('t.public.generated_as_identity_c_seq') [as=c_default:9]
+      │    │    │         └── unique_rowid() [as=rowid_default:10]
       │    │    └── aggregations
       │    │         ├── first-agg [as=column1:7]
       │    │         │    └── column1:7
-      │    │         └── first-agg [as=b_default:8]
-      │    │              └── b_default:8
+      │    │         ├── first-agg [as=b_default:8]
+      │    │         │    └── b_default:8
+      │    │         └── first-agg [as=c_default:9]
+      │    │              └── c_default:9
       │    ├── scan generated_as_identity
-      │    │    └── columns: a:10 b:11!null c:12!null rowid:13!null crdb_internal_mvcc_timestamp:14 tableoid:15
+      │    │    └── columns: a:11 b:12!null c:13!null rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       │    └── filters
-      │         └── rowid_default:9 = rowid:13
+      │         └── rowid_default:10 = rowid:14
       └── projections
-           ├── CASE WHEN rowid:13 IS NULL THEN b_default:8 ELSE b:11 END [as=upsert_b:16]
-           ├── CASE WHEN rowid:13 IS NULL THEN b_default:8 ELSE c:12 END [as=upsert_c:17]
-           └── CASE WHEN rowid:13 IS NULL THEN rowid_default:9 ELSE rowid:13 END [as=upsert_rowid:18]
+           ├── CASE WHEN rowid:14 IS NULL THEN b_default:8 ELSE b:12 END [as=upsert_b:17]
+           ├── CASE WHEN rowid:14 IS NULL THEN c_default:9 ELSE c:13 END [as=upsert_c:18]
+           └── CASE WHEN rowid:14 IS NULL THEN rowid_default:10 ELSE rowid:14 END [as=upsert_rowid:19]
 
 build
 UPSERT INTO generated_as_identity (a, b) VALUES (3, 30)
@@ -2287,7 +2286,7 @@ upsert generated_as_identity
       │    │    │    │    ├── columns: column1:7!null column2:8!null
       │    │    │    │    └── (3, 30)
       │    │    │    └── projections
-      │    │    │         ├── NULL::INT8 [as=b_default:9]
+      │    │    │         ├── nextval('t.public.generated_as_identity_b_seq') [as=b_default:9]
       │    │    │         └── unique_rowid() [as=rowid_default:10]
       │    │    └── aggregations
       │    │         ├── first-agg [as=column1:7]

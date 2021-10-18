@@ -18,7 +18,7 @@ TABLE xyz
  ├── z int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX xyz_pkey
  │    └── x int not null
  └── INDEX foo
       ├── z int
@@ -53,7 +53,7 @@ TABLE abcdef
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── CHECK (f > 2:::INT8)
- └── PRIMARY INDEX primary
+ └── PRIMARY INDEX abcdef_pkey
       └── rowid int not null default (unique_rowid()) [hidden]
 scan abcdef
  ├── check constraint expressions
@@ -91,7 +91,7 @@ TABLE uvwxy
  ├── FAMILY fam_0_u_v_w (u, v, w)
  ├── FAMILY fam_1_x (x)
  ├── FAMILY fam_2_y (y)
- └── PRIMARY INDEX primary
+ └── PRIMARY INDEX uvwxy_pkey
       ├── u int not null
       └── v int not null
 scan uvwxy
@@ -119,7 +119,7 @@ TABLE child
  ├── r int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX child_pkey
  │    └── c int not null
  └── CONSTRAINT fk FOREIGN KEY child (p, q, r) REFERENCES parent (p, q, r)
 scan child
@@ -134,7 +134,7 @@ TABLE parent
  ├── other int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX parent_pkey
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
@@ -161,7 +161,7 @@ TABLE child2
  ├── r int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX child2_pkey
  │    └── c int not null
  └── CONSTRAINT fk FOREIGN KEY child2 (p, q, r) REFERENCES parent (p, q, r) MATCH FULL ON DELETE SET NULL
 scan child2
@@ -176,7 +176,7 @@ TABLE parent
  ├── other int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX parent_pkey
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null

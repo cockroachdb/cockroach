@@ -245,7 +245,7 @@ export class NodeGraphs extends React.Component<NodeGraphsProps> {
       );
     });
 
-    // add pading to have last chart tooltip visible
+    // add padding to have last chart tooltip visible
     // tooltip layout with header and paddings take up
     // somewhere around 50px, after it have more than
     // 9 nodes it switch to multicolumn layout that take
@@ -257,9 +257,7 @@ export class NodeGraphs extends React.Component<NodeGraphsProps> {
     return (
       <div style={{ paddingBottom }}>
         <Helmet title={title} />
-        <section className="section">
-          <h1 className="base-heading">{title}</h1>
-        </section>
+        <h3 className="base-heading">{title}</h3>
         <PageConfig>
           <PageConfigItem>
             <Dropdown

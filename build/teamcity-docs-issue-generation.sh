@@ -57,6 +57,11 @@ process_pr_commits() {
       body="${body//$'\"'/'\''"'}"
       # Get merge branch
       merge_branch=$(curl -s --retry 5 -s -H "Authorization: token $GITHUB_API_TOKEN" https://api.github.com/repos/cockroachdb/cockroach/pulls/"$1" | jq .base.ref)
+      # If merge branch is master, use the release version instead
+      if [ "$merge_branch" = "master" ]
+      then
+        merge_branch="release-22.1"
+      fi
       # Create issue
       echo "Creating issue for PR $prnum"
       curl -s --retry 5 -X POST -H "Authorization: token $GITHUB_API_TOKEN" \

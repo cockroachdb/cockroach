@@ -1,0 +1,57 @@
+@import "../core/index.module";
+
+.popup-container {
+  width: 506px;
+  height: 240px;
+
+  .label {
+    display: block;
+    margin-bottom: 1rem;
+  }
+
+  .popup-content {
+    :global(.ant-calendar-picker) {
+      width: 290px;
+      margin-right: 14px;
+      input {
+        padding-left: 34px;
+      }
+    }
+
+    :global(.ant-time-picker-icon),
+    :global(.ant-calendar-picker-icon) {
+      left: 12px;
+    }
+
+    :global(.ant-time-picker) {
+      width: 150px;
+    }
+  }
+
+  .popup-footer {
+    margin-top: 24px;
+    text-align: right;
+    button {
+      margin-left: 8px;
+    }
+  }
+
+  :global(.ant-popover-arrow) {
+    display: none;
+  }
+}
+
+.date-range-form {
+  width: 300px;
+  height: 40px;
+
+  :global(.ant-input-affix-wrapper) {
+    height: 40px;
+    &:hover {
+      :global(.ant-input:not(.ant-input-disabled)) {
+        border-color: $colors--primary-blue-3;
+        border-right-width: 2px !important;
+      }
+    }
+  }
+}

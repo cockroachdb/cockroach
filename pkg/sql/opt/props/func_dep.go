@@ -677,6 +677,9 @@ func (f *FuncDepSet) ComputeClosure(cols opt.ColSet) opt.ColSet {
 
 // AreColsEquiv returns true if the two given columns are equivalent.
 func (f *FuncDepSet) AreColsEquiv(col1, col2 opt.ColumnID) bool {
+	if col1 == col2 {
+		return true
+	}
 	for i := range f.deps {
 		fd := &f.deps[i]
 

@@ -19,7 +19,7 @@ do
     # Run affected tests.
     for test in $tests
     do
-        $(bazel info bazel-bin)/pkg/cmd/bazci/bazci_/bazci --config ci --config race test "$test" -- \
+        $(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci --config=ci --config=race test "$test" -- \
                                --test_env=COCKROACH_LOGIC_TESTS_SKIP=true \
                                --test_env=GOMAXPROCS=8
     done

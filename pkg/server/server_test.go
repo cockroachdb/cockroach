@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -980,14 +979,10 @@ func TestServeIndexHTML(t *testing.T) {
 `
 
 	linkInFakeUI := func() {
-		ui.Asset = func(string) (_ []byte, _ error) { return }
-		ui.AssetDir = func(name string) (_ []string, _ error) { return }
-		ui.AssetInfo = func(name string) (_ os.FileInfo, _ error) { return }
+		ui.HaveUI = true
 	}
 	unlinkFakeUI := func() {
-		ui.Asset = nil
-		ui.AssetDir = nil
-		ui.AssetInfo = nil
+		ui.HaveUI = false
 	}
 
 	t.Run("Insecure mode", func(t *testing.T) {
@@ -1050,7 +1045,7 @@ Binary built without web UI.
 				fmt.Sprintf(
 					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
 					build.GetInfo().Tag,
-					build.VersionPrefix(),
+					build.BinaryVersionPrefix(),
 					1,
 				),
 			)
@@ -1085,7 +1080,7 @@ Binary built without web UI.
 				fmt.Sprintf(
 					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
 					build.GetInfo().Tag,
-					build.VersionPrefix(),
+					build.BinaryVersionPrefix(),
 					1,
 				),
 			},
@@ -1094,7 +1089,7 @@ Binary built without web UI.
 				fmt.Sprintf(
 					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
 					build.GetInfo().Tag,
-					build.VersionPrefix(),
+					build.BinaryVersionPrefix(),
 					1,
 				),
 			},
@@ -1230,4 +1225,29 @@ func TestSQLDecommissioned(t *testing.T) {
 		_, err = sqlClient.Query("SELECT * FROM crdb_internal.tables")
 		return err != nil
 	}, 10*time.Second, 100*time.Millisecond, "timed out waiting for queries to error")
+}
+
+func TestAssertEnginesEmpty(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	eng, err := storage.Open(ctx, storage.InMemory())
+	require.NoError(t, err)
+	defer eng.Close()
+
+	require.NoError(t, assertEnginesEmpty([]storage.Engine{eng}))
+
+	require.NoError(t, storage.MVCCPutProto(ctx, eng, nil, keys.StoreClusterVersionKey(),
+		hlc.Timestamp{}, nil, &roachpb.Version{Major: 21, Minor: 1, Internal: 122}))
+	require.NoError(t, assertEnginesEmpty([]storage.Engine{eng}))
+
+	batch := eng.NewBatch()
+	key := storage.MVCCKey{
+		Key:       []byte{0xde, 0xad, 0xbe, 0xef},
+		Timestamp: hlc.Timestamp{WallTime: 100},
+	}
+	require.NoError(t, batch.PutMVCC(key, []byte("foo")))
+	require.NoError(t, batch.Commit(false))
+	require.Error(t, assertEnginesEmpty([]storage.Engine{eng}))
 }

@@ -357,6 +357,47 @@ const (
 	MVCCKeyIterKind
 )
 
+// ExportOptions contains options provided to export operation.
+type ExportOptions struct {
+	// StartKey determines start of the exported interval (inclusive).
+	// StartKey.Timestamp is either empty which represent starting from a potential
+	// intent and continuing to versions or non-empty, which represents starting
+	// from a particular version.
+	StartKey MVCCKey
+	// EndKey determines the end of exported interval (exclusive).
+	EndKey roachpb.Key
+	// StartTS and EndTS determine exported time range as (startTS, endTS].
+	StartTS, EndTS hlc.Timestamp
+	// If ExportAllRevisions is true export every revision of a key for the interval,
+	// otherwise only the latest value within the interval is exported.
+	ExportAllRevisions bool
+	// If TargetSize is positive, it indicates that the export should produce SSTs
+	// which are roughly target size. Specifically, it will return an SST such that
+	// the last key is responsible for meeting or exceeding the targetSize. If the
+	// resumeKey is non-nil then the data size of the returned sst will be greater
+	// than or equal to the targetSize.
+	TargetSize uint64
+	// If MaxSize is positive, it is an absolute maximum on byte size for the
+	// returned sst. If it is the case that the versions of the last key will lead
+	// to an SST that exceeds maxSize, an error will be returned. This parameter
+	// exists to prevent creating SSTs which are too large to be used.
+	MaxSize uint64
+	// If StopMidKey is false, once function reaches targetSize it would continue
+	// adding all versions until it reaches next key or end of range. If true, it
+	// would stop immediately when targetSize is reached and return the next versions
+	// timestamp in resumeTs so that subsequent operation can pass it to firstKeyTs.
+	StopMidKey bool
+	// ResourceLimiter limits how long iterator could run until it exhausts allocated
+	// resources. Expot queries limiter in its iteration loop to break out once
+	// resources are exhausted.
+	ResourceLimiter ResourceLimiter
+	// If UseTBI is true, the backing MVCCIncrementalIterator will initialize a
+	// time-bound iterator along with its regular iterator. The TBI will be used
+	// as an optimization to skip over swaths of uninteresting keys i.e. keys
+	// outside our time bounds, while locating the KVs to export.
+	UseTBI bool
+}
+
 // Reader is the read interface to an engine's data. Certain implementations
 // of Reader guarantee consistency of the underlying engine state across the
 // different iterators created by NewMVCCIterator, NewEngineIterator:
@@ -382,39 +423,14 @@ type Reader interface {
 	// that they are not using a closed engine. Intended for use within package
 	// engine; exported to enable wrappers to exist in other packages.
 	Closed() bool
-	// ExportMVCCToSst exports changes to the keyrange [startKey, endKey) over the
-	// interval (startTS, endTS]. Passing exportAllRevisions exports
-	// every revision of a key for the interval, otherwise only the latest value
-	// within the interval is exported. Deletions are included if all revisions are
-	// requested or if the start.Timestamp is non-zero.
-	//
-	// firstKeyTS is either empty which represent starting from potential intent
-	// and continuing to versions or non-empty, which represents starting from
-	// particular version. firstKeyTS will always be empty when !stopMidKey
-	//
-	// If targetSize is positive, it indicates that the export should produce SSTs
-	// which are roughly target size. Specifically, it will return an SST such that
-	// the last key is responsible for meeting or exceeding the targetSize. If the
-	// resumeKey is non-nil then the data size of the returned sst will be greater
-	// than or equal to the targetSize.
-	//
-	// If maxSize is positive, it is an absolute maximum on byte size for the
-	// returned sst. If it is the case that the versions of the last key will lead
-	// to an SST that exceeds maxSize, an error will be returned. This parameter
-	// exists to prevent creating SSTs which are too large to be used.
-	//
-	// If stopMidKey is false, once function reaches targetSize it would continue
-	// adding all versions until it reaches next key or end of range. If true, it
-	// would stop immediately when targetSize is reached and return a next versions
-	// timestamp in resumeTs so that subsequent operation can pass it to firstKeyTs.
-	//
-	// If useTBI is true, the backing MVCCIncrementalIterator will initialize a
-	// time-bound iterator along with its regular iterator. The TBI will be used
-	// as an optimization to skip over swaths of uninteresting keys i.e. keys
-	// outside our time bounds, while locating the KVs to export.
-	//
+	// ExportMVCCToSst exports changes to the keyrange [StartKey, EndKey) over the
+	// interval (StartTS, EndTS].
+	// Deletions are included if all revisions are requested or if the StartTS
+	// is non-zero.
 	// This function looks at MVCC versions and intents, and returns an error if an
 	// intent is found.
+	// exportOptions determine ranges as well as additional export options. See
+	// struct definition for details.
 	//
 	// Data is written to dest as it is collected. If error is returned content of
 	// dest is undefined.
@@ -423,9 +439,7 @@ type Reader interface {
 	// that allow resuming export if it was cut short because it reached limits or
 	// an error if export failed for some reason.
 	ExportMVCCToSst(
-		ctx context.Context, startKey, endKey roachpb.Key, startTS, endTS, firstKeyTS hlc.Timestamp,
-		exportAllRevisions bool, targetSize uint64, maxSize uint64, stopMidKey bool, useTBI bool,
-		dest io.Writer,
+		ctx context.Context, exportOptions ExportOptions, dest io.Writer,
 	) (_ roachpb.BulkOpSummary, resumeKey roachpb.Key, resumeTS hlc.Timestamp, _ error)
 	// MVCCGet returns the value for the given key, nil otherwise. Semantically, it
 	// behaves as if an iterator with MVCCKeyAndIntentsIterKind was used.
@@ -679,6 +693,31 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	SingleClearEngineKey(key EngineKey) error
+
+	// OverrideTxnDidNotUpdateMetaToFalse is a temporary method that will be removed
+	// for 22.1.
+	//
+	// See #69891 for details on the bug related to usage of SingleDelete in
+	// separated intent resolution. The following is needed for correctly
+	// migrating from 21.1 to 21.2.
+	//
+	// We have fixed the intent resolution code path in 21.2-beta to use
+	// SingleDelete more conservatively. The 21.2-GA will also likely include
+	// Pebble changes to make the old buggy usage of SingleDelete correct.
+	// However, there is a problem if someone upgrades from 21.1 to
+	// 21.2-beta/21.2-GA:
+	// 21.1 nodes will not write separated intents while they are the
+	// leaseholder for a range. However they can become the leaseholder for a
+	// range after a separated intent was written (in a mixed version cluster).
+	// Hence they can resolve separated intents. The logic in 21.1 for using
+	// SingleDelete when resolving intents is similarly buggy, and the Pebble
+	// code included in 21.1 will not make this buggy usage correct. The
+	// solution is for 21.2 nodes to never set txnDidNotUpdateMeta=true when
+	// writing separated intents, until the cluster version is at the version
+	// when the buggy code was fixed in 21.2. So 21.1 code will never use
+	// SingleDelete when resolving these separated intents (since the only
+	// separated intents being written are by 21.2 nodes).
+	OverrideTxnDidNotUpdateMetaToFalse(ctx context.Context) bool
 }
 
 // ReadWriter is the read/write interface to an engine's data.
@@ -789,9 +828,9 @@ type Engine interface {
 	// adjust their expectations.
 	IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool
 
-	// DeprecateBaseEncryptionRegistry is used to signal to the engine that it
-	// should stop using the Base version monolithic encryption-at-rest registry.
-	DeprecateBaseEncryptionRegistry(version *roachpb.Version) error
+	// SetMinVersion is used to signal to the engine the current minimum
+	// version that it must maintain compatibility with.
+	SetMinVersion(version roachpb.Version) error
 
 	// UsingRecordsEncryptionRegistry returns whether the engine is using the
 	// Records version incremental encryption-at-rest registry.
@@ -799,7 +838,7 @@ type Engine interface {
 
 	// MinVersionIsAtLeastTargetVersion returns whether the engine's recorded
 	// storage min version is at least the target version.
-	MinVersionIsAtLeastTargetVersion(target *roachpb.Version) (bool, error)
+	MinVersionIsAtLeastTargetVersion(target roachpb.Version) (bool, error)
 }
 
 // Batch is the interface for batch specific operations.
@@ -815,6 +854,8 @@ type Batch interface {
 	Commit(sync bool) error
 	// Empty returns whether the batch has been written to or not.
 	Empty() bool
+	// Count returns the number of memtable-modifying operations in the batch.
+	Count() uint32
 	// Len returns the size of the underlying representation of the batch.
 	// Because of the batch header, the size of the batch is never 0 and should
 	// not be used interchangeably with Empty. The method avoids the memory copy

@@ -50,6 +50,16 @@ type SessionData struct {
 	SequenceState *SequenceState
 }
 
+// Clone returns a clone of SessionData.
+func (s *SessionData) Clone() *SessionData {
+	// Currently clone does a shallow copy of everything - we can get away with it
+	// as all the slices/maps does a copy if it mutates OR are operations that
+	// affect the whole SessionDataStack (e.g. setting SequenceState should be the
+	// setting the same value across all copied SessionData).
+	ret := *s
+	return &ret
+}
+
 // MarshalNonLocal serializes all non-local parameters from SessionData struct
 // that don't have native protobuf support into proto.
 func MarshalNonLocal(sd *SessionData, proto *sessiondatapb.SessionData) {
@@ -178,10 +188,10 @@ func (s *SessionData) MaybeGetDatabaseForTemporarySchemaID(schemaID uint32) (uin
 	return 0, false
 }
 
-// GetTemporarySchemaIDForDb returns the schemaID for the temporary schema if
+// GetTemporarySchemaIDForDB returns the schemaID for the temporary schema if
 // one exists for the DB. The second return value communicates the existence of
 // the temp schema for that DB.
-func (s *SessionData) GetTemporarySchemaIDForDb(dbID uint32) (uint32, bool) {
+func (s *SessionData) GetTemporarySchemaIDForDB(dbID uint32) (uint32, bool) {
 	schemaID, found := s.DatabaseIDToTempSchemaID[dbID]
 	return schemaID, found
 }
@@ -193,11 +203,33 @@ func (s *SessionData) GetTemporarySchemaIDForDb(dbID uint32) (uint32, bool) {
 type Stack struct {
 	// Use an internal variable to prevent abstraction leakage.
 	stack []*SessionData
+	// base is a pointer to the first element of the stack.
+	// This avoids a race with stack being reassigned, as the first element
+	// is *always* set.
+	base *SessionData
 }
 
 // NewStack creates a new tack.
 func NewStack(firstElem *SessionData) *Stack {
-	return &Stack{stack: []*SessionData{firstElem}}
+	return &Stack{stack: []*SessionData{firstElem}, base: firstElem}
+}
+
+// Clone clones the current stack.
+func (s *Stack) Clone() *Stack {
+	ret := &Stack{
+		stack: make([]*SessionData, len(s.stack)),
+	}
+	for i, st := range s.stack {
+		ret.stack[i] = st.Clone()
+	}
+	ret.base = ret.stack[0]
+	return ret
+}
+
+// Replace replaces the current stack with the provided stack.
+func (s *Stack) Replace(repl *Stack) {
+	// Replace with a clone, as the same stack savepoint can be re-used.
+	*s = *repl.Clone()
 }
 
 // Top returns the top element of the stack.
@@ -208,9 +240,24 @@ func (s *Stack) Top() *SessionData {
 	return s.stack[len(s.stack)-1]
 }
 
+// Base returns the bottom element of the stack.
+// This is a non-racy structure, as the bottom element is always constant.
+func (s *Stack) Base() *SessionData {
+	return s.base
+}
+
 // Push pushes a SessionData element to the stack.
 func (s *Stack) Push(elem *SessionData) {
 	s.stack = append(s.stack, elem)
+}
+
+// PushTopClone pushes a copy of the top element to the stack.
+func (s *Stack) PushTopClone() {
+	if len(s.stack) == 0 {
+		return
+	}
+	sd := s.stack[len(s.stack)-1]
+	s.stack = append(s.stack, sd.Clone())
 }
 
 // Pop removes the top SessionData element from the stack.
@@ -222,6 +269,28 @@ func (s *Stack) Pop() error {
 	s.stack[idx] = nil
 	s.stack = s.stack[:idx]
 	return nil
+}
+
+// PopN removes the top SessionData N elements from the stack.
+func (s *Stack) PopN(n int) error {
+	if len(s.stack)-n <= 0 {
+		return errors.AssertionFailedf("there must always be at least one element in the SessionData stack")
+	}
+	// Explicitly unassign each pointer.
+	for i := 0; i < n; i++ {
+		s.stack[len(s.stack)-1-i] = nil
+	}
+	s.stack = s.stack[:len(s.stack)-n]
+	return nil
+}
+
+// PopAll removes all except the base SessionData element from the stack.
+func (s *Stack) PopAll() {
+	// Explicitly unassign each pointer.
+	for i := 1; i < len(s.stack); i++ {
+		s.stack[i] = nil
+	}
+	s.stack = s.stack[:1]
 }
 
 // Elems returns all elements in the Stack.

@@ -181,7 +181,12 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 			}
 		}
 		// 2.4.1.5.2: 1% of the time, an item is supplied from a remote warehouse.
-		item.remoteWarehouse = rng.Intn(100) == 0
+		// If we're in localWarehouses mode, keep all items local.
+		if n.config.localWarehouses {
+			item.remoteWarehouse = false
+		} else {
+			item.remoteWarehouse = rng.Intn(100) == 0
+		}
 		item.olSupplyWID = wID
 		if item.remoteWarehouse && n.config.activeWarehouses > 1 {
 			allLocal = 0

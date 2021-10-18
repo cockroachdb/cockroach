@@ -40,6 +40,7 @@ export default function(props: GraphDashboardProps) {
       sources={nodeSources}
       tooltip={`A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements
         successfully executed per second ${tooltipSelection}.`}
+      preCalcGraphSize={true}
     >
       <Axis label="queries">
         <Metric
@@ -77,6 +78,7 @@ export default function(props: GraphDashboardProps) {
           </em>
         </div>
       }
+      preCalcGraphSize={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, node => (
@@ -95,6 +97,7 @@ export default function(props: GraphDashboardProps) {
       title="SQL Statement Contention"
       sources={nodeSources}
       tooltip={`The total number of SQL statements that experienced contention ${tooltipSelection}.`}
+      preCalcGraphSize={true}
     >
       <Axis label="queries">
         <Metric
@@ -116,6 +119,7 @@ export default function(props: GraphDashboardProps) {
           </em>
         </div>
       }
+      preCalcGraphSize={true}
     >
       <Axis label="replicas">
         {_.map(nodeIDs, nid => (
@@ -133,6 +137,7 @@ export default function(props: GraphDashboardProps) {
       title="Capacity"
       sources={storeSources}
       tooltip={<CapacityGraphTooltip tooltipSelection={tooltipSelection} />}
+      preCalcGraphSize={true}
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
         <Metric name="cr.store.capacity" title="Max" />

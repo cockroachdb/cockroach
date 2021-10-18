@@ -12,10 +12,10 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -28,12 +28,8 @@ const (
 	stressArgsFlag  = "stress-args"
 	raceFlag        = "race"
 	ignoreCacheFlag = "ignore-cache"
-
-	// Logic test related flags.
-	logicFlag    = "logic"
-	filesFlag    = "files"
-	subtestsFlag = "subtests"
-	configFlag   = "config"
+	rewriteFlag     = "rewrite"
+	rewriteArgFlag  = "rewrite-arg"
 )
 
 func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -45,39 +41,28 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 		Example: `
 	dev test
 	dev test pkg/kv/kvserver --filter=TestReplicaGC* -v --timeout=1m
-	dev test --stress --race ...
-	dev test --logic --files=prepare|fk --subtests=20042 --config=local`,
+	dev test --stress --race ...`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}
 	// Attach flags for the test sub-command.
+	addCommonBuildFlags(testCmd)
 	addCommonTestFlags(testCmd)
 	testCmd.Flags().BoolP(vFlag, "v", false, "enable logging during test runs")
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testCmd.Flags().String(stressArgsFlag, "", "Additional arguments to pass to stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
-
-	// Logic test related flags.
-	testCmd.Flags().Bool(logicFlag, false, "run logic tests")
-	testCmd.Flags().String(filesFlag, "", "run logic tests for files matching this regex")
-	testCmd.Flags().String(subtestsFlag, "", "run logic test subtests matching this regex")
-	testCmd.Flags().String(configFlag, "", "run logic tests under the specified config")
+	testCmd.Flags().Bool(rewriteFlag, false, "rewrite test files (only applicable for certain tests, e.g. logic and datadriven tests)")
+	testCmd.Flags().String(rewriteArgFlag, "", "additional argument to pass to -rewrite (implies --rewrite)")
 	return testCmd
 }
 
 // TODO(irfansharif): Add tests for the various bazel commands that get
 // generated from the set of provided user flags.
 
-func (d *dev) test(cmd *cobra.Command, pkgs []string) error {
-	if logicTest := mustGetFlagBool(cmd, logicFlag); logicTest {
-		return d.runLogicTest(cmd)
-	}
-
-	return d.runUnitTest(cmd, pkgs)
-}
-
-func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
+func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
+	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	stress := mustGetFlagBool(cmd, stressFlag)
 	stressArgs := mustGetFlagString(cmd, stressArgsFlag)
@@ -87,32 +72,35 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 	short := mustGetFlagBool(cmd, shortFlag)
 	ignoreCache := mustGetFlagBool(cmd, ignoreCacheFlag)
 	verbose := mustGetFlagBool(cmd, vFlag)
+	rewriteArg := mustGetFlagString(cmd, rewriteArgFlag)
+	rewrite := mustGetFlagBool(cmd, rewriteFlag) || (rewriteArg != "")
 
 	d.log.Printf("unit test args: stress=%t  race=%t  filter=%s  timeout=%s  ignore-cache=%t  pkgs=%s",
 		stress, race, filter, timeout, ignoreCache, pkgs)
 
 	var args []string
 	args = append(args, "test")
-	args = append(args, "--color=yes")
-	args = append(args, "--experimental_convenience_symlinks=ignore")
-	args = append(args, getConfigFlags()...)
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
 	if race {
 		args = append(args, "--config=race")
+	} else if stress {
+		args = append(args, "--test_sharding_strategy=disabled")
 	}
 
+	var testTargets []string
 	for _, pkg := range pkgs {
 		pkg = strings.TrimPrefix(pkg, "//")
+		pkg = strings.TrimPrefix(pkg, "./")
 		pkg = strings.TrimRight(pkg, "/")
 
 		if !strings.HasPrefix(pkg, "pkg/") {
-			return errors.Newf("malformed package %q, expecting %q", pkg, "pkg/{...}")
+			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
 		}
 
-		if strings.HasSuffix(pkg, "...") {
+		if strings.HasSuffix(pkg, "/...") {
 			// Similar to `go test`, we implement `...` expansion to allow
 			// callers to use the following pattern to test all packages under a
 			// named one:
@@ -142,18 +130,52 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 				if err != nil {
 					return err
 				}
-				targets := strings.TrimSpace(string(out))
-				args = append(args, strings.Split(targets, "\n")...)
+				targets := strings.Split(strings.TrimSpace(string(out)), "\n")
+				testTargets = append(testTargets, targets...)
 			}
+		} else if strings.Contains(pkg, ":") {
+			testTargets = append(testTargets, pkg)
 		} else {
-			components := strings.Split(pkg, "/")
-			pkgName := components[len(components)-1]
-			args = append(args, fmt.Sprintf("//%s:%s_test", pkg, pkgName))
+			out, err := d.exec.CommandContextSilent(ctx, "bazel", "query", fmt.Sprintf("kind(go_test, //%s:all)", pkg))
+			if err != nil {
+				return err
+			}
+			tests := strings.Split(strings.TrimSpace(string(out)), "\n")
+			testTargets = append(testTargets, tests...)
 		}
 	}
 
+	args = append(args, testTargets...)
+
 	if ignoreCache {
 		args = append(args, "--nocache_test_results")
+	}
+	if rewrite {
+		if stress {
+			// Both of these flags require --run_under, and their usages would conflict.
+			return fmt.Errorf("cannot combine --%s and --%s", stressFlag, rewriteFlag)
+		}
+		workspace, err := d.getWorkspace(ctx)
+		if err != nil {
+			return err
+		}
+		var cdDir string
+		for _, testTarget := range testTargets {
+			dir := getDirectoryFromTarget(testTarget)
+			if cdDir != "" && cdDir != dir {
+				// We can't pass different run_under arguments for different tests
+				// in different packages.
+				return fmt.Errorf("cannot --%s for selected targets: %s. Hint: try only specifying one test target",
+					rewriteFlag, strings.Join(testTargets, ","))
+			}
+			cdDir = dir
+		}
+		args = append(args, "--run_under", fmt.Sprintf("cd %s && ", filepath.Join(workspace, cdDir)))
+		args = append(args, "--test_env=YOU_ARE_IN_THE_WORKSPACE=1")
+		args = append(args, "--test_arg", "-rewrite")
+		if rewriteArg != "" {
+			args = append(args, "--test_arg", rewriteArg)
+		}
 	}
 	if stress && timeout > 0 {
 		args = append(args, "--run_under", fmt.Sprintf("%s -maxtime=%s %s", stressTarget, timeout, stressArgs))
@@ -177,16 +199,17 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 	} else {
 		args = append(args, "--test_output", "errors")
 	}
+	args = append(args, additionalBazelArgs...)
 
+	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 }
 
-func (d *dev) runLogicTest(cmd *cobra.Command) error {
-	files := mustGetFlagString(cmd, filesFlag)
-	subtests := mustGetFlagString(cmd, subtestsFlag)
-	config := mustGetFlagString(cmd, configFlag)
-
-	d.log.Printf("logic test args: files=%s  subtests=%s  config=%s",
-		files, subtests, config)
-	return errors.New("--logic unimplemented")
+func getDirectoryFromTarget(target string) string {
+	target = strings.TrimPrefix(target, "//")
+	colon := strings.LastIndex(target, ":")
+	if colon < 0 {
+		return target
+	}
+	return target[:colon]
 }

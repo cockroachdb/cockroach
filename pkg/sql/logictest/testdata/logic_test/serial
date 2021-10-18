@@ -16,7 +16,7 @@ serial  CREATE TABLE public.serial (
         a INT8 NOT NULL DEFAULT unique_rowid(),
         b INT8 NULL DEFAULT 7:::INT8,
         c INT8 NOT NULL DEFAULT unique_rowid(),
-        CONSTRAINT "primary" PRIMARY KEY (a ASC),
+        CONSTRAINT serial_pkey PRIMARY KEY (a ASC),
         UNIQUE INDEX serial_c_key (c ASC),
         FAMILY "primary" (a, b, c)
 )
@@ -55,7 +55,7 @@ smallbig  CREATE TABLE public.smallbig (
           b INT8 NOT NULL DEFAULT unique_rowid(),
           c INT8 NULL,
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+          CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC),
           FAMILY "primary" (a, b, c, rowid)
 )
 
@@ -79,7 +79,7 @@ serials  CREATE TABLE public.serials (
          c INT8 NOT NULL DEFAULT unique_rowid(),
          d INT8 NULL,
          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-         CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+         CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC),
          FAMILY "primary" (a, b, c, d, rowid)
 )
 
@@ -120,7 +120,7 @@ serial  CREATE TABLE public.serial (
         a INT8 NOT NULL DEFAULT nextval('public.serial_a_seq'::REGCLASS),
         b INT8 NULL DEFAULT 7:::INT8,
         c INT8 NOT NULL DEFAULT nextval('public.serial_c_seq2'::REGCLASS),
-        CONSTRAINT "primary" PRIMARY KEY (a ASC),
+        CONSTRAINT serial_pkey PRIMARY KEY (a ASC),
         UNIQUE INDEX serial_c_key (c ASC),
         FAMILY "primary" (a, b, c)
 )
@@ -164,7 +164,7 @@ smallbig  CREATE TABLE public.smallbig (
           b INT8 NOT NULL DEFAULT nextval('public.smallbig_b_seq'::REGCLASS),
           c INT8 NULL,
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+          CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC),
           FAMILY "primary" (a, b, c, rowid)
 )
 
@@ -188,7 +188,7 @@ serials  CREATE TABLE public.serials (
          c INT8 NOT NULL DEFAULT nextval('public.serials_c_seq'::REGCLASS),
          d INT8 NULL,
          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-         CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+         CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC),
          FAMILY "primary" (a, b, c, d, rowid)
 )
 
@@ -225,7 +225,7 @@ serial  CREATE TABLE public.serial (
         a INT8 NOT NULL DEFAULT nextval('public.serial_a_seq1'::REGCLASS),
         b INT8 NULL DEFAULT 7:::INT8,
         c INT8 NOT NULL DEFAULT nextval('public.serial_c_seq3'::REGCLASS),
-        CONSTRAINT "primary" PRIMARY KEY (a ASC),
+        CONSTRAINT serial_pkey PRIMARY KEY (a ASC),
         UNIQUE INDEX serial_c_key (c ASC),
         FAMILY "primary" (a, b, c)
 )
@@ -281,7 +281,7 @@ SHOW CREATE TABLE "serial_MixedCase"
                     a INT8 NOT NULL DEFAULT nextval('public."serial_MixedCase_a_seq"'::REGCLASS),
                     b INT8 NULL DEFAULT 7:::INT8,
                     c INT8 NOT NULL DEFAULT nextval('public."serial_MixedCase_c_seq"'::REGCLASS),
-                    CONSTRAINT "primary" PRIMARY KEY (a ASC),
+                    CONSTRAINT "serial_MixedCase_pkey" PRIMARY KEY (a ASC),
                     UNIQUE INDEX "serial_MixedCase_c_key" (c ASC),
                     FAMILY "primary" (a, b, c)
 )
@@ -309,7 +309,7 @@ smallbig  CREATE TABLE public.smallbig (
           b INT8 NOT NULL DEFAULT nextval('public.smallbig_b_seq1'::REGCLASS),
           c INT8 NULL,
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+          CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC),
           FAMILY "primary" (a, b, c, rowid)
 )
 
@@ -333,7 +333,7 @@ serials  CREATE TABLE public.serials (
          c INT8 NOT NULL DEFAULT nextval('public.serials_c_seq1'::REGCLASS),
          d INT8 NULL,
          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-         CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+         CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC),
          FAMILY "primary" (a, b, c, d, rowid)
 )
 

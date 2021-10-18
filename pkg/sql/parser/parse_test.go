@@ -63,16 +63,16 @@ func TestParseDatadriven(t *testing.T) {
 				// first the literals are removed from statement to form a stat key,
 				// then the stat key is re-parsed, to undergo the anonymization stage.
 				// We also want to check the re-parsing is fine.
-				//
-				// TODO(knz,rafiss): Turn the following two cases into proper test
-				// errors once the bugs are fixed.
 				reparsedStmts, err := parser.Parse(constantsHidden)
 				if err != nil {
-					fmt.Fprintln(&buf, "REPARSE WITHOUT LITERALS FAILS:", err)
+					d.Fatalf(t, "unexpected error when reparsing without literals: %+v", err)
 				} else {
 					reparsedStmtsS := reparsedStmts.String()
 					if reparsedStmtsS != constantsHidden {
-						fmt.Fprintln(&buf, reparsedStmtsS, "-- UNEXPECTED REPARSED AST WITHOUT LITERALS")
+						d.Fatalf(t,
+							"mismatched AST when reparsing without literals:\noriginal: %s\nexpected: %s\nactual:   %s",
+							d.Input, constantsHidden, reparsedStmtsS,
+						)
 					}
 				}
 
@@ -441,7 +441,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`DISCARD TEMPORARY`, 0, `discard temp`, ``},
 
 		{`SET CONSTRAINTS foo`, 0, `set constraints`, ``},
-		{`SET LOCAL foo = bar`, 32562, ``, ``},
 		{`SET foo FROM CURRENT`, 0, `set from current`, ``},
 
 		{`CREATE TABLE a(x INT[][])`, 32552, ``, ``},
@@ -531,10 +530,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT 1 FROM t GROUP BY a, ROLLUP (b)`, 46280, `rollup`, ``},
 		{`SELECT 1 FROM t GROUP BY CUBE (b)`, 46280, `cube`, ``},
 		{`SELECT 1 FROM t GROUP BY GROUPING SETS (b)`, 46280, `grouping sets`, ``},
-
-		{`SELECT a FROM t ORDER BY a NULLS LAST`, 6224, ``, ``},
-		{`SELECT a FROM t ORDER BY a ASC NULLS LAST`, 6224, ``, ``},
-		{`SELECT a FROM t ORDER BY a DESC NULLS FIRST`, 6224, ``, ``},
 
 		{`CREATE TABLE a(b BOX)`, 21286, `box`, ``},
 		{`CREATE TABLE a(b CIDR)`, 18846, `cidr`, ``},

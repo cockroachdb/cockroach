@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 // SQLRunner is a helper for issuing SQL statements; it supports multiple
@@ -120,9 +119,9 @@ func (sr *SQLRunner) Init(
 		for i, s := range sr.stmts {
 			stmtName := fmt.Sprintf("%s-%d", name, i+1)
 			s.preparedName = stmtName
+			mcp.AddPreparedStatement(stmtName, s.sql)
 		}
 	}
-
 	sr.mcp = mcp
 	sr.initialized = true
 	return nil
@@ -156,26 +155,13 @@ func (h StmtHandle) Exec(ctx context.Context, args ...interface{}) (pgconn.Comma
 	p := h.s.sr.mcp.Get()
 	switch h.s.sr.method {
 	case prepare:
-		// Note that calling `Prepare` with a name that has already been prepared
-		// is idempotent and short-circuits before doing any communication to the
-		// server.
-		var commandTag pgconn.CommandTag
-		err := p.AcquireFunc(ctx, func(conn *pgxpool.Conn) error {
-			if _, err := conn.Conn().Prepare(ctx, h.s.preparedName, h.s.sql); err != nil {
-				return err
-			}
-			var connErr error
-			commandTag, connErr = conn.Conn().Exec(ctx, h.s.preparedName, args...)
-			return connErr
-		})
-		return commandTag, err
+		return p.Exec(ctx, h.s.preparedName, args...)
 
 	case noprepare:
 		return p.Exec(ctx, h.s.sql, args...)
 
 	case simple:
-		newArgs := []interface{}{pgx.QuerySimpleProtocol(true)}
-		return p.Exec(ctx, h.s.sql, append(newArgs, args)...)
+		return p.Exec(ctx, h.s.sql, prependQuerySimpleProtocol(args)...)
 
 	default:
 		panic("invalid method")
@@ -191,20 +177,13 @@ func (h StmtHandle) ExecTx(
 	h.check()
 	switch h.s.sr.method {
 	case prepare:
-		// Note that calling `Prepare` with a name that has already been prepared
-		// is idempotent and short-circuits before doing any communication to the
-		// server.
-		if _, err := tx.Prepare(ctx, h.s.preparedName, h.s.sql); err != nil {
-			return nil, err
-		}
 		return tx.Exec(ctx, h.s.preparedName, args...)
 
 	case noprepare:
 		return tx.Exec(ctx, h.s.sql, args...)
 
 	case simple:
-		newArgs := []interface{}{pgx.QuerySimpleProtocol(true)}
-		return tx.Exec(ctx, h.s.sql, append(newArgs, args)...)
+		return tx.Exec(ctx, h.s.sql, prependQuerySimpleProtocol(args)...)
 
 	default:
 		panic("invalid method")
@@ -219,26 +198,13 @@ func (h StmtHandle) Query(ctx context.Context, args ...interface{}) (pgx.Rows, e
 	p := h.s.sr.mcp.Get()
 	switch h.s.sr.method {
 	case prepare:
-		// Note that calling `Prepare` with a name that has already been prepared
-		// is idempotent and short-circuits before doing any communication to the
-		// server.
-		var rows pgx.Rows
-		err := p.AcquireFunc(ctx, func(conn *pgxpool.Conn) error {
-			if _, err := conn.Conn().Prepare(ctx, h.s.preparedName, h.s.sql); err != nil {
-				return err
-			}
-			var connErr error
-			rows, connErr = conn.Conn().Query(ctx, h.s.preparedName, args...)
-			return connErr
-		})
-		return rows, err
+		return p.Query(ctx, h.s.preparedName, args...)
 
 	case noprepare:
 		return p.Query(ctx, h.s.sql, args...)
 
 	case simple:
-		newArgs := []interface{}{pgx.QuerySimpleProtocol(true)}
-		return p.Query(ctx, h.s.sql, append(newArgs, args)...)
+		return p.Query(ctx, h.s.sql, prependQuerySimpleProtocol(args)...)
 
 	default:
 		panic("invalid method")
@@ -252,20 +218,13 @@ func (h StmtHandle) QueryTx(ctx context.Context, tx pgx.Tx, args ...interface{})
 	h.check()
 	switch h.s.sr.method {
 	case prepare:
-		// Note that calling `Prepare` with a name that has already been prepared
-		// is idempotent and short-circuits before doing any communication to the
-		// server.
-		if _, err := tx.Prepare(ctx, h.s.preparedName, h.s.sql); err != nil {
-			return nil, err
-		}
 		return tx.Query(ctx, h.s.preparedName, args...)
 
 	case noprepare:
 		return tx.Query(ctx, h.s.sql, args...)
 
 	case simple:
-		newArgs := []interface{}{pgx.QuerySimpleProtocol(true)}
-		return tx.Query(ctx, h.s.sql, append(newArgs, args)...)
+		return tx.Query(ctx, h.s.sql, prependQuerySimpleProtocol(args)...)
 
 	default:
 		panic("invalid method")
@@ -280,29 +239,13 @@ func (h StmtHandle) QueryRow(ctx context.Context, args ...interface{}) pgx.Row {
 	p := h.s.sr.mcp.Get()
 	switch h.s.sr.method {
 	case prepare:
-		// Note that calling `Prepare` with a name that has already been prepared
-		// is idempotent and short-circuits before doing any communication to the
-		// server.
-		var row pgx.Row
-		err := p.AcquireFunc(ctx, func(conn *pgxpool.Conn) error {
-			if _, err := conn.Conn().Prepare(ctx, h.s.preparedName, h.s.sql); err != nil {
-				return err
-			}
-			row = conn.Conn().QueryRow(ctx, h.s.preparedName, args...)
-			return nil
-		})
-		if err != nil {
-			r := errRow{retErr: err}
-			return &r
-		}
-		return row
+		return p.QueryRow(ctx, h.s.preparedName, args...)
 
 	case noprepare:
 		return p.QueryRow(ctx, h.s.sql, args...)
 
 	case simple:
-		newArgs := []interface{}{pgx.QuerySimpleProtocol(true)}
-		return p.QueryRow(ctx, h.s.sql, append(newArgs, args)...)
+		return p.QueryRow(ctx, h.s.sql, prependQuerySimpleProtocol(args)...)
 
 	default:
 		panic("invalid method")
@@ -317,36 +260,28 @@ func (h StmtHandle) QueryRowTx(ctx context.Context, tx pgx.Tx, args ...interface
 	h.check()
 	switch h.s.sr.method {
 	case prepare:
-		// Note that calling `Prepare` with a name that has already been prepared
-		// is idempotent and short-circuits before doing any communication to the
-		// server.
-		if _, err := tx.Prepare(ctx, h.s.preparedName, h.s.sql); err != nil {
-			r := errRow{retErr: err}
-			return &r
-		}
 		return tx.QueryRow(ctx, h.s.preparedName, args...)
 
 	case noprepare:
 		return tx.QueryRow(ctx, h.s.sql, args...)
 
 	case simple:
-		newArgs := []interface{}{pgx.QuerySimpleProtocol(true)}
-		return tx.QueryRow(ctx, h.s.sql, append(newArgs, args)...)
+		return tx.QueryRow(ctx, h.s.sql, prependQuerySimpleProtocol(args)...)
 
 	default:
 		panic("invalid method")
 	}
 }
 
-// errRow implements the pgx.Row interface. It's used only in the `prepare`
-// mode.
-type errRow struct {
-	retErr error
+// prependQuerySimpleProtocol inserts pgx.QuerySimpleProtocol(true) at the
+// beginning of the slice. It is based on
+// https://github.com/golang/go/wiki/SliceTricks.
+func prependQuerySimpleProtocol(args []interface{}) []interface{} {
+	args = append(args, pgx.QuerySimpleProtocol(true))
+	copy(args[1:], args)
+	args[0] = pgx.QuerySimpleProtocol(true)
+	return args
 }
-
-var _ pgx.Row = &errRow{}
-
-func (r *errRow) Scan(_ ...interface{}) error { return r.retErr }
 
 // Appease the linter.
 var _ = StmtHandle.QueryRow

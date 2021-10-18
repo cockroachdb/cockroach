@@ -21,15 +21,18 @@ import _ from "lodash";
 import {
   addExecStats,
   aggregateNumericStats,
-  containAny,
   FixLong,
   longToInt,
-  unique,
+  statementKey,
+  TimestampToNumber,
+  addStatementStats,
+  flattenStatementStats,
 } from "../util";
 
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
+type Timestamp = protos.google.protobuf.ITimestamp;
 
 export const getTrxAppFilterOptions = (
   transactions: Transaction[],
@@ -53,12 +56,17 @@ export const getTrxAppFilterOptions = (
 export const collectStatementsText = (statements: Statement[]): string =>
   statements.map(s => s.key.key_data.query).join("\n");
 
-export const getStatementsByFingerprintId = (
+export const getStatementsByFingerprintIdAndTime = (
   statementFingerprintIds: Long[],
+  timestamp: Timestamp | null,
   statements: Statement[],
 ): Statement[] => {
-  return statements.filter(s =>
-    statementFingerprintIds.some(id => id.eq(s.id)),
+  return statements.filter(
+    s =>
+      (timestamp == null ||
+        (s.key?.aggregated_ts != null &&
+          timestamp.seconds.eq(s.key.aggregated_ts.seconds))) &&
+      statementFingerprintIds.some(id => id.eq(s.id)),
   );
 };
 
@@ -67,21 +75,34 @@ export const statementFingerprintIdsToText = (
   statements: Statement[],
 ): string => {
   return statementFingerprintIds
-    .map(s => statements.find(stmt => stmt.id.eq(s)).key.key_data.query)
+    .map(s => statements.find(stmt => stmt.id.eq(s))?.key.key_data.query)
     .join("\n");
 };
 
+// Aggregate transaction statements from different nodes.
 export const aggregateStatements = (
   statements: Statement[],
-): AggregateStatistics[] =>
-  statements.map((s: Statement) => ({
-    label: s.key.key_data.query,
-    implicitTxn: s.key.key_data.implicit_txn,
-    database: s.key.key_data.database,
-    fullScan: s.key.key_data.full_scan,
-    stats: s.stats,
-  }));
+): AggregateStatistics[] => {
+  const statsKey: { [key: string]: AggregateStatistics } = {};
 
+  flattenStatementStats(statements).forEach(s => {
+    const key = statementKey(s);
+    if (!(key in statsKey)) {
+      statsKey[key] = {
+        label: s.statement,
+        aggregatedTs: s.aggregated_ts,
+        implicitTxn: s.implicit_txn,
+        database: s.database,
+        fullScan: s.full_scan,
+        stats: s.stats,
+      };
+    } else {
+      statsKey[key].stats = addStatementStats(statsKey[key].stats, s.stats);
+    }
+  });
+
+  return Object.values(statsKey);
+};
 export const searchTransactionsData = (
   search: string,
   transactions: Transaction[],
@@ -90,8 +111,9 @@ export const searchTransactionsData = (
   return transactions.filter((t: Transaction) =>
     search.split(" ").every(val =>
       collectStatementsText(
-        getStatementsByFingerprintId(
+        getStatementsByFingerprintIdAndTime(
           t.stats_data.statement_fingerprint_ids,
+          t.stats_data.aggregated_ts,
           statements,
         ),
       )
@@ -107,6 +129,7 @@ export const filterTransactions = (
   internalAppNamePrefix: string,
   statements: Statement[],
   nodeRegions: { [key: string]: string },
+  isTenant: boolean,
 ): { transactions: Transaction[]; activeFilters: number } => {
   if (!filters)
     return {
@@ -139,11 +162,15 @@ export const filterTransactions = (
       // The transaction must contain at least one value of the nodes
       // and regions list (if the list is not empty).
       if (regions.length == 0 && nodes.length == 0) return true;
+      // If the cluster is a tenant cluster we don't care
+      // about node/regions.
+      if (isTenant) return true;
       let foundRegion: boolean = regions.length == 0;
       let foundNode: boolean = nodes.length == 0;
 
-      getStatementsByFingerprintId(
+      getStatementsByFingerprintIdAndTime(
         t.stats_data.statement_fingerprint_ids,
+        t.stats_data.aggregated_ts,
         statements,
       ).some(stmt => {
         stmt.stats.nodes &&
@@ -186,8 +213,9 @@ export const generateRegionNode = (
   // nodes and regions of all the statements to a single list of `region: nodes`
   // for the transaction.
   // E.g. {"gcp-us-east1" : [1,3,4]}
-  getStatementsByFingerprintId(
+  getStatementsByFingerprintIdAndTime(
     transaction.stats_data.statement_fingerprint_ids,
+    transaction.stats_data.aggregated_ts,
     statements,
   ).forEach(stmt => {
     stmt.stats.nodes &&
@@ -263,6 +291,12 @@ function addTransactionStats(
       countB,
     ),
     rows_read: aggregateNumericStats(a.rows_read, b.rows_read, countA, countB),
+    rows_written: aggregateNumericStats(
+      a.rows_written,
+      b.rows_written,
+      countA,
+      countB,
+    ),
     bytes_read: aggregateNumericStats(
       a.bytes_read,
       b.bytes_read,
@@ -309,7 +343,12 @@ export const aggregateAcrossNodeIDs = function(
 ): Transaction[] {
   return _.chain(t)
     .map(t => withFingerprint(t, stmts))
-    .groupBy(t => t.fingerprint + t.stats_data.app)
+    .groupBy(
+      t =>
+        t.fingerprint +
+        t.stats_data.app +
+        TimestampToNumber(t.stats_data.aggregated_ts),
+    )
     .mapValues(mergeTransactionStats)
     .values()
     .value();

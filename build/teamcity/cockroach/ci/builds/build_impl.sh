@@ -20,6 +20,7 @@ then
 fi
 
 bazel build //pkg/cmd/bazci --config=ci
-$(bazel info bazel-bin)/pkg/cmd/bazci/bazci_/bazci --compilation_mode opt \
-		       --config "$CONFIG" \
-		       build //pkg/cmd/cockroach-short //c-deps:libgeos $GENFILES_TARGETS
+$(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci --compilation_mode opt \
+		       --config "$CONFIG" --config with_ui \
+		       build //pkg/cmd/cockroach-short //pkg/cmd/cockroach \
+		       //pkg/cmd/cockroach-oss //c-deps:libgeos $GENFILES_TARGETS

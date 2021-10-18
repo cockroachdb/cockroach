@@ -12,7 +12,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 #
 # gazelle:prefix github.com/cockroachdb/cockroach
 # gazelle:build_file_name BUILD.bazel
-# gazelle:build_tags bazel,crdb_test,crdb_test_off,gss
+# gazelle:build_tags bazel,crdb_test,crdb_test_off,fast_int_set_small,fast_int_set_large,gss
 
 # Enable protobuf generation.
 #
@@ -90,7 +90,13 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude _bazel
 # gazelle:exclude c-deps/krb5
 # gazelle:exclude artifacts
+# gazelle:exclude bin
+# gazelle:exclude build/builder_home
+# gazelle:exclude lib
 # gazelle:exclude pkg/ccl/gssapiccl
+# gazelle:exclude pkg/ui/node_modules
+# gazelle:exclude pkg/ui/workspaces/cluster-ui/node_modules
+# gazelle:exclude pkg/ui/workspaces/db-console/node_modules
 # gazelle:exclude vendor
 # gazelle:exclude .vendor.tmp.*
 # gazelle:exclude **/zcgo_flags.go
@@ -116,6 +122,9 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/sql/schemachanger/scop/backfill_visitor_generated.go
 # gazelle:exclude pkg/sql/schemachanger/scop/mutation_visitor_generated.go
 # gazelle:exclude pkg/sql/schemachanger/scop/validation_visitor_generated.go
+# gazelle:exclude pkg/sql/schemachanger/scpb/elements_generated.go
+# gazelle:exclude pkg/ui/distccl/distccl_no_bazel.go
+# gazelle:exclude pkg/ui/distoss/distoss_no_bazel.go
 # gazelle:exclude pkg/util/log/channel/channel_generated.go
 # gazelle:exclude pkg/util/log/eventpb/eventlog_channels_generated.go
 # gazelle:exclude pkg/util/log/eventpb/json_encode_generated.go

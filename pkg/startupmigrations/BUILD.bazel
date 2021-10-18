@@ -55,7 +55,6 @@ go_test(
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/catalog/catalogkeys",
-        "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",

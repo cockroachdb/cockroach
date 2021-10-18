@@ -223,7 +223,7 @@ make a similar type assertion in its `Eval` method, but this shouldn't
 be necessary.
 
 The `ProcessPlaceholderAnnotations` will need to be adjusted to adopt the
-rules listed above for interactions between casts and annotions. This is
+rules listed above for interactions between casts and annotations. This is
 already stubbed out.
 
 # Drawbacks

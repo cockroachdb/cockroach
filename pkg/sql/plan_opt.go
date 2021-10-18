@@ -55,7 +55,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 	case *tree.AlterIndex, *tree.AlterTable, *tree.AlterSequence,
 		*tree.Analyze,
 		*tree.BeginTransaction,
-		*tree.CommentOnColumn, *tree.CommentOnDatabase, *tree.CommentOnIndex, *tree.CommentOnTable, *tree.CommentOnSchema,
+		*tree.CommentOnColumn, *tree.CommentOnConstraint, *tree.CommentOnDatabase, *tree.CommentOnIndex, *tree.CommentOnTable, *tree.CommentOnSchema,
 		*tree.CommitTransaction,
 		*tree.CopyFrom, *tree.CreateDatabase, *tree.CreateIndex, *tree.CreateView,
 		*tree.CreateSequence,
@@ -104,7 +104,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 				if !isStale {
 					opc.log(ctx, "query cache hit (prepare)")
 					opc.flags.Set(planFlagOptCacheHit)
-					stmt.Prepared.AnonymizedStr = pm.AnonymizedStr
+					stmt.Prepared.StatementNoConstants = pm.StatementNoConstants
 					stmt.Prepared.Columns = pm.Columns
 					stmt.Prepared.Types = pm.Types
 					stmt.Prepared.Memo = cachedData.Memo
@@ -561,6 +561,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var isDDL bool
 	var containsFullTableScan bool
 	var containsFullIndexScan bool
+	var containsLargeFullTableScan bool
+	var containsLargeFullIndexScan bool
 	var containsMutation bool
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		// No instrumentation.
@@ -573,6 +575,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 		isDDL = bld.IsDDL
 		containsFullTableScan = bld.ContainsFullTableScan
 		containsFullIndexScan = bld.ContainsFullIndexScan
+		containsLargeFullTableScan = bld.ContainsLargeFullTableScan
+		containsLargeFullIndexScan = bld.ContainsLargeFullIndexScan
 		containsMutation = bld.ContainsMutation
 	} else {
 		// Create an explain factory and record the explain.Plan.
@@ -589,6 +593,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 		isDDL = bld.IsDDL
 		containsFullTableScan = bld.ContainsFullTableScan
 		containsFullIndexScan = bld.ContainsFullIndexScan
+		containsLargeFullTableScan = bld.ContainsLargeFullTableScan
+		containsLargeFullIndexScan = bld.ContainsLargeFullIndexScan
 		containsMutation = bld.ContainsMutation
 
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
@@ -612,6 +618,12 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 	if containsFullIndexScan {
 		planTop.flags.Set(planFlagContainsFullIndexScan)
+	}
+	if containsLargeFullTableScan {
+		planTop.flags.Set(planFlagContainsLargeFullTableScan)
+	}
+	if containsLargeFullIndexScan {
+		planTop.flags.Set(planFlagContainsLargeFullIndexScan)
 	}
 	if containsMutation {
 		planTop.flags.Set(planFlagContainsMutation)

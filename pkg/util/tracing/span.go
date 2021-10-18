@@ -12,11 +12,13 @@ package tracing
 
 import (
 	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	opentracing "github.com/opentracing/opentracing-go"
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -28,7 +30,7 @@ const (
 // configuration, it can hold anywhere between zero and three destinations for
 // trace information:
 //
-// 1. external OpenTracing-compatible trace collector (Jaeger, Zipkin, Lightstep),
+// 1. external OpenTelemetry-compatible trace collector (Jaeger, Zipkin, Lightstep),
 // 2. /debug/requests endpoint (net/trace package); mostly useful for local debugging
 // 3. CRDB-internal trace span (powers SQL session tracing).
 //
@@ -51,6 +53,13 @@ type Span struct {
 	// to guard spanInner against use-after-Finish.
 	i               spanInner
 	numFinishCalled int32 // atomic
+}
+
+// IsNoop returns true if this span is a black hole - it doesn't correspond to a
+// CRDB span and it doesn't output either to an OpenTelemetry tracer, or to
+// net.Trace.
+func (sp *Span) IsNoop() bool {
+	return sp.i.isNoop()
 }
 
 func (sp *Span) done() bool {
@@ -76,7 +85,7 @@ func (sp *Span) SetOperationName(operationName string) {
 // Finish idempotently marks the Span as completed (at which point it will
 // silently drop any new data added to it). Finishing a nil *Span is a noop.
 func (sp *Span) Finish() {
-	if sp == nil || sp.i.isNoop() || atomic.AddInt32(&sp.numFinishCalled, 1) != 1 {
+	if sp == nil || sp.IsNoop() || atomic.AddInt32(&sp.numFinishCalled, 1) != 1 {
 		return
 	}
 	sp.i.Finish()
@@ -160,9 +169,7 @@ func (sp *Span) IsVerbose() bool {
 // Record provides a way to record free-form text into verbose spans. Recordings
 // may be dropped due to sizing constraints.
 //
-// TODO(irfansharif): We don't currently have redactability with trace
-// recordings (both here, and using RecordStructured above). We'll want to do this
-// soon.
+// TODO(tbg): make sure `msg` is lint-forced to be const.
 func (sp *Span) Record(msg string) {
 	if sp.done() {
 		return
@@ -193,7 +200,7 @@ func (sp *Span) RecordStructured(item Structured) {
 
 // SetTag adds a tag to the span. If there is a pre-existing tag set for the
 // key, it is overwritten.
-func (sp *Span) SetTag(key string, value interface{}) {
+func (sp *Span) SetTag(key string, value attribute.Value) {
 	if sp.done() {
 		return
 	}
@@ -216,6 +223,13 @@ func (sp *Span) TraceID() uint64 {
 	return sp.i.TraceID()
 }
 
+// IsSterile returns true if this span does not want to have children spans. In
+// that case, trying to create a child span will result in the would-be child
+// being a root span.
+func (sp *Span) IsSterile() bool {
+	return sp.i.sterile
+}
+
 // SpanMeta is information about a Span that is not local to this
 // process. Typically, SpanMeta is populated from information
 // about a Span on the other end of an RPC, and is used to derive
@@ -232,13 +246,10 @@ type SpanMeta struct {
 	traceID uint64
 	spanID  uint64
 
-	// Underlying shadow tracer info and span context (optional). This
-	// will only be populated when the remote Span is reporting to an
-	// external opentracing tracer. We hold on to the type of tracer to
-	// avoid mixing spans when the tracer is reconfigured, as impls are
-	// not typically robust to being shown spans they did not create.
-	shadowTracerType string
-	shadowCtx        opentracing.SpanContext
+	// otelCtx is the OpenTelemetry span context. This is only populated when the
+	// remote Span is reporting to an external OpenTelemetry tracer. Setting this
+	// will cause child spans to also get an OpenTelemetry span.
+	otelCtx oteltrace.SpanContext
 
 	// If set, all spans derived from this context are being recorded.
 	//
@@ -248,6 +259,18 @@ type SpanMeta struct {
 
 	// The Span's associated baggage.
 	Baggage map[string]string
+
+	// sterile is set if this span does not want to have children spans. In that
+	// case, trying to create a child span will result in the would-be child being
+	// a root span. This is useful for span corresponding to long-running
+	// operations that don't want to be associated with derived operations.
+	//
+	// Note that this field is unlike all the others in that it doesn't make it
+	// across the wire through a carrier. As can be seen in
+	// Tracer.InjectMetaInto(carrier), if sterile is set, then we don't propagate
+	// any info about the span in order to not have a child be created on the
+	// other side. Similarly, ExtractMetaFrom does not deserialize this field.
+	sterile bool
 }
 
 // Empty returns whether or not the SpanMeta is a zero value.
@@ -255,8 +278,16 @@ func (sm SpanMeta) Empty() bool {
 	return sm.spanID == 0 && sm.traceID == 0
 }
 
-func (sm *SpanMeta) String() string {
-	return fmt.Sprintf("[spanID: %d, traceID: %d]", sm.spanID, sm.traceID)
+func (sm SpanMeta) String() string {
+	var s strings.Builder
+	s.WriteString(fmt.Sprintf("[spanID: %d, traceID: %d", sm.spanID, sm.traceID))
+	hasOtelSpan := sm.otelCtx.IsValid()
+	if hasOtelSpan {
+		s.WriteString(" hasOtel")
+		s.WriteString(fmt.Sprintf(" trace: %d span: %d", sm.otelCtx.TraceID(), sm.otelCtx.SpanID()))
+	}
+	s.WriteRune(']')
+	return s.String()
 }
 
 // Structured is an opaque protobuf that can be attached to a trace via

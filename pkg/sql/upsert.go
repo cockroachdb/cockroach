@@ -37,6 +37,8 @@ type upsertNode struct {
 	run upsertRun
 }
 
+var _ mutationPlanNode = &upsertNode{}
+
 // upsertRun contains the run-time state of upsertNode during local execution.
 type upsertRun struct {
 	tw        optTableUpserter
@@ -57,7 +59,7 @@ func (n *upsertNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
-	return n.run.tw.init(params.ctx, params.p.txn, params.EvalContext())
+	return n.run.tw.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV)
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but
@@ -118,6 +120,7 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
+		n.run.tw.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 		if err := n.run.tw.finalize(params.ctx); err != nil {
 			return false, err
 		}
@@ -134,7 +137,11 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 // processSourceRow processes one row from the source for upsertion.
 // The table writer is in charge of accumulating the result rows.
 func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) error {
-	if err := enforceLocalColumnConstraints(rowVals, n.run.insertCols); err != nil {
+	if err := enforceLocalColumnConstraints(
+		rowVals,
+		n.run.insertCols,
+		true, /* isUpdate */
+	); err != nil {
 		return err
 	}
 
@@ -189,6 +196,10 @@ func (n *upsertNode) Close(ctx context.Context) {
 	n.run.tw.close(ctx)
 	*n = upsertNode{}
 	upsertNodePool.Put(n)
+}
+
+func (n *upsertNode) rowsWritten() int64 {
+	return n.run.tw.rowsWritten
 }
 
 func (n *upsertNode) enableAutoCommit() {

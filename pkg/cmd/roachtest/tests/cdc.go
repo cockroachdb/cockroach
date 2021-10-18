@@ -44,6 +44,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/codahale/hdrhistogram"
@@ -82,6 +84,24 @@ type cdcTestArgs struct {
 	targetTxnPerSecond       float64
 }
 
+func cdcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
+	// kv.rangefeed.enabled is required for changefeeds to run
+	db.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	randomlyRun(t, db, "SET CLUSTER SETTING kv.rangefeed.catchup_scan_iterator_optimization.enabled = true")
+}
+
+const randomSettingPercent = 0.50
+
+var rng, _ = randutil.NewTestPseudoRand()
+
+func randomlyRun(t test.Test, db *sqlutils.SQLRunner, query string) {
+	if rng.Float64() < randomSettingPercent {
+		db.Exec(t, query)
+		t.L().Printf("setting non-default cluster setting: %s", query)
+	}
+
+}
+
 func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcTestArgs) {
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
@@ -93,8 +113,7 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 	db := c.Conn(ctx, 1)
 	defer stopFeeds(db)
 	tdb := sqlutils.MakeSQLRunner(db)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	tdb.Exec(t, `SET CLUSTER SETTING jobs.registry.retry.max_delay = '1s'`)
+	cdcClusterSettings(t, tdb)
 	kafka := kafkaManager{
 		t:     t,
 		c:     c,
@@ -315,21 +334,10 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := c.Conn(ctx, 1)
 	defer stopFeeds(db)
 
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`,
-	); err != nil {
-		t.Fatal(err)
-	}
+	tdb := sqlutils.MakeSQLRunner(db)
+	cdcClusterSettings(t, tdb)
+	tdb.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
 
 	// NB: the WITH diff option was not supported until v20.1.
 	withDiff := t.IsBuildVersion("v20.1.0")
@@ -481,9 +489,8 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := c.Conn(ctx, 1)
 	defer stopFeeds(db)
 
-	if _, err := db.Exec(`SET CLUSTER SETTING kv.rangefeed.enabled = $1`, true); err != nil {
-		t.Fatal(err)
-	}
+	cdcClusterSettings(t, sqlutils.MakeSQLRunner(db))
+
 	if _, err := db.Exec(`CREATE TABLE foo (a INT PRIMARY KEY)`); err != nil {
 		t.Fatal(err)
 	}
@@ -615,24 +622,12 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := c.Conn(ctx, 1)
 	defer stopFeeds(db)
 
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`CREATE TABLE auth_test_table (a INT PRIMARY KEY)`); err != nil {
-		t.Fatal(err)
-	}
+	tdb := sqlutils.MakeSQLRunner(db)
+	cdcClusterSettings(t, tdb)
+	tdb.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
+
+	tdb.Exec(t, `CREATE TABLE auth_test_table (a INT PRIMARY KEY)`)
 
 	caCert := testCerts.CACertBase64()
 	saslURL := kafka.sinkURLSASL(ctx)
@@ -1231,9 +1226,24 @@ func (k kafkaManager) install(ctx context.Context) {
 	k.c.Run(ctx, k.nodes, downloadScriptPath, folder)
 	if !k.c.IsLocal() {
 		k.c.Run(ctx, k.nodes, `mkdir -p logs`)
-		k.c.Run(ctx, k.nodes, `sudo apt-get -q update 2>&1 > logs/apt-get-update.log`)
-		k.c.Run(ctx, k.nodes, `yes | sudo apt-get -q install openssl default-jre 2>&1 > logs/apt-get-install.log`)
+		if err := k.installJRE(ctx); err != nil {
+			k.t.Fatal(err)
+		}
 	}
+}
+
+func (k kafkaManager) installJRE(ctx context.Context) error {
+	retryOpts := retry.Options{
+		InitialBackoff: 1 * time.Minute,
+		MaxBackoff:     5 * time.Minute,
+	}
+	return retry.WithMaxAttempts(ctx, retryOpts, 3, func() error {
+		err := k.c.RunE(ctx, k.nodes, `sudo apt-get -q update 2>&1 > logs/apt-get-update.log`)
+		if err != nil {
+			return err
+		}
+		return k.c.RunE(ctx, k.nodes, `sudo DEBIAN_FRONTEND=noninteractive apt-get -yq --no-install-recommends install openssl default-jre 2>&1 > logs/apt-get-install.log`)
+	})
 }
 
 func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
@@ -1346,24 +1356,51 @@ func (k kafkaManager) start(ctx context.Context, services ...string) {
 	k.restart(ctx, services...)
 }
 
-func (k kafkaManager) restart(ctx context.Context, services ...string) {
-	var startArgs string
-	if len(services) == 0 {
-		startArgs = "schema-registry"
+var kafkaServices = map[string][]string{
+	"zookeeper":       {"zookeeper"},
+	"kafka":           {"zookeeper", "kafka"},
+	"schema-registry": {"zookeeper", "kafka", "schema-registry"},
+}
+
+func (k kafkaManager) kafkaServicesForTargets(targets []string) []string {
+	var services []string
+	for _, tgt := range targets {
+		if s, ok := kafkaServices[tgt]; ok {
+			services = append(services, s...)
+		} else {
+			k.t.Fatalf("unknown kafka start target %q", tgt)
+		}
+	}
+	return services
+}
+
+func (k kafkaManager) restart(ctx context.Context, targetServices ...string) {
+	var services []string
+	if len(targetServices) == 0 {
+		services = kafkaServices["schema-registry"]
 	} else {
-		startArgs = strings.Join(services, " ")
+		services = k.kafkaServicesForTargets(targetServices)
 	}
 
 	k.c.Run(ctx, k.nodes, "touch", k.serverJAASConfig())
+	for _, svcName := range services {
+		// The confluent tool applies the KAFKA_OPTS to all
+		// services. Also, the kafka.logs.dir is used by each
+		// service, despite the name.
+		opts := fmt.Sprintf("-Djava.security.auth.login.config=%s -Dkafka.logs.dir=%s",
+			k.serverJAASConfig(),
+			fmt.Sprintf("logs/%s", svcName),
+		)
+		startCmd := fmt.Sprintf(
+			"CONFLUENT_CURRENT=%s CONFLUENT_HOME=%s KAFKA_OPTS='%s' %s local services %s start",
+			k.basePath(),
+			k.confluentHome(),
+			opts,
+			k.confluentBin(),
+			svcName)
+		k.c.Run(ctx, k.nodes, startCmd)
+	}
 
-	startCmd := fmt.Sprintf(
-		"CONFLUENT_CURRENT=%s CONFLUENT_HOME=%s KAFKA_OPTS=-Djava.security.auth.login.config=%s %s local services %s start",
-		k.basePath(),
-		k.confluentHome(),
-		k.serverJAASConfig(),
-		k.confluentBin(),
-		startArgs)
-	k.c.Run(ctx, k.nodes, startCmd)
 }
 
 func (k kafkaManager) makeCommand(exe string, args ...string) string {

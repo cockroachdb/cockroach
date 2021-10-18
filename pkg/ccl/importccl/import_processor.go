@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -215,6 +216,7 @@ func injectTimeIntoEvalCtx(ctx *tree.EvalContext, walltime int64) {
 
 func makeInputConverter(
 	ctx context.Context,
+	semaCtx *tree.SemaContext,
 	spec *execinfrapb.ReadImportDataSpec,
 	evalCtx *tree.EvalContext,
 	kvCh chan row.KVBatch,
@@ -271,26 +273,27 @@ func makeInputConverter(
 			}
 		}
 		if isWorkload {
-			return newWorkloadReader(kvCh, singleTable, evalCtx), nil
+			return newWorkloadReader(semaCtx, evalCtx, singleTable, kvCh), nil
 		}
 		return newCSVInputReader(
-			kvCh, spec.Format.Csv, spec.WalltimeNanos, int(spec.ReaderParallelism),
+			semaCtx, kvCh, spec.Format.Csv, spec.WalltimeNanos, int(spec.ReaderParallelism),
 			singleTable, singleTableTargetCols, evalCtx, seqChunkProvider), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
 		return newMysqloutfileReader(
-			spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
+			semaCtx, spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
 			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx)
 	case roachpb.IOFileFormat_Mysqldump:
-		return newMysqldumpReader(ctx, kvCh, spec.WalltimeNanos, spec.Tables, evalCtx, spec.Format.MysqlDump)
+		return newMysqldumpReader(ctx, semaCtx, kvCh, spec.WalltimeNanos, spec.Tables, evalCtx,
+			spec.Format.MysqlDump)
 	case roachpb.IOFileFormat_PgCopy:
-		return newPgCopyReader(spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
+		return newPgCopyReader(semaCtx, spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
 			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx)
 	case roachpb.IOFileFormat_PgDump:
-		return newPgDumpReader(ctx, int64(spec.Progress.JobID), kvCh, spec.Format.PgDump,
+		return newPgDumpReader(ctx, semaCtx, int64(spec.Progress.JobID), kvCh, spec.Format.PgDump,
 			spec.WalltimeNanos, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_Avro:
 		return newAvroInputReader(
-			kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
+			semaCtx, kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
 			int(spec.ReaderParallelism), evalCtx)
 	default:
 		return nil, errors.Errorf(
@@ -369,12 +372,20 @@ func ingestKvs(
 	pkFlushedRow := make([]int64, len(spec.Uri))
 	idxFlushedRow := make([]int64, len(spec.Uri))
 
+	bulkSummaryMu := &struct {
+		syncutil.Mutex
+		summary roachpb.BulkOpSummary
+	}{}
+
 	// When the PK adder flushes, everything written has been flushed, so we set
 	// pkFlushedRow to writtenRow. Additionally if the indexAdder is empty then we
 	// can treat it as flushed as well (in case we're not adding anything to it).
-	pkIndexAdder.SetOnFlush(func() {
+	pkIndexAdder.SetOnFlush(func(summary roachpb.BulkOpSummary) {
 		for i, emitted := range writtenRow {
 			atomic.StoreInt64(&pkFlushedRow[i], emitted)
+			bulkSummaryMu.Lock()
+			bulkSummaryMu.summary.Add(summary)
+			bulkSummaryMu.Unlock()
 		}
 		if indexAdder.IsEmpty() {
 			for i, emitted := range writtenRow {
@@ -382,9 +393,12 @@ func ingestKvs(
 			}
 		}
 	})
-	indexAdder.SetOnFlush(func() {
+	indexAdder.SetOnFlush(func(summary roachpb.BulkOpSummary) {
 		for i, emitted := range writtenRow {
 			atomic.StoreInt64(&idxFlushedRow[i], emitted)
+			bulkSummaryMu.Lock()
+			bulkSummaryMu.summary.Add(summary)
+			bulkSummaryMu.Unlock()
 		}
 	})
 
@@ -411,6 +425,11 @@ func ingestKvs(
 				prog.ResumePos[file] = idx
 			}
 			prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
+			// Write down the summary of how much we've ingested since the last update.
+			bulkSummaryMu.Lock()
+			prog.BulkSummary = bulkSummaryMu.summary
+			bulkSummaryMu.summary.Reset()
+			bulkSummaryMu.Unlock()
 		}
 		progCh <- prog
 	}

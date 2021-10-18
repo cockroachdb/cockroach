@@ -514,11 +514,17 @@ func (p *Provider) createVM(
 				VMSize: compute.VirtualMachineSizeTypes(p.opts.machineType),
 			},
 			StorageProfile: &compute.StorageProfile{
+				// From https://discourse.ubuntu.com/t/find-ubuntu-images-on-microsoft-azure/18918
+				// You can find available versions by running the following command:
+				// az vm image list --all --publisher Canonical
+				// To get the latest 20.04 version:
+				// az vm image list --all --publisher Canonical | \
+				// jq '[.[] | select(.sku=="20_04-lts")] | max_by(.version)'
 				ImageReference: &compute.ImageReference{
 					Publisher: to.StringPtr("Canonical"),
-					Offer:     to.StringPtr("UbuntuServer"),
-					Sku:       to.StringPtr("18.04-LTS"),
-					Version:   to.StringPtr("latest"),
+					Offer:     to.StringPtr("0001-com-ubuntu-server-focal"),
+					Sku:       to.StringPtr("20_04-lts"),
+					Version:   to.StringPtr("20.04.202109080"),
 				},
 				OsDisk: &compute.OSDisk{
 					CreateOption: compute.DiskCreateOptionTypesFromImage,

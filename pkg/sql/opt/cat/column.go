@@ -11,7 +11,10 @@
 package cat
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -24,19 +27,20 @@ type Column struct {
 	//
 	// Warning! If any fields are added here, make sure both Init methods below
 	// set all fields (even if they are the empty value).
-	ordinal                     int
-	stableID                    StableID
-	name                        tree.Name
-	datumType                   *types.T
-	kind                        ColumnKind
-	nullable                    bool
-	visibility                  ColumnVisibility
-	virtualComputed             bool
-	defaultExpr                 string
-	computedExpr                string
-	onUpdateExpr                string
-	invertedSourceColumnOrdinal int
-	generatedAsIdentityType     GeneratedAsIdentityType
+	ordinal                           int
+	stableID                          StableID
+	name                              tree.Name
+	datumType                         *types.T
+	kind                              ColumnKind
+	nullable                          bool
+	visibility                        ColumnVisibility
+	virtualComputed                   bool
+	defaultExpr                       string
+	computedExpr                      string
+	onUpdateExpr                      string
+	invertedSourceColumnOrdinal       int
+	generatedAsIdentityType           GeneratedAsIdentityType
+	generatedAsIdentitySequenceOption string
 }
 
 // Ordinal returns the position of the column in its table. The following always
@@ -108,6 +112,14 @@ func (c *Column) DefaultExprStr() string {
 // HasOnUpdate returns true if the column has an ON UPDATE expression.
 func (c *Column) HasOnUpdate() bool {
 	return c.onUpdateExpr != ""
+}
+
+// UseOnUpdate returns true if there is an ON UPDATE expression which should be
+// updated as part of the session. This is to allow gating ON UPDATE
+// rehome_row() from triggering when on_update_rehome_row_enabled = false.
+func (c *Column) UseOnUpdate(sd *sessiondata.SessionData) bool {
+	return c.onUpdateExpr != "" &&
+		(sd.OnUpdateRehomeRowEnabled || !strings.HasPrefix(c.onUpdateExpr, "rehome_row()"))
 }
 
 // OnUpdateExprStr is set to the SQL expression string that describes the
@@ -225,6 +237,20 @@ const (
 	GeneratedByDefaultAsIdentity
 )
 
+// HasGeneratedAsIdentitySequenceOption returns true if there is a sequence
+// option for a `GENERATED AS IDENTITY` column.
+func (c *Column) HasGeneratedAsIdentitySequenceOption() bool {
+	return c.generatedAsIdentitySequenceOption != ""
+}
+
+// GeneratedAsIdentitySequenceOption is set to the SQL expression string that
+// specify the sequence option for a `GENERATED AS IDENTITY` column.
+// A `GENERATED AS IDENTITY` column is an auto-incremented column based on an
+// underlying sequence, for which users can customize the options.
+func (c *Column) GeneratedAsIdentitySequenceOption() string {
+	return strings.TrimSpace(c.generatedAsIdentitySequenceOption)
+}
+
 // MaybeHidden is a helper constructor for either Visible or Hidden, depending
 // on a flag.
 func MaybeHidden(hidden bool) ColumnVisibility {
@@ -255,6 +281,7 @@ func (c *Column) Init(
 	computedExpr *string,
 	onUpdateExpr *string,
 	generatedAsIdentityType GeneratedAsIdentityType,
+	generatedAsIdentitySequenceOption *string,
 ) {
 	if kind == Inverted {
 		panic(errors.AssertionFailedf("incorrect init method"))
@@ -286,6 +313,11 @@ func (c *Column) Init(
 	}
 	if onUpdateExpr != nil {
 		c.onUpdateExpr = *onUpdateExpr
+	}
+	if generatedAsIdentityType != NotGeneratedAsIdentity {
+		if generatedAsIdentitySequenceOption != nil {
+			c.generatedAsIdentitySequenceOption = *generatedAsIdentitySequenceOption
+		}
 	}
 }
 
@@ -336,7 +368,7 @@ func (c *Column) InitVirtualComputed(
 }
 
 // IsGeneratedAlwaysAsIdentity returns true
-// if the column is created with the GENERATED ALWAYS AS IDENTITY token
+// if the column is created with the GENERATED ALWAYS AS IDENTITY syntax
 // and hence is not allowed for explicit write
 // (write without any additional tokens).
 func (c *Column) IsGeneratedAlwaysAsIdentity() bool {

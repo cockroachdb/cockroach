@@ -284,7 +284,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// 21.1 version keys are deprecated and we are certainly not adding any new
 		// ones in those ranges. Until these deprecated version keys are all deleted
 		// we tie this migration to the last 20.2 version key.
-		includedInBootstrap: clusterversion.ByKey(clusterversion.V20_2),
+		includedInBootstrap: roachpb.Version{Major: 20, Minor: 2},
 		newDescriptorIDs:    staticIDs(keys.TenantsTableID),
 	},
 	{
@@ -299,12 +299,6 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		// Introduced in v20.2.
 		name: "mark non-terminal schema change jobs with a pre-20.1 format version as failed",
-	},
-	{
-		// Introduced in v21.2.
-		name:                "add indexes on columns revokedAt and lastUsedAt for system.web_sessions table",
-		workFn:              alterSystemWebSessionsCreateIndexes,
-		includedInBootstrap: clusterversion.ByKey(clusterversion.AlterSystemWebSessionsCreateIndexes),
 	},
 }
 
@@ -968,27 +962,4 @@ func updateSystemLocationData(ctx context.Context, r runner) error {
 		}
 	}
 	return nil
-}
-
-func alterSystemWebSessionsCreateIndexes(ctx context.Context, r runner) (err error) {
-	addIdxRevokedAtStmt := `
-CREATE INDEX IF NOT EXISTS "web_sessions_revokedAt_idx" 
-ON system.web_sessions ("revokedAt")
-`
-	addIdxLastUsedAtStmt := `
-CREATE INDEX IF NOT EXISTS "web_sessions_lastUsedAt_idx" 
-ON system.web_sessions ("lastUsedAt")
-`
-
-	asNode := sessiondata.InternalExecutorOverride{
-		User: security.NodeUserName(),
-	}
-
-	if _, err = r.sqlExecutor.ExecEx(ctx, "add-web-sessions-revoked-at-idx", nil /* txn */, asNode, addIdxRevokedAtStmt); err != nil {
-		return err
-	}
-
-	_, err = r.sqlExecutor.ExecEx(ctx, "add-web-sessions-last-used-at-idx", nil /* txn */, asNode, addIdxLastUsedAtStmt)
-
-	return err
 }

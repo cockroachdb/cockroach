@@ -42,10 +42,6 @@ func wrapCommonSetup(setupFn Setup) Setup {
 	return func(r *rand.Rand) string {
 		s := setupFn(r)
 		var sb strings.Builder
-		sb.WriteString(`
-SET CLUSTER SETTING sql.defaults.drop_enum_value.enabled = true;
-SET enable_drop_enum_value = true;
-`)
 		sb.WriteString(s)
 		return sb.String()
 	}

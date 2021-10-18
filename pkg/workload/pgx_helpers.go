@@ -12,8 +12,12 @@ package workload
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/sync/errgroup"
 )
@@ -23,6 +27,13 @@ type MultiConnPool struct {
 	Pools []*pgxpool.Pool
 	// Atomic counter used by Get().
 	counter uint32
+
+	mu struct {
+		syncutil.RWMutex
+		// preparedStatements is a map from name to SQL. The statements in the map
+		// are prepared whenever a new connection is acquired from the pool.
+		preparedStatements map[string]string
+	}
 }
 
 // MultiConnPoolCfg encapsulates the knobs passed to NewMultiConnPool.
@@ -39,6 +50,28 @@ type MultiConnPoolCfg struct {
 	MaxConnsPerPool int
 }
 
+// pgxLogger implements the pgx.Logger interface.
+type pgxLogger struct{}
+
+var _ pgx.Logger = pgxLogger{}
+
+// Log implements the pgx.Logger interface.
+func (p pgxLogger) Log(
+	ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{},
+) {
+	if ctx.Err() != nil {
+		// Don't log anything from pgx if the context was canceled by the workload
+		// runner. It would result in spam at the end of every workload.
+		return
+	}
+	if strings.Contains(msg, "restart transaction") {
+		// Our workloads have a lot of contention, so "restart transaction" messages
+		// are expected and noisy.
+		return
+	}
+	log.Infof(ctx, "pgx logger [%s]: %s logParams=%v", level.String(), msg, data)
+}
+
 // NewMultiConnPool creates a new MultiConnPool.
 //
 // Each URL gets one or more pools, and each pool has at most MaxConnsPerPool
@@ -50,6 +83,8 @@ func NewMultiConnPool(
 	ctx context.Context, cfg MultiConnPoolCfg, urls ...string,
 ) (*MultiConnPool, error) {
 	m := &MultiConnPool{}
+	m.mu.preparedStatements = map[string]string{}
+
 	connsPerURL := distribute(cfg.MaxTotalConnections, len(urls))
 	maxConnsPerPool := cfg.MaxConnsPerPool
 	if maxConnsPerPool == 0 {
@@ -61,13 +96,29 @@ func NewMultiConnPool(
 		connsPerPool := distributeMax(connsPerURL[i], maxConnsPerPool)
 		for _, numConns := range connsPerPool {
 			connCfg, err := pgxpool.ParseConfig(urls[i])
-			// Disable the automatic prepared statement cache. We've seen a lot of
-			// churn in this cache since workloads create many of different queries.
-			connCfg.ConnConfig.BuildStatementCache = nil
 			if err != nil {
 				return nil, err
 			}
+			// Disable the automatic prepared statement cache. We've seen a lot of
+			// churn in this cache since workloads create many of different queries.
+			connCfg.ConnConfig.BuildStatementCache = nil
+			connCfg.ConnConfig.LogLevel = pgx.LogLevelWarn
+			connCfg.ConnConfig.Logger = pgxLogger{}
 			connCfg.MaxConns = int32(numConns)
+			connCfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
+				m.mu.RLock()
+				defer m.mu.RUnlock()
+				for name, sql := range m.mu.preparedStatements {
+					// Note that calling `Prepare` with a name that has already been
+					// prepared is idempotent and short-circuits before doing any
+					// communication to the server.
+					if _, err := conn.Prepare(ctx, name, sql); err != nil {
+						log.Warningf(ctx, "error preparing statement. name=%s sql=%s %v", name, sql, err)
+						return false
+					}
+				}
+				return true
+			}
 			p, err := pgxpool.ConnectConfig(ctx, connCfg)
 			if err != nil {
 				return nil, err
@@ -115,6 +166,15 @@ func NewMultiConnPool(
 	}
 
 	return m, nil
+}
+
+// AddPreparedStatement adds the given sql statement to the map of
+// statements that will be prepared when a new connection is retrieved
+// from the pool.
+func (m *MultiConnPool) AddPreparedStatement(name string, statement string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mu.preparedStatements[name] = statement
 }
 
 // Get returns one of the pools, in round-robin manner.

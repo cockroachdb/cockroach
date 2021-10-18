@@ -17,10 +17,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvbase",
+        "//pkg/kv/kvserver/closedts",
         "//pkg/roachpb:with-mocks",
+        "//pkg/settings",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/util/admission",

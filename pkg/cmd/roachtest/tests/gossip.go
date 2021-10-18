@@ -91,7 +91,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 
 			for i := 1; i <= c.Spec().NodeCount; i++ {
 				if elapsed := timeutil.Since(start); elapsed >= 20*time.Second {
-					t.Fatalf("gossip did not stabilize in %.1fs", deadNode, elapsed.Seconds())
+					t.Fatalf("gossip did not stabilize (dead node %d) in %.1fs", deadNode, elapsed.Seconds())
 				}
 
 				if i == deadNode {
@@ -409,6 +409,9 @@ func runGossipRestartNodeOne(ctx context.Context, t test.Test, c cluster.Cluster
 	if t.IsBuildVersion("v19.2.0") {
 		run(`ALTER TABLE system.replication_stats %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 		run(`ALTER TABLE system.replication_constraint_stats %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
+	}
+	if t.IsBuildVersion("v21.2.0") {
+		run(`ALTER TABLE system.tenant_usage %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 	}
 
 	var lastReplCount int

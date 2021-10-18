@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -58,6 +59,20 @@ var ExportRequestMaxAllowedFileSizeOverage = settings.RegisterByteSizeSetting(
 	64<<20, /* 64 MiB */
 ).WithPublic()
 
+// exportRequestMaxIterationTime controls time spent by export request iterating
+// over data in underlying storage. This threshold preventing export request from
+// holding locks for too long and preventing non mvcc operations from progressing.
+// If request takes longer than this threshold it would stop and return already
+// collected data and allow caller to use resume span to continue.
+var exportRequestMaxIterationTime = settings.RegisterDurationSetting(
+	"kv.bulk_sst.max_request_time",
+	"if set, limits amount of time spent in export requests; "+
+		"if export request can not finish within allocated time it will resume from the point it stopped in "+
+		"subsequent request",
+	// Feature is disabled by default.
+	0,
+)
+
 func init() {
 	RegisterReadOnlyCommand(roachpb.Export, declareKeysExport, evalExport)
 }
@@ -86,11 +101,9 @@ func evalExport(
 
 	var evalExportTrace types.StringValue
 	if cArgs.EvalCtx.NodeID() == h.GatewayNodeID {
-		evalExportTrace.Value = fmt.Sprintf("evaluating Export [%s, %s) on local node %d",
-			args.Key, args.EndKey, cArgs.EvalCtx.NodeID())
+		evalExportTrace.Value = fmt.Sprintf("evaluating Export on local node %d", cArgs.EvalCtx.NodeID())
 	} else {
-		evalExportTrace.Value = fmt.Sprintf("evaluating Export [%s, %s) on remote node %d",
-			args.Key, args.EndKey, cArgs.EvalCtx.NodeID())
+		evalExportTrace.Value = fmt.Sprintf("evaluating Export on remote node %d", cArgs.EvalCtx.NodeID())
 	}
 	evalExportSpan.RecordStructured(&evalExportTrace)
 
@@ -136,6 +149,8 @@ func evalExport(
 		maxSize = targetSize + uint64(allowedOverage)
 	}
 
+	maxRunTime := exportRequestMaxIterationTime.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+
 	// Time-bound iterators only make sense to use if the start time is set.
 	useTBI := args.EnableTimeBoundIteratorOptimization && !args.StartTime.IsEmpty()
 	// Only use resume timestamp if splitting mid key is enabled.
@@ -147,8 +162,18 @@ func evalExport(
 	var curSizeOfExportedSSTs int64
 	for start := args.Key; start != nil; {
 		destFile := &storage.MemFile{}
-		summary, resume, resumeTS, err := reader.ExportMVCCToSst(ctx, start, args.EndKey, args.StartTime,
-			h.Timestamp, resumeKeyTS, exportAllRevisions, targetSize, maxSize, args.SplitMidKey, useTBI, destFile)
+		summary, resume, resumeTS, err := reader.ExportMVCCToSst(ctx, storage.ExportOptions{
+			StartKey:           storage.MVCCKey{Key: start, Timestamp: resumeKeyTS},
+			EndKey:             args.EndKey,
+			StartTS:            args.StartTime,
+			EndTS:              h.Timestamp,
+			ExportAllRevisions: exportAllRevisions,
+			TargetSize:         targetSize,
+			MaxSize:            maxSize,
+			StopMidKey:         args.SplitMidKey,
+			UseTBI:             useTBI,
+			ResourceLimiter:    storage.NewResourceLimiter(storage.ResourceLimiterOptions{MaxRunTime: maxRunTime}, timeutil.DefaultTimeSource{}),
+		}, destFile)
 		if err != nil {
 			if errors.HasType(err, (*storage.ExceedMaxSizeError)(nil)) {
 				err = errors.WithHintf(err,
@@ -205,7 +230,6 @@ func evalExport(
 				targetSize = curSizeOfExportedSSTs
 			}
 			reply.NumBytes = targetSize
-			reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 			// NB: This condition means that we will allow another SST to be created
 			// even if we have less room in our TargetBytes than the target size of
 			// the next SST. In the worst case this could lead to us exceeding our
@@ -216,6 +240,7 @@ func evalExport(
 						Key:    resume,
 						EndKey: args.EndKey,
 					}
+					reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
 				}
 				break
 			}

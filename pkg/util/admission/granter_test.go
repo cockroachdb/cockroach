@@ -13,9 +13,12 @@ package admission
 import (
 	"context"
 	"fmt"
+	"math"
+	"math/rand"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -83,7 +86,7 @@ func (tr *testRequester) getAdmittedCount() uint64 {
 // return-grant work=<kind>
 // took-without-permission work=<kind>
 // continue-grant-chain work=<kind>
-// cpu-load runnable=<int> procs=<int>
+// cpu-load runnable=<int> procs=<int> [infrequent=<bool>]
 // set-io-tokens tokens=<int>
 func TestGranterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -159,7 +162,15 @@ func TestGranterBasic(t *testing.T) {
 			var runnable, procs int
 			d.ScanArgs(t, "runnable", &runnable)
 			d.ScanArgs(t, "procs", &procs)
-			coord.CPULoad(runnable, procs)
+			infrequent := false
+			if d.HasArg("infrequent") {
+				d.ScanArgs(t, "infrequent", &infrequent)
+			}
+			samplePeriod := time.Millisecond
+			if infrequent {
+				samplePeriod = 250 * time.Millisecond
+			}
+			coord.CPULoad(runnable, procs, samplePeriod)
 			return flushAndReset()
 
 		case "set-io-tokens":
@@ -374,6 +385,78 @@ func TestIOLoadListener(t *testing.T) {
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
 		})
+}
+
+func TestIOLoadListenerOverflow(t *testing.T) {
+	req := &testRequesterForIOLL{}
+	kvGranter := &testGranterWithIOTokens{}
+	st := cluster.MakeTestingClusterSettings()
+	ioll := ioLoadListener{
+		settings:    st,
+		kvRequester: req,
+	}
+	ioll.mu.Mutex = &syncutil.Mutex{}
+	ioll.mu.kvGranter = kvGranter
+	// Bug 1: overflow when totalTokens is too large.
+	for i := int64(0); i < adjustmentInterval; i++ {
+		// Override the totalTokens manually to trigger the overflow bug.
+		ioll.totalTokens = math.MaxInt64 - i
+		ioll.tokensAllocated = 0
+		for j := 0; j < adjustmentInterval; j++ {
+			ioll.allocateTokensTick()
+		}
+	}
+	// Bug2: overflow when bytes added delta is 0.
+	m := pebble.Metrics{}
+	m.Levels[0] = pebble.LevelMetrics{
+		Sublevels: 100,
+		NumFiles:  10000,
+	}
+	ioll.pebbleMetricsTick(m)
+	ioll.pebbleMetricsTick(m)
+	ioll.allocateTokensTick()
+}
+
+type testGranterNonNegativeTokens struct {
+	t *testing.T
+}
+
+func (g *testGranterNonNegativeTokens) setAvailableIOTokensLocked(tokens int64) {
+	require.LessOrEqual(g.t, int64(0), tokens)
+}
+
+// TestBadIOLoadListenerStats tests that bad stats (non-monotonic cumulative
+// stats and negative values) don't cause panics or tokens to be negative.
+func TestBadIOLoadListenerStats(t *testing.T) {
+	var m pebble.Metrics
+	req := &testRequesterForIOLL{}
+
+	randomValues := func() {
+		// Use uints, and cast so that we get bad negative values.
+		m.Levels[0].Sublevels = int32(rand.Uint32())
+		m.Levels[0].NumFiles = int64(rand.Uint64())
+		m.Levels[0].Size = int64(rand.Uint64())
+		m.Levels[0].BytesFlushed = rand.Uint64()
+		m.Levels[0].BytesIngested = rand.Uint64()
+		req.admittedCount = rand.Uint64()
+	}
+	kvGranter := &testGranterNonNegativeTokens{t: t}
+	st := cluster.MakeTestingClusterSettings()
+	ioll := ioLoadListener{
+		settings:    st,
+		kvRequester: req,
+	}
+	ioll.mu.Mutex = &syncutil.Mutex{}
+	ioll.mu.kvGranter = kvGranter
+	for i := 0; i < 100; i++ {
+		randomValues()
+		ioll.pebbleMetricsTick(m)
+		for j := 0; j < adjustmentInterval; j++ {
+			ioll.allocateTokensTick()
+			require.LessOrEqual(t, int64(0), ioll.totalTokens)
+			require.LessOrEqual(t, int64(0), ioll.tokensAllocated)
+		}
+	}
 }
 
 // TODO(sumeer):

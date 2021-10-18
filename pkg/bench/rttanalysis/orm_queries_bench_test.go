@@ -159,25 +159,84 @@ WHERE
 			Setup: `CREATE TABLE t1(a int primary key, b int);`,
 			Stmt:  `SELECT * FROM pg_attribute`,
 		},
+
 		{
 			Name:  "has_table_privilege real table",
 			Setup: `CREATE TABLE t(a int primary key, b int)`,
 			Stmt:  `SELECT has_table_privilege('t', 'SELECT')`,
 		},
+
 		{
 			Name:  "has_table_privilege virtual table",
 			Setup: `CREATE TABLE t(a int primary key, b int)`,
 			Stmt:  `SELECT has_table_privilege('t', 'SELECT')`,
 		},
+
 		{
 			Name:  "has_column_privilege using attnum",
 			Setup: `CREATE TABLE t(a int primary key, b int)`,
 			Stmt:  `SELECT has_column_privilege('t', 1, 'INSERT')`,
 		},
+
 		{
 			Name:  "has_column_privilege using column name",
 			Setup: `CREATE TABLE t(a int primary key, b int)`,
 			Stmt:  `SELECT has_column_privilege('t', 'a', 'INSERT')`,
+		},
+
+		{
+			Name: "pg_my_temp_schema",
+			Setup: `SET experimental_enable_temp_tables = true;
+              CREATE TEMP TABLE t(a int primary key, b int)`,
+			Stmt: `SELECT pg_my_temp_schema()`,
+		},
+
+		{
+			Name: "pg_my_temp_schema multiple times",
+			Setup: `SET experimental_enable_temp_tables = true;
+              CREATE TEMP TABLE t(a int primary key, b int)`,
+			Stmt: `SELECT pg_my_temp_schema() FROM generate_series(1, 10)`,
+		},
+
+		{
+			Name: "pg_is_other_temp_schema",
+			Setup: `SET experimental_enable_temp_tables = true;
+              CREATE TEMP TABLE t(a int primary key, b int)`,
+			Stmt: `SELECT nspname, pg_is_other_temp_schema(oid) FROM
+               (SELECT * FROM pg_namespace WHERE nspname = 'public') n`,
+		},
+
+		{
+			Name: "pg_is_other_temp_schema multiple times",
+			Setup: `SET experimental_enable_temp_tables = true;
+              CREATE TEMP TABLE t(a int primary key, b int)`,
+			Stmt: `SELECT nspname, pg_is_other_temp_schema(oid) FROM
+               (SELECT * FROM pg_namespace LIMIT 5) n`,
+		},
+
+		{
+			Name: "information_schema._pg_index_position",
+			Setup: `CREATE TABLE indexed (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  INDEX (b, d),
+  INDEX (c, a)
+);
+CREATE VIEW indexes AS
+  SELECT i.relname, indkey::INT2[], indexrelid
+    FROM pg_catalog.pg_index
+    JOIN pg_catalog.pg_class AS t ON indrelid   = t.oid
+    JOIN pg_catalog.pg_class AS i ON indexrelid = i.oid
+   WHERE t.relname = 'indexed'
+ORDER BY i.relname`,
+			Stmt: `SELECT relname,
+	indkey,
+	generate_series(1, 4) input,
+	information_schema._pg_index_position(indexrelid, generate_series(1, 4))
+FROM indexes
+ORDER BY relname DESC, input`,
 		},
 	}
 

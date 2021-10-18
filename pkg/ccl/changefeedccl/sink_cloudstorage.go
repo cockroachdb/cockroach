@@ -302,6 +302,17 @@ const sinkCompressionGzip = "gzip"
 
 var cloudStorageSinkIDAtomic int64
 
+// Files that are emitted can be partitioned by their earliest event time,
+// for example being emitted to topic/date/file.ndjson, or further split by hour.
+// Note that a file may contain events with timestamps that would normally
+// fall under a different partition had they been flushed later.
+var partitionDateFormats = map[string]string{
+	"flat":   "/",
+	"daily":  "2006-01-02/",
+	"hourly": "2006-01-02/15/",
+}
+var defaultPartitionFormat = partitionDateFormats["daily"]
+
 func makeCloudStorageSink(
 	ctx context.Context,
 	u sinkURL,
@@ -321,10 +332,6 @@ func makeCloudStorageSink(
 	}
 	u.Scheme = strings.TrimPrefix(u.Scheme, `experimental-`)
 
-	// Date partitioning is pretty standard, so no override for now, but we could
-	// plumb one down if someone needs it.
-	const defaultPartitionFormat = `2006-01-02`
-
 	sinkID := atomic.AddInt64(&cloudStorageSinkIDAtomic, 1)
 	s := &cloudStorageSink{
 		srcID:             srcID,
@@ -337,9 +344,19 @@ func makeCloudStorageSink(
 		// TODO(dan,ajwerner): Use the jobs framework's session ID once that's available.
 		jobSessionID: generateChangefeedSessionID(),
 	}
-	if timestampOracle != nil {
-		s.dataFileTs = cloudStorageFormatTime(timestampOracle.inclusiveLowerBoundTS())
-		s.dataFilePartition = timestampOracle.inclusiveLowerBoundTS().GoTime().Format(s.partitionFormat)
+
+	if partitionFormat := u.consumeParam(changefeedbase.SinkParamPartitionFormat); partitionFormat != "" {
+		dateFormat, ok := partitionDateFormats[partitionFormat]
+		if !ok {
+			return nil, errors.Errorf("invalid partition_format of %s", partitionFormat)
+		}
+
+		s.partitionFormat = dateFormat
+	}
+
+	if s.timestampOracle != nil {
+		s.dataFileTs = cloudStorageFormatTime(s.timestampOracle.inclusiveLowerBoundTS())
+		s.dataFilePartition = s.timestampOracle.inclusiveLowerBoundTS().GoTime().Format(s.partitionFormat)
 	}
 
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {

@@ -14,7 +14,7 @@
 	padding: 20px;
 	width: 100%;
 	margin-bottom: 29px;
-	min-height: 282px;
+	height: 282px;
 	white-space: pre-wrap;
   background-color: $colors--neutral-10;
   box-shadow: 0px 0px 1px rgba(67, 90, 111, 0.415);
@@ -29,6 +29,11 @@
     line-height: 1.57;
     white-space: pre-line;
     word-wrap: break-word;
+
+    span {
+      font-family: SFMono-Semibold;
+      color: $colors--neutral-2;
+    }
 
     :global(.hljs-label) {
       padding-left: 8px;
@@ -45,7 +50,7 @@
   }
 }
 
-.higlight-divider {
+.highlight-divider {
 	width: 100%;
 	height: 1px;
 	border-bottom: 1px dashed $colors--neutral-6;

@@ -10,6 +10,28 @@ go_library(
         "//pkg/build",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_elazarl_go_bindata_assetfs//:go-bindata-assetfs",
     ],
+)
+
+config_setting(
+    name = "cockroach_with_ui",
+    define_values = {
+        "cockroach_with_ui": "y",
+    },
+    visibility = ["//visibility:public"],
+)
+
+genrule(
+    name = "gen-empty-index.html",
+    outs = ["index.html"],
+    cmd = """
+    cat >$@ <<EOF
+<!DOCTYPE html>
+<title>CockroachDB</title>
+Binary built without web UI.
+<hr>
+<em>%s</em>
+EOF
+""",
+    visibility = ["//pkg/ui:__subpackages__"],
 )

@@ -135,23 +135,12 @@ func (desc *immutable) DescriptorProto() *descpb.Descriptor {
 	}
 }
 
-// IsMultiRegion returns whether the database has multi-region properties
-// configured. If so, desc.RegionConfig can be used.
+// IsMultiRegion implements the DatabaseDescriptor interface.
 func (desc *immutable) IsMultiRegion() bool {
 	return desc.RegionConfig != nil
 }
 
-// MultiRegionEnumID returns the ID of the multi-region enum if the database
-// is a multi-region database, and an error otherwise.
-func (desc *immutable) MultiRegionEnumID() (descpb.ID, error) {
-	if !desc.IsMultiRegion() {
-		return descpb.InvalidID, errors.AssertionFailedf(
-			"can not get multi-region enum ID of a non multi-region database")
-	}
-	return desc.RegionConfig.RegionEnumID, nil
-}
-
-// PrimaryRegionName returns the primary region for a multi-region database.
+// PrimaryRegionName implements the DatabaseDescriptor interface.
 func (desc *immutable) PrimaryRegionName() (descpb.RegionName, error) {
 	if !desc.IsMultiRegion() {
 		return "", errors.AssertionFailedf(
@@ -160,13 +149,21 @@ func (desc *immutable) PrimaryRegionName() (descpb.RegionName, error) {
 	return desc.RegionConfig.PrimaryRegion, nil
 }
 
+// MultiRegionEnumID implements the DatabaseDescriptor interface.
+func (desc *immutable) MultiRegionEnumID() (descpb.ID, error) {
+	if !desc.IsMultiRegion() {
+		return descpb.InvalidID, errors.AssertionFailedf(
+			"can not get multi-region enum ID of a non multi-region database")
+	}
+	return desc.RegionConfig.RegionEnumID, nil
+}
+
 // SetName sets the name on the descriptor.
 func (desc *Mutable) SetName(name string) {
 	desc.Name = name
 }
 
-// ForEachSchemaInfo iterates f over each schema info mapping in the descriptor.
-// iterutil.StopIteration is supported.
+// ForEachSchemaInfo implements the DatabaseDescriptor interface.
 func (desc *immutable) ForEachSchemaInfo(
 	f func(id descpb.ID, name string, isDropped bool) error,
 ) error {
@@ -181,8 +178,7 @@ func (desc *immutable) ForEachSchemaInfo(
 	return nil
 }
 
-// GetSchemaID returns the ID in the schema mapping entry for the
-// given name, 0 otherwise.
+// GetSchemaID implements the DatabaseDescriptor interface.
 func (desc *immutable) GetSchemaID(name string) descpb.ID {
 	info := desc.Schemas[name]
 	if info.Dropped {
@@ -191,8 +187,7 @@ func (desc *immutable) GetSchemaID(name string) descpb.ID {
 	return info.ID
 }
 
-// GetNonDroppedSchemaName returns the name in the schema mapping entry for the
-// given ID, if it's not marked as dropped, empty string otherwise.
+// GetNonDroppedSchemaName implements the DatabaseDescriptor interface.
 func (desc *immutable) GetNonDroppedSchemaName(schemaID descpb.ID) string {
 	for name, info := range desc.Schemas {
 		if !info.Dropped && info.ID == schemaID {

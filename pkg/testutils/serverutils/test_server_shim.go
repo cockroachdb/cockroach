@@ -93,8 +93,8 @@ type TestServerInterface interface {
 	// The real return type is sql.ExecutorConfig.
 	ExecutorConfig() interface{}
 
-	// Tracer returns a *tracing.Tracer as an interface{}.
-	Tracer() interface{}
+	// TracerI returns a *tracing.Tracer as an interface{}.
+	TracerI() interface{}
 
 	// GossipI returns the gossip used by the TestServer.
 	// The real return type is *gossip.Gossip.
@@ -352,12 +352,16 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 // StartTenant starts a tenant SQL server connecting to the supplied test
 // server. It uses the server's stopper to shut down automatically. However,
 // the returned DB is for the caller to close.
+//
+// Note: log.Scope() should always be used in tests that start a tenant
+// (otherwise, having more than one test in a package which uses StartTenant
+// without log.Scope() will cause a a "clusterID already set" panic).
 func StartTenant(
 	t testing.TB, ts TestServerInterface, params base.TestTenantArgs,
 ) (TestTenantInterface, *gosql.DB) {
 	tenant, err := ts.StartTenant(context.Background(), params)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("%+v", err)
 	}
 
 	stopper := params.Stopper

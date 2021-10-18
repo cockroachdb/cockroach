@@ -10,7 +10,10 @@
 
 import { createSelector } from "reselect";
 
-import { adminUISelector } from "../statementsPage/statementsPage.selectors";
+import {
+  adminUISelector,
+  localStorageSelector,
+} from "../statementsPage/statementsPage.selectors";
 
 export const selectTransactionsSlice = createSelector(
   adminUISelector,
@@ -19,10 +22,21 @@ export const selectTransactionsSlice = createSelector(
 
 export const selectTransactionsData = createSelector(
   selectTransactionsSlice,
-  transactionsState => transactionsState.data,
+  transactionsState =>
+    // The state is valid if we have successfully fetched data, and it has not yet been invalidated.
+    transactionsState.valid ? transactionsState.data : null,
 );
 
 export const selectTransactionsLastError = createSelector(
   selectTransactionsSlice,
   state => state.lastError,
+);
+
+export const selectTxnColumns = createSelector(
+  localStorageSelector,
+  // return array of columns if user have customized it or `null` otherwise
+  localStorage =>
+    localStorage["showColumns/TransactionPage"]
+      ? localStorage["showColumns/TransactionPage"].split(",")
+      : null,
 );

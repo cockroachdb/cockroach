@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -164,8 +165,8 @@ func TestNextRowSingle(t *testing.T) {
 				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
-				NoBytesLimit,
-				NoRowLimit,
+				rowinfra.NoBytesLimit,
+				rowinfra.NoRowLimit,
 				false, /*traceKV*/
 				false, /*forceProductionKVBatchSize*/
 			); err != nil {
@@ -285,7 +286,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
-				DefaultBatchBytesLimit,
+				rowinfra.DefaultBatchBytesLimit,
 				10,    /*limitHint*/
 				false, /*traceKV*/
 				false, /*forceProductionKVBatchSize*/
@@ -396,8 +397,8 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 		context.Background(),
 		kv.NewTxn(ctx, kvDB, 0),
 		roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
-		NoBytesLimit,
-		NoRowLimit,
+		rowinfra.NoBytesLimit,
+		rowinfra.NoRowLimit,
 		false, /*traceKV*/
 		false, /*forceProductionKVBatchSize*/
 	)
@@ -482,7 +483,7 @@ INDEX(c)
 		roachpb.Spans{indexSpan,
 			roachpb.Span{Key: midKey, EndKey: endKey},
 		},
-		DefaultBatchBytesLimit,
+		rowinfra.DefaultBatchBytesLimit,
 		// Set a limitHint of 1 to more quickly end the first batch, causing a
 		// batch that ends between rows.
 		1,     /*limitHint*/
@@ -645,8 +646,8 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.PublicNonPrimaryIndexes()[0].GetID())},
-				NoBytesLimit,
-				NoRowLimit,
+				rowinfra.NoBytesLimit,
+				rowinfra.NoRowLimit,
 				false, /*traceKV*/
 				false, /*forceProductionKVBatchSize*/
 			); err != nil {

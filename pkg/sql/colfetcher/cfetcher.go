@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -76,21 +77,31 @@ type cTableInfo struct {
 
 	// One value per column that is part of the key; each value is a column
 	// index (into cols); -1 if we don't need the value for that column.
+	//
+	// Note that if the tracing is enabled on the cFetcher (traceKV == true),
+	// then values for all columns are needed and, thus, there will be no -1 in
+	// indexColOrdinals.
 	indexColOrdinals []int
-	// allIndexColOrdinals is the same as indexColOrdinals but
-	// does not contain any -1's. It is meant to be used only in logging.
-	allIndexColOrdinals []int
 
 	// The set of column ordinals which are both composite and part of the index
 	// key.
 	compositeIndexColOrdinals util.FastIntSet
 
-	// One value per column that is part of the key; each value is a column
-	// index (into cols); -1 if we don't need the value for that column.
+	// One number per column coming from the "key suffix" that is part of the
+	// value; each number is a column index (into cols); -1 if we don't need the
+	// value for that column.
+	//
+	// The "key suffix" columns are only used for secondary indexes:
+	// - for non-unique indexes, these columns are appended to the key (and will
+	// be included in indexColOrdinals instead);
+	// - for unique indexes, these columns are stored in the value (unless the
+	// key contains a NULL value: then the extra columns are appended to the key
+	// to unique-ify it).
+	//
+	// Note that if the tracing is enabled on the cFetcher (traceKV == true),
+	// then values for all columns are needed and, thus, there will be no -1 in
+	// extraValColOrdinals.
 	extraValColOrdinals []int
-	// allExtraValColOrdinals is the same as extraValColOrdinals but
-	// does not contain any -1's. It is meant to be used only in logging.
-	allExtraValColOrdinals []int
 
 	// invertedColOrdinal is a column index (into cols), indicating the inverted
 	// column; -1 if there is no inverted column or we don't need the value for
@@ -120,6 +131,9 @@ type cTableInfo struct {
 
 	keyValTypes []*types.T
 	extraTypes  []*types.T
+	// extraValDirections contains len(extraTypes) ASC directions. This will
+	// only be used for unique secondary indexes.
+	extraValDirections []descpb.IndexDescriptor_Direction
 
 	da rowenc.DatumAlloc
 }
@@ -145,15 +159,14 @@ func (c *cTableInfo) Release() {
 	c.colIdxMap.ords = c.colIdxMap.ords[:0]
 	c.colIdxMap.vals = c.colIdxMap.vals[:0]
 	*c = cTableInfo{
-		colIdxMap:              c.colIdxMap,
-		keyValTypes:            c.keyValTypes[:0],
-		extraTypes:             c.extraTypes[:0],
-		neededColsList:         c.neededColsList[:0],
-		notNeededColOrdinals:   c.notNeededColOrdinals[:0],
-		indexColOrdinals:       c.indexColOrdinals[:0],
-		allIndexColOrdinals:    c.allIndexColOrdinals[:0],
-		extraValColOrdinals:    c.extraValColOrdinals[:0],
-		allExtraValColOrdinals: c.allExtraValColOrdinals[:0],
+		colIdxMap:            c.colIdxMap,
+		keyValTypes:          c.keyValTypes[:0],
+		extraTypes:           c.extraTypes[:0],
+		extraValDirections:   c.extraValDirections[:0],
+		neededColsList:       c.neededColsList[:0],
+		notNeededColOrdinals: c.notNeededColOrdinals[:0],
+		indexColOrdinals:     c.indexColOrdinals[:0],
+		extraValColOrdinals:  c.extraValColOrdinals[:0],
 	}
 	cTableInfoPool.Put(c)
 }
@@ -223,6 +236,7 @@ const noOutputColumn = -1
 //      }
 //      // Process res.colBatch
 //   }
+//   rf.Close(ctx)
 type cFetcher struct {
 	// table is the table that's configured for fetching.
 	table *cTableInfo
@@ -237,9 +251,8 @@ type cFetcher struct {
 	maxKeysPerRow int
 
 	// True if the index key must be decoded.
-	// If there is more than one table, the index key must always be decoded.
-	// This is only false if there are no needed columns and the (single)
-	// table has no interleave children.
+	// This is only false if there are no needed columns, the table has no
+	// interleave children, and the tracing is not enabled.
 	mustDecodeIndexKey bool
 
 	// lockStrength represents the row-level locking mode to use when fetching rows.
@@ -255,7 +268,7 @@ type cFetcher struct {
 	lockTimeout time.Duration
 
 	// traceKV indicates whether or not session tracing is enabled. It is set
-	// when beginning a new scan.
+	// when initializing the fetcher.
 	traceKV bool
 
 	// mvccDecodeStrategy controls whether or not MVCC timestamps should
@@ -315,6 +328,10 @@ type cFetcher struct {
 		// tableoidCol is the same as timestampCol but for the tableoid system column.
 		tableoidCol coldata.DatumVec
 	}
+
+	// scratch is a scratch space used when decoding bytes-like and decimal
+	// keys.
+	scratch []byte
 
 	typs             []*types.T
 	accountingHelper colmem.SetAccountingHelper
@@ -383,23 +400,16 @@ func (rf *cFetcher) Init(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockTimeout time.Duration,
-	tables ...row.FetcherTableArgs,
+	tableArgs row.FetcherTableArgs,
+	traceKV bool,
 ) error {
 	rf.memoryLimit = memoryLimit
-	if len(tables) == 0 {
-		return errors.AssertionFailedf("no tables to fetch from")
-	}
-
 	rf.reverse = reverse
 	rf.lockStrength = lockStrength
 	rf.lockWaitPolicy = lockWaitPolicy
 	rf.lockTimeout = lockTimeout
+	rf.traceKV = traceKV
 
-	if len(tables) > 1 {
-		return errors.New("multiple tables not supported in cfetcher")
-	}
-
-	tableArgs := tables[0]
 	table := newCTableInfo()
 	nCols := tableArgs.ColIdxMap.Len()
 	if cap(table.colIdxMap.vals) < nCols {
@@ -415,18 +425,16 @@ func (rf *cFetcher) Init(
 	}
 	sort.Sort(table.colIdxMap)
 	*table = cTableInfo{
-		desc:                   tableArgs.Desc,
-		colIdxMap:              table.colIdxMap,
-		index:                  tableArgs.Index,
-		isSecondaryIndex:       tableArgs.IsSecondaryIndex,
-		cols:                   colDescriptors,
-		neededColsList:         table.neededColsList[:0],
-		indexColOrdinals:       table.indexColOrdinals[:0],
-		allIndexColOrdinals:    table.allIndexColOrdinals[:0],
-		extraValColOrdinals:    table.extraValColOrdinals[:0],
-		allExtraValColOrdinals: table.allExtraValColOrdinals[:0],
-		timestampOutputIdx:     noOutputColumn,
-		oidOutputIdx:           noOutputColumn,
+		desc:                tableArgs.Desc,
+		colIdxMap:           table.colIdxMap,
+		index:               tableArgs.Index,
+		isSecondaryIndex:    tableArgs.IsSecondaryIndex,
+		cols:                colDescriptors,
+		neededColsList:      table.neededColsList[:0],
+		indexColOrdinals:    table.indexColOrdinals[:0],
+		extraValColOrdinals: table.extraValColOrdinals[:0],
+		timestampOutputIdx:  noOutputColumn,
+		oidOutputIdx:        noOutputColumn,
 	}
 
 	if cap(rf.typs) < len(colDescriptors) {
@@ -500,30 +508,22 @@ func (rf *cFetcher) Init(
 		table.neededValueColsByIdx.Remove(table.oidOutputIdx)
 	}
 
-	neededIndexCols := 0
 	nIndexCols := len(indexColumnIDs)
 	if cap(table.indexColOrdinals) >= nIndexCols {
 		table.indexColOrdinals = table.indexColOrdinals[:nIndexCols]
 	} else {
 		table.indexColOrdinals = make([]int, nIndexCols)
 	}
-	if cap(table.allIndexColOrdinals) >= nIndexCols {
-		table.allIndexColOrdinals = table.allIndexColOrdinals[:nIndexCols]
-	} else {
-		table.allIndexColOrdinals = make([]int, nIndexCols)
-	}
 	indexColOrdinals := table.indexColOrdinals
 	_ = indexColOrdinals[len(indexColumnIDs)-1]
-	allIndexColOrdinals := table.allIndexColOrdinals
-	_ = allIndexColOrdinals[len(indexColumnIDs)-1]
+	needToDecodeDecimalKey := false
 	for i, id := range indexColumnIDs {
 		colIdx, ok := tableArgs.ColIdxMap.Get(id)
-		//gcassert:bce
-		allIndexColOrdinals[i] = colIdx
-		if ok && neededCols.Contains(int(id)) {
+		if (ok && neededCols.Contains(int(id))) || rf.traceKV {
 			//gcassert:bce
 			indexColOrdinals[i] = colIdx
-			neededIndexCols++
+			rf.mustDecodeIndexKey = true
+			needToDecodeDecimalKey = needToDecodeDecimalKey || typs[colIdx].Family() == types.DecimalFamily
 			// A composite column might also have a value encoding which must be
 			// decoded. Others can be removed from neededValueColsByIdx.
 			if compositeColumnIDs.Contains(int(id)) {
@@ -538,6 +538,13 @@ func (rf *cFetcher) Init(
 				return errors.AssertionFailedf("needed column %d not in colIdxMap", id)
 			}
 		}
+	}
+	if needToDecodeDecimalKey && cap(rf.scratch) < 64 {
+		// If we need to decode the decimal key encoding, it might use a scratch
+		// byte slice internally, so we'll allocate such a space to be reused
+		// for every decimal.
+		// TODO(yuzefovich): 64 was chosen arbitrarily, tune it.
+		rf.scratch = make([]byte, 64)
 	}
 	table.invertedColOrdinal = -1
 	if table.index.GetType() == descpb.IndexDescriptor_INVERTED {
@@ -559,7 +566,6 @@ func (rf *cFetcher) Init(
 			if ok && neededCols.Contains(int(id)) {
 				if compositeColumnIDs.Contains(int(id)) {
 					table.compositeIndexColOrdinals.Add(colIdx)
-				} else {
 					table.neededValueColsByIdx.Remove(colIdx)
 				}
 			}
@@ -571,7 +577,7 @@ func (rf *cFetcher) Init(
 	// - If there are needed columns from the index key, we need to read it.
 	//
 	// Otherwise, we can completely avoid decoding the index key.
-	if neededIndexCols > 0 || table.index.NumInterleavedBy() > 0 || table.index.NumInterleaveAncestors() > 0 {
+	if table.index.NumInterleavedBy() > 0 || table.index.NumInterleaveAncestors() > 0 {
 		rf.mustDecodeIndexKey = true
 	}
 
@@ -607,23 +613,21 @@ func (rf *cFetcher) Init(
 		} else {
 			table.extraValColOrdinals = make([]int, nExtraColumns)
 		}
-
-		if cap(table.allExtraValColOrdinals) >= nExtraColumns {
-			table.allExtraValColOrdinals = table.allExtraValColOrdinals[:nExtraColumns]
+		// Note that for extraValDirections we only need to make sure that the
+		// slice has the correct length set since the ASC direction is the zero
+		// value and we don't modify the elements of this slice.
+		if cap(table.extraValDirections) >= nExtraColumns {
+			table.extraValDirections = table.extraValDirections[:nExtraColumns]
 		} else {
-			table.allExtraValColOrdinals = make([]int, nExtraColumns)
+			table.extraValDirections = make([]descpb.IndexDescriptor_Direction, nExtraColumns)
 		}
 
 		extraValColOrdinals := table.extraValColOrdinals
 		_ = extraValColOrdinals[nExtraColumns-1]
-		allExtraValColOrdinals := table.allExtraValColOrdinals
-		_ = allExtraValColOrdinals[nExtraColumns-1]
 		for i := 0; i < nExtraColumns; i++ {
 			id := table.index.GetKeySuffixColumnID(i)
 			idx := tableArgs.ColIdxMap.GetDefault(id)
-			//gcassert:bce
-			allExtraValColOrdinals[i] = idx
-			if neededCols.Contains(int(id)) {
+			if neededCols.Contains(int(id)) || rf.traceKV {
 				//gcassert:bce
 				extraValColOrdinals[i] = idx
 			} else {
@@ -659,42 +663,45 @@ func (rf *cFetcher) Init(
 
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
+//
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly. The caller can only reuse the
+// spans slice after the fetcher has been closed (which happens when the fetcher
+// emits the first zero batch), and if the caller does, it becomes responsible
+// for the memory accounting.
 func (rf *cFetcher) StartScan(
+	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
 	bsHeader *roachpb.BoundedStalenessHeader,
 	limitBatches bool,
-	batchBytesLimit row.BytesLimit,
-	limitHint row.RowLimit,
-	traceKV bool,
+	batchBytesLimit rowinfra.BytesLimit,
+	limitHint rowinfra.RowLimit,
 	forceProductionKVBatchSize bool,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
 	}
-	if !limitBatches && batchBytesLimit != row.NoBytesLimit {
+	if !limitBatches && batchBytesLimit != rowinfra.NoBytesLimit {
 		return errors.AssertionFailedf("batchBytesLimit set without limitBatches")
 	}
-
-	rf.traceKV = traceKV
 
 	// If we have a limit hint, we limit the first batch size. Subsequent
 	// batches get larger to avoid making things too slow (e.g. in case we have
 	// a very restrictive filter and actually have to retrieve a lot of rows).
-	firstBatchLimit := row.KeyLimit(limitHint)
+	firstBatchLimit := rowinfra.KeyLimit(limitHint)
 	if firstBatchLimit != 0 {
 		// The limitHint is a row limit, but each row could be made up
 		// of more than one key. We take the maximum possible keys
 		// per row out of all the table rows we could potentially
 		// scan over.
-		firstBatchLimit = row.KeyLimit(int(limitHint) * rf.maxKeysPerRow)
+		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * rf.maxKeysPerRow)
 		// We need an extra key to make sure we form the last row.
 		firstBatchLimit++
 	}
 
-	// Note that we pass a nil memMonitor here, because the cfetcher does its own
-	// memory accounting.
 	f, err := row.NewKVFetcher(
+		ctx,
 		txn,
 		spans,
 		bsHeader,
@@ -704,7 +711,7 @@ func (rf *cFetcher) StartScan(
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.lockTimeout,
-		nil, /* memMonitor */
+		rf.accountingHelper.Allocator.GetMonitor(),
 		forceProductionKVBatchSize,
 	)
 	if err != nil {
@@ -889,7 +896,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			// in the index key. This is used when decoding unique secondary indexes in order
 			// to tell whether they have extra columns appended to the key.
 			var foundNull bool
-			if rf.mustDecodeIndexKey || rf.traceKV {
+			if rf.mustDecodeIndexKey {
 				if debugState {
 					log.Infof(ctx, "decoding first key %s", rf.machine.nextKV.Key)
 				}
@@ -898,27 +905,24 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 					matches bool
 					err     error
 				)
-				indexOrds := rf.table.indexColOrdinals
-				if rf.traceKV {
-					indexOrds = rf.table.allIndexColOrdinals
-				}
 				// For unique secondary indexes on tables with multiple column
 				// families, we must check all columns for NULL values in order
 				// to determine whether a KV belongs to the same row as the
 				// previous KV or a different row.
 				checkAllColsForNull := rf.table.isSecondaryIndex && rf.table.index.IsUnique() && rf.table.desc.NumFamilies() != 1
-				key, matches, foundNull, err = colencoding.DecodeIndexKeyToCols(
+				key, matches, foundNull, rf.scratch, err = colencoding.DecodeIndexKeyToCols(
 					&rf.table.da,
 					rf.machine.colvecs,
 					rf.machine.rowIdx,
 					rf.table.desc,
 					rf.table.index,
-					indexOrds,
+					rf.table.indexColOrdinals,
 					checkAllColsForNull,
 					rf.table.keyValTypes,
 					rf.table.indexColumnDirs,
 					rf.machine.nextKV.Key[rf.table.knownPrefixLength:],
 					rf.table.invertedColOrdinal,
+					rf.scratch,
 				)
 				if err != nil {
 					return nil, err
@@ -997,12 +1001,8 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			rf.machine.remainingValueColsByIdx.CopyFrom(rf.table.neededValueColsByIdx)
 			// Process the current KV's value component.
-			prettyKey, prettyVal, err := rf.processValue(ctx, familyID)
-			if err != nil {
+			if err := rf.processValue(ctx, familyID); err != nil {
 				return nil, err
-			}
-			if rf.traceKV {
-				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 			}
 			// Update the MVCC values for this row.
 			if rf.table.rowLastModified.Less(rf.machine.nextKV.Value.Timestamp) {
@@ -1097,12 +1097,8 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 
 			// Process the current KV's value component.
-			prettyKey, prettyVal, err := rf.processValue(ctx, familyID)
-			if err != nil {
+			if err := rf.processValue(ctx, familyID); err != nil {
 				return nil, err
-			}
-			if rf.traceKV {
-				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 			}
 
 			// Update the MVCC values for this row.
@@ -1173,6 +1169,8 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			return rf.machine.batch, nil
 
 		case stateFinished:
+			// Close the fetcher eagerly so that its memory could be GCed.
+			rf.Close(ctx)
 			return coldata.ZeroBatch, nil
 		}
 	}
@@ -1201,26 +1199,27 @@ func (rf *cFetcher) getDatumAt(colIdx int, rowIdx int) tree.Datum {
 // processValue processes the state machine's current value component, setting
 // columns in the rowIdx'th tuple in the current batch depending on what data
 // is found in the current value component.
-// If debugStrings is true, returns pretty printed key and value
-// information in prettyKey/prettyValue (otherwise they are empty strings).
-func (rf *cFetcher) processValue(
-	ctx context.Context, familyID descpb.FamilyID,
-) (prettyKey string, prettyValue string, err error) {
+func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) (err error) {
 	table := rf.table
 
+	var prettyKey, prettyValue string
 	if rf.traceKV {
+		defer func() {
+			if err == nil {
+				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyValue)
+			}
+		}()
+
 		var buf strings.Builder
 		buf.WriteByte('/')
 		buf.WriteString(rf.table.desc.GetName())
 		buf.WriteByte('/')
 		buf.WriteString(rf.table.index.GetName())
-		for _, idx := range rf.table.allIndexColOrdinals {
+		// Note that because rf.traceKV is true, rf.table.indexColOrdinals will
+		// not include any -1, so idx values will all be valid.
+		for _, idx := range rf.table.indexColOrdinals {
 			buf.WriteByte('/')
-			if idx != -1 {
-				buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx).String())
-			} else {
-				buf.WriteByte('?')
-			}
+			buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx).String())
 		}
 		prettyKey = buf.String()
 	}
@@ -1230,7 +1229,7 @@ func (rf *cFetcher) processValue(
 		if rf.traceKV {
 			prettyValue = tree.DNull.String()
 		}
-		return prettyKey, prettyValue, nil
+		return nil
 	}
 
 	val := rf.machine.nextKV.Value
@@ -1255,17 +1254,17 @@ func (rf *cFetcher) processValue(
 			if err != nil {
 				break
 			}
-			prettyKey, prettyValue, err = rf.processValueTuple(ctx, table, tupleBytes, prettyKey)
+			prettyKey, prettyValue, err = rf.processValueBytes(ctx, table, tupleBytes, prettyKey)
 		default:
 			var family *descpb.ColumnFamilyDescriptor
 			family, err = table.desc.FindFamilyByID(familyID)
 			if err != nil {
-				return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
+				return scrub.WrapError(scrub.IndexKeyDecodingError, err)
 			}
 			prettyKey, prettyValue, err = rf.processValueSingle(ctx, table, family, prettyKey)
 		}
 		if err != nil {
-			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
+			return scrub.WrapError(scrub.IndexValueDecodingError, err)
 		}
 	} else {
 		tag := val.GetTag()
@@ -1277,35 +1276,31 @@ func (rf *cFetcher) processValue(
 			// key columns if they are present, so we decode them here.
 			valueBytes, err = val.GetBytes()
 			if err != nil {
-				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
+				return scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
 
 			if table.isSecondaryIndex && table.index.IsUnique() {
 				// This is a unique secondary index; decode the extra
 				// column values from the value.
-				extraColOrds := table.extraValColOrdinals
-				if rf.traceKV {
-					extraColOrds = table.allExtraValColOrdinals
-				}
-				valueBytes, _, err = colencoding.DecodeKeyValsToCols(
+				valueBytes, _, rf.scratch, err = colencoding.DecodeKeyValsToCols(
 					&table.da,
 					rf.machine.colvecs,
 					rf.machine.rowIdx,
-					extraColOrds,
+					table.extraValColOrdinals,
 					false, /* checkAllColsForNull */
 					table.extraTypes,
-					nil,
+					table.extraValDirections,
 					&rf.machine.remainingValueColsByIdx,
 					valueBytes,
 					rf.table.invertedColOrdinal,
+					rf.scratch,
 				)
 				if err != nil {
-					return "", "", scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
+					return scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
 				}
 				if rf.traceKV {
 					var buf strings.Builder
-					for j := range table.extraTypes {
-						idx := table.allExtraValColOrdinals[j]
+					for _, idx := range table.extraValColOrdinals {
 						buf.WriteByte('/')
 						buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx).String())
 					}
@@ -1315,7 +1310,7 @@ func (rf *cFetcher) processValue(
 		case roachpb.ValueType_TUPLE:
 			valueBytes, err = val.GetTuple()
 			if err != nil {
-				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
+				return scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
 		}
 
@@ -1324,7 +1319,7 @@ func (rf *cFetcher) processValue(
 				ctx, table, valueBytes, prettyKey,
 			)
 			if err != nil {
-				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
+				return scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
 		}
 	}
@@ -1333,7 +1328,7 @@ func (rf *cFetcher) processValue(
 		prettyValue = tree.DNull.String()
 	}
 
-	return prettyKey, prettyValue, nil
+	return nil
 }
 
 // processValueSingle processes the given value (of column
@@ -1499,14 +1494,6 @@ func (rf *cFetcher) processValueBytes(
 	return prettyKey, prettyValue, nil
 }
 
-// processValueTuple processes the given values (of columns family.ColumnIDs),
-// setting values in the rf.row accordingly. The key is only used for logging.
-func (rf *cFetcher) processValueTuple(
-	ctx context.Context, table *cTableInfo, tupleBytes []byte, prettyKeyPrefix string,
-) (prettyKey string, prettyValue string, err error) {
-	return rf.processValueBytes(ctx, table, tupleBytes, prettyKeyPrefix)
-}
-
 func (rf *cFetcher) fillNulls() error {
 	table := rf.table
 	if rf.machine.remainingValueColsByIdx.Empty() {
@@ -1612,7 +1599,8 @@ func (rf *cFetcher) Release() {
 	*rf = cFetcher{
 		// The types are small objects, so we don't bother deeply resetting this
 		// slice.
-		typs: rf.typs[:0],
+		typs:    rf.typs[:0],
+		scratch: rf.scratch[:0],
 	}
 	cFetcherPool.Put(rf)
 }
@@ -1636,7 +1624,7 @@ func initCFetcher(
 	index catalog.Index,
 	neededCols util.FastIntSet,
 	colIdxMap catalog.TableColMap,
-	virtualCol catalog.Column,
+	invertedCol catalog.Column,
 	args cFetcherArgs,
 ) (*cFetcher, error) {
 	fetcher := cFetcherPool.Get().(*cFetcher)
@@ -1650,14 +1638,21 @@ func initCFetcher(
 		ValNeededForCol:  neededCols,
 	}
 
-	tableArgs.InitCols(desc, args.visibility, args.hasSystemColumns, virtualCol)
+	tableArgs.InitCols(desc, args.visibility, args.hasSystemColumns, invertedCol)
 
 	if err := fetcher.Init(
 		flowCtx.Codec(), allocator, args.memoryLimit, args.reverse, args.lockingStrength,
-		args.lockingWaitPolicy, flowCtx.EvalCtx.SessionData().LockTimeout, tableArgs,
+		args.lockingWaitPolicy, flowCtx.EvalCtx.SessionData().LockTimeout, tableArgs, flowCtx.TraceKV,
 	); err != nil {
 		return nil, err
 	}
 
 	return fetcher, nil
+}
+
+func (rf *cFetcher) Close(ctx context.Context) {
+	if rf != nil && rf.fetcher != nil {
+		rf.fetcher.Close(ctx)
+		rf.fetcher = nil
+	}
 }

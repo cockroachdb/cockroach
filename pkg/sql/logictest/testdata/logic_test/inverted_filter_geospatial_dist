@@ -17,6 +17,7 @@ INSERT INTO geo_table VALUES
   (6, 'POLYGON((1 1, 5 1, 5 5, 1 5, 1 1))'),
   (7, 'LINESTRING(1 1, 3 3)')
 
+# Not distributed.
 query I
 SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
@@ -30,33 +31,6 @@ SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::g
 6
 7
 
-# Not distributed.
-query T
-EXPLAIN (DISTSQL)
-SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
-----
-distribution: full
-vectorized: true
-·
-• sort
-│ order: +k
-│
-└── • filter
-    │ filter: st_intersects('01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840', geom)
-    │
-    └── • index join
-        │ table: geo_table@primary
-        │
-        └── • inverted filter
-            │ inverted column: geom_inverted_key
-            │ num spans: 31
-            │
-            └── • scan
-                  missing stats
-                  table: geo_table@geom_index
-                  spans: 31 spans
-·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUlFFP2zAQx9_3Kax7odW81naCNvxUGGHLVChLO21orlDW3FhEsTPbnTKhfvcpCQNa1ED84PbO_v3P_7OcW3C_lyAh-nY-PozPSO84ns6mn8d9Mo3G0fsZuSYnyeSUXKG59OmPJZKvH6MkIs5f5tqjdbjwrrd3-mU8i88n8dms1xMDQcRA9CnpBQNGggHr9_ek_BBNTqNZckErrZs-mSTHUUKOLsg1UNAmw7P0Bh3I78BhTqGwZoHOGVulbusNcVaCZBRyXax8lZ5TWBiLIG_B536JIGFWnTHBNEM7ZEAhQ5_my1r23sKoOsBlrjMsgcK0SLWTZKjgSKnyZ6ZUyZlSJXtugjddGa6ApDojASPG_0LrYL6mYFb-wY_z6RWC5Gv6cs-x_oPWY3aSLz1atEO-afz_elQWlhhNRlwSV7kmzqfWy9pF8HZfKSaYUow9NwFBnXXFKvNb7ilMVl6SEd_ZB9GlD59Mru-uXuy6-sLmN6n9-1CajsTO6kGX6vfdDzZrN3m5_WIYZyFrhrj75Yw3fw4OD-4H4-GT-GHnxngXPon35OOHNxL9F_Q87OJ6aqxHOww3PY_4653y-13kE3SF0Q435Hcps_WcAmZX2HwynFnZBZ5bs6jLNOGk5upEhs43q7wJYt0sVQd8DPNWWLTDohUO2uGgFQ7b4bAV3t-C5-tX_wIAAP__VL3gzA==
 
 # The inverted filterer handles five inverted index rows with decoded
 # datums, where the first column is the PK (k) and the second is the cellid
@@ -80,35 +54,6 @@ replicas  lease_holder
 {1}       1
 {1}       1
 
-# Not distributed, since both ranges of the index are on the same node,
-# which is also the gateway node.
-query T
-EXPLAIN (DISTSQL)
-SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
-----
-distribution: full
-vectorized: true
-·
-• sort
-│ order: +k
-│
-└── • filter
-    │ filter: st_intersects('01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840', geom)
-    │
-    └── • index join
-        │ table: geo_table@primary
-        │
-        └── • inverted filter
-            │ inverted column: geom_inverted_key
-            │ num spans: 31
-            │
-            └── • scan
-                  missing stats
-                  table: geo_table@geom_index
-                  spans: 31 spans
-·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUlFFP2zAQx9_3Kax7odW81naCNvxUGGHLVChLO21orlDW3FhEsTPbnTKhfvcpCQNa1ED84PbO_v3P_7OcW3C_lyAh-nY-PozPSO84ns6mn8d9Mo3G0fsZuSYnyeSUXKG59OmPJZKvH6MkIs5f5tqjdbjwrrd3-mU8i88n8dms1xMDQcRA9CnpBQNGggHr9_ek_BBNTqNZckErrZs-mSTHUUKOLsg1UNAmw7P0Bh3I78BhTqGwZoHOGVulbusNcVaCZBRyXax8lZ5TWBiLIG_B536JIGFWnTHBNEM7ZEAhQ5_my1r23sKoOsBlrjMsgcK0SLWTZKjgSKnyZ6ZUyZlSJXtugjddGa6ApDojASPG_0LrYL6mYFb-wY_z6RWC5Gv6cs-x_oPWY3aSLz1atEO-afz_elQWlhhNRlwSV7kmzqfWy9pF8HZfKSaYUow9NwFBnXXFKvNb7ilMVl6SEd_ZB9GlD59Mru-uXuy6-sLmN6n9-1CajsTO6kGX6vfdDzZrN3m5_WIYZyFrhrj75Yw3fw4OD-4H4-GT-GHnxngXPon35OOHNxL9F_Q87OJ6aqxHOww3PY_4653y-13kE3SF0Q435Hcps_WcAmZX2HwynFnZBZ5bs6jLNOGk5upEhs43q7wJYt0sVQd8DPNWWLTDohUO2uGgFQ7b4bAV3t-C5-tX_wIAAP__VL3gzA==
-
 statement ok
 ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1152921574000000000)
 
@@ -127,66 +72,12 @@ SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::
 6
 7
 
-query T
-EXPLAIN (DISTSQL)
-SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
-----
-distribution: full
-vectorized: true
-·
-• sort
-│ order: +k
-│
-└── • filter
-    │ filter: st_intersects('01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840', geom)
-    │
-    └── • index join
-        │ table: geo_table@primary
-        │
-        └── • inverted filter
-            │ inverted column: geom_inverted_key
-            │ num spans: 31
-            │
-            └── • scan
-                  missing stats
-                  table: geo_table@geom_index
-                  spans: 31 spans
-·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUlFFP2zAQx9_3Kax7odW81naCNvxUGGHLVChLO21orlDW3FhEsTPbnTKhfvcpCQNa1ED84PbO_v3P_7OcW3C_lyAh-nY-PozPSO84ns6mn8d9Mo3G0fsZuSYnyeSUXKG59OmPJZKvH6MkIs5f5tqjdbjwrrd3-mU8i88n8dms1xMDQcRA9CnpBQNGggHr9_ek_BBNTqNZckErrZs-mSTHUUKOLsg1UNAmw7P0Bh3I78BhTqGwZoHOGVulbusNcVaCZBRyXax8lZ5TWBiLIG_B536JIGFWnTHBNEM7ZEAhQ5_my1r23sKoOsBlrjMsgcK0SLWTZKjgSKnyZ6ZUyZlSJXtugjddGa6ApDojASPG_0LrYL6mYFb-wY_z6RWC5Gv6cs-x_oPWY3aSLz1atEO-afz_elQWlhhNRlwSV7kmzqfWy9pF8HZfKSaYUow9NwFBnXXFKvNb7ilMVl6SEd_ZB9GlD59Mru-uXuy6-sLmN6n9-1CajsTO6kGX6vfdDzZrN3m5_WIYZyFrhrj75Yw3fw4OD-4H4-GT-GHnxngXPon35OOHNxL9F_Q87OJ6aqxHOww3PY_4653y-13kE3SF0Q435Hcps_WcAmZX2HwynFnZBZ5bs6jLNOGk5upEhs43q7wJYt0sVQd8DPNWWLTDohUO2uGgFQ7b4bAV3t-C5-tX_wIAAP__VL3gzA==
-
 # Data is distributed, but the filterer can't be distributed since it is not a union.
 query I
 SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 6
 7
-
-query T
-EXPLAIN (DISTSQL)
-SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
-----
-distribution: full
-vectorized: true
-·
-• sort
-│ order: +k
-│
-└── • filter
-    │ filter: st_coveredby('01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840', geom)
-    │
-    └── • index join
-        │ table: geo_table@primary
-        │
-        └── • inverted filter
-            │ inverted column: geom_inverted_key
-            │ num spans: 31
-            │
-            └── • scan
-                  missing stats
-                  table: geo_table@geom_index
-                  spans: 31 spans
-·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUlFFP2zwUhu-_X2GdG1p9Xms7QRu-KoywZSqUpZ02NFco1GcsosSZ7aIg1P8-JWFAQQ3EF27PsZ_3-D2WcwfuzxIkRD9Ox_vxCekdxtPZ9Ou4T6bROPo4I1fkKJkck0s05z69WCL5_jlKIuL8-cLcoEV9cdvbOf42nsWnk_hk1uuJgSBiIPqU9IIBI8GA9fs7Un6KJsfRLDmjldR1n0ySwyghB2fkCijkRuNJeo0O5E_gMKdQWLNA54ytUnf1hliXIBmFLC9WvkrPKSyMRZB34DO_RJAwq46YYKrRDhlQ0OjTbFnLPjgYVQc4z3KNJVCYFmnuJBkqOFCq_KWVKjlTqmSvTfCuK8MVkDTXJGDE-N9oHczXFMzKP_pxPr1EkHxN3-45zm_QetRH2dKjRTvkm8b_rUdlYYnJyYhL4irXxPnUelm7CN7vKsUEU4qx1yYgmOuuWGX-mXsKk5WXZMS39kF06cMXk-X3Vy-2XX1hs-vU3j6WpiOxtXrQpfpD94PN2k1ePnswjLOQNUPc_3LGmz97-3sPg_HwRfy4c2N8CF_EO_LpuxuJ_htaHnYxPTXWox2Gm5ZH_P-t8rtd5BN0hckdbshvU2brOQXUl9h8MZxZ2QWeWrOoyzThpObqhEbnm1XeBHHeLFUHfArzVli0w6IVDtrhoBUO2-GwFd59Bs_X__0NAAD___MV38o=
 
 # Move all the index data that will be read to node 2 while the query executes
 # at node 1. The filtering moves to node 2 when it is distributable.
@@ -209,163 +100,8 @@ SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::
 7
 
 # Filtering is placed at node 2.
-query T
-EXPLAIN (DISTSQL)
-SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
-----
-distribution: full
-vectorized: true
-·
-• sort
-│ order: +k
-│
-└── • filter
-    │ filter: st_intersects('01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840', geom)
-    │
-    └── • index join
-        │ table: geo_table@primary
-        │
-        └── • inverted filter
-            │ inverted column: geom_inverted_key
-            │ num spans: 31
-            │
-            └── • scan
-                  missing stats
-                  table: geo_table@geom_index
-                  spans: 31 spans
-·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUlFFP2zwUhu-_X2GdG1p9prWdlA1fFUbYMpWWpZ02NFcoa85YRLEz2506of73KQ0DAmogvnB7jv2ck_e17Ftwv5YgIfp6PjqKx6RzEk9n00-jLplGo-jdjFyT02RyRq7QXPr0-xLJlw9REhHnL3Pt0TpceNfZO_s8msXnk3g863RETxDRE11KOkGPkaDHut09Kd9Hk7NollzQstZNl0ySkyghxxfkGihok-E4vUEH8htwoCBgTqGwZoHOGVumb7eb4mwNklHIdbHyZXpOYWEsgrwFn_slgoSx2TdFfwAUMvRpvtxu21AwK_8AOZ9eIciDDX1UmDcXnpUGJJhmaPusVh7u_RmW6i5zneEaKEyLVDtJ-gqOlVr_yJRac6bUmr00wX5bhisgqc5IwIjxP9E62KWZt9Ec699oPWan-dKjRdvndeH_1qN1YYnRZMglcaVq4nxqvdyqCN4MlGKCKcXYSxMQ1FlbrBT_RD2FycpLMuQ7fRBtfPhocn139GLX0Rc2v0ntn4fWdCh2dg_adL93P6j3rvLy6XVknIWsGuLulzNe_Tk8OrwfjIfP4oedtfE2fBbvyce3eii6r_A8bKN6aqxH2w_rmof8_53lB7XyL7wTCbrCaIeveijYZk4Bsyus3iJnVnaB59Ystm2qcLLltokMna9WD6og1tVS-YGPYd4Ii2ZYNMJBMxw0wmEzHDbCg2Z40AizJ_B889_fAAAA___nMRL3
-
 query I
 SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 6
 7
-
-# Filtering is at gateway node since the filter is not distributable.
-query T
-EXPLAIN (DISTSQL)
-SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
-----
-distribution: full
-vectorized: true
-·
-• sort
-│ order: +k
-│
-└── • filter
-    │ filter: st_coveredby('01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840', geom)
-    │
-    └── • index join
-        │ table: geo_table@primary
-        │
-        └── • inverted filter
-            │ inverted column: geom_inverted_key
-            │ num spans: 31
-            │
-            └── • scan
-                  missing stats
-                  table: geo_table@geom_index
-                  spans: 31 spans
-·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUlFFP2zAQx9_3Kax7odVMazspG34qjLBlKi1LO21orlCobyyixJntoiLU7z6lYUBBDcQPbu_s3__yP8u-A_d3DhKin6eDg3hIWkfxeDL-NmiTcTSIPk3IFTlORifkEs25Ty_mSH58iZKIOH8-MzdoUV_ctnZOvg8m8ekoHk5aLdERRHREm5JW0GEk6LB2e0fKz9HoJJokZ7SUum6TUXIUJeTwjFwBhdxoHKbX6ED-Ag4UBEwpFNbM0Dljy_TdelOslyAZhSwvFr5MTynMjEWQd-AzP0eQMDS7puj2gIJGn2bz9bYVBbPwj5Dz6SWC3FvRJ8K8XnhS-k8w1Wi7bEMeHtrTL92dZ7nGJVAYF2nuJOkqOFRq-VsrteRMqSV7bYLdpgxXQNJck4AR4_-gdbDNM2_iOc5v0HrUx9nco0Xb5ZvG_69Hy8ISk5M-l8SVronzqfVy7SL40FOKCaYUY69NQDDXTbHS_DP3FEYLL0mfb-2DaNKHrybL749ebDv6wmbXqb19LE37Ymv1oEn1h-4Hm7WrvHx2GxlnIauGuP_ljFd_9g_2Hwbj4Yv4cefG-Bi-iHfk00vdF-03tDxsYnpsrEfbDTct9_n7rfK9DflXnokEXWFyh296J9hqSgH1JVZPkTMLO8NTa2brMlU4WnPrhEbnq9W9Kojzaqn8wKcwr4VFPSxq4aAeDmrhsB4Oa-FePdyrhdkzeLp69y8AAP__-8wR9Q==
-
-# Bounding box operations.
-statement ok
-SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
-
-query T
-EXPLAIN (DISTSQL)
-SELECT k FROM geo_table WHERE geom && 'POINT(3.0 3.0)'::geometry
-----
-distribution: full
-vectorized: true
-·
-• filter
-│ filter: geom && '010100000000000000000008400000000000000840'
-│
-└── • index join
-    │ table: geo_table@primary
-    │
-    └── • inverted filter
-        │ inverted column: geom_inverted_key
-        │ num spans: 31
-        │
-        └── • scan
-              missing stats
-              table: geo_table@geom_index
-              spans: 31 spans
-·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk29v0z4Qx5__XoV1T7pJ3mon7Q_kR-VPBkFdW9pKgHA1hfooEa0dbAcFVX3vKAlsS6emxA9Oujt_7vw96_bgfmxBQPRxNn4RT8jF63ixXLwfX5JFNI5eLcl3cjOf3pINmjuffNki-fA2mkelvyMyZyz4v7akN5vGk-VFeM1IeM0ue0K8iaa30XL-CShoo3CS7NCB-AwcKASwopBZs0bnjC3D--pSrAoQjEKqs9yX4RWFtbEIYg8-9VsEARNzZbL-ACgo9Em6ra4dKJjcP0DOJxsEMTzQR4V5e-FlKXCOiULbZ43ycK9_VCq_S7XCAigsskQ7QfoSXkpZfFVSFpxJWbBzBq66MlwCSbQiISPGf0Pr4JRm3kVzrH-i9ahu0q1Hi7bPm8L_5qMis8RoMuKCuFI1cT6xXlQqwmdDKVnApGTsnAGCWnXFSvFH6ilMcy_IiJ-cQ9BlDu9Mqv98fXDq6zOb7hL766E1HQUnu4ddut9PP2z2ruOCjIKjZWOccfb0PB888XuisYnnhjZoPPvMJs7RZUY7_KdVZIcVBVQbrLfdmdyucWbNumpTu9OKqwIKna-zw9qJdZ0qH_gY5q1w0A4HrXDYDoet8KAdHrTC7AheHf77HQAA__-eq8eX
-
-query T
-EXPLAIN (DISTSQL)
-SELECT k FROM geo_table WHERE 'POINT(3.0 3.0)'::geometry::box2d && geom
-----
-distribution: full
-vectorized: true
-·
-• filter
-│ filter: 'BOX(3 3,3 3)' && geom
-│
-└── • index join
-    │ table: geo_table@primary
-    │
-    └── • inverted filter
-        │ inverted column: geom_inverted_key
-        │ num spans: 31
-        │
-        └── • scan
-              missing stats
-              table: geo_table@geom_index
-              spans: 31 spans
-·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk9Fv2j4Qx99_f8XpXmglV9gJ_Db5ibGmGhODDpCGNKMqwzcWDezMNlMmxP8-Jdna0o5Q_HDS3flz5-9Zt0P_Y40Sk_nt8M1gBBfXg-ls-nF4CdNkmLydwXe4mYw_wIrsXUi_rAk-vUsmCbS44II_P687z_yWlP3xPLoGteU8-r-2ZcENMjRW0yjdkEf5GQUyjHDBMHd2Sd5bV4Z31aWBLlByhpnJt6EMLxgurSOUOwxZWBNKHNkrm7c7yFBTSLN1dW3P0G7DA-RDuiKU3T17VFg0F56VyieUanJtflAe7wfTKxXdZUZTgQyneWq8hLbCvlLFV61UIbhSBT9l8OpcRiiE1GiIOdjwjZzHY5rFOZoH5ie5QPomWwdy5NriUPjffFLkDqyBnpDgS9XgQ-qCrFTEr7pK8Ygrxfkpg0BGn4uV4p-oZzjeBgk9cXQO0TlzeG8z8-fro2Nfn7tsk7pfD61ZLzraPT6n-_3048PedVxCqz-eX8QQsxjiy5b856r1ohfMpHPwqhOLNiGfW-PpRZvG9wuGpFdUL7O3W7ekW2eXVZvaHVdcFdDkQ53t1s7A1KnygY9h0QhHzXDUCMfNcNwId5rhTiPMn8CL_X-_AwAA__8rRsTS
-
-query T
-EXPLAIN (DISTSQL)
-SELECT k FROM geo_table WHERE 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry ~ geom
-----
-distribution: full
-vectorized: true
-·
-• filter
-│ filter: '010200000002000000000000000000F03F000000000000F03F00000000000014400000000000001440' ~ geom
-│
-└── • index join
-    │ table: geo_table@primary
-    │
-    └── • inverted filter
-        │ inverted column: geom_inverted_key
-        │ num spans: 33
-        │
-        └── • scan
-              missing stats
-              table: geo_table@geom_index
-              spans: 33 spans
-·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUlG9v2j4Qx5__XoV1T2glF-wk6Cf5EfsTukwUuoC0TTOqMnxj0cDObDNlQuy1T0nWFpAIxVIc3Z0_d_meddmC-7kCAfGn-9GrZEyu3ibT2fTD6JpM41H8ZkZ-kGE6uSNLNA8--7pC8vFdnMakM0rG8XSWJuPbK95lhHcZJf0uq57rjhC38eQunqWfyZ8KXQMFbRSOszU6EF-AA4UA5hQKaxbonLGVe1sfSlQJglHIdbHxlXtOYWEsgtiCz_0KQcDY3JiiFwEFhT7LV_WxHQWz8c-Q89kSQfR3dC8xb088qzSmmCm0PXaQHp5aMKgUPeRaYQkUpkWmnSA9Ca-lLL8pKUvOpCzZuQ1uLmW4BJJpRcKAGP8drYNTmvklmhP9C61HNcxXHi3aHj8U_hiPy8ISo8mAC-Iq1cT5zHpRqwj_70vJAiYlY-c2IKjVpVgl_kg9hcnGCzLgJ_sQXNKH9ybX_64-OHX1hc3Xmf39XJoOgpPVw0uqP3U_PKzd-AXpMM4C1qzH994asnDYZvMoYsd2RxwM6iB4QUejA01nxjRFVxjt8EVzynZzCqiW2PwKnNnYBd5bs6jLNOak5mqHQuebaL8xEt2Eqg_ch3krHLTDQSsctsNhKxy1w1ErzI7g-e6_vwEAAP__M6HNEQ==
-
-query T
-EXPLAIN (DISTSQL)
-SELECT k FROM geo_table WHERE geom ~ 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry::box2d
-----
-distribution: full
-vectorized: true
-·
-• filter
-│ filter: geom ~ 'BOX(1 1,5 5)'
-│
-└── • index join
-    │ table: geo_table@primary
-    │
-    └── • inverted filter
-        │ inverted column: geom_inverted_key
-        │ num spans: 30
-        │
-        └── • scan
-              missing stats
-              table: geo_table@geom_index
-              spans: 30 spans
-·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk9-LGjEQx9_7V4R5uTvIYZJdKc2TtbdSi9WrChUaObZmapdqsk1i2SL2by-72zt_gGvdhywzyWcm32-YLfifK5CQzB4Hb_tDcvvQn0wnnwZ3ZJIMkndT8oP0xqOPZIn2KaRfV0g-v0_GSRmvyR9ywzgTrP6e_wdfj0W9ppjHMTuNb6TsjmbiASgYq3GYrtGD_AIcKAiYU8idXaD31pXpbXWorwuQjEJm8k0o03MKC-sQ5BZCFlYIEob23uatGChoDGm2qo7tKNhN2EM-pEsE2d7Rg8K8ufC0tGWMqUbXYkfl4cW1TunXU2Y0FkBhkqfGS9JS0FWq-KaVKjhTqmCXFri_luEKSGo0EW-IDd_ReTinmV-juW9-oQuoe9kqoEPX4sfCn_eTInfEGtLhkvhSNfEhdUFWKqLXbaWYYEoxdmkBgkZfi5XiT9RTGG2CJB1-1gdxjQ8fbGb-Pb049_S5y9ap-71vTTvibPfomu4v7kfHveu8JB1Rjmh3NLvlhNM2ad_dyP10XTIiPrrKhekao8-t8fhf48V2cwqol1hPsLcbt8BHZxdVmzocVVyV0OhDvduug76pt8oLHsK8ERbNsGiEo2Y4aoTjZjhuhNkJPN-9-hsAAP___rvHVQ==

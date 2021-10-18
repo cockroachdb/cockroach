@@ -449,9 +449,9 @@ func ClearTableDataInChunks(
 			log.VEventf(ctx, 2, "table %s truncate at row: %d, span: %s", tableDesc.GetName(), rowIdx, resume)
 		}
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			rd := row.MakeDeleter(codec, tableDesc, nil /* requestedCols */, sv, true /* internal */)
+			rd := row.MakeDeleter(codec, tableDesc, nil /* requestedCols */, sv, true /* internal */, nil /* metrics */)
 			td := tableDeleter{rd: rd, alloc: alloc}
-			if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
+			if err := td.init(ctx, txn, nil /* *tree.EvalContext */, sv); err != nil {
 				return err
 			}
 			var err error

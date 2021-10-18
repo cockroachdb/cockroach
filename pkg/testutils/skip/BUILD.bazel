@@ -12,5 +12,6 @@ go_library(
         "//pkg/build/bazel",
         "//pkg/util",
         "//pkg/util/envutil",
+        "//pkg/util/syncutil",
     ],
 )

@@ -58,6 +58,10 @@ const customStyles = {
     border: "none",
     height: "fit-content",
   }),
+  dropdownIndicator: (provided: any) => ({
+    ...provided,
+    color: "#C0C6D9",
+  }),
   option: (provided: any, state: any) => ({
     ...provided,
     backgroundColor: state.isSelected ? "#DEEBFF" : provided.backgroundColor,
@@ -66,11 +70,16 @@ const customStyles = {
   control: (provided: any) => ({
     ...provided,
     width: "100%",
+    borderColor: "#C0C6D9",
   }),
   multiValue: (provided: any) => ({
     ...provided,
     backgroundColor: "#E7ECF3",
     borderRadius: "3px",
+  }),
+  placeholder: (provided: any) => ({
+    ...provided,
+    color: "#475872",
   }),
 };
 

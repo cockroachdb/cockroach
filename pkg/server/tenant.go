@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"time"
 
@@ -40,13 +41,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // StartTenant starts a stand-alone SQL server against a KV backend.
@@ -57,6 +62,11 @@ func StartTenant(
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
 ) (sqlServer *SQLServer, pgAddr string, httpAddr string, _ error) {
+	err := ApplyTenantLicense()
+	if err != nil {
+		return nil, "", "", err
+	}
+
 	args, err := makeTenantSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
 		return nil, "", "", err
@@ -70,6 +80,7 @@ func StartTenant(
 		histogramWindowInterval: args.HistogramWindowInterval(),
 		settings:                args.Settings,
 	})
+
 	connManager := netutil.MakeServer(
 		args.stopper,
 		// The SQL server only uses connManager.ServeWith. The both below
@@ -114,9 +125,16 @@ func StartTenant(
 		}
 	}
 
+	serverTLSConfig, err := args.rpcContext.GetUIServerTLSConfig()
+	if err != nil {
+		return nil, "", "", err
+	}
 	httpL, err := ListenAndUpdateAddrs(ctx, &args.Config.HTTPAddr, &args.Config.HTTPAdvertiseAddr, "http")
 	if err != nil {
 		return nil, "", "", err
+	}
+	if serverTLSConfig != nil {
+		httpL = tls.NewListener(httpL, serverTLSConfig)
 	}
 
 	{
@@ -132,23 +150,28 @@ func StartTenant(
 	pgLAddr := pgL.Addr().String()
 	httpLAddr := httpL.Addr().String()
 	args.advertiseAddr = baseCfg.AdvertiseAddr
+	// The tenantStatusServer needs access to the sqlServer,
+	// but we also need the same object to set up the sqlServer.
+	// So construct the tenant status server with a nil sqlServer,
+	// and then assign it once an SQL server gets created. We are
+	// going to assume that the tenant status server won't require
+	// the SQL server object.
+	tenantStatusServer := newTenantStatusServer(
+		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
+		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, nil,
+		args.rpcContext, args.stopper,
+	)
+	args.sqlStatusServer = tenantStatusServer
 	s, err := newSQLServer(ctx, args)
+	tenantStatusServer.sqlServer = s
+
 	if err != nil {
 		return nil, "", "", err
 	}
 
-	tenantStatusServer := newTenantStatusServer(
-		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
-		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, s,
-		args.rpcContext, args.stopper,
-	)
-
-	s.execCfg.SQLStatusServer = tenantStatusServer
-
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
 	// SpanResolver.
 	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: 0})
-
 	workersCtx := tenantStatusServer.AnnotateCtx(context.Background())
 
 	// Register and start gRPC service on pod. This is separate from the
@@ -184,7 +207,7 @@ func StartTenant(
 
 	if err := args.stopper.RunAsyncTask(ctx, "serve-http", func(ctx context.Context) {
 		mux := http.NewServeMux()
-		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn())
+		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
 		mux.Handle("/", debugServer)
 		mux.Handle("/_status/", gwMux)
 		mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
@@ -196,7 +219,16 @@ func StartTenant(
 		})
 		f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
 		mux.Handle(statusVars, http.HandlerFunc(f))
-		_ = http.Serve(httpL, mux)
+		ff := loadVarsHandler(ctx, args.runtime)
+		mux.Handle(loadStatusVars, http.HandlerFunc(ff))
+
+		tlsConnManager := netutil.MakeServer(
+			args.stopper,
+			serverTLSConfig, // tlsConfig
+			mux,             // handler
+		)
+
+		netutil.FatalIfUnexpected(tlsConnManager.Serve(httpL))
 	}); err != nil {
 		return nil, "", "", err
 	}
@@ -215,6 +247,7 @@ func StartTenant(
 		goroutineDumpDirName: args.GoroutineDumpDirName,
 		heapProfileDirName:   args.HeapProfileDirName,
 		runtime:              args.runtime,
+		sessionRegistry:      args.sessionRegistry,
 	}); err != nil {
 		return nil, "", "", err
 	}
@@ -246,7 +279,28 @@ func StartTenant(
 	log.SetNodeIDs(clusterID, 0 /* nodeID is not known for a SQL-only server. */)
 	log.SetTenantIDs(args.TenantID.String(), int32(s.SQLInstanceID()))
 
-	if err := args.costController.Start(ctx, args.stopper, status.GetUserCPUSeconds); err != nil {
+	externalUsageFn := func(ctx context.Context) multitenant.ExternalUsage {
+		userTimeMillis, _, err := status.GetCPUTime(ctx)
+		if err != nil {
+			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
+		}
+		return multitenant.ExternalUsage{
+			CPUSecs:           float64(userTimeMillis) * 1e-3,
+			PGWireEgressBytes: s.pgServer.BytesOut(),
+		}
+	}
+
+	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(
+		ctx,
+		args.stopper,
+		s.sqlInstanceProvider,
+		s.SQLInstanceID(),
+	)
+
+	if err := args.costController.Start(
+		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID,
+		externalUsageFn, nextLiveInstanceIDFn,
+	); err != nil {
 		return nil, "", "", err
 	}
 
@@ -259,6 +313,39 @@ func StartTenant(
 	}
 
 	return s, pgLAddr, httpLAddr, nil
+}
+
+// Construct a handler responsible for serving the instant values of selected
+// load metrics. These include user and system CPU time currently.
+func loadVarsHandler(
+	ctx context.Context, rsr *status.RuntimeStatSampler,
+) func(http.ResponseWriter, *http.Request) {
+	cpuUserNanos := metric.NewGauge(rsr.CPUUserNS.GetMetadata())
+	cpuSysNanos := metric.NewGauge(rsr.CPUSysNS.GetMetadata())
+	registry := metric.NewRegistry()
+	registry.AddMetric(cpuUserNanos)
+	registry.AddMetric(cpuSysNanos)
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
+		if err != nil {
+			// Just log but don't return an error to match the _status/vars metrics handler.
+			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
+		}
+		// cpuTime.{User,Sys} are in milliseconds, convert to nanoseconds.
+		utime := userTimeMillis * 1e6
+		stime := sysTimeMillis * 1e6
+		cpuUserNanos.Update(utime)
+		cpuSysNanos.Update(stime)
+
+		exporter := metric.MakePrometheusExporter()
+		exporter.ScrapeRegistry(registry, true)
+		if err := exporter.PrintAsText(w); err != nil {
+			log.Errorf(r.Context(), "%v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 }
 
 func makeTenantSQLServerArgs(
@@ -449,6 +536,83 @@ func makeTenantSQLServerArgs(
 	}, nil
 }
 
+func makeNextLiveInstanceIDFn(
+	serverCtx context.Context,
+	stopper *stop.Stopper,
+	sqlInstanceProvider sqlinstance.Provider,
+	instanceID base.SQLInstanceID,
+) multitenant.NextLiveInstanceIDFn {
+	retrieveNextLiveInstanceID := func(ctx context.Context) base.SQLInstanceID {
+		instances, err := sqlInstanceProvider.GetAllInstances(ctx)
+		if err != nil {
+			log.Infof(ctx, "GetAllInstances failed: %v", err)
+			// We will try again.
+			return 0
+		}
+		if len(instances) == 0 {
+			return 0
+		}
+		// Find the next ID in circular order.
+		var minID, nextID base.SQLInstanceID
+		for i := range instances {
+			id := instances[i].InstanceID
+			if minID == 0 || minID > id {
+				minID = id
+			}
+			if id > instanceID && (nextID == 0 || nextID > id) {
+				nextID = id
+			}
+		}
+		if nextID == 0 {
+			return minID
+		}
+		return nextID
+	}
+
+	// We retrieve the value from the provider every minute.
+	//
+	// We report each retrieved value only once; for all other calls we return 0.
+	// We prefer to not provide a value rather than providing a stale value which
+	// might cause a bit of unnecessary work on the server side.
+	//
+	// TODO(radu): once the provider caches the information (see #69976), we can
+	// use it directly each time.
+	const interval = 1 * time.Minute
+	var mu syncutil.Mutex
+	var lastRefresh time.Time
+	var lastValue base.SQLInstanceID
+	var refreshInProgress bool
+
+	serverCtx = logtags.AddTag(serverCtx, "get-next-live-instance-id", nil)
+
+	return func(ctx context.Context) base.SQLInstanceID {
+		mu.Lock()
+		defer mu.Unlock()
+		if lastValue != 0 {
+			v := lastValue
+			lastValue = 0
+			return v
+		}
+
+		if now := timeutil.Now(); lastRefresh.Before(now.Add(-interval)) && !refreshInProgress {
+			lastRefresh = now
+			refreshInProgress = true
+
+			// An error here indicates that the server is shutting down, so we can
+			// ignore it.
+			_ = stopper.RunAsyncTask(serverCtx, "get-next-live-instance-id", func(ctx context.Context) {
+				newValue := retrieveNextLiveInstanceID(ctx)
+
+				mu.Lock()
+				defer mu.Unlock()
+				lastValue = newValue
+				refreshInProgress = false
+			})
+		}
+		return 0
+	}
+}
+
 // NewTenantSideCostController is a hook for CCL code which implements the
 // controller.
 var NewTenantSideCostController = func(
@@ -458,6 +622,11 @@ var NewTenantSideCostController = func(
 	return noopTenantSideCostController{}, nil
 }
 
+// ApplyTenantLicense is a hook for CCL code which enables enterprise features
+// for the tenant process if the COCKROACH_TENANT_LICENSE environment variable
+// is set.
+var ApplyTenantLicense = func() error { return nil /* no-op */ }
+
 // noopTenantSideCostController is a no-op implementation of
 // TenantSideCostController.
 type noopTenantSideCostController struct{}
@@ -465,7 +634,12 @@ type noopTenantSideCostController struct{}
 var _ multitenant.TenantSideCostController = noopTenantSideCostController{}
 
 func (noopTenantSideCostController) Start(
-	ctx context.Context, stopper *stop.Stopper, cpuSecsFn multitenant.CPUSecsFn,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	instanceID base.SQLInstanceID,
+	sessionID sqlliveness.SessionID,
+	externalUsageFn multitenant.ExternalUsageFn,
+	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn,
 ) error {
 	return nil
 }
@@ -477,6 +651,6 @@ func (noopTenantSideCostController) OnRequestWait(
 }
 
 func (noopTenantSideCostController) OnResponse(
-	ctx context.Context, info tenantcostmodel.ResponseInfo,
+	ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
 ) {
 }

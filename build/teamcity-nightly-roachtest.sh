@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euxo pipefail
+set -euo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
 

@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -55,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -66,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -371,7 +374,7 @@ func startServer(t *testing.T) *TestServer {
 func newRPCTestContext(ts *TestServer, cfg *base.Config) *rpc.Context {
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: ts.ClusterSettings().Tracer},
+		AmbientCtx: log.AmbientContext{Tracer: ts.Tracer()},
 		Config:     cfg,
 		Clock:      ts.Clock(),
 		Stopper:    ts.Stopper(),
@@ -519,6 +522,10 @@ func TestStatusLocalLogs(t *testing.T) {
 
 	s := log.ScopeWithoutShowLogs(t)
 	defer s.Close(t)
+
+	// This test cares about the number of output files. Ensure
+	// there's just one.
+	defer s.SetupSingleFileLogging()()
 
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
@@ -691,6 +698,10 @@ func TestStatusLogRedaction(t *testing.T) {
 		func(t *testing.T, redactableLogs bool) {
 			s := log.ScopeWithoutShowLogs(t)
 			defer s.Close(t)
+
+			// This test cares about the number of output files. Ensure
+			// there's just one.
+			defer s.SetupSingleFileLogging()()
 
 			// Apply the redactable log boolean for this test.
 			defer log.TestingSetRedactable(redactableLogs)()
@@ -929,6 +940,17 @@ func TestChartCatalogGen(t *testing.T) {
 	}
 }
 
+// walkAllSections invokes the visitor on each of the ChartSections nestled under
+// the input one.
+func walkAllSections(chartCatalog []catalog.ChartSection, visit func(c *catalog.ChartSection)) {
+	for _, c := range chartCatalog {
+		visit(&c)
+		for _, ic := range c.Subsections {
+			visit(ic)
+		}
+	}
+}
+
 // findUndefinedMetrics finds metrics listed in pkg/ts/catalog/chart_catalog.go
 // that are not defined. This is most likely caused by a metric being removed.
 func findUndefinedMetrics(c *catalog.ChartSection, metadata map[string]metric.Metadata) []string {
@@ -1015,9 +1037,35 @@ func TestChartCatalogMetrics(t *testing.T) {
 			metricNames = append(metricNames, metricName)
 		}
 		sort.Strings(metricNames)
-		t.Fatalf(`The following metrics need to be added to the chart catalog
+		t.Errorf(`The following metrics need to be added to the chart catalog
 		    (pkg/ts/catalog/chart_catalog.go): %v`, metricNames)
 	}
+
+	internalTSDBMetricNamesWithoutPrefix := map[string]struct{}{}
+	for _, name := range catalog.AllInternalTimeseriesMetricNames() {
+		name = strings.TrimPrefix(name, "cr.node.")
+		name = strings.TrimPrefix(name, "cr.store.")
+		internalTSDBMetricNamesWithoutPrefix[name] = struct{}{}
+	}
+	walkAllSections(chartCatalog, func(cs *catalog.ChartSection) {
+		for _, chart := range cs.Charts {
+			for _, metric := range chart.Metrics {
+				if *metric.MetricType.Enum() != io_prometheus_client.MetricType_HISTOGRAM {
+					continue
+				}
+				// We have a histogram. Make sure that it is properly represented in
+				// AllInternalTimeseriesMetricNames(). It's not a complete check but good enough in
+				// practice. Ideally we wouldn't require `histogramMetricsNames` and
+				// the associated manual step when adding a histogram. See:
+				// https://github.com/cockroachdb/cockroach/issues/64373
+				_, ok := internalTSDBMetricNamesWithoutPrefix[metric.Name+"-p50"]
+				if !ok {
+					t.Errorf("histogram %s needs to be added to `catalog.histogramMetricsNames` manually",
+						metric.Name)
+				}
+			}
+		}
+	})
 }
 
 func TestHotRangesResponse(t *testing.T) {
@@ -1436,6 +1484,144 @@ func TestRangeResponse(t *testing.T) {
 	}
 }
 
+func TestStatusAPICombinedTransactions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: params,
+	})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+
+	thirdServer := testCluster.Server(2)
+	pgURL, cleanupGoDB := sqlutils.PGUrl(
+		t, thirdServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(security.RootUser))
+	defer cleanupGoDB()
+	firstServerProto := testCluster.Server(0)
+
+	type testCase struct {
+		query         string
+		fingerprinted string
+		count         int
+		shouldRetry   bool
+		numRows       int
+	}
+
+	testCases := []testCase{
+		{query: `CREATE DATABASE roachblog`, count: 1, numRows: 0},
+		{query: `SET database = roachblog`, count: 1, numRows: 0},
+		{query: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`, count: 1, numRows: 0},
+		{
+			query:         `INSERT INTO posts VALUES (1, 'foo')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
+			count:         1,
+			numRows:       1,
+		},
+		{query: `SELECT * FROM posts`, count: 2, numRows: 1},
+		{query: `BEGIN; SELECT * FROM posts; SELECT * FROM posts; COMMIT`, count: 3, numRows: 2},
+		{
+			query:         `BEGIN; SELECT crdb_internal.force_retry('2s'); SELECT * FROM posts; COMMIT;`,
+			fingerprinted: `BEGIN; SELECT crdb_internal.force_retry(_); SELECT * FROM posts; COMMIT;`,
+			shouldRetry:   true,
+			count:         1,
+			numRows:       2,
+		},
+		{
+			query:         `BEGIN; SELECT crdb_internal.force_retry('5s'); SELECT * FROM posts; COMMIT;`,
+			fingerprinted: `BEGIN; SELECT crdb_internal.force_retry(_); SELECT * FROM posts; COMMIT;`,
+			shouldRetry:   true,
+			count:         1,
+			numRows:       2,
+		},
+	}
+
+	appNameToTestCase := make(map[string]testCase)
+
+	for i, tc := range testCases {
+		appName := fmt.Sprintf("app%d", i)
+		appNameToTestCase[appName] = tc
+
+		// Create a brand new connection for each app, so that we don't pollute
+		// transaction stats collection with `SET application_name` queries.
+		sqlDB, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.Exec(fmt.Sprintf(`SET application_name = "%s"`, appName)); err != nil {
+			t.Fatal(err)
+		}
+		for c := 0; c < tc.count; c++ {
+			if _, err := sqlDB.Exec(tc.query); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := sqlDB.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Hit query endpoint.
+	var resp serverpb.StatementsResponse
+	if err := getStatusJSONProto(firstServerProto, "combinedstmts", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// Construct a map of all the statement fingerprint IDs.
+	statementFingerprintIDs := make(map[roachpb.StmtFingerprintID]bool, len(resp.Statements))
+	for _, respStatement := range resp.Statements {
+		statementFingerprintIDs[respStatement.ID] = true
+	}
+
+	respAppNames := make(map[string]bool)
+	for _, respTransaction := range resp.Transactions {
+		appName := respTransaction.StatsData.App
+		tc, found := appNameToTestCase[appName]
+		if !found {
+			// Ignore internal queries, they aren't relevant to this test.
+			continue
+		}
+		respAppNames[appName] = true
+		// Ensure all statementFingerprintIDs comprised by the Transaction Response can be
+		// linked to StatementFingerprintIDs for statements in the response.
+		for _, stmtFingerprintID := range respTransaction.StatsData.StatementFingerprintIDs {
+			if _, found := statementFingerprintIDs[stmtFingerprintID]; !found {
+				t.Fatalf("app: %s, expected stmtFingerprintID: %d not found in StatementResponse.", appName, stmtFingerprintID)
+			}
+		}
+		stats := respTransaction.StatsData.Stats
+		if tc.count != int(stats.Count) {
+			t.Fatalf("app: %s, expected count %d, got %d", appName, tc.count, stats.Count)
+		}
+		if tc.shouldRetry && respTransaction.StatsData.Stats.MaxRetries == 0 {
+			t.Fatalf("app: %s, expected retries, got none\n", appName)
+		}
+
+		// Sanity check numeric stat values
+		if respTransaction.StatsData.Stats.CommitLat.Mean <= 0 {
+			t.Fatalf("app: %s, unexpected mean for commit latency\n", appName)
+		}
+		if respTransaction.StatsData.Stats.RetryLat.Mean <= 0 && tc.shouldRetry {
+			t.Fatalf("app: %s, expected retry latency mean to be non-zero as retries were involved\n", appName)
+		}
+		if respTransaction.StatsData.Stats.ServiceLat.Mean <= 0 {
+			t.Fatalf("app: %s, unexpected mean for service latency\n", appName)
+		}
+		if respTransaction.StatsData.Stats.NumRows.Mean != float64(tc.numRows) {
+			t.Fatalf("app: %s, unexpected number of rows observed. expected: %d, got %d\n",
+				appName, tc.numRows, int(respTransaction.StatsData.Stats.NumRows.Mean))
+		}
+	}
+
+	// Ensure we got transaction statistics for all the queries we sent.
+	for appName := range appNameToTestCase {
+		if _, found := respAppNames[appName]; !found {
+			t.Fatalf("app: %s did not appear in the response\n", appName)
+		}
+	}
+}
+
 func TestStatusAPITransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1575,7 +1761,10 @@ func TestStatusAPITransactionStatementFingerprintIDsTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	params, _ := tests.CreateTestServerParams()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: params,
+	})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServerProto := testCluster.Server(0)
@@ -1633,7 +1822,18 @@ func TestStatusAPIStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	// Aug 30 2021 19:50:00 GMT+0000
+	aggregatedTs := int64(1630353000)
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
+					StubTimeNow: func() time.Time { return timeutil.Unix(aggregatedTs, 0) },
+				},
+			},
+		},
+	})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServerProto := testCluster.Server(0)
@@ -1665,14 +1865,47 @@ func TestStatusAPIStatements(t *testing.T) {
 	}
 
 	// Grant VIEWACTIVITY.
-	thirdServerSQL.Exec(t, "ALTER USER $1 VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized())
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
 
-	// Hit query endpoint.
-	if err := getStatusJSONProtoWithAdminOption(firstServerProto, "statements", &resp, false); err != nil {
-		t.Fatal(err)
+	testPath := func(path string, expectedStmts []string) {
+		// Hit query endpoint.
+		if err := getStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false); err != nil {
+			t.Fatal(err)
+		}
+
+		// See if the statements returned are what we executed.
+		var statementsInResponse []string
+		for _, respStatement := range resp.Statements {
+			if respStatement.Key.KeyData.Failed {
+				// We ignore failed statements here as the INSERT statement can fail and
+				// be automatically retried, confusing the test success check.
+				continue
+			}
+			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
+				// We ignore internal queries, these are not relevant for the
+				// validity of this test.
+				continue
+			}
+			if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
+				// Ignore the ALTER USER ... VIEWACTIVITY statement.
+				continue
+			}
+			if len(respStatement.Stats.SensitiveInfo.MostRecentPlanDescription.Name) == 0 {
+				// Ensure that we populate the explain plan.
+				t.Fatal("expected MostRecentPlanDescription to be populated")
+			}
+			statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
+		}
+
+		sort.Strings(expectedStmts)
+		sort.Strings(statementsInResponse)
+
+		if !reflect.DeepEqual(expectedStmts, statementsInResponse) {
+			t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v\n%s",
+				expectedStmts, statementsInResponse, pretty.Sprint(resp))
+		}
 	}
 
-	// See if the statements returned are what we executed.
 	var expectedStatements []string
 	for _, stmt := range statements {
 		var expectedStmt = stmt.stmt
@@ -1682,32 +1915,121 @@ func TestStatusAPIStatements(t *testing.T) {
 		expectedStatements = append(expectedStatements, expectedStmt)
 	}
 
-	var statementsInResponse []string
-	for _, respStatement := range resp.Statements {
-		if respStatement.Key.KeyData.Failed {
-			// We ignore failed statements here as the INSERT statement can fail and
-			// be automatically retried, confusing the test success check.
-			continue
-		}
-		if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
-			// We ignore internal queries, these are not relevant for the
-			// validity of this test.
-			continue
-		}
-		if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
-			// Ignore the ALTER USER ... VIEWACTIVITY statement.
-			continue
-		}
-		statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
+	// Test no params
+	testPath("statements", expectedStatements)
+	// Test combined=true forwards to CombinedStatements
+	testPath(fmt.Sprintf("statements?combined=true&start=%d", aggregatedTs+60), nil)
+}
+
+func TestStatusAPICombinedStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Aug 30 2021 19:50:00 GMT+0000
+	aggregatedTs := int64(1630353000)
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
+					StubTimeNow: func() time.Time { return timeutil.Unix(aggregatedTs, 0) },
+				},
+			},
+		},
+	})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServerProto := testCluster.Server(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	statements := []struct {
+		stmt          string
+		fingerprinted string
+	}{
+		{stmt: `CREATE DATABASE roachblog`},
+		{stmt: `SET database = roachblog`},
+		{stmt: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`},
+		{
+			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
+		},
+		{stmt: `SELECT * FROM posts`},
 	}
 
-	sort.Strings(expectedStatements)
-	sort.Strings(statementsInResponse)
-
-	if !reflect.DeepEqual(expectedStatements, statementsInResponse) {
-		t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v\n%s",
-			expectedStatements, statementsInResponse, pretty.Sprint(resp))
+	for _, stmt := range statements {
+		thirdServerSQL.Exec(t, stmt.stmt)
 	}
+
+	var resp serverpb.StatementsResponse
+	// Test that non-admin without VIEWACTIVITY privileges cannot access.
+	err := getStatusJSONProtoWithAdminOption(firstServerProto, "combinedstmts", &resp, false)
+	if !testutils.IsError(err, "status: 403") {
+		t.Fatalf("expected privilege error, got %v", err)
+	}
+
+	// Grant VIEWACTIVITY.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+
+	testPath := func(path string, expectedStmts []string) {
+		// Hit query endpoint.
+		if err := getStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false); err != nil {
+			t.Fatal(err)
+		}
+
+		// See if the statements returned are what we executed.
+		var statementsInResponse []string
+		for _, respStatement := range resp.Statements {
+			if respStatement.Key.KeyData.Failed {
+				// We ignore failed statements here as the INSERT statement can fail and
+				// be automatically retried, confusing the test success check.
+				continue
+			}
+			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
+				// We ignore internal queries, these are not relevant for the
+				// validity of this test.
+				continue
+			}
+			if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
+				// Ignore the ALTER USER ... VIEWACTIVITY statement.
+				continue
+			}
+
+			if len(respStatement.Stats.SensitiveInfo.MostRecentPlanDescription.Name) == 0 {
+				// Ensure that we populate the explain plan.
+				t.Fatal("expected MostRecentPlanDescription to be populated")
+			}
+
+			statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
+		}
+
+		sort.Strings(expectedStmts)
+		sort.Strings(statementsInResponse)
+
+		if !reflect.DeepEqual(expectedStmts, statementsInResponse) {
+			t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v\n%s",
+				expectedStmts, statementsInResponse, pretty.Sprint(resp))
+		}
+	}
+
+	var expectedStatements []string
+	for _, stmt := range statements {
+		var expectedStmt = stmt.stmt
+		if stmt.fingerprinted != "" {
+			expectedStmt = stmt.fingerprinted
+		}
+		expectedStatements = append(expectedStatements, expectedStmt)
+	}
+
+	// Test with no query params
+	testPath("combinedstmts", expectedStatements)
+
+	oneMinAfterAggregatedTs := aggregatedTs + 60
+	// Test with end = 1 min after aggregatedTs; should give the same results as get all.
+	testPath(fmt.Sprintf("combinedstmts?end=%d", oneMinAfterAggregatedTs), expectedStatements)
+	// Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
+	testPath(fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs), expectedStatements)
+	// Test with start = 1 min after aggregatedTs; should give no results
+	testPath(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil)
 }
 
 func TestListSessionsSecurity(t *testing.T) {
@@ -1838,7 +2160,7 @@ func TestListActivitySecurity(t *testing.T) {
 			// Note that for this query to work, it is crucial that
 			// getStatusJSONProtoWithAdminOption below is called at least once,
 			// on the previous test case, so that the user exists.
-			_, err := db.Exec("ALTER USER $1 VIEWACTIVITY", myUser)
+			_, err := db.Exec(fmt.Sprintf("ALTER USER %s VIEWACTIVITY", myUser))
 			require.NoError(t, err)
 		}
 		err := getStatusJSONProtoWithAdminOption(s, tc.endpoint, tc.response, tc.requestWithAdmin)
@@ -1860,7 +2182,7 @@ func TestListActivitySecurity(t *testing.T) {
 			}
 		}
 		if tc.requestWithViewActivityGranted {
-			_, err := db.Exec("ALTER USER $1 NOVIEWACTIVITY", myUser)
+			_, err := db.Exec(fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", myUser))
 			require.NoError(t, err)
 		}
 	}
@@ -2340,4 +2662,123 @@ func TestLicenseExpiryMetricNoLicense(t *testing.T) {
 			require.Equal(t, tc.expected, buf.String())
 		})
 	}
+}
+
+func TestStatusServer_nodeStatusToResp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var nodeStatus = &statuspb.NodeStatus{
+		Desc: roachpb.NodeDescriptor{
+			Address: util.UnresolvedAddr{
+				NetworkField: "network",
+				AddressField: "address",
+			},
+			Attrs: roachpb.Attributes{
+				Attrs: []string{"attr"},
+			},
+			LocalityAddress: []roachpb.LocalityAddress{{Address: util.UnresolvedAddr{
+				NetworkField: "network",
+				AddressField: "address",
+			}, LocalityTier: roachpb.Tier{Value: "v", Key: "k"}}},
+			SQLAddress: util.UnresolvedAddr{
+				NetworkField: "network",
+				AddressField: "address",
+			},
+		},
+		Args: []string{"args"},
+		Env:  []string{"env"},
+	}
+	resp := nodeStatusToResp(nodeStatus, false)
+	require.Empty(t, resp.Args)
+	require.Empty(t, resp.Env)
+	require.Empty(t, resp.Desc.Address)
+	require.Empty(t, resp.Desc.Attrs.Attrs)
+	require.Empty(t, resp.Desc.LocalityAddress)
+	require.Empty(t, resp.Desc.SQLAddress)
+
+	// Now fetch all the node statuses as admin.
+	resp = nodeStatusToResp(nodeStatus, true)
+	require.NotEmpty(t, resp.Args)
+	require.NotEmpty(t, resp.Env)
+	require.NotEmpty(t, resp.Desc.Address)
+	require.NotEmpty(t, resp.Desc.Attrs.Attrs)
+	require.NotEmpty(t, resp.Desc.LocalityAddress)
+	require.NotEmpty(t, resp.Desc.SQLAddress)
+}
+
+func TestStatusAPIContentionEvents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	ctx := context.Background()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: params,
+	})
+
+	defer testCluster.Stopper().Stop(ctx)
+
+	server1Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	server2Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(1))
+
+	sqlutils.CreateTable(
+		t,
+		testCluster.ServerConn(0),
+		"test",
+		"x INT PRIMARY KEY",
+		1, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn),
+	)
+
+	testTableID, err :=
+		strconv.Atoi(server1Conn.QueryStr(t, "SELECT 'test.test'::regclass::oid")[0][0])
+	require.NoError(t, err)
+
+	server1Conn.Exec(t, "USE test")
+	server2Conn.Exec(t, "USE test")
+
+	server1Conn.Exec(t, `
+SET TRACING=on;
+BEGIN;
+UPDATE test SET x = 100 WHERE x = 1;
+`)
+	server2Conn.Exec(t, `
+SET TRACING=on;
+BEGIN PRIORITY HIGH;
+UPDATE test SET x = 1000 WHERE x = 1;
+COMMIT;
+SET TRACING=off;
+`)
+	server1Conn.ExpectErr(
+		t,
+		"^pq: restart transaction.+",
+		`
+COMMIT;
+SET TRACING=off;
+`,
+	)
+
+	var resp serverpb.ListContentionEventsResponse
+	require.NoError(t,
+		getStatusJSONProtoWithAdminOption(
+			testCluster.Server(2),
+			"contention_events",
+			&resp,
+			true /* isAdmin */),
+	)
+
+	require.GreaterOrEqualf(t, len(resp.Events.IndexContentionEvents), 1,
+		"expecting at least 1 contention event, but found none")
+
+	found := false
+	for _, event := range resp.Events.IndexContentionEvents {
+		if event.TableID == descpb.ID(testTableID) && event.IndexID == descpb.IndexID(1) {
+			found = true
+			break
+		}
+	}
+
+	require.True(t, found,
+		"expect to find contention event for table %d, but found %+v", testTableID, resp)
 }

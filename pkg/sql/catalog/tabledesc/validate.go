@@ -11,14 +11,13 @@
 package tabledesc
 
 import (
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -138,7 +137,7 @@ func (desc *wrapper) ValidateCrossReferences(
 
 	if dbDesc != nil {
 		// Validate the all types present in the descriptor exist.
-		typeIDs, err := desc.GetAllReferencedTypeIDs(dbDesc, vdg.GetTypeDescriptor)
+		typeIDs, _, err := desc.GetAllReferencedTypeIDs(dbDesc, vdg.GetTypeDescriptor)
 		if err != nil {
 			vea.Report(err)
 		} else {
@@ -149,7 +148,7 @@ func (desc *wrapper) ValidateCrossReferences(
 		}
 
 		// Validate table locality.
-		if err := desc.validateTableLocalityConfig(dbDesc, vdg); err != nil {
+		if err := multiregion.ValidateTableLocalityConfig(desc, dbDesc, vdg); err != nil {
 			vea.Report(errors.Wrap(err, "invalid locality config"))
 			return
 		}
@@ -274,65 +273,6 @@ func (desc *wrapper) validateOutboundFK(
 	if found {
 		return nil
 	}
-	// In 20.2 we introduced a bug where we fail to upgrade the FK references
-	// on the referenced descriptors from their pre-19.2 format when reading
-	// them during validation (#57032). So we account for the possibility of
-	// un-upgraded foreign key references on the other table. This logic
-	// somewhat parallels the logic in maybeUpgradeForeignKeyRepOnIndex.
-	unupgradedFKsPresent := false
-	if err := catalog.ForEachIndex(referencedTable, catalog.IndexOpts{}, func(referencedIdx catalog.Index) error {
-		if found {
-			// TODO (lucy): If we ever revisit the tabledesc.immutable methods, add
-			// a way to break out of the index loop.
-			return nil
-		}
-		if len(referencedIdx.IndexDesc().ReferencedBy) > 0 {
-			unupgradedFKsPresent = true
-		} else {
-			return nil
-		}
-		// Determine whether the index on the other table is a unique index that
-		// could support this FK constraint.
-		if !referencedIdx.IsValidReferencedUniqueConstraint(fk.ReferencedColumnIDs) {
-			return nil
-		}
-		// Now check the backreferences. Backreferences in ReferencedBy only had
-		// Index and Table populated.
-		for i := range referencedIdx.IndexDesc().ReferencedBy {
-			backref := &referencedIdx.IndexDesc().ReferencedBy[i]
-			if backref.Table != desc.ID {
-				continue
-			}
-			// Look up the index that the un-upgraded reference refers to and
-			// see if that index could support the foreign key reference. (Note
-			// that it shouldn't be possible for this index to not exist. See
-			// planner.MaybeUpgradeDependentOldForeignKeyVersionTables, which is
-			// called from the drop index implementation.)
-			originalOriginIndex, err := desc.FindIndexWithID(backref.Index)
-			if err != nil {
-				return errors.AssertionFailedf(
-					"missing index %d on %q from pre-19.2 foreign key "+
-						"backreference %q on %q",
-					backref.Index, desc.Name, fk.Name, referencedTable.GetName(),
-				)
-			}
-			if originalOriginIndex.IsValidOriginIndex(fk.OriginColumnIDs) {
-				found = true
-				break
-			}
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	if found {
-		return nil
-	}
-	if unupgradedFKsPresent {
-		return errors.AssertionFailedf("missing fk back reference %q to %q "+
-			"from %q (un-upgraded foreign key references present)",
-			fk.Name, desc.Name, referencedTable.GetName())
-	}
 	return errors.AssertionFailedf("missing fk back reference %q to %q from %q",
 		fk.Name, desc.Name, referencedTable.GetName())
 }
@@ -354,60 +294,6 @@ func (desc *wrapper) validateInboundFK(
 	})
 	if found {
 		return nil
-	}
-	// In 20.2 we introduced a bug where we fail to upgrade the FK references
-	// on the referenced descriptors from their pre-19.2 format when reading
-	// them during validation (#57032). So we account for the possibility of
-	// un-upgraded foreign key references on the other table. This logic
-	// somewhat parallels the logic in maybeUpgradeForeignKeyRepOnIndex.
-	unupgradedFKsPresent := false
-	if err := catalog.ForEachIndex(originTable, catalog.IndexOpts{}, func(originIdx catalog.Index) error {
-		if found {
-			// TODO (lucy): If we ever revisit the tabledesc.immutable methods, add
-			// a way to break out of the index loop.
-			return nil
-		}
-		fk := originIdx.IndexDesc().ForeignKey
-		if fk.IsSet() {
-			unupgradedFKsPresent = true
-		} else {
-			return nil
-		}
-		// Determine whether the index on the other table is a index that could
-		// support this FK constraint on the referencing side. Such an index would
-		// have been required in earlier versions.
-		if !originIdx.IsValidOriginIndex(backref.OriginColumnIDs) {
-			return nil
-		}
-		if fk.Table != desc.ID {
-			return nil
-		}
-		// Look up the index that the un-upgraded reference refers to and
-		// see if that index could support the foreign key reference. (Note
-		// that it shouldn't be possible for this index to not exist. See
-		// planner.MaybeUpgradeDependentOldForeignKeyVersionTables, which is
-		// called from the drop index implementation.)
-		originalReferencedIndex, err := desc.FindIndexWithID(fk.Index)
-		if err != nil {
-			return errors.AssertionFailedf(
-				"missing index %d on %q from pre-19.2 foreign key forward reference %q on %q",
-				fk.Index, desc.Name, backref.Name, originTable.GetName(),
-			)
-		}
-		if originalReferencedIndex.IsValidReferencedUniqueConstraint(backref.ReferencedColumnIDs) {
-			found = true
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	if found {
-		return nil
-	}
-	if unupgradedFKsPresent {
-		return errors.AssertionFailedf("missing fk forward reference %q to %q from %q "+
-			"(un-upgraded foreign key references present)",
-			backref.Name, desc.Name, originTable.GetName())
 	}
 	return errors.AssertionFailedf("missing fk forward reference %q to %q from %q",
 		backref.Name, desc.Name, originTable.GetName())
@@ -645,44 +531,39 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate that there are no column with both a foreign key ON UPDATE and an
 	// ON UPDATE expression. This check is made to ensure that we know which ON
 	// UPDATE action to perform when a FK UPDATE happens.
-	if err := ValidateOnUpdate(desc.AllColumns(), desc.GetOutboundFKs()); err != nil {
-		vea.Report(err)
-	}
+	ValidateOnUpdate(desc, vea.Report)
 }
 
 // ValidateOnUpdate returns an error if there is a column with both a foreign
 // key constraint and an ON UPDATE expression, nil otherwise.
-func ValidateOnUpdate(cols []catalog.Column, outboundFks []descpb.ForeignKeyConstraint) error {
+func ValidateOnUpdate(desc catalog.TableDescriptor, errReportFn func(err error)) {
 	var onUpdateCols catalog.TableColSet
-	for _, col := range cols {
+	for _, col := range desc.AllColumns() {
 		if col.HasOnUpdate() {
 			onUpdateCols.Add(col.GetID())
 		}
 	}
 
-	var foundErrors []error
-	for _, fk := range outboundFks {
+	_ = desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		if fk.OnUpdate == descpb.ForeignKeyReference_NO_ACTION ||
 			fk.OnUpdate == descpb.ForeignKeyReference_RESTRICT {
-			continue
+			return nil
 		}
 		for _, fkCol := range fk.OriginColumnIDs {
 			if onUpdateCols.Contains(fkCol) {
-				foundErrors = append(foundErrors, pgerror.Newf(pgcode.InvalidTableDefinition,
+				col, err := desc.FindColumnWithID(fkCol)
+				if err != nil {
+					return err
+				}
+				errReportFn(pgerror.Newf(pgcode.InvalidTableDefinition,
 					"cannot specify both ON UPDATE expression and a foreign key"+
-						" ON UPDATE action for column with ID %d",
-					fkCol,
+						" ON UPDATE action for column %q",
+					col.ColName(),
 				))
 			}
 		}
-	}
-
-	var combinedError error
-	for i := 0; i < len(foundErrors); i++ {
-		combinedError = errors.CombineErrors(combinedError, foundErrors[i])
-	}
-
-	return combinedError
+		return nil
+	})
 }
 
 func (desc *wrapper) validateColumns(
@@ -968,6 +849,10 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 		}
 		if idx.GetID() == 0 {
 			return errors.Newf("invalid index ID %d", idx.GetID())
+		}
+
+		if idx.IndexDesc().ForeignKey.IsSet() || len(idx.IndexDesc().ReferencedBy) > 0 {
+			return errors.AssertionFailedf("index %q contains deprecated foreign key representation", idx.GetName())
 		}
 
 		if _, indexNameExists := indexNames[idx.GetName()]; indexNameExists {
@@ -1339,228 +1224,4 @@ func (desc *wrapper) validatePartitioning() error {
 			a, idx, idx.GetPartitioning(), 0 /* colOffset */, partitionNames,
 		)
 	})
-}
-
-// validateTableLocalityConfig validates whether the descriptor's locality
-// config is valid under the given database.
-func (desc *wrapper) validateTableLocalityConfig(
-	db catalog.DatabaseDescriptor, vdg catalog.ValidationDescGetter,
-) error {
-
-	if desc.LocalityConfig == nil {
-		if db.IsMultiRegion() {
-			return pgerror.Newf(
-				pgcode.InvalidTableDefinition,
-				"database %s is multi-region enabled, but table %s has no locality set",
-				db.GetName(),
-				desc.GetName(),
-			)
-		}
-		// Nothing to validate for non-multi-region databases.
-		return nil
-	}
-
-	if !db.IsMultiRegion() {
-		s := tree.NewFmtCtx(tree.FmtSimple)
-		var locality string
-		// Formatting the table locality config should never fail; if it does, the
-		// error message is more clear if we construct a dummy locality here.
-		if err := FormatTableLocalityConfig(desc.LocalityConfig, s); err != nil {
-			locality = "INVALID LOCALITY"
-		}
-		locality = s.String()
-		return pgerror.Newf(
-			pgcode.InvalidTableDefinition,
-			"database %s is not multi-region enabled, but table %s has locality %s set",
-			db.GetName(),
-			desc.GetName(),
-			locality,
-		)
-	}
-
-	regionsEnumID, err := db.MultiRegionEnumID()
-	if err != nil {
-		return err
-	}
-	regionsEnumDesc, err := vdg.GetTypeDescriptor(regionsEnumID)
-	if err != nil {
-		return errors.Wrapf(err, "multi-region enum with ID %d does not exist", regionsEnumID)
-	}
-
-	// Check non-table items have a correctly set locality.
-	if desc.IsSequence() {
-		if !desc.IsLocalityRegionalByTable() {
-			return errors.AssertionFailedf(
-				"expected sequence %s to have locality REGIONAL BY TABLE",
-				desc.Name,
-			)
-		}
-	}
-	if desc.IsView() {
-		if desc.MaterializedView() {
-			if !desc.IsLocalityGlobal() {
-				return errors.AssertionFailedf(
-					"expected materialized view %s to have locality GLOBAL",
-					desc.Name,
-				)
-			}
-		} else {
-			if !desc.IsLocalityRegionalByTable() {
-				return errors.AssertionFailedf(
-					"expected view %s to have locality REGIONAL BY TABLE",
-					desc.Name,
-				)
-			}
-		}
-	}
-
-	// REGIONAL BY TABLE tables homed in the primary region should include a
-	// reference to the multi-region type descriptor and a corresponding
-	// backreference. All other patterns should only contain a reference if there
-	// is an explicit column which uses the multi-region type descriptor as its
-	// *types.T. While the specific cases are validated below, we search for the
-	// region enum ID in the references list just once, up top here.
-	typeIDs, err := desc.GetAllReferencedTypeIDs(db, vdg.GetTypeDescriptor)
-	if err != nil {
-		return err
-	}
-	regionEnumIDReferenced := false
-	for _, typeID := range typeIDs {
-		if typeID == regionsEnumID {
-			regionEnumIDReferenced = true
-			break
-		}
-	}
-	columnTypesTypeIDs, err := desc.getAllReferencedTypesInTableColumns(vdg.GetTypeDescriptor)
-	if err != nil {
-		return err
-	}
-	switch lc := desc.LocalityConfig.Locality.(type) {
-	case *descpb.TableDescriptor_LocalityConfig_Global_:
-		if regionEnumIDReferenced {
-			if _, found := columnTypesTypeIDs[regionsEnumID]; !found {
-				return errors.AssertionFailedf(
-					"expected no region Enum ID to be referenced by a GLOBAL TABLE: %q"+
-						" but found: %d",
-					desc.GetName(),
-					regionsEnumDesc.GetID(),
-				)
-			}
-		}
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
-		if !desc.IsPartitionAllBy() {
-			return errors.AssertionFailedf("expected REGIONAL BY ROW table to have PartitionAllBy set")
-		}
-		// For REGIONAL BY ROW tables, ensure partitions in the PRIMARY KEY match
-		// the database descriptor. Ensure each public region has a partition,
-		// and each transitioning region name to possibly have a partition.
-		// We do validation that ensures all index partitions are the same on
-		// PARTITION ALL BY.
-		regions, err := regionsEnumDesc.RegionNames()
-		if err != nil {
-			return err
-		}
-		regionNames := make(map[descpb.RegionName]struct{}, len(regions))
-		for _, region := range regions {
-			regionNames[region] = struct{}{}
-		}
-		transitioningRegions, err := regionsEnumDesc.TransitioningRegionNames()
-		if err != nil {
-			return err
-		}
-		transitioningRegionNames := make(map[descpb.RegionName]struct{}, len(regions))
-		for _, region := range transitioningRegions {
-			transitioningRegionNames[region] = struct{}{}
-		}
-
-		part := desc.GetPrimaryIndex().GetPartitioning()
-		err = part.ForEachList(func(name string, _ [][]byte, _ catalog.Partitioning) error {
-			regionName := descpb.RegionName(name)
-			// Any transitioning region names may exist.
-			if _, ok := transitioningRegionNames[regionName]; ok {
-				return nil
-			}
-			// If a region is not found in any of the region names, we have an unknown
-			// partition.
-			if _, ok := regionNames[regionName]; !ok {
-				return errors.AssertionFailedf(
-					"unknown partition %s on PRIMARY INDEX of table %s",
-					name,
-					desc.GetName(),
-				)
-			}
-			delete(regionNames, regionName)
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-
-		// Any regions that are not deleted from the above loop is missing.
-		for regionName := range regionNames {
-			return errors.AssertionFailedf(
-				"missing partition %s on PRIMARY INDEX of table %s",
-				regionName,
-				desc.GetName(),
-			)
-		}
-
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
-
-		// Table is homed in an explicit (non-primary) region.
-		if lc.RegionalByTable.Region != nil {
-			foundRegion := false
-			regions, err := regionsEnumDesc.RegionNamesForValidation()
-			if err != nil {
-				return err
-			}
-			for _, r := range regions {
-				if *lc.RegionalByTable.Region == r {
-					foundRegion = true
-					break
-				}
-			}
-			if !foundRegion {
-				return errors.WithHintf(
-					pgerror.Newf(
-						pgcode.InvalidTableDefinition,
-						`region "%s" has not been added to database "%s"`,
-						*lc.RegionalByTable.Region,
-						db.DatabaseDesc().Name,
-					),
-					"available regions: %s",
-					strings.Join(regions.ToStrings(), ", "),
-				)
-			}
-			if !regionEnumIDReferenced {
-				return errors.AssertionFailedf(
-					"expected multi-region enum ID %d to be referenced on REGIONAL BY TABLE: %q locality "+
-						"config, but did not find it",
-					regionsEnumID,
-					desc.GetName(),
-				)
-			}
-		} else {
-			if regionEnumIDReferenced {
-				// It may be the case that the multi-region type descriptor is used
-				// as the type of the table column. Validations should only fail if
-				// that is not the case.
-				if _, found := columnTypesTypeIDs[regionsEnumID]; !found {
-					return errors.AssertionFailedf(
-						"expected no region Enum ID to be referenced by a REGIONAL BY TABLE: %q homed in the "+
-							"primary region, but found: %d",
-						desc.GetName(),
-						regionsEnumDesc.GetID(),
-					)
-				}
-			}
-		}
-	default:
-		return pgerror.Newf(
-			pgcode.InvalidTableDefinition,
-			"unknown locality level: %T",
-			lc,
-		)
-	}
-	return nil
 }

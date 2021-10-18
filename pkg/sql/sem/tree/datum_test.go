@@ -146,13 +146,17 @@ func TestCompareTimestamps(t *testing.T) {
 						},
 					),
 				}
-				assert.Equal(t, tc.expected, compareTimestamps(ctx, tc.left, tc.right))
-				assert.Equal(t, -tc.expected, compareTimestamps(ctx, tc.right, tc.left))
+				res, err := compareTimestamps(ctx, tc.left, tc.right)
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expected, res)
+				res, err = compareTimestamps(ctx, tc.right, tc.left)
+				assert.NoError(t, err)
+				assert.Equal(t, -tc.expected, res)
 			},
 		)
 	}
-
-	assert.Panics(t, func() { compareTimestamps(nil /* ctx */, dMaxDate, dMinDate) })
+	_, err = compareTimestamps(nil /* ctx */, dMaxDate, dMinDate)
+	assert.Error(t, err, "should not be able to compare infinite timestamps")
 }
 
 func TestCastStringToRegClassTableName(t *testing.T) {

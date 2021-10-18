@@ -11,10 +11,12 @@
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
+import { Moment } from "moment";
 
 import { AppState } from "src/store";
 import { actions as transactionsActions } from "src/store/transactions";
 import { actions as resetSQLStatsActions } from "src/store/sqlStats";
+import { actions as statementsActions } from "src/store/statements";
 import { TransactionsPage } from "./transactionsPage";
 import {
   TransactionsPageStateProps,
@@ -23,8 +25,13 @@ import {
 import {
   selectTransactionsData,
   selectTransactionsLastError,
+  selectTxnColumns,
 } from "./transactionsPage.selectors";
+import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
+import { selectDateRange } from "src/statementsPage/statementsPage.selectors";
+import { StatementsRequest } from "src/api/statementsApi";
+import { actions as localStorageActions } from "../store/localStorage";
 
 export const TransactionsPageConnected = withRouter(
   connect<
@@ -36,10 +43,34 @@ export const TransactionsPageConnected = withRouter(
       data: selectTransactionsData(state),
       nodeRegions: nodeRegionsByIDSelector(state),
       error: selectTransactionsLastError(state),
+      isTenant: selectIsTenant(state),
+      dateRange: selectDateRange(state),
+      columns: selectTxnColumns(state),
     }),
     (dispatch: Dispatch) => ({
-      refreshData: () => dispatch(transactionsActions.refresh()),
+      refreshData: (req?: StatementsRequest) =>
+        dispatch(transactionsActions.refresh(req)),
       resetSQLStats: () => dispatch(resetSQLStatsActions.request()),
+      onDateRangeChange: (start: Moment, end: Moment) => {
+        dispatch(
+          statementsActions.updateDateRange({
+            start: start.unix(),
+            end: end.unix(),
+          }),
+        );
+      },
+      // We use `null` when the value was never set and it will show all columns.
+      // If the user modifies the selection and no columns are selected,
+      // the function will save the value as a blank space, otherwise
+      // it gets saved as `null`.
+      onColumnsChange: (selectedColumns: string[]) =>
+        dispatch(
+          localStorageActions.update({
+            key: "showColumns/TransactionPage",
+            value:
+              selectedColumns.length === 0 ? " " : selectedColumns.join(","),
+          }),
+        ),
     }),
   )(TransactionsPage),
 );

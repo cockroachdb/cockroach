@@ -70,6 +70,7 @@ function rebaseText(text: string, highlight: string) {
 export function getHighlightedText(
   text: string,
   highlight: string,
+  hasDarkBkg: boolean,
   isOriginalText?: boolean,
 ) {
   if (!highlight || highlight.length === 0) {
@@ -91,10 +92,11 @@ export function getHighlightedText(
   const parts = isOriginalText
     ? text.split(new RegExp(`(${search})`, "gi"))
     : rebaseText(text, highlight).split(new RegExp(`(${search})`, "gi"));
+  const highlightClass = hasDarkBkg ? "_text-bold-light" : "_text-bold";
   return parts.map((part, i) => {
     if (search.includes(part.toLowerCase())) {
       return (
-        <span key={i} className={cx("_text-bold")}>
+        <span key={i} className={cx(highlightClass)}>
           {`${part}`}
         </span>
       );

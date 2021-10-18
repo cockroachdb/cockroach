@@ -25,10 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -38,6 +41,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSQLStatsCompactorNilTestingKnobCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	server, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer server.Stopper().Stop(ctx)
+
+	statsCompactor := persistedsqlstats.NewStatsCompactor(
+		server.ClusterSettings(),
+		server.InternalExecutor().(sqlutil.InternalExecutor),
+		server.DB(),
+		metric.NewCounter(metric.Metadata{}),
+		nil, /* knobs */
+	)
+
+	// We run the compactor without disabling the follower read. This can possibly
+	// fail due to descriptor not found.
+	err := statsCompactor.DeleteOldestEntries(ctx)
+	if err != nil {
+		require.ErrorIs(t, err, catalog.ErrDescriptorNotFound)
+	}
+}
 
 func TestSQLStatsCompactor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -63,8 +90,8 @@ func TestSQLStatsCompactor(t *testing.T) {
 		t, 3 /* numNodes */, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
-					SQLStatsKnobs: &persistedsqlstats.TestingKnobs{
-						DisableFollowerRead: true,
+					SQLStatsKnobs: &sqlstats.TestingKnobs{
+						AOSTClause: "AS OF SYSTEM TIME '-1us'",
 					},
 				},
 			},
@@ -134,8 +161,8 @@ func TestSQLStatsCompactor(t *testing.T) {
 						firstServer.InternalExecutor().(sqlutil.InternalExecutor),
 						firstServer.DB(),
 						metric.NewCounter(metric.Metadata{}),
-						&persistedsqlstats.TestingKnobs{
-							DisableFollowerRead: true,
+						&sqlstats.TestingKnobs{
+							AOSTClause: "AS OF SYSTEM TIME '-1us'",
 						},
 					)
 
@@ -182,8 +209,8 @@ func TestAtMostOneSQLStatsCompactionJob(t *testing.T) {
 	var serverArgs base.TestServerArgs
 	var allowRequest chan struct{}
 
-	serverArgs.Knobs.SQLStatsKnobs = &persistedsqlstats.TestingKnobs{
-		DisableFollowerRead: true,
+	serverArgs.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
+		AOSTClause: "AS OF SYSTEM TIME '-1us'",
 	}
 
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
@@ -241,6 +268,41 @@ func TestAtMostOneSQLStatsCompactionJob(t *testing.T) {
 	sqlDB.CheckQueryResultsRetry(
 		t,
 		fmt.Sprintf(`SELECT count(*) FROM system.jobs where id = %d AND status = 'succeeded'`, jobID),
+		[][]string{{"1"}},
+	)
+}
+
+func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+		ServerArgs: params,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	server := tc.Server(0 /* idx */)
+	conn := tc.ServerConn(0 /* idx */)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	jobID, err := launchSQLStatsCompactionJob(server)
+	require.NoError(t, err)
+
+	// Ensure the sqlstats job is hidden from the SHOW JOBS command.
+	sqlDB.CheckQueryResults(
+		t,
+		"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = '"+jobspb.TypeAutoSQLStatsCompaction.String()+"'",
+		[][]string{{"0"}},
+	)
+
+	// Ensure the sqlstats job is displayed in SHOW AUTOMATIC JOBS command.
+	sqlDB.CheckQueryResults(
+		t,
+		fmt.Sprintf("SELECT count(*) FROM [SHOW AUTOMATIC JOBS] WHERE job_id = %d", jobID),
 		[][]string{{"1"}},
 	)
 }

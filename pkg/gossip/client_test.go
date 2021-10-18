@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -339,7 +338,7 @@ func TestClientDisconnectLoopback(t *testing.T) {
 	local := startGossip(uuid.Nil, 1, stopper, t, metric.NewRegistry())
 	local.mu.Lock()
 	lAddr := local.mu.is.NodeAddr
-	local.startClientLocked(&lAddr)
+	local.startClientLocked(lAddr)
 	local.mu.Unlock()
 	local.manage()
 	testutils.SucceedsSoon(t, func() error {
@@ -385,7 +384,7 @@ func TestClientDisconnectRedundant(t *testing.T) {
 			// Restart the client connection in the loop. It might have failed due to
 			// a heartbeat time.
 			local.mu.Lock()
-			local.startClientLocked(&rAddr)
+			local.startClientLocked(rAddr)
 			local.mu.Unlock()
 			return fmt.Errorf("unable to find local to remote client")
 		}
@@ -396,7 +395,7 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	// Start a remote to local client. This client will get removed as being
 	// redundant as there is already a connection between the two nodes.
 	remote.mu.Lock()
-	remote.startClientLocked(&lAddr)
+	remote.startClientLocked(lAddr)
 	remote.mu.Unlock()
 
 	testutils.SucceedsSoon(t, func() error {
@@ -431,8 +430,8 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 	// Start two clients from local to remote. RPC client cache is
 	// disabled via the context, so we'll start two different outgoing
 	// connections.
-	local.startClientLocked(&rAddr)
-	local.startClientLocked(&rAddr)
+	local.startClientLocked(rAddr)
+	local.startClientLocked(rAddr)
 	local.mu.Unlock()
 	remote.mu.Unlock()
 	local.manage()
@@ -489,13 +488,8 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 			gossipAddr = ln.Addr().String()
 		}
 
-		var resolvers []resolver.Resolver
-		resolver, err := resolver.NewResolver(gossipAddr)
-		if err != nil {
-			t.Fatal(err)
-		}
-		resolvers = append(resolvers, resolver)
-		gnode.Start(ln.Addr(), resolvers)
+		addresses := []util.UnresolvedAddr{util.MakeUnresolvedAddr("tcp", gossipAddr)}
+		gnode.Start(ln.Addr(), addresses)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
@@ -507,58 +501,6 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 			return errors.Errorf("expected %v to contain %d nodes, got %d", g[0].mu.nodeMap, e, a)
 		}
 		return nil
-	})
-}
-
-type testResolver struct {
-	addr         string
-	numTries     int
-	numFails     int
-	numSuccesses int
-}
-
-func (tr *testResolver) Type() string { return "tcp" }
-
-func (tr *testResolver) Addr() string { return tr.addr }
-
-func (tr *testResolver) GetAddress() (net.Addr, error) {
-	defer func() { tr.numTries++ }()
-	if tr.numTries < tr.numFails {
-		return nil, errors.New("bad address")
-	}
-	return util.NewUnresolvedAddr("tcp", tr.addr), nil
-}
-
-// TestClientRetryBootstrap verifies that an initial failure to connect
-// to a bootstrap host doesn't stall the bootstrapping process in the
-// absence of any additional activity. This can happen during acceptance
-// tests if the DNS can't lookup hostnames when gossip is started.
-func TestClientRetryBootstrap(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-
-	// Shared cluster ID by all gossipers (this ensures that the gossipers
-	// don't talk to servers from unrelated tests by accident).
-	clusterID := uuid.MakeV4()
-	local := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
-	remote := startGossip(clusterID, 2, stopper, t, metric.NewRegistry())
-
-	if err := local.AddInfo("local-key", []byte("hello"), 0*time.Second); err != nil {
-		t.Fatal(err)
-	}
-
-	local.SetBootstrapInterval(10 * time.Millisecond)
-	resolvers := []resolver.Resolver{
-		&testResolver{addr: remote.GetNodeAddr().String(), numFails: 3, numSuccesses: 1},
-	}
-	local.setResolvers(resolvers)
-	local.bootstrap()
-	local.manage()
-
-	testutils.SucceedsSoon(t, func() error {
-		_, err := remote.GetInfo("local-key")
-		return err
 	})
 }
 

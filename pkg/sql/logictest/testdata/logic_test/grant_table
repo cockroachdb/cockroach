@@ -40,6 +40,7 @@ test           crdb_internal       cluster_queries                        public
 test           crdb_internal       cluster_sessions                       public   SELECT
 test           crdb_internal       cluster_settings                       public   SELECT
 test           crdb_internal       cluster_transactions                   public   SELECT
+test           crdb_internal       create_schema_statements               public   SELECT
 test           crdb_internal       create_statements                      public   SELECT
 test           crdb_internal       create_type_statements                 public   SELECT
 test           crdb_internal       cross_db_references                    public   SELECT
@@ -86,6 +87,7 @@ test           crdb_internal       table_columns                          public
 test           crdb_internal       table_indexes                          public   SELECT
 test           crdb_internal       table_row_statistics                   public   SELECT
 test           crdb_internal       tables                                 public   SELECT
+test           crdb_internal       tenant_usage_details                   public   SELECT
 test           crdb_internal       transaction_statistics                 public   SELECT
 test           crdb_internal       zones                                  public   SELECT
 test           information_schema  NULL                                   admin    ALL
@@ -422,7 +424,11 @@ test           pg_catalog          pg_statio_sys_tables                   public
 test           pg_catalog          pg_statio_user_indexes                 public   SELECT
 test           pg_catalog          pg_statio_user_sequences               public   SELECT
 test           pg_catalog          pg_statio_user_tables                  public   SELECT
+test           pg_catalog          pg_statistic                           public   SELECT
 test           pg_catalog          pg_statistic_ext                       public   SELECT
+test           pg_catalog          pg_statistic_ext_data                  public   SELECT
+test           pg_catalog          pg_stats                               public   SELECT
+test           pg_catalog          pg_stats_ext                           public   SELECT
 test           pg_catalog          pg_subscription                        public   SELECT
 test           pg_catalog          pg_subscription_rel                    public   SELECT
 test           pg_catalog          pg_tables                              public   SELECT

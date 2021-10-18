@@ -10,14 +10,16 @@
 
 import React from "react";
 import { RouteComponentProps } from "react-router-dom";
-import { isNil, merge, forIn } from "lodash";
+import { isNil, merge } from "lodash";
 import Helmet from "react-helmet";
+import moment, { Moment } from "moment";
 import classNames from "classnames/bind";
 import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { ColumnDescriptor, SortSetting } from "src/sortedtable";
 import { Search } from "src/search";
 import { Pagination } from "src/pagination";
+import { DateRange } from "src/dateRange";
 import { TableStatistics } from "../tableStatistics";
 import {
   Filter,
@@ -34,6 +36,7 @@ import {
   calculateTotalWorkload,
   unique,
   containAny,
+  queryByName,
 } from "src/util";
 import {
   AggregateStatistics,
@@ -43,7 +46,6 @@ import {
 } from "../statementsTable";
 import {
   getLabel,
-  statisticsColumnLabels,
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
 import {
@@ -59,6 +61,9 @@ type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosti
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
+import { UIConfigState } from "../store";
+import { StatementsRequest } from "src/api/statementsApi";
+import Long from "long";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -69,7 +74,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 // provide convenient definitions for `mapDispatchToProps`, `mapStateToProps` and props that
 // have to be provided by parent component.
 export interface StatementsPageDispatchProps {
-  refreshStatements: () => void;
+  refreshStatements: (req?: StatementsRequest) => void;
   refreshStatementDiagnosticsRequests: () => void;
   resetSQLStats: () => void;
   dismissAlertMessage: () => void;
@@ -86,10 +91,12 @@ export interface StatementsPageDispatchProps {
   onFilterChange?: (value: string) => void;
   onStatementClick?: (statement: string) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
+  onDateRangeChange: (start: Moment, end: Moment) => void;
 }
 
 export interface StatementsPageStateProps {
   statements: AggregateStatistics[];
+  dateRange: [Moment, Moment];
   statementsError: Error | null;
   apps: string[];
   databases: string[];
@@ -97,6 +104,7 @@ export interface StatementsPageStateProps {
   lastReset: string;
   columns: string[];
   nodeRegions: { [key: string]: string };
+  isTenant?: UIConfigState["isTenant"];
 }
 
 export interface StatementsPageState {
@@ -110,6 +118,16 @@ export interface StatementsPageState {
 export type StatementsPageProps = StatementsPageDispatchProps &
   StatementsPageStateProps &
   RouteComponentProps<unknown>;
+
+function statementsRequestFromProps(
+  props: StatementsPageProps,
+): cockroach.server.serverpb.StatementsRequest {
+  return new cockroach.server.serverpb.StatementsRequest({
+    combined: true,
+    start: Long.fromNumber(props.dateRange[0].unix()),
+    end: Long.fromNumber(props.dateRange[1].unix()),
+  });
+}
 
 export class StatementsPage extends React.Component<
   StatementsPageProps,
@@ -141,6 +159,10 @@ export class StatementsPage extends React.Component<
     this.activateDiagnosticsRef = React.createRef();
   }
 
+  static defaultProps: Partial<StatementsPageProps> = {
+    isTenant: false,
+  };
+
   getStateFromHistory = (): Partial<StatementsPageState> => {
     const { history } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
@@ -157,23 +179,23 @@ export class StatementsPage extends React.Component<
     };
   };
 
-  syncHistory = (params: Record<string, string | undefined>) => {
+  syncHistory = (params: Record<string, string | undefined>): void => {
     const { history } = this.props;
-    const currentSearchParams = new URLSearchParams(history.location.search);
+    const nextSearchParams = new URLSearchParams(history.location.search);
 
-    forIn(params, (value, key) => {
+    Object.entries(params).forEach(([key, value]) => {
       if (!value) {
-        currentSearchParams.delete(key);
+        nextSearchParams.delete(key);
       } else {
-        currentSearchParams.set(key, value);
+        nextSearchParams.set(key, value);
       }
     });
 
-    history.location.search = currentSearchParams.toString();
+    history.location.search = nextSearchParams.toString();
     history.replace(history.location);
   };
 
-  changeSortSetting = (ss: SortSetting) => {
+  changeSortSetting = (ss: SortSetting): void => {
     this.setState({
       sortSetting: ss,
     });
@@ -187,18 +209,21 @@ export class StatementsPage extends React.Component<
     }
   };
 
-  selectApp = (value: string) => {
-    if (value == "All") value = "";
-    const { history, onFilterChange } = this.props;
-    history.location.pathname = `/statements/${encodeURIComponent(value)}`;
-    history.replace(history.location);
-    this.resetPagination();
-    if (onFilterChange) {
-      onFilterChange(value);
+  changeDateRange = (start: Moment, end: Moment): void => {
+    if (this.props.onDateRangeChange) {
+      this.props.onDateRangeChange(start, end);
     }
   };
 
-  resetPagination = () => {
+  resetTime = (): void => {
+    // Default range to reset to is one hour ago.
+    this.changeDateRange(
+      moment.utc().subtract(1, "hours"),
+      moment.utc().add(1, "minute"),
+    );
+  };
+
+  resetPagination = (): void => {
     this.setState(prevState => {
       return {
         pagination: {
@@ -209,33 +234,42 @@ export class StatementsPage extends React.Component<
     });
   };
 
-  componentDidMount() {
-    this.props.refreshStatements();
-    this.props.refreshStatementDiagnosticsRequests();
+  refreshStatements = (): void => {
+    const req = statementsRequestFromProps(this.props);
+    this.props.refreshStatements(req);
+  };
+
+  componentDidMount(): void {
+    this.refreshStatements();
+    if (!this.props.isTenant) {
+      this.props.refreshStatementDiagnosticsRequests();
+    }
   }
 
   componentDidUpdate = (
     __: StatementsPageProps,
     prevState: StatementsPageState,
-  ) => {
+  ): void => {
     if (this.state.search && this.state.search !== prevState.search) {
       this.props.onSearchComplete(this.filteredStatementsData());
     }
-    this.props.refreshStatements();
-    this.props.refreshStatementDiagnosticsRequests();
+    this.refreshStatements();
+    if (!this.props.isTenant) {
+      this.props.refreshStatementDiagnosticsRequests();
+    }
   };
 
-  componentWillUnmount() {
+  componentWillUnmount(): void {
     this.props.dismissAlertMessage();
   }
 
-  onChangePage = (current: number) => {
+  onChangePage = (current: number): void => {
     const { pagination } = this.state;
     this.setState({ pagination: { ...pagination, current } });
     this.props.onPageChanged(current);
   };
 
-  onSubmitSearchField = (search: string) => {
+  onSubmitSearchField = (search: string): void => {
     this.setState({ search });
     this.resetPagination();
     this.syncHistory({
@@ -243,7 +277,7 @@ export class StatementsPage extends React.Component<
     });
   };
 
-  onSubmitFilters = (filters: Filters) => {
+  onSubmitFilters = (filters: Filters): void => {
     this.setState({
       filters: {
         ...this.state.filters,
@@ -262,17 +296,16 @@ export class StatementsPage extends React.Component<
       regions: filters.regions,
       nodes: filters.nodes,
     });
-    this.selectApp(filters.app);
   };
 
-  onClearSearchField = () => {
+  onClearSearchField = (): void => {
     this.setState({ search: "" });
     this.syncHistory({
       q: undefined,
     });
   };
 
-  onClearFilters = () => {
+  onClearFilters = (): void => {
     this.setState({
       filters: {
         ...defaultFilters,
@@ -289,12 +322,11 @@ export class StatementsPage extends React.Component<
       regions: undefined,
       nodes: undefined,
     });
-    this.selectApp("");
   };
 
-  filteredStatementsData = () => {
+  filteredStatementsData = (): AggregateStatistics[] => {
     const { search, filters } = this.state;
-    const { statements, nodeRegions } = this.props;
+    const { statements, nodeRegions, isTenant } = this.props;
     const timeValue = getTimeValueInSeconds(filters);
     const sqlTypes =
       filters.sqlType.length > 0
@@ -340,9 +372,12 @@ export class StatementsPage extends React.Component<
           sqlTypes.length == 0 || sqlTypes.includes(statement.stats.sql_type),
       )
       .filter(
-        // The statement must contain at least one value from the selected nodes
+        // The statement must contain at least one value from the selected regions
         // list if the list is not empty.
+        // If the cluster is a tenant cluster we don't care
+        // about regions.
         statement =>
+          isTenant ||
           regions.length == 0 ||
           (statement.stats.nodes &&
             containAny(
@@ -354,9 +389,12 @@ export class StatementsPage extends React.Component<
             )),
       )
       .filter(
-        // The statement must contain at least one value from the selected regions
+        // The statement must contain at least one value from the selected nodes
         // list if the list is not empty.
+        // If the cluster is a tenant cluster we don't care
+        // about nodes.
         statement =>
+          isTenant ||
           nodes.length == 0 ||
           (statement.stats.nodes &&
             containAny(
@@ -371,49 +409,53 @@ export class StatementsPage extends React.Component<
     const {
       statements,
       databases,
-      match,
       lastReset,
+      location,
       onDiagnosticsReportDownload,
       onStatementClick,
       resetSQLStats,
       columns: userSelectedColumnsToShow,
       onColumnsChange,
       nodeRegions,
+      isTenant,
     } = this.props;
-    const appAttrValue = getMatchParamByName(match, appAttr);
+    const appAttrValue = queryByName(location, appAttr);
     const selectedApp = appAttrValue || "";
-    const appOptions = [{ value: "All", label: "All" }];
+    const appOptions = [{ value: "", label: "All" }];
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
     const data = this.filteredStatementsData();
     const totalWorkload = calculateTotalWorkload(data);
     const totalCount = data.length;
     const isEmptySearchResults = statements?.length > 0 && search?.length > 0;
-    const nodes = Object.keys(nodeRegions)
-      .map(n => Number(n))
-      .sort();
-    const regions = unique(
-      nodes.map(node => nodeRegions[node.toString()]),
-    ).sort();
-    populateRegionNodeForStatements(statements, nodeRegions);
+    // If the cluster is a tenant cluster we don't show info
+    // about nodes/regions.
+    const nodes = isTenant
+      ? []
+      : Object.keys(nodeRegions)
+          .map(n => Number(n))
+          .sort();
+    const regions = isTenant
+      ? []
+      : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
+    populateRegionNodeForStatements(statements, nodeRegions, isTenant);
 
-    // Creates a list of all possible columns
+    // Creates a list of all possible columns,
+    // hiding nodeRegions if is not multi-region and
+    // hiding columns that won't be displayed for tenants.
     const columns = makeStatementsColumns(
       statements,
       selectedApp,
       totalWorkload,
       nodeRegions,
       "statement",
+      isTenant,
       search,
       this.activateDiagnosticsRef,
       onDiagnosticsReportDownload,
       onStatementClick,
-    );
-
-    // If it's multi-region, we want to show the Regions/Nodes column by default
-    // and hide otherwise.
-    if (regions.length > 1) {
-      columns.filter(c => c.name === "regionNodes")[0].showByDefault = true;
-    }
+    )
+      .filter(c => !(c.name === "regionNodes" && regions.length < 2))
+      .filter(c => !(isTenant && c.hideIfTenant));
 
     const isColumnSelected = (c: ColumnDescriptor<AggregateStatistics>) => {
       return (
@@ -466,6 +508,18 @@ export class StatementsPage extends React.Component<
               showNodes={nodes.length > 1}
             />
           </PageConfigItem>
+          <PageConfigItem>
+            <DateRange
+              start={this.props.dateRange[0]}
+              end={this.props.dateRange[1]}
+              onSubmit={this.changeDateRange}
+            />
+          </PageConfigItem>
+          <PageConfigItem>
+            <button className={cx("reset-btn")} onClick={this.resetTime}>
+              reset time
+            </button>
+          </PageConfigItem>
         </PageConfig>
         <section className={sortableTableCx("cl-table-container")}>
           <div>
@@ -479,6 +533,7 @@ export class StatementsPage extends React.Component<
               search={search}
               totalCount={totalCount}
               arrayItemName="statements"
+              tooltipType="statement"
               activeFilters={activeFilters}
               onClearFilters={this.onClearFilters}
               resetSQLStats={resetSQLStats}
@@ -510,20 +565,16 @@ export class StatementsPage extends React.Component<
 
   render() {
     const {
-      match,
+      location,
       refreshStatementDiagnosticsRequests,
       onActivateStatementDiagnostics,
       onDiagnosticsModalOpen,
     } = this.props;
-    const app = getMatchParamByName(match, appAttr);
+    const app = queryByName(location, appAttr);
     return (
       <div className={cx("root", "table-area")}>
         <Helmet title={app ? `${app} App | Statements` : "Statements"} />
-
-        <section className={cx("section")}>
-          <h1 className={cx("base-heading")}>Statements</h1>
-        </section>
-
+        <h3 className={cx("base-heading")}>Statements</h3>
         <Loading
           loading={isNil(this.props.statements)}
           error={this.props.statementsError}

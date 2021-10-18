@@ -237,7 +237,7 @@ func (ss *diskSideloadStorage) TruncateTo(
 	if deletedAll {
 		// The directory may not exist, or it may exist and have been empty.
 		// Not worth trying to figure out which one, just try to delete.
-		err := ss.eng.RemoveDir(ss.dir)
+		err := ss.eng.Remove(ss.dir)
 		if err != nil && !oserror.IsNotExist(err) {
 			log.Infof(ctx, "unable to remove sideloaded dir %s: %v", ss.dir, err)
 			err = nil // handled

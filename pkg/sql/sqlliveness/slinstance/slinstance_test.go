@@ -12,6 +12,7 @@ package slinstance_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -20,12 +21,54 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSQLInstance_invokesSessionExpiryCallbacksInGoroutine(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, stopper := context.Background(), stop.NewStopper()
+
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	mClock := hlc.NewManualClock(t0.UnixNano())
+	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
+	settings := cluster.MakeTestingClusterSettings()
+
+	fakeStorage := slstorage.NewFakeStorage()
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	sqlInstance.Start(ctx)
+
+	session, err := sqlInstance.Session(ctx)
+	require.NoError(t, err)
+
+	// Simulating what happens in `instanceprovider.shutdownSQLInstance`
+	session.RegisterCallbackForSessionExpiry(func(ctx context.Context) {
+		stopper.Stop(ctx)
+	})
+
+	// Removing the session will run the callback above, which will have to
+	// wait for async tasks to stop. The async tasks include the
+	// sqlInstance `heartbeatLoop` function.
+	require.NoError(t, fakeStorage.Delete(ctx, session.ID()))
+
+	// Clock needs to advance for expiry we trigger below to be valid
+	mClock.Increment(int64(slinstance.DefaultTTL.Get(&settings.SV)))
+
+	testutils.SucceedsSoon(t, func() error {
+		select {
+		case <-stopper.IsStopped():
+			return nil
+		default:
+			return errors.New("not stopped")
+		}
+	})
+}
 
 func TestSQLInstance(t *testing.T) {
 	defer leaktest.AfterTest(t)()

@@ -11,6 +11,7 @@
 package server
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/tls"
@@ -45,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	_ "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -107,6 +108,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
+	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -266,7 +268,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		clock = hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset))
 	}
 	registry := metric.NewRegistry()
-	// If the tracer has a Close function, call it after the server stops.
+	stopper.SetTracer(cfg.AmbientCtx.Tracer)
 	stopper.AddCloser(cfg.AmbientCtx.Tracer)
 
 	// Add a dynamic log tag value for the node ID.
@@ -386,7 +388,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		cfg.Locality,
 		&cfg.DefaultZoneConfig,
 	)
-	nodeDialer := nodedialer.New(rpcContext, gossip.AddressResolver(g))
+
+	var dialerKnobs nodedialer.DialerTestingKnobs
+	if dk := cfg.TestingKnobs.DialerKnobs; dk != nil {
+		dialerKnobs = dk.(nodedialer.DialerTestingKnobs)
+	}
+
+	nodeDialer := nodedialer.NewWithOpt(rpcContext, gossip.AddressResolver(g),
+		nodedialer.DialerOpt{TestingKnobs: dialerKnobs})
 
 	runtimeSampler := status.NewRuntimeStatSampler(ctx, clock)
 	registry.AddMetricStruct(runtimeSampler)
@@ -559,10 +568,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		return nil, err
 	}
 
-	// Break a circular dependency: we need a Node to make a StoreConfig (for
-	// ClosedTimestamp), but the Node needs a StoreConfig to be made.
-	var lateBoundNode *Node
-
 	// Break a circular dependency: we need the rootSQLMemoryMonitor to construct
 	// the KV memory monitor for the StoreConfig.
 	sqlMonitorAndMetrics := newRootSQLMemoryMonitor(monitorAndMetricsOptions{
@@ -578,7 +583,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}))
 
 	storeCfg := kvserver.StoreConfig{
-		DefaultZoneConfig:       &cfg.DefaultZoneConfig,
+		DefaultSpanConfig:       cfg.DefaultZoneConfig.AsSpanConfig(),
 		Settings:                st,
 		AmbientCtx:              cfg.AmbientCtx,
 		RaftConfig:              cfg.RaftConfig,
@@ -600,33 +605,23 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		TimeSeriesDataStore:     tsDB,
 		ClosedTimestampSender:   ctSender,
 		ClosedTimestampReceiver: ctReceiver,
-
-		// Initialize the closed timestamp subsystem. Note that it won't
-		// be ready until it is .Start()ed, but the grpc server can be
-		// registered early.
-		ClosedTimestamp: container.NewContainer(container.Config{
-			Settings: st,
-			Stopper:  stopper,
-			Clock:    nodeLiveness.AsLiveClock(),
-			// NB: s.node is not defined at this point, but it will be
-			// before this is ever called.
-			Refresh: func(rangeIDs ...roachpb.RangeID) {
-				for _, rangeID := range rangeIDs {
-					repl, _, err := lateBoundNode.stores.GetReplicaForRangeID(ctx, rangeID)
-					if err != nil || repl == nil {
-						continue
-					}
-					repl.EmitMLAI()
-				}
-			},
-			Dialer: nodeDialer.CTDialer(),
-		}),
-
 		ExternalStorage:         externalStorage,
 		ExternalStorageFromURI:  externalStorageFromURI,
 		ProtectedTimestampCache: protectedtsProvider,
 		KVMemoryMonitor:         kvMemoryMonitor,
 	}
+
+	var spanConfigAccessor spanconfig.KVAccessor
+	if cfg.SpanConfigsEnabled {
+		storeCfg.SpanConfigsEnabled = true
+		spanConfigAccessor = spanconfigkvaccessor.New(
+			db, internalExecutor, cfg.Settings,
+			systemschema.SpanConfigurationsTableName.FQString(),
+		)
+	} else {
+		spanConfigAccessor = spanconfigkvaccessor.DisabledAccessor{}
+	}
+
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
 	}
@@ -652,13 +647,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		updates.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
 
-	tenantUsage := NewTenantUsageServer(db, internalExecutor)
+	tenantUsage := NewTenantUsageServer(st, db, internalExecutor)
 	registry.AddMetricStruct(tenantUsage.Metrics())
-
-	spanConfigAccessor := spanconfigkvaccessor.New(
-		db, internalExecutor, cfg.Settings,
-		systemschema.SpanConfigurationsTableName.FQString(),
-	)
 
 	node := NewNode(
 		storeCfg, recorder, registry, stopper,
@@ -666,11 +656,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		gcoords.Regular.GetWorkQueue(admission.KVWork), gcoords.Stores,
 		tenantUsage, spanConfigAccessor,
 	)
-	lateBoundNode = node
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
 	kvserver.RegisterPerStoreServer(grpcServer.Server, node.perReplicaServer)
-	node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(grpcServer.Server)
 	ctpb.RegisterSideTransportServer(grpcServer.Server, ctReceiver)
 	replicationReporter := reports.NewReporter(
 		db, node.stores, storePool, st, nodeLiveness, internalExecutor)
@@ -733,7 +721,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	kvProber := kvprober.NewProber(kvprober.Opts{
-		AmbientCtx:              cfg.AmbientCtx,
+		Tracer:                  cfg.AmbientCtx.Tracer,
 		DB:                      db,
 		Settings:                st,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
@@ -784,7 +772,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	sStatus.baseStatusServer.sqlServer = sqlServer
-	debugServer := debug.NewServer(st, sqlServer.pgServer.HBADebugFn())
+	debugServer := debug.NewServer(st, sqlServer.pgServer.HBADebugFn(), sStatus)
 	node.InitLogger(sqlServer.execCfg)
 
 	*lateBoundServer = Server{
@@ -1276,8 +1264,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 		blobs.NewBlobClientFactory(s.nodeIDContainer.Get(),
 			s.nodeDialer, s.st.ExternalIODir), &fileTableInternalExecutor, s.db)
 
-	// Filter out self from the gossip bootstrap resolvers.
-	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx)
+	// Filter out self from the gossip bootstrap addresses.
+	filtered := s.cfg.FilterGossipBootstrapAddresses(ctx)
 
 	// Set up the init server. We have to do this relatively early because we
 	// can't call RegisterInitServer() after `grpc.Serve`, which is called in
@@ -1670,6 +1658,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		goroutineDumpDirName: s.cfg.GoroutineDumpDirName,
 		heapProfileDirName:   s.cfg.HeapProfileDirName,
 		runtime:              s.runtime,
+		sessionRegistry:      s.status.sessionRegistry,
 	}); err != nil {
 		return err
 	}
@@ -2008,6 +1997,18 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 		return errors.New("cannot import timeseries into an existing cluster or a multi-{store,node} cluster")
 	}
 
+	// Also do a best effort at disabling the timeseries of the local node to cause
+	// confusion.
+	ts.TimeseriesStorageEnabled.Override(ctx, &s.ClusterSettings().SV, false)
+
+	// Suppress writing of node statuses for the local node (n1). If it wrote one,
+	// and the imported data also contains n1 but with a different set of stores,
+	// we'd effectively clobber the timeseries display for n1 (which relies on the
+	// store statuses to map the store timeseries to the node under which they
+	// fall). An alternative to this is setting a FirstStoreID and FirstNodeID that
+	// is not in use in the data set to import.
+	s.node.suppressNodeStatus.Set(true)
+
 	f, err := os.Open(tsImport)
 	if err != nil {
 		return err
@@ -2075,6 +2076,21 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 		// matching ID, i.e. n1->s1, n2->s2, etc.
 		nodeToStore[n] = []string{n}
 	}
+	storeToNode := map[string]string{}
+	if knobs.ImportTimeseriesMappingFile == "" {
+		return errors.Errorf("need to specify COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE; it should point at " +
+			"a YAML file that maps StoreID to NodeID. For example, if s1 is on n1 and s2 is on n5:\n\n1: 1\n2:5")
+	}
+	mapBytes, err := ioutil.ReadFile(knobs.ImportTimeseriesMappingFile)
+	if err != nil {
+		return err
+	}
+	if err := yaml.NewDecoder(bytes.NewReader(mapBytes)).Decode(&storeToNode); err != nil {
+		return err
+	}
+	for sid, nid := range storeToNode {
+		nodeToStore[nid] = append(nodeToStore[nid], sid)
+	}
 
 	for nodeString, storeStrings := range nodeToStore {
 		nid, err := strconv.ParseInt(nodeString, 10, 32)
@@ -2090,7 +2106,7 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 				return err
 			}
 			ss = append(ss, statuspb.StoreStatus{Desc: roachpb.StoreDescriptor{StoreID: roachpb.StoreID(sid)}})
-			delete(storeIDs, nodeString)
+			delete(storeIDs, storeString)
 		}
 
 		ns := statuspb.NodeStatus{
@@ -2104,15 +2120,10 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 			return err
 		}
 	}
-	if len(storeIDs) == 0 {
-		log.Warningf(ctx, "*** guessed the assignment of nodes to stores: %v ***", nodeToStore)
-	} else {
-		// If you end up here, you can adjust nodeToStore above with the correct mapping and run
-		// a custom binary. We could add an env var that takes JSON if this becomes too burdensome.
-		// Another complication is the fact that at least n1 is live and will write regular statuses,
-		// and generally whatever nodes are running in the cluster have to have the right storeIDs
-		// or things will quickly be out of whack.
-		return errors.Errorf("unable to guess the assignment of remaining stores %v to nodes %v, needs manual mapping", storeIDs, nodeIDs)
+	if len(storeIDs) > 0 {
+		return errors.Errorf(
+			"need to map the remaining stores %v to nodes %v, please provide an updated mapping file %s",
+			storeIDs, nodeIDs, knobs.ImportTimeseriesMappingFile)
 	}
 
 	return nil
@@ -2398,17 +2409,6 @@ func (s *SQLServer) startServeSQL(
 func (s *Server) Decommission(
 	ctx context.Context, targetStatus livenesspb.MembershipStatus, nodeIDs []roachpb.NodeID,
 ) error {
-	if !s.st.Version.IsActive(ctx, clusterversion.NodeMembershipStatus) {
-		if targetStatus.Decommissioned() {
-			// In mixed-version cluster settings, we need to ensure that we're
-			// on-the-wire compatible with nodes only familiar with the boolean
-			// representation of membership state. We do the simple thing and
-			// simply disallow the setting of the fully decommissioned state until
-			// we're guaranteed to be on v20.2.
-			targetStatus = livenesspb.MembershipStatus_DECOMMISSIONING
-		}
-	}
-
 	// If we're asked to decommission ourself we may lose access to cluster RPC,
 	// so we decommission ourself last. We copy the slice to avoid mutating the
 	// input slice.
@@ -2497,6 +2497,7 @@ type sampleEnvironmentCfg struct {
 	goroutineDumpDirName string
 	heapProfileDirName   string
 	runtime              *status.RuntimeStatSampler
+	sessionRegistry      *sql.SessionRegistry
 }
 
 // startSampleEnvironment starts a periodic loop that samples the environment and,
@@ -2532,6 +2533,7 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 	var heapProfiler *heapprofiler.HeapProfiler
 	var nonGoAllocProfiler *heapprofiler.NonGoAllocProfiler
 	var statsProfiler *heapprofiler.StatsProfiler
+	var queryProfiler *heapprofiler.ActiveQueryProfiler
 	if cfg.heapProfileDirName != "" {
 		hasValidDumpDir := true
 		if err := os.MkdirAll(cfg.heapProfileDirName, 0755); err != nil {
@@ -2558,69 +2560,80 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 			if err != nil {
 				return errors.Wrap(err, "starting memory stats collector worker")
 			}
+			queryProfiler, err = heapprofiler.NewActiveQueryProfiler(ctx, cfg.heapProfileDirName, cfg.st)
+			if err != nil {
+				log.Warningf(ctx, "failed to start query profiler worker: %v", err)
+			}
 		}
 	}
 
-	return cfg.stopper.RunAsyncTask(ctx, "mem-logger", func(ctx context.Context) {
-		var goMemStats atomic.Value // *status.GoMemStats
-		goMemStats.Store(&status.GoMemStats{})
-		var collectingMemStats int32 // atomic, 1 when stats call is ongoing
+	return cfg.stopper.RunAsyncTaskEx(ctx,
+		stop.TaskOpts{TaskName: "mem-logger", SpanOpt: stop.SterileRootSpan},
+		func(ctx context.Context) {
+			var goMemStats atomic.Value // *status.GoMemStats
+			goMemStats.Store(&status.GoMemStats{})
+			var collectingMemStats int32 // atomic, 1 when stats call is ongoing
 
-		timer := timeutil.NewTimer()
-		defer timer.Stop()
-		timer.Reset(cfg.minSampleInterval)
+			timer := timeutil.NewTimer()
+			defer timer.Stop()
+			timer.Reset(cfg.minSampleInterval)
 
-		for {
-			select {
-			case <-cfg.stopper.ShouldQuiesce():
-				return
-			case <-timer.C:
-				timer.Read = true
-				timer.Reset(cfg.minSampleInterval)
+			for {
+				select {
+				case <-cfg.stopper.ShouldQuiesce():
+					return
+				case <-timer.C:
+					timer.Read = true
+					timer.Reset(cfg.minSampleInterval)
 
-				// We read the heap stats on another goroutine and give up after 1s.
-				// This is necessary because as of Go 1.12, runtime.ReadMemStats()
-				// "stops the world" and that requires first waiting for any current GC
-				// run to finish. With a large heap and under extreme conditions, a
-				// single GC run may take longer than the default sampling period of
-				// 10s. Under normal operations and with more recent versions of Go,
-				// this hasn't been observed to be a problem.
-				statsCollected := make(chan struct{})
-				if atomic.CompareAndSwapInt32(&collectingMemStats, 0, 1) {
-					if err := cfg.stopper.RunAsyncTask(ctx, "get-mem-stats", func(ctx context.Context) {
-						var ms status.GoMemStats
-						runtime.ReadMemStats(&ms.MemStats)
-						ms.Collected = timeutil.Now()
-						log.VEventf(ctx, 2, "memstats: %+v", ms)
+					// We read the heap stats on another goroutine and give up after 1s.
+					// This is necessary because as of Go 1.12, runtime.ReadMemStats()
+					// "stops the world" and that requires first waiting for any current GC
+					// run to finish. With a large heap and under extreme conditions, a
+					// single GC run may take longer than the default sampling period of
+					// 10s. Under normal operations and with more recent versions of Go,
+					// this hasn't been observed to be a problem.
+					statsCollected := make(chan struct{})
+					if atomic.CompareAndSwapInt32(&collectingMemStats, 0, 1) {
+						if err := cfg.stopper.RunAsyncTaskEx(ctx,
+							stop.TaskOpts{TaskName: "get-mem-stats"},
+							func(ctx context.Context) {
+								var ms status.GoMemStats
+								runtime.ReadMemStats(&ms.MemStats)
+								ms.Collected = timeutil.Now()
+								log.VEventf(ctx, 2, "memstats: %+v", ms)
 
-						goMemStats.Store(&ms)
-						atomic.StoreInt32(&collectingMemStats, 0)
-						close(statsCollected)
-					}); err != nil {
-						close(statsCollected)
+								goMemStats.Store(&ms)
+								atomic.StoreInt32(&collectingMemStats, 0)
+								close(statsCollected)
+							}); err != nil {
+							close(statsCollected)
+						}
+					}
+
+					select {
+					case <-statsCollected:
+						// Good; we managed to read the Go memory stats quickly enough.
+					case <-time.After(time.Second):
+					}
+
+					curStats := goMemStats.Load().(*status.GoMemStats)
+					cgoStats := status.GetCGoMemStats(ctx)
+					cfg.runtime.SampleEnvironment(ctx, curStats, cgoStats)
+					if goroutineDumper != nil {
+						goroutineDumper.MaybeDump(ctx, cfg.st, cfg.runtime.Goroutines.Value())
+					}
+					if heapProfiler != nil {
+						heapProfiler.MaybeTakeProfile(ctx, cfg.runtime.GoAllocBytes.Value())
+						nonGoAllocProfiler.MaybeTakeProfile(ctx, cfg.runtime.CgoTotalBytes.Value())
+						statsProfiler.MaybeTakeProfile(ctx, cfg.runtime.RSSBytes.Value(), curStats, cgoStats)
+					}
+					if queryProfiler != nil {
+						queryProfiler.MaybeDumpQueries(ctx, cfg.sessionRegistry, cfg.st)
 					}
 				}
-
-				select {
-				case <-statsCollected:
-					// Good; we managed to read the Go memory stats quickly enough.
-				case <-time.After(time.Second):
-				}
-
-				curStats := goMemStats.Load().(*status.GoMemStats)
-				cgoStats := status.GetCGoMemStats(ctx)
-				cfg.runtime.SampleEnvironment(ctx, curStats, cgoStats)
-				if goroutineDumper != nil {
-					goroutineDumper.MaybeDump(ctx, cfg.st, cfg.runtime.Goroutines.Value())
-				}
-				if heapProfiler != nil {
-					heapProfiler.MaybeTakeProfile(ctx, cfg.runtime.GoAllocBytes.Value())
-					nonGoAllocProfiler.MaybeTakeProfile(ctx, cfg.runtime.CgoTotalBytes.Value())
-					statsProfiler.MaybeTakeProfile(ctx, cfg.runtime.RSSBytes.Value(), curStats, cgoStats)
-				}
 			}
-		}
-	})
+		})
 }
 
 // Stop stops the server.

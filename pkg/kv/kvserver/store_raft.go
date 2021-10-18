@@ -599,8 +599,8 @@ func (s *Store) processRaft(ctx context.Context) {
 	// spans in them, and we don't want to be leaking any.
 	s.stopper.AddCloser(stop.CloserFn(func() {
 		s.VisitReplicas(func(r *Replica) (more bool) {
-			r.mu.proposalBuf.FlushLockedWithoutProposing(ctx)
 			r.mu.Lock()
+			r.mu.proposalBuf.FlushLockedWithoutProposing(ctx)
 			for k, prop := range r.mu.proposals {
 				delete(r.mu.proposals, k)
 				prop.finishApplication(
@@ -655,8 +655,6 @@ func (s *Store) updateLivenessMap() {
 	nextMap := s.cfg.NodeLiveness.GetIsLiveMap()
 	for nodeID, entry := range nextMap {
 		if entry.IsLive {
-			// Make sure we ask all live nodes for closed timestamp updates.
-			s.cfg.ClosedTimestamp.Clients.EnsureClient(nodeID)
 			continue
 		}
 		// Liveness claims that this node is down, but ConnHealth gets the last say

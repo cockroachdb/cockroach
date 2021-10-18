@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/errors"
 )
 
 // ReassignOwnedByNode represents a REASSIGN OWNED BY <role(s)> TO <role> statement.
@@ -42,13 +43,14 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 		return nil, err
 	}
 
-	normalizedOldRole, err := n.OldRoles.ToSQLUsernames()
+	normalizedOldRoles, err := n.OldRoles.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return nil, err
 	}
 	// Check all roles in old roles exist. Checks in authorization.go will confirm that current user
 	// is a member of old roles and new roles and has CREATE privilege.
-	for _, oldRole := range normalizedOldRole {
+	// Postgres first checks if the role exists before checking privileges.
+	for _, oldRole := range normalizedOldRoles {
 		roleExists, err := RoleExists(ctx, p.ExecCfg(), p.Txn(), oldRole)
 		if err != nil {
 			return nil, err
@@ -57,7 +59,51 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", oldRole)
 		}
 	}
-	return &reassignOwnedByNode{n: n, normalizedOldRoles: normalizedOldRole}, nil
+	newRole, err := n.NewRole.ToSQLUsername(p.SessionData(), security.UsernameValidation)
+	if err != nil {
+		return nil, err
+	}
+	roleExists, err := RoleExists(ctx, p.ExecCfg(), p.Txn(), newRole)
+	if !roleExists {
+		return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", newRole)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	hasAdminRole, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// The current user must either be an admin or we have to check that
+	// the current user is a member of both the new roles and all the
+	// old roles.
+	if !hasAdminRole {
+		memberOf, err := p.MemberOfWithAdminOption(ctx, p.User())
+		if err != nil {
+			return nil, err
+		}
+		if p.User() != newRole {
+			if _, ok := memberOf[newRole]; !ok {
+				return nil, errors.WithHint(
+					pgerror.Newf(pgcode.InsufficientPrivilege,
+						"permission denied to reassign objects"),
+					"user must be a member of the new role")
+			}
+		}
+		for _, oldRole := range normalizedOldRoles {
+			if p.User() != oldRole {
+				if _, ok := memberOf[oldRole]; !ok {
+					return nil, errors.WithHint(
+						pgerror.Newf(pgcode.InsufficientPrivilege,
+							"permission denied to reassign objects"),
+						"user must be a member of the old roles")
+				}
+			}
+		}
+	}
+	return &reassignOwnedByNode{n: n, normalizedOldRoles: normalizedOldRoles}, nil
 }
 
 func (n *reassignOwnedByNode) startExec(params runParams) error {
@@ -91,7 +137,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 		}
 		for _, schemaID := range lCtx.schemaIDs {
 			if IsOwner(lCtx.schemaDescs[schemaID], oldRole) {
-				if err := n.reassignSchemaOwner(lCtx.schemaDescs[schemaID], params); err != nil {
+				if err := n.reassignSchemaOwner(lCtx.schemaDescs[schemaID], currentDbDesc, params); err != nil {
 					return err
 				}
 			}
@@ -121,8 +167,11 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 	if err != nil {
 		return err
 	}
-	if err := params.p.checkCanAlterDatabaseAndSetNewOwner(params.ctx,
-		mutableDbDesc.(*dbdesc.Mutable), n.n.NewRole); err != nil {
+	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData(), security.UsernameValidation)
+	if err != nil {
+		return err
+	}
+	if err := params.p.setNewDatabaseOwner(params.ctx, mutableDbDesc, owner); err != nil {
 		return err
 	}
 	if err := params.p.writeNonDropDatabaseChange(
@@ -136,15 +185,19 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 }
 
 func (n *reassignOwnedByNode) reassignSchemaOwner(
-	schemaDesc catalog.SchemaDescriptor, params runParams,
+	schemaDesc catalog.SchemaDescriptor, dbDesc *dbdesc.Mutable, params runParams,
 ) error {
 	mutableSchemaDesc, err := params.p.Descriptors().GetMutableDescriptorByID(
 		params.ctx, schemaDesc.GetID(), params.p.txn)
 	if err != nil {
 		return err
 	}
-	if err := params.p.checkCanAlterSchemaAndSetNewOwner(
-		params.ctx, mutableSchemaDesc.(*schemadesc.Mutable), n.n.NewRole); err != nil {
+	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData(), security.UsernameValidation)
+	if err != nil {
+		return err
+	}
+	if err := params.p.setNewSchemaOwner(
+		params.ctx, dbDesc, mutableSchemaDesc.(*schemadesc.Mutable), owner); err != nil {
 		return err
 	}
 	if err := params.p.writeSchemaDescChange(params.ctx,
@@ -164,8 +217,18 @@ func (n *reassignOwnedByNode) reassignTableOwner(
 	if err != nil {
 		return err
 	}
-	if err := params.p.checkCanAlterTableAndSetNewOwner(
-		params.ctx, mutableTbDesc.(*tabledesc.Mutable), n.n.NewRole); err != nil {
+
+	tableName, err := params.p.getQualifiedTableName(params.ctx, tbDesc)
+	if err != nil {
+		return err
+	}
+
+	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData(), security.UsernameValidation)
+	if err != nil {
+		return err
+	}
+	if err := params.p.setNewTableOwner(
+		params.ctx, mutableTbDesc.(*tabledesc.Mutable), *tableName, owner); err != nil {
 		return err
 	}
 	if err := params.p.writeSchemaChange(
@@ -189,8 +252,23 @@ func (n *reassignOwnedByNode) reassignTypeOwner(
 	if err != nil {
 		return err
 	}
-	if err := params.p.checkCanAlterTypeAndSetNewOwner(
-		params.ctx, mutableTypDesc.(*typedesc.Mutable), arrayDesc, n.n.NewRole); err != nil {
+
+	typeName, err := params.p.getQualifiedTypeName(params.ctx, mutableTypDesc.(*typedesc.Mutable))
+	if err != nil {
+		return err
+	}
+	arrayTypeName, err := params.p.getQualifiedTypeName(params.ctx, arrayDesc)
+	if err != nil {
+		return err
+	}
+
+	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData(), security.UsernameValidation)
+	if err != nil {
+		return err
+	}
+	if err := params.p.setNewTypeOwner(
+		params.ctx, mutableTypDesc.(*typedesc.Mutable), arrayDesc, *typeName,
+		*arrayTypeName, owner); err != nil {
 		return err
 	}
 	if err := params.p.writeTypeSchemaChange(

@@ -338,7 +338,7 @@ func (tc *distinctTestCase) runTests(
 		}
 		colexectestutils.RunTestsWithoutAllNullsInjectionWithErrorHandler(
 			t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs},
-			tc.expected, verifier, instrumentedConstructor, errorHandler,
+			tc.expected, verifier, instrumentedConstructor, errorHandler, nil, /* orderedCols */
 		)
 		if tc.noError {
 			require.Zero(t, numErrorRuns)

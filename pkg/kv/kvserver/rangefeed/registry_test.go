@@ -95,24 +95,33 @@ type testRegistration struct {
 	errC   <-chan *roachpb.Error
 }
 
+func makeCatchUpIteratorConstructor(iter storage.SimpleMVCCIterator) CatchUpIteratorConstructor {
+	if iter == nil {
+		return nil
+	}
+	return func() *CatchUpIterator { return &CatchUpIterator{SimpleMVCCIterator: iter} }
+}
+
 func newTestRegistration(
 	span roachpb.Span, ts hlc.Timestamp, catchup storage.SimpleMVCCIterator, withDiff bool,
 ) *testRegistration {
 	s := newTestStream()
 	errC := make(chan *roachpb.Error, 1)
+	r := newRegistration(
+		span,
+		ts,
+		makeCatchUpIteratorConstructor(catchup),
+		withDiff,
+		5,
+		NewMetrics(),
+		s,
+		errC,
+	)
+	r.maybeConstructCatchUpIter()
 	return &testRegistration{
-		registration: newRegistration(
-			span,
-			ts,
-			makeIteratorConstructor(catchup),
-			withDiff,
-			5,
-			NewMetrics(),
-			s,
-			errC,
-		),
-		stream: s,
-		errC:   errC,
+		registration: r,
+		stream:       s,
+		errC:         errC,
 	}
 }
 
@@ -154,7 +163,7 @@ func TestRegistrationBasic(t *testing.T) {
 		makeInline("ba", "val2"),
 		makeKV("bc", "val3", 11),
 		makeKV("bd", "val4", 9),
-	}), false)
+	}, nil), false)
 	catchupReg.publish(ev1)
 	catchupReg.publish(ev2)
 	require.Equal(t, len(catchupReg.buf), 2)
@@ -257,16 +266,16 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 		makeIntent("z", txn2, "txnKeyZ", 21),
 		makeProvisionalKV("z", "txnKeyZ", 21),
 		makeKV("z", "valZ1", 4),
-	})
+	}, roachpb.Key("w"))
 	r := newTestRegistration(roachpb.Span{
 		Key:    roachpb.Key("d"),
 		EndKey: roachpb.Key("w"),
 	}, hlc.Timestamp{WallTime: 4}, iter, true /* withDiff */)
 
-	require.Zero(t, r.metrics.RangeFeedCatchupScanNanos.Count())
-	require.NoError(t, r.maybeRunCatchupScan())
+	require.Zero(t, r.metrics.RangeFeedCatchUpScanNanos.Count())
+	require.NoError(t, r.maybeRunCatchUpScan())
 	require.True(t, iter.closed)
-	require.NotZero(t, r.metrics.RangeFeedCatchupScanNanos.Count())
+	require.NotZero(t, r.metrics.RangeFeedCatchUpScanNanos.Count())
 
 	// Compare the events sent on the registration's Stream to the expected events.
 	expEvents := []*roachpb.RangeFeedEvent{
@@ -564,14 +573,14 @@ func TestRegistrationString(t *testing.T) {
 		{
 			r: registration{
 				span:             roachpb.Span{Key: roachpb.Key("d")},
-				catchupTimestamp: hlc.Timestamp{WallTime: 10, Logical: 1},
+				catchUpTimestamp: hlc.Timestamp{WallTime: 10, Logical: 1},
 			},
 			exp: `[d @ 0.000000010,1+]`,
 		},
 		{
 			r: registration{span: roachpb.Span{
 				Key: roachpb.Key("d"), EndKey: roachpb.Key("z")},
-				catchupTimestamp: hlc.Timestamp{WallTime: 40, Logical: 9},
+				catchUpTimestamp: hlc.Timestamp{WallTime: 40, Logical: 9},
 			},
 			exp: `[{d-z} @ 0.000000040,9+]`,
 		},

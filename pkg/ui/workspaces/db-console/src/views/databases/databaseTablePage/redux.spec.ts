@@ -117,6 +117,7 @@ describe("Database Table Page", function() {
     driver.assertProperties({
       databaseName: "DATABASE",
       name: "TABLE",
+      showNodeRegionsSection: false,
       details: {
         loading: false,
         loaded: false,
@@ -130,6 +131,7 @@ describe("Database Table Page", function() {
         loaded: false,
         sizeInBytes: 0,
         rangeCount: 0,
+        nodesByRegionString: "",
       },
     });
   });
@@ -180,6 +182,7 @@ describe("Database Table Page", function() {
       loaded: true,
       sizeInBytes: 44040192,
       rangeCount: 4200,
+      nodesByRegionString: "",
     });
   });
 });

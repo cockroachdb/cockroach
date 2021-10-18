@@ -25,7 +25,7 @@ function fakeTimeSeriesDatapoint(): ITimeSeriesDatapoint {
 }
 
 /**
- * @summary Redux Middleware which intercepts RESPONSE actions with requrested metrics data
+ * @summary Redux Middleware which intercepts RESPONSE actions with requested metrics data
  * and populates datapoints for entire requested date period.
  * @example Display datapoints for 2 months period even if cluster was created today and
  * there is no available data for requested period, then missing datapoints will be randomly generated.

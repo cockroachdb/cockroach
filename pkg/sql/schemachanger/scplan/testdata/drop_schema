@@ -68,9 +68,9 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [Table:{DescID: 54}, PUBLIC]
   to:   [View:{DescID: 55}, ABSENT]
 - from: [Type:{DescID: 59}, PUBLIC]
-  to:   [TypeReference:{DescID: 61, ReferencedDescID: 59}, DELETE_ONLY]
+  to:   [TypeReference:{DescID: 61, ReferencedDescID: 59}, ABSENT]
 - from: [Type:{DescID: 60}, PUBLIC]
-  to:   [TypeReference:{DescID: 61, ReferencedDescID: 60}, DELETE_ONLY]
+  to:   [TypeReference:{DescID: 61, ReferencedDescID: 60}, ABSENT]
 - from: [View:{DescID: 55}, ABSENT]
   to:   [View:{DescID: 56}, ABSENT]
 - from: [View:{DescID: 55}, ABSENT]
@@ -139,7 +139,7 @@ Stage 0
 Stage 1
   *scop.MarkDescriptorAsDropped
     TableID: 52
-Stage 2
+Stage 2 (non-revertible)
   *scop.MarkDescriptorAsDropped
     TableID: 53
   *scop.DrainDescriptorName

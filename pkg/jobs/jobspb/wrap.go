@@ -15,8 +15,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 )
@@ -26,6 +28,9 @@ type JobID int64
 
 // InvalidJobID is the zero value for JobID corresponding to no job.
 const InvalidJobID JobID = 0
+
+// SafeValue implements the redact.SafeValue interface.
+func (j JobID) SafeValue() {}
 
 // Details is a marker interface for job details proto structs.
 type Details interface{}
@@ -40,6 +45,7 @@ var _ Details = StreamIngestionDetails{}
 var _ Details = NewSchemaChangeDetails{}
 var _ Details = MigrationDetails{}
 var _ Details = AutoSpanConfigReconciliationDetails{}
+var _ Details = ImportDetails{}
 
 // ProgressDetails is a marker interface for job progress details proto structs.
 type ProgressDetails interface{}
@@ -60,13 +66,25 @@ func (p *Payload) Type() Type {
 	return DetailsType(p.Details)
 }
 
+// Import base which is in the generated proto field but won't get picked up
+// by bazel if it were not imported in a non-generated file.
+var _ base.SQLInstanceID
+
 // AutoStatsName is the name to use for statistics created automatically.
 // The name is chosen to be something that users are unlikely to choose when
 // running CREATE STATISTICS manually.
 const AutoStatsName = "__auto__"
 
+// ImportStatsName is the name to use for statistics created automatically
+// during import.
+const ImportStatsName = "__import__"
+
 // AutomaticJobTypes is a list of automatic job types that currently exist.
-var AutomaticJobTypes = [...]Type{TypeAutoCreateStats, TypeAutoSpanConfigReconciliation}
+var AutomaticJobTypes = [...]Type{
+	TypeAutoCreateStats,
+	TypeAutoSpanConfigReconciliation,
+	TypeAutoSQLStatsCompaction,
+}
 
 // DetailsType returns the type for a payload detail.
 func DetailsType(d isPayload_Details) Type {
@@ -99,8 +117,8 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeMigration
 	case *Payload_AutoSpanConfigReconciliation:
 		return TypeAutoSpanConfigReconciliation
-	case *Payload_SqlStatsCompaction:
-		return TypeSQLStatsCompaction
+	case *Payload_AutoSQLStatsCompaction:
+		return TypeAutoSQLStatsCompaction
 	default:
 		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -139,8 +157,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_Migration{Migration: &d}
 	case AutoSpanConfigReconciliationProgress:
 		return &Progress_AutoSpanConfigReconciliation{AutoSpanConfigReconciliation: &d}
-	case SQLStatsCompactionProgress:
-		return &Progress_SqlStatsCompaction{SqlStatsCompaction: &d}
+	case AutoSQLStatsCompactionProgress:
+		return &Progress_AutoSQLStatsCompaction{AutoSQLStatsCompaction: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -174,8 +192,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.Migration
 	case *Payload_AutoSpanConfigReconciliation:
 		return *d.AutoSpanConfigReconciliation
-	case *Payload_SqlStatsCompaction:
-		return *d.SqlStatsCompaction
+	case *Payload_AutoSQLStatsCompaction:
+		return *d.AutoSQLStatsCompaction
 	default:
 		return nil
 	}
@@ -209,8 +227,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.Migration
 	case *Progress_AutoSpanConfigReconciliation:
 		return *d.AutoSpanConfigReconciliation
-	case *Progress_SqlStatsCompaction:
-		return *d.SqlStatsCompaction
+	case *Progress_AutoSQLStatsCompaction:
+		return *d.AutoSQLStatsCompaction
 	default:
 		return nil
 	}
@@ -257,8 +275,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_Migration{Migration: &d}
 	case AutoSpanConfigReconciliationDetails:
 		return &Payload_AutoSpanConfigReconciliation{AutoSpanConfigReconciliation: &d}
-	case SQLStatsCompactionDetails:
-		return &Payload_SqlStatsCompaction{SqlStatsCompaction: &d}
+	case AutoSQLStatsCompactionDetails:
+		return &Payload_AutoSQLStatsCompaction{AutoSQLStatsCompaction: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -296,14 +314,17 @@ func (Type) SafeValue() {}
 // NumJobTypes is the number of jobs types.
 const NumJobTypes = 15
 
-// MarshalJSONPB redacts sensitive sink URI parameters from ChangefeedDetails.
-func (p ChangefeedDetails) MarshalJSONPB(x *jsonpb.Marshaler) ([]byte, error) {
-	var err error
-	p.SinkURI, err = cloud.SanitizeExternalStorageURI(p.SinkURI, nil)
-	if err != nil {
-		return nil, err
+// MarshalJSONPB implements jsonpb.JSONPBMarshaller to  redact sensitive sink URI
+// parameters from ChangefeedDetails.
+func (m ChangefeedDetails) MarshalJSONPB(marshaller *jsonpb.Marshaler) ([]byte, error) {
+	if protoreflect.ShouldRedact(marshaller) {
+		var err error
+		m.SinkURI, err = cloud.SanitizeExternalStorageURI(m.SinkURI, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return json.Marshal(p)
+	return json.Marshal(m)
 }
 
 func init() {

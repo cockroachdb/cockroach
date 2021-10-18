@@ -1027,6 +1027,7 @@ var charts = []sectionDescription{
 					"txn.restarts.serializable",
 					"txn.restarts.writetooold",
 					"txn.restarts.asyncwritefailure",
+					"txn.restarts.commitdeadlineexceeded",
 					"txn.restarts.readwithinuncertainty",
 					"txn.restarts.txnaborted",
 					"txn.restarts.txnpush",
@@ -2261,6 +2262,43 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Guardrails"}},
+		Charts: []chartDescription{
+			{
+				Title: "Transaction Row Count Limit Violations",
+				Metrics: []string{
+					"sql.guardrails.transaction_rows_written_log.count",
+					"sql.guardrails.transaction_rows_written_log.count.internal",
+					"sql.guardrails.transaction_rows_written_err.count",
+					"sql.guardrails.transaction_rows_written_err.count.internal",
+					"sql.guardrails.transaction_rows_read_log.count",
+					"sql.guardrails.transaction_rows_read_log.count.internal",
+					"sql.guardrails.transaction_rows_read_err.count",
+					"sql.guardrails.transaction_rows_read_err.count.internal",
+				},
+				AxisLabel: "Transactions",
+			},
+			{
+				Title: "Maximum Row Size Violations",
+				Metrics: []string{
+					"sql.guardrails.max_row_size_log.count",
+					"sql.guardrails.max_row_size_log.count.internal",
+					"sql.guardrails.max_row_size_err.count",
+					"sql.guardrails.max_row_size_err.count.internal",
+				},
+				AxisLabel: "Rows",
+			},
+			{
+				Title: "Rejected Large Full Table or Index Scans",
+				Metrics: []string{
+					"sql.guardrails.full_scan_rejected.count",
+					"sql.guardrails.full_scan_rejected.count.internal",
+				},
+				AxisLabel: "SQL Statements",
+			},
+		},
+	},
+	{
 		Organization: [][]string{{StorageLayer, "RocksDB", "Block Cache"}},
 		Charts: []chartDescription{
 			{
@@ -2519,6 +2557,19 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{Jobs, "Schedules", "SQL Stats"}},
+		Charts: []chartDescription{
+			{
+				Title: "Counts",
+				Metrics: []string{
+					"schedules.scheduled-sql-stats-compaction-executor.started",
+					"schedules.scheduled-sql-stats-compaction-executor.succeeded",
+					"schedules.scheduled-sql-stats-compaction-executor.failed",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{Jobs, "Execution"}},
 		Charts: []chartDescription{
 			{
@@ -2537,7 +2588,7 @@ var charts = []sectionDescription{
 					"jobs.stream_ingestion.currently_running",
 					"jobs.migration.currently_running",
 					"jobs.auto_span_config_reconciliation.currently_running",
-					"jobs.sql_stats_compaction.currently_running",
+					"jobs.auto_sql_stats_compaction.currently_running",
 				},
 			},
 			{
@@ -2695,12 +2746,12 @@ var charts = []sectionDescription{
 			{
 				Title: "SQL Stats Compaction",
 				Metrics: []string{
-					"jobs.sql_stats_compaction.fail_or_cancel_completed",
-					"jobs.sql_stats_compaction.fail_or_cancel_failed",
-					"jobs.sql_stats_compaction.fail_or_cancel_retry_error",
-					"jobs.sql_stats_compaction.resume_completed",
-					"jobs.sql_stats_compaction.resume_failed",
-					"jobs.sql_stats_compaction.resume_retry_error",
+					"jobs.auto_sql_stats_compaction.fail_or_cancel_completed",
+					"jobs.auto_sql_stats_compaction.fail_or_cancel_failed",
+					"jobs.auto_sql_stats_compaction.fail_or_cancel_retry_error",
+					"jobs.auto_sql_stats_compaction.resume_completed",
+					"jobs.auto_sql_stats_compaction.resume_failed",
+					"jobs.auto_sql_stats_compaction.resume_retry_error",
 				},
 			},
 		},

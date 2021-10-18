@@ -558,7 +558,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		//   can be retried in the next adopt-loop.
 		// - We wait until the resumer completes one execution and the job needs
 		//   to be picked up again in the next adopt-loop.
-		// - Now we validate that resumedJobs counter has increment, which ensures
+		// - Now we validate that resumedJobs counter has incremented, which ensures
 		//   that the job has completed only one cycle in this time.
 		//
 		// If retries do not happen based on exponential-backoff times, our counters
@@ -622,7 +622,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		expectedResumed := int64(0)
 		runTest(t, jobID, retryCnt, expectedResumed, lastRun, &bti, func(_ int64) {
 			<-bti.resumeCh
-			bti.errCh <- NewRetryJobError("injecting error to retry running")
+			bti.errCh <- MarkAsRetryJobError(errors.New("injecting error to retry running"))
 			<-bti.transitionCh
 		})
 	})
@@ -669,13 +669,13 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		<-bti.resumeCh
 		bti.errCh <- errors.Errorf("injecting error to revert")
 		<-bti.failOrCancelCh
-		bti.errCh <- NewRetryJobError("injecting error in reverting state to retry")
+		bti.errCh <- MarkAsRetryJobError(errors.New("injecting error in reverting state to retry"))
 		<-bti.transitionCh
 		expectedResumed := bti.resumed.Count()
 		retryCnt := 1
 		runTest(t, jobID, retryCnt, expectedResumed, lastRun, &bti, func(_ int64) {
 			<-bti.failOrCancelCh
-			bti.errCh <- NewRetryJobError("injecting error in reverting state to retry")
+			bti.errCh <- MarkAsRetryJobError(errors.New("injecting error in reverting state to retry"))
 			<-bti.transitionCh
 		})
 	})
@@ -692,12 +692,12 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		pauseOrCancelJob(t, ctx, bti.kvDB, bti.registry, jobID, cancel)
 		bti.errCh <- nil
 		<-bti.failOrCancelCh
-		bti.errCh <- NewRetryJobError("injecting error in reverting state")
+		bti.errCh <- MarkAsRetryJobError(errors.New("injecting error in reverting state"))
 		expectedResumed := bti.resumed.Count()
 		retryCnt := 1
 		runTest(t, jobID, retryCnt, expectedResumed, lastRun, &bti, func(retryCnt int64) {
 			<-bti.failOrCancelCh
-			bti.errCh <- NewRetryJobError("injecting error in reverting state")
+			bti.errCh <- MarkAsRetryJobError(errors.New("injecting error in reverting state"))
 			waitUntilCount(t, bti.jobMetrics.FailOrCancelRetryError, retryCnt+1)
 		})
 	})
@@ -719,7 +719,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		<-bti.resumeCh
 		bti.errCh <- errors.Errorf("injecting error to revert")
 		<-bti.failOrCancelCh
-		bti.errCh <- NewRetryJobError("injecting error in reverting state to retry")
+		bti.errCh <- MarkAsRetryJobError(errors.New("injecting error in reverting state to retry"))
 		<-bti.transitionCh
 		expectedResumed := bti.resumed.Count()
 		retryCnt := 1
@@ -730,7 +730,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			// failed regardless of the fact that it is currently pause-requested in the
 			// jobs table. This is because we currently do not check the current status
 			// of a job before marking it as failed.
-			bti.errCh <- NewRetryJobError("injecting error in reverting state to retry")
+			bti.errCh <- MarkAsRetryJobError(errors.New("injecting error in reverting state to retry"))
 			<-bti.transitionCh
 			waitUntilStatus(t, bti.tdb, jobID, StatusPaused)
 			require.NoError(t, bti.registry.Unpause(ctx, nil, jobID))
@@ -872,6 +872,53 @@ func TestRegistryUsePartialIndex(t *testing.T) {
 			}
 			require.NoError(t, rows.Close())
 			require.True(t, usingIndex, "partial index is not used")
+		})
+	}
+}
+
+// TestJitterCalculation tests the correctness of jitter calculation function
+// in jobs/config.go.
+func TestJitterCalculation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const (
+		minFactor = 1 - (1.0 / 6.0)
+		maxFactor = 1 + (1.0 / 6.0)
+	)
+
+	outputRange := func(input time.Duration) (time.Duration, time.Duration) {
+		return time.Duration(float64(input) * minFactor), time.Duration(float64(input) * maxFactor)
+	}
+
+	for _, test := range []struct {
+		name  string
+		input time.Duration
+	}{
+		{
+			"zero",
+			0,
+		},
+		{
+			"small",
+			time.Millisecond,
+		},
+		{
+			"large",
+			100 * time.Hour,
+		},
+		{
+			"default",
+			defaultAdoptInterval,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			interval := jitter(test.input)
+			rangeMin, rangeMax := outputRange(test.input)
+			require.GreaterOrEqual(t, rangeMax, interval)
+			require.LessOrEqual(t, rangeMin, interval)
+			if test.input != 0 {
+				require.NotEqual(t, test.input, interval)
+			}
 		})
 	}
 }

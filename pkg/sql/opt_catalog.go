@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -370,6 +371,11 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 		nil
 }
 
+// RoleExists is part of the cat.Catalog interface.
+func (oc *optCatalog) RoleExists(ctx context.Context, role security.SQLUsername) (bool, error) {
+	return RoleExists(ctx, oc.planner.ExecCfg(), oc.planner.Txn(), role)
+}
+
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
 // The wrapper might come from the cache, or it may be created now.
 func (oc *optCatalog) dataSourceForDesc(
@@ -695,6 +701,7 @@ func newOptTable(
 				col.ColumnDesc().ComputeExpr,
 				col.ColumnDesc().OnUpdateExpr,
 				mapGeneratedAsIdentityType(col.GetGeneratedAsIdentityType()),
+				col.ColumnDesc().GeneratedAsIdentitySequenceOption,
 			)
 		} else {
 			// Note: a WriteOnly or DeleteOnly mutation column doesn't require any
@@ -738,6 +745,7 @@ func newOptTable(
 				sysCol.ColumnDesc().ComputeExpr,
 				sysCol.ColumnDesc().OnUpdateExpr,
 				mapGeneratedAsIdentityType(sysCol.GetGeneratedAsIdentityType()),
+				sysCol.ColumnDesc().GeneratedAsIdentitySequenceOption,
 			)
 		}
 	}
@@ -834,8 +842,7 @@ func newOptTable(
 		}
 	}
 
-	for i := range ot.desc.GetOutboundFKs() {
-		fk := &ot.desc.GetOutboundFKs()[i]
+	_ = ot.desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
 			name:              fk.Name,
 			originTable:       ot.ID(),
@@ -847,9 +854,9 @@ func newOptTable(
 			deleteAction:      fk.OnDelete,
 			updateAction:      fk.OnUpdate,
 		})
-	}
-	for i := range ot.desc.GetInboundFKs() {
-		fk := &ot.desc.GetInboundFKs()[i]
+		return nil
+	})
+	_ = ot.desc.ForeachInboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		ot.inboundFKs = append(ot.inboundFKs, optForeignKeyConstraint{
 			name:              fk.Name,
 			originTable:       cat.StableID(fk.OriginTableID),
@@ -861,7 +868,8 @@ func newOptTable(
 			deleteAction:      fk.OnDelete,
 			updateAction:      fk.OnUpdate,
 		})
-	}
+		return nil
+	})
 
 	ot.primaryFamily.init(ot, &desc.GetFamilies()[0])
 	ot.families = make([]optFamily, len(desc.GetFamilies())-1)
@@ -1815,6 +1823,7 @@ func newOptVirtualTable(
 		nil,        /* computedExpr */
 		nil,        /* onUpdateExpr */
 		cat.NotGeneratedAsIdentity,
+		nil, /* generatedAsIdentitySequenceOption */
 	)
 	for i, d := range desc.PublicColumns() {
 		ot.columns[i+1].Init(
@@ -1829,6 +1838,7 @@ func newOptVirtualTable(
 			d.ColumnDesc().ComputeExpr,
 			d.ColumnDesc().OnUpdateExpr,
 			mapGeneratedAsIdentityType(d.GetGeneratedAsIdentityType()),
+			d.ColumnDesc().GeneratedAsIdentitySequenceOption,
 		)
 	}
 
@@ -2299,10 +2309,10 @@ func collectTypes(col catalog.Column) (descpb.IDs, error) {
 // cat.GeneratedAsIdentityType. This is a helper function for the read access to
 // the GeneratedAsIdentityType attribute for descpb.ColumnDescriptor.
 func mapGeneratedAsIdentityType(inType descpb.GeneratedAsIdentityType) cat.GeneratedAsIdentityType {
-	generatedAsIdentityTypeMap := [...]cat.GeneratedAsIdentityType{
+	mapGeneratedAsIdentityType := map[descpb.GeneratedAsIdentityType]cat.GeneratedAsIdentityType{
 		descpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN:  cat.NotGeneratedAsIdentity,
 		descpb.GeneratedAsIdentityType_GENERATED_ALWAYS:     cat.GeneratedAlwaysAsIdentity,
 		descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT: cat.GeneratedByDefaultAsIdentity,
 	}
-	return generatedAsIdentityTypeMap[inType]
+	return mapGeneratedAsIdentityType[inType]
 }

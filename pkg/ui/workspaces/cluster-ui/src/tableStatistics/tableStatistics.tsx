@@ -16,13 +16,15 @@ import { ISortedTablePagination } from "../sortedtable";
 import { Button } from "src/button";
 import { ResultsPerPageLabel } from "src/pagination";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import statementStyles from "src/statementDetails/statementDetails.module.scss";
 import tableStatsStyles from "./tableStatistics.module.scss";
 import classNames from "classnames/bind";
 import { Icon } from "@cockroachlabs/ui-components";
+import {
+  contentModifiers,
+  StatisticType,
+} from "../statsTableUtil/statsTableUtil";
 
 const { statistic, countTitle, lastCleared } = statisticsClasses;
-const cxStmt = classNames.bind(statementStyles);
 const cxStats = classNames.bind(tableStatsStyles);
 
 interface TableStatistics {
@@ -30,18 +32,12 @@ interface TableStatistics {
   totalCount: number;
   lastReset: Date | string;
   arrayItemName: string;
+  tooltipType: StatisticType;
   activeFilters: number;
   search?: string;
   onClearFilters?: () => void;
   resetSQLStats: () => void;
 }
-
-const toolTipText = `Statement history is cleared once an hour by default, which can be configured with the cluster setting
- diagnostics.reporting.interval. Clicking ‘Clear SQL stats’ will reset SQL stats on the statements and transactions pages.`;
-
-const renderLastCleared = (lastReset: string | Date) => {
-  return `Last cleared ${moment.utc(lastReset).format(DATE_FORMAT)}`;
-};
 
 export const TableStatistics: React.FC<TableStatistics> = ({
   pagination,
@@ -49,6 +45,7 @@ export const TableStatistics: React.FC<TableStatistics> = ({
   lastReset,
   search,
   arrayItemName,
+  tooltipType,
   onClearFilters,
   activeFilters,
   resetSQLStats,
@@ -71,21 +68,41 @@ export const TableStatistics: React.FC<TableStatistics> = ({
     </>
   );
 
+  let statsType = "";
+  switch (tooltipType) {
+    case "transaction":
+      statsType = contentModifiers.transactionCapital;
+      break;
+    case "statement":
+      statsType = contentModifiers.statementCapital;
+      break;
+    case "transactionDetails":
+      statsType = contentModifiers.statementCapital;
+      break;
+    default:
+      break;
+  }
+  const toolTipText = `${statsType} statistics are aggregated once an hour and organized by the start time. 
+  Statistics between two hourly intervals belong to the nearest hour rounded down. 
+  For example, a ${statsType} execution ending at 1:50 would have its statistics aggregated in the 1:00 interval 
+  start time. Clicking ‘clear SQL stats’ will reset SQL stats on the Statements and Transactions pages and 
+  crdb_internal tables.`;
+
   return (
     <div className={statistic}>
       <h4 className={countTitle}>
         {activeFilters ? resultsCountAndClear : resultsPerPageLabel}
       </h4>
       <div className={cxStats("flex-display")}>
-        <Tooltip content={toolTipText}>
+        <Tooltip content={toolTipText} style="tableTitle">
           <div className={cxStats("tooltip-hover-area")}>
             <Icon iconName={"InfoCircle"} />
           </div>
         </Tooltip>
         <div className={lastCleared}>
-          {renderLastCleared(lastReset)}
-          {"  "}-{"  "}
-          <a onClick={resetSQLStats}>Clear SQL Stats</a>
+          <a className={cxStats("action")} onClick={resetSQLStats}>
+            clear SQL stats
+          </a>
         </div>
       </div>
     </div>

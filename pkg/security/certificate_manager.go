@@ -66,13 +66,13 @@ var (
 		Unit:        metric.Unit_TIMESTAMP_SEC,
 	}
 
-	metaTenantClientCAExpiration = metric.Metadata{
+	metaTenantCAExpiration = metric.Metadata{
 		Name:        "security.certificate.expiration.ca-client-tenant",
 		Help:        "Expiration for the Tenant Client CA certificate. 0 means no certificate or error.",
 		Measurement: "Certificate Expiration",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
 	}
-	metaTenantClientExpiration = metric.Metadata{
+	metaTenantExpiration = metric.Metadata{
 		Name:        "security.certificate.expiration.client-tenant",
 		Help:        "Expiration for the Tenant Client certificate. 0 means no certificate or error.",
 		Measurement: "Certificate Expiration",
@@ -126,7 +126,7 @@ type CertificateManager struct {
 	clientCerts    map[SQLUsername]*CertInfo
 
 	// Certs only used with multi-tenancy.
-	tenantClientCACert, tenantClientCert *CertInfo
+	tenantCACert, tenantCert *CertInfo
 
 	// TLS configs. Initialized lazily. Wiped on every successful Load().
 	// Server-side config.
@@ -137,21 +137,21 @@ type CertificateManager struct {
 	// All other client tls.Config objects are built as requested and not cached.
 	clientConfig *tls.Config
 	// Client config for the tenant (if running in a SQL tenant server).
-	tenantClientConfig *tls.Config
+	tenantConfig *tls.Config
 }
 
 // CertificateMetrics holds metrics about the various certificates.
 // These are initialized when the certificate manager is created and updated
 // on reload.
 type CertificateMetrics struct {
-	CAExpiration             *metric.Gauge
-	ClientCAExpiration       *metric.Gauge
-	UICAExpiration           *metric.Gauge
-	NodeExpiration           *metric.Gauge
-	NodeClientExpiration     *metric.Gauge
-	UIExpiration             *metric.Gauge
-	TenantClientCAExpiration *metric.Gauge
-	TenantClientExpiration   *metric.Gauge
+	CAExpiration         *metric.Gauge
+	ClientCAExpiration   *metric.Gauge
+	UICAExpiration       *metric.Gauge
+	NodeExpiration       *metric.Gauge
+	NodeClientExpiration *metric.Gauge
+	UIExpiration         *metric.Gauge
+	TenantCAExpiration   *metric.Gauge
+	TenantExpiration     *metric.Gauge
 }
 
 func makeCertificateManager(
@@ -167,14 +167,14 @@ func makeCertificateManager(
 		tenantIdentifier: o.tenantIdentifier,
 		tlsSettings:      tlsSettings,
 		certMetrics: CertificateMetrics{
-			CAExpiration:             metric.NewGauge(metaCAExpiration),
-			ClientCAExpiration:       metric.NewGauge(metaClientCAExpiration),
-			UICAExpiration:           metric.NewGauge(metaUICAExpiration),
-			NodeExpiration:           metric.NewGauge(metaNodeExpiration),
-			NodeClientExpiration:     metric.NewGauge(metaNodeClientExpiration),
-			UIExpiration:             metric.NewGauge(metaUIExpiration),
-			TenantClientCAExpiration: metric.NewGauge(metaTenantClientCAExpiration),
-			TenantClientExpiration:   metric.NewGauge(metaTenantClientExpiration),
+			CAExpiration:         metric.NewGauge(metaCAExpiration),
+			ClientCAExpiration:   metric.NewGauge(metaClientCAExpiration),
+			UICAExpiration:       metric.NewGauge(metaUICAExpiration),
+			NodeExpiration:       metric.NewGauge(metaNodeExpiration),
+			NodeClientExpiration: metric.NewGauge(metaNodeClientExpiration),
+			UIExpiration:         metric.NewGauge(metaUIExpiration),
+			TenantCAExpiration:   metric.NewGauge(metaTenantCAExpiration),
+			TenantExpiration:     metric.NewGauge(metaTenantExpiration),
 		},
 	}
 }
@@ -218,6 +218,12 @@ func NewCertificateManagerFirstRun(
 	}
 
 	return cm, cm.LoadCertificates()
+}
+
+// IsForTenant returns true iff this certificate manager is handling certs
+// for a SQL-only server process.
+func (cm *CertificateManager) IsForTenant() bool {
+	return cm.tenantIdentifier != 0
 }
 
 // Metrics returns the metrics struct.
@@ -280,15 +286,15 @@ func (cl CertsLocator) CAKeyPath() string {
 // CAKeyFilename returns the expected file name for the CA certificate.
 func CAKeyFilename() string { return "ca" + keyExtension }
 
-// TenantClientCACertPath returns the expected file path for the Tenant client CA
+// TenantCACertPath returns the expected file path for the Tenant client CA
 // certificate.
-func (cl CertsLocator) TenantClientCACertPath() string {
-	return filepath.Join(cl.certsDir, TenantClientCACertFilename())
+func (cl CertsLocator) TenantCACertPath() string {
+	return filepath.Join(cl.certsDir, TenantCACertFilename())
 }
 
-// TenantClientCACertFilename returns the expected file name for the Tenant CA
+// TenantCACertFilename returns the expected file name for the Tenant CA
 // certificate.
-func TenantClientCACertFilename() string {
+func TenantCACertFilename() string {
 	return "ca-client-tenant" + certExtension
 }
 
@@ -370,23 +376,23 @@ func (cl CertsLocator) UIKeyPath() string {
 	return filepath.Join(cl.certsDir, "ui"+keyExtension)
 }
 
-// TenantClientCertPath returns the expected file path for the user's certificate.
-func (cl CertsLocator) TenantClientCertPath(tenantIdentifier string) string {
-	return filepath.Join(cl.certsDir, TenantClientCertFilename(tenantIdentifier))
+// TenantCertPath returns the expected file path for the user's certificate.
+func (cl CertsLocator) TenantCertPath(tenantIdentifier string) string {
+	return filepath.Join(cl.certsDir, TenantCertFilename(tenantIdentifier))
 }
 
-// TenantClientCertFilename returns the expected file name for the user's certificate.
-func TenantClientCertFilename(tenantIdentifier string) string {
+// TenantCertFilename returns the expected file name for the user's certificate.
+func TenantCertFilename(tenantIdentifier string) string {
 	return "client-tenant." + tenantIdentifier + certExtension
 }
 
-// TenantClientKeyPath returns the expected file path for the tenant's key.
-func (cl CertsLocator) TenantClientKeyPath(tenantIdentifier string) string {
-	return filepath.Join(cl.certsDir, TenantClientKeyFilename(tenantIdentifier))
+// TenantKeyPath returns the expected file path for the tenant's key.
+func (cl CertsLocator) TenantKeyPath(tenantIdentifier string) string {
+	return filepath.Join(cl.certsDir, TenantKeyFilename(tenantIdentifier))
 }
 
-// TenantClientKeyFilename returns the expected file name for the user's key.
-func TenantClientKeyFilename(tenantIdentifier string) string {
+// TenantKeyFilename returns the expected file name for the user's key.
+func TenantKeyFilename(tenantIdentifier string) string {
 	return "client-tenant." + tenantIdentifier + keyExtension
 }
 
@@ -590,7 +596,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 	}
 
 	var caCert, clientCACert, uiCACert, nodeCert, uiCert, nodeClientCert *CertInfo
-	var tenantClientCACert, tenantClientCert *CertInfo
+	var tenantCACert, tenantCert *CertInfo
 	clientCerts := make(map[SQLUsername]*CertInfo)
 	for _, ci := range cl.Certificates() {
 		switch ci.FileUsage {
@@ -602,7 +608,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 			uiCACert = ci
 		case NodePem:
 			nodeCert = ci
-		case TenantClientPem:
+		case TenantPem:
 			// When there are multiple tenant client certs, pick the one we need only.
 			// In practice, this is expected only during testing, when we share a certs
 			// dir between multiple tenants.
@@ -611,10 +617,10 @@ func (cm *CertificateManager) LoadCertificates() error {
 				return errors.Errorf("invalid tenant id %s", ci.Name)
 			}
 			if tenantID == cm.tenantIdentifier {
-				tenantClientCert = ci
+				tenantCert = ci
 			}
-		case TenantClientCAPem:
-			tenantClientCACert = ci
+		case TenantCAPem:
+			tenantCACert = ci
 		case UIPem:
 			uiCert = ci
 		case ClientPem:
@@ -651,15 +657,15 @@ func (cm *CertificateManager) LoadCertificates() error {
 			return makeError(err, "reload would lose valid UI certificate")
 		}
 
-		if err := checkCertIsValid(tenantClientCACert); checkCertIsValid(cm.tenantClientCACert) == nil && err != nil {
+		if err := checkCertIsValid(tenantCACert); checkCertIsValid(cm.tenantCACert) == nil && err != nil {
 			return makeError(err, "reload would lose valid tenant client CA certificate")
 		}
-		if err := checkCertIsValid(tenantClientCert); checkCertIsValid(cm.tenantClientCert) == nil && err != nil {
+		if err := checkCertIsValid(tenantCert); checkCertIsValid(cm.tenantCert) == nil && err != nil {
 			return makeError(err, "reload would lose valid tenant client certificate")
 		}
 	}
 
-	if tenantClientCert == nil && cm.tenantIdentifier != 0 {
+	if tenantCert == nil && cm.tenantIdentifier != 0 {
 		return makeErrorf(errors.New("tenant client cert not found"), "for %d", cm.tenantIdentifier)
 	}
 
@@ -687,9 +693,9 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.uiServerConfig = nil
 	cm.clientConfig = nil
 
-	cm.tenantClientConfig = nil
-	cm.tenantClientCACert = tenantClientCACert
-	cm.tenantClientCert = tenantClientCert
+	cm.tenantConfig = nil
+	cm.tenantCACert = tenantCACert
+	cm.tenantCert = tenantCert
 
 	cm.updateMetricsLocked()
 	return nil
@@ -774,9 +780,19 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 		return nil, err
 	}
 
-	nodeCert, err := cm.getNodeCertLocked()
-	if err != nil {
-		return nil, err
+	var nodeCert *CertInfo
+	if !cm.IsForTenant() {
+		// Host cluster.
+		nodeCert, err = cm.getNodeCertLocked()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// Tenant server.
+		nodeCert, err = cm.getTenantCertLocked()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	clientCA, err := cm.getClientCACertLocked()
@@ -784,7 +800,7 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 		return nil, err
 	}
 
-	tenantClientCA, err := cm.getTenantClientCACertLocked()
+	tenantCA, err := cm.getTenantCACertLocked()
 	if err != nil {
 		return nil, err
 	}
@@ -795,7 +811,7 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 		nodeCert.KeyFileContents,
 		ca.FileContents,
 		clientCA.FileContents,
-		tenantClientCA.FileContents,
+		tenantCA.FileContents,
 	)
 	if err != nil {
 		return nil, err
@@ -901,7 +917,12 @@ func (cm *CertificateManager) getNodeCertLocked() (*CertInfo, error) {
 func (cm *CertificateManager) getUICertLocked() (*CertInfo, error) {
 	if cm.uiCert == nil {
 		// No UI certificate: use node certificate.
-		return cm.getNodeCertLocked()
+		if !cm.IsForTenant() {
+			// Host cluster.
+			return cm.getNodeCertLocked()
+		}
+		// Tenant server.
+		return cm.getTenantCertLocked()
 	}
 	if err := checkCertIsValid(cm.uiCert); err != nil {
 		return nil, makeError(err, "problem with UI certificate")
@@ -911,7 +932,10 @@ func (cm *CertificateManager) getUICertLocked() (*CertInfo, error) {
 
 // getClientCertLocked returns the client cert/key for the specified user,
 // or an error if not found.
+// This is used both to connect to KV nodes and SQL servers.
 // cm.mu must be held.
+//
+// TODO(catj): split the logic here into two functions.
 func (cm *CertificateManager) getClientCertLocked(user SQLUsername) (*CertInfo, error) {
 	ci := cm.clientCerts[user]
 	if err := checkCertIsValid(ci); err != nil {
@@ -927,7 +951,11 @@ func (cm *CertificateManager) getClientCertLocked(user SQLUsername) (*CertInfo, 
 // cm.mu must be held.
 func (cm *CertificateManager) getNodeClientCertLocked() (*CertInfo, error) {
 	if cm.nodeClientCert == nil {
-		// No specific client cert for 'node': use multi-purpose node cert.
+		// No specific client cert for 'node': use multi-purpose node cert,
+		// but only if we are in the host cluster.
+		if cm.IsForTenant() {
+			return nil, errors.New("no node client cert for a SQL server")
+		}
 		return cm.getNodeCertLocked()
 	}
 
@@ -937,60 +965,72 @@ func (cm *CertificateManager) getNodeClientCertLocked() (*CertInfo, error) {
 	return cm.nodeClientCert, nil
 }
 
-// getTenantClientCACertLocked returns the CA cert used to verify tenant client
+// getTenantCACertLocked returns the CA cert used to verify tenant client
 // certificates. Use the tenant client CA if it exists, otherwise fall back to
 // client CA. cm.mu must be held.
-func (cm *CertificateManager) getTenantClientCACertLocked() (*CertInfo, error) {
-	if cm.tenantClientCACert == nil {
+func (cm *CertificateManager) getTenantCACertLocked() (*CertInfo, error) {
+	if cm.tenantCACert == nil {
 		return cm.getClientCACertLocked()
 	}
-	c := cm.tenantClientCACert
+	c := cm.tenantCACert
 	if err := checkCertIsValid(c); err != nil {
 		return nil, makeError(err, "problem with tenant client CA certificate")
 	}
 	return c, nil
 }
 
-// getTenantClientCertLocked returns the tenant node cert.
+// getTenantCertLocked returns the tenant node cert.
 // cm.mu must be held.
-func (cm *CertificateManager) getTenantClientCertLocked() (*CertInfo, error) {
-	c := cm.tenantClientCert
+func (cm *CertificateManager) getTenantCertLocked() (*CertInfo, error) {
+	c := cm.tenantCert
 	if err := checkCertIsValid(c); err != nil {
 		return nil, makeError(err, "problem with tenant client certificate")
 	}
 	return c, nil
 }
 
-// GetTenantClientTLSConfig returns the most up-to-date tenant client
+// GetTenantTLSConfig returns the most up-to-date tenant client
 // tls.Config.
-func (cm *CertificateManager) GetTenantClientTLSConfig() (*tls.Config, error) {
+func (cm *CertificateManager) GetTenantTLSConfig() (*tls.Config, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	if cm.tenantClientConfig != nil {
-		return cm.tenantClientConfig, nil
+	if cm.tenantConfig != nil {
+		return cm.tenantConfig, nil
 	}
 
+	// CA used to validate certs provided by KV nodes.
 	ca, err := cm.getCACertLocked()
 	if err != nil {
 		return nil, err
 	}
 
-	tenantClientCert, err := cm.getTenantClientCertLocked()
+	caBlob := ca.FileContents
+
+	if cm.tenantCACert != nil {
+		// If it's available, we also include the tenant CA.
+		tenantCA, err := cm.getTenantCACertLocked()
+		if err == nil {
+			caBlob = AppendCertificatesToBlob(caBlob, tenantCA.FileContents)
+		}
+	}
+
+	// Client cert presented to KV nodes.
+	tenantCert, err := cm.getTenantCertLocked()
 	if err != nil {
 		return nil, err
 	}
 
 	cfg, err := newClientTLSConfig(
 		cm.tlsSettings,
-		tenantClientCert.FileContents,
-		tenantClientCert.KeyFileContents,
-		ca.FileContents)
+		tenantCert.FileContents,
+		tenantCert.KeyFileContents,
+		caBlob)
 	if err != nil {
 		return nil, err
 	}
 
-	cm.tenantClientConfig = cfg
+	cm.tenantConfig = cfg
 	return cfg, nil
 }
 
@@ -1002,9 +1042,20 @@ func (cm *CertificateManager) GetClientTLSConfig(user SQLUsername) (*tls.Config,
 	defer cm.mu.Unlock()
 
 	// We always need the CA cert.
-	ca, err := cm.getCACertLocked()
-	if err != nil {
-		return nil, err
+	var ca *CertInfo
+	var err error
+	if !cm.IsForTenant() {
+		// Host cluster.
+		ca, err = cm.getCACertLocked()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// Tenant server.
+		ca, err = cm.getTenantCACertLocked()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if !user.IsNodeUser() {
@@ -1025,7 +1076,7 @@ func (cm *CertificateManager) GetClientTLSConfig(user SQLUsername) (*tls.Config,
 		return cfg, nil
 	}
 
-	// We're the node user:
+	// We're the node user.
 	// Return the cached config if we have one.
 	if cm.clientConfig != nil {
 		return cm.clientConfig, nil
@@ -1062,7 +1113,17 @@ func (cm *CertificateManager) GetUIClientTLSConfig() (*tls.Config, error) {
 		return nil, err
 	}
 
-	cfg, err := newUIClientTLSConfig(cm.tlsSettings, uiCA.FileContents)
+	caBlob := uiCA.FileContents
+
+	if cm.tenantCACert != nil {
+		// If it's available, we also include the tenant CA.
+		tenantCA, err := cm.getTenantCACertLocked()
+		if err == nil {
+			caBlob = AppendCertificatesToBlob(caBlob, tenantCA.FileContents)
+		}
+	}
+
+	cfg, err := newUIClientTLSConfig(cm.tlsSettings, caBlob)
 	if err != nil {
 		return nil, err
 	}

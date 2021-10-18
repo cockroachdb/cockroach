@@ -14,12 +14,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 )
 
 func recordsBasedRegistryMigration(
-	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps,
+	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps, _ *jobs.Job,
 ) error {
 	return deps.Cluster.ForEveryNode(ctx, "deprecate-base-encryption-registry", func(ctx context.Context, client serverpb.MigrationClient) error {
 		req := &serverpb.DeprecateBaseEncryptionRegistryRequest{Version: &cv.Version}

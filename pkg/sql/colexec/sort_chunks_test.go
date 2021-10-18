@@ -271,28 +271,7 @@ func BenchmarkSortChunks(b *testing.B) {
 								}
 								batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 								batch.SetLength(coldata.BatchSize())
-								ordCols := make([]execinfrapb.Ordering_Column, nCols)
-								for i := range ordCols {
-									ordCols[i].ColIdx = uint32(i)
-									if i < matchLen {
-										ordCols[i].Direction = execinfrapb.Ordering_Column_ASC
-									} else {
-										ordCols[i].Direction = execinfrapb.Ordering_Column_Direction(rng.Int() % 2)
-									}
-
-									col := batch.ColVec(i).Int64()
-									col[0] = 0
-									for j := 1; j < coldata.BatchSize(); j++ {
-										if i < matchLen {
-											col[j] = col[j-1]
-											if rng.Float64() < 1.0/float64(avgChunkSize) {
-												col[j]++
-											}
-										} else {
-											col[j] = rng.Int63() % int64((i*1024)+1)
-										}
-									}
-								}
+								ordCols := generatePartiallyOrderedColumns(*rng, batch, nCols, matchLen, avgChunkSize)
 								b.ResetTimer()
 								for n := 0; n < b.N; n++ {
 									source := colexectestutils.NewFiniteChunksSource(testAllocator, batch, typs, nBatches, matchLen)

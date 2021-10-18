@@ -126,6 +126,7 @@ export const transactionDetails = {
           },
           bytes_read: { mean: 0, squared_diffs: 0 },
           rows_read: { mean: 0, squared_diffs: 0 },
+          rows_written: { mean: 1, squared_diffs: 0.99 },
         },
       },
       {
@@ -187,6 +188,7 @@ export const transactionDetails = {
             squared_diffs: 18.32727272727264,
           },
           rows_read: { mean: 1, squared_diffs: 0 },
+          rows_written: { mean: 1, squared_diffs: 0.99 },
         },
       },
       {
@@ -250,6 +252,7 @@ export const transactionDetails = {
           },
           bytes_read: { mean: 1570, squared_diffs: 0 },
           rows_read: { mean: 35, squared_diffs: 0 },
+          rows_written: { mean: 1, squared_diffs: 0.99 },
         },
       },
       {
@@ -378,6 +381,7 @@ export const transactionDetails = {
           },
           bytes_read: { mean: 0, squared_diffs: 0 },
           rows_read: { mean: 0, squared_diffs: 0 },
+          rows_written: { mean: 1, squared_diffs: 0.99 },
         },
       },
       {
@@ -424,6 +428,7 @@ export const transactionDetails = {
           },
           bytes_read: { mean: 327, squared_diffs: 0 },
           rows_read: { mean: 7, squared_diffs: 0 },
+          rows_written: { mean: 1, squared_diffs: 0.99 },
         },
       },
       {
@@ -484,6 +489,7 @@ export const transactionDetails = {
           },
           bytes_read: { mean: 0, squared_diffs: 0 },
           rows_read: { mean: 0, squared_diffs: 0 },
+          rows_written: { mean: 1, squared_diffs: 0.99 },
         },
       },
       {
@@ -544,6 +550,7 @@ export const transactionDetails = {
           },
           bytes_read: { mean: 0, squared_diffs: 0 },
           rows_read: { mean: 0, squared_diffs: 0 },
+          rows_written: { mean: 1, squared_diffs: 0.99 },
         },
       },
     ],

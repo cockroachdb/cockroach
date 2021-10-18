@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -167,14 +167,20 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 
 			// Index joins will always return exactly one output row per input row.
 			s.rf.setEstimatedRowCount(uint64(rowCount))
+			// Note that the fetcher takes ownership of the spans slice - it
+			// will modify it and perform the memory accounting. We don't care
+			// about the modification here, but we want to be conscious about
+			// the memory accounting - we don't double count for any memory of
+			// spans because the spanAssembler released all of the relevant
+			// memory from its account in GetSpans().
 			if err := s.rf.StartScan(
+				s.Ctx,
 				s.flowCtx.Txn,
 				spans,
 				nil,   /* bsHeader */
 				false, /* limitBatches */
-				row.NoBytesLimit,
-				row.NoRowLimit,
-				s.flowCtx.TraceKV,
+				rowinfra.NoBytesLimit,
+				rowinfra.NoRowLimit,
 				s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 			); err != nil {
 				colexecerror.InternalError(err)
@@ -191,6 +197,11 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			}
 			n := batch.Length()
 			if n == 0 {
+				// NB: the fetcher has just been closed automatically, so it
+				// released all of the resources. We now have to tell the
+				// ColSpanAssembler to account for the spans slice since it
+				// still has the references to it.
+				s.spanAssembler.AccountForSpans()
 				s.state = indexJoinConstructingSpans
 				continue
 			}
@@ -199,6 +210,11 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			s.mu.Unlock()
 			return batch
 		case indexJoinDone:
+			// Eagerly close the index joiner. Note that Close() is idempotent,
+			// so it's ok if it'll be closed again.
+			if err := s.Close(); err != nil {
+				colexecerror.InternalError(err)
+			}
 			return coldata.ZeroBatch
 		}
 	}
@@ -210,7 +226,12 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 // result batches. TODO(drewk): once the Streamer work is finished, the fetcher
 // logic will be able to control result size without sacrificing parallelism, so
 // we can remove this limit.
-const inputBatchSizeLimit = 4 << 20 /* 4 MB */
+var inputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRange(
+	"ColIndexJoin-batch-size",
+	4<<20, /* 4 MB */
+	1,     /* min */
+	4<<20, /* max */
+))
 
 // findEndIndex returns an index endIdx into s.batch such that generating spans
 // for rows in the interval [s.startIdx, endIdx) will get as close to the memory
@@ -397,7 +418,7 @@ func NewColIndexJoin(
 		cols = table.DeletableColumns()
 	}
 	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
-	typs := catalog.ColumnTypesWithVirtualCol(cols, nil /* virtualCol */)
+	typs := catalog.ColumnTypes(cols)
 
 	// Add all requested system columns to the output.
 	if spec.HasSystemColumns {
@@ -437,7 +458,7 @@ func NewColIndexJoin(
 	}
 
 	fetcher, err := initCFetcher(
-		flowCtx, fetcherAllocator, table, index, neededColumns, columnIdxMap, nil, /* virtualColumn */
+		flowCtx, fetcherAllocator, table, index, neededColumns, columnIdxMap, nil, /* invertedColumn */
 		cFetcherArgs{
 			visibility:        spec.Visibility,
 			lockingStrength:   spec.LockingStrength,
@@ -514,6 +535,11 @@ func adjustMemEstimate(estimate int64) int64 {
 	return estimate*memEstimateMultiplier + memEstimateAdditive
 }
 
+// GetScanStats is part of the colexecop.KVReader interface.
+func (s *ColIndexJoin) GetScanStats() execinfra.ScanStats {
+	return execinfra.GetScanStats(s.Ctx)
+}
+
 // Release implements the execinfra.Releasable interface.
 func (s *ColIndexJoin) Release() {
 	s.rf.Release()
@@ -523,11 +549,15 @@ func (s *ColIndexJoin) Release() {
 
 // Close implements the colexecop.Closer interface.
 func (s *ColIndexJoin) Close() error {
+	s.rf.Close(s.EnsureCtx())
 	if s.tracingSpan != nil {
 		s.tracingSpan.Finish()
 		s.tracingSpan = nil
 	}
-	s.spanAssembler.Close()
+	if s.spanAssembler != nil {
+		// spanAssembler can be nil if Release() has already been called.
+		s.spanAssembler.Close()
+	}
 	s.batch = nil
 	return nil
 }

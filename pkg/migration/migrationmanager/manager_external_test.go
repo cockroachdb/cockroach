@@ -13,6 +13,7 @@ package migrationmanager_test
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"sort"
 	"sync/atomic"
 	"testing"
@@ -78,7 +79,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 							return nil, false
 						}
 						return migration.NewTenantMigration("test", cv, migrations.NoPrecondition, func(
-							ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
+							ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps, _ *jobs.Job,
 						) error {
 							canResume := make(chan error)
 							ch <- canResume
@@ -142,13 +143,13 @@ RETURNING id;`).Scan(&secondID))
 	require.Regexp(t, "found multiple non-terminal jobs for version", err)
 
 	// Let the fake, erroneous job finish with an error.
-	fakeJobBlockChan <- errors.New("boom")
+	fakeJobBlockChan <- jobs.MarkAsPermanentJobError(errors.New("boom"))
 	require.Regexp(t, "boom", <-runErr)
 
 	// Launch a second migration which later we'll ensure does not kick off
 	// another job. We'll make sure this happens by polling the trace to see
 	// the log line indicating what we want.
-	tr := tc.Server(0).Tracer().(*tracing.Tracer)
+	tr := tc.Server(0).TracerI().(*tracing.Tracer)
 	recCtx, getRecording, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test")
 	defer cancel()
 	upgrade2Err := make(chan error, 1)
@@ -212,7 +213,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 							return nil, false
 						}
 						return migration.NewSystemMigration("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, d migration.SystemDeps,
+							ctx context.Context, version clusterversion.ClusterVersion, d migration.SystemDeps, _ *jobs.Job,
 						) error {
 							return d.DB.Migrate(ctx, desc.StartKey, desc.EndKey, cv.Version)
 						}), true
@@ -327,7 +328,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 					},
 					RegistryOverride: func(cv clusterversion.ClusterVersion) (migration.Migration, bool) {
 						return migration.NewSystemMigration("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, d migration.SystemDeps,
+							ctx context.Context, version clusterversion.ClusterVersion, d migration.SystemDeps, _ *jobs.Job,
 						) error {
 							if atomic.AddInt32(&active, 1) != 1 {
 								t.Error("unexpected concurrency")
@@ -412,7 +413,7 @@ func TestPauseMigration(t *testing.T) {
 							return nil, false
 						}
 						return migration.NewTenantMigration("test", cv, migrations.NoPrecondition, func(
-							ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
+							ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps, _ *jobs.Job,
 						) error {
 							canResume := make(chan error)
 							ch <- migrationEvent{
@@ -473,6 +474,12 @@ SELECT id
 		t.Fatalf("did not expect the job to run again")
 	case <-time.After(10 * time.Millisecond):
 	}
+	// Wait for the job to actually be paused as opposed to waiting in
+	// pause-requested. There's a separate issue to make PAUSE wait for
+	// the job to be paused, but that's a behavior change is better than nothing.
+	tdb.CheckQueryResultsRetry(t, fmt.Sprintf(
+		`SELECT status FROM crdb_internal.jobs WHERE job_id = %d`, id,
+	), [][]string{{"paused"}})
 	tdb.Exec(t, "RESUME JOB $1", id)
 	ev = <-ch
 	close(ev.unblock)
@@ -500,11 +507,11 @@ func TestPrecondition(t *testing.T) {
 	migrationErr.Store(true)
 	cf := func(run *int64, err *atomic.Value) migration.TenantMigrationFunc {
 		return func(
-			context.Context, clusterversion.ClusterVersion, migration.TenantDeps,
+			context.Context, clusterversion.ClusterVersion, migration.TenantDeps, *jobs.Job,
 		) error {
 			atomic.AddInt64(run, 1)
 			if err.Load().(bool) {
-				return errors.New("boom")
+				return jobs.MarkAsPermanentJobError(errors.New("boom"))
 			}
 			return nil
 		}
@@ -526,7 +533,11 @@ func TestPrecondition(t *testing.T) {
 				switch cv {
 				case v1:
 					return migration.NewTenantMigration("v1", cv,
-						migration.PreconditionFunc(cf(&preconditionRun, &preconditionErr)),
+						migration.PreconditionFunc(func(
+							ctx context.Context, cv clusterversion.ClusterVersion, td migration.TenantDeps,
+						) error {
+							return cf(&preconditionRun, &preconditionErr)(ctx, cv, td, nil)
+						}),
 						cf(&migrationRun, &migrationErr),
 					), true
 				case v2:

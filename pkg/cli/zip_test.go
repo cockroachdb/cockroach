@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -78,7 +79,6 @@ table_name NOT IN (
 	'interleaved',
 	'lost_descriptors_with_data',
 	'table_columns',
-	'table_indexes',
 	'table_row_statistics',
 	'ranges',
 	'ranges_no_leases',
@@ -87,7 +87,8 @@ table_name NOT IN (
 	'session_variables',
 	'tables',
 	'statement_statistics',
-	'transaction_statistics'
+	'transaction_statistics',
+	'tenant_usage_details'
 )
 ORDER BY name ASC`)
 	assert.NoError(t, err)
@@ -104,6 +105,7 @@ ORDER BY name ASC`)
 		"system.descriptor",
 		"system.namespace",
 		"system.scheduled_jobs",
+		"system.settings",
 	)
 	sort.Strings(tables)
 
@@ -158,15 +160,19 @@ func TestConcurrentZip(t *testing.T) {
 	skip.UnderShort(t)
 	skip.UnderRace(t)
 
-	defer log.ScopeWithoutShowLogs(t).Close(t)
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	// Reduce the number of output log files to just what's expected.
+	defer sc.SetupSingleFileLogging()()
 
 	ctx := context.Background()
 
 	// Three nodes. We want to see what `zip` thinks when one of the nodes is down.
+	params, _ := tests.CreateTestServerParams()
+	params.Insecure = true
 	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-			Insecure: true,
-		}})
+		base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
 
 	// Zip it. We fake a CLI test context for this.
@@ -245,12 +251,16 @@ create table defaultdb."../system"(x int);
 func TestUnavailableZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.WithIssue(t, 53306, "flaky test")
-	defer log.Scope(t).Close(t)
 
 	skip.UnderShort(t)
 	// Race builds make the servers so slow that they report spurious
 	// unavailability.
 	skip.UnderRace(t)
+
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+	// Reduce the number of output log files to just what's expected.
+	defer sc.SetupSingleFileLogging()()
 
 	// unavailableCh is used by the replica command filter
 	// to conditionally block requests and simulate unavailability.
@@ -269,11 +279,14 @@ func TestUnavailableZip(t *testing.T) {
 	}
 
 	// Make a 2-node cluster, with an option to make the first node unavailable.
+	params, _ := tests.CreateTestServerParams()
+	params.Insecure = true
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {Insecure: true, Knobs: base.TestingKnobs{Store: knobs}},
 			1: {Insecure: true},
 		},
+		ServerArgs: params,
 	})
 	defer tc.Stopper().Stop(context.Background())
 
@@ -348,18 +361,24 @@ func eraseNonDeterministicZipOutput(out string) string {
 // need the SSL certs dir to run a CLI test securely.
 func TestPartialZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	// We want a low timeout so that the test doesn't take forever;
 	// however low timeouts make race runs flaky with false positives.
 	skip.UnderShort(t)
 	skip.UnderRace(t)
 
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+	// Reduce the number of output log files to just what's expected.
+	defer sc.SetupSingleFileLogging()()
+
 	ctx := context.Background()
 
 	// Three nodes. We want to see what `zip` thinks when one of the nodes is down.
+	params, _ := tests.CreateTestServerParams()
+	params.Insecure = true
 	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{Insecure: true}})
+		base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
 
 	// Switch off the second node.
@@ -449,7 +468,9 @@ func TestZipRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	params, _ := tests.CreateTestServerParams()
+	params.Insecure = true
+	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
 	dir, cleanupFn := testutils.TempDir(t)

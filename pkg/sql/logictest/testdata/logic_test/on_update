@@ -147,10 +147,10 @@ pk2  val2       def
 # as to which ON UPDATE should be applied.
 subtest OnUpdateFKConflict
 
-statement error pq: cannot specify both ON UPDATE expression and a foreign key ON UPDATE action for column with ID 2
+statement error pq: cannot specify both ON UPDATE expression and a foreign key ON UPDATE action for column "j"
 CREATE TABLE test_fk_invalid_inline (p STRING PRIMARY KEY, j STRING REFERENCES test_fk_base (j) ON UPDATE CASCADE ON UPDATE 'test')
 
-statement error pq: cannot specify both ON UPDATE expression and a foreign key ON UPDATE action for column with ID 2
+statement error pq: cannot specify both ON UPDATE expression and a foreign key ON UPDATE action for column "j"
 CREATE TABLE test_fk_invalid (p STRING PRIMARY KEY, j STRING ON UPDATE 'test', CONSTRAINT fk FOREIGN KEY (j) REFERENCES test_fk_base(j) ON UPDATE SET NULL)
 
 statement ok
@@ -205,8 +205,8 @@ test_show_fk  CREATE TABLE public.test_show_fk (
               p STRING NOT NULL,
               j STRING NULL,
               k STRING NULL ON UPDATE 'regress':::STRING,
-              CONSTRAINT "primary" PRIMARY KEY (p ASC),
-              CONSTRAINT fk_j_ref_test_fk_base FOREIGN KEY (j) REFERENCES public.test_fk_base(j) ON UPDATE CASCADE,
+              CONSTRAINT test_show_fk_pkey PRIMARY KEY (p ASC),
+              CONSTRAINT test_show_fk_j_fkey FOREIGN KEY (j) REFERENCES public.test_fk_base(j) ON UPDATE CASCADE,
               FAMILY fam_0_p (p),
               FAMILY fam_1_j (j),
               FAMILY fam_2_k (k)
@@ -294,9 +294,6 @@ query TT
 SELECT p, k FROM test_table_enum
 ----
 pk1  y
-
-statement ok
-SET enable_drop_enum_value = true
 
 statement ok
 ALTER TYPE test_enum DROP VALUE 'z'

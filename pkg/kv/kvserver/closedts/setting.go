@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/errors"
 )
 
 // TargetDuration is the follower reads closed timestamp update target duration.
@@ -24,19 +23,6 @@ var TargetDuration = settings.RegisterDurationSetting(
 	3*time.Second,
 	settings.NonNegativeDuration,
 )
-
-// CloseFraction is the fraction of TargetDuration determining how often closed
-// timestamp updates are to be attempted.
-var CloseFraction = settings.RegisterFloatSetting(
-	"kv.closed_timestamp.close_fraction",
-	"fraction of closed timestamp target duration specifying how frequently the closed timestamp is advanced",
-	0.2,
-	func(v float64) error {
-		if v <= 0 || v > 1 {
-			return errors.New("value not between zero and one")
-		}
-		return nil
-	})
 
 // SideTransportCloseInterval determines the ClosedTimestampSender's frequency.
 var SideTransportCloseInterval = settings.RegisterDurationSetting(

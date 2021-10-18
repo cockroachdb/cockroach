@@ -38,7 +38,7 @@ against the cluster. To that effect, `roachtest run` takes the `--cockroach`,
 so that they do not need to be specified in the common case. Besides, when
 the binaries have nonstandard names, it is often more convenient to move them
 to the location `roachtest` expects (it will tell you) rather than to specify
-the flags. However, when multiple binaries are around, it might be preferrable
+the flags. However, when multiple binaries are around, it might be preferable
 to be explicit, to avoid accidentally running tests against against the wrong
 version of CockroachDB.
 
@@ -191,9 +191,22 @@ A solid foundation for building the binaries and stressing a roachtest is
 provided via the [roachstress.sh] script, which can either be used outright or
 saved and adjusted. The script can be invoked without parameters from a clean
 checkout of the cockroach repository at the revision to be tested. It will
-prompt for user input on which test to stress.
+prompt for user input on which test to stress. Each input can be provided via
+the environment (replacing the prompt), and additional flags that are passed
+through to `roachtest` can be provided. For example:
+
+```bash
+# Run 10 instances of mytest against real VMs (i.e. not locally), and build the
+# full CRDB binary (i.e. build with the ui). Also, use a CPU quota of 1000 and
+# keep clusters for failing tests running for later investigation.
+TEST=mytest COUNT=10 LOCAL=n SHORT=n ./pkg/cmd/roachtest/roachstress.sh --cpu-quota 1000 --debug
+```
 
 [roachstress.sh]: https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/roachstress.sh
+
+It's important to make sure that the machine running this invocation does not
+suspend or lose network connectivity. Using a tmux session on a `./scripts/gceworker.sh`
+machine has worked well for many of us in the past.
 
 Another option is to start a [`Cockroach_Nightlies_RoachtestStress`](https://teamcity.cockroachdb.com/buildConfiguration/Cockroach_Nightlies_RoachtestStress)
 CI job, which allows running a bunch of tests without having to keep your

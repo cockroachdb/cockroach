@@ -13,6 +13,8 @@ package rangefeed
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
@@ -27,6 +29,8 @@ type config struct {
 	withInitialScan    bool
 	withDiff           bool
 	onInitialScanError OnInitialScanError
+	onCheckpoint       OnCheckpoint
+	onFrontierAdvance  OnFrontierAdvance
 }
 
 type optionFunc func(*config)
@@ -77,6 +81,29 @@ func WithDiff() Option {
 func WithRetry(options retry.Options) Option {
 	return optionFunc(func(c *config) {
 		c.retryOptions = options
+	})
+}
+
+// OnCheckpoint is called when a rangefeed checkpoint occurs.
+type OnCheckpoint func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpoint)
+
+// WithOnCheckpoint sets up a callback that's invoked whenever a check point
+// event is emitted.
+func WithOnCheckpoint(f OnCheckpoint) Option {
+	return optionFunc(func(c *config) {
+		c.onCheckpoint = f
+	})
+}
+
+// OnFrontierAdvance is called when the rangefeed frontier is advanced with the
+// new frontier timestamp.
+type OnFrontierAdvance func(ctx context.Context, timestamp hlc.Timestamp)
+
+// WithOnFrontierAdvance sets up a callback that's invoked whenever the
+// rangefeed frontier is advanced.
+func WithOnFrontierAdvance(f OnFrontierAdvance) Option {
+	return optionFunc(func(c *config) {
+		c.onFrontierAdvance = f
 	})
 }
 

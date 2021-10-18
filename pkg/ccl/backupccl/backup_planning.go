@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -920,19 +919,7 @@ func backupPlanHook(
 			}
 		case tree.AllDescriptors:
 			// Cluster backups include all of the descriptors in the cluster.
-			var allDescs []catalog.Descriptor
-			var err error
-			switch mvccFilter {
-			case MVCCFilter_All:
-				// Usually, revision_history backups include all previous versions of the
-				// descriptors at exist as of end time since they have not been GC'ed yet.
-				// However, since database descriptors are deleted as soon as the database
-				// is deleted, cluster backups need to explicitly go looking for these
-				// dropped descriptors up front.
-				allDescs, err = loadAllDescsInInterval(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, startTime, endTime)
-			case MVCCFilter_Latest:
-				allDescs, err = backupresolver.LoadAllDescs(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, endTime)
-			}
+			allDescs, err := backupresolver.LoadAllDescs(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, endTime)
 			if err != nil {
 				return err
 			}
@@ -1002,39 +989,26 @@ func backupPlanHook(
 		var revs []BackupManifest_DescriptorRevision
 		if mvccFilter == MVCCFilter_All {
 			priorIDs = make(map[descpb.ID]descpb.ID)
-			revs, err = getRelevantDescChanges(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, startTime, endTime, targetDescs, completeDBs, priorIDs, backupStmt.Coverage())
+			revs, err = getRelevantDescChanges(ctx, p.ExecCfg(), startTime, endTime, targetDescs, completeDBs, priorIDs, backupStmt.Coverage())
 			if err != nil {
 				return err
 			}
 		}
 
 		var spans []roachpb.Span
-		var tenantRows []tree.Datums
+		var tenants []descpb.TenantInfoWithUsage
 		if backupStmt.Targets != nil && backupStmt.Targets.Tenant != (roachpb.TenantID{}) {
 			if !p.ExecCfg().Codec.ForSystemTenant() {
 				return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can backup other tenants")
 			}
 
-			tenID := backupStmt.Targets.Tenant
-			id := backupStmt.Targets.Tenant.ToUint64()
-			ds, err := p.ExecCfg().InternalExecutor.QueryRow(
-				ctx, "backup-lookup-tenant", p.ExtendedEvalContext().Txn,
-				`SELECT id, active, info FROM system.tenants WHERE id = $1`, id,
+			tenantInfo, err := retrieveSingleTenantMetadata(
+				ctx, p.ExecCfg().InternalExecutor, p.ExtendedEvalContext().Txn, backupStmt.Targets.Tenant,
 			)
-
 			if err != nil {
 				return err
 			}
-
-			if ds == nil {
-				return errors.Errorf("tenant %s does not exist", tenID)
-			}
-
-			if !tree.MustBeDBool(ds[1]) {
-				return errors.Errorf("tenant %d is not active", id)
-			}
-
-			tenantRows = append(tenantRows, ds)
+			tenants = []descpb.TenantInfoWithUsage{tenantInfo}
 		} else {
 			tableSpans, err := spansForAllTableIndexes(ctx, p.ExecCfg(), endTime, tables, revs)
 			if err != nil {
@@ -1044,38 +1018,26 @@ func backupPlanHook(
 
 			if p.ExecCfg().Codec.ForSystemTenant() {
 				// Include all tenants.
-				tenantRows, err = p.ExecCfg().InternalExecutor.QueryBuffered(
-					ctx, "backup-lookup-tenant", p.ExtendedEvalContext().Txn,
-					`SELECT id, active, info FROM system.tenants`,
+				tenants, err = retrieveAllTenantsMetadata(
+					ctx, p.ExecCfg().InternalExecutor, p.ExtendedEvalContext().Txn,
+				)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		if len(tenants) > 0 {
+			if backupStmt.Options.CaptureRevisionHistory {
+				return errors.UnimplementedError(
+					errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/47896"},
+					"can not backup tenants with revision history",
 				)
 			}
-
-			if err != nil {
-				return err
+			for i := range tenants {
+				prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenants[i].ID))
+				spans = append(spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
 			}
-		}
-
-		var tenants []descpb.TenantInfo
-		for _, row := range tenantRows {
-			// TODO isn't there a general problem here with tenant IDs > MaxInt64?
-			id := uint64(tree.MustBeDInt(row[0]))
-
-			info := descpb.TenantInfo{ID: id}
-			infoBytes := []byte(tree.MustBeDBytes(row[2]))
-			if err := protoutil.Unmarshal(infoBytes, &info); err != nil {
-				return err
-			}
-			tenants = append(tenants, info)
-
-			prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(id))
-			spans = append(spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
-		}
-
-		if len(tenants) > 0 && backupStmt.Options.CaptureRevisionHistory {
-			return errors.UnimplementedError(
-				errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/47896"},
-				"can not backup tenants with revision history",
-			)
 		}
 
 		if len(prevBackups) > 0 {

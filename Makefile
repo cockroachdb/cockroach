@@ -64,7 +64,7 @@ include build/defs.mk
 #
 # Note how the actions for this rule are *not* using $(GIT_DIR) which
 # is otherwise defined in defs.mk above. This is because submodules
-# are used in the process of definining the .mk files included by the
+# are used in the process of defining the .mk files included by the
 # Makefile, so it is not yet defined by the time
 # `.submodules-initialized` is needed during a fresh build after a
 # checkout.
@@ -366,9 +366,9 @@ $(CLUSTER_UI_JS): $(shell find pkg/ui/workspaces/cluster-ui/src -type f | sed 's
 pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock | bin/.submodules-initialized
 	@# Do not install optional dependencies as far as they are required for UI development only
 	@# and should not be installed for production builds.
-	@# Also some of linux distributives (that are used as development env) don't support some of
+	@# Also some linux distributions (that are used as development env) don't support some of
 	@# optional dependencies (i.e. cypress) so it is important to make these deps optional.
-	$(NODE_RUN) -C pkg/ui yarn install --ignore-optional
+	$(NODE_RUN) -C pkg/ui yarn install --ignore-optional --offline
 	@# We remove this broken dependency again in pkg/ui/webpack.config.js.
 	@# See the comment there for details.
 	rm -rf pkg/ui/node_modules/@types/node
@@ -566,6 +566,7 @@ $(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialize
 	@echo "regenerating $@"
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
 	@echo >> $@
+	@echo '//go:build $(if $(findstring $(native-tag),$@),$(native-tag),!make)' >> $@
 	@echo '// +build $(if $(findstring $(native-tag),$@),$(native-tag),!make)' >> $@
 	@echo >> $@
 	@echo 'package $(if $($(@D)-package),$($(@D)-package),$(notdir $(@D)))' >> $@
@@ -779,9 +780,6 @@ SQLPARSER_TARGETS = \
 	pkg/sql/lexbase/keywords.go \
 	pkg/sql/lexbase/reserved_keywords.go
 
-WKTPARSER_TARGETS = \
-	pkg/geo/wkt/wkt.go
-
 PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources
 
 SWAGGER_TARGETS := \
@@ -809,6 +807,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/rowstovec.eg.go \
   pkg/sql/colexec/select_in.eg.go \
   pkg/sql/colexec/sort.eg.go \
+  pkg/sql/colexec/sorttopk.eg.go \
   pkg/sql/colexec/sort_partitioner.eg.go \
   pkg/sql/colexec/substring.eg.go \
   pkg/sql/colexec/values_differ.eg.go \
@@ -894,8 +893,26 @@ OPTGEN_TARGETS = \
 	pkg/sql/opt/exec/factory.og.go \
 	pkg/sql/opt/exec/explain/explain_factory.og.go
 
+# removed-files is a list of files that used to exist in the
+# repository that need to be explicitly cleaned up to prevent build
+# failures.
+removed-files = pkg/ui/distccl/bindata.go
+
+removed-files-to-remove = $(strip $(foreach f,$(removed-files),$(wildcard $(f))))
+
+CLEANUP_TARGETS =
+ifneq ($(removed-files-to-remove),)
+CLEANUP_TARGETS = clean-removed-files
+endif
+
+.PHONY: clean-removed-files
+clean-removed-files:
+ifneq ($(removed-files-to-remove),)
+	rm -f $(removed-files-to-remove)
+endif
+
 test-targets := \
-	check test testshort testslow testrace testraceslow testbuild \
+	check test testshort testslow testrace testraceslow testdeadlock testbuild \
 	stress stressrace \
 	roachprod-stress roachprod-stressrace \
 	testlogic testbaselogic testccllogic testoptlogic
@@ -905,7 +922,7 @@ go-targets-ccl := \
 	bin/workload \
 	go-install \
 	bench benchshort \
-	check test testshort testslow testrace testraceslow testbuild \
+	check test testshort testslow testrace testraceslow testdeadlock testbuild \
 	stress stressrace \
 	roachprod-stress roachprod-stressrace \
 	generate \
@@ -923,10 +940,10 @@ build-mode = build -o $@
 
 go-install: build-mode = install
 
-$(COCKROACH) go-install generate: pkg/ui/distccl/bindata.go
+$(COCKROACH) go-install generate: pkg/ui/assets.ccl.installed
 
 $(COCKROACHOSS): BUILDTARGET = ./pkg/cmd/cockroach-oss
-$(COCKROACHOSS): $(C_LIBS_OSS) pkg/ui/distoss/bindata.go | $(C_LIBS_DYNAMIC)
+$(COCKROACHOSS): $(C_LIBS_OSS) pkg/ui/assets.oss.installed | $(C_LIBS_DYNAMIC)
 
 $(COCKROACHSHORT): BUILDTARGET = ./pkg/cmd/cockroach-short
 $(COCKROACHSHORT): TAGS += short
@@ -946,7 +963,7 @@ BUILD_TAGGED_RELEASE =
 ## Override for .buildinfo/tag
 BUILDINFO_TAG :=
 
-$(go-targets): bin/.bootstrap $(BUILDINFO) $(CGO_FLAGS_FILES) $(PROTOBUF_TARGETS) $(LIBPROJ)
+$(go-targets): bin/.bootstrap $(BUILDINFO) $(CGO_FLAGS_FILES) $(PROTOBUF_TARGETS) $(LIBPROJ) $(CLEANUP_TARGETS)
 $(go-targets): $(LOG_TARGETS) $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS)
 $(go-targets): override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(if $(BUILDINFO_TAG),$(BUILDINFO_TAG),$(shell cat .buildinfo/tag))" \
@@ -1028,6 +1045,8 @@ testbuild:
 
 testshort: override TESTFLAGS += -short
 
+testdeadlock: TAGS += deadlock
+
 testrace: ## Run tests with the Go race detector enabled.
 testrace stressrace roachprod-stressrace: override GOFLAGS += -race
 testrace stressrace roachprod-stressrace: export GORACE := halt_on_error=1
@@ -1047,9 +1066,9 @@ bench benchshort: TESTTIMEOUT := $(BENCHTIMEOUT)
 # that longer running benchmarks can skip themselves.
 benchshort: override TESTFLAGS += -benchtime=1ns -short
 
-.PHONY: check test testshort testrace testlogic testbaselogic testccllogic testoptlogic bench benchshort
+.PHONY: check test testshort testrace testdeadlock testlogic testbaselogic testccllogic testoptlogic bench benchshort
 test: ## Run tests.
-check test testshort testrace bench benchshort:
+check test testshort testrace testdeadlock bench benchshort:
 	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: stress stressrace
@@ -1120,18 +1139,17 @@ compose: ## Run compose tests.
 dupl: bin/.bootstrap
 	$(FIND_RELEVANT) \
 	       -name '*.go'             \
-	       -not -name '*.pb.go'     \
-	       -not -name '*.pb.gw.go'  \
-	       -not -name 'bindata.go' \
-	       -not -name '*_string.go' \
-	       -not -name 'sql.go'      \
-	       -not -name 'irgen.go'    \
-	       -not -name '*.ir.go'     \
+	       -not -name '*.pb.go'    	\
+	       -not -name '*.pb.gw.go' 	\
+	       -not -name '*_string.go'	\
+	       -not -name 'sql.go'     	\
+	       -not -name 'irgen.go'   	\
+	       -not -name '*.ir.go'    	\
 	| dupl -files $(DUPLFLAGS)
 
 .PHONY: generate
 generate: ## Regenerate generated code.
-generate: protobuf $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(LOG_TARGETS) $(SQLPARSER_TARGETS) $(WKTPARSER_TARGETS) $(SETTINGS_DOC_PAGES) $(SWAGGER_TARGETS) bin/langgen bin/terraformgen
+generate: protobuf $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(LOG_TARGETS) $(SQLPARSER_TARGETS) $(SETTINGS_DOC_PAGES) $(SWAGGER_TARGETS) bin/langgen bin/terraformgen
 	$(GO) generate $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 	$(MAKE) execgen
 
@@ -1184,7 +1202,7 @@ ARCHIVE_EXTRAS = \
 	$(BUILDINFO) \
 	$(SQLPARSER_TARGETS) \
 	$(OPTGEN_TARGETS) \
-	pkg/ui/distccl/bindata.go pkg/ui/distoss/bindata.go
+	pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
 
 # TODO(benesch): Make this recipe use `git ls-files --recurse-submodules`
 # instead of scripts/ls-files.sh once Git v2.11 is widely deployed.
@@ -1319,7 +1337,7 @@ WEBPACK_DEV_SERVER := ./node_modules/.bin/webpack-dev-server
 WEBPACK_DASHBOARD  := ./opt/node_modules/.bin/webpack-dashboard
 
 .PHONY: ui-generate
-ui-generate: pkg/ui/distccl/bindata.go
+ui-generate: pkg/ui/assets.ccl.installed
 
 .PHONY: ui-fonts
 ui-fonts:
@@ -1380,21 +1398,19 @@ ui-test-watch: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(KARMA) start --browsers Chrome --no-single-run --debug --auto-watch
 
-pkg/ui/distccl/bindata.go: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/workspaces/db-console/ccl -type f)
-pkg/ui/distoss/bindata.go: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
-pkg/ui/dist%/bindata.go: pkg/ui/workspaces/db-console/webpack.app.js $(CLUSTER_UI_JS) $(shell find pkg/ui/workspaces/db-console/src pkg/ui/workspaces/db-console/styl -type f) | bin/.bootstrap
-	find pkg/ui/dist$* -mindepth 1 -not -name dist$*.go -delete
-	set -e; shopt -s extglob; for dll in $(notdir $(filter %.dll.js,$^)); do \
-	  ln -s ../workspaces/db-console/dist/$$dll pkg/ui/dist$*/$${dll/@(.ccl|.oss)}; \
+.SECONDARY: pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
+pkg/ui/assets.ccl.installed: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/workspaces/db-console/ccl -type f)
+pkg/ui/assets.oss.installed: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
+pkg/ui/assets.%.installed: pkg/ui/workspaces/db-console/webpack.app.js $(shell find pkg/ui/workspaces/db-console/src pkg/ui/workspaces/db-console/styl -type f) | bin/.bootstrap
+	find pkg/ui/dist$*/assets -mindepth 1 -not -name .gitkeep -delete
+	for dll in $(shell find pkg/ui/workspaces/db-console/dist -name '*.dll.js' -type f); do \
+		echo $$dll | sed -E "s/.oss.dll.js|.ccl.dll.js/.dll.js/" | sed -E "s|^.*\/|pkg/ui/dist$*/assets/|" | xargs -I{} cp $$dll {};\
 	done
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(WEBPACK) --config webpack.app.js --env.dist=$*
-	go-bindata -pkg dist$* -o $@ -prefix pkg/ui/dist$* pkg/ui/dist$*/...
-	echo 'func init() { ui.Asset = Asset; ui.AssetDir = AssetDir; ui.AssetInfo = AssetInfo }' >> $@
-	gofmt -s -w $@
-	goimports -w $@
+	touch $@
 
 pkg/ui/yarn.opt.installed:
-	$(NODE_RUN) -C pkg/ui yarn install --check-files
+	$(NODE_RUN) -C pkg/ui yarn install --check-files --offline
 	touch $@
 
 .PHONY: ui-watch-secure
@@ -1415,7 +1431,9 @@ ui-watch ui-watch-secure: $(UI_CCL_DLLS) pkg/ui/yarn.opt.installed
 
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
-	find pkg/ui/workspaces/db-console/dist* -mindepth 1 -not -name dist*.go -delete
+	find pkg/ui/distccl/assets pkg/ui/distoss/assets -mindepth 1 -not -name .gitkeep -delete
+	rm -rf pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
+	rm -rf pkg/ui/dist/*
 	rm -f $(UI_PROTOS_CCL) $(UI_PROTOS_OSS)
 	rm -f pkg/ui/workspaces/db-console/*manifest.json
 	rm -rf pkg/ui/workspaces/cluster-ui/dist
@@ -1556,11 +1574,12 @@ EVENTLOG_PROTOS = \
 	pkg/util/log/eventpb/sql_audit_events.proto \
 	pkg/util/log/eventpb/cluster_events.proto \
 	pkg/util/log/eventpb/job_events.proto \
-	pkg/util/log/eventpb/health_events.proto
+	pkg/util/log/eventpb/health_events.proto \
+	pkg/util/log/eventpb/telemetry.proto
 
 LOGSINKDOC_DEP = pkg/util/log/logconfig/config.go
 
-docs/generated/logsinks.md: pkg/util/log/logconfig/gen.go $(LOGSINKDOC_DEP)
+docs/generated/logsinks.md: pkg/util/log/logconfig/gen.go $(LOGSINKDOC_DEP) | bin/.bootstrap
 	$(GO) run $(GOMODVENDORFLAGS) $< <$(LOGSINKDOC_DEP) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
@@ -1576,21 +1595,21 @@ pkg/util/log/eventpb/json_encode_generated.go: pkg/util/log/eventpb/gen.go $(EVE
 	$(GO) run $(GOMODVENDORFLAGS) $< json_encode_go $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
-docs/generated/logging.md: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto
+docs/generated/logging.md: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto | bin/.bootstrap
 	$(GO) run $(GOMODVENDORFLAGS) $^ logging.md $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 docs/generated/swagger/spec.json: pkg/server/api*.go bin/.bootstrap
 
-pkg/util/log/severity/severity_generated.go: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto
+pkg/util/log/severity/severity_generated.go: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto | bin/.bootstrap
 	$(GO) run $(GOMODVENDORFLAGS) $^ severity.go $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
-pkg/util/log/channel/channel_generated.go: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto
+pkg/util/log/channel/channel_generated.go: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto | bin/.bootstrap
 	$(GO) run $(GOMODVENDORFLAGS) $^ channel.go $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
-pkg/util/log/log_channels_generated.go: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto
+pkg/util/log/log_channels_generated.go: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto | bin/.bootstrap
 	$(GO) run $(GOMODVENDORFLAGS) $^ log_channels.go $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
@@ -1785,14 +1804,10 @@ fuzz: ## Run fuzz tests.
 fuzz: bin/fuzz
 	bin/fuzz $(TESTFLAGS) -tests $(TESTS) -timeout $(TESTTIMEOUT) $(PKG)
 
-# Short hand to re-generate all bazel BUILD files.
-#
-# Even with --symlink_prefix, some sub-command somewhere hardcodes the
-# creation of a "bazel-out" symlink. This bazel-out symlink can only
-# be blocked by the existence of a file before the bazel command is
-# invoked. For now, this is left as an exercise for the user.
-#
-bazel-generate: ## Generate all bazel BUILD files.
+# Short hand to re-generate all bazel BUILD files. (Does the same thing as
+# `./dev generate bazel`.)
+.PHONY: bazel-generate
+bazel-generate:
 	@echo 'Generating DEPS.bzl and BUILD files using gazelle'
 	./build/bazelutil/bazel-generate.sh
 
@@ -1815,7 +1830,7 @@ endif
 #
 # The additional complexity below handles whitespace and comments.
 #
-# The special comments at the beginning are for Github/Go/Reviewable:
+# The special comments at the beginning are for GitHub/Go/Reviewable:
 # https://github.com/golang/go/issues/13560#issuecomment-277804473
 # https://github.com/Reviewable/Reviewable/wiki/FAQ#how-do-i-tell-reviewable-that-a-file-is-generated-and-should-not-be-reviewed
 # Note how the 'prefix' variable is manually appended. This is required by Homebrew.

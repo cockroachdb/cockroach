@@ -243,6 +243,8 @@ func NewRegistry() *Registry {
 func (r *Registry) AddContentionEvent(c roachpb.ContentionEvent) {
 	r.globalLock.Lock()
 	defer r.globalLock.Unlock()
+	// Remove the tenant ID prefix if there is any.
+	c.Key, _, _ = keys.DecodeTenantPrefix(c.Key)
 	_, rawTableID, rawIndexID, err := keys.DecodeTableIDIndexID(c.Key)
 	if err != nil {
 		// The key is not a valid SQL key, so we store it in a separate cache.

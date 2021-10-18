@@ -28,8 +28,7 @@ import (
 var retryableError = roachpb.NewTransactionRetryWithProtoRefreshError(
 	``, uuid.MakeV4(), roachpb.Transaction{})
 
-func closureTxnWithTimestamp(typ ClosureTxnType, ts int, ops ...Operation) Operation {
-	closureTxnOp := closureTxn(typ, ops...)
+func withTimestamp(op Operation, ts int) Operation {
 	txn := roachpb.MakeTransaction(
 		"test",
 		nil, // baseKey
@@ -37,8 +36,14 @@ func closureTxnWithTimestamp(typ ClosureTxnType, ts int, ops ...Operation) Opera
 		hlc.Timestamp{WallTime: int64(ts)},
 		0,
 	)
-	closureTxnOp.ClosureTxn.Txn = &txn
-	return closureTxnOp
+	switch o := op.GetValue().(type) {
+	case *ClosureTxnOperation:
+		o.Txn = &txn
+	default:
+		panic("incorrect op type")
+	}
+
+	return op
 }
 
 func withResult(op Operation, err error) Operation {
@@ -62,6 +67,15 @@ func withScanResult(op Operation, kvs ...KeyValue) Operation {
 	scan.Result = Result{
 		Type:   ResultType_Values,
 		Values: kvs,
+	}
+	return op
+}
+
+func withDeleteRangeResult(op Operation, keys ...[]byte) Operation {
+	delRange := op.GetValue().(*DeleteRangeOperation)
+	delRange.Result = Result{
+		Type: ResultType_Keys,
+		Keys: keys,
 	}
 	return op
 }
@@ -120,7 +134,7 @@ func TestValidate(t *testing.T) {
 			name:     "no ops with unexpected delete",
 			steps:    nil,
 			kvs:      kvs(tombstone(`a`, 1)),
-			expected: []string{`extra writes: [w]"a":uncertain-><nil>`},
+			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
 		},
 		{
 			name:     "one put with expected write",
@@ -144,7 +158,7 @@ func TestValidate(t *testing.T) {
 			name:     "one delete with missing write",
 			steps:    []Step{step(withResult(del(`a`), nil))},
 			kvs:      nil,
-			expected: []string{`committed delete missing write: [w]"a":missing-><nil>`},
+			expected: []string{`committed delete missing write: [d]"a":missing-><nil>`},
 		},
 		{
 			name:     "one ambiguous put with successful write",
@@ -156,7 +170,7 @@ func TestValidate(t *testing.T) {
 			name:     "one ambiguous delete with successful write",
 			steps:    []Step{step(withResult(del(`a`), roachpb.NewAmbiguousResultError(``)))},
 			kvs:      kvs(tombstone(`a`, 1)),
-			expected: []string{`unable to validate delete operations in ambiguous transactions: [w]"a":missing-><nil>`},
+			expected: []string{`unable to validate delete operations in ambiguous transactions: [d]"a":missing-><nil>`},
 		},
 		{
 			name:     "one ambiguous put with failed write",
@@ -178,8 +192,8 @@ func TestValidate(t *testing.T) {
 			},
 			kvs: kvs(tombstone(`a`, 1)),
 			expected: []string{
-				`unable to validate delete operations in ambiguous transactions: [w]"a":missing-><nil>`,
-				`committed delete missing write: [w]"a":missing-><nil>`,
+				`unable to validate delete operations in ambiguous transactions: [d]"a":missing-><nil>`,
+				`committed delete missing write: [d]"a":missing-><nil>`,
 			},
 		},
 		{
@@ -206,7 +220,7 @@ func TestValidate(t *testing.T) {
 			kvs:   kvs(tombstone(`a`, 1)),
 			// NB: Error messages are different because we can't match an uncommitted
 			// delete op to a stored kv like above.
-			expected: []string{`extra writes: [w]"a":uncertain-><nil>`},
+			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
 		},
 		{
 			name: "one delete with expected write after write transaction with shadowed delete",
@@ -245,7 +259,7 @@ func TestValidate(t *testing.T) {
 			name:     "one batch delete with missing write",
 			steps:    []Step{step(withResult(batch(withResult(del(`a`), nil)), nil))},
 			kvs:      nil,
-			expected: []string{`committed batch missing write: [w]"a":missing-><nil>`},
+			expected: []string{`committed batch missing write: [d]"a":missing-><nil>`},
 		},
 		{
 			name: "one transactionally committed put with the correct writes",
@@ -281,13 +295,13 @@ func TestValidate(t *testing.T) {
 		{
 			name: "one transactionally committed delete with first write missing",
 			steps: []Step{
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 1,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(del(`a`), nil),
 					withResult(del(`b`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(tombstone(`b`, 1)),
-			expected: []string{`committed txn missing write: [w]"a":missing-><nil> [w]"b":0.000000001,0-><nil>`},
+			expected: []string{`committed txn missing write: [d]"a":missing-><nil> [d]"b":0.000000001,0-><nil>`},
 		},
 		{
 			name: "one transactionally committed put with second write missing",
@@ -303,13 +317,13 @@ func TestValidate(t *testing.T) {
 		{
 			name: "one transactionally committed delete with second write missing",
 			steps: []Step{
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 1,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(del(`a`), nil),
 					withResult(del(`b`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(tombstone(`a`, 1)),
-			expected: []string{`committed txn missing write: [w]"a":0.000000001,0-><nil> [w]"b":missing-><nil>`},
+			expected: []string{`committed txn missing write: [d]"a":0.000000001,0-><nil> [d]"b":missing-><nil>`},
 		},
 		{
 			name: "one transactionally committed put with write timestamp disagreement",
@@ -327,16 +341,16 @@ func TestValidate(t *testing.T) {
 		{
 			name: "one transactionally committed delete with write timestamp disagreement",
 			steps: []Step{
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 1,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(del(`a`), nil),
 					withResult(del(`b`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs: kvs(tombstone(`a`, 1), tombstone(`b`, 2)),
 			// NB: Error messages are different because we can't match an uncommitted
 			// delete op to a stored kv like above.
 			expected: []string{
-				`committed txn missing write: [w]"a":0.000000001,0-><nil> [w]"b":missing-><nil>`,
+				`committed txn missing write: [d]"a":0.000000001,0-><nil> [d]"b":missing-><nil>`,
 			},
 		},
 		{
@@ -377,7 +391,7 @@ func TestValidate(t *testing.T) {
 				), errors.New(`rollback`))),
 			},
 			kvs:      kvs(tombstone(`a`, 1)),
-			expected: []string{`extra writes: [w]"a":uncertain-><nil>`},
+			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
 		},
 		{
 			name: "one transactionally rolled back batch put with write (correctly) missing",
@@ -417,10 +431,10 @@ func TestValidate(t *testing.T) {
 		{
 			name: "two transactionally committed deletes of the same key",
 			steps: []Step{
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 1,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(del(`a`), nil),
 					withResult(del(`a`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(tombstone(`a`, 1)),
 			expected: nil,
@@ -428,10 +442,10 @@ func TestValidate(t *testing.T) {
 		{
 			name: "two transactionally committed writes (put, delete) of the same key",
 			steps: []Step{
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 1,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
 					withResult(del(`a`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(tombstone(`a`, 1)),
 			expected: nil,
@@ -465,29 +479,29 @@ func TestValidate(t *testing.T) {
 		{
 			name: "two transactionally committed deletes of the same key with extra write",
 			steps: []Step{
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 1,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(del(`a`), nil),
 					withResult(del(`a`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			// HACK: These should be the same timestamp. See the TODO in
 			// watcher.processEvents.
 			kvs:      kvs(tombstone(`a`, 1), tombstone(`a`, 2)),
-			expected: []string{`extra writes: [w]"a":uncertain-><nil>`},
+			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
 		},
 		{
 			name: "two transactionally committed writes (put, delete) of the same key with extra write",
 			steps: []Step{
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 2,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
 					withResult(del(`a`), nil),
-				), nil)),
+				), 2), nil)),
 			},
 			// HACK: These should be the same timestamp. See the TODO in
 			// watcher.processEvents.
 			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
 			expected: []string{
-				`committed txn overwritten key had write: [w]"a":0.000000001,0->v1 [w]"a":0.000000002,0-><nil>`,
+				`committed txn overwritten key had write: [w]"a":0.000000001,0->v1 [d]"a":0.000000002,0-><nil>`,
 			},
 		},
 		{
@@ -514,7 +528,7 @@ func TestValidate(t *testing.T) {
 			// delete in an ambiguous txn, this should pass without error.
 			// For now we fail validation on all ambiguous transactions with deletes.
 			expected: []string{
-				`unable to validate delete operations in ambiguous transactions: [w]"a":0.000000001,0->v1 [w]"b":missing-><nil>`,
+				`unable to validate delete operations in ambiguous transactions: [w]"a":0.000000001,0->v1 [d]"b":missing-><nil>`,
 			},
 		},
 		{
@@ -555,10 +569,10 @@ func TestValidate(t *testing.T) {
 		{
 			name: "ambiguous transaction with delete committed but has validation error",
 			steps: []Step{
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 2,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
 					withResult(del(`b`), nil),
-				), roachpb.NewAmbiguousResultError(``))),
+				), 2), roachpb.NewAmbiguousResultError(``))),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`b`, 2)),
 			// TODO(sarkesian): If able to determine the tombstone resulting from a
@@ -566,7 +580,7 @@ func TestValidate(t *testing.T) {
 			// `ambiguous txn non-atomic timestamps: [w]"a":0.000000001,0->v1 [w]"b":0.000000002,0->v2`
 			// For now we fail validation on all ambiguous transactions with deletes.
 			expected: []string{
-				`unable to validate delete operations in ambiguous transactions: [w]"a":0.000000001,0->v1 [w]"b":missing-><nil>`,
+				`unable to validate delete operations in ambiguous transactions: [w]"a":0.000000001,0->v1 [d]"b":missing-><nil>`,
 			},
 		},
 		{
@@ -840,10 +854,10 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`b`, `v2`), nil)),
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 3,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(del(`a`), nil),
 					withResult(del(`b`), nil),
-				), nil)),
+				), 3), nil)),
 				step(withResult(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), ``),
 					withReadResult(get(`b`), `v2`),
@@ -861,11 +875,11 @@ func TestValidate(t *testing.T) {
 			name: "transactional reads and deletes after write with non-empty time overlap",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 2,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), `v1`),
 					withResult(del(`a`), nil),
 					withReadResult(get(`a`), ``),
-				), nil)),
+				), 2), nil)),
 				step(withResult(put(`a`, `v2`), nil)),
 				step(withResult(del(`a`), nil)),
 			},
@@ -877,11 +891,11 @@ func TestValidate(t *testing.T) {
 			name: "transactional reads and deletes after write with empty time overlap",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 2,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), ``),
 					withResult(del(`a`), nil),
 					withReadResult(get(`a`), ``),
-				), nil)),
+				), 2), nil)),
 				step(withResult(put(`a`, `v2`), nil)),
 				step(withResult(del(`a`), nil)),
 			},
@@ -889,7 +903,7 @@ func TestValidate(t *testing.T) {
 			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), kv(`a`, 3, `v2`), tombstone(`a`, 4)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[<min>, 0.000000001,0),[0.000000004,0, <max>)-><nil> [w]"a":0.000000002,0-><nil> [r]"a":[<min>, 0.000000001,0),[0.000000004,0, <max>),[0.000000002,0, 0.000000003,0)-><nil>`,
+					`[r]"a":[<min>, 0.000000001,0),[0.000000004,0, <max>)-><nil> [d]"a":0.000000002,0-><nil> [r]"a":[<min>, 0.000000001,0),[0.000000004,0, <max>),[0.000000002,0, 0.000000003,0)-><nil>`,
 			},
 		},
 		{
@@ -972,11 +986,11 @@ func TestValidate(t *testing.T) {
 			name: "transaction with read before and after delete",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 2,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), `v1`),
 					withResult(del(`a`), nil),
 					withReadResult(get(`a`), ``),
-				), nil)),
+				), 2), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
 			expected: nil,
@@ -1000,16 +1014,16 @@ func TestValidate(t *testing.T) {
 			name: "transaction with incorrect read before delete",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 2,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), ``),
 					withResult(del(`a`), nil),
 					withReadResult(get(`a`), ``),
-				), nil)),
+				), 2), nil)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[<min>, 0.000000001,0)-><nil> [w]"a":0.000000002,0-><nil> [r]"a":[<min>, 0.000000001,0),[0.000000002,0, <max>)-><nil>`,
+					`[r]"a":[<min>, 0.000000001,0)-><nil> [d]"a":0.000000002,0-><nil> [r]"a":[<min>, 0.000000001,0),[0.000000002,0, <max>)-><nil>`,
 			},
 		},
 		{
@@ -1031,16 +1045,16 @@ func TestValidate(t *testing.T) {
 			name: "transaction with incorrect read after delete",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 2,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), `v1`),
 					withResult(del(`a`), nil),
 					withReadResult(get(`a`), `v1`),
-				), nil)),
+				), 2), nil)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[0.000000001,0, <max>)->v1 [w]"a":0.000000002,0-><nil> [r]"a":[0.000000001,0, 0.000000002,0)->v1`,
+					`[r]"a":[0.000000001,0, <max>)->v1 [d]"a":0.000000002,0-><nil> [r]"a":[0.000000001,0, 0.000000002,0)->v1`,
 			},
 		},
 		{
@@ -1060,13 +1074,13 @@ func TestValidate(t *testing.T) {
 		{
 			name: "two transactionally committed put/delete ops of the same key with reads",
 			steps: []Step{
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 1,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), ``),
 					withResult(put(`a`, `v1`), nil),
 					withReadResult(get(`a`), `v1`),
 					withResult(del(`a`), nil),
 					withReadResult(get(`a`), ``),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(tombstone(`a`, 1)),
 			expected: nil,
@@ -1074,26 +1088,26 @@ func TestValidate(t *testing.T) {
 		{
 			name: "two transactionally committed put/delete ops of the same key with incorrect read",
 			steps: []Step{
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 1,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), ``),
 					withResult(put(`a`, `v1`), nil),
 					withReadResult(get(`a`), `v1`),
 					withResult(del(`a`), nil),
 					withReadResult(get(`a`), `v1`),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs: kvs(tombstone(`a`, 1)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[<min>, <max>)-><nil> [w]"a":missing->v1 [r]"a":[0.000000001,0, <max>)->v1 [w]"a":0.000000001,0-><nil> [r]"a":[0,0, 0,0)->v1`,
+					`[r]"a":[<min>, <max>)-><nil> [w]"a":missing->v1 [r]"a":[0.000000001,0, <max>)->v1 [d]"a":0.000000001,0-><nil> [r]"a":[0,0, 0,0)->v1`,
 			},
 		},
 		{
 			name: "one transactional put with correct commit time",
 			steps: []Step{
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 1,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
 			expected: nil,
@@ -1101,9 +1115,9 @@ func TestValidate(t *testing.T) {
 		{
 			name: "one transactional put with incorrect commit time",
 			steps: []Step{
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 1,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs: kvs(kv(`a`, 2, `v1`)),
 			expected: []string{
@@ -1115,10 +1129,10 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				// NB: this Delete comes first in operation order, but the write is delayed.
 				step(withResult(del(`a`), nil)),
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 2,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`b`, `v1`), nil),
 					withResult(del(`a`), nil),
-				), nil)),
+				), 2), nil)),
 			},
 			kvs: kvs(tombstone(`a`, 2), tombstone(`a`, 3), kv(`b`, 2, `v1`)),
 			// This should fail validation if we match delete operations to tombstones by operation order,
@@ -1131,10 +1145,10 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				step(withResult(del(`a`), nil)),
 				step(withResult(del(`b`), nil)),
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 1,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(del(`a`), nil),
 					withResult(del(`b`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs: kvs(tombstone(`a`, 1), tombstone(`a`, 2), tombstone(`b`, 1), tombstone(`b`, 3)),
 			// This should fail validation if we match delete operations to tombstones by operation order,
@@ -1146,10 +1160,10 @@ func TestValidate(t *testing.T) {
 			name: "one transactional scan followed by delete within time range",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 2,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
 					withResult(del(`a`), nil),
-				), nil)),
+				), 2), nil)),
 				step(withResult(put(`b`, `v2`), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), kv(`b`, 3, `v2`)),
@@ -1159,16 +1173,16 @@ func TestValidate(t *testing.T) {
 			name: "one transactional scan followed by delete outside time range",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 4,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
 					withResult(del(`a`), nil),
-				), nil)),
+				), 4), nil)),
 				step(withResult(put(`b`, `v2`), nil)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 4), kv(`b`, 3, `v2`)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, 0.000000003,0)}->["a":v1] [w]"a":0.000000004,0-><nil>`,
+					`[s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, 0.000000003,0)}->["a":v1] [d]"a":0.000000004,0-><nil>`,
 			},
 		},
 		{
@@ -1262,10 +1276,10 @@ func TestValidate(t *testing.T) {
 			name: "one tranactional scan after write and delete returning extra key",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 2,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`b`, `v2`), nil),
 					withResult(del(`a`), nil),
-				), nil)),
+				), 2), nil)),
 				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v2`))),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), kv(`b`, 2, `v2`)),
@@ -1307,17 +1321,17 @@ func TestValidate(t *testing.T) {
 					withResult(put(`a`, `v1`), nil),
 					withResult(put(`b`, `v2`), nil),
 				), nil)),
-				step(withResult(closureTxnWithTimestamp(ClosureTxnType_Commit, 2,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`), scanKV(`b`, `v2`)),
 					withResult(del(`a`), nil),
-				), nil)),
+				), 2), nil)),
 				step(withResult(put(`a`, `v3`), nil)),
 				step(withResult(del(`a`), nil)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 1, `v2`), tombstone(`a`, 2), kv(`a`, 3, `v3`), tombstone(`a`, 4)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, 0.000000001,0),[0.000000004,0, <max>)}->["b":v2] [w]"a":0.000000002,0-><nil>`,
+					`[s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, 0.000000001,0),[0.000000004,0, <max>)}->["b":v2] [d]"a":0.000000002,0-><nil>`,
 			},
 		},
 		{
@@ -1646,6 +1660,221 @@ func TestValidate(t *testing.T) {
 			},
 			kvs:      kvs(kv(`a`, 1, `v2`), kv(`b`, 1, `v3`)),
 			expected: nil,
+		},
+		{
+			name: "one deleterange before write",
+			steps: []Step{
+				step(withDeleteRangeResult(delRange(`a`, `c`))),
+				step(withResult(put(`a`, `v1`), nil)),
+			},
+			kvs:      kvs(kv(`a`, 1, `v1`)),
+			expected: nil,
+		},
+		{
+			name: "one deleterange before write returning wrong value",
+			steps: []Step{
+				step(withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`))),
+				step(withResult(put(`a`, `v1`), nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`)),
+			expected: []string{
+				`committed deleteRange missing write: ` +
+					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, <max>)}->["a"] ` +
+					`[dr.d]"a":missing-><nil>`,
+			},
+		},
+		{
+			name: "one deleterange after write",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
+					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`)),
+				), 2), nil)),
+			},
+			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
+			expected: nil,
+		},
+		{
+			name: "one deleterange after write returning wrong value",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
+					withDeleteRangeResult(delRange(`a`, `c`)),
+				), 2), nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
+			expected: []string{
+				`extra writes: [d]"a":uncertain-><nil>`,
+			},
+		},
+		{
+			name: "one deleterange after write missing write",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
+					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`)),
+				), 1), nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`)),
+			expected: []string{
+				`committed txn missing write: ` +
+					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, <max>)}->["a"] ` +
+					`[dr.d]"a":missing-><nil>`,
+			},
+		},
+		{
+			name: "one deleterange after writes",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withResult(put(`c`, `v3`), nil)),
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
+					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`b`)),
+				), 4), nil)),
+				step(withScanResult(scan(`a`, `d`), scanKV(`c`, `v3`))),
+			},
+			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), kv(`c`, 3, `v3`), tombstone(`a`, 4), tombstone(`b`, 4)),
+			expected: nil,
+		},
+		{
+			name: "one deleterange after writes with write timestamp disagreement",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withResult(put(`c`, `v3`), nil)),
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
+					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`b`)),
+				), 4), nil)),
+				step(withScanResult(scan(`a`, `d`), scanKV(`c`, `v3`))),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), kv(`c`, 3, `v3`), tombstone(`a`, 4), tombstone(`b`, 5)),
+			expected: []string{
+				`committed txn missing write: ` +
+					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), 1:[0.000000002,0, 0.000000005,0), gap:[<min>, <max>)}->["a", "b"] ` +
+					`[dr.d]"a":0.000000004,0-><nil> [dr.d]"b":missing-><nil>`,
+			},
+		},
+		{
+			name: "one deleterange after writes with missing write",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withResult(put(`c`, `v3`), nil)),
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
+					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`b`)),
+				), 4), nil)),
+				step(withScanResult(scan(`a`, `d`), scanKV(`c`, `v3`))),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), kv(`c`, 3, `v3`), tombstone(`a`, 4)),
+			expected: []string{
+				`committed txn missing write: ` +
+					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), 1:[0.000000002,0, <max>), gap:[<min>, <max>)}->["a", "b"] ` +
+					`[dr.d]"a":0.000000004,0-><nil> [dr.d]"b":missing-><nil>`,
+				`committed scan non-atomic timestamps: [s]{a-d}:{0:[0.000000003,0, <max>), gap:[<min>, 0.000000001,0)}->["c":v3]`,
+			},
+		},
+		{
+			name: "one deleterange after writes and delete",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withResult(del(`a`), nil)),
+				step(withResult(put(`a`, `v3`), nil)),
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
+					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`b`)),
+				), 3), nil)),
+			},
+			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), tombstone(`a`, 3), tombstone(`b`, 3), tombstone(`a`, 4), kv(`a`, 5, `v3`)),
+			expected: nil,
+		},
+		{
+			name: "one transactional deleterange followed by put after writes",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
+					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`)),
+					withResult(put(`b`, `v2`), nil),
+				), 2), nil)),
+			},
+			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), kv(`b`, 2, `v2`)),
+			expected: nil,
+		},
+		{
+			name: "one transactional deleterange followed by put after writes with write timestamp disagreement",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
+					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`)),
+					withResult(put(`b`, `v2`), nil),
+				), 2), nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), kv(`b`, 3, `v2`)),
+			expected: []string{
+				`committed txn non-atomic timestamps: ` +
+					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, <max>)}->["a"] ` +
+					`[dr.d]"a":0.000000002,0-><nil> [w]"b":0.000000003,0->v2`,
+			},
+		},
+		{
+			name: "one transactional put shadowed by deleterange after writes",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
+					withResult(put(`b`, `v2`), nil),
+					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`b`)),
+				), 2), nil)),
+			},
+			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), tombstone(`b`, 2)),
+			expected: nil,
+		},
+		{
+			name: "one transactional put shadowed by deleterange after writes with write timestamp disagreement",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
+					withResult(put(`b`, `v2`), nil),
+					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`b`)),
+				), 2), nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), tombstone(`b`, 3)),
+			expected: []string{
+				`committed txn missing write: ` +
+					`[w]"b":missing->v2 ` +
+					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), 1:[0,0, <max>), gap:[<min>, <max>)}->["a", "b"] ` +
+					`[dr.d]"a":0.000000002,0-><nil> [dr.d]"b":missing-><nil>`,
+			},
+		},
+		{
+			name: "one deleterange after writes returning keys outside span boundary",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`d`, `v2`), nil)),
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
+					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`d`)),
+				), 3), nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 3), kv(`d`, 2, `v2`)),
+			expected: []string{
+				`key "d" outside delete range bounds: ` +
+					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), 1:[0.000000002,0, <max>), gap:[<min>, <max>)}->["a", "d"] ` +
+					`[dr.d]"a":0.000000003,0-><nil> [dr.d]"d":missing-><nil>`,
+			},
+		},
+		{
+			name: "one deleterange after writes incorrectly deleting keys outside span boundary",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`d`, `v2`), nil)),
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
+					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`d`)),
+				), 3), nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 3), kv(`d`, 2, `v2`), tombstone(`d`, 3)),
+			expected: []string{
+				`key "d" outside delete range bounds: ` +
+					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), 1:[0.000000002,0, <max>), gap:[<min>, <max>)}->["a", "d"] ` +
+					`[dr.d]"a":0.000000003,0-><nil> [dr.d]"d":0.000000003,0-><nil>`,
+			},
 		},
 	}
 

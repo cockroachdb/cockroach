@@ -63,7 +63,7 @@ func (t *testServerShim) RPCContext() *rpc.Context              { panic(unsuppor
 func (t *testServerShim) LeaseManager() interface{}             { panic(unsupportedShimMethod) }
 func (t *testServerShim) InternalExecutor() interface{}         { panic(unsupportedShimMethod) }
 func (t *testServerShim) ExecutorConfig() interface{}           { panic(unsupportedShimMethod) }
-func (t *testServerShim) Tracer() interface{}                   { panic(unsupportedShimMethod) }
+func (t *testServerShim) TracerI() interface{}                  { panic(unsupportedShimMethod) }
 func (t *testServerShim) GossipI() interface{}                  { panic(unsupportedShimMethod) }
 func (t *testServerShim) RangeFeedFactory() interface{}         { panic(unsupportedShimMethod) }
 func (t *testServerShim) Clock() *hlc.Clock                     { panic(unsupportedShimMethod) }

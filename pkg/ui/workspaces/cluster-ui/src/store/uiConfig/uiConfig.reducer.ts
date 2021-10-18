@@ -11,6 +11,8 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { merge } from "lodash";
 import { DOMAIN_NAME } from "../utils";
+import { createSelector } from "reselect";
+import { AppState } from "../reducers";
 
 export type UIConfigState = {
   isTenant: boolean;
@@ -51,5 +53,15 @@ const uiConfigSlice = createSlice({
     },
   },
 });
+
+export const selectUIConfig = createSelector(
+  (state: AppState) => state.adminUI.uiConfig,
+  uiConfig => uiConfig,
+);
+
+export const selectIsTenant = createSelector(
+  selectUIConfig,
+  uiConfig => uiConfig.isTenant,
+);
 
 export const { actions, reducer } = uiConfigSlice;

@@ -113,10 +113,10 @@ SELECT current_user() -- identifiers removed
 parse
 SELECT SESSION_USER
 ----
-SELECT current_user() -- normalized!
-SELECT (current_user()) -- fully parenthesized
-SELECT current_user() -- literals removed
-SELECT current_user() -- identifiers removed
+SELECT session_user() -- normalized!
+SELECT (session_user()) -- fully parenthesized
+SELECT session_user() -- literals removed
+SELECT session_user() -- identifiers removed
 
 parse
 SELECT USER

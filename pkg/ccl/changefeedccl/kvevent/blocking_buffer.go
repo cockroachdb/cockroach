@@ -10,7 +10,6 @@ package kvevent
 
 import (
 	"context"
-	"io"
 	"sync"
 	"time"
 
@@ -34,8 +33,10 @@ type blockingBuffer struct {
 
 	mu struct {
 		syncutil.Mutex
-		closed bool
-		queue  bufferEntryQueue
+		closed  bool             // True when buffer closed.
+		drainCh chan struct{}    // Set when Drain request issued.
+		blocked bool             // Set when event is blocked, waiting to acquire quota.
+		queue   bufferEntryQueue // Queue of added events.
 	}
 }
 
@@ -53,15 +54,18 @@ func NewMemBuffer(
 				metrics.BufferPushbackNanos.Inc(timeutil.Since(start).Nanoseconds())
 			}))
 
-	return &blockingBuffer{
+	b := &blockingBuffer{
 		signalCh: make(chan struct{}, 1),
 		metrics:  metrics,
 		sv:       sv,
-		qp: allocPool{
-			AbstractPool: quotapool.New("changefeed", &memQuota{acc: acc}, opts...),
-			metrics:      metrics,
-		},
 	}
+	quota := &memQuota{acc: acc, notifyOutOfQuota: b.notifyOutOfQuota}
+	b.qp = allocPool{
+		AbstractPool: quotapool.New("changefeed", quota, opts...),
+		metrics:      metrics,
+	}
+
+	return b
 }
 
 var _ Buffer = (*blockingBuffer)(nil)
@@ -70,9 +74,48 @@ func (b *blockingBuffer) pop() (e *bufferEntry, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.mu.closed {
-		return nil, io.EOF
+		return nil, ErrBufferClosed
 	}
-	return b.mu.queue.dequeue(), nil
+
+	e = b.mu.queue.dequeue()
+
+	if e == nil && b.mu.blocked {
+		// Here, we know that we are blocked, waiting for memory; yet we have nothing queued up
+		// (and thus, no resources that could be released by draining the queue).
+		// This means that all the previously added entries have been read by the consumer,
+		// but their resources have not been yet released.
+		// The delayed release could happen when multiple events, along with their allocs,
+		// are batched prior to being released (e.g. a sink producing files).
+		// If the batching event consumer does not have periodic flush configured,
+		// we may never be able to make forward progress.
+		// So, we issue the flush request to the consumer to ensure that we release some memory.
+		e = newBufferEntry(Event{flush: true})
+		// Ensure we notify only once.
+		b.mu.blocked = false
+	}
+
+	if b.mu.drainCh != nil && b.mu.queue.empty() {
+		close(b.mu.drainCh)
+		b.mu.drainCh = nil
+	}
+	return e, nil
+}
+
+// notifyOutOfQuota is invoked by memQuota to notify blocking buffer that
+// event is blocked, waiting for more resources.
+func (b *blockingBuffer) notifyOutOfQuota() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.mu.closed {
+		return
+	}
+	b.mu.blocked = true
+
+	select {
+	case b.signalCh <- struct{}{}:
+	default:
+	}
 }
 
 // Get implements kvevent.Reader interface.
@@ -114,36 +157,22 @@ func (b *blockingBuffer) ensureOpenedLocked(ctx context.Context) error {
 	return nil
 }
 
-// Add implements Writer interface.
-func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
-	if e.alloc.ap != nil {
-		return errors.AssertionFailedf("event unexpectedly has a alloc associated with it")
-	}
-
-	if err := b.ensureOpened(ctx); err != nil {
-		return err
-	}
-
-	// Acquire the quota first.
-	alloc := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.approxSize))
-	if l := changefeedbase.PerChangefeedMemLimit.Get(b.sv); alloc > l {
-		return errors.Newf("event size %d exceeds per changefeed limit %d", alloc, l)
-	}
-
-	be := newBufferEntry(e, &b.qp, alloc)
-	if err := b.qp.Acquire(ctx, be); err != nil {
-		bufferEntryPool.Put(be)
-		return err
-	}
-	b.metrics.BufferEntriesMemAcquired.Inc(alloc)
-
+func (b *blockingBuffer) enqueue(ctx context.Context, be *bufferEntry) (err error) {
 	// Enqueue message, and signal if anybody is waiting.
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if err := b.ensureOpenedLocked(ctx); err != nil {
+	defer func() {
+		if err != nil {
+			bufferEntryPool.Put(be)
+		}
+	}()
+
+	if err = b.ensureOpenedLocked(ctx); err != nil {
 		return err
 	}
+
 	b.metrics.BufferEntriesIn.Inc(1)
+	b.mu.blocked = false
 	b.mu.queue.enqueue(be)
 
 	select {
@@ -153,28 +182,68 @@ func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 	return nil
 }
 
-func (b *blockingBuffer) Close(ctx context.Context) error {
+// Add implements Writer interface.
+func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
+	if err := b.ensureOpened(ctx); err != nil {
+		return err
+	}
+
+	if e.alloc.ap != nil {
+		// Use allocation associated with the event itself.
+		return b.enqueue(ctx, newBufferEntry(e))
+	}
+
+	// Acquire the quota first.
+	alloc := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.approxSize))
+	if l := changefeedbase.PerChangefeedMemLimit.Get(b.sv); alloc > l {
+		return errors.Newf("event size %d exceeds per changefeed limit %d", alloc, l)
+	}
+	e.alloc = Alloc{
+		bytes:   alloc,
+		entries: 1,
+		ap:      &b.qp,
+	}
+	be := newBufferEntry(e)
+
+	if err := b.qp.Acquire(ctx, be); err != nil {
+		bufferEntryPool.Put(be)
+		return err
+	}
+	b.metrics.BufferEntriesMemAcquired.Inc(alloc)
+	return b.enqueue(ctx, be)
+}
+
+// tryDrain attempts to see if the buffer already empty.
+// If so, returns nil.  If not, returns a channel that will be closed once the buffer is empty.
+func (b *blockingBuffer) tryDrain() chan struct{} {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-
-	if b.mu.closed {
-		logcrash.ReportOrPanic(ctx, b.sv, "close called multiple times")
-		return errors.AssertionFailedf("close called multiple times")
+	if b.mu.queue.empty() {
+		return nil
 	}
 
-	b.mu.closed = true
-	close(b.signalCh)
+	b.mu.drainCh = make(chan struct{})
+	return b.mu.drainCh
+}
 
+// Drain implements Writer interface.
+func (b *blockingBuffer) Drain(ctx context.Context) error {
+	if drained := b.tryDrain(); drained != nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-drained:
+			return nil
+		}
+	}
+
+	return nil
+}
+
+// Close implements Writer interface.
+func (b *blockingBuffer) Close(ctx context.Context) error {
 	// Close quota pool -- any requests waiting to acquire will receive an error.
-	// It would be nice if we can logcrash if anybody was waiting.
 	b.qp.Close("blocking buffer closing")
-
-	// Release all resources we have queued up.
-	var alloc Alloc
-	for be := b.mu.queue.dequeue(); be != nil; be = b.mu.queue.dequeue() {
-		alloc.Merge(&be.e.alloc)
-	}
-	alloc.Release(ctx)
 
 	// Mark memory quota closed, and close the underlying bound account,
 	// releasing all of its allocated resources at once.
@@ -198,6 +267,24 @@ func (b *blockingBuffer) Close(ctx context.Context) error {
 		return false
 	})
 
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.mu.closed {
+		logcrash.ReportOrPanic(ctx, b.sv, "close called multiple times")
+		return errors.AssertionFailedf("close called multiple times")
+	}
+
+	b.mu.closed = true
+	close(b.signalCh)
+
+	// Return all queued up entries to the buffer pool.
+	// Note: we do not need to release their resources since we are going to close
+	// bound account anyway.
+	for be := b.mu.queue.dequeue(); be != nil; be = b.mu.queue.dequeue() {
+		bufferEntryPool.Put(be)
+	}
+
 	return nil
 }
 
@@ -216,6 +303,11 @@ type memQuota struct {
 	// We don't want to see them often. If we see one, avoid allocating
 	// again until the allocated budget drops to below half that level.
 	canAllocateBelow int64
+
+	// When memQuota blocks waiting for resources, invoke the callback
+	// to notify about this. The notification maybe invoked multiple
+	// times for a single request that's blocked.
+	notifyOutOfQuota func()
 
 	acc mon.BoundAccount
 }
@@ -236,13 +328,8 @@ var bufferEntryPool = sync.Pool{
 	},
 }
 
-func newBufferEntry(e Event, ap *allocPool, alloc int64) *bufferEntry {
+func newBufferEntry(e Event) *bufferEntry {
 	be := bufferEntryPool.Get().(*bufferEntry)
-	e.alloc = Alloc{
-		bytes:   alloc,
-		entries: 1,
-		ap:      ap,
-	}
 	be.e = e
 	be.next = nil
 	return be
@@ -255,6 +342,18 @@ func (be *bufferEntry) Acquire(
 	ctx context.Context, resource quotapool.Resource,
 ) (fulfilled bool, tryAgainAfter time.Duration) {
 	quota := resource.(*memQuota)
+	fulfilled, tryAgainAfter = be.acquireQuota(ctx, quota)
+
+	if !fulfilled {
+		quota.notifyOutOfQuota()
+	}
+
+	return fulfilled, tryAgainAfter
+}
+
+func (be *bufferEntry) acquireQuota(
+	ctx context.Context, quota *memQuota,
+) (fulfilled bool, tryAgainAfter time.Duration) {
 	if quota.canAllocateBelow > 0 {
 		if quota.allocated > quota.canAllocateBelow {
 			return false, 0
@@ -270,7 +369,7 @@ func (be *bufferEntry) Acquire(
 			// single request, but we may succeed if we try again later since some other
 			// process may release it into the pool.
 			// TODO(yevgeniy): Consider making retry configurable; possibly with backoff.
-			return true, time.Second
+			return false, time.Second
 		}
 
 		// Back off on allocating until we've cleared up half of our usage.
@@ -300,6 +399,10 @@ func (l *bufferEntryQueue) enqueue(be *bufferEntry) {
 		l.tail.next = be
 		l.tail = be
 	}
+}
+
+func (l *bufferEntryQueue) empty() bool {
+	return l.head == nil
 }
 
 func (l *bufferEntryQueue) dequeue() *bufferEntry {

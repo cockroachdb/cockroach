@@ -306,25 +306,25 @@ memo (optimized, ~5KB, required=[presentation: y:2,z:7] [ordering: +1,-2])
  ├── G1: (project G2 G3 x y)
  │    ├── [presentation: y:2,z:7] [ordering: +1,-2]
  │    │    ├── best: (project G2="[ordering: +1,-2]" G3 x y)
- │    │    └── cost: 1101.31
+ │    │    └── cost: 1101.34
  │    └── []
  │         ├── best: (project G2 G3 x y)
- │         └── cost: 1101.31
+ │         └── cost: 1101.34
  ├── G2: (select G4 G5)
  │    ├── [ordering: +1,-2]
  │    │    ├── best: (select G4="[ordering: +1,-2]" G5)
- │    │    └── cost: 1094.63
+ │    │    └── cost: 1094.65
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1094.63
+ │         └── cost: 1094.65
  ├── G3: (projections G6)
  ├── G4: (scan a,cols=(1,2))
  │    ├── [ordering: +1,-2]
  │    │    ├── best: (scan a,cols=(1,2))
- │    │    └── cost: 1084.61
+ │    │    └── cost: 1084.62
  │    └── []
  │         ├── best: (scan a,cols=(1,2))
- │         └── cost: 1084.61
+ │         └── cost: 1084.62
  ├── G5: (filters G7)
  ├── G6: (minus G8 G9)
  ├── G7: (gt G8 G10)
@@ -359,25 +359,25 @@ memo (optimized, ~5KB, required=[presentation: y:2,z:3] [ordering: +2])
  ├── G1: (project G2 G3 y z)
  │    ├── [presentation: y:2,z:3] [ordering: +2]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1177.30
+ │    │    └── cost: 1177.34
  │    └── []
  │         ├── best: (project G2 G3 y z)
- │         └── cost: 1108.07
+ │         └── cost: 1108.10
  ├── G2: (select G4 G5)
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1177.29
+ │    │    └── cost: 1177.32
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1104.73
+ │         └── cost: 1104.75
  ├── G3: (projections)
  ├── G4: (scan a,cols=(1-3))
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G4)
- │    │    └── cost: 1344.18
+ │    │    └── cost: 1344.20
  │    └── []
  │         ├── best: (scan a,cols=(1-3))
- │         └── cost: 1094.71
+ │         └── cost: 1094.72
  ├── G5: (filters G6)
  ├── G6: (gt G7 G8)
  ├── G7: (variable x)
@@ -670,14 +670,14 @@ memo (optimized, ~3KB, required=[presentation: info:7])
  ├── G1: (explain G2 [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
  │    └── [presentation: info:7]
  │         ├── best: (explain G2="[presentation: x:1,y:2,z:3,s:4] [ordering: +2]" [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
- │         └── cost: 1364.29
+ │         └── cost: 1364.32
  └── G2: (scan a,cols=(1-4))
       ├── [presentation: x:1,y:2,z:3,s:4] [ordering: +2]
       │    ├── best: (sort G2)
-      │    └── cost: 1364.28
+      │    └── cost: 1364.30
       └── []
            ├── best: (scan a,cols=(1-4))
-           └── cost: 1104.81
+           └── cost: 1104.82
 
 # --------------------------------------------------
 # With Ordinality
@@ -690,14 +690,14 @@ memo (optimized, ~4KB, required=[presentation: y:2] [ordering: +7])
  ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: +7]
  │    │    ├── best: (ordinality G2)
- │    │    └── cost: 1084.52
+ │    │    └── cost: 1084.54
  │    └── []
  │         ├── best: (ordinality G2)
- │         └── cost: 1084.52
+ │         └── cost: 1084.54
  └── G2: (scan a,cols=(2))
       └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1074.51
+           └── cost: 1074.52
 
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY -ordinality
@@ -706,19 +706,19 @@ memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +8])
  ├── G1: (project G2 G3 y)
  │    ├── [presentation: y:2] [ordering: +8]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1344.00
+ │    │    └── cost: 1344.04
  │    └── []
  │         ├── best: (project G2 G3 y)
- │         └── cost: 1104.53
+ │         └── cost: 1104.56
  ├── G2: (ordinality G4)
  │    └── []
  │         ├── best: (ordinality G4)
- │         └── cost: 1084.52
+ │         └── cost: 1084.54
  ├── G3: (projections G5)
  ├── G4: (scan a,cols=(2))
  │    └── []
  │         ├── best: (scan a,cols=(2))
- │         └── cost: 1074.51
+ │         └── cost: 1074.52
  ├── G5: (unary-minus G6)
  └── G6: (variable ordinality)
 
@@ -729,14 +729,14 @@ memo (optimized, ~6KB, required=[presentation: y:2] [ordering: +7])
  ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: +7]
  │    │    ├── best: (ordinality G2)
- │    │    └── cost: 1084.52
+ │    │    └── cost: 1084.54
  │    └── []
  │         ├── best: (ordinality G2)
- │         └── cost: 1084.52
+ │         └── cost: 1084.54
  └── G2: (scan a,cols=(2))
       └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1074.51
+           └── cost: 1074.52
 
 memo
 SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY y, ordinality
@@ -745,17 +745,17 @@ memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +2,+7])
  ├── G1: (ordinality G2 ordering=+2)
  │    ├── [presentation: y:2] [ordering: +2,+7]
  │    │    ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
- │    │    └── cost: 1313.99
+ │    │    └── cost: 1314.02
  │    └── []
  │         ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
- │         └── cost: 1313.99
+ │         └── cost: 1314.02
  └── G2: (scan a,cols=(2))
       ├── [ordering: +2]
       │    ├── best: (sort G2)
-      │    └── cost: 1303.98
+      │    └── cost: 1304.00
       └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1074.51
+           └── cost: 1074.52
 
 memo
 SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY ordinality, y
@@ -764,17 +764,17 @@ memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +7])
  ├── G1: (ordinality G2 ordering=+2)
  │    ├── [presentation: y:2] [ordering: +7]
  │    │    ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
- │    │    └── cost: 1313.99
+ │    │    └── cost: 1314.02
  │    └── []
  │         ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
- │         └── cost: 1313.99
+ │         └── cost: 1314.02
  └── G2: (scan a,cols=(2))
       ├── [ordering: +2]
       │    ├── best: (sort G2)
-      │    └── cost: 1303.98
+      │    └── cost: 1304.00
       └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1074.51
+           └── cost: 1074.52
 
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality DESC
@@ -783,14 +783,14 @@ memo (optimized, ~4KB, required=[presentation: y:2] [ordering: -7])
  ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: -7]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1323.99
+ │    │    └── cost: 1324.02
  │    └── []
  │         ├── best: (ordinality G2)
- │         └── cost: 1084.52
+ │         └── cost: 1084.54
  └── G2: (scan a,cols=(2))
       └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1074.51
+           └── cost: 1074.52
 
 # --------------------------------------------------
 # Merge Join
@@ -1685,6 +1685,68 @@ intersect-all
       ├── fd: ()-->(2)
       └── (1,)
 
+# Regression test for #69497. Ensure streaming set ops specify all columns in
+# the ordering.
+exec-ddl
+CREATE TABLE t69497_abc (a INT, b INT, c INT, INDEX (a, b, c DESC))
+----
+
+exec-ddl
+CREATE TABLE t69497_def (d INT PRIMARY KEY, e INT, f INT)
+----
+
+opt
+SELECT d, e, f FROM t69497_def EXCEPT SELECT a, b, c FROM t69497_abc ORDER by d, e
+----
+except-all
+ ├── columns: d:1 e:2 f:3
+ ├── left columns: d:1 e:2 f:3
+ ├── right columns: a:6 b:7 c:8
+ ├── internal-ordering: +1,+2,-3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── ordering: +1
+ ├── scan t69497_def
+ │    ├── columns: d:1!null e:2 f:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── ordering: +1
+ └── scan t69497_abc@secondary
+      ├── columns: a:6 b:7 c:8
+      └── ordering: +6,+7,-8
+
+# Example where the interesting orderings do not include all columns.
+exec-ddl
+CREATE TABLE t69497_abcd (a INT, b INT, c INT, d INT, INDEX (a, b, c DESC) STORING (d))
+----
+
+exec-ddl
+CREATE TABLE t69497_efgh (e INT PRIMARY KEY, f INT, g INT, h INT)
+----
+
+opt
+SELECT e, f, g, h FROM t69497_efgh EXCEPT SELECT a, b, c, d FROM t69497_abcd ORDER by e, f
+----
+except-all
+ ├── columns: e:1 f:2 g:3 h:4
+ ├── left columns: e:1 f:2 g:3 h:4
+ ├── right columns: a:7 b:8 c:9 d:10
+ ├── internal-ordering: +1,+2,-3,+4
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +1
+ ├── scan t69497_efgh
+ │    ├── columns: e:1!null f:2 g:3 h:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── ordering: +1
+ └── sort (segmented)
+      ├── columns: a:7 b:8 c:9 d:10
+      ├── ordering: +7,+8,-9,+10
+      └── scan t69497_abcd@secondary
+           ├── columns: a:7 b:8 c:9 d:10
+           └── ordering: +7,+8,-9
+
 # --------------------------------------------------
 # Insert operator.
 # --------------------------------------------------
@@ -1713,20 +1775,15 @@ sort
       │    ├── cardinality: [0 - 2]
       │    ├── volatile, mutations
       │    ├── key: (1-3)
-      │    └── limit
+      │    └── top-k
       │         ├── columns: x:6!null y:7!null z:8!null
       │         ├── internal-ordering: +7,+8
+      │         ├── k: 2
       │         ├── cardinality: [0 - 2]
       │         ├── key: (6-8)
-      │         ├── sort
-      │         │    ├── columns: x:6!null y:7!null z:8!null
-      │         │    ├── key: (6-8)
-      │         │    ├── ordering: +7,+8
-      │         │    ├── limit hint: 2.00
-      │         │    └── scan xyz
-      │         │         ├── columns: x:6!null y:7!null z:8!null
-      │         │         └── key: (6-8)
-      │         └── 2
+      │         └── scan xyz
+      │              ├── columns: x:6!null y:7!null z:8!null
+      │              └── key: (6-8)
       └── with-scan &1
            ├── columns: a:11!null b:12!null c:13!null
            ├── mapping:
@@ -2062,20 +2119,15 @@ sort
       │         │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │         │    │    ├── cardinality: [0 - 2]
       │         │    │    ├── key: (6-8)
-      │         │    │    └── limit
+      │         │    │    └── top-k
       │         │    │         ├── columns: x:6!null y:7!null z:8!null
       │         │    │         ├── internal-ordering: +7,+8
+      │         │    │         ├── k: 2
       │         │    │         ├── cardinality: [0 - 2]
       │         │    │         ├── key: (6-8)
-      │         │    │         ├── sort
-      │         │    │         │    ├── columns: x:6!null y:7!null z:8!null
-      │         │    │         │    ├── key: (6-8)
-      │         │    │         │    ├── ordering: +7,+8
-      │         │    │         │    ├── limit hint: 2.00
-      │         │    │         │    └── scan xyz
-      │         │    │         │         ├── columns: x:6!null y:7!null z:8!null
-      │         │    │         │         └── key: (6-8)
-      │         │    │         └── 2
+      │         │    │         └── scan xyz
+      │         │    │              ├── columns: x:6!null y:7!null z:8!null
+      │         │    │              └── key: (6-8)
       │         │    └── filters (true)
       │         └── projections
       │              ├── CASE WHEN abc.a:11 IS NULL THEN x:6 ELSE 10 END [as=upsert_a:17, outer=(6,11)]
@@ -2215,6 +2267,63 @@ sort
            └── filters
                 └── b:16 = c:17 [outer=(16,17), fd=(16)==(17), (17)==(16)]
 
+# --------------------------------------------------
+# With operator.
+# --------------------------------------------------
+
+# Verify that we can pass through the ordering requirement through the With
+# operator.
+opt
+WITH cte AS MATERIALIZED (SELECT x FROM xyz)
+SELECT * FROM abc ORDER BY a,b,c
+----
+with &1 (cte)
+ ├── columns: a:6!null b:7!null c:8!null
+ ├── materialized
+ ├── key: (6-8)
+ ├── ordering: +6,+7,+8
+ ├── scan xyz
+ │    └── columns: x:1!null
+ └── scan abc
+      ├── columns: a:6!null b:7!null c:8!null
+      ├── key: (6-8)
+      └── ordering: +6,+7,+8
+
+opt
+WITH cte AS MATERIALIZED (SELECT x FROM xyz)
+SELECT * FROM abc INNER MERGE JOIN cte ON a = x ORDER BY a
+----
+with &1 (cte)
+ ├── columns: a:6!null b:7!null c:8!null x:11!null
+ ├── materialized
+ ├── fd: (6)==(11), (11)==(6)
+ ├── ordering: +(6|11) [actual: +6]
+ ├── scan xyz
+ │    └── columns: xyz.x:1!null
+ └── inner-join (merge)
+      ├── columns: a:6!null b:7!null c:8!null x:11!null
+      ├── flags: force merge join
+      ├── left ordering: +6
+      ├── right ordering: +11
+      ├── fd: (6)==(11), (11)==(6)
+      ├── ordering: +(6|11) [actual: +6]
+      ├── scan abc
+      │    ├── columns: a:6!null b:7!null c:8!null
+      │    ├── key: (6-8)
+      │    └── ordering: +6
+      ├── sort
+      │    ├── columns: x:11!null
+      │    ├── ordering: +11
+      │    └── with-scan &1 (cte)
+      │         ├── columns: x:11!null
+      │         └── mapping:
+      │              └──  xyz.x:1 => x:11
+      └── filters (true)
+
+
+# --------------------------------------------------
+# Misc tests.
+# --------------------------------------------------
 
 # Regression test for #36219: lookup join with ON condition that imposes an
 # equality on two input columns (which isn't pushed down).

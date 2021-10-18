@@ -344,3 +344,10 @@ SELECT * FROM t65171 WHERE x = 1 OR x = 2 ORDER BY y LIMIT 2
 ----
 1  2
 1  2
+
+query III
+SELECT * FROM t ORDER BY v, w LIMIT 3;
+----
+6  -36  216
+4  -16  94
+2  -4   8

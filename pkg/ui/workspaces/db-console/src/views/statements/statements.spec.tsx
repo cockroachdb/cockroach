@@ -148,13 +148,13 @@ describe("selectStatements", () => {
     assert.equal(result.length, 1);
   });
 
-  it('filters out statements with app set when app param is "(internal)"', () => {
+  it('filters out statements with app set when app param is "$ internal"', () => {
     const state = makeStateWithStatements([
       makeFingerprint(1, "$ internal_stmnt_app"),
       makeFingerprint(2, "bar"),
       makeFingerprint(3, "baz"),
     ]);
-    const props = makeRoutePropsWithApp("(internal)");
+    const props = makeRoutePropsWithApp("$ internal");
     const result = selectStatements(state, props);
     assert.equal(result.length, 1);
   });
@@ -285,7 +285,6 @@ describe("selectStatement", () => {
     assert.deepEqual(result.app, [stmtA.key.key_data.app]);
     assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
     assert.deepEqual(result.vec, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.opt, { numerator: 0, denominator: 1 });
     assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
@@ -311,7 +310,6 @@ describe("selectStatement", () => {
     ]);
     assert.deepEqual(result.distSQL, { numerator: 0, denominator: 3 });
     assert.deepEqual(result.vec, { numerator: 0, denominator: 3 });
-    assert.deepEqual(result.opt, { numerator: 0, denominator: 3 });
     assert.deepEqual(result.failed, { numerator: 0, denominator: 3 });
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
@@ -334,20 +332,19 @@ describe("selectStatement", () => {
     assert.deepEqual(result.app, [stmtA.key.key_data.app]);
     assert.deepEqual(result.distSQL, { numerator: 0, denominator: 3 });
     assert.deepEqual(result.vec, { numerator: 0, denominator: 3 });
-    assert.deepEqual(result.opt, { numerator: 0, denominator: 3 });
     assert.deepEqual(result.failed, { numerator: 0, denominator: 3 });
     assert.deepEqual(result.node_id, [1, 2, 3]);
   });
 
-  it("coalesces statements with differing distSQL, vec, opt and failed values", () => {
-    const stmtA = makeFingerprint(1, "", 1, false, false, false, false);
-    const stmtB = makeFingerprint(1, "", 1, false, false, true, true);
-    const stmtC = makeFingerprint(1, "", 1, false, true, false, false);
-    const stmtD = makeFingerprint(1, "", 1, false, true, true, true);
-    const stmtE = makeFingerprint(1, "", 1, true, false, false, false);
-    const stmtF = makeFingerprint(1, "", 1, true, false, true, true);
-    const stmtG = makeFingerprint(1, "", 1, true, true, false, false);
-    const stmtH = makeFingerprint(1, "", 1, true, true, true, true);
+  it("coalesces statements with differing distSQL, vec and failed values", () => {
+    const stmtA = makeFingerprint(1, "", 1, false, false, false);
+    const stmtB = makeFingerprint(1, "", 1, false, true, true);
+    const stmtC = makeFingerprint(1, "", 1, true, false, false);
+    const stmtD = makeFingerprint(1, "", 1, true, true, true);
+    const stmtE = makeFingerprint(1, "", 1, false, false, false);
+    const stmtF = makeFingerprint(1, "", 1, false, true, true);
+    const stmtG = makeFingerprint(1, "", 1, true, false, false);
+    const stmtH = makeFingerprint(1, "", 1, true, true, true);
     const sumCount = stmtA.stats.count
       .add(stmtB.stats.count)
       .add(stmtC.stats.count)
@@ -376,7 +373,6 @@ describe("selectStatement", () => {
     assert.deepEqual(result.app, [stmtA.key.key_data.app]);
     assert.deepEqual(result.distSQL, { numerator: 4, denominator: 8 });
     assert.deepEqual(result.vec, { numerator: 4, denominator: 8 });
-    assert.deepEqual(result.opt, { numerator: 4, denominator: 8 });
     assert.deepEqual(result.failed, { numerator: 4, denominator: 8 });
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
@@ -400,7 +396,6 @@ describe("selectStatement", () => {
     assert.deepEqual(result.app, [stmtA.key.key_data.app]);
     assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
     assert.deepEqual(result.vec, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.opt, { numerator: 0, denominator: 1 });
     assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
@@ -424,12 +419,11 @@ describe("selectStatement", () => {
     assert.deepEqual(result.app, [stmtA.key.key_data.app]);
     assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
     assert.deepEqual(result.vec, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.opt, { numerator: 0, denominator: 1 });
     assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
 
-  it('filters out statements with app set when app param is "(internal)"', () => {
+  it('filters out statements with app set when app param is "$ internal"', () => {
     const stmtA = makeFingerprint(1, "$ internal_stmnt_app");
     const state = makeStateWithStatements([
       stmtA,
@@ -438,17 +432,17 @@ describe("selectStatement", () => {
     ]);
     const props = makeRoutePropsWithStatementAndApp(
       stmtA.key.key_data.query,
-      "(internal)",
+      "$ internal",
     );
 
     const result = selectStatement(state, props);
 
     assert.equal(result.statement, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
-    assert.deepEqual(result.app, [stmtA.key.key_data.app]);
+    // Statements with internal app prefix should have "$ internal" as app name
+    assert.deepEqual(result.app, ["$ internal"]);
     assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
     assert.deepEqual(result.vec, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.opt, { numerator: 0, denominator: 1 });
     assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
@@ -461,7 +455,6 @@ function makeFingerprint(
   distSQL: boolean = false,
   failed: boolean = false,
   vec: boolean = false,
-  opt: boolean = false,
 ) {
   return {
     key: {
@@ -470,7 +463,6 @@ function makeFingerprint(
         app,
         distSQL,
         vec,
-        opt,
         failed,
       },
       node_id: nodeId,
@@ -496,6 +488,7 @@ function makeStats(): Required<StatementStatistics> {
     sensitive_info: makeEmptySensitiveInfo(),
     rows_read: makeStat(),
     bytes_read: makeStat(),
+    rows_written: makeStat(),
     exec_stats: makeExecStats(),
     sql_type: "DDL",
     last_exec_timestamp: {
@@ -596,6 +589,21 @@ function makeRoutePropsWithParams(params: { [key: string]: string }) {
   };
 }
 
+function makeRoutePropsWithSearchParams(params: { [key: string]: string }) {
+  const history = H.createHashHistory();
+  history.location.search = new URLSearchParams(params).toString();
+  return {
+    location: history.location,
+    history,
+    match: {
+      url: "",
+      path: history.location.pathname,
+      isExact: false,
+      params: {},
+    },
+  };
+}
+
 function makeEmptyRouteProps(): RouteComponentProps<any> {
   const history = H.createHashHistory();
   return {
@@ -611,7 +619,7 @@ function makeEmptyRouteProps(): RouteComponentProps<any> {
 }
 
 function makeRoutePropsWithApp(app: string) {
-  return makeRoutePropsWithParams({
+  return makeRoutePropsWithSearchParams({
     [appAttr]: app,
   });
 }

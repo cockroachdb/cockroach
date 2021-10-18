@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -63,6 +64,8 @@ var (
 	// ErrFloatOutOfRange is reported when float arithmetic overflows.
 	ErrFloatOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
 	errDecOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "decimal out of range")
+	// errCharOutOfRange is reported when int cast to ASCII byte overflows.
+	errCharOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "\"char\" out of range")
 
 	// ErrDivByZero is reported on a division by zero.
 	ErrDivByZero       = pgerror.New(pgcode.DivisionByZero, "division by zero")
@@ -284,12 +287,13 @@ type TwoArgFn func(*EvalContext, Datum, Datum) (Datum, error)
 
 // BinOp is a binary operator.
 type BinOp struct {
-	LeftType     *types.T
-	RightType    *types.T
-	ReturnType   *types.T
-	NullableArgs bool
-	Fn           TwoArgFn
-	Volatility   Volatility
+	LeftType          *types.T
+	RightType         *types.T
+	ReturnType        *types.T
+	NullableArgs      bool
+	Fn                TwoArgFn
+	Volatility        Volatility
+	PreferredOverload bool
 
 	types   TypeList
 	retType ReturnTyper
@@ -311,8 +315,8 @@ func (op *BinOp) returnType() ReturnTyper {
 	return op.retType
 }
 
-func (*BinOp) preferred() bool {
-	return false
+func (op *BinOp) preferred() bool {
+	return op.PreferredOverload
 }
 
 // AppendToMaybeNullArray appends an element to an array. If the first
@@ -1891,7 +1895,8 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 				}
 				return &DJSON{j}, nil
 			},
-			Volatility: VolatilityImmutable,
+			PreferredOverload: true,
+			Volatility:        VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Jsonb,
@@ -1952,7 +1957,8 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 				}
 				return NewDString(*text), nil
 			},
-			Volatility: VolatilityImmutable,
+			PreferredOverload: true,
+			Volatility:        VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Jsonb,
@@ -2026,7 +2032,7 @@ type CmpOp struct {
 
 	Volatility Volatility
 
-	isPreferred bool
+	PreferredOverload bool
 }
 
 func (op *CmpOp) params() TypeList {
@@ -2044,7 +2050,7 @@ func (op *CmpOp) returnType() ReturnTyper {
 }
 
 func (op *CmpOp) preferred() bool {
-	return op.isPreferred
+	return op.PreferredOverload
 }
 
 func cmpOpFixups(
@@ -2061,7 +2067,7 @@ func cmpOpFixups(
 	}
 
 	// Array equality comparisons.
-	for _, t := range types.Scalar {
+	for _, t := range append(types.Scalar, types.AnyEnum) {
 		cmpOps[EQ] = append(cmpOps[EQ], &CmpOp{
 			LeftType:   types.MakeArray(t),
 			RightType:  types.MakeArray(t),
@@ -2319,9 +2325,9 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 			RightType:    types.Unknown,
 			Fn:           cmpOpScalarIsFn,
 			NullableArgs: true,
-			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL>
-			isPreferred: true,
-			Volatility:  VolatilityLeakProof,
+			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL.
+			PreferredOverload: true,
+			Volatility:        VolatilityLeakProof,
 		},
 		&CmpOp{
 			LeftType:     types.AnyArray,
@@ -3072,22 +3078,6 @@ type DatabaseRegionConfig interface {
 // EvalDatabase consists of functions that reference the session database
 // and is to be used from EvalContext.
 type EvalDatabase interface {
-	// CurrentDatabaseRegionConfig returns the RegionConfig of the current
-	// session database.
-	CurrentDatabaseRegionConfig(ctx context.Context) (DatabaseRegionConfig, error)
-
-	// ValidateAllMultiRegionZoneConfigsInCurrentDatabase validates whether the current
-	// database's multi-region zone configs are correctly setup. This includes
-	// all tables within the database.
-	ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context.Context) error
-
-	// ResetMultiRegionZoneConfigsForTable resets the given table's zone
-	// configuration to its multi-region default.
-	ResetMultiRegionZoneConfigsForTable(ctx context.Context, id int64) error
-
-	// ResetMultiRegionZoneConfigsForDatabase resets the given database's zone
-	// configuration to its multi-region default.
-	ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id int64) error
 
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] [ schema_name . ] table_name`.
@@ -3124,7 +3114,6 @@ type EvalDatabase interface {
 		specifier HasPrivilegeSpecifier,
 		user security.SQLUsername,
 		kind privilege.Kind,
-		withGrantOpt bool,
 	) (bool, error)
 }
 
@@ -3216,6 +3205,13 @@ type EvalPlanner interface {
 		force bool,
 	) error
 
+	// UserHasAdminRole returns tuple of bool and error:
+	// (true, nil) means that the user has an admin role (i.e. root or node)
+	// (false, nil) means that the user has NO admin role
+	// (false, err) means that there was an error running the query on
+	// the `system.users` table
+	UserHasAdminRole(ctx context.Context, user security.SQLUsername) (bool, error)
+
 	// MemberOfWithAdminOption is used to collect a list of roles (direct and
 	// indirect) that the member is part of. See the comment on the planner
 	// implementation in authorization.go
@@ -3241,11 +3237,12 @@ type CompactEngineSpanFunc func(
 
 // EvalSessionAccessor is a limited interface to access session variables.
 type EvalSessionAccessor interface {
-	// SetConfig sets a session variable to a new value.
+	// SetSessionVar sets a session variable to a new value. If isLocal is true,
+	// the setting change is scoped to the current transaction (as in SET LOCAL).
 	//
 	// This interface only supports strings as this is sufficient for
 	// pg_catalog.set_config().
-	SetSessionVar(ctx context.Context, settingName, newValue string) error
+	SetSessionVar(ctx context.Context, settingName, newValue string, isLocal bool) error
 
 	// GetSessionVar retrieves the current value of a session variable.
 	GetSessionVar(ctx context.Context, settingName string, missingOk bool) (bool, string, error)
@@ -3253,7 +3250,7 @@ type EvalSessionAccessor interface {
 	// HasAdminRole returns true iff the current session user has the admin role.
 	HasAdminRole(ctx context.Context) (bool, error)
 
-	// HasAdminRole returns nil iff the current session user has the specified
+	// HasRoleOption returns nil iff the current session user has the specified
 	// role option.
 	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
 }
@@ -3314,30 +3311,37 @@ type PrivilegedAccessor interface {
 	LookupZoneConfigByNamespaceID(ctx context.Context, id int64) (DBytes, bool, error)
 }
 
+// RegionOperator gives access to the current region, validation for all
+// regions, and the ability to reset the zone configurations for tables
+// or databases.
+type RegionOperator interface {
+
+	// CurrentDatabaseRegionConfig returns the RegionConfig of the current
+	// session database.
+	CurrentDatabaseRegionConfig(ctx context.Context) (DatabaseRegionConfig, error)
+
+	// ValidateAllMultiRegionZoneConfigsInCurrentDatabase validates whether the current
+	// database's multi-region zone configs are correctly setup. This includes
+	// all tables within the database.
+	ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context.Context) error
+
+	// ResetMultiRegionZoneConfigsForTable resets the given table's zone
+	// configuration to its multi-region default.
+	ResetMultiRegionZoneConfigsForTable(ctx context.Context, id int64) error
+
+	// ResetMultiRegionZoneConfigsForDatabase resets the given database's zone
+	// configuration to its multi-region default.
+	ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id int64) error
+}
+
 // SequenceOperators is used for various sql related functions that can
 // be used from EvalContext.
 type SequenceOperators interface {
-	EvalDatabase
 
 	// GetSerialSequenceNameFromColumn returns the sequence name for a given table and column
 	// provided it is part of a SERIAL sequence.
 	// Returns an empty string if the sequence name does not exist.
 	GetSerialSequenceNameFromColumn(ctx context.Context, tableName *TableName, columnName Name) (*TableName, error)
-
-	// IncrementSequence increments the given sequence and returns the result.
-	// It returns an error if the given name is not a sequence.
-	// The caller must ensure that seqName is fully qualified already.
-	IncrementSequence(ctx context.Context, seqName *TableName) (int64, error)
-
-	// GetLatestValueInSessionForSequence returns the value most recently obtained by
-	// nextval() for the given sequence in this session.
-	GetLatestValueInSessionForSequence(ctx context.Context, seqName *TableName) (int64, error)
-
-	// SetSequenceValue sets the sequence's value.
-	// If isCalled is false, the sequence is set such that the next time nextval() is called,
-	// `newVal` is returned. Otherwise, the next call to nextval will return
-	// `newVal + seqOpts.Increment`.
-	SetSequenceValue(ctx context.Context, seqName *TableName, newVal int64, isCalled bool) error
 
 	// IncrementSequenceByID increments the given sequence and returns the result.
 	// It returns an error if the given ID is not a sequence.
@@ -3436,6 +3440,7 @@ func (*EvalContextTestingKnobs) ModuleTestingKnobs() {}
 // to avoid circular dependency.
 type SQLStatsController interface {
 	ResetClusterSQLStats(ctx context.Context) error
+	CreateSQLStatsCompactionSchedule(ctx context.Context) error
 }
 
 // EvalContext defines the context in which to evaluate an expression, allowing
@@ -3477,6 +3482,8 @@ type EvalContext struct {
 	//   [region=us,dc=east]
 	//
 	Locality roachpb.Locality
+
+	Tracer *tracing.Tracer
 
 	// The statement timestamp. May be different for every statement.
 	// Used for statement_timestamp().
@@ -3535,6 +3542,9 @@ type EvalContext struct {
 	Sequence SequenceOperators
 
 	Tenant TenantOperator
+
+	// Regions stores information about regions.
+	Regions RegionOperator
 
 	JoinTokenCreator JoinTokenCreator
 
@@ -4137,6 +4147,9 @@ func (expr *FuncExpr) EvalArgsAndGetGenerator(ctx *EvalContext) (ValueGenerator,
 	if expr.fn == nil || expr.fnProps.Class != GeneratorClass {
 		return nil, errors.AssertionFailedf("cannot call EvalArgsAndGetGenerator() on non-aggregate function: %q", ErrString(expr))
 	}
+	if expr.fn.GeneratorWithExprs != nil {
+		return expr.fn.GeneratorWithExprs(ctx, expr.Exprs)
+	}
 	nullArg, args, err := expr.evalArgs(ctx)
 	if err != nil || nullArg {
 		return nil, err
@@ -4181,6 +4194,10 @@ func (expr *FuncExpr) MaybeWrapError(err error) error {
 
 // Eval implements the TypedExpr interface.
 func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
+	if expr.fn.FnWithExprs != nil {
+		return expr.fn.FnWithExprs(ctx, expr.Exprs)
+	}
+
 	nullResult, args, err := expr.evalArgs(ctx)
 	if err != nil {
 		return nil, err
@@ -4666,7 +4683,8 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 		// checking, since the placeholder's type hint didn't match the desired
 		// type for the placeholder. In this case, we cast the expression to
 		// the desired type.
-		// TODO(jordan): introduce a restriction on what casts are allowed here.
+		// TODO(jordan,mgartner): Introduce a restriction on what casts are
+		// allowed here. Most likely, only implicit casts should be allowed.
 		cast := NewTypedCastExpr(e, typ)
 		return cast.Eval(ctx)
 	}

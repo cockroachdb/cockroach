@@ -10,12 +10,10 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/security"
-
 // ReassignOwnedBy represents a REASSIGN OWNED BY <name> TO <name> statement.
 type ReassignOwnedBy struct {
-	OldRoles NameList
-	NewRole  security.SQLUsername
+	OldRoles RoleSpecList
+	NewRole  RoleSpec
 }
 
 var _ Statement = &ReassignOwnedBy{}
@@ -27,8 +25,8 @@ func (node *ReassignOwnedBy) Format(ctx *FmtCtx) {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatUsernameN(node.OldRoles[i])
+		node.OldRoles[i].Format(ctx)
 	}
 	ctx.WriteString(" TO ")
-	ctx.FormatUsername(node.NewRole)
+	ctx.FormatNode(&node.NewRole)
 }

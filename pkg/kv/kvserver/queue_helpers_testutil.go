@@ -30,8 +30,8 @@ func forceScanAndProcess(s *Store, q *baseQueue) error {
 	// Check that the system config is available. It is needed by many queues. If
 	// it's not available, some queues silently fail to process any replicas,
 	// which is undesirable for this method.
-	if cfg := s.Gossip().GetSystemConfig(); cfg == nil {
-		return errors.Errorf("system config not available in gossip")
+	if _, err := s.GetConfReader(); err != nil {
+		return errors.Wrap(err, "unable to retrieve conf reader")
 	}
 
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {

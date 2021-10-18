@@ -40,6 +40,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/migration"
@@ -55,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
@@ -459,6 +461,9 @@ type testClusterConfig struct {
 	// If true, a sql tenant server will be started and pointed at a node in the
 	// cluster. Connections on behalf of the logic test will go to that tenant.
 	useTenant bool
+	// If set, the span configs infrastructure will be enabled. This is
+	// equivalent to setting COCKROACH_EXPERIMENTAL_SPAN_CONFIGS.
+	enableSpanConfigs bool
 	// isCCLConfig should be true for any config that can only be run with a CCL
 	// binary.
 	isCCLConfig bool
@@ -683,6 +688,28 @@ var logicTestConfigs = []testClusterConfig{
 		},
 	},
 	{
+		name:              "multiregion-3node-3superlongregions",
+		numNodes:          3,
+		overrideAutoStats: "false",
+		localities: map[int]roachpb.Locality{
+			1: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "veryveryveryveryveryveryverylongregion1"},
+				},
+			},
+			2: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "veryveryveryveryveryveryverylongregion2"},
+				},
+			},
+			3: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "veryveryveryveryveryveryverylongregion3"},
+				},
+			},
+		},
+	},
+	{
 		name:              "multiregion-9node-3region-3azs",
 		numNodes:          9,
 		overrideAutoStats: "false",
@@ -701,6 +728,11 @@ var logicTestConfigs = []testClusterConfig{
 		overrideAutoStats: "false",
 		localities:        multiregion9node3region3azsLocalities,
 		overrideVectorize: "off",
+	},
+	{
+		name:              "experimental-span-configs",
+		numNodes:          1,
+		enableSpanConfigs: true,
 	},
 }
 
@@ -1120,7 +1152,7 @@ type logicTest struct {
 	nodeIdx int
 	// If this test uses a SQL tenant server, this is its address. In this case,
 	// all clients are created against this tenant.
-	tenantAddr string
+	tenantAddrs []string
 	// map of built clients. Needs to be persisted so that we can
 	// re-use them and close them all on exit.
 	clients map[string]*gosql.DB
@@ -1269,9 +1301,9 @@ func (t *logicTest) setUser(user string) func() {
 		return func() {}
 	}
 
-	addr := t.tenantAddr
-	if addr == "" {
-		addr = t.cluster.Server(t.nodeIdx).ServingSQLAddr()
+	addr := t.cluster.Server(t.nodeIdx).ServingSQLAddr()
+	if len(t.tenantAddrs) > 0 {
+		addr = t.tenantAddrs[t.nodeIdx]
 	}
 	pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(user))
 	pgURL.Path = "test"
@@ -1351,6 +1383,9 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					DeterministicExplain: true,
 				},
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					AOSTClause: "AS OF SYSTEM TIME '-1us'",
+				},
 			},
 			ClusterName:   "testclustername",
 			ExternalIODir: t.sharedIODir,
@@ -1360,10 +1395,13 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 		ReplicationMode: base.ReplicationManual,
 	}
 
+	cfg := t.cfg
+	if cfg.enableSpanConfigs {
+		params.ServerArgs.EnableSpanConfigs = true
+	}
 	distSQLKnobs := &execinfra.TestingKnobs{
 		MetadataTestLevel: execinfra.Off,
 	}
-	cfg := t.cfg
 	if cfg.sqlExecUseDisk {
 		distSQLKnobs.ForceDiskSpill = true
 	}
@@ -1449,31 +1487,38 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
 	if cfg.useTenant {
-		var err error
-		tenantArgs := base.TestTenantArgs{
-			TenantID:                    serverutils.TestTenantID(),
-			AllowSettingClusterSettings: true,
-			TestingKnobs: base.TestingKnobs{
-				SQLExecutor: &sql.ExecutorTestingKnobs{
-					DeterministicExplain: true,
+		t.tenantAddrs = make([]string, cfg.numNodes)
+		for i := 0; i < cfg.numNodes; i++ {
+			tenantArgs := base.TestTenantArgs{
+				TenantID:                    serverutils.TestTenantID(),
+				AllowSettingClusterSettings: true,
+				TestingKnobs: base.TestingKnobs{
+					SQLExecutor: &sql.ExecutorTestingKnobs{
+						DeterministicExplain: true,
+					},
+					SQLStatsKnobs: &sqlstats.TestingKnobs{
+						AOSTClause: "AS OF SYSTEM TIME '-1us'",
+					},
 				},
-			},
-			MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
-			TempStorageConfig: &params.ServerArgs.TempStorageConfig,
+				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
+				TempStorageConfig: &params.ServerArgs.TempStorageConfig,
+				Locality:          paramsPerNode[i].Locality,
+				Existing:          i > 0,
+			}
+
+			// Prevent a logging assertion that the server ID is initialized multiple times.
+			log.TestingClearServerIdentifiers()
+
+			tenant, err := t.cluster.Server(i).StartTenant(context.Background(), tenantArgs)
+			if err != nil {
+				t.rootT.Fatalf("%+v", err)
+			}
+			t.tenantAddrs[i] = tenant.SQLAddr()
 		}
 
-		// Prevent a logging assertion that the server ID is initialized multiple times.
-		log.TestingClearServerIdentifiers()
-
-		tenant, err := t.cluster.Server(t.nodeIdx).StartTenant(context.Background(), tenantArgs)
-		if err != nil {
-			t.rootT.Fatalf("%+v", err)
-		}
-		t.tenantAddr = tenant.SQLAddr()
-
-		// Open a connection to this tenant to set any cluster settings specified
+		// Open a connection to a tenant to set any cluster settings specified
 		// by the test config.
-		pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddr, "Tenant", url.User(security.RootUser))
+		pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(security.RootUser))
 		defer cleanup()
 		if params.ServerArgs.Insecure {
 			pgURL.RawQuery = "sslmode=disable"
@@ -2531,6 +2576,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 }
 
 func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
+	t.noticeBuffer = nil
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}
@@ -2592,6 +2638,9 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	db := t.db
 	if query.nodeIdx != 0 {
 		addr := t.cluster.Server(query.nodeIdx).ServingSQLAddr()
+		if len(t.tenantAddrs) > 0 {
+			addr = t.tenantAddrs[query.nodeIdx]
+		}
 		pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(t.user))
 		defer cleanupFunc()
 		pgURL.Path = "test"
@@ -3087,22 +3136,58 @@ SELECT encode(descriptor, 'hex') AS descriptor
 		}
 	}
 
-	// TODO(lucy): we should really drop all created databases in this test, not
-	// just the one we started with.
-	stmt := "SET sql_safe_updates=false; DROP DATABASE IF EXISTS test CASCADE"
-	if _, err := t.db.Exec(stmt); err != nil {
-		return errors.Wrap(err, "dropping test database failed")
+	var dbNames pq.StringArray
+	if err := t.db.QueryRow(
+		`SELECT array_agg(database_name) FROM [SHOW DATABASES] WHERE database_name NOT IN ('system', 'postgres')`,
+	).Scan(&dbNames); err != nil {
+		return errors.Wrap(err, "error getting database names")
 	}
 
+	for _, dbName := range dbNames {
+		if err := func() (retErr error) {
+			ctx := context.Background()
+			// Open a new connection, since we want to preserve the original DB
+			// that we were originally on in t.db.
+			conn, err := t.db.Conn(ctx)
+			if err != nil {
+				return errors.Wrap(err, "error grabbing new connection")
+			}
+			defer func() {
+				retErr = errors.CombineErrors(retErr, conn.Close())
+			}()
+			if _, err := conn.ExecContext(ctx, "SET database = $1", dbName); err != nil {
+				return errors.Wrapf(err, "error validating zone config for database %s", dbName)
+			}
+			// Ensure each database's zone configs are valid.
+			if _, err := conn.ExecContext(ctx, "SELECT crdb_internal.validate_multi_region_zone_configs()"); err != nil {
+				return errors.Wrapf(err, "error validating zone config for database %s", dbName)
+			}
+			// Drop the database.
+			dbTreeName := tree.Name(dbName)
+			dropDatabaseStmt := fmt.Sprintf(
+				"DROP DATABASE %s CASCADE",
+				dbTreeName.String(),
+			)
+			if _, err := t.db.Exec(dropDatabaseStmt); err != nil {
+				return errors.Wrapf(err, "dropping database %s failed", dbName)
+			}
+			return nil
+		}(); err != nil {
+			return err
+		}
+	}
+
+	// Ensure after dropping all databases state is still valid.
 	invalidObjects, err = validate()
 	if err != nil {
-		return errors.Wrap(err, "running object validation after failed")
+		return errors.Wrap(err, "running object validation after database drops failed")
 	}
 	if invalidObjects != "" {
 		return errors.Errorf(
-			"descriptor validation failed after dropping test database:\n%s", invalidObjects,
+			"descriptor validation failed after dropping databases:\n%s", invalidObjects,
 		)
 	}
+
 	return nil
 }
 
@@ -3408,16 +3493,25 @@ func runSQLLiteLogicTest(t *testing.T, configOverride string, globs ...string) {
 		skip.IgnoreLint(t, "-bigtest flag must be specified to run this test")
 	}
 
-	logicTestPath := gobuild.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
-	if _, err := os.Stat(logicTestPath); oserror.IsNotExist(err) {
-		fullPath, err := filepath.Abs(logicTestPath)
+	var logicTestPath string
+	if bazel.BuiltWithBazel() {
+		runfilesPath, err := bazel.RunfilesPath()
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Fatalf("unable to find sqllogictest repo: %s\n"+
-			"git clone https://github.com/cockroachdb/sqllogictest %s",
-			logicTestPath, fullPath)
-		return
+		logicTestPath = filepath.Join(runfilesPath, "external", "com_github_cockroachdb_sqllogictest")
+	} else {
+		logicTestPath = gobuild.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
+		if _, err := os.Stat(logicTestPath); oserror.IsNotExist(err) {
+			fullPath, err := filepath.Abs(logicTestPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Fatalf("unable to find sqllogictest repo: %s\n"+
+				"git clone https://github.com/cockroachdb/sqllogictest %s",
+				logicTestPath, fullPath)
+			return
+		}
 	}
 
 	// Prefix the globs with the logicTestPath.

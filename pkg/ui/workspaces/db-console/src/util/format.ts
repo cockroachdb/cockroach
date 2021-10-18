@@ -27,7 +27,7 @@ interface UnitValue {
   units: string;
 }
 
-// computePrefixExponent is used to compute an appopriate display unit for a value
+// computePrefixExponent is used to compute an appropriate display unit for a value
 // for which the units have metric-style prefixes available. For example, the
 // value may be expressed in bytes, but we may want to display it on the graph
 // as a larger prefix unit (such as "kilobytes" or "gigabytes") in order to make
@@ -141,7 +141,7 @@ export function Duration(nanoseconds: number): string {
 }
 
 /**
- * Cast nanonseconds to provided scale units
+ * Cast nanoseconds to provided scale units
  */
 export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
   if (!nanoseconds) {

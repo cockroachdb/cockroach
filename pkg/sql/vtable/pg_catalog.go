@@ -93,6 +93,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attoptions STRING[],
 	attfdwoptions STRING[],
 	atthasmissing BOOL,
+	attmissingval STRING[],
   INDEX(attrelid)
 )`
 
@@ -709,7 +710,7 @@ CREATE TABLE pg_catalog.pg_settings (
     pending_restart BOOL
 )`
 
-// PGCatalogShdepend describes the schema of the pg_catalog.pg_shdepend table.
+// PGCatalogShdepend describes the schema of the pg_catalog. table.
 // https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html,
 const PGCatalogShdepend = `
 CREATE TABLE pg_catalog.pg_shdepend (
@@ -823,7 +824,7 @@ CREATE TABLE pg_catalog.pg_user (
 	userepl  BOOL,
 	usebypassrls BOOL,
 	passwd TEXT,
-	valuntil TIMESTAMP,
+	valuntil TIMESTAMPTZ,
 	useconfig TEXT[]
 )`
 
@@ -1051,19 +1052,19 @@ CREATE TABLE pg_catalog.pg_rules (
 	tablename NAME
 )`
 
-// PgCatalogShadow is an empty table created by pg_catalog_test
-// and is currently unimplemented.
+// PgCatalogShadow is the implementation of pg_catalog.pg_shadow
+// see https://www.postgresql.org/docs/13/view-pg-shadow.html
 const PgCatalogShadow = `
 CREATE TABLE pg_catalog.pg_shadow (
-	useconfig STRING[],
-	usecreatedb BOOL,
-	userepl BOOL,
-	usesuper BOOL,
-	usesysid OID,
-	valuntil TIMESTAMPTZ,
-	passwd STRING,
 	usename NAME,
-	usebypassrls BOOL
+	usesysid OID,
+	usecreatedb BOOL,
+	usesuper BOOL,
+  userepl BOOL,
+  usebypassrls BOOL,
+	passwd STRING,
+  valuntil TIMESTAMPTZ,
+	useconfig STRING[]
 )`
 
 // PgCatalogPublication is an empty table created by pg_catalog_test
@@ -1238,18 +1239,18 @@ CREATE TABLE pg_catalog.pg_hba_file_rules (
 	options STRING[]
 )`
 
-// PgCatalogStatisticExt is an empty table created by pg_catalog_test
-// and is currently unimplemented.
+// PgCatalogStatisticExt describes the schema of pg_catalog.pg_statistic_ext
+// https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html
 const PgCatalogStatisticExt = `
 CREATE TABLE pg_catalog.pg_statistic_ext (
-	stxrelid OID,
-	stxstattarget INT4,
 	oid OID,
+	stxrelid OID,
+  stxname NAME,
+  stxnamespace OID,
+	stxowner OID,
+	stxstattarget INT4,
 	stxkeys INT2VECTOR,
-	stxkind "char"[],
-	stxname NAME,
-	stxnamespace OID,
-	stxowner OID
+	stxkind "char"[]
 )`
 
 // PgCatalogReplicationOrigin is an empty table created by pg_catalog_test
@@ -1921,4 +1922,86 @@ CREATE TABLE pg_catalog.pg_stat_progress_vacuum (
 	max_dead_tuples INT,
 	num_dead_tuples INT,
 	phase STRING
+)`
+
+//PgCatalogStatistic is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogStatistic = `
+CREATE TABLE pg_catalog.pg_statistic (
+	stakind2 INT2,
+	stanumbers2 FLOAT4[],
+	stanumbers3 FLOAT4[],
+	staop5 OID,
+	stacoll3 OID,
+	stainherit BOOL,
+	stakind3 INT2,
+	stavalues5 STRING[],
+	staattnum INT2,
+	stacoll1 OID,
+	stacoll4 OID,
+	stanullfrac FLOAT4,
+	stavalues1 STRING[],
+	stawidth INT4,
+	stacoll2 OID,
+	stanumbers4 FLOAT4[],
+	stanumbers5 FLOAT4[],
+	staop2 OID,
+	stavalues3 STRING[],
+	stakind4 INT2,
+	staop1 OID,
+	staop4 OID,
+	stacoll5 OID,
+	stakind5 INT2,
+	staop3 OID,
+	stavalues2 STRING[],
+	stavalues4 STRING[],
+	stakind1 INT2,
+	stanumbers1 FLOAT4[],
+	starelid OID,
+	stadistinct FLOAT4
+)`
+
+//PgCatalogStats is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogStats = `
+CREATE TABLE pg_catalog.pg_stats (
+	histogram_bounds STRING[],
+	most_common_elem_freqs FLOAT4[],
+	most_common_elems STRING[],
+	most_common_vals STRING[],
+	attname NAME,
+	inherited BOOL,
+	n_distinct FLOAT4,
+	schemaname NAME,
+	correlation FLOAT4,
+	null_frac FLOAT4,
+	elem_count_histogram FLOAT4[],
+	most_common_freqs FLOAT4[],
+	tablename NAME,
+	avg_width INT4
+)`
+
+//PgCatalogStatsExt is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogStatsExt = `
+CREATE TABLE pg_catalog.pg_stats_ext (
+	kinds "char"[],
+	most_common_base_freqs FLOAT[],
+	most_common_freqs FLOAT[],
+	n_distinct BYTES,
+	schemaname NAME,
+	statistics_schemaname NAME,
+	dependencies BYTES,
+	most_common_val_nulls BOOL[],
+	most_common_vals STRING[],
+	statistics_name NAME,
+	statistics_owner NAME,
+	tablename NAME,
+	attnames NAME[]
+)`
+
+//PgCatalogStatisticExtData is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogStatisticExtData = `
+CREATE TABLE pg_catalog.pg_statistic_ext_data (
+	stxddependencies BYTES,
+	stxdmcv BYTES,
+	stxdndistinct BYTES,
+	stxoid OID
 )`

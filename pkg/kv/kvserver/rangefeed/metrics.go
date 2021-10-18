@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	metaRangeFeedCatchupScanNanos = metric.Metadata{
+	metaRangeFeedCatchUpScanNanos = metric.Metadata{
 		Name:        "kv.rangefeed.catchup_scan_nanos",
 		Help:        "Time spent in RangeFeed catchup scan",
 		Measurement: "Nanoseconds",
@@ -29,7 +29,7 @@ var (
 
 // Metrics are for production monitoring of RangeFeeds.
 type Metrics struct {
-	RangeFeedCatchupScanNanos *metric.Counter
+	RangeFeedCatchUpScanNanos *metric.Counter
 
 	RangeFeedSlowClosedTimestampLogN  log.EveryN
 	RangeFeedSlowClosedTimestampNudge singleflight.Group
@@ -46,7 +46,7 @@ func (*Metrics) MetricStruct() {}
 // NewMetrics makes the metrics for RangeFeeds monitoring.
 func NewMetrics() *Metrics {
 	return &Metrics{
-		RangeFeedCatchupScanNanos:            metric.NewCounter(metaRangeFeedCatchupScanNanos),
+		RangeFeedCatchUpScanNanos:            metric.NewCounter(metaRangeFeedCatchUpScanNanos),
 		RangeFeedSlowClosedTimestampLogN:     log.Every(5 * time.Second),
 		RangeFeedSlowClosedTimestampNudgeSem: make(chan struct{}, 1024),
 	}

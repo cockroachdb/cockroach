@@ -14,6 +14,7 @@ option go_package = "jobspb";
 
 import "errorspb/errors.proto";
 import "gogoproto/gogo.proto";
+import "roachpb/api.proto";
 import "roachpb/data.proto";
 import "roachpb/io-formats.proto";
 import "sql/catalog/descpb/structured.proto";
@@ -167,6 +168,9 @@ message RestoreDetails {
     // ToExisting represents whether this descriptor is being remapped to a
     // descriptor that already exists in the cluster.
     bool to_existing = 3;
+
+    // NewDBName represents the new name given to a restored database during a database restore
+    string new_db_name = 4 [(gogoproto.customname) = "NewDBName"];
   }
   message BackupLocalityInfo {
     map<string, string> uris_by_original_locality_kv = 1 [(gogoproto.customname) = "URIsByOriginalLocalityKV"];
@@ -194,7 +198,8 @@ message RestoreDetails {
   // Like TypeDescs, it does not include existing schema descriptors in the
   // cluster that backed up schemas are remapped to.
   repeated sqlbase.SchemaDescriptor schema_descs = 15;
-  repeated sqlbase.TenantInfo tenants = 13 [(gogoproto.nullable) = false];
+  reserved 13;
+  repeated sqlbase.TenantInfoWithUsage tenants = 21 [(gogoproto.nullable) = false];
 
   string override_db = 6 [(gogoproto.customname) = "OverrideDB"];
 
@@ -243,7 +248,10 @@ message RestoreDetails {
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
 
-  // NEXT ID: 20.
+  // DebugPauseOn describes the events that the job should pause itself on for debugging purposes.
+  string debug_pause_on = 20;
+
+  // NEXT ID: 22.
 }
 
 message RestoreProgress {
@@ -263,8 +271,13 @@ message ImportDetails {
   message Schema {
     sqlbase.SchemaDescriptor desc = 1;
   }
+  message Type {
+    sqlbase.TypeDescriptor desc = 1;
+  }
   repeated Table tables = 1 [(gogoproto.nullable) = false];
   repeated Schema schemas = 23 [(gogoproto.nullable) = false];
+  repeated Type types = 26 [(gogoproto.nullable) = false];
+
   repeated string uris = 2 [(gogoproto.customname) = "URIs"];
   roachpb.IOFileFormat format = 3 [(gogoproto.nullable) = false];
 
@@ -313,7 +326,13 @@ message ImportDetails {
   // when the import is planned.
   int32 default_int_size = 25;
 
-  // next val: 26
+  // If the database being imported into is a multi-region database, then this
+  // field stores the databases' primary region.
+  string database_primary_region = 27 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.RegionName"
+  ];
+
+  // next val: 28
 }
 
 // SequenceValChunks represents a single chunk of sequence values allocated
@@ -360,6 +379,8 @@ message ImportProgress {
   // Holds metadata related to sequences for every file processed during an
   // IMPORT.
   repeated SequenceDetails sequence_details = 6;
+
+  roachpb.BulkOpSummary summary = 7 [(gogoproto.nullable) = false];
 }
 
 // TypeSchemaChangeDetails is the job detail information for a type schema change job.
@@ -705,47 +726,13 @@ message MigrationDetails {
 }
 
 message MigrationProgress {
-
+  bytes watermark = 1;
 }
 
-// ExecutionEvent holds information about a job when it starts or
-// ends an execution. It contains information about the event time,
-// the node on which the job is executed, the status of the job,and
-// any errors occurred during execution.
-message ExecutionEvent {
-  enum EventType {
-    option (gogoproto.goproto_enum_prefix) = false;
-
-    // JobEventUnspecified is the zero value for EventType and should be used.
-    UNSPECIFIED = 0 [(gogoproto.enumvalue_customname) = "JobEventUnspecified"];
-
-    // JobStartEvent indicates that this event was created at the beginning of
-    // job execution.
-    START = 1 [(gogoproto.enumvalue_customname) = "JobStartEvent"];
-
-    // JobEndEvent indicates that this event was created at the end of job
-    // execution.
-    END = 2 [(gogoproto.enumvalue_customname) = "JobEndEvent"];
-  }
-  // Type of event, start or end of execution when this event is created.
-  EventType type = 1;
-  // ID of the node on which the job is executed.
-  int32 instance_id = 2;
-  // Status of the job in this execution. It should be a jobs.Status.
-  string status = 3;
-  // Event timestamp when the event is created, represented as the number
-  // of microseconds elapsed since UnixEpoch. See timeutil.ToUnixMicros
-  // for more information about conversion to micros.
-  int64 event_time_micros = 4;
-  // Errors during execution: it is empty for a JobStartEvent. For a JobEndEvent,
-  // it consists of errors encountered during the current job execution.
-  string execution_error = 5;
+message AutoSQLStatsCompactionDetails {
 }
 
-message SQLStatsCompactionDetails {
-}
-
-message SQLStatsCompactionProgress {
+message AutoSQLStatsCompactionProgress {
 }
 
 message Payload {
@@ -792,23 +779,19 @@ message Payload {
     NewSchemaChangeDetails newSchemaChange = 24;
     MigrationDetails migration = 25;
     AutoSpanConfigReconciliationDetails autoSpanConfigReconciliation = 27;
-    SQLStatsCompactionDetails sqlStatsCompaction = 30;
+    AutoSQLStatsCompactionDetails autoSQLStatsCompaction = 30;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
   // or has been requested to be paused.
   string pause_reason = 28;
+  // RetriableExecutionFailureLog stores a history of retriable execution
+  // failures. These failures may occur in either the RUNNING or REVERTING
+  // status. A finite number of these entries will be kept, as governed by
+  // the jobs.execution_errors.max_entries cluster setting.
+  repeated RetriableExecutionFailure retriable_execution_failure_log = 32;
 
-  // An ExecutionEvent is created whenever a job's Resumer starts and ends
-  // an execution. At the beginning of the execution of a job's Resumer,
-  // a EventType.START event is created and appended to executionLog in
-  // job's payload. When the Resumer completes execution, which can be with
-  // or without an error, an EventType.END event is created and appended to
-  // job's executionLog. The sequence of events in this log show the lifecycle
-  // of a job and the errors encountered during job execution.
-  repeated ExecutionEvent executionLog = 29;
-
-  // NEXT ID: 31.
+  // NEXT ID: 33.
 }
 
 message Progress {
@@ -832,7 +815,7 @@ message Progress {
     NewSchemaChangeProgress newSchemaChange = 19;
     MigrationProgress migration = 20;
     AutoSpanConfigReconciliationProgress AutoSpanConfigReconciliation = 22;
-    SQLStatsCompactionProgress sqlStatsCompaction = 23;
+    AutoSQLStatsCompactionProgress autoSQLStatsCompaction = 23;
   }
 
   uint64 trace_id = 21 [(gogoproto.customname) = "TraceID"];
@@ -858,7 +841,7 @@ enum Type {
   NEW_SCHEMA_CHANGE = 11 [(gogoproto.enumvalue_customname) = "TypeNewSchemaChange"];
   MIGRATION = 12 [(gogoproto.enumvalue_customname) = "TypeMigration"];
   AUTO_SPAN_CONFIG_RECONCILIATION = 13 [(gogoproto.enumvalue_customname) = "TypeAutoSpanConfigReconciliation"];
-  SQL_STATS_COMPACTION = 14 [(gogoproto.enumvalue_customname) = "TypeSQLStatsCompaction"];
+  AUTO_SQL_STATS_COMPACTION = 14 [(gogoproto.enumvalue_customname) = "TypeAutoSQLStatsCompaction"];
 }
 
 message Job {
@@ -867,4 +850,24 @@ message Job {
   // running job.
   Progress progress = 2;
   Payload payload = 3;
+}
+
+// RetriableExecutionFailure is used in Payload.RetriableExecutionFailureLog
+// to store a history of executions which failed.
+message RetriableExecutionFailure {
+  // Status is the status of the job when this failure occurred.
+  string status = 1;
+  // ExecutionStartMicros is the timestamp at which this execution occurred.
+  int64 execution_start_micros = 2;
+  // ExecutionEndMicros is the timestamp at which this execution concluded.
+  int64 execution_end_micros = 3;
+  // InstanceID is the instance which coordinated the execution.
+  int32 instance_id = 4 [(gogoproto.customname) = "InstanceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID", (gogoproto.nullable) = false];
+  // Error stores the structured error which occurred. It might be nil if it
+  // was too large. In that case, the TruncatedError will be populated.
+  errorspb.EncodedError error = 5;
+  // TruncatedError is a fragment of a error message populated in the case
+  // that the error was too large. While the structure may be lost, at least
+  // some information will be preserved.
+  string truncated_error = 6;
 }

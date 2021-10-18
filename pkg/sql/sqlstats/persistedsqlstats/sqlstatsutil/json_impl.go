@@ -49,6 +49,7 @@ var (
 	_ jsonMarshaler = (*jsonBool)(nil)
 	_ jsonMarshaler = (*jsonInt)(nil)
 	_ jsonMarshaler = (*stmtFingerprintID)(nil)
+	_ jsonMarshaler = (*int64Array)(nil)
 )
 
 type txnStats roachpb.TransactionStatistics
@@ -94,11 +95,43 @@ func (s *stmtStatsMetadata) jsonFields() jsonFields {
 		{"db", (*jsonString)(&s.Key.Database)},
 		{"distsql", (*jsonBool)(&s.Key.DistSQL)},
 		{"failed", (*jsonBool)(&s.Key.Failed)},
-		{"opt", (*jsonBool)(&s.Key.Opt)},
 		{"implicitTxn", (*jsonBool)(&s.Key.ImplicitTxn)},
 		{"vec", (*jsonBool)(&s.Key.Vec)},
 		{"fullScan", (*jsonBool)(&s.Key.FullScan)},
 	}
+}
+
+type int64Array []int64
+
+func (a *int64Array) decodeJSON(js json.JSON) error {
+	arrLen := js.Len()
+	for i := 0; i < arrLen; i++ {
+		var value jsonInt
+		valJSON, err := js.FetchValIdx(i)
+		if err != nil {
+			return err
+		}
+		if err := value.decodeJSON(valJSON); err != nil {
+			return err
+		}
+		*a = append(*a, int64(value))
+	}
+
+	return nil
+}
+
+func (a *int64Array) encodeJSON() (json.JSON, error) {
+	builder := json.NewArrayBuilder(len(*a))
+
+	for _, value := range *a {
+		jsVal, err := (*jsonInt)(&value).encodeJSON()
+		if err != nil {
+			return nil, err
+		}
+		builder.Add(jsVal)
+	}
+
+	return builder.Build(), nil
 }
 
 type stmtFingerprintIDArray []roachpb.StmtFingerprintID
@@ -173,6 +206,7 @@ func (t *innerTxnStats) jsonFields() jsonFields {
 		{"commitLat", (*numericStats)(&t.CommitLat)},
 		{"bytesRead", (*numericStats)(&t.BytesRead)},
 		{"rowsRead", (*numericStats)(&t.RowsRead)},
+		{"rowsWritten", (*numericStats)(&t.RowsWritten)},
 	}
 }
 
@@ -200,6 +234,8 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"ovhLat", (*numericStats)(&s.OverheadLat)},
 		{"bytesRead", (*numericStats)(&s.BytesRead)},
 		{"rowsRead", (*numericStats)(&s.RowsRead)},
+		{"rowsWritten", (*numericStats)(&s.RowsWritten)},
+		{"nodes", (*int64Array)(&s.Nodes)},
 	}
 }
 
@@ -261,13 +297,15 @@ func (jf jsonFields) decodeJSON(js json.JSON) (err error) {
 
 	for i := range jf {
 		fieldName = jf[i].field
-		field, err := safeFetchVal(js, fieldName)
+		field, err := js.FetchValKey(fieldName)
 		if err != nil {
 			return err
 		}
-		err = jf[i].val.decodeJSON(field)
-		if err != nil {
-			return err
+		if field != nil {
+			err = jf[i].val.decodeJSON(field)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -299,7 +337,7 @@ func (t *jsonTime) decodeJSON(js json.JSON) error {
 		return err
 	}
 
-	tm := (time.Time)(*t)
+	tm := (*time.Time)(t)
 	if err := tm.UnmarshalText([]byte(s)); err != nil {
 		return err
 	}
@@ -401,26 +439,4 @@ func (d *decimal) decodeJSON(js json.JSON) error {
 
 func (d *decimal) encodeJSON() (json.JSON, error) {
 	return json.FromDecimal(*(*apd.Decimal)(d)), nil
-}
-
-func safeFetchVal(jsonVal json.JSON, key string) (json.JSON, error) {
-	field, err := jsonVal.FetchValKey(key)
-	if err != nil {
-		return nil, err
-	}
-	if field == nil {
-		return nil, errors.Newf("%s field is not found in the JSON payload", key)
-	}
-	return field, nil
-}
-
-func safeFetchValIdx(jsonVal json.JSON, idx int) (json.JSON, error) {
-	field, err := jsonVal.FetchValIdx(idx)
-	if err != nil {
-		return nil, err
-	}
-	if field == nil {
-		return nil, errors.Newf("%dth element is not found in the JSON payload", idx)
-	}
-	return field, nil
 }

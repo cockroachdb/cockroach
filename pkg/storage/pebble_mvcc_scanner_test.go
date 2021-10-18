@@ -93,7 +93,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 		failOnMoreRecent: false,
 	}
 	mvccScanner.init(nil /* txn */, hlc.Timestamp{})
-	_, err = mvccScanner.scan(context.Background())
+	_, _, err = mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
 	kvData := mvccScanner.results.finish()
@@ -152,7 +152,7 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 		ts:      ts,
 	}
 	mvccScanner.init(nil /* txn */, hlc.Timestamp{})
-	_, err := mvccScanner.scan(context.Background())
+	_, _, err := mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
 	kvData := mvccScanner.results.finish()
@@ -205,17 +205,20 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		GlobalUncertaintyLimit: ts1,
 	}
 	val := roachpb.Value{RawBytes: bytes.Repeat([]byte("v"), 1000)}
-	batch := eng.NewBatch()
-	for i := 0; i < 10; i++ {
-		key := makeKey(nil, i)
-		require.NoError(t, MVCCPut(context.Background(), batch, nil, key, ts1, val, &txn1))
-	}
-	require.NoError(t, batch.Commit(true))
-	batch.Close()
+	func() {
+		batch := eng.NewBatch()
+		defer batch.Close()
+		for i := 0; i < 10; i++ {
+			key := makeKey(nil, i)
+			require.NoError(t, MVCCPut(context.Background(), batch, nil, key, ts1, val, &txn1))
+		}
+		require.NoError(t, batch.Commit(true))
+	}()
 
 	// iterator that can span over all the written keys.
 	iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
 		IterOptions{LowerBound: makeKey(nil, 0), UpperBound: makeKey(nil, 11)})
+	defer iter.Close()
 
 	// Narrow scan succeeds with a budget of 6000.
 	scanner := &pebbleMVCCScanner{
@@ -226,8 +229,9 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 	}
 	scanner.init(&txn1, hlc.Timestamp{})
 	cleanup := scannerWithAccount(ctx, st, scanner, 6000)
-	resumeSpan, err := scanner.scan(ctx)
+	resumeSpan, resumeReason, err := scanner.scan(ctx)
 	require.Nil(t, resumeSpan)
+	require.Zero(t, resumeReason)
 	require.Nil(t, err)
 	cleanup()
 
@@ -240,8 +244,9 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 	}
 	scanner.init(&txn1, hlc.Timestamp{})
 	cleanup = scannerWithAccount(ctx, st, scanner, 6000)
-	resumeSpan, err = scanner.scan(ctx)
+	resumeSpan, resumeReason, err = scanner.scan(ctx)
 	require.Nil(t, resumeSpan)
+	require.Zero(t, resumeReason)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "memory budget exceeded")
 	cleanup()
@@ -258,8 +263,9 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		}
 		scanner.init(nil, hlc.Timestamp{})
 		cleanup = scannerWithAccount(ctx, st, scanner, 100)
-		resumeSpan, err = scanner.scan(ctx)
+		resumeSpan, resumeReason, err = scanner.scan(ctx)
 		require.Nil(t, resumeSpan)
+		require.Zero(t, resumeReason)
 		require.NotNil(t, err)
 		require.Contains(t, err.Error(), "memory budget exceeded")
 		cleanup()

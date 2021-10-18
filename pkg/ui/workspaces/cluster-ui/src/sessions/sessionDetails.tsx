@@ -14,7 +14,7 @@ import { sessionAttr } from "src/util/constants";
 import { Helmet } from "react-helmet";
 import { Loading } from "../loading";
 import _ from "lodash";
-import { Link, RouteComponentProps, withRouter } from "react-router-dom";
+import { Link, RouteComponentProps } from "react-router-dom";
 
 import { SessionInfo } from "./sessionsTable";
 
@@ -63,6 +63,8 @@ export interface OwnProps {
   cancelSession: (payload: ICancelSessionRequest) => void;
   cancelQuery: (payload: ICancelQueryRequest) => void;
   uiConfig?: UIConfigState["pages"]["sessionDetails"];
+  isTenant?: UIConfigState["isTenant"];
+  isCloud?: boolean;
   onBackButtonClick?: () => void;
   onTerminateSessionClick?: () => void;
   onTerminateStatementClick?: () => void;
@@ -91,11 +93,16 @@ export const MemoryUsageItem: React.FC<{
 export class SessionDetails extends React.Component<SessionDetailsProps> {
   terminateSessionRef: React.RefObject<TerminateSessionModalRef>;
   terminateQueryRef: React.RefObject<TerminateQueryModalRef>;
-  static defaultProps = { uiConfig: { showGatewayNodeLink: true } };
+  static defaultProps = {
+    uiConfig: { showGatewayNodeLink: true },
+    isTenant: false,
+  };
 
   componentDidMount() {
-    this.props.refreshNodes();
-    this.props.refreshNodesLiveness();
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+      this.props.refreshNodesLiveness();
+    }
     this.props.refreshSessions();
   }
 
@@ -130,11 +137,12 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
       sessionError,
       cancelSession,
       cancelQuery,
+      isCloud,
       onTerminateSessionClick,
       onTerminateStatementClick,
     } = this.props;
     const session = this.props.session?.session;
-    const showActionButtons = !!session && !sessionError;
+    const showActionButtons = !!session && !sessionError && !isCloud;
     return (
       <div className={cx("sessions-details")}>
         <Helmet title={`Details | ${sessionID} | Sessions`} />
@@ -145,17 +153,18 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
             size="small"
             icon={<ArrowLeft fontSize={"10px"} />}
             iconPosition="left"
+            className="small-margin"
           >
             Sessions
           </Button>
           <div className={cx("heading-with-controls")}>
-            <h1
+            <h3
               className={`${statementsPageCx("base-heading")} ${cx(
                 "page--header__title",
               )}`}
             >
               Session details
-            </h1>
+            </h3>
             {showActionButtons && (
               <div className={cx("heading-controls-group")}>
                 <Button
@@ -218,6 +227,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
     if (!this.props.session) {
       return null;
     }
+    const { isTenant } = this.props;
     const { session } = this.props.session;
 
     if (!session) {
@@ -310,10 +320,9 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 <Link
                   to={StatementLinkTarget({
                     statement: stmt.sql,
-                    anonStatement: stmt.sql_anon,
+                    statementNoConstants: stmt.sql_no_constants,
                     implicitTxn: session.active_txn?.implicit,
                     app: "",
-                    search: "",
                   })}
                   onClick={() =>
                     this.props.onStatementClick && this.props.onStatementClick()
@@ -346,20 +355,22 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 value={TimestampToMoment(session.start).format(DATE_FORMAT)}
                 className={cx("details-item")}
               />
-              <SummaryCardItem
-                label={"Gateway Node"}
-                value={
-                  this.props.uiConfig.showGatewayNodeLink ? (
-                    <NodeLink
-                      nodeId={session.node_id.toString()}
-                      nodeNames={this.props.nodeNames}
-                    />
-                  ) : (
-                    session.node_id.toString()
-                  )
-                }
-                className={cx("details-item")}
-              />
+              {!isTenant && (
+                <SummaryCardItem
+                  label={"Gateway Node"}
+                  value={
+                    this.props.uiConfig.showGatewayNodeLink ? (
+                      <NodeLink
+                        nodeId={session.node_id.toString()}
+                        nodeNames={this.props.nodeNames}
+                      />
+                    ) : (
+                      session.node_id.toString()
+                    )
+                  }
+                  className={cx("details-item")}
+                />
+              )}
             </Col>
             <Col className="gutter-row" span={4}></Col>
             <Col className="gutter-row" span={10}>

@@ -11,6 +11,7 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -42,49 +43,105 @@ func registerDiskFull(r registry.Registry) {
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf(
 					"./workload run kv --tolerate-errors --init --read-percent=0"+
-						" --concurrency=10 --duration=2m {pgurl:2-%d}",
+						" --concurrency=10 --duration=4m {pgurl:2-%d}",
 					nodes)
 				c.Run(ctx, c.Node(nodes+1), cmd)
 				return nil
 			})
+
+			// Each node should have an automatically created
+			// EMERGENCY_BALLAST file in the auxiliary directory.
+			c.Run(ctx, c.Range(1, nodes), "stat {store-dir}/auxiliary/EMERGENCY_BALLAST")
+
 			m.Go(func(ctx context.Context) error {
-				time.Sleep(30 * time.Second)
 				const n = 1
-				m.ExpectDeath()
+
 				t.L().Printf("filling disk on %d\n", n)
-				// The 100% ballast size will cause the disk to fill up and the ballast
-				// command to exit with an error. The "|| true" is used to ignore that
-				// error.
-				c.Run(ctx, c.Node(n), "./cockroach debug ballast {store-dir}/ballast --size=100% || true")
+				// Create a manual ballast that fills up the entire disk
+				// (size=100%). The "|| true" is used to ignore the
+				// error returned by `debug ballast`.
+				m.ExpectDeath()
+				c.Run(ctx, c.Node(n), "./cockroach debug ballast {store-dir}/largefile --size=100% || true")
+
+				// Node 1 should forcibly exit due to a full disk.
+				for isLive := true; isLive; {
+					db := c.Conn(ctx, 2)
+					err := db.QueryRow(`SELECT is_live FROM crdb_internal.gossip_nodes WHERE node_id = 1;`).Scan(&isLive)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if isLive {
+						t.L().Printf("waiting for n%d to die due to full disk\n", n)
+						time.Sleep(time.Second)
+					}
+				}
+
+				t.L().Printf("node n%d died as expected\n", n)
 
 				// Restart cockroach in a loop for 30s.
 				for start := timeutil.Now(); timeutil.Since(start) < 30*time.Second; {
 					if t.Failed() {
 						return nil
 					}
-					t.L().Printf("starting %d when disk is full\n", n)
-					// Pebble treats "no space left on device" as a background error. Kill
-					// cockroach if it is still running. Note that this is to kill the
-					// node that was started prior to this for loop, before the ballast
-					// was created. Now that the disk is full, any subsequent node starts
-					// must fail with an error for this test to succeed.
-					_ = c.StopE(ctx, c.Node(n))
-					// We expect cockroach to die during startup, though it might get far
-					// enough along that the monitor detects the death.
+					t.L().Printf("starting n%d when disk is full\n", n)
+
+					// We expect cockroach to die during startup with
+					// exit code 10 (Disk Full). Just in case the
+					// monitor detects the death, expect it.
 					m.ExpectDeath()
-					if err := c.StartE(ctx, c.Node(n)); err == nil {
-						t.Fatalf("node successfully started unexpectedly")
+					err := c.StartE(ctx, c.Node(n))
+					t.L().Printf("starting n%d: error %v", n, err)
+					if err == nil {
+						t.Fatal("node successfully started unexpectedly")
 					} else if strings.Contains(cluster.GetStderr(err), "a panic has occurred") {
 						t.Fatal(err)
 					}
+
+					// The error returned from StartE, which is
+					// propagated from roachprod, obscures the Cockroach
+					// exit code. There should still be a record of it
+					// in the systemd logs.
+					exitLogs, err := c.RunWithBuffer(ctx, t.L(), c.Node(n),
+						`systemctl status cockroach.service | grep 'Main PID' | grep -oE '\((.+)\)'`,
+					)
+					if err != nil {
+						t.Fatal(err)
+					}
+					exitLogsStr := string(bytes.TrimSpace(exitLogs))
+					const want = `(code=exited, status=10)`
+					if exitLogsStr != want {
+						t.Fatalf("cockroach systemd status: got %q, want %q", exitLogsStr, want)
+					}
 				}
 
-				// Clear the disk full condition and restart cockroach again.
-				t.L().Printf("clearing full disk on %d\n", n)
-				c.Run(ctx, c.Node(n), "rm -f {store-dir}/ballast")
-				// Clear any death expectations that did not occur.
+				// Clear the emergency ballast. Clearing the ballast
+				// should allow the node to start, perform compactions,
+				// etc.
+				t.L().Printf("removing the emergency ballast on n%d\n", n)
 				m.ResetDeaths()
-				return c.StartE(ctx, c.Node(n))
+				c.Run(ctx, c.Node(n), "rm -f {store-dir}/auxiliary/EMERGENCY_BALLAST")
+				if err := c.StartE(ctx, c.Node(n)); err != nil {
+					t.Fatal(err)
+				}
+
+				// Wait a little while and delete the large file we
+				// added to induce the out-of-disk condition.
+				time.Sleep(30 * time.Second)
+				t.L().Printf("removing n%d's large file to free up available disk space.\n", n)
+				c.Run(ctx, c.Node(n), "rm -f {store-dir}/largefile")
+
+				// When CockroachDB detects that it has sufficient
+				// capacity available, it should recreate the emergency
+				// ballast file automatically.
+				t.L().Printf("waiting for node n%d's emergency ballast to be restored.\n", n)
+				for {
+					err := c.RunE(ctx, c.Node(1), "stat {store-dir}/auxiliary/EMERGENCY_BALLAST")
+					if err == nil {
+						return nil
+					}
+					t.L().Printf("node n%d's emergency ballast doesn't exist yet\n", n)
+					time.Sleep(time.Second)
+				}
 			})
 			m.Wait()
 		},

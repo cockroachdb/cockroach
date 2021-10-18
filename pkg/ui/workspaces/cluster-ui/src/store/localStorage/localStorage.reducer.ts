@@ -8,12 +8,20 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
+
+type StatementsDateRangeState = {
+  start: number;
+  end: number;
+};
 
 export type LocalStorageState = {
   "adminUi/showDiagnosticsModal": boolean;
   "showColumns/StatementsPage": string;
+  "showColumns/TransactionPage": string;
+  "dateRange/StatementsPage": StatementsDateRangeState;
 };
 
 type Payload = {
@@ -21,12 +29,26 @@ type Payload = {
   value: any;
 };
 
+const defaultDateRange: StatementsDateRangeState = {
+  start: moment
+    .utc()
+    .subtract(1, "hours")
+    .unix(),
+  end: moment.utc().unix() + 60, // Add 1 minute to account for potential lag.
+};
+
 // TODO (koorosh): initial state should be restored from preserved keys in LocalStorage
 const initialState: LocalStorageState = {
   "adminUi/showDiagnosticsModal":
-    Boolean(localStorage.getItem("adminUi/showDiagnosticsModal")) || false,
+    Boolean(JSON.parse(localStorage.getItem("adminUi/showDiagnosticsModal"))) ||
+    false,
   "showColumns/StatementsPage":
-    localStorage.getItem("showColumns/StatementsPage") || "default",
+    JSON.parse(localStorage.getItem("showColumns/StatementsPage")) || null,
+  "showColumns/TransactionPage":
+    JSON.parse(localStorage.getItem("showColumns/TransactionPage")) || null,
+  "dateRange/StatementsPage":
+    JSON.parse(localStorage.getItem("dateRange/StatementsPage")) ||
+    defaultDateRange,
 };
 
 const localStorageSlice = createSlice({

@@ -15,7 +15,7 @@ syn match Comment display '#.*$' contains=Todo
 syn keyword Todo TODO XXX
 
 syn region ruletags start='^\[' end='\]$' contains=ruletag
-syn match ruletag contained display '[A-Za-z0-9_]*' 
+syn match ruletag contained display '[A-Za-z0-9_]*'
 
 syn region list start='(' end=')' contains=list,func,var,operator
 syn match func contained display '\((\)\@<=[A-Za-z0-9_]\+\( | [A-Za-z0-9_]\+\)*'
@@ -42,7 +42,7 @@ syn keyword operator RegIMatch NotRegIMatch Is IsNot Contains JsonExists JsonAll
 syn keyword operator JsonSomeExists AnyScalar Bitand Bitor Bitxor Plus Minus Mult Div FloorDiv
 syn keyword operator Mod Pow Concat LShift RShift FetchVal FetchText FetchValPath FetchTextPath
 syn keyword operator UnaryMinus UnaryComplement Cast Case When Array Indirection
-syn keyword operator Function FunctionPrivate Coalesce ColumnAccess UnsupportedExpr
+syn keyword operator Function FunctionPrivate Coalesce ColumnAccess
 syn keyword operator Avg BoolAnd BoolOr ConcatAgg Count CountRows Max Min SumInt Sum SqrDiff
 syn keyword operator Variance StdDev XorAgg JsonAgg JsonbAgg ConstAgg ConstNotNullAgg
 syn keyword operator AnyNotNullAgg FirstAgg AggDistinct ScalarList

@@ -97,8 +97,7 @@ message LocalOnlySessionData {
   // ImplicitPartitioningEnabled indicates whether implicit column partitioning
   // can be created.
   bool implicit_column_partitioning_enabled = 22;
-  // DropEnumValueEnabled indicates whether enum values can be dropped.
-  bool drop_enum_value_enabled = 23;
+  reserved 23;
   // OverrideMultiRegionZoneConfigEnabled indicates whether zone configurations can be
   // modified for multi-region databases and tables/indexes/partitions.
   bool override_multi_region_zone_config_enabled = 24;
@@ -176,6 +175,42 @@ message LocalOnlySessionData {
   // This is only populated when SET ROLE is used, otherwise the session_user
   // is the same as the UserProto in SessionData.
   string session_user_proto = 46 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  // TxnRowsWrittenLog is the threshold for the number of rows written by a SQL
+  // transaction which - once exceeded - will trigger a logging event to SQL_PERF
+  // (or SQL_INTERNAL_PERF for internal transactions); 0 means disabled.
+  int64 txn_rows_written_log = 47;
+  // TxnRowsWrittenErr is the limit for the number of rows written by a SQL
+  // transaction which - once exceeded - will fail the transaction (or will
+  // trigger a logging event to SQL_INTERNAL_PERF for internal transactions); 0
+  // means disabled.
+  int64 txn_rows_written_err = 48;
+  // TxnRowsReadLog is the threshold for the number of rows read by a SQL
+  // transaction which - once exceeded - will trigger a logging event to SQL_PERF
+  // (or SQL_INTERNAL_PERF for internal transactions); 0 means disabled.
+  int64 txn_rows_read_log = 49;
+  // TxnRowsReadErr is the limit for the number of rows read by a SQL
+  // transaction which - once exceeded - will fail the transaction (or will
+  // trigger a logging event to SQL_INTERNAL_PERF for internal transactions); 0
+  // means disabled.
+  int64 txn_rows_read_err = 50;
+  // AutoRehomingEnabled indicates whether or not REGIONAL BY ROW tables should
+  // have a rehoming ON UPDATE clause added to them.
+  bool auto_rehoming_enabled = 51;
+  // IsSuperuser returns whether the user is a "superuser", which is defined
+  // to be a user with an admin role.
+  bool is_superuser = 52;
+  // LargeFullScanRows is the estimated row count at which a full scan is
+  // considered large, and worthy of logging and/or disabling depending on other
+  // settings.
+  double large_full_scan_rows = 53;
+  // InjectRetryErrorsEnabled causes statements inside an explicit
+  // transaction to return a transaction retry error. It is intended for
+  // developers to test their app's retry logic.
+  bool inject_retry_errors_enabled = 54;
+  // NullOrderedLast controls whether NULL is ordered last. We default to
+  // NULLS FIRST for ascending order by default, whereas postgres defaults
+  // to NULLS LAST.
+  bool null_ordered_last = 55;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

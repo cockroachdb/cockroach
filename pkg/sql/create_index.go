@@ -423,6 +423,17 @@ func replaceExpressionElemsWithVirtualCols(
 			}
 
 			if !isInverted && !colinfo.ColumnTypeIsIndexable(typ) {
+				if colinfo.ColumnTypeIsInvertedIndexable(typ) {
+					return errors.WithHint(
+						pgerror.Newf(
+							pgcode.InvalidTableDefinition,
+							"index element %s of type %s is not indexable in a non-inverted index",
+							elem.Expr.String(),
+							typ.Name(),
+						),
+						"you may want to create an inverted index instead. See the documentation for inverted indexes: "+docs.URL("inverted-indexes.html"),
+					)
+				}
 				return pgerror.Newf(
 					pgcode.InvalidTableDefinition,
 					"index element %s of type %s is not indexable",
@@ -603,27 +614,31 @@ var interleavedTableDisabledError = errors.WithIssueLink(
 	errors.IssueLink{IssueURL: build.MakeIssueURL(52009)},
 )
 
-var interleavedTableDisabledMigrationError = errors.WithIssueLink(
-	pgerror.New(pgcode.WarningDeprecatedFeature,
-		"creation of new interleaved tables and interleaved indexes is no longer supported."+
-			" For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations"),
-	errors.IssueLink{IssueURL: build.MakeIssueURL(52009)},
-)
+var interleavedTableDisabledMigrationError = pgnotice.Newf(
+	"creation of new interleaved tables or interleaved indexes is no longer supported and will be ignored." +
+		" For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations")
 
 // interleavedTableDeprecationAction either returns an error, if interleaved
-// tables are disabled, or sends a notice, if they're not.
-func interleavedTableDeprecationAction(params runParams) error {
+// tables are disabled, or sends a notice, if they're not. Returns any error
+// and if the interleaved option should be ignored.
+func interleavedTableDeprecationAction(params runParams) (ignoreInterleave bool, err error) {
+	// Once interleave tables should be prevented, we should
+	// return a client notice and ignore opeartions.
 	if params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.PreventNewInterleavedTables) {
-		return interleavedTableDisabledMigrationError
+		params.p.BufferClientNotice(
+			params.ctx,
+			interleavedTableDisabledMigrationError,
+		)
+		return true, nil
 	}
 	if !InterleavedTablesEnabled.Get(params.p.execCfg.SV()) {
-		return interleavedTableDisabledError
+		return false, interleavedTableDisabledError
 	}
 	params.p.BufferClientNotice(
 		params.ctx,
 		interleavedTableDeprecationError,
 	)
-	return nil
+	return false, nil
 }
 
 func (n *createIndexNode) startExec(params runParams) error {
@@ -667,8 +682,12 @@ func (n *createIndexNode) startExec(params runParams) error {
 			return pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot be partitioned")
 		}
 
-		if err := interleavedTableDeprecationAction(params); err != nil {
+		interleaveIgnored, err := interleavedTableDeprecationAction(params)
+		if err != nil {
 			return err
+		}
+		if interleaveIgnored {
+			n.n.Interleave = nil
 		}
 	}
 

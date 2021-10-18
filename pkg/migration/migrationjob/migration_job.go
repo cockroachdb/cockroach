@@ -37,9 +37,11 @@ func init() {
 }
 
 // NewRecord constructs a new jobs.Record for this migration.
-func NewRecord(version clusterversion.ClusterVersion, user security.SQLUsername) jobs.Record {
+func NewRecord(
+	version clusterversion.ClusterVersion, user security.SQLUsername, name string,
+) jobs.Record {
 	return jobs.Record{
-		Description: "Migration to " + version.String(),
+		Description: name,
 		Details: jobspb.MigrationDetails{
 			ClusterVersion: &version,
 		},
@@ -78,7 +80,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	}
 	switch m := m.(type) {
 	case *migration.SystemMigration:
-		err = m.Run(ctx, cv, mc.SystemDeps())
+		err = m.Run(ctx, cv, mc.SystemDeps(), r.j)
 	case *migration.TenantMigration:
 		err = m.Run(ctx, cv, migration.TenantDeps{
 			DB:                execCtx.ExecCfg().DB,
@@ -88,7 +90,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			LeaseManager:      execCtx.ExecCfg().LeaseManager,
 			InternalExecutor:  execCtx.ExecCfg().InternalExecutor,
 			TestingKnobs:      execCtx.ExecCfg().MigrationTestingKnobs,
-		})
+		}, r.j)
 	default:
 		return errors.AssertionFailedf("unknown migration type %T", m)
 	}

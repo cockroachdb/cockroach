@@ -13,7 +13,7 @@ import { throwError } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
-import { getStatements } from "src/api/statementsApi";
+import { getCombinedStatements, getStatements } from "src/api/statementsApi";
 
 import {
   receivedTransactionsSaga,
@@ -40,6 +40,24 @@ describe("TransactionsPage sagas", () => {
     it("successfully requests statements list", () => {
       expectSaga(requestTransactionsSaga)
         .provide([[matchers.call.fn(getStatements), statements]])
+        .put(actions.received(statements))
+        .withReducer(reducer)
+        .hasFinalState<TransactionsState>({
+          data: statements,
+          lastError: null,
+          valid: true,
+        })
+        .run();
+    });
+
+    it("requests combined statements if combined=true in the request message", () => {
+      const req = {
+        payload: new cockroach.server.serverpb.StatementsRequest({
+          combined: true,
+        }),
+      };
+      expectSaga(requestTransactionsSaga, req)
+        .provide([[matchers.call.fn(getCombinedStatements), statements]])
         .put(actions.received(statements))
         .withReducer(reducer)
         .hasFinalState<TransactionsState>({

@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -26,25 +27,27 @@ import (
 // backwards-incompatible feature.
 const MinVersionFilename = "STORAGE_MIN_VERSION"
 
-// WriteMinVersionFile writes the provided version to disk. The caller must
+// writeMinVersionFile writes the provided version to disk. The caller must
 // guarantee that the version will never be downgraded below the given version.
-func WriteMinVersionFile(fs vfs.FS, dir string, version *roachpb.Version) error {
-	if version == nil {
-		return errors.New("min version should not be nil")
+func writeMinVersionFile(atomicRenameFS vfs.FS, dir string, version roachpb.Version) error {
+	// TODO(jackson): Assert that atomicRenameFS supports atomic renames
+	// once Pebble is bumped to the appropriate SHA.
+	if version == (roachpb.Version{}) {
+		return errors.New("min version should not be empty")
 	}
-	ok, err := MinVersionIsAtLeastTargetVersion(fs, dir, version)
+	ok, err := MinVersionIsAtLeastTargetVersion(atomicRenameFS, dir, version)
 	if err != nil {
 		return err
 	}
 	if ok {
 		return nil
 	}
-	b, err := protoutil.Marshal(version)
+	b, err := protoutil.Marshal(&version)
 	if err != nil {
 		return err
 	}
-	filename := fs.PathJoin(dir, MinVersionFilename)
-	if err := SafeWriteToFile(fs, dir, filename, b); err != nil {
+	filename := atomicRenameFS.PathJoin(dir, MinVersionFilename)
+	if err := fs.SafeWriteToFile(atomicRenameFS, dir, filename, b); err != nil {
 		return err
 	}
 	return nil
@@ -53,40 +56,45 @@ func WriteMinVersionFile(fs vfs.FS, dir string, version *roachpb.Version) error 
 // MinVersionIsAtLeastTargetVersion returns whether the min version recorded
 // on disk is at least the target version.
 func MinVersionIsAtLeastTargetVersion(
-	fs vfs.FS, dir string, target *roachpb.Version,
+	atomicRenameFS vfs.FS, dir string, target roachpb.Version,
 ) (bool, error) {
-	if target == nil {
-		return false, errors.New("target version should not be nil")
+	// TODO(jackson): Assert that atomicRenameFS supports atomic renames
+	// once Pebble is bumped to the appropriate SHA.
+	if target == (roachpb.Version{}) {
+		return false, errors.New("target version should not be empty")
 	}
-	minVersion, err := GetMinVersion(fs, dir)
+	minVersion, err := getMinVersion(atomicRenameFS, dir)
 	if err != nil {
 		return false, err
 	}
-	if minVersion == nil {
+	if minVersion == (roachpb.Version{}) {
 		return false, nil
 	}
-	return !minVersion.Less(*target), nil
+	return !minVersion.Less(target), nil
 }
 
-// GetMinVersion returns the min version recorded on disk if the min version
+// getMinVersion returns the min version recorded on disk if the min version
 // file exists and nil otherwise.
-func GetMinVersion(fs vfs.FS, dir string) (*roachpb.Version, error) {
-	filename := fs.PathJoin(dir, MinVersionFilename)
-	f, err := fs.Open(filename)
+func getMinVersion(atomicRenameFS vfs.FS, dir string) (roachpb.Version, error) {
+	// TODO(jackson): Assert that atomicRenameFS supports atomic renames
+	// once Pebble is bumped to the appropriate SHA.
+
+	filename := atomicRenameFS.PathJoin(dir, MinVersionFilename)
+	f, err := atomicRenameFS.Open(filename)
 	if oserror.IsNotExist(err) {
-		return nil, nil
+		return roachpb.Version{}, nil
 	}
 	if err != nil {
-		return nil, err
+		return roachpb.Version{}, err
 	}
 	defer f.Close()
 	b, err := ioutil.ReadAll(f)
 	if err != nil {
-		return nil, err
+		return roachpb.Version{}, err
 	}
-	version := &roachpb.Version{}
-	if err := protoutil.Unmarshal(b, version); err != nil {
-		return nil, err
+	version := roachpb.Version{}
+	if err := protoutil.Unmarshal(b, &version); err != nil {
+		return version, err
 	}
 	return version, nil
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -48,6 +49,10 @@ type EngineMetrics struct {
 
 	// FullTableOrIndexScanCount counts the number of full table or index scans.
 	FullTableOrIndexScanCount *metric.Counter
+
+	// FullTableOrIndexScanRejectedCount counts the number of queries that were
+	// rejected because of the `disallow_full_table_scans` guardrail.
+	FullTableOrIndexScanRejectedCount *metric.Counter
 }
 
 // EngineMetrics implements the metric.Struct interface.
@@ -77,6 +82,20 @@ var _ metric.Struct = StatsMetrics{}
 
 // MetricStruct is part of the metric.Struct interface.
 func (StatsMetrics) MetricStruct() {}
+
+// GuardrailMetrics groups metrics related to different guardrails in the SQL
+// layer.
+type GuardrailMetrics struct {
+	TxnRowsWrittenLogCount *metric.Counter
+	TxnRowsWrittenErrCount *metric.Counter
+	TxnRowsReadLogCount    *metric.Counter
+	TxnRowsReadErrCount    *metric.Counter
+}
+
+var _ metric.Struct = GuardrailMetrics{}
+
+// MetricStruct is part of the metric.Struct interface.
+func (GuardrailMetrics) MetricStruct() {}
 
 // recordStatementSummery gathers various details pertaining to the
 // last executed statement/query and performs the associated
@@ -133,13 +152,38 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	recordedStmtStatsKey := roachpb.StatementStatisticsKey{
-		Query:       stmt.AnonymizedStr,
+		Query:       stmt.StmtNoConstants,
 		DistSQL:     flags.IsDistributed(),
 		Vec:         flags.IsSet(planFlagVectorized),
 		ImplicitTxn: flags.IsSet(planFlagImplicitTxn),
 		FullScan:    flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
 		Failed:      stmtErr != nil,
 		Database:    planner.SessionData().Database,
+	}
+
+	// We only populate the transaction fingerprint ID field if we are in an
+	// implicit transaction.
+	//
+	// TODO(azhng): This will require some big refactoring later, we already
+	//  compute statement's fingerprintID in RecordStatement().
+	//  However, we need to recompute the Fingerprint() here because this
+	//  is required to populate the transaction fingerprint ID field.
+	//
+	//  The reason behind it is that: for explicit transactions, we have a final
+	//  callback that will eventually invoke
+	//  statsCollector.EndExplicitTransaction() which will use the extraTxnState
+	//  stored in the connExecutor to compute the transaction fingerprintID.
+	//  Unfortunately, that callback is not invoked for implicit transactions,
+	//  because we don't create temporary stats container for the implicit
+	//  transactions. (The statement stats directly gets written to the actual
+	//  stats container). This means that, unless we populate the transaction
+	//  fingerprintID here, we will not have another chance to do so later.
+	if ex.implicitTxn() {
+		stmtFingerprintID := recordedStmtStatsKey.FingerprintID()
+		txnFingerprintHash := util.MakeFNV64()
+		txnFingerprintHash.Add(uint64(stmtFingerprintID))
+		recordedStmtStatsKey.TransactionFingerprintID =
+			roachpb.TransactionFingerprintID(txnFingerprintHash.Sum())
 	}
 
 	recordedStmtStats := sqlstats.RecordedStmtStats{
@@ -152,6 +196,7 @@ func (ex *connExecutor) recordStatementSummary(
 		OverheadLatency: execOverhead,
 		BytesRead:       stats.bytesRead,
 		RowsRead:        stats.rowsRead,
+		RowsWritten:     stats.rowsWritten,
 		Nodes:           getNodesFromPlanner(planner),
 		StatementType:   stmt.AST.StatementType(),
 		Plan:            planner.instrumentation.PlanForStats(ctx),

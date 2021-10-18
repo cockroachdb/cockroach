@@ -351,6 +351,16 @@ func (f *jobFeed) FetchTerminalJobErr() error {
 	return nil
 }
 
+// FetchRunningStatus retrieves running status from changefeed job.
+func (f *jobFeed) FetchRunningStatus() (runningStatusStr string, err error) {
+	if err = f.db.QueryRow(
+		`SELECT running_status FROM [SHOW JOBS] WHERE job_id=$1`, f.jobID,
+	).Scan(&runningStatusStr); err != nil {
+		return "", err
+	}
+	return runningStatusStr, err
+}
+
 // Close closes job feed.
 func (f *jobFeed) Close() error {
 	// Signal shutdown.

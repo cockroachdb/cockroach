@@ -22,6 +22,7 @@ import {
   countBarChart,
   rowsReadBarChart,
   bytesReadBarChart,
+  rowsWrittenBarChart,
   latencyBarChart,
   contentionBarChart,
   maxMemUsageBarChart,
@@ -42,6 +43,7 @@ import {
   statisticsTableTitles,
   NodeNames,
   StatisticType,
+  formatStartIntervalColumn,
 } from "../statsTableUtil/statsTableUtil";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -71,6 +73,10 @@ function makeCommonColumns(
   const countBar = countBarChart(statements, defaultBarChartOptions);
   const rowsReadBar = rowsReadBarChart(statements, defaultBarChartOptions);
   const bytesReadBar = bytesReadBarChart(statements, defaultBarChartOptions);
+  const rowsWrittenBar = rowsWrittenBarChart(
+    statements,
+    defaultBarChartOptions,
+  );
   const latencyBar = latencyBarChart(statements, defaultBarChartOptions);
   const contentionBar = contentionBarChart(
     statements,
@@ -86,7 +92,15 @@ function makeCommonColumns(
   );
   const retryBar = retryBarChart(statements, defaultBarChartOptions);
 
-  const columns: ColumnDescriptor<AggregateStatistics>[] = [
+  return [
+    {
+      name: "intervalStartTime",
+      title: statisticsTableTitles.intervalStartTime(statType),
+      className: cx("statements-table__interval_time"),
+      cell: (stmt: AggregateStatistics) =>
+        formatStartIntervalColumn(stmt.aggregatedTs),
+      sort: (stmt: AggregateStatistics) => stmt.aggregatedTs,
+    },
     {
       name: "executionCount",
       title: statisticsTableTitles.executionCount(statType),
@@ -116,6 +130,14 @@ function makeCommonColumns(
       cell: bytesReadBar,
       sort: (stmt: AggregateStatistics) =>
         FixLong(Number(stmt.stats.bytes_read.mean)),
+    },
+    {
+      name: "rowsWritten",
+      title: statisticsTableTitles.rowsWritten(statType),
+      cell: rowsWrittenBar,
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.rows_written?.mean)),
+      showByDefault: false,
     },
     {
       name: "time",
@@ -173,15 +195,15 @@ function makeCommonColumns(
         return longListWithTooltip(stmt.regionNodes.sort().join(", "), 50);
       },
       sort: (stmt: AggregateStatistics) => stmt.regionNodes.sort().join(", "),
-      showByDefault: false,
+      hideIfTenant: true,
     },
   ];
-  return columns;
 }
 
 export interface AggregateStatistics {
   // label is either shortStatement (StatementsPage) or nodeId (StatementDetails).
   label: string;
+  aggregatedTs: number;
   implicitTxn: boolean;
   fullScan: boolean;
   database: string;
@@ -238,6 +260,7 @@ export function makeStatementsColumns(
   totalWorkload: number,
   nodeRegions: { [nodeId: string]: string },
   statType: StatisticType,
+  isTenant: boolean,
   search?: string,
   activateDiagnosticsRef?: React.RefObject<ActivateDiagnosticsModalRef>,
   onDiagnosticsDownload?: (report: IStatementDiagnosticsReport) => void,
@@ -255,7 +278,7 @@ export function makeStatementsColumns(
     ...makeCommonColumns(statements, totalWorkload, nodeRegions, statType),
   );
 
-  if (activateDiagnosticsRef) {
+  if (activateDiagnosticsRef && !isTenant) {
     const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
       name: "diagnostics",
       title: statisticsTableTitles.diagnostics(statType),
@@ -307,12 +330,19 @@ export function makeNodesColumns(
  * node it was executed on.
  * @param nodeRegions: object with keys being the node id and the value
  * which region it belongs to.
+ * @param isTenant: boolean indicating if the cluster is tenant, since
+ * node information doesn't need to be populated on this case.
  */
 export function populateRegionNodeForStatements(
   statements: AggregateStatistics[],
   nodeRegions: { [p: string]: string },
-) {
+  isTenant: boolean,
+): void {
   statements.forEach(stmt => {
+    if (isTenant) {
+      stmt.regionNodes = [];
+      return;
+    }
     const regions: { [region: string]: Set<number> } = {};
     // For each region, populate a list of all nodes where the statement was executed.
     // E.g. {"gcp-us-east1" : [1,3,4]}

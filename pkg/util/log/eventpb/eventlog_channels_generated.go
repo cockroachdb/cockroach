@@ -74,6 +74,9 @@ func (m *AlterType) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SC
 func (m *CommentOnColumn) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *CommentOnConstraint) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *CommentOnDatabase) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
@@ -224,10 +227,26 @@ func (m *LargeRow) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_PER
 func (m *SlowQuery) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_PERF }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *TxnRowsReadLimit) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_PERF }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *TxnRowsWrittenLimit) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_PERF }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *LargeRowInternal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_INTERNAL_PERF }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *SlowQueryInternal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_INTERNAL_PERF }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *TxnRowsReadLimitInternal) LoggingChannel() logpb.Channel {
+	return logpb.Channel_SQL_INTERNAL_PERF
+}
+
+// LoggingChannel implements the EventPayload interface.
+func (m *TxnRowsWrittenLimitInternal) LoggingChannel() logpb.Channel {
+	return logpb.Channel_SQL_INTERNAL_PERF
+}
 
 // LoggingChannel implements the EventPayload interface.
 func (m *AlterRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }
@@ -237,6 +256,9 @@ func (m *CreateRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_
 
 // LoggingChannel implements the EventPayload interface.
 func (m *DropRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *SampledQuery) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *RemoveZoneConfig) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }

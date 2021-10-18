@@ -18,17 +18,17 @@ CREATE ROLE public
 statement error pgcode 22023 role public does not exist
 SET ROLE public
 
-statement error username "node" reserved
+statement error role name "node" is reserved
 CREATE ROLE node
 
 statement error pgcode 22023 role node does not exist
 SET ROLE node
 
 # Check root can reset and become itself.
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-root  root
+root  root  root  root
 
 query T
 SHOW ROLE
@@ -41,10 +41,10 @@ RESET ROLE
 statement error pgcode 22023 role non_existent_user does not exist
 SET ROLE non_existent_user
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-root  root
+root  root  root  root
 
 query T
 SHOW ROLE
@@ -54,10 +54,10 @@ root
 statement ok
 SET ROLE = root
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-root  root
+root  root  root  root
 
 query T
 SHOW ROLE
@@ -73,10 +73,15 @@ SELECT * FROM testuser_table
 statement ok
 SET ROLE = 'testuser'
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-testuser  root
+testuser  testuser  root  root
+
+query T
+SHOW is_superuser
+----
+off
 
 statement ok
 SELECT * FROM priv_t
@@ -106,26 +111,36 @@ CREATE USER testuser2
 statement ok
 SET ROLE testuser2
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-testuser2  root
+testuser2  testuser2  root  root
+
+query T
+SHOW is_superuser
+----
+off
 
 statement ok
 SET ROLE = 'NoNe'
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-root  root
+root  root  root  root
+
+query T
+SHOW is_superuser
+----
+on
 
 # Check testuser cannot transition to other users as it has no privileges.
 user testuser
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-testuser  testuser
+testuser  testuser  testuser  testuser
 
 query T
 SHOW ROLE
@@ -135,10 +150,10 @@ none
 statement ok
 SET ROLE testuser
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-testuser  testuser
+testuser  testuser  testuser  testuser
 
 query T
 SHOW ROLE
@@ -168,10 +183,15 @@ SET ROLE root
 statement ok
 SET ROLE testuser2
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-testuser2  testuser
+testuser2  testuser2  testuser  testuser
+
+query T
+SHOW is_superuser
+----
+off
 
 statement error pgcode 42501 user testuser2 does not have SELECT privilege on relation priv_t
 SELECT * FROM priv_t
@@ -182,10 +202,15 @@ SELECT * FROM no_priv_t
 statement ok
 RESET ROLE
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-testuser  testuser
+testuser  testuser  testuser  testuser
+
+query T
+SHOW is_superuser
+----
+on
 
 # testuser2 cannot become anyone.
 
@@ -200,18 +225,18 @@ SET ROLE testuser
 statement ok
 SET ROLE testuser2
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-testuser2  testuser2
+testuser2  testuser2  testuser2  testuser2
 
 statement ok
 RESET ROLE
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-testuser2  testuser2
+testuser2  testuser2  testuser2  testuser2
 
 # Set testuser2 as admin, check testuser2 can become testuser
 user root
@@ -224,10 +249,10 @@ user testuser2
 statement ok
 SET ROLE testuser
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-testuser  testuser2
+testuser  testuser  testuser2  testuser2
 
 statement ok
 RESET ROLE
@@ -251,18 +276,18 @@ user testuser2
 statement ok
 SET ROLE testuser
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-testuser  testuser2
+testuser  testuser  testuser2  testuser2
 
 statement ok
 SET ROLE testrole
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-testrole  testuser2
+testrole  testrole  testuser2  testuser2
 
 statement ok
 RESET ROLE
@@ -282,10 +307,10 @@ REVOKE admin FROM testuser
 
 user testuser
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-testuser2  testuser
+testuser2  testuser2  testuser  testuser
 
 statement error pgcode 42501 permission denied to set role "testuser2"
 SET ROLE testuser2
@@ -293,7 +318,50 @@ SET ROLE testuser2
 statement ok
 SET ROLE 'none'
 
-query TT
-SELECT current_user, session_user()
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
 ----
-testuser  testuser
+testuser  testuser  testuser  testuser
+
+
+# SET ROLE is specially cased in SET LOCAL as it uses SetWithPlanner,
+# so test it behaves as appropriate. Also ensure that the node_sessions
+# is correctly attributed to root instead of testuser.
+
+user root
+
+statement ok
+GRANT ADMIN TO testuser;
+BEGIN;
+SET LOCAL ROLE testuser
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser  testuser  root  root
+
+query T
+SELECT user_name FROM crdb_internal.node_sessions
+WHERE active_queries LIKE 'SELECT user_name%'
+----
+root
+
+statement ok
+ROLLBACK
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+root  root  root  root
+
+statement ok
+SET ROLE testuser
+
+query T
+SELECT user_name FROM crdb_internal.node_sessions
+WHERE active_queries LIKE 'SELECT user_name%'
+----
+root
+
+statement ok
+RESET ROLE

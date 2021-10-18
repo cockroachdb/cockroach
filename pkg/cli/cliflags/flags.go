@@ -318,6 +318,12 @@ accidents. This can also be overridden in a session with SET
 sql_safe_updates = FALSE.`,
 	}
 
+	ReadOnly = FlagInfo{
+		Name: "read-only",
+		Description: `
+Set the session variable default_transaction_read_only to on.`,
+	}
+
 	Set = FlagInfo{
 		Name: "set",
 		Description: `
@@ -1167,6 +1173,11 @@ can also be specified (e.g. .25).`,
 	RunDemoWorkload = FlagInfo{
 		Name:        "with-load",
 		Description: `Run a demo workload against the pre-loaded database.`,
+	}
+
+	DemoWorkloadMaxQPS = FlagInfo{
+		Name:        "workload-max-qps",
+		Description: "The maximum QPS when a workload is running.",
 	}
 
 	DemoNodeLocality = FlagInfo{

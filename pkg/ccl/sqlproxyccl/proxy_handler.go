@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certmgr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -97,10 +98,9 @@ type ProxyOptions struct {
 	// DrainTimeout if set, will close DRAINING connections that have been idle
 	// for this duration.
 	DrainTimeout time.Duration
-
-	// Token bucket policy used to throttle (IP, TenantID) connection pairs that
-	// have no history of successful authentication.
-	ThrottlePolicy throttler.BucketPolicy
+	// ThrottleBaseDelay is the initial exponential backoff triggered in
+	// response to the first connection failure.
+	ThrottleBaseDelay time.Duration
 }
 
 // proxyHandler is the default implementation of a proxy handler.
@@ -134,6 +134,8 @@ type proxyHandler struct {
 	certManager *certmgr.CertManager
 }
 
+var throttledError = newErrorf(codeProxyRefusedConnection, "connection attempt throttled")
+
 // newProxyHandler will create a new proxy handler with configuration based on
 // the provided options.
 func newProxyHandler(
@@ -162,7 +164,7 @@ func newProxyHandler(
 	}
 
 	handler.throttleService = throttler.NewLocalService(
-		throttler.WithPolicy(handler.ThrottlePolicy),
+		throttler.WithBaseDelay(handler.ThrottleBaseDelay),
 	)
 
 	if handler.DirectoryAddr != "" {
@@ -228,7 +230,9 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	ctx = logtags.AddTag(ctx, "cluster", clusterName)
 	ctx = logtags.AddTag(ctx, "tenant", tenID)
 
-	ipAddr, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+	// Use an empty string as the default port as we only care about the
+	// correctly parsing the IP address here.
+	ipAddr, _, err := addr.SplitHostPort(conn.RemoteAddr().String(), "")
 	if err != nil {
 		clientErr := newErrorf(codeParamsRoutingFailed, "unexpected connection address")
 		log.Errorf(ctx, "could not parse address: %v", err.Error())
@@ -257,16 +261,12 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	defer removeListener()
 
 	throttleTags := throttler.ConnectionTags{IP: ipAddr, TenantID: tenID.String()}
-	if err := handler.throttleService.LoginCheck(throttleTags); err != nil {
+	throttleTime, err := handler.throttleService.LoginCheck(throttleTags)
+	if err != nil {
 		log.Errorf(ctx, "throttler refused connection: %v", err.Error())
-		err = newErrorf(codeProxyRefusedConnection, "connection attempt throttled")
+		err = throttledError
 		updateMetricsAndSendErrToClient(err, conn, handler.metrics)
 		return err
-	}
-
-	var TLSConf *tls.Config
-	if !handler.Insecure {
-		TLSConf = &tls.Config{InsecureSkipVerify: handler.SkipVerify}
 	}
 
 	var crdbConn net.Conn
@@ -314,8 +314,37 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 			break
 		}
 
+		// NB: TLS options for the proxy are split into Insecure and
+		// SkipVerify. In insecure mode, tlsConf is expected to be nil. This
+		// will cause BackendDial to skip TLS entirely. If SkipVerify is true,
+		// tlsConf will be set to a non-nil config with InsecureSkipVerify set
+		// to true. InsecureSkipVerify will provide an encrypted connection but
+		// not verify that the connection recipient is a trusted party.
+		var tlsConf *tls.Config
+		if !handler.Insecure {
+			// Use an empty string as the default port as we only care about the
+			// correctly parsing the outgoingHost/IP here.
+			outgoingHost, _, err := addr.SplitHostPort(outgoingAddress, "")
+			if err != nil {
+				log.Errorf(ctx, "could not split outgoing address '%s' into host and port: %v", outgoingAddress, err.Error())
+				// Remap error for external consumption.
+				clientErr := newErrorf(
+					codeParamsRoutingFailed, "cluster %s-%d not found", clusterName, tenID.ToUint64())
+				updateMetricsAndSendErrToClient(clientErr, conn, handler.metrics)
+				return clientErr
+			}
+
+			tlsConf = &tls.Config{
+				// Always set ServerName, if SkipVerify is true, it will be
+				// ignored. When SkipVerify is false, it is required to
+				// establish a TLS connection.
+				ServerName:         outgoingHost,
+				InsecureSkipVerify: handler.SkipVerify,
+			}
+		}
+
 		// Now actually dial the backend server.
-		crdbConn, err = BackendDial(backendStartupMsg, outgoingAddress, TLSConf)
+		crdbConn, err = BackendDial(backendStartupMsg, outgoingAddress, tlsConf)
 
 		// If we get a backend down error, retry the connection.
 		var codeErr *codeError
@@ -370,14 +399,20 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	defer func() { _ = crdbConn.Close() }()
 
 	// Perform user authentication.
-	if err := authenticate(conn, crdbConn); err != nil {
+	if err := authenticate(conn, crdbConn, func(status throttler.AttemptStatus) *pgproto3.ErrorResponse {
+		err := handler.throttleService.ReportAttempt(ctx, throttleTags, throttleTime, status)
+		if err != nil {
+			log.Errorf(ctx, "throttler refused connection after authentication: %v", err.Error())
+			return toPgError(throttledError)
+		}
+		return nil
+	}); err != nil {
 		handler.metrics.updateForError(err)
 		log.Ops.Errorf(ctx, "authenticate: %s", err)
 		return err
 	}
 
 	handler.metrics.SuccessfulConnCount.Inc(1)
-	handler.throttleService.ReportSuccess(throttleTags)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -548,7 +583,7 @@ func clusterNameAndTenantFromParams(
 		return msg, "", roachpb.MaxTenantID, err
 	}
 
-	clusterNameFromOpt, err := parseOptionsParam(msg.Parameters["options"])
+	clusterNameFromOpt, newOptionsParam, err := parseOptionsParam(msg.Parameters["options"])
 	if err != nil {
 		return msg, "", roachpb.MaxTenantID, err
 	}
@@ -595,7 +630,11 @@ func clusterNameAndTenantFromParams(
 	for key, value := range msg.Parameters {
 		if key == "database" {
 			paramsOut[key] = databaseName
-		} else if key != "options" {
+		} else if key == "options" {
+			if newOptionsParam != "" {
+				paramsOut[key] = newOptionsParam
+			}
+		} else {
 			paramsOut[key] = value
 		}
 	}
@@ -636,47 +675,45 @@ func parseDatabaseParam(databaseParam string) (clusterName, databaseName string,
 }
 
 // parseOptionsParam parses the options parameter from the PG connection string,
-// and tries to return the cluster name if present. Just like PostgreSQL, the
+// and tries to return the cluster name if present. It also returns the options
+// parameter with the cluster name stripped out. Just like PostgreSQL, the
 // sqlproxy supports three different ways to set a run-time parameter through
 // its command-line options:
 //     -c NAME=VALUE (commonly used throughout documentation around PGOPTIONS)
 //     -cNAME=VALUE
 //     --NAME=VALUE
 //
-// CockroachDB currently does not support the options parameter, so the parsing
-// logic is built on that assumption. If we do start supporting options in
-// CockroachDB itself, then we should revisit this.
-//
 // Note that this parsing approach is not perfect as it allows a negative case
 // like options="-c --cluster=happy-koala -c -c -c" to go through. To properly
 // parse this, we need to traverse the string from left to right, and look at
 // every single argument, but that involves quite a bit of work, so we'll punt
 // for now.
-func parseOptionsParam(optionsParam string) (string, error) {
+func parseOptionsParam(optionsParam string) (clusterName, newOptionsParam string, err error) {
 	// Only search up to 2 in case of large inputs.
 	matches := clusterNameLongOptionRE.FindAllStringSubmatch(optionsParam, 2 /* n */)
 	if len(matches) == 0 {
-		return "", nil
+		return "", optionsParam, nil
 	}
 
 	if len(matches) > 1 {
 		// Technically we could still allow requests to go through if all
 		// cluster names match, but we don't want to parse the entire string, so
 		// we will just error out if at least two cluster flags are provided.
-		return "", errors.New("multiple cluster flags provided")
+		return "", "", errors.New("multiple cluster flags provided")
 	}
 
 	// Length of each match should always be 2 with the given regex, one for
 	// the full string, and the other for the cluster name.
 	if len(matches[0]) != 2 {
 		// We don't want to panic here.
-		return "", errors.New("internal server error")
+		return "", "", errors.New("internal server error")
 	}
 
 	// Flag was provided, but value is NULL.
 	if len(matches[0][1]) == 0 {
-		return "", errors.New("invalid cluster flag")
+		return "", "", errors.New("invalid cluster flag")
 	}
-
-	return matches[0][1], nil
+	newOptionsParam = strings.ReplaceAll(optionsParam, matches[0][0], "")
+	newOptionsParam = strings.TrimSpace(newOptionsParam)
+	return matches[0][1], newOptionsParam, nil
 }

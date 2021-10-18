@@ -58,10 +58,11 @@ type ProposalData struct {
 	sp *tracing.Span
 
 	// idKey uniquely identifies this proposal.
-	// TODO(andreimatei): idKey is legacy at this point: We could easily key
-	// commands by their MaxLeaseIndex, and doing so should be ok with a stop-
-	// the-world migration. However, various test facilities depend on the
-	// command ID for e.g. replay protection.
+	// TODO(andrei): idKey is legacy at this point: We could easily key commands
+	// by their MaxLeaseIndex, and doing so should be ok with a stop- the-world
+	// migration. However, various test facilities depend on the command ID for
+	// e.g. replay protection. Later edit: the MaxLeaseIndex assignment has,
+	// however, moved to happen later, at proposal time.
 	idKey kvserverbase.CmdIDKey
 
 	// proposedAtTicks is the (logical) time at which this command was
@@ -81,9 +82,6 @@ type ProposalData struct {
 	// raftMu. Once the proposal comes out of Raft, ownerwhip of this quota is
 	// passed to r.mu.quotaReleaseQueue.
 	quotaAlloc *quotapool.IntAlloc
-
-	// tmpFooter is used to avoid an allocation.
-	tmpFooter kvserverpb.MaxLeaseFooter
 
 	// ec.done is called after command application to update the timestamp
 	// cache and optionally release latches and exits lock wait-queues.
@@ -444,7 +442,7 @@ func (r *Replica) leasePostApplyLocked(
 
 	// Inform the propBuf about the new lease so that it can initialize its closed
 	// timestamp tracking.
-	r.mu.proposalBuf.OnLeaseChangeLocked(iAmTheLeaseHolder, r.mu.state.RaftClosedTimestamp)
+	r.mu.proposalBuf.OnLeaseChangeLocked(iAmTheLeaseHolder, r.mu.state.RaftClosedTimestamp, r.mu.state.LeaseAppliedIndex)
 
 	// Ordering is critical here. We only install the new lease after we've
 	// checked for an in-progress merge and updated the timestamp cache. If the
@@ -517,11 +515,6 @@ func (r *Replica) leasePostApplyLocked(
 			if err := r.MaybeGossipNodeLivenessRaftMuLocked(ctx, keys.NodeLivenessSpan); err != nil {
 				log.Errorf(ctx, "%v", err)
 			}
-
-			// Emit an MLAI on the leaseholder replica, as follower will be looking
-			// for one and if we went on to quiesce, they wouldn't necessarily get
-			// one otherwise (unless they ask for it, which adds latency).
-			r.EmitMLAI()
 		})
 		if leaseChangingHands && log.V(1) {
 			// This logging is useful to troubleshoot incomplete drains.
@@ -781,7 +774,7 @@ func (r *Replica) evaluateProposal(
 	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
 	lul hlc.Timestamp,
-	latchSpans, lockSpans *spanset.SpanSet,
+	latchSpans *spanset.SpanSet,
 ) (*result.Result, bool, *roachpb.Error) {
 	if ba.Timestamp.IsEmpty() {
 		return nil, false, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
@@ -797,7 +790,7 @@ func (r *Replica) evaluateProposal(
 	//
 	// TODO(tschottdorf): absorb all returned values in `res` below this point
 	// in the call stack as well.
-	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, lul, latchSpans, lockSpans)
+	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, lul, latchSpans)
 
 	// Note: reusing the proposer's batch when applying the command on the
 	// proposer was explored as an optimization but resulted in no performance
@@ -846,6 +839,8 @@ func (r *Replica) evaluateProposal(
 		ba.RequiresConsensus()
 
 	if needConsensus {
+		log.VEventf(ctx, 2, "need consensus on write batch with op count=%d", batch.Count())
+
 		// Set the proposal's WriteBatch, which is the serialized representation of
 		// the proposals effect on RocksDB.
 		res.WriteBatch = &kvserverpb.WriteBatch{
@@ -869,13 +864,6 @@ func (r *Replica) evaluateProposal(
 		// This is the result of a migration. See the field for more details.
 		if res.Replicated.Delta.ContainsEstimates > 0 {
 			res.Replicated.Delta.ContainsEstimates *= 2
-		}
-
-		// If the cluster version doesn't track abort span size in MVCCStats, we
-		// zero it out to prevent inconsistencies in MVCCStats across nodes in a
-		// possibly mixed-version cluster.
-		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.AbortSpanBytes) {
-			res.Replicated.Delta.AbortSpanBytes = 0
 		}
 
 		// If the RangeAppliedState key is not being used and the cluster version is
@@ -930,9 +918,9 @@ func (r *Replica) requestToProposal(
 	ba *roachpb.BatchRequest,
 	st kvserverpb.LeaseStatus,
 	lul hlc.Timestamp,
-	latchSpans, lockSpans *spanset.SpanSet,
+	latchSpans *spanset.SpanSet,
 ) (*ProposalData, *roachpb.Error) {
-	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, lul, latchSpans, lockSpans)
+	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, lul, latchSpans)
 
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal := &ProposalData{

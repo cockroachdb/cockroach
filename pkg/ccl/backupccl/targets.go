@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -47,8 +46,7 @@ import (
 // a descriptor the ID by which it was previously known (e.g pre-TRUNCATE).
 func getRelevantDescChanges(
 	ctx context.Context,
-	codec keys.SQLCodec,
-	db *kv.DB,
+	execCfg *sql.ExecutorConfig,
 	startTime, endTime hlc.Timestamp,
 	descs []catalog.Descriptor,
 	expanded []descpb.ID,
@@ -56,7 +54,7 @@ func getRelevantDescChanges(
 	descriptorCoverage tree.DescriptorCoverage,
 ) ([]BackupManifest_DescriptorRevision, error) {
 
-	allChanges, err := getAllDescChanges(ctx, codec, db, startTime, endTime, priorIDs)
+	allChanges, err := getAllDescChanges(ctx, execCfg.Codec, execCfg.DB, startTime, endTime, priorIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +73,31 @@ func getRelevantDescChanges(
 	// target spec, plus those that belonged to a DB that our spec expanded at any
 	// point in the interval.
 	interestingIDs := make(map[descpb.ID]struct{}, len(descs))
+
+	systemTableIDsToExcludeFromBackup, err := GetSystemTableIDsToExcludeFromClusterBackup(ctx, execCfg)
+	if err != nil {
+		return nil, err
+	}
+	isExcludedDescriptor := func(id descpb.ID) bool {
+		if _, isOptOutSystemTable := systemTableIDsToExcludeFromBackup[id]; id == keys.SystemDatabaseID || isOptOutSystemTable {
+			return true
+		}
+		return false
+	}
+
+	isInterestingID := func(id descpb.ID) bool {
+		// We're interested in changes to all descriptors if we're targeting all
+		// descriptors except for the descriptors that we do not include in a
+		// cluster backup.
+		if descriptorCoverage == tree.AllDescriptors && !isExcludedDescriptor(id) {
+			return true
+		}
+		// A change to an ID that we're interested in is obviously interesting.
+		if _, ok := interestingIDs[id]; ok {
+			return true
+		}
+		return false
+	}
 
 	// The descriptors that currently (endTime) match the target spec (desc) are
 	// obviously interesting to our backup.
@@ -98,7 +121,7 @@ func getRelevantDescChanges(
 	}
 
 	if !startTime.IsEmpty() {
-		starting, err := backupresolver.LoadAllDescs(ctx, codec, db, startTime)
+		starting, err := backupresolver.LoadAllDescs(ctx, execCfg.Codec, execCfg.DB, startTime)
 		if err != nil {
 			return nil, err
 		}
@@ -112,7 +135,7 @@ func getRelevantDescChanges(
 					interestingIDs[desc.GetID()] = struct{}{}
 				}
 			}
-			if _, ok := interestingIDs[i.GetID()]; ok {
+			if isInterestingID(i.GetID()) {
 				desc := i
 				// We inject a fake "revision" that captures the starting state for
 				// matched descriptor, to allow restoring to times before its first rev
@@ -124,19 +147,6 @@ func getRelevantDescChanges(
 				interestingChanges = append(interestingChanges, initial)
 			}
 		}
-	}
-
-	isInterestingID := func(id descpb.ID) bool {
-		// We're interested in changes to all descriptors if we're targeting all
-		// descriptors except for the system database itself.
-		if descriptorCoverage == tree.AllDescriptors && id != keys.SystemDatabaseID {
-			return true
-		}
-		// A change to an ID that we're interested in is obviously interesting.
-		if _, ok := interestingIDs[id]; ok {
-			return true
-		}
-		return false
 	}
 
 	for _, change := range allChanges {
@@ -216,46 +226,6 @@ func getAllDescChanges(
 		}
 	}
 	return res, nil
-}
-
-func loadAllDescsInInterval(
-	ctx context.Context, codec keys.SQLCodec, db *kv.DB, startTime, endTime hlc.Timestamp,
-) ([]catalog.Descriptor, error) {
-	seen := make(map[descpb.ID]struct{})
-	allDescs := make([]catalog.Descriptor, 0)
-
-	currentDescs, err := backupresolver.LoadAllDescs(ctx, codec, db, endTime)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, desc := range currentDescs {
-		if _, wasSeen := seen[desc.GetID()]; wasSeen {
-			continue
-		}
-		seen[desc.GetID()] = struct{}{}
-		allDescs = append(allDescs, desc)
-	}
-
-	revs, err := getAllDescChanges(ctx, codec, db, startTime, endTime, nil /* priorIDs */)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, rev := range revs {
-		if rev.Desc == nil {
-			// rev.Desc may be nil when the descriptor was deleted in this revision.
-			continue
-		}
-		desc := catalogkv.NewBuilder(rev.Desc).BuildImmutable()
-		if _, wasSeen := seen[desc.GetID()]; wasSeen {
-			continue
-		}
-		seen[desc.GetID()] = struct{}{}
-		allDescs = append(allDescs, desc)
-	}
-
-	return allDescs, nil
 }
 
 // validateMultiRegionBackup validates that for all tables included in the
@@ -361,7 +331,7 @@ func lookupDatabaseID(
 
 func fullClusterTargetsRestore(
 	allDescs []catalog.Descriptor, lastBackupManifest BackupManifest,
-) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfo, error) {
+) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfoWithUsage, error) {
 	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
 	if err != nil {
 		return nil, nil, nil, err
@@ -380,7 +350,7 @@ func fullClusterTargetsRestore(
 	}
 
 	// Restore all tenants during full-cluster restore.
-	tenants := lastBackupManifest.Tenants
+	tenants := lastBackupManifest.GetTenants()
 
 	return filteredDescs, filteredDBs, tenants, nil
 }
@@ -444,6 +414,14 @@ func fullClusterTargetsBackup(
 	return fullClusterDescs, fullClusterDBIDs, nil
 }
 
+// selectTargets loads all descriptors from the selected backup manifest(s), and
+// filters the descriptors based on the targets specified in the restore. Post
+// filtering, the method returns:
+//  - A list of all descriptors (table, type, database, schema) along with their
+//    parent databases.
+//  - A list of database descriptors IFF the user is restoring on the cluster or
+//    database level
+//  - A list of tenants to restore, if applicable.
 func selectTargets(
 	ctx context.Context,
 	p sql.PlanHookState,
@@ -451,7 +429,7 @@ func selectTargets(
 	targets tree.TargetList,
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
-) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfo, error) {
+) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfoWithUsage, error) {
 	allDescs, lastBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 
 	if descriptorCoverage == tree.AllDescriptors {
@@ -459,11 +437,11 @@ func selectTargets(
 	}
 
 	if targets.Tenant != (roachpb.TenantID{}) {
-		for _, tenant := range lastBackupManifest.Tenants {
+		for _, tenant := range lastBackupManifest.GetTenants() {
 			// TODO(dt): for now it is zero-or-one but when that changes, we should
 			// either keep it sorted or build a set here.
 			if tenant.ID == targets.Tenant.ToUint64() {
-				return nil, nil, []descpb.TenantInfo{tenant}, nil
+				return nil, nil, []descpb.TenantInfoWithUsage{tenant}, nil
 			}
 		}
 		return nil, nil, nil, errors.Errorf("tenant %d not in backup", targets.Tenant.ToUint64())
@@ -625,9 +603,26 @@ func checkMultiRegionCompatible(
 	table *tabledesc.Mutable,
 	database catalog.DatabaseDescriptor,
 ) error {
-	// If either the database or table are non-MR then allow it.
-	if !database.IsMultiRegion() || table.GetLocalityConfig() == nil {
+	// If we are not dealing with an MR database and table there are no
+	// compatibility checks that need to be performed.
+	if !database.IsMultiRegion() && table.GetLocalityConfig() == nil {
 		return nil
+	}
+
+	// If we are restoring a non-MR table into a MR database, allow it. We will
+	// set the table to a REGIONAL BY TABLE IN PRIMARY REGION before writing the
+	// table descriptor to disk.
+	if database.IsMultiRegion() && table.GetLocalityConfig() == nil {
+		return nil
+	}
+
+	// If we are restoring a MR table into a non-MR database, disallow it.
+	if !database.IsMultiRegion() && table.GetLocalityConfig() != nil {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"cannot restore descriptor for multi-region table %s into non-multi-region database %s",
+			table.GetName(),
+			database.GetName(),
+		)
 	}
 
 	if table.IsLocalityGlobal() {
@@ -671,10 +666,13 @@ func checkMultiRegionCompatible(
 	}
 
 	if table.IsLocalityRegionalByRow() {
-		return unimplemented.NewWithIssuef(67269,
-			"cannot restore REGIONAL BY ROW table %s (ID: %d) individually into a multi-region database %s",
-			table.GetName(), table.GetID(), database.GetName(),
-		)
+		// Unlike the check for RegionalByTable above, we do not want to run a
+		// verification on every row in a RegionalByRow table. If the table has a
+		// row with a `crdb_region` that is not in the parent databases' regions,
+		// this will be caught later in the restore when we attempt to remap the
+		// backed up MR enum to point to the existing MR enum in the restoring
+		// cluster.
+		return nil
 	}
 
 	return errors.AssertionFailedf(

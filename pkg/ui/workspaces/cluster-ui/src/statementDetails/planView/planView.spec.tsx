@@ -16,6 +16,7 @@ import {
   FlatPlanNodeAttribute,
   flattenTreeAttributes,
   flattenAttributes,
+  standardizeKey,
 } from "./planView";
 import IAttr = cockroach.sql.ExplainTreePlanNode.IAttr;
 
@@ -73,175 +74,190 @@ const expectedTestAttrsDistinctKeys: FlatPlanNodeAttribute[] = [
   },
 ];
 
-describe("flattenTreeAttributes", () => {
-  describe("when all nodes have attributes with different keys", () => {
-    it("creates array with exactly one value for each attribute for each node", () => {
-      const node: IExplainTreePlanNode = {
-        name: "root",
-        attrs: testAttrsDistinctKeys,
-        children: [
+describe("planView", () => {
+  describe("flattenTreeAttributes", () => {
+    describe("when all nodes have attributes with different keys", () => {
+      it("creates array with exactly one value for each attribute for each node", () => {
+        const node: IExplainTreePlanNode = {
+          name: "root",
+          attrs: testAttrsDistinctKeys,
+          children: [
+            {
+              name: "child",
+              attrs: testAttrsDistinctKeys,
+              children: [
+                {
+                  name: "grandchild",
+                  attrs: testAttrsDistinctKeys,
+                  children: [],
+                },
+              ],
+            },
+          ],
+        };
+
+        const nodeFlattened: FlatPlanNode = {
+          name: "root",
+          attrs: expectedTestAttrsDistinctKeys,
+          children: [
+            {
+              name: "child",
+              attrs: expectedTestAttrsDistinctKeys,
+              children: [
+                {
+                  name: "grandchild",
+                  attrs: expectedTestAttrsDistinctKeys,
+                  children: [],
+                },
+              ],
+            },
+          ],
+        };
+
+        assert.deepEqual(flattenTreeAttributes(node), nodeFlattened);
+      });
+    });
+    describe("when there are nodes with multiple attributes with the same key", () => {
+      it("flattens attributes for each node having multiple attributes with the same key", () => {
+        const node: IExplainTreePlanNode = {
+          name: "root",
+          attrs: testAttrsDuplicatedKeys,
+          children: [
+            {
+              name: "child",
+              attrs: testAttrsDuplicatedKeys,
+              children: [
+                {
+                  name: "grandchild",
+                  attrs: testAttrsDuplicatedKeys,
+                  children: [],
+                },
+              ],
+            },
+          ],
+        };
+
+        const nodeFlattened: FlatPlanNode = {
+          name: "root",
+          attrs: expectedTestAttrsFlattened,
+          children: [
+            {
+              name: "child",
+              attrs: expectedTestAttrsFlattened,
+              children: [
+                {
+                  name: "grandchild",
+                  attrs: expectedTestAttrsFlattened,
+                  children: [],
+                },
+              ],
+            },
+          ],
+        };
+
+        assert.deepEqual(flattenTreeAttributes(node), nodeFlattened);
+      });
+    });
+  });
+
+  describe("flattenAttributes", () => {
+    describe("when all attributes have different keys", () => {
+      it("creates array with exactly one value for each attribute", () => {
+        assert.deepEqual(
+          flattenAttributes(testAttrsDistinctKeys),
+          expectedTestAttrsDistinctKeys,
+        );
+      });
+    });
+    describe("when there are multiple attributes with same key", () => {
+      it("collects values into one array for same key", () => {
+        assert.deepEqual(
+          flattenAttributes(testAttrsDuplicatedKeys),
+          expectedTestAttrsFlattened,
+        );
+      });
+    });
+    describe("when attribute key/value is `spans FULL SCAN`", () => {
+      it("sets warn to true", () => {
+        const testAttrs: IAttr[] = [
           {
-            name: "child",
-            attrs: testAttrsDistinctKeys,
-            children: [
-              {
-                name: "grandchild",
-                attrs: testAttrsDistinctKeys,
-                children: [],
-              },
-            ],
+            key: "foo",
+            value: "bar",
           },
-        ],
-      };
-
-      const nodeFlattened: FlatPlanNode = {
-        name: "root",
-        attrs: expectedTestAttrsDistinctKeys,
-        children: [
           {
-            name: "child",
-            attrs: expectedTestAttrsDistinctKeys,
-            children: [
-              {
-                name: "grandchild",
-                attrs: expectedTestAttrsDistinctKeys,
-                children: [],
-              },
-            ],
+            key: "spans",
+            value: "FULL SCAN",
           },
-        ],
-      };
-
-      assert.deepEqual(flattenTreeAttributes(node), nodeFlattened);
-    });
-  });
-  describe("when there are nodes with multiple attributes with the same key", () => {
-    it("flattens attributes for each node having multiple attributes with the same key", () => {
-      const node: IExplainTreePlanNode = {
-        name: "root",
-        attrs: testAttrsDuplicatedKeys,
-        children: [
+        ];
+        const expectedTestAttrs: FlatPlanNodeAttribute[] = [
           {
-            name: "child",
-            attrs: testAttrsDuplicatedKeys,
-            children: [
-              {
-                name: "grandchild",
-                attrs: testAttrsDuplicatedKeys,
-                children: [],
-              },
-            ],
+            key: "foo",
+            values: ["bar"],
+            warn: false,
           },
-        ],
-      };
-
-      const nodeFlattened: FlatPlanNode = {
-        name: "root",
-        attrs: expectedTestAttrsFlattened,
-        children: [
           {
-            name: "child",
-            attrs: expectedTestAttrsFlattened,
-            children: [
-              {
-                name: "grandchild",
-                attrs: expectedTestAttrsFlattened,
-                children: [],
-              },
-            ],
+            key: "spans",
+            values: ["FULL SCAN"],
+            warn: true,
           },
-        ],
-      };
+        ];
 
-      assert.deepEqual(flattenTreeAttributes(node), nodeFlattened);
+        assert.deepEqual(flattenAttributes(testAttrs), expectedTestAttrs);
+      });
+    });
+    describe("when keys are unsorted", () => {
+      it("puts table key first, and sorts remaining keys alphabetically", () => {
+        const testAttrs: IAttr[] = [
+          {
+            key: "zebra",
+            value: "foo",
+          },
+          {
+            key: "table",
+            value: "foo",
+          },
+          {
+            key: "cheetah",
+            value: "foo",
+          },
+          {
+            key: "table",
+            value: "bar",
+          },
+        ];
+        const expectedTestAttrs: FlatPlanNodeAttribute[] = [
+          {
+            key: "table",
+            values: ["foo", "bar"],
+            warn: false,
+          },
+          {
+            key: "cheetah",
+            values: ["foo"],
+            warn: false,
+          },
+          {
+            key: "zebra",
+            values: ["foo"],
+            warn: false,
+          },
+        ];
+
+        assert.deepEqual(flattenAttributes(testAttrs), expectedTestAttrs);
+      });
     });
   });
-});
 
-describe("flattenAttributes", () => {
-  describe("when all attributes have different keys", () => {
-    it("creates array with exactly one value for each attribute", () => {
-      assert.deepEqual(
-        flattenAttributes(testAttrsDistinctKeys),
-        expectedTestAttrsDistinctKeys,
-      );
+  describe("standardizeKey", () => {
+    it("should convert strings to camel case", () => {
+      assert.equal(standardizeKey("hello world"), "helloWorld");
+      assert.equal(standardizeKey("camels-are-cool"), "camelsAreCool");
+      assert.equal(standardizeKey("cockroach"), "cockroach");
     });
-  });
-  describe("when there are multiple attributes with same key", () => {
-    it("collects values into one array for same key", () => {
-      assert.deepEqual(
-        flattenAttributes(testAttrsDuplicatedKeys),
-        expectedTestAttrsFlattened,
-      );
-    });
-  });
-  describe("when attribute key/value is `spans FULL SCAN`", () => {
-    it("sets warn to true", () => {
-      const testAttrs: IAttr[] = [
-        {
-          key: "foo",
-          value: "bar",
-        },
-        {
-          key: "spans",
-          value: "FULL SCAN",
-        },
-      ];
-      const expectedTestAttrs: FlatPlanNodeAttribute[] = [
-        {
-          key: "foo",
-          values: ["bar"],
-          warn: false,
-        },
-        {
-          key: "spans",
-          values: ["FULL SCAN"],
-          warn: true,
-        },
-      ];
 
-      assert.deepEqual(flattenAttributes(testAttrs), expectedTestAttrs);
-    });
-  });
-  describe("when keys are unsorted", () => {
-    it("puts table key first, and sorts remaining keys alphabetically", () => {
-      const testAttrs: IAttr[] = [
-        {
-          key: "zebra",
-          value: "foo",
-        },
-        {
-          key: "table",
-          value: "foo",
-        },
-        {
-          key: "cheetah",
-          value: "foo",
-        },
-        {
-          key: "table",
-          value: "bar",
-        },
-      ];
-      const expectedTestAttrs: FlatPlanNodeAttribute[] = [
-        {
-          key: "table",
-          values: ["foo", "bar"],
-          warn: false,
-        },
-        {
-          key: "cheetah",
-          values: ["foo"],
-          warn: false,
-        },
-        {
-          key: "zebra",
-          values: ["foo"],
-          warn: false,
-        },
-      ];
-
-      assert.deepEqual(flattenAttributes(testAttrs), expectedTestAttrs);
+    it("should remove '(anti)' from the key", () => {
+      assert.equal(standardizeKey("lookup join (anti)"), "lookupJoin");
+      assert.equal(standardizeKey("(anti) hello world"), "helloWorld");
     });
   });
 });

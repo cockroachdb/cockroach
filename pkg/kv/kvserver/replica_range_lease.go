@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -346,8 +347,18 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		p.nextLease = roachpb.Lease{}
 	}
 
-	err := p.repl.store.Stopper().RunAsyncTask(
-		ctx, "storage.pendingLeaseRequest: requesting lease", func(ctx context.Context) {
+	err := p.repl.store.Stopper().RunAsyncTaskEx(
+		ctx,
+		stop.TaskOpts{
+			TaskName: "pendingLeaseRequest: requesting lease",
+			// Trace the lease acquisition as a child even though it might outlive the
+			// parent in case the parent's ctx is canceled. Other requests might
+			// later block on this lease acquisition too, and we can't include the
+			// acquisition's trace in all of them, but let's at least include it in
+			// the request that triggered it.
+			SpanOpt: stop.ChildSpan,
+		},
+		func(ctx context.Context) {
 			defer sp.Finish()
 
 			// If requesting an epoch-based lease & current state is expired,
@@ -1303,21 +1314,21 @@ func (r *Replica) maybeExtendLeaseAsync(ctx context.Context, st kvserverpb.Lease
 }
 
 // checkLeaseRespectsPreferences checks if current replica owns the lease and
-// if it respects the lease preferences defined in the zone config. If there are no
+// if it respects the lease preferences defined in the span config. If there are no
 // preferences defined then it will return true and consider that to be in-conformance.
 func (r *Replica) checkLeaseRespectsPreferences(ctx context.Context) (bool, error) {
 	if !r.OwnsValidLease(ctx, r.store.cfg.Clock.NowAsClockTimestamp()) {
 		return false, errors.Errorf("replica %s is not the leaseholder, cannot check lease preferences", r)
 	}
-	_, zone := r.DescAndZone()
-	if len(zone.LeasePreferences) == 0 {
+	conf := r.SpanConfig()
+	if len(conf.LeasePreferences) == 0 {
 		return true, nil
 	}
 	storeDesc, err := r.store.Descriptor(ctx, false /* useCached */)
 	if err != nil {
 		return false, err
 	}
-	for _, preference := range zone.LeasePreferences {
+	for _, preference := range conf.LeasePreferences {
 		if constraint.ConjunctionsCheck(*storeDesc, preference.Constraints) {
 			return true, nil
 		}

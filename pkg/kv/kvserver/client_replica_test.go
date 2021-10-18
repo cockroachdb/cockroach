@@ -3223,12 +3223,12 @@ func TestStrictGCEnforcement(t *testing.T) {
 				for i := 0; i < tc.NumServers(); i++ {
 					s := tc.Server(i)
 					_, r := getFirstStoreReplica(t, s, tableKey)
-					if _, z := r.DescAndZone(); z.GC.TTLSeconds != int32(exp) {
+					if c := r.SpanConfig(); c.TTL().Seconds() != (time.Duration(exp) * time.Second).Seconds() {
 						_, sysCfg := getFirstStoreReplica(t, tc.Server(i), keys.SystemConfigSpan.Key)
 						sysCfg.RaftLock()
 						require.NoError(t, sysCfg.MaybeGossipSystemConfigRaftMuLocked(ctx))
 						sysCfg.RaftUnlock()
-						return errors.Errorf("expected %d, got %d", exp, z.GC.TTLSeconds)
+						return errors.Errorf("expected %d, got %f", exp, c.TTL().Seconds())
 					}
 				}
 				return nil
@@ -3867,6 +3867,7 @@ func TestOptimisticEvalRetry(t *testing.T) {
 			require.True(t, removedLocks)
 			done = true
 		case <-timer.C:
+			timer.Read = true
 			require.NoError(t, txn1.Commit(ctx))
 			removedLocks = true
 		}

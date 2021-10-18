@@ -19,7 +19,10 @@
 
 package tree
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // Instructions for creating new types: If a type needs to satisfy an
 // interface, declare that function along with that interface. This
@@ -435,6 +438,17 @@ func (n *ControlJobsForSchedules) StatementTag() string {
 }
 
 // StatementReturnType implements the Statement interface.
+func (*ControlJobsOfType) StatementReturnType() StatementReturnType { return RowsAffected }
+
+// StatementType implements the Statement interface.
+func (*ControlJobsOfType) StatementType() StatementType { return TypeTCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (n *ControlJobsOfType) StatementTag() string {
+	return fmt.Sprintf("%s ALL %s JOBS", JobCommandToStatement[n.Command], strings.ToUpper(n.Type))
+}
+
+// StatementReturnType implements the Statement interface.
 func (*CancelQueries) StatementReturnType() StatementReturnType { return RowsAffected }
 
 // StatementType implements the Statement interface.
@@ -469,6 +483,15 @@ func (*CommentOnColumn) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CommentOnColumn) StatementTag() string { return "COMMENT ON COLUMN" }
+
+// StatementReturnType implements the Statement interface.
+func (*CommentOnConstraint) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*CommentOnConstraint) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CommentOnConstraint) StatementTag() string { return "COMMENT ON CONSTRAINT" }
 
 // StatementReturnType implements the Statement interface.
 func (*CommentOnDatabase) StatementReturnType() StatementReturnType { return DDL }
@@ -1178,6 +1201,15 @@ func (*ShowCreate) StatementType() StatementType { return TypeDML }
 func (*ShowCreate) StatementTag() string { return "SHOW CREATE" }
 
 // StatementReturnType implements the Statement interface.
+func (*ShowCreateAllSchemas) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowCreateAllSchemas) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowCreateAllSchemas) StatementTag() string { return "SHOW CREATE ALL SCHEMAS" }
+
+// StatementReturnType implements the Statement interface.
 func (*ShowCreateAllTables) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -1631,10 +1663,12 @@ func (n *BeginTransaction) String() string               { return AsString(n) }
 func (n *ControlJobs) String() string                    { return AsString(n) }
 func (n *ControlSchedules) String() string               { return AsString(n) }
 func (n *ControlJobsForSchedules) String() string        { return AsString(n) }
+func (n *ControlJobsOfType) String() string              { return AsString(n) }
 func (n *CancelQueries) String() string                  { return AsString(n) }
 func (n *CancelSessions) String() string                 { return AsString(n) }
 func (n *CannedOptPlan) String() string                  { return AsString(n) }
 func (n *CommentOnColumn) String() string                { return AsString(n) }
+func (n *CommentOnConstraint) String() string            { return AsString(n) }
 func (n *CommentOnDatabase) String() string              { return AsString(n) }
 func (n *CommentOnSchema) String() string                { return AsString(n) }
 func (n *CommentOnIndex) String() string                 { return AsString(n) }
@@ -1706,7 +1740,8 @@ func (n *ShowClusterSettingList) String() string         { return AsString(n) }
 func (n *ShowColumns) String() string                    { return AsString(n) }
 func (n *ShowConstraints) String() string                { return AsString(n) }
 func (n *ShowCreate) String() string                     { return AsString(n) }
-func (n *ShowCreateAllTables) String() string            { return AsString(n) }
+func (node *ShowCreateAllSchemas) String() string        { return AsString(node) }
+func (node *ShowCreateAllTables) String() string         { return AsString(node) }
 func (n *ShowCreateSchedules) String() string            { return AsString(n) }
 func (n *ShowDatabases) String() string                  { return AsString(n) }
 func (n *ShowDatabaseIndexes) String() string            { return AsString(n) }

@@ -709,3 +709,15 @@ SET DATABASE = test
 # system is a database, not a schema.
 query error relation ".system.users" does not exist
 SELECT username FROM "".system.users WHERE username = 'root'
+
+# Verify that tenant_usage has a reduced TTL.
+query T
+SELECT raw_config_sql FROM [ SHOW ZONE CONFIGURATION FOR TABLE system.tenant_usage ]
+----
+ALTER TABLE system.public.tenant_usage CONFIGURE ZONE USING
+  range_min_bytes = 134217728,
+  range_max_bytes = 536870912,
+  gc.ttlseconds = 7200,
+  num_replicas = 5,
+  constraints = '[]',
+  lease_preferences = '[]'

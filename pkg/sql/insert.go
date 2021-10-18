@@ -44,6 +44,8 @@ type insertNode struct {
 	run insertRun
 }
 
+var _ mutationPlanNode = &insertNode{}
+
 // insertRun contains the run-time state of insertNode during local execution.
 type insertRun struct {
 	ti         tableInserter
@@ -121,7 +123,7 @@ func (r *insertRun) initRowContainer(params runParams, columns colinfo.ResultCol
 // processSourceRow processes one row from the source for insertion and, if
 // result rows are needed, saves it in the result row container.
 func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) error {
-	if err := enforceLocalColumnConstraints(rowVals, r.insertCols); err != nil {
+	if err := enforceLocalColumnConstraints(rowVals, r.insertCols, false /* isUpdate */); err != nil {
 		return err
 	}
 
@@ -186,7 +188,7 @@ func (n *insertNode) startExec(params runParams) error {
 
 	n.run.initRowContainer(params, n.columns)
 
-	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext())
+	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV)
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but
@@ -254,6 +256,7 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
+		n.run.ti.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 		if err := n.run.ti.finalize(params.ctx); err != nil {
 			return false, err
 		}
@@ -283,4 +286,8 @@ func (n *insertNode) Close(ctx context.Context) {
 // See planner.autoCommit.
 func (n *insertNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()
+}
+
+func (n *insertNode) rowsWritten() int64 {
+	return n.run.ti.rowsWritten
 }

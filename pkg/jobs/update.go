@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -141,9 +142,11 @@ func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error 
 func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateFn UpdateFn) error {
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
+	var runStats *RunStats
 
 	backoffIsActive := j.registry.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff)
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
+		payload, progress, runStats = nil, nil, nil
 		var err error
 		var row tree.Datums
 		row, err = j.registry.ex.QueryRowEx(
@@ -176,6 +179,8 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 					"job %d: with status '%s': expected session '%s' but found '%s'",
 					j.ID(), statusString, j.sessionID, storedSession)
 			}
+		} else {
+			log.VInfof(ctx, 1, "job %d: update called with no session ID", j.ID())
 		}
 		if payload, err = UnmarshalPayload(row[1]); err != nil {
 			return err
@@ -268,6 +273,7 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 		}
 
 		if backoffIsActive && ju.md.RunStats != nil {
+			runStats = ju.md.RunStats
 			addSetter("last_run", ju.md.RunStats.LastRun)
 			addSetter("num_runs", ju.md.RunStats.NumRuns)
 		}
@@ -289,16 +295,19 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 	}); err != nil {
 		return err
 	}
-	if payload != nil {
+	func() {
 		j.mu.Lock()
-		j.mu.payload = *payload
-		j.mu.Unlock()
-	}
-	if progress != nil {
-		j.mu.Lock()
-		j.mu.progress = *progress
-		j.mu.Unlock()
-	}
+		defer j.mu.Unlock()
+		if payload != nil {
+			j.mu.payload = *payload
+		}
+		if progress != nil {
+			j.mu.progress = *progress
+		}
+		if runStats != nil {
+			j.mu.runStats = runStats
+		}
+	}()
 	return nil
 }
 

@@ -33,6 +33,7 @@ import (
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -639,6 +640,21 @@ func FindPriorBackups(
 	return prev, nil
 }
 
+// checkForLatestFileInCollection checks whether the directory pointed by store contains the
+// latestFileName pointer directory.
+func checkForLatestFileInCollection(
+	ctx context.Context, store cloud.ExternalStorage,
+) (bool, error) {
+	_, err := store.ReadFile(ctx, latestFileName)
+	if err != nil {
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return false, nil
+		}
+		return false, pgerror.WithCandidateCode(err, pgcode.Io)
+	}
+	return true, nil
+}
+
 // resolveBackupManifests resolves a list of list of URIs that point to the
 // incremental layers (each of which can be partitioned) of backups into the
 // actual backup manifests and metadata required to RESTORE. If only one layer
@@ -858,7 +874,15 @@ func loadSQLDescsFromBackupsAtTime(
 		return ret
 	}
 	if asOf.IsEmpty() {
-		return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+		if lastBackupManifest.DescriptorCoverage != tree.AllDescriptors {
+			return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+		}
+
+		// Cluster backups with revision history may have included previous
+		// database versions of database descriptors in
+		// lastBackupManifest.Descriptors. Find the correct set of descriptors by
+		// going through their revisions. See #68541.
+		asOf = lastBackupManifest.EndTime
 	}
 
 	for _, b := range backupManifests {
@@ -889,8 +913,14 @@ func loadSQLDescsFromBackupsAtTime(
 		// backed up -- if the DB is missing, filter the object.
 		desc := catalogkv.NewBuilder(raw).BuildExistingMutable()
 		var isObject bool
-		switch desc.(type) {
-		case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
+		switch d := desc.(type) {
+		case catalog.TableDescriptor:
+			// Filter out revisions in the dropped state.
+			if d.GetState() == descpb.DescriptorState_DROP {
+				continue
+			}
+			isObject = true
+		case catalog.TypeDescriptor, catalog.SchemaDescriptor:
 			isObject = true
 		}
 		if isObject && byID[desc.GetParentID()] == nil {

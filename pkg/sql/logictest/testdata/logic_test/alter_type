@@ -269,12 +269,6 @@ SELECT 'lru'::store
 statement ok
 CREATE TYPE greetings AS ENUM('hi', 'hello', 'howdy', 'yo')
 
-statement error pq: ALTER TYPE ... DROP VALUE ... is only supported as an alpha feature
-ALTER TYPE greetings DROP VALUE 'hi'
-
-statement ok
-SET enable_drop_enum_value = true;
-
 statement ok
 ALTER TYPE greetings DROP VALUE 'hi'
 

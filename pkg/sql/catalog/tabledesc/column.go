@@ -11,6 +11,8 @@
 package tabledesc
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -228,6 +230,22 @@ func (w column) IsGeneratedByDefaultAsIdentity() bool {
 // otherwise, returns descpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN.
 func (w column) GetGeneratedAsIdentityType() descpb.GeneratedAsIdentityType {
 	return w.desc.GeneratedAsIdentityType
+}
+
+// GetGeneratedAsIdentitySequenceOption returns the column's `GENERATED AS
+// IDENTITY` sequence option if it exists, empty string otherwise.
+func (w column) GetGeneratedAsIdentitySequenceOption() string {
+	if !w.HasGeneratedAsIdentitySequenceOption() {
+		return ""
+	}
+	return strings.TrimSpace(*w.desc.GeneratedAsIdentitySequenceOption)
+}
+
+// HasGeneratedAsIdentitySequenceOption returns true if there is a
+// customized sequence option when this column is created as a
+// `GENERATED AS IDENTITY` column.
+func (w column) HasGeneratedAsIdentitySequenceOption() bool {
+	return w.desc.GeneratedAsIdentitySequenceOption != nil
 }
 
 // columnCache contains precomputed slices of catalog.Column interfaces.

@@ -12,16 +12,17 @@ package row
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,21 +37,27 @@ type KVFetcher struct {
 	newSpan       bool
 
 	// Observability fields.
-	mu struct {
-		syncutil.Mutex
+	// Note: these need to be read via an atomic op.
+	atomics struct {
 		bytesRead int64
 	}
 }
 
 // NewKVFetcher creates a new KVFetcher.
 // If mon is non-nil, this fetcher will track its fetches and must be Closed.
+//
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly (if mon is non-nil). The
+// caller can only reuse the spans slice after the fetcher has been closed, and
+// if the caller does, it becomes responsible for the memory accounting.
 func NewKVFetcher(
+	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
 	bsHeader *roachpb.BoundedStalenessHeader,
 	reverse bool,
-	batchBytesLimit BytesLimit,
-	firstBatchLimit KeyLimit,
+	batchBytesLimit rowinfra.BytesLimit,
+	firstBatchLimit rowinfra.KeyLimit,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockTimeout time.Duration,
@@ -84,6 +91,7 @@ func NewKVFetcher(
 	}
 
 	kvBatchFetcher, err := makeKVBatchFetcher(
+		ctx,
 		sendFn,
 		spans,
 		reverse,
@@ -113,9 +121,7 @@ func (f *KVFetcher) GetBytesRead() int64 {
 	if f == nil {
 		return 0
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.mu.bytesRead
+	return atomic.LoadInt64(&f.atomics.bytesRead)
 }
 
 // MVCCDecodingStrategy controls if and how the fetcher should decode MVCC
@@ -191,9 +197,12 @@ func (f *KVFetcher) NextKV(
 			return false, kv, false, nil
 		}
 		f.newSpan = true
-		f.mu.Lock()
-		f.mu.bytesRead += int64(len(f.batchResponse))
-		f.mu.Unlock()
+		nBytes := len(f.batchResponse)
+		for i := range f.kvs {
+			nBytes += len(f.kvs[i].Key)
+			nBytes += len(f.kvs[i].Value.RawBytes)
+		}
+		atomic.AddInt64(&f.atomics.bytesRead, int64(nBytes))
 	}
 }
 

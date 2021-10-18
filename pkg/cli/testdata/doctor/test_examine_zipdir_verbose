@@ -3,6 +3,7 @@ debug doctor zipdir --verbose
 debug doctor zipdir testdata/doctor/debugzip --verbose
 reading testdata/doctor/debugzip/system.descriptor.txt
 reading testdata/doctor/debugzip/system.namespace.txt
+WARNING: errors occurred during the production of system.jobs.txt, contents may be missing or incomplete.
 reading testdata/doctor/debugzip/system.jobs.txt
 Examining 37 descriptors and 42 namespace entries...
   ParentID   0, ParentSchemaID  0: database "system" (1): processed

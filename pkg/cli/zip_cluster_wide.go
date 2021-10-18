@@ -86,9 +86,11 @@ var debugZipTablesPerCluster = []string{
 	"system.descriptor", // descriptors also contain job-like mutation state.
 	"system.namespace",
 	"system.scheduled_jobs",
+	"system.settings", // get the raw settings to determine what's explicitly set.
 
 	// The synthetic SQL CREATE statements for all tables.
 	// Note the "". to collect across all databases.
+	`"".crdb_internal.create_schema_statements`,
 	`"".crdb_internal.create_statements`,
 	// Ditto, for CREATE TYPE.
 	`"".crdb_internal.create_type_statements`,
@@ -103,6 +105,7 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.zones",
 	"crdb_internal.invalid_objects",
 	"crdb_internal.index_usage_statistics",
+	"crdb_internal.table_indexes",
 }
 
 // collectClusterData runs the data collection that only needs to

@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/redact"
 	types "github.com/gogo/protobuf/types"
 )
 
-// LogMessageField is the field name used for the opentracing.Span.LogFields()
-// for a log message.
+// LogMessageField is the field name used for the log message in a LogRecord.
 const LogMessageField = "event"
 
 func (s *RecordedSpan) String() string {
@@ -34,16 +34,6 @@ func (s *RecordedSpan) String() string {
 // Structured visits the data passed to RecordStructured for the Span from which
 // the RecordedSpan was created.
 func (s *RecordedSpan) Structured(visit func(*types.Any, time.Time)) {
-	// Check if the RecordedSpan is from a node running a version less than 21.2.
-	// If it is, we set the "recorded at" time to the StartTime of the span.
-	// TODO(adityamaru): Remove this code in 22.1 since all RecordedSpans will
-	// have StructuredRecords in 21.2+ nodes.
-	if s.StructuredRecords == nil {
-		for _, item := range s.DeprecatedInternalStructured {
-			visit(item, s.StartTime)
-		}
-		return
-	}
 	for _, sr := range s.StructuredRecords {
 		visit(sr.Payload, sr.Time)
 	}
@@ -51,14 +41,19 @@ func (s *RecordedSpan) Structured(visit func(*types.Any, time.Time)) {
 
 // Msg extracts the message of the LogRecord, which is either in an "event" or
 // "error" field.
-func (l LogRecord) Msg() string {
-	for _, f := range l.Fields {
+func (l LogRecord) Msg() redact.RedactableString {
+	if l.Message != "" {
+		return l.Message
+	}
+
+	// Compatibility with 21.2: look at l.DeprecatedFields.
+	for _, f := range l.DeprecatedFields {
 		key := f.Key
 		if key == LogMessageField {
 			return f.Value
 		}
 		if key == "error" {
-			return fmt.Sprint("error:", f.Value)
+			return redact.Sprintf("error: %s", f.Value)
 		}
 	}
 	return ""

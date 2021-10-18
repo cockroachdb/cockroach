@@ -40,6 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -68,6 +70,10 @@ const (
 	initialWindowSize     = defaultWindowSize * 32 // for an RPC
 	initialConnWindowSize = initialWindowSize * 16 // for a connection
 )
+
+// GRPC Dialer connection timeout. 20s matches default value that is
+// suppressed when backoff config is provided.
+const minConnectionTimeout = 20 * time.Second
 
 // sourceAddr is the environment-provided local address for outgoing
 // connections.
@@ -328,6 +334,13 @@ type connKey struct {
 	targetAddr string
 	nodeID     roachpb.NodeID
 	class      ConnectionClass
+}
+
+var _ redact.SafeFormatter = connKey{}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (c connKey) SafeFormat(p redact.SafePrinter, _ rune) {
+	p.Printf("{n%d: %s (%v)}", c.nodeID, c.targetAddr, c.class)
 }
 
 // ContextOptions are passed to NewContext to set up a new *Context.
@@ -672,17 +685,26 @@ func (ctx *Context) removeConn(conn *Connection, keys ...connKey) {
 	for _, key := range keys {
 		ctx.conns.Delete(key)
 	}
-	if log.V(1) {
-		log.Health.Infof(ctx.masterCtx, "closing %+v", keys)
-	}
+	log.Health.Infof(ctx.masterCtx, "closing %+v", keys)
 	if grpcConn := conn.grpcConn; grpcConn != nil {
 		err := grpcConn.Close() // nolint:grpcconnclose
 		if err != nil && !grpcutil.IsClosedConnection(err) {
-			if log.V(1) {
-				log.Health.Errorf(ctx.masterCtx, "failed to close client connection: %v", err)
-			}
+			log.Health.Warningf(ctx.masterCtx, "failed to close client connection: %v", err)
 		}
 	}
+}
+
+// ConnHealth returns nil if we have an open connection of the request
+// class to the given node that succeeded on its most recent heartbeat.
+func (ctx *Context) ConnHealth(target string, nodeID roachpb.NodeID, class ConnectionClass) error {
+	// The local client is always considered healthy.
+	if ctx.GetLocalInternalClientForAddr(target, nodeID) != nil {
+		return nil
+	}
+	if value, ok := ctx.conns.Load(connKey{target, nodeID, class}); ok {
+		return value.(*Connection).Health()
+	}
+	return ErrNoConnection
 }
 
 // GRPCDialOptions returns the minimal `grpc.DialOption`s necessary to connect
@@ -711,7 +733,7 @@ func (ctx *Context) grpcDialOptions(
 		if ctx.tenID == roachpb.SystemTenantID {
 			tlsConfig, err = ctx.GetClientTLSConfig()
 		} else {
-			tlsConfig, err = ctx.GetTenantClientTLSConfig()
+			tlsConfig, err = ctx.GetTenantTLSConfig()
 		}
 		if err != nil {
 			return nil, err
@@ -759,7 +781,7 @@ func (ctx *Context) grpcDialOptions(
 		// is in setupSpanForIncomingRPC().
 		//
 		tagger := func(span *tracing.Span) {
-			span.SetTag("node", ctx.NodeID.Get().String())
+			span.SetTag("node", attribute.IntValue(int(ctx.NodeID.Get())))
 		}
 		unaryInterceptors = append(unaryInterceptors,
 			tracing.ClientInterceptor(tracer, tagger))
@@ -991,7 +1013,9 @@ func (ctx *Context) grpcDialRaw(
 	// ~second range.
 	backoffConfig := backoff.DefaultConfig
 	backoffConfig.MaxDelay = maxBackoff
-	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoffConfig}))
+	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{
+		Backoff:           backoffConfig,
+		MinConnectTimeout: minConnectionTimeout}))
 	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
 	dialOpts = append(dialOpts,
 		grpc.WithInitialWindowSize(initialWindowSize),
@@ -1018,9 +1042,7 @@ func (ctx *Context) grpcDialRaw(
 	// behavior and redialChan will never be closed).
 	dialOpts = append(dialOpts, ctx.testingDialOpts...)
 
-	if log.V(1) {
-		log.Health.Infof(ctx.masterCtx, "dialing %s", target)
-	}
+	log.Health.Infof(ctx.masterCtx, "dialing n%v: %s (%v)", remoteNodeID, target, class)
 	conn, err := grpc.DialContext(ctx.masterCtx, target, dialOpts...)
 	return conn, dialer.redialChan, err
 }
@@ -1133,6 +1155,10 @@ func (ctx *Context) NewBreaker(name string) *circuit.Breaker {
 // ErrNotHeartbeated is returned by ConnHealth when we have not yet performed
 // the first heartbeat.
 var ErrNotHeartbeated = errors.New("not yet heartbeated")
+
+// ErrNoConnection is returned by ConnHealth when no connection exists to
+// the node.
+var ErrNoConnection = errors.New("no connection found")
 
 func (ctx *Context) runHeartbeat(
 	conn *Connection, target string, redialChan <-chan struct{},

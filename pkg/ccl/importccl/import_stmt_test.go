@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -168,14 +169,13 @@ ORDER BY table_name
 				s string collate en_u_ks_level1 primary key
 			`,
 			typ: "CSV",
-			data: `a
-B
-c
-D
-d
+			data: `'a' collate en_u_ks_level1
+'B' collate en_u_ks_level1
+'c' collate en_u_ks_level1
+'D' collate en_u_ks_level1
+'d' collate en_u_ks_level1
 `,
-			err:       "duplicate key",
-			skipIssue: 53956,
+			err: "duplicate key",
 		},
 		{
 			name: "duplicate PK at sst boundary",
@@ -272,11 +272,10 @@ d
 			name:   "collated strings",
 			create: `s string collate en_u_ks_level1`,
 			typ:    "CSV",
-			data:   strings.Repeat("1\n", 2000),
+			data:   strings.Repeat("'1' COLLATE en_u_ks_level1\n", 2000),
 			query: map[string][][]string{
 				`SELECT s, count(*) FROM t GROUP BY s`: {{"1", "2000"}},
 			},
-			skipIssue: 53957,
 		},
 		{
 			name:   "quotes are accepted in a quoted string",
@@ -994,7 +993,7 @@ END;
 						`CREATE TABLE public.t (
 	a INT8 NOT NULL,
 	b INT8 NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	CONSTRAINT t_pkey PRIMARY KEY (a ASC),
 	FAMILY "primary" (a, b)
 )`,
 					},
@@ -1017,7 +1016,7 @@ END;
 	a INT8 NOT NULL,
 	b INT8 NOT VISIBLE NULL,
 	c INT8 NULL,
-	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	CONSTRAINT t_pkey PRIMARY KEY (a ASC),
 	FAMILY "primary" (a, b, c)
 )`,
 					},
@@ -1038,7 +1037,7 @@ END;
 						`CREATE TABLE public.t (
 	a INT8 NOT NULL,
 	b INT8 NULL DEFAULT 8:::INT8,
-	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	CONSTRAINT t_pkey PRIMARY KEY (a ASC),
 	FAMILY "primary" (a, b)
 )`,
 					},
@@ -1112,6 +1111,54 @@ CREATE TABLE t (a duration);
 			create: `i int8 default nextval('s')`,
 			typ:    "CSV",
 			err:    `"s" not found`,
+		},
+		{
+			name:   "statistics collection",
+			create: "a INT",
+			typ:    "CSV",
+			data: "0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n" +
+				"10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n" +
+				"20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n" +
+				"30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n" +
+				"40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n" +
+				"50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n" +
+				"60\n61\n62\n63\n64\n65\n66\n67\n68\n69\n" +
+				"70\n71\n72\n73\n74\n75\n76\n77\n78\n79\n" +
+				"80\n81\n82\n83\n84\n85\n86\n87\n88\n89\n" +
+				"90\n91\n92\n93\n94\n95\n96\n97\n98\n99\n",
+			query: map[string][][]string{
+				"SELECT column_names, row_count, distinct_count, null_count " +
+					"FROM [SHOW STATISTICS FOR TABLE t] " +
+					"WHERE statistics_name = '__import__' " +
+					"ORDER BY column_names": {
+					{"{a}", "100", "10", "1"},
+					{"{rowid}", "100", "10", "1"},
+				},
+			},
+		},
+		{
+			name:   "statistics collection multi",
+			create: "a INT PRIMARY KEY, b INT, INDEX (b, a)",
+			typ:    "CSV",
+			data: "0,0\n1,1\n2,2\n3,3\n4,4\n5,5\n6,6\n7,7\n8,8\n9,9\n" +
+				"10,10\n11,11\n12,12\n13,13\n14,14\n15,15\n16,16\n17,17\n18,18\n19,19\n" +
+				"20,20\n21,21\n22,22\n23,23\n24,24\n25,25\n26,26\n27,27\n28,28\n29,29\n" +
+				"30,30\n31,31\n32,32\n33,33\n34,34\n35,35\n36,36\n37,37\n38,38\n39,39\n" +
+				"40,40\n41,41\n42,42\n43,43\n44,44\n45,45\n46,46\n47,47\n48,48\n49,49\n" +
+				"50,50\n51,51\n52,52\n53,53\n54,54\n55,55\n56,56\n57,57\n58,58\n59,59\n" +
+				"60,60\n61,61\n62,62\n63,63\n64,64\n65,65\n66,66\n67,67\n68,68\n69,69\n" +
+				"70,70\n71,71\n72,72\n73,73\n74,74\n75,75\n76,76\n77,77\n78,78\n79,79\n" +
+				"80,80\n81,81\n82,82\n83,83\n84,84\n85,85\n86,86\n87,87\n88,88\n89,89\n" +
+				"90,90\n91,91\n92,92\n93,93\n94,94\n95,95\n96,96\n97,97\n98,98\n99,99",
+			query: map[string][][]string{
+				"SELECT column_names, row_count, distinct_count, null_count " +
+					"FROM [SHOW STATISTICS FOR TABLE t] " +
+					"WHERE statistics_name = '__import__' " +
+					"ORDER BY column_names": {
+					{"{a}", "100", "10", "1"},
+					{"{b}", "100", "10", "1"},
+				},
+			},
 		},
 	}
 
@@ -1200,7 +1247,7 @@ CREATE TABLE t (a duration);
 	})
 }
 
-func TestImportUserDefinedTypes(t *testing.T) {
+func TestImportIntoUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -1275,6 +1322,22 @@ func TestImportUserDefinedTypes(t *testing.T) {
 			verifyQuery: "SELECT * FROM t ORDER BY a",
 			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
 		},
+		// Test CSV default and computed column imports.
+		{
+			create: `
+a greeting, b greeting default 'hi', c greeting 
+AS (
+CASE a
+WHEN 'hello' THEN 'hi'
+WHEN 'hi' THEN 'hello'
+END
+) STORED`,
+			intoCols:    "a",
+			typ:         "CSV",
+			contents:    "hello\nhi\n",
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hi", "hi"}, {"hi", "hi", "hello"}},
+		},
 		// Test AVRO imports.
 		{
 			create:      "a greeting, b greeting",
@@ -1283,6 +1346,22 @@ func TestImportUserDefinedTypes(t *testing.T) {
 			contents:    avroData,
 			verifyQuery: "SELECT * FROM t ORDER BY a",
 			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
+		},
+		// Test AVRO default and computed column imports.
+		{
+			create: `
+a greeting, b greeting, c greeting 
+AS (
+CASE a
+WHEN 'hello' THEN 'hi'
+WHEN 'hi' THEN 'hello'
+END
+) STORED`,
+			intoCols:    "a, b",
+			typ:         "AVRO",
+			contents:    avroData,
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hello", "hi"}, {"hi", "hi", "hello"}},
 		},
 		// Test DELIMITED imports.
 		{
@@ -1293,6 +1372,22 @@ func TestImportUserDefinedTypes(t *testing.T) {
 			verifyQuery: "SELECT * FROM t ORDER BY a",
 			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
 		},
+		// Test DELIMITED default and computed column imports.
+		{
+			create: `
+a greeting, b greeting default 'hi', c greeting 
+AS (
+CASE a
+WHEN 'hello' THEN 'hi'
+WHEN 'hi' THEN 'hello'
+END
+) STORED`,
+			intoCols:    "a",
+			typ:         "DELIMITED",
+			contents:    "hello\nhi\n",
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hi", "hi"}, {"hi", "hi", "hello"}},
+		},
 		// Test PGCOPY imports.
 		{
 			create:      "a greeting, b greeting",
@@ -1302,13 +1397,29 @@ func TestImportUserDefinedTypes(t *testing.T) {
 			verifyQuery: "SELECT * FROM t ORDER BY a",
 			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
 		},
-		// Test table with default value
+		// Test PGCOPY default and computed column imports.
 		{
-			create:    "a greeting, b greeting default 'hi'",
-			intoCols:  "a, b",
+			create: `
+a greeting, b greeting default 'hi', c greeting 
+AS (
+CASE a
+WHEN 'hello' THEN 'hi'
+WHEN 'hi' THEN 'hello'
+END
+) STORED`,
+			intoCols:    "a",
+			typ:         "PGCOPY",
+			contents:    "hello\nhi\n",
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hi", "hi"}, {"hi", "hi", "hello"}},
+		},
+		// Test table with an invalid enum value.
+		{
+			create:    "a greeting",
+			intoCols:  "a",
 			typ:       "PGCOPY",
-			contents:  "hello\nhi\thi\n",
-			errString: "type OID 100052 does not exist",
+			contents:  "randomvalue\n",
+			errString: "encountered error invalid input value for enum greeting",
 		},
 	}
 
@@ -1352,7 +1463,7 @@ const (
 	prcp FLOAT4 NULL,
 	date DATE NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+	CONSTRAINT weather_pkey PRIMARY KEY (rowid ASC),
 	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES public.cities(city) NOT VALID,
 	FAMILY "primary" (city, temp_lo, temp_hi, prcp, date, rowid)
 )`
@@ -3677,6 +3788,7 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 	}()
 
 	importCtx := &parallelImportContext{
+		semaCtx:   &semaCtx,
 		evalCtx:   &evalCtx,
 		tableDesc: tableDesc.ImmutableCopy().(catalog.TableDescriptor),
 		kvCh:      kvCh,
@@ -4673,7 +4785,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	for i, col := range tableDesc.Columns {
 		cols[i] = tree.Name(col.Name)
 	}
-	r, err := newMysqloutfileReader(roachpb.MySQLOutfileOptions{
+	r, err := newMysqloutfileReader(&semaCtx, roachpb.MySQLOutfileOptions{
 		RowSeparator:   '\n',
 		FieldSeparator: '\t',
 	}, kvCh, 0, 0,
@@ -4775,7 +4887,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 	for i, col := range tableDesc.Columns {
 		cols[i] = tree.Name(col.Name)
 	}
-	r, err := newPgCopyReader(roachpb.PgCopyOptions{
+	r, err := newPgCopyReader(&semaCtx, roachpb.PgCopyOptions{
 		Delimiter:  '\t',
 		Null:       `\N`,
 		MaxRowSize: 4096,
@@ -5502,7 +5614,7 @@ func TestImportPgDump(t *testing.T) {
 	a INT8 NULL DEFAULT nextval('public.a_seq'::REGCLASS),
 	b INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+	CONSTRAINT seqtable_pkey PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (a, b, rowid)
 )`,
 				}})
@@ -6347,22 +6459,44 @@ func TestImportMultiRegion(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	baseDir := filepath.Join("testdata")
-	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 1 /* numServers */, base.TestingKnobs{}, multiregionccltestutils.WithBaseDirectory(baseDir),
+	tc, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 2 /* numServers */, base.TestingKnobs{}, multiregionccltestutils.WithBaseDirectory(baseDir),
 	)
 	defer cleanup()
 
-	_, err := sqlDB.Exec(`SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
-	require.NoError(t, err)
+	// Set up a hook which we can set to run during the import.
+	// Importantly this happens before the final descriptors have been published.
+	var duringImportFunc atomic.Value
+	noopDuringImportFunc := func() error { return nil }
+	duringImportFunc.Store(noopDuringImportFunc)
+	for i := 0; i < tc.NumServers(); i++ {
+		tc.Server(i).JobRegistry().(*jobs.Registry).
+			TestingResumerCreationKnobs = map[jobspb.Type]func(jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(resumer jobs.Resumer) jobs.Resumer {
+				resumer.(*importResumer).testingKnobs.afterImport = func(summary backupccl.RowCount) error {
+					return duringImportFunc.Load().(func() error)()
+				}
+				return resumer
+			},
+		}
+	}
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 
 	// Create the databases
-	_, err = sqlDB.Exec(`CREATE DATABASE foo`)
-	require.NoError(t, err)
-
-	_, err = sqlDB.Exec(`CREATE DATABASE multi_region PRIMARY REGION "us-east1"`)
-	require.NoError(t, err)
+	tdb.Exec(t, `CREATE DATABASE foo`)
+	tdb.Exec(t, `CREATE DATABASE multi_region PRIMARY REGION "us-east1"`)
 
 	simpleOcf := fmt.Sprintf("nodelocal://0/avro/%s", "simple.ocf")
+
+	var data string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
 
 	// Table schemas for USING
 	tableSchemaMR := fmt.Sprintf("nodelocal://0/avro/%s", "simple-schema-multi-region.sql")
@@ -6396,30 +6530,23 @@ func TestImportMultiRegion(t *testing.T) {
 
 	for _, tc := range viewsAndSequencesTestCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			_, err = sqlDB.Exec(`USE multi_region`)
-			require.NoError(t, err)
-			defer func() {
-				_, err := sqlDB.Exec(`
+			tdb.Exec(t, `USE multi_region`)
+			defer tdb.Exec(t, `
 DROP TABLE IF EXISTS tbl;
 DROP SEQUENCE IF EXISTS s;
 DROP SEQUENCE IF EXISTS table_auto_inc;
 DROP VIEW IF EXISTS v`,
-				)
-				require.NoError(t, err)
-			}()
+			)
 
-			_, err = sqlDB.Exec(tc.importSQL)
-			require.NoError(t, err)
-			rows, err := sqlDB.Query("SELECT table_name, locality FROM [SHOW TABLES] ORDER BY table_name")
-			require.NoError(t, err)
-
+			tdb.Exec(t, tc.importSQL)
+			rows := tdb.Query(t, "SELECT table_name, locality FROM [SHOW TABLES] ORDER BY table_name")
 			results := make(map[string]string)
 			for rows.Next() {
-				require.NoError(t, rows.Err())
 				var tableName, locality string
 				require.NoError(t, rows.Scan(&tableName, &locality))
 				results[tableName] = locality
 			}
+			require.NoError(t, rows.Err())
 			require.Equal(t, tc.expected, results)
 		})
 	}
@@ -6433,6 +6560,8 @@ DROP VIEW IF EXISTS v`,
 			create    string
 			args      []interface{}
 			errString string
+			data      string
+			during    string
 		}{
 			{
 				name:      "import-create-using-multi-region-to-non-multi-region-database",
@@ -6440,7 +6569,7 @@ DROP VIEW IF EXISTS v`,
 				table:     "simple",
 				sql:       "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
 				args:      []interface{}{tableSchemaMR, simpleOcf},
-				errString: "cannot write descriptor for multi-region table",
+				errString: "cannot restore or create multi-region table simple into non-multi-region database foo",
 			},
 			{
 				name:  "import-create-using-multi-region-regional-by-table-to-multi-region-database",
@@ -6458,16 +6587,73 @@ DROP VIEW IF EXISTS v`,
 				errString: "IMPORT to REGIONAL BY ROW table not supported",
 			},
 			{
-				name:      "import-into-multi-region-regional-by-row-to-multi-region-database",
+				name:   "import-into-multi-region-regional-by-row-default-col-to-multi-region-database",
+				db:     "multi_region",
+				table:  "mr_regional_by_row",
+				create: "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
+				sql:    "IMPORT INTO mr_regional_by_row AVRO DATA ($1)",
+				args:   []interface{}{simpleOcf},
+			},
+			{
+				name:   "import-into-multi-region-regional-by-row-to-multi-region-database",
+				db:     "multi_region",
+				table:  "mr_regional_by_row",
+				create: "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
+				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
+				args:   []interface{}{srv.URL},
+				data:   "1,\"foo\",NULL,us-east1\n",
+			},
+			{
+				name:   "import-into-multi-region-regional-by-row-to-multi-region-database-concurrent-table-add",
+				db:     "multi_region",
+				table:  "mr_regional_by_row",
+				create: "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
+				during: "CREATE TABLE mr_regional_by_row2 (i INT8 PRIMARY KEY) LOCALITY REGIONAL BY ROW",
+				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
+				args:   []interface{}{srv.URL},
+				data:   "1,\"foo\",NULL,us-east1\n",
+			},
+			{
+				name:   "import-into-multi-region-regional-by-row-to-multi-region-database-concurrent-add-region",
+				db:     "multi_region",
+				table:  "mr_regional_by_row",
+				create: "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
+				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
+				during: `ALTER DATABASE multi_region ADD REGION "us-east2"`,
+				errString: `type descriptor "crdb_internal_region" \(54\) has been ` +
+					`modified, potentially incompatibly, since import planning; ` +
+					`aborting to avoid possible corruption`,
+				args: []interface{}{srv.URL},
+				data: "1,\"foo\",NULL,us-east1\n",
+			},
+			{
+				name:  "import-into-multi-region-regional-by-row-with-enum-which-has-been-modified",
+				db:    "multi_region",
+				table: "mr_regional_by_row",
+				create: `
+CREATE TYPE typ AS ENUM ('a');
+CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s typ, b bytea) LOCALITY REGIONAL BY ROW;
+`,
+				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
+				during: `ALTER TYPE typ ADD VALUE 'b'`,
+				errString: `type descriptor "typ" \(67\) has been ` +
+					`modified, potentially incompatibly, since import planning; ` +
+					`aborting to avoid possible corruption`,
+				args: []interface{}{srv.URL},
+				data: "1,\"a\",NULL,us-east1\n",
+			},
+			{
+				name:      "import-into-multi-region-regional-by-row-to-multi-region-database-wrong-value",
 				db:        "multi_region",
 				table:     "mr_regional_by_row",
 				create:    "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
-				sql:       "IMPORT INTO mr_regional_by_row AVRO DATA ($1)",
-				args:      []interface{}{simpleOcf},
-				errString: "IMPORT into REGIONAL BY ROW table not supported",
+				sql:       "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
+				args:      []interface{}{srv.URL},
+				data:      "1,\"foo\",NULL,us-west1\n",
+				errString: "invalid input value for enum crdb_internal_region",
 			},
 			{
-				name:   "import-into-using-multi-region-global-to-multi-region-database",
+				name:   "import-into-multi-region-global-to-multi-region-database",
 				db:     "multi_region",
 				table:  "mr_global",
 				create: "CREATE TABLE mr_global (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY GLOBAL",
@@ -6478,29 +6664,34 @@ DROP VIEW IF EXISTS v`,
 
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {
-				_, err = sqlDB.Exec(fmt.Sprintf(`SET DATABASE = %q`, test.db))
-				require.NoError(t, err)
+				defer duringImportFunc.Store(noopDuringImportFunc)
+				if test.during != "" {
+					duringImportFunc.Store(func() error {
+						q := fmt.Sprintf(`SET DATABASE = %q; %s`, test.db, test.during)
+						_, err := sqlDB.Exec(q)
+						return err
+					})
+				}
+				tdb.Exec(t, fmt.Sprintf(`SET DATABASE = %q`, test.db))
+				tdb.Exec(t, fmt.Sprintf("DROP TABLE IF EXISTS %q CASCADE", test.table))
 
-				_, err = sqlDB.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %q CASCADE", test.table))
-				require.NoError(t, err)
-
-				if test.create != "" {
-					_, err = sqlDB.Exec(test.create)
-					require.NoError(t, err)
+				if test.data != "" {
+					data = test.data
 				}
 
-				_, err = sqlDB.ExecContext(context.Background(), test.sql, test.args...)
+				if test.create != "" {
+					tdb.Exec(t, test.create)
+				}
+
+				_, err := sqlDB.ExecContext(context.Background(), test.sql, test.args...)
 				if test.errString != "" {
-					testutils.IsError(err, test.errString)
+					require.Regexp(t, test.errString, err)
 				} else {
 					require.NoError(t, err)
-					res := sqlDB.QueryRow(fmt.Sprintf("SELECT count(*) FROM %q", test.table))
-					require.NoError(t, res.Err())
-
 					var numRows int
-					err = res.Scan(&numRows)
-					require.NoError(t, err)
-
+					tdb.QueryRow(
+						t, fmt.Sprintf("SELECT count(*) FROM %q", test.table),
+					).Scan(&numRows)
 					if numRows == 0 {
 						t.Error("expected some rows after import")
 					}
@@ -7083,5 +7274,143 @@ CSV DATA ($1)
 				}
 			})
 		}
+	}
+}
+
+func TestUDTChangeDuringImport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	baseDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	// Write some data to the test file.
+	f, err := ioutil.TempFile(baseDir, "data")
+	require.NoError(t, err)
+	_, err = f.Write([]byte("1,hello\n2,hi\n"))
+	require.NoError(t, err)
+
+	importStmt := "IMPORT INTO t (a, b) CSV DATA ($1)"
+	importArgs := fmt.Sprintf("nodelocal://0/%s", filepath.Base(f.Name()))
+
+	testCases := []struct {
+		name                string
+		query               string
+		expectTypeChangeErr string
+		expectImportErr     bool
+	}{
+		{
+			"add-value",
+			"ALTER TYPE d.greeting ADD VALUE 'cheers'",
+			"",
+			true,
+		},
+		{
+			"rename-value",
+			"ALTER TYPE d.greeting RENAME VALUE 'howdy' TO 'hola';",
+			"",
+			true,
+		},
+		{
+			"add-value-in-txn",
+			"BEGIN; ALTER TYPE d.greeting ADD VALUE 'cheers'; COMMIT;",
+			"",
+			true,
+		},
+		// Dropping a value does change the modification time on the descriptor,
+		// even though the enum value removal is forbidden during an import.
+		// As a result of this, the import is expected to fail.
+		{
+			"drop-value",
+			"ALTER TYPE d.greeting DROP VALUE 'howdy';",
+			"could not validate enum value removal",
+			true,
+		},
+		// Dropping a type does not change the modification time on the descriptor,
+		// and so the import is expected to succeed.
+		{
+			"drop-type",
+			"DROP TYPE d.greeting",
+			"cannot drop type \"greeting\"",
+			false,
+		},
+		{
+			"use-in-table",
+			"CREATE TABLE d.foo (i INT PRIMARY KEY, j d.greeting)",
+			"",
+			false,
+		},
+		{
+			"grant",
+			"CREATE USER u; GRANT USAGE ON TYPE d.greeting TO u;",
+			"",
+			false,
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			requestReceived := make(chan struct{})
+			allowResponse := make(chan struct{})
+			tc := testcluster.StartTestCluster(
+				t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+					ExternalIODir: baseDir,
+					Knobs: base.TestingKnobs{
+						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+						Store: &kvserver.StoreTestingKnobs{
+							TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
+							TestingRequestFilter: func(ctx context.Context, br roachpb.BatchRequest) *roachpb.Error {
+								for _, ru := range br.Requests {
+									switch ru.GetInner().(type) {
+									case *roachpb.AddSSTableRequest:
+										<-requestReceived
+									}
+								}
+								return nil
+							},
+						}},
+				}})
+			defer tc.Stopper().Stop(ctx)
+			conn := tc.Conns[0]
+			sqlDB := sqlutils.MakeSQLRunner(conn)
+
+			// Create a database with a type.
+			sqlDB.Exec(t, `
+CREATE DATABASE d;
+USE d;
+CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
+CREATE TABLE t (a INT, b greeting);
+`)
+
+			// Start the import.
+			errCh := make(chan error)
+			defer close(errCh)
+			go func() {
+				_, err := sqlDB.DB.ExecContext(ctx, importStmt, importArgs)
+				errCh <- err
+			}()
+
+			// Wait for the import to start.
+			requestReceived <- struct{}{}
+
+			if test.expectTypeChangeErr != "" {
+				sqlDB.ExpectErr(t, test.expectTypeChangeErr, test.query)
+			} else {
+				sqlDB.Exec(t, test.query)
+			}
+
+			// Allow the import to finish.
+			close(requestReceived)
+			close(allowResponse)
+
+			err := <-errCh
+			if test.expectImportErr {
+				testutils.IsError(err,
+					"unsafe to import since the type has changed during the course of the import")
+			} else {
+				require.NoError(t, err)
+			}
+		})
 	}
 }

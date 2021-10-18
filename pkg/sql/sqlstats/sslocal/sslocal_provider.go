@@ -16,18 +16,18 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 // New returns an instance of SQLStats.
@@ -40,16 +40,20 @@ func New(
 	pool *mon.BytesMonitor,
 	resetInterval *settings.DurationSetting,
 	reportingSink Sink,
+	knobs *sqlstats.TestingKnobs,
 ) *SQLStats {
 	return newSQLStats(settings, maxStmtFingerprints, maxTxnFingerprints,
-		curMemoryBytesCount, maxMemoryBytesHist, pool, resetInterval, reportingSink)
+		curMemoryBytesCount, maxMemoryBytesHist, pool, resetInterval,
+		reportingSink, knobs)
 }
 
 var _ sqlstats.Provider = &SQLStats{}
 
 // GetController returns a sqlstats.Controller responsible for the current
 // SQLStats.
-func (s *SQLStats) GetController(server serverpb.SQLStatusServer) *Controller {
+func (s *SQLStats) GetController(
+	server serverpb.SQLStatusServer, db *kv.DB, ie sqlutil.InternalExecutor,
+) *Controller {
 	return NewController(s, server)
 }
 
@@ -97,8 +101,8 @@ func (s *SQLStats) periodicallyClearSQLStats(
 	})
 }
 
-// GetWriterForApplication implements sqlstats.Provider interface.
-func (s *SQLStats) GetWriterForApplication(appName string) sqlstats.Writer {
+// GetApplicationStats implements sqlstats.Provider interface.
+func (s *SQLStats) GetApplicationStats(appName string) sqlstats.ApplicationStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if a, ok := s.mu.apps[appName]; ok {
@@ -112,6 +116,7 @@ func (s *SQLStats) GetWriterForApplication(appName string) sqlstats.Writer {
 		&s.atomic.uniqueTxnFingerprintCount,
 		s.mu.mon,
 		appName,
+		s.knobs,
 	)
 	s.mu.apps[appName] = a
 	return a
@@ -169,7 +174,7 @@ func (s *SQLStats) TxnStatsIterator(options *sqlstats.IteratorOptions) *TxnStats
 
 // IterateAggregatedTransactionStats implements sqlstats.Provider interface.
 func (s *SQLStats) IterateAggregatedTransactionStats(
-	_ context.Context,
+	ctx context.Context,
 	options *sqlstats.IteratorOptions,
 	visitor sqlstats.AggregatedTransactionVisitor,
 ) error {
@@ -178,37 +183,13 @@ func (s *SQLStats) IterateAggregatedTransactionStats(
 	for _, appName := range appNames {
 		statsContainer := s.getStatsForApplication(appName)
 
-		err := statsContainer.IterateAggregatedTransactionStats(appName, visitor)
+		err := statsContainer.IterateAggregatedTransactionStats(ctx, options, visitor)
 		if err != nil {
 			return fmt.Errorf("sql stats iteration abort: %s", err)
 		}
 	}
 
 	return nil
-}
-
-// GetStatementStats implements sqlstats.Provider interface.
-func (s *SQLStats) GetStatementStats(
-	key *roachpb.StatementStatisticsKey,
-) (*roachpb.CollectedStatementStatistics, error) {
-	statsContainer := s.getStatsForApplication(key.App)
-	if statsContainer == nil {
-		return nil, errors.Errorf("no stats found for appName: %s", key.App)
-	}
-
-	return statsContainer.GetStatementStats(key)
-}
-
-// GetTransactionStats implements sqlstats.Provider interface.
-func (s *SQLStats) GetTransactionStats(
-	appName string, key roachpb.TransactionFingerprintID,
-) (*roachpb.CollectedTransactionStatistics, error) {
-	statsContainer := s.getStatsForApplication(appName)
-	if statsContainer == nil {
-		return nil, errors.Errorf("no stats found for appName: %s", appName)
-	}
-
-	return statsContainer.GetTransactionStats(appName, key)
 }
 
 // Reset implements sqlstats.Provider interface.

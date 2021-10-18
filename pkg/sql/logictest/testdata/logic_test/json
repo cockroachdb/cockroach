@@ -84,20 +84,17 @@ SELECT NULL::JSON
 ----
 NULL
 
-statement error arrays of jsonb not allowed.*\nHINT:.*\n.*23468
-SELECT ARRAY['"hello"'::JSON]
-
-statement error arrays of jsonb not allowed.*\nHINT:.*\n.*23468
-SELECT '{}'::JSONB[]
-
-statement error arrays of jsonb not allowed.*\nHINT:.*\n.*23468
+statement error arrays of JSON unsupported as column type.*\nHINT:.*\n.*23468
 CREATE TABLE x (y JSONB[])
 
 statement ok
-CREATE TABLE foo (bar JSON)
+CREATE TABLE foo (pk INT DEFAULT unique_rowid(), bar JSON)
+
+statement error arrays of JSON unsupported as column type.*\nHINT:.*\n.*23468
+CREATE VIEW x AS SELECT array_agg(bar) FROM foo
 
 statement ok
-INSERT INTO foo VALUES
+INSERT INTO foo(bar) VALUES
   ('{"a": "b"}'),
   ('[1, 2, 3]'),
   ('"hello"'),
@@ -201,19 +198,24 @@ NULL
 NULL
 NULL
 
-query T
+query IT
 SELECT * from foo where bar->'x' = '[1]'
 ----
 
-query T
+query IT
 SELECT * from foo where bar->'x' = '{}'
 ----
+
+query T
+SELECT array_agg(bar ORDER BY pk) FROM foo
+----
+{"'{\"a\": \"b\"}'","'[1, 2, 3]'","\"hello\"",1.000,true,false,NULL,"'{\"x\": [1, 2, 3]}'","'{\"x\": {\"y\": \"z\"}}'"}
 
 statement ok
 DELETE FROM foo
 
 statement ok
-INSERT INTO foo VALUES ('{"a": {"c": "d"}}');
+INSERT INTO foo(bar) VALUES ('{"a": {"c": "d"}}');
 
 query TT
 SELECT bar->'a'->'c', bar->'a'->>'c' FROM foo
@@ -839,4 +841,14 @@ query T
 SELECT j - s FROM t57165
 ----
 {}
+{}
+
+query T
+SELECT ARRAY['"hello"'::JSON]
+----
+{"\"hello\""}
+
+query T
+SELECT '{}'::JSONB[]
+----
 {}

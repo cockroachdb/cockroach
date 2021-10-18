@@ -128,45 +128,38 @@ func TestExportCmd(t *testing.T) {
 		t *testing.T, res ExportAndSlurpResult,
 		mvccLatestFilesLen int, mvccLatestKVsLen int, mvccAllFilesLen int, mvccAllKVsLen int,
 	) {
-		if len(res.mvccLatestFiles) != mvccLatestFilesLen {
-			t.Errorf("expected %d files in latest export got %d", mvccLatestFilesLen, len(res.mvccLatestFiles))
-		}
-		if len(res.mvccLatestKVs) != mvccLatestKVsLen {
-			t.Errorf("expected %d kvs in latest export got %d", mvccLatestKVsLen, len(res.mvccLatestKVs))
-		}
-		if len(res.mvccAllFiles) != mvccAllFilesLen {
-			t.Errorf("expected %d files in all export got %d", mvccAllFilesLen, len(res.mvccAllFiles))
-		}
-		if len(res.mvccAllKVs) != mvccAllKVsLen {
-			t.Errorf("expected %d kvs in all export got %d", mvccAllKVsLen, len(res.mvccAllKVs))
-		}
+		t.Helper()
+		require.Len(t, res.mvccLatestFiles, mvccLatestFilesLen, "unexpected files in latest export")
+		require.Len(t, res.mvccLatestKVs, mvccLatestKVsLen, "unexpected kvs in latest export")
+		require.Len(t, res.mvccAllFiles, mvccAllFilesLen, "unexpected files in all export")
+		require.Len(t, res.mvccAllKVs, mvccAllKVsLen, "unexpected kvs in all export")
 	}
 
 	expectResponseHeader := func(
 		t *testing.T, res ExportAndSlurpResult, mvccLatestResponseHeader roachpb.ResponseHeader,
 		mvccAllResponseHeader roachpb.ResponseHeader) {
-		isSpanEqual := func(spanOne, spanTwo *roachpb.Span) bool {
-			if spanOne == nil || spanTwo == nil {
-				return spanOne == spanTwo
+		t.Helper()
+		requireResumeSpan := func(expect, actual *roachpb.Span, msgAndArgs ...interface{}) {
+			t.Helper()
+			if expect == nil {
+				require.Nil(t, actual, msgAndArgs...)
+			} else {
+				require.NotNil(t, actual, msgAndArgs...)
+				require.Equal(t, expect.String(), actual.String(), msgAndArgs...)
 			}
-			return spanOne.String() == spanTwo.String()
 		}
-		if res.mvccAllResponseHeader.NumBytes != mvccAllResponseHeader.NumBytes {
-			t.Errorf("expected %d NumBytes in all export got %d", mvccAllResponseHeader.NumBytes,
-				res.mvccAllResponseHeader.NumBytes)
-		}
-		if !isSpanEqual(res.mvccAllResponseHeader.ResumeSpan, mvccAllResponseHeader.ResumeSpan) {
-			t.Errorf("expected %s span in all export got %s", mvccAllResponseHeader.ResumeSpan.String(),
-				res.mvccAllResponseHeader.ResumeSpan.String())
-		}
-		if res.mvccLatestResponseHeader.NumBytes != mvccLatestResponseHeader.NumBytes {
-			t.Errorf("expected %d NumBytes in all export got %d", mvccLatestResponseHeader.NumBytes,
-				res.mvccLatestResponseHeader.NumBytes)
-		}
-		if !isSpanEqual(res.mvccLatestResponseHeader.ResumeSpan, mvccLatestResponseHeader.ResumeSpan) {
-			t.Errorf("expected %s span in all export got %s",
-				mvccLatestResponseHeader.ResumeSpan.String(), res.mvccLatestResponseHeader.ResumeSpan.String())
-		}
+		require.Equal(t, mvccLatestResponseHeader.NumBytes, res.mvccLatestResponseHeader.NumBytes,
+			"unexpected NumBytes in latest export")
+		requireResumeSpan(mvccLatestResponseHeader.ResumeSpan, res.mvccLatestResponseHeader.ResumeSpan,
+			"unexpected ResumeSpan in latest export")
+		require.Equal(t, mvccLatestResponseHeader.ResumeReason, res.mvccLatestResponseHeader.ResumeReason,
+			"unexpected ResumeReason in latest export")
+		require.Equal(t, mvccAllResponseHeader.NumBytes, res.mvccAllResponseHeader.NumBytes,
+			"unexpected NumBytes in all export")
+		requireResumeSpan(mvccAllResponseHeader.ResumeSpan, res.mvccAllResponseHeader.ResumeSpan,
+			"unexpected ResumeSpan in all export")
+		require.Equal(t, mvccAllResponseHeader.ResumeReason, res.mvccAllResponseHeader.ResumeReason,
+			"unexpected ResumeReason in latest export")
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
@@ -318,14 +311,10 @@ INTO
 		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
 		expect(t, res7, 2, 100, 2, 100)
 		latestRespHeader := roachpb.ResponseHeader{
-			ResumeSpan:   nil,
-			ResumeReason: 2,
-			NumBytes:     maxResponseSSTBytes,
+			NumBytes: maxResponseSSTBytes,
 		}
 		allRespHeader := roachpb.ResponseHeader{
-			ResumeSpan:   nil,
-			ResumeReason: 2,
-			NumBytes:     maxResponseSSTBytes,
+			NumBytes: maxResponseSSTBytes,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
 
@@ -341,7 +330,7 @@ INTO
 				Key:    []byte("/Table/53/1/2"),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		allRespHeader = roachpb.ResponseHeader{
@@ -349,7 +338,7 @@ INTO
 				Key:    []byte("/Table/53/1/2"),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
@@ -365,7 +354,7 @@ INTO
 				Key:    []byte("/Table/53/1/3/0"),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		allRespHeader = roachpb.ResponseHeader{
@@ -373,7 +362,7 @@ INTO
 				Key:    []byte("/Table/53/1/3/0"),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
@@ -388,7 +377,7 @@ INTO
 				Key:    []byte("/Table/53/1/100/0"),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		allRespHeader = roachpb.ResponseHeader{
@@ -396,7 +385,7 @@ INTO
 				Key:    []byte("/Table/53/1/100/0"),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
@@ -409,14 +398,10 @@ INTO
 		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
 		expect(t, res7, 100, 100, 100, 100)
 		latestRespHeader = roachpb.ResponseHeader{
-			ResumeSpan:   nil,
-			ResumeReason: 2,
-			NumBytes:     100 * kvByteSize,
+			NumBytes: 100 * kvByteSize,
 		}
 		allRespHeader = roachpb.ResponseHeader{
-			ResumeSpan:   nil,
-			ResumeReason: 2,
-			NumBytes:     100 * kvByteSize,
+			NumBytes: 100 * kvByteSize,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
 	})
@@ -594,8 +579,17 @@ func assertEqualKVs(
 			prevStart := start
 			prevTs := resumeTs
 			sstFile := &storage.MemFile{}
-			summary, start, resumeTs, err = e.ExportMVCCToSst(ctx, start, endKey, startTime, endTime, resumeTs,
-				bool(exportAllRevisions), targetSize, maxSize, bool(stopMidKey), bool(enableTimeBoundIteratorOptimization), sstFile)
+			summary, start, resumeTs, err = e.ExportMVCCToSst(ctx, storage.ExportOptions{
+				StartKey:           storage.MVCCKey{Key: start, Timestamp: resumeTs},
+				EndKey:             endKey,
+				StartTS:            startTime,
+				EndTS:              endTime,
+				ExportAllRevisions: bool(exportAllRevisions),
+				TargetSize:         targetSize,
+				MaxSize:            maxSize,
+				StopMidKey:         bool(stopMidKey),
+				UseTBI:             bool(enableTimeBoundIteratorOptimization),
+			}, sstFile)
 			require.NoError(t, err)
 			sst = sstFile.Data()
 			loaded := loadSST(t, sst, startKey, endKey)
@@ -634,8 +628,17 @@ func assertEqualKVs(
 				if dataSizeWhenExceeded == maxSize {
 					maxSize--
 				}
-				_, _, _, err = e.ExportMVCCToSst(ctx, prevStart, endKey, startTime, endTime, prevTs,
-					bool(exportAllRevisions), targetSize, maxSize, false, bool(enableTimeBoundIteratorOptimization), &storage.MemFile{})
+				_, _, _, err = e.ExportMVCCToSst(ctx, storage.ExportOptions{
+					StartKey:           storage.MVCCKey{Key: prevStart, Timestamp: prevTs},
+					EndKey:             endKey,
+					StartTS:            startTime,
+					EndTS:              endTime,
+					ExportAllRevisions: bool(exportAllRevisions),
+					TargetSize:         targetSize,
+					MaxSize:            maxSize,
+					StopMidKey:         false,
+					UseTBI:             bool(enableTimeBoundIteratorOptimization),
+				}, &storage.MemFile{})
 				require.Regexp(t, fmt.Sprintf("export size \\(%d bytes\\) exceeds max size \\(%d bytes\\)",
 					dataSizeWhenExceeded, maxSize), err)
 			}

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -24,9 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/sequence"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -81,6 +83,16 @@ func (b *buildContext) alterTableAddColumn(
 	toType, err := tree.ResolveType(ctx, d.Type, b.SemaCtx.GetTypeResolver())
 	if err != nil {
 		panic(err)
+	}
+
+	version := b.EvalCtx.Settings.Version.ActiveVersionOrEmpty(ctx)
+	supported := types.IsTypeSupportedInVersion(version, toType)
+	if !supported {
+		panic(pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"type %s is not supported until version upgrade is finalized",
+			toType.SQLString(),
+		))
 	}
 
 	// User defined columns are not supported, since we don't
@@ -353,7 +365,7 @@ var _ = (*buildContext)(nil).alterTableDropColumn
 func (b *buildContext) maybeAddSequenceReferenceDependencies(
 	ctx context.Context, tableID descpb.ID, col *descpb.ColumnDescriptor, defaultExpr tree.TypedExpr,
 ) {
-	seqIdentifiers, err := sequence.GetUsedSequences(defaultExpr)
+	seqIdentifiers, err := seqexpr.GetUsedSequences(defaultExpr)
 	if err != nil {
 		panic(err)
 	}
@@ -391,7 +403,7 @@ func (b *buildContext) maybeAddSequenceReferenceDependencies(
 	}
 
 	if len(seqIdentifiers) > 0 {
-		newExpr, err := sequence.ReplaceSequenceNamesWithIDs(defaultExpr, seqNameToID)
+		newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(defaultExpr, seqNameToID)
 		if err != nil {
 			panic(err)
 		}
@@ -525,7 +537,7 @@ func (b *buildContext) nextColumnID(table catalog.TableDescriptor) descpb.Column
 	var maxColID descpb.ColumnID
 
 	for _, n := range b.output {
-		if n.Target.Direction != scpb.Target_ADD || scpb.GetDescID(n.Element()) != table.GetID() {
+		if n.Target.Direction != scpb.Target_ADD || screl.GetDescID(n.Element()) != table.GetID() {
 			continue
 		}
 		if ac, ok := n.Element().(*scpb.Column); ok {
@@ -544,7 +556,7 @@ func (b *buildContext) nextIndexID(table catalog.TableDescriptor) descpb.IndexID
 	nextMaxID := table.GetNextIndexID()
 	var maxIdxID descpb.IndexID
 	for _, n := range b.output {
-		if n.Target.Direction != scpb.Target_ADD || scpb.GetDescID(n.Element()) != table.GetID() {
+		if n.Target.Direction != scpb.Target_ADD || screl.GetDescID(n.Element()) != table.GetID() {
 			continue
 		}
 		if ai, ok := n.Element().(*scpb.SecondaryIndex); ok {
@@ -644,7 +656,7 @@ func (b *buildContext) maybeCleanTableFKs(
 	ctx context.Context, table catalog.TableDescriptor, behavior tree.DropBehavior,
 ) { // Loop through and update inbound and outbound
 	// foreign key references.
-	for _, fk := range table.GetInboundFKs() {
+	_ = table.ForeachInboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		dependentTable, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, fk.OriginTableID, tree.ObjectLookupFlagsWithRequired())
 		if err != nil {
 			panic(err)
@@ -680,9 +692,10 @@ func (b *buildContext) maybeCleanTableFKs(
 			b.addNode(scpb.Target_DROP,
 				inFkNode)
 		}
-	}
+		return nil
+	})
 
-	for _, fk := range table.GetOutboundFKs() {
+	_ = table.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		outFkNode := &scpb.OutboundForeignKey{
 			OriginID:         fk.OriginTableID,
 			OriginColumns:    fk.OriginColumnIDs,
@@ -705,7 +718,8 @@ func (b *buildContext) maybeCleanTableFKs(
 			b.addNode(scpb.Target_DROP,
 				inFkNode)
 		}
-	}
+		return nil
+	})
 }
 
 func (b *buildContext) dropTableDesc(

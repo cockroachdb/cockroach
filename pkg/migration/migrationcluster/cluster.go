@@ -94,6 +94,15 @@ func (c *Cluster) UntilClusterStable(ctx context.Context, fn func() error) error
 	return nil
 }
 
+// NumNodes is part of the migration.Cluster interface.
+func (c *Cluster) NumNodes(ctx context.Context) (int, error) {
+	ns, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
+	if err != nil {
+		return 0, err
+	}
+	return len(ns), nil
+}
+
 // ForEveryNode is part of the migration.Cluster interface.
 func (c *Cluster) ForEveryNode(
 	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,

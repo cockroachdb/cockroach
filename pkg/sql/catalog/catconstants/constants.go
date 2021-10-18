@@ -96,6 +96,7 @@ const (
 	CrdbInternalClusterTransactionsTableID
 	CrdbInternalClusterSessionsTableID
 	CrdbInternalClusterSettingsTableID
+	CrdbInternalCreateSchemaStmtsTableID
 	CrdbInternalCreateStmtsTableID
 	CrdbInternalCreateTypeStmtsTableID
 	CrdbInternalDatabasesTableID
@@ -146,6 +147,7 @@ const (
 	CrdbInternalRegionsTable
 	CrdbInternalDefaultPrivilegesTable
 	CrdbInternalActiveRangeFeedsTable
+	CrdbInternalTenantUsageDetailsViewID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
@@ -340,7 +342,11 @@ const (
 	PgCatalogStatioUserIndexesTableID
 	PgCatalogStatioUserSequencesTableID
 	PgCatalogStatioUserTablesTableID
+	PgCatalogStatisticExtDataTableID
 	PgCatalogStatisticExtTableID
+	PgCatalogStatisticTableID
+	PgCatalogStatsExtTableID
+	PgCatalogStatsTableID
 	PgCatalogSubscriptionRelTableID
 	PgCatalogSubscriptionTableID
 	PgCatalogTablesTableID

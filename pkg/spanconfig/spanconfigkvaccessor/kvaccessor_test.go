@@ -33,7 +33,11 @@ func TestKVAccessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			EnableSpanConfigs: true,
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	span := func(start, end string) roachpb.Span {
@@ -72,6 +76,7 @@ func TestKVAccessor(t *testing.T) {
 
 	const dummySpanConfigurationsFQN = "defaultdb.public.dummy_span_configurations"
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_kvaccessor.enabled = true`)
 	tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummySpanConfigurationsFQN))
 	accessor := spanconfigkvaccessor.New(
 		tc.Server(0).DB(),

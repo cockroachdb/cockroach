@@ -644,67 +644,82 @@ func TestFilterBucket(t *testing.T) {
 		runTest(h, testData, types.TimeTZFamily)
 	})
 
-	t.Run("string", func(t *testing.T) {
-		h1 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
-			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDString("bear"))},
-			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("bobcat")},
-		}}
-		h2 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
-			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDString("a"))},
-			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("c")},
-		}}
-		h3 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
-			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDString("aaaaaaaaaaaa"))},
-			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("cccccccccccc")},
-		}}
-
-		t1 := []testCase{
+	t.Run("string-bytes", func(t *testing.T) {
+		typesToTest := []struct {
+			family        types.Family
+			createDatumFn func(string) tree.Datum
+		}{
 			{
-				span:     "[/bluejay - /boar]",
-				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 2.92, DistinctRange: 2.92, UpperBound: tree.NewDString("boar")},
+				family:        types.StringFamily,
+				createDatumFn: func(s string) tree.Datum { return tree.NewDString(s) },
 			},
 			{
-				span:     "[/beer - /bobcat]",
-				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 9.98, DistinctRange: 9.98, UpperBound: tree.NewDString("bobcat")},
+				family:        types.BytesFamily,
+				createDatumFn: func(s string) tree.Datum { return tree.NewDBytes(tree.DBytes(s)) },
 			},
 		}
+		for _, typ := range typesToTest {
+			h1 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+				{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(typ.createDatumFn("bear"))},
+				{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: typ.createDatumFn("bobcat")},
+			}}
+			h2 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+				{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(typ.createDatumFn("a"))},
+				{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: typ.createDatumFn("c")},
+			}}
+			h3 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+				{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(typ.createDatumFn("aaaaaaaaaaaa"))},
+				{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: typ.createDatumFn("cccccccccccc")},
+			}}
 
-		t2 := []testCase{
-			// Within the CRDB encoding, all null bytes are followed by an escape byte,
-			// (255) which are left in for the rangeAfter calculations. For this
-			// reason, the resulting NumRange is slightly lower than expected at 4.99
-			// instead of 5.
-			{
-				span:     "[/a\x00 - /b]",
-				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 4.99, DistinctRange: 4.99, UpperBound: tree.NewDString("b")},
-			},
-			{
-				span:     "[/as - /b]",
-				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 2.76, DistinctRange: 2.76, UpperBound: tree.NewDString("b")},
-			},
-			{
-				span:     "[/as - /c]",
-				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 7.77, DistinctRange: 7.77, UpperBound: tree.NewDString("c")},
-			},
-			{
-				span:     "[/bs - /c]",
-				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 2.76, DistinctRange: 2.76, UpperBound: tree.NewDString("c")},
-			},
+			t1 := []testCase{
+				{
+					span:     "[/bluejay - /boar]",
+					expected: &cat.HistogramBucket{NumEq: 0, NumRange: 2.92, DistinctRange: 2.92, UpperBound: typ.createDatumFn("boar")},
+				},
+				{
+					span:     "[/beer - /bobcat]",
+					expected: &cat.HistogramBucket{NumEq: 5, NumRange: 9.98, DistinctRange: 9.98, UpperBound: typ.createDatumFn("bobcat")},
+				},
+			}
+
+			t2 := []testCase{
+				// Within the CRDB encoding, all null bytes are followed by an escape byte,
+				// (255) which are left in for the rangeAfter calculations. For this
+				// reason, the resulting NumRange is slightly lower than expected at 4.99
+				// instead of 5.
+				{
+					span:     "[/a\x00 - /b]",
+					expected: &cat.HistogramBucket{NumEq: 0, NumRange: 4.99, DistinctRange: 4.99, UpperBound: typ.createDatumFn("b")},
+				},
+				{
+					span:     "[/as - /b]",
+					expected: &cat.HistogramBucket{NumEq: 0, NumRange: 2.76, DistinctRange: 2.76, UpperBound: typ.createDatumFn("b")},
+				},
+				{
+					span:     "[/as - /c]",
+					expected: &cat.HistogramBucket{NumEq: 5, NumRange: 7.77, DistinctRange: 7.77, UpperBound: typ.createDatumFn("c")},
+				},
+				{
+					span:     "[/bs - /c]",
+					expected: &cat.HistogramBucket{NumEq: 5, NumRange: 2.76, DistinctRange: 2.76, UpperBound: typ.createDatumFn("c")},
+				},
+			}
+
+			// The initial 8 bytes for lowerBound and upperBound of the span is the same.
+			// Hence, the resulting NumRange/DistinctRange should be 0, as rangeAfter
+			// only considers the first 8 bytes of the bounds.
+			t3 := []testCase{
+				{
+					span:     "[/aaaaaaaabbbb - /aaaaaaaacccc]",
+					expected: &cat.HistogramBucket{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: typ.createDatumFn("aaaaaaaacccc")},
+				},
+			}
+
+			runTest(h1, t1, typ.family)
+			runTest(h2, t2, typ.family)
+			runTest(h3, t3, typ.family)
 		}
-
-		// The initial 8 bytes for lowerBound and upperBound of the span is the same.
-		// Hence, the resulting NumRange/DistinctRange should be 0, as rangeAfter
-		// only considers the first 8 bytes of the bounds.
-		t3 := []testCase{
-			{
-				span:     "[/aaaaaaaabbbb - /aaaaaaaacccc]",
-				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDString("aaaaaaaacccc")},
-			},
-		}
-
-		runTest(h1, t1, types.StringFamily)
-		runTest(h2, t2, types.StringFamily)
-		runTest(h3, t3, types.StringFamily)
 	})
 
 	t.Run("uuid", func(t *testing.T) {

@@ -138,7 +138,7 @@ The `bazelbuilder` image is used exclusively for performing builds using Bazel. 
     docker image push cockroachdb/bazel:$TAG
 ```
 - Then, update `build/teamcity-bazel-support.sh` with the new tag and commit all your changes.
-- Ensure the "Github CI (Optional)" job passes on your PR before merging.
+- Ensure the "GitHub CI (Optional)" job passes on your PR before merging.
 
 #  Dependencies
 
@@ -160,7 +160,7 @@ is missing, ensure it is used in code. This can be a blank dependency, e.g.
 `import _ "golang.org/api/compute/v1"`. These changes must then be committed in the submodule directory
 (see [Working with Submodules](#working-with-submodules)).
 
-Finally, run `make bazel-generate` to regenerate `DEPS.bzl` with the updated Go dependency information.
+Finally, run `./dev generate bazel` to regenerate `DEPS.bzl` with the updated Go dependency information.
 
 Programs can then be run using `go build ...` or `go test ...`.
 

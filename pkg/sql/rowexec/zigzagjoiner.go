@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -54,7 +55,7 @@ import (
 //
 // To see how this query would be executed, consider the equivalent query:
 //
-// SELECT t1.* FROM abcd@c_idx AS t1 JOIN abcd@d_idx ON t1.a = t2.a AND
+// SELECT t1.* FROM abcd@c_idx AS t1 JOIN abcd@d_idx AS t2 ON t1.a = t2.a AND
 // t1.b = t2.b WHERE t1.c = 2 AND t2.d = 3;
 //
 // A zigzag joiner takes 2 sides as input. In the example above, the join would
@@ -246,13 +247,15 @@ type zigzagJoiner struct {
 
 	rowAlloc           rowenc.EncDatumRowAlloc
 	fetchedInititalRow bool
+
+	scanStats execinfra.ScanStats
 }
 
 // zigzagJoinerBatchSize is a parameter which determines how many rows should
 // be fetched at a time. Increasing this will improve performance for when
 // matched rows are grouped together, but increasing this too much will result
 // in fetching too many rows and therefore skipping less rows.
-var zigzagJoinerBatchSize = row.RowLimit(util.ConstantWithMetamorphicTestValue(
+var zigzagJoinerBatchSize = rowinfra.RowLimit(util.ConstantWithMetamorphicTestValue(
 	"zig-zag-joiner-batch-size",
 	5, /* defaultValue */
 	1, /* metamorphicValue */
@@ -462,6 +465,8 @@ func (z *zigzagJoiner) setupInfo(
 	for _, col := range info.eqColumns {
 		neededCols.Add(int(col))
 	}
+
+	z.addColumnsNeededByOnExpr(&neededCols, colOffset, maxCol)
 
 	// Setup the RowContainers.
 	info.container.Reset()
@@ -793,7 +798,7 @@ func (z *zigzagJoiner) nextRow(ctx context.Context, txn *kv.Txn) (rowenc.EncDatu
 			ctx,
 			txn,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
-			row.DefaultBatchBytesLimit,
+			rowinfra.DefaultBatchBytesLimit,
 			zigzagJoinerBatchSize,
 			z.FlowCtx.TraceKV,
 			z.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
@@ -938,7 +943,7 @@ func (z *zigzagJoiner) maybeFetchInitialRow() error {
 			z.Ctx,
 			z.FlowCtx.Txn,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
-			row.DefaultBatchBytesLimit,
+			rowinfra.DefaultBatchBytesLimit,
 			zigzagJoinerBatchSize,
 			z.FlowCtx.TraceKV,
 			z.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
@@ -990,10 +995,13 @@ func (z *zigzagJoiner) ConsumerClosed() {
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
+	z.scanStats = execinfra.GetScanStats(z.Ctx)
+
 	kvStats := execinfrapb.KVStats{
 		BytesRead:      optional.MakeUint(uint64(z.getBytesRead())),
 		ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(z.Ctx)),
 	}
+	execinfra.PopulateKVMVCCStats(&kvStats, &z.scanStats)
 	for i := range z.infos {
 		fis, ok := getFetcherInputStats(z.infos[i].fetcher)
 		if !ok {

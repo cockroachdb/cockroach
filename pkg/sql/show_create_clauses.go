@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -376,7 +376,7 @@ func showFamilyClause(desc catalog.TableDescriptor, f *tree.FmtCtx) {
 func showCreateLocality(desc catalog.TableDescriptor, f *tree.FmtCtx) error {
 	if c := desc.GetLocalityConfig(); c != nil {
 		f.WriteString(" LOCALITY ")
-		return tabledesc.FormatTableLocalityConfig(c, f)
+		return multiregion.FormatTableLocalityConfig(c, f)
 	}
 	return nil
 }

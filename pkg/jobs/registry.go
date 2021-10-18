@@ -652,12 +652,13 @@ func (r *Registry) CreateStartableJobWithTxn(
 		// Using a new context allows for independent lifetimes and cancellation.
 		resumerCtx, cancel = r.makeCtx()
 
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		if _, alreadyRegistered := r.mu.adoptedJobs[jobID]; alreadyRegistered {
-			log.Fatalf(ctx, "job %d: was just created but found in registered adopted jobs", jobID)
+		if alreadyAdopted := r.addAdoptedJob(jobID, j.sessionID, cancel); alreadyAdopted {
+			log.Fatalf(
+				ctx,
+				"job %d: was just created but found in registered adopted jobs",
+				jobID,
+			)
 		}
-		r.mu.adoptedJobs[jobID] = &adoptedJob{sid: j.sessionID, cancel: cancel}
 		execDone = make(chan struct{})
 	}
 
@@ -675,8 +676,28 @@ func (r *Registry) CreateStartableJobWithTxn(
 
 // LoadJob loads an existing job with the given jobID from the system.jobs
 // table.
+//
+// WARNING: Avoid new uses of this function. The returned Job allows
+// for mutation even if the instance no longer holds a valid claim on
+// the job.
+//
+// TODO(ssd): Remove this API and replace it with a safer API.
 func (r *Registry) LoadJob(ctx context.Context, jobID jobspb.JobID) (*Job, error) {
 	return r.LoadJobWithTxn(ctx, jobID, nil)
+}
+
+// LoadClaimedJob loads an existing job with the given jobID from the
+// system.jobs table. The job must have already been claimed by this
+// Registry.
+func (r *Registry) LoadClaimedJob(ctx context.Context, jobID jobspb.JobID) (*Job, error) {
+	j, err := r.getClaimedJob(jobID)
+	if err != nil {
+		return nil, err
+	}
+	if err := j.load(ctx, nil); err != nil {
+		return nil, err
+	}
+	return j, nil
 }
 
 // LoadJobWithTxn does the same as above, but using the transaction passed in
@@ -1136,39 +1157,6 @@ func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer,
 	return fn(job, settings), nil
 }
 
-type retryJobError string
-
-// retryJobErrorSentinel exists so the errors returned from NewRetryJobError can
-// be marked with it, allowing more robust detection of retry errors even if
-// they are wrapped, etc. This was originally introduced to deal with injected
-// retry errors from testing knobs.
-var retryJobErrorSentinel = retryJobError("")
-
-// NewRetryJobError creates a new error that, if returned by a Resumer,
-// indicates to the jobs registry that the job should be restarted in the
-// background.
-func NewRetryJobError(s string) error {
-	return errors.Mark(retryJobError(s), retryJobErrorSentinel)
-}
-
-func (r retryJobError) Error() string {
-	return string(r)
-}
-
-// Registry does not retry a job that fails due to a permanent error.
-var errJobPermanentSentinel = errors.New("permanent job-error")
-
-// MarkAsPermanentJobError marks an error as a permanent job error, which indicates
-// Registry to not retry the job when it fails due to this error.
-func MarkAsPermanentJobError(err error) error {
-	return errors.Mark(err, errJobPermanentSentinel)
-}
-
-// IsPermanentJobError checks whether the given error is a permanent error.
-func IsPermanentJobError(err error) bool {
-	return errors.Is(err, errJobPermanentSentinel)
-}
-
 // stepThroughStateMachine implements the state machine of the job lifecycle.
 // The job is executed with the ctx, so ctx must only be canceled if the job
 // should also be canceled. resultsCh is passed to the resumable func and should
@@ -1181,7 +1169,18 @@ func (r *Registry) stepThroughStateMachine(
 	jobType := payload.Type()
 	log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
 	jm := r.metrics.JobMetrics[jobType]
-
+	onExecutionFailed := func(cause error) error {
+		log.InfofDepth(
+			ctx, 1,
+			"job %d: %s execution encountered retriable error: %v",
+			job.ID(), status, cause,
+		)
+		start := job.getRunStats().LastRun
+		end := r.clock.Now().GoTime()
+		return newRetriableExecutionError(
+			r.nodeID.SQLInstanceID(), status, start, end, cause,
+		)
+	}
 	switch status {
 	case StatusRunning:
 		if jobErr != nil {
@@ -1214,10 +1213,16 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
 		// TODO(spaskob): enforce a limit on retries.
-		if errors.Is(err, retryJobErrorSentinel) {
+
+		if nonCancelableRetry := job.Payload().Noncancelable && !IsPermanentJobError(err); nonCancelableRetry ||
+			errors.Is(err, errRetryJobSentinel) {
 			jm.ResumeRetryError.Inc(1)
-			return errors.Errorf("job %d: %s: restarting in background", job.ID(), err)
+			if nonCancelableRetry {
+				err = errors.Wrapf(err, "non-cancelable")
+			}
+			return onExecutionFailed(err)
 		}
+
 		jm.ResumeFailed.Inc(1)
 		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
 			if sErr.status != StatusCancelRequested && sErr.status != StatusPauseRequested {
@@ -1280,31 +1285,14 @@ func (r *Registry) stepThroughStateMachine(
 			}
 			return r.stepThroughStateMachine(ctx, execCtx, resumer, job, nextStatus, jobErr)
 		}
+		jm.FailOrCancelRetryError.Inc(1)
 		if onFailOrCancelCtx.Err() != nil {
-			jm.FailOrCancelRetryError.Inc(1)
 			// The context was canceled. Tell the user, but don't attempt to
 			// mark the job as failed because it can be resumed by another node.
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
-		if errors.Is(err, retryJobErrorSentinel) {
-			jm.FailOrCancelRetryError.Inc(1)
-			return errors.Errorf("job %d: %s: restarting in background", job.ID(), err)
-		}
-		// A non-cancelable job is always retried while reverting unless the error is marked as permanent.
-		if job.Payload().Noncancelable && !IsPermanentJobError(err) {
-			jm.FailOrCancelRetryError.Inc(1)
-			return errors.Wrapf(err, "job %d: job is non-cancelable, restarting in background", job.ID())
-		}
-		jm.FailOrCancelFailed.Inc(1)
-		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
-			if sErr.status != StatusPauseRequested {
-				return errors.NewAssertionErrorWithWrappedErrf(jobErr,
-					"job %d: unexpected status %s provided for a reverting job", job.ID(), sErr.status)
-			}
-			return sErr
-		}
-		return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusRevertFailed,
-			errors.Wrapf(err, "job %d: cannot be reverted, manual cleanup may be required", job.ID()))
+		// All reverting jobs are retried.
+		return onExecutionFailed(err)
 	case StatusFailed:
 		if jobErr == nil {
 			return errors.AssertionFailedf("job %d: has StatusFailed but no error was provided", job.ID())
@@ -1317,6 +1305,9 @@ func (r *Registry) stepThroughStateMachine(
 		telemetry.Inc(TelemetryMetrics[jobType].Failed)
 		return jobErr
 	case StatusRevertFailed:
+		// TODO(sajjad): Remove StatusRevertFailed and related code in other places in v22.1.
+		// v21.2 modified all reverting jobs to retry instead of go to revert-failed. Therefore,
+		// revert-failed state is not reachable after 21.2.
 		if jobErr == nil {
 			return errors.AssertionFailedf("job %d: has StatusRevertFailed but no error was provided",
 				job.ID())
@@ -1362,15 +1353,33 @@ func (r *Registry) cancelAllAdoptedJobs() {
 func (r *Registry) unregister(jobID jobspb.JobID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	aj, ok := r.mu.adoptedJobs[jobID]
-	// It is possible for a job to be double unregistered. unregister is always
-	// called at the end of resume. But it can also be called during deprecatedCancelAll
-	// and in the adopt loop under certain circumstances.
-	if ok {
+	if aj, ok := r.mu.adoptedJobs[jobID]; ok {
 		aj.cancel()
 		delete(r.mu.adoptedJobs, jobID)
 	}
+}
+
+func (r *Registry) cancelRegisteredJobContext(jobID jobspb.JobID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if aj, ok := r.mu.adoptedJobs[jobID]; ok {
+		aj.cancel()
+	}
+}
+
+func (r *Registry) getClaimedJob(jobID jobspb.JobID) (*Job, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	aj, ok := r.mu.adoptedJobs[jobID]
+	if !ok {
+		return nil, &JobNotFoundError{jobID: jobID}
+	}
+	return &Job{
+		id:        jobID,
+		sessionID: aj.sid,
+		registry:  r,
+	}, nil
 }
 
 // RetryInitialDelay returns the value of retryInitialDelaySetting cluster setting,
@@ -1389,4 +1398,39 @@ func (r *Registry) RetryMaxDelay() float64 {
 		return r.knobs.IntervalOverrides.RetryMaxDelay.Seconds()
 	}
 	return retryMaxDelaySetting.Get(&r.settings.SV).Seconds()
+}
+
+// maybeRecordRetriableExeuctionFailure will record a
+// RetriableExecutionFailureError into the job payload.
+func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j *Job) {
+	var efe *retriableExecutionError
+	if !errors.As(err, &efe) {
+		return
+	}
+
+	updateErr := j.Update(ctx, nil, func(
+		txn *kv.Txn, md JobMetadata, ju *JobUpdater,
+	) error {
+		pl := md.Payload
+		{ // Append the entry to the log
+			maxSize := int(executionErrorsMaxEntrySize.Get(&r.settings.SV))
+			pl.RetriableExecutionFailureLog = append(pl.RetriableExecutionFailureLog,
+				efe.toRetriableExecutionFailure(ctx, maxSize))
+		}
+		{ // Maybe truncate the log.
+			maxEntries := int(executionErrorsMaxEntriesSetting.Get(&r.settings.SV))
+			log := &pl.RetriableExecutionFailureLog
+			if len(*log) > maxEntries {
+				*log = (*log)[len(*log)-maxEntries:]
+			}
+		}
+		ju.UpdatePayload(pl)
+		return nil
+	})
+	if ctx.Err() != nil {
+		return
+	}
+	if updateErr != nil {
+		log.Warningf(ctx, "failed to record error for job %d: %v: %v", j.ID(), err, err)
+	}
 }

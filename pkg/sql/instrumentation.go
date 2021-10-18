@@ -95,9 +95,12 @@ type instrumentationHelper struct {
 	finishCollectionDiagnostics func()
 	withStatementTrace          func(trace tracing.Recording, stmt string)
 
-	sp      *tracing.Span
-	origCtx context.Context
-	evalCtx *tree.EvalContext
+	sp *tracing.Span
+	// shouldFinishSpan determines whether sp needs to be finished in
+	// instrumentationHelper.Finish.
+	shouldFinishSpan bool
+	origCtx          context.Context
+	evalCtx          *tree.EvalContext
 
 	// If savePlanForStats is true, the explainPlan will be collected and returned
 	// via PlanForStats().
@@ -148,6 +151,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.fingerprint = fingerprint
 	ih.implicitTxn = implicitTxn
 	ih.codec = cfg.Codec
+	ih.origCtx = ctx
 
 	switch ih.outputMode {
 	case explainAnalyzeDebugOutput:
@@ -177,7 +181,11 @@ func (ih *instrumentationHelper) Setup(
 			// collection is enabled so that stats are shown in the traces, but
 			// no extra work is needed by the instrumentationHelper.
 			ih.collectExecStats = true
-			return ctx, false
+			// We still, however, want to finish the instrumentationHelper in
+			// case we're collecting a bundle. We also capture the span in order
+			// to fetch the trace from it, but the span won't be finished.
+			ih.sp = sp
+			return ctx, ih.collectBundle
 		}
 	} else {
 		if util.CrdbTestBuild {
@@ -200,8 +208,8 @@ func (ih *instrumentationHelper) Setup(
 		if ih.collectExecStats {
 			// If we need to collect stats, create a non-verbose child span. Stats
 			// will be added as structured metadata and processed in Finish.
-			ih.origCtx = ctx
 			newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithForceRealSpan())
+			ih.shouldFinishSpan = true
 			return newCtx, true
 		}
 		return ctx, false
@@ -209,9 +217,9 @@ func (ih *instrumentationHelper) Setup(
 
 	ih.collectExecStats = true
 	ih.traceMetadata = make(execNodeTraceMetadata)
-	ih.origCtx = ctx
 	ih.evalCtx = p.EvalContext()
 	newCtx, ih.sp = tracing.StartVerboseTrace(ctx, cfg.AmbientCtx.Tracer, "traced statement")
+	ih.shouldFinishSpan = true
 	return newCtx, true
 }
 
@@ -230,7 +238,9 @@ func (ih *instrumentationHelper) Finish(
 	if ih.sp == nil {
 		return retErr
 	}
-	ih.sp.Finish()
+	if ih.shouldFinishSpan {
+		ih.sp.Finish()
+	}
 
 	// Record the statement information that we've collected.
 	// Note that in case of implicit transactions, the trace contains the auto-commit too.
@@ -268,6 +278,16 @@ func (ih *instrumentationHelper) Finish(
 			Database:    p.SessionData().Database,
 			Failed:      retErr != nil,
 		}
+		// We populate transaction fingerprint ID if this is an implicit transaction.
+		// See executor_statement_metrics.go:recordStatementSummary() for further
+		// explanation.
+		if ih.implicitTxn {
+			stmtFingerprintID := stmtStatsKey.FingerprintID()
+			txnFingerprintHash := util.MakeFNV64()
+			txnFingerprintHash.Add(uint64(stmtFingerprintID))
+			stmtStatsKey.TransactionFingerprintID =
+				roachpb.TransactionFingerprintID(txnFingerprintHash.Sum())
+		}
 		err = statsCollector.RecordStatementExecStats(stmtStatsKey, queryLevelStats)
 		if err != nil {
 			if log.V(2 /* level */) {
@@ -283,7 +303,7 @@ func (ih *instrumentationHelper) Finish(
 	if ih.collectBundle {
 		ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
 		placeholders := p.extendedEvalCtx.Placeholders
-		ob := ih.buildExplainAnalyzePlan(
+		ob := ih.emitExplainAnalyzePlanToOutputBuilder(
 			explain.Flags{Verbose: true, ShowTypes: true},
 			statsCollector.PhaseTimes(),
 			&queryLevelStats,
@@ -404,10 +424,10 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *roachpb.Expl
 	return ob.BuildProtoTree()
 }
 
-// buildExplainAnalyzePlan creates an explain.OutputBuilder and populates it
-// with the EXPLAIN ANALYZE plan. BuildString/BuildStringRows can be used on the
-// result.
-func (ih *instrumentationHelper) buildExplainAnalyzePlan(
+// emitExplainAnalyzePlanToOutputBuilder creates an explain.OutputBuilder and
+// populates it with the EXPLAIN ANALYZE plan. BuildString/BuildStringRows can
+// be used on the result.
+func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	flags explain.Flags, phaseTimes *sessionphase.Times, queryStats *execstats.QueryLevelStats,
 ) *explain.OutputBuilder {
 	ob := explain.NewOutputBuilder(flags)
@@ -464,7 +484,7 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 		return nil //nolint:returnerrcheck
 	}
 
-	ob := ih.buildExplainAnalyzePlan(ih.explainFlags, phaseTimes, queryLevelStats)
+	ob := ih.emitExplainAnalyzePlanToOutputBuilder(ih.explainFlags, phaseTimes, queryLevelStats)
 	rows := ob.BuildStringRows()
 	if distSQLFlowInfos != nil {
 		rows = append(rows, "")
@@ -558,6 +578,10 @@ func (m execNodeTraceMetadata) annotateExplain(
 				nodeStats.KVContentionTime.MaybeAdd(stats.KV.ContentionTime)
 				nodeStats.KVBytesRead.MaybeAdd(stats.KV.BytesRead)
 				nodeStats.KVRowsRead.MaybeAdd(stats.KV.TuplesRead)
+				nodeStats.StepCount.MaybeAdd(stats.KV.NumInterfaceSteps)
+				nodeStats.InternalStepCount.MaybeAdd(stats.KV.NumInternalSteps)
+				nodeStats.SeekCount.MaybeAdd(stats.KV.NumInterfaceSeeks)
+				nodeStats.InternalSeekCount.MaybeAdd(stats.KV.NumInternalSeeks)
 				nodeStats.VectorizedBatchCount.MaybeAdd(stats.Output.NumBatches)
 			}
 			// If we didn't get statistics for all processors, we don't show the

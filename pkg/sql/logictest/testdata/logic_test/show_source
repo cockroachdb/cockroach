@@ -45,7 +45,6 @@ disallow_full_table_scans                              off
 distsql                                                off
 distsql_workmem                                        64 MiB
 enable_copying_partitioning_when_deinterleaving_table  off
-enable_drop_enum_value                                 off
 enable_experimental_alter_column_type_general          off
 enable_experimental_stream_replication                 off
 enable_implicit_select_for_update                      on
@@ -55,6 +54,7 @@ enable_seqscan                                         on
 enable_zigzag_join                                     on
 escape_string_warning                                  on
 experimental_distsql_planning                          off
+experimental_enable_auto_rehoming                      off
 experimental_enable_hash_sharded_indexes               off
 experimental_enable_implicit_column_partitioning       off
 experimental_enable_temp_tables                        off
@@ -65,15 +65,20 @@ force_savepoint_restart                                off
 foreign_key_cascades_limit                             10000
 idle_in_session_timeout                                0
 idle_in_transaction_session_timeout                    0
+inject_retry_errors_enabled                            off
 integer_datetimes                                      on
 intervalstyle                                          postgres
 intervalstyle_enabled                                  off
+is_superuser                                           on
+large_full_scan_rows                                   1000
 locality                                               region=test,dc=dc1
 locality_optimized_partitioned_index_scan              on
 lock_timeout                                           0
 max_identifier_length                                  128
 max_index_keys                                         32
 node_id                                                1
+null_ordered_last                                      off
+on_update_rehome_row_enabled                           on
 optimizer_use_histograms                               on
 optimizer_use_multicol_stats                           on
 override_multi_region_zone_config                      off
@@ -102,6 +107,10 @@ tracing                                                off
 transaction_isolation                                  serializable
 transaction_priority                                   normal
 transaction_read_only                                  off
+transaction_rows_read_err                              0
+transaction_rows_read_log                              0
+transaction_rows_written_err                           0
+transaction_rows_written_log                           0
 transaction_status                                     NoTxn
 vectorize                                              on
 
@@ -407,10 +416,10 @@ SELECT * FROM [SHOW COMPACT TRACE FOR SESSION] LIMIT 0
 ----
 age  message  tag  operation
 
-query ITTTTTTTTTTRTII colnames
+query ITTTTTTTTTTRTIITTIT colnames
 SELECT * FROM [SHOW JOBS] LIMIT 0
 ----
-job_id  job_type  description  statement  user_name  status  running_status  created  started  finished  modified  fraction_completed  error  coordinator_id  trace_id
+job_id  job_type  description  statement  user_name  status  running_status  created  started  finished  modified  fraction_completed  error  coordinator_id  trace_id  last_run  next_run  num_runs  execution_errors
 
 query TT colnames
 SELECT * FROM [SHOW SYNTAX 'select 1; select 2']
@@ -446,8 +455,8 @@ CREATE TABLE showdbindexestest.table2 (key2 INT PRIMARY KEY);
 query TTBITTBB
 SHOW INDEXES FROM DATABASE showdbindexestest;
 ----
-table1 primary false 1 key1 ASC false false
-table2 primary false 1 key2 ASC false false
+table1  table1_pkey  false  1  key1  ASC  false  false
+table2  table2_pkey  false  1  key2  ASC  false  false
 
 statement ok
 CREATE DATABASE "$peci@l";
@@ -461,8 +470,8 @@ CREATE TABLE "$peci@l".table2 (key2 INT PRIMARY KEY);
 query TTBITTBB
 SHOW INDEXES FROM DATABASE "$peci@l";
 ----
-table1 primary false 1 key1 ASC false false
-table2 primary false 1 key2 ASC false false
+table1  table1_pkey  false  1  key1  ASC  false  false
+table2  table2_pkey  false  1  key2  ASC  false  false
 
 # Test SHOW LOCALITY telemetry.
 query T
@@ -537,16 +546,16 @@ COMMENT ON INDEX t@i2 IS 'comm''ent3'
 query TTBITTBBT
 SHOW INDEXES FROM t WITH COMMENT
 ----
-t  i1       true   1  x      ASC  false  false  NULL
-t  i1       true   2  rowid  ASC  false  true   NULL
-t  i2       true   1  y      ASC  false  false  comm'ent3
-t  i2       true   2  rowid  ASC  false  true   comm'ent3
-t  i3       true   1  z      ASC  false  false  NULL
-t  i3       true   2  rowid  ASC  false  true   NULL
-t  primary  false  1  rowid  ASC  false  false  NULL
-t  primary  false  2  x      N/A  true   false  NULL
-t  primary  false  3  y      N/A  true   false  NULL
-t  primary  false  4  z      N/A  true   false  NULL
+t  i1      true   1  x      ASC  false  false  NULL
+t  i1      true   2  rowid  ASC  false  true   NULL
+t  i2      true   1  y      ASC  false  false  comm'ent3
+t  i2      true   2  rowid  ASC  false  true   comm'ent3
+t  i3      true   1  z      ASC  false  false  NULL
+t  i3      true   2  rowid  ASC  false  true   NULL
+t  t_pkey  false  1  rowid  ASC  false  false  NULL
+t  t_pkey  false  2  x      N/A  true   false  NULL
+t  t_pkey  false  3  y      N/A  true   false  NULL
+t  t_pkey  false  4  z      N/A  true   false  NULL
 
 query TTBITTBBT
 SHOW INDEXES FROM t2 WITH COMMENT
@@ -557,7 +566,7 @@ t2  i2       true   1  y      ASC  false  false  NULL
 t2  i2       true   2  rowid  ASC  false  true   NULL
 t2  i3       true   1  z      ASC  false  false  NULL
 t2  i3       true   2  rowid  ASC  false  true   NULL
-t2  primary  false  1  rowid  ASC  false  false  NULL
-t2  primary  false  2  x      N/A  true   false  NULL
-t2  primary  false  3  y      N/A  true   false  NULL
-t2  primary  false  4  z      N/A  true   false  NULL
+t2  t2_pkey  false  1  rowid  ASC  false  false  NULL
+t2  t2_pkey  false  2  x      N/A  true   false  NULL
+t2  t2_pkey  false  3  y      N/A  true   false  NULL
+t2  t2_pkey  false  4  z      N/A  true   false  NULL

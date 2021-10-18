@@ -34,6 +34,7 @@ type mysqloutfileReader struct {
 var _ inputConverter = &mysqloutfileReader{}
 
 func newMysqloutfileReader(
+	semaCtx *tree.SemaContext,
 	opts roachpb.MySQLOutfileOptions,
 	kvCh chan row.KVBatch,
 	walltime int64,
@@ -44,6 +45,7 @@ func newMysqloutfileReader(
 ) (*mysqloutfileReader, error) {
 	return &mysqloutfileReader{
 		importCtx: &parallelImportContext{
+			semaCtx:    semaCtx,
 			walltime:   walltime,
 			numWorkers: parallelism,
 			evalCtx:    evalCtx,

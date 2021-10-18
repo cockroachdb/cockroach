@@ -15,6 +15,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -31,23 +32,48 @@ const (
 
 // NewTopKSorter returns a new sort operator, which sorts its input on the
 // columns given in orderingCols and returns the first K rows. The inputTypes
-// must correspond 1-1 with the columns in the input operator.
+// must correspond 1-1 with the columns in the input operator. If matchLen is
+// non-zero, then the input tuples must be sorted on first matchLen columns.
 func NewTopKSorter(
 	allocator *colmem.Allocator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
+	matchLen int,
 	k uint64,
 	maxOutputBatchMemSize int64,
-) colexecop.ResettableOperator {
-	return &topKSorter{
+) (colexecop.ResettableOperator, error) {
+	if matchLen < 0 {
+		return nil, errors.AssertionFailedf("invalid matchLen %v", matchLen)
+	}
+	base := &topKSorter{
 		allocator:             allocator,
 		OneInputNode:          colexecop.NewOneInputNode(input),
 		inputTypes:            inputTypes,
 		orderingCols:          orderingCols,
 		k:                     k,
+		hasPartialOrder:       matchLen > 0,
+		matchLen:              matchLen,
 		maxOutputBatchMemSize: maxOutputBatchMemSize,
 	}
+	if base.hasPartialOrder {
+		base.heaper = &topKPartialOrderHeaper{base}
+		partialOrderCols := make([]uint32, matchLen)
+		for i := range partialOrderCols {
+			partialOrderCols[i] = orderingCols[i].ColIdx
+		}
+		var err error
+		base.orderState.distincterInput = &colexecop.FeedOperator{}
+		base.orderState.distincter, base.orderState.distinctOutput, err = colexecbase.OrderedDistinctColsToOperators(
+			base.orderState.distincterInput, partialOrderCols, inputTypes, false, /* nullsAreDistinct */
+		)
+		if err != nil {
+			return base, err
+		}
+	} else {
+		base.heaper = &topKHeaper{base}
+	}
+	return base, nil
 }
 
 var _ colexecop.BufferingInMemoryOperator = &topKSorter{}
@@ -71,12 +97,12 @@ const (
 type topKSorter struct {
 	colexecop.OneInputNode
 	colexecop.InitHelper
-
-	allocator    *colmem.Allocator
-	orderingCols []execinfrapb.Ordering_Column
-	inputTypes   []*types.T
-	k            uint64
-
+	allocator       *colmem.Allocator
+	orderingCols    []execinfrapb.Ordering_Column
+	inputTypes      []*types.T
+	k               uint64
+	matchLen        int
+	hasPartialOrder bool
 	// state is the current state of the sort.
 	state topKSortState
 	// inputBatch is the last read batch from the input.
@@ -89,7 +115,8 @@ type topKSorter struct {
 	// topK stores the top K rows. It is not sorted internally.
 	topK *colexecutils.AppendOnlyBufferedBatch
 	// heap is a max heap which stores indices into topK.
-	heap []int
+	heap   []int
+	heaper heap.Interface
 	// sel is a selection vector which specifies an ordering on topK.
 	sel []int
 	// emitted is the count of rows which have been emitted so far.
@@ -100,6 +127,17 @@ type topKSorter struct {
 	exportedFromTopK  int
 	exportedFromBatch int
 	windowedBatch     coldata.Batch
+
+	// orderState stores fields useful for computing top K for partially ordered inputs.
+	orderState struct {
+		// group stores the group number associated with each entry in topK.
+		group []int
+		// distincter is an operator that groups an input batch by its partially
+		// ordered column values.
+		distincterInput *colexecop.FeedOperator
+		distincter      colexecop.Operator
+		distinctOutput  []bool
+	}
 }
 
 func (t *topKSorter) Init(ctx context.Context) {
@@ -108,6 +146,8 @@ func (t *topKSorter) Init(ctx context.Context) {
 	}
 	t.Input.Init(t.Ctx)
 	t.topK = colexecutils.NewAppendOnlyBufferedBatch(t.allocator, t.inputTypes, nil /* colsToStore */)
+	// TODO(harding): We only need to create a vecComparator for the input vectors
+	// in orderingCols.
 	t.comparators = make([]vecComparator, len(t.inputTypes))
 	for i, typ := range t.inputTypes {
 		t.comparators[i] = GetVecComparator(typ, 2)
@@ -116,6 +156,10 @@ func (t *topKSorter) Init(ctx context.Context) {
 	// require plumbing unlimited allocator to work correctly in tests with
 	// memory limit of 1.
 	t.windowedBatch = coldata.NewMemBatchNoCols(t.inputTypes, coldata.BatchSize())
+	if t.hasPartialOrder {
+		t.orderState.distincter.Init(t.Ctx)
+		t.orderState.group = make([]int, t.k)
+	}
 }
 
 func (t *topKSorter) Next() coldata.Batch {
@@ -149,82 +193,8 @@ func (t *topKSorter) Reset(ctx context.Context) {
 	t.firstUnprocessedTupleIdx = 0
 	t.topK.ResetInternalBatch()
 	t.emitted = 0
-}
-
-// spool reads in the entire input, always storing the top K rows it has seen so
-// far in o.topK. This is done by maintaining a max heap of indices into o.topK.
-// Whenever we encounter a row which is smaller than the max row in the heap,
-// we replace the max with that row.
-//
-// After all the input has been read, we pop everything off the heap to
-// determine the final output ordering. This is used in emit() to output the rows
-// in sorted order.
-func (t *topKSorter) spool() {
-	// Fill up t.topK by spooling up to K rows from the input.
-	t.inputBatch = t.Input.Next()
-	remainingRows := t.k
-	for remainingRows > 0 && t.inputBatch.Length() > 0 {
-		fromLength := t.inputBatch.Length()
-		if remainingRows < uint64(t.inputBatch.Length()) {
-			// t.topK will be full after this batch.
-			fromLength = int(remainingRows)
-		}
-		t.firstUnprocessedTupleIdx = fromLength
-		t.topK.AppendTuples(t.inputBatch, 0 /* startIdx */, fromLength)
-		remainingRows -= uint64(fromLength)
-		if fromLength == t.inputBatch.Length() {
-			t.inputBatch = t.Input.Next()
-			t.firstUnprocessedTupleIdx = 0
-		}
-	}
-	t.updateComparators(topKVecIdx, t.topK)
-
-	// Initialize the heap.
-	if cap(t.heap) < t.topK.Length() {
-		t.heap = make([]int, t.topK.Length())
-	} else {
-		t.heap = t.heap[:t.topK.Length()]
-	}
-	for i := range t.heap {
-		t.heap[i] = i
-	}
-	heap.Init(t)
-
-	// Read the remainder of the input. Whenever a row is less than the heap max,
-	// swap it in.
-	for t.inputBatch.Length() > 0 {
-		t.updateComparators(inputVecIdx, t.inputBatch)
-		sel := t.inputBatch.Selection()
-		t.allocator.PerformOperation(
-			t.topK.ColVecs(),
-			func() {
-				for i := t.firstUnprocessedTupleIdx; i < t.inputBatch.Length(); i++ {
-					idx := i
-					if sel != nil {
-						idx = sel[i]
-					}
-					maxIdx := t.heap[0]
-					if t.compareRow(inputVecIdx, topKVecIdx, idx, maxIdx) < 0 {
-						for j := range t.inputTypes {
-							t.comparators[j].set(inputVecIdx, topKVecIdx, idx, maxIdx)
-						}
-						heap.Fix(t, 0)
-					}
-				}
-				t.firstUnprocessedTupleIdx = t.inputBatch.Length()
-			},
-		)
-		t.inputBatch = t.Input.Next()
-		t.firstUnprocessedTupleIdx = 0
-	}
-
-	// t.topK now contains the top K rows unsorted. Create a selection vector
-	// which specifies the rows in sorted order by popping everything off the
-	// heap. Note that it's a max heap so we need to fill the selection vector in
-	// reverse.
-	t.sel = make([]int, t.topK.Length())
-	for i := 0; i < t.topK.Length(); i++ {
-		t.sel[len(t.sel)-i-1] = heap.Pop(t).(int)
+	if t.hasPartialOrder {
+		t.orderState.distincter.(colexecop.Resetter).Reset(t.Ctx)
 	}
 }
 
@@ -257,24 +227,6 @@ func (t *topKSorter) emit() coldata.Batch {
 	t.output.SetLength(toEmit)
 	t.emitted += toEmit
 	return t.output
-}
-
-func (t *topKSorter) compareRow(vecIdx1, vecIdx2 int, rowIdx1, rowIdx2 int) int {
-	for i := range t.orderingCols {
-		info := t.orderingCols[i]
-		res := t.comparators[info.ColIdx].compare(vecIdx1, vecIdx2, rowIdx1, rowIdx2)
-		if res != 0 {
-			switch d := info.Direction; d {
-			case execinfrapb.Ordering_Column_ASC:
-				return res
-			case execinfrapb.Ordering_Column_DESC:
-				return -res
-			default:
-				colexecerror.InternalError(errors.AssertionFailedf("unexpected direction value %d", d))
-			}
-		}
-	}
-	return 0
 }
 
 func (t *topKSorter) updateComparators(vecIdx int, batch coldata.Batch) {
@@ -315,11 +267,6 @@ func (t *topKSorter) ExportBuffered(colexecop.Operator) coldata.Batch {
 // Len is part of heap.Interface and is only meant to be used internally.
 func (t *topKSorter) Len() int {
 	return len(t.heap)
-}
-
-// Less is part of heap.Interface and is only meant to be used internally.
-func (t *topKSorter) Less(i, j int) bool {
-	return t.compareRow(topKVecIdx, topKVecIdx, t.heap[i], t.heap[j]) > 0
 }
 
 // Swap is part of heap.Interface and is only meant to be used internally.

@@ -9,7 +9,6 @@ go_library(
         "//pkg/base",
         "//pkg/config/zonepb",
         "//pkg/gossip",
-        "//pkg/gossip/resolver",
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/settings/cluster",

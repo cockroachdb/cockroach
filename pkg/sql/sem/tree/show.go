@@ -442,20 +442,25 @@ func (node *ShowTransactions) Format(ctx *FmtCtx) {
 
 // ShowConstraints represents a SHOW CONSTRAINTS statement.
 type ShowConstraints struct {
-	Table *UnresolvedObjectName
+	Table       *UnresolvedObjectName
+	WithComment bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowConstraints) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CONSTRAINTS FROM ")
 	ctx.FormatNode(node.Table)
+
+	if node.WithComment {
+		ctx.WriteString(" WITH COMMENT")
+	}
 }
 
 // ShowGrants represents a SHOW GRANTS statement.
 // TargetList is defined in grant.go.
 type ShowGrants struct {
 	Targets  *TargetList
-	Grantees NameList
+	Grantees RoleSpecList
 }
 
 // Format implements the NodeFormatter interface.
@@ -473,8 +478,8 @@ func (node *ShowGrants) Format(ctx *FmtCtx) {
 
 // ShowRoleGrants represents a SHOW GRANTS ON ROLE statement.
 type ShowRoleGrants struct {
-	Roles    NameList
-	Grantees NameList
+	Roles    RoleSpecList
+	Grantees RoleSpecList
 }
 
 // Format implements the NodeFormatter interface.
@@ -519,6 +524,14 @@ func (node *ShowCreate) Format(ctx *FmtCtx) {
 		ctx.WriteString("DATABASE ")
 	}
 	ctx.FormatNode(node.Name)
+}
+
+// ShowCreateAllSchemas represents a SHOW CREATE ALL SCHEMAS statement.
+type ShowCreateAllSchemas struct{}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowCreateAllSchemas) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW CREATE ALL SCHEMAS")
 }
 
 // ShowCreateAllTables represents a SHOW CREATE ALL TABLES statement.
@@ -750,11 +763,16 @@ const (
 	// ScheduledBackupExecutor is an executor responsible for
 	// the execution of the scheduled backups.
 	ScheduledBackupExecutor
+
+	// ScheduledSQLStatsCompactionExecutor is an executor responsible for the
+	// execution of the scheduled SQL Stats compaction.
+	ScheduledSQLStatsCompactionExecutor
 )
 
 var scheduleExecutorInternalNames = map[ScheduledJobExecutorType]string{
-	InvalidExecutor:         "unknown-executor",
-	ScheduledBackupExecutor: "scheduled-backup-executor",
+	InvalidExecutor:                     "unknown-executor",
+	ScheduledBackupExecutor:             "scheduled-backup-executor",
+	ScheduledSQLStatsCompactionExecutor: "scheduled-sql-stats-compaction-executor",
 }
 
 // InternalName returns an internal executor name.
@@ -768,6 +786,8 @@ func (t ScheduledJobExecutorType) UserName() string {
 	switch t {
 	case ScheduledBackupExecutor:
 		return "BACKUP"
+	case ScheduledSQLStatsCompactionExecutor:
+		return "SQL STATISTICS"
 	}
 	return "unsupported-executor"
 }
@@ -835,7 +855,7 @@ func (n *ShowSchedules) Format(ctx *FmtCtx) {
 
 // ShowDefaultPrivileges represents a SHOW DEFAULT PRIVILEGES statement.
 type ShowDefaultPrivileges struct {
-	Roles       NameList
+	Roles       RoleSpecList
 	ForAllRoles bool
 }
 

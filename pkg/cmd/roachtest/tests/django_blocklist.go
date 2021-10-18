@@ -165,14 +165,19 @@ var djangoBlocklists = blocklistsForVersion{
 	{"v20.2", "djangoBlocklist20_2", djangoBlocklist20_2, "djangoIgnoreList20_2", djangoIgnoreList20_2},
 	{"v21.1", "djangoBlocklist21_1", djangoBlocklist21_1, "djangoIgnoreList21_1", djangoIgnoreList21_1},
 	{"v21.2", "djangoBlocklist21_2", djangoBlocklist21_2, "djangoIgnoreList21_2", djangoIgnoreList21_2},
+	{"v22.1", "djangoBlocklist22_1", djangoBlocklist22_1, "djangoIgnoreList22_1", djangoIgnoreList22_1},
 }
 
 // Maintain that this list is alphabetized.
+var djangoBlocklist22_1 = djangoBlocklist21_2
+
 var djangoBlocklist21_2 = djangoBlocklist21_1
 
 var djangoBlocklist21_1 = djangoBlocklist20_2
 
 var djangoBlocklist20_2 = blocklist{}
+
+var djangoIgnoreList22_1 = djangoIgnoreList21_2
 
 var djangoIgnoreList21_2 = blocklist{
 	"migrations.test_operations.OperationTests.test_alter_fk_non_fk":  "will be fixed in django-cockroachdb v3.2.2",

@@ -154,15 +154,15 @@ func newTestProcessorWithTxnPusher(
 		EventChanCap:         testProcessorEventCCap,
 		CheckStreamsInterval: 10 * time.Millisecond,
 	})
-	p.Start(stopper, makeIteratorConstructor(rtsIter))
+	p.Start(stopper, makeIntentScannerConstructor(rtsIter))
 	return p, stopper
 }
 
-func makeIteratorConstructor(rtsIter storage.SimpleMVCCIterator) IteratorConstructor {
+func makeIntentScannerConstructor(rtsIter storage.SimpleMVCCIterator) IntentScannerConstructor {
 	if rtsIter == nil {
 		return nil
 	}
-	return func() storage.SimpleMVCCIterator { return rtsIter }
+	return func() IntentScanner { return NewLegacyIntentScanner(rtsIter) }
 }
 
 func newTestProcessor(rtsIter storage.SimpleMVCCIterator) (*Processor, *stop.Stopper) {
@@ -563,7 +563,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 		makeIntent("z", txn2, "txnKey2", 21),
 		makeProvisionalKV("z", "txnKey2", 21),
 		makeKV("z", "val11", 4),
-	})
+	}, nil)
 	rtsIter.block = make(chan struct{})
 
 	p, stopper := newTestProcessor(rtsIter)

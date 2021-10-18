@@ -55,16 +55,18 @@ func DecodeStmtStatsStatisticsJSON(jsonVal json.JSON, result *roachpb.StatementS
 func JSONToExplainTreePlanNode(jsonVal json.JSON) (*roachpb.ExplainTreePlanNode, error) {
 	node := roachpb.ExplainTreePlanNode{}
 
-	nameAttr, err := safeFetchVal(jsonVal, "Name")
+	nameAttr, err := jsonVal.FetchValKey("Name")
 	if err != nil {
 		return nil, err
 	}
 
-	str, err := nameAttr.AsText()
-	if err != nil {
-		return nil, err
+	if nameAttr != nil {
+		str, err := nameAttr.AsText()
+		if err != nil {
+			return nil, err
+		}
+		node.Name = *str
 	}
-	node.Name = *str
 
 	iter, err := jsonVal.ObjectIter()
 	if err != nil {
@@ -86,15 +88,17 @@ func JSONToExplainTreePlanNode(jsonVal json.JSON) (*roachpb.ExplainTreePlanNode,
 
 		if key == "Children" {
 			for childIdx := 0; childIdx < value.Len(); childIdx++ {
-				childJSON, err := safeFetchValIdx(value, childIdx)
+				childJSON, err := value.FetchValIdx(childIdx)
 				if err != nil {
 					return nil, err
 				}
-				child, err := JSONToExplainTreePlanNode(childJSON)
-				if err != nil {
-					return nil, err
+				if childJSON != nil {
+					child, err := JSONToExplainTreePlanNode(childJSON)
+					if err != nil {
+						return nil, err
+					}
+					node.Children = append(node.Children, child)
 				}
-				node.Children = append(node.Children, child)
 			}
 		} else {
 			str, err := value.AsText()

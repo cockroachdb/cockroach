@@ -515,3 +515,35 @@ SET "role" = 'bob' -- normalized!
 SET "role" = ('bob') -- fully parenthesized
 SET "role" = '_' -- literals removed
 SET "role" = 'bob' -- identifiers removed
+
+parse
+SET LOCAL ROLE bob
+----
+SET LOCAL "role" = bob -- normalized!
+SET LOCAL "role" = (bob) -- fully parenthesized
+SET LOCAL "role" = bob -- literals removed
+SET LOCAL "role" = _ -- identifiers removed
+
+parse
+SET LOCAL TIME ZONE +3
+----
+SET LOCAL timezone = 3 -- normalized!
+SET LOCAL timezone = (3) -- fully parenthesized
+SET LOCAL timezone = _ -- literals removed
+SET LOCAL timezone = 3 -- identifiers removed
+
+parse
+SET LOCAL intervalstyle = 'postgres'
+----
+SET LOCAL intervalstyle = 'postgres'
+SET LOCAL intervalstyle = ('postgres') -- fully parenthesized
+SET LOCAL intervalstyle = '_' -- literals removed
+SET LOCAL intervalstyle = 'postgres' -- identifiers removed
+
+parse
+SET LOCAL intervalstyle TO 'postgres'
+----
+SET LOCAL intervalstyle = 'postgres' -- normalized!
+SET LOCAL intervalstyle = ('postgres') -- fully parenthesized
+SET LOCAL intervalstyle = '_' -- literals removed
+SET LOCAL intervalstyle = 'postgres' -- identifiers removed

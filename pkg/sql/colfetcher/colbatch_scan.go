@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -47,13 +47,13 @@ import (
 type ColBatchScan struct {
 	colexecop.ZeroInputNode
 	colexecop.InitHelper
+	execinfra.SpansWithCopy
 
-	spans           roachpb.Spans
 	flowCtx         *execinfra.FlowCtx
 	bsHeader        *roachpb.BoundedStalenessHeader
 	rf              *cFetcher
-	limitHint       row.RowLimit
-	batchBytesLimit row.BytesLimit
+	limitHint       rowinfra.RowLimit
+	batchBytesLimit rowinfra.BytesLimit
 	parallelize     bool
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
@@ -92,13 +92,13 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchscan")
 	limitBatches := !s.parallelize
 	if err := s.rf.StartScan(
+		s.Ctx,
 		s.flowCtx.Txn,
-		s.spans,
+		s.Spans,
 		s.bsHeader,
 		limitBatches,
 		s.batchBytesLimit,
 		s.limitHint,
-		s.flowCtx.TraceKV,
 		s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		colexecerror.InternalError(err)
@@ -126,7 +126,7 @@ func (s *ColBatchScan) DrainMeta() []execinfrapb.ProducerMetadata {
 	if !s.flowCtx.Local {
 		nodeID, ok := s.flowCtx.NodeID.OptionalNodeID()
 		if ok {
-			ranges := execinfra.MisplannedRanges(s.Ctx, s.spans, nodeID, s.flowCtx.Cfg.RangeCache)
+			ranges := execinfra.MisplannedRanges(s.Ctx, s.SpansCopy, nodeID, s.flowCtx.Cfg.RangeCache)
 			if ranges != nil {
 				trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 			}
@@ -169,6 +169,11 @@ func (s *ColBatchScan) GetCumulativeContentionTime() time.Duration {
 	return execinfra.GetCumulativeContentionTime(s.Ctx)
 }
 
+// GetScanStats is part of the colexecop.KVReader interface.
+func (s *ColBatchScan) GetScanStats() execinfra.ScanStats {
+	return execinfra.GetScanStats(s.Ctx)
+}
+
 var colBatchScanPool = sync.Pool{
 	New: func() interface{} {
 		return &ColBatchScan{}
@@ -194,15 +199,15 @@ func NewColBatchScan(
 		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
 	}
 
-	limitHint := row.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
+	limitHint := rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
 	// TODO(ajwerner): The need to construct an immutable here
 	// indicates that we're probably doing this wrong. Instead we should be
 	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated immutable from cache.
 	table := spec.BuildTableDescriptor()
-	virtualColumn := tabledesc.FindVirtualColumn(table, spec.VirtualColumn)
+	invertedColumn := tabledesc.FindInvertedColumn(table, spec.InvertedColumn)
 	typs, columnIdxMap, err := retrieveTypsAndColOrds(
-		ctx, flowCtx, evalCtx, table, virtualColumn, spec.Visibility, spec.HasSystemColumns)
+		ctx, flowCtx, evalCtx, table, invertedColumn, spec.Visibility, spec.HasSystemColumns)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +219,7 @@ func NewColBatchScan(
 
 	fetcher, err := initCFetcher(
 		flowCtx, allocator, table, table.ActiveIndexes()[spec.IndexIdx],
-		neededColumns, columnIdxMap, virtualColumn,
+		neededColumns, columnIdxMap, invertedColumn,
 		cFetcherArgs{
 			visibility:        spec.Visibility,
 			lockingStrength:   spec.LockingStrength,
@@ -242,18 +247,22 @@ func NewColBatchScan(
 		bsHeader = &roachpb.BoundedStalenessHeader{
 			MinTimestampBound:       ts,
 			MinTimestampBoundStrict: aost.NearestOnly,
-		}
-		if !evalCtx.AsOfSystemTime.MaxTimestampBound.IsEmpty() {
-			bsHeader.MaxTimestampBound = evalCtx.AsOfSystemTime.MaxTimestampBound
+			MaxTimestampBound:       evalCtx.AsOfSystemTime.MaxTimestampBound, // may be empty
 		}
 	}
 
 	s := colBatchScanPool.Get().(*ColBatchScan)
-	spans := s.spans[:0]
+	s.Spans = s.Spans[:0]
 	specSpans := spec.Spans
 	for i := range specSpans {
 		//gcassert:bce
-		spans = append(spans, specSpans[i].Span)
+		s.Spans = append(s.Spans, specSpans[i].Span)
+	}
+	if !flowCtx.Local {
+		// Make a copy of the spans so that we could get the misplanned ranges
+		// info.
+		allocator.AdjustMemoryUsage(s.Spans.MemUsage())
+		s.MakeSpansCopy()
 	}
 
 	if spec.LimitHint > 0 || spec.BatchBytesLimit > 0 {
@@ -261,16 +270,16 @@ func NewColBatchScan(
 		// just in case.
 		spec.Parallelize = false
 	}
-	var batchBytesLimit row.BytesLimit
+	var batchBytesLimit rowinfra.BytesLimit
 	if !spec.Parallelize {
-		batchBytesLimit = row.BytesLimit(spec.BatchBytesLimit)
+		batchBytesLimit = rowinfra.BytesLimit(spec.BatchBytesLimit)
 		if batchBytesLimit == 0 {
-			batchBytesLimit = row.DefaultBatchBytesLimit
+			batchBytesLimit = rowinfra.DefaultBatchBytesLimit
 		}
 	}
 
 	*s = ColBatchScan{
-		spans:           spans,
+		SpansWithCopy:   s.SpansWithCopy,
 		flowCtx:         flowCtx,
 		bsHeader:        bsHeader,
 		rf:              fetcher,
@@ -290,7 +299,7 @@ func retrieveTypsAndColOrds(
 	flowCtx *execinfra.FlowCtx,
 	evalCtx *tree.EvalContext,
 	table catalog.TableDescriptor,
-	virtualCol catalog.Column,
+	invertedCol catalog.Column,
 	visibility execinfrapb.ScanVisibility,
 	hasSystemColumns bool,
 ) ([]*types.T, catalog.TableColMap, error) {
@@ -299,7 +308,7 @@ func retrieveTypsAndColOrds(
 		cols = table.DeletableColumns()
 	}
 	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
-	typs := catalog.ColumnTypesWithVirtualCol(cols, virtualCol)
+	typs := catalog.ColumnTypesWithInvertedCol(cols, invertedCol)
 
 	// Add all requested system columns to the output.
 	if hasSystemColumns {
@@ -325,17 +334,16 @@ func retrieveTypsAndColOrds(
 func (s *ColBatchScan) Release() {
 	s.rf.Release()
 	// Deeply reset the spans so that we don't hold onto the keys of the spans.
-	for i := range s.spans {
-		s.spans[i] = roachpb.Span{}
-	}
+	s.SpansWithCopy.Reset()
 	*s = ColBatchScan{
-		spans: s.spans[:0],
+		SpansWithCopy: s.SpansWithCopy,
 	}
 	colBatchScanPool.Put(s)
 }
 
 // Close implements the colexecop.Closer interface.
 func (s *ColBatchScan) Close() error {
+	s.rf.Close(s.EnsureCtx())
 	if s.tracingSpan != nil {
 		s.tracingSpan.Finish()
 		s.tracingSpan = nil

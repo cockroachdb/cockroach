@@ -195,9 +195,9 @@ func (b *stmtBundleBuilder) addStatement() {
 	// If we hit an early error, stmt or stmt.AST might not be initialized yet.
 	switch {
 	case b.plan.stmt == nil:
-		output = "No Statement."
+		output = "-- No Statement."
 	case b.plan.stmt.AST == nil:
-		output = "No AST."
+		output = "-- No AST."
 	default:
 		output = cfg.Pretty(b.plan.stmt.AST)
 	}
@@ -205,14 +205,14 @@ func (b *stmtBundleBuilder) addStatement() {
 	if b.placeholders != nil && len(b.placeholders.Values) != 0 {
 		var buf bytes.Buffer
 		buf.WriteString(output)
-		buf.WriteString("\n\nArguments:\n")
+		buf.WriteString("\n\n-- Arguments:\n")
 		for i, v := range b.placeholders.Values {
-			fmt.Fprintf(&buf, "  %s: %v\n", tree.PlaceholderIdx(i), v)
+			fmt.Fprintf(&buf, "--  %s: %v\n", tree.PlaceholderIdx(i), v)
 		}
 		output = buf.String()
 	}
 
-	b.z.AddFile("statement.txt", output)
+	b.z.AddFile("statement.sql", output)
 }
 
 // addOptPlans adds the EXPLAIN (OPT) variants as files opt.txt, opt-v.txt,
@@ -507,6 +507,8 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		return sessiondatapb.VectorizeExecMode(n).String()
 	}
 
+	// TODO(rytaft): Keeping this list up to date is a challenge. Consider just
+	// printing all session settings.
 	relevantSettings := []struct {
 		sessionSetting string
 		clusterSetting settings.WritableSetting
@@ -517,6 +519,12 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode, convFunc: boolToOnOff},
 		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode, convFunc: boolToOnOff},
 		{sessionSetting: "locality_optimized_partitioned_index_scan", clusterSetting: localityOptimizedSearchMode, convFunc: boolToOnOff},
+		{sessionSetting: "propagate_input_ordering", clusterSetting: propagateInputOrdering, convFunc: boolToOnOff},
+		{sessionSetting: "prefer_lookup_joins_for_fks", clusterSetting: preferLookupJoinsForFKs, convFunc: boolToOnOff},
+		{sessionSetting: "intervalstyle_enabled", clusterSetting: intervalStyleEnabled, convFunc: boolToOnOff},
+		{sessionSetting: "datestyle_enabled", clusterSetting: dateStyleEnabled, convFunc: boolToOnOff},
+		{sessionSetting: "disallow_full_table_scans", clusterSetting: disallowFullTableScans, convFunc: boolToOnOff},
+		{sessionSetting: "large_full_scan_rows", clusterSetting: largeFullScanRows},
 		{sessionSetting: "distsql", clusterSetting: DistSQLClusterExecMode, convFunc: distsqlConv},
 		{sessionSetting: "vectorize", clusterSetting: VectorizeClusterMode, convFunc: vectorizeConv},
 	}

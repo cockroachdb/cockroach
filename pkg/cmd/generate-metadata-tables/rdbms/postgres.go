@@ -38,6 +38,12 @@ var unimplementedEquivalencies = map[oid.Oid]oid.Oid{
 	oid.Oid(13443): oid.T_text,        // sql_identifier
 	oid.Oid(13448): oid.T_timestamptz, // time_stamp
 
+	// pg_catalog
+	oid.Oid(2277): oid.T__text, // anyarray
+	oid.Oid(3361): oid.T_bytea, // pg_ndistinct
+	oid.Oid(3402): oid.T_bytea, // pg_dependencies
+	oid.Oid(5017): oid.T_bytea, // pg_mcv_list
+
 	// Other types
 	oid.T__aclitem:     oid.T__text,
 	oid.T_pg_node_tree: oid.T_text,

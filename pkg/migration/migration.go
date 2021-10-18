@@ -21,7 +21,11 @@
 // truncated state in KV.
 package migration
 
-import "github.com/cockroachdb/cockroach/pkg/clusterversion"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+)
 
 // Migration defines a program to be executed once every node in the cluster is
 // (a) running a specific binary version, and (b) has completed all prior
@@ -59,7 +63,7 @@ import "github.com/cockroachdb/cockroach/pkg/clusterversion"
 //
 type Migration interface {
 	ClusterVersion() clusterversion.ClusterVersion
-
+	Name() string
 	internal() // restrict implementations to this package
 }
 
@@ -83,6 +87,11 @@ type migration struct {
 // ClusterVersion makes SystemMigration a Migration.
 func (m *migration) ClusterVersion() clusterversion.ClusterVersion {
 	return m.cv
+}
+
+// Name returns a human readable name for this migration.
+func (m *migration) Name() string {
+	return fmt.Sprintf("Migration to %s: %q", m.cv.String(), m.description)
 }
 
 func (m *migration) internal() {}

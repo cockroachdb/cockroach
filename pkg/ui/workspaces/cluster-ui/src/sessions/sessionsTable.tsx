@@ -24,8 +24,6 @@ type ISession = cockroach.server.serverpb.Session;
 
 import { TerminateSessionModalRef } from "./terminateSessionModal";
 import { TerminateQueryModalRef } from "./terminateQueryModal";
-
-import { StatementLink } from "src/statementsTable/statementsTableContent";
 import { ColumnDescriptor, SortedTable } from "src/sortedtable/sortedtable";
 
 import { Icon } from "antd";
@@ -35,6 +33,8 @@ import {
 } from "src/dropdown/dropdown";
 import { Button } from "src/button/button";
 import { Tooltip } from "@cockroachlabs/ui-components";
+import { summarize } from "../util";
+import { shortStatement } from "../statementsTable";
 
 const cx = classNames.bind(styles);
 
@@ -44,7 +44,7 @@ export interface SessionInfo {
 
 export class SessionsSortedTable extends SortedTable<SessionInfo> {}
 
-export function byteArrayToUuid(array: Uint8Array) {
+export function byteArrayToUuid(array: Uint8Array): string {
   const hexDigits: string[] = [];
   array.forEach(t => hexDigits.push(t.toString(16).padStart(2, "0")));
   return [
@@ -97,15 +97,16 @@ const AgeLabel = (props: { start: Moment; thingName: string }) => {
 export function makeSessionsColumns(
   terminateSessionRef?: React.RefObject<TerminateSessionModalRef>,
   terminateQueryRef?: React.RefObject<TerminateQueryModalRef>,
+  isCloud?: boolean,
   onSessionClick?: () => void,
   onTerminateSessionClick?: () => void,
   onTerminateStatementClick?: () => void,
 ): ColumnDescriptor<SessionInfo>[] {
-  return [
+  const columns: ColumnDescriptor<SessionInfo>[] = [
     {
       name: "sessionAge",
       title: SessionTableTitle.sessionAge,
-      className: cx("cl-table__col-session-age"),
+      className: cx("cl-table__col-session"),
       cell: session =>
         SessionLink({ session: session.session, onClick: onSessionClick }),
       sort: session => TimestampToMoment(session.session.start).valueOf(),
@@ -113,7 +114,7 @@ export function makeSessionsColumns(
     {
       name: "txnAge",
       title: SessionTableTitle.txnAge,
-      className: cx("cl-table__col-session-start"),
+      className: cx("cl-table__col-session"),
       cell: function(session: SessionInfo) {
         if (session.session.active_txn) {
           return AgeLabel({
@@ -128,7 +129,7 @@ export function makeSessionsColumns(
     {
       name: "statementAge",
       title: SessionTableTitle.statementAge,
-      className: cx("cl-table__col-session-start"),
+      className: cx("cl-table__col-session"),
       cell: function(session: SessionInfo) {
         if (session.session.active_queries?.length > 0) {
           return AgeLabel({
@@ -148,7 +149,7 @@ export function makeSessionsColumns(
     {
       name: "memUsage",
       title: SessionTableTitle.memUsage,
-      className: cx("cl-table__col-session-mem-usage"),
+      className: cx("cl-table__col-session"),
       cell: session =>
         BytesWithPrecision(session.session.alloc_bytes?.toNumber(), 0) +
         "/" +
@@ -158,85 +159,80 @@ export function makeSessionsColumns(
     {
       name: "statement",
       title: SessionTableTitle.statement,
-      className: cx("cl-table__col-query-text"),
+      className: cx("cl-table__col-session", "code"),
       cell: session => {
         if (!(session.session.active_queries?.length > 0)) {
           return "N/A";
         }
         const stmt = session.session.active_queries[0].sql;
-        const anonStmt = session.session.active_queries[0].sql_anon;
-        return (
-          <StatementLink
-            statement={stmt}
-            anonStatement={anonStmt}
-            implicitTxn={session.session.active_txn?.implicit}
-            search={""}
-            app={""}
-          />
-        );
-      },
-    },
-    {
-      name: "actions",
-      title: SessionTableTitle.actions,
-      className: cx("cl-table__col-session-actions"),
-      titleAlign: "right",
-      cell: ({ session }) => {
-        const menuItems: DropdownItem[] = [
-          {
-            value: "terminateStatement",
-            name: "Terminate Statement",
-            disabled: session.active_queries?.length === 0,
-          },
-          {
-            value: "terminateSession",
-            name: "Terminate Session",
-          },
-        ];
-
-        const onMenuItemChange = (
-          value: "terminateStatement" | "terminateSession",
-        ) => {
-          switch (value) {
-            case "terminateSession":
-              onTerminateSessionClick && onTerminateSessionClick();
-              terminateSessionRef?.current?.showModalFor({
-                session_id: session.id,
-                node_id: session.node_id.toString(),
-              });
-              break;
-            case "terminateStatement":
-              if (session.active_queries?.length > 0) {
-                onTerminateStatementClick && onTerminateStatementClick();
-                terminateQueryRef?.current?.showModalFor({
-                  query_id: session.active_queries[0].id,
-                  node_id: session.node_id.toString(),
-                });
-              }
-              break;
-            default:
-              break;
-          }
-        };
-
-        const renderDropdownToggleButton: JSX.Element = (
-          <>
-            <Button type="secondary" size="small">
-              <Icon type="ellipsis" />
-            </Button>
-          </>
-        );
-
-        return (
-          <Dropdown
-            items={menuItems}
-            customToggleButton={renderDropdownToggleButton}
-            onChange={onMenuItemChange}
-            className={cx("session-action--dropdown")}
-            menuPosition="right"
-          />
-        );
+        const summary = summarize(stmt);
+        return shortStatement(summary, stmt);
       },
     },
   ];
+
+  const actions: ColumnDescriptor<SessionInfo> = {
+    name: "actions",
+    title: SessionTableTitle.actions,
+    className: cx("cl-table__col-session-actions"),
+    titleAlign: "right",
+    cell: ({ session }) => {
+      const menuItems: DropdownItem[] = [
+        {
+          value: "terminateStatement",
+          name: "Terminate Statement",
+          disabled: session.active_queries?.length === 0,
+        },
+        {
+          value: "terminateSession",
+          name: "Terminate Session",
+        },
+      ];
+
+      const onMenuItemChange = (
+        value: "terminateStatement" | "terminateSession",
+      ) => {
+        switch (value) {
+          case "terminateSession":
+            onTerminateSessionClick && onTerminateSessionClick();
+            terminateSessionRef?.current?.showModalFor({
+              session_id: session.id,
+              node_id: session.node_id.toString(),
+            });
+            break;
+          case "terminateStatement":
+            if (session.active_queries?.length > 0) {
+              onTerminateStatementClick && onTerminateStatementClick();
+              terminateQueryRef?.current?.showModalFor({
+                query_id: session.active_queries[0].id,
+                node_id: session.node_id.toString(),
+              });
+            }
+            break;
+          default:
+            break;
+        }
+      };
+
+      const renderDropdownToggleButton: JSX.Element = (
+        <>
+          <Button type="secondary" size="small">
+            <Icon type="ellipsis" />
+          </Button>
+        </>
+      );
+
+      return (
+        <Dropdown
+          items={menuItems}
+          customToggleButton={renderDropdownToggleButton}
+          onChange={onMenuItemChange}
+          className={cx("session-action--dropdown")}
+          menuPosition="right"
+        />
+      );
+    },
+  };
+
+  return isCloud ? columns : columns.concat([actions]);
 }

@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"net/url"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
@@ -83,14 +84,6 @@ func changefeedPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	if err := featureflag.CheckEnabled(
-		ctx,
-		p.ExecCfg(),
-		featureChangefeedEnabled,
-		"CHANGEFEED",
-	); err != nil {
-		return nil, nil, nil, false, err
-	}
 	var sinkURIFn func() (string, error)
 	var header colinfo.ResultColumns
 	unspecifiedSink := changefeedStmt.SinkURI == nil
@@ -131,6 +124,22 @@ func changefeedPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
+		if err := featureflag.CheckEnabled(
+			ctx,
+			p.ExecCfg(),
+			featureChangefeedEnabled,
+			"CHANGEFEED",
+		); err != nil {
+			return err
+		}
+
+		// Changefeeds are based on the Rangefeed abstraction, which
+		// requires the `kv.rangefeed.enabled` setting to be true.
+		if !kvserver.RangefeedEnabled.Get(&p.ExecCfg().Settings.SV) {
+			return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
+				docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
+		}
+
 		ok, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
 		if err != nil {
 			return err
@@ -154,10 +163,17 @@ func changefeedPlanHook(
 			return err
 		}
 
-		if opts[changefeedbase.OptFormat] == changefeedbase.DeprecatedOptFormatAvro {
+		for key, value := range opts {
+			// if option is case insensitive then convert its value to lower case
+			if _, ok := changefeedbase.CaseInsensitiveOpts[key]; ok {
+				opts[key] = strings.ToLower(value)
+			}
+		}
+
+		if newFormat, ok := changefeedbase.NoLongerExperimental[opts[changefeedbase.OptFormat]]; ok {
 			p.BufferClientNotice(ctx, pgnotice.Newf(
 				`%[1]s is no longer experimental, use %[2]s=%[1]s`,
-				changefeedbase.OptFormatAvro, changefeedbase.OptFormat),
+				newFormat, changefeedbase.OptFormat),
 			)
 			// Still serialize the experimental_ form for backwards compatibility
 		}
@@ -203,6 +219,11 @@ func changefeedPlanHook(
 		targetDescs, _, err := backupresolver.ResolveTargetsToDescriptors(
 			ctx, p, statementTime, &changefeedStmt.Targets)
 		if err != nil {
+			var m *backupresolver.MissingTableErr
+			if errors.As(err, &m) {
+				tableName := m.GetTableName()
+				err = errors.Errorf("table %q does not exist", tableName)
+			}
 			err = errors.Wrap(err, "failed to resolve targets in the CHANGEFEED stmt")
 			if !initialHighWater.IsEmpty() {
 				// We specified cursor -- it is possible the targets do not exist at that time.
@@ -279,13 +300,21 @@ func changefeedPlanHook(
 		if err != nil {
 			return err
 		}
+		if newScheme, ok := changefeedbase.NoLongerExperimental[parsedSink.Scheme]; ok {
+			parsedSink.Scheme = newScheme // This gets munged anyway when building the sink
+			p.BufferClientNotice(ctx, pgnotice.Newf(`%[1]s is no longer experimental, use %[1]s://`,
+				newScheme),
+			)
+		}
+
 		if details, err = validateDetails(details); err != nil {
 			return err
 		}
 
-		if _, err := getEncoder(ctx, details.Opts, details.Targets); err != nil {
+		if _, err := getEncoder(details.Opts, details.Targets); err != nil {
 			return err
 		}
+
 		if isCloudStorageSink(parsedSink) || isWebhookSink(parsedSink) {
 			details.Opts[changefeedbase.OptKeyInValue] = ``
 		}
@@ -319,12 +348,6 @@ func changefeedPlanHook(
 			return changefeedbase.MaybeStripRetryableErrorMarker(err)
 		}
 
-		// Changefeeds are based on the Rangefeed abstraction, which requires the
-		// `kv.rangefeed.enabled` setting to be true.
-		if !kvserver.RangefeedEnabled.Get(&p.ExecCfg().Settings.SV) {
-			return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
-				docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
-		}
 		if err := utilccl.CheckEnterpriseEnabled(
 			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
 		); err != nil {
@@ -711,7 +734,7 @@ func (b *changefeedResumer) resumeWithRetries(
 				// retries will not help.
 				// Instead, we want to make sure that the changefeed job is not marked failed
 				// due to a transient, retryable error.
-				err = jobs.NewRetryJobError(fmt.Sprintf("retryable flow error: %+v", err))
+				err = jobs.MarkAsRetryJobError(err)
 				b.setJobRunningStatus(ctx, "retryable flow error: %s", err)
 			}
 
@@ -719,14 +742,14 @@ func (b *changefeedResumer) resumeWithRetries(
 			return err
 		}
 
-		log.Warningf(ctx, `CHANGEFEED job %d encountered retryable error: %v`, jobID, err)
+		log.Warningf(ctx, `WARNING: CHANGEFEED job %d encountered retryable error: %v`, jobID, err)
 		b.setJobRunningStatus(ctx, "retryable error: %s", err)
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
 			metrics.ErrorRetries.Inc(1)
 		}
 		// Re-load the job in order to update our progress object, which may have
 		// been updated by the changeFrontier processor since the flow started.
-		reloadedJob, reloadErr := execCfg.JobRegistry.LoadJob(ctx, jobID)
+		reloadedJob, reloadErr := execCfg.JobRegistry.LoadClaimedJob(ctx, jobID)
 		if reloadErr != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()

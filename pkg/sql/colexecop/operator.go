@@ -72,6 +72,9 @@ type KVReader interface {
 	// GetCumulativeContentionTime returns the amount of time KV reads spent
 	// contending. It must be safe for concurrent use.
 	GetCumulativeContentionTime() time.Duration
+	// GetScanStats returns statistics about the scan that happened during the
+	// KV reads. It must be safe for concurrent use.
+	GetScanStats() execinfra.ScanStats
 }
 
 // ZeroInputNode is an execinfra.OpNode with no inputs.
@@ -141,6 +144,11 @@ type Closer interface {
 	// Close releases the resources associated with this Closer. If this Closer
 	// is an Operator, the implementation of Close must be safe to execute even
 	// if Operator.Init wasn't called.
+	//
+	// If this Closer is an execinfra.Releasable, the implementation must be
+	// safe to execute even after Release() was called.
+	// TODO(yuzefovich): refactor this because the Release()'d objects should
+	// not be used anymore.
 	Close() error
 }
 
@@ -152,11 +160,15 @@ type Closers []Closer
 // Note: this method should *only* be used when returning an error doesn't make
 // sense.
 func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
-	prefix += ":"
-	for _, closer := range c {
-		if err := closer.Close(); err != nil && log.V(1) {
-			log.Infof(ctx, "%s error closing Closer: %v", prefix, err)
+	if err := colexecerror.CatchVectorizedRuntimeError(func() {
+		prefix += ":"
+		for _, closer := range c {
+			if err := closer.Close(); err != nil && log.V(1) {
+				log.Infof(ctx, "%s error closing Closer: %v", prefix, err)
+			}
 		}
+	}); err != nil && log.V(1) {
+		log.Infof(ctx, "%s runtime error closing the closers: %v", prefix, err)
 	}
 }
 

@@ -59,6 +59,23 @@ enum RoutingPolicy {
   NEAREST = 1;
 }
 
+// ResumeReason specifies why a ResumeSpan was generated instead of a
+// complete result.
+enum ResumeReason {
+  option (gogoproto.goproto_enum_prefix) = false;
+  // Zero value; no resume, or an unknown reason from a future or past cockroachdb version.
+  RESUME_UNKNOWN = 0;
+  // A key limit was exceeded, i.e. MaxSpanRequestKeys.
+  RESUME_KEY_LIMIT = 1;
+  // A byte limit was exceeded, i.e. TargetBytes.
+  // NB: 21.2 and below will return RESUME_KEY_LIMIT instead.
+  RESUME_BYTE_LIMIT = 2;
+  // An intent limit was exceeded. This is currently never returned to clients,
+  // since MVCCScan converts the result into a WriteIntentError.
+  // NB: 21.2 and below will return RESUME_KEY_LIMIT instead.
+  RESUME_INTENT_LIMIT = 3;
+}
+
 // RequestHeader is supplied with every storage node request.
 message RequestHeader {
   reserved 1, 2;
@@ -78,15 +95,6 @@ message RequestHeader {
 // ResponseHeader is returned with every storage node response. Note that this is
 // different from a BatchResponse's header.
 message ResponseHeader {
-  enum ResumeReason {
-    option (gogoproto.goproto_enum_prefix) = false;
-    // Zero value; no resume.
-    RESUME_UNKNOWN = 0;
-    // The spanning operation didn't finish because the key limit was
-    // exceeded.
-    RESUME_KEY_LIMIT = 1;
-  }
-
   // txn is non-nil if the request specified a non-nil transaction.
   // The transaction timestamp and/or priority may have been updated,
   // depending on the outcome of the request.
@@ -96,9 +104,10 @@ message ResponseHeader {
   // network.
   Transaction txn = 3;
   // The next span to resume from when the response doesn't cover the full span
-  // requested. This can happen when a bound on the keys is set through
-  // max_span_request_keys in the batch header or when a scan has been stopped
-  // before covering the requested data because of scan_options.
+  // requested. This can happen when a bound on the result size is set through
+  // max_span_request_keys or target_bytes in the batch header or when a scan
+  // has been stopped before covering the requested data because of
+  // scan_options.
   //
   // ResumeSpan is unset when the entire span of keys have been
   // operated on. The span is set to the original span if the request
@@ -107,9 +116,6 @@ message ResponseHeader {
   Span resume_span = 4;
   // When resume_span is populated, this specifies the reason why the operation
   // wasn't completed and needs to be resumed.
-  // This field appeared in v2.0. Responses from storage coming from older
-  // servers will not contain it, but the conversion from a BatchResponse to a
-  // client.Result always fills it in.
   ResumeReason resume_reason = 7;
 
   // The number of keys operated on.
@@ -223,9 +229,6 @@ message ConditionalPutRequest {
   // Specify as true to put the value without a corresponding
   // timestamp. This option should be used with care as it precludes
   // the use of this value with transactions.
-  //
-  // Callers should check the version gate clusterversion.CPutInline to make
-  // sure this is supported.
   bool inline = 7;
 }
 
@@ -2176,12 +2179,12 @@ message Header {
 // BoundedStalenessHeader contains configuration values pertaining to bounded
 // staleness read requests.
 message BoundedStalenessHeader {
-  // min_timestamp_bound places a lower bound on the dynamically chosen
-  // timestamp during a bounded staleness read. During such reads, a resolved
-  // timestamp over the request's key span will initially be computed on the
-  // target replica. If the resolved timestamp is equal to or greater than the
-  // minimum timestamp bound, then the batch timestamp will be set to the
-  // resolved timestamp, the batch will be evaluated, and the negotiated
+  // min_timestamp_bound places an (inclusive) lower bound on the dynamically
+  // chosen timestamp during a bounded staleness read. During such reads, a
+  // resolved timestamp over the request's key span will initially be computed
+  // on the target replica. If the resolved timestamp is equal to or greater
+  // than the minimum timestamp bound, then the batch timestamp will be set to
+  // the resolved timestamp, the batch will be evaluated, and the negotiated
   // timestamp will be recorded in the BatchResponse Header. If the resolved
   // timestamp is less than the minimum timestamp bound, then the request will
   // either be rejected with a MinTimestampBoundUnsatisfiableError or will be
@@ -2200,15 +2203,16 @@ message BoundedStalenessHeader {
   // blocking is permitted and MinTimestampBoundUnsatisfiableErrors will never
   // be returned.
   bool min_timestamp_bound_strict = 2;
-  // max_timestamp_bound places an upper bound on the dynamically chosen
-  // timestamp during a bounded staleness read. If the field is set and a
+  // max_timestamp_bound places an (exclusive) upper bound on the dynamically
+  // chosen timestamp during a bounded staleness read. If the field is set and a
   // resolved timestamp over the request's key span is computed to be greater
-  // than the maximum timestamp bound, the batch timestamp will be set to the
-  // maximum timestamp bound instead, then the batch will be evaluated at this
-  // timestamp, and it will be recorded in the BatchResponse Header.
+  // than or equal to the maximum timestamp bound, the batch timestamp will be
+  // set to the timestamp preceding the maximum timestamp bound instead, then
+  // the batch will be evaluated at this timestamp, and it will be recorded in
+  // the BatchResponse Header.
   //
   // This field is optional when a BoundedStalenessHeader is set in a Header.
-  // If the field is set, max_timestamp_bound must be equal to or greater than
+  // However, if the field is set, max_timestamp_bound must be greater than
   // min_timestamp_bound.
   util.hlc.Timestamp max_timestamp_bound = 3 [(gogoproto.nullable) = false];
 }
@@ -2465,6 +2469,9 @@ message TenantConsumption {
   uint64 write_requests = 4;
   uint64 write_bytes = 5;
   double sql_pods_cpu_seconds = 6 [(gogoproto.customname) = "SQLPodsCPUSeconds"];
+  uint64 pgwire_egress_bytes = 7 [(gogoproto.customname) = "PGWireEgressBytes"];
+
+  // Note: if any fields are changed, the Sub and Add methods must be updated.
 }
 
 // TokenBucketRequest is used by tenants to obtain Request Units and report
@@ -2479,22 +2486,72 @@ message TokenBucketRequest {
   // originates.
   uint32 instance_id = 3 [(gogoproto.customname) = "InstanceID"];
 
+  // NextLiveInstanceID is the ID of the next live SQL instance for this tenant,
+  // in circular order by ID.
+  //
+  // In other words:
+  //  - if this instance has the largest ID, NextLiveInstanceID is the smallest
+  //    ID of a live instance.
+  //  - otherwise, NextLiveInstanceID is the smallest ID of a live instance that
+  //    is greater than InstanceID.
+  //
+  // In particular, if this is the only live instance, then NextLiveInstanceID
+  // will equal InstanceID.
+  //
+  // The information in this field is used by the server to trigger checking for
+  // dead instances; it is acceptable for the information to be stale.
+  //
+  // Can be zero if this information is not currently available.
+  uint32 next_live_instance_id = 8 [(gogoproto.customname) = "NextLiveInstanceID"];
+
   // InstanceLease uniquely identifies the SQL pod instance from where the
   // request originates, in light of ID reuse.
   bytes instance_lease = 4;
 
-  // TODO(radu): add remaining fields.
+  // SeqNum is a strictly positive, monotonically increasing sequence number,
+  // used to detect duplicate requests on the server side (to avoid
+  // double-charging). The consumption reported in a request with a lower
+  // sequence number than the last request is ignored.
+  int64 seq_num = 7;
+
+  // RequestedRU is the number of requested tokens (RUs).
+  double requested_r_u = 5;
+
+  // TargetRequestPeriod is the approximate frequency of requests, used to limit
+  // TrickleDuration in the response.
+  google.protobuf.Duration target_request_period = 6 [(gogoproto.nullable) = false,
+                                                      (gogoproto.stdduration) = true];
 }
 
 message TokenBucketResponse {
-  // TODO(radu): add fields.
-
   // If non-empty, the other fields will be empty. This field stores any error
   // that occurs on the server, allowing us to differentiate between those and
   // RPC errors.
   errorspb.EncodedError error = 1 [(gogoproto.nullable) = false];
-}
 
+  // GrantedTokens is the amount of RUs granted. In most cases, this is equal to
+  // the requested RUs; the only exception is when TrickleDuration would
+  // otherwise exceed TargetRequestPeriod, in which case the number of granted
+  // RUs is reduced.
+  double granted_r_u = 2;
+
+  // TrickleDuration describes how the granted tokens can be consumed.
+  //
+  // If zero, the granted tokens can be used immediately, without restriction.
+  // If set, the granted tokens become available at a constant rate over the
+  // trickle time period. E.g. if we are granted 1000 tokens and the trickle
+  // duration is 10 seconds, the tokens become available at a rate of
+  // 100 tokens/sec for the next 10 seconds.
+  //
+  // TrickleDuration is at most the given TargetRequestPeriod.
+  google.protobuf.Duration trickle_duration = 3 [(gogoproto.nullable) = false,
+                                                 (gogoproto.stdduration) = true];
+
+  // FallbackRate indicates a rate (in RU/s) that the instance will use once it
+  // runs out of tokens and a problem prevents TokenBucket requests from
+  // completing.
+  double fallback_rate = 4;
+}
 
 // JoinNodeRequest is used to specify to the server node what the client's
 // binary version is. If it's not compatible with the rest of the cluster, the
@@ -2551,4 +2608,15 @@ message ContentionEvent {
   // Duration spent contending against the other transaction.
   google.protobuf.Duration duration = 3 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
+}
+
+// ScanStats is a message that will be attached to BatchResponses containing
+// information about what happened during each scan and get in the request.
+message ScanStats {
+  option (gogoproto.goproto_stringer) = false;
+
+  uint64 num_interface_seeks = 1;
+  uint64 num_internal_seeks = 2;
+  uint64 num_interface_steps = 3;
+  uint64 num_internal_steps = 4;
 }

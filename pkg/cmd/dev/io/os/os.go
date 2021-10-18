@@ -17,11 +17,11 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/recording"
-	"github.com/cockroachdb/errors/oserror"
 )
 
 // OS is a convenience wrapper around the stdlib os package. It lets us
@@ -94,7 +94,7 @@ func (o *OS) Remove(path string) error {
 
 	if o.Recording == nil {
 		// Do the real thing.
-		if err := os.Remove(path); err != nil && !oserror.IsNotExist(err) {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		return nil
@@ -256,6 +256,31 @@ func (o *OS) ListFilesWithSuffix(root, suffix string) ([]string, error) {
 		return nil, err
 	}
 	return strings.Split(strings.TrimSpace(lines), "\n"), nil
+}
+
+// CurrentUserAndGroup returns the user and effective group.
+func (o *OS) CurrentUserAndGroup() (uid string, gid string, err error) {
+	command := "id"
+	o.logger.Print(command)
+
+	if o.Recording == nil {
+		// Do the real thing.
+		var currentUser *user.User
+		currentUser, err = user.Current()
+		if err != nil {
+			return
+		}
+		uid = currentUser.Uid
+		gid = currentUser.Gid
+		return
+	}
+
+	output, err := o.replay(command)
+	if err != nil {
+		return
+	}
+	ids := strings.Split(strings.TrimSpace(output), ":")
+	return ids[0], ids[1], nil
 }
 
 // replay replays the specified command, erroring out if it's mismatched with

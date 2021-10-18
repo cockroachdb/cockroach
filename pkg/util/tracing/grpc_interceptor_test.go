@@ -209,16 +209,13 @@ func TestGRPCInterceptors(t *testing.T) {
 			require.NoError(t, err)
 			var rec tracingpb.RecordedSpan
 			require.NoError(t, types.UnmarshalAny(recAny, &rec))
-			require.Len(t, rec.DeprecatedInternalStructured, 1)
 			require.Len(t, rec.StructuredRecords, 1)
 			sp.ImportRemoteSpans([]tracingpb.RecordedSpan{rec})
 			sp.Finish()
-			var deprecatedN int
 			var n int
 			finalRecs := sp.GetRecording()
 			sp.SetVerbose(false)
 			for _, rec := range finalRecs {
-				deprecatedN += len(rec.DeprecatedInternalStructured)
 				n += len(rec.StructuredRecords)
 				// Remove all of the _unfinished tags. These crop up because
 				// in this test we are pulling the recorder in the handler impl,
@@ -230,17 +227,16 @@ func TestGRPCInterceptors(t *testing.T) {
 				delete(rec.Tags, "_unfinished")
 				delete(rec.Tags, "_verbose")
 			}
-			require.Equal(t, 1, deprecatedN)
 			require.Equal(t, 1, n)
 
 			exp := fmt.Sprintf(`
 				span: %[1]s
 					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
-						tags: component=gRPC span.kind=client test-baggage-key=test-baggage-value
+						tags: span.kind=client test-baggage-key=test-baggage-value
 					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
-						tags: component=gRPC span.kind=server test-baggage-key=test-baggage-value
+						tags: span.kind=server test-baggage-key=test-baggage-value
 						event: structured=magic-value`, tc.name)
-			require.NoError(t, tracing.TestingCheckRecordedSpans(finalRecs, exp))
+			require.NoError(t, tracing.CheckRecordedSpans(finalRecs, exp))
 		})
 	}
 	testutils.SucceedsSoon(t, func() error {

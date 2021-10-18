@@ -32,7 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 )
 
 const (
@@ -897,6 +899,10 @@ func mvccGet(
 	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
 	mvccScanner.get(ctx)
 
+	// If we have a trace, emit the scan stats that we produced.
+	traceSpan := tracing.SpanFromContext(ctx)
+	recordIteratorStats(traceSpan, mvccScanner.stats())
+
 	if mvccScanner.err != nil {
 		return optionalValue{}, nil, mvccScanner.err
 	}
@@ -1069,8 +1075,7 @@ func (b *putBuffer) putIntentMeta(
 	ctx context.Context,
 	writer Writer,
 	key MVCCKey,
-	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
+	helper txnDidNotUpdateMetaHelper,
 	meta *enginepb.MVCCMetadata,
 ) (keyBytes, valBytes int64, separatedIntentCountDelta int, err error) {
 	if meta.Txn != nil && meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
@@ -1079,30 +1084,84 @@ func (b *putBuffer) putIntentMeta(
 		return 0, 0, 0, errors.AssertionFailedf(
 			"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
 	}
-	// All nodes in this cluster understand separated intents, so can fiddle
-	// with TxnDidNotUpdateMeta, which is not understood by older nodes (which
-	// are no longer present, and will never again be present).
-	//
-	// NB: the parameter txnDidNotUpdateMeta is about what happened prior to
-	// this Put, and is passed through to writer below. The field
-	// TxnDidNotUpdateMeta, in the MVCCMetadata we are about to write,
-	// includes what happened in this Put.
-	if state == NoExistingIntent {
-		meta.TxnDidNotUpdateMeta = &trueValue
-	} else {
-		// Absence represents false.
-		meta.TxnDidNotUpdateMeta = nil
-	}
-
+	helper.populateMeta(ctx, meta)
 	bytes, err := b.marshalMeta(meta)
 	if err != nil {
 		return 0, 0, 0, err
 	}
 	if separatedIntentCountDelta, err = writer.PutIntent(
-		ctx, key.Key, bytes, state, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
+		ctx, key.Key, bytes, helper.state, helper.valueForPutIntent(), meta.Txn.ID); err != nil {
 		return 0, 0, 0, err
 	}
 	return int64(key.EncodedSize()), int64(len(bytes)), separatedIntentCountDelta, nil
+}
+
+// txnDidNotUpdateMetaHelper is used to decide what to put in the MVCCMetadata
+// proto, and what value to pass in the txnDidNotUpdateMeta parameter of
+// PutIntent.
+//
+// Note that separated intents are understood by v21.1 already, though we
+// assume they were never actively written there (the cluster setting defaults
+// to false and there are known bugs). Therefore all nodes in a cluster (v21.1
+// or v21.2) understand separated intents. This understanding by v21.1
+// includes reading and resolving separated intents, and setting
+// MVCCMetadata.TxnDidNotUpdateMeta to true. Note that since v21.1 nodes only
+// write MVCCMetadata to interleaved intents, they can only set
+// MVCCMetadata.TxnDidNotUpdateMeta to true for interleaved intents, which is
+// harmless since interleaved intents do not invoke the SingleDelete
+// optimization.
+//
+// However, when migrating from v21.1 to v21.2, and running in a mixed version
+// cluster, we need to be careful. A v21.1 node can become the leaseholder for
+// a range after a separated intent was written by a v21.2 node. Hence they
+// can resolve separated intents. The logic in v21.1 for using SingleDelete
+// when resolving intents is similarly buggy, and the Pebble code included in
+// v21.1 will not make this buggy usage correct. The solution is for v21.2
+// nodes to never set txnDidNotUpdateMeta=true when writing separated intents,
+// until the cluster version is at the version when the buggy code was fixed
+// in v21.2. So v21.1 code will never use SingleDelete when resolving these
+// separated intents (since the only separated intents being written are by
+// v21.2 nodes).
+//
+// Details about this helper:
+// - The txnDidNotUpdateMeta field is about what happened prior to this Put,
+//   and is intended to be passed through to Writer.PutIntent.
+//   In general it can be true in 2 cases:
+//   - There was no prior intent.
+//   - MVCCMetadata.TxnDidNotUpdateMeta is true: v21.2 nodes will never set
+//     this to true in a mixed version cluster (see next bullet). However,
+//     v21.1 nodes can set it to true.
+//   What saves us is that it is only used by intentDemuxWriter when there was
+//   an existing separated intent that was written once and the writer is
+//   writing interleaved intents, and the true value enables SingleDelete of
+//   the existing separated intent. This transition can happen when an intent
+//   written at a v21.2 node is rewritten on a v21.1 node. So it is irrelevant
+//   for the first case above. And since v21.2 nodes never set
+//   MVCCMetadata.TxnDidNotUpdateMeta to true in a mixed version cluster, the
+//   situation in which this value is used will always be false, which takes
+//   care of case 2 above.
+//
+// - The state field describes the preceding intent state. It is intended to
+//   be used for populating the MVCCMetadata.TxnDidNotUpdateMeta. This is
+//   where we use Writer.OverrideTxnDidNotUpdateMetaToFalse to override to
+//   false until there can never be v21.1 nodes.
+type txnDidNotUpdateMetaHelper struct {
+	txnDidNotUpdateMeta bool
+	state               PrecedingIntentState
+	w                   Writer
+}
+
+func (t txnDidNotUpdateMetaHelper) valueForPutIntent() bool {
+	return t.txnDidNotUpdateMeta
+}
+
+func (t txnDidNotUpdateMetaHelper) populateMeta(ctx context.Context, meta *enginepb.MVCCMetadata) {
+	if t.state == NoExistingIntent && !t.w.OverrideTxnDidNotUpdateMetaToFalse(ctx) {
+		meta.TxnDidNotUpdateMeta = &trueValue
+	} else {
+		// Absence represents false.
+		meta.TxnDidNotUpdateMeta = nil
+	}
 }
 
 // MVCCPut sets the value for a specified key. It will save the value
@@ -1740,7 +1799,12 @@ func mvccPutInternal(
 	var separatedIntentCountDelta int
 	if newMeta.Txn != nil {
 		metaKeySize, metaValSize, separatedIntentCountDelta, err = buf.putIntentMeta(
-			ctx, writer, metaKey, precedingIntentState, txnDidNotUpdateMeta, newMeta)
+			ctx, writer, metaKey,
+			txnDidNotUpdateMetaHelper{
+				txnDidNotUpdateMeta: txnDidNotUpdateMeta,
+				state:               precedingIntentState,
+				w:                   writer,
+			}, newMeta)
 		if err != nil {
 			return err
 		}
@@ -2347,6 +2411,22 @@ func MVCCDeleteRange(
 	return keys, res.ResumeSpan, res.NumKeys, nil
 }
 
+func recordIteratorStats(traceSpan *tracing.Span, iteratorStats IteratorStats) {
+	stats := iteratorStats.Stats
+	if traceSpan != nil {
+		steps := stats.ReverseStepCount[pebble.InterfaceCall] + stats.ForwardStepCount[pebble.InterfaceCall]
+		seeks := stats.ReverseSeekCount[pebble.InterfaceCall] + stats.ForwardSeekCount[pebble.InterfaceCall]
+		internalSteps := stats.ReverseStepCount[pebble.InternalIterCall] + stats.ForwardStepCount[pebble.InternalIterCall]
+		internalSeeks := stats.ReverseSeekCount[pebble.InternalIterCall] + stats.ForwardSeekCount[pebble.InternalIterCall]
+		traceSpan.RecordStructured(&roachpb.ScanStats{
+			NumInterfaceSeeks: uint64(seeks),
+			NumInternalSeeks:  uint64(internalSeeks),
+			NumInterfaceSteps: uint64(steps),
+			NumInternalSteps:  uint64(internalSteps),
+		})
+	}
+}
+
 func mvccScanToBytes(
 	ctx context.Context,
 	iter MVCCIterator,
@@ -2360,9 +2440,17 @@ func mvccScanToBytes(
 	if err := opts.validate(); err != nil {
 		return MVCCScanResult{}, err
 	}
-	if opts.MaxKeys < 0 || opts.TargetBytes < 0 {
-		resumeSpan := &roachpb.Span{Key: key, EndKey: endKey}
-		return MVCCScanResult{ResumeSpan: resumeSpan}, nil
+	if opts.MaxKeys < 0 {
+		return MVCCScanResult{
+			ResumeSpan:   &roachpb.Span{Key: key, EndKey: endKey},
+			ResumeReason: roachpb.RESUME_KEY_LIMIT,
+		}, nil
+	}
+	if opts.TargetBytes < 0 {
+		return MVCCScanResult{
+			ResumeSpan:   &roachpb.Span{Key: key, EndKey: endKey},
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
+		}, nil
 	}
 
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
@@ -2388,7 +2476,7 @@ func mvccScanToBytes(
 
 	var res MVCCScanResult
 	var err error
-	res.ResumeSpan, err = mvccScanner.scan(ctx)
+	res.ResumeSpan, res.ResumeReason, err = mvccScanner.scan(ctx)
 
 	if err != nil {
 		return MVCCScanResult{}, err
@@ -2397,6 +2485,11 @@ func mvccScanToBytes(
 	res.KVData = mvccScanner.results.finish()
 	res.NumKeys = mvccScanner.results.count
 	res.NumBytes = mvccScanner.results.bytes
+
+	// If we have a trace, emit the scan stats that we produced.
+	traceSpan := tracing.SpanFromContext(ctx)
+
+	recordIteratorStats(traceSpan, mvccScanner.stats())
 
 	res.Intents, err = buildScanIntents(mvccScanner.intentsRepr())
 	if err != nil {
@@ -2545,8 +2638,9 @@ type MVCCScanResult struct {
 	// used for encoding the uncompressed kv pairs contained in the result.
 	NumBytes int64
 
-	ResumeSpan *roachpb.Span
-	Intents    []roachpb.Intent
+	ResumeSpan   *roachpb.Span
+	ResumeReason roachpb.ResumeReason
+	Intents      []roachpb.Intent
 }
 
 // MVCCScan scans the key range [key, endKey) in the provided reader up to some
@@ -2711,11 +2805,6 @@ func MVCCIterate(
 // committed in the event the transaction succeeds (all those with
 // epoch matching the commit epoch), and which intents get aborted,
 // even if the transaction succeeds.
-//
-// TODO(tschottdorf): encountered a bug in which a Txn committed with
-// its original timestamp after laying down intents at higher timestamps.
-// Doesn't look like this code here caught that. Shouldn't resolve intents
-// when they're not at the timestamp the Txn mandates them to be.
 func MVCCResolveWriteIntent(
 	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate,
 ) (bool, error) {
@@ -2752,13 +2841,265 @@ func unsafeNextVersion(iter MVCCIterator, latestKey MVCCKey) (MVCCKey, []byte, b
 	return unsafeKey, iter.UnsafeValue(), true, nil
 }
 
+// iterForKeyVersions provides a subset of the functionality of MVCCIterator.
+// The expected use-case is when the iter is already positioned at the intent
+// (if one exists) for a particular key, or some version, and positioning
+// operators like SeekGE, Next are only being used to find other versions for
+// that key, and never to find intents for other keys. A full-fledged
+// MVCCIterator can be used here. The methods below have the same behavior as
+// in MVCCIterator, but the caller should never call SeekGE with an empty
+// MVCCKey.Timestamp. Additionally, Next must be preceded by at least one call
+// to SeekGE.
+type iterForKeyVersions interface {
+	Valid() (bool, error)
+	SeekGE(key MVCCKey)
+	Next()
+	UnsafeKey() MVCCKey
+	UnsafeValue() []byte
+	ValueProto(msg protoutil.Message) error
+	IsCurIntentSeparated() bool
+}
+
+// separatedIntentAndVersionIter is an implementation of iterForKeyVersions
+// used for ranged intent resolution. The MVCCIterator used by it is of
+// MVCCKeyIterKind. The caller attempting to do ranged intent resolution uses
+// seekEngineKey, nextEngineKey to iterate over the lock table, and for each
+// lock/intent that needs to be resolved passes this iterator to
+// mvccResolveWriteIntent. The MVCCIterator is positioned lazily, only if
+// needed -- the fast path for intent resolution when a transaction is
+// committing and does not need to change the provisional value or timestamp,
+// does not need to position the MVCCIterator. The other cases, which include
+// transaction aborts and changing provisional value timestamps, or changing
+// the provisional value due to savepoint rollback, will position the
+// MVCCIterator, and are the slow path.
+// Note that even this slow path is faster than when intents were interleaved,
+// since it can avoid iterating over keys with no intents.
+type separatedIntentAndVersionIter struct {
+	engineIter EngineIterator
+	mvccIter   MVCCIterator
+
+	// Already parsed meta, when the starting position is at an intent.
+	meta            *enginepb.MVCCMetadata
+	atMVCCIter      bool
+	engineIterValid bool
+	engineIterErr   error
+	intentKey       roachpb.Key
+}
+
+var _ iterForKeyVersions = &separatedIntentAndVersionIter{}
+
+func (s *separatedIntentAndVersionIter) seekEngineKeyGE(key EngineKey) {
+	s.atMVCCIter = false
+	s.meta = nil
+	s.engineIterValid, s.engineIterErr = s.engineIter.SeekEngineKeyGE(key)
+	s.initIntentKey()
+}
+
+func (s *separatedIntentAndVersionIter) nextEngineKey() {
+	s.atMVCCIter = false
+	s.meta = nil
+	s.engineIterValid, s.engineIterErr = s.engineIter.NextEngineKey()
+	s.initIntentKey()
+}
+
+func (s *separatedIntentAndVersionIter) initIntentKey() {
+	if s.engineIterValid {
+		engineKey, err := s.engineIter.UnsafeEngineKey()
+		if err != nil {
+			s.engineIterErr = err
+			s.engineIterValid = false
+			return
+		}
+		if s.intentKey, err = keys.DecodeLockTableSingleKey(engineKey.Key); err != nil {
+			s.engineIterErr = err
+			s.engineIterValid = false
+			return
+		}
+	}
+}
+
+func (s *separatedIntentAndVersionIter) Valid() (bool, error) {
+	if s.atMVCCIter {
+		return s.mvccIter.Valid()
+	}
+	return s.engineIterValid, s.engineIterErr
+}
+
+func (s *separatedIntentAndVersionIter) SeekGE(key MVCCKey) {
+	if !key.IsValue() {
+		panic(errors.AssertionFailedf("SeekGE only permitted for values"))
+	}
+	s.mvccIter.SeekGE(key)
+	s.atMVCCIter = true
+}
+
+func (s *separatedIntentAndVersionIter) Next() {
+	if !s.atMVCCIter {
+		panic(errors.AssertionFailedf("Next not preceded by SeekGE"))
+	}
+	s.mvccIter.Next()
+}
+
+func (s *separatedIntentAndVersionIter) UnsafeKey() MVCCKey {
+	if s.atMVCCIter {
+		return s.mvccIter.UnsafeKey()
+	}
+	return MVCCKey{Key: s.intentKey}
+}
+
+func (s *separatedIntentAndVersionIter) UnsafeValue() []byte {
+	if s.atMVCCIter {
+		return s.mvccIter.UnsafeValue()
+	}
+	return s.engineIter.UnsafeValue()
+}
+
+func (s *separatedIntentAndVersionIter) ValueProto(msg protoutil.Message) error {
+	if s.atMVCCIter {
+		return s.mvccIter.ValueProto(msg)
+	}
+	meta, ok := msg.(*enginepb.MVCCMetadata)
+	if ok && meta == s.meta {
+		// Already parsed.
+		return nil
+	}
+	v := s.engineIter.UnsafeValue()
+	return protoutil.Unmarshal(v, msg)
+}
+
+func (s *separatedIntentAndVersionIter) IsCurIntentSeparated() bool {
+	if s.atMVCCIter {
+		panic(errors.AssertionFailedf("IsCurIntentSeparated called when not positioned at intent"))
+	}
+	return true
+}
+
+// mvccGetIntent uses an iterForKeyVersions that has been seeked to
+// metaKey.Key for a potential intent, and tries to retrieve an intent if it
+// is present. ok returns true iff an intent for that key is found. In that
+// case, keyBytes and valBytes are set to non-zero and the deserialized intent
+// is placed in meta.
+func mvccGetIntent(
+	iter iterForKeyVersions, metaKey MVCCKey, meta *enginepb.MVCCMetadata,
+) (ok bool, isSeparated bool, keyBytes, valBytes int64, err error) {
+	if ok, err := iter.Valid(); !ok {
+		return false, false, 0, 0, err
+	}
+	unsafeKey := iter.UnsafeKey()
+	if !unsafeKey.Key.Equal(metaKey.Key) {
+		return false, false, 0, 0, nil
+	}
+	if unsafeKey.IsValue() {
+		return false, false, 0, 0, nil
+	}
+	if err := iter.ValueProto(meta); err != nil {
+		return false, false, 0, 0, err
+	}
+	return true, iter.IsCurIntentSeparated(), int64(unsafeKey.EncodedSize()),
+		int64(len(iter.UnsafeValue())), nil
+}
+
+// With the separated lock table, we are employing a performance optimization:
+// when an intent metadata is removed, we preferably want to do so using a
+// SingleDel (as opposed to a Del). This is only safe if the previous operations
+// on the metadata key allow it. Due to practical limitations, at the time of
+// writing the condition we need is that the pebble history of the key consists
+// of a single SET. (#69891 tracks an improvement, to also make SingleDel safe
+// in the case of `<anything>; (DEL or legitimate SingleDel); SET; SingleDel`,
+// which will open up further optimizations).
+//
+// It is difficult to track the history of engine writes to a key precisely, in
+// particular when values are ever aborted. So we apply the optimization only to
+// the main case in which it is useful, namely that of a transaction committing
+// its intent that it never re-wrote in the initial epoch (i.e. no chance of it
+// ever being removed before as part of being pushed). Note that when a txn
+// refreshes, it stays in the original epoch, and the intents are moved, which
+// does *not* cause a write to the MVCC metadata key (for which the history has
+// to remain a single SET). So transactions that "only" refresh are covered by
+// the optimization as well.
+//
+// Note that a transaction can "partially abort" and still commit due to nested
+// SAVEPOINTs, such as in the below example:
+//
+//   BEGIN;
+//     SAVEPOINT foo;
+//       INSERT INTO kv VALUES(1, 1);
+//     ROLLBACK TO SAVEPOINT foo;
+//     INSERT INTO kv VALUES(1, 2);
+//   COMMIT;
+//
+// This would first remove the intent (1,1) during the ROLLBACK using a Del (the
+// anomaly below would occur the same if a SingleDel were used here), and thus
+// without an additional condition the INSERT (1,2) would be eligible for
+// committing via a SingleDel. This has to be avoided as well, since the
+// metadata key for k=1 has the following history:
+//
+// - Set // when (1,1) is written
+// - Del // during ROLLBACK
+// - Set // when (1,2) is written
+// - SingleDel // on COMMIT
+//
+// However, this sequence could compact as follows (at the time of writing, bound
+// to change with #69891):
+//
+// - Set (Del Set') SingleDel
+//          ↓
+// - Set   Set'     SingleDel
+// - Set  (Set'     SingleDel)
+//               ↓
+// - Set
+//
+// which means that a previously deleted intent metadata would erroneously
+// become visible again. So on top of restricting SingleDel to the COMMIT case,
+// we also restrict it to the case of having no ignored sequence number ranges
+// (i.e. no nested txn was rolled back before the commit).
+//
+// For a deeper discussion of these correctness problems (avoided using the
+// scoping down in this helper), see:
+//
+// https://github.com/cockroachdb/cockroach/issues/69891
+type singleDelOptimizationHelper struct {
+	// Internal state, don't access this, use the getters instead
+	// (that's what the _ prefix is trying to communicate).
+	_didNotUpdateMeta *bool
+	_hasIgnoredSeqs   bool
+	_epoch            enginepb.TxnEpoch
+}
+
+// v is the inferred value of the TxnDidNotUpdateMeta field.
+func (h singleDelOptimizationHelper) v() bool {
+	if h._didNotUpdateMeta == nil {
+		return false
+	}
+	return *h._didNotUpdateMeta
+}
+
+// onCommitIntent returns true if the SingleDel optimization is available
+// for committing an intent.
+func (h singleDelOptimizationHelper) onCommitIntent() bool {
+	// We're committing the intent at epoch zero, the meta tracking says we didn't
+	// rewrite the intent, and we also didn't previously remove the metadata for
+	// this key as part of a voluntary rollback of a nested txn. So we are safe to
+	// use a SingleDel here.
+	return h.v() && !h._hasIgnoredSeqs && h._epoch == 0
+}
+
+// onAbortIntent returns true if the SingleDel optimization is available
+// for removing an intent. It is always false.
+// Note that "removing an intent" can occur if we know that the epoch
+// changed, or when a savepoint is rolled back. It does not imply that
+// the transaction aborted.
+func (h singleDelOptimizationHelper) onAbortIntent() bool {
+	return false
+}
+
 // mvccResolveWriteIntent is the core logic for resolving an intent.
 // REQUIRES: iter is already seeked to intent.Key.
 // Returns whether an intent was found and resolved, false otherwise.
 func mvccResolveWriteIntent(
 	ctx context.Context,
 	rw ReadWriter,
-	iter MVCCIterator,
+	iter iterForKeyVersions,
 	ms *enginepb.MVCCStats,
 	intent roachpb.LockUpdate,
 	buf *putBuffer,
@@ -2766,7 +3107,7 @@ func mvccResolveWriteIntent(
 	metaKey := MakeMVCCMetadataKey(intent.Key)
 	meta := &buf.meta
 	ok, isIntentSeparated, origMetaKeySize, origMetaValSize, err :=
-		mvccGetMetadata(iter, metaKey, true /* iterAlreadyPositioned */, meta)
+		mvccGetIntent(iter, metaKey, meta)
 	if err != nil {
 		return false, err
 	}
@@ -2778,9 +3119,12 @@ func mvccResolveWriteIntent(
 	if isIntentSeparated {
 		precedingIntentState = ExistingIntentSeparated
 	}
-	txnDidNotUpdateMeta := false
-	if meta.TxnDidNotUpdateMeta != nil {
-		txnDidNotUpdateMeta = *meta.TxnDidNotUpdateMeta
+	canSingleDelHelper := singleDelOptimizationHelper{
+		_didNotUpdateMeta: meta.TxnDidNotUpdateMeta,
+		_hasIgnoredSeqs:   len(intent.IgnoredSeqNums) > 0,
+		// NB: the value is only used if epochs match, so it doesn't
+		// matter if we use the one from meta or incoming request here.
+		_epoch: intent.Txn.Epoch,
 	}
 
 	// A commit with a newer epoch than the intent effectively means that we
@@ -2899,11 +3243,17 @@ func mvccResolveWriteIntent(
 			// to do anything to update the intent but to move the timestamp forward,
 			// even if it can.
 			metaKeySize, metaValSize, separatedIntentCountDelta, err = buf.putIntentMeta(
-				ctx, rw, metaKey, precedingIntentState, txnDidNotUpdateMeta, &buf.newMeta)
+				ctx, rw, metaKey,
+				txnDidNotUpdateMetaHelper{
+					txnDidNotUpdateMeta: canSingleDelHelper.v(),
+					state:               precedingIntentState,
+					w:                   rw,
+				},
+				&buf.newMeta)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
 			separatedIntentCountDelta, err =
-				rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID)
+				rw.ClearIntent(metaKey.Key, precedingIntentState, canSingleDelHelper.onCommitIntent(), meta.Txn.ID)
 		}
 		if err != nil {
 			return false, err
@@ -2998,16 +3348,38 @@ func mvccResolveWriteIntent(
 		Key: intent.Key,
 	})
 
-	unsafeNextKey, unsafeNextValue, ok, err := unsafeNextVersion(iter, latestKey)
-	if err != nil {
-		return false, err
+	nextKey := latestKey.Next()
+	ok = false
+	var unsafeNextKey MVCCKey
+	var unsafeNextValue []byte
+	if nextKey.IsValue() {
+		// The latestKey was not the smallest possible timestamp {WallTime: 0,
+		// Logical: 1}. Practically, this is the only case that will occur in
+		// production.
+		iter.SeekGE(nextKey)
+		ok, err = iter.Valid()
+		if err != nil {
+			return false, err
+		}
+		if ok && iter.UnsafeKey().Key.Equal(latestKey.Key) {
+			unsafeNextKey = iter.UnsafeKey()
+			if !unsafeNextKey.IsValue() {
+				// Should never see an intent for this key since we seeked to a
+				// particular timestamp.
+				return false, errors.Errorf("expected an MVCC value key: %s", unsafeNextKey)
+			}
+			unsafeNextValue = iter.UnsafeValue()
+		} else {
+			ok = false
+		}
+		iter = nil // prevent accidental use below
 	}
-	iter = nil // prevent accidental use below
+	// Else stepped to next key, so !ok
 
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
 		if separatedIntentCountDelta, err =
-			rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
+			rw.ClearIntent(metaKey.Key, precedingIntentState, canSingleDelHelper.onAbortIntent(), meta.Txn.ID); err != nil {
 			return false, err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
@@ -3027,7 +3399,7 @@ func mvccResolveWriteIntent(
 		ValBytes: valueSize,
 	}
 	if separatedIntentCountDelta, err =
-		rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
+		rw.ClearIntent(metaKey.Key, precedingIntentState, canSingleDelHelper.onAbortIntent(), meta.Txn.ID); err != nil {
 		return false, err
 	}
 	metaKeySize := int64(metaKey.EncodedSize())
@@ -3127,52 +3499,127 @@ func (b IterAndBuf) Cleanup() {
 // intent span as the resume span. Returns the number of intents resolved and a
 // resume span if the max keys limit was exceeded.
 func MVCCResolveWriteIntentRange(
-	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate, max int64,
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	intent roachpb.LockUpdate,
+	max int64,
+	onlySeparatedIntents bool,
 ) (int64, *roachpb.Span, error) {
 	if max < 0 {
 		resumeSpan := intent.Span // don't inline or `intent` would escape to heap
 		return 0, &resumeSpan, nil
 	}
 
-	iterAndBuf := GetIterAndBuf(rw, IterOptions{UpperBound: intent.EndKey})
-	defer iterAndBuf.Cleanup()
+	var putBuf *putBuffer
+	// Exactly one of sepIter and mvccIter is non-nil. sepIter is used when
+	// onlySeparatedIntents=true and rw provides consistent iterators, else
+	// mvccIter is initialized and used. The former allows for more efficient
+	// intent resolution.
+	var sepIter *separatedIntentAndVersionIter
+	var mvccIter MVCCIterator
+	// iter is set to either sepIter or mvccIter and used for individual intent
+	// resolution.
+	var iter iterForKeyVersions
 
-	encKey := MakeMVCCMetadataKey(intent.Key)
-	encEndKey := MakeMVCCMetadataKey(intent.EndKey)
-	nextKey := encKey
+	// If onlySeparatedIntents, we can find relevant intents quickly by
+	// iterating over the lock table. We additionally require
+	// ConsistentIterators() since we want the two iterators to be mutually
+	// consistent (and production code will have consistent iterators).
+	//
+	// TODO(sumeer): when removing the slow path, use
+	// newMVCCIteratorByCloningEngineIter for the inconsistent iterators case.
+	if onlySeparatedIntents && rw.ConsistentIterators() {
+		ltStart, _ := keys.LockTableSingleKey(intent.Key, nil)
+		ltEnd, _ := keys.LockTableSingleKey(intent.EndKey, nil)
+		engineIter := rw.NewEngineIterator(IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
+		iterAndBuf :=
+			GetBufUsingIter(rw.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: intent.EndKey}))
+		defer func() {
+			engineIter.Close()
+			iterAndBuf.Cleanup()
+		}()
+		putBuf = iterAndBuf.buf
+		sepIter = &separatedIntentAndVersionIter{
+			engineIter: engineIter,
+			mvccIter:   iterAndBuf.iter,
+		}
+		iter = sepIter
+		// Seek sepIter to position it for the loop below. The loop itself will
+		// only step the iterator and not seek.
+		sepIter.seekEngineKeyGE(EngineKey{Key: ltStart})
+	} else {
+		iterAndBuf := GetIterAndBuf(rw, IterOptions{UpperBound: intent.EndKey})
+		defer iterAndBuf.Cleanup()
+		putBuf = iterAndBuf.buf
+		mvccIter = iterAndBuf.iter
+		iter = mvccIter
+	}
+	nextKey := MakeMVCCMetadataKey(intent.Key)
+	intentEndKey := intent.EndKey
+	intent.EndKey = nil
 
 	var keyBuf []byte
 	num := int64(0)
-	intent.EndKey = nil
-
 	for {
 		if max > 0 && num == max {
-			return num, &roachpb.Span{Key: nextKey.Key, EndKey: encEndKey.Key}, nil
+			return num, &roachpb.Span{Key: nextKey.Key, EndKey: intentEndKey}, nil
 		}
-
-		iterAndBuf.iter.SeekGE(nextKey)
-		if ok, err := iterAndBuf.iter.Valid(); err != nil {
-			return 0, nil, err
-		} else if !ok || !iterAndBuf.iter.UnsafeKey().Less(encEndKey) {
-			// No more keys exists in the given range.
-			break
+		var key MVCCKey
+		if sepIter != nil {
+			// sepIter is already positioned since it is seeked prior to the loop
+			// and then stepped at the end of each iteration, to prepare for the
+			// next iteration.
+			if valid, err := sepIter.Valid(); err != nil {
+				return 0, nil, err
+			} else if !valid {
+				// No more intents in the given range.
+				break
+			}
+			// Parse the MVCCMetadata to see if it is a relevant intent.
+			meta := &putBuf.meta
+			if err := sepIter.ValueProto(meta); err != nil {
+				return 0, nil, err
+			}
+			if meta.Txn == nil {
+				return 0, nil, errors.Errorf("intent with no txn")
+			}
+			if intent.Txn.ID == meta.Txn.ID {
+				// Stash the parsed meta so don't need to parse it again in
+				// mvccResolveWriteIntent. This parsing can be ~10% of the
+				// resolution cost in some benchmarks.
+				sepIter.meta = meta
+				// Manually copy the underlying bytes of the unsafe key. This
+				// construction reuses keyBuf across iterations.
+				key = sepIter.UnsafeKey()
+				keyBuf = append(keyBuf[:0], key.Key...)
+				key.Key = keyBuf
+			} else {
+				sepIter.nextEngineKey()
+				continue
+			}
+		} else {
+			// mvccIter needs to be positioned at the start of each iteration.
+			mvccIter.SeekGE(nextKey)
+			if valid, err := mvccIter.Valid(); err != nil {
+				return 0, nil, err
+			} else if !valid {
+				// No more keys exists in the given range.
+				break
+			}
+			key = mvccIter.UnsafeKey()
+			// Manually copy the underlying bytes of the unsafe key. This
+			// construction reuses keyBuf across iterations.
+			keyBuf = append(keyBuf[:0], key.Key...)
+			key.Key = keyBuf
 		}
-
-		// Manually copy the underlying bytes of the unsafe key. This construction
-		// reuses keyBuf across iterations.
-		key := iterAndBuf.iter.UnsafeKey()
-		keyBuf = append(keyBuf[:0], key.Key...)
-		key.Key = keyBuf
 
 		var err error
 		var ok bool
 		if !key.IsValue() {
-			// When we start allowing existence of multiple intents on the same key,
-			// the iter is not necessarily positioned at the intent for this key
-			// that is owned by this txn (if there is any such intent). The logic in
-			// this function will need to be adjusted.
+			// NB: This if-condition is always true for the sepIter != nil path.
 			intent.Key = key.Key
-			ok, err = mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
+			ok, err = mvccResolveWriteIntent(ctx, rw, iter, ms, intent, putBuf)
 		}
 		if err != nil {
 			log.Warningf(ctx, "failed to resolve intent for key %q: %+v", key.Key, err)
@@ -3180,15 +3627,18 @@ func MVCCResolveWriteIntentRange(
 			num++
 		}
 
+		if sepIter != nil {
+			sepIter.nextEngineKey()
+			// We could also compute a tighter nextKey here if we wanted to.
+		}
 		// nextKey is already a metadata key...
 		nextKey.Key = key.Key.Next()
-		if !nextKey.Less(encEndKey) {
+		if nextKey.Key.Compare(intentEndKey) >= 0 {
 			// ... but we don't want to Seek to a key outside of the range as we validate
 			// those span accesses (see TestSpanSetMVCCResolveWriteIntentRangeUsingIter).
 			break
 		}
 	}
-
 	return num, nil, nil
 }
 

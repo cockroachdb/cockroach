@@ -1285,7 +1285,7 @@ func TestEngineFS(t *testing.T) {
 				"9e: list-dir /dir1 == bar,baz",
 				"9f: delete /dir1/bar",
 				"9g: delete /dir1/baz",
-				"9h: delete-dir /dir1",
+				"9h: delete /dir1",
 			}
 
 			var f fs.File
@@ -1326,8 +1326,6 @@ func TestEngineFS(t *testing.T) {
 					err = e.Rename(s[1], s[2])
 				case "create-dir":
 					err = e.MkdirAll(s[1])
-				case "delete-dir":
-					err = e.RemoveDir(s[1])
 				case "list-dir":
 					result, err := e.List(s[1])
 					if err != nil {

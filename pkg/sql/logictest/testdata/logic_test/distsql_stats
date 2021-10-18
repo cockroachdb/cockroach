@@ -110,11 +110,12 @@ SELECT
 	null_count,
 	histogram_id IS NOT NULL AS has_histogram
 FROM
-	[SHOW STATISTICS FOR TABLE data];
+	[SHOW STATISTICS FOR TABLE data]
+ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
-s1               {a}           256        4               0           true
 NULL             {b}           256        4               0           true
+s1               {a}           256        4               0           true
 
 # Verify that we can package statistics into a json object and later restore them.
 let $json_stats
@@ -133,17 +134,18 @@ SELECT
 	null_count,
 	histogram_id IS NOT NULL AS has_histogram
 FROM
-	[SHOW STATISTICS FOR TABLE data];
+	[SHOW STATISTICS FOR TABLE data]
+ORDER BY column_names::STRING
 ----
 statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+NULL             {a,b,c,d}     256        256             0           false
+NULL             {a,b,c}       256        64              0           false
+NULL             {a,b}         256        16              0           false
 NULL             {a}           256        4               0           true
 NULL             {b}           256        4               0           true
-NULL             {a,b}         256        16              0           false
-NULL             {c}           256        4               0           true
-NULL             {a,b,c}       256        64              0           false
-NULL             {d}           256        4               0           true
-NULL             {a,b,c,d}     256        256             0           false
 NULL             {c,d}         256        16              0           false
+NULL             {c}           256        4               0           true
+NULL             {d}           256        4               0           true
 NULL             {e}           256        2               0           true
 
 statement ok
@@ -162,44 +164,51 @@ SELECT
 	null_count,
 	histogram_id IS NOT NULL AS has_histogram
 FROM
-	[SHOW STATISTICS FOR TABLE data];
+	[SHOW STATISTICS FOR TABLE data]
+ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
-s1               {a}           256        4               0           true
 NULL             {b}           256        4               0           true
+s1               {a}           256        4               0           true
 
 # Verify that any other statistics are blown away when we INJECT.
 statement ok
 CREATE STATISTICS s3 ON c FROM data
 
 query TTIII colnames
-SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-s1               {a}           256        4               0
 NULL             {b}           256        4               0
+s1               {a}           256        4               0
 s3               {c}           256        4               0
 
 statement ok
 ALTER TABLE data INJECT STATISTICS '$json_stats'
 
 query TTIII colnames
-SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-s1               {a}           256        4               0
 NULL             {b}           256        4               0
+s1               {a}           256        4               0
 
 # Test AS OF SYSTEM TIME
 
-statement error pgcode 42P01 relation "data" does not exist
+statement error pgcode 3D000 database "test" does not exist
 CREATE STATISTICS s2 ON a FROM data AS OF SYSTEM TIME '2017'
 
 statement ok
 CREATE STATISTICS s2 ON a FROM data AS OF SYSTEM TIME '-1us'
 
 query TTIII colnames
-SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
 NULL             {b}           256        4               0
@@ -220,6 +229,7 @@ query TIIIB colnames
 SELECT column_names, row_count, distinct_count, null_count, histogram_id IS NOT NULL AS has_histogram
 FROM [SHOW STATISTICS FOR TABLE data]
 WHERE statistics_name = 's3'
+ORDER BY column_names::STRING
 ----
 column_names  row_count  distinct_count  null_count  has_histogram
 {a}           256        4               0           true
@@ -245,17 +255,18 @@ query TIII colnames
 SELECT column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data]
 WHERE statistics_name = 's4'
+ORDER BY column_names::STRING
 ----
 column_names  row_count  distinct_count  null_count
+{a,b,c,d}     256        256             0
+{a,b,c}       256        64              0
+{a,b}         256        16              0
 {a}           256        4               0
 {b}           256        4               0
-{a,b}         256        16              0
-{c}           256        4               0
-{a,b,c}       256        64              0
-{d}           256        4               0
-{a,b,c,d}     256        256             0
-{c,d}         256        16              0
 {c,b}         256        16              0
+{c,d}         256        16              0
+{c}           256        4               0
+{d}           256        4               0
 {e}           256        2               0
 
 statement ok
@@ -268,15 +279,16 @@ query TIII colnames
 SELECT column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data]
 WHERE statistics_name = 's5'
+ORDER BY column_names::STRING
 ----
 column_names  row_count  distinct_count  null_count
+{a,b,c,d}     256        256             0
+{a,b,c}       256        64              0
+{a,b}         256        16              0
 {a}           256        4               0
 {b}           256        4               0
-{a,b}         256        16              0
 {c}           256        4               0
-{a,b,c}       256        64              0
 {d}           256        4               0
-{a,b,c,d}     256        256             0
 {e}           256        2               0
 
 # Table with a hidden primary key and no other indexes.
@@ -289,6 +301,7 @@ CREATE STATISTICS default_stat1 FROM simple
 query TTIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE simple]
+ORDER BY column_names::STRING
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
 default_stat1    {rowid}       0          0               0
@@ -310,11 +323,12 @@ CREATE STATISTICS default_stat2 FROM simple
 query TTIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE simple]
+ORDER BY column_names::STRING
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
 default_stat2    {rowid}       1          1               0
-default_stat2    {y}           1          1               1
 default_stat2    {x}           1          1               1
+default_stat2    {y}           1          1               1
 
 # Add a few more rows.
 statement ok
@@ -333,12 +347,13 @@ CREATE STATISTICS default_stat3 FROM simple
 query TTIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE simple]
+ORDER BY column_names::STRING
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
 default_stat3    {rowid}       5          5               0
-default_stat3    {y}           5          3               3
-default_stat3    {x}           5          2               3
 default_stat3    {x,y}         5          4               2
+default_stat3    {x}           5          2               3
+default_stat3    {y}           5          3               3
 
 let $hist_id_3
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE simple]
@@ -362,16 +377,17 @@ CREATE STATISTICS s6 ON a FROM [53]
 query TTIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data]
+ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-s4               {c,d}         256        16              0
 s4               {c,b}         256        16              0
-s5               {b}           256        4               0
-s5               {a,b}         256        16              0
-s5               {c}           256        4               0
-s5               {a,b,c}       256        64              0
-s5               {d}           256        4               0
+s4               {c,d}         256        16              0
 s5               {a,b,c,d}     256        256             0
+s5               {a,b,c}       256        64              0
+s5               {a,b}         256        16              0
+s5               {b}           256        4               0
+s5               {c}           256        4               0
+s5               {d}           256        4               0
 s5               {e}           256        2               0
 s6               {a}           256        4               0
 
@@ -383,15 +399,16 @@ query TIII colnames
 SELECT column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data]
 WHERE statistics_name = '__auto__'
+ORDER BY column_names::STRING
 ----
 column_names  row_count  distinct_count  null_count
+{a,b,c,d}     256        256             0
+{a,b,c}       256        64              0
+{a,b}         256        16              0
 {a}           256        4               0
 {b}           256        4               0
-{a,b}         256        16              0
 {c}           256        4               0
-{a,b,c}       256        64              0
 {d}           256        4               0
-{a,b,c,d}     256        256             0
 {e}           256        2               0
 
 #
@@ -825,10 +842,17 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 
 # Test that stats are not collected for virtual columns.
 statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = true
+
+statement ok
 CREATE TABLE virt (
   a INT,
+  b INT,
   v INT AS (a + 10) VIRTUAL,
-  INDEX (v)
+  INDEX (v),
+  INDEX (a, v),
+  INDEX (a, v, b),
+  INDEX (a) WHERE v > 0
 )
 
 statement ok
@@ -850,7 +874,9 @@ ORDER BY
   column_names::STRING, created
 ----
 statistics_name  column_names  row_count  null_count  has_histogram
+s                {a,b}         3          0           false
 s                {a}           3          0           true
+s                {b}           3          3           true
 s                {rowid}       3          0           true
 
 # Test that stats are not collect for inaccessible virtual columns that
@@ -861,7 +887,9 @@ CREATE TABLE expression (
   b INT,
   j JSON,
   INDEX a_plus_b ((a + b)),
-  INVERTED INDEX j_a ((j->'a'))
+  INDEX a_a_plus_b (a, (a + b)),
+  INVERTED INDEX j_a ((j->'a')),
+  INVERTED INDEX a_j_a (a, (j->'a'))
 );
 INSERT INTO expression VALUES (1, 1, '{"a": "b"}'), (2, 10, '{"c": "d"}'), (3, 1, '{"e": "f"}');
 
@@ -1037,6 +1065,7 @@ ORDER BY
 column_names  has_histogram
 {id}          true
 {j}           true
+{s,j}         false
 {s}           true
 
 statement ok
@@ -1093,6 +1122,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
             }
         ],
         "histo_col_type": "INT8",
+        "histo_version": 1,
         "name": "s",
         "null_count": 0,
         "row_count": 1
@@ -1141,6 +1171,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
             }
         ],
         "histo_col_type": "public.greeting",
+        "histo_version": 1,
         "name": "s",
         "null_count": 0,
         "row_count": 1
@@ -1179,3 +1210,28 @@ CREATE TABLE t63387 (
 );
 INSERT INTO t63387 VALUES (1, '{}');
 CREATE STATISTICS s FROM t63387;
+
+# Regression test for #71080. Stats collection should succeed on tables with NOT
+# NULL virtual columns.
+statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = true
+
+statement ok
+CREATE TABLE t71080 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT NOT NULL AS (a + 10) VIRTUAL,
+  INDEX (a, b)
+);
+
+statement ok
+INSERT INTO t71080 VALUES (1, 2);
+
+statement ok
+CREATE STATISTICS s FROM t71080;
+
+statement error cannot create statistics on virtual column \"b\"
+CREATE STATISTICS s ON b FROM t71080;
+
+statement error cannot create statistics on virtual column \"b\"
+CREATE STATISTICS s ON a, b FROM t71080;

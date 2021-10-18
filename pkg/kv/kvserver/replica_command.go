@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -561,13 +560,6 @@ func (r *Replica) AdminMerge(
 	runMergeTxn := func(txn *kv.Txn) error {
 		log.Event(ctx, "merge txn begins")
 		txn.SetDebugName(mergeTxnName)
-
-		// If we aren't certain that all possible nodes in the cluster support a
-		// range merge transaction refreshing its reads while the RHS range is
-		// subsumed, observe the commit timestamp to force a client-side retry.
-		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.PriorReadSummaries) {
-			_ = txn.CommitTimestamp()
-		}
 
 		// Pipelining might send QueryIntent requests to the RHS after the RHS has
 		// noticed the merge and started blocking all traffic. This causes the merge
@@ -2042,11 +2034,11 @@ type changeReplicasTxnArgs struct {
 	//
 	// - Replicas on decommissioning node/store are considered live.
 	//
-	// - If `includeSuspectStores` is true, stores that are marked suspect (i.e.
+	// - If `includeSuspectAndDrainingStores` is true, stores that are marked suspect (i.e.
 	// stores that have failed a liveness heartbeat in the recent past) are
 	// considered live. Otherwise, they are excluded from the returned slices.
 	liveAndDeadReplicas func(
-		repls []roachpb.ReplicaDescriptor, includeSuspectStores bool,
+		repls []roachpb.ReplicaDescriptor, includeSuspectAndDrainingStores bool,
 	) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor)
 
 	logChange                            logChangeFn
@@ -2141,7 +2133,7 @@ func execChangeReplicasTxn(
 			// Note that the allocator will avoid rebalancing to stores that are
 			// currently marked suspect. See uses of StorePool.getStoreList() in
 			// allocator.go.
-			liveReplicas, _ := args.liveAndDeadReplicas(replicas.Descriptors(), true /* includeSuspectStores */)
+			liveReplicas, _ := args.liveAndDeadReplicas(replicas.Descriptors(), true /* includeSuspectAndDrainingStores */)
 			if !replicas.CanMakeProgress(
 				func(rDesc roachpb.ReplicaDescriptor) bool {
 					for _, inner := range liveReplicas {
@@ -2854,11 +2846,11 @@ func (s *Store) relocateOne(
 			`range %s was either in a joint configuration or had learner replicas: %v`, desc, desc.Replicas())
 	}
 
-	sysCfg := s.cfg.Gossip.GetSystemConfig()
-	if sysCfg == nil {
-		return nil, nil, fmt.Errorf("no system config available, unable to perform RelocateRange")
+	confReader, err := s.GetConfReader()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "can't relocate range")
 	}
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
+	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2895,8 +2887,10 @@ func (s *Store) relocateOne(
 		for _, candidate := range candidateTargets {
 			store, ok := storeMap[candidate.StoreID]
 			if !ok {
-				return nil, nil, fmt.Errorf("cannot up-replicate to s%d; missing gossiped StoreDescriptor",
-					candidate.StoreID)
+				return nil, nil, fmt.Errorf(
+					"cannot up-replicate to s%d; missing gossiped StoreDescriptor"+
+						" (the store is likely dead, draining or decommissioning)", candidate.StoreID,
+				)
 			}
 			candidateDescs = append(candidateDescs, *store)
 		}
@@ -2905,7 +2899,7 @@ func (s *Store) relocateOne(
 		targetStore, _ := s.allocator.allocateTargetFromList(
 			ctx,
 			candidateStoreList,
-			zone,
+			conf,
 			existingVoters,
 			existingNonVoters,
 			s.allocator.scorerOptions(),
@@ -2976,8 +2970,13 @@ func (s *Store) relocateOne(
 		// overreplicated. If we asked it instead to remove s3 from (s1,s2,s3) it
 		// may not want to do that due to constraints.
 		targetStore, _, err := s.allocator.removeTarget(
-			ctx, zone, args.targetsToRemove(), existingVoters,
-			existingNonVoters, args.targetType,
+			ctx,
+			conf,
+			args.targetsToRemove(),
+			existingVoters,
+			existingNonVoters,
+			args.targetType,
+			s.allocator.scorerOptions(),
 		)
 		if err != nil {
 			return nil, nil, errors.Wrapf(

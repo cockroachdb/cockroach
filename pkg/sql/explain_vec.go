@@ -35,6 +35,8 @@ type explainVecNode struct {
 		lines []string
 		// The current row returned by the node.
 		values tree.Datums
+		// cleanup will be called after closing the input tree.
+		cleanup func()
 	}
 }
 
@@ -45,7 +47,6 @@ func (n *explainVecNode) startExec(params runParams) error {
 		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData().DistSQLMode, n.plan.main,
 	)
-	willDistribute := distribution.WillDistribute()
 	outerSubqueries := params.p.curPlan.subqueryPlans
 	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, n.plan.subqueryPlans, distribution)
 	defer func() {
@@ -60,7 +61,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 		return err
 	}
 
-	distSQLPlanner.FinalizePlan(planCtx, physPlan)
+	distSQLPlanner.finalizePlanWithRowCount(planCtx, physPlan, n.plan.mainRowCount)
 	flows := physPlan.GenerateFlowSpecs()
 	flowCtx := newFlowCtxForExplainPurposes(planCtx, params.p)
 
@@ -74,7 +75,8 @@ func (n *explainVecNode) startExec(params runParams) error {
 		return errors.New("vectorize is set to 'off'")
 	}
 	verbose := n.options.Flags[tree.ExplainFlagVerbose]
-	n.run.lines, err = colflow.ExplainVec(
+	willDistribute := physPlan.Distribution.WillDistribute()
+	n.run.lines, n.run.cleanup, err = colflow.ExplainVec(
 		params.ctx, flowCtx, flows, physPlan.LocalProcessors, nil, /* opChains */
 		distSQLPlanner.gatewayNodeID, verbose, willDistribute,
 	)
@@ -131,4 +133,7 @@ func (n *explainVecNode) Next(runParams) (bool, error) {
 func (n *explainVecNode) Values() tree.Datums { return n.run.values }
 func (n *explainVecNode) Close(ctx context.Context) {
 	n.plan.close(ctx)
+	if n.run.cleanup != nil {
+		n.run.cleanup()
+	}
 }

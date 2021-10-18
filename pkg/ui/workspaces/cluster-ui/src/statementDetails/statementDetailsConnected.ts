@@ -15,18 +15,18 @@ import {
   StatementDetails,
   StatementDetailsDispatchProps,
   StatementDetailsProps,
-  StatementDetailsStateProps,
 } from "./statementDetails";
 import { AppState } from "../store";
 import {
   selectStatement,
   selectStatementDetailsUiConfig,
 } from "./statementDetails.selectors";
+import { selectIsTenant } from "../store/uiConfig";
 import {
   nodeDisplayNameByIDSelector,
   nodeRegionsByIDSelector,
 } from "../store/nodes";
-import { actions as statementActions } from "src/store/statements";
+import { actions as statementsActions } from "src/store/statements";
 import {
   actions as statementDiagnosticsActions,
   selectDiagnosticsReportsByStatementFingerprint,
@@ -35,27 +35,34 @@ import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as nodesActions } from "../store/nodes";
 import { actions as nodeLivenessActions } from "../store/liveness";
+import { selectDateRange } from "../statementsPage/statementsPage.selectors";
 
+// For tenant cases, we don't show information about node, regions and
+// diagnostics.
 const mapStateToProps = (state: AppState, props: StatementDetailsProps) => {
   const statement = selectStatement(state, props);
   const statementFingerprint = statement?.statement;
   return {
     statement,
     statementsError: state.adminUI.statements.lastError,
-    nodeNames: nodeDisplayNameByIDSelector(state),
-    nodeRegions: nodeRegionsByIDSelector(state),
-    diagnosticsReports: selectDiagnosticsReportsByStatementFingerprint(
-      state,
-      statementFingerprint,
-    ),
+    dateRange: selectDateRange(state),
+    nodeNames: selectIsTenant(state) ? {} : nodeDisplayNameByIDSelector(state),
+    nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
+    diagnosticsReports: selectIsTenant(state)
+      ? []
+      : selectDiagnosticsReportsByStatementFingerprint(
+          state,
+          statementFingerprint,
+        ),
     uiConfig: selectStatementDetailsUiConfig(state),
+    isTenant: selectIsTenant(state),
   };
 };
 
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): StatementDetailsDispatchProps => ({
-  refreshStatements: () => dispatch(statementActions.refresh()),
+  refreshStatements: () => dispatch(statementsActions.refresh()),
   refreshStatementDiagnosticsRequests: () =>
     dispatch(statementDiagnosticsActions.refresh()),
   refreshNodes: () => dispatch(nodesActions.refresh()),

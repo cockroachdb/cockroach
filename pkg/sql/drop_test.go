@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -570,43 +569,6 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	}
 }
 
-func TestDropIndexInterleaved(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	const chunkSize = 200
-	params, _ := tests.CreateTestServerParams()
-	params.Knobs = base.TestingKnobs{
-		Server: &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: 1,
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PreventNewInterleavedTables - 1),
-		},
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			BackfillChunkSize: chunkSize,
-		},
-	}
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-
-	numRows := 2*chunkSize + 1
-	tests.CreateKVInterleavedTable(t, sqlDB, numRows)
-
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
-
-	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
-
-	if _, err := sqlDB.Exec(`DROP INDEX t.intlv@intlv_idx`); err != nil {
-		t.Fatal(err)
-	}
-	tests.CheckKeyCount(t, kvDB, tableSpan, 2*numRows)
-
-	// Ensure that index is not active.
-	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "intlv")
-	if _, err := tableDesc.FindIndexWithName("intlv_idx"); err == nil {
-		t.Fatalf("table descriptor still contains index after index is dropped")
-	}
-}
-
 // Tests DROP TABLE and also checks that the table data is not deleted
 // via the synchronous path.
 func TestDropTable(t *testing.T) {
@@ -914,54 +876,6 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 		return descExists(sqlDBRaw, false, tableDesc.ID)
 	})
 	tests.CheckKeyCount(t, kvDB, tableSpan, 0)
-}
-
-// Tests dropping a table that is interleaved within
-// another table.
-func TestDropTableInterleavedDeleteData(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
-	params.Knobs = base.TestingKnobs{
-		Server: &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: 1,
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PreventNewInterleavedTables - 1),
-		},
-	}
-	defer gcjob.SetSmallMaxGCIntervalForTest()()
-
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-
-	numRows := 2*row.TableTruncateChunkSize + 1
-	tests.CreateKVInterleavedTable(t, sqlDB, numRows)
-
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	tableDescInterleaved := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "intlv")
-	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
-
-	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
-	if _, err := sqlDB.Exec(`DROP TABLE t.intlv`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Test that deleted table cannot be used. This prevents regressions where
-	// name -> descriptor ID caches might make this statement erronously work.
-	if _, err := sqlDB.Exec(`SELECT * FROM t.intlv`); !testutils.IsError(
-		err, `relation "t.intlv" does not exist`,
-	) {
-		t.Fatalf("different error than expected: %v", err)
-	}
-
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDescInterleaved.GetID()); err != nil {
-		t.Fatal(err)
-	}
-
-	testutils.SucceedsSoon(t, func() error {
-		return descExists(sqlDB, false, tableDescInterleaved.GetID())
-	})
-
-	tests.CheckKeyCount(t, kvDB, tableSpan, numRows)
 }
 
 func TestDropTableInTxn(t *testing.T) {

@@ -135,9 +135,12 @@ export const selectCommissionedNodeStatuses = createSelector(
 /**
  * nodeIDsSelector returns the NodeID of all nodes currently on the cluster.
  */
-const nodeIDsSelector = createSelector(nodeStatusesSelector, nodeStatuses => {
-  return _.map(nodeStatuses, ns => ns.desc.node_id.toString());
-});
+export const nodeIDsSelector = createSelector(
+  nodeStatusesSelector,
+  nodeStatuses => {
+    return _.map(nodeStatuses, ns => ns.desc.node_id.toString());
+  },
+);
 
 /**
  * nodeStatusByIDSelector returns a map from NodeID to a current INodeStatus.
@@ -335,6 +338,15 @@ export const nodeRegionsByIDSelector = createSelector(
       });
     }
     return result;
+  },
+);
+
+// selectIsMoreThanOneNode returns a boolean describing whether or not there
+// exists more than one node in the cluster.
+export const selectIsMoreThanOneNode = createSelector(
+  (state: AdminUIState) => nodeRegionsByIDSelector(state),
+  (nodeRegions): boolean => {
+    return Object.keys(nodeRegions).length > 1;
   },
 );
 

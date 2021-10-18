@@ -11,6 +11,7 @@
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import moment, { Moment } from "moment";
 import * as protos from "src/js/protos";
 import {
   refreshStatementDiagnosticsRequests,
@@ -32,12 +33,14 @@ import { TimestampToMoment } from "src/util/convert";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
-import { getMatchParamByName } from "src/util/query";
+import { statementsDateRangeLocalSetting } from "src/redux/statementsDateRange";
+import { queryByName } from "src/util/query";
 
 import { StatementsPage, AggregateStatistics } from "@cockroachlabs/cluster-ui";
 import {
   createOpenDiagnosticsModalAction,
   createStatementDiagnosticsReportAction,
+  setCombinedStatementsDateRangeAction,
 } from "src/redux/statements";
 import {
   trackDownloadDiagnosticsBundleAction,
@@ -54,6 +57,7 @@ type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDi
 
 interface StatementsSummaryData {
   statement: string;
+  aggregatedTs: number;
   implicitTxn: boolean;
   fullScan: boolean;
   database: string;
@@ -71,11 +75,11 @@ export const selectStatements = createSelector(
     props: RouteComponentProps<any>,
     diagnosticsReportsPerStatement,
   ): AggregateStatistics[] => {
-    if (!state.data) {
+    if (!state.data || state.inFlight) {
       return null;
     }
     let statements = flattenStatementStats(state.data.statements);
-    const app = getMatchParamByName(props.match, appAttr);
+    const app = queryByName(props.location, appAttr);
     const isInternal = (statement: ExecutionStatistics) =>
       statement.app.startsWith(state.data.internal_app_name_prefix);
 
@@ -84,7 +88,7 @@ export const selectStatements = createSelector(
       let showInternal = false;
       if (criteria === "(unset)") {
         criteria = "";
-      } else if (criteria === "(internal)") {
+      } else if (criteria === state.data.internal_app_name_prefix) {
         showInternal = true;
       }
 
@@ -102,6 +106,7 @@ export const selectStatements = createSelector(
       if (!(key in statsByStatementKey)) {
         statsByStatementKey[key] = {
           statement: stmt.statement,
+          aggregatedTs: stmt.aggregated_ts,
           implicitTxn: stmt.implicit_txn,
           fullScan: stmt.full_scan,
           database: stmt.database,
@@ -115,6 +120,7 @@ export const selectStatements = createSelector(
       const stmt = statsByStatementKey[key];
       return {
         label: stmt.statement,
+        aggregatedTs: stmt.aggregatedTs,
         implicitTxn: stmt.implicitTxn,
         fullScan: stmt.fullScan,
         database: stmt.database,
@@ -154,7 +160,7 @@ export const selectApps = createSelector(
       },
     );
     return []
-      .concat(sawInternal ? ["(internal)"] : [])
+      .concat(sawInternal ? [state.data.internal_app_name_prefix] : [])
       .concat(sawBlank ? ["(unset)"] : [])
       .concat(Object.keys(apps));
   },
@@ -199,6 +205,13 @@ export const selectLastReset = createSelector(
   },
 );
 
+export const selectDateRange = createSelector(
+  statementsDateRangeLocalSetting.selector,
+  (state: { start: number; end: number }): [Moment, Moment] => {
+    return [moment.unix(state.start), moment.unix(state.end)];
+  },
+);
+
 export const statementColumnsLocalSetting = new LocalSetting(
   "create_statement_columns",
   (state: AdminUIState) => state.localSettings,
@@ -210,6 +223,7 @@ export default withRouter(
     (state: AdminUIState, props: RouteComponentProps) => ({
       statements: selectStatements(state, props),
       statementsError: state.cachedData.statements.lastError,
+      dateRange: selectDateRange(state),
       apps: selectApps(state),
       databases: selectDatabases(state),
       totalFingerprints: selectTotalFingerprints(state),
@@ -218,7 +232,8 @@ export default withRouter(
       nodeRegions: nodeRegionsByIDSelector(state),
     }),
     {
-      refreshStatements,
+      refreshStatements: refreshStatements,
+      onDateRangeChange: setCombinedStatementsDateRangeAction,
       refreshStatementDiagnosticsRequests,
       resetSQLStats: resetSQLStatsAction,
       dismissAlertMessage: () =>

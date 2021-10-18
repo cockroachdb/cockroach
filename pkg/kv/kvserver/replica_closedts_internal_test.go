@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"sync/atomic"
 	"testing"
@@ -508,8 +509,8 @@ func (r *mockReceiver) HTML() string {
 	return ""
 }
 
-// Test that r.GetClosedTimestampV2() mixes its sources of information correctly.
-func TestReplicaClosedTimestampV2(t *testing.T) {
+// Test that r.GetClosedTimestamp() mixes its sources of information correctly.
+func TestReplicaClosedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -566,7 +567,7 @@ func TestReplicaClosedTimestampV2(t *testing.T) {
 			tc.repl.mu.state.RaftClosedTimestamp = test.raftClosed
 			tc.repl.mu.state.LeaseAppliedIndex = uint64(test.applied)
 			tc.repl.mu.Unlock()
-			require.Equal(t, test.expClosed, tc.repl.GetClosedTimestampV2(ctx))
+			require.Equal(t, test.expClosed, tc.repl.GetClosedTimestamp(ctx))
 		})
 	}
 }
@@ -887,22 +888,41 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				name:       "empty key, min and max bound below closed ts",
 				reqs:       []roachpb.Request{&getEmptyKey},
 				minTSBound: ts10,
-				maxTSBound: ts20,
+				maxTSBound: ts20.Next(),
 				expRespTS:  ts20,
 			},
 			{
 				name:       "intent key, min and max bound below intent ts, min and max bound below closed ts",
 				reqs:       []roachpb.Request{&getIntentKey},
 				minTSBound: ts10,
-				maxTSBound: ts10,
+				maxTSBound: ts10.Next(),
 				expRespTS:  ts10,
 			},
 			{
 				name:       "empty and intent key, min and max bound below intent ts, min and max bound below closed ts",
 				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
 				minTSBound: ts10,
-				maxTSBound: ts10,
+				maxTSBound: ts10.Next(),
 				expRespTS:  ts10,
+			},
+			{
+				name:   "req without min_timestamp_bound",
+				reqs:   []roachpb.Request{&getEmptyKey},
+				expErr: "MinTimestampBound must be set in batch",
+			},
+			{
+				name:       "req with equal min_timestamp_bound and max_timestamp_bound",
+				reqs:       []roachpb.Request{&getEmptyKey},
+				minTSBound: ts10,
+				maxTSBound: ts10,
+				expErr:     "MaxTimestampBound, if set in batch, must be greater than MinTimestampBound",
+			},
+			{
+				name:       "req with inverted min_timestamp_bound and max_timestamp_bound",
+				reqs:       []roachpb.Request{&getEmptyKey},
+				minTSBound: ts20,
+				maxTSBound: ts10,
+				expErr:     "MaxTimestampBound, if set in batch, must be greater than MinTimestampBound",
 			},
 			{
 				name:       "req with timestamp",
@@ -983,4 +1003,188 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestServerSideBoundedStalenessNegotiationWithResumeSpan verifies that the
+// server-side bounded staleness negotiation fast-path negotiates a timestamp
+// over a batch's entire set of read spans even if it only performs reads and
+// returns results from part of them due to a key/byte limit.
+func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Setup:
+	//
+	//  a: value  @ 9
+	//  b: value  @ 20 // ts above res ts, ignored by reads
+	//  c: value  @ 5
+	//  d: intent @ 20
+	//  e: value  @ 10 // ts above res ts, ignored by reads
+	//  f: value  @ 6
+	//  g: intent @ 10
+	//  h: value  @ 7
+	//
+	//  closed_timestamp: 30
+	//
+	//  expected_resolved_timestamp: 10.Prev()
+	//
+	makeTS := func(ts int64) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: ts}
+	}
+	setup := func(t *testing.T, tc *testContext) hlc.Timestamp {
+		// Write values and intents.
+		val := []byte("val")
+		send := func(h roachpb.Header, args roachpb.Request) {
+			_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), h, args)
+			require.Nil(t, pErr)
+		}
+		writeValue := func(k string, ts int64) {
+			pArgs := putArgs(roachpb.Key(k), val)
+			send(roachpb.Header{Timestamp: makeTS(ts)}, &pArgs)
+		}
+		writeIntent := func(k string, ts int64) {
+			txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, makeTS(ts), 0)
+			pArgs := putArgs(roachpb.Key(k), val)
+			assignSeqNumsForReqs(&txn, &pArgs)
+			send(roachpb.Header{Txn: &txn}, &pArgs)
+		}
+		writeValue("a", 9)
+		writeValue("b", 20)
+		writeValue("c", 5)
+		writeIntent("d", 20)
+		writeValue("e", 10)
+		writeValue("f", 6)
+		writeIntent("g", 10)
+		writeValue("h", 7)
+
+		// Inject a closed timestamp.
+		tc.repl.mu.Lock()
+		tc.repl.mu.state.RaftClosedTimestamp = makeTS(30)
+		tc.repl.mu.Unlock()
+
+		// Return the timestamp of the earliest intent.
+		return makeTS(10)
+	}
+
+	// Reqs:
+	//
+	//  scan: [a, f)
+	//  get:  [f]
+	//  get:  [g]
+	//  get:  [h]
+	//
+	makeReq := func(maxKeys int) (ba roachpb.BatchRequest) {
+		ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+			MinTimestampBound: makeTS(5),
+		}
+		ba.WaitPolicy = lock.WaitPolicy_Error
+		ba.MaxSpanRequestKeys = int64(maxKeys)
+
+		scan := scanArgsString("a", "f")
+		get1 := getArgsString("f")
+		get2 := getArgsString("g")
+		get3 := getArgsString("h")
+		ba.Add(scan, get1, get2, get3)
+		return ba
+	}
+
+	for _, test := range []struct {
+		maxKeys int
+
+		expRespKeys   []string
+		expResumeSpan string
+	}{
+		{
+			maxKeys:     0, // no limit
+			expRespKeys: []string{"a", "c", "f", "h"},
+		},
+		{
+			maxKeys:       1,
+			expRespKeys:   []string{"a"},
+			expResumeSpan: "b",
+		},
+		{
+			maxKeys:       2,
+			expRespKeys:   []string{"a", "c"},
+			expResumeSpan: "d",
+		},
+		{
+			maxKeys:       3,
+			expRespKeys:   []string{"a", "c", "f"},
+			expResumeSpan: "g",
+		},
+		{
+			maxKeys:     4,
+			expRespKeys: []string{"a", "c", "f", "h"},
+		},
+		{
+			maxKeys:     5,
+			expRespKeys: []string{"a", "c", "f", "h"},
+		},
+	} {
+		t.Run(fmt.Sprintf("maxKeys=%d", test.maxKeys), func(t *testing.T) {
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+
+			// Create a single range.
+			var tc testContext
+			tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
+			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, 100*time.Nanosecond))
+			cfg.TestingKnobs.DontCloseTimestamps = true
+			tc.StartWithStoreConfig(t, stopper, cfg)
+
+			// Set up the test.
+			earliestIntentTS := setup(t, &tc)
+
+			// Construct the request.
+			ba := makeReq(test.maxKeys)
+			ba.RangeID = tc.rangeID
+
+			// Regardless of the keys returned, we expect negotiation to decide on the
+			// timestamp immediately preceding the earliest intent. This is the
+			// primary focus of this test. It would be incorrect for the negotiated
+			// spans to be limited to only the spans read before the key limit was
+			// reached.
+			expRespTS := earliestIntentTS.Prev()
+
+			// Issue the request.
+			br, pErr := tc.store.Send(ctx, ba)
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+			require.Equal(t, expRespTS, br.Timestamp)
+			require.Equal(t, len(ba.Requests), len(br.Responses))
+
+			// Validate response keys and resume span.
+			var respKeys []string
+			var resumeStart roachpb.Key
+			for i, ru := range br.Responses {
+				req := ru.GetInner()
+				switch v := req.(type) {
+				case *roachpb.ScanResponse:
+					for _, kv := range v.Rows {
+						respKeys = append(respKeys, string(kv.Key))
+					}
+				case *roachpb.GetResponse:
+					if v.Value.IsPresent() {
+						respKeys = append(respKeys, string(ba.Requests[i].GetGet().Key))
+					}
+				default:
+					t.Fatalf("unexpected response type %T", req)
+				}
+				if resume := req.Header().ResumeSpan; resume != nil {
+					if resumeStart == nil || resume.Key.Compare(resumeStart) < 0 {
+						resumeStart = resume.Key
+					}
+				}
+			}
+			require.Equal(t, test.expRespKeys, respKeys)
+			if test.expResumeSpan == "" {
+				require.Nil(t, resumeStart)
+			} else {
+				require.NotNil(t, resumeStart)
+				require.Equal(t, test.expResumeSpan, string(resumeStart))
+			}
+		})
+	}
 }

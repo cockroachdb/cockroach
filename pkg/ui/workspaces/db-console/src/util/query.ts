@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { Location } from "history";
+import _ from "lodash";
 import { match as Match } from "react-router-dom";
 
 interface ParamsObj {
@@ -19,15 +20,18 @@ interface URLSearchParamsWithKeys extends URLSearchParams {
   keys: () => string;
 }
 
-/* eslint-disable no-prototype-builtins,no-restricted-syntax */
-export function queryToString(obj: any) {
-  const str = [];
-  for (const p in obj) {
-    if (obj.hasOwnProperty(p)) {
-      str.push(`${encodeURIComponent(p)}=${encodeURIComponent(obj[p])}`);
-    }
-  }
-  return str.join("&");
+// propsToQueryString is a helper function that converts a set of object
+// properties to a query string
+// - keys with null or undefined values will be skipped
+// - non-string values will be toString'd
+export function propsToQueryString(props: { [k: string]: any }): string {
+  return _.compact(
+    _.map(props, (v: any, k: string) =>
+      !_.isNull(v) && !_.isUndefined(v)
+        ? `${encodeURIComponent(k)}=${encodeURIComponent(v.toString())}`
+        : null,
+    ),
+  ).join("&");
 }
 
 export function queryToObj(location: Location, key: string, value: string) {
@@ -48,7 +52,7 @@ export function queryToObj(location: Location, key: string, value: string) {
   return paramObj;
 }
 
-export function queryByName(location: Location, key: string) {
+export function queryByName(location: Location, key: string): string | null {
   const urlParams = new URLSearchParams(location.search);
   return urlParams.get(key);
 }

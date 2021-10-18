@@ -1,12 +1,15 @@
-build --symlink_prefix=_bazel/ --ui_event_filters=-DEBUG --define gotags=bazel,crdb_test_off,gss --experimental_proto_descriptor_sets_include_source_info
-test --config=test
-build:test --define gotags=bazel,crdb_test,gss --test_env=TZ=
-build:race --@io_bazel_rules_go//go/config:race --test_env=GORACE=halt_on_error=1
-query --ui_event_filters=-DEBUG
-
 try-import %workspace%/.bazelrc.user
 
+build --symlink_prefix=_bazel/ --ui_event_filters=-DEBUG --define gotags=bazel,crdb_test_off,gss --experimental_proto_descriptor_sets_include_source_info
+test --config=test
+build:with_ui --define cockroach_with_ui=y
+build:test --define gotags=bazel,crdb_test,gss
+build:race --@io_bazel_rules_go//go/config:race --test_env=GORACE=halt_on_error=1 --test_sharding_strategy=disabled
+test:test --test_env=TZ=
+query --ui_event_filters=-DEBUG
+
 # CI should always run with `--config=ci`.
+build:ci --experimental_convenience_symlinks=ignore
 build:ci --stamp
 build:ci --host_crosstool_top=@toolchain_cross_x86_64-unknown-linux-gnu//:suite
 # Set `-test.v` in Go tests.
@@ -14,6 +17,8 @@ build:ci --host_crosstool_top=@toolchain_cross_x86_64-unknown-linux-gnu//:suite
 test:ci --test_env=GO_TEST_WRAP_TESTV=1
 # Dump all output for failed tests to the build log.
 test:ci --test_output=errors
+# Put all tmp artifacts in /artifacts/tmp.
+test:ci --test_tmpdir=/artifacts/tmp
 
 # cross-compilation configurations. Add e.g. --config=crosslinux to turn these on
 # TODO(ricky): Having to specify both the `platform` and the `crosstool_top` is
@@ -21,19 +26,20 @@ test:ci --test_output=errors
 build:crosslinux --platforms=//build/toolchains:cross_linux
 build:crosslinux --crosstool_top=@toolchain_cross_x86_64-unknown-linux-gnu//:suite
 build:crosslinux '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu'
-build:crosslinux --config=ci
+build:crosslinux --config=ci --config=cross
 build:crosswindows --platforms=//build/toolchains:cross_windows
 build:crosswindows --crosstool_top=@toolchain_cross_x86_64-w64-mingw32//:suite
 build:crosswindows '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32'
-build:crosswindows --config=ci
+build:crosswindows --config=ci --config=cross
 build:crossmacos --platforms=//build/toolchains:cross_macos
 build:crossmacos --crosstool_top=@toolchain_cross_x86_64-apple-darwin19//:suite
 build:crossmacos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19'
-build:crossmacos --config=ci
+build:crossmacos --config=ci --config=cross
 build:crosslinuxarm --platforms=//build/toolchains:cross_linux_arm
 build:crosslinuxarm --crosstool_top=@toolchain_cross_aarch64-unknown-linux-gnu//:suite
 build:crosslinuxarm '--workspace_status_command=./build/bazelutil/stamp.sh aarch64-unknown-linux-gnu'
-build:crosslinuxarm --config=ci
+build:crosslinuxarm --config=ci --config=cross
+build:cross --define cockroach_cross=y
 
 # developer configurations. Add e.g. --config=devdarwinx86_64 to turn these on.
 build:devdarwinx86_64 --crosstool_top=@toolchain_dev_darwin_x86-64//:suite

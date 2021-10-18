@@ -37,8 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -52,8 +51,6 @@ import (
 // distsql planning.
 type extendedEvalContext struct {
 	tree.EvalContext
-
-	SessionMutatorIterator *sessionDataMutatorIterator
 
 	// SessionID for this connection.
 	SessionID ClusterWideID
@@ -97,7 +94,7 @@ type extendedEvalContext struct {
 	// SchemaChangeJobRecords refers to schemaChangeJobsCache in extraTxnState.
 	SchemaChangeJobRecords map[descpb.ID]*jobs.Record
 
-	statsStorage sqlstats.Storage
+	statsProvider *persistedsqlstats.PersistedSQLStats
 
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
@@ -308,9 +305,10 @@ func newInternalPlanner(
 	sd.SessionData.Database = "system"
 	sd.SessionData.UserProto = user.EncodeProto()
 	sd.SessionData.Internal = true
+	sds := sessiondata.NewStack(sd)
 
 	if params.collection == nil {
-		params.collection = execCfg.CollectionFactory.NewCollection(sd)
+		params.collection = execCfg.CollectionFactory.NewCollection(descs.NewTemporarySchemaProvider(sds))
 	}
 
 	var ts time.Time
@@ -344,7 +342,6 @@ func newInternalPlanner(
 		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
 	plannerMon.Start(ctx, execCfg.RootMemoryMonitor, mon.BoundAccount{})
 
-	sds := sessiondata.NewStack(sd)
 	smi := &sessionDataMutatorIterator{
 		sds: sds,
 		sessionDataMutatorBase: sessionDataMutatorBase{
@@ -357,30 +354,21 @@ func newInternalPlanner(
 		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
 	}
 
-	p.extendedEvalCtx = internalExtendedEvalCtx(
-		ctx,
-		sds,
-		smi,
-		params.collection,
-		txn,
-		ts,
-		ts,
-		execCfg,
-		plannerMon,
-	)
+	p.extendedEvalCtx = internalExtendedEvalCtx(ctx, sds, params.collection, txn, ts, ts, execCfg, plannerMon)
 	p.extendedEvalCtx.Planner = p
 	p.extendedEvalCtx.PrivilegedAccessor = p
 	p.extendedEvalCtx.SessionAccessor = p
 	p.extendedEvalCtx.ClientNoticeSender = p
 	p.extendedEvalCtx.Sequence = p
 	p.extendedEvalCtx.Tenant = p
+	p.extendedEvalCtx.Regions = p
 	p.extendedEvalCtx.JoinTokenCreator = p
 	p.extendedEvalCtx.ClusterID = execCfg.ClusterID()
 	p.extendedEvalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	p.extendedEvalCtx.NodeID = execCfg.NodeID
 	p.extendedEvalCtx.Locality = execCfg.Locality
 
-	p.sessionDataMutatorIterator = p.extendedEvalCtx.SessionMutatorIterator
+	p.sessionDataMutatorIterator = smi
 	p.autoCommit = false
 
 	p.extendedEvalCtx.MemMetrics = memMetrics
@@ -418,7 +406,6 @@ func newInternalPlanner(
 func internalExtendedEvalCtx(
 	ctx context.Context,
 	sds *sessiondata.Stack,
-	smi *sessionDataMutatorIterator,
 	tables *descs.Collection,
 	txn *kv.Txn,
 	txnTimestamp time.Time,
@@ -441,7 +428,7 @@ func internalExtendedEvalCtx(
 			indexUsageStats = idxusage.NewLocalIndexUsageStats(&idxusage.Config{
 				Setting: execCfg.Settings,
 			})
-			sqlStatsController = &sslocal.Controller{}
+			sqlStatsController = &persistedsqlstats.Controller{}
 		}
 	}
 	return extendedEvalContext{
@@ -452,6 +439,7 @@ func internalExtendedEvalCtx(
 			TxnImplicit:        true,
 			Settings:           execCfg.Settings,
 			Codec:              execCfg.Codec,
+			Tracer:             execCfg.AmbientCtx.Tracer,
 			Context:            ctx,
 			Mon:                plannerMon,
 			TestingKnobs:       evalContextTestingKnobs,
@@ -460,15 +448,14 @@ func internalExtendedEvalCtx(
 			InternalExecutor:   execCfg.InternalExecutor,
 			SQLStatsController: sqlStatsController,
 		},
-		SessionMutatorIterator: smi,
-		VirtualSchemas:         execCfg.VirtualSchemas,
-		Tracing:                &SessionTracing{},
-		NodesStatusServer:      execCfg.NodesStatusServer,
-		RegionsServer:          execCfg.RegionsServer,
-		Descs:                  tables,
-		ExecCfg:                execCfg,
-		DistSQLPlanner:         execCfg.DistSQLPlanner,
-		indexUsageStats:        indexUsageStats,
+		VirtualSchemas:    execCfg.VirtualSchemas,
+		Tracing:           &SessionTracing{},
+		NodesStatusServer: execCfg.NodesStatusServer,
+		RegionsServer:     execCfg.RegionsServer,
+		Descs:             tables,
+		ExecCfg:           execCfg,
+		DistSQLPlanner:    execCfg.DistSQLPlanner,
+		indexUsageStats:   indexUsageStats,
 	}
 }
 
@@ -515,21 +502,13 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 	return p.extendedEvalCtx.ExecCfg
 }
 
-func (p *planner) forEachMutator(applyFunc func(m *sessionDataMutator)) {
-	p.sessionDataMutatorIterator.forEachMutator(applyFunc)
-}
-
-func (p *planner) forEachMutatorError(applyFunc func(m *sessionDataMutator) error) error {
-	return p.sessionDataMutatorIterator.forEachMutatorError(applyFunc)
-}
-
 // GetOrInitSequenceCache returns the sequence cache for the session.
 // If the sequence cache has not been used yet, it initializes the cache
 // inside the session data.
 func (p *planner) GetOrInitSequenceCache() sessiondatapb.SequenceCache {
 	if p.SessionData().SequenceCache == nil {
-		p.ExtendedEvalContext().SessionMutatorIterator.forEachMutator(
-			func(m *sessionDataMutator) {
+		p.sessionDataMutatorIterator.applyOnEachMutator(
+			func(m sessionDataMutator) {
 				m.initSequenceCache()
 			},
 		)
@@ -796,6 +775,11 @@ func (p *planner) TypeAsStringArray(
 // SessionData is part of the PlanHookState interface.
 func (p *planner) SessionData() *sessiondata.SessionData {
 	return p.EvalContext().SessionData()
+}
+
+// SessionDataMutatorIterator is part of the PlanHookState interface.
+func (p *planner) SessionDataMutatorIterator() *sessionDataMutatorIterator {
+	return p.sessionDataMutatorIterator
 }
 
 // Ann is a shortcut for the Annotations from the eval context.

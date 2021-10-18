@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -82,12 +83,24 @@ func AlterColumnType(
 		return err
 	}
 
+	if err := checkTypeIsSupported(ctx, params.ExecCfg().Settings, typ); err != nil {
+		return err
+	}
+
 	// Special handling for STRING COLLATE xy to verify that we recognize the language.
 	if t.Collation != "" {
 		if types.IsStringType(typ) {
 			typ = types.MakeCollatedString(typ, t.Collation)
 		} else {
 			return pgerror.New(pgcode.Syntax, "COLLATE can only be used with string types")
+		}
+	}
+
+	// Special handling for IDENTITY column to make sure it cannot be altered into
+	// a non-integer type.
+	if col.IsGeneratedAsIdentity() {
+		if typ.InternalType.Family != types.IntFamily {
+			return sqlerrors.NewIdentityColumnTypeError()
 		}
 	}
 
@@ -190,9 +203,18 @@ func alterColumnTypeGeneral(
 	// Disallow ALTER COLUMN TYPE general for columns that have a foreign key
 	// constraint.
 	for _, fk := range tableDesc.AllActiveAndInactiveForeignKeys() {
-		for _, id := range append(fk.OriginColumnIDs, fk.ReferencedColumnIDs...) {
-			if col.GetID() == id {
-				return colWithConstraintNotSupportedErr
+		if fk.OriginTableID == tableDesc.GetID() {
+			for _, id := range fk.OriginColumnIDs {
+				if col.GetID() == id {
+					return colWithConstraintNotSupportedErr
+				}
+			}
+		}
+		if fk.ReferencedTableID == tableDesc.GetID() {
+			for _, id := range fk.ReferencedColumnIDs {
+				if col.GetID() == id {
+					return colWithConstraintNotSupportedErr
+				}
 			}
 		}
 	}

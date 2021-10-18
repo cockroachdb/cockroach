@@ -68,6 +68,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 //         loaded: boolean;
 //         replicationSizeInBytes: number;
 //         rangeCount: number;
+//         nodesByRegionString: string;
 //       };
 //     }[];
 //   }
@@ -76,6 +77,7 @@ export interface DatabaseDetailsPageData {
   loaded: boolean;
   name: string;
   tables: DatabaseDetailsPageDataTable[];
+  showNodeRegionsColumn?: boolean;
 }
 
 export interface DatabaseDetailsPageDataTable {
@@ -99,6 +101,7 @@ export interface DatabaseDetailsPageDataTableStats {
   loaded: boolean;
   replicationSizeInBytes: number;
   rangeCount: number;
+  nodesByRegionString?: string;
 }
 
 export interface DatabaseDetailsPageActions {
@@ -268,6 +271,22 @@ export class DatabaseDetailsPage extends React.Component<
         className: cx("database-table__col-index-count"),
         name: "indexCount",
       },
+      {
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="Regions/nodes on which the table data is stored."
+          >
+            Regions
+          </Tooltip>
+        ),
+        cell: table => table.stats.nodesByRegionString || "None",
+        sort: table => table.stats.nodesByRegionString,
+        className: cx("database-table__col--regions"),
+        name: "regions",
+        showByDefault: this.props.showNodeRegionsColumn,
+        hideIfTenant: true,
+      },
     ];
   }
 
@@ -295,21 +314,33 @@ export class DatabaseDetailsPage extends React.Component<
         name: "name",
       },
       {
-        title: "Users",
+        title: (
+          <Tooltip placement="bottom" title="The number of users of the table.">
+            Users
+          </Tooltip>
+        ),
         cell: table => table.details.userCount,
         sort: table => table.details.userCount,
         className: cx("database-table__col-user-count"),
         name: "userCount",
       },
       {
-        title: "Roles",
+        title: (
+          <Tooltip placement="bottom" title="The list of roles of the table.">
+            Roles
+          </Tooltip>
+        ),
         cell: table => _.join(table.details.roles, ", "),
         sort: table => _.join(table.details.roles, ", "),
         className: cx("database-table__col-roles"),
         name: "roles",
       },
       {
-        title: "Grants",
+        title: (
+          <Tooltip placement="bottom" title="The list of grants of the table.">
+            Grants
+          </Tooltip>
+        ),
         cell: table => _.join(table.details.grants, ", "),
         sort: table => _.join(table.details.grants, ", "),
         className: cx("database-table__col-grants"),
@@ -345,14 +376,14 @@ export class DatabaseDetailsPage extends React.Component<
             }
           />
 
-          <h1
+          <h3
             className={`${baseHeadingClasses.tableName} ${cx(
               "icon__container",
             )}`}
           >
             <StackIcon className={cx("icon--md", "icon--title")} />
             {this.props.name}
-          </h1>
+          </h3>
         </section>
 
         <PageConfig>

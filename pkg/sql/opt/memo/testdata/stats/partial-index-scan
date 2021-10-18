@@ -1036,11 +1036,11 @@ project
       ├── inverted constraint: /7/1
       │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
       ├── flags: force-index=partial
-      ├── stats: [rows=184.108911, distinct(4)=2, null(4)=0, distinct(7)=50.5, null(7)=0, distinct(4,7)=101, null(4,7)=0]
-      │   histogram(4)=  0   92.054   0   92.054
+      ├── stats: [rows=100, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
+      │   histogram(4)=  0     50     0     50
       │                <--- 'banana' --- 'cherry'
-      │   histogram(7)=  0        73.644        110.47          0
-      │                <--- '\x376700012a0e00' -------- '\x376700012a0e01'
+      │   histogram(7)=  0         100          5.9476e-16          0
+      │                <--- '\x376700012a0e00' ------------ '\x376700012a0e01'
       └── key: (1)
 
 opt
@@ -1059,11 +1059,11 @@ index-join inv_hist
       ├── inverted constraint: /7/1
       │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
       ├── flags: force-index=partial
-      ├── stats: [rows=184.108911, distinct(4)=2, null(4)=0, distinct(7)=50.5, null(7)=0, distinct(4,7)=101, null(4,7)=0]
-      │   histogram(4)=  0   92.054   0   92.054
+      ├── stats: [rows=100, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
+      │   histogram(4)=  0     50     0     50
       │                <--- 'banana' --- 'cherry'
-      │   histogram(7)=  0        73.644        110.47          0
-      │                <--- '\x376700012a0e00' -------- '\x376700012a0e01'
+      │   histogram(7)=  0         100          5.9476e-16          0
+      │                <--- '\x376700012a0e00' ------------ '\x376700012a0e01'
       └── key: (1)
 
 opt
@@ -1084,7 +1084,7 @@ project
       ├── fd: ()-->(4), (1)-->(3)
       ├── index-join inv_hist
       │    ├── columns: k:1(int!null) j:3(jsonb) s:4(string)
-      │    ├── stats: [rows=184.108911]
+      │    ├── stats: [rows=100]
       │    ├── key: (1)
       │    ├── fd: (1)-->(3,4)
       │    └── scan inv_hist@partial,partial
@@ -1092,11 +1092,11 @@ project
       │         ├── inverted constraint: /7/1
       │         │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
       │         ├── flags: force-index=partial
-      │         ├── stats: [rows=184.108911, distinct(4)=2, null(4)=0, distinct(7)=50.5, null(7)=0, distinct(4,7)=101, null(4,7)=0]
-      │         │   histogram(4)=  0   92.054   0   92.054
+      │         ├── stats: [rows=100, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
+      │         │   histogram(4)=  0     50     0     50
       │         │                <--- 'banana' --- 'cherry'
-      │         │   histogram(7)=  0        73.644        110.47          0
-      │         │                <--- '\x376700012a0e00' -------- '\x376700012a0e01'
+      │         │   histogram(7)=  0         100          5.9476e-16          0
+      │         │                <--- '\x376700012a0e00' ------------ '\x376700012a0e01'
       │         └── key: (1)
       └── filters
            └── s:4 = 'banana' [type=bool, outer=(4), constraints=(/4: [/'banana' - /'banana']; tight), fd=()-->(4)]
@@ -1114,7 +1114,7 @@ select
  ├── fd: ()-->(4), (1)-->(2,3)
  ├── index-join inv_hist
  │    ├── columns: k:1(int!null) i:2(int) j:3(jsonb) s:4(string)
- │    ├── stats: [rows=184.108911]
+ │    ├── stats: [rows=100]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    └── scan inv_hist@partial,partial
@@ -1122,11 +1122,11 @@ select
  │         ├── inverted constraint: /7/1
  │         │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
  │         ├── flags: force-index=partial
- │         ├── stats: [rows=184.108911, distinct(4)=2, null(4)=0, distinct(7)=50.5, null(7)=0, distinct(4,7)=101, null(4,7)=0]
- │         │   histogram(4)=  0   92.054   0   92.054
+ │         ├── stats: [rows=100, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
+ │         │   histogram(4)=  0     50     0     50
  │         │                <--- 'banana' --- 'cherry'
- │         │   histogram(7)=  0        73.644        110.47          0
- │         │                <--- '\x376700012a0e00' -------- '\x376700012a0e01'
+ │         │   histogram(7)=  0         100          5.9476e-16          0
+ │         │                <--- '\x376700012a0e00' ------------ '\x376700012a0e01'
  │         └── key: (1)
  └── filters
       └── s:4 = 'banana' [type=bool, outer=(4), constraints=(/4: [/'banana' - /'banana']; tight), fd=()-->(4)]
@@ -1146,7 +1146,7 @@ select
  ├── fd: (1)-->(2-4)
  ├── index-join inv_hist
  │    ├── columns: k:1(int!null) i:2(int) j:3(jsonb) s:4(string)
- │    ├── stats: [rows=184.108911]
+ │    ├── stats: [rows=100]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    └── scan inv_hist@partial,partial
@@ -1154,11 +1154,11 @@ select
  │         ├── inverted constraint: /7/1
  │         │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
  │         ├── flags: force-index=partial
- │         ├── stats: [rows=184.108911, distinct(4)=2, null(4)=0, distinct(7)=50.5, null(7)=0, distinct(4,7)=101, null(4,7)=0]
- │         │   histogram(4)=  0   92.054   0   92.054
+ │         ├── stats: [rows=100, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
+ │         │   histogram(4)=  0     50     0     50
  │         │                <--- 'banana' --- 'cherry'
- │         │   histogram(7)=  0        73.644        110.47          0
- │         │                <--- '\x376700012a0e00' -------- '\x376700012a0e01'
+ │         │   histogram(7)=  0         100          5.9476e-16          0
+ │         │                <--- '\x376700012a0e00' ------------ '\x376700012a0e01'
  │         └── key: (1)
  └── filters
       └── (i:2 > 0) AND (i:2 <= 100) [type=bool, outer=(2), constraints=(/2: [/1 - /100]; tight)]
@@ -1457,7 +1457,7 @@ project
       ├── fd: (1)-->(2,3)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=300]
+      │    ├── stats: [rows=118.756842]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1470,7 +1470,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=300]
+      │         ├── stats: [rows=118.756842]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
@@ -1479,11 +1479,11 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── stats: [rows=300, distinct(1)=85.7142857, null(1)=0, distinct(3)=2, null(3)=0, distinct(7)=3, null(7)=0, distinct(3,7)=6, null(3,7)=0]
-      │              │   histogram(3)=  0    100     0    100
+      │              ├── stats: [rows=118.756842, distinct(1)=33.9305263, null(1)=0, distinct(3)=2, null(3)=0, distinct(7)=1.18756842, null(7)=0, distinct(3,7)=2.37513684, null(3,7)=0]
+      │              │   histogram(3)=  0   59.378   0   59.378
       │              │                <--- 'banana' --- 'cherry'
-      │              │   histogram(7)=  0             0              50             0              50            100             50             0              0             0              50             0
-      │              │                <--- '\x42fd1000000000000000' ---- '\x42fd1000000000000001' ---- '\x42fd1000000100000000' ---- '\x42fd1200000000000000' --- '\x42fd1400000000000000' ---- '\x42fd1400000000000001'
+      │              │   histogram(7)=  0             0              1.8225e-10            100             18.757             0              0             0
+      │              │                <--- '\x42fd1000000000000001' ------------ '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000001'
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
@@ -1509,7 +1509,7 @@ project
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=300]
+      │    ├── stats: [rows=118.756842]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1522,7 +1522,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=300]
+      │         ├── stats: [rows=118.756842]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
@@ -1531,11 +1531,11 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── stats: [rows=300, distinct(1)=85.7142857, null(1)=0, distinct(3)=2, null(3)=0, distinct(7)=3, null(7)=0, distinct(3,7)=6, null(3,7)=0]
-      │              │   histogram(3)=  0    100     0    100
+      │              ├── stats: [rows=118.756842, distinct(1)=33.9305263, null(1)=0, distinct(3)=2, null(3)=0, distinct(7)=1.18756842, null(7)=0, distinct(3,7)=2.37513684, null(3,7)=0]
+      │              │   histogram(3)=  0   59.378   0   59.378
       │              │                <--- 'banana' --- 'cherry'
-      │              │   histogram(7)=  0             0              50             0              50            100             50             0              0             0              50             0
-      │              │                <--- '\x42fd1000000000000000' ---- '\x42fd1000000000000001' ---- '\x42fd1000000100000000' ---- '\x42fd1200000000000000' --- '\x42fd1400000000000000' ---- '\x42fd1400000000000001'
+      │              │   histogram(7)=  0             0              1.8225e-10            100             18.757             0              0             0
+      │              │                <--- '\x42fd1000000000000001' ------------ '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000001'
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
@@ -1595,7 +1595,7 @@ project
       ├── fd: (1)-->(2,3)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=307.105263]
+      │    ├── stats: [rows=121.569504]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1608,7 +1608,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=307.105263]
+      │         ├── stats: [rows=121.569504]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
@@ -1617,11 +1617,11 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── stats: [rows=307.105263, distinct(1)=87.7443609, null(1)=0, distinct(3)=2, null(3)=0, distinct(7)=3, null(7)=0, distinct(3,7)=6, null(3,7)=0]
-      │              │   histogram(3)=  0    100     0    100
+      │              ├── stats: [rows=121.569504, distinct(1)=34.7341441, null(1)=0, distinct(3)=2, null(3)=0, distinct(7)=1.18756842, null(7)=0, distinct(3,7)=2.37513684, null(3,7)=0]
+      │              │   histogram(3)=  0   60.785   0   60.785
       │              │                <--- 'banana' --- 'cherry'
-      │              │   histogram(7)=  0             0              51.184             0              51.184           102.37           51.184             0              0             0              51.184             0
-      │              │                <--- '\x42fd1000000000000000' -------- '\x42fd1000000000000001' -------- '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000000' -------- '\x42fd1400000000000001'
+      │              │   histogram(7)=  0             0              1.8657e-10           102.37           19.201             0              0             0
+      │              │                <--- '\x42fd1000000000000001' ------------ '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000001'
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
@@ -1645,7 +1645,7 @@ project
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=307.105263]
+      │    ├── stats: [rows=121.569504]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1658,7 +1658,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=307.105263]
+      │         ├── stats: [rows=121.569504]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
@@ -1667,11 +1667,11 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── stats: [rows=307.105263, distinct(1)=87.7443609, null(1)=0, distinct(3)=2, null(3)=0, distinct(7)=3, null(7)=0, distinct(3,7)=6, null(3,7)=0]
-      │              │   histogram(3)=  0    100     0    100
+      │              ├── stats: [rows=121.569504, distinct(1)=34.7341441, null(1)=0, distinct(3)=2, null(3)=0, distinct(7)=1.18756842, null(7)=0, distinct(3,7)=2.37513684, null(3,7)=0]
+      │              │   histogram(3)=  0   60.785   0   60.785
       │              │                <--- 'banana' --- 'cherry'
-      │              │   histogram(7)=  0             0              51.184             0              51.184           102.37           51.184             0              0             0              51.184             0
-      │              │                <--- '\x42fd1000000000000000' -------- '\x42fd1000000000000001' -------- '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000000' -------- '\x42fd1400000000000001'
+      │              │   histogram(7)=  0             0              1.8657e-10           102.37           19.201             0              0             0
+      │              │                <--- '\x42fd1000000000000001' ------------ '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000001'
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters

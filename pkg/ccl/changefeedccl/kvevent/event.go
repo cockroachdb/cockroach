@@ -18,7 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
+
+// ErrBufferClosed is returned by Readers when no more values will be
+// returned from the buffer.
+var ErrBufferClosed = errors.New("buffer closed")
 
 // Buffer is an interface for communicating kvfeed entries between processors.
 type Buffer interface {
@@ -36,6 +41,8 @@ type Reader interface {
 type Writer interface {
 	// Add adds event to this writer.
 	Add(ctx context.Context, event Event) error
+	// Drain waits until all events buffered by this writer has been consumed.
+	Drain(ctx context.Context) error
 	// Close closes this writer.
 	Close(ctx context.Context) error
 }
@@ -55,6 +62,11 @@ const (
 	// meaningful.
 	TypeResolved
 
+	// TypeFlush indicates a request to flush buffered data.
+	// This request type is emitted by blocking buffer when it's blocked, waiting
+	// for more memory.
+	TypeFlush
+
 	// TypeUnknown indicates the event could not be parsed. Will fail the feed.
 	TypeUnknown
 )
@@ -64,6 +76,7 @@ const (
 type Event struct {
 	kv                 roachpb.KeyValue
 	prevVal            roachpb.Value
+	flush              bool
 	resolved           *jobspb.ResolvedSpan
 	backfillTimestamp  hlc.Timestamp
 	bufferGetTimestamp time.Time
@@ -78,6 +91,9 @@ func (b *Event) Type() Type {
 	}
 	if b.resolved != nil {
 		return TypeResolved
+	}
+	if b.flush {
+		return TypeFlush
 	}
 	return TypeUnknown
 }
@@ -133,6 +149,8 @@ func (b *Event) Timestamp() hlc.Timestamp {
 			return b.backfillTimestamp
 		}
 		return b.kv.Value.Timestamp
+	case TypeFlush:
+		return hlc.Timestamp{}
 	default:
 		log.Warningf(context.TODO(),
 			"setting empty timestamp for unknown event type")
@@ -149,6 +167,8 @@ func (b *Event) MVCCTimestamp() hlc.Timestamp {
 		return b.resolved.Timestamp
 	case TypeKV:
 		return b.kv.Value.Timestamp
+	case TypeFlush:
+		return hlc.Timestamp{}
 	default:
 		log.Warningf(context.TODO(),
 			"setting empty timestamp for unknown event type")
@@ -159,8 +179,7 @@ func (b *Event) MVCCTimestamp() hlc.Timestamp {
 // DetachAlloc detaches and returns allocation associated with this event.
 func (b *Event) DetachAlloc() Alloc {
 	a := b.alloc
-	b.alloc.entries = 0
-	b.alloc.bytes = 0
+	b.alloc.clear()
 	return a
 }
 

@@ -618,7 +618,7 @@ type DistSQLReceiver struct {
 	// this node's clock.
 	clockUpdater clockUpdater
 
-	stats topLevelQueryStats
+	stats *topLevelQueryStats
 
 	expectedRowsRead int64
 	progressAtomic   *uint64
@@ -710,6 +710,80 @@ func (w *errOnlyResultWriter) IncrementRowsAffected(ctx context.Context, n int) 
 	panic("IncrementRowsAffected not supported by errOnlyResultWriter")
 }
 
+// RowResultWriter is a thin wrapper around a RowContainer.
+type RowResultWriter struct {
+	rowContainer *rowContainerHelper
+	rowsAffected int
+	err          error
+}
+
+var _ rowResultWriter = &RowResultWriter{}
+
+// NewRowResultWriter creates a new RowResultWriter.
+func NewRowResultWriter(rowContainer *rowContainerHelper) *RowResultWriter {
+	return &RowResultWriter{rowContainer: rowContainer}
+}
+
+// IncrementRowsAffected implements the rowResultWriter interface.
+func (b *RowResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
+	b.rowsAffected += n
+}
+
+// AddRow implements the rowResultWriter interface.
+func (b *RowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	if b.rowContainer != nil {
+		return b.rowContainer.addRow(ctx, row)
+	}
+	return nil
+}
+
+// SetError is part of the rowResultWriter interface.
+func (b *RowResultWriter) SetError(err error) {
+	b.err = err
+}
+
+// Err is part of the rowResultWriter interface.
+func (b *RowResultWriter) Err() error {
+	return b.err
+}
+
+// CallbackResultWriter is a rowResultWriter that runs a callback function
+// on AddRow.
+type CallbackResultWriter struct {
+	fn           func(ctx context.Context, row tree.Datums) error
+	rowsAffected int
+	err          error
+}
+
+var _ rowResultWriter = &CallbackResultWriter{}
+
+// NewCallbackResultWriter creates a new CallbackResultWriter.
+func NewCallbackResultWriter(
+	fn func(ctx context.Context, row tree.Datums) error,
+) *CallbackResultWriter {
+	return &CallbackResultWriter{fn: fn}
+}
+
+// IncrementRowsAffected is part of the rowResultWriter interface.
+func (c *CallbackResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
+	c.rowsAffected += n
+}
+
+// AddRow is part of the rowResultWriter interface.
+func (c *CallbackResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	return c.fn(ctx, row)
+}
+
+// SetError is part of the rowResultWriter interface.
+func (c *CallbackResultWriter) SetError(err error) {
+	c.err = err
+}
+
+// Err is part of the rowResultWriter interface.
+func (c *CallbackResultWriter) Err() error {
+	return c.err
+}
+
 var _ execinfra.RowReceiver = &DistSQLReceiver{}
 var _ execinfra.BatchReceiver = &DistSQLReceiver{}
 
@@ -763,6 +837,7 @@ func MakeDistSQLReceiver(
 		rangeCache:         rangeCache,
 		txn:                txn,
 		clockUpdater:       clockUpdater,
+		stats:              &topLevelQueryStats{},
 		stmtType:           stmtType,
 		tracing:            tracing,
 		contentionRegistry: contentionRegistry,
@@ -788,6 +863,7 @@ func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 		rangeCache:         r.rangeCache,
 		txn:                r.txn,
 		clockUpdater:       r.clockUpdater,
+		stats:              r.stats,
 		stmtType:           tree.Rows,
 		tracing:            r.tracing,
 		contentionRegistry: r.contentionRegistry,
@@ -884,6 +960,7 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 	if meta.Metrics != nil {
 		r.stats.bytesRead += meta.Metrics.BytesRead
 		r.stats.rowsRead += meta.Metrics.RowsRead
+		r.stats.rowsWritten += meta.Metrics.RowsWritten
 		if r.progressAtomic != nil && r.expectedRowsRead != 0 {
 			progress := float64(r.stats.rowsRead) / float64(r.expectedRowsRead)
 			atomic.StoreUint64(r.progressAtomic, math.Float64bits(progress))
@@ -1139,7 +1216,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	if err != nil {
 		return err
 	}
-	dsp.FinalizePlan(subqueryPlanCtx, subqueryPhysPlan)
+	dsp.finalizePlanWithRowCount(subqueryPlanCtx, subqueryPhysPlan, subqueryPlan.rowCount)
 
 	// TODO(arjun): #28264: We set up a row container, wrap it in a row
 	// receiver, and use it and serialize the results of the subquery. The type
@@ -1268,7 +1345,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		recv.SetError(err)
 		return physPlanCleanup
 	}
-	dsp.FinalizePlan(planCtx, physPlan)
+	dsp.finalizePlanWithRowCount(planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
 	runCleanup := dsp.Run(planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 	return func() {

@@ -445,7 +445,7 @@ func (sb *statisticsBuilder) colStatLeaf(
 			if nullableCols.Equals(colSet) {
 				// No column statistics on this colSet - use the unknown
 				// null count ratio.
-				colStat.NullCount = s.RowCount * unknownNullCountRatio
+				colStat.NullCount = s.RowCount * UnknownNullCountRatio
 			} else {
 				colStatLeaf := sb.colStatLeaf(nullableCols, s, fd, notNullCols)
 				// Fetch the colStat again since it may now have a different address.
@@ -460,8 +460,8 @@ func (sb *statisticsBuilder) colStatLeaf(
 
 	if colSet.Len() == 1 {
 		col, _ := colSet.Next(0)
-		colStat.DistinctCount = unknownDistinctCountRatio * s.RowCount
-		colStat.NullCount = unknownNullCountRatio * s.RowCount
+		colStat.DistinctCount = UnknownDistinctCountRatio * s.RowCount
+		colStat.NullCount = UnknownNullCountRatio * s.RowCount
 		if notNullCols.Contains(col) {
 			colStat.NullCount = 0
 		}
@@ -806,13 +806,17 @@ func (sb *statisticsBuilder) constrainScan(
 	// -----------------------------------
 	histSelectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, scan, s)
 	s.ApplySelectivity(histSelectivity)
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, scan, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, notNullCols, constrainedCols))
 
-	// Adjust the selectivity so we don't double-count the histogram columns, but
-	// make sure it does not exceed the upper bound based on the histograms.
-	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, scan, s))
+	// Apply selectivity from multi-col distinct counts, adjusting so that we
+	// don't double-count the histogram columns. This adjustment may cause the
+	// selectivity to increase, so apply a limit to ensure it does not exceed the
+	// upper bound based on the histograms.
+	s.ApplySelectivityRatio(
+		sb.selectivityFromMultiColDistinctCounts(constrainedCols, scan, s),
+		sb.selectivityFromSingleColDistinctCounts(histCols, scan, s),
+	)
 	s.LimitSelectivity(selectivityUpperBound)
 }
 
@@ -996,12 +1000,16 @@ func (sb *statisticsBuilder) buildInvertedFilter(
 	s.RowCount = inputStats.RowCount
 	histSelectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, invFilter, s)
 	s.ApplySelectivity(histSelectivity)
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, invFilter, s))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(invFilter, relProps.NotNullCols, constrainedCols))
 
-	// Adjust the selectivity so we don't double-count the histogram columns, but
-	// make sure it does not exceed the upper bound based on the histograms.
-	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, invFilter, s))
+	// Apply selectivity from multi-col distinct counts, adjusting so that we
+	// don't double-count the histogram columns. This adjustment may cause the
+	// selectivity to increase, so apply a limit to ensure it does not exceed the
+	// upper bound based on the histograms.
+	s.ApplySelectivityRatio(
+		sb.selectivityFromMultiColDistinctCounts(constrainedCols, invFilter, s),
+		sb.selectivityFromSingleColDistinctCounts(histCols, invFilter, s),
+	)
 	s.LimitSelectivity(selectivityUpperBound)
 
 	sb.finalizeFromCardinality(relProps)
@@ -1165,18 +1173,23 @@ func (sb *statisticsBuilder) buildJoin(
 	}
 	histSelectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, join, s)
 	s.ApplySelectivity(histSelectivity)
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(
-		constrainedCols.Intersection(leftCols), join, s,
-	))
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(
-		constrainedCols.Intersection(rightCols), join, s,
-	))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(join, relProps.NotNullCols, constrainedCols))
 
-	// Adjust the selectivity so we don't double-count the histogram columns, but
-	// make sure it does not exceed the upper bound based on the histograms.
-	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, join, s))
+	// Apply selectivity from multi-col distinct counts, adjusting so that we
+	// don't double-count the histogram columns. This adjustment may cause the
+	// selectivity to increase, so apply a limit to ensure it does not exceed the
+	// upper bound based on the histograms.
+	multiColSelectivity := sb.selectivityFromMultiColDistinctCounts(
+		constrainedCols.Intersection(leftCols), join, s,
+	)
+	multiColSelectivity.Multiply(sb.selectivityFromMultiColDistinctCounts(
+		constrainedCols.Intersection(rightCols), join, s),
+	)
+	s.ApplySelectivityRatio(
+		multiColSelectivity,
+		sb.selectivityFromSingleColDistinctCounts(histCols, join, s),
+	)
 	s.LimitSelectivity(selectivityUpperBound)
 
 	// Update distinct counts based on equivalencies; this should happen after
@@ -1995,6 +2008,28 @@ func (sb *statisticsBuilder) buildLimit(limit *LimitExpr, relProps *props.Relati
 	sb.finalizeFromCardinality(relProps)
 }
 
+func (sb *statisticsBuilder) buildTopK(topK *TopKExpr, relProps *props.Relational) {
+	s := &relProps.Stats
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+	s.Available = sb.availabilityFromInput(topK)
+
+	inputStats := &topK.Input.Relational().Stats
+
+	// Copy row count from input.
+	s.RowCount = inputStats.RowCount
+
+	// Update row count if row count and k are non-zero.
+	if inputStats.RowCount > 0 && topK.K > 0 {
+		s.RowCount = min(float64(topK.K), inputStats.RowCount)
+		s.Selectivity = props.MakeSelectivity(s.RowCount / inputStats.RowCount)
+	}
+
+	sb.finalizeFromCardinality(relProps)
+}
+
 func (sb *statisticsBuilder) colStatLimit(
 	colSet opt.ColSet, limit *LimitExpr,
 ) *props.ColumnStatistic {
@@ -2086,7 +2121,7 @@ func (sb *statisticsBuilder) colStatMax1Row(
 	s := &max1Row.Relational().Stats
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
-	colStat.NullCount = s.RowCount * unknownNullCountRatio
+	colStat.NullCount = s.RowCount * UnknownNullCountRatio
 	if colSet.Intersects(max1Row.Relational().NotNullCols) {
 		colStat.NullCount = 0
 	}
@@ -2222,7 +2257,7 @@ func (sb *statisticsBuilder) buildProjectSet(
 	var zipRowCount float64
 	for i := range projectSet.Zip {
 		if fn, ok := projectSet.Zip[i].Fn.(*FunctionExpr); ok {
-			if fn.Overload.Generator != nil {
+			if fn.Overload.IsGenerator() {
 				// TODO(rytaft): We may want to estimate the number of rows based on
 				// the type of generator function and its parameters.
 				zipRowCount = unknownGeneratorRowCount
@@ -2278,13 +2313,13 @@ func (sb *statisticsBuilder) colStatProjectSet(
 		for i := range projectSet.Zip {
 			item := &projectSet.Zip[i]
 			if item.Cols.ToSet().Intersects(reqZipCols) {
-				if fn, ok := item.Fn.(*FunctionExpr); ok && fn.Overload.Generator != nil {
+				if fn, ok := item.Fn.(*FunctionExpr); ok && fn.Overload.IsGenerator() {
 					// The columns(s) contain a generator function.
 					// TODO(rytaft): We may want to determine which generator function the
 					// requested columns correspond to, and estimate the distinct count and
 					// null count based on the type of generator function and its parameters.
 					zipColsDistinctCount *= unknownGeneratorRowCount * unknownGeneratorDistinctCountRatio
-					zipColsNullCount *= unknownNullCountRatio
+					zipColsNullCount *= UnknownNullCountRatio
 				} else {
 					// The columns(s) contain a scalar function or expression.
 					// These columns can contain many null values if the zip also
@@ -2311,7 +2346,7 @@ func (sb *statisticsBuilder) colStatProjectSet(
 				if item.ScalarProps().OuterCols.Intersects(inputProps.OutputCols) {
 					// The column(s) are correlated with the input, so they may have a
 					// distinct value for each distinct row of the input.
-					zipColsDistinctCount *= inputStats.RowCount * unknownDistinctCountRatio
+					zipColsDistinctCount *= inputStats.RowCount * UnknownDistinctCountRatio
 				}
 			}
 		}
@@ -2753,14 +2788,15 @@ const (
 	// This is an arbitrary row count used in the absence of any real statistics.
 	unknownRowCount = 1000
 
-	// This is the ratio of distinct column values to number of rows, which is
-	// used in the absence of any real statistics for non-key columns.
-	// TODO(rytaft): See if there is an industry standard value for this.
-	unknownDistinctCountRatio = 0.1
+	// UnknownDistinctCountRatio is the ratio of distinct column values to number
+	// of rows, which is used in the absence of any real statistics for non-key
+	// columns.  TODO(rytaft): See if there is an industry standard value for
+	// this.
+	UnknownDistinctCountRatio = 0.1
 
-	// This is the ratio of null column values to number of rows for nullable
-	// columns, which is used in the absence of any real statistics.
-	unknownNullCountRatio = 0.01
+	// UnknownNullCountRatio is the ratio of null column values to number of rows
+	// for nullable columns, which is used in the absence of any real statistics.
+	UnknownNullCountRatio = 0.01
 
 	// Use a small row count for generator functions; this allows use of lookup
 	// join in cases like using json_array_elements with a small constant array.
@@ -2865,14 +2901,18 @@ func (sb *statisticsBuilder) filterRelExpr(
 	// -----------------------------------
 	histSelectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, e, s)
 	s.ApplySelectivity(histSelectivity)
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, e, s))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, e, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(e, notNullCols, constrainedCols))
 
-	// Adjust the selectivity so we don't double-count the histogram columns, but
-	// make sure it does not exceed the upper bound based on the histograms.
-	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, e, s))
+	// Apply selectivity from multi-col distinct counts, adjusting so that we
+	// don't double-count the histogram columns. This adjustment may cause the
+	// selectivity to increase, so apply a limit to ensure it does not exceed the
+	// upper bound based on the histograms.
+	s.ApplySelectivityRatio(
+		sb.selectivityFromMultiColDistinctCounts(constrainedCols, e, s),
+		sb.selectivityFromSingleColDistinctCounts(histCols, e, s),
+	)
 	s.LimitSelectivity(selectivityUpperBound)
 
 	// Update distinct and null counts based on equivalencies; this should
@@ -3104,12 +3144,16 @@ func (sb *statisticsBuilder) constrainExpr(
 	// -----------------------------------
 	histSelectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, e, s)
 	s.ApplySelectivity(histSelectivity)
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, e, s))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(e, notNullCols, constrainedCols))
 
-	// Adjust the selectivity so we don't double-count the histogram columns, but
-	// make sure it does not exceed the upper bound based on the histograms.
-	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, e, s))
+	// Apply selectivity from multi-col distinct counts, adjusting so that we
+	// don't double-count the histogram columns. This adjustment may cause the
+	// selectivity to increase, so apply a limit to ensure it does not exceed the
+	// upper bound based on the histograms.
+	s.ApplySelectivityRatio(
+		sb.selectivityFromMultiColDistinctCounts(constrainedCols, e, s),
+		sb.selectivityFromSingleColDistinctCounts(histCols, e, s),
+	)
 	s.LimitSelectivity(selectivityUpperBound)
 }
 
@@ -3155,7 +3199,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 		numConjuncts := sb.numConjunctsInConstraint(c, i)
 
 		// Set the distinct count for the current column of the constraint
-		// according to unknownDistinctCountRatio.
+		// according to UnknownDistinctCountRatio.
 		var lowerBound float64
 		if i == applied {
 			lowerBound = lastColMinDistinct
@@ -3207,7 +3251,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 			numConjuncts := sb.numConjunctsInConstraint(c, 0 /* nth */)
 
 			// Set the distinct count for the first column of the constraint
-			// according to unknownDistinctCountRatio.
+			// according to UnknownDistinctCountRatio.
 			sb.updateDistinctCountFromUnappliedConjuncts(col, e, s, numConjuncts, lastColMinDistinct)
 		}
 

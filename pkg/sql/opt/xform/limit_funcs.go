@@ -208,3 +208,15 @@ func (c *CustomFuncs) SplitLimitedScanIntoUnionScans(
 	limitVal := int(*limit.(*tree.DInt))
 	return c.splitScanIntoUnionScans(limitOrdering, scan, sp, cons, limitVal, keyPrefixLength)
 }
+
+// MakeTopKPrivate returns a TopKPrivate operator with a constant, positive
+// integer limit and an order.
+func (c *CustomFuncs) MakeTopKPrivate(
+	limit tree.Datum, ordering props.OrderingChoice,
+) *memo.TopKPrivate {
+	limitVal := int64(*limit.(*tree.DInt))
+	return &memo.TopKPrivate{
+		K:        limitVal,
+		Ordering: ordering,
+	}
+}

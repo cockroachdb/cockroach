@@ -54,8 +54,22 @@ func RecentNormalizedRunnableGoroutines() float64 {
 // will have to add a new version of that file.
 var _ = numRunnableGoroutines
 
-// We sample the number of runnable goroutines once per samplePeriod.
-const samplePeriod = time.Millisecond
+// We sample the number of runnable goroutines once per samplePeriodShort or
+// samplePeriodLong (if the system is underloaded). Using samplePeriodLong can
+// cause sluggish response to a load spike, from the perspective of
+// RunnableCountCallback implementers (admission control), so it is not ideal.
+// We support this behavior only because we have observed 5-10% of cpu
+// utilization on CockroachDB nodes that are doing no other work, even though
+// 1ms polling (samplePeriodShort) is extremely cheap. The cause may be a poor
+// interaction with processor idle state
+// https://github.com/golang/go/issues/30740#issuecomment-471634471. See
+// #66881.
+const samplePeriodShort = time.Millisecond
+const samplePeriodLong = 250 * time.Millisecond
+
+// The system is underloaded if the number of runnable goroutines per proc
+// is below this threshold.
+const underloadedRunnablePerProcThreshold = 1 * toFixedPoint
 
 // We "report" the average value every reportingPeriod.
 // Note: if this is changed from 1s, CumulativeNormalizedRunnableGoroutines()
@@ -78,8 +92,8 @@ var total uint64
 var ewma uint64
 
 // RunnableCountCallback is provided the current value of runnable goroutines,
-// and GOMAXPROCS.
-type RunnableCountCallback func(numRunnable int, numProcs int)
+// GOMAXPROCS, and the current sampling period.
+type RunnableCountCallback func(numRunnable int, numProcs int, samplePeriod time.Duration)
 
 type callbackWithID struct {
 	RunnableCountCallback
@@ -95,7 +109,8 @@ var callbackInfo struct {
 }
 
 // RegisterRunnableCountCallback registers a callback to be run with the
-// runnable and procs info every 1ms. This is exclusively for use by admission
+// runnable and procs info, every 1ms, unless cpu load is very low (see the
+// commentary for samplePeriodShort). This is exclusively for use by admission
 // control that wants to react extremely quickly to cpu changes. Past
 // experience in other systems (not CockroachDB) motivated not consuming a
 // smoothed signal for admission control. The CockroachDB setting may possibly
@@ -140,48 +155,90 @@ func UnregisterRunnableCountCallback(id int64) {
 
 func init() {
 	go func() {
-		lastTime := timeutil.Now()
-		// sum accumulates the sum of the number of runnable goroutines per CPU,
-		// multiplied by toFixedPoint, for all samples since the last reporting.
-		var sum uint64
-		var numSamples int
-
-		ticker := time.NewTicker(samplePeriod)
-		// We keep local versions of "total" and "ewma" and we just Store the
-		// updated values to the globals.
-		var localTotal, localEWMA uint64
+		sst := schedStatsTicker{
+			lastTime:              timeutil.Now(),
+			curPeriod:             samplePeriodShort,
+			numRunnableGoroutines: numRunnableGoroutines,
+		}
+		ticker := time.NewTicker(sst.curPeriod)
 		for {
 			t := <-ticker.C
-			if t.Sub(lastTime) > reportingPeriod {
-				if numSamples > 0 {
-					// We want the average value over the reporting period, so we divide
-					// by numSamples.
-					newValue := sum / uint64(numSamples)
-					localTotal += newValue
-					atomic.StoreUint64(&total, localTotal)
-
-					// ewma(t) = c * value(t) + (1 - c) * ewma(t-1)
-					// We use c = 0.5.
-					localEWMA = (newValue + localEWMA) / 2
-					atomic.StoreUint64(&ewma, localEWMA)
-				}
-				lastTime = t
-				sum = 0
-				numSamples = 0
-			}
-			runnable, numProcs := numRunnableGoroutines()
 			callbackInfo.mu.Lock()
 			cbs := callbackInfo.cbs
 			callbackInfo.mu.Unlock()
-			for i := range cbs {
-				cbs[i].RunnableCountCallback(runnable, numProcs)
-			}
-			// The value of the sample is the ratio of runnable to numProcs (scaled
-			// for fixed-point arithmetic).
-			sum += uint64(runnable) * toFixedPoint / uint64(numProcs)
-			numSamples++
+			sst.getStatsOnTick(t, cbs, ticker)
 		}
 	}()
+}
+
+// timeTickerInterface abstracts time.Ticker for testing.
+type timeTickerInterface interface {
+	Reset(d time.Duration)
+}
+
+// schedStatsTicker contains the local state maintained across stats collection
+// ticks.
+type schedStatsTicker struct {
+	lastTime              time.Time
+	curPeriod             time.Duration
+	numRunnableGoroutines func() (numRunnable int, numProcs int)
+	// sum accumulates the sum of the number of runnable goroutines per CPU,
+	// multiplied by toFixedPoint, for all samples since the last reporting.
+	sum uint64
+	// numSamples is the number of samples since the last reporting.
+	numSamples int
+	// We keep local versions of "total" and "ewma" and we just Store the
+	// updated values to the globals.
+	localTotal, localEWMA uint64
+}
+
+// getStatsOnTick gets scheduler stats as the ticker has ticked.
+func (s *schedStatsTicker) getStatsOnTick(
+	t time.Time, cbs []callbackWithID, ticker timeTickerInterface,
+) {
+	if t.Sub(s.lastTime) > reportingPeriod {
+		var avgValue uint64
+		if s.numSamples > 0 {
+			// We want the average value over the reporting period, so we divide
+			// by numSamples.
+			avgValue = s.sum / uint64(s.numSamples)
+			s.localTotal += avgValue
+			atomic.StoreUint64(&total, s.localTotal)
+
+			// ewma(t) = c * value(t) + (1 - c) * ewma(t-1)
+			// We use c = 0.5.
+			s.localEWMA = (avgValue + s.localEWMA) / 2
+			atomic.StoreUint64(&ewma, s.localEWMA)
+		}
+		nextPeriod := samplePeriodShort
+		// Both the mean over the last 1s, and the exponentially weighted average
+		// must be low for the system to be considered underloaded.
+		if avgValue < underloadedRunnablePerProcThreshold &&
+			s.localEWMA < underloadedRunnablePerProcThreshold {
+			// Underloaded, so switch to longer sampling period.
+			nextPeriod = samplePeriodLong
+		}
+		// We switch the sample period only at reportingPeriod boundaries
+		// since it ensures that all samples contributing to a reporting
+		// period were at equal intervals (this is desirable since we average
+		// them). It also naturally reduces the frequency at which we reset a
+		// ticker.
+		if nextPeriod != s.curPeriod {
+			ticker.Reset(nextPeriod)
+			s.curPeriod = nextPeriod
+		}
+		s.lastTime = t
+		s.sum = 0
+		s.numSamples = 0
+	}
+	runnable, numProcs := s.numRunnableGoroutines()
+	for i := range cbs {
+		cbs[i].RunnableCountCallback(runnable, numProcs, s.curPeriod)
+	}
+	// The value of the sample is the ratio of runnable to numProcs (scaled
+	// for fixed-point arithmetic).
+	s.sum += uint64(runnable) * toFixedPoint / uint64(numProcs)
+	s.numSamples++
 }
 
 var _ = RecentNormalizedRunnableGoroutines

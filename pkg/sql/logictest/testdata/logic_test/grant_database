@@ -184,3 +184,8 @@ database_name  schema_name  table_name  grantee   privilege_type
 b              public       t           admin     ALL
 b              public       t           root      ALL
 b              public       t           testuser  ALL
+
+# Calling SHOW GRANTS on an invalid user should error out.
+
+statement error role/user "invaliduser" does not exist
+SHOW GRANTS FOR invaliduser

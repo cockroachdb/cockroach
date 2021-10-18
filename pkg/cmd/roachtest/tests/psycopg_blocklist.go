@@ -14,6 +14,7 @@ var psycopgBlocklists = blocklistsForVersion{
 	{"v20.2", "psycopgBlockList20_2", psycopgBlockList20_2, "psycopgIgnoreList20_2", psycopgIgnoreList20_2},
 	{"v21.1", "psycopgBlockList21_1", psycopgBlockList21_1, "psycopgIgnoreList21_1", psycopgIgnoreList21_1},
 	{"v21.2", "psycopgBlockList21_2", psycopgBlockList21_2, "psycopgIgnoreList21_2", psycopgIgnoreList21_2},
+	{"v22.1", "psycopgBlockList22_1", psycopgBlockList22_1, "psycopgIgnoreList22_1", psycopgIgnoreList22_1},
 }
 
 // These are lists of known psycopg test errors and failures.
@@ -27,6 +28,8 @@ var psycopgBlocklists = blocklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
+var psycopgBlockList22_1 = psycopgBlockList21_2
+
 var psycopgBlockList21_2 = blocklist{
 	"tests.test_async_keyword.CancelTests.test_async_cancel": "41335",
 	// The following two items can be removed once there is a new psycopg2 release.
@@ -43,6 +46,8 @@ var psycopgBlockList21_1 = blocklist{
 var psycopgBlockList20_2 = blocklist{
 	"tests.test_async_keyword.CancelTests.test_async_cancel": "41335",
 }
+
+var psycopgIgnoreList22_1 = psycopgIgnoreList21_2
 
 var psycopgIgnoreList21_2 = psycopgIgnoreList21_1
 

@@ -315,6 +315,19 @@ func (s *Store) maybeThrottleBatch(
 		}
 		return res, nil
 
+	case *roachpb.ScanInterleavedIntentsRequest:
+		before := timeutil.Now()
+		res, err := s.limiters.ConcurrentScanInterleavedIntents.Begin(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		waited := timeutil.Since(before)
+		if waited > time.Second {
+			log.Infof(ctx, "ScanInterleavedIntents request was delayed by %v", waited)
+		}
+		return res, nil
+
 	default:
 		return nil, nil
 	}
@@ -358,6 +371,15 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 ) (roachpb.BatchRequest, *roachpb.Error) {
 	if ba.BoundedStaleness == nil {
 		log.Fatal(ctx, "BoundedStaleness header required for server-side negotiation fast-path")
+	}
+	cfg := ba.BoundedStaleness
+	if cfg.MinTimestampBound.IsEmpty() {
+		return ba, roachpb.NewError(errors.AssertionFailedf(
+			"MinTimestampBound must be set in batch"))
+	}
+	if !cfg.MaxTimestampBound.IsEmpty() && cfg.MaxTimestampBound.LessEq(cfg.MinTimestampBound) {
+		return ba, roachpb.NewError(errors.AssertionFailedf(
+			"MaxTimestampBound, if set in batch, must be greater than MinTimestampBound"))
 	}
 	if !ba.Timestamp.IsEmpty() {
 		return ba, roachpb.NewError(errors.AssertionFailedf(
@@ -403,7 +425,6 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 			resTS.Backward(ts)
 		}
 	}
-	cfg := ba.BoundedStaleness
 	if resTS.Less(cfg.MinTimestampBound) {
 		// The local resolved timestamp was below the request's minimum timestamp
 		// bound. If the minimum timestamp bound should be strictly obeyed, reject
@@ -419,10 +440,10 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 		}
 		resTS = cfg.MinTimestampBound
 	}
-	if !cfg.MaxTimestampBound.IsEmpty() && cfg.MaxTimestampBound.Less(resTS) {
+	if !cfg.MaxTimestampBound.IsEmpty() && cfg.MaxTimestampBound.LessEq(resTS) {
 		// The local resolved timestamp was above the request's maximum timestamp
 		// bound. Drop the request timestamp to the maximum timestamp bound.
-		resTS = cfg.MaxTimestampBound
+		resTS = cfg.MaxTimestampBound.Prev()
 	}
 
 	ba.Timestamp = resTS

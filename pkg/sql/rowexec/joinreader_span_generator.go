@@ -35,6 +35,10 @@ type joinReaderSpanGenerator interface {
 	// are returned in rows order, but there are no duplicates (i.e. if a 2nd row
 	// results in the same spans as a previous row, the results don't include them
 	// a second time).
+	//
+	// The returned spans are not accounted for, so it is the caller's
+	// responsibility to register the spans memory usage with our memory
+	// accounting system.
 	generateSpans(ctx context.Context, rows []rowenc.EncDatumRow) (roachpb.Spans, error)
 
 	// getMatchingRowIndices returns the indices of the input rows that desire
@@ -45,6 +49,9 @@ type joinReaderSpanGenerator interface {
 	// maxLookupCols returns the maximum number of index columns used as the key
 	// for each lookup.
 	maxLookupCols() int
+
+	// close releases any resources associated with the joinReaderSpanGenerator.
+	close(context.Context)
 }
 
 var _ joinReaderSpanGenerator = &defaultSpanGenerator{}
@@ -67,6 +74,8 @@ type defaultSpanGenerator struct {
 
 	scratchSpans roachpb.Spans
 
+	// memAcc is owned by this span generator and is closed when the generator
+	// is closed.
 	memAcc *mon.BoundAccount
 }
 
@@ -105,9 +114,6 @@ func (g *defaultSpanGenerator) hasNullLookupColumn(row rowenc.EncDatumRow) bool 
 func (g *defaultSpanGenerator) generateSpans(
 	ctx context.Context, rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
-	// Memory accounting.
-	beforeSize := g.memUsage()
-
 	// This loop gets optimized to a runtime.mapclear call.
 	for k := range g.keyToInputRowIndices {
 		delete(g.keyToInputRowIndices, k)
@@ -139,8 +145,7 @@ func (g *defaultSpanGenerator) generateSpans(
 	}
 
 	// Memory accounting.
-	afterSize := g.memUsage()
-	if err := g.memAcc.Resize(ctx, beforeSize, afterSize); err != nil {
+	if err := g.memAcc.ResizeTo(ctx, g.memUsage()); err != nil {
 		return nil, err
 	}
 
@@ -159,6 +164,8 @@ func (g *defaultSpanGenerator) maxLookupCols() int {
 
 // memUsage returns the size of the data structures in the defaultSpanGenerator
 // for memory accounting purposes.
+// NOTE: this does not account for scratchSpans because the joinReader passes
+// the ownership of spans to the fetcher which will account for it accordingly.
 func (g *defaultSpanGenerator) memUsage() int64 {
 	// Account for keyToInputRowIndices.
 	var size int64
@@ -167,10 +174,12 @@ func (g *defaultSpanGenerator) memUsage() int64 {
 		size += memsize.String + int64(len(k))
 		size += memsize.IntSliceOverhead + memsize.Int*int64(cap(v))
 	}
-
-	// Account for scratchSpans.
-	size += g.scratchSpans.MemUsage()
 	return size
+}
+
+func (g *defaultSpanGenerator) close(ctx context.Context) {
+	g.memAcc.Close(ctx)
+	*g = defaultSpanGenerator{}
 }
 
 type spanRowIndex struct {
@@ -258,6 +267,8 @@ type multiSpanGenerator struct {
 
 	scratchSpans roachpb.Spans
 
+	// memAcc is owned by this span generator and is closed when the generator
+	// is closed.
 	memAcc *mon.BoundAccount
 }
 
@@ -634,9 +645,6 @@ func (s *spanRowIndices) findInputRowIndicesByKey(key roachpb.Key) []int {
 func (g *multiSpanGenerator) generateSpans(
 	ctx context.Context, rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
-	// Memory accounting.
-	beforeSize := g.memUsage()
-
 	// This loop gets optimized to a runtime.mapclear call.
 	for k := range g.keyToInputRowIndices {
 		delete(g.keyToInputRowIndices, k)
@@ -685,8 +693,7 @@ func (g *multiSpanGenerator) generateSpans(
 	}
 
 	// Memory accounting.
-	afterSize := g.memUsage()
-	if err := g.memAcc.Resize(ctx, beforeSize, afterSize); err != nil {
+	if err := g.memAcc.ResizeTo(ctx, g.memUsage()); err != nil {
 		return nil, err
 	}
 
@@ -703,6 +710,8 @@ func (g *multiSpanGenerator) getMatchingRowIndices(key roachpb.Key) []int {
 
 // memUsage returns the size of the data structures in the multiSpanGenerator
 // for memory accounting purposes.
+// NOTE: this does not account for scratchSpans because the joinReader passes
+// the ownership of spans to the fetcher which will account for it accordingly.
 func (g *multiSpanGenerator) memUsage() int64 {
 	// Account for keyToInputRowIndices.
 	var size int64
@@ -714,10 +723,12 @@ func (g *multiSpanGenerator) memUsage() int64 {
 
 	// Account for spanToInputRowIndices.
 	size += g.spanToInputRowIndices.memUsage()
-
-	// Account for scratchSpans.
-	size += g.scratchSpans.MemUsage()
 	return size
+}
+
+func (g *multiSpanGenerator) close(ctx context.Context) {
+	g.memAcc.Close(ctx)
+	*g = multiSpanGenerator{}
 }
 
 // localityOptimizedSpanGenerator is the span generator for locality optimized
@@ -738,15 +749,16 @@ func (g *localityOptimizedSpanGenerator) init(
 	localExprHelper *execinfrapb.ExprHelper,
 	remoteExprHelper *execinfrapb.ExprHelper,
 	tableOrdToIndexOrd util.FastIntMap,
-	memAcc *mon.BoundAccount,
+	localSpanGenMemAcc *mon.BoundAccount,
+	remoteSpanGenMemAcc *mon.BoundAccount,
 ) error {
 	if err := g.localSpanGen.init(
-		spanBuilder, numKeyCols, numInputCols, localExprHelper, tableOrdToIndexOrd, memAcc,
+		spanBuilder, numKeyCols, numInputCols, localExprHelper, tableOrdToIndexOrd, localSpanGenMemAcc,
 	); err != nil {
 		return err
 	}
 	if err := g.remoteSpanGen.init(
-		spanBuilder, numKeyCols, numInputCols, remoteExprHelper, tableOrdToIndexOrd, memAcc,
+		spanBuilder, numKeyCols, numInputCols, remoteExprHelper, tableOrdToIndexOrd, remoteSpanGenMemAcc,
 	); err != nil {
 		return err
 	}
@@ -789,4 +801,10 @@ func (g *localityOptimizedSpanGenerator) getMatchingRowIndices(key roachpb.Key) 
 		return res
 	}
 	return g.remoteSpanGen.getMatchingRowIndices(key)
+}
+
+func (g *localityOptimizedSpanGenerator) close(ctx context.Context) {
+	g.localSpanGen.close(ctx)
+	g.remoteSpanGen.close(ctx)
+	*g = localityOptimizedSpanGenerator{}
 }

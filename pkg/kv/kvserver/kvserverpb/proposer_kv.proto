@@ -288,10 +288,12 @@ message RaftCommand {
   // update. If the value is not zero, the value is greater or equal to that of
   // the previous commands (and all before it).
   //
-  // This field is set through ClosedTimestampFooter hackery. Unlike in the
-  // ClosedTimestampFooter, the field is nullable here so that it does not get
-  // encoded when empty. This prevents the field from being encoded twice in the
-  // combined RaftCommand+ClosedTimestampFooter proto.
+  // This field is set through ClosedTimestampFooter hackery. The field is
+  // nullable so that it does not get encoded when empty. This prevents the
+  // field from being encoded twice in the combined
+  // RaftCommand+ClosedTimestampFooter proto (encoding it twice is not illegal
+  // as far as proto goes - the last value wins when decoding - but it is a
+  // problem for sideloading, which reduces the size of the proto).
   util.hlc.Timestamp closed_timestamp = 17;
 
   reserved 3;
@@ -318,22 +320,17 @@ message RaftCommand {
   reserved 1, 2, 10001 to 10014;
 }
 
-// MaxLeaseFooter contains a subset of the fields in RaftCommand. It is used
+// RaftCommandFooter contains a subset of the fields in RaftCommand. It is used
 // to optimize a pattern where most of the fields in RaftCommand are marshaled
 // outside of a heavily contended critical section, except for the fields in the
-// footer, which are assigned and marhsaled inside of the critical section and
+// footer, which are assigned and marshaled inside of the critical section and
 // appended to the marshaled byte buffer. This minimizes the memory allocation
 // and marshaling work performed under lock.
-message MaxLeaseFooter {
+message RaftCommandFooter {
   uint64 max_lease_index = 4;
-}
-
-// ClosedTimestampFooter is similar to MaxLeaseFooter, allowing the proposal
-// buffer to fill in the closed_timestamp field after most of the proto has been
-// marshaled already.
-message ClosedTimestampFooter {
-  // NOTE: unlike in RaftCommand, there's no reason to make this field nullable.
-  // If we don't want to include the field, we don't need to append the encoded
-  // footer to an encoded RaftCommand buffer.
+  // NOTE: unlike in RaftCommand, there's no reason to make this field nullable
+  // and so we make it non-nullable in order to save allocations. This means
+  // that the field on a decoded RaftCommand will also never be nil, but we
+  // don't rely on that.
   util.hlc.Timestamp closed_timestamp = 17 [(gogoproto.nullable) = false];
 }

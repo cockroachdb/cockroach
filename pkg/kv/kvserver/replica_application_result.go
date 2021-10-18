@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
@@ -205,16 +204,12 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 		return nil
 	}
 
-	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
-	defer untrack(ctx, 0, 0, 0) // covers all error paths below
-
 	// We need to track the request again in order to protect its timestamp until
 	// it gets reproposed.
 	// TODO(andrei): Only track if the request consults the ts cache. Some
 	// requests (e.g. EndTxn) don't care about closed timestamps.
-	minTS2, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, p.Request.WriteTimestamp())
+	minTS, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, p.Request.WriteTimestamp())
 	defer tok.DoneIfNotMoved(ctx)
-	minTS.Forward(minTS2)
 
 	// NB: p.Request.Timestamp reflects the action of ba.SetActiveTimestamp.
 	// The IsIntentWrite condition matches the similar logic for caring
@@ -234,15 +229,11 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 	// Some tests check for this log message in the trace.
 	log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
 
-	maxLeaseIndex, pErr := r.propose(ctx, p, tok.Move(ctx))
+	pErr := r.propose(ctx, p, tok.Move(ctx))
 	if pErr != nil {
 		return pErr
 	}
-	// NB: The caller already promises that the lease check succeeded, meaning
-	// the sequence numbers match, implying that the lease epoch hasn't changed
-	// from what it was under the proposal-time lease.
-	untrack(ctx, ctpb.Epoch(r.mu.state.Lease.Epoch), r.RangeID, ctpb.LAI(maxLeaseIndex))
-	log.VEventf(ctx, 2, "reproposed command %x at maxLeaseIndex=%d", cmd.idKey, maxLeaseIndex)
+	log.VEventf(ctx, 2, "reproposed command %x", cmd.idKey)
 	return nil
 }
 

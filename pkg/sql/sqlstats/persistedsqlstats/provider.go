@@ -16,26 +16,31 @@ package persistedsqlstats
 import (
 	"context"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-// TODO(azhng): currently we do not have the ability to compute a hash for
-//  query plan. This is currently being worked on by the SQL Queries team.
-//  Once we are able get consistent hash value from a query plan, we should
-//  update this.
-const dummyPlanHash = int64(0)
+const (
+	// TODO(azhng): currently we do not have the ability to compute a hash for
+	//  query plan. This is currently being worked on by the SQL Queries team.
+	//  Once we are able get consistent hash value from a query plan, we should
+	//  update this.
+	dummyPlanHash = int64(0)
+)
 
 // ErrConcurrentSQLStatsCompaction is reported when two sql stats compaction
 // jobs are issued concurrently. This is a sentinel error.
@@ -55,7 +60,7 @@ type Config struct {
 	FailureCounter *metric.Counter
 
 	// Testing knobs.
-	Knobs *TestingKnobs
+	Knobs *sqlstats.TestingKnobs
 }
 
 // PersistedSQLStats is a sqlstats.Provider that wraps a node-local in-memory
@@ -68,30 +73,51 @@ type PersistedSQLStats struct {
 
 	cfg *Config
 
-	// memoryPressureSignal is used by the persistedsqlstats.StatsWriter to signal
+	// memoryPressureSignal is used by the persistedsqlstats.ApplicationStats to signal
 	// memory pressure during stats recording. A signal is emitted through this
 	// channel either if the fingerprint limit or the memory limit has been
 	// exceeded.
 	memoryPressureSignal chan struct{}
 
 	lastFlushStarted time.Time
+	jobMonitor       jobMonitor
+
+	atomic struct {
+		nextFlushAt atomic.Value
+	}
 }
 
 var _ sqlstats.Provider = &PersistedSQLStats{}
 
 // New returns a new instance of the PersistedSQLStats.
 func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
-	return &PersistedSQLStats{
+	p := &PersistedSQLStats{
 		SQLStats:             memSQLStats,
 		cfg:                  cfg,
 		memoryPressureSignal: make(chan struct{}),
 	}
+
+	p.jobMonitor = jobMonitor{
+		st:           cfg.Settings,
+		ie:           cfg.InternalExecutor,
+		db:           cfg.KvDB,
+		scanInterval: defaultScanInterval,
+		jitterFn:     p.jitterInterval,
+	}
+
+	return p
 }
 
 // Start implements sqlstats.Provider interface.
 func (s *PersistedSQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.SQLStats.Start(ctx, stopper)
 	s.startSQLStatsFlushLoop(ctx, stopper)
+	s.jobMonitor.start(ctx, stopper)
+}
+
+// GetController returns the controller of the PersistedSQLStats.
+func (s *PersistedSQLStats) GetController(server serverpb.SQLStatusServer) *Controller {
+	return NewController(s, server, s.cfg.KvDB, s.cfg.InternalExecutor)
 }
 
 func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper *stop.Stopper) {
@@ -105,7 +131,15 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 			}
 		})
 
-		for timer := timeutil.NewTimer(); ; timer.Reset(s.nextFlushInterval()) {
+		initialDelay := s.nextFlushInterval()
+		timer := timeutil.NewTimer()
+		timer.Reset(initialDelay)
+
+		log.Infof(ctx, "starting sql-stats-worker with initial delay: %s", initialDelay)
+		for {
+			waitInterval := s.nextFlushInterval()
+			timer.Reset(waitInterval)
+
 			select {
 			case <-timer.C:
 				timer.Read = true
@@ -129,24 +163,43 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 	})
 }
 
+// GetLocalMemProvider returns a sqlstats.Provider that can only be used to
+// access local in-memory sql statistics.
+func (s *PersistedSQLStats) GetLocalMemProvider() sqlstats.Provider {
+	return s.SQLStats
+}
+
+// GetNextFlushAt returns the time next flush is going to happen.
+func (s *PersistedSQLStats) GetNextFlushAt() time.Time {
+	return s.atomic.nextFlushAt.Load().(time.Time)
+}
+
 // nextFlushInterval calculates the wait interval that is between:
 // [(1 - SQLStatsFlushJitter) * SQLStatsFlushInterval),
 //  (1 + SQLStatsFlushJitter) * SQLStatsFlushInterval)]
 func (s *PersistedSQLStats) nextFlushInterval() time.Duration {
 	baseInterval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
+	waitInterval := s.jitterInterval(baseInterval)
 
+	nextFlushAt := s.getTimeNow().Add(waitInterval)
+	s.atomic.nextFlushAt.Store(nextFlushAt)
+
+	return waitInterval
+}
+
+func (s *PersistedSQLStats) jitterInterval(interval time.Duration) time.Duration {
 	jitter := SQLStatsFlushJitter.Get(&s.cfg.Settings.SV)
 	frac := 1 + (2*rand.Float64()-1)*jitter
 
-	flushInterval := time.Duration(frac * float64(baseInterval.Nanoseconds()))
-	return flushInterval
+	jitteredInterval := time.Duration(frac * float64(interval.Nanoseconds()))
+	return jitteredInterval
 }
 
-// GetWriterForApplication implements sqlstats.Provider interface.
-func (s *PersistedSQLStats) GetWriterForApplication(appName string) sqlstats.Writer {
-	writer := s.SQLStats.GetWriterForApplication(appName)
-	return &StatsWriter{
-		memWriter:            writer,
+// GetApplicationStats implements sqlstats.Provider interface.
+func (s *PersistedSQLStats) GetApplicationStats(appName string) sqlstats.ApplicationStats {
+	appStats := s.SQLStats.GetApplicationStats(appName)
+	return &ApplicationStats{
+		ApplicationStats:     appStats,
 		memoryPressureSignal: s.memoryPressureSignal,
 	}
 }

@@ -13,8 +13,9 @@ const webpack = require("webpack");
 const WebpackBar = require("webpackbar");
 const MomentLocalesPlugin = require("moment-locales-webpack-plugin");
 
+// tslint:disable:object-literal-sort-keys
 module.exports = {
-  entry: "./src/index.ts",
+  entry: path.resolve(__dirname, "./src/index.ts"),
 
   output: {
     path: path.resolve(__dirname, "dist/js"),
@@ -47,6 +48,7 @@ module.exports = {
             limit: true,
           }
         },
+        exclude: /node_modules/,
       },
       // Styles in current project use SCSS preprocessing language with CSS modules.
       // They have to follow file naming convention: [filename].module.scss
@@ -73,6 +75,7 @@ module.exports = {
       {
         test: /(?<!\.module)\.scss/,
         use: ["style-loader", "css-loader", "sass-loader"],
+        exclude: /node_modules/,
       },
       {
         test: /\.(ts|js)x?$/,
@@ -80,10 +83,13 @@ module.exports = {
           "babel-loader",
           {
             loader: "astroturf/loader",
-            options: { extension: ".module.scss" },
+            options: {extension: ".module.scss"},
           },
         ],
-        exclude: /node_modules/,
+        exclude: [
+          /node_modules/,
+          /db-console\/src\/js/,
+        ],
       },
       // Preprocess LESS styles required by external components
       // (react-select)
@@ -107,8 +113,16 @@ module.exports = {
         enforce: "pre",
         test: /\.js$/,
         loader: "source-map-loader",
+        exclude: [
+          /node_modules/,
+          /db-console\/src\/js/,
+        ],
       },
-      { test: /\.css$/, use: [ "style-loader", "css-loader" ] },
+      {
+        test: /\.css$/,
+        use: ["style-loader", "css-loader"],
+        exclude: /node_modules/,
+      },
     ],
   },
 
@@ -148,4 +162,4 @@ module.exports = {
     "redux-saga": "redux-saga",
     "redux": "redux",
   },
-};
+}

@@ -187,7 +187,7 @@ func ParseINet(s string, dest *IPAddr) error {
 		} else {
 			maskSize = 128
 		}
-		ip := net.ParseIP(addr)
+		ip := ParseIP(addr)
 		if ip == nil {
 			return pgerror.WithCandidateCode(
 				errors.Errorf("could not parse %q as inet. invalid IP", s),
@@ -236,7 +236,7 @@ func ParseINet(s string, dest *IPAddr) error {
 
 	}
 
-	ip := net.ParseIP(addr)
+	ip := ParseIP(addr)
 	if ip == nil {
 		return pgerror.WithCandidateCode(
 			errors.Errorf("could not parse %q as inet. invalid IP", s),

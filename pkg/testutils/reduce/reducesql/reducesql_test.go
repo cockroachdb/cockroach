@@ -38,7 +38,7 @@ func TestReduceSQL(t *testing.T) {
 }
 
 func isInterestingSQL(contains string) reduce.InterestingFn {
-	return func(ctx context.Context, f string) bool {
+	return func(ctx context.Context, f string) (bool, func()) {
 		args := base.TestServerArgs{
 			Insecure: true,
 		}
@@ -65,10 +65,10 @@ func isInterestingSQL(contains string) reduce.InterestingFn {
 		if err != nil {
 			panic(err)
 		}
-		_, err = db.Exec(ctx, string(f))
+		_, err = db.Exec(ctx, f)
 		if err == nil {
-			return false
+			return false, nil
 		}
-		return strings.Contains(err.Error(), contains)
+		return strings.Contains(err.Error(), contains), nil
 	}
 }

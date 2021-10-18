@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/alessio/shellescape"
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/recording"
 )
 
@@ -80,12 +81,6 @@ func WithRecording(r *recording.Recording) func(e *Exec) {
 	}
 }
 
-// CommandContext wraps around exec.CommandContext, executing the named program
-// with the given arguments.
-func (e *Exec) CommandContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return e.commandContextImpl(ctx, nil, false, name, args...)
-}
-
 // CommandContextSilent is like CommandContext, but does not take over
 // stdout/stderr. It's to be used for "internal" operations.
 func (e *Exec) CommandContextSilent(
@@ -110,7 +105,7 @@ func (e *Exec) CommandContextInheritingStdStreams(
 ) error {
 	var command string
 	if len(args) > 0 {
-		command = fmt.Sprintf("%s %s", name, strings.Join(args, " "))
+		command = fmt.Sprintf("%s %s", name, shellescape.QuoteCommand(args))
 	} else {
 		command = name
 	}
@@ -162,7 +157,7 @@ func (e *Exec) commandContextImpl(
 ) ([]byte, error) {
 	var command string
 	if len(args) > 0 {
-		command = fmt.Sprintf("%s %s", name, strings.Join(args, " "))
+		command = fmt.Sprintf("%s %s", name, shellescape.QuoteCommand(args))
 	} else {
 		command = name
 	}

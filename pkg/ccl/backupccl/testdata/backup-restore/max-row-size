@@ -14,7 +14,7 @@ SELECT i, pg_column_size(s) FROM maxrow ORDER BY i;
 1 20004
 
 exec-sql
-SET CLUSTER SETTING sql.mutations.max_row_size.err = '16KiB';
+SET CLUSTER SETTING sql.guardrails.max_row_size_err = '16KiB';
 ----
 
 query-sql
@@ -39,7 +39,7 @@ INSERT INTO d2.maxrow VALUES (2, repeat('y', 20000));
 pq: row larger than max row size: table 57 family 0 primary key /Table/57/1/2/0 size 20013
 
 exec-sql
-SET CLUSTER SETTING sql.mutations.max_row_size.err = default;
+SET CLUSTER SETTING sql.guardrails.max_row_size_err = DEFAULT;
 INSERT INTO d2.maxrow VALUES (2, repeat('y', 20000));
 ----
 

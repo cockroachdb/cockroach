@@ -236,6 +236,11 @@ func (f *Factory) CopyAndReplace(
 		panic(errors.AssertionFailedf("destination memo must be empty"))
 	}
 
+	// Copy the next scalar rank to the target memo so that new scalar
+	// expressions built with the new memo will not share scalar ranks with
+	// existing expressions.
+	f.mem.CopyNextRankFrom(from.Memo())
+
 	// Copy all metadata to the target memo so that referenced tables and
 	// columns can keep the same ids they had in the "from" memo. Scalar
 	// expressions in the metadata cannot have placeholders, so we simply copy

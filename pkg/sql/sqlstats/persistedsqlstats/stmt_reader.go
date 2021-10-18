@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -103,22 +102,30 @@ func (s *PersistedSQLStats) getFetchQueryForStmtStatsTable(
 	selectedColumns := []string{
 		"aggregated_ts",
 		"fingerprint_id",
+		"transaction_fingerprint_id",
 		"plan_hash",
 		"app_name",
 		"metadata",
 		"statistics",
 		"plan",
 	}
-	query = fmt.Sprintf(`
+
+	// [1]: selection columns
+	// [2]: AOST clause
+	query = `
 SELECT 
-  %s
+  %[1]s
 FROM
 	system.statement_statistics
-`, strings.Join(selectedColumns, ","))
+%[2]s`
 
-	if s.cfg.Knobs != nil && !s.cfg.Knobs.DisableFollowerRead {
-		query = fmt.Sprintf("%s AS OF SYSTEM TIME follower_read_timestamp()", query)
+	followerReadClause := "AS OF SYSTEM TIME follower_read_timestamp()"
+
+	if s.cfg.Knobs != nil {
+		followerReadClause = s.cfg.Knobs.AOSTClause
 	}
+
+	query = fmt.Sprintf(query, strings.Join(selectedColumns, ","), followerReadClause)
 
 	orderByColumns := []string{"aggregated_ts"}
 	if options.SortedAppNames {
@@ -132,6 +139,7 @@ FROM
 		orderByColumns = append(orderByColumns, "metadata ->> 'query'")
 	}
 
+	orderByColumns = append(orderByColumns, "transaction_fingerprint_id")
 	query = fmt.Sprintf("%s ORDER BY %s", query, strings.Join(orderByColumns, ","))
 
 	return query, len(selectedColumns)
@@ -141,25 +149,37 @@ func rowToStmtStats(row tree.Datums) (*roachpb.CollectedStatementStatistics, err
 	var stats roachpb.CollectedStatementStatistics
 	stats.AggregatedTs = tree.MustBeDTimestampTZ(row[0]).Time
 
-	stmtFingerprintID, err := datumToUint64(row[1])
+	stmtFingerprintID, err := sqlstatsutil.DatumToUint64(row[1])
 	if err != nil {
 		return nil, err
 	}
 	stats.ID = roachpb.StmtFingerprintID(stmtFingerprintID)
-	stats.Key.PlanHash = uint64(tree.MustBeDInt(row[2]))
-	stats.Key.App = string(tree.MustBeDString(row[3]))
 
-	metadata := tree.MustBeDJSON(row[4]).JSON
+	transactionFingerprintID, err := sqlstatsutil.DatumToUint64(row[2])
+	if err != nil {
+		return nil, err
+	}
+	stats.Key.TransactionFingerprintID =
+		roachpb.TransactionFingerprintID(transactionFingerprintID)
+
+	stats.Key.PlanHash, err = sqlstatsutil.DatumToUint64(row[3])
+	if err != nil {
+		return nil, err
+	}
+
+	stats.Key.App = string(tree.MustBeDString(row[4]))
+
+	metadata := tree.MustBeDJSON(row[5]).JSON
 	if err = sqlstatsutil.DecodeStmtStatsMetadataJSON(metadata, &stats); err != nil {
 		return nil, err
 	}
 
-	statistics := tree.MustBeDJSON(row[5]).JSON
+	statistics := tree.MustBeDJSON(row[6]).JSON
 	if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statistics, &stats.Stats); err != nil {
 		return nil, err
 	}
 
-	jsonPlan := tree.MustBeDJSON(row[6]).JSON
+	jsonPlan := tree.MustBeDJSON(row[7]).JSON
 	plan, err := sqlstatsutil.JSONToExplainTreePlanNode(jsonPlan)
 	if err != nil {
 		return nil, err
@@ -167,15 +187,4 @@ func rowToStmtStats(row tree.Datums) (*roachpb.CollectedStatementStatistics, err
 	stats.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 
 	return &stats, nil
-}
-
-func datumToUint64(d tree.Datum) (uint64, error) {
-	b := []byte(tree.MustBeDBytes(d))
-
-	_, val, err := encoding.DecodeUint64Ascending(b)
-	if err != nil {
-		return 0, err
-	}
-
-	return val, nil
 }

@@ -227,6 +227,7 @@ func (f *vectorizedFlow) Setup(
 	f.batchFlowCoordinator = batchFlowCoordinator
 	f.testingInfo.numClosers = f.creator.numClosers
 	f.testingInfo.numClosed = &f.creator.numClosed
+	f.SetStartedGoroutines(f.creator.operatorConcurrency)
 	log.VEventf(ctx, 2, "vectorized flow setup succeeded")
 	if !f.IsLocal() {
 		// For distributed flows set opChains to nil, per the contract of
@@ -308,7 +309,11 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// This cleans up all the memory and disk monitoring of the vectorized flow.
 	f.creator.cleanup(ctx)
 
-	if util.CrdbTestBuild {
+	if util.CrdbTestBuild && f.FlowBase.Started() {
+		// Check that all closers have been closed. Note that we don't check
+		// this in case the flow was never started in the first place (it is ok
+		// to not check this since closers haven't allocated any resources in
+		// such a case).
 		if numClosed := atomic.LoadInt32(f.testingInfo.numClosed); numClosed != f.testingInfo.numClosers {
 			colexecerror.InternalError(errors.AssertionFailedf("expected %d components to be closed, but found that only %d were", f.testingInfo.numClosers, numClosed))
 		}
@@ -1162,7 +1167,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 				ExprHelper:           s.exprHelper,
 				Factory:              factory,
 			}
-			args.TestingKnobs.PlanInvariantsCheckers = util.CrdbTestBuild
 			var result *colexecargs.NewColOperatorResult
 			result, err = colbuilder.NewColOperator(ctx, flowCtx, args)
 			if result != nil {

@@ -39,6 +39,12 @@ func (b *chanBuffer) Add(ctx context.Context, event Event) error {
 	}
 }
 
+// Drain implements Writer interface.
+func (b *chanBuffer) Drain(ctx context.Context) error {
+	// channel buffer is unbuffered.
+	return nil
+}
+
 func (b *chanBuffer) Close(_ context.Context) error {
 	close(b.entriesCh)
 	return nil
@@ -50,7 +56,12 @@ func (b *chanBuffer) Get(ctx context.Context) (Event, error) {
 	select {
 	case <-ctx.Done():
 		return Event{}, ctx.Err()
-	case e := <-b.entriesCh:
+	case e, ok := <-b.entriesCh:
+		if !ok {
+			// Our channel has been closed by the
+			// Writer. No more events will be returned.
+			return e, ErrBufferClosed
+		}
 		e.bufferGetTimestamp = timeutil.Now()
 		return e, nil
 	}

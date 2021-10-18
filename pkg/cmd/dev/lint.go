@@ -10,7 +10,11 @@
 
 package main
 
-import "github.com/spf13/cobra"
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+)
 
 // makeLintCmd constructs the subcommand used to run the specified linters.
 func makeLintCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -23,6 +27,7 @@ func makeLintCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 		Args: cobra.NoArgs,
 		RunE: runE,
 	}
+	addCommonBuildFlags(lintCmd)
 	addCommonTestFlags(lintCmd)
 	return lintCmd
 }
@@ -36,9 +41,11 @@ func (d *dev) lint(cmd *cobra.Command, _ []string) error {
 	var args []string
 	// NOTE the --config=test here. It's very important we compile the test binary with the
 	// appropriate stuff (gotags, etc.)
-	args = append(args, "run", "--color=yes", "--config=test", "//build/bazelutil:lint")
-	args = append(args, getConfigFlags()...)
+	args = append(args, "run", "--config=test", "//build/bazelutil:lint")
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
+	if numCPUs != 0 {
+		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+	}
 	args = append(args, "--", "-test.v")
 	if short {
 		args = append(args, "-test.short")
@@ -50,5 +57,6 @@ func (d *dev) lint(cmd *cobra.Command, _ []string) error {
 		args = append(args, "-test.run", filter)
 	}
 
+	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 }

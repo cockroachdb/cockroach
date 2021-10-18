@@ -13,12 +13,12 @@ package migrations_test
 import (
 	"context"
 	"fmt"
-	"path"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -36,6 +37,7 @@ import (
 
 func TestSeparatedIntentsMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >5 mins under race")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -50,23 +52,25 @@ func TestSeparatedIntentsMigration(t *testing.T) {
 	storeKnobs := &kvserver.StoreTestingKnobs{
 		StorageKnobs: storage.TestingKnobs{DisableSeparatedIntents: true},
 	}
-	tempDir, cleanup := testutils.TempDir(t)
-	defer cleanup()
+	reg := server.NewStickyInMemEnginesRegistry(server.ReplaceEngines)
+	defer reg.CloseAllStickyInMemEngines()
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
 			Settings: settings,
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory: false,
-					Path:     path.Join(tempDir, fmt.Sprintf("engine-%d", i)),
+					InMemory:               true,
+					StickyInMemoryEngineID: fmt.Sprintf("engine-%d", i),
 				},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: 1,
 					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.SeparatedIntentsMigration - 1),
+					StickyEngineRegistry:           reg,
 				},
-				Store: storeKnobs,
+				Store:            storeKnobs,
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
 		}
 	}
@@ -82,13 +86,12 @@ func TestSeparatedIntentsMigration(t *testing.T) {
 
 	findInterleavedIntent := func(s *kvserver.Store) bool {
 		db := s.Engine()
-
 		iter := db.NewEngineIterator(storage.IterOptions{
 			LowerBound: roachpb.KeyMin,
 			UpperBound: roachpb.KeyMax,
 		})
 		defer iter.Close()
-		valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
+		valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: keys.UserTableDataMin})
 		for ; valid && err == nil; valid, err = iter.NextEngineKey() {
 			key, err := iter.EngineKey()
 			if err != nil {
@@ -129,34 +132,33 @@ func TestSeparatedIntentsMigration(t *testing.T) {
 	require.NoError(t, err)
 	_, err = txn.Exec("INSERT INTO test.kv SELECT generate_series(1, 100), 'test123';")
 	require.NoError(t, err)
-	time.Sleep(500 * time.Millisecond)
 
-	interleavedIntentFound := false
-	for i := 0; i < numServers; i++ {
-		err := tc.Server(i).GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
-			s.WaitForInit()
-			interleavedIntentFound = interleavedIntentFound || findInterleavedIntent(s)
-			return nil
-		})
-		require.NoError(t, err)
-		if interleavedIntentFound {
-			// This is all we care about; no need to waste cycles.
-			break
+	testutils.SucceedsSoon(t, func() error {
+		interleavedIntentFound := false
+		for i := 0; i < numServers; i++ {
+			err := tc.Server(i).GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+				s.WaitForInit()
+				interleavedIntentFound = interleavedIntentFound || findInterleavedIntent(s)
+				return nil
+			})
+			require.NoError(t, err)
+			if interleavedIntentFound {
+				// This is all we care about; no need to waste cycles.
+				return nil
+			}
 		}
-	}
-	require.True(t, interleavedIntentFound)
+		return errors.New("no intent found")
+	})
 
 	// Start writing separated intents.
 	storeKnobs.StorageKnobs.DisableSeparatedIntents = false
 	require.NoError(t, tc.Restart())
-	time.Sleep(10 * time.Second)
 	tdb = tc.ServerConn(0)
 
 	_, err = tdb.Exec(`SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.PostSeparatedIntentsMigration).String())
 	require.NoError(t, err)
 
-	time.Sleep(5 * time.Second)
 	testutils.SucceedsSoon(t, func() error {
 		interleavedIntentFound := false
 		for i := 0; i < numServers; i++ {

@@ -527,3 +527,62 @@ ReadyForQuery
 {"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
 {"Type":"ErrorResponse","Code":"22P04"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DROP TABLE IF EXISTS t"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE t (i INT8, t TIMESTAMPTZ)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "COPY t FROM STDIN CSV"}
+CopyData {"Data": "1,2021-09-20T06:05:04\n"}
+CopyData {"Data": "\\.\n"}
+CopyDone
+----
+
+until ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SET TIME ZONE \"America/Chicago\""}
+Query {"String": "COPY t FROM STDIN CSV"}
+CopyData {"Data": "2,2021-09-20T06:05:04\n"}
+CopyData {"Data": "\\.\n"}
+CopyDone
+Query {"String": "SELECT i, t FROM t ORDER BY i"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"America/Chicago"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"2021-09-20 01:05:04-05"}]}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"2021-09-20 06:05:04-05"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

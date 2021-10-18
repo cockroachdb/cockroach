@@ -66,7 +66,8 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 
 	th := &testHelper{
-		env:   jobstest.NewJobSchedulerTestEnv(jobstest.UseSystemTables, timeutil.Now()),
+		env: jobstest.NewJobSchedulerTestEnv(
+			jobstest.UseSystemTables, timeutil.Now(), tree.ScheduledBackupExecutor),
 		iodir: dir,
 	}
 
@@ -191,6 +192,114 @@ func (t userType) String() string {
 		return "free user"
 	}
 	return "enterprise user"
+}
+
+func TestScheduledTableBackupNameQualification(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	th.sqlDB.Exec(t, `
+CREATE DATABASE mydb;
+USE mydb;
+
+CREATE TABLE t1(a int);
+INSERT INTO t1 values (1), (10), (100);
+
+CREATE TABLE t2(b int);
+INSERT INTO t2 VALUES (3), (2), (1);
+
+CREATE TABLE t3(c int);
+INSERT INTO t3 VALUES (5), (5), (7);
+
+CREATE TABLE "my.tbl"(d int);
+
+CREATE SCHEMA myschema;
+CREATE TABLE myschema.mytbl(a int);
+
+CREATE DATABASE other_db;
+CREATE TABLE other_db.t1(a int);
+`)
+
+	testCases := []struct {
+		name               string
+		query              string
+		expectedBackupStmt string
+	}{
+		{
+			name:               "fully-qualified-table-name",
+			query:              "CREATE SCHEDULE FOR BACKUP mydb.public.t1 INTO $1 RECURRING '@hourly'",
+			expectedBackupStmt: "BACKUP TABLE mydb.public.t1 INTO '%s' WITH detached",
+		},
+		{
+			name:               "schema-qualified-table-name",
+			query:              "CREATE SCHEDULE FOR BACKUP public.t1 INTO $1 RECURRING '@hourly'",
+			expectedBackupStmt: "BACKUP TABLE mydb.public.t1 INTO '%s' WITH detached",
+		},
+		{
+			name:               "uds-qualified-table-name",
+			query:              "CREATE SCHEDULE FOR BACKUP myschema.mytbl INTO $1 RECURRING '@hourly'",
+			expectedBackupStmt: "BACKUP TABLE mydb.myschema.mytbl INTO '%s' WITH detached",
+		},
+		{
+			name:               "db-qualified-table-name",
+			query:              "CREATE SCHEDULE FOR BACKUP mydb.t1 INTO $1 RECURRING '@hourly'",
+			expectedBackupStmt: "BACKUP TABLE mydb.public.t1 INTO '%s' WITH detached",
+		},
+		{
+			name:               "unqualified-table-name",
+			query:              "CREATE SCHEDULE FOR BACKUP t1 INTO $1 RECURRING '@hourly'",
+			expectedBackupStmt: "BACKUP TABLE mydb.public.t1 INTO '%s' WITH detached",
+		},
+		{
+			name:               "unqualified-table-name-with-symbols",
+			query:              `CREATE SCHEDULE FOR BACKUP "my.tbl" INTO $1 RECURRING '@hourly'`,
+			expectedBackupStmt: `BACKUP TABLE mydb.public."my.tbl" INTO '%s' WITH detached`,
+		},
+		{
+			name:               "table-names-from-different-db",
+			query:              "CREATE SCHEDULE FOR BACKUP t1, other_db.t1 INTO $1 RECURRING '@hourly'",
+			expectedBackupStmt: "BACKUP TABLE mydb.public.t1, other_db.public.t1 INTO '%s' WITH detached",
+		},
+		{
+			name:               "unqualified-all-tables-selectors",
+			query:              "CREATE SCHEDULE FOR BACKUP * INTO $1 RECURRING '@hourly'",
+			expectedBackupStmt: "BACKUP TABLE mydb.public.* INTO '%s' WITH detached",
+		},
+		{
+			name:               "all-tables-selectors-with-user-defined-schema",
+			query:              "CREATE SCHEDULE FOR BACKUP myschema.* INTO $1 RECURRING '@hourly'",
+			expectedBackupStmt: "BACKUP TABLE mydb.myschema.* INTO '%s' WITH detached",
+		},
+		{
+			name:               "partially-qualified-all-tables-selectors-with-different-db",
+			query:              "CREATE SCHEDULE FOR BACKUP other_db.* INTO $1 RECURRING '@hourly'",
+			expectedBackupStmt: "BACKUP TABLE other_db.public.* INTO '%s' WITH detached",
+		},
+		{
+			name:               "fully-qualified-all-tables-selectors-with-multiple-dbs",
+			query:              "CREATE SCHEDULE FOR BACKUP *, other_db.* INTO $1 RECURRING '@hourly'",
+			expectedBackupStmt: "BACKUP TABLE mydb.public.*, other_db.public.* INTO '%s' WITH detached",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			defer th.clearSchedules(t)
+			defer utilccl.TestingDisableEnterprise()()
+
+			destination := "nodelocal://0/backup/" + tc.name
+			schedules, err := th.createBackupSchedule(t, tc.query, destination)
+			require.NoError(t, err)
+
+			for _, s := range schedules {
+				stmt := getScheduledBackupStatement(t, s.ExecutionArgs())
+				require.Equal(t, fmt.Sprintf(tc.expectedBackupStmt, destination), stmt)
+			}
+		})
+	}
 }
 
 // This test examines serialized representation of backup schedule arguments
@@ -331,15 +440,18 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		WITH revision_history RECURRING '@hourly'`,
 			expectedSchedules: []expectedSchedule{
 				{
-					nameRe:                        "BACKUP .*",
-					backupStmt:                    "BACKUP TABLE system.jobs, system.scheduled_jobs INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached",
+					nameRe: "BACKUP .*",
+					backupStmt: "BACKUP TABLE system.public.jobs, " +
+						"system.public.scheduled_jobs INTO LATEST IN 'nodelocal://0/backup' WITH" +
+						" revision_history, detached",
 					period:                        time.Hour,
 					paused:                        true,
 					chainProtectedTimestampRecord: true,
 				},
 				{
-					nameRe:                        "BACKUP .+",
-					backupStmt:                    "BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup' WITH revision_history, detached",
+					nameRe: "BACKUP .+",
+					backupStmt: "BACKUP TABLE system.public.jobs, " +
+						"system.public.scheduled_jobs INTO 'nodelocal://0/backup' WITH revision_history, detached",
 					period:                        24 * time.Hour,
 					runsNow:                       true,
 					chainProtectedTimestampRecord: true,
@@ -376,13 +488,13 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "BACKUP .*",
-					backupStmt: "BACKUP TABLE system.* INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached",
+					backupStmt: "BACKUP TABLE system.public.* INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached",
 					period:     time.Hour,
 					paused:     true,
 				},
 				{
 					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP TABLE system.* INTO 'nodelocal://0/backup' WITH revision_history, detached",
+					backupStmt: "BACKUP TABLE system.public.* INTO 'nodelocal://0/backup' WITH revision_history, detached",
 					period:     24 * time.Hour,
 					runsNow:    true,
 				},
@@ -437,10 +549,12 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe: "BACKUP .*",
-					backupStmt: "BACKUP TABLE system.jobs, " +
-						"system.scheduled_jobs INTO 'nodelocal://0/backup' WITH revision_history, encryption_passphrase = 'secret', detached",
-					shownStmt: "BACKUP TABLE system.jobs, " +
-						"system.scheduled_jobs INTO 'nodelocal://0/backup' WITH revision_history, encryption_passphrase = '*****', detached",
+					backupStmt: "BACKUP TABLE system.public.jobs, " +
+						"system.public.scheduled_jobs INTO 'nodelocal://0/backup' WITH" +
+						" revision_history, encryption_passphrase = 'secret', detached",
+					shownStmt: "BACKUP TABLE system.public.jobs, " +
+						"system.public.scheduled_jobs INTO 'nodelocal://0/backup' WITH" +
+						" revision_history, encryption_passphrase = '*****', detached",
 					period: 7 * 24 * time.Hour,
 				},
 			},
@@ -469,7 +583,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		},
 		{
 			name:   "missing-destination-placeholder",
-			query:  `CREATE SCHEDULE FOR BACKUP TABLE t INTO $1 RECURRING '@hourly'`,
+			query:  `CREATE SCHEDULE FOR BACKUP TABLE system.public.jobs INTO $1 RECURRING '@hourly'`,
 			errMsg: "failed to evaluate backup destination paths",
 		},
 		{
@@ -500,7 +614,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, len(tc.expectedSchedules), len(schedules))
 
-			shown := th.sqlDB.QueryStr(t, `SELECT id, command->'backup_statement' FROM [SHOW SCHEDULES]`)
+			shown := th.sqlDB.QueryStr(t, `SELECT id, command->'backup_statement' FROM [SHOW SCHEDULES] WHERE command->>'backup_statement' LIKE 'BACKUP%'`)
 			require.Equal(t, len(tc.expectedSchedules), len(shown))
 			shownByID := map[int64]string{}
 			for _, i := range shown {
@@ -736,6 +850,48 @@ func TestCreateBackupScheduleCollectionOverwrite(t *testing.T) {
 		"RECURRING '@daily' WITH SCHEDULE OPTIONS ignore_existing_backups;")
 }
 
+// TestCreateBackupScheduleIfNotExists: checks if adding IF NOT EXISTS will
+// create the schedule only if the schedule label doesn't already exist.
+func TestCreateBackupScheduleIfNotExists(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	const collectionLocation = "nodelocal://1/collection"
+	const scheduleLabel = "foo"
+	const createQuery = "CREATE SCHEDULE IF NOT EXISTS '%s' FOR BACKUP INTO '%s' RECURRING '@daily' FULL BACKUP ALWAYS;"
+
+	th.sqlDB.Exec(t, fmt.Sprintf(createQuery, scheduleLabel, collectionLocation))
+
+	// no op expected
+	th.sqlDB.Exec(t, fmt.Sprintf(createQuery, scheduleLabel, collectionLocation))
+
+	const selectQuery = "SELECT label FROM [SHOW SCHEDULES] WHERE command->>'backup_statement' LIKE 'BACKUP%';"
+
+	rows, err := th.cfg.InternalExecutor.QueryBufferedEx(
+		context.Background(), "check-sched", nil,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		selectQuery)
+
+	require.NoError(t, err)
+	require.Equal(t, 1, len(rows))
+
+	// the 'bar' schedule should get scheduled
+	const newScheduleLabel = "bar"
+
+	th.sqlDB.Exec(t, fmt.Sprintf(createQuery, newScheduleLabel, collectionLocation))
+
+	rows, err = th.cfg.InternalExecutor.QueryBufferedEx(
+		context.Background(), "check-sched2", nil,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		selectQuery)
+
+	require.NoError(t, err)
+	require.Equal(t, 2, len(rows))
+}
+
 func TestCreateBackupScheduleInExplicitTxnRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -743,7 +899,7 @@ func TestCreateBackupScheduleInExplicitTxnRollback(t *testing.T) {
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
 
-	res := th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES];")
+	res := th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES] WHERE label LIKE 'BACKUP%';")
 	require.False(t, res.Next())
 	require.NoError(t, res.Err())
 
@@ -751,7 +907,7 @@ func TestCreateBackupScheduleInExplicitTxnRollback(t *testing.T) {
 	th.sqlDB.Exec(t, "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/collection' RECURRING '@daily';")
 	th.sqlDB.Exec(t, "ROLLBACK;")
 
-	res = th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES];")
+	res = th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES] WHERE label LIKE 'BACKUP%';")
 	require.False(t, res.Next())
 	require.NoError(t, res.Err())
 }
@@ -987,8 +1143,10 @@ func constructExpectedScheduledBackupNode(
 		},
 	}
 	sb := &tree.ScheduledBackup{
-		ScheduleLabel: tree.NewDString(sj.ScheduleLabel()),
-		Recurrence:    tree.NewDString(recurrence),
+		ScheduleLabelSpec: tree.ScheduleLabelSpec{
+			IfNotExists: false,
+			Label:       tree.NewDString(sj.ScheduleLabel())},
+		Recurrence: tree.NewDString(recurrence),
 		FullBackup: &tree.FullBackupClause{
 			AlwaysFull: fullBackupAlways,
 		},
@@ -1060,7 +1218,7 @@ func TestShowCreateScheduleStatement(t *testing.T) {
 				tc.fullBackupAlways, tc.fullRecurrence, tc.recurrence)
 
 			t.Run("show-create-all-schedules", func(t *testing.T) {
-				rows := th.sqlDB.QueryStr(t, "SHOW CREATE ALL SCHEDULES")
+				rows := th.sqlDB.QueryStr(t, "SELECT * FROM [ SHOW CREATE ALL SCHEDULES ] WHERE create_statement LIKE '%FOR BACKUP%'")
 				cols, err := th.sqlDB.Query(t, "SHOW CREATE ALL SCHEDULES").Columns()
 				require.NoError(t, err)
 				// The number of rows returned should be equal to the number of schedules created

@@ -109,6 +109,7 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 	range_min_bytes = 134217728,
 	range_max_bytes = 536870912,
 	gc.ttlseconds = 90000,
+	global_reads = true,
 	num_replicas = 3,
 	num_voters = 3,
 	constraints = '{+region=ajstorm-1: 1}',

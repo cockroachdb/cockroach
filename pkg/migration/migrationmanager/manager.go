@@ -297,7 +297,7 @@ func (m *Manager) runMigration(
 	if isSystemMigration && !m.codec.ForSystemTenant() {
 		return nil
 	}
-	alreadyCompleted, id, err := m.getOrCreateMigrationJob(ctx, user, version)
+	alreadyCompleted, id, err := m.getOrCreateMigrationJob(ctx, user, version, mig.Name())
 	if alreadyCompleted || err != nil {
 		return err
 	}
@@ -305,7 +305,10 @@ func (m *Manager) runMigration(
 }
 
 func (m *Manager) getOrCreateMigrationJob(
-	ctx context.Context, user security.SQLUsername, version clusterversion.ClusterVersion,
+	ctx context.Context,
+	user security.SQLUsername,
+	version clusterversion.ClusterVersion,
+	name string,
 ) (alreadyCompleted bool, jobID jobspb.JobID, _ error) {
 	newJobID := m.jr.MakeJobID()
 	if err := m.deps.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
@@ -325,7 +328,7 @@ func (m *Manager) getOrCreateMigrationJob(
 			return nil
 		}
 		jobID = newJobID
-		_, err = m.jr.CreateJobWithTxn(ctx, migrationjob.NewRecord(version, user), jobID, txn)
+		_, err = m.jr.CreateJobWithTxn(ctx, migrationjob.NewRecord(version, user, name), jobID, txn)
 		return err
 	}); err != nil {
 		return false, 0, err
@@ -350,7 +353,7 @@ SELECT id, status
   WHERE status IN ` + jobs.NonTerminalStatusTupleString + `
 	)
 	WHERE pl->'migration'->'clusterVersion' = $1::JSON;`
-	jsonMsg, err := protoreflect.MessageToJSON(&version, false /* emitDefaults */)
+	jsonMsg, err := protoreflect.MessageToJSON(&version, protoreflect.FmtFlags{EmitDefaults: false})
 	if err != nil {
 		return false, 0, errors.Wrap(err, "failed to marshal version to JSON")
 	}

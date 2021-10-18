@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -308,6 +309,11 @@ func MakeServer(
 	return server
 }
 
+// BytesOut returns the total number of bytes transmitted from this server.
+func (s *Server) BytesOut() uint64 {
+	return uint64(s.metrics.BytesOutCount.Count())
+}
+
 // AnnotateCtxForIncomingConn annotates the provided context with a
 // tag that reports the peer's address. In the common case, the
 // context is annotated with a "client" tag. When the server is
@@ -357,10 +363,12 @@ func (s *Server) Metrics() (res []interface{}) {
 		&s.SQLServer.Metrics.ExecutedStatementCounters,
 		&s.SQLServer.Metrics.EngineMetrics,
 		&s.SQLServer.Metrics.StatsMetrics,
+		&s.SQLServer.Metrics.GuardrailMetrics,
 		&s.SQLServer.InternalMetrics.StartedStatementCounters,
 		&s.SQLServer.InternalMetrics.ExecutedStatementCounters,
 		&s.SQLServer.InternalMetrics.EngineMetrics,
 		&s.SQLServer.InternalMetrics.StatsMetrics,
+		&s.SQLServer.InternalMetrics.GuardrailMetrics,
 	}
 }
 
@@ -755,6 +763,10 @@ func parseClientProvidedSessionParameters(
 			// here, so that further lookups for authentication have the correct
 			// identifier.
 			args.User, _ = security.MakeSQLUsernameFromUserInput(value, security.UsernameValidation)
+			// TODO(#sql-experience): we should retrieve the admin status during
+			// authentication using the roles cache, instead of using a simple/naive
+			// username match. See #69355.
+			args.IsSuperuser = args.User.IsRootUser()
 
 		case "results_buffer_size":
 			if args.ConnResultsBufferSize, err = humanizeutil.ParseBytes(value); err != nil {
@@ -916,7 +928,7 @@ func splitOptions(options string) []string {
 	for i < len(options) {
 		sb.Reset()
 		// skip leading space
-		for i < len(options) && options[i] == ' ' {
+		for i < len(options) && unicode.IsSpace(rune(options[i])) {
 			i++
 		}
 		if i == len(options) {
@@ -926,7 +938,7 @@ func splitOptions(options string) []string {
 		lastWasEscape := false
 
 		for i < len(options) {
-			if options[i] == ' ' && !lastWasEscape {
+			if unicode.IsSpace(rune(options[i])) && !lastWasEscape {
 				break
 			}
 			if !lastWasEscape && options[i] == '\\' {

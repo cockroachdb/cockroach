@@ -12,15 +12,21 @@ package spanconfigmanager_test
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -46,6 +52,7 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			EnableSpanConfigs: true,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation
@@ -136,6 +143,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			EnableSpanConfigs: true,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation
@@ -176,4 +184,74 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
 	require.NoError(t, err)
 	require.True(t, started)
+}
+
+func TestManagerCheckJobConditions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	spanConfigJobVersion := clusterversion.ByKey(clusterversion.AutoSpanConfigReconciliationJob)
+	preSpanConfigJobVersion := clusterversion.ByKey(clusterversion.AutoSpanConfigReconciliationJob - 1)
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		spanConfigJobVersion, preSpanConfigJobVersion, false, /* initializeVersion */
+	)
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings:          settings,
+			EnableSpanConfigs: true,
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true, // disable the automatic job creation
+				},
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          preSpanConfigJobVersion,
+					DisableAutomaticVersionUpgrade: 1,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	ts := tc.Server(0)
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.enabled = false;`)
+
+	var interceptCount int32
+	checkInterceptCountGreaterThan := func(min int32) int32 {
+		var currentCount int32
+		testutils.SucceedsSoon(t, func() error {
+			if currentCount = atomic.LoadInt32(&interceptCount); !(currentCount > min) {
+				return errors.Errorf("expected intercept count(=%d) > min(=%d)",
+					currentCount, min)
+			}
+			return nil
+		})
+		return currentCount
+	}
+	manager := spanconfigmanager.New(
+		ts.DB(),
+		ts.JobRegistry().(*jobs.Registry),
+		ts.InternalExecutor().(*sql.InternalExecutor),
+		ts.Stopper(),
+		ts.ClusterSettings(),
+		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
+		&spanconfig.TestingKnobs{
+			ManagerDisableJobCreation: true,
+			ManagerCheckJobInterceptor: func() {
+				atomic.AddInt32(&interceptCount, 1)
+			},
+		},
+	)
+	var currentCount int32
+	require.NoError(t, manager.Start(ctx))
+	currentCount = checkInterceptCountGreaterThan(currentCount) // wait for an initial check
+
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.enabled = true;`)
+	currentCount = checkInterceptCountGreaterThan(currentCount) // the job enablement setting triggers a check
+
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.check_interval = '25m'`)
+	currentCount = checkInterceptCountGreaterThan(currentCount) // the job check interval setting triggers a check
+
+	tdb.Exec(t, `SET CLUSTER SETTING version = $1`, spanConfigJobVersion.String())
+	_ = checkInterceptCountGreaterThan(currentCount) // the cluster version setting triggers a check
 }

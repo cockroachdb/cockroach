@@ -71,6 +71,12 @@ func (j *Job) Started(ctx context.Context) error {
 	return j.started(ctx, nil /* txn */)
 }
 
+// Reverted is a wrapper around the internal function that moves a job to the
+// reverting state.
+func (j *Job) Reverted(ctx context.Context, err error) error {
+	return j.reverted(ctx, nil /* txn */, err, nil)
+}
+
 // Paused is a wrapper around the internal function that moves a job to the
 // paused state.
 func (j *Job) Paused(ctx context.Context) error {
@@ -89,36 +95,26 @@ func (j *Job) Succeeded(ctx context.Context) error {
 	return j.succeeded(ctx, nil /* txn */, nil /* fn */)
 }
 
+const (
+	AdoptQuery                     = claimQuery
+	CancelQuery                    = pauseAndCancelUpdate
+	GcQuery                        = expiredJobsQuery
+	RemoveClaimsQuery              = removeClaimsQuery
+	ProcessJobsQuery               = processQueryWithBackoff
+	IntervalBaseSettingKey         = intervalBaseSettingKey
+	AdoptIntervalSettingKey        = adoptIntervalSettingKey
+	CancelIntervalSettingKey       = cancelIntervalSettingKey
+	GcIntervalSettingKey           = gcIntervalSettingKey
+	RetentionTimeSettingKey        = retentionTimeSettingKey
+	DefaultAdoptInterval           = defaultAdoptInterval
+	ExecutionErrorsMaxEntriesKey   = executionErrorsMaxEntriesKey
+	ExecutionErrorsMaxEntrySizeKey = executionErrorsMaxEntrySizeKey
+)
+
 var (
-	AdoptQuery = claimQuery
-
-	CancelQuery = pauseAndCancelUpdate
-
-	GcQuery = expiredJobsQuery
-
-	RemoveClaimsQuery = removeClaimsQuery
-
-	ProcessJobsQuery = processQueryWithBackoff
-
-	IntervalBaseSettingKey = intervalBaseSettingKey
-
-	AdoptIntervalSettingKey = adoptIntervalSettingKey
-
-	CancelIntervalSettingKey = cancelIntervalSettingKey
-
-	GcIntervalSettingKey = gcIntervalSettingKey
-
-	RetentionTimeSettingKey = retentionTimeSettingKey
-
-	AdoptIntervalSetting = adoptIntervalSetting
-
-	CancelIntervalSetting = cancelIntervalSetting
-
+	AdoptIntervalSetting            = adoptIntervalSetting
+	CancelIntervalSetting           = cancelIntervalSetting
 	CancellationsUpdateLimitSetting = cancellationsUpdateLimitSetting
-
-	GcIntervalSetting = gcIntervalSetting
-
-	RetentionTimeSetting = retentionTimeSetting
-
-	DefaultAdoptInterval = defaultAdoptInterval
+	GcIntervalSetting               = gcIntervalSetting
+	RetentionTimeSetting            = retentionTimeSetting
 )

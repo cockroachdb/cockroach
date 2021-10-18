@@ -509,7 +509,7 @@ or use multiple RootTxns for the same txn object side-by-side.
 
 Note that while the SQL code is architected to take this restriction
 into account, *it is not currently enforced on the KV side*. We
-sometimes see bugs (eg #41222 / #41992) occuring because we do not
+sometimes see bugs (eg #41222 / #41992) occurring because we do not
 have infrastructure in place to detect violations of this restriction.
 
 This restriction exists for 3 reasons, one of them actually invalid
@@ -617,7 +617,7 @@ These three values are synchronized as follows:
   - every read gets a copy of the seqnum of the last write.
 - The `Sequence` field in the request header of individual KV
   operations is also copied to same-name field in `TxnMeta` of the
-  batch header in certain circumstnaces (most notably by another later
+  batch header in certain circumstances (most notably by another later
   interceptor, the `txnPipeliner`) for use during txn conflict
   resolution and write reordering.
 - When a TCS is instantiated from a LeafTxnInputState (e.g. forking a

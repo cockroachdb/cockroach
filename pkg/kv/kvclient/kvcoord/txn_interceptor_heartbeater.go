@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -289,7 +290,7 @@ func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) {
 	if h.mu.loopStarted {
 		log.Fatal(ctx, "attempting to start a second heartbeat loop")
 	}
-	log.VEventf(ctx, 2, "coordinator spawns heartbeat loop")
+	log.VEventf(ctx, 2, kvbase.SpawningHeartbeatLoopMsg)
 	h.mu.loopStarted = true
 	// NB: we can't do this in init() because the txn isn't populated yet then
 	// (it's zero).

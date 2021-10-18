@@ -210,9 +210,11 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 						return errors.New("no persisted cluster version found, please retry later")
 					}
 					// The tenant cluster in 20.2 did not ever initialize this value and
-					// utilized a hard-coded value of
+					// utilized this hard-coded value instead. In 21.1, the builtin
+					// which creates tenants sets up the cluster version state. It also
+					// is set when the version is upgraded.
 					tenantDefaultVersion := clusterversion.ClusterVersion{
-						Version: clusterversion.ByKey(clusterversion.V20_2),
+						Version: roachpb.Version{Major: 20, Minor: 2},
 					}
 					// Pretend that the expected value was already there to allow us to
 					// run migrations.
@@ -400,21 +402,6 @@ func runVersionUpgradeHook(
 
 	targetVersionStr := string(*value.(*tree.DString))
 	to.Version = roachpb.MustParseVersion(targetVersionStr)
-
-	start21_1 := clusterversion.ByKey(clusterversion.Start21_1)
-	if !params.extendedEvalCtx.Codec.ForSystemTenant() && from.Less(start21_1) {
-
-		// In the case that we're setting the cluster version to something that
-		// precedes the start of 21.1, which is permitted, if only because it's
-		// complex to prevent, then there's definitely no migrations to run and
-		// it may be hazardous due to assumptions about versions being even.
-		if to.Less(start21_1) {
-			return nil
-		}
-		// Otherwise, tell the migration layer that we're starting from the lowest
-		// allowable version.
-		from.Version = start21_1
-	}
 
 	// toSettingString already validated the input, and checked to
 	// see that we are allowed to transition. Let's call into our

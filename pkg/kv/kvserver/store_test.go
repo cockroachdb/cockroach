@@ -216,7 +216,7 @@ func createTestStoreWithoutStart(
 		Settings:   cfg.Settings,
 	})
 	server := rpc.NewServer(rpcContext) // never started
-	cfg.Gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), cfg.DefaultZoneConfig)
+	cfg.Gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	cfg.StorePool = NewTestStorePool(*cfg)
 	// Many tests using this test harness (as opposed to higher-level
 	// ones like multiTestContext or TestServer) want to micro-manage
@@ -231,7 +231,7 @@ func createTestStoreWithoutStart(
 	cfg.TestingKnobs.DisableMergeQueue = true
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
-	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
+	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
 	factory := &testSenderFactory{}
 	cfg.DB = kv.NewDB(cfg.AmbientCtx, factory, cfg.Clock, stopper)
 	store := NewStore(context.Background(), *cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
@@ -245,7 +245,7 @@ func createTestStoreWithoutStart(
 	}
 	var splits []roachpb.RKey
 	kvs, tableSplits := bootstrap.MakeMetadataSchema(
-		keys.SystemSQLCodec, cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig,
+		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	).GetInitialValues()
 	if opts.createSystemRanges {
 		splits = config.StaticSplits()
@@ -436,7 +436,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	defer stopper.Stop(ctx)
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
-	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
+	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
 	factory := &testSenderFactory{}
 	cfg.DB = kv.NewDB(cfg.AmbientCtx, factory, cfg.Clock, stopper)
 	{
@@ -463,7 +463,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		// Bootstrap the system ranges.
 		var splits []roachpb.RKey
 		kvs, tableSplits := bootstrap.MakeMetadataSchema(
-			keys.SystemSQLCodec, cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig,
+			keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 		).GetInitialValues()
 		splits = config.StaticSplits()
 		splits = append(splits, tableSplits...)
@@ -524,7 +524,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 	require.NoError(t, eng.PutUnversioned(roachpb.Key("foo"), []byte("bar")))
 
 	cfg := TestStoreConfig(nil)
-	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
+	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
 	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.
@@ -1356,22 +1356,23 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		expMaxBytes int64
 	}{
 		{store.LookupReplica(roachpb.RKeyMin),
-			*store.cfg.DefaultZoneConfig.RangeMaxBytes},
+			store.cfg.DefaultSpanConfig.RangeMaxBytes},
 		{splitTestRange(store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID)), t),
 			1 << 20},
 		{splitTestRange(store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+1)), t),
-			*store.cfg.DefaultZoneConfig.RangeMaxBytes},
+			store.cfg.DefaultSpanConfig.RangeMaxBytes},
 		{splitTestRange(store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+2)), t),
 			2 << 20},
 	}
 
 	// Set zone configs.
-	config.TestingSetZoneConfig(
-		config.SystemTenantObjectID(baseID), zonepb.ZoneConfig{RangeMaxBytes: proto.Int64(1 << 20)},
-	)
-	config.TestingSetZoneConfig(
-		config.SystemTenantObjectID(baseID+2), zonepb.ZoneConfig{RangeMaxBytes: proto.Int64(2 << 20)},
-	)
+	zoneA := zonepb.DefaultZoneConfig()
+	zoneA.RangeMaxBytes = proto.Int64(1 << 20)
+	config.TestingSetZoneConfig(config.SystemTenantObjectID(baseID), zoneA)
+
+	zoneB := zonepb.DefaultZoneConfig()
+	zoneB.RangeMaxBytes = proto.Int64(2 << 20)
+	config.TestingSetZoneConfig(config.SystemTenantObjectID(baseID+2), zoneB)
 
 	// Despite faking the zone configs, we still need to have a system config
 	// entry so that the store picks up the new zone configs. This new system
@@ -2692,11 +2693,11 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	checkRemoved(s.removePlaceholderLocked(ctx, placeholder1, removePlaceholderFilled))
 	checkNotRemoved(s.removePlaceholderLocked(ctx, placeholder1, removePlaceholderFailed))
 	checkNotRemoved(s.removePlaceholderLocked(ctx, placeholder1, removePlaceholderDropped))
-	checkErr(`attempt to remove already removed placeholder`)(s.removePlaceholderLocked(
+	checkErr(`attempting to fill tainted placeholder`)(s.removePlaceholderLocked(
 		ctx, placeholder1, removePlaceholderFilled,
 	))
 	placeholder1.tainted = 0 // pretend it wasn't already deleted
-	checkErr(`expected placeholder to exist: true but found in store: false`)(s.removePlaceholderLocked(
+	checkErr(`expected placeholder .* to exist`)(s.removePlaceholderLocked(
 		ctx, placeholder1, removePlaceholderDropped,
 	))
 
@@ -2722,7 +2723,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 
 	// Test that Placeholder deletion doesn't delete replicas.
 	placeholder1.tainted = 0
-	checkErr(`expected placeholder to exist: true`)(s.removePlaceholderLocked(ctx, placeholder1, removePlaceholderFilled))
+	checkErr(`expected placeholder .* to exist`)(s.removePlaceholderLocked(ctx, placeholder1, removePlaceholderFilled))
 	checkNotRemoved(s.removePlaceholderLocked(ctx, placeholder1, removePlaceholderFailed))
 	check(`
 [] - [99] (/Min - "c")

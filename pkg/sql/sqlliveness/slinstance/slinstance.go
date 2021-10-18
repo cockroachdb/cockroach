@@ -76,6 +76,9 @@ func (s *session) Expiration() hlc.Timestamp {
 	return s.mu.exp
 }
 
+// RegisterCallbackForSessionExpiry adds the given function to the list
+// of functions called after a session expires. The functions are
+// executed in a goroutine.
 func (s *session) RegisterCallbackForSessionExpiry(sExp func(context.Context)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -86,7 +89,7 @@ func (s *session) invokeSessionExpiryCallbacks(ctx context.Context) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, callback := range s.mu.sessionExpiryCallbacks {
-		callback(ctx)
+		go callback(ctx)
 	}
 }
 
@@ -300,7 +303,9 @@ func (l *Instance) Start(ctx context.Context) {
 // If the current one has expired then a new one is created.
 func (l *Instance) Session(ctx context.Context) (sqlliveness.Session, error) {
 	if l.testKnobs.SessionOverride != nil {
-		return l.testKnobs.SessionOverride(ctx)
+		if s, err := l.testKnobs.SessionOverride(ctx); s != nil || err != nil {
+			return s, err
+		}
 	}
 	l.mu.Lock()
 	if !l.mu.started {

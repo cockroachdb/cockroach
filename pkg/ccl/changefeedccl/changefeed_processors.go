@@ -78,7 +78,7 @@ type changeAggregator struct {
 	resolvedSpanBuf encDatumRowBuffer
 
 	// eventProducer produces the next event from the kv feed.
-	eventProducer kvEventProducer
+	eventProducer kvevent.Reader
 	// eventConsumer consumes the event.
 	eventConsumer kvEventConsumer
 
@@ -159,7 +159,7 @@ func newChangeAggregatorProcessor(
 	}
 
 	var err error
-	if ca.encoder, err = getEncoder(ctx, ca.spec.Feed.Opts, ca.spec.Feed.Targets); err != nil {
+	if ca.encoder, err = getEncoder(ca.spec.Feed.Opts, ca.spec.Feed.Targets); err != nil {
 		return nil, err
 	}
 
@@ -257,26 +257,36 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.sink = makeMetricsSink(ca.metrics, ca.sink)
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
-	cfg := ca.flowCtx.Cfg
-	buf := kvevent.NewThrottlingBuffer(
-		kvevent.MakeChanBuffer(), cdcutils.NodeLevelThrottler(&cfg.Settings.SV))
-	kvfeedCfg := makeKVFeedCfg(ctx, ca.flowCtx.Cfg, ca.kvFeedMemMon,
-		ca.spec, spans, buf, ca.metrics, ca.knobs.FeedKnobs)
-
-	ca.eventProducer = &bufEventProducer{buf}
+	initialHighWater, needsInitialScan := getKVFeedInitialParameters(ca.spec)
+	ca.eventProducer, err = ca.startKVFeed(ctx, spans, initialHighWater, needsInitialScan)
+	if err != nil {
+		// Early abort in the case that there is an error creating the sink.
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return
+	}
 
 	if ca.spec.Feed.Opts[changefeedbase.OptFormat] == string(changefeedbase.OptFormatNative) {
 		ca.eventConsumer = newNativeKVConsumer(ca.sink)
 	} else {
 		ca.eventConsumer = newKVEventToRowConsumer(
-			ctx, cfg, ca.frontier.SpanFrontier(), kvfeedCfg.InitialHighWater,
+			ctx, ca.flowCtx.Cfg, ca.frontier.SpanFrontier(), initialHighWater,
 			ca.sink, ca.encoder, ca.spec.Feed, ca.knobs)
 	}
-
-	ca.startKVFeed(ctx, kvfeedCfg)
 }
 
-func (ca *changeAggregator) startKVFeed(ctx context.Context, kvfeedCfg kvfeed.Config) {
+func (ca *changeAggregator) startKVFeed(
+	ctx context.Context, spans []roachpb.Span, initialHighWater hlc.Timestamp, needsInitialScan bool,
+) (kvevent.Reader, error) {
+	cfg := ca.flowCtx.Cfg
+	buf := kvevent.NewThrottlingBuffer(
+		kvevent.NewMemBuffer(ca.kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV, &ca.metrics.KVFeedMetrics),
+		cdcutils.NodeLevelThrottler(&cfg.Settings.SV, &ca.metrics.ThrottleMetrics))
+
+	// KVFeed takes ownership of the kvevent.Writer portion of the buffer, while
+	// we return the kvevent.Reader part to the caller.
+	kvfeedCfg := ca.makeKVFeedCfg(ctx, spans, buf, initialHighWater, needsInitialScan)
+
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
 	ca.errCh = make(chan error, 2)
@@ -294,63 +304,53 @@ func (ca *changeAggregator) startKVFeed(ctx context.Context, kvfeedCfg kvfeed.Co
 		close(ca.kvFeedDoneCh)
 		ca.errCh <- err
 		ca.cancel()
+		return nil, err
 	}
+
+	return buf, nil
 }
 
-func newSchemaFeed(
+func (ca *changeAggregator) makeKVFeedCfg(
 	ctx context.Context,
-	cfg *execinfra.ServerConfig,
-	spec execinfrapb.ChangeAggregatorSpec,
-	metrics *Metrics,
-) schemafeed.SchemaFeed {
-	schemaChangePolicy := changefeedbase.SchemaChangePolicy(
-		spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
-	if schemaChangePolicy == changefeedbase.OptSchemaChangePolicyIgnore {
-		return schemafeed.DoNothingSchemaFeed
-	}
-	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
-		spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
-	initialHighWater, _ := getKVFeedInitialParameters(spec)
-	return schemafeed.New(ctx, cfg, schemaChangeEvents,
-		spec.Feed.Targets, initialHighWater, &metrics.SchemaFeedMetrics)
-}
-
-func makeKVFeedCfg(
-	ctx context.Context,
-	cfg *execinfra.ServerConfig,
-	mm *mon.BytesMonitor,
-	spec execinfrapb.ChangeAggregatorSpec,
 	spans []roachpb.Span,
-	buf kvevent.Buffer,
-	metrics *Metrics,
-	knobs kvfeed.TestingKnobs,
+	buf kvevent.Writer,
+	initialHighWater hlc.Timestamp,
+	needsInitialScan bool,
 ) kvfeed.Config {
 	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
-		spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
+		ca.spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
 	schemaChangePolicy := changefeedbase.SchemaChangePolicy(
-		spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
-	_, withDiff := spec.Feed.Opts[changefeedbase.OptDiff]
-	initialHighWater, needsInitialScan := getKVFeedInitialParameters(spec)
+		ca.spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
+	_, withDiff := ca.spec.Feed.Opts[changefeedbase.OptDiff]
+	cfg := ca.flowCtx.Cfg
+
+	var sf schemafeed.SchemaFeed
+	if schemaChangePolicy == changefeedbase.OptSchemaChangePolicyIgnore {
+		sf = schemafeed.DoNothingSchemaFeed
+	} else {
+		sf = schemafeed.New(ctx, cfg, schemaChangeEvents, ca.spec.Feed.Targets,
+			initialHighWater, &ca.metrics.SchemaFeedMetrics)
+	}
 
 	return kvfeed.Config{
-		Sink:               buf,
+		Writer:             buf,
 		Settings:           cfg.Settings,
 		DB:                 cfg.DB,
 		Codec:              cfg.Codec,
 		Clock:              cfg.DB.Clock(),
 		Gossip:             cfg.Gossip,
 		Spans:              spans,
-		BackfillCheckpoint: spec.Checkpoint.Spans,
-		Targets:            spec.Feed.Targets,
-		Metrics:            &metrics.KVFeedMetrics,
-		MM:                 mm,
+		BackfillCheckpoint: ca.spec.Checkpoint.Spans,
+		Targets:            ca.spec.Feed.Targets,
+		Metrics:            &ca.metrics.KVFeedMetrics,
+		MM:                 ca.kvFeedMemMon,
 		InitialHighWater:   initialHighWater,
 		WithDiff:           withDiff,
 		NeedsInitialScan:   needsInitialScan,
 		SchemaChangeEvents: schemaChangeEvents,
 		SchemaChangePolicy: schemaChangePolicy,
-		SchemaFeed:         newSchemaFeed(ctx, cfg, spec, metrics),
-		Knobs:              knobs,
+		SchemaFeed:         sf,
+		Knobs:              ca.knobs.FeedKnobs,
 	}
 }
 
@@ -426,6 +426,7 @@ func (ca *changeAggregator) close() {
 				log.Warningf(ca.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
 			}
 		}
+
 		ca.memAcc.Close(ca.Ctx)
 		if ca.kvFeedMemMon != nil {
 			ca.kvFeedMemMon.Stop(ca.Ctx)
@@ -443,6 +444,12 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 			return ca.ProcessRowHelper(ca.resolvedSpanBuf.Pop()), nil
 		}
 		if err := ca.tick(); err != nil {
+			if errors.Is(err, kvevent.ErrBufferClosed) {
+				// ErrBufferClosed is a signal that
+				// our kvfeed has exited expectedly.
+				err = nil
+			}
+
 			select {
 			// If the poller errored first, that's the
 			// interesting one, so overwrite `err`.
@@ -463,7 +470,7 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 // kvFeed, sends off this event to the event consumer, and flushes the sink
 // if necessary.
 func (ca *changeAggregator) tick() error {
-	event, err := ca.eventProducer.GetEvent(ca.Ctx)
+	event, err := ca.eventProducer.Get(ca.Ctx)
 	if err != nil {
 		return err
 	}
@@ -483,11 +490,14 @@ func (ca *changeAggregator) tick() error {
 	case kvevent.TypeKV:
 		return ca.eventConsumer.ConsumeEvent(ca.Ctx, event)
 	case kvevent.TypeResolved:
-		event.DetachAlloc().Release(ca.Ctx)
+		a := event.DetachAlloc()
+		a.Release(ca.Ctx)
 		resolved := event.Resolved()
 		if ca.knobs.ShouldSkipResolved == nil || !ca.knobs.ShouldSkipResolved(resolved) {
 			return ca.noteResolvedSpan(resolved)
 		}
+	case kvevent.TypeFlush:
+		return ca.sink.Flush(ca.Ctx)
 	}
 
 	return nil
@@ -566,22 +576,6 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 func (ca *changeAggregator) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	ca.close()
-}
-
-type kvEventProducer interface {
-	// GetEvent returns the next kv event.
-	GetEvent(ctx context.Context) (kvevent.Event, error)
-}
-
-type bufEventProducer struct {
-	kvevent.Reader
-}
-
-var _ kvEventProducer = &bufEventProducer{}
-
-// GetEvent implements kvEventProducer interface
-func (p *bufEventProducer) GetEvent(ctx context.Context) (kvevent.Event, error) {
-	return p.Get(ctx)
 }
 
 type kvEventConsumer interface {
@@ -1046,7 +1040,7 @@ func newChangeFrontierProcessor(
 		cf.freqEmitResolved = emitNoResolved
 	}
 
-	if cf.encoder, err = getEncoder(ctx, spec.Feed.Opts, spec.Feed.Targets); err != nil {
+	if cf.encoder, err = getEncoder(spec.Feed.Opts, spec.Feed.Targets); err != nil {
 		return nil, err
 	}
 
@@ -1092,7 +1086,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 
 	cf.highWaterAtStart = cf.spec.Feed.StatementTime
 	if cf.spec.JobID != 0 {
-		job, err := cf.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cf.spec.JobID)
+		job, err := cf.flowCtx.Cfg.JobRegistry.LoadClaimedJob(ctx, cf.spec.JobID)
 		if err != nil {
 			cf.MoveToDraining(err)
 			return
@@ -1377,6 +1371,15 @@ func (cf *changeFrontier) checkpointJobProgress(
 		}
 
 		ju.UpdateProgress(progress)
+
+		// Reset RunStats.NumRuns to 1 since the changefeed is
+		// now running. By resetting the NumRuns, we avoid
+		// future job system level retries from having large
+		// backoffs because of past failures.
+		if md.RunStats != nil {
+			ju.UpdateRunStats(1, md.RunStats.LastRun)
+		}
+
 		return nil
 	})
 }

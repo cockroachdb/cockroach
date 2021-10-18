@@ -467,7 +467,7 @@ func waitForUpgradeStep(nodes option.NodeListOption) versionStep {
 		t.L().Printf("%s: waiting for cluster to auto-upgrade\n", newVersion)
 
 		for _, i := range nodes {
-			err := retry.ForDuration(30*time.Second, func() error {
+			err := retry.ForDuration(5*time.Minute, func() error {
 				currentVersion := u.clusterVersion(ctx, t, i).String()
 				if currentVersion != newVersion {
 					return fmt.Errorf("%d: expected version %s, got %s", i, newVersion, currentVersion)

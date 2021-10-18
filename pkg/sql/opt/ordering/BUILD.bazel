@@ -19,6 +19,8 @@ go_library(
         "set.go",
         "sort.go",
         "statement.go",
+        "topk.go",
+        "with.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/ordering",
     visibility = ["//visibility:public"],

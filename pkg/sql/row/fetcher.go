@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -163,18 +163,18 @@ func (fta *FetcherTableArgs) InitCols(
 	desc catalog.TableDescriptor,
 	scanVisibility execinfrapb.ScanVisibility,
 	withSystemColumns bool,
-	virtualColumn catalog.Column,
+	invertedColumn catalog.Column,
 ) {
 	cols := make([]catalog.Column, 0, len(desc.AllColumns()))
-	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
+	if scanVisibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
 		cols = append(cols, desc.ReadableColumns()...)
 	} else {
 		cols = append(cols, desc.PublicColumns()...)
 	}
-	if virtualColumn != nil {
+	if invertedColumn != nil {
 		for i, col := range cols {
-			if col.GetID() == virtualColumn.GetID() {
-				cols[i] = virtualColumn
+			if col.GetID() == invertedColumn.GetID() {
+				cols[i] = invertedColumn
 				break
 			}
 		}
@@ -341,7 +341,8 @@ func (rf *Fetcher) Init(
 	rf.isCheck = isCheck
 
 	if memMonitor != nil {
-		rf.mon = execinfra.NewMonitor(ctx, memMonitor, "fetcher-mem")
+		rf.mon = mon.NewMonitorInheritWithLimit("fetcher-mem", 0 /* limit */, memMonitor)
+		rf.mon.Start(ctx, memMonitor, mon.BoundAccount{})
 	}
 
 	// We must always decode the index key if we need to distinguish between
@@ -563,28 +564,6 @@ func (rf *Fetcher) GetTables() []catalog.Descriptor {
 	return ret
 }
 
-// RowLimit represents a response limit expressed in terms of number of result
-// rows. RowLimits get ultimately converted to KeyLimits and are translated into
-// BatchRequest.MaxSpanRequestKeys.
-type RowLimit uint64
-
-// KeyLimit represents a response limit expressed in terms of number of keys.
-type KeyLimit int64
-
-// BytesLimit represents a response limit expressed in terms of the size of the
-// results. A BytesLimit ultimately translates into BatchRequest.TargetBytes.
-type BytesLimit uint64
-
-// NoRowLimit can be passed to Fetcher.StartScan to signify that the caller
-// doesn't want to limit the number of result rows for each scan request.
-const NoRowLimit RowLimit = 0
-
-// NoBytesLimit can be passed to Fetcher.StartScan to signify that the caller
-// doesn't want to limit the size of results for each scan request.
-//
-// See also DefaultBatchBytesLimit.
-const NoBytesLimit BytesLimit = 0
-
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
 //
@@ -606,8 +585,8 @@ func (rf *Fetcher) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
-	batchBytesLimit BytesLimit,
-	rowLimitHint RowLimit,
+	batchBytesLimit rowinfra.BytesLimit,
+	rowLimitHint rowinfra.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
 ) error {
@@ -617,6 +596,7 @@ func (rf *Fetcher) StartScan(
 
 	rf.traceKV = traceKV
 	f, err := makeKVBatchFetcher(
+		ctx,
 		makeKVBatchFetcherDefaultSendFunc(txn),
 		spans,
 		rf.reverse,
@@ -658,8 +638,8 @@ func (rf *Fetcher) StartInconsistentScan(
 	initialTimestamp hlc.Timestamp,
 	maxTimestampAge time.Duration,
 	spans roachpb.Spans,
-	batchBytesLimit BytesLimit,
-	rowLimitHint RowLimit,
+	batchBytesLimit rowinfra.BytesLimit,
+	rowLimitHint rowinfra.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
 ) error {
@@ -717,6 +697,7 @@ func (rf *Fetcher) StartInconsistentScan(
 
 	rf.traceKV = traceKV
 	f, err := makeKVBatchFetcher(
+		ctx,
 		sendFunc(sendFn),
 		spans,
 		rf.reverse,
@@ -736,7 +717,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	return rf.StartScanFrom(ctx, &f)
 }
 
-func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint RowLimit) KeyLimit {
+func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint rowinfra.RowLimit) rowinfra.KeyLimit {
 	if rowLimitHint == 0 {
 		return 0
 	}
@@ -748,7 +729,7 @@ func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint RowLimit) KeyLimit {
 	// rows we could potentially scan over.
 	//
 	// We add an extra key to make sure we form the last row.
-	return KeyLimit(int64(rowLimitHint)*int64(rf.maxKeysPerRow) + 1)
+	return rowinfra.KeyLimit(int64(rowLimitHint)*int64(rf.maxKeysPerRow) + 1)
 }
 
 // StartScanFrom initializes and starts a scan from the given kvBatchFetcher. Can be
@@ -1125,7 +1106,12 @@ func (rf *Fetcher) processKV(
 			// In this case, we don't need to decode the column family ID, because
 			// the ValueType_TUPLE encoding includes the column id with every encoded
 			// column value.
-			prettyKey, prettyValue, err = rf.processValueTuple(ctx, table, kv, prettyKey)
+			var tupleBytes []byte
+			tupleBytes, err = kv.Value.GetTuple()
+			if err != nil {
+				break
+			}
+			prettyKey, prettyValue, err = rf.processValueBytes(ctx, table, kv, tupleBytes, prettyKey)
 		default:
 			var familyID uint64
 			_, familyID, err = encoding.DecodeUvarintAscending(rf.keyRemainingBytes)
@@ -1338,18 +1324,6 @@ func (rf *Fetcher) processValueBytes(
 		prettyValue = rf.prettyValueBuf.String()
 	}
 	return prettyKey, prettyValue, nil
-}
-
-// processValueTuple processes the given values (of columns family.ColumnIDs),
-// setting values in the rf.row accordingly. The key is only used for logging.
-func (rf *Fetcher) processValueTuple(
-	ctx context.Context, table *tableInfo, kv roachpb.KeyValue, prettyKeyPrefix string,
-) (prettyKey string, prettyValue string, err error) {
-	tupleBytes, err := kv.Value.GetTuple()
-	if err != nil {
-		return "", "", err
-	}
-	return rf.processValueBytes(ctx, table, kv, tupleBytes, prettyKeyPrefix)
 }
 
 // NextRow processes keys until we complete one row, which is returned as an

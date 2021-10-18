@@ -34,6 +34,7 @@ var metamorphicBuild bool
 const (
 	metamorphicBuildProbability = 0.8
 	metamorphicValueProbability = 0.75
+	metamorphicBoolProbability  = 0.5
 )
 
 // ConstantWithMetamorphicTestValue should be used to initialize "magic
@@ -110,6 +111,21 @@ func ConstantWithMetamorphicTestRange(name string, defaultValue, min, max int) i
 	return defaultValue
 }
 
-func logMetamorphicValue(name string, value int) {
-	fmt.Fprintf(os.Stderr, "initialized metamorphic constant %q with value %d\n", name, value)
+// ConstantWithMetamorphicTestBool is like ConstantWithMetamorphicTestValue except
+// it returns the non-default value half of the time (if running a metamorphic build).
+//
+// The given name is used for logging.
+func ConstantWithMetamorphicTestBool(name string, defaultValue bool) bool {
+	if metamorphicBuild {
+		if rng.Float64() < metamorphicBoolProbability {
+			ret := !defaultValue
+			logMetamorphicValue(name, ret)
+			return ret
+		}
+	}
+	return defaultValue
+}
+
+func logMetamorphicValue(name string, value interface{}) {
+	fmt.Fprintf(os.Stderr, "initialized metamorphic constant %q with value %v\n", name, value)
 }

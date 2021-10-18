@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -178,9 +177,17 @@ func NewProcessor(cfg Config) *Processor {
 	}
 }
 
-// IteratorConstructor is used to construct an iterator. It should be called
-// from underneath a stopper task to ensure that the engine has not been closed.
-type IteratorConstructor func() storage.SimpleMVCCIterator
+// IntentScannerConstructor is used to construct an IntentScanner. It
+// should be called from underneath a stopper task to ensure that the
+// engine has not been closed.
+type IntentScannerConstructor func() IntentScanner
+
+// CatchUpIteratorConstructor is used to construct an iterator that
+// can be used for catchup-scans. It should be called from underneath
+// a stopper task to ensure that the engine has not been closed.
+//
+// The constructed iterator must have an UpperBound set.
+type CatchUpIteratorConstructor func() *CatchUpIterator
 
 // Start launches a goroutine to process rangefeed events and send them to
 // registrations.
@@ -191,7 +198,7 @@ type IteratorConstructor func() storage.SimpleMVCCIterator
 // calling its Close method when it is finished. If the iterator is nil then
 // no initialization scan will be performed and the resolved timestamp will
 // immediately be considered initialized.
-func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IteratorConstructor) {
+func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IntentScannerConstructor) {
 	ctx := p.AnnotateCtx(context.Background())
 	if err := stopper.RunAsyncTask(ctx, "rangefeed.Processor", func(ctx context.Context) {
 		p.run(ctx, p.RangeID, rtsIterFunc, stopper)
@@ -206,7 +213,7 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IteratorConstructor
 func (p *Processor) run(
 	ctx context.Context,
 	_forStacks roachpb.RangeID,
-	rtsIterFunc IteratorConstructor,
+	rtsIterFunc IntentScannerConstructor,
 	stopper *stop.Stopper,
 ) {
 	defer close(p.stoppedC)
@@ -246,6 +253,11 @@ func (p *Processor) run(
 			if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
 				log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 			}
+
+			// Construct the catchUpIter before notifying the registration that it
+			// has been registered. Note that if the catchUpScan is never run, then
+			// the iterator constructed here will be closed in disconnect.
+			r.maybeConstructCatchUpIter()
 
 			// Add the new registration to the registry.
 			p.reg.Register(&r)
@@ -394,7 +406,7 @@ func (p *Processor) sendStop(pErr *roachpb.Error) {
 func (p *Processor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchupIterConstructor IteratorConstructor,
+	catchUpIterConstructor CatchUpIteratorConstructor,
 	withDiff bool,
 	stream Stream,
 	errC chan<- *roachpb.Error,
@@ -405,7 +417,7 @@ func (p *Processor) Register(
 	p.syncEventC()
 
 	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchupIterConstructor, withDiff,
+		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
 		p.Config.EventChanCap, p.Metrics, stream, errC,
 	)
 	select {

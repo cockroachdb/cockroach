@@ -14,9 +14,13 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
+	"github.com/spf13/cobra"
 )
 
 func TestCLITimeout(t *testing.T) {
@@ -71,4 +75,27 @@ func TestJunkPositionalArguments(t *testing.T) {
 			t.Errorf("%d: expected:\n%s\ngot:\n%s", i, exp, out)
 		}
 	}
+}
+
+func Example_exitcode() {
+	c := NewCLITest(TestCLIParams{NoServer: true})
+	defer c.Cleanup()
+
+	testCmd := &cobra.Command{
+		Use: "test-exit-code",
+		RunE: clierrorplus.MaybeDecorateError(
+			func(_ *cobra.Command, _ []string) error {
+				return clierror.NewError(errors.New("err"), exit.Interrupted())
+			}),
+	}
+	cockroachCmd.AddCommand(testCmd)
+	defer cockroachCmd.RemoveCommand(testCmd)
+
+	c.reportExitCode = true
+	c.Run("test-exit-code")
+
+	// Output:
+	// test-exit-code
+	// ERROR: err
+	// exit code: 3
 }

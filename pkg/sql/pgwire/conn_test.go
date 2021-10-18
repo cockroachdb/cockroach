@@ -1366,6 +1366,15 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 			},
 		},
 		{
+			desc:  "success parsing options with a tab (%09) separating the options",
+			query: "user=root&options=-csearch_path=default,test%09-coptimizer_use_multicol_stats=true",
+			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+				require.NoError(t, err)
+				require.Equal(t, "default,test", args.SessionDefaults["search_path"])
+				require.Equal(t, "true", args.SessionDefaults["optimizer_use_multicol_stats"])
+			},
+		},
+		{
 			desc:  "error when no leading '-c'",
 			query: "user=root&options=search_path=default",
 			assert: func(t *testing.T, args sql.SessionArgs, err error) {

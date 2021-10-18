@@ -8,7 +8,7 @@ with t=a k=a
 ----
 >> at end:
 txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/11.000000000,0 -> /BYTES/first
 
 # Lay down an intent without increasing the sequence but with a different value.
@@ -18,7 +18,7 @@ with t=a k=a
   put v=second
 ----
 >> at end:
-meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/11.000000000,0 -> /BYTES/first
 error: (*withstack.withStack:) transaction 00000000-0000-0000-0000-000000000001 with sequence 0 has a different value [0 0 0 0 3 115 101 99 111 110 100] after recomputing from what was written: [0 0 0 0 3 102 105 114 115 116]
 
@@ -34,10 +34,10 @@ with t=a k=a
   txn_step
   check_intent
 ----
-meta: "a" -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+meta: "a" -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 >> at end:
 txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/11.000000000,0 -> /BYTES/second
 
 run error
@@ -48,7 +48,7 @@ with t=a k=a
 ----
 >> at end:
 txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=-1} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/11.000000000,0 -> /BYTES/second
 error: (*withstack.withStack:) transaction 00000000-0000-0000-0000-000000000001 with sequence 1 missing an intent with lower sequence -1
 
@@ -68,9 +68,9 @@ inc: current value = 1
 inc: current value = 1
 >> at end:
 txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/11.000000000,0 -> /BYTES/second
-meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=2} ts=11.000000000,0 del=false klen=12 vlen=6
+meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=2} ts=11.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/11.000000000,0 -> /INT/1
 
 run ok
@@ -95,9 +95,9 @@ inc: current value = 1
 inc: current value = 1
 >> at end:
 txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/11.000000000,0 -> /BYTES/second
-meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}}
+meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "i"/11.000000000,0 -> /INT/2
 
 # Write a key outside of the transaction.
@@ -106,9 +106,9 @@ increment k=i2 ts=10
 ----
 inc: current value = 1
 >> at end:
-meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/11.000000000,0 -> /BYTES/second
-meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}}
+meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "i"/11.000000000,0 -> /INT/2
 data: "i2"/10.000000000,0 -> /INT/1
 
@@ -128,11 +128,11 @@ inc: current value = 2
 inc: current value = 2
 >> at end:
 txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/11.000000000,0 -> /BYTES/second
-meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}}
+meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "i"/11.000000000,0 -> /INT/2
-meta: "i2"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=4} ts=11.000000000,0 del=false klen=12 vlen=6
+meta: "i2"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=4} ts=11.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i2"/11.000000000,0 -> /INT/2
 data: "i2"/10.000000000,0 -> /INT/1
 
@@ -158,10 +158,10 @@ inc: current value = 2
 inc: current value = 2
 >> at end:
 txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/11.000000000,0 -> /BYTES/second
-meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}}
+meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "i"/11.000000000,0 -> /INT/2
-meta: "i2"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=5} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{4 /INT/2}}
+meta: "i2"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=5} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{4 /INT/2}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "i2"/11.000000000,0 -> /INT/3
 data: "i2"/10.000000000,0 -> /INT/1

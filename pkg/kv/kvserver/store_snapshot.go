@@ -16,7 +16,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -924,10 +923,6 @@ func SendEmptySnapshot(
 		return err
 	}
 
-	var replicaVersion roachpb.Version
-	if st.Version.IsActive(ctx, clusterversion.ReplicaVersions) {
-		replicaVersion = st.Version.ActiveVersionOrEmpty(ctx).Version
-	}
 	ms, err = stateloader.WriteInitialReplicaState(
 		ctx,
 		eng,
@@ -936,7 +931,7 @@ func SendEmptySnapshot(
 		roachpb.Lease{},
 		hlc.Timestamp{}, // gcThreshold
 		stateloader.TruncatedStateUnreplicated,
-		replicaVersion,
+		st.Version.ActiveVersionOrEmpty(ctx).Version,
 	)
 	if err != nil {
 		return err

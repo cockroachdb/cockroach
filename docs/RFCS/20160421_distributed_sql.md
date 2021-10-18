@@ -959,7 +959,7 @@ RPC for ranges with tons of lookups. In this case, the idea is to push a bunch
 of the computation to the data, so the flow passed to `ScheduleFlows` will be a
 copy of the physical nodes downstream of the aggregator, including filtering
 and aggregation. We imagine the processor will take the decision to move to
-this heavywight process once it sees that it's batching a lot of lookups for
+this heavyweight process once it sees that it's batching a lot of lookups for
 the same range.
 
 ## Retiring flows
@@ -1139,7 +1139,7 @@ scales well with the query size: if a query draws data from a single node, we
 will do all the aggregation on that node; if a query draws data from many nodes,
 we will distribute the aggregation among those nodes.
 
-We will also support configuring things to minimize the distribution - gettting
+We will also support configuring things to minimize the distribution - getting
 everything back on the single gateway node as quickly as possible. This will be
 useful to compare with the current "everything on the gateway" approach; it is
 also a conservative step that might avoid some problems when distributing

@@ -145,8 +145,7 @@ func evalNewLease(
 	// only ever updates in-mem state) but it's easy to get things wrong (in
 	// which case they could easily take a catastrophic turn) and the benefit is
 	// low.
-	readSumActive := rec.ClusterSettings().Version.IsActive(ctx, clusterversion.PriorReadSummaries)
-	if priorReadSum != nil && readSumActive {
+	if priorReadSum != nil {
 		if err := readsummary.Set(ctx, readWriter, rec.GetRangeID(), ms, priorReadSum); err != nil {
 			return newFailedLeaseTrigger(isTransfer), err
 		}

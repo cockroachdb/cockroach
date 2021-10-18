@@ -19,9 +19,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/alessio/shellescape"
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
-	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/oserror"
 	"github.com/spf13/cobra"
 )
 
@@ -29,6 +28,11 @@ const (
 	crossFlag              = "cross"
 	hoistGeneratedCodeFlag = "hoist-generated-code"
 )
+
+type buildTarget struct {
+	fullName   string
+	isGoBinary bool
+}
 
 // makeBuildCmd constructs the subcommand used to build the specified binaries.
 func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -44,7 +48,7 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}
-	buildCmd.Flags().String(volumeFlag, "bzlcache", "the Docker volume to use as the Bazel cache (only used for cross builds)")
+	buildCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
 	buildCmd.Flags().String(crossFlag, "", `
         Turns on cross-compilation. Builds the binary using the builder image w/ Docker.
         You can optionally set a config, as in --cross=windows.
@@ -52,6 +56,7 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
         build configuration specified in .bazelrc, minus the "cross" prefix.`)
 	buildCmd.Flags().Bool(hoistGeneratedCodeFlag, false, "hoist generated code out of the Bazel sandbox into the workspace")
 	buildCmd.Flags().Lookup(crossFlag).NoOptDefVal = "linux"
+	addCommonBuildFlags(buildCmd)
 	return buildCmd
 }
 
@@ -60,40 +65,56 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 // above, and in usage docs.
 
 var buildTargetMapping = map[string]string{
-	"cockroach":        "//pkg/cmd/cockroach",
-	"cockroach-oss":    "//pkg/cmd/cockroach-oss",
-	"cockroach-short":  "//pkg/cmd/cockroach-short",
-	"dev":              "//pkg/cmd/dev",
-	"docgen":           "//pkg/cmd/docgen",
-	"execgen":          "//pkg/sql/colexec/execgen/cmd/execgen",
-	"optgen":           "//pkg/sql/opt/optgen/cmd/optgen",
-	"optfmt":           "//pkg/sql/opt/optgen/cmd/optfmt",
-	"langgen":          "//pkg/sql/opt/optgen/cmd/langgen",
-	"roachprod":        "//pkg/cmd/roachprod",
-	"roachprod-stress": "//pkg/cmd/roachprod-stress",
-	"short":            "//pkg/cmd/cockroach-short",
-	"workload":         "//pkg/cmd/workload",
-	"roachtest":        "//pkg/cmd/roachtest",
+	"buildifier":       "@com_github_bazelbuild_buildtools//buildifier:buildifier",
+	"buildozer":        "@com_github_bazelbuild_buildtools//buildozer:buildozer",
+	"cockroach":        "//pkg/cmd/cockroach:cockroach",
+	"cockroach-oss":    "//pkg/cmd/cockroach-oss:cockroach-oss",
+	"cockroach-short":  "//pkg/cmd/cockroach-short:cockroach-short",
+	"crlfmt":           "@com_github_cockroachdb_crlfmt//:crlfmt",
+	"dev":              "//pkg/cmd/dev:dev",
+	"docgen":           "//pkg/cmd/docgen:docgen",
+	"execgen":          "//pkg/sql/colexec/execgen/cmd/execgen:execgen",
+	"gofmt":            "@com_github_cockroachdb_gostdlib//cmd/gofmt:gofmt",
+	"goimports":        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports:goimports",
+	"optgen":           "//pkg/sql/opt/optgen/cmd/optgen:optgen",
+	"optfmt":           "//pkg/sql/opt/optgen/cmd/optfmt:optfmt",
+	"oss":              "//pkg/cmd/cockroach-oss:cockroach-oss",
+	"langgen":          "//pkg/sql/opt/optgen/cmd/langgen:langgen",
+	"roachprod":        "//pkg/cmd/roachprod:roachprod",
+	"roachprod-stress": "//pkg/cmd/roachprod-stress:roachprod-stress",
+	"roachtest":        "//pkg/cmd/roachtest:roachtest",
+	"short":            "//pkg/cmd/cockroach-short:cockroach-short",
+	"stress":           stressTarget,
+	"workload":         "//pkg/cmd/workload:workload",
 }
 
-func (d *dev) build(cmd *cobra.Command, targets []string) error {
+func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
+	targets, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	cross := mustGetFlagString(cmd, crossFlag)
 	hoistGeneratedCode := mustGetFlagBool(cmd, hoistGeneratedCodeFlag)
 
-	args, fullTargets, err := getBasicBuildArgs(targets)
+	args, buildTargets, err := d.getBasicBuildArgs(ctx, targets)
 	if err != nil {
 		return err
 	}
+	args = append(args, additionalBazelArgs...)
 
 	if cross == "" {
-		args = append(args, getConfigFlags()...)
+		logCommand("bazel", args...)
 		if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
 			return err
 		}
-		return d.stageArtifacts(ctx, fullTargets, hoistGeneratedCode)
+		return d.stageArtifacts(ctx, buildTargets, hoistGeneratedCode)
 	}
 	// Cross-compilation case.
+	for _, target := range buildTargets {
+		if !target.isGoBinary {
+			// We can't cross-compile these targets because we can't be sure where
+			// Bazel is going to stage their output files.
+			return fmt.Errorf("cannot cross-compile target %s because it is not a go binary", target.fullName)
+		}
+	}
 	cross = "cross" + cross
 	volume := mustGetFlagString(cmd, volumeFlag)
 	args = append(args, fmt.Sprintf("--config=%s", cross))
@@ -109,21 +130,22 @@ func (d *dev) build(cmd *cobra.Command, targets []string) error {
 	// but that's hard and I don't think it's necessary for now.
 	script.WriteString(fmt.Sprintf("bazel %s\n", strings.Join(args, " ")))
 	script.WriteString(fmt.Sprintf("BAZELBIN=`bazel info bazel-bin --color=no --config=%s`\n", cross))
-	for _, target := range fullTargets {
-		script.WriteString(fmt.Sprintf("cp $BAZELBIN/%s /artifacts\n", bazelutil.OutputOfBinaryRule(target)))
-		script.WriteString(fmt.Sprintf("chmod +w /artifacts/%s\n", targetToBinBasename(target)))
+	for _, target := range buildTargets {
+		script.WriteString(fmt.Sprintf("cp $BAZELBIN/%s /artifacts\n", bazelutil.OutputOfBinaryRule(target.fullName)))
 	}
 	_, err = d.exec.CommandContextWithInput(ctx, script.String(), "docker", dockerArgs...)
 	if err != nil {
 		return err
 	}
-	for _, target := range fullTargets {
-		logSuccessfulBuild(target, filepath.Join("artifacts", targetToBinBasename(target)))
+	for _, target := range buildTargets {
+		logSuccessfulBuild(target.fullName, filepath.Join("artifacts", targetToBinBasename(target.fullName)))
 	}
 	return nil
 }
 
-func (d *dev) stageArtifacts(ctx context.Context, targets []string, hoistGeneratedCode bool) error {
+func (d *dev) stageArtifacts(
+	ctx context.Context, targets []buildTarget, hoistGeneratedCode bool,
+) error {
 	workspace, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
@@ -138,8 +160,12 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []string, hoistGenerat
 	}
 
 	for _, target := range targets {
-		binaryPath := filepath.Join(bazelBin, bazelutil.OutputOfBinaryRule(target))
-		base := targetToBinBasename(target)
+		if !target.isGoBinary {
+			// Skip staging for these.
+			continue
+		}
+		binaryPath := filepath.Join(bazelBin, bazelutil.OutputOfBinaryRule(target.fullName))
+		base := targetToBinBasename(target.fullName)
 		var symlinkPath string
 		// Binaries beginning with the string "cockroach" go right at
 		// the top of the workspace; others go in the `bin` directory.
@@ -150,7 +176,7 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []string, hoistGenerat
 		}
 
 		// Symlink from binaryPath -> symlinkPath
-		if err := d.os.Remove(symlinkPath); err != nil && !oserror.IsNotExist(err) {
+		if err := d.os.Remove(symlinkPath); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		if err := d.os.Symlink(binaryPath, symlinkPath); err != nil {
@@ -160,7 +186,7 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []string, hoistGenerat
 		if err != nil {
 			rel = symlinkPath
 		}
-		logSuccessfulBuild(target, rel)
+		logSuccessfulBuild(target.fullName, rel)
 	}
 
 	if hoistGeneratedCode {
@@ -257,40 +283,64 @@ func targetToBinBasename(target string) string {
 // The first string slice returned is the list of arguments (i.e. to pass to
 // `CommandContext`), and the second is the full list of targets to be built
 // (e.g. after translation, so short -> "//pkg/cmd/cockroach-short").
-func getBasicBuildArgs(targets []string) (args, fullTargets []string, err error) {
+func (d *dev) getBasicBuildArgs(
+	ctx context.Context, targets []string,
+) (args []string, buildTargets []buildTarget, err error) {
 	if len(targets) == 0 {
 		// Default to building the cockroach binary.
 		targets = append(targets, "cockroach")
 	}
 
 	args = append(args, "build")
-	args = append(args, "--color=yes")
-	// Don't let bazel generate any convenience symlinks, we'll create them
-	// ourself.
-	args = append(args, "--experimental_convenience_symlinks=ignore")
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
 
+	shouldBuildWithTestConfig := false
 	for _, target := range targets {
+		target = strings.TrimPrefix(target, "./")
 		target = strings.TrimRight(target, "/")
-		// Assume that targets beginning with `//` or containing `/`
-		// don't need to be munged.
-		if strings.HasPrefix(target, "//") || strings.Contains(target, "/") {
-			args = append(args, target)
-			fullTargets = append(fullTargets, target)
+		// For targets beginning with // or containing / or :, we need to ask Bazel
+		// what kind of target it is.
+		if strings.HasPrefix(target, "//") || strings.ContainsAny(target, "/:") {
+			queryArgs := []string{"query", target, "--output=label_kind"}
+			labelKind, queryErr := d.exec.CommandContextSilent(ctx, "bazel", queryArgs...)
+			if queryErr != nil {
+				err = fmt.Errorf("could not run `bazel %s` (%w)", shellescape.QuoteCommand(queryArgs), queryErr)
+				return
+			}
+			fields := strings.Fields(strings.TrimSpace(string(labelKind)))
+			fullTargetName := fields[len(fields)-1]
+			typ := fields[0]
+			args = append(args, fullTargetName)
+			buildTargets = append(buildTargets, buildTarget{fullName: fullTargetName, isGoBinary: typ == "go_binary"})
+			if typ == "go_test" {
+				shouldBuildWithTestConfig = true
+			}
 			continue
 		}
-		buildTarget, ok := buildTargetMapping[target]
+		aliased, ok := buildTargetMapping[target]
 		if !ok {
-			err = errors.Newf("unrecognized target: %s", target)
+			err = fmt.Errorf("unrecognized target: %s", target)
 			return
 		}
 
-		fullTargets = append(fullTargets, buildTarget)
-		args = append(args, buildTarget)
+		args = append(args, aliased)
+		buildTargets = append(buildTargets, buildTarget{fullName: aliased, isGoBinary: true})
 	}
+
+	// Add --config=with_ui iff we're building a target that needs it.
+	for _, target := range buildTargets {
+		if target.fullName == buildTargetMapping["cockroach"] || target.fullName == buildTargetMapping["cockroach-oss"] {
+			args = append(args, "--config=with_ui")
+			break
+		}
+	}
+	if shouldBuildWithTestConfig {
+		args = append(args, "--config=test")
+	}
+
 	return
 }
 

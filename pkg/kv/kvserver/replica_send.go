@@ -37,6 +37,58 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 // Send executes a command on this range, dispatching it to the
 // read-only, read-write, or admin execution path as appropriate.
 // ctx should contain the log tags from the store (and up).
+//
+// A rough schematic for the path requests take through a Replica
+// is presented below, with a focus on where requests may spend
+// most of their time (once they arrive at the Node.Batch endpoint).
+//
+//                                 DistSender (tenant)
+//                                      │
+//                                      ┆ (RPC)
+//                                      │
+//                                      ▼
+//                                 Node.Batch (host cluster)
+//                                      │
+//                                      ▼
+//                              Admission control
+//                                      │
+//                                      ▼
+//                                 Replica.Send
+//                                      │
+//                                      ▼
+//                      Replica.maybeBackpressureBatch (if Range too large)
+//                                      │
+//                                      ▼
+//               Replica.maybeRateLimitBatch (tenant rate limits)
+//                                      │
+//                                      ▼
+//                 Replica.maybeCommitWaitBeforeCommitTrigger (if committing with commit-trigger)
+//                                      │
+// read-write ◄─────────────────────────┴────────────────────────► read-only
+//     │                                                               │
+//     │                                                               │
+//     ├─────────────► executeBatchWithConcurrencyRetries ◄────────────┤
+//     │               (handles leases and txn conflicts)              │
+//     │                                                               │
+//     ▼                                                               │
+// executeReadWriteBatch                                               │
+//     │                                                               │
+//     ▼                                                               ▼
+// evalAndPropose         (turns the BatchRequest        executeReadOnlyBatch
+//     │                   into pebble WriteBatch)
+//     │
+//     ├──────────────────► (writes that can use async consensus do not
+//     │                     wait for replication and are done here)
+//     │
+//     ├──────────────────► maybeAcquireProposalQuota
+//     │                    (applies backpressure in case of
+//     │                     lagging Raft followers)
+//     │
+//     │
+//     ▼
+// handleRaftReady        (drives the Raft loop, first appending to the log
+//                         to commit the command, then signaling proposer and
+//                         applying the command)
 func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -426,7 +478,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			// Then attempt to acquire the lease if not currently held by any
 			// replica or redirect to the current leaseholder if currently held
 			// by a different replica.
-			if pErr = r.handleInvalidLeaseError(ctx, ba, pErr, t); pErr != nil {
+			if pErr = r.handleInvalidLeaseError(ctx, ba); pErr != nil {
 				return nil, pErr
 			}
 		case *roachpb.MergeInProgressError:
@@ -576,28 +628,14 @@ func (r *Replica) handleIndeterminateCommitError(
 }
 
 func (r *Replica) handleInvalidLeaseError(
-	ctx context.Context, ba *roachpb.BatchRequest, _ *roachpb.Error, t *roachpb.InvalidLeaseError,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
 	// On an invalid lease error, attempt to acquire a new lease. If in the
 	// process of doing so, we determine that the lease now lives elsewhere,
 	// redirect.
 	_, pErr := r.redirectOnOrAcquireLeaseForRequest(ctx, ba.Timestamp)
-	if pErr == nil {
-		// Lease valid. Retry command.
-		return nil
-	}
-	// If we failed to acquire the lease, check to see whether the request can
-	// still be served as a follower read on this replica. Doing so here will
-	// not be necessary once we break the dependency between closed timestamps
-	// and leases and address the TODO in checkExecutionCanProceed to check the
-	// closed timestamp before consulting the lease.
-
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if r.canServeFollowerReadRLocked(ctx, ba, pErr.GoError()) {
-		// Follower read possible. Retry command.
-		return nil
-	}
+	// If we managed to get a lease (i.e. pErr == nil), the request evaluation
+	// will be retried.
 	return pErr
 }
 

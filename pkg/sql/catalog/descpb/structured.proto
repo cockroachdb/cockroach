@@ -166,6 +166,10 @@ message ColumnDescriptor {
   // NOT_IDENTITY_COLUMN.
   optional GeneratedAsIdentityType generated_as_identity_type = 19 [(gogoproto.nullable) = false];
 
+  // Expression to specify the sequence option for a `GENERATED AS IDENTITY`
+  // column.
+  optional string generated_as_identity_sequence_option = 20;
+
   reserved 7;
   // Ids of sequences used in this column's DEFAULT and ON UPDATE expressions,
   // in calls to nextval().
@@ -1361,6 +1365,10 @@ message TypeDescriptor {
     // Represents a special multi-region enum type which tracks available regions
     // as its enum values.
     MULTIREGION_ENUM = 2;
+    // Represents the implicit record type created on behalf of each table. This
+    // kind of TypeDescriptor is *never* persisted to disk! If you are here,
+    // thinking about using or persisting this value, you should *not* do that!
+    TABLE_IMPLICIT_RECORD_TYPE = 3;
     // Add more entries as we support more user defined types.
   }
   optional Kind kind = 5 [(gogoproto.nullable) = false];

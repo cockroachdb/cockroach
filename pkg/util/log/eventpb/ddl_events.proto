@@ -262,6 +262,19 @@ message CommentOnIndex {
   bool null_comment = 6 [(gogoproto.jsontag) = ",omitempty"];
 }
 
+// CommentOnConstraint is recorded when an constraint is commented.
+message CommentOnConstraint {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the table containing the affected constraint.
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The name of the affected constraint.
+  string constraint_name = 4  [(gogoproto.jsontag) = ",omitempty"];
+  // The new comment.
+  string comment = 5 [(gogoproto.jsontag) = ",omitempty"];
+  // Set to true if the comment was removed entirely.
+  bool null_comment = 6 [(gogoproto.jsontag) = ",omitempty"];
+}
 
 // CreateIndex is recorded when an index is created.
 message CreateIndex {

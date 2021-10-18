@@ -21,12 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func TestInterleavedTableMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
@@ -53,7 +55,7 @@ func TestInterleavedTableMigration(t *testing.T) {
  ) INTERLEAVE IN PARENT customers (customer);`)
 	// Migration to the second phase should fail, since the pre-condition was violated.
 	tdb.ExpectErr(t,
-		"pq: verifying precondition for version 21.1-140: interleaved tables are no longer supported at this version, please drop or uninterleave any tables visible using crdb_internal.interleaved.",
+		"pq: verifying precondition for version 21.1-1140: interleaved tables are no longer supported at this version, please drop or uninterleave any tables visible using crdb_internal.interleaved.",
 		"SET CLUSTER SETTING version = $1",
 		clusterversion.ByKey(clusterversion.EnsureNoInterleavedTables).String())
 	// Migration to the first phase should be fine, since it only blocks creating
@@ -63,7 +65,7 @@ func TestInterleavedTableMigration(t *testing.T) {
 		clusterversion.ByKey(clusterversion.PreventNewInterleavedTables).String())
 	// Migration to the next phase without interleaved tables should fail.
 	tdb.ExpectErr(t,
-		"pq: verifying precondition for version 21.1-140: interleaved tables are no longer supported at this version, please drop or uninterleave any tables visible using crdb_internal.interleaved.",
+		"pq: verifying precondition for version 21.1-1140: interleaved tables are no longer supported at this version, please drop or uninterleave any tables visible using crdb_internal.interleaved.",
 		"SET CLUSTER SETTING version = $1",
 		clusterversion.ByKey(clusterversion.EnsureNoInterleavedTables).String())
 	// Next drop the old descriptor and wait for the jobs to complete.
@@ -82,8 +84,7 @@ func TestInterleavedTableMigration(t *testing.T) {
 	})
 	// Check that creation of interleaved tables is fully disabled.
 	tdb.Exec(t, "CREATE TABLE customers2 (id INT PRIMARY KEY, name STRING(50));")
-	tdb.ExpectErr(t,
-		"pq: creation of new interleaved tables and interleaved indexes is no longer supported. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations",
+	tdb.Exec(t,
 		`CREATE TABLE orders2 (
    customer INT,
    id INT,
@@ -91,7 +92,28 @@ func TestInterleavedTableMigration(t *testing.T) {
    PRIMARY KEY (customer, id),
    CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES customers2
  ) INTERLEAVE IN PARENT customers2 (customer);`)
+	// Check that no interleaved tables were created and the syntax is now a no-op.
+	tdb.CheckQueryResults(t,
+		"SELECT EXISTS(SELECT * FROM crdb_internal.interleaved);",
+		[][]string{
+			{"false"},
+		})
 	// Migration to next phase should succeed.
 	tdb.ExecSucceedsSoon(t, "SET CLUSTER SETTING version = $1",
 		clusterversion.ByKey(clusterversion.EnsureNoInterleavedTables).String())
+	// Check that creation of interleaved tables is a no-op.
+	tdb.Exec(t,
+		`CREATE TABLE orders3 (
+   customer INT,
+   id INT,
+   total DECIMAL(20, 5),
+   PRIMARY KEY (customer, id),
+   CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES customers2
+ ) INTERLEAVE IN PARENT customers2 (customer);`)
+	// Check that no interleaved tables were created and the syntax is now a no-op.
+	tdb.CheckQueryResults(t,
+		"SELECT EXISTS(SELECT * FROM crdb_internal.interleaved);",
+		[][]string{
+			{"false"},
+		})
 }

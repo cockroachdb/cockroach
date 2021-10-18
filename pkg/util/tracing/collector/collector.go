@@ -87,11 +87,12 @@ type Iterator struct {
 
 // StartIter fetches the live nodes in the cluster, and configures the underlying
 // Iterator that is used to access recorded spans in a streaming fashion.
-func (t *TraceCollector) StartIter(ctx context.Context, traceID uint64) *Iterator {
+func (t *TraceCollector) StartIter(ctx context.Context, traceID uint64) (*Iterator, error) {
 	tc := &Iterator{ctx: ctx, traceID: traceID, collector: t}
-	tc.liveNodes, tc.iterErr = nodesFromNodeLiveness(ctx, t.nodeliveness)
-	if tc.iterErr != nil {
-		return nil
+	var err error
+	tc.liveNodes, err = nodesFromNodeLiveness(ctx, t.nodeliveness)
+	if err != nil {
+		return nil, err
 	}
 
 	// Calling Next() positions the Iterator in a valid state. It will fetch the
@@ -99,7 +100,7 @@ func (t *TraceCollector) StartIter(ctx context.Context, traceID uint64) *Iterato
 	// nodes.
 	tc.Next()
 
-	return tc
+	return tc, nil
 }
 
 // Valid returns whether the Iterator is in a valid state to read values from.

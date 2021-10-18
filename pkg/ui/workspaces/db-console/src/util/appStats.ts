@@ -16,6 +16,7 @@ import _ from "lodash";
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 import { uniqueLong } from "src/util/arrays";
+import { TimestampToNumber } from "src/util/convert";
 
 export type ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
@@ -82,6 +83,12 @@ export function addStatementStats(
     ),
     bytes_read: addNumericStats(a.bytes_read, b.bytes_read, countA, countB),
     rows_read: addNumericStats(a.rows_read, b.rows_read, countA, countB),
+    rows_written: addNumericStats(
+      a.rows_written,
+      b.rows_written,
+      countA,
+      countB,
+    ),
     sensitive_info: coalesceSensitiveInfo(a.sensitive_info, b.sensitive_info),
     legacy_last_err: "",
     legacy_last_err_redacted: "",
@@ -181,11 +188,11 @@ export function aggregateStatementStats(
 
 export interface ExecutionStatistics {
   statement: string;
+  aggregated_ts: number;
   app: string;
   database: string;
   distSQL: boolean;
   vec: boolean;
-  opt: boolean;
   implicit_txn: boolean;
   full_scan: boolean;
   failed: boolean;
@@ -198,11 +205,11 @@ export function flattenStatementStats(
 ): ExecutionStatistics[] {
   return statementStats.map(stmt => ({
     statement: stmt.key.key_data.query,
+    aggregated_ts: TimestampToNumber(stmt.key.aggregated_ts),
     app: stmt.key.key_data.app,
     database: stmt.key.key_data.database,
     distSQL: stmt.key.key_data.distSQL,
     vec: stmt.key.key_data.vec,
-    opt: stmt.key.key_data.opt,
     implicit_txn: stmt.key.key_data.implicit_txn,
     full_scan: stmt.key.key_data.full_scan,
     failed: stmt.key.key_data.failed,
@@ -219,7 +226,9 @@ export function combineStatementStats(
 
 // This function returns a key based on all parameters
 // that should be used to group statements.
-// Parameters being used: node_id, implicit_txn and database.
+// Parameters being used: query, implicit_txn, database, and aggregated_ts.
 export function statementKey(stmt: ExecutionStatistics): string {
-  return stmt.statement + stmt.implicit_txn + stmt.database;
+  return (
+    stmt.statement + stmt.implicit_txn + stmt.database + stmt.aggregated_ts
+  );
 }

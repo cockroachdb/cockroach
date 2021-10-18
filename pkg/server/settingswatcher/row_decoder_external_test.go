@@ -51,7 +51,7 @@ func TestRowDecoder(t *testing.T) {
 			expStr:     "17s",
 			expValType: "d",
 		},
-		"kv.closed_timestamp.close_fraction": {
+		"sql.txn_stats.sample_rate": {
 			val:        .23,
 			expStr:     "0.23",
 			expValType: "f",

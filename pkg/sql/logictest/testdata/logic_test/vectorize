@@ -458,7 +458,7 @@ CREATE TABLE composite (d DECIMAL, INDEX d_idx (d));
 INSERT INTO composite VALUES (NULL), (1), (1.0), (1.00);
 
 query T rowsort
-SELECT d FROM composite@primary
+SELECT d FROM composite@composite_pkey
 ----
 NULL
 1
@@ -1253,3 +1253,44 @@ query T
 SELECT c FROM t68040 WHERE c LIKE '%\\%'
 ----
 string with \ backslash
+
+# Regression test for #68979. The IN operator should evaluate correctly when the
+# tuple contents are not sorted by the optimizer.
+statement ok
+CREATE TABLE t68979 (
+  a INT
+)
+
+statement ok
+INSERT INTO t68979 VALUES (0)
+
+query B
+SELECT 'b' IN ('b', (SELECT NULL FROM t68979), 'a') FROM t68979
+----
+true
+
+statement ok
+CREATE TABLE t63792 (c INT);
+INSERT INTO t63792 VALUES (NULL), (1), (2)
+
+query IB rowsort
+SELECT c, c = c FROM t63792
+----
+NULL  NULL
+1     true
+2     true
+
+# Verify that binary operations on integers of any width return INT8.
+statement ok
+CREATE TABLE ints (_int2 INT2, _int4 INT4, _int8 INT8);
+INSERT INTO ints VALUES (1, 1, 1), (2, 2, 2)
+
+query T
+SELECT pg_typeof(_int2 - _int2) FROM ints LIMIT 1
+----
+bigint
+
+query I
+SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
+----
+4

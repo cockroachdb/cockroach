@@ -212,7 +212,7 @@ ORDER BY object_type, object_name`, full)
 		expectedCreateTable := `CREATE TABLE tablea (
 		a INT8 NOT NULL,
 		b INT8 NULL,
-		CONSTRAINT "primary" PRIMARY KEY (a ASC),
+		CONSTRAINT tablea_pkey PRIMARY KEY (a ASC),
 		INDEX tablea_b_idx (b ASC),
 		FAMILY "primary" (a, b)
 	)`
@@ -247,15 +247,15 @@ ORDER BY object_type, object_name`, full)
 		wantSameDB := `CREATE TABLE fkreftable (
 				a INT8 NOT NULL,
 				b INT8 NULL,
-				CONSTRAINT "primary" PRIMARY KEY (a ASC),
-				CONSTRAINT fk_b_ref_fksrc FOREIGN KEY (b) REFERENCES public.fksrc(a),
+				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC),
+				CONSTRAINT fkreftable_b_fkey FOREIGN KEY (b) REFERENCES public.fksrc(a),
 				FAMILY "primary" (a, b)
 			)`
 		wantDiffDB := `CREATE TABLE fkreftable (
 				a INT8 NOT NULL,
 				b INT8 NULL,
-				CONSTRAINT "primary" PRIMARY KEY (a ASC),
-				CONSTRAINT fk_b_ref_fksrc FOREIGN KEY (b) REFERENCES data.public.fksrc(a),
+				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC),
+				CONSTRAINT fkreftable_b_fkey FOREIGN KEY (b) REFERENCES data.public.fksrc(a),
 				FAMILY "primary" (a, b)
 			)`
 
@@ -280,7 +280,7 @@ ORDER BY object_type, object_name`, full)
 		want := `CREATE TABLE fkreftable (
 				a INT8 NOT NULL,
 				b INT8 NULL,
-				CONSTRAINT "primary" PRIMARY KEY (a ASC),
+				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC),
 				FAMILY "primary" (a, b)
 			)`
 
@@ -650,4 +650,22 @@ func TestShowBackupWithDebugIDs(t *testing.T) {
 
 	require.Equal(t, expectedObjects, res)
 
+}
+
+func TestShowBackupPathIsCollectionRoot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+
+	// Create test database with bank table.
+	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	// Make an initial backup.
+	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, LocalFoo)
+
+	// Ensure proper error gets returned from back SHOW BACKUP Path
+	sqlDB.ExpectErr(t, "The specified path is the root of a backup collection.",
+		"SHOW BACKUP $1", LocalFoo)
 }

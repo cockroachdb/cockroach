@@ -1,0 +1,33 @@
+# LogicTest: multiregion-3node-3superlongregions
+
+query TTTT
+SHOW REGIONS
+----
+veryveryveryveryveryveryverylongregion1  {}  {}  {}
+veryveryveryveryveryveryverylongregion2  {}  {}  {}
+veryveryveryveryveryveryverylongregion3  {}  {}  {}
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+statement ok
+CREATE DATABASE "mr-zone-configs" primary region "veryveryveryveryveryveryverylongregion1" regions "veryveryveryveryveryveryverylongregion2","veryveryveryveryveryveryverylongregion3"
+
+statement ok
+use "mr-zone-configs"
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
+----
+DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
+                            range_min_bytes = 134217728,
+                            range_max_bytes = 536870912,
+                            gc.ttlseconds = 90000,
+                            num_replicas = 5,
+                            num_voters = 3,
+                            constraints = '{+region=veryveryveryveryveryveryverylongregion1: 1, +region=veryveryveryveryveryveryverylongregion2: 1, +region=veryveryveryveryveryveryverylongregion3: 1}',
+                            voter_constraints = '[+region=veryveryveryveryveryveryverylongregion1]',
+                            lease_preferences = '[[+region=veryveryveryveryveryveryverylongregion1]]'

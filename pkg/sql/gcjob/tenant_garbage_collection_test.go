@@ -50,11 +50,15 @@ func TestGCTenant(t *testing.T) {
 	)
 	require.NoError(t, sql.CreateTenantRecord(
 		ctx, &execCfg, nil, /* txn */
-		&descpb.TenantInfo{ID: activeTenID}),
+		&descpb.TenantInfoWithUsage{
+			TenantInfo: descpb.TenantInfo{ID: activeTenID},
+		}),
 	)
 	require.NoError(t, sql.CreateTenantRecord(
 		ctx, &execCfg, nil, /* txn */
-		&descpb.TenantInfo{ID: dropTenID, State: descpb.TenantInfo_DROP}),
+		&descpb.TenantInfoWithUsage{
+			TenantInfo: descpb.TenantInfo{ID: dropTenID, State: descpb.TenantInfo_DROP},
+		}),
 	)
 
 	t.Run("unexpected progress state", func(t *testing.T) {

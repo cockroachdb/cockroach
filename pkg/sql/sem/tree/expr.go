@@ -57,7 +57,7 @@ type TypedExpr interface {
 	// encountered: Placeholder, VarName (and related UnqualifiedStar,
 	// UnresolvedName and AllColumnsSelector) or Subquery. These nodes
 	// should be replaced prior to expression evaluation by an
-	// appropriate WalkExpr. For example, Placeholder should be replace
+	// appropriate WalkExpr. For example, Placeholder should be replaced
 	// by the argument passed from the client.
 	Eval(*EvalContext) (Datum, error)
 	// ResolvedType provides the type of the TypedExpr, which is the type of Datum
@@ -503,11 +503,15 @@ func (node *ComparisonExpr) Format(ctx *FmtCtx) {
 	opStr := node.Operator.String()
 	// IS and IS NOT are equivalent to IS NOT DISTINCT FROM and IS DISTINCT
 	// FROM, respectively, when the RHS is true or false. We prefer the less
-	// verbose IS and IS NOT in those cases.
-	if node.Operator.Symbol == IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
-		opStr = "IS NOT"
-	} else if node.Operator.Symbol == IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
-		opStr = "IS"
+	// verbose IS and IS NOT in those cases, unless we are in FmtHideConstants
+	// mode. In that mode we need the more verbose form in order to be able
+	// to re-parse the statement when reporting telemetry.
+	if !ctx.HasFlags(FmtHideConstants) {
+		if node.Operator.Symbol == IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+			opStr = "IS NOT"
+		} else if node.Operator.Symbol == IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+			opStr = "IS"
+		}
 	}
 	if node.Operator.Symbol.HasSubOperator() {
 		binExprFmtWithParenAndSubOp(ctx, node.Left, node.SubOperator.String(), opStr, node.Right)
@@ -1446,7 +1450,7 @@ func (node *FuncExpr) ResolvedOverload() *Overload {
 
 // IsGeneratorApplication returns true iff the function applied is a generator (SRF).
 func (node *FuncExpr) IsGeneratorApplication() bool {
-	return node.fn != nil && node.fn.Generator != nil
+	return node.fn != nil && (node.fn.Generator != nil || node.fn.GeneratorWithExprs != nil)
 }
 
 // IsWindowFunctionApplication returns true iff the function is being applied as a window function.
@@ -1456,7 +1460,7 @@ func (node *FuncExpr) IsWindowFunctionApplication() bool {
 
 // IsDistSQLBlocklist returns whether the function is not supported by DistSQL.
 func (node *FuncExpr) IsDistSQLBlocklist() bool {
-	return node.fnProps != nil && node.fnProps.DistsqlBlocklist
+	return (node.fn != nil && node.fn.DistsqlBlocklist) || (node.fnProps != nil && node.fnProps.DistsqlBlocklist)
 }
 
 // CanHandleNulls returns whether or not the function can handle null

@@ -127,7 +127,10 @@ export const availableTimeScales: TimeScaleCollection = _.mapValues(
   },
 );
 
-export const findClosestTimeScale = (seconds: number) => {
+export const findClosestTimeScale = (
+  seconds: number,
+  startSeconds?: number,
+) => {
   const data: TimeScale[] = [];
   Object.keys(availableTimeScales).forEach(val =>
     data.push(availableTimeScales[val]),
@@ -137,7 +140,23 @@ export const findClosestTimeScale = (seconds: number) => {
       Math.abs(seconds - a.windowSize.asSeconds()) -
       Math.abs(seconds - b.windowSize.asSeconds()),
   );
-  return data[0].windowSize.asSeconds() === seconds
+
+  const firstTimeScaleOptionSeconds = data[0].windowSize.asSeconds();
+
+  // This logic covers the edge case where drag-to-timerange on a linegraph is of a duration
+  // that exactly matches one of the standard available time scales e.g. selecting June 1 at
+  // 0:00 to June 2 at 0:00 when the date is July 1 at 0:00 should return a custom timescale
+  // instead of past day.
+  if (startSeconds && firstTimeScaleOptionSeconds === seconds) {
+    const startWindow = moment()
+      .subtract(firstTimeScaleOptionSeconds, "seconds")
+      .unix();
+    if (startSeconds < startWindow) {
+      return { ...data[0], key: "Custom" };
+    }
+  }
+
+  return firstTimeScaleOptionSeconds === seconds
     ? data[0]
     : { ...data[0], key: "Custom" };
 };

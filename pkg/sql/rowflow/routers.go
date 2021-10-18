@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type router interface {
@@ -310,7 +311,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 			var span *tracing.Span
 			if rb.statsCollectionEnabled {
 				ctx, span = execinfra.ProcessorSpan(ctx, "router output")
-				span.SetTag(execinfrapb.StreamIDTagKey, ro.streamID)
+				span.SetTag(execinfrapb.StreamIDTagKey, attribute.IntValue(int(ro.streamID)))
 				ro.stats.Inputs = make([]execinfrapb.InputStats, 1)
 			}
 

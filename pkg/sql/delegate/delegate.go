@@ -55,6 +55,9 @@ func TryDelegate(
 	case *tree.ShowCreateAllTables:
 		return d.delegateShowCreateAllTables()
 
+	case *tree.ShowCreateAllSchemas:
+		return d.delegateShowCreateAllSchemas()
+
 	case *tree.ShowDatabaseIndexes:
 		return d.delegateShowDatabaseIndexes(t)
 
@@ -134,7 +137,16 @@ func TryDelegate(
 		return d.delegateShowSchedules(t)
 
 	case *tree.ControlJobsForSchedules:
-		return d.delegateJobControl(t)
+		return d.delegateJobControl(ControlJobsDelegate{
+			Schedules: t.Schedules,
+			Command:   t.Command,
+		})
+
+	case *tree.ControlJobsOfType:
+		return d.delegateJobControl(ControlJobsDelegate{
+			Type:    t.Type,
+			Command: t.Command,
+		})
 
 	case *tree.ShowFullTableScans:
 		return d.delegateShowFullTableScans()

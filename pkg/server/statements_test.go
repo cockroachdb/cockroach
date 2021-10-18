@@ -14,14 +14,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 // TestStatements ensures that the Statements endpoint is accessible
@@ -33,16 +32,14 @@ func TestStatements(t *testing.T) {
 
 	ctx := context.Background()
 
-	testServer, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	params, _ := tests.CreateTestServerParams()
+	testServer, db, _ := serverutils.StartServer(t, params)
 	defer testServer.Stopper().Stop(ctx)
 
 	conn, err := testServer.RPCContext().GRPCDialNode(
 		testServer.RPCAddr(), testServer.NodeID(), rpc.DefaultClass,
 	).Connect(ctx)
 	require.NoError(t, err)
-	defer func(conn *grpc.ClientConn) {
-		_ = conn.Close()
-	}(conn)
 
 	client := serverpb.NewStatusClient(conn)
 

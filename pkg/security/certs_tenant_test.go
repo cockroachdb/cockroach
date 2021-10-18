@@ -31,7 +31,7 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string, cleanup func
 	// Make certs for the tenant CA (= auth broker). In production, these would be
 	// given to a dedicated service.
 	tenantCAKey := filepath.Join(certsDir, "tenant-ca-name-irrelevant.key")
-	require.NoError(t, security.CreateTenantClientCAPair(
+	require.NoError(t, security.CreateTenantCAPair(
 		certsDir,
 		tenantCAKey,
 		2048,
@@ -41,13 +41,13 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string, cleanup func
 	))
 
 	// That dedicated service can make client certs for a tenant as follows:
-	tenantCerts, err := security.CreateTenantClientPair(
-		certsDir, tenantCAKey, testKeySize, 48*time.Hour, tenant,
+	tenantCerts, err := security.CreateTenantPair(
+		certsDir, tenantCAKey, testKeySize, 48*time.Hour, tenant, []string{"127.0.0.1"},
 	)
 	require.NoError(t, err)
 	// We write the certs to disk, though in production this would not necessarily
 	// happen (it may be enough to just have them in-mem, we will see).
-	require.NoError(t, security.WriteTenantClientPair(certsDir, tenantCerts, false /* overwrite */))
+	require.NoError(t, security.WriteTenantPair(certsDir, tenantCerts, false /* overwrite */))
 
 	// The server also needs to show certs trusted by the client. These are the
 	// node certs.
@@ -112,7 +112,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 
 	// The client in turn trusts the server CA and presents its tenant certs to the
 	// server (which will validate them using the tenant CA).
-	clientTLSConfig, err := cm.GetTenantClientTLSConfig()
+	clientTLSConfig, err := cm.GetTenantTLSConfig()
 	require.NoError(t, err)
 	require.NotNil(t, clientTLSConfig)
 

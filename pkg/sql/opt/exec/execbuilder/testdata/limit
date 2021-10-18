@@ -25,7 +25,7 @@ vectorized: true
         │ columns: (k, v, w)
         │ ordering: +v
         │ estimated row count: 30 (missing stats)
-        │ table: t@primary
+        │ table: t@t_pkey
         │ key columns: k
         │
         └── • scan
@@ -56,22 +56,18 @@ vectorized: true
     │ distinct on: w
     │ order key: w
     │
-    └── • limit
+    └── • top-k
         │ columns: (w)
+        │ ordering: +w
         │ estimated row count: 100 (missing stats)
-        │ count: 100
+        │ order: +w
+        │ k: 100
         │
-        └── • sort
-            │ columns: (w)
-            │ ordering: +w
-            │ estimated row count: 1,000 (missing stats)
-            │ order: +w
-            │
-            └── • scan
-                  columns: (w)
-                  estimated row count: 1,000 (missing stats)
-                  table: t@primary
-                  spans: FULL SCAN
+        └── • scan
+              columns: (w)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k LIMIT 5
@@ -83,7 +79,7 @@ vectorized: true
   columns: (k, v)
   ordering: +k
   estimated row count: 5 (missing stats)
-  table: t@primary
+  table: t@t_pkey
   spans: LIMITED SCAN
   limit: 5
 
@@ -102,7 +98,7 @@ vectorized: true
       columns: (k, v)
       ordering: +k
       estimated row count: 1,000 (missing stats)
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
 
 query T
@@ -157,31 +153,27 @@ vectorized: true
     │ ordering: -any_not_null
     │ estimated row count: 10 (missing stats)
     │
-    └── • limit
+    └── • top-k
         │ columns: (k, sum, any_not_null)
+        │ ordering: -any_not_null
         │ estimated row count: 10 (missing stats)
-        │ count: 10
+        │ order: -any_not_null
+        │ k: 10
         │
-        └── • sort
+        └── • group
             │ columns: (k, sum, any_not_null)
-            │ ordering: -any_not_null
             │ estimated row count: 1,000 (missing stats)
-            │ order: -any_not_null
+            │ aggregate 0: sum(w)
+            │ aggregate 1: any_not_null(v)
+            │ group by: k
+            │ ordered: +k
             │
-            └── • group
-                │ columns: (k, sum, any_not_null)
-                │ estimated row count: 1,000 (missing stats)
-                │ aggregate 0: sum(w)
-                │ aggregate 1: any_not_null(v)
-                │ group by: k
-                │ ordered: +k
-                │
-                └── • scan
-                      columns: (k, v, w)
-                      ordering: +k
-                      estimated row count: 1,000 (missing stats)
-                      table: t@primary
-                      spans: FULL SCAN
+            └── • scan
+                  columns: (k, v, w)
+                  ordering: +k
+                  estimated row count: 1,000 (missing stats)
+                  table: t@t_pkey
+                  spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
@@ -258,7 +250,7 @@ vectorized: true
         └── • scan
               columns: (k, v, w)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
 
 query T
@@ -274,7 +266,7 @@ vectorized: true
     │ columns: (k, v, w)
     │ ordering: +v
     │ estimated row count: 10 (missing stats)
-    │ table: t@primary
+    │ table: t@t_pkey
     │ key columns: k
     │
     └── • scan
@@ -315,7 +307,7 @@ vectorized: true
                   columns: (k, v, w)
                   ordering: +k
                   estimated row count: 1,000 (missing stats)
-                  table: t@primary
+                  table: t@t_pkey
                   spans: FULL SCAN
 
 # Regression test for #47283: scan with both hard limit and soft limit.
@@ -342,7 +334,7 @@ vectorized: true
     └── • scan
           columns: (k, a)
           estimated row count: 4 (missing stats)
-          table: t_47283@primary
+          table: t_47283@t_47283_pkey
           spans: LIMITED SCAN
           limit: 4
 
@@ -479,3 +471,89 @@ vectorized: true
           table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
           spans: [/7/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /7/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
           limit: 5
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY v, w LIMIT 5
+----
+distribution: local
+vectorized: true
+·
+• top-k
+│ columns: (k, v, w)
+│ ordering: +v,+w
+│ estimated row count: 5 (missing stats)
+│ order: +v,+w
+│ k: 5
+│
+└── • scan
+      columns: (k, v, w)
+      estimated row count: 1,000 (missing stats)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+
+
+statement ok
+CREATE TABLE a AS (SELECT i, i AS j FROM generate_series(0, 1000) AS gen(i));
+
+statement ok
+CREATE INDEX ON a (i, j);
+
+statement ok
+CREATE TABLE b AS SELECT k, k::STRING AS s FROM generate_series(0, 99) AS gen(k);
+
+statement ok
+CREATE INDEX ON b (k, s);
+
+statement ok
+ANALYZE a;
+
+statement ok
+ANALYZE b;
+
+query T retry
+EXPLAIN ANALYZE SELECT * FROM a INNER LOOKUP JOIN b ON k = j ORDER BY i LIMIT 5;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows read from KV: 176 (1.4 KiB)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+·
+• limit
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 5
+│ KV time: 0µs
+│ KV contention time: 0µs
+│ KV rows read: 76
+│ KV bytes read: 608 B
+│ estimated row count: 5
+│ count: 5
+│
+└── • lookup join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 5
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows read: 76
+    │ KV bytes read: 608 B
+    │ estimated row count: 100
+    │ table: b@b_k_s_idx
+    │ equality: (j) = (k)
+    │
+    └── • scan
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 100
+          KV time: 0µs
+          KV contention time: 0µs
+          KV rows read: 100
+          KV bytes read: 800 B
+          estimated row count: 100 - 1,001 (100% of the table; stats collected <hidden> ago)
+          table: a@a_i_j_idx
+          spans: FULL SCAN

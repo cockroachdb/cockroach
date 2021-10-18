@@ -135,27 +135,12 @@ message RangeInfo {
   repeated int64 proposal_quota_release_queue = 15;
   // The max size the range can grow to before it will be split.
   int64 range_max_bytes = 8;
-  reserved 9;
-  message CTEntry {
-    option (gogoproto.equal) = true;
-    int32 node_id = 1 [(gogoproto.customname) = "NodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-    util.hlc.Timestamp closed_timestamp = 2 [(gogoproto.nullable) = false];
-    int64 mlai = 3 [(gogoproto.customname) = "MLAI"];
-    int64 epoch = 4;
-  }
-  // The highest closed timestamp known to have data for this replica, taken
-  // across the data received from all nodes. This does not reflect whether
-  // the replica can use this closed timestamp (it may, for example, not have
-  // caught up sufficiently to do so).
-  CTEntry newest_closed_timestamp = 11 [(gogoproto.nullable) = false];
+  reserved 9, 11;
   // The closed timestamp active on the replica when the info was generated.
   // This is the actual timestamp at or below which requests can be served from
-  // this replica at this moment (assuming it is not the leaseholder). This takes
-  // into account the lease start time, the current lease applied index, and the
-  // closed timestamp information received from other nodes, among other things.
-  // In practice, this should not usually trail newest_closed_timestamp except
-  // for a short moment after newest_closed_timestamp gets updated.
+  // this replica at this moment (assuming it is not the leaseholder). This
+  // takes into account the current lease applied index, and the closed
+  // timestamp information received from other nodes, among other things.
   util.hlc.Timestamp active_closed_timestamp = 12 [(gogoproto.nullable) = false];
   // The number of Rangefeed registrations attached to the Replica.
   int64 rangefeed_registrations = 13;

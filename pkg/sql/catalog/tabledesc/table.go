@@ -84,6 +84,10 @@ func MakeColumnDefDescs(
 			return nil, nil, nil, errors.AssertionFailedf(
 				"column %s is of invalid generated as identity type (neither ALWAYS nor BY DEFAULT)", string(d.Name))
 		}
+		if genSeqOpt := d.GeneratedIdentity.SeqOptions; genSeqOpt != nil {
+			s := tree.Serialize(&d.GeneratedIdentity.SeqOptions)
+			col.GeneratedAsIdentitySequenceOption = &s
+		}
 	}
 
 	// Validate and assign column type.
@@ -223,13 +227,12 @@ func GetShardColumnName(colNames []string, buckets int32) string {
 	)
 }
 
-// GetConstraintInfo returns a summary of all constraints on the table.
+// GetConstraintInfo implements the TableDescriptor interface.
 func (desc *wrapper) GetConstraintInfo() (map[string]descpb.ConstraintDetail, error) {
 	return desc.collectConstraintInfo(nil)
 }
 
-// GetConstraintInfoWithLookup returns a summary of all constraints on the
-// table using the provided function to fetch a TableDescriptor from an ID.
+// GetConstraintInfoWithLookup implements the TableDescriptor interface.
 func (desc *wrapper) GetConstraintInfoWithLookup(
 	tableLookup catalog.TableLookupFn,
 ) (map[string]descpb.ConstraintDetail, error) {
@@ -492,19 +495,48 @@ func FindPublicColumnWithID(
 	return col, nil
 }
 
-// FindVirtualColumn returns a catalog.Column matching the virtual column
+// FindInvertedColumn returns a catalog.Column matching the inverted column
 // descriptor in `spec` if not nil, nil otherwise.
-func FindVirtualColumn(
-	desc catalog.TableDescriptor, virtualColDesc *descpb.ColumnDescriptor,
+func FindInvertedColumn(
+	desc catalog.TableDescriptor, invertedColDesc *descpb.ColumnDescriptor,
 ) catalog.Column {
-	if virtualColDesc == nil {
+	if invertedColDesc == nil {
 		return nil
 	}
-	found, err := desc.FindColumnWithID(virtualColDesc.ID)
+	found, err := desc.FindColumnWithID(invertedColDesc.ID)
 	if err != nil {
 		panic(errors.HandleAsAssertionFailure(err))
 	}
-	virtualColumn := found.DeepCopy()
-	*virtualColumn.ColumnDesc() = *virtualColDesc
-	return virtualColumn
+	invertedColumn := found.DeepCopy()
+	*invertedColumn.ColumnDesc() = *invertedColDesc
+	return invertedColumn
+}
+
+// PrimaryKeyString returns the pretty-printed primary key declaration for a
+// table descriptor.
+func PrimaryKeyString(desc catalog.TableDescriptor) string {
+	primaryIdx := desc.GetPrimaryIndex()
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	f.WriteString("PRIMARY KEY (")
+	startIdx := primaryIdx.ExplicitColumnStartIdx()
+	for i, n := startIdx, primaryIdx.NumKeyColumns(); i < n; i++ {
+		if i > startIdx {
+			f.WriteString(", ")
+		}
+		// Primary key columns cannot be inaccessible computed columns, so it is
+		// safe to always print the column name. For secondary indexes, we have
+		// to print inaccessible computed column expressions. See
+		// catformat.FormatIndexElements.
+		name := primaryIdx.GetKeyColumnName(i)
+		f.FormatNameP(&name)
+		f.WriteByte(' ')
+		f.WriteString(primaryIdx.GetKeyColumnDirection(i).String())
+	}
+	f.WriteByte(')')
+	if primaryIdx.IsSharded() {
+		f.WriteString(
+			fmt.Sprintf(" USING HASH WITH BUCKET_COUNT = %v", primaryIdx.GetSharded().ShardBuckets),
+		)
+	}
+	return f.CloseAndGetString()
 }

@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,6 +27,11 @@ import (
 // Cluster abstracts a physical KV cluster and can be utilized by a long-running
 // migration.
 type Cluster interface {
+	// NumNodes returns the number of nodes in the cluster. This is merely a
+	// convenience method and is not meant to be used to infer cluster stability;
+	// for that, use UntilClusterStable.
+	NumNodes(ctx context.Context) (int, error)
+
 	// ForEveryNode is a short hand to execute the given closure (named by the
 	// informational parameter op) against every node in the cluster at a given
 	// point in time. Given it's possible for nodes to join or leave the cluster
@@ -140,7 +146,7 @@ type SystemMigration struct {
 
 // SystemMigrationFunc is used to perform kv-level migrations. It should only be
 // run from the system tenant.
-type SystemMigrationFunc func(context.Context, clusterversion.ClusterVersion, SystemDeps) error
+type SystemMigrationFunc func(context.Context, clusterversion.ClusterVersion, SystemDeps, *jobs.Job) error
 
 // NewSystemMigration constructs a SystemMigration.
 func NewSystemMigration(
@@ -157,8 +163,8 @@ func NewSystemMigration(
 
 // Run kickstarts the actual migration process for system-level migrations.
 func (m *SystemMigration) Run(
-	ctx context.Context, cv clusterversion.ClusterVersion, d SystemDeps,
+	ctx context.Context, cv clusterversion.ClusterVersion, d SystemDeps, job *jobs.Job,
 ) error {
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("migration=%s", cv), nil)
-	return m.fn(ctx, cv, d)
+	return m.fn(ctx, cv, d, job)
 }

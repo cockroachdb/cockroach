@@ -5,5 +5,8 @@ go_library(
     srcs = ["exec.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/dev/io/exec",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/cmd/dev/recording"],
+    deps = [
+        "//pkg/cmd/dev/recording",
+        "@com_github_alessio_shellescape//:shellescape",
+    ],
 )

@@ -180,7 +180,7 @@ func (p *PhysicalPlan) GetResultTypes() []*types.T {
 // NewStage updates the distribution of the plan given the fact whether the new
 // stage contains at least one processor planned on a remote node and returns a
 // stage identifier of the new stage that can be used in processor specs.
-func (p *PhysicalPlan) NewStage(containsRemoteProcessor bool) int32 {
+func (p *PhysicalPlan) NewStage(containsRemoteProcessor bool, allowPartialDistribution bool) int32 {
 	newStageDistribution := LocalPlan
 	if containsRemoteProcessor {
 		newStageDistribution = FullyDistributedPlan
@@ -190,7 +190,7 @@ func (p *PhysicalPlan) NewStage(containsRemoteProcessor bool) int32 {
 		// distribution as is.
 		p.Distribution = newStageDistribution
 	} else {
-		p.Distribution = p.Distribution.compose(newStageDistribution)
+		p.Distribution = p.Distribution.compose(newStageDistribution, allowPartialDistribution)
 	}
 	p.stageCounter++
 	return p.stageCounter
@@ -199,16 +199,13 @@ func (p *PhysicalPlan) NewStage(containsRemoteProcessor bool) int32 {
 // NewStageOnNodes is the same as NewStage but takes in the information about
 // the nodes participating in the new stage and the gateway.
 func (p *PhysicalPlan) NewStageOnNodes(nodes []roachpb.NodeID) int32 {
-	return p.NewStageWithFirstNode(len(nodes), nodes[0])
-}
-
-// NewStageWithFirstNode is the same as NewStage but takes in the number of
-// total nodes participating in the new stage and the first node's id.
-func (p *PhysicalPlan) NewStageWithFirstNode(nNodes int, firstNode roachpb.NodeID) int32 {
 	// We have a remote processor either when we have multiple nodes
 	// participating in the stage or the single processor is scheduled not on
 	// the gateway.
-	return p.NewStage(nNodes > 1 || firstNode != p.GatewayNodeID /* containsRemoteProcessor */)
+	return p.NewStage(
+		len(nodes) > 1 || nodes[0] != p.GatewayNodeID, /* containsRemoteProcessor */
+		false, /* allowPartialDistribution */
+	)
 }
 
 // SetMergeOrdering sets p.MergeOrdering.
@@ -240,7 +237,17 @@ func (p *PhysicalPlan) AddNoInputStage(
 	outputTypes []*types.T,
 	newOrdering execinfrapb.Ordering,
 ) {
-	stageID := p.NewStageWithFirstNode(len(corePlacements), corePlacements[0].NodeID)
+	// Note that in order to find out whether we have a remote processor it is
+	// not sufficient to have len(corePlacements) be greater than one - we might
+	// plan multiple table readers on the gateway if the plan is local.
+	containsRemoteProcessor := false
+	for i := range corePlacements {
+		if corePlacements[i].NodeID != p.GatewayNodeID {
+			containsRemoteProcessor = true
+			break
+		}
+	}
+	stageID := p.NewStage(containsRemoteProcessor, false /* allowPartialDistribution */)
 	p.ResultRouters = make([]ProcessorIdx, len(corePlacements))
 	for i := range p.ResultRouters {
 		proc := Processor{
@@ -291,7 +298,7 @@ func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
 ) {
 	// New stage has the same distribution as the previous one, so we need to
 	// figure out whether the last stage contains a remote processor.
-	stageID := p.NewStage(p.IsLastStageDistributed())
+	stageID := p.NewStage(p.IsLastStageDistributed(), false /* allowPartialDistribution */)
 	prevStageResultTypes := p.GetResultTypes()
 	for i, resultProc := range p.ResultRouters {
 		prevProc := &p.Processors[resultProc]
@@ -387,7 +394,7 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 			// We're planning a single processor on the node nodeID, so we'll
 			// have a remote processor only when the node is different from the
 			// gateway.
-			StageID:     p.NewStage(nodeID != p.GatewayNodeID),
+			StageID:     p.NewStage(nodeID != p.GatewayNodeID, false /* allowPartialDistribution */),
 			ResultTypes: outputTypes,
 		},
 	}
@@ -893,13 +900,14 @@ func MergePlans(
 	mergedPlan *PhysicalPlan,
 	left, right *PhysicalPlan,
 	leftPlanDistribution, rightPlanDistribution PlanDistribution,
+	allowPartialDistribution bool,
 ) {
 	if mergedPlan.PhysicalInfrastructure != left.PhysicalInfrastructure ||
 		mergedPlan.PhysicalInfrastructure != right.PhysicalInfrastructure {
 		panic(errors.AssertionFailedf("can only merge plans that share infrastructure"))
 	}
 	mergedPlan.SetRowEstimates(left, right)
-	mergedPlan.Distribution = leftPlanDistribution.compose(rightPlanDistribution)
+	mergedPlan.Distribution = leftPlanDistribution.compose(rightPlanDistribution, allowPartialDistribution)
 }
 
 // AddJoinStage adds join processors at each of the specified nodes, and wires
@@ -1231,9 +1239,18 @@ func (a PlanDistribution) String() string {
 
 // compose returns the distribution indicator of a plan given indicators for
 // two parts of it.
-func (a PlanDistribution) compose(b PlanDistribution) PlanDistribution {
-	if a != b {
+func (a PlanDistribution) compose(
+	b PlanDistribution, allowPartialDistribution bool,
+) PlanDistribution {
+	if allowPartialDistribution && a != b {
 		return PartiallyDistributedPlan
 	}
-	return a
+	// TODO(yuzefovich): this is not quite correct - using
+	// PartiallyDistributedPlan would make more sense when a != b, but that
+	// would lead to confusing to users "distribution: partial" in the EXPLAIN
+	// output, so for now we have this hack.
+	if a != LocalPlan || b != LocalPlan {
+		return FullyDistributedPlan
+	}
+	return LocalPlan
 }

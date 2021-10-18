@@ -76,6 +76,8 @@ func TestFullClusterBackup(t *testing.T) {
 SELECT id, status, created, payload, progress, created_by_type, created_by_id, claim_instance_id
 FROM system.jobs
 	`
+	// Pause SQL Stats compaction job to ensure the test is deterministic.
+	sqlDB.Exec(t, `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR SQL STATISTICS]`)
 
 	// Disable automatic stats collection on the backup and restoring clusters to ensure
 	// the test is deterministic.
@@ -239,7 +241,6 @@ CREATE TABLE data2.foo (a int);
 			systemschema.TableStatisticsTable.GetName(),
 			systemschema.UITable.GetName(),
 			systemschema.UsersTable.GetName(),
-			systemschema.ZonesTable.GetName(),
 			systemschema.ScheduledJobsTable.GetName(),
 		}
 
@@ -313,6 +314,22 @@ CREATE TABLE data2.foo (a int);
 			}
 			require.Equal(t, oldJob, newJob)
 		}
+	})
+
+	t.Run("zone_configs", func(t *testing.T) {
+		// The restored zones should be a superset of the zones in the backed up
+		// cluster.
+		zoneIDsResult := sqlDB.QueryStr(t, `SELECT id FROM system.zones`)
+		var q strings.Builder
+		q.WriteString("SELECT * FROM system.zones WHERE id IN (")
+		for i, restoreZoneIDRow := range zoneIDsResult {
+			if i > 0 {
+				q.WriteString(", ")
+			}
+			q.WriteString(restoreZoneIDRow[0])
+		}
+		q.WriteString(")")
+		sqlDBRestore.CheckQueryResults(t, q.String(), sqlDB.QueryStr(t, q.String()))
 	})
 
 	t.Run("ensure that tables can be created at the excepted ID", func(t *testing.T) {
@@ -636,7 +653,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 							r.testingKnobs.duringSystemTableRestoration = func(systemTableName string) error {
 								if !alreadyErrored && systemTableName == customRestoreSystemTable {
 									alreadyErrored = true
-									return jobs.NewRetryJobError("injected error")
+									return jobs.MarkAsRetryJobError(errors.New("injected error"))
 								}
 								return nil
 							}
@@ -645,7 +662,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 					}
 				}
 				// The initial restore will return an error, and restart.
-				sqlDBRestore.ExpectErr(t, `injected error: restarting in background`, `RESTORE FROM $1`, LocalFoo)
+				sqlDBRestore.ExpectErr(t, `running execution from '.*' to '.*' on \d+ failed: injected error`, `RESTORE FROM $1`, LocalFoo)
 				// Reduce retry delays.
 				sqlDBRestore.Exec(t, "SET CLUSTER SETTING jobs.registry.retry.initial_delay = '1ms'")
 				// Expect the restore to succeed.
@@ -719,6 +736,30 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	})
 }
 
+// A regression test where dropped descriptors would appear in the set of
+// `Descriptors`.
+func TestDropDatabaseRevisionHistory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, LocalFoo)
+	sqlDB.Exec(t, `
+CREATE DATABASE same_name_db;
+DROP DATABASE same_name_db;
+CREATE DATABASE same_name_db;
+`)
+	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, LocalFoo)
+
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	defer cleanupEmptyCluster()
+	sqlDBRestore.Exec(t, `RESTORE FROM $1`, LocalFoo)
+	sqlDBRestore.ExpectErr(t, `database "same_name_db" already exists`, `CREATE DATABASE same_name_db`)
+}
+
 // TestClusterRevisionHistory tests that cluster backups can be taken with
 // revision_history and correctly restore into various points in time.
 func TestClusterRevisionHistory(t *testing.T) {
@@ -730,7 +771,7 @@ func TestClusterRevisionHistory(t *testing.T) {
 		check func(t *testing.T, runner *sqlutils.SQLRunner)
 	}
 
-	testCases := make([]testCase, 0, 6)
+	testCases := make([]testCase, 0)
 	ts := make([]string, 6)
 
 	var tc testCase
@@ -955,4 +996,32 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 
 		destDB.ExpectErr(t, `relation "restoredb.bank" does not exist`, `SELECT count(*) FROM restoredb.bank`)
 	})
+}
+
+// TestClusterRevisionDoesNotBackupOptOutSystemTables is a regression test for a
+// bug that was introduced where we would include revisions for descriptors that
+// are not supposed to be backed up egs: system tables that are opted out.
+//
+// The test would previously fail with an error that the descriptors table (an
+// opt out system table) did not have a span covering the time between the
+// `EndTime` of the first backup and second backup, since there are no revisions
+// to it between those backups.
+func TestClusterRevisionDoesNotBackupOptOutSystemTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, tc, _, _, cleanup := BackupRestoreTestSetup(t, singleNode, 10, InitManualReplication)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	defer cleanup()
+
+	sqlDB.Exec(t, `
+CREATE DATABASE test;
+USE test;
+CREATE TABLE foo (id INT);
+BACKUP TO 'nodelocal://1/foo' WITH revision_history;
+BACKUP TO 'nodelocal://1/foo' WITH revision_history;
+CREATE TABLE bar (id INT);
+BACKUP TO 'nodelocal://1/foo' WITH revision_history;
+`)
 }

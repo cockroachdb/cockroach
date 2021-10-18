@@ -16,7 +16,6 @@ import (
 	"reflect"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -76,6 +76,7 @@ type Job struct {
 		syncutil.Mutex
 		payload  jobspb.Payload
 		progress jobspb.Progress
+		runStats *RunStats
 	}
 }
 
@@ -232,31 +233,6 @@ func (s Status) Terminal() bool {
 	return s == StatusFailed || s == StatusSucceeded || s == StatusCanceled || s == StatusRevertFailed
 }
 
-// InvalidStatusError is the error returned when the desired operation is
-// invalid given the job's current status.
-type InvalidStatusError struct {
-	id     jobspb.JobID
-	status Status
-	op     string
-	err    string
-}
-
-func (e *InvalidStatusError) Error() string {
-	if e.err != "" {
-		return fmt.Sprintf("cannot %s %s job (id %d, err: %q)", e.op, e.status, e.id, e.err)
-	}
-	return fmt.Sprintf("cannot %s %s job (id %d)", e.op, e.status, e.id)
-}
-
-// SimplifyInvalidStatusError unwraps an *InvalidStatusError into an error
-// message suitable for users. Other errors are returned as passed.
-func SimplifyInvalidStatusError(err error) error {
-	if ierr := (*InvalidStatusError)(nil); errors.As(err, &ierr) {
-		return errors.Errorf("job %s", ierr.status)
-	}
-	return err
-}
-
 // ID returns the ID of the job.
 func (j *Job) ID() jobspb.JobID {
 	return j.id
@@ -286,7 +262,14 @@ func (j *Job) started(ctx context.Context, txn *kv.Txn) error {
 			md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 			ju.UpdatePayload(md.Payload)
 		}
-		if j.registry.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+		// md.RunStats can be nil because of the timing of version-update when exponential-backoff
+		// gets activated. It may happen that backoff is not activated when Update() function was
+		// called, which will cause to not populate md.RunStats. However, when the code reaches this
+		// point, version update may have been updated to enable backoff. In this case, we can skip
+		// updating num_runs and last_run, treating this job run as if backoff was not activated.
+		//
+		// TODO (sajjad): Update this comment after version 22.2 has been released.
+		if md.RunStats != nil {
 			ju.UpdateRunStats(md.RunStats.NumRuns+1, j.registry.clock.Now().GoTime())
 		}
 		return nil
@@ -564,7 +547,12 @@ func (j *Job) reverted(
 			}
 			ju.UpdateStatus(StatusReverting)
 		}
-		if j.registry.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+		// md.RunStats will be nil if clusterversion.RetryJobsWithExponentialBackoff
+		// was not active when Update was called above. In this case, we skip updating
+		// the runStats, treating this job run as if backoff is not active.
+		//
+		// TODO (sajjad): Update this comment after version 22.2 has been released.
+		if md.RunStats != nil {
 			// We can reach here due to a failure or due to the job being canceled.
 			// We should reset the exponential backoff parameters if the job was not
 			// canceled. Note that md.Status will be StatusReverting if the job
@@ -753,11 +741,15 @@ func (j *Job) runInTxn(
 
 // JobNotFoundError is returned from load when the job does not exist.
 type JobNotFoundError struct {
-	jobID jobspb.JobID
+	jobID     jobspb.JobID
+	sessionID sqlliveness.SessionID
 }
 
 // Error makes JobNotFoundError an error.
 func (e *JobNotFoundError) Error() string {
+	if e.sessionID != "" {
+		return fmt.Sprintf("job with ID %d does not exist with claim session id %q", e.jobID, e.sessionID.String())
+	}
 	return fmt.Sprintf("job with ID %d does not exist", e.jobID)
 }
 
@@ -772,10 +764,21 @@ func (j *Job) load(ctx context.Context, txn *kv.Txn) error {
 	var createdBy *CreatedByInfo
 
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
-		const stmt = "SELECT payload, progress, created_by_type, created_by_id FROM system.jobs WHERE id = $1"
-		row, err := j.registry.ex.QueryRowEx(
-			ctx, "load-job-query", txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			stmt, j.ID())
+		const (
+			queryNoSessionID   = "SELECT payload, progress, created_by_type, created_by_id FROM system.jobs WHERE id = $1"
+			queryWithSessionID = queryNoSessionID + " AND claim_session_id = $2"
+		)
+		sess := sessiondata.InternalExecutorOverride{User: security.RootUserName()}
+
+		var err error
+		var row tree.Datums
+		if j.sessionID == "" {
+			row, err = j.registry.ex.QueryRowEx(ctx, "load-job-query", txn, sess,
+				queryNoSessionID, j.ID())
+		} else {
+			row, err = j.registry.ex.QueryRowEx(ctx, "load-job-query", txn, sess,
+				queryWithSessionID, j.ID(), j.sessionID.UnsafeBytes())
+		}
 		if err != nil {
 			return err
 		}
@@ -831,7 +834,7 @@ func UnmarshalProgress(datum tree.Datum) (*jobspb.Progress, error) {
 	return progress, nil
 }
 
-// unnarshalCreatedBy unrmarshals and returns created_by_type and created_by_id datums
+// unmarshalCreatedBy unmarshals and returns created_by_type and created_by_id datums
 // which may be tree.DNull, or tree.DString and tree.DInt respectively.
 func unmarshalCreatedBy(createdByType, createdByID tree.Datum) (*CreatedByInfo, error) {
 	if createdByType == tree.DNull || createdByID == tree.DNull {
@@ -869,12 +872,23 @@ func (j *Job) CurrentStatus(ctx context.Context, txn *kv.Txn) (Status, error) {
 	return Status(statusString), nil
 }
 
+// getRunStats returns the RunStats for a job. If they are not set, it will
+// return a zero-value.
+func (j *Job) getRunStats() (rs RunStats) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.mu.runStats != nil {
+		rs = *j.mu.runStats
+	}
+	return rs
+}
+
 // Start will resume the job. The transaction used to create the StartableJob
 // must be committed. If a non-nil error is returned, the job was not started
 // and nothing will be send on errCh. Clients must not start jobs more than
 // once.
 func (sj *StartableJob) Start(ctx context.Context) (err error) {
-	if starts := atomic.AddInt64(&sj.starts, 1); starts != 1 {
+	if alreadyStarted := sj.recordStart(); alreadyStarted {
 		return errors.AssertionFailedf(
 			"StartableJob %d cannot be started more than once", sj.ID())
 	}
@@ -972,6 +986,48 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 // Cancel will mark the job as canceled and release its resources in the
 // Registry.
 func (sj *StartableJob) Cancel(ctx context.Context) error {
-	defer sj.registry.unregister(sj.ID())
+	alreadyStarted := sj.recordStart() // prevent future start attempts
+	defer func() {
+		if alreadyStarted {
+			sj.registry.cancelRegisteredJobContext(sj.ID())
+		} else {
+			sj.registry.unregister(sj.ID())
+		}
+	}()
 	return sj.registry.CancelRequested(ctx, nil, sj.ID())
+}
+
+func (sj *StartableJob) recordStart() (alreadyStarted bool) {
+	return atomic.AddInt64(&sj.starts, 1) != 1
+}
+
+// FormatRetriableExecutionErrorLogToStringArray extracts the events
+// stored in the payload, formats them into strings and returns them as an
+// array of strings. This function is intended for use with crdb_internal.jobs.
+func FormatRetriableExecutionErrorLogToStringArray(
+	ctx context.Context, pl *jobspb.Payload,
+) *tree.DArray {
+	arr := tree.NewDArray(types.String)
+	for _, ev := range pl.RetriableExecutionFailureLog {
+		if ev == nil { // no reason this should happen, but be defensive
+			continue
+		}
+		var cause error
+		if ev.Error != nil {
+			cause = errors.DecodeError(ctx, *ev.Error)
+		} else {
+			cause = fmt.Errorf("(truncated) %s", ev.TruncatedError)
+		}
+		msg := formatRetriableExecutionFailure(
+			ev.InstanceID,
+			Status(ev.Status),
+			timeutil.FromUnixMicros(ev.ExecutionStartMicros),
+			timeutil.FromUnixMicros(ev.ExecutionEndMicros),
+			cause,
+		)
+		// We really don't care about errors here. I'd much rather see nothing
+		// in my log than crash.
+		_ = arr.Append(tree.NewDString(msg))
+	}
+	return arr
 }

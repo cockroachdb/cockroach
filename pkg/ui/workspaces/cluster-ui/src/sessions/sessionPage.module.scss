@@ -10,7 +10,8 @@
 
 @import "../core/index.module.scss";
 
-.sessions-page{
+.sessions-page {
+  position: relative;
   all: initial;
   font-family: $font-family--base;
 }

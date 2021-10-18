@@ -51,7 +51,8 @@ type maxTimestampBoundDeadlineHolder struct {
 
 // ReadTimestamp implements the deadlineHolder interface.
 func (m maxTimestampBoundDeadlineHolder) ReadTimestamp() hlc.Timestamp {
-	return m.maxTimestampBound
+	// We return .Prev() because maxTimestampBound is an exclusive upper bound.
+	return m.maxTimestampBound.Prev()
 }
 
 // UpdateDeadline implements the deadlineHolder interface.
@@ -196,7 +197,16 @@ func (ld *leasedDescriptors) maybeUpdateDeadline(
 	// SQL pods.
 	var deadline hlc.Timestamp
 	if session != nil {
-		deadline = session.Expiration()
+		if expiration, txnTS := session.Expiration(), txn.ReadTimestamp(); txnTS.Less(expiration) {
+			deadline = expiration
+		} else {
+			// If the session has expired relative to this transaction, propagate
+			// a clear error that that's what is going on.
+			return errors.Errorf(
+				"liveness session expired %s before transaction",
+				txnTS.GoTime().Sub(expiration.GoTime()),
+			)
+		}
 	}
 	if leaseDeadline, ok := ld.getDeadline(); ok && (deadline.IsEmpty() || leaseDeadline.Less(deadline)) {
 		// Set the deadline to the lease deadline if session expiration is empty

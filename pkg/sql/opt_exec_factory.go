@@ -149,7 +149,7 @@ func generateScanSpans(
 ) (roachpb.Spans, error) {
 	sb := span.MakeBuilder(evalCtx, codec, tabDesc, index)
 	if params.InvertedConstraint != nil {
-		return sb.SpansFromInvertedSpans(params.InvertedConstraint, params.IndexConstraint)
+		return sb.SpansFromInvertedSpans(params.InvertedConstraint, params.IndexConstraint, nil /* scratch */)
 	}
 	return sb.SpansFromConstraint(params.IndexConstraint, params.NeededCols, false /* forDelete */)
 }
@@ -558,11 +558,6 @@ func (ef *execFactory) ConstructStreamingSetOp(
 func (ef *execFactory) ConstructUnionAll(
 	left, right exec.Node, reqOrdering exec.OutputOrdering, hardLimit uint64,
 ) (exec.Node, error) {
-	if hardLimit > 1 {
-		return nil, errors.AssertionFailedf(
-			"locality optimized search is not yet supported for more than one row at a time",
-		)
-	}
 	return ef.planner.newUnionNode(
 		tree.UnionOp,
 		true, /* all */
@@ -990,6 +985,18 @@ func (ef *execFactory) ConstructLimit(
 	}, nil
 }
 
+// ConstructTopK is part of the execFactory interface.
+func (ef *execFactory) ConstructTopK(
+	input exec.Node, k int64, ordering exec.OutputOrdering, alreadyOrderedPrefix int,
+) (exec.Node, error) {
+	return &topKNode{
+		plan:                 input.(planNode),
+		k:                    k,
+		ordering:             colinfo.ColumnOrdering(ordering),
+		alreadyOrderedPrefix: alreadyOrderedPrefix,
+	}, nil
+}
+
 // ConstructMax1Row is part of the exec.Factory interface.
 func (ef *execFactory) ConstructMax1Row(input exec.Node, errorText string) (exec.Node, error) {
 	plan := input.(planNode)
@@ -1096,13 +1103,17 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 
 // ConstructPlan is part of the exec.Factory interface.
 func (ef *execFactory) ConstructPlan(
-	root exec.Node, subqueries []exec.Subquery, cascades []exec.Cascade, checks []exec.Node,
+	root exec.Node,
+	subqueries []exec.Subquery,
+	cascades []exec.Cascade,
+	checks []exec.Node,
+	rootRowCount int64,
 ) (exec.Plan, error) {
 	// No need to spool at the root.
 	if spool, ok := root.(*spoolNode); ok {
 		root = spool.source
 	}
-	return constructPlan(ef.planner, root, subqueries, cascades, checks)
+	return constructPlan(ef.planner, root, subqueries, cascades, checks, rootRowCount)
 }
 
 // urlOutputter handles writing strings into an encoded URL for EXPLAIN (OPT,
@@ -1278,6 +1289,7 @@ func (ef *execFactory) ConstructInsert(
 	}
 
 	// Create the table inserter, which does the bulk of the work.
+	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
 		ctx,
 		ef.planner.txn,
@@ -1286,7 +1298,8 @@ func (ef *execFactory) ConstructInsert(
 		cols,
 		ef.planner.alloc,
 		&ef.planner.ExecCfg().Settings.SV,
-		ef.planner.SessionData().Internal,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1351,6 +1364,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 	}
 
 	// Create the table inserter, which does the bulk of the work.
+	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
 		ctx,
 		ef.planner.txn,
@@ -1359,7 +1373,8 @@ func (ef *execFactory) ConstructInsertFastPath(
 		cols,
 		ef.planner.alloc,
 		&ef.planner.ExecCfg().Settings.SV,
-		ef.planner.SessionData().Internal,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1455,6 +1470,7 @@ func (ef *execFactory) ConstructUpdate(
 	}
 
 	// Create the table updater, which does the bulk of the work.
+	internal := ef.planner.SessionData().Internal
 	ru, err := row.MakeUpdater(
 		ctx,
 		ef.planner.txn,
@@ -1465,7 +1481,8 @@ func (ef *execFactory) ConstructUpdate(
 		row.UpdaterDefault,
 		ef.planner.alloc,
 		&ef.planner.ExecCfg().Settings.SV,
-		ef.planner.SessionData().Internal,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1559,6 +1576,7 @@ func (ef *execFactory) ConstructUpsert(
 	}
 
 	// Create the table inserter, which does the bulk of the insert-related work.
+	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
 		ctx,
 		ef.planner.txn,
@@ -1567,7 +1585,8 @@ func (ef *execFactory) ConstructUpsert(
 		insertCols,
 		ef.planner.alloc,
 		&ef.planner.ExecCfg().Settings.SV,
-		ef.planner.SessionData().Internal,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1584,7 +1603,8 @@ func (ef *execFactory) ConstructUpsert(
 		row.UpdaterDefault,
 		ef.planner.alloc,
 		&ef.planner.ExecCfg().Settings.SV,
-		ef.planner.SessionData().Internal,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1656,12 +1676,14 @@ func (ef *execFactory) ConstructDelete(
 	// the deleter derives the columns that need to be fetched. By contrast, the
 	// CBO will have already determined the set of fetch columns, and passes
 	// those sets into the deleter (which will basically be a no-op).
+	internal := ef.planner.SessionData().Internal
 	rd := row.MakeDeleter(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		fetchCols,
 		&ef.planner.ExecCfg().Settings.SV,
-		ef.planner.SessionData().Internal,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 
 	// Now make a delete node. We use a pool.

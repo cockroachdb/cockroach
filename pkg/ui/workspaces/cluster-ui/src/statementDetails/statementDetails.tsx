@@ -18,6 +18,7 @@ import classNames from "classnames/bind";
 import { format as d3Format } from "d3-format";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import Long from "long";
 
 import {
   intersperse,
@@ -29,10 +30,12 @@ import {
   NumericStat,
   StatementStatistics,
   stdDev,
-  getMatchParamByName,
   formatNumberForDisplay,
   calculateTotalWorkload,
   unique,
+  summarize,
+  queryByName,
+  aggregatedTsAttr,
 } from "src/util";
 import { Loading } from "src/loading";
 import { Button } from "src/button";
@@ -58,8 +61,9 @@ import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import styles from "./statementDetails.module.scss";
 import { NodeSummaryStats } from "../nodes";
-import { UIConfigState } from "../store/uiConfig";
-import moment from "moment";
+import { UIConfigState } from "../store";
+import moment, { Moment } from "moment";
+import { StatementsRequest } from "src/api/statementsApi";
 
 const { TabPane } = Tabs;
 
@@ -74,7 +78,6 @@ interface SingleStatementStatistics {
   database: string;
   distSQL: Fraction;
   vec: Fraction;
-  opt: Fraction;
   implicit_txn: Fraction;
   failed: Fraction;
   node_id: number[];
@@ -125,7 +128,7 @@ export type NodesSummary = {
 };
 
 export interface StatementDetailsDispatchProps {
-  refreshStatements: () => void;
+  refreshStatements: (req?: StatementsRequest) => void;
   refreshStatementDiagnosticsRequests: () => void;
   refreshNodes: () => void;
   refreshNodesLiveness: () => void;
@@ -144,10 +147,12 @@ export interface StatementDetailsDispatchProps {
 export interface StatementDetailsStateProps {
   statement: SingleStatementStatistics;
   statementsError: Error | null;
+  dateRange: [Moment, Moment];
   nodeNames: { [nodeId: string]: string };
   nodeRegions: { [nodeId: string]: string };
   diagnosticsReports: cockroach.server.serverpb.IStatementDiagnosticsReport[];
   uiConfig?: UIConfigState["pages"]["statementDetails"];
+  isTenant?: UIConfigState["isTenant"];
 }
 
 export type StatementDetailsOwnProps = StatementDetailsDispatchProps &
@@ -157,15 +162,27 @@ const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortedTableStyles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
+function statementsRequestFromProps(
+  props: StatementDetailsProps,
+): cockroach.server.serverpb.StatementsRequest {
+  return new cockroach.server.serverpb.StatementsRequest({
+    combined: true,
+    start: Long.fromNumber(props.dateRange[0].unix()),
+    end: Long.fromNumber(props.dateRange[1].unix()),
+  });
+}
+
 function AppLink(props: { app: string }) {
   if (!props.app) {
     return <span className={cx("app-name", "app-name__unset")}>(unset)</span>;
   }
 
+  const searchParams = new URLSearchParams({ [appAttr]: props.app });
+
   return (
     <Link
       className={cx("app-name")}
-      to={`/statements/${encodeURIComponent(props.app)}`}
+      to={`/statements/?${searchParams.toString()}`}
     >
       {props.app}
     </Link>
@@ -318,9 +335,10 @@ export class StatementDetails extends React.Component<
     uiConfig: {
       showStatementDiagnosticsLink: true,
     },
+    isTenant: false,
   };
 
-  changeSortSetting = (ss: SortSetting) => {
+  changeSortSetting = (ss: SortSetting): void => {
     this.setState({
       sortSetting: ss,
     });
@@ -329,21 +347,30 @@ export class StatementDetails extends React.Component<
     }
   };
 
-  componentDidMount() {
-    this.props.refreshStatements();
-    this.props.refreshStatementDiagnosticsRequests();
-    this.props.refreshNodes();
-    this.props.refreshNodesLiveness();
+  refreshStatements = (): void => {
+    const req = statementsRequestFromProps(this.props);
+    this.props.refreshStatements(req);
+  };
+
+  componentDidMount(): void {
+    this.refreshStatements();
+    if (!this.props.isTenant) {
+      this.props.refreshStatementDiagnosticsRequests();
+      this.props.refreshNodes();
+      this.props.refreshNodesLiveness();
+    }
   }
 
-  componentDidUpdate() {
-    this.props.refreshStatements();
-    this.props.refreshStatementDiagnosticsRequests();
-    this.props.refreshNodes();
-    this.props.refreshNodesLiveness();
+  componentDidUpdate(): void {
+    this.refreshStatements();
+    if (!this.props.isTenant) {
+      this.props.refreshStatementDiagnosticsRequests();
+      this.props.refreshNodes();
+      this.props.refreshNodesLiveness();
+    }
   }
 
-  onTabChange = (tabId: string) => {
+  onTabChange = (tabId: string): void => {
     const { history } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
     searchParams.set("tab", tabId);
@@ -357,15 +384,15 @@ export class StatementDetails extends React.Component<
     this.props.onTabChanged && this.props.onTabChanged(tabId);
   };
 
-  backToStatementsClick = () => {
+  backToStatementsClick = (): void => {
     this.props.history.push("/statements");
     if (this.props.onBackToStatementsClick) {
       this.props.onBackToStatementsClick();
     }
   };
 
-  render() {
-    const app = getMatchParamByName(this.props.match, appAttr);
+  render(): React.ReactElement {
+    const app = queryByName(this.props.location, appAttr);
     return (
       <div className={cx("root")}>
         <Helmet title={`Details | ${app ? `${app} App |` : ""} Statements`} />
@@ -376,12 +403,13 @@ export class StatementDetails extends React.Component<
             size="small"
             icon={<ArrowLeft fontSize={"10px"} />}
             iconPosition="left"
+            className="small-margin"
           >
             Statements
           </Button>
-          <h1 className={cx("base-heading", "page--header__title")}>
+          <h3 className={cx("base-heading", "no-margin-bottom")}>
             Statement Details
-          </h1>
+          </h3>
         </div>
         <section className={cx("section", "section--container")}>
           <Loading
@@ -394,13 +422,14 @@ export class StatementDetails extends React.Component<
     );
   }
 
-  renderContent = () => {
+  renderContent = (): React.ReactElement => {
     const {
       createStatementDiagnosticsReport,
       diagnosticsReports,
       dismissStatementDiagnosticsAlertMessage,
       onDiagnosticBundleDownload,
       nodeRegions,
+      isTenant,
     } = this.props;
     const { currentTab } = this.state;
 
@@ -413,14 +442,13 @@ export class StatementDetails extends React.Component<
       app,
       distSQL,
       vec,
-      opt,
       failed,
       implicit_txn,
       database,
     } = this.props.statement;
 
     if (!stats) {
-      const sourceApp = getMatchParamByName(this.props.match, appAttr);
+      const sourceApp = queryByName(this.props.location, appAttr);
       const listUrl = "/statements" + (sourceApp ? "/" + sourceApp : "");
 
       return (
@@ -460,7 +488,7 @@ export class StatementDetails extends React.Component<
 
     const statsByNode = this.props.statement.byNode;
     const totalWorkload = calculateTotalWorkload(statsByNode);
-    populateRegionNodeForStatements(statsByNode, nodeRegions);
+    populateRegionNodeForStatements(statsByNode, nodeRegions, isTenant);
     const nodes: string[] = unique(
       (stats.nodes || []).map(node => node.toString()),
     ).sort();
@@ -477,6 +505,31 @@ export class StatementDetails extends React.Component<
       moment(stats.last_exec_timestamp.seconds.low * 1e3).format(
         "MMM DD, YYYY HH:MM",
       );
+    const statementSampled = stats.exec_stats.count > Long.fromNumber(0);
+    const unavailableTooltip = !statementSampled && (
+      <Tooltip
+        placement="bottom"
+        style="default"
+        content={
+          <p>
+            This metric is part of the statement execution and therefore will
+            not be available until the statement is sampled via tracing.
+          </p>
+        }
+      >
+        <span className={cx("tooltip-info")}>unavailable</span>
+      </Tooltip>
+    );
+    const summary = summarize(statement);
+    const showRowsWritten =
+      stats.sql_type === "TypeDML" && summary.statement !== "select";
+
+    // If the aggregatedTs is unset, we are aggregating over the whole date range.
+    const aggregatedTs = queryByName(this.props.location, aggregatedTsAttr);
+    const intervalStartTime = aggregatedTs
+      ? moment.unix(parseInt(aggregatedTs)).utc()
+      : this.props.dateRange[0];
+
     return (
       <Tabs
         defaultActiveKey="1"
@@ -533,41 +586,66 @@ export class StatementDetails extends React.Component<
                     </div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Mean rows/bytes read</Text>
-                      <Text>
-                        {formatNumberForDisplay(
-                          stats.rows_read.mean,
-                          formatTwoPlaces,
-                        )}
-                        {" / "}
-                        {formatNumberForDisplay(stats.bytes_read.mean, Bytes)}
-                      </Text>
+                      {statementSampled && (
+                        <Text>
+                          {formatNumberForDisplay(
+                            stats.rows_read.mean,
+                            formatTwoPlaces,
+                          )}
+                          {" / "}
+                          {formatNumberForDisplay(stats.bytes_read.mean, Bytes)}
+                        </Text>
+                      )}
+                      {unavailableTooltip}
                     </div>
+                    {showRowsWritten && (
+                      <div
+                        className={summaryCardStylesCx("summary--card__item")}
+                      >
+                        <Text>Mean rows written</Text>
+                        <Text>
+                          {formatNumberForDisplay(
+                            stats.rows_written?.mean,
+                            formatTwoPlaces,
+                          )}
+                        </Text>
+                      </div>
+                    )}
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Max memory usage</Text>
-                      <Text>
-                        {formatNumberForDisplay(
-                          stats.exec_stats.max_mem_usage.mean,
-                          Bytes,
-                        )}
-                      </Text>
+                      {statementSampled && (
+                        <Text>
+                          {formatNumberForDisplay(
+                            stats.exec_stats.max_mem_usage.mean,
+                            Bytes,
+                          )}
+                        </Text>
+                      )}
+                      {unavailableTooltip}
                     </div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Network usage</Text>
-                      <Text>
-                        {formatNumberForDisplay(
-                          stats.exec_stats.network_bytes.mean,
-                          Bytes,
-                        )}
-                      </Text>
+                      {statementSampled && (
+                        <Text>
+                          {formatNumberForDisplay(
+                            stats.exec_stats.network_bytes.mean,
+                            Bytes,
+                          )}
+                        </Text>
+                      )}
+                      {unavailableTooltip}
                     </div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Max scratch disk usage</Text>
-                      <Text>
-                        {formatNumberForDisplay(
-                          stats.exec_stats.max_disk_usage.mean,
-                          Bytes,
-                        )}
-                      </Text>
+                      {statementSampled && (
+                        <Text>
+                          {formatNumberForDisplay(
+                            stats.exec_stats.max_disk_usage.mean,
+                            Bytes,
+                          )}
+                        </Text>
+                      )}
+                      {unavailableTooltip}
                     </div>
                   </Col>
                 </Row>
@@ -577,18 +655,28 @@ export class StatementDetails extends React.Component<
               <SummaryCard className={cx("summary-card")}>
                 <Heading type="h5">Statement details</Heading>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Nodes</Text>
-                  <Text>
-                    {intersperse<ReactNode>(
-                      nodes.map(n => <NodeLink node={n} key={n} />),
-                      ", ",
-                    )}
-                  </Text>
+                  <Text>Interval start time</Text>
+                  <Text>{intervalStartTime.format("MMM D, h:mm A (UTC)")}</Text>
                 </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Regions</Text>
-                  <Text>{intersperse<ReactNode>(regions, ", ")}</Text>
-                </div>
+
+                {!isTenant && (
+                  <div>
+                    <div className={summaryCardStylesCx("summary--card__item")}>
+                      <Text>Nodes</Text>
+                      <Text>
+                        {intersperse<ReactNode>(
+                          nodes.map(n => <NodeLink node={n} key={n} />),
+                          ", ",
+                        )}
+                      </Text>
+                    </div>
+                    <div className={summaryCardStylesCx("summary--card__item")}>
+                      <Text>Regions</Text>
+                      <Text>{intersperse<ReactNode>(regions, ", ")}</Text>
+                    </div>
+                  </div>
+                )}
+
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Database</Text>
                   <Text>{database}</Text>
@@ -610,10 +698,6 @@ export class StatementDetails extends React.Component<
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Failed?</Text>
                   <Text>{renderBools(failed)}</Text>
-                </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Used cost-based optimizer?</Text>
-                  <Text>{renderBools(opt)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Distributed execution?</Text>
@@ -676,25 +760,27 @@ export class StatementDetails extends React.Component<
             </Col>
           </Row>
         </TabPane>
-        <TabPane
-          tab={`Diagnostics ${
-            hasDiagnosticReports ? `(${diagnosticsReports.length})` : ""
-          }`}
-          key="diagnostics"
-        >
-          <DiagnosticsView
-            activate={createStatementDiagnosticsReport}
-            diagnosticsReports={diagnosticsReports}
-            dismissAlertMessage={dismissStatementDiagnosticsAlertMessage}
-            hasData={hasDiagnosticReports}
-            statementFingerprint={statement}
-            onDownloadDiagnosticBundleClick={onDiagnosticBundleDownload}
-            showDiagnosticsViewLink={
-              this.props.uiConfig.showStatementDiagnosticsLink
-            }
-            onSortingChange={this.props.onSortingChange}
-          />
-        </TabPane>
+        {!isTenant && (
+          <TabPane
+            tab={`Diagnostics ${
+              hasDiagnosticReports ? `(${diagnosticsReports.length})` : ""
+            }`}
+            key="diagnostics"
+          >
+            <DiagnosticsView
+              activate={createStatementDiagnosticsReport}
+              diagnosticsReports={diagnosticsReports}
+              dismissAlertMessage={dismissStatementDiagnosticsAlertMessage}
+              hasData={hasDiagnosticReports}
+              statementFingerprint={statement}
+              onDownloadDiagnosticBundleClick={onDiagnosticBundleDownload}
+              showDiagnosticsViewLink={
+                this.props.uiConfig.showStatementDiagnosticsLink
+              }
+              onSortingChange={this.props.onSortingChange}
+            />
+          </TabPane>
+        )}
         <TabPane tab="Explain Plan" key="explain-plan">
           <SummaryCard>
             <PlanView
@@ -710,7 +796,7 @@ export class StatementDetails extends React.Component<
           className={cx("fit-content-width")}
         >
           <SummaryCard>
-            <h2
+            <h3
               className={classNames(
                 cx("base-heading"),
                 summaryCardStylesCx("summary--card__title"),
@@ -728,7 +814,7 @@ export class StatementDetails extends React.Component<
                   </div>
                 </Tooltip>
               </div>
-            </h2>
+            </h3>
             <NumericStatTable
               title="Phase"
               measure="Latency"
@@ -753,14 +839,14 @@ export class StatementDetails extends React.Component<
             />
           </SummaryCard>
           <SummaryCard>
-            <h2
+            <h3
               className={classNames(
                 cx("base-heading"),
                 summaryCardStylesCx("summary--card__title"),
               )}
             >
               Other Execution Statistics
-            </h2>
+            </h3>
             <NumericStatTable
               title="Stat"
               measure="Quantity"
@@ -779,6 +865,11 @@ export class StatementDetails extends React.Component<
                   format: Bytes,
                 },
                 {
+                  name: "Rows Written",
+                  value: stats.rows_written,
+                  bar: genericBarChart(stats.rows_written, stats.count),
+                },
+                {
                   name: "Network Bytes Sent",
                   value: stats.exec_stats.network_bytes,
                   bar: genericBarChart(
@@ -790,9 +881,10 @@ export class StatementDetails extends React.Component<
                 },
               ].filter(function(r) {
                 if (
-                  r.name === "Network Bytes Sent" &&
-                  r.value &&
-                  r.value.mean === 0
+                  (r.name === "Network Bytes Sent" &&
+                    r.value &&
+                    r.value.mean === 0) ||
+                  (r.name === "Rows Written" && !showRowsWritten)
                 ) {
                   // Omit if empty.
                   return false;
@@ -801,40 +893,42 @@ export class StatementDetails extends React.Component<
               })}
             />
           </SummaryCard>
-          <SummaryCard className={cx("fit-content-width")}>
-            <h2
-              className={classNames(
-                cx("base-heading"),
-                summaryCardStylesCx("summary--card__title"),
-              )}
-            >
-              Stats By Node
-              <div className={cx("numeric-stats-table__tooltip")}>
-                <Tooltip content="Execution statistics for this statement per gateway node.">
-                  <div
-                    className={cx("numeric-stats-table__tooltip-hover-area")}
-                  >
-                    <div className={cx("numeric-stats-table__info-icon")}>
-                      i
+          {!isTenant && (
+            <SummaryCard className={cx("fit-content-width")}>
+              <h3
+                className={classNames(
+                  cx("base-heading"),
+                  summaryCardStylesCx("summary--card__title"),
+                )}
+              >
+                Stats By Node
+                <div className={cx("numeric-stats-table__tooltip")}>
+                  <Tooltip content="Execution statistics for this statement per gateway node.">
+                    <div
+                      className={cx("numeric-stats-table__tooltip-hover-area")}
+                    >
+                      <div className={cx("numeric-stats-table__info-icon")}>
+                        i
+                      </div>
                     </div>
-                  </div>
-                </Tooltip>
-              </div>
-            </h2>
-            <StatementsSortedTable
-              className={cx("statements-table")}
-              data={statsByNode}
-              columns={makeNodesColumns(
-                statsByNode,
-                this.props.nodeNames,
-                totalWorkload,
-                nodeRegions,
-              )}
-              sortSetting={this.state.sortSetting}
-              onChangeSortSetting={this.changeSortSetting}
-              firstCellBordered
-            />
-          </SummaryCard>
+                  </Tooltip>
+                </div>
+              </h3>
+              <StatementsSortedTable
+                className={cx("statements-table")}
+                data={statsByNode}
+                columns={makeNodesColumns(
+                  statsByNode,
+                  this.props.nodeNames,
+                  totalWorkload,
+                  nodeRegions,
+                )}
+                sortSetting={this.state.sortSetting}
+                onChangeSortSetting={this.changeSortSetting}
+                firstCellBordered
+              />
+            </SummaryCard>
+          )}
         </TabPane>
       </Tabs>
     );
