@@ -387,7 +387,7 @@ type rawEventFeed []roachpb.RangeFeedEvent
 
 func (f rawEventFeed) run(
 	ctx context.Context,
-	span roachpb.Span,
+	spans []roachpb.Span,
 	startFrom hlc.Timestamp,
 	withDiff bool,
 	eventC chan<- *roachpb.RangeFeedEvent,
