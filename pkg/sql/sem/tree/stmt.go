@@ -916,7 +916,7 @@ func (*RenameColumn) StatementReturnType() StatementReturnType { return DDL }
 func (*RenameColumn) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*RenameColumn) StatementTag() string { return "RENAME COLUMN" }
+func (*RenameColumn) StatementTag() string { return "ALTER TABLE" }
 
 // StatementReturnType implements the Statement interface.
 func (*RenameDatabase) StatementReturnType() StatementReturnType { return DDL }
@@ -925,7 +925,7 @@ func (*RenameDatabase) StatementReturnType() StatementReturnType { return DDL }
 func (*RenameDatabase) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*RenameDatabase) StatementTag() string { return "RENAME DATABASE" }
+func (*RenameDatabase) StatementTag() string { return "ALTER DATABASE" }
 
 // StatementReturnType implements the Statement interface.
 func (*ReparentDatabase) StatementReturnType() StatementReturnType { return DDL }
@@ -943,7 +943,7 @@ func (*RenameIndex) StatementReturnType() StatementReturnType { return DDL }
 func (*RenameIndex) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*RenameIndex) StatementTag() string { return "RENAME INDEX" }
+func (*RenameIndex) StatementTag() string { return "ALTER INDEX" }
 
 // StatementReturnType implements the Statement interface.
 func (*RenameTable) StatementReturnType() StatementReturnType { return DDL }
@@ -954,11 +954,11 @@ func (*RenameTable) StatementType() StatementType { return TypeDDL }
 // StatementTag returns a short string identifying the type of statement.
 func (n *RenameTable) StatementTag() string {
 	if n.IsView {
-		return "RENAME VIEW"
+		return "ALTER VIEW"
 	} else if n.IsSequence {
-		return "RENAME SEQUENCE"
+		return "ALTER SEQUENCE"
 	}
-	return "RENAME TABLE"
+	return "ALTER TABLE"
 }
 
 // StatementReturnType implements the Statement interface.
