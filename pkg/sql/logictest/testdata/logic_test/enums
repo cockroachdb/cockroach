@@ -1562,3 +1562,15 @@ ORDER BY id
 {a,a}    {b,a}
 {b,a}    {b,b}
 {a,b,a}  {b,a,b}
+
+query TT
+SELECT
+  elems || 'a',
+  'b' || elems
+FROM enum_array_table
+ORDER BY id
+----
+{a}      {b}
+{a,a}    {b,a}
+{b,a}    {b,b}
+{a,b,a}  {b,a,b}
