@@ -5,12 +5,17 @@ CREATE TYPE defaultdb.typ AS ENUM('a')
 ops
 DROP TYPE defaultdb.typ
 ----
-Stage 0
-  *scop.MarkDescriptorAsDropped
-    TableID: 52
-  *scop.MarkDescriptorAsDropped
-    TableID: 53
+Stage 0 (non-revertible)
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 52
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 53
 Stage 1 (non-revertible)
+  *scop.MarkDescriptorAsDropped
+    DescID: 52
+  *scop.MarkDescriptorAsDropped
+    DescID: 53
+Stage 2 (non-revertible)
   *scop.DrainDescriptorName
     TableID: 52
   *scop.DrainDescriptorName

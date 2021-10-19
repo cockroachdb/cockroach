@@ -6,17 +6,6 @@ ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT
 ----
 Stage 0
-  *scop.MakeAddedColumnDeleteOnly
-    Column:
-      ID: 2
-      Name: j
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    FamilyName: primary
-    TableID: 52
   *scop.MakeAddedIndexDeleteOnly
     Index:
       EncodingType: 1
@@ -35,23 +24,36 @@ Stage 0
       Unique: true
       Version: 4
     TableID: 52
-Stage 1 (non-revertible)
+Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
+Stage 2 (non-revertible)
+  *scop.MakeAddedColumnDeleteOnly
+    Column:
+      ID: 2
+      Name: j
+      Nullable: true
+      Type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    FamilyName: primary
+    TableID: 52
+Stage 3
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
-Stage 2 (non-revertible)
+Stage 4
   *scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 3 (non-revertible)
+Stage 5
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
     TableID: 52
-Stage 4 (non-revertible)
+Stage 6
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -87,11 +89,11 @@ Stage 4 (non-revertible)
   *scop.MakeColumnPublic
     ColumnID: 2
     TableID: 52
-Stage 5 (non-revertible)
+Stage 7 (non-revertible)
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 52
-Stage 6 (non-revertible)
+Stage 8
   *scop.MakeIndexAbsent
     IndexID: 1
     TableID: 52
@@ -100,6 +102,29 @@ ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 ----
 Stage 0
+  *scop.MakeAddedIndexDeleteOnly
+    Index:
+      EncodingType: 1
+      ID: 2
+      KeyColumnDirections:
+      - 0
+      KeyColumnIDs:
+      - 1
+      KeyColumnNames:
+      - i
+      Name: new_primary_key
+      StoreColumnIDs:
+      - 2
+      StoreColumnNames:
+      - j
+      Unique: true
+      Version: 4
+    TableID: 52
+Stage 1
+  *scop.MakeAddedIndexDeleteAndWriteOnly
+    IndexID: 2
+    TableID: 52
+Stage 2 (non-revertible)
   *scop.MakeAddedColumnDeleteOnly
     Column:
       DefaultExpr: 123:::INT8
@@ -112,41 +137,20 @@ Stage 0
         width: 64
     FamilyName: primary
     TableID: 52
-  *scop.MakeAddedIndexDeleteOnly
-    Index:
-      EncodingType: 1
-      ID: 2
-      KeyColumnDirections:
-      - 0
-      KeyColumnIDs:
-      - 1
-      KeyColumnNames:
-      - i
-      Name: new_primary_key
-      StoreColumnIDs:
-      - 2
-      StoreColumnNames:
-      - j
-      Unique: true
-      Version: 4
-    TableID: 52
-Stage 1 (non-revertible)
-  *scop.MakeAddedIndexDeleteAndWriteOnly
-    IndexID: 2
-    TableID: 52
+Stage 3
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
-Stage 2 (non-revertible)
+Stage 4
   *scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 3 (non-revertible)
+Stage 5
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
     TableID: 52
-Stage 4 (non-revertible)
+Stage 6
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -182,11 +186,11 @@ Stage 4 (non-revertible)
   *scop.MakeColumnPublic
     ColumnID: 2
     TableID: 52
-Stage 5 (non-revertible)
+Stage 7 (non-revertible)
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 52
-Stage 6 (non-revertible)
+Stage 8
   *scop.MakeIndexAbsent
     IndexID: 1
     TableID: 52
@@ -196,18 +200,6 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
 ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
 Stage 0
-  *scop.MakeAddedColumnDeleteOnly
-    Column:
-      DefaultExpr: 123:::INT8
-      ID: 2
-      Name: j
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    FamilyName: primary
-    TableID: 52
   *scop.MakeAddedIndexDeleteOnly
     Index:
       EncodingType: 1
@@ -227,6 +219,23 @@ Stage 0
       - k
       Unique: true
       Version: 4
+    TableID: 52
+Stage 1
+  *scop.MakeAddedIndexDeleteAndWriteOnly
+    IndexID: 2
+    TableID: 52
+Stage 2 (non-revertible)
+  *scop.MakeAddedColumnDeleteOnly
+    Column:
+      DefaultExpr: 123:::INT8
+      ID: 2
+      Name: j
+      Nullable: true
+      Type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    FamilyName: primary
     TableID: 52
   *scop.MakeAddedColumnDeleteOnly
     Column:
@@ -240,26 +249,23 @@ Stage 0
         width: 64
     FamilyName: primary
     TableID: 52
-Stage 1 (non-revertible)
-  *scop.MakeAddedIndexDeleteAndWriteOnly
-    IndexID: 2
-    TableID: 52
+Stage 3
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 3
     TableID: 52
-Stage 2 (non-revertible)
+Stage 4
   *scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 3 (non-revertible)
+Stage 5
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
     TableID: 52
-Stage 4 (non-revertible)
+Stage 6
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -300,11 +306,11 @@ Stage 4 (non-revertible)
   *scop.MakeColumnPublic
     ColumnID: 3
     TableID: 52
-Stage 5 (non-revertible)
+Stage 7 (non-revertible)
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 52
-Stage 6 (non-revertible)
+Stage 8
   *scop.MakeIndexAbsent
     IndexID: 1
     TableID: 52
@@ -313,18 +319,6 @@ ops
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
 Stage 0
-  *scop.MakeAddedColumnDeleteOnly
-    Column:
-      ComputeExpr: i + 1:::INT8
-      ID: 2
-      Name: a
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    FamilyName: primary
-    TableID: 52
   *scop.MakeAddedIndexDeleteOnly
     Index:
       EncodingType: 1
@@ -343,23 +337,37 @@ Stage 0
       Unique: true
       Version: 4
     TableID: 52
-Stage 1 (non-revertible)
+Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
+Stage 2 (non-revertible)
+  *scop.MakeAddedColumnDeleteOnly
+    Column:
+      ComputeExpr: i + 1:::INT8
+      ID: 2
+      Name: a
+      Nullable: true
+      Type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    FamilyName: primary
+    TableID: 52
+Stage 3
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
-Stage 2 (non-revertible)
+Stage 4
   *scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 3 (non-revertible)
+Stage 5
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
     TableID: 52
-Stage 4 (non-revertible)
+Stage 6
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -395,11 +403,11 @@ Stage 4 (non-revertible)
   *scop.MakeColumnPublic
     ColumnID: 2
     TableID: 52
-Stage 5 (non-revertible)
+Stage 7 (non-revertible)
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 52
-Stage 6 (non-revertible)
+Stage 8
   *scop.MakeIndexAbsent
     IndexID: 1
     TableID: 52
@@ -414,17 +422,6 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT;
 ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
 Stage 0
-  *scop.MakeAddedColumnDeleteOnly
-    Column:
-      ID: 2
-      Name: a
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    FamilyName: primary
-    TableID: 52
   *scop.MakeAddedIndexDeleteOnly
     Index:
       EncodingType: 1
@@ -443,17 +440,6 @@ Stage 0
       Unique: true
       Version: 4
     TableID: 52
-  *scop.MakeAddedColumnDeleteOnly
-    Column:
-      ID: 3
-      Name: b
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    FamilyName: primary
-    TableID: 53
   *scop.MakeAddedIndexDeleteOnly
     Index:
       EncodingType: 1
@@ -474,27 +460,51 @@ Stage 0
       Unique: true
       Version: 4
     TableID: 53
-Stage 1 (non-revertible)
+Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
+  *scop.MakeAddedIndexDeleteAndWriteOnly
+    IndexID: 2
+    TableID: 53
+Stage 2 (non-revertible)
+  *scop.MakeAddedColumnDeleteOnly
+    Column:
+      ID: 2
+      Name: a
+      Nullable: true
+      Type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    FamilyName: primary
+    TableID: 52
+  *scop.MakeAddedColumnDeleteOnly
+    Column:
+      ID: 3
+      Name: b
+      Nullable: true
+      Type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    FamilyName: primary
+    TableID: 53
+Stage 3
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
-  *scop.MakeAddedIndexDeleteAndWriteOnly
-    IndexID: 2
-    TableID: 53
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 3
     TableID: 53
-Stage 2 (non-revertible)
+Stage 4
   *scop.BackfillIndex
     IndexID: 2
     TableID: 52
   *scop.BackfillIndex
     IndexID: 2
     TableID: 53
-Stage 3 (non-revertible)
+Stage 5
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
@@ -503,7 +513,7 @@ Stage 3 (non-revertible)
     IndexID: 2
     PrimaryIndexID: 1
     TableID: 53
-Stage 4 (non-revertible)
+Stage 6
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -580,14 +590,14 @@ Stage 4 (non-revertible)
   *scop.MakeColumnPublic
     ColumnID: 3
     TableID: 53
-Stage 5 (non-revertible)
+Stage 7 (non-revertible)
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 52
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 53
-Stage 6 (non-revertible)
+Stage 8
   *scop.MakeIndexAbsent
     IndexID: 1
     TableID: 52
