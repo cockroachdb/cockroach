@@ -75,7 +75,6 @@ func (r *registry) buildGraph(currentPhase scop.Phase, initial scpb.State) (*scg
 						op.from = op.to
 						op.ops = func(element scpb.Element) []scop.Op { return nil }
 					}
-
 					edgesToAdd = append(edgesToAdd, toAdd{
 						transition: op,
 						n:          n,
@@ -87,6 +86,11 @@ func (r *registry) buildGraph(currentPhase scop.Phase, initial scpb.State) (*scg
 			return nil, err
 		}
 		for _, op := range edgesToAdd {
+			// Revertibility is infectious and will impact
+			// all edges that follow.
+			if len(edgesToAdd) > 0 && !edgesToAdd[len(edgesToAdd)-1].revertible {
+				op.revertible = false
+			}
 			if err := g.AddOpEdges(
 				op.n.Target, op.from, op.to, op.revertible, op.ops(op.n.Element())...,
 			); err != nil {
