@@ -614,7 +614,7 @@ func (am *authenticationMux) getSession(
 		}
 		break
 	}
-	if !found {
+	if err != nil || !found {
 		return "", nil, http.ErrNoCookie
 	}
 
