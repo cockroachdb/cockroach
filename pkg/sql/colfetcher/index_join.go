@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -385,6 +386,7 @@ func NewColIndexJoin(
 	ctx context.Context,
 	allocator *colmem.Allocator,
 	fetcherAllocator *colmem.Allocator,
+	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
@@ -458,7 +460,7 @@ func NewColIndexJoin(
 	}
 
 	fetcher, err := initCFetcher(
-		flowCtx, fetcherAllocator, table, index, neededColumns, columnIdxMap, nil, /* invertedColumn */
+		flowCtx, fetcherAllocator, kvFetcherMemAcc, table, index, neededColumns, columnIdxMap, nil, /* invertedColumn */
 		cFetcherArgs{
 			visibility:        spec.Visibility,
 			lockingStrength:   spec.LockingStrength,

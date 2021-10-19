@@ -289,8 +289,9 @@ type Fetcher struct {
 	// Buffered allocation of decoded datums.
 	alloc *rowenc.DatumAlloc
 
-	// Memory monitor for the bytes fetched by this fetcher.
-	mon *mon.BytesMonitor
+	// Memory monitor and memory account for the bytes fetched by this fetcher.
+	mon             *mon.BytesMonitor
+	kvFetcherMemAcc *mon.BoundAccount
 }
 
 // Reset resets this Fetcher, preserving the memory capacity that was used
@@ -309,6 +310,7 @@ func (rf *Fetcher) Close(ctx context.Context) {
 		rf.kvFetcher.Close(ctx)
 	}
 	if rf.mon != nil {
+		rf.kvFetcherMemAcc.Close(ctx)
 		rf.mon.Stop(ctx)
 	}
 }
@@ -343,6 +345,8 @@ func (rf *Fetcher) Init(
 	if memMonitor != nil {
 		rf.mon = mon.NewMonitorInheritWithLimit("fetcher-mem", 0 /* limit */, memMonitor)
 		rf.mon.Start(ctx, memMonitor, mon.BoundAccount{})
+		memAcc := rf.mon.MakeBoundAccount()
+		rf.kvFetcherMemAcc = &memAcc
 	}
 
 	// We must always decode the index key if we need to distinguish between
@@ -605,7 +609,7 @@ func (rf *Fetcher) StartScan(
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.lockTimeout,
-		rf.mon,
+		rf.kvFetcherMemAcc,
 		forceProductionKVBatchSize,
 		txn.AdmissionHeader(),
 		txn.DB().SQLKVResponseAdmissionQ,
@@ -706,7 +710,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.lockTimeout,
-		rf.mon,
+		rf.kvFetcherMemAcc,
 		forceProductionKVBatchSize,
 		txn.AdmissionHeader(),
 		txn.DB().SQLKVResponseAdmissionQ,

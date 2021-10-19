@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -184,6 +185,7 @@ var colBatchScanPool = sync.Pool{
 func NewColBatchScan(
 	ctx context.Context,
 	allocator *colmem.Allocator,
+	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
 	evalCtx *tree.EvalContext,
 	spec *execinfrapb.TableReaderSpec,
@@ -218,7 +220,7 @@ func NewColBatchScan(
 	}
 
 	fetcher, err := initCFetcher(
-		flowCtx, allocator, table, table.ActiveIndexes()[spec.IndexIdx],
+		flowCtx, allocator, kvFetcherMemAcc, table, table.ActiveIndexes()[spec.IndexIdx],
 		neededColumns, columnIdxMap, invertedColumn,
 		cFetcherArgs{
 			visibility:        spec.Visibility,
