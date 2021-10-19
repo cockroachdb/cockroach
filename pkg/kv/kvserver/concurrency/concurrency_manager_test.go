@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"reflect"
 	"regexp"
@@ -43,7 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
-	"github.com/maruel/panicparse/stack"
+	"github.com/maruel/panicparse/v2/stack"
 	"github.com/petermattis/goid"
 )
 
@@ -1142,7 +1143,8 @@ func (m *monitor) waitForAsyncGoroutinesToStall(t *testing.T) {
 			continue
 		}
 		stalledCall := firstNonStdlib(stat.Stack.Calls)
-		log.Eventf(g.ctx, "blocked on %s in %s", stat.State, stalledCall.Func.PkgDotName())
+		log.Eventf(g.ctx, "blocked on %s in %s.%s",
+			stat.State, stalledCall.Func.DirName, stalledCall.Func.Name)
 	}
 }
 
@@ -1205,6 +1207,28 @@ var goroutineStalledStates = map[string]bool{
 // matches the provided filter. It uses the provided buffer to avoid repeat
 // allocations.
 func goroutineStatus(t *testing.T, filter string, buf *[]byte) []*stack.Goroutine {
+	b := stacks(buf)
+	s, _, err := stack.ScanSnapshot(bytes.NewBuffer(b), ioutil.Discard, stack.DefaultOpts())
+	if err != io.EOF {
+		t.Fatalf("could not parse goroutine dump: %v", err)
+		return nil
+	}
+
+	matching := s.Goroutines[:0]
+	for _, g := range s.Goroutines {
+		for _, call := range g.Stack.Calls {
+			if strings.Contains(call.Func.Complete, filter) {
+				matching = append(matching, g)
+				break
+			}
+		}
+	}
+	return matching
+}
+
+// stacks is a wrapper for runtime.Stack that attempts to recover the data for
+// all goroutines. It uses the provided buffer to avoid repeat allocations.
+func stacks(buf *[]byte) []byte {
 	// We don't know how big the buffer needs to be to collect all the
 	// goroutines. Start with 64 KB and try a few times, doubling each time.
 	// NB: This is inspired by runtime/pprof/pprof.go:writeGoroutineStacks.
@@ -1220,30 +1244,12 @@ func goroutineStatus(t *testing.T, filter string, buf *[]byte) []*stack.Goroutin
 		}
 		*buf = make([]byte, 2*len(*buf))
 	}
-
-	// guesspaths=true is required for Call objects to have IsStdlib filled in.
-	guesspaths := true
-	ctx, err := stack.ParseDump(bytes.NewBuffer(truncBuf), ioutil.Discard, guesspaths)
-	if err != nil {
-		t.Fatalf("could not parse goroutine dump: %v", err)
-		return nil
-	}
-
-	matching := ctx.Goroutines[:0]
-	for _, g := range ctx.Goroutines {
-		for _, call := range g.Stack.Calls {
-			if strings.Contains(call.Func.Raw, filter) {
-				matching = append(matching, g)
-				break
-			}
-		}
-	}
-	return matching
+	return truncBuf
 }
 
 func firstNonStdlib(calls []stack.Call) stack.Call {
 	for _, call := range calls {
-		if !call.IsStdlib {
+		if call.Location != stack.Stdlib {
 			return call
 		}
 	}
