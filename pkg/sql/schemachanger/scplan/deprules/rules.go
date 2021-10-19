@@ -35,8 +35,11 @@ func joinTargetNode(
 const (
 	add, drop = scpb.Target_ADD, scpb.Target_DROP
 
-	public, absent, deleteOnly, deleteAndWriteOnly = scpb.Status_PUBLIC,
-		scpb.Status_ABSENT, scpb.Status_DELETE_ONLY, scpb.Status_DELETE_AND_WRITE_ONLY
+	public, txnDropped, absent, deleteOnly, deleteAndWriteOnly = scpb.Status_PUBLIC,
+		scpb.Status_TXN_DROPPED, scpb.Status_ABSENT, scpb.Status_DELETE_ONLY, scpb.Status_DELETE_AND_WRITE_ONLY
+	// Make the linter happy
+	_ = txnDropped
+	_ = deleteOnly
 )
 
 func init() {
@@ -76,7 +79,7 @@ func init() {
 
 			screl.JoinTargetNode(parent, parentTarget, parentNode),
 			parentTarget.AttrEq(screl.Direction, drop),
-			parentNode.AttrIn(screl.Status, deleteOnly, deleteAndWriteOnly),
+			parentNode.AttrIn(screl.Status, absent),
 
 			joinTargetNode(other, otherTarget, otherNode, drop, absent),
 		),
@@ -108,7 +111,7 @@ func init() {
 	tab, tabTarget, tabNode := targetNodeVars("tab")
 	register(
 		"table drop in public depends on absent sequence owned by?",
-		tabNode, ownedByNode,
+		ownedByNode, tabNode,
 		screl.MustQuery(
 			tab.Type((*scpb.Table)(nil)),
 			ownedBy.Type((*scpb.SequenceOwnedBy)(nil)),
@@ -116,19 +119,18 @@ func init() {
 			tab.AttrEqVar(screl.DescID, id),
 			ownedBy.AttrEqVar(screl.ReferencedDescID, id),
 
-			joinTargetNode(tab, tabTarget, tabNode, drop, public),
+			joinTargetNode(tab, tabTarget, tabNode, drop, absent),
 			joinTargetNode(ownedBy, ownedByTarget, ownedByNode, drop, absent),
 		))
 }
 
 func init() {
-
 	typ, typTarget, typNode := targetNodeVars("type")
 	typRef, typRefTarget, typRefNode := targetNodeVars("type-ref")
 	var id rel.Var = "id"
 	register(
 		"type reference something",
-		typNode, typRefNode,
+		typRefNode, typNode,
 		screl.MustQuery(
 			typ.Type((*scpb.Type)(nil)),
 			typRef.Type((*scpb.TypeReference)(nil)),
@@ -136,7 +138,7 @@ func init() {
 			typ.AttrEqVar(screl.DescID, id),
 			typRef.AttrEqVar(screl.ReferencedDescID, id),
 
-			joinTargetNode(typ, typTarget, typNode, drop, public),
+			joinTargetNode(typ, typTarget, typNode, drop, absent),
 			joinTargetNode(typRef, typRefTarget, typRefNode, drop, absent),
 		),
 	)
@@ -179,7 +181,7 @@ func init() {
 				return idInIDs(to.DependsOn, from.TableID)
 			}),
 
-			joinTargetNode(from, fromTarget, fromNode, drop, public),
+			joinTargetNode(from, fromTarget, fromNode, drop, absent),
 			joinTargetNode(to, toTarget, toNode, drop, absent),
 		),
 	)
@@ -309,7 +311,7 @@ func init() {
 	id := rel.Var("id")
 	register(
 		"table default expr",
-		tabNode, defExprNode,
+		defExprNode, tabNode,
 		screl.MustQuery(
 
 			tab.Type((*scpb.Table)(nil)),
@@ -317,7 +319,7 @@ func init() {
 
 			id.Entities(screl.DescID, tab, defExpr),
 
-			joinTargetNode(tab, tabTarget, tabNode, drop, public),
+			joinTargetNode(tab, tabTarget, tabNode, drop, absent),
 			joinTargetNode(defExpr, defExprTarget, defExprNode, drop, absent),
 		),
 	)
@@ -331,24 +333,23 @@ func init() {
 	relDepOnBy, relDepOnByTarget, relDepOnByNode := targetNodeVars("rel-dep")
 	tabID := rel.Var("dep-id")
 	register(
-		"table drop relation depended on",
-		tabNode, relDepOnByNode,
+		"table/view drop relation depended on",
+		relDepOnByNode, tabNode,
 		screl.MustQuery(
 
-			tab.Type((*scpb.Table)(nil)),
+			tab.Type((*scpb.Table)(nil), (*scpb.View)(nil), (*scpb.Sequence)(nil)),
 			relDepOnBy.Type((*scpb.RelationDependedOnBy)(nil)),
 
 			tab.AttrEqVar(screl.DescID, tabID),
-			relDepOnBy.AttrEqVar(screl.ReferencedDescID, tabID),
+			relDepOnBy.AttrEqVar(screl.DescID, tabID),
 
-			joinTargetNode(tab, tabTarget, tabNode, drop, public),
+			joinTargetNode(tab, tabTarget, tabNode, drop, absent),
 			joinTargetNode(relDepOnBy, relDepOnByTarget, relDepOnByNode, drop, absent),
 		),
 	)
 }
 
 func init() {
-
 	// These are more weird rules where the public drop table
 	// depends on something else.
 	tab, tabTarget, tabNode := targetNodeVars("tab")
@@ -356,7 +357,7 @@ func init() {
 	tabID := rel.Var("dep-id")
 	register(
 		"table drop depends on outbound fk",
-		tabNode, fkByNode,
+		fkByNode, tabNode,
 		screl.MustQuery(
 
 			tab.Type((*scpb.Table)(nil)),
@@ -365,7 +366,31 @@ func init() {
 			tab.AttrEqVar(screl.DescID, tabID),
 			fkBy.AttrEqVar(screl.DescID, tabID),
 
-			joinTargetNode(tab, tabTarget, tabNode, drop, public),
+			joinTargetNode(tab, tabTarget, tabNode, drop, absent),
+			joinTargetNode(fkBy, fkByTarget, fkByNode, drop, absent),
+		),
+	)
+}
+
+func init() {
+	// Require that a table has entered an absent state
+	// if its being dropped at the same time. This ensures
+	// that we transitioned away from txnDropped state.
+	tab, tabTarget, tabNode := targetNodeVars("tab")
+	fkBy, fkByTarget, fkByNode := targetNodeVars("fk")
+	tabID := rel.Var("dep-id")
+	register(
+		"table drop depends on inbound fk",
+		fkByNode, tabNode,
+		screl.MustQuery(
+
+			tab.Type((*scpb.Table)(nil)),
+			fkBy.Type((*scpb.InboundForeignKey)(nil)),
+
+			tab.AttrEqVar(screl.DescID, tabID),
+			fkBy.AttrEqVar(screl.ReferencedDescID, tabID),
+
+			joinTargetNode(tab, tabTarget, tabNode, drop, absent),
 			joinTargetNode(fkBy, fkByTarget, fkByNode, drop, absent),
 		),
 	)
