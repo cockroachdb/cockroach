@@ -53,10 +53,10 @@ export const statusOptions = [
   { value: "", label: "All" },
   { value: "succeeded", label: "Succeeded" },
   { value: "failed", label: "Failed" },
-  { value: "running", label: "Running" },
-  { value: "pending", label: "Pending" },
   { value: "canceled", label: "Canceled" },
   { value: "paused", label: "Paused" },
+  { value: "running", label: "Running" },
+  { value: "pending", label: "Pending" },
 ];
 
 export function jobHasOneOfStatuses(job: Job, ...statuses: string[]) {
