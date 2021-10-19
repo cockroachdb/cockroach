@@ -306,6 +306,17 @@ func (w index) GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID 
 	return w.desc.CompositeColumnIDs[compositeColumnOrdinal]
 }
 
+// UseDeletePreservingEncoding returns true if the index is to be encoded with
+// an additional bit that indicates whether or not the value has been deleted.
+// Index key-values that are deleted in this way are not actually deleted,
+// but remain in the index with a value which has the delete bit set to true.
+// This is necessary to preserve the delete history for the MVCC-compatible
+// index backfiller
+// docs/RFCS/20211004_incremental_index_backfiller.md#new-index-encoding-for-deletions-vs-mvcc
+func (w index) UseDeletePreservingEncoding() bool {
+	return w.desc.UseDeletePreservingEncoding
+}
+
 // partitioning is the backing struct for a catalog.Partitioning interface.
 type partitioning struct {
 	desc *descpb.PartitioningDescriptor
