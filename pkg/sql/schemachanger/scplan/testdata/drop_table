@@ -61,8 +61,6 @@ Stage 0
     TableID: 55
   *scop.UpdateRelationDeps
     TableID: 55
-  *scop.RemoveSequenceOwnedBy
-    TableID: 56
   *scop.RemoveColumnDefaultExpression
     ColumnID: 2
     TableID: 55
@@ -99,6 +97,8 @@ Stage 1 (non-revertible)
     TableID: 56
   *scop.CreateGcJobForDescriptor
     DescID: 56
+  *scop.RemoveSequenceOwnedBy
+    TableID: 56
   *scop.MarkDescriptorAsDropped
     TableID: 55
   *scop.DrainDescriptorName
