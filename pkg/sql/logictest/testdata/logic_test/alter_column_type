@@ -390,7 +390,7 @@ statement ok
 CREATE TABLE t18 (x INT NOT NULL PRIMARY KEY);
 CREATE TABLE t19 (y INT NOT NULL REFERENCES t18 (x), INDEX(y));
 
-statement error pq: unimplemented: ALTER COLUMN TYPE requiring rewrite of on-disk data is currently not supported for columns that are part of an index
+statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
 ALTER TABLE t18 ALTER COLUMN x TYPE STRING
 
 statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
@@ -528,6 +528,9 @@ CREATE TABLE child_71089 (a INT, b INT REFERENCES parent_71089 (id) NOT NULL)
 
 statement ok
 ALTER TABLE child_71089 ALTER COLUMN a TYPE FLOAT;
+
+statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
+ALTER TABLE parent_71089 ALTER COLUMN id TYPE uuid USING gen_random_uuid();
 
 # ColumnConversionValidate should error out if the conversion is not valid.
 # STRING -> BYTES is a ColumnConversionValidate type conversion, it should

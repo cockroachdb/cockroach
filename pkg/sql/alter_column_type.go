@@ -202,7 +202,7 @@ func alterColumnTypeGeneral(
 
 	// Disallow ALTER COLUMN TYPE general for columns that have a foreign key
 	// constraint.
-	for _, fk := range tableDesc.AllActiveAndInactiveForeignKeys() {
+	checkFK := func(fk *descpb.ForeignKeyConstraint) error {
 		if fk.OriginTableID == tableDesc.GetID() {
 			for _, id := range fk.OriginColumnIDs {
 				if col.GetID() == id {
@@ -217,6 +217,16 @@ func alterColumnTypeGeneral(
 				}
 			}
 		}
+		return nil
+	}
+
+	for _, fk := range tableDesc.AllActiveAndInactiveForeignKeys() {
+		if err := checkFK(fk); err != nil {
+			return err
+		}
+	}
+	if err := tableDesc.ForeachInboundFK(checkFK); err != nil {
+		return err
 	}
 
 	// Disallow ALTER COLUMN TYPE general for columns that are
