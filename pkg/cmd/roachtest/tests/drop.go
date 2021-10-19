@@ -73,7 +73,7 @@ func registerDrop(r registry.Registry) {
 			run(false, `SET CLUSTER SETTING trace.debug.enable = true`)
 
 			// Drop a constraint that would get in the way of deleting from tpcc.stock.
-			const stmtDropConstraint = "ALTER TABLE tpcc.order_line DROP CONSTRAINT fk_ol_supply_w_id_ref_stock"
+			const stmtDropConstraint = "ALTER TABLE tpcc.order_line DROP CONSTRAINT order_line_ol_supply_w_id_ol_i_id_fkey"
 			run(false, stmtDropConstraint)
 
 			var rows, minWarehouse, maxWarehouse int
