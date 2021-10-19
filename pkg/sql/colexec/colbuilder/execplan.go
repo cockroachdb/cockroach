@@ -762,10 +762,13 @@ func NewColOperator(
 			cFetcherMemAcc := result.createUnlimitedMemAccount(
 				ctx, flowCtx, "cfetcher" /* opName */, spec.ProcessorID,
 			)
+			kvFetcherMemAcc := result.createUnlimitedMemAccount(
+				ctx, flowCtx, "kvfetcher" /* opName */, spec.ProcessorID,
+			)
 			estimatedRowCount := spec.EstimatedRowCount
 			scanOp, err := colfetcher.NewColBatchScan(
-				ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), flowCtx,
-				evalCtx, core.TableReader, post, estimatedRowCount,
+				ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
+				flowCtx, evalCtx, core.TableReader, post, estimatedRowCount,
 			)
 			if err != nil {
 				return r, err
@@ -786,11 +789,14 @@ func NewColOperator(
 			cFetcherMemAcc := result.createUnlimitedMemAccount(
 				ctx, flowCtx, "cfetcher" /* opName */, spec.ProcessorID,
 			)
+			kvFetcherMemAcc := result.createUnlimitedMemAccount(
+				ctx, flowCtx, "kvfetcher" /* opName */, spec.ProcessorID,
+			)
 			semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
 			inputTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(inputTypes, spec.Input[0].ColumnTypes)
 			indexJoinOp, err := colfetcher.NewColIndexJoin(
-				ctx, streamingAllocator, colmem.NewAllocator(ctx, cFetcherMemAcc, factory),
+				ctx, streamingAllocator, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
 				flowCtx, evalCtx, semaCtx, inputs[0].Root, core.JoinReader, post, inputTypes)
 			if err != nil {
 				return r, err
