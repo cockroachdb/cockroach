@@ -753,3 +753,9 @@ message RangeInfo {
   Lease lease = 2 [(gogoproto.nullable) = false];
   RangeClosedTimestampPolicy closed_timestamp_policy = 3;
 }
+
+message IndexValueWrapper {
+  bytes value = 1;
+
+  bool deleted = 2;
+}

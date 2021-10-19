@@ -562,6 +562,8 @@ message IndexDescriptor {
   // TODO(mgartner): Update the comment to explain that columns are referenced
   // by their ID once #49766 is addressed.
   optional string predicate = 23 [(gogoproto.nullable) = false];
+
+  optional bool use_delete_preserving_encoding = 24 [(gogoproto.nullable) = false];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
