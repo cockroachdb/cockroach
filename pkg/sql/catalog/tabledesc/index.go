@@ -334,6 +334,10 @@ func (w index) GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID 
 	return w.desc.CompositeColumnIDs[compositeColumnOrdinal]
 }
 
+func (w index) UseDeletePreservingEncoding() bool {
+	return w.desc.UseDeletePreservingEncoding
+}
+
 // partitioning is the backing struct for a catalog.Partitioning interface.
 type partitioning struct {
 	desc *descpb.PartitioningDescriptor
