@@ -20,17 +20,23 @@ func init() {
 		(*scpb.Database)(nil),
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
-		to(scpb.Status_DELETE_ONLY,
-			minPhase(scop.PreCommitPhase),
+		to(scpb.Status_TXN_DROPPED,
+			minPhase(scop.StatementPhase),
 			emit(func(this *scpb.Database) scop.Op {
-				return &scop.MarkDescriptorAsDropped{
-					TableID: this.DatabaseID,
+				return &scop.MarkDescriptorAsDroppedSynthetically{
+					DescID: this.DatabaseID,
 				}
 			})),
 		to(scpb.Status_ABSENT,
-			minPhase(scop.PostCommitPhase),
+			minPhase(scop.PreCommitPhase),
 			revertible(false),
 			emit(func(this *scpb.Database) scop.Op {
+				return &scop.MarkDescriptorAsDropped{
+					DescID: this.DatabaseID,
+				}
+			}),
+			emit(func(this *scpb.Database) scop.Op {
+
 				return &scop.DrainDescriptorName{
 					TableID: this.DatabaseID,
 				}

@@ -39,6 +39,28 @@ ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
 Stage 0
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 57
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 56
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 55
+    TableID: 54
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 55
+Stage 1 (non-revertible)
+  *scop.MarkDescriptorAsDropped
+    DescID: 57
+  *scop.DrainDescriptorName
+    TableID: 57
+  *scop.CreateGcJobForDescriptor
+    DescID: 57
+  *scop.MarkDescriptorAsDropped
+    DescID: 55
+  *scop.DrainDescriptorName
+    TableID: 55
+  *scop.CreateGcJobForDescriptor
+    DescID: 55
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 57
     TableID: 55
@@ -61,6 +83,12 @@ Stage 0
     TableID: 55
   *scop.UpdateRelationDeps
     TableID: 55
+  *scop.MarkDescriptorAsDropped
+    DescID: 56
+  *scop.DrainDescriptorName
+    TableID: 56
+  *scop.CreateGcJobForDescriptor
+    DescID: 56
   *scop.RemoveSequenceOwnedBy
     TableID: 56
   *scop.RemoveColumnDefaultExpression
@@ -83,51 +111,33 @@ Stage 0
     TableID: 55
   *scop.UpdateRelationDeps
     TableID: 55
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 55
-    TableID: 54
-Stage 1 (non-revertible)
-  *scop.MarkDescriptorAsDropped
-    TableID: 57
-  *scop.DrainDescriptorName
-    TableID: 57
-  *scop.CreateGcJobForDescriptor
-    DescID: 57
-  *scop.MarkDescriptorAsDropped
-    TableID: 56
-  *scop.DrainDescriptorName
-    TableID: 56
-  *scop.CreateGcJobForDescriptor
-    DescID: 56
-  *scop.MarkDescriptorAsDropped
-    TableID: 55
-  *scop.DrainDescriptorName
-    TableID: 55
-  *scop.CreateGcJobForDescriptor
-    DescID: 55
 
 deps
 DROP TABLE defaultdb.shipments CASCADE;
 ----
+- from: [DefaultExpression:{DescID: 55, ColumnID: 1}, ABSENT]
+  to:   [Table:{DescID: 55}, ABSENT]
+- from: [DefaultExpression:{DescID: 55, ColumnID: 2}, ABSENT]
+  to:   [Table:{DescID: 55}, ABSENT]
+- from: [DefaultExpression:{DescID: 55, ColumnID: 3}, ABSENT]
+  to:   [Table:{DescID: 55}, ABSENT]
+- from: [DefaultExpression:{DescID: 55, ColumnID: 4}, ABSENT]
+  to:   [Table:{DescID: 55}, ABSENT]
+- from: [DefaultExpression:{DescID: 55, ColumnID: 5}, ABSENT]
+  to:   [Table:{DescID: 55}, ABSENT]
+- from: [InboundForeignKey:{DescID: 52, Name: fk_customers, ReferencedDescID: 55}, ABSENT]
+  to:   [Table:{DescID: 55}, ABSENT]
+- from: [InboundForeignKey:{DescID: 53, Name: fk_orders, ReferencedDescID: 55}, ABSENT]
+  to:   [Table:{DescID: 55}, ABSENT]
+- from: [OutboundForeignKey:{DescID: 55, Name: fk_customers, ReferencedDescID: 52}, ABSENT]
+  to:   [Table:{DescID: 55}, ABSENT]
+- from: [OutboundForeignKey:{DescID: 55, Name: fk_orders, ReferencedDescID: 53}, ABSENT]
+  to:   [Table:{DescID: 55}, ABSENT]
+- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
+  to:   [Table:{DescID: 55}, ABSENT]
 - from: [SequenceOwnedBy:{DescID: 56, ReferencedDescID: 55}, ABSENT]
   to:   [Sequence:{DescID: 56}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
-  to:   [DefaultExpression:{DescID: 55, ColumnID: 1}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
-  to:   [DefaultExpression:{DescID: 55, ColumnID: 2}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
-  to:   [DefaultExpression:{DescID: 55, ColumnID: 3}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
-  to:   [DefaultExpression:{DescID: 55, ColumnID: 4}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
-  to:   [DefaultExpression:{DescID: 55, ColumnID: 5}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
-  to:   [OutboundForeignKey:{DescID: 55, Name: fk_customers, ReferencedDescID: 52}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
-  to:   [OutboundForeignKey:{DescID: 55, Name: fk_orders, ReferencedDescID: 53}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
-  to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
-  to:   [SequenceOwnedBy:{DescID: 56, ReferencedDescID: 55}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
+- from: [SequenceOwnedBy:{DescID: 56, ReferencedDescID: 55}, ABSENT]
+  to:   [Table:{DescID: 55}, ABSENT]
+- from: [Table:{DescID: 55}, ABSENT]
   to:   [View:{DescID: 57}, ABSENT]
