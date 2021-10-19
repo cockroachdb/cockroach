@@ -305,7 +305,7 @@ FROM system.eventlog
 WHERE "eventType" = 'rename_table'
   AND info::JSONB->>'Statement' LIKE 'ALTER TABLE %toberenamed% RENAME TO %renamedtable%'
 ----
-1  {"EventType": "rename_table", "NewTableName": "test.public.renamedtable", "Statement": "ALTER TABLE toberenamed RENAME TO renamedtable", "TableName": "test.public.toberenamed", "Tag": "RENAME TABLE", "User": "root"}
+1  {"EventType": "rename_table", "NewTableName": "test.public.renamedtable", "Statement": "ALTER TABLE toberenamed RENAME TO renamedtable", "TableName": "test.public.toberenamed", "Tag": "ALTER TABLE", "User": "root"}
 
 
 ##################
@@ -413,7 +413,7 @@ FROM system.eventlog
 WHERE "eventType" = 'rename_database'
   AND info::JSONB->>'Statement' LIKE 'ALTER DATABASE %eventlogtorename% RENAME TO %eventlogtonewname%'
 ----
-1  {"DatabaseName": "eventlogtorename", "EventType": "rename_database", "NewDatabaseName": "eventlogtonewname", "Statement": "ALTER DATABASE eventlogtorename RENAME TO eventlogtonewname", "Tag": "RENAME DATABASE", "User": "root"}
+1  {"DatabaseName": "eventlogtorename", "EventType": "rename_database", "NewDatabaseName": "eventlogtonewname", "Statement": "ALTER DATABASE eventlogtorename RENAME TO eventlogtonewname", "Tag": "ALTER DATABASE", "User": "root"}
 
 statement ok
 SET DATABASE = test
