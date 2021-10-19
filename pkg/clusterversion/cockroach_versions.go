@@ -521,7 +521,7 @@ var (
 	// version than binaryMinSupportedVersion, then the binary will exit with
 	// an error. This typically trails the current release by one (see top-level
 	// comment).
-	binaryMinSupportedVersion = ByKey(V21_1)
+	binaryMinSupportedVersion = ByKey(V21_2)
 
 	// binaryVersion is the version of this binary.
 	//
