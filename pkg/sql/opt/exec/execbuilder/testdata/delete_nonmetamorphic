@@ -1,103 +1,5 @@
 # LogicTest: local !metamorphic
 
-# Check that updates on tables with multiple column families behave as
-# they should.
-
-statement ok
-CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
-  INSERT INTO tu VALUES (1, 2, 3, 4)
-
-# Update single column family.
-query T
-EXPLAIN (VERBOSE) UPDATE tu SET c=c+1
-----
-distribution: local
-vectorized: true
-·
-• update
-│ columns: ()
-│ estimated row count: 0 (missing stats)
-│ table: tu
-│ set: c
-│ auto commit
-│
-└── • render
-    │ columns: (a, c, d, c_new)
-    │ estimated row count: 1,000 (missing stats)
-    │ render c_new: c + 1
-    │ render a: a
-    │ render c: c
-    │ render d: d
-    │
-    └── • scan
-          columns: (a, c, d)
-          estimated row count: 1,000 (missing stats)
-          table: tu@tu_pkey
-          spans: FULL SCAN
-          locking strength: for update
-
-statement ok
-SET tracing = on,kv,results; UPDATE tu SET c=c+1; SET tracing = off
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
-----
-Scan /Table/53/{1-2}
-fetched: /tu/tu_pkey/1 -> NULL
-fetched: /tu/tu_pkey/1/b -> 2
-fetched: /tu/tu_pkey/1/c/d -> /3/4
-Put /Table/53/1/1/2/1 -> /TUPLE/3:3:Int/4/1:4:Int/4
-fast path completed
-rows affected: 1
-
-statement ok
-SET tracing = on,kv,results; UPDATE tu SET b = NULL, c = NULL, d = NULL; SET tracing = off
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
-----
-Scan /Table/53/{1-2}
-fetched: /tu/tu_pkey/1 -> NULL
-fetched: /tu/tu_pkey/1/b -> 2
-fetched: /tu/tu_pkey/1/c/d -> /4/4
-Del /Table/53/1/1/1/1
-Del /Table/53/1/1/2/1
-fast path completed
-rows affected: 1
-
-# ------------------------------------------------------------------------------
-# Test without implicit SELECT FOR UPDATE.
-# Some cases were all tested earlier in this file with implicit SFU enabled.
-# ------------------------------------------------------------------------------
-
-statement ok
-SET enable_implicit_select_for_update = false
-
-# Update single column family.
-query T
-EXPLAIN UPDATE tu SET c=c+1
-----
-distribution: local
-vectorized: true
-·
-• update
-│ table: tu
-│ set: c
-│ auto commit
-│
-└── • render
-    │
-    └── • scan
-          missing stats
-          table: tu@tu_pkey
-          spans: FULL SCAN
-
-# Reset for rest of test.
-statement ok
-SET enable_implicit_select_for_update = true
-
 # ---------------------------------------------------------
 # Index With Delete Preserving Encoding
 # ---------------------------------------------------------
@@ -139,12 +41,11 @@ statement ok
 INSERT INTO ti VALUES (1, 2, 100)
 
 query T kvtrace
-UPDATE ti SET b = b + 1, c = c + 1
+DELETE FROM ti WHERE a = 1
 ----
-Scan /Table/54/{1-2}
-Put /Table/54/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/101
-Put (delete) /Table/54/2/2/100/1/0
-CPut /Table/54/2/3/101/1/0 -> /BYTES/0x0a0103 (expecting does not exist)
+Scan /Table/53/1/1/0
+Put (delete) /Table/53/2/2/100/1/0
+Del /Table/53/1/1/0
 
 # ---------------------------------------------------------
 # Partial Index With Delete Preserving Encoding
@@ -184,48 +85,22 @@ statement ok
 SELECT * FROM crdb_internal.unsafe_upsert_descriptor($t_id, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor',$$ $updated_t_jsonb $$), true)
 
 statement ok
-INSERT INTO tpi VALUES (3, 4, 'bar')
+INSERT INTO tpi VALUES (1, 2, 'bar'), (2, 3, 'bar'), (3, 2, 'foo')
 
-# Update a row that doesn't match the partial index.
+# Delete a row that doesn't match the partial index.
 query T kvtrace
-UPDATE tpi SET b = b + 1
+DELETE FROM tpi WHERE a = 1
 ----
-Scan /Table/55/{1-2}
-Put /Table/55/1/3/0 -> /TUPLE/2:2:Int/5/1:3:Bytes/bar
+Scan /Table/54/1/1/0
+Del /Table/54/1/1/0
 
-# Update a row that didn't match the partial index before but matches after.
+# Delete a row that matches the partial index.
 query T kvtrace
-UPDATE tpi SET b = b - 3, c = 'foo'
+DELETE FROM tpi WHERE a = 3
 ----
-Scan /Table/55/{1-2}
-Put /Table/55/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foo
-CPut /Table/55/2/"foo"/3/0 -> /BYTES/0x0a0103 (expecting does not exist)
-
-# Update a row that matches the partial index before and after, but the index
-# entry doesn't change.
-query T kvtrace
-UPDATE tpi SET b = b - 1
-----
-Scan /Table/55/{1-2}
-Put /Table/55/1/3/0 -> /TUPLE/2:2:Int/1/1:3:Bytes/foo
-
-# Update a row that matches the partial index before and after, and the index
-# entry changes.
-query T kvtrace
-UPDATE tpi SET b = b + 1, c = 'foobar'
-----
-Scan /Table/55/{1-2}
-Put /Table/55/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foobar
-Put (delete) /Table/55/2/"foo"/3/0
-CPut /Table/55/2/"foobar"/3/0 -> /BYTES/0x0a0103 (expecting does not exist)
-
-# Update a row that matches the partial index before but not after.
-query T kvtrace
-UPDATE tpi SET c = 'baz'
-----
-Scan /Table/55/{1-2}
-Put /Table/55/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/baz
-Put (delete) /Table/55/2/"foobar"/3/0
+Scan /Table/54/1/3/0
+Put (delete) /Table/54/2/"foo"/3/0
+Del /Table/54/1/3/0
 
 # ---------------------------------------------------------
 # Expression Index With Delete Preserving Encoding
@@ -240,7 +115,7 @@ CREATE TABLE tei (
 )
 
 let $t_id
-SELECT id FROM system.namespace WHERE name = 'tei'
+SELECT id FROM system.namespace WHERE name ='tei'
 
 let $updated_t_jsonb
 WITH
@@ -270,23 +145,15 @@ statement ok
 SELECT * FROM crdb_internal.unsafe_upsert_descriptor($t_id, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor',$$ $updated_t_jsonb $$), true)
 
 statement ok
-INSERT INTO tei VALUES (1, 2, 100)
+INSERT INTO tei VALUES (1, 2, 100), (2, 3, 200), (3, 4, 300)
 
-# Update a row which changes the index entry.
 query T kvtrace
-UPDATE tei SET a = a + 1, b = b + 100
+DELETE FROM tei WHERE a + b = 102
 ----
-Scan /Table/56/{1-2}
-Put /Table/56/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/200
-Put (delete) /Table/56/2/102/1/0
-CPut /Table/56/2/203/1/0 -> /BYTES/0x0a0103 (expecting does not exist)
-
-# Update a row with different values without changing the index entry.
-query T kvtrace
-UPDATE tei SET a = a + 1, b = b - 1
-----
-Scan /Table/56/{1-2}
-Put /Table/56/1/1/0 -> /TUPLE/2:2:Int/4/1:3:Int/199
+Scan /Table/55/2/10{2-3}
+Scan /Table/55/1/1/0
+Put (delete) /Table/55/2/102/1/0
+Del /Table/55/1/1/0
 
 # ---------------------------------------------------------
 # Inverted Index With Delete Preserving Encoding
@@ -301,7 +168,7 @@ CREATE TABLE tii (
 )
 
 let $t_id
-SELECT id FROM system.namespace WHERE name = 'tii'
+SELECT id FROM system.namespace WHERE name ='tii'
 
 let $updated_t_jsonb
 WITH
@@ -333,14 +200,15 @@ SELECT * FROM crdb_internal.unsafe_upsert_descriptor($t_id, crdb_internal.json_t
 statement ok
 INSERT INTO tii VALUES (1, ARRAY[1, 2, 3, 2, 2, NULL, 3])
 
-# Update a row that has 1 new entry and 1 removed entry in the index.
 query T kvtrace
-UPDATE tii SET b = ARRAY[1, 2, 2, NULL, 4, 4]
+DELETE FROM tii WHERE a = 1
 ----
-Scan /Table/57/{1-2}
-Put /Table/57/1/1/0 -> /TUPLE/
-Put (delete) /Table/57/2/3/1/0
-InitPut /Table/57/2/4/1/0 -> /BYTES/0x0a0103
+Scan /Table/56/1/1/0
+Put (delete) /Table/56/2/NULL/1/0
+Put (delete) /Table/56/2/1/1/0
+Put (delete) /Table/56/2/2/1/0
+Put (delete) /Table/56/2/3/1/0
+Del /Table/56/1/1/0
 
 # ---------------------------------------------------------
 # Multicolumn Inverted Index With Delete Preserving Encoding
@@ -356,7 +224,7 @@ CREATE TABLE tmi (
 )
 
 let $t_id
-SELECT id FROM system.namespace WHERE name = 'tmi'
+SELECT id FROM system.namespace WHERE name ='tmi'
 
 let $updated_t_jsonb
 WITH
@@ -389,11 +257,9 @@ statement ok
 INSERT INTO tmi VALUES (1, 2, '{"a": "foo", "b": "bar"}'::json)
 
 query T kvtrace
-UPDATE tmi SET b = 3, c = '{"a": "foobar", "c": "baz"}'::json
+DELETE FROM tmi WHERE a = 1
 ----
-Scan /Table/58/{1-2}
-Put /Table/58/1/1/0 -> /TUPLE/2:2:Int/3/
-Put (delete) /Table/58/2/2/"a"/"foo"/1/0
-Put (delete) /Table/58/2/2/"b"/"bar"/1/0
-InitPut /Table/58/2/3/"a"/"foobar"/1/0 -> /BYTES/0x0a0103
-InitPut /Table/58/2/3/"c"/"baz"/1/0 -> /BYTES/0x0a0103
+Scan /Table/57/1/1/0
+Put (delete) /Table/57/2/2/"a"/"foo"/1/0
+Put (delete) /Table/57/2/2/"b"/"bar"/1/0
+Del /Table/57/1/1/0

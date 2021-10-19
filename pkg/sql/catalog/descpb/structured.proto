@@ -562,6 +562,21 @@ message IndexDescriptor {
   // TODO(mgartner): Update the comment to explain that columns are referenced
   // by their ID once #49766 is addressed.
   optional string predicate = 23 [(gogoproto.nullable) = false];
+
+  // UseDeletePreservingEncoding, if true, causes the index to be encoded with
+  // an additional bit that indicates whether or not the value has been deleted.
+  // Index key-values that are deleted in this way are not actually deleted, but
+  // remain in the index with a value which has the delete bit set to true.
+  //
+  // The encoding with the additional delete bit was chosen over a separate
+  // index encoding type because there would have to be a separate type for each
+  // encoding that we already have for indexes. The alternative would get harder
+  // to maintain if we added more index encodings in the future.
+  //
+  // This is necessary to preserve the delete history for the MVCC-compatible
+  // index backfiller
+  // docs/RFCS/20211004_incremental_index_backfiller.md#new-index-encoding-for-deletions-vs-mvcc
+  optional bool use_delete_preserving_encoding = 24 [(gogoproto.nullable) = false];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
