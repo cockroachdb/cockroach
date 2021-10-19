@@ -29,14 +29,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 )
 
 const (
-	timeArgs        = "time"
-	dbNameArgs      = "db"
-	implicitTxnArgs = "implicitTxn"
-	fingerprintArgs = "fingerprint"
+	timeArgs                 = "time"
+	dbNameArgs               = "db"
+	implicitTxnArgs          = "implicitTxn"
+	fingerprintArgs          = "fingerprint"
+	eventArgs                = "event"
+	eventCallbackCmd         = "callbackCmd"
+	eventCallbackCmdArgKey   = "callbackCmdArgKey"
+	eventCallbackCmdArgValue = "callbackCmdArgValue"
 )
 
 // TestSQLStatsDataDriven runs the data-driven tests in
@@ -63,9 +68,13 @@ func TestSQLStatsDataDriven(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	stubTime := &stubTime{}
+	injector := newRuntimeKnobsInjector()
+
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs).StubTimeNow = stubTime.Now
+	params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs).OnStmtStatsFlushFinished = injector.invokePostStmtStatsFlushCallback
+	params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs).OnTxnStatsFlushFinished = injector.invokePostTxnStatsFlushCallback
 
 	cluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: params,
@@ -84,64 +93,127 @@ func TestSQLStatsDataDriven(t *testing.T) {
 
 	observer := sqlutils.MakeSQLRunner(observerConn)
 
+	execDataDrivenTestCmd := func(t *testing.T, d *datadriven.TestData) string {
+		switch d.Cmd {
+		case "exec-sql":
+			stmts := strings.Split(d.Input, "\n")
+			for i := range stmts {
+				_, err := sqlConn.Exec(stmts[i])
+				if err != nil {
+					t.Errorf("failed to execute stmt %s due to %s", stmts[i], err.Error())
+				}
+			}
+		case "observe-sql":
+			actual := observer.QueryStr(t, d.Input)
+			rows := make([]string, len(actual))
+
+			for rowIdx := range actual {
+				rows[rowIdx] = strings.Join(actual[rowIdx], ",")
+			}
+			return strings.Join(rows, "\n")
+		case "sql-stats-flush":
+			sqlStats.Flush(ctx)
+		case "set-time":
+			mustHaveArgsOrFatal(t, d, timeArgs)
+
+			var timeString string
+			d.ScanArgs(t, timeArgs, &timeString)
+			tm, err := time.Parse(time.RFC3339, timeString)
+			if err != nil {
+				return err.Error()
+			}
+			stubTime.setTime(tm)
+			return stubTime.Now().String()
+		case "should-sample-logical-plan":
+			mustHaveArgsOrFatal(t, d, fingerprintArgs, implicitTxnArgs, dbNameArgs)
+
+			var dbName string
+			var implicitTxn bool
+			var fingerprint string
+
+			d.ScanArgs(t, fingerprintArgs, &fingerprint)
+			d.ScanArgs(t, implicitTxnArgs, &implicitTxn)
+			d.ScanArgs(t, dbNameArgs, &dbName)
+
+			// Since the data driven tests framework does not support space
+			// in args, we used % as a placeholder for space and manually replace
+			// them.
+			fingerprint = strings.Replace(fingerprint, "%", " ", -1)
+
+			return fmt.Sprintf("%t",
+				appStats.ShouldSaveLogicalPlanDesc(
+					fingerprint,
+					implicitTxn,
+					dbName,
+				),
+			)
+		}
+
+		return ""
+	}
+
 	datadriven.Walk(t, "testdata/", func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			switch d.Cmd {
-			case "exec-sql":
-				stmts := strings.Split(d.Input, "\n")
-				for i := range stmts {
-					_, err := sqlConn.Exec(stmts[i])
-					if err != nil {
-						t.Errorf("failed to execute stmt %s due to %s", stmts[i], err.Error())
-					}
-				}
-			case "observe-sql":
-				actual := observer.QueryStr(t, d.Input)
-				rows := make([]string, len(actual))
-
-				for rowIdx := range actual {
-					rows[rowIdx] = strings.Join(actual[rowIdx], ",")
-				}
-				return strings.Join(rows, "\n")
-			case "sql-stats-flush":
-				sqlStats.Flush(ctx)
-			case "set-time":
-				mustHaveArgsOrFatal(t, d, timeArgs)
-
-				var timeString string
-				d.ScanArgs(t, timeArgs, &timeString)
-				tm, err := time.Parse(time.RFC3339, timeString)
-				if err != nil {
-					return err.Error()
-				}
-				stubTime.setTime(tm)
-				return stubTime.Now().String()
-			case "should-sample-logical-plan":
-				mustHaveArgsOrFatal(t, d, fingerprintArgs, implicitTxnArgs, dbNameArgs)
-
-				var dbName string
-				var implicitTxn bool
-				var fingerprint string
-
-				d.ScanArgs(t, fingerprintArgs, &fingerprint)
-				d.ScanArgs(t, implicitTxnArgs, &implicitTxn)
-				d.ScanArgs(t, dbNameArgs, &dbName)
-
-				// Since the data driven tests framework does not support space
-				// in args, we used % as a placeholder for space and manually replace
-				// them.
-				fingerprint = strings.Replace(fingerprint, "%", " ", -1)
-
-				return fmt.Sprintf("%t",
-					appStats.ShouldSaveLogicalPlanDesc(
-						fingerprint,
-						implicitTxn,
-						dbName,
-					),
+			if d.Cmd == "register-callback" {
+				mustHaveArgsOrFatal(
+					t,
+					d,
+					eventArgs,
+					eventCallbackCmd,
+					eventCallbackCmdArgKey,
+					eventCallbackCmdArgValue,
 				)
-			}
 
-			return ""
+				var event string
+				var callbackCmd string
+				var callbackCmdArgKey string
+				var callbackCmdArgValue string
+
+				d.ScanArgs(t, eventArgs, &event)
+				d.ScanArgs(t, eventCallbackCmd, &callbackCmd)
+				d.ScanArgs(t, eventCallbackCmdArgKey, &callbackCmdArgKey)
+				d.ScanArgs(t, eventCallbackCmdArgValue, &callbackCmdArgValue)
+
+				injectedDataDrivenCmd := &datadriven.TestData{
+					Cmd: callbackCmd,
+					CmdArgs: []datadriven.CmdArg{
+						{
+							Key: callbackCmdArgKey,
+							Vals: []string{
+								callbackCmdArgValue,
+							},
+						},
+					},
+				}
+
+				switch event {
+				case "stmt-stats-flushed":
+					injector.registerPostStmtStatsFlushCallback(func() {
+						execDataDrivenTestCmd(t, injectedDataDrivenCmd)
+					})
+				case "txn-stats-flushed":
+					injector.registerPostTxnStatsFlushCallback(func() {
+						execDataDrivenTestCmd(t, injectedDataDrivenCmd)
+					})
+				default:
+					return "invalid callback event"
+				}
+			} else if d.Cmd == "unregister-callback" {
+				mustHaveArgsOrFatal(t, d, eventArgs)
+
+				var event string
+				d.ScanArgs(t, eventArgs, &event)
+
+				switch event {
+				case "stmt-stats-flushed":
+					injector.unregisterPostStmtStatsFlushCallback()
+				case "txn-stats-flushed":
+					injector.unregisterPostTxnStatsFlushCallback()
+				default:
+					return "invalid event"
+				}
+			}
+			return execDataDrivenTestCmd(t, d)
 		})
 	})
 }
@@ -151,5 +223,58 @@ func mustHaveArgsOrFatal(t *testing.T, d *datadriven.TestData, args ...string) {
 		if !d.HasArg(arg) {
 			t.Fatalf("no %q provided", arg)
 		}
+	}
+}
+
+type runtimeKnobsInjector struct {
+	mu struct {
+		syncutil.Mutex
+		knobs *sqlstats.TestingKnobs
+	}
+}
+
+func newRuntimeKnobsInjector() *runtimeKnobsInjector {
+	r := &runtimeKnobsInjector{}
+	r.mu.knobs = &sqlstats.TestingKnobs{}
+	return r
+}
+
+func (r *runtimeKnobsInjector) registerPostStmtStatsFlushCallback(cb func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.knobs.OnStmtStatsFlushFinished = cb
+}
+
+func (r *runtimeKnobsInjector) unregisterPostStmtStatsFlushCallback() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.knobs.OnStmtStatsFlushFinished = nil
+}
+
+func (r *runtimeKnobsInjector) invokePostStmtStatsFlushCallback() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.mu.knobs.OnStmtStatsFlushFinished != nil {
+		r.mu.knobs.OnStmtStatsFlushFinished()
+	}
+}
+
+func (r *runtimeKnobsInjector) registerPostTxnStatsFlushCallback(cb func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.knobs.OnTxnStatsFlushFinished = cb
+}
+
+func (r *runtimeKnobsInjector) unregisterPostTxnStatsFlushCallback() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.knobs.OnTxnStatsFlushFinished = nil
+}
+
+func (r *runtimeKnobsInjector) invokePostTxnStatsFlushCallback() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.mu.knobs.OnTxnStatsFlushFinished != nil {
+		r.mu.knobs.OnTxnStatsFlushFinished()
 	}
 }
