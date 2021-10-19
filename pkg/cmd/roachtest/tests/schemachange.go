@@ -133,7 +133,7 @@ func waitForSchemaChanges(ctx context.Context, l *logger.Logger, db *gosql.DB) e
 	}
 	// Queries to hone in on index validation problems.
 	indexValidationQueries := []string{
-		"SELECT count(k) FROM test.kv@primary AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at <= $2",
+		"SELECT count(k) FROM test.kv@kv_pkey AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at <= $2",
 		"SELECT count(v) FROM test.kv@foo AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at <= $2",
 	}
 	return runValidationQueries(ctx, l, db, start, validationQueries, indexValidationQueries)
