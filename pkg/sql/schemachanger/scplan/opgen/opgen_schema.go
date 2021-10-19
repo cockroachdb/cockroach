@@ -20,15 +20,22 @@ func init() {
 		(*scpb.Schema)(nil),
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
-		to(scpb.Status_DELETE_ONLY,
-			// TODO(ajwerner): Sort out these steps. In general, DELETE_ONLY is
-			// not revertible.
-			minPhase(scop.PreCommitPhase),
+		to(scpb.Status_TXN_DROPPED,
+			minPhase(scop.StatementPhase),
 			emit(func(this *scpb.Schema) scop.Op {
-				return &scop.MarkDescriptorAsDropped{
-					TableID: this.SchemaID,
+				return &scop.MarkDescriptorAsDroppedSynthetically{
+					DescID: this.SchemaID,
 				}
 			})),
+		to(scpb.Status_DROPPED,
+			minPhase(scop.PreCommitPhase),
+			revertible(false),
+			emit(func(this *scpb.Schema) scop.Op {
+				return &scop.MarkDescriptorAsDropped{
+					DescID: this.SchemaID,
+				}
+			}),
+		),
 		to(scpb.Status_ABSENT,
 			// TODO(ajwerner): The minPhase here feels like it should be PostCommit.
 			// Also, this definitely is not revertible. Leaving to make this commit
