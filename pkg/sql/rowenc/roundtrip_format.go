@@ -11,6 +11,9 @@
 package rowenc
 
 import (
+	"fmt"
+	"regexp"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -23,6 +26,7 @@ func ParseDatumStringAs(t *types.T, s string, evalCtx *tree.EvalContext) (tree.D
 	// We use a different parser for array types because ParseAndRequireString only parses
 	// the internal postgres string representation of arrays.
 	case types.ArrayFamily, types.CollatedStringFamily:
+		s = formatArrayString(s)
 		return parseAsTyp(evalCtx, t, s)
 	default:
 		res, _, err := tree.ParseAndRequireString(t, s, evalCtx)
@@ -58,4 +62,14 @@ func parseAsTyp(evalCtx *tree.EvalContext, typ *types.T, s string) (tree.Datum, 
 	}
 	datum, err := typedExpr.Eval(evalCtx)
 	return datum, err
+}
+
+// formatArrayString is to convert an array with format `{}` to fotmat `ARRAY[]`.
+func formatArrayString(s string) string {
+	arrayRegex := `{(.*)}`
+	matched := regexp.MustCompile(arrayRegex).FindStringSubmatch(s)
+	if len(matched) < 2 {
+		return s
+	}
+	return fmt.Sprintf("ARRAY[%s]", matched[1])
 }
