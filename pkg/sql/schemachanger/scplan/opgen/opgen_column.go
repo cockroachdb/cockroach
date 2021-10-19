@@ -22,6 +22,7 @@ func init() {
 		scpb.Status_ABSENT,
 		to(scpb.Status_DELETE_ONLY,
 			minPhase(scop.PreCommitPhase),
+			revertible(false),
 			emit(func(this *scpb.Column) scop.Op {
 				return &scop.MakeAddedColumnDeleteOnly{
 					TableID:    this.TableID,

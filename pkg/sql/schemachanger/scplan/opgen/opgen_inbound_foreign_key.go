@@ -20,7 +20,7 @@ func init() {
 		(*scpb.InboundForeignKey)(nil),
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
-		to(scpb.Status_ABSENT,
+		to(scpb.Status_DROPPED,
 			// TODO(ajwerner): This probably cannot happen until post-commit.
 			minPhase(scop.PreCommitPhase),
 			revertible(false),
@@ -31,5 +31,9 @@ func init() {
 					Outbound: false,
 				}
 			})),
+		to(scpb.Status_ABSENT,
+			minPhase(scop.PreCommitPhase),
+			revertible(false),
+		),
 	)
 }

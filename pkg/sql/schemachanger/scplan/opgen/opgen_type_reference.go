@@ -20,7 +20,7 @@ func init() {
 		(*scpb.TypeReference)(nil),
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
-		to(scpb.Status_ABSENT,
+		to(scpb.Status_DROPPED,
 			minPhase(scop.PreCommitPhase),
 			revertible(false),
 			emit(func(this *scpb.TypeReference) scop.Op {
@@ -29,6 +29,10 @@ func init() {
 					DescID: this.DescID,
 				}
 			})),
+		to(scpb.Status_ABSENT,
+			minPhase(scop.PreCommitPhase),
+			revertible(false),
+		),
 	)
 
 	opRegistry.register(

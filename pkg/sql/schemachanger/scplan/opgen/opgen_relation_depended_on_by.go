@@ -20,7 +20,7 @@ func init() {
 		(*scpb.RelationDependedOnBy)(nil),
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
-		to(scpb.Status_ABSENT,
+		to(scpb.Status_DROPPED,
 			minPhase(scop.PreCommitPhase),
 			revertible(false),
 			emit(func(this *scpb.RelationDependedOnBy) scop.Op {
@@ -29,5 +29,9 @@ func init() {
 					DependedOnBy: this.DependedOnBy,
 				}
 			})),
+		to(scpb.Status_ABSENT,
+			minPhase(scop.PreCommitPhase),
+			revertible(false),
+		),
 	)
 }

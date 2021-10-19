@@ -20,7 +20,7 @@ func init() {
 		(*scpb.SequenceOwnedBy)(nil),
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
-		to(scpb.Status_ABSENT,
+		to(scpb.Status_DROPPED,
 			minPhase(scop.PreCommitPhase),
 			revertible(false),
 			emit(func(this *scpb.SequenceOwnedBy) scop.Op {
@@ -28,5 +28,8 @@ func init() {
 					TableID: this.SequenceID,
 				}
 			})),
+		to(scpb.Status_ABSENT,
+			minPhase(scop.PreCommitPhase),
+			revertible(false)),
 	)
 }

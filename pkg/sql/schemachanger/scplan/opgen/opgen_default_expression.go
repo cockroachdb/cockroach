@@ -20,7 +20,7 @@ func init() {
 		(*scpb.DefaultExpression)(nil),
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
-		to(scpb.Status_ABSENT,
+		to(scpb.Status_DROPPED,
 			minPhase(scop.PreCommitPhase),
 			revertible(false),
 			emit(func(this *scpb.DefaultExpression) scop.Op {
@@ -34,5 +34,8 @@ func init() {
 					TableID: this.TableID,
 				}
 			})),
+		to(scpb.Status_ABSENT,
+			minPhase(scop.PreCommitPhase),
+			revertible(false)),
 	)
 }

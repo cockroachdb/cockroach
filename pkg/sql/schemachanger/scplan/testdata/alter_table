@@ -35,23 +35,23 @@ Stage 0
       Unique: true
       Version: 4
     TableID: 52
-Stage 1 (non-revertible)
+Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
-Stage 2 (non-revertible)
+Stage 2
   *scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 3 (non-revertible)
+Stage 3
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
     TableID: 52
-Stage 4 (non-revertible)
+Stage 4
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -91,7 +91,7 @@ Stage 5 (non-revertible)
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 52
-Stage 6 (non-revertible)
+Stage 6
   *scop.MakeIndexAbsent
     IndexID: 1
     TableID: 52
@@ -130,23 +130,23 @@ Stage 0
       Unique: true
       Version: 4
     TableID: 52
-Stage 1 (non-revertible)
+Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
-Stage 2 (non-revertible)
+Stage 2
   *scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 3 (non-revertible)
+Stage 3
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
     TableID: 52
-Stage 4 (non-revertible)
+Stage 4
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -186,7 +186,7 @@ Stage 5 (non-revertible)
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 52
-Stage 6 (non-revertible)
+Stage 6
   *scop.MakeIndexAbsent
     IndexID: 1
     TableID: 52
@@ -240,7 +240,7 @@ Stage 0
         width: 64
     FamilyName: primary
     TableID: 52
-Stage 1 (non-revertible)
+Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
@@ -250,16 +250,16 @@ Stage 1 (non-revertible)
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 3
     TableID: 52
-Stage 2 (non-revertible)
+Stage 2
   *scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 3 (non-revertible)
+Stage 3
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
     TableID: 52
-Stage 4 (non-revertible)
+Stage 4
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -304,7 +304,7 @@ Stage 5 (non-revertible)
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 52
-Stage 6 (non-revertible)
+Stage 6
   *scop.MakeIndexAbsent
     IndexID: 1
     TableID: 52
@@ -343,23 +343,23 @@ Stage 0
       Unique: true
       Version: 4
     TableID: 52
-Stage 1 (non-revertible)
+Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
-Stage 2 (non-revertible)
+Stage 2
   *scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 3 (non-revertible)
+Stage 3
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
     TableID: 52
-Stage 4 (non-revertible)
+Stage 4
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -399,7 +399,7 @@ Stage 5 (non-revertible)
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 52
-Stage 6 (non-revertible)
+Stage 6
   *scop.MakeIndexAbsent
     IndexID: 1
     TableID: 52
@@ -474,7 +474,7 @@ Stage 0
       Unique: true
       Version: 4
     TableID: 53
-Stage 1 (non-revertible)
+Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
@@ -487,14 +487,14 @@ Stage 1 (non-revertible)
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 3
     TableID: 53
-Stage 2 (non-revertible)
+Stage 2
   *scop.BackfillIndex
     IndexID: 2
     TableID: 52
   *scop.BackfillIndex
     IndexID: 2
     TableID: 53
-Stage 3 (non-revertible)
+Stage 3
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
@@ -503,7 +503,7 @@ Stage 3 (non-revertible)
     IndexID: 2
     PrimaryIndexID: 1
     TableID: 53
-Stage 4 (non-revertible)
+Stage 4
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -587,7 +587,7 @@ Stage 5 (non-revertible)
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 53
-Stage 6 (non-revertible)
+Stage 6
   *scop.MakeIndexAbsent
     IndexID: 1
     TableID: 52
