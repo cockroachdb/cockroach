@@ -16,12 +16,12 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -189,7 +189,7 @@ func getAllDescChanges(
 	startKey := codec.TablePrefix(keys.DescriptorTableID)
 	endKey := startKey.PrefixEnd()
 
-	allRevs, err := storageccl.GetAllRevisions(ctx, db, startKey, endKey, startTime, endTime)
+	allRevs, err := backfill.GetAllRevisions(ctx, db, startKey, endKey, startTime, endTime)
 	if err != nil {
 		return nil, err
 	}
