@@ -512,48 +512,21 @@ statement ok
 ANALYZE b;
 
 query T retry
-EXPLAIN ANALYZE SELECT * FROM a INNER LOOKUP JOIN b ON k = j ORDER BY i LIMIT 5;
+EXPLAIN SELECT * FROM a INNER LOOKUP JOIN b ON k = j ORDER BY i LIMIT 5;
 ----
-planning time: 10µs
-execution time: 100µs
-distribution: <hidden>
-vectorized: <hidden>
-rows read from KV: 176 (1.4 KiB)
-maximum memory usage: <hidden>
-network usage: <hidden>
-regions: <hidden>
+distribution: local
+vectorized: true
 ·
 • limit
-│ nodes: <hidden>
-│ regions: <hidden>
-│ actual row count: 5
-│ KV time: 0µs
-│ KV contention time: 0µs
-│ KV rows read: 76
-│ KV bytes read: 608 B
 │ estimated row count: 5
 │ count: 5
 │
 └── • lookup join
-    │ nodes: <hidden>
-    │ regions: <hidden>
-    │ actual row count: 5
-    │ KV time: 0µs
-    │ KV contention time: 0µs
-    │ KV rows read: 76
-    │ KV bytes read: 608 B
     │ estimated row count: 100
     │ table: b@b_k_s_idx
     │ equality: (j) = (k)
     │
     └── • scan
-          nodes: <hidden>
-          regions: <hidden>
-          actual row count: 100
-          KV time: 0µs
-          KV contention time: 0µs
-          KV rows read: 100
-          KV bytes read: 800 B
           estimated row count: 100 - 1,001 (100% of the table; stats collected <hidden> ago)
           table: a@a_i_j_idx
           spans: FULL SCAN
