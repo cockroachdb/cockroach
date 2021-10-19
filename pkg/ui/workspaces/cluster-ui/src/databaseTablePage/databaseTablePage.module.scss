@@ -18,32 +18,6 @@
   }
 }
 
-.cockroach--tabs {
-  :global(.ant-tabs-bar) {
-    border-bottom: 1px solid $grey2;
-  }
-
-  :global(.ant-tabs-tab) {
-    @include text--heading-5;
-    font-weight: $font-weight--medium;
-    color: $colors--neutral-7;
-  }
-
-  :global(.ant-tabs-tab-active) {
-    color: $colors--neutral-8;
-  }
-
-  :global(.ant-tabs-tab:hover) {
-    color: $colors--link;
-  }
-
-  :global(.ant-tabs-ink-bar) {
-    height: 3px;
-    border-radius: 40px;
-    background-color: $colors--link;
-  }
-}
-
 .summary-card {
   h4 {
     @include text--body-strong;
