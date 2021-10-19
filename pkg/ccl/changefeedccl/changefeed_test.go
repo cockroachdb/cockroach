@@ -2082,6 +2082,13 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 		registry := f.Server().JobRegistry().(*jobs.Registry)
 		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
 
+		drainUntilErr := func(f cdctest.TestFeed) (err error) {
+			var msg *cdctest.TestFeedMessage
+			for msg, err = f.Next(); msg != nil; {
+			}
+			return err
+		}
+
 		sqlDB.Exec(t, `CREATE TABLE truncate (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE truncate_cascade (b INT PRIMARY KEY REFERENCES truncate (a))`)
 		sqlDB.Exec(t,
@@ -2093,10 +2100,10 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 		assertPayloads(t, truncate, []string{`truncate: [1]->{"after": {"a": 1}}`})
 		assertPayloads(t, truncateCascade, []string{`truncate_cascade: [1]->{"after": {"b": 1}}`})
 		sqlDB.Exec(t, `TRUNCATE TABLE truncate CASCADE`)
-		if _, err := truncate.Next(); !testutils.IsError(err, `"truncate" was truncated`) {
+		if err := drainUntilErr(truncate); !testutils.IsError(err, `"truncate" was truncated`) {
 			t.Fatalf(`expected ""truncate" was truncated" error got: %+v`, err)
 		}
-		if _, err := truncateCascade.Next(); !testutils.IsError(
+		if err := drainUntilErr(truncateCascade); !testutils.IsError(
 			err, `"truncate_cascade" was truncated`,
 		) {
 			t.Fatalf(`expected ""truncate_cascade" was truncated" error got: %+v`, err)
@@ -2109,7 +2116,7 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 		defer closeFeed(t, drop)
 		assertPayloads(t, drop, []string{`drop: [1]->{"after": {"a": 1}}`})
 		sqlDB.Exec(t, `DROP TABLE drop`)
-		if _, err := drop.Next(); !testutils.IsError(err, `"drop" was dropped`) {
+		if err := drainUntilErr(drop); !testutils.IsError(err, `"drop" was dropped`) {
 			t.Errorf(`expected ""drop" was dropped" error got: %+v`, err)
 		}
 		assertFailuresCounter(t, metrics, 3)
