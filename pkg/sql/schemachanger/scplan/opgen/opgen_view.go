@@ -21,12 +21,19 @@ func init() {
 		(*scpb.View)(nil),
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
+		to(scpb.Status_TXN_DROPPED,
+			minPhase(scop.StatementPhase),
+			emit(func(this *scpb.View) scop.Op {
+				return &scop.MarkDescriptorAsDroppedSynthetically{
+					DescID: this.TableID,
+				}
+			})),
 		to(scpb.Status_ABSENT,
 			minPhase(scop.PreCommitPhase),
 			revertible(false),
 			emit(func(this *scpb.View) scop.Op {
 				return &scop.MarkDescriptorAsDropped{
-					TableID: this.TableID,
+					DescID: this.TableID,
 				}
 			}),
 			emit(func(this *scpb.View) scop.Op {

@@ -55,7 +55,8 @@ enum Status {
   DELETE_AND_WRITE_ONLY = 3;
   BACKFILLED = 4;
   VALIDATED = 5;
-  PUBLIC = 6;
+  TXN_DROPPED = 6;
+  PUBLIC = 7;
 }
 
 message Column {

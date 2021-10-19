@@ -53,9 +53,6 @@ Stage 4
     PrimaryIndexID: 1
     TableID: 52
 Stage 5
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -87,6 +84,9 @@ Stage 5
       Name: foo_pkey
       Unique: true
       Version: 4
+    TableID: 52
+  *scop.MakeColumnPublic
+    ColumnID: 2
     TableID: 52
 Stage 6
   *scop.MakeDroppedIndexDeleteOnly
@@ -149,9 +149,6 @@ Stage 4
     PrimaryIndexID: 1
     TableID: 52
 Stage 5
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -183,6 +180,9 @@ Stage 5
       Name: foo_pkey
       Unique: true
       Version: 4
+    TableID: 52
+  *scop.MakeColumnPublic
+    ColumnID: 2
     TableID: 52
 Stage 6
   *scop.MakeDroppedIndexDeleteOnly
@@ -263,9 +263,6 @@ Stage 4
     PrimaryIndexID: 1
     TableID: 52
 Stage 5
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -299,6 +296,9 @@ Stage 5
       Name: foo_pkey
       Unique: true
       Version: 4
+    TableID: 52
+  *scop.MakeColumnPublic
+    ColumnID: 2
     TableID: 52
   *scop.MakeColumnPublic
     ColumnID: 3
@@ -364,9 +364,6 @@ Stage 4
     PrimaryIndexID: 1
     TableID: 52
 Stage 5
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -398,6 +395,9 @@ Stage 5
       Name: foo_pkey
       Unique: true
       Version: 4
+    TableID: 52
+  *scop.MakeColumnPublic
+    ColumnID: 2
     TableID: 52
 Stage 6
   *scop.MakeDroppedIndexDeleteOnly
@@ -509,9 +509,6 @@ Stage 4
     PrimaryIndexID: 1
     TableID: 53
 Stage 5
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -545,8 +542,8 @@ Stage 5
       Version: 4
     TableID: 52
   *scop.MakeColumnPublic
-    ColumnID: 3
-    TableID: 53
+    ColumnID: 2
+    TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -584,6 +581,9 @@ Stage 5
       - j
       Unique: true
       Version: 4
+    TableID: 53
+  *scop.MakeColumnPublic
+    ColumnID: 3
     TableID: 53
 Stage 6
   *scop.MakeDroppedIndexDeleteOnly
