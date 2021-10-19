@@ -214,7 +214,7 @@ func (p *Provider) Delete(vms vm.List) error {
 		if err != nil {
 			return err
 		}
-		future, err := client.Delete(ctx, parts.resourceGroup, parts.resourceName)
+		future, err := client.Delete(ctx, parts.resourceGroup, parts.resourceName, nil)
 		if err != nil {
 			return errors.Wrapf(err, "could not delete %s", vm.ProviderID)
 		}
@@ -385,7 +385,7 @@ func (p *Provider) List() (vm.List, error) {
 		return nil, err
 	}
 
-	it, err := client.ListAllComplete(ctx)
+	it, err := client.ListAllComplete(ctx, "false")
 	if err != nil {
 		return nil, err
 	}
@@ -653,7 +653,7 @@ func (p *Provider) createNIC(
 					Name: to.StringPtr("ipConfig"),
 					InterfaceIPConfigurationPropertiesFormat: &network.InterfaceIPConfigurationPropertiesFormat{
 						Subnet:                    &subnet,
-						PrivateIPAllocationMethod: network.Dynamic,
+						PrivateIPAllocationMethod: network.IPAllocationMethodDynamic,
 						PublicIPAddress:           &ip,
 					},
 				},
@@ -1052,7 +1052,7 @@ func (p *Provider) createVNetPeerings(ctx context.Context, vnets []network.Virtu
 				return err
 			}
 
-			future, err := client.CreateOrUpdate(ctx, outerParts.resourceGroup, *outer.Name, linkName, peering)
+			future, err := client.CreateOrUpdate(ctx, outerParts.resourceGroup, *outer.Name, linkName, peering, network.SyncRemoteAddressSpaceTrue)
 			if err != nil {
 				return errors.Wrapf(err, "creating vnet peering %s", linkName)
 			}
@@ -1095,8 +1095,8 @@ func (p *Provider) createIP(
 			Location: group.Location,
 			Zones:    to.StringSlicePtr([]string{p.opts.zone}),
 			PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
-				PublicIPAddressVersion:   network.IPv4,
-				PublicIPAllocationMethod: network.Static,
+				PublicIPAddressVersion:   network.IPVersionIPv4,
+				PublicIPAllocationMethod: network.IPAllocationMethodStatic,
 			},
 		})
 	if err != nil {
@@ -1241,11 +1241,11 @@ func (p *Provider) createUltraDisk(
 			Zones:    to.StringSlicePtr([]string{p.opts.zone}),
 			Location: group.Location,
 			Sku: &compute.DiskSku{
-				Name: compute.UltraSSDLRS,
+				Name: compute.DiskStorageAccountTypesUltraSSDLRS,
 			},
 			DiskProperties: &compute.DiskProperties{
 				CreationData: &compute.CreationData{
-					CreateOption: compute.Empty,
+					CreateOption: compute.DiskCreateOptionEmpty,
 				},
 				DiskSizeGB:        to.Int32Ptr(p.opts.networkDiskSize),
 				DiskIOPSReadWrite: to.Int64Ptr(p.opts.ultraDiskIOPS),
