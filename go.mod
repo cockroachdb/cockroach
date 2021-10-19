@@ -111,9 +111,9 @@ require (
 	github.com/linkedin/goavro/v2 v2.10.0
 	github.com/lufia/iostat v1.0.0
 	github.com/lusis/slack-test v0.0.0-20190426140909-c40012f20018 // indirect
-	github.com/maruel/panicparse v1.1.2-0.20180806203336-f20d4c4d746f
+	github.com/maruel/panicparse/v2 v2.2.0
 	github.com/marusama/semaphore v0.0.0-20190110074507-6952cef993b2
-	github.com/mattn/go-isatty v0.0.12
+	github.com/mattn/go-isatty v0.0.14
 	github.com/mattn/go-zglob v0.0.3 // indirect
 	github.com/mattn/goveralls v0.0.2
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
@@ -167,7 +167,7 @@ require (
 	golang.org/x/oauth2 v0.0.0-20210810183815-faf39c7919d5
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20210910150752-751e447fb3d0
+	golang.org/x/sys v0.0.0-20211015200801-69063c4bb744
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
