@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
@@ -1185,6 +1186,13 @@ func EncodePrimaryIndex(
 	}); err != nil {
 		return nil, err
 	}
+
+	if index.UseDeletePreservingEncoding() {
+		if err := wrapIndexEntries(indexEntries); err != nil {
+			return nil, err
+		}
+	}
+
 	return indexEntries, nil
 }
 
@@ -1296,6 +1304,13 @@ func EncodeSecondaryIndex(
 			}
 		}
 	}
+
+	if secondaryIndex.UseDeletePreservingEncoding() {
+		if err := wrapIndexEntries(entries); err != nil {
+			return nil, err
+		}
+	}
+
 	return entries, nil
 }
 
@@ -1900,4 +1915,43 @@ func growKey(key []byte, additionalCapacity int) []byte {
 	newKey := make([]byte, len(key), len(key)+additionalCapacity)
 	copy(newKey, key)
 	return newKey
+}
+
+func getIndexValueWrapperBytes(entry *IndexEntry) ([]byte, error) {
+	tempKV := descpb.IndexValueWrapper{
+		Value:   entry.Value.TagAndDataBytes(),
+		Deleted: false,
+	}
+
+	return protoutil.Marshal(&tempKV)
+}
+
+func wrapIndexEntries(indexEntries []IndexEntry) error {
+	for i := range indexEntries {
+		encodedEntry, err := getIndexValueWrapperBytes(&indexEntries[i])
+		if err != nil {
+			return err
+		}
+
+		indexEntries[i].Value.SetBytes(encodedEntry)
+	}
+
+	return nil
+}
+
+// DecodeWrapper decodes the bytes field of value into an instance of
+// descpb.IndexValueWrapper.
+func DecodeWrapper(value *roachpb.Value) (*descpb.IndexValueWrapper, error) {
+	var wrapper descpb.IndexValueWrapper
+
+	valueBytes, err := value.GetBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := protoutil.Unmarshal(valueBytes, &wrapper); err != nil {
+		return nil, err
+	}
+
+	return &wrapper, nil
 }
