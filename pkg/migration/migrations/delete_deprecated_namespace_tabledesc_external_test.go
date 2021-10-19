@@ -39,8 +39,9 @@ func TestDeleteDeprecatedNamespaceDescriptorMigration(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.DeleteDeprecatedNamespaceTableDescriptorMigration - 1),
+					DisableAutomaticVersionUpgrade:    1,
+					BinaryVersionOverride:             clusterversion.ByKey(clusterversion.DeleteDeprecatedNamespaceTableDescriptorMigration - 1),
+					BinaryMinSupportedVersionOverride: clusterversion.ByKey(clusterversion.DeleteDeprecatedNamespaceTableDescriptorMigration - 1),
 				},
 			},
 		},

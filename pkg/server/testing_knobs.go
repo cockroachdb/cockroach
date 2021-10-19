@@ -74,11 +74,15 @@ type TestingKnobs struct {
 	// out join requests.
 	//
 	// NB: When setting this, you probably also want to set
-	// DisableAutomaticVersionUpgrade.
+	// DisableAutomaticVersionUpgrade and BinaryMinSupportedVersionOverride.
 	//
 	// TODO(irfansharif): Update users of this testing knob to use the
 	// appropriate clusterversion.Handle instead.
 	BinaryVersionOverride roachpb.Version
+	// BinaryMinSupportedVersionOverride overrides the minimum supported binary
+	// version. See BinaryVersionOverride.
+	BinaryMinSupportedVersionOverride roachpb.Version
+
 	// An (additional) callback invoked whenever a
 	// node is permanently removed from the cluster.
 	OnDecommissionedCallback func(livenesspb.Liveness)

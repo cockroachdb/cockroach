@@ -618,12 +618,15 @@ type initServerCfg struct {
 
 func newInitServerConfig(ctx context.Context, cfg Config, dialOpts []grpc.DialOption) initServerCfg {
 	binaryVersion := cfg.Settings.Version.BinaryVersion()
+	binaryMinSupportedVersion := cfg.Settings.Version.BinaryMinSupportedVersion()
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		if ov := knobs.(*TestingKnobs).BinaryVersionOverride; ov != (roachpb.Version{}) {
 			binaryVersion = ov
 		}
+		if ov := knobs.(*TestingKnobs).BinaryMinSupportedVersionOverride; ov != (roachpb.Version{}) {
+			binaryMinSupportedVersion = ov
+		}
 	}
-	binaryMinSupportedVersion := cfg.Settings.Version.BinaryMinSupportedVersion()
 	if binaryVersion.Less(binaryMinSupportedVersion) {
 		log.Fatalf(ctx, "binary version (%s) less than min supported version (%s)",
 			binaryVersion, binaryMinSupportedVersion)
