@@ -129,10 +129,9 @@ func (rd *Deleter) DeleteRow(
 			return err
 		}
 		for _, e := range entries {
-			if traceKV {
-				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.secIndexValDirs[i], e.Key))
+			if err := rd.Helper.deleteIndexEntry(ctx, b, rd.Helper.Indexes[i], rd.Helper.secIndexValDirs[i], &e, traceKV); err != nil {
+				return err
 			}
-			b.Del(&e.Key)
 		}
 	}
 
