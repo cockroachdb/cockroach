@@ -1283,6 +1283,7 @@ func (ctx *Context) runHeartbeat(
 				// Only update the clock offset measurement if we actually got a
 				// successful response from the server.
 				pingDuration := receiveTime.Sub(sendTime)
+				ctx.RemoteClocks.updateLatencyMetrics(target, pingDuration)
 				maxOffset := ctx.Clock.MaxOffset()
 				if pingDuration > maximumPingDurationMult*maxOffset {
 					request.Offset.Reset()
@@ -1297,7 +1298,7 @@ func (ctx *Context) runHeartbeat(
 					remoteTimeNow := timeutil.Unix(0, response.ServerTime).Add(pingDuration / 2)
 					request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
 				}
-				ctx.RemoteClocks.UpdateOffset(ctx.masterCtx, target, request.Offset, pingDuration)
+				ctx.RemoteClocks.UpdateOffset(ctx.masterCtx, target, request.Offset)
 
 				if cb := ctx.HeartbeatCB; cb != nil {
 					cb()

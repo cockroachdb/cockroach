@@ -43,7 +43,7 @@ func TestUpdateOffset(t *testing.T) {
 		Uncertainty: 20,
 		MeasuredAt:  monitor.clock.PhysicalTime().Add(-(monitor.offsetTTL + 1)).UnixNano(),
 	}
-	monitor.UpdateOffset(context.Background(), key, offset1, latency)
+	monitor.UpdateOffset(context.Background(), key, offset1)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %s to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -58,7 +58,7 @@ func TestUpdateOffset(t *testing.T) {
 		Uncertainty: 20,
 		MeasuredAt:  monitor.clock.PhysicalTime().Add(-(monitor.offsetTTL + 1)).UnixNano(),
 	}
-	monitor.UpdateOffset(context.Background(), key, offset2, latency)
+	monitor.UpdateOffset(context.Background(), key, offset2)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %s to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -73,7 +73,7 @@ func TestUpdateOffset(t *testing.T) {
 		Uncertainty: 10,
 		MeasuredAt:  offset2.MeasuredAt + 1,
 	}
-	monitor.UpdateOffset(context.Background(), key, offset3, latency)
+	monitor.UpdateOffset(context.Background(), key, offset3)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %s to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -83,7 +83,7 @@ func TestUpdateOffset(t *testing.T) {
 	monitor.mu.Unlock()
 
 	// Larger error and offset3 is not stale, so no update.
-	monitor.UpdateOffset(context.Background(), key, offset2, latency)
+	monitor.UpdateOffset(context.Background(), key, offset2)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %s to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -195,7 +195,7 @@ func TestLatencies(t *testing.T) {
 	// comment on the WARMUP_SAMPLES const in the ewma package for details.
 	const emptyKey = "no measurements"
 	for i := 0; i < 11; i++ {
-		monitor.UpdateOffset(context.Background(), emptyKey, RemoteOffset{}, 0)
+		monitor.UpdateOffset(context.Background(), emptyKey, RemoteOffset{})
 	}
 	if l, ok := monitor.mu.latenciesNanos[emptyKey]; ok {
 		t.Errorf("expected no latency measurement for %q, got %v", emptyKey, l.Value())
@@ -206,8 +206,8 @@ func TestLatencies(t *testing.T) {
 		expectedAvg  time.Duration
 	}{
 		{[]time.Duration{10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10}, 10},
-		{[]time.Duration{10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0}, 10},
-		{[]time.Duration{0, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10}, 10},
+		{[]time.Duration{10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 11}, 10},
+		{[]time.Duration{11, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10}, 10},
 		{[]time.Duration{10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 99}, 18},
 		{[]time.Duration{99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 10}, 90},
 		{[]time.Duration{10, 10, 10, 10, 10, 10, 99, 99, 99, 99, 99}, 50},
@@ -218,7 +218,7 @@ func TestLatencies(t *testing.T) {
 	for _, tc := range testCases {
 		key := fmt.Sprintf("%v", tc.measurements)
 		for _, measurement := range tc.measurements {
-			monitor.UpdateOffset(context.Background(), key, RemoteOffset{}, measurement)
+			monitor.updateLatencyMetrics(key, measurement)
 		}
 		if val, ok := monitor.Latency(key); !ok || val != tc.expectedAvg {
 			t.Errorf("%q: expected latency %d, got %d", key, tc.expectedAvg, val)

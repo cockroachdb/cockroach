@@ -126,19 +126,27 @@ func (r *RemoteClockMonitor) AllLatencies() map[string]time.Duration {
 	return result
 }
 
-// UpdateOffset is a thread-safe way to update the remote clock and latency
-// measurements.
+func (r *RemoteClockMonitor) updateLatencyMetrics(addr string, roundTripLatency time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	latencyAvg, ok := r.mu.latenciesNanos[addr]
+	if !ok {
+		latencyAvg = ewma.NewMovingAverage(avgLatencyMeasurementAge)
+		r.mu.latenciesNanos[addr] = latencyAvg
+	}
+	latencyAvg.Add(float64(roundTripLatency.Nanoseconds()))
+	r.metrics.LatencyHistogramNanos.RecordValue(roundTripLatency.Nanoseconds())
+}
+
+// UpdateOffset is a thread-safe way to update the remote clock measurement.
 //
 // It only updates the offset for addr if one of the following cases holds:
 // 1. There is no prior offset for that address.
 // 2. The old offset for addr was measured long enough ago to be considered
 // stale.
 // 3. The new offset's error is smaller than the old offset's error.
-//
-// Pass a roundTripLatency of 0 or less to avoid recording the latency.
-func (r *RemoteClockMonitor) UpdateOffset(
-	ctx context.Context, addr string, offset RemoteOffset, roundTripLatency time.Duration,
-) {
+func (r *RemoteClockMonitor) UpdateOffset(ctx context.Context, addr string, offset RemoteOffset) {
 	emptyOffset := offset == RemoteOffset{}
 
 	r.mu.Lock()
@@ -164,16 +172,6 @@ func (r *RemoteClockMonitor) UpdateOffset(
 		if !emptyOffset {
 			r.mu.offsets[addr] = offset
 		}
-	}
-
-	if roundTripLatency > 0 {
-		latencyAvg, ok := r.mu.latenciesNanos[addr]
-		if !ok {
-			latencyAvg = ewma.NewMovingAverage(avgLatencyMeasurementAge)
-			r.mu.latenciesNanos[addr] = latencyAvg
-		}
-		latencyAvg.Add(float64(roundTripLatency.Nanoseconds()))
-		r.metrics.LatencyHistogramNanos.RecordValue(roundTripLatency.Nanoseconds())
 	}
 
 	if log.V(2) {
