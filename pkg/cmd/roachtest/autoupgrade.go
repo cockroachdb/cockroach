@@ -237,8 +237,9 @@ func registerAutoUpgrade(r *testRegistry) {
 			t.Fatalf("cluster setting cluster.preserve_downgrade_option is %s, should be an empty string", downgradeVersion)
 		}
 
-		// Start n3 again to satisfy the dead node detector.
-		c.Start(ctx, t, c.Node(nodeDecommissioned))
+		// Wipe n3 to exclude it from the dead node check the roachtest harness
+		// will perform after the test.
+		c.Wipe(ctx, c.Node(nodeDecommissioned))
 
 		// Test the 21.1.8 (Internal=124) to 21.1 downgrade, by first rolling back
 		// the cluster version (in case it is at -124), then adding a 21.1.0 node.
@@ -250,7 +251,8 @@ func registerAutoUpgrade(r *testRegistry) {
 		if err := sleep(time.Second); err != nil {
 			t.Fatal(err)
 		}
-		rollbackNode := c.Node(nodes - 1)
+		// Pick a node that's not n3 (since n3 got stopped and wiped).
+		rollbackNode := c.Node(nodes - 2)
 		c.Stop(ctx, rollbackNode)
 		if err := c.Stage(ctx, c.l, "release", "v21.1.0", "", rollbackNode); err != nil {
 			t.Fatal(err)
