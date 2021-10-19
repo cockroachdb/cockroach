@@ -208,7 +208,7 @@ const mapStateToProps = (state: AdminUIState, _: RouteComponentProps) => {
   };
 };
 
-const mapDispatchToProps = {
+export const mapDispatchToProps = {
   setSort: sortSetting.set,
   setStatus: statusSetting.set,
   setShow: showSetting.set,

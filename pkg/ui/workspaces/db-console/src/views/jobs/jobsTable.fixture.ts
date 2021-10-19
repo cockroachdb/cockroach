@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { JobsTableProps } from "./index";
+import { JobsTableProps, mapDispatchToProps } from "./index";
 import { RouteComponentProps } from "react-router-dom";
 import moment from "moment";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
@@ -32,11 +32,12 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
   status: "",
   show: "50",
   type: 0,
-  setSort: (() => {}) as any,
-  setStatus: (() => {}) as any,
-  setShow: (() => {}) as any,
-  setType: (() => {}) as any,
-  refreshJobs: (() => {}) as any,
+  ...mapDispatchToProps,
+  // setSort: (() => {}) as any,
+  // setStatus: (() => {}) as any,
+  // setShow: (() => {}) as any,
+  // setType: (() => {}) as any,
+  // refreshJobs: (() => {}) as any,
   jobs: {
     inFlight: false,
     valid: false,
