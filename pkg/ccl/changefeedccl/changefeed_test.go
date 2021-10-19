@@ -4217,7 +4217,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 	skip.UnderRace(t)
 	skip.UnderShort(t)
 
-	rnd, _ := randutil.NewPseudoRand()
+	rnd, _ := randutil.NewTestRand()
 
 	var maxCheckpointSize int64
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {

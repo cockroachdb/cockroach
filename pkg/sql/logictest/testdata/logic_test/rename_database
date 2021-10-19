@@ -187,7 +187,7 @@ EXPLAIN ALTER DATABASE v RENAME TO x
 distribution: local
 vectorized: true
 ·
-• rename database
+• alter database
 
 statement ok
 RESET vectorize

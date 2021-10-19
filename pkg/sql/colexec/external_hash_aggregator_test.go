@@ -57,7 +57,7 @@ func TestExternalHashAggregator(t *testing.T) {
 		accounts []*mon.BoundAccount
 		monitors []*mon.BytesMonitor
 	)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	numForcedRepartitions := rng.Intn(5)
 	for _, cfg := range []struct {
 		diskSpillingEnabled bool

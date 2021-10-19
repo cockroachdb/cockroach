@@ -88,8 +88,9 @@ func TestRangeFeedIntegration(t *testing.T) {
 		v1 := <-rows
 		require.Equal(t, mkKey("a"), v1.Key)
 		// Ensure the initial scan contract is fulfilled when WithDiff is specified.
-		require.Equal(t, v1.Value, v1.PrevValue)
+		require.Equal(t, v1.Value.RawBytes, v1.PrevValue.RawBytes)
 		require.Equal(t, v1.Value.Timestamp, afterB)
+		require.True(t, v1.PrevValue.Timestamp.IsEmpty())
 	}
 	{
 		v2 := <-rows
@@ -332,4 +333,116 @@ func TestWithOnCheckpoint(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+// TestRangefeedValueTimestamps tests that the rangefeed values (and previous
+// values) have the kind of timestamps we expect when writing, overwriting, and
+// deleting keys.
+func TestRangefeedValueTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.Server(0).DB()
+	scratchKey := tc.ScratchRange(t)
+	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
+	mkKey := func(k string) roachpb.Key {
+		return encoding.EncodeStringAscending(scratchKey, k)
+	}
+
+	sp := roachpb.Span{
+		Key:    scratchKey,
+		EndKey: scratchKey.PrefixEnd(),
+	}
+	{
+		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
+		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
+		require.NoError(t, err)
+	}
+	{
+		// Lower the closed timestamp target duration to speed up the test.
+		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
+		require.NoError(t, err)
+	}
+
+	f, err := rangefeed.NewFactory(tc.Stopper(), db, nil)
+	require.NoError(t, err)
+
+	rows := make(chan *roachpb.RangeFeedValue)
+	r, err := f.RangeFeed(ctx, "test", sp, db.Clock().Now(),
+		func(ctx context.Context, value *roachpb.RangeFeedValue) {
+			select {
+			case rows <- value:
+			case <-ctx.Done():
+			}
+		},
+		rangefeed.WithDiff(),
+	)
+	require.NoError(t, err)
+	defer r.Close()
+
+	mustGetInt := func(value roachpb.Value) int {
+		val, err := value.GetInt()
+		require.NoError(t, err)
+		return int(val)
+	}
+
+	{
+		beforeWriteTS := db.Clock().Now()
+		require.NoError(t, db.Put(ctx, mkKey("a"), 1))
+		afterWriteTS := db.Clock().Now()
+
+		v := <-rows
+		require.Equal(t, mustGetInt(v.Value), 1)
+		require.True(t, beforeWriteTS.Less(v.Value.Timestamp))
+		require.True(t, v.Value.Timestamp.Less(afterWriteTS))
+
+		require.False(t, v.PrevValue.IsPresent())
+	}
+
+	{
+		beforeOverwriteTS := db.Clock().Now()
+		require.NoError(t, db.Put(ctx, mkKey("a"), 2))
+		afterOverwriteTS := db.Clock().Now()
+
+		v := <-rows
+		require.Equal(t, mustGetInt(v.Value), 2)
+		require.True(t, beforeOverwriteTS.Less(v.Value.Timestamp))
+		require.True(t, v.Value.Timestamp.Less(afterOverwriteTS))
+
+		require.True(t, v.PrevValue.IsPresent())
+		require.Equal(t, mustGetInt(v.PrevValue), 1)
+		require.True(t, v.PrevValue.Timestamp.IsEmpty())
+	}
+
+	{
+		beforeDelTS := db.Clock().Now()
+		require.NoError(t, db.Del(ctx, mkKey("a")))
+		afterDelTS := db.Clock().Now()
+
+		v := <-rows
+		require.False(t, v.Value.IsPresent())
+		require.True(t, beforeDelTS.Less(v.Value.Timestamp))
+		require.True(t, v.Value.Timestamp.Less(afterDelTS))
+
+		require.True(t, v.PrevValue.IsPresent())
+		require.Equal(t, mustGetInt(v.PrevValue), 2)
+		require.True(t, v.PrevValue.Timestamp.IsEmpty())
+	}
+
+	{
+		beforeDelTS := db.Clock().Now()
+		require.NoError(t, db.Del(ctx, mkKey("a")))
+		afterDelTS := db.Clock().Now()
+
+		v := <-rows
+		require.False(t, v.Value.IsPresent())
+		require.True(t, beforeDelTS.Less(v.Value.Timestamp))
+		require.True(t, v.Value.Timestamp.Less(afterDelTS))
+
+		require.False(t, v.PrevValue.IsPresent())
+		require.True(t, v.PrevValue.Timestamp.IsEmpty())
+	}
 }

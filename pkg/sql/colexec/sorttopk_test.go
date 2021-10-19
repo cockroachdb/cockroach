@@ -125,7 +125,7 @@ func TestTopKSortRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	nTups := coldata.BatchSize()*2 + 1
 	maxCols := 4
 	// TODO(yuzefovich/mgartner): randomize types as well.
@@ -168,7 +168,7 @@ func TestTopKSortRandomized(t *testing.T) {
 
 func BenchmarkSortTopK(b *testing.B) {
 	defer log.Scope(b).Close(b)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
 	k := uint64(128)
 

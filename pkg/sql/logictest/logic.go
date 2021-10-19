@@ -3395,7 +3395,7 @@ func RunLogicTestWithDefaultConfig(
 							t.Parallel() // SAFE FOR TESTING (this comments satisfies the linter)
 						}
 					}
-					rng, _ := randutil.NewPseudoRand()
+					rng, _ := randutil.NewTestRand()
 					lt := logicTest{
 						rootT:           t,
 						verbose:         verbose,

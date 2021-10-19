@@ -1211,7 +1211,7 @@ func TestInitialPartitioning(t *testing.T) {
 	skip.UnderStressRace(t)
 	skip.UnderShort(t)
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	testCases := allPartitioningTests(rng)
 
 	ctx := context.Background()
@@ -1324,7 +1324,7 @@ func TestRepartitioning(t *testing.T) {
 	// race stress.
 	skip.UnderStressRace(t)
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	testCases, err := allRepartitioningTests(allPartitioningTests(rng))
 	if err != nil {
 		t.Fatalf("%+v", err)
