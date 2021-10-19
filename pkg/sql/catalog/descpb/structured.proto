@@ -562,6 +562,8 @@ message IndexDescriptor {
   // TODO(mgartner): Update the comment to explain that columns are referenced
   // by their ID once #49766 is addressed.
   optional string predicate = 23 [(gogoproto.nullable) = false];
+
+  optional bool use_delete_preserving_encoding = 24 [(gogoproto.nullable) = false];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
@@ -1472,4 +1474,16 @@ message Descriptor {
     TypeDescriptor type = 3;
     SchemaDescriptor schema = 4;
   }
+}
+
+// Wrapper for the bytes of the value of an index that also contains bit for
+// whether or not the value was deleted. A wrapper of arbitrary index values
+// with the additional delete bit was chosen over a separate index encoding type
+// because there would have to be a separate type for each encoding that we
+// already have for indexes. The alternative would get harder to maintain if we
+// added more index encodings in the future.
+message IndexValueWrapper {
+  optional bytes value = 1;
+
+  optional bool deleted = 2 [(gogoproto.nullable) = false];
 }
