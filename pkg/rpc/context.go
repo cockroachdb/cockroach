@@ -1236,7 +1236,21 @@ func (ctx *Context) runHeartbeat(
 					return err
 				}
 				var err error
+				tBegin := timeutil.Now()
 				response, err = heartbeatClient.Ping(goCtx, request)
+				if err == nil {
+					ctx.RemoteClocks.updateLatencyMetrics(target, timeutil.Since(tBegin))
+				} else {
+					// On errors, record a latency measurement that skews the average
+					// decidedly towards infinity. In a better world, we would have
+					// a separate way to measure the latency of errors but this would
+					// require more upstream plumbing to consume these new metrics
+					// and this gets the job done with no extra work.
+					//
+					// See: https://github.com/cockroachdb/cockroach/issues/58033
+					ctx.RemoteClocks.updateLatencyMetrics(target, 24*time.Hour)
+				}
+
 				return err
 			}
 			var err error
@@ -1283,7 +1297,6 @@ func (ctx *Context) runHeartbeat(
 				// Only update the clock offset measurement if we actually got a
 				// successful response from the server.
 				pingDuration := receiveTime.Sub(sendTime)
-				ctx.RemoteClocks.updateLatencyMetrics(target, pingDuration)
 				maxOffset := ctx.Clock.MaxOffset()
 				if pingDuration > maximumPingDurationMult*maxOffset {
 					request.Offset.Reset()
