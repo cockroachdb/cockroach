@@ -67,25 +67,7 @@ Stage 0
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 59
     TableID: 56
-  *scop.RemoveTypeBackRef
-    DescID: 59
-    TypeID: 57
-  *scop.RemoveTypeBackRef
-    DescID: 59
-    TypeID: 58
 Stage 1 (non-revertible)
-  *scop.MarkDescriptorAsDropped
-    TableID: 53
-  *scop.DrainDescriptorName
-    TableID: 53
-  *scop.CreateGcJobForDescriptor
-    DescID: 53
-  *scop.MarkDescriptorAsDropped
-    TableID: 54
-  *scop.DrainDescriptorName
-    TableID: 54
-  *scop.CreateGcJobForDescriptor
-    DescID: 54
   *scop.MarkDescriptorAsDropped
     TableID: 55
   *scop.DrainDescriptorName
@@ -93,17 +75,35 @@ Stage 1 (non-revertible)
   *scop.CreateGcJobForDescriptor
     DescID: 55
   *scop.MarkDescriptorAsDropped
-    TableID: 56
+    TableID: 54
   *scop.DrainDescriptorName
-    TableID: 56
+    TableID: 54
   *scop.CreateGcJobForDescriptor
-    DescID: 56
+    DescID: 54
+  *scop.MarkDescriptorAsDropped
+    TableID: 53
+  *scop.DrainDescriptorName
+    TableID: 53
+  *scop.CreateGcJobForDescriptor
+    DescID: 53
+  *scop.RemoveTypeBackRef
+    DescID: 59
+    TypeID: 57
   *scop.MarkDescriptorAsDropped
     TableID: 59
   *scop.DrainDescriptorName
     TableID: 59
   *scop.CreateGcJobForDescriptor
     DescID: 59
+  *scop.MarkDescriptorAsDropped
+    TableID: 56
+  *scop.DrainDescriptorName
+    TableID: 56
+  *scop.CreateGcJobForDescriptor
+    DescID: 56
+  *scop.RemoveTypeBackRef
+    DescID: 59
+    TypeID: 58
 
 deps
 DROP VIEW defaultdb.v1 CASCADE

@@ -22,7 +22,7 @@ func init() {
 		scpb.Status_PUBLIC,
 		to(scpb.Status_ABSENT,
 			minPhase(scop.PreCommitPhase),
-			// TODO(ajwerner): This should be marked as non-revertible.
+			revertible(false),
 			emit(func(this *scpb.RelationDependedOnBy) scop.Op {
 				return &scop.RemoveRelationDependedOnBy{
 					TableID:      this.TableID,

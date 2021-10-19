@@ -21,9 +21,9 @@ func init() {
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
 		to(scpb.Status_ABSENT,
+			// TODO(ajwerner): This probably cannot happen until post-commit.
 			minPhase(scop.PreCommitPhase),
-			// TODO(ajwerner): This should not be revertible and probably
-			// cannot happen until post-commit.
+			revertible(false),
 			emit(func(this *scpb.InboundForeignKey) scop.Op {
 				return &scop.DropForeignKeyRef{
 					TableID:  this.OriginID,

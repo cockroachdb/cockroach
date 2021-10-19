@@ -32,9 +32,6 @@ func init() {
 			})),
 		to(scpb.Status_DELETE_AND_WRITE_ONLY,
 			minPhase(scop.PostCommitPhase),
-			// TODO(ajwerner): This non-revertible label is not
-			// correct here but we're porting rules.
-			revertible(false),
 			emit(func(this *scpb.Column) scop.Op {
 				return &scop.MakeAddedColumnDeleteAndWriteOnly{
 					TableID:  this.TableID,
@@ -61,8 +58,8 @@ func init() {
 					ColumnID: this.Column.ID,
 				}
 			})),
-		to(scpb.Status_DELETE_AND_WRITE_ONLY,
-			// TODO(ajwerner): This should probably be marked as non-revertible.
+		to(scpb.Status_DELETE_ONLY,
+			revertible(false),
 			minPhase(scop.PostCommitPhase),
 			emit(func(this *scpb.Column) scop.Op {
 				return &scop.MakeDroppedColumnDeleteOnly{

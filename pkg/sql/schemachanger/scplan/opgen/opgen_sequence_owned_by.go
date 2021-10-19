@@ -21,8 +21,8 @@ func init() {
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
 		to(scpb.Status_ABSENT,
-			// TODO(ajwerner): This probably should be marked as non-revertible.
 			minPhase(scop.PreCommitPhase),
+			revertible(false),
 			emit(func(this *scpb.SequenceOwnedBy) scop.Op {
 				return &scop.RemoveSequenceOwnedBy{
 					TableID: this.SequenceID,

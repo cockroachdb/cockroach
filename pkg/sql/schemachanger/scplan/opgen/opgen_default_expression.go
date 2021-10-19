@@ -22,6 +22,7 @@ func init() {
 		scpb.Status_PUBLIC,
 		to(scpb.Status_ABSENT,
 			minPhase(scop.PreCommitPhase),
+			revertible(false),
 			emit(func(this *scpb.DefaultExpression) scop.Op {
 				return &scop.RemoveColumnDefaultExpression{
 					TableID:  this.TableID,
