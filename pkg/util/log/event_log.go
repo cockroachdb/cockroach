@@ -39,9 +39,7 @@ func StructuredEvent(ctx context.Context, event eventpb.EventPayload) {
 		event)
 
 	if sp, el, ok := getSpanOrEventLog(ctx); ok {
-		// Prevent `entry` from moving to the heap when this branch is not taken.
-		heapEntry := entry
-		eventInternal(sp, el, entry.sev >= severity.ERROR, &heapEntry)
+		eventInternal(sp, el, (entry.sev >= severity.ERROR), entry.convertToLegacy())
 	}
 
 	logger := logging.getLogger(entry.ch)

@@ -11,13 +11,13 @@
 package tracing
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"golang.org/x/net/trace"
@@ -228,13 +228,9 @@ func (s *spanInner) Recordf(format string, args ...interface{}) {
 	if !s.hasVerboseSink() {
 		return
 	}
-	str := redact.Sprintf(format, args...)
+	str := fmt.Sprintf(format, args...)
 	if s.ot.shadowSpan != nil {
-		// TODO(obs-inf): depending on the situation it may be more appropriate to
-		// redact the string here.
-		// See:
-		// https://github.com/cockroachdb/cockroach/issues/58610#issuecomment-926093901
-		s.ot.shadowSpan.LogFields(otlog.String(tracingpb.LogMessageField, str.StripMarkers()))
+		s.ot.shadowSpan.LogFields(otlog.String(tracingpb.LogMessageField, str))
 	}
 	if s.netTr != nil {
 		s.netTr.LazyPrintf(format, args)

@@ -638,7 +638,7 @@ func TestNodeSendUnknownBatchRequest(t *testing.T) {
 		Requests: make([]roachpb.RequestUnion, 1),
 	}
 	n := &Node{}
-	br, err := n.batchInternal(context.Background(), roachpb.SystemTenantID, &ba)
+	br, err := n.batchInternal(context.Background(), &ba)
 	if err != nil {
 		t.Fatal(err)
 	}

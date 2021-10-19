@@ -552,6 +552,7 @@ func TestOracle(t *testing.T) {
 // encountering this situation, and then follower reads work.
 func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	// The test uses follower_read_timestamp().
