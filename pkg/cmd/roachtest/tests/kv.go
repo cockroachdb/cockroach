@@ -54,7 +54,9 @@ func registerKV(r registry.Registry) {
 		admissionControlEnabled bool
 		concMultiplier          int
 		duration                time.Duration
+		tracing                 bool // `trace.debug.enable`
 		tags                    []string
+		owner                   registry.Owner // defaults to KV
 	}
 	computeNumSplits := func(opts kvOptions) int {
 		// TODO(ajwerner): set this default to a more sane value or remove it and
@@ -75,11 +77,16 @@ func registerKV(r registry.Registry) {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 		c.Start(ctx, c.Range(1, nodes), option.StartArgs(fmt.Sprintf("--encrypt=%t", opts.encryption)))
 
+		db := c.Conn(ctx, 1)
+		defer db.Close()
 		if opts.disableLoadSplits {
-			db := c.Conn(ctx, 1)
-			defer db.Close()
 			if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'"); err != nil {
 				t.Fatalf("failed to disable load based splitting: %v", err)
+			}
+		}
+		if opts.tracing {
+			if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING trace.debug.enable = true"); err != nil {
+				t.Fatalf("failed to enable tracing: %v", err)
 			}
 		}
 		if opts.admissionControlEnabled {
@@ -150,6 +157,7 @@ func registerKV(r registry.Registry) {
 		{nodes: 1, cpus: 32, readPercent: 95},
 		{nodes: 3, cpus: 8, readPercent: 0},
 		{nodes: 3, cpus: 8, readPercent: 95},
+		{nodes: 3, cpus: 8, readPercent: 95, tracing: true, owner: registry.OwnerObsInf},
 		{nodes: 3, cpus: 8, readPercent: 0, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 8, readPercent: 95, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 0},
@@ -237,10 +245,16 @@ func registerKV(r registry.Registry) {
 		if opts.disableLoadSplits {
 			nameParts = append(nameParts, "no-load-splitting")
 		}
-
+		if opts.tracing {
+			nameParts = append(nameParts, "tracing")
+		}
+		owner := registry.OwnerKV
+		if opts.owner != "" {
+			owner = opts.owner
+		}
 		r.Add(registry.TestSpec{
 			Name:    strings.Join(nameParts, "/"),
-			Owner:   registry.OwnerKV,
+			Owner:   owner,
 			Cluster: r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKV(ctx, t, c, opts)
