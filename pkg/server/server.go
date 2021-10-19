@@ -1277,7 +1277,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 			return err
 		}
 
-		initConfig := newInitServerConfig(s.cfg, dialOpts)
+		initConfig := newInitServerConfig(ctx, s.cfg, dialOpts)
 		inspectedDiskState, err := inspectEngines(
 			ctx,
 			s.engines,
