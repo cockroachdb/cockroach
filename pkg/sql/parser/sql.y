@@ -789,7 +789,8 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
 %token <str> IDENTITY
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCLUDE_DEPRECATED_INTERLEAVES INCLUDING INCREMENT INCREMENTAL
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE
+%token <str> INCLUDE_DEPRECATED_INTERLEAVES INCLUDING INCREMENT INCREMENTAL INCREMENTAL_STORAGE
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INTEGER
@@ -2565,17 +2566,30 @@ opt_clear_data:
 // %Help: BACKUP - back up data to external storage
 // %Category: CCL
 // %Text:
-// BACKUP <targets...> TO <location...>
+//
+// Create a full backup
+// BACKUP <targets...> INTO <destination...>
 //        [ AS OF SYSTEM TIME <expr> ]
-//        [ INCREMENTAL FROM <location...> ]
-//        [ WITH <option> [= <value>] [, ...] ]
+//				[ WITH <option> [= <value>] [, ...] ]
+//
+// Append an incremental backup to the most recent backup added to a collection
+// BACKUP <targets...> INTO LATEST IN <destination...>
+//        [ AS OF SYSTEM TIME <expr> ]
+//				[ WITH <option> [= <value>] [, ...] ]
+//
+//
+// Append an incremental backup in the <subdir>. This command will create an
+// incremental backup iff there is a full backup in <destination>
+// BACKUP <targets...> INTO [<subdir...> IN] <destination>
+//        [ AS OF SYSTEM TIME <expr> ]
+//				[ WITH <option> [= <value>] [, ...] ]
 //
 // Targets:
 //    Empty targets list: backup full cluster.
 //    TABLE <pattern> [, ...]
 //    DATABASE <databasename> [, ...]
 //
-// Location:
+// Destination:
 //    "[scheme]://[host]/[path to backup]?[parameters]"
 //
 // Options:
@@ -2584,6 +2598,7 @@ opt_clear_data:
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : encrypt backups using KMS
 //    detached: execute backup job asynchronously, without waiting for its completion
 //    include_deprecated_interleaves: allow backing up interleaved tables, even if future versions will be unable to restore.
+//    incremental_storage: specify a different path to store the incremental backup
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
@@ -2692,6 +2707,10 @@ backup_options:
 | INCLUDE_DEPRECATED_INTERLEAVES
   {
     $$.val = &tree.BackupOptions{IncludeDeprecatedInterleaves: true}
+  }
+| INCREMENTAL_STORAGE '=' string_or_placeholder_opt_list
+  {
+  $$.val = &tree.BackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
   }
 
 
@@ -13213,6 +13232,7 @@ unreserved_keyword:
 | INCLUDING
 | INCREMENT
 | INCREMENTAL
+| INCREMENTAL_STORAGE
 | INDEXES
 | INHERITS
 | INJECT

@@ -317,7 +317,7 @@ func getURIsByLocalityKV(to []string, appendPath string) (string, map[string]str
 }
 
 func resolveOptionsForBackupJobDescription(
-	opts tree.BackupOptions, kmsURIs []string,
+	opts tree.BackupOptions, kmsURIs []string, incrementalStorage []string,
 ) (tree.BackupOptions, error) {
 	if opts.IsDefault() {
 		return opts, nil
@@ -332,12 +332,15 @@ func resolveOptionsForBackupJobDescription(
 		newOpts.EncryptionPassphrase = tree.NewDString("redacted")
 	}
 
-	for _, uri := range kmsURIs {
-		redactedURI, err := cloud.RedactKMSURI(uri)
-		if err != nil {
-			return tree.BackupOptions{}, err
-		}
-		newOpts.EncryptionKMSURI = append(newOpts.EncryptionKMSURI, tree.NewDString(redactedURI))
+	var err error
+	newOpts.EncryptionKMSURI, err = sanitizeURIList(kmsURIs)
+	if err != nil {
+		return tree.BackupOptions{}, err
+	}
+
+	newOpts.IncrementalStorage, err = sanitizeURIList(incrementalStorage)
+	if err != nil {
+		return tree.BackupOptions{}, err
 	}
 
 	return newOpts, nil
@@ -351,6 +354,7 @@ func GetRedactedBackupNode(
 	incrementalFrom []string,
 	kmsURIs []string,
 	resolvedSubdir string,
+	incrementalStorage []string,
 	hasBeenPlanned bool,
 ) (*tree.Backup, error) {
 	b := &tree.Backup{
@@ -371,28 +375,37 @@ func GetRedactedBackupNode(
 		b.Subdir = tree.NewDString(resolvedSubdir)
 	}
 
-	for _, t := range to {
-		sanitizedTo, err := cloud.SanitizeExternalStorageURI(t, nil /* extraParams */)
-		if err != nil {
-			return nil, err
-		}
-		b.To = append(b.To, tree.NewDString(sanitizedTo))
+	var err error
+	b.To, err = sanitizeURIList(to)
+	if err != nil {
+		return nil, err
 	}
 
-	for _, from := range incrementalFrom {
-		sanitizedFrom, err := cloud.SanitizeExternalStorageURI(from, nil /* extraParams */)
-		if err != nil {
-			return nil, err
-		}
-		b.IncrementalFrom = append(b.IncrementalFrom, tree.NewDString(sanitizedFrom))
+	b.IncrementalFrom, err = sanitizeURIList(incrementalFrom)
+	if err != nil {
+		return nil, err
 	}
 
-	resolvedOpts, err := resolveOptionsForBackupJobDescription(backup.Options, kmsURIs)
+	resolvedOpts, err := resolveOptionsForBackupJobDescription(backup.Options, kmsURIs,
+		incrementalStorage)
 	if err != nil {
 		return nil, err
 	}
 	b.Options = resolvedOpts
 	return b, nil
+}
+
+// sanitizeURIList sanitizes a list of URIS in order to build an AST
+func sanitizeURIList(uris []string) ([]tree.Expr, error) {
+	var sanitizedURIs []tree.Expr
+	for _, uri := range uris {
+		sanitizedURI, err := cloud.SanitizeExternalStorageURI(uri, nil /* extraParams */)
+		if err != nil {
+			return nil, err
+		}
+		sanitizedURIs = append(sanitizedURIs, tree.NewDString(sanitizedURI))
+	}
+	return sanitizedURIs, nil
 }
 
 func backupJobDescription(
@@ -402,9 +415,10 @@ func backupJobDescription(
 	incrementalFrom []string,
 	kmsURIs []string,
 	resolvedSubdir string,
+	incrementalStorage []string,
 ) (string, error) {
-	b, err := GetRedactedBackupNode(backup, to, incrementalFrom, kmsURIs, resolvedSubdir,
-		true /* hasBeenPlanned */)
+	b, err := GetRedactedBackupNode(backup, to, incrementalFrom, kmsURIs,
+		resolvedSubdir, incrementalStorage, true /* hasBeenPlanned */)
 	if err != nil {
 		return "", err
 	}
@@ -595,6 +609,12 @@ func backupPlanHook(
 		return nil, nil, nil, false, err
 	}
 
+	incToFn, err := p.TypeAsStringArray(ctx, tree.Exprs(backupStmt.Options.IncrementalStorage),
+		"BACKUP")
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+
 	encryptionParams := backupEncryptionParams{}
 
 	var pwFn func() (string, error)
@@ -676,6 +696,14 @@ func backupPlanHook(
 			return err
 		}
 
+		incrementalStorage, err := incToFn()
+		if err != nil {
+			return err
+		}
+		if !backupStmt.Nested && len(incrementalStorage) > 0 {
+			return errors.New("incremental_storage option not supported with `BACKUP TO` syntax")
+		}
+
 		endTime := p.ExecCfg().Clock.Now()
 		if backupStmt.AsOf.Expr != nil {
 			asOf, err := p.EvalAsOfTimestamp(ctx, backupStmt.AsOf)
@@ -716,11 +744,12 @@ func backupPlanHook(
 		// backupDestination struct.
 		collectionURI, defaultURI, resolvedSubdir, urisByLocalityKV, prevs, err :=
 			resolveDest(ctx, p.User(), backupStmt.Nested, backupStmt.AppendToLatest, defaultURI,
-				urisByLocalityKV, makeCloudStorage, endTime, to, incrementalFrom, subdir)
+				urisByLocalityKV, makeCloudStorage, endTime, to, incrementalFrom, subdir, incrementalStorage)
 		if err != nil {
 			return err
 		}
-		prevBackups, encryptionOptions, err := fetchPreviousBackups(ctx, p.User(), makeCloudStorage, prevs,
+		prevBackups, encryptionOptions, err := fetchPreviousBackups(ctx, p.User(), makeCloudStorage,
+			prevs,
 			encryptionParams)
 		if err != nil {
 			return err
@@ -950,7 +979,8 @@ func backupPlanHook(
 			return errors.Wrap(err, "new backup would not cover expected time")
 		}
 
-		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom, encryptionParams.kmsURIs, resolvedSubdir)
+		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom,
+			encryptionParams.kmsURIs, resolvedSubdir, incrementalStorage)
 		if err != nil {
 			return err
 		}

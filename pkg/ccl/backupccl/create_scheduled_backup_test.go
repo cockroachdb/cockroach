@@ -432,6 +432,25 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			},
 		},
 		{
+			name:  "full-cluster-remote-incremental-storage",
+			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' WITH incremental_storage = 'nodelocal://1/incremental' RECURRING '@hourly'",
+			user:  enterpriseUser,
+			expectedSchedules: []expectedSchedule{
+				{
+					nameRe:     "BACKUP .*",
+					backupStmt: "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached, incremental_storage = 'nodelocal://1/incremental'",
+					period:     time.Hour,
+					paused:     true,
+				},
+				{
+					nameRe:     "BACKUP .+",
+					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH detached",
+					period:     24 * time.Hour,
+					runsNow:    true,
+				},
+			},
+		},
+		{
 			name: "multiple-tables-with-revision-history",
 			user: enterpriseUser,
 			query: `

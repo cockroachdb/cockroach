@@ -931,6 +931,7 @@ unreserved_keyword ::=
 	| 'INCLUDING'
 	| 'INCREMENT'
 	| 'INCREMENTAL'
+	| 'INCREMENTAL_STORAGE'
 	| 'INDEXES'
 	| 'INHERITS'
 	| 'INJECT'
@@ -1858,6 +1859,7 @@ backup_options ::=
 	| 'DETACHED'
 	| 'KMS' '=' string_or_placeholder_opt_list
 	| 'INCLUDE_DEPRECATED_INTERLEAVES'
+	| 'INCREMENTAL_STORAGE' '=' string_or_placeholder_opt_list
 
 c_expr ::=
 	d_expr
