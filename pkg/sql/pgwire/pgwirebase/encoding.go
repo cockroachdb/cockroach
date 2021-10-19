@@ -928,7 +928,7 @@ func decodeBinaryArray(
 		return nil, err
 	}
 	if t.Oid() != oid.Oid(hdr.ElemOid) {
-		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "wrong element type")
+		return nil, pgerror.Newf(pgcode.ProtocolViolation, "wrong element type")
 	}
 	arr := tree.NewDArray(t)
 	if hdr.Ndims == 0 {
