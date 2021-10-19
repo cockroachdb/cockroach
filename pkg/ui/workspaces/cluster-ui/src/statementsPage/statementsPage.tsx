@@ -32,7 +32,6 @@ import {
 
 import {
   appAttr,
-  getMatchParamByName,
   calculateTotalWorkload,
   unique,
   containAny,
@@ -64,6 +63,8 @@ import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
 import { UIConfigState } from "../store";
 import { StatementsRequest } from "src/api/statementsApi";
 import Long from "long";
+import ClearStats from "../sqlActivity/clearStats";
+import { commonStyles } from "../common";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -404,12 +405,11 @@ export class StatementsPage extends React.Component<
       );
   };
 
-  renderStatements = () => {
+  renderStatements = (): React.ReactElement => {
     const { pagination, search, filters, activeFilters } = this.state;
     const {
       statements,
       databases,
-      lastReset,
       location,
       onDiagnosticsReportDownload,
       onStatementClick,
@@ -520,6 +520,9 @@ export class StatementsPage extends React.Component<
               reset time
             </button>
           </PageConfigItem>
+          <PageConfigItem className={commonStyles("separator")}>
+            <ClearStats resetSQLStats={resetSQLStats} tooltipType="statement" />
+          </PageConfigItem>
         </PageConfig>
         <section className={sortableTableCx("cl-table-container")}>
           <div>
@@ -529,14 +532,11 @@ export class StatementsPage extends React.Component<
             />
             <TableStatistics
               pagination={pagination}
-              lastReset={lastReset}
               search={search}
               totalCount={totalCount}
               arrayItemName="statements"
-              tooltipType="statement"
               activeFilters={activeFilters}
               onClearFilters={this.onClearFilters}
-              resetSQLStats={resetSQLStats}
             />
           </div>
           <StatementsSortedTable
@@ -563,7 +563,7 @@ export class StatementsPage extends React.Component<
     );
   };
 
-  render() {
+  render(): React.ReactElement {
     const {
       location,
       refreshStatementDiagnosticsRequests,
@@ -574,7 +574,6 @@ export class StatementsPage extends React.Component<
     return (
       <div className={cx("root", "table-area")}>
         <Helmet title={app ? `${app} App | Statements` : "Statements"} />
-        <h3 className={cx("base-heading")}>Statements</h3>
         <Loading
           loading={isNil(this.props.statements)}
           error={this.props.statementsError}

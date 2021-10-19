@@ -1,0 +1,15 @@
+@import "src/core/index.module";
+
+.tooltip-info {
+  border-bottom: 1px dashed $colors--neutral-5;
+}
+
+.action {
+  color: $colors--link;
+  display: flex;
+  line-height: 24px;
+  &:hover {
+  color: $colors--link;
+    text-decoration: underline;
+  }
+}

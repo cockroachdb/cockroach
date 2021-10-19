@@ -60,6 +60,7 @@ import { DiagnosticsView } from "./diagnostics/diagnosticsView";
 import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import styles from "./statementDetails.module.scss";
+import { commonStyles } from "src/common";
 import { NodeSummaryStats } from "../nodes";
 import { UIConfigState } from "../store";
 import moment, { Moment } from "moment";
@@ -385,7 +386,7 @@ export class StatementDetails extends React.Component<
   };
 
   backToStatementsClick = (): void => {
-    this.props.history.push("/statements");
+    this.props.history.push("/sql-activity/statements");
     if (this.props.onBackToStatementsClick) {
       this.props.onBackToStatementsClick();
     }
@@ -407,7 +408,7 @@ export class StatementDetails extends React.Component<
           >
             Statements
           </Button>
-          <h3 className={cx("base-heading", "no-margin-bottom")}>
+          <h3 className={commonStyles("base-heading", "no-margin-bottom")}>
             Statement Details
           </h3>
         </div>
@@ -533,7 +534,7 @@ export class StatementDetails extends React.Component<
     return (
       <Tabs
         defaultActiveKey="1"
-        className={cx("cockroach--tabs")}
+        className={commonStyles("cockroach--tabs")}
         onChange={this.onTabChange}
         activeKey={currentTab}
       >
@@ -798,7 +799,7 @@ export class StatementDetails extends React.Component<
           <SummaryCard>
             <h3
               className={classNames(
-                cx("base-heading"),
+                commonStyles("base-heading"),
                 summaryCardStylesCx("summary--card__title"),
               )}
             >
@@ -841,7 +842,7 @@ export class StatementDetails extends React.Component<
           <SummaryCard>
             <h3
               className={classNames(
-                cx("base-heading"),
+                commonStyles("base-heading"),
                 summaryCardStylesCx("summary--card__title"),
               )}
             >
@@ -897,7 +898,7 @@ export class StatementDetails extends React.Component<
             <SummaryCard className={cx("fit-content-width")}>
               <h3
                 className={classNames(
-                  cx("base-heading"),
+                  commonStyles("base-heading"),
                   summaryCardStylesCx("summary--card__title"),
                 )}
               >

@@ -9,46 +9,34 @@
 // licenses/APL.txt.
 
 import React from "react";
-import moment from "moment";
-import { DATE_FORMAT } from "src/util";
 import { statisticsClasses } from "../transactionsPage/transactionsPageClasses";
 import { ISortedTablePagination } from "../sortedtable";
 import { Button } from "src/button";
 import { ResultsPerPageLabel } from "src/pagination";
-import { Tooltip } from "@cockroachlabs/ui-components";
-import tableStatsStyles from "./tableStatistics.module.scss";
-import classNames from "classnames/bind";
-import { Icon } from "@cockroachlabs/ui-components";
-import {
-  contentModifiers,
-  StatisticType,
-} from "../statsTableUtil/statsTableUtil";
 
-const { statistic, countTitle, lastCleared } = statisticsClasses;
-const cxStats = classNames.bind(tableStatsStyles);
+const { statistic, countTitle } = statisticsClasses;
 
 interface TableStatistics {
   pagination: ISortedTablePagination;
   totalCount: number;
-  lastReset: Date | string;
   arrayItemName: string;
-  tooltipType: StatisticType;
   activeFilters: number;
   search?: string;
   onClearFilters?: () => void;
-  resetSQLStats: () => void;
 }
 
+// TableStatistics shows statistics about the results being
+// displayed on the table, including total results count,
+// how many are currently being displayed on the page and
+// if there is an active filter.
+// This component has also a clear filter option.
 export const TableStatistics: React.FC<TableStatistics> = ({
   pagination,
   totalCount,
-  lastReset,
   search,
   arrayItemName,
-  tooltipType,
   onClearFilters,
   activeFilters,
-  resetSQLStats,
 }) => {
   const resultsPerPageLabel = (
     <ResultsPerPageLabel
@@ -68,43 +56,11 @@ export const TableStatistics: React.FC<TableStatistics> = ({
     </>
   );
 
-  let statsType = "";
-  switch (tooltipType) {
-    case "transaction":
-      statsType = contentModifiers.transactionCapital;
-      break;
-    case "statement":
-      statsType = contentModifiers.statementCapital;
-      break;
-    case "transactionDetails":
-      statsType = contentModifiers.statementCapital;
-      break;
-    default:
-      break;
-  }
-  const toolTipText = `${statsType} statistics are aggregated once an hour and organized by the start time. 
-  Statistics between two hourly intervals belong to the nearest hour rounded down. 
-  For example, a ${statsType} execution ending at 1:50 would have its statistics aggregated in the 1:00 interval 
-  start time. Clicking ‘clear SQL stats’ will reset SQL stats on the Statements and Transactions pages and 
-  crdb_internal tables.`;
-
   return (
     <div className={statistic}>
       <h4 className={countTitle}>
         {activeFilters ? resultsCountAndClear : resultsPerPageLabel}
       </h4>
-      <div className={cxStats("flex-display")}>
-        <Tooltip content={toolTipText} style="tableTitle">
-          <div className={cxStats("tooltip-hover-area")}>
-            <Icon iconName={"InfoCircle"} />
-          </div>
-        </Tooltip>
-        <div className={lastCleared}>
-          <a className={cxStats("action")} onClick={resetSQLStats}>
-            clear SQL stats
-          </a>
-        </div>
-      </div>
     </div>
   );
 };
