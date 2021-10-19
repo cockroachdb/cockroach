@@ -20,18 +20,28 @@ func init() {
 		(*scpb.Type)(nil),
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
-		to(scpb.Status_DELETE_ONLY,
-			minPhase(scop.PreCommitPhase),
-			// TODO(ajwerner): This should be marked as non-revertible.
+		to(scpb.Status_TXN_DROPPED,
+			minPhase(scop.StatementPhase),
 			emit(func(this *scpb.Type) scop.Op {
-				return &scop.MarkDescriptorAsDropped{
-					TableID: this.TypeID,
+				return &scop.MarkDescriptorAsDroppedSynthetically{
+					DescID: this.TypeID,
 				}
 			})),
+		to(scpb.Status_DROPPED,
+			// TODO(ajwerner): The move to DELETE_ONLY should be marked
+			// non-revertible.
+			minPhase(scop.PreCommitPhase),
+			revertible(false),
+			emit(func(this *scpb.Type) scop.Op {
+				return &scop.MarkDescriptorAsDropped{
+					DescID: this.TypeID,
+				}
+			}),
+		),
 		to(scpb.Status_ABSENT,
 			// TODO(ajwerner): The move to DELETE_ONLY should be marked
 			// non-revertible.
-			minPhase(scop.PostCommitPhase),
+			minPhase(scop.PreCommitPhase),
 			revertible(false),
 			emit(func(this *scpb.Type) scop.Op {
 				return &scop.DrainDescriptorName{
