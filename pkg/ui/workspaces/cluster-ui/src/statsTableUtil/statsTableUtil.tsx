@@ -35,7 +35,7 @@ export const statisticsColumnLabels = {
   database: "Database",
   diagnostics: "Diagnostics",
   executionCount: "Execution Count",
-  intervalStartTime: "Interval Start Time (UTC)",
+  aggregationInterval: "Aggregation Interval (UTC)",
   maxMemUsage: "Max Memory",
   networkBytes: "Network",
   regionNodes: "Regions/Nodes",
@@ -140,7 +140,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
       </Tooltip>
     );
   },
-  intervalStartTime: () => {
+  aggregationInterval: () => {
     return (
       <Tooltip
         placement="bottom"
@@ -148,9 +148,8 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         content={
           <div>
             <p>
-              The time that the statement execution interval started. By
-              default, statements are configured to aggregate over an hour
-              interval.
+              The time interval of the statement execution. By default,
+              statements are configured to aggregate over an hour interval.
               <br />
               For example, if a statement is executed at 1:23PM it will fall in
               the 1:00PM - 2:00PM time interval.
@@ -158,7 +157,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           </div>
         }
       >
-        {getLabel("intervalStartTime")}
+        {getLabel("aggregationInterval")}
       </Tooltip>
     );
   },
@@ -676,9 +675,17 @@ export const statisticsTableTitles: StatisticTableTitleType = {
   },
 };
 
-export function formatStartIntervalColumn(aggregatedTs: number) {
-  return moment
-    .unix(aggregatedTs)
-    .utc()
-    .format("MMM D, h:mm A");
+export function formatAggregationIntervalColumn(
+  aggregatedTs: number,
+  interval: number,
+): string {
+  const formatStr = "MMM D, h:mm A";
+  const formatStrWithoutDay = "h:mm A";
+  const start = moment.unix(aggregatedTs).utc();
+  const end = moment.unix(aggregatedTs + interval).utc();
+  const isSameDay = start.isSame(end, "day");
+
+  return `${start.format(formatStr)} - ${end.format(
+    isSameDay ? formatStrWithoutDay : formatStr,
+  )}`;
 }

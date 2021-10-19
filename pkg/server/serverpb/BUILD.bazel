@@ -35,6 +35,7 @@ proto_library(
         "//pkg/util/log/logpb:logpb_proto",
         "//pkg/util/metric:metric_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:timestamp_proto",
         "@go_googleapis//google/api:annotations_proto",
         "@io_etcd_go_etcd_raft_v3//raftpb:raftpb_proto",

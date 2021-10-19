@@ -16,7 +16,7 @@ import _ from "lodash";
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 import { uniqueLong } from "src/util/arrays";
-import { TimestampToNumber } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 
 export type ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
@@ -190,6 +190,7 @@ export interface ExecutionStatistics {
   statement: string;
   statement_summary: string;
   aggregated_ts: number;
+  aggregation_interval: number;
   app: string;
   database: string;
   distSQL: boolean;
@@ -207,7 +208,8 @@ export function flattenStatementStats(
   return statementStats.map(stmt => ({
     statement: stmt.key.key_data.query,
     statement_summary: stmt.key.key_data.query_summary,
-    aggregated_ts: TimestampToNumber(stmt.key.aggregated_ts),
+    aggregated_ts: util.TimestampToNumber(stmt.key.aggregated_ts),
+    aggregation_interval: util.DurationToNumber(stmt.key.aggregation_interval),
     app: stmt.key.key_data.app,
     database: stmt.key.key_data.database,
     distSQL: stmt.key.key_data.distSQL,
@@ -228,9 +230,14 @@ export function combineStatementStats(
 
 // This function returns a key based on all parameters
 // that should be used to group statements.
-// Parameters being used: query, implicit_txn, database, and aggregated_ts.
+// Parameters being used: query, implicit_txn, database,
+// aggregated_ts and aggregation_interval.
 export function statementKey(stmt: ExecutionStatistics): string {
   return (
-    stmt.statement + stmt.implicit_txn + stmt.database + stmt.aggregated_ts
+    stmt.statement +
+    stmt.implicit_txn +
+    stmt.database +
+    stmt.aggregated_ts +
+    stmt.aggregation_interval
   );
 }
