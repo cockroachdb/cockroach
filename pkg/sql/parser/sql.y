@@ -792,7 +792,8 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
 %token <str> IDENTITY
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCLUDING INCREMENT INCREMENTAL
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE
+%token <str> INCLUDING INCREMENT INCREMENTAL INCREMENTAL_STORAGE
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
 %token <str> INNER INSERT INT INTEGER
@@ -2583,9 +2584,28 @@ opt_clear_data:
 // %Help: BACKUP - back up data to external storage
 // %Category: CCL
 // %Text:
-// BACKUP <targets...> TO <location...>
+//
+// Newer Synopsis, for full backups
+// BACKUP <targets...> INTO <destination...>
 //        [ AS OF SYSTEM TIME <expr> ]
-//        [ INCREMENTAL FROM <location...> ]
+//				[ WITH <option> [= <value>] [, ...] ]
+//
+// Newer Synopsis, for incremental backups to append to latest full backup in destination
+// BACKUP <targets...> INTO LATEST IN <destination...>
+//        [ AS OF SYSTEM TIME <expr> ]
+//				[ WITH <option> [= <value>] [, ...] ]
+//
+//
+// Newer Synopsis, for backups with explicit subdir
+// This command will create an incremental backup iff there is a full backup in <destination>
+// BACKUP <targets...> INTO [<subdir...> IN] <destination>
+//        [ AS OF SYSTEM TIME <expr> ]
+//				[ WITH <option> [= <value>] [, ...] ]
+//
+// Older Synopsis, Last Updated in 20.2
+// BACKUP <targets...> TO <destination...>
+//        [ AS OF SYSTEM TIME <expr> ]
+//        [ INCREMENTAL FROM <destination...> ]
 //        [ WITH <option> [= <value>] [, ...] ]
 //
 // Targets:
@@ -2593,7 +2613,7 @@ opt_clear_data:
 //    TABLE <pattern> [, ...]
 //    DATABASE <databasename> [, ...]
 //
-// Location:
+// Destination:
 //    "[scheme]://[host]/[path to backup]?[parameters]"
 //
 // Options:
@@ -2601,6 +2621,7 @@ opt_clear_data:
 //    encryption_passphrase="secret": encrypt backups
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : encrypt backups using KMS
 //    detached: execute backup job asynchronously, without waiting for its completion
+//    incremental_storage: specify a different path to store the incremental backup
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
@@ -2705,6 +2726,10 @@ backup_options:
 | KMS '=' string_or_placeholder_opt_list
   {
     $$.val = &tree.BackupOptions{EncryptionKMSURI: $3.stringOrPlaceholderOptList()}
+  }
+| INCREMENTAL_STORAGE '=' string_or_placeholder_opt_list
+  {
+  $$.val = &tree.BackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
   }
 
 
@@ -13211,6 +13236,7 @@ unreserved_keyword:
 | INCLUDING
 | INCREMENT
 | INCREMENTAL
+| INCREMENTAL_STORAGE
 | INDEXES
 | INHERITS
 | INJECT

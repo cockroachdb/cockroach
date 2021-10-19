@@ -638,7 +638,7 @@ func emitSchedule(
 	}
 
 	redactedBackupNode, err := GetRedactedBackupNode(backupNode, to, incrementalFrom, kmsURIs, "",
-		false /* hasBeenPlanned */)
+		nil, false /* hasBeenPlanned */)
 	if err != nil {
 		return err
 	}
@@ -796,6 +796,9 @@ func makeScheduledBackupEval(
 		}
 	}
 
+	if schedule.BackupOptions.IncrementalStorage != nil {
+		return nil, errors.New("incremental_storage not available yet for scheduled backups")
+	}
 	eval := &scheduledBackupEval{ScheduledBackup: schedule}
 
 	if schedule.ScheduleLabelSpec.Label != nil {
