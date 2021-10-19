@@ -32,28 +32,47 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 	log.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
 		s.SQLStats.GetTotalFingerprintCount(), s.SQLStats.GetTotalFingerprintBytes(), timeutil.Since(s.lastFlushStarted))
 
-	// The flush routine directly logs errors if they are encountered. Therefore,
-	// no error is returned here.
-	_ = s.SQLStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
-		s.doFlush(ctx, func() error {
-			return s.doFlushSingleStmtStats(ctx, statistics)
-		}, "failed to flush statement statistics" /* errMsg */)
+	aggregatedTs := s.computeAggregatedTs()
+	s.lastFlushStarted = s.getTimeNow()
 
-		return nil
-	})
-	_ = s.SQLStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *roachpb.CollectedTransactionStatistics) error {
-		s.doFlush(ctx, func() error {
-			return s.doFlushSingleTxnStats(ctx, statistics)
-		}, "failed to flush transaction statistics" /* errMsg */)
-
-		return nil
-	})
+	s.flushStmtStats(ctx, aggregatedTs)
+	s.flushTxnStats(ctx, aggregatedTs)
 
 	if err := s.SQLStats.Reset(ctx); err != nil {
 		log.Warningf(ctx, "fail to reset in-memory SQL Stats: %s", err)
 	}
+}
 
-	s.lastFlushStarted = s.getTimeNow()
+func (s *PersistedSQLStats) flushStmtStats(ctx context.Context, aggregatedTs time.Time) {
+	// s.doFlush directly logs errors if they are encountered. Therefore,
+	// no error is returned here.
+	_ = s.SQLStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{},
+		func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+			s.doFlush(ctx, func() error {
+				return s.doFlushSingleStmtStats(ctx, statistics, aggregatedTs)
+			}, "failed to flush statement statistics" /* errMsg */)
+
+			return nil
+		})
+
+	if s.cfg.Knobs != nil && s.cfg.Knobs.OnStmtStatsFlushFinished != nil {
+		s.cfg.Knobs.OnStmtStatsFlushFinished()
+	}
+}
+
+func (s *PersistedSQLStats) flushTxnStats(ctx context.Context, aggregatedTs time.Time) {
+	_ = s.SQLStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{},
+		func(ctx context.Context, statistics *roachpb.CollectedTransactionStatistics) error {
+			s.doFlush(ctx, func() error {
+				return s.doFlushSingleTxnStats(ctx, statistics, aggregatedTs)
+			}, "failed to flush transaction statistics" /* errMsg */)
+
+			return nil
+		})
+
+	if s.cfg.Knobs != nil && s.cfg.Knobs.OnTxnStatsFlushFinished != nil {
+		s.cfg.Knobs.OnTxnStatsFlushFinished()
+	}
 }
 
 func (s *PersistedSQLStats) doFlush(ctx context.Context, workFn func() error, errMsg string) {
@@ -74,13 +93,12 @@ func (s *PersistedSQLStats) doFlush(ctx context.Context, workFn func() error, er
 }
 
 func (s *PersistedSQLStats) doFlushSingleTxnStats(
-	ctx context.Context, stats *roachpb.CollectedTransactionStatistics,
+	ctx context.Context, stats *roachpb.CollectedTransactionStatistics, aggregatedTs time.Time,
 ) error {
 	return s.cfg.KvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Explicitly copy the stats variable so the txn closure is retryable.
 		scopedStats := *stats
 
-		aggregatedTs := s.computeAggregatedTs()
 		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.TransactionFingerprintID))
 
 		insertFn := func(ctx context.Context, txn *kv.Txn) (alreadyExists bool, err error) {
@@ -121,13 +139,12 @@ func (s *PersistedSQLStats) doFlushSingleTxnStats(
 }
 
 func (s *PersistedSQLStats) doFlushSingleStmtStats(
-	ctx context.Context, stats *roachpb.CollectedStatementStatistics,
+	ctx context.Context, stats *roachpb.CollectedStatementStatistics, aggregatedTs time.Time,
 ) error {
 	return s.cfg.KvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Explicitly copy the stats so that this closure is retryable.
 		scopedStats := *stats
 
-		aggregatedTs := s.computeAggregatedTs()
 		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(scopedStats.ID))
 		serializedTransactionFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(scopedStats.Key.TransactionFingerprintID))
 		serializedPlanHash := sqlstatsutil.EncodeUint64ToBytes(uint64(dummyPlanHash))
