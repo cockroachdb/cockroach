@@ -76,11 +76,15 @@ const (
 	// storing incremental backups for auto-appendable backups.
 	// It is exported for testing backup inspection tooling.
 	DateBasedIncFolderName = "/20060102/150405.00"
+
 	// DateBasedIntoFolderName is the date format used when creating sub-directories
 	// for storing backups in a collection.
 	// Also exported for testing backup inspection tooling.
 	DateBasedIntoFolderName = "/2006/01/02-150405.00"
-	latestFileName          = "LATEST"
+
+	// latestFileName is the name of a file in the collection which contains the
+	// path of the most recently taken full backup in the backup collection.
+	latestFileName = "LATEST"
 )
 
 // isGZipped detects whether the given bytes represent GZipped data. This check
