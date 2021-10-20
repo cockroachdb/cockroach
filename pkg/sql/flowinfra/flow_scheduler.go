@@ -13,6 +13,7 @@ package flowinfra
 import (
 	"container/list"
 	"context"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -29,10 +30,28 @@ import (
 
 const flowDoneChanSize = 8
 
+var defaultMaxRunningFlows int64
+
+func init() {
+	// We think that it makes sense to scale the default value for
+	// max_running_flows based on how beefy the machines are, so we make it a
+	// multiple of the number of available CPU cores.
+	//
+	// The choice of 128 as the multiple is driven by the old default value of
+	// 500 and is such that if we have 4 CPUs, then we'll get the value of 512,
+	// pretty close to the old default.
+	defaultMaxRunningFlows = 128 * int64(runtime.GOMAXPROCS(0))
+	if defaultMaxRunningFlows < 500 {
+		defaultMaxRunningFlows = 500
+	}
+}
+
+// TODO(yuzefovich): we probably want to remove / disable this limit completely
+// when we enable the admission control.
 var settingMaxRunningFlows = settings.RegisterIntSetting(
 	"sql.distsql.max_running_flows",
 	"maximum number of concurrent flows that can be run on a node",
-	500,
+	defaultMaxRunningFlows,
 ).WithPublic()
 
 // FlowScheduler manages running flows and decides when to queue and when to
