@@ -16,7 +16,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"math/rand"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -7321,7 +7320,7 @@ COMMIT;
 }
 
 // TestDeinterleaveRevert tests that schema changes which fail during an alter
-// primary key to remove an interleave in an unrecoverable way.
+// primary key to remove an interleave successfully reverts.
 func TestDeinterleaveRevert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -7357,23 +7356,13 @@ INSERT INTO child VALUES (1, 1, 1);
 		errCh <- err
 	}()
 
-	const errMsgPat = `relation "child" \(53\): missing interleave back reference to "child"@"primary" from "parent"@"primary"`
-	testutils.SucceedsSoon(t, func() error {
-		got := tdb.QueryStr(t, "SELECT status, error FROM crdb_internal.jobs WHERE description LIKE '%ALTER PRIMARY KEY%'")
-		if len(got) != 1 {
-			return errors.Errorf("waiting for 1 row")
-		}
-		status, gotErr := got[0][0], got[0][1]
-		if status != "failed" {
-			return errors.Errorf("waiting for failed")
-		}
-		 matched, err := regexp.MatchString(errMsgPat, gotErr)
-		 require.NoError(t, err)
-		 if !matched {
-			 return errors.Errorf("expected to match %s, got %s", errMsgPat , gotErr)
-		}
-		return nil
+	const errMsg = `failed to construct index entries during backfill: boom`
+	tdb.CheckQueryResultsRetry(t, `
+SELECT status, error
+  FROM crdb_internal.jobs
+ WHERE job_type = 'SCHEMA CHANGE' AND description LIKE '%ALTER PRIMARY KEY%';
+`, [][]string{
+		{"failed", errMsg},
 	})
-	
-	require.EqualError(t, <-errCh, `pq: failed to construct index entries during backfill: boom`)
+	require.EqualError(t, <-errCh, `pq: `+errMsg)
 }
