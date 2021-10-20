@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -695,7 +696,96 @@ func (e *distSQLSpecExecFactory) ConstructZigzagJoin(
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: zigzag join")
+	planCtx := e.getPlanCtx(cannotDistribute)
+
+	// Maybe someday N will be greater than 2, code it that way.
+	nsides := 2
+	pi := zigzagPlanningInfo{onCond: onCond, reqOrdering: reqOrdering}
+	pi.init(nsides)
+
+	tables := []cat.Table{leftTable, rightTable}
+	indexes := []cat.Index{leftIndex, rightIndex}
+	cols := []exec.TableColumnOrdinalSet{leftCols, rightCols}
+	eqCols := [][]exec.TableColumnOrdinal{leftEqCols, rightEqCols}
+	fixedVals := [][]tree.TypedExpr{leftFixedVals, rightFixedVals}
+	allCols := exec.TableColumnOrdinalSet{}
+
+	numOutputCols := 0
+
+	for s, table := range tables {
+		// RFC: does casting a cat.Table to an optTable ruin the ability to test this code from opttester?  opt_exec_factory
+		// does the same thing, just curious.
+		tdesc := table.(*optTable).desc
+		err := pi.initSide(s, tdesc, indexes[s].(*optIndex).idx, len(eqCols[s]))
+		if err != nil {
+			return nil, err
+		}
+		for j, col := range eqCols[s] {
+			pi.eqCols[s].Columns[j] = uint32(col)
+		}
+		numOutputCols += cols[s].Len()
+		allCols.UnionWith(cols[s])
+	}
+
+	// The fixed values are represented as a Values node with one tuple.
+	for s, vals := range fixedVals {
+		typs := make([]*types.T, len(vals))
+		for t := range typs {
+			col := indexes[s].Column(t)
+			typs[t] = col.DatumType()
+		}
+		valuesSpec, err := e.dsp.createValuesSpecFromTuples(planCtx, [][]tree.TypedExpr{vals}, typs)
+		if err != nil {
+			return nil, err
+		}
+		pi.fixedValues[s] = valuesSpec
+	}
+
+	// The internal schema of the zigzag joiner is:
+	//    <side 1 table columns> ... <side 2 table columns> ...
+	// with only the columns in the specified index populated.
+	//
+	// The schema of the zigzagJoinNode is:
+	//    <side 1 index columns> ... <side 2 index columns> ...
+	// so the planToStreamColMap has to basically map index ordinals
+	// to table ordinals.
+	pi.initOutput(numOutputCols)
+	colOffset := 0
+	i := 0
+
+	// Populate post.OutputColumns (the implicit projection), result types,
+	// and the planToStreamColMap for index columns from all sides.
+	for s, col := range cols {
+		tdesc := tables[s].(*optTable).desc
+		for c, ok := col.Next(0); ok; c, ok = col.Next(c + 1) {
+			column := tdesc.PublicColumns()[c]
+			// RFC: what's going on with visibility?  can't find where its set I think its just
+			// defaulting to the Go default so use that.
+			ord := tableOrdinal(tdesc, column.GetID(), execinfra.ScanVisibilityPublic)
+			pi.outputColumns[i] = uint32(colOffset + ord)
+			pi.outputTypes[i] = column.GetType()
+			pi.planToStreamColMap[i] = i
+			i++
+		}
+
+		colOffset += len(tdesc.PublicColumns())
+	}
+
+	p, err := e.dsp.constructZigzagJoin(planCtx, pi)
+
+	// We don't support different tables currently.
+	table := tables[0]
+	colCfg := makeScanColumnsConfig(table, allCols)
+	// Note that initColsForScan and setting ResultColumns below are equivalent
+	// to what scan.initTable call does in execFactory.ConstructScan.
+	tabDesc := table.(*optTable).desc
+	catCols, err := initColsForScan(tabDesc, colCfg)
+	if err != nil {
+		return nil, err
+	}
+	p.ResultColumns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), catCols)
+
+	return makePlanMaybePhysical(p, nil /* planNodesToClose */), err
 }
 
 func (e *distSQLSpecExecFactory) ConstructLimit(
