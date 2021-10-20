@@ -649,6 +649,13 @@ func DecodeDatum(
 			case 0xc000:
 				// https://github.com/postgres/postgres/blob/ffa4cbd623dd69f9fa99e5e92426928a5782cf1a/src/backend/utils/adt/numeric.c#L169
 				return tree.ParseDDecimal("NaN")
+			case 0xd000:
+				// https://github.com/postgres/postgres/blob/a57d312a7706321d850faa048a562a0c0c01b835/src/backend/utils/adt/numeric.c#L201
+				return tree.ParseDDecimal("Inf")
+
+			case 0xf000:
+				// https://github.com/postgres/postgres/blob/a57d312a7706321d850faa048a562a0c0c01b835/src/backend/utils/adt/numeric.c#L200
+				return tree.ParseDDecimal("-Inf")
 			default:
 				return nil, pgerror.Newf(pgcode.Syntax, "unsupported numeric sign: %d", alloc.pgNum.Sign)
 			}

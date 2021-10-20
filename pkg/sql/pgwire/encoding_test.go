@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -373,17 +372,5 @@ func BenchmarkEncodings(b *testing.B) {
 				}
 			})
 		})
-	}
-}
-
-func TestEncodingErrorCounts(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	buf := newWriteBuffer(metric.NewCounter(metric.Metadata{}))
-	d, _ := tree.ParseDDecimal("Inf")
-	buf.writeBinaryDatum(context.Background(), d, nil, d.ResolvedType())
-	if count := telemetry.GetRawFeatureCounts()["pgwire.#32489.binary_decimal_infinity"]; count != 1 {
-		t.Fatalf("expected 1 encoding error, got %d", count)
 	}
 }

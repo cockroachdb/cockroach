@@ -533,6 +533,12 @@ var mathBuiltins = map[string]builtinDefinition{
 				operand, _ := args[0].(*tree.DDecimal).Float64()
 				b1, _ := args[1].(*tree.DDecimal).Float64()
 				b2, _ := args[2].(*tree.DDecimal).Float64()
+				if math.IsInf(operand, 0) || math.IsInf(b1, 0) || math.IsInf(b2, 0) {
+					return nil, pgerror.New(
+						pgcode.InvalidParameterValue,
+						"operand, lower bound, and upper bound cannot be infinity",
+					)
+				}
 				count := int(tree.MustBeDInt(args[3]))
 				return tree.NewDInt(tree.DInt(widthBucket(operand, b1, b2, count))), nil
 			},
