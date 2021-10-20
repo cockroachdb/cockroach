@@ -952,6 +952,16 @@ func (ts *TestServer) SpanConfigAccessor() interface{} {
 	return ts.Server.node.spanConfigAccessor
 }
 
+// SpanConfigSQLTranslator is part of TestServerInterface.
+func (ts *TestServer) SpanConfigSQLTranslator() interface{} {
+	if ts.sqlServer.spanconfigMgr == nil {
+		panic(
+			"span config manager uninitialized; see EnableSpanConfigs testing knob to use span configs",
+		)
+	}
+	return ts.sqlServer.spanconfigMgr.SQLTranslator
+}
+
 // SQLServer is part of TestServerInterface.
 func (ts *TestServer) SQLServer() interface{} {
 	return ts.PGServer().SQLServer
