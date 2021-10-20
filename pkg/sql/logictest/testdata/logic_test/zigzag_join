@@ -68,6 +68,41 @@ SELECT n,a,b FROM a WHERE a = 4 AND b = 1;
 statement ok
 SELECT n FROM a WHERE b = 1 AND (((a < 1) AND (a > 1)) OR (a >= 2 AND a <= 2))
 
+# Regression test for #71655. Zig-zag joins should only be planned with implicit
+# equality columns that are non-nullable.
+statement ok
+CREATE TABLE t71655 (
+    k INT PRIMARY KEY,
+    a INT,
+    b INT,
+    c INT,
+    d INT NOT NULL,
+    INDEX ac (a, c),
+    INDEX bc (b, c)
+);
+INSERT INTO t71655 VALUES (1, 10, 20, NULL, 11);
+INSERT INTO t71655 VALUES (2, 10, 20, NULL, 12)
+
+# A zig-zag join is not performed here with ac and bc because c is nullable and
+# cannot be an implicit equality column.
+query I rowsort
+SELECT k FROM t71655 WHERE a = 10 AND b = 20
+----
+1
+2
+
+statement ok
+CREATE INDEX ad ON t71655 (a, d);
+CREATE INDEX bd ON t71655 (b, d)
+
+# A zig-zag join is performed here with ad and bd because d is non-nullable and
+# can be an implicit equality column.
+query I rowsort
+SELECT k FROM t71655 WHERE a = 10 AND b = 20
+----
+1
+2
+
 # ------------------------------------------------------------------------------
 # Zigzag join tests on inverted indexes.
 # ------------------------------------------------------------------------------

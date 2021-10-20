@@ -1193,26 +1193,32 @@ func eqColsForZigzag(
 		i++
 		j++
 
+		// If the columns are not equated in their filters, but they have the
+		// same ID, then they are assumed to be implicitly equal. This is only
+		// true if they are non-nullable because NULL != NULL. See issue #71655.
 		if leftColID == rightColID {
-			leftEqPrefix = append(leftEqPrefix, leftColID)
-			rightEqPrefix = append(rightEqPrefix, rightColID)
-			continue
+			col := tab.Column(tabID.ColumnOrdinal(leftColID))
+			if !col.IsNullable() {
+				leftEqPrefix = append(leftEqPrefix, leftColID)
+				rightEqPrefix = append(rightEqPrefix, rightColID)
+				continue
+			}
 		}
+
+		// If both columns are at the same index in their respective EqCols
+		// lists, they were explicitly equated in the filters.
 		leftIdx, leftOk := leftEqCols.Find(leftColID)
 		rightIdx, rightOk := rightEqCols.Find(rightColID)
-		// If both columns are at the same index in their respective
-		// EqCols lists, they were equated in the filters.
 		if leftOk && rightOk && leftIdx == rightIdx {
 			leftEqPrefix = append(leftEqPrefix, leftColID)
 			rightEqPrefix = append(rightEqPrefix, rightColID)
 			continue
-		} else {
-			// We've reached the first non-equal column; the zigzag
-			// joiner does not support non-contiguous/non-prefix equal
-			// columns.
-			break
 		}
 
+		// We've reached the first non-equal column; the zigzag
+		// joiner does not support non-contiguous/non-prefix equal
+		// columns.
+		break
 	}
 
 	return leftEqPrefix, rightEqPrefix
