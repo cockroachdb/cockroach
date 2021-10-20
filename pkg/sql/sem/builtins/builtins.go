@@ -3844,6 +3844,21 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"json_valid": makeBuiltin(
+		jsonProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"string", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(e *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return jsonValidate(e, tree.MustBeDString(args[0])), nil
+			},
+			Info:       "Returns whether the given string is a valid JSON or not",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"crdb_internal.pb_to_json": makeBuiltin(
 		jsonProps(),
 		func() []tree.Overload {
@@ -8334,6 +8349,11 @@ func toJSONObject(ctx *tree.EvalContext, d tree.Datum) (tree.Datum, error) {
 		return nil, err
 	}
 	return tree.NewDJSON(j), nil
+}
+
+func jsonValidate(_ *tree.EvalContext, string tree.DString) *tree.DBool {
+	var js interface{}
+	return tree.MakeDBool(gojson.Unmarshal([]byte(string), &js) == nil)
 }
 
 // padMaybeTruncate truncates the input string to length if the string is
