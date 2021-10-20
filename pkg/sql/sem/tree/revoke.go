@@ -24,9 +24,10 @@ import "github.com/cockroachdb/cockroach/pkg/sql/privilege"
 // Revoke represents a REVOKE statement.
 // PrivilegeList and TargetList are defined in grant.go
 type Revoke struct {
-	Privileges privilege.List
-	Targets    TargetList
-	Grantees   RoleSpecList
+	Privileges     privilege.List
+	Targets        TargetList
+	Grantees       RoleSpecList
+	GrantOptionFor bool
 }
 
 // Format implements the NodeFormatter interface.

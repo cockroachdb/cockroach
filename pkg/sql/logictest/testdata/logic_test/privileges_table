@@ -23,7 +23,7 @@ statement ok
 CREATE USER bar
 
 statement ok
-GRANT ALL ON t TO bar
+GRANT ALL ON t TO bar WITH GRANT OPTION
 
 statement ok
 REVOKE ALL ON t FROM bar
@@ -111,7 +111,7 @@ DROP TABLE t
 user root
 
 statement ok
-GRANT SELECT ON t TO testuser
+GRANT SELECT ON t TO testuser WITH GRANT OPTION
 
 user testuser
 
@@ -161,7 +161,7 @@ DROP TABLE t
 user root
 
 statement ok
-GRANT ALL ON t TO testuser
+GRANT ALL ON t TO testuser WITH GRANT OPTION
 
 statement ok
 REVOKE SELECT ON t FROM testuser
@@ -169,7 +169,7 @@ REVOKE SELECT ON t FROM testuser
 user testuser
 
 statement ok
-GRANT INSERT ON t TO bar
+GRANT INSERT ON t TO bar WITH GRANT OPTION
 
 statement ok
 REVOKE INSERT ON t FROM bar
@@ -214,12 +214,12 @@ statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v int)
 
 statement ok
-GRANT ALL ON t TO testuser
+GRANT ALL ON t TO testuser WITH GRANT OPTION
 
 user testuser
 
 statement ok
-GRANT ALL ON t TO bar
+GRANT ALL ON t TO bar WITH GRANT OPTION
 
 statement ok
 REVOKE ALL ON t FROM bar
@@ -258,7 +258,7 @@ statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v int)
 
 statement ok
-GRANT INSERT ON t TO testuser
+GRANT INSERT ON t TO testuser WITH GRANT OPTION
 
 user testuser
 
@@ -277,7 +277,7 @@ UPSERT INTO t VALUES (1, 2)
 user root
 
 statement ok
-GRANT SELECT ON t TO testuser
+GRANT SELECT ON t TO testuser WITH GRANT OPTION
 
 user testuser
 
@@ -294,7 +294,7 @@ INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v
 user root
 
 statement ok
-GRANT UPDATE ON t TO testuser
+GRANT UPDATE ON t TO testuser WITH GRANT OPTION
 
 user testuser
 
@@ -331,7 +331,7 @@ SHOW CONSTRAINTS FROM t
 user root
 
 statement ok
-GRANT SELECT ON t TO testuser
+GRANT SELECT ON t TO testuser WITH GRANT OPTION
 
 user testuser
 
