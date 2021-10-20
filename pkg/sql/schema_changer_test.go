@@ -16,6 +16,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"math/rand"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -7317,4 +7318,62 @@ COMMIT;
 
 	close(delayNotify)
 	close(proceedBeforeBackfill)
+}
+
+// TestDeinterleaveRevert tests that schema changes which fail during an alter
+// primary key to remove an interleave in an unrecoverable way.
+func TestDeinterleaveRevert(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	const shortInterval = 100 * time.Millisecond
+	defer jobs.TestingSetAdoptAndCancelIntervals(shortInterval, shortInterval)()
+
+	settings := cluster.MakeTestingClusterSettings()
+	sql.InterleavedTablesEnabled.Override(&settings.SV, true)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: settings,
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+					return errors.New("boom")
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `
+CREATE TABLE parent (i INT PRIMARY KEY);
+CREATE TABLE child (i INT, j INT, k INT, PRIMARY KEY (i, j)) INTERLEAVE IN PARENT "parent" (i);
+INSERT INTO parent VALUES (1);
+INSERT INTO child VALUES (1, 1, 1);
+`)
+
+	errCh := make(chan error)
+	go func() {
+		_, err := sqlDB.Exec(`ALTER TABLE child ALTER PRIMARY KEY USING COLUMNS (i, j)`)
+		errCh <- err
+	}()
+
+	const errMsgPat = `relation "child" \(53\): missing interleave back reference to "child"@"primary" from "parent"@"primary"`
+	testutils.SucceedsSoon(t, func() error {
+		got := tdb.QueryStr(t, "SELECT status, error FROM crdb_internal.jobs WHERE description LIKE '%ALTER PRIMARY KEY%'")
+		if len(got) != 1 {
+			return errors.Errorf("waiting for 1 row")
+		}
+		status, gotErr := got[0][0], got[0][1]
+		if status != "failed" {
+			return errors.Errorf("waiting for failed")
+		}
+		 matched, err := regexp.MatchString(errMsgPat, gotErr)
+		 require.NoError(t, err)
+		 if !matched {
+			 return errors.Errorf("expected to match %s, got %s", errMsgPat , gotErr)
+		}
+		return nil
+	})
+	
+	require.EqualError(t, <-errCh, `pq: failed to construct index entries during backfill: boom`)
 }
