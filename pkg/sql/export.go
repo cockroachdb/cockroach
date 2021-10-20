@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"strconv"
 	"strings"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -100,6 +100,8 @@ var featureExportEnabled = settings.RegisterBoolSetting(
 func (ef *execFactory) ConstructExport(
 	input exec.Node, fileName tree.TypedExpr, fileFormat string, options []exec.KVOption,
 ) (exec.Node, error) {
+	fileFormat = strings.ToLower(fileFormat)
+
 	if !featureExportEnabled.Get(&ef.planner.ExecCfg().Settings.SV) {
 		return nil, pgerror.Newf(
 			pgcode.OperatorIntervention,
@@ -120,7 +122,7 @@ func (ef *execFactory) ConstructExport(
 		return nil, errors.Errorf("EXPORT cannot be used inside a transaction")
 	}
 
-	if fileFormat != "CSV" && fileFormat != "PARQUET" {
+	if fileFormat != csvSuffix && fileFormat != parquetSuffix {
 		return nil, errors.Errorf("unsupported export format: %q", fileFormat)
 	}
 
@@ -154,49 +156,28 @@ func (ef *execFactory) ConstructExport(
 		return nil, err
 	}
 
-	var exportFilePattern string
-
-	// evaluate csvOpts
-	var csvOpts *roachpb.CSVOptions
-	if err := func () error {
-		if fileFormat == "CSV" {
-			csvOpts = &roachpb.CSVOptions{}
-		} else{
-			return nil
-		}
+	var (
+		exportFilePattern string
+		csvOpts           *roachpb.CSVOptions
+		parquetOpts       *roachpb.ParquetOptions
+	)
+	switch fileFormat {
+	case csvSuffix:
+		csvOpts = &roachpb.CSVOptions{}
 		if override, ok := optVals[exportOptionDelimiter]; ok {
 			csvOpts.Comma, err = util.GetSingleRune(override)
 			if err != nil {
-				return pgerror.New(pgcode.InvalidParameterValue, "invalid delimiter")
+				return nil, pgerror.New(pgcode.InvalidParameterValue, "invalid delimiter")
 			}
 		}
-
 		if override, ok := optVals[exportOptionNullAs]; ok {
 			csvOpts.NullEncoding = &override
 		}
-		exportFilePattern = exportFilePatternPart+"."+csvSuffix
+		exportFilePattern = exportFilePatternPart + "." + csvSuffix
 
-		return nil
-	}(); err != nil {
-		return nil, err
-	}
-
-	// evaluate parquetOpts
-	var parquetOpts *roachpb.ParquetOptions
-	if err := func () error {
-		if fileFormat == "PARQUET" {
-			parquetOpts = &roachpb.ParquetOptions{}
-		} else {
-			return nil
-		}
-		if override, ok := optVals[exportOptionNullAs]; ok {
-			parquetOpts.NullEncoding = &override
-		}
-
+	case parquetSuffix:
+		parquetOpts = &roachpb.ParquetOptions{}
 		exportFilePattern = exportFilePatternPart + "." + parquetSuffix
-		return nil
-	}(); err != nil {
-		return nil, err
 	}
 
 	chunkRows := exportChunkRowsDefault

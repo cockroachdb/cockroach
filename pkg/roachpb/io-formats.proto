@@ -65,8 +65,6 @@ message CSVOptions {
 }
 
 message ParquetOptions {
-  // null_encoding, if not nil, is the string which identifies a NULL. Can be the empty string.
-  optional string null_encoding = 1 [(gogoproto.nullable) = true];
 }
 
 // MySQLOutfileOptions describe the format of mysql's outfile.
