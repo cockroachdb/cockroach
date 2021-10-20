@@ -17,7 +17,7 @@ import (
 
 // AlterDefaultPrivileges represents an ALTER DEFAULT PRIVILEGES statement.
 type AlterDefaultPrivileges struct {
-	Roles NameList
+	Roles RoleSpecList
 	// True if `ALTER DEFAULT PRIVILEGES FOR ALL ROLES` is executed.
 	ForAllRoles bool
 	// If Schema is not specified, ALTER DEFAULT PRIVILEGES is being
@@ -118,7 +118,7 @@ func (t AlterDefaultPrivilegesTargetObject) String() string {
 type AbbreviatedGrant struct {
 	Privileges      privilege.List
 	Target          AlterDefaultPrivilegesTargetObject
-	Grantees        NameList
+	Grantees        RoleSpecList
 	WithGrantOption bool
 }
 
@@ -149,7 +149,7 @@ func (n *AbbreviatedGrant) Format(ctx *FmtCtx) {
 type AbbreviatedRevoke struct {
 	Privileges     privilege.List
 	Target         AlterDefaultPrivilegesTargetObject
-	Grantees       NameList
+	Grantees       RoleSpecList
 	GrantOptionFor bool
 }
 

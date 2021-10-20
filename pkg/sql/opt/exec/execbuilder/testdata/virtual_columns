@@ -30,7 +30,7 @@ t  CREATE TABLE public.t (
    a INT8 NOT NULL,
    b INT8 NULL,
    v INT8 NULL AS (a + b) VIRTUAL,
-   CONSTRAINT "primary" PRIMARY KEY (a ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (a ASC),
    FAMILY fam_0_a (a),
    FAMILY fam_1_b (b)
 )
@@ -44,7 +44,7 @@ t_idx  CREATE TABLE public.t_idx (
        c INT8 NULL,
        v INT8 NULL AS (a + b) VIRTUAL,
        w INT8 NULL AS (c + 1:::INT8) VIRTUAL,
-       CONSTRAINT "primary" PRIMARY KEY (a ASC),
+       CONSTRAINT t_idx_pkey PRIMARY KEY (a ASC),
        INDEX t_idx_v_idx (v ASC),
        UNIQUE INDEX t_idx_w_key (w ASC),
        FAMILY fam_0_a (a),
@@ -66,7 +66,7 @@ TABLE t
  ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_a (a)
  ├── FAMILY fam_1_b (b)
- └── PRIMARY INDEX primary
+ └── PRIMARY INDEX t_pkey
       └── a int not null
 project
  ├── scan t
@@ -92,7 +92,7 @@ vectorized: true
 └── • scan
       columns: (a, b)
       estimated row count: 1,000 (missing stats)
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
 
 query T
@@ -135,7 +135,7 @@ vectorized: true
 └── • index join
     │ columns: (a, b)
     │ estimated row count: 333 (missing stats)
-    │ table: t_idx@primary
+    │ table: t_idx@t_idx_pkey
     │ key columns: a
     │
     └── • scan
@@ -174,7 +174,7 @@ vectorized: true
 • lookup join (inner)
 │ columns: (a, b, v, x)
 │ estimated row count: 3 (missing stats)
-│ table: t_idx@primary
+│ table: t_idx@t_idx_pkey
 │ equality: (a) = (a)
 │ equality cols are key
 │
@@ -287,7 +287,7 @@ vectorized: true
         └── • scan
               columns: (a, b)
               estimated row count: 333 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: /2-
 
 query T
@@ -314,7 +314,7 @@ vectorized: true
         └── • scan
               columns: (a, b)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
 
 query T
@@ -339,7 +339,7 @@ vectorized: true
     └── • scan
           columns: (a, b, c)
           estimated row count: 333 (missing stats)
-          table: t_idx@primary
+          table: t_idx@t_idx_pkey
           spans: /2-
 
 query T
@@ -368,7 +368,7 @@ vectorized: true
         └── • scan
               columns: (a, b, c)
               estimated row count: 333 (missing stats)
-              table: t_idx@primary
+              table: t_idx@t_idx_pkey
               spans: /2-
 
 query T
@@ -393,7 +393,7 @@ vectorized: true
     └── • index join
         │ columns: (a, b, c)
         │ estimated row count: 333 (missing stats)
-        │ table: t_idx@primary
+        │ table: t_idx@t_idx_pkey
         │ key columns: a
         │
         └── • scan
@@ -424,7 +424,7 @@ vectorized: true
     └── • index join
         │ columns: (a, b, c)
         │ estimated row count: 333 (missing stats)
-        │ table: t_idx@primary
+        │ table: t_idx@t_idx_pkey
         │ key columns: a
         │
         └── • scan
@@ -468,7 +468,7 @@ vectorized: true
         └── • scan
               columns: (a, b)
               estimated row count: 1,000 (missing stats)
-              table: t@primary
+              table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
 
@@ -510,7 +510,7 @@ vectorized: true
             └── • scan
                   columns: (a, b)
                   estimated row count: 1,000 (missing stats)
-                  table: t@primary
+                  table: t@t_pkey
                   spans: FULL SCAN
 
 query T
@@ -550,7 +550,7 @@ vectorized: true
         └── • scan
               columns: (a, b, c)
               estimated row count: 1,000 (missing stats)
-              table: t_idx@primary
+              table: t_idx@t_idx_pkey
               spans: FULL SCAN
               locking strength: for update
 
@@ -593,7 +593,7 @@ vectorized: true
             └── • scan
                   columns: (a, b, c)
                   estimated row count: 1,000 (missing stats)
-                  table: t_idx@primary
+                  table: t_idx@t_idx_pkey
                   spans: FULL SCAN
                   locking strength: for update
 
@@ -636,7 +636,7 @@ vectorized: true
             └── • index join
                 │ columns: (a, b, c)
                 │ estimated row count: 333 (missing stats)
-                │ table: t_idx@primary
+                │ table: t_idx@t_idx_pkey
                 │ key columns: a
                 │
                 └── • scan
@@ -671,7 +671,7 @@ vectorized: true
     └── • scan
           columns: (a, c)
           estimated row count: 1 (missing stats)
-          table: t_idx@primary
+          table: t_idx@t_idx_pkey
           spans: /2/0 /2/2/1
           locking strength: for update
 
@@ -712,7 +712,7 @@ vectorized: true
         └── • scan
               columns: (a, b, c)
               estimated row count: 1,000 (missing stats)
-              table: t_idx@primary
+              table: t_idx@t_idx_pkey
               spans: FULL SCAN
               locking strength: for update
 
@@ -755,7 +755,7 @@ vectorized: true
             └── • scan
                   columns: (a, b, c)
                   estimated row count: 1,000 (missing stats)
-                  table: t_idx@primary
+                  table: t_idx@t_idx_pkey
                   spans: FULL SCAN
                   locking strength: for update
 
@@ -810,12 +810,12 @@ vectorized: true
     │ estimated row count: 0 (missing stats)
     │ into: t(a, b, v)
     │ auto commit
-    │ arbiter indexes: primary
+    │ arbiter indexes: t_pkey
     │
     └── • lookup join (anti)
         │ columns: (column1, column2, v_comp)
         │ estimated row count: 0 (missing stats)
-        │ table: t@primary
+        │ table: t@t_pkey
         │ equality: (column1) = (a)
         │ equality cols are key
         │
@@ -845,7 +845,7 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: t(a, b, v)
 │ auto commit
-│ arbiter indexes: primary
+│ arbiter indexes: t_pkey
 │
 └── • project
     │ columns: (column1, column2, v_comp, a, b, v, upsert_b, upsert_v, a)
@@ -875,7 +875,7 @@ vectorized: true
             └── • lookup join (left outer)
                 │ columns: (v_comp, column1, column2, a, b)
                 │ estimated row count: 3 (missing stats)
-                │ table: t@primary
+                │ table: t@t_pkey
                 │ equality: (column1) = (a)
                 │ equality cols are key
                 │ locking strength: for update
@@ -908,7 +908,7 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: t(a, b, v)
 │ auto commit
-│ arbiter indexes: primary
+│ arbiter indexes: t_pkey
 │
 └── • project
     │ columns: (column1, column2, v_comp, a, b, v, upsert_b, upsert_v, a)
@@ -938,7 +938,7 @@ vectorized: true
             └── • lookup join (left outer)
                 │ columns: (v_comp, column1, column2, a, b)
                 │ estimated row count: 3 (missing stats)
-                │ table: t@primary
+                │ table: t@t_pkey
                 │ equality: (column1) = (a)
                 │ equality cols are key
                 │ locking strength: for update
@@ -971,7 +971,7 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: t_idx(a, b, c, v, w)
 │ auto commit
-│ arbiter indexes: primary
+│ arbiter indexes: t_idx_pkey
 │
 └── • project
     │ columns: (column1, column2, column3, v_comp, w_comp, a, b, c, v, w, column2, column3, v_comp, w_comp, a)
@@ -993,7 +993,7 @@ vectorized: true
         └── • lookup join (left outer)
             │ columns: (v_comp, w_comp, column1, column2, column3, a, b, c)
             │ estimated row count: 4 (missing stats)
-            │ table: t_idx@primary
+            │ table: t_idx@t_idx_pkey
             │ equality: (column1) = (a)
             │ equality cols are key
             │ locking strength: for update
@@ -1034,7 +1034,7 @@ vectorized: true
 │ estimated row count: 2 (missing stats)
 │ into: t_idx(a, b, c, v, w)
 │ auto commit
-│ arbiter indexes: primary
+│ arbiter indexes: t_idx_pkey
 │
 └── • project
     │ columns: (column1, column2, column3, v_comp, w_comp, a, b, c, v, w, column2, column3, v_comp, w_comp, a)
@@ -1071,7 +1071,7 @@ vectorized: true
             └── • lookup join (left outer)
                 │ columns: (v_comp, w_comp, column1, column2, column3, a, b, c)
                 │ estimated row count: 2 (missing stats)
-                │ table: t_idx@primary
+                │ table: t_idx@t_idx_pkey
                 │ equality: (column1) = (a)
                 │ equality cols are key
                 │ locking strength: for update
@@ -1110,7 +1110,7 @@ vectorized: true
     │ estimated row count: 0 (missing stats)
     │ into: t_idx(a, b, c, v, w)
     │ auto commit
-    │ arbiter indexes: primary, t_idx_w_key
+    │ arbiter indexes: t_idx_pkey, t_idx_w_key
     │
     └── • distinct
         │ columns: (column1, column2, column3, v_comp, w_comp)
@@ -1121,7 +1121,7 @@ vectorized: true
         └── • lookup join (anti)
             │ columns: (v_comp, w_comp, column1, column2, column3)
             │ estimated row count: 0 (missing stats)
-            │ table: t_idx@primary
+            │ table: t_idx@t_idx_pkey
             │ equality: (column1) = (a)
             │ equality cols are key
             │
@@ -1138,7 +1138,7 @@ vectorized: true
                 │   └── • scan
                 │         columns: (c)
                 │         estimated row count: 1,000 (missing stats)
-                │         table: t_idx@primary
+                │         table: t_idx@t_idx_pkey
                 │         spans: FULL SCAN
                 │
                 └── • render
@@ -1174,7 +1174,7 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: t_idx(a, b, c, v, w)
 │ auto commit
-│ arbiter indexes: primary
+│ arbiter indexes: t_idx_pkey
 │
 └── • project
     │ columns: (column1, column2, column3, v_comp, w_comp, a, c, w, upsert_c, upsert_w, a)
@@ -1208,7 +1208,7 @@ vectorized: true
             └── • lookup join (left outer)
                 │ columns: (v_comp, w_comp, column1, column2, column3, a, c)
                 │ estimated row count: 3 (missing stats)
-                │ table: t_idx@primary
+                │ table: t_idx@t_idx_pkey
                 │ equality: (column1) = (a)
                 │ equality cols are key
                 │ locking strength: for update
@@ -1246,7 +1246,7 @@ vectorized: true
 │ estimated row count: 3 (missing stats)
 │ into: t_idx(a, b, c, v, w)
 │ auto commit
-│ arbiter indexes: primary
+│ arbiter indexes: t_idx_pkey
 │
 └── • project
     │ columns: (column1, column2, column3, v_comp, w_comp, a, b, c, v, w, upsert_c, upsert_w, a)
@@ -1287,7 +1287,7 @@ vectorized: true
             └── • lookup join (left outer)
                 │ columns: (v_comp, w_comp, column1, column2, column3, a, b, c)
                 │ estimated row count: 3 (missing stats)
-                │ table: t_idx@primary
+                │ table: t_idx@t_idx_pkey
                 │ equality: (column1) = (a)
                 │ equality cols are key
                 │ locking strength: for update
@@ -1365,7 +1365,7 @@ vectorized: true
             │   └── • scan
             │         columns: (a, b, c)
             │         estimated row count: 1,000 (missing stats)
-            │         table: t_idx@primary
+            │         table: t_idx@t_idx_pkey
             │         spans: FULL SCAN
             │
             └── • distinct
@@ -1512,7 +1512,7 @@ vectorized: true
 • render
 │
 └── • index join
-    │ table: t65343@primary
+    │ table: t65343@t65343_pkey
     │
     └── • scan
           missing stats
@@ -1528,7 +1528,7 @@ vectorized: true
 • render
 │
 └── • index join
-    │ table: t65343@primary
+    │ table: t65343@t65343_pkey
     │
     └── • scan
           missing stats
@@ -1544,7 +1544,7 @@ vectorized: true
 • render
 │
 └── • index join
-    │ table: t65343@primary
+    │ table: t65343@t65343_pkey
     │
     └── • scan
           missing stats
@@ -1560,7 +1560,7 @@ vectorized: true
 • render
 │
 └── • index join
-    │ table: t65343@primary
+    │ table: t65343@t65343_pkey
     │
     └── • scan
           missing stats

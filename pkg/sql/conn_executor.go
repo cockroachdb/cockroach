@@ -40,8 +40,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -877,7 +879,7 @@ func (s *Server) newConnExecutorWithTxn(
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
 		// sanity, set read only on the session.
-		ex.dataMutatorIterator.applyForEachMutator(func(m sessionDataMutator) {
+		ex.dataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
 			m.SetReadOnly(true)
 		})
 	}
@@ -2302,8 +2304,11 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 
 	retriable := errIsRetriable(err)
 	if retriable {
-		rc, canAutoRetry := ex.getRewindTxnCapability()
-
+		var rc rewindCapability
+		var canAutoRetry bool
+		if ex.implicitTxn() || !ex.sessionData().InjectRetryErrorsEnabled {
+			rc, canAutoRetry = ex.getRewindTxnCapability()
+		}
 		if canAutoRetry {
 			ex.extraTxnState.autoRetryReason = err
 		}
@@ -2455,7 +2460,6 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SQLStatsController:     ex.server.sqlStatsController,
 			CompactEngineSpan:      ex.server.cfg.CompactEngineSpanFunc,
 		},
-		SessionMutatorIterator: ex.dataMutatorIterator,
 		VirtualSchemas:         ex.server.cfg.VirtualSchemas,
 		Tracing:                &ex.sessionTracing,
 		NodesStatusServer:      ex.server.cfg.NodesStatusServer,
@@ -2920,7 +2924,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	)
 	after, err := runNewSchemaChanger(
 		ctx,
-		scplan.PreCommitPhase,
+		scop.PreCommitPhase,
 		ex.extraTxnState.schemaChangerState.state,
 		executor,
 		scs.stmts,
@@ -2943,7 +2947,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		states[i] = scs.state[i].Status
 		// Depending on the element type either a single descriptor ID
 		// will exist or multiple (i.e. foreign keys).
-		if id := scpb.GetDescID(scs.state[i].Element()); id != descpb.InvalidID {
+		if id := screl.GetDescID(scs.state[i].Element()); id != descpb.InvalidID {
 			descIDSet.Add(id)
 		}
 	}
@@ -2975,7 +2979,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 
 func runNewSchemaChanger(
 	ctx context.Context,
-	phase scplan.Phase,
+	phase scop.Phase,
 	state scpb.State,
 	executor *scexec.Executor,
 	stmts []string,

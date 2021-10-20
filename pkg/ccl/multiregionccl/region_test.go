@@ -245,7 +245,7 @@ func TestRegionAddDropEnclosingRegionalByRowOps(t *testing.T) {
 		{
 			name:            "create-rbr-table",
 			op:              `DROP TABLE IF EXISTS db.rbr; CREATE TABLE db.rbr() LOCALITY REGIONAL BY ROW`,
-			expectedIndexes: []string{"rbr@primary"},
+			expectedIndexes: []string{"rbr@rbr_pkey"},
 		},
 	}
 
@@ -982,7 +982,7 @@ INSERT INTO db.rbr VALUES (1,1),(2,2),(3,3);
 						sqlDBRestore,
 						"db",
 						"rbr",
-						[]string{"rbr@primary"},
+						[]string{"rbr@rbr_pkey"},
 					)
 				})
 			})

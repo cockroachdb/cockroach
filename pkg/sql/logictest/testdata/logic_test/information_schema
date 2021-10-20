@@ -1904,7 +1904,7 @@ constraint_catalog  constraint_schema  constraint_name           table_catalog  
 constraint_db       public             3753077756_62_1_not_null  constraint_db  public        t1          CHECK            NO             NO
 constraint_db       public             c2                        constraint_db  public        t1          CHECK            NO             NO
 constraint_db       public             check_a                   constraint_db  public        t1          CHECK            NO             NO
-constraint_db       public             primary                   constraint_db  public        t1          PRIMARY KEY      NO             NO
+constraint_db       public             t1_pkey                   constraint_db  public        t1          PRIMARY KEY      NO             NO
 constraint_db       public             t1_a_key                  constraint_db  public        t1          UNIQUE           NO             NO
 constraint_db       public             3753077756_63_2_not_null  constraint_db  public        t2          CHECK            NO             NO
 constraint_db       public             fk                        constraint_db  public        t2          FOREIGN KEY      NO             NO
@@ -1930,7 +1930,7 @@ constraint_db  public        t1          a            constraint_db       public
 constraint_db  public        t1          a            constraint_db       public             check_a
 constraint_db  public        t1          a            constraint_db       public             fk
 constraint_db  public        t1          a            constraint_db       public             t1_a_key
-constraint_db  public        t1          p            constraint_db       public             primary
+constraint_db  public        t1          p            constraint_db       public             t1_pkey
 
 # Query issued by jOOQ in PostgresDatabase.loadCheckConstraints.
 query TTTT colnames
@@ -2367,7 +2367,7 @@ char_len    dc           1                         4
 char_len    ec           12                        48
 char_len    dv           NULL                      NULL
 char_len    ev           12                        48
-char_len    dq           NULL                      NULL
+char_len    dq           1                         4
 char_len    f            NULL                      NULL
 char_len    g            1                         NULL
 char_len    h            12                        NULL
@@ -2538,10 +2538,10 @@ SELECT * FROM information_schema.key_column_usage WHERE constraint_schema = 'pub
 constraint_catalog  constraint_schema  constraint_name  table_catalog      table_schema  table_name  column_name  ordinal_position  position_in_unique_constraint
 constraint_column   public             index_key        constraint_column  public        t1          b            1                 NULL
 constraint_column   public             index_key        constraint_column  public        t1          c            2                 NULL
-constraint_column   public             primary          constraint_column  public        t1          p            1                 NULL
 constraint_column   public             t1_a_key         constraint_column  public        t1          a            1                 NULL
+constraint_column   public             t1_pkey          constraint_column  public        t1          p            1                 NULL
 constraint_column   public             fk               constraint_column  public        t2          t1_id        1                 1
-constraint_column   public             primary          constraint_column  public        t2          t1_id        1                 NULL
+constraint_column   public             t2_pkey          constraint_column  public        t2          t1_id        1                 NULL
 constraint_column   public             fk2              constraint_column  public        t3          a            1                 1
 constraint_column   public             fk2              constraint_column  public        t3          b            2                 2
 constraint_column   public             unique_a         constraint_column  public        t4          a            1                 NULL
@@ -2549,7 +2549,7 @@ constraint_column   public             unique_b_c       constraint_column  publi
 constraint_column   public             unique_b_c       constraint_column  public        t4          c            2                 NULL
 constraint_column   public             fk3              constraint_column  public        t5          b            1                 1
 constraint_column   public             fk3              constraint_column  public        t5          c            2                 2
-constraint_column   public             fk_a_ref_t4      constraint_column  public        t5          a            1                 1
+constraint_column   public             t5_a_fkey        constraint_column  public        t5          a            1                 1
 
 query TTTTTTTTTTT colnames
 SELECT * FROM information_schema.referential_constraints WHERE constraint_schema = 'public' ORDER BY TABLE_NAME, CONSTRAINT_NAME
@@ -2558,7 +2558,7 @@ constraint_catalog  constraint_schema  constraint_name  unique_constraint_catalo
 constraint_column   public             fk               constraint_column          public                    t1_a_key                NONE          NO ACTION    RESTRICT     t2          t1
 constraint_column   public             fk2              constraint_column          public                    index_key               NONE          CASCADE      NO ACTION    t3          t1
 constraint_column   public             fk3              constraint_column          public                    unique_b_c              FULL          RESTRICT     NO ACTION    t5          t4
-constraint_column   public             fk_a_ref_t4      constraint_column          public                    unique_a                NONE          NO ACTION    CASCADE      t5          t4
+constraint_column   public             t5_a_fkey        constraint_column          public                    unique_a                NONE          NO ACTION    CASCADE      t5          t4
 
 statement ok
 DROP DATABASE constraint_column CASCADE
@@ -3942,16 +3942,16 @@ CREATE TABLE other_db.teststatics(id INT PRIMARY KEY, c INT, d INT, e STRING, IN
 query TTTTTTITIITTT colnames
 SELECT * FROM other_db.information_schema.statistics WHERE table_schema='public' AND table_name='teststatics' ORDER BY INDEX_SCHEMA,INDEX_NAME,SEQ_IN_INDEX
 ----
-table_catalog  table_schema  table_name   non_unique  index_schema  index_name  seq_in_index  column_name  COLLATION  cardinality  direction  storing  implicit
-other_db       public        teststatics  YES         public        idx_c       1             c            NULL       NULL         ASC        NO       NO
-other_db       public        teststatics  YES         public        idx_c       2             id           NULL       NULL         ASC        NO       YES
-other_db       public        teststatics  NO          public        idx_cd      1             c            NULL       NULL         ASC        NO       NO
-other_db       public        teststatics  NO          public        idx_cd      2             d            NULL       NULL         ASC        NO       NO
-other_db       public        teststatics  NO          public        idx_cd      3             id           NULL       NULL         ASC        NO       YES
-other_db       public        teststatics  NO          public        primary     1             id           NULL       NULL         ASC        NO       NO
-other_db       public        teststatics  NO          public        primary     2             c            NULL       NULL         N/A        YES      NO
-other_db       public        teststatics  NO          public        primary     3             d            NULL       NULL         N/A        YES      NO
-other_db       public        teststatics  NO          public        primary     4             e            NULL       NULL         N/A        YES      NO
+table_catalog  table_schema  table_name   non_unique  index_schema  index_name        seq_in_index  column_name  COLLATION  cardinality  direction  storing  implicit
+other_db       public        teststatics  YES         public        idx_c             1             c            NULL       NULL         ASC        NO       NO
+other_db       public        teststatics  YES         public        idx_c             2             id           NULL       NULL         ASC        NO       YES
+other_db       public        teststatics  NO          public        idx_cd            1             c            NULL       NULL         ASC        NO       NO
+other_db       public        teststatics  NO          public        idx_cd            2             d            NULL       NULL         ASC        NO       NO
+other_db       public        teststatics  NO          public        idx_cd            3             id           NULL       NULL         ASC        NO       YES
+other_db       public        teststatics  NO          public        teststatics_pkey  1             id           NULL       NULL         ASC        NO       NO
+other_db       public        teststatics  NO          public        teststatics_pkey  2             c            NULL       NULL         N/A        YES      NO
+other_db       public        teststatics  NO          public        teststatics_pkey  3             d            NULL       NULL         N/A        YES      NO
+other_db       public        teststatics  NO          public        teststatics_pkey  4             e            NULL       NULL         N/A        YES      NO
 
 # Verify information_schema.views
 statement ok
@@ -4312,8 +4312,8 @@ query TTTT
 SELECT constraint_name, table_name, referenced_table_name, match_option
   FROM information_schema.referential_constraints
 ----
-fk_a_ref_v  w  v  FULL
-fk_c_ref_v  w  v  NONE
+w_a_b_fkey  w  v  FULL
+w_c_d_fkey  w  v  NONE
 
 statement ok
 SET database = test
@@ -4649,6 +4649,7 @@ force_savepoint_restart                                off
 foreign_key_cascades_limit                             10000
 idle_in_session_timeout                                0
 idle_in_transaction_session_timeout                    0
+inject_retry_errors_enabled                            off
 integer_datetimes                                      on
 intervalstyle                                          postgres
 intervalstyle_enabled                                  off
@@ -4660,6 +4661,7 @@ lock_timeout                                           0
 max_identifier_length                                  128
 max_index_keys                                         32
 node_id                                                1
+null_ordered_last                                      off
 on_update_rehome_row_enabled                           on
 optimizer                                              on
 optimizer_use_histograms                               on

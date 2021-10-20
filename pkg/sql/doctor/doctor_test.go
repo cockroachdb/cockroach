@@ -47,7 +47,7 @@ var validTableDesc = &descpb.Descriptor{
 			},
 			NextFamilyID: 1,
 			PrimaryIndex: descpb.IndexDescriptor{
-				Name:                tabledesc.PrimaryKeyIndexName,
+				Name:                tabledesc.PrimaryKeyIndexName("t"),
 				ID:                  1,
 				Unique:              true,
 				KeyColumnNames:      []string{"col"},

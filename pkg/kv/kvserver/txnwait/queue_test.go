@@ -180,13 +180,64 @@ func makeConfig(s kv.SenderFunc, stopper *stop.Stopper) Config {
 	return cfg
 }
 
+// TestMaybeWaitForPushWithContextCancellation adds a new waiting push to the
+// queue and cancels its context. It then verifies that the push was cleaned up
+// and that this was properly reflected in the metrics.
+func TestMaybeWaitForPushWithContextCancellation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	var mockSender kv.SenderFunc
+	cfg := makeConfig(func(
+		ctx context.Context, ba roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, *roachpb.Error) {
+		return mockSender(ctx, ba)
+	}, stopper)
+	q := NewQueue(cfg)
+	q.Enable(1 /* leaseSeq */)
+
+	// Enqueue pushee transaction in the queue.
+	txn := roachpb.MakeTransaction("test", nil, 0, cfg.Clock.Now(), 0)
+	q.EnqueueTxn(&txn)
+
+	// Mock out responses to any QueryTxn requests.
+	mockSender = func(
+		ctx context.Context, ba roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, *roachpb.Error) {
+		br := ba.CreateReply()
+		resp := br.Responses[0].GetInner().(*roachpb.QueryTxnResponse)
+		resp.QueriedTxn = txn
+		return br, nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	waitingRes := make(chan *roachpb.Error)
+	go func() {
+		req := roachpb.PushTxnRequest{PusheeTxn: txn.TxnMeta, PushType: roachpb.PUSH_ABORT}
+		_, err := q.MaybeWaitForPush(ctx, &req)
+		waitingRes <- err
+	}()
+
+	cancel()
+	pErr := <-waitingRes
+	require.NotNil(t, pErr)
+	require.Regexp(t, context.Canceled.Error(), pErr)
+	require.Equal(t, 0, q.mu.txns[txn.ID].waitingPushes.Len())
+
+	m := cfg.Metrics
+	require.Equal(t, int64(1), m.PusheeWaiting.Value())
+	require.Equal(t, int64(0), m.PusherWaiting.Value())
+	require.Equal(t, int64(0), m.QueryWaiting.Value())
+	require.Equal(t, int64(0), m.PusherSlow.Value())
+}
+
 // TestMaybeWaitForQueryWithContextCancellation adds a new waiting query to the
-// queue and cancels its context. It then verifies that the query was cleaned
-// up. Regression test against #28849, before which the waiting query would
-// leak.
+// queue and cancels its context. It then verifies that the query was cleaned up
+// and that this was properly reflected in the metrics. Regression test against
+// #28849, before which the waiting query would leak.
 func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx, cancel := context.WithCancel(context.Background())
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -194,6 +245,7 @@ func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 	q := NewQueue(cfg)
 	q.Enable(1 /* leaseSeq */)
 
+	ctx, cancel := context.WithCancel(context.Background())
 	waitingRes := make(chan *roachpb.Error)
 	go func() {
 		req := &roachpb.QueryTxnRequest{WaitForUpdate: true}
@@ -201,22 +253,16 @@ func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 	}()
 
 	cancel()
-	if pErr := <-waitingRes; !testutils.IsPError(pErr, "context canceled") {
-		t.Errorf("unexpected error %v", pErr)
-	}
-	if len(q.mu.queries) != 0 {
-		t.Errorf("expected no waiting queries, found %v", q.mu.queries)
-	}
+	pErr := <-waitingRes
+	require.NotNil(t, pErr)
+	require.Regexp(t, context.Canceled.Error(), pErr)
+	require.Equal(t, 0, len(q.mu.queries))
 
-	metrics := cfg.Metrics
-	allMetricsAreZero := metrics.PusheeWaiting.Value() == 0 &&
-		metrics.PusherWaiting.Value() == 0 &&
-		metrics.QueryWaiting.Value() == 0 &&
-		metrics.PusherSlow.Value() == 0
-
-	if !allMetricsAreZero {
-		t.Errorf("expected all metric gauges to be zero, got some that aren't")
-	}
+	m := cfg.Metrics
+	require.Equal(t, int64(0), m.PusheeWaiting.Value())
+	require.Equal(t, int64(0), m.PusherWaiting.Value())
+	require.Equal(t, int64(0), m.QueryWaiting.Value())
+	require.Equal(t, int64(0), m.PusherSlow.Value())
 }
 
 // TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn tests that if any

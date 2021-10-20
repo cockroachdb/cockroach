@@ -77,7 +77,7 @@ func (p *planner) alterDefaultPrivileges(
 }
 
 func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
-	targetRoles, err := n.n.Roles.ToSQLUsernames()
+	targetRoles, err := n.n.Roles.ToSQLUsernames(params.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return err
 	}
@@ -99,13 +99,9 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		objectType = n.n.Revoke.Target
 	}
 
-	granteeSQLUsernames := make([]security.SQLUsername, len(grantees))
-	for i, grantee := range grantees {
-		user, err := security.MakeSQLUsernameFromUserInput(string(grantee), security.UsernameValidation)
-		if err != nil {
-			return err
-		}
-		granteeSQLUsernames[i] = user
+	granteeSQLUsernames, err := grantees.ToSQLUsernames(params.p.SessionData(), security.UsernameValidation)
+	if err != nil {
+		return err
 	}
 
 	if err := params.p.validateRoles(params.ctx, granteeSQLUsernames, true /* isPublicValid */); err != nil {
@@ -162,7 +158,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	}
 
 	var events []eventLogEntry
-	granteeSQLUsernames, err = grantees.ToSQLUsernames()
+	granteeSQLUsernames, err = grantees.ToSQLUsernames(params.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return err
 	}

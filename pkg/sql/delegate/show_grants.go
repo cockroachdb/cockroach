@@ -228,8 +228,12 @@ FROM "".information_schema.type_privileges`
 
 	if n.Grantees != nil {
 		params = params[:0]
-		for _, grantee := range n.Grantees.ToStrings() {
-			params = append(params, lexbase.EscapeSQLString(grantee))
+		grantees, err := n.Grantees.ToSQLUsernames(d.evalCtx.SessionData(), security.UsernameValidation)
+		if err != nil {
+			return nil, err
+		}
+		for _, grantee := range grantees {
+			params = append(params, lexbase.EscapeSQLString(grantee.Normalized()))
 		}
 		fmt.Fprintf(&cond, ` AND grantee IN (%s)`, strings.Join(params, ","))
 	}
@@ -239,7 +243,8 @@ FROM "".information_schema.type_privileges`
 
 	// Terminate on invalid users.
 	for _, p := range n.Grantees {
-		user, err := security.MakeSQLUsernameFromUserInput(string(p), security.UsernameValidation)
+
+		user, err := p.ToSQLUsername(d.evalCtx.SessionData(), security.UsernameValidation)
 		if err != nil {
 			return nil, err
 		}

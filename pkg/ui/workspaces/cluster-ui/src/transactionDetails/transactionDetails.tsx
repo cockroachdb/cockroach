@@ -109,7 +109,6 @@ export class TransactionDetails extends React.Component<
       transactionStats,
       handleDetails,
       error,
-      resetSQLStats,
       nodeRegions,
     } = this.props;
     return (
@@ -131,12 +130,7 @@ export class TransactionDetails extends React.Component<
           error={error}
           loading={!statements || !transactionStats}
           render={() => {
-            const {
-              statements,
-              transactionStats,
-              lastReset,
-              isTenant,
-            } = this.props;
+            const { statements, transactionStats, isTenant } = this.props;
             const { sortSetting, pagination } = this.state;
             const aggregatedStatements = aggregateStatements(statements);
             populateRegionNodeForStatements(
@@ -283,13 +277,10 @@ export class TransactionDetails extends React.Component<
                   <TableStatistics
                     pagination={pagination}
                     totalCount={statements.length}
-                    lastReset={lastReset}
                     arrayItemName={
                       "statement fingerprints for this transaction"
                     }
-                    tooltipType="transactionDetails"
                     activeFilters={0}
-                    resetSQLStats={resetSQLStats}
                   />
                   <div className={cx("table-area")}>
                     <SortedTable

@@ -11,8 +11,10 @@ package serverccl
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/hex"
 	"fmt"
 	"net/url"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -475,4 +477,148 @@ WHERE
 	expected = [][]string{}
 
 	require.Equal(t, expected, actual)
+}
+
+func selectClusterSessionIDs(t *testing.T, conn *sqlutils.SQLRunner) []string {
+	var sessionIDs []string
+	rows := conn.QueryStr(t, "SELECT session_id FROM crdb_internal.cluster_sessions")
+	for _, row := range rows {
+		sessionIDs = append(sessionIDs, row[0])
+	}
+	return sessionIDs
+}
+
+func TestTenantStatusCancelSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "expensive tests")
+
+	ctx := context.Background()
+	helper := newTestTenantHelper(t, 3, base.TestingKnobs{})
+	defer helper.cleanup(ctx, t)
+
+	// Open a SQL session on tenant SQL pod 0.
+	sqlPod0 := helper.testCluster().tenantConn(0)
+	sqlPod0.Exec(t, "SELECT 1")
+
+	// See the session over HTTP on tenant SQL pod 1.
+	httpPod1, err := helper.testCluster().tenantHTTPJSONClient(1)
+	require.NoError(t, err)
+	defer httpPod1.Close()
+	listSessionsResp := serverpb.ListSessionsResponse{}
+	err = httpPod1.GetJSON("/_status/sessions", &listSessionsResp)
+	require.NoError(t, err)
+	var session serverpb.Session
+	for _, s := range listSessionsResp.Sessions {
+		if s.LastActiveQuery == "SELECT 1" {
+			session = s
+			break
+		}
+	}
+	require.NotNil(t, session.ID, "session not found")
+
+	// See the session over SQL on tenant SQL pod 0.
+	require.Contains(t, selectClusterSessionIDs(t, sqlPod0), hex.EncodeToString(session.ID))
+
+	// Cancel the session over HTTP from tenant SQL pod 1.
+	cancelSessionReq := serverpb.CancelSessionRequest{SessionID: session.ID}
+	cancelSessionResp := serverpb.CancelSessionResponse{}
+	err = httpPod1.PostJSON("/_status/cancel_session/"+session.NodeID.String(), &cancelSessionReq, &cancelSessionResp)
+	require.NoError(t, err)
+	require.Equal(t, true, cancelSessionResp.Canceled, cancelSessionResp.Error)
+
+	// No longer see the session over SQL from tenant SQL pod 0.
+	// (The SQL client maintains an internal connection pool and automatically reconnects.)
+	require.NotContains(t, selectClusterSessionIDs(t, sqlPod0), hex.EncodeToString(session.ID))
+
+	// Attempt to cancel the session again over HTTP from tenant SQL pod 1, so that we can see the error message.
+	err = httpPod1.PostJSON("/_status/cancel_session/"+session.NodeID.String(), &cancelSessionReq, &cancelSessionResp)
+	require.NoError(t, err)
+	require.Equal(t, false, cancelSessionResp.Canceled)
+	require.Equal(t, fmt.Sprintf("session ID %s not found", hex.EncodeToString(session.ID)), cancelSessionResp.Error)
+}
+
+func selectClusterQueryIDs(t *testing.T, conn *sqlutils.SQLRunner) []string {
+	var queryIDs []string
+	rows := conn.QueryStr(t, "SELECT query_id FROM crdb_internal.cluster_queries")
+	for _, row := range rows {
+		queryIDs = append(queryIDs, row[0])
+	}
+	return queryIDs
+}
+
+func TestTenantStatusCancelQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "expensive tests")
+
+	ctx := context.Background()
+	helper := newTestTenantHelper(t, 3, base.TestingKnobs{})
+	defer helper.cleanup(ctx, t)
+
+	// Open a SQL session on tenant SQL pod 0 and start a long-running query.
+	sqlPod0 := helper.testCluster().tenantConn(0)
+	results := make(chan struct{})
+	errors := make(chan error)
+	defer close(results)
+	defer close(errors)
+	go func() {
+		if _, err := sqlPod0.DB.ExecContext(ctx, "SELECT pg_sleep(60)"); err != nil {
+			errors <- err
+		} else {
+			results <- struct{}{}
+		}
+	}()
+
+	// See the query over HTTP on tenant SQL pod 1.
+	httpPod1, err := helper.testCluster().tenantHTTPJSONClient(1)
+	require.NoError(t, err)
+	defer httpPod1.Close()
+	var listSessionsResp serverpb.ListSessionsResponse
+	var query serverpb.ActiveQuery
+	require.Eventually(t, func() bool {
+		err = httpPod1.GetJSON("/_status/sessions", &listSessionsResp)
+		require.NoError(t, err)
+		for _, s := range listSessionsResp.Sessions {
+			for _, q := range s.ActiveQueries {
+				if q.Sql == "SELECT pg_sleep(60)" {
+					query = q
+					break
+				}
+			}
+		}
+		return query.ID != ""
+	}, 10*time.Second, 100*time.Millisecond, "query not found")
+
+	// See the query over SQL on tenant SQL pod 0.
+	require.Contains(t, selectClusterQueryIDs(t, sqlPod0), query.ID)
+
+	// Cancel the query over HTTP on tenant SQL pod 1.
+	cancelQueryReq := serverpb.CancelQueryRequest{QueryID: query.ID}
+	cancelQueryResp := serverpb.CancelQueryResponse{}
+	err = httpPod1.PostJSON("/_status/cancel_query/0", &cancelQueryReq, &cancelQueryResp)
+	require.NoError(t, err)
+	require.Equal(t, true, cancelQueryResp.Canceled,
+		"expected query to be canceled, but encountered unexpected error %s", cancelQueryResp.Error)
+
+	// No longer see the query over SQL on tenant SQL pod 0.
+	require.Eventually(t, func() bool {
+		return !strings.Contains(reflect.ValueOf(selectClusterQueryIDs(t, sqlPod0)).String(), query.ID)
+	}, 10*time.Second, 100*time.Millisecond,
+		"expected query %s to no longer be visible in crdb_internal.cluster_queries", query.ID)
+
+	select {
+	case <-results:
+		t.Fatalf("Expected long-running query to have been canceled with error.")
+	case err := <-errors:
+		require.Equal(t, "pq: query execution canceled", err.Error())
+	}
+
+	// Attempt to cancel the query again over HTTP from tenant SQL pod 1, so that we can see the error message.
+	err = httpPod1.PostJSON("/_status/cancel_query/0", &cancelQueryReq, &cancelQueryResp)
+	require.NoError(t, err)
+	require.Equal(t, false, cancelQueryResp.Canceled)
+	require.Equal(t, fmt.Sprintf("query ID %s not found", query.ID), cancelQueryResp.Error)
 }

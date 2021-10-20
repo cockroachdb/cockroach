@@ -133,6 +133,8 @@ type Memo struct {
 
 	// The following are selected fields from SessionData which can affect
 	// planning. We need to cross-check these before reusing a cached memo.
+	// NOTE: If you add new fields here, be sure to add them to the relevant
+	//       fields in explain_bundle.go.
 	reorderJoinsLimit       int
 	zigzagJoinEnabled       bool
 	useHistograms           bool
@@ -145,6 +147,10 @@ type Memo struct {
 	intervalStyleEnabled    bool
 	dateStyle               pgdate.DateStyle
 	intervalStyle           duration.IntervalStyle
+	propagateInputOrdering  bool
+	disallowFullTableScans  bool
+	largeFullScanRows       float64
+	nullOrderedLast         bool
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -187,6 +193,10 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 		dateStyleEnabled:        evalCtx.SessionData().DateStyleEnabled,
 		dateStyle:               evalCtx.SessionData().GetDateStyle(),
 		intervalStyle:           evalCtx.SessionData().GetIntervalStyle(),
+		propagateInputOrdering:  evalCtx.SessionData().PropagateInputOrdering,
+		disallowFullTableScans:  evalCtx.SessionData().DisallowFullTableScans,
+		largeFullScanRows:       evalCtx.SessionData().LargeFullScanRows,
+		nullOrderedLast:         evalCtx.SessionData().NullOrderedLast,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(evalCtx, m)
@@ -298,7 +308,11 @@ func (m *Memo) IsStale(
 		m.intervalStyleEnabled != evalCtx.SessionData().IntervalStyleEnabled ||
 		m.dateStyleEnabled != evalCtx.SessionData().DateStyleEnabled ||
 		m.dateStyle != evalCtx.SessionData().GetDateStyle() ||
-		m.intervalStyle != evalCtx.SessionData().GetIntervalStyle() {
+		m.intervalStyle != evalCtx.SessionData().GetIntervalStyle() ||
+		m.propagateInputOrdering != evalCtx.SessionData().PropagateInputOrdering ||
+		m.disallowFullTableScans != evalCtx.SessionData().DisallowFullTableScans ||
+		m.largeFullScanRows != evalCtx.SessionData().LargeFullScanRows ||
+		m.nullOrderedLast != evalCtx.SessionData().NullOrderedLast {
 		return true, nil
 	}
 

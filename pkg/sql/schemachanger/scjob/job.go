@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -92,7 +93,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 
 	settings := execCtx.ExtendedEvalContext().Settings
 	sc, err := scplan.MakePlan(makeState(ctx, settings, n.targets, states), scplan.Params{
-		ExecutionPhase: scplan.PostCommitPhase,
+		ExecutionPhase: scop.PostCommitPhase,
 	})
 	if err != nil {
 		return err
@@ -117,7 +118,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 				jt, execCtx.ExecCfg().NewSchemaChangerTestingKnobs, execCtx.ExecCfg().JobRegistry,
 				execCtx.ExecCfg().InternalExecutor).ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{
 				Statements: n.job.Payload().Statement,
-				Phase:      scplan.PostCommitPhase,
+				Phase:      scop.PostCommitPhase,
 			}); err != nil {
 				return err
 			}

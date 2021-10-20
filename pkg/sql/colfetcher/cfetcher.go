@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -337,6 +338,10 @@ type cFetcher struct {
 	accountingHelper colmem.SetAccountingHelper
 	memoryLimit      int64
 
+	// kvFetcherMemAcc is a memory account that will be used by the underlying
+	// KV fetcher.
+	kvFetcherMemAcc *mon.BoundAccount
+
 	// maxCapacity if non-zero indicates the target capacity of the output
 	// batch. It is set when at the row finalization we realize that the output
 	// batch has exceeded the memory limit.
@@ -395,6 +400,7 @@ func (rf *cFetcher) resetBatch() {
 func (rf *cFetcher) Init(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
+	kvFetcherMemAcc *mon.BoundAccount,
 	memoryLimit int64,
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
@@ -403,6 +409,7 @@ func (rf *cFetcher) Init(
 	tableArgs row.FetcherTableArgs,
 	traceKV bool,
 ) error {
+	rf.kvFetcherMemAcc = kvFetcherMemAcc
 	rf.memoryLimit = memoryLimit
 	rf.reverse = reverse
 	rf.lockStrength = lockStrength
@@ -566,7 +573,6 @@ func (rf *cFetcher) Init(
 			if ok && neededCols.Contains(int(id)) {
 				if compositeColumnIDs.Contains(int(id)) {
 					table.compositeIndexColOrdinals.Add(colIdx)
-				} else {
 					table.neededValueColsByIdx.Remove(colIdx)
 				}
 			}
@@ -664,6 +670,12 @@ func (rf *cFetcher) Init(
 
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
+//
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly. The caller can only reuse the
+// spans slice after the fetcher has been closed (which happens when the fetcher
+// emits the first zero batch), and if the caller does, it becomes responsible
+// for the memory accounting.
 func (rf *cFetcher) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -706,7 +718,7 @@ func (rf *cFetcher) StartScan(
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.lockTimeout,
-		rf.accountingHelper.Allocator.GetMonitor(),
+		rf.kvFetcherMemAcc,
 		forceProductionKVBatchSize,
 	)
 	if err != nil {
@@ -1159,14 +1171,13 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 
 		case stateEmitLastBatch:
-			// Close the fetcher eagerly so that its memory could be GCed.
-			rf.fetcher.Close(ctx)
-			rf.fetcher = nil
 			rf.machine.state[0] = stateFinished
 			rf.finalizeBatch()
 			return rf.machine.batch, nil
 
 		case stateFinished:
+			// Close the fetcher eagerly so that its memory could be GCed.
+			rf.Close(ctx)
 			return coldata.ZeroBatch, nil
 		}
 	}
@@ -1616,6 +1627,7 @@ type cFetcherArgs struct {
 func initCFetcher(
 	flowCtx *execinfra.FlowCtx,
 	allocator *colmem.Allocator,
+	kvFetcherMemAcc *mon.BoundAccount,
 	desc catalog.TableDescriptor,
 	index catalog.Index,
 	neededCols util.FastIntSet,
@@ -1637,7 +1649,7 @@ func initCFetcher(
 	tableArgs.InitCols(desc, args.visibility, args.hasSystemColumns, invertedCol)
 
 	if err := fetcher.Init(
-		flowCtx.Codec(), allocator, args.memoryLimit, args.reverse, args.lockingStrength,
+		flowCtx.Codec(), allocator, kvFetcherMemAcc, args.memoryLimit, args.reverse, args.lockingStrength,
 		args.lockingWaitPolicy, flowCtx.EvalCtx.SessionData().LockTimeout, tableArgs, flowCtx.TraceKV,
 	); err != nil {
 		return nil, err
@@ -1649,5 +1661,6 @@ func initCFetcher(
 func (rf *cFetcher) Close(ctx context.Context) {
 	if rf != nil && rf.fetcher != nil {
 		rf.fetcher.Close(ctx)
+		rf.fetcher = nil
 	}
 }

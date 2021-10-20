@@ -402,9 +402,6 @@ type TableDescriptor interface {
 	// in preparation to add a new one. In CockroachDB, all tables have primary
 	// keys, even if they're not defined by the user.
 	HasPrimaryKey() bool
-	// PrimaryKeyString returns the pretty-printed primary key declaration for a
-	// table descriptor.
-	PrimaryKeyString() string
 
 	// AllColumns returns a slice of Column interfaces containing the
 	// table's public columns and column mutations, in the canonical order:
@@ -678,7 +675,9 @@ type TypeDescriptor interface {
 // types.T. Implementers of tree.TypeReferenceResolver should implement this
 // interface as well.
 type TypeDescriptorResolver interface {
-	// GetTypeDescriptor returns the type descriptor for the input ID.
+	// GetTypeDescriptor returns the type descriptor for the input ID. Note that
+	// the returned type descriptor may be the implicitly-defined record type for
+	// a table, if the input ID points to a table descriptor.
 	GetTypeDescriptor(ctx context.Context, id descpb.ID) (tree.TypeName, TypeDescriptor, error)
 }
 

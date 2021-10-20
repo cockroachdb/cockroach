@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//go:build crdb_test
 // +build crdb_test
 
 package memo
@@ -306,6 +307,21 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		}
 		if t.Value == tree.DBoolFalse {
 			panic(errors.AssertionFailedf("false values should always use FalseSingleton, not ConstExpr"))
+		}
+
+	case *WithExpr:
+		if !t.BindingOrdering.Any() && (!t.Mtr.Set || !t.Mtr.Materialize) {
+			panic(errors.AssertionFailedf("with ordering can only be specified with forced materialization"))
+		}
+
+	case *WithScanExpr:
+		// Verify the input columns exist in the binding.
+		binding := m.Metadata().WithBinding(t.With)
+		if binding == nil {
+			panic(errors.AssertionFailedf("WithScan binding missing"))
+		}
+		if !t.InCols.ToSet().SubsetOf(binding.(RelExpr).Relational().OutputCols) {
+			panic(errors.AssertionFailedf("invalid WithScan input columns %v", t.InCols))
 		}
 
 	default:

@@ -1,0 +1,249 @@
+# tests adapted from logictest -- propagate_input_ordering
+
+exec-ddl
+CREATE TABLE ab (a int, b int);
+----
+
+exec-ddl
+CREATE TABLE xy (x int, y int);
+----
+
+build propagate-input-ordering
+SELECT * FROM
+  (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC)
+----
+sort
+ ├── columns: i:1  [hidden: column2:2]
+ ├── ordering: +2,+1
+ └── project
+      ├── columns: column2:2 generate_series:1
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 10)
+      └── projections
+           └── generate_series:1 % 5 [as=column2:2]
+
+build propagate-input-ordering
+WITH tmp AS (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) SELECT * FROM tmp;
+----
+with &1 (tmp)
+ ├── columns: i:3
+ ├── materialized
+ ├── sort
+ │    ├── columns: generate_series:1 column2:2
+ │    ├── ordering: +2,+1
+ │    └── project
+ │         ├── columns: column2:2 generate_series:1
+ │         ├── project-set
+ │         │    ├── columns: generate_series:1
+ │         │    ├── values
+ │         │    │    └── ()
+ │         │    └── zip
+ │         │         └── generate_series(1, 10)
+ │         └── projections
+ │              └── generate_series:1 % 5 [as=column2:2]
+ └── with-scan &1 (tmp)
+      ├── columns: i:3
+      └── mapping:
+           └──  generate_series:1 => i:3
+
+# The internal ordering column for i%5 should not be present in the output.
+build propagate-input-ordering
+SELECT foo FROM (SELECT i, i%2 FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) AS foo
+----
+sort
+ ├── columns: foo:4  [hidden: generate_series:1 column3:3]
+ ├── ordering: +3,+1
+ └── project
+      ├── columns: foo:4 generate_series:1 column3:3
+      ├── project
+      │    ├── columns: "?column?":2 column3:3 generate_series:1
+      │    ├── project-set
+      │    │    ├── columns: generate_series:1
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── zip
+      │    │         └── generate_series(1, 10)
+      │    └── projections
+      │         ├── generate_series:1 % 2 [as="?column?":2]
+      │         └── generate_series:1 % 5 [as=column3:3]
+      └── projections
+           └── ((generate_series:1, "?column?":2) AS i, "?column?") [as=foo:4]
+
+# The internal ordering column for i%5 should not be present in the output.
+build propagate-input-ordering
+SELECT foo.* FROM (SELECT i, i%2 FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) AS foo
+----
+sort
+ ├── columns: i:1 "?column?":2  [hidden: column3:3]
+ ├── ordering: +3,+1
+ └── project
+      ├── columns: "?column?":2 column3:3 generate_series:1
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 10)
+      └── projections
+           ├── generate_series:1 % 2 [as="?column?":2]
+           └── generate_series:1 % 5 [as=column3:3]
+
+# The subquery ordering is propagated to the aggregation.
+build propagate-input-ordering
+SELECT array_agg(i) FROM (SELECT * FROM generate_series(1, 5) i ORDER BY i%2 DESC, i)
+----
+scalar-group-by
+ ├── columns: array_agg:3
+ ├── internal-ordering: -2,+1
+ ├── sort
+ │    ├── columns: generate_series:1 column2:2
+ │    ├── ordering: -2,+1
+ │    └── project
+ │         ├── columns: column2:2 generate_series:1
+ │         ├── project-set
+ │         │    ├── columns: generate_series:1
+ │         │    ├── values
+ │         │    │    └── ()
+ │         │    └── zip
+ │         │         └── generate_series(1, 5)
+ │         └── projections
+ │              └── generate_series:1 % 2 [as=column2:2]
+ └── aggregations
+      └── array-agg [as=array_agg:3]
+           └── generate_series:1
+
+# The input ordering is not propagated through joins.
+build propagate-input-ordering
+SELECT *
+FROM (SELECT * FROM generate_series(1, 2) x) tmp,
+     (SELECT * FROM generate_series(8, 12) i ORDER BY i % 5 ASC, i ASC) tmp2;
+----
+inner-join (cross)
+ ├── columns: x:1 i:2  [hidden: column3:3]
+ ├── project-set
+ │    ├── columns: generate_series:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 2)
+ ├── project
+ │    ├── columns: column3:3 generate_series:2
+ │    ├── project-set
+ │    │    ├── columns: generate_series:2
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         └── generate_series(8, 12)
+ │    └── projections
+ │         └── generate_series:2 % 5 [as=column3:3]
+ └── filters (true)
+
+# Do not preserve the subquery ordering because the parent scope has its own
+# ordering.
+build propagate-input-ordering
+SELECT * FROM
+  (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC)
+ORDER BY i DESC;
+----
+sort
+ ├── columns: i:1
+ ├── ordering: -1
+ └── project
+      ├── columns: generate_series:1
+      └── project
+           ├── columns: column2:2 generate_series:1
+           ├── project-set
+           │    ├── columns: generate_series:1
+           │    ├── values
+           │    │    └── ()
+           │    └── zip
+           │         └── generate_series(1, 10)
+           └── projections
+                └── generate_series:1 % 5 [as=column2:2]
+
+# CTEs get materialized in the desired order. 
+build propagate-input-ordering
+WITH
+  cte1 AS (SELECT b FROM ab ORDER BY a, b),
+  cte2 AS (SELECT y FROM xy ORDER BY x, y)
+SELECT * FROM cte1 UNION ALL SELECT * FROM cte2
+----
+with &1 (cte1)
+ ├── columns: b:13
+ ├── materialized
+ ├── sort
+ │    ├── columns: a:1 ab.b:2
+ │    ├── ordering: +1,+2
+ │    └── project
+ │         ├── columns: a:1 ab.b:2
+ │         └── scan ab
+ │              └── columns: a:1 ab.b:2 ab.rowid:3!null ab.crdb_internal_mvcc_timestamp:4 ab.tableoid:5
+ └── with &2 (cte2)
+      ├── columns: b:13
+      ├── materialized
+      ├── sort
+      │    ├── columns: x:6 xy.y:7
+      │    ├── ordering: +6,+7
+      │    └── project
+      │         ├── columns: x:6 xy.y:7
+      │         └── scan xy
+      │              └── columns: x:6 xy.y:7 xy.rowid:8!null xy.crdb_internal_mvcc_timestamp:9 xy.tableoid:10
+      └── union-all
+           ├── columns: b:13
+           ├── left columns: b:11
+           ├── right columns: y:12
+           ├── with-scan &1 (cte1)
+           │    ├── columns: b:11
+           │    └── mapping:
+           │         └──  ab.b:2 => b:11
+           └── with-scan &2 (cte2)
+                ├── columns: y:12
+                └── mapping:
+                     └──  xy.y:7 => y:12
+
+build propagate-input-ordering
+WITH
+  cte1 AS (SELECT b FROM ab),
+  cte2 AS (SELECT DISTINCT ON (x) y FROM xy ORDER BY x, y)
+SELECT * FROM cte1 UNION ALL SELECT * FROM cte2
+----
+with &1 (cte1)
+ ├── columns: b:13
+ ├── project
+ │    ├── columns: ab.b:2
+ │    └── scan ab
+ │         └── columns: a:1 ab.b:2 ab.rowid:3!null ab.crdb_internal_mvcc_timestamp:4 ab.tableoid:5
+ └── with &2 (cte2)
+      ├── columns: b:13
+      ├── materialized
+      ├── distinct-on
+      │    ├── columns: x:6 xy.y:7
+      │    ├── grouping columns: x:6
+      │    ├── internal-ordering: +7 opt(6)
+      │    ├── ordering: +6
+      │    ├── sort
+      │    │    ├── columns: x:6 xy.y:7
+      │    │    ├── ordering: +6,+7
+      │    │    └── project
+      │    │         ├── columns: x:6 xy.y:7
+      │    │         └── scan xy
+      │    │              └── columns: x:6 xy.y:7 xy.rowid:8!null xy.crdb_internal_mvcc_timestamp:9 xy.tableoid:10
+      │    └── aggregations
+      │         └── first-agg [as=xy.y:7]
+      │              └── xy.y:7
+      └── union-all
+           ├── columns: b:13
+           ├── left columns: b:11
+           ├── right columns: y:12
+           ├── with-scan &1 (cte1)
+           │    ├── columns: b:11
+           │    └── mapping:
+           │         └──  ab.b:2 => b:11
+           └── with-scan &2 (cte2)
+                ├── columns: y:12
+                └── mapping:
+                     └──  xy.y:7 => y:12

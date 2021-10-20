@@ -360,7 +360,7 @@ The load balancing in `system.jobs`  has not been implemented yet
 At a high level, the scheduled job daemon periodically performs the following steps:
   1. Starts transaction
   1. Polls `system.scheduled_jobs` to find eligible scheduled job
-  1. Updates the `next_run` according to the cron experession, setting it to the next computed time,
+  1. Updates the `next_run` according to the cron expression, setting it to the next computed time,
      or null if there is no next run.
      * This update acquires intent-based lock on this row and, in effect, exclusively
      locks this row against other dispatchers
@@ -418,7 +418,7 @@ The `ScheduledJobExecutor` is defined as follows:
 ```go
 type ScheduledJobExecutor interface {
   ExecuteJob(context, ExecutionArguments) error
-  NotifyJobTermination(schedulID, md *jobspb.JobMetadata, txn *kv.Txn) error
+  NotifyJobTermination(scheduleID, md *jobspb.JobMetadata, txn *kv.Txn) error
 }
 ```
 

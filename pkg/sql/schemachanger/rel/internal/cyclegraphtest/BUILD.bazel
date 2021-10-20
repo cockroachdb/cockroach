@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "cyclegraphtest",
+    srcs = [
+        "schema.go",
+        "tests.go",
+        ":gen-testattr-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel/internal/cyclegraphtest",
+    visibility = ["//pkg/sql/schemachanger/rel:__subpackages__"],
+    deps = [
+        "//pkg/sql/schemachanger/rel",
+        "//pkg/sql/schemachanger/rel/reltest",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)
+
+stringer(
+    name = "gen-testattr-stringer",
+    src = "schema.go",
+    typ = "testAttr",
+)

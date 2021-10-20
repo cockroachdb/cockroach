@@ -290,6 +290,40 @@ rangeLoop:
 	return requestEntries, maxEndTime, nil
 }
 
+func processTableForMultiRegion(
+	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, table catalog.TableDescriptor,
+) error {
+	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
+		ctx, txn, table.GetParentID(), tree.DatabaseLookupFlags{
+			Required:       true,
+			AvoidCached:    true,
+			IncludeOffline: true,
+		})
+	if err != nil {
+		return err
+	}
+	// If the table descriptor is being written to a multi-region database and
+	// the table does not have a locality config setup, set one up here. The
+	// table's locality config will be set to the default locality - REGIONAL
+	// BY TABLE IN PRIMARY REGION.
+	if dbDesc.IsMultiRegion() {
+		if table.GetLocalityConfig() == nil {
+			table.(*tabledesc.Mutable).SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
+		}
+	} else {
+		// If the database is not multi-region enabled, ensure that we don't
+		// write any multi-region table descriptors into it.
+		if table.GetLocalityConfig() != nil {
+			return pgerror.Newf(pgcode.FeatureNotSupported,
+				"cannot restore or create multi-region table %s into non-multi-region database %s",
+				table.GetName(),
+				dbDesc.GetName(),
+			)
+		}
+	}
+	return nil
+}
+
 // WriteDescriptors writes all the new descriptors: First the ID ->
 // TableDescriptor for the new table, then flip (or initialize) the name -> ID
 // entry so any new queries will use the new one. The tables are assigned the
@@ -306,7 +340,6 @@ func WriteDescriptors(
 	tables []catalog.TableDescriptor,
 	types []catalog.TypeDescriptor,
 	descCoverage tree.DescriptorCoverage,
-	settings *cluster.Settings,
 	extra []roachpb.KeyValue,
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "WriteDescriptors")
@@ -378,33 +411,9 @@ func WriteDescriptors(
 			}
 			privilegeDesc := table.GetPrivileges()
 			catprivilege.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
-			// If the table descriptor is being written to a multi-region database and
-			// the table does not have a locality config setup, set one up here. The
-			// table's locality config will be set to the default locality - REGIONAL
-			// BY TABLE IN PRIMARY REGION.
-			_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-				ctx, txn, table.GetParentID(), tree.DatabaseLookupFlags{
-					Required:       true,
-					AvoidCached:    true,
-					IncludeOffline: true,
-				})
-			if err != nil {
+
+			if err := processTableForMultiRegion(ctx, txn, descsCol, table); err != nil {
 				return err
-			}
-			if dbDesc.IsMultiRegion() {
-				if table.GetLocalityConfig() == nil {
-					table.(*tabledesc.Mutable).SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
-				}
-			} else {
-				// If the database is not multi-region enabled, ensure that we don't
-				// write any multi-region table descriptors into it.
-				if table.GetLocalityConfig() != nil {
-					return pgerror.Newf(pgcode.FeatureNotSupported,
-						"cannot write descriptor for multi-region table %s into non-multi-region database %s",
-						table.GetName(),
-						dbDesc.GetName(),
-					)
-				}
 			}
 
 			if err := descsCol.WriteDescToBatch(
@@ -1142,8 +1151,21 @@ func createImportingDescriptors(
 		}
 	}
 
-	// Assign new IDs to all of the type descriptors that need to be written.
-	if err := rewriteTypeDescs(typesToWrite, details.DescriptorRewrites); err != nil {
+	// Perform rewrites on ALL type descriptors that are present in the rewrite
+	// mapping.
+	//
+	// `types` contains a mix of existing type descriptors in the restoring
+	// cluster, and new type descriptors we will write from the backup.
+	//
+	// New type descriptors need to be rewritten with their generated IDs before
+	// they are written out to disk.
+	//
+	// Existing type descriptors need to be rewritten to the type ID of the type
+	// they are referring to in the restoring cluster. This ID is different from
+	// the ID the descriptor had when it was backed up. Changes to existing type
+	// descriptors will not be written to disk, and is only for accurate,
+	// in-memory resolution hereon out.
+	if err := rewriteTypeDescs(types, details.DescriptorRewrites); err != nil {
 		return nil, nil, err
 	}
 
@@ -1264,7 +1286,7 @@ func createImportingDescriptors(
 			// Write the new descriptors which are set in the OFFLINE state.
 			if err := WriteDescriptors(
 				ctx, p.ExecCfg().Codec, txn, p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes,
-				details.DescriptorCoverage, r.settings, nil, /* extra */
+				details.DescriptorCoverage, nil, /* extra */
 			); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
 			}
@@ -1316,7 +1338,11 @@ func createImportingDescriptors(
 					return err
 				}
 				typeIDs, _, err := table.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
-					return typesByID[id], nil
+					t, ok := typesByID[id]
+					if !ok {
+						return nil, errors.AssertionFailedf("type with id %d was not found in rewritten type mapping", id)
+					}
+					return t, nil
 				})
 				if err != nil {
 					return err

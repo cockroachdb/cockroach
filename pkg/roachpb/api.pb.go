@@ -7130,6 +7130,7 @@ type RangeFeedValue struct {
 	// 1. with_diff was passed in the corresponding RangeFeedRequest.
 	// 2. the key-value was present and not a deletion tombstone before
 	//    this event.
+	// The timestamp on the previous value is empty.
 	PrevValue Value `protobuf:"bytes,3,opt,name=prev_value,json=prevValue,proto3" json:"prev_value"`
 }
 

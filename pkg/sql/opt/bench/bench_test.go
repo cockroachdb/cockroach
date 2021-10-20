@@ -319,7 +319,7 @@ func init() {
 // to run. See the comments for the Phase enumeration for more details
 // on what each phase includes.
 func BenchmarkPhases(b *testing.B) {
-	for _, query := range queries {
+	for _, query := range queriesToTest(b) {
 		h := newHarness(b, query)
 		b.Run(query.name, func(b *testing.B) {
 			b.Run("Simple", func(b *testing.B) {
@@ -572,6 +572,64 @@ func makeChain(size int) benchQuery {
 	}
 }
 
+func makeQueryWithORs(size int) benchQuery {
+	var buf bytes.Buffer
+	buf.WriteString(`SELECT * FROM stock WHERE `)
+	sep := ""
+	for i := 0; i < size; i++ {
+		buf.WriteString(sep)
+		fmt.Fprintf(&buf, "s_w_id = %d AND s_order_cnt = %d", i, i)
+		sep = " OR "
+	}
+	return benchQuery{
+		name:  fmt.Sprintf("ored-preds-%d", size),
+		query: buf.String(),
+	}
+}
+
+func makeParameterizedQueryWithORs(size int) benchQuery {
+	var buf bytes.Buffer
+	buf.WriteString(`SELECT * FROM stock WHERE `)
+	sep := ""
+	numParams := size
+	parameterValues := make([]interface{}, numParams)
+	for i := 1; i <= numParams; i++ {
+		parameterValues[i-1] = i
+		buf.WriteString(sep)
+		fmt.Fprintf(&buf, "s_w_id = $%d AND s_order_cnt = $%d", i, i)
+		sep = " OR "
+	}
+	return benchQuery{
+		name:  fmt.Sprintf("ored-preds-using-params-%d", size),
+		query: buf.String(),
+		args:  parameterValues,
+	}
+}
+
+// makeOredPredsTests constructs a set of non-parameterized queries and
+// parameterized queries with a certain number of ORed predicates as indicated
+// in the testSizes array and test name suffix. The test names produced are:
+// ored-preds-100
+// ored-preds-using-params-100
+func makeOredPredsTests(b *testing.B) []benchQuery {
+	// Add more entries to this array to test with different numbers of ORed
+	// predicates.
+	testSizes := [...]int{100}
+	benchQueries := make([]benchQuery, len(testSizes)*2)
+	for i := 0; i < len(testSizes); i++ {
+		benchQueries[i] = makeQueryWithORs(testSizes[i])
+	}
+	for i := len(testSizes); i < len(testSizes)*2; i++ {
+		benchQueries[i] = makeParameterizedQueryWithORs(testSizes[i-len(testSizes)])
+	}
+	return benchQueries
+}
+
+func queriesToTest(b *testing.B) []benchQuery {
+	allQueries := append(queries[:], makeOredPredsTests(b)...)
+	return allQueries
+}
+
 // BenchmarkChain benchmarks the planning of a "chain" query, where
 // some number of tables are joined together, with there being a
 // predicate joining the first and second, second and third, third
@@ -611,7 +669,7 @@ func BenchmarkEndToEnd(b *testing.B) {
 		sr.Exec(b, schema)
 	}
 
-	for _, query := range queries {
+	for _, query := range queriesToTest(b) {
 		b.Run(query.name, func(b *testing.B) {
 			b.Run("Simple", func(b *testing.B) {
 				for i := 0; i < b.N; i++ {

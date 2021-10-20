@@ -448,11 +448,11 @@ TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
                        lease_preferences = '[[+region=us-east-1]]'
 
 statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
-ALTER partition "us-east-1" of index regional_by_row@primary CONFIGURE ZONE USING num_replicas = 10
+ALTER partition "us-east-1" of index regional_by_row@regional_by_row_pkey CONFIGURE ZONE USING num_replicas = 10
 
 statement ok
 SET override_multi_region_zone_config = true;
-ALTER partition "us-east-1" of index regional_by_row@primary CONFIGURE ZONE USING num_replicas = 10;
+ALTER partition "us-east-1" of index regional_by_row@regional_by_row_pkey CONFIGURE ZONE USING num_replicas = 10;
 SET override_multi_region_zone_config = false
 
 query TTT
@@ -461,23 +461,23 @@ ORDER BY partition_name, index_name
 ----
 num_voters = 3,
 voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@primary  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
 lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
 num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@primary  ca-central-1
+voter_constraints = '[+region=ap-southeast-2]',
+lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
 num_voters = 3,
 voter_constraints = '[+region=ca-central-1]',
 lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_replicas = 10,
 num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@primary  us-east-1
+voter_constraints = '[+region=ca-central-1]',
+lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
 num_voters = 3,
 voter_constraints = '[+region=us-east-1]',
 lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
+num_replicas = 10,
+num_voters = 3,
+voter_constraints = '[+region=us-east-1]',
+lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
 
 statement error attempting to update zone configuration for table regional_by_row which contains modified field "num_replicas"
 ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE
@@ -488,7 +488,7 @@ ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE;
 SET override_multi_region_zone_config = false
 
 statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
-ALTER index regional_by_row@primary CONFIGURE ZONE USING num_replicas = 10
+ALTER index regional_by_row@regional_by_row_pkey CONFIGURE ZONE USING num_replicas = 10
 
 query TTT
 SELECT ZONE_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -496,7 +496,7 @@ ORDER BY partition_name, index_name
 ----
 
 query TT
-SHOW ZONE CONFIGURATION FOR INDEX regional_by_row@primary
+SHOW ZONE CONFIGURATION FOR INDEX regional_by_row@regional_by_row_pkey
 ----
 TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
                        range_min_bytes = 1000,
@@ -624,16 +624,16 @@ SELECT crdb_internal.validate_multi_region_zone_configs()
 
 statement ok
 SET override_multi_region_zone_config = true;
-ALTER index regional_by_row@primary CONFIGURE ZONE USING num_replicas = 10;
+ALTER index regional_by_row@regional_by_row_pkey CONFIGURE ZONE USING num_replicas = 10;
 SET override_multi_region_zone_config = false
 
-statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row@"primary" with field num_replicas populated
+statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row@regional_by_row_pkey with field num_replicas populated
 ALTER TABLE regional_by_row SET LOCALITY GLOBAL
 
-statement error extraneous zone configuration for index regional_by_row@"primary" with field num_replicas populated
+statement error extraneous zone configuration for index regional_by_row@regional_by_row_pkey with field num_replicas populated
 SELECT crdb_internal.validate_multi_region_zone_configs()
 
-statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row@"primary" with field num_replicas populated
+statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row@regional_by_row_pkey with field num_replicas populated
 ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW
 
 statement ok
@@ -652,13 +652,13 @@ CREATE TABLE regional_by_row_as (
 
 statement ok
 SET override_multi_region_zone_config = true;
-ALTER index regional_by_row_as@primary CONFIGURE ZONE USING num_replicas = 10;
+ALTER index regional_by_row_as@regional_by_row_as_pkey CONFIGURE ZONE USING num_replicas = 10;
 SET override_multi_region_zone_config = false
 
 query TT
-SHOW ZONE CONFIGURATION FOR INDEX regional_by_row_as@primary
+SHOW ZONE CONFIGURATION FOR INDEX regional_by_row_as@regional_by_row_as_pkey
 ----
-INDEX regional_by_row_as@primary  ALTER INDEX regional_by_row_as@primary CONFIGURE ZONE USING
+INDEX regional_by_row_as@regional_by_row_as_pkey  ALTER INDEX regional_by_row_as@regional_by_row_as_pkey CONFIGURE ZONE USING
                                   range_min_bytes = 1000,
                                   range_max_bytes = 100000,
                                   gc.ttlseconds = 100000,
@@ -668,7 +668,7 @@ INDEX regional_by_row_as@primary  ALTER INDEX regional_by_row_as@primary CONFIGU
                                   voter_constraints = '[+region=us-east-1]',
                                   lease_preferences = '[[+region=us-east-1]]'
 
-statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row_as@"primary" with field num_replicas populated
+statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row_as@regional_by_row_as_pkey with field num_replicas populated
 ALTER TABLE regional_by_row_as SET LOCALITY REGIONAL BY ROW
 
 statement ok
@@ -677,7 +677,7 @@ ALTER TABLE regional_by_row_as SET LOCALITY REGIONAL BY ROW;
 SET override_multi_region_zone_config = false
 
 query TT
-SHOW ZONE CONFIGURATION FOR INDEX regional_by_row_as@primary
+SHOW ZONE CONFIGURATION FOR INDEX regional_by_row_as@regional_by_row_as_pkey
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
                             range_min_bytes = 1000,
@@ -697,7 +697,7 @@ regional_by_row_as          CREATE TABLE public.regional_by_row_as (
                             i INT8 NULL,
                             cr public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::public.crdb_internal_region,
                             crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
-                            CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                            CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                             INDEX regional_by_row_as_i_idx (i ASC),
                             FAMILY fam_0_cr_pk_i (cr, pk, i, crdb_region)
 ) LOCALITY REGIONAL BY ROW
@@ -708,22 +708,22 @@ ORDER BY partition_name, index_name
 ----
 num_voters = 3,
 voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_as@primary  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
 lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_as@regional_by_row_as_i_idx  ap-southeast-2
 num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row_as@primary  ca-central-1
+voter_constraints = '[+region=ap-southeast-2]',
+lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_as@regional_by_row_as_pkey  ap-southeast-2
 num_voters = 3,
 voter_constraints = '[+region=ca-central-1]',
 lease_preferences = '[[+region=ca-central-1]]'  regional_by_row_as@regional_by_row_as_i_idx  ca-central-1
 num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row_as@primary  us-east-1
+voter_constraints = '[+region=ca-central-1]',
+lease_preferences = '[[+region=ca-central-1]]'  regional_by_row_as@regional_by_row_as_pkey  ca-central-1
 num_voters = 3,
 voter_constraints = '[+region=us-east-1]',
 lease_preferences = '[[+region=us-east-1]]'  regional_by_row_as@regional_by_row_as_i_idx  us-east-1
+num_voters = 3,
+voter_constraints = '[+region=us-east-1]',
+lease_preferences = '[[+region=us-east-1]]'  regional_by_row_as@regional_by_row_as_pkey  us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
@@ -758,14 +758,14 @@ RANGE default  ALTER RANGE default CONFIGURE ZONE USING
                lease_preferences = '[]'
 
 statement ok
-ALTER INDEX regional_by_row@primary CONFIGURE ZONE DISCARD
+ALTER INDEX regional_by_row@regional_by_row_pkey CONFIGURE ZONE DISCARD
 
 statement error attempting to discard the zone configuration of a multi-region entity
-ALTER PARTITION "ca-central-1" OF INDEX regional_by_row@primary CONFIGURE ZONE DISCARD
+ALTER PARTITION "ca-central-1" OF INDEX regional_by_row@regional_by_row_pkey CONFIGURE ZONE DISCARD
 
 statement ok
 SET override_multi_region_zone_config = true;
-ALTER PARTITION "ca-central-1" OF INDEX regional_by_row@primary CONFIGURE ZONE DISCARD;
+ALTER PARTITION "ca-central-1" OF INDEX regional_by_row@regional_by_row_pkey CONFIGURE ZONE DISCARD;
 SET override_multi_region_zone_config = false
 
 # Drop invalid zone config database so validation passes.
@@ -1463,9 +1463,9 @@ CREATE TABLE tbl8 (
 ) LOCALITY REGIONAL BY ROW
 
 query TT
-SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" of INDEX tbl8@primary
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" of INDEX tbl8@tbl8_pkey
 ----
-PARTITION "us-east-1" OF INDEX tbl8@primary  ALTER PARTITION "us-east-1" OF INDEX tbl8@primary CONFIGURE ZONE USING
+PARTITION "us-east-1" OF INDEX tbl8@tbl8_pkey  ALTER PARTITION "us-east-1" OF INDEX tbl8@tbl8_pkey CONFIGURE ZONE USING
                                              range_min_bytes = 134217728,
                                              range_max_bytes = 536870912,
                                              gc.ttlseconds = 90000,
@@ -1477,11 +1477,11 @@ PARTITION "us-east-1" OF INDEX tbl8@primary  ALTER PARTITION "us-east-1" OF INDE
 
 statement ok
 SET override_multi_region_zone_config = true;
-ALTER PARTITION "us-east-1" OF INDEX tbl8@primary CONFIGURE ZONE DISCARD;
+ALTER PARTITION "us-east-1" OF INDEX tbl8@tbl8_pkey CONFIGURE ZONE DISCARD;
 SET override_multi_region_zone_config = false
 
 query TT
-SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" of INDEX tbl8@primary
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" of INDEX tbl8@tbl8_pkey
 ----
 DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
                                  range_min_bytes = 134217728,
@@ -1493,7 +1493,7 @@ DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE
                                  voter_constraints = '[+region=us-east-1]',
                                  lease_preferences = '[[+region=us-east-1]]'
 
-statement error missing zone configuration for partition "us-east-1" of tbl8@"primary"
+statement error missing zone configuration for partition "us-east-1" of tbl8@tbl8_pkey
 SELECT crdb_internal.validate_multi_region_zone_configs()
 
 let $tbl8_id
@@ -1503,9 +1503,9 @@ statement ok
 SELECT crdb_internal.reset_multi_region_zone_configs_for_table($tbl8_id)
 
 query TT
-SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" of INDEX tbl8@primary
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" of INDEX tbl8@tbl8_pkey
 ----
-PARTITION "us-east-1" OF INDEX tbl8@primary  ALTER PARTITION "us-east-1" OF INDEX tbl8@primary CONFIGURE ZONE USING
+PARTITION "us-east-1" OF INDEX tbl8@tbl8_pkey  ALTER PARTITION "us-east-1" OF INDEX tbl8@tbl8_pkey CONFIGURE ZONE USING
                                              range_min_bytes = 134217728,
                                              range_max_bytes = 536870912,
                                              gc.ttlseconds = 90000,

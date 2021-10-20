@@ -1600,6 +1600,24 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	`null_ordered_last`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`null_ordered_last`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`null_ordered_last`, s)
+			if err != nil {
+				return err
+			}
+			m.SetNullOrderedLast(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().NullOrderedLast)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(false)
+		},
+	},
+
 	`propagate_input_ordering`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`propagate_input_ordering`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
@@ -1708,6 +1726,24 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: func(sv *settings.Values) string {
 			return strconv.FormatInt(txnRowsReadErr.Get(sv), 10)
 		},
+	},
+
+	// CockroachDB extension. Allows for testing of transaction retry logic
+	// using the cockroach_restart savepoint.
+	`inject_retry_errors_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`retry_errors_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("inject_retry_errors_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetInjectRetryErrorsEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().InjectRetryErrorsEnabled)
+		},
+		GlobalDefault: globalFalse,
 	},
 }
 

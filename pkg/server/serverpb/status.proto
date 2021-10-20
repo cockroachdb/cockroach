@@ -38,6 +38,7 @@ import "etcd/raft/v3/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 message CertificatesRequest {
   // node_id is a string so that "local" can be used to specify that no
@@ -1198,6 +1199,9 @@ message StatementsResponse {
     int32 node_id = 2 [(gogoproto.customname) = "NodeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
     google.protobuf.Timestamp aggregated_ts = 3 [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
+    // The aggregation duration.
+    google.protobuf.Duration aggregation_interval = 4 [(gogoproto.nullable) = false,
+      (gogoproto.stdduration) = true];
   }
 
   message CollectedStatementStatistics {
@@ -1437,6 +1441,14 @@ service Status {
     };
   }
 
+  // CancelLocalQuery cancels a SQL query running on this node given its ID.
+  rpc CancelLocalQuery(CancelQueryRequest) returns (CancelQueryResponse) {
+    option (google.api.http) = {
+      post : "/_status/cancel_local_query"
+      body: "*"
+    };
+  }
+
   // ListContentionEvents retrieves the contention events across the entire
   // cluster.
   //
@@ -1514,6 +1526,14 @@ service Status {
     option (google.api.http) = {
       post : "/_status/cancel_session/{node_id}"
 			body: "*"
+    };
+  }
+
+  // CancelLocalSession forcefully terminates a SQL session running on this node given its ID.
+  rpc CancelLocalSession(CancelSessionRequest) returns (CancelSessionResponse) {
+    option (google.api.http) = {
+      post : "/_status/cancel_local_session"
+      body: "*"
     };
   }
 

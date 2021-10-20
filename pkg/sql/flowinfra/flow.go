@@ -32,9 +32,9 @@ type flowStatus int
 
 // Flow status indicators.
 const (
-	FlowNotStarted flowStatus = iota
-	FlowRunning
-	FlowFinished
+	flowNotStarted flowStatus = iota
+	flowRunning
+	flowFinished
 )
 
 // Startable is any component that can be started (a router or an outbox).
@@ -122,8 +122,9 @@ type Flow interface {
 	// GetID returns the flow ID.
 	GetID() execinfrapb.FlowID
 
-	// Cleanup should be called when the flow completes (after all processors and
-	// mailboxes exited).
+	// Cleanup should be called when the flow completes (after all processors
+	// and mailboxes exited). The implementations must be safe to execute in
+	// case the Flow is never Run() or Start()ed.
 	Cleanup(context.Context)
 
 	// ConcurrentTxnUse returns true if multiple processors/operators in the flow
@@ -227,6 +228,11 @@ func (f *FlowBase) SetStartedGoroutines(val bool) {
 	f.startedGoroutines = val
 }
 
+// Started returns true if f has either been Run() or Start()ed.
+func (f *FlowBase) Started() bool {
+	return f.status != flowNotStarted
+}
+
 var _ Flow = &FlowBase{}
 
 // NewFlowBase creates a new FlowBase.
@@ -251,7 +257,7 @@ func NewFlowBase(
 		admissionInfo.Priority = admission.WorkPriority(h.Priority)
 		admissionInfo.CreateTime = h.CreateTime
 	}
-	base := &FlowBase{
+	return &FlowBase{
 		FlowCtx:               flowCtx,
 		flowRegistry:          flowReg,
 		rowSyncFlowConsumer:   rowSyncFlowConsumer,
@@ -259,9 +265,8 @@ func NewFlowBase(
 		localProcessors:       localProcessors,
 		admissionInfo:         admissionInfo,
 		onFlowCleanup:         onFlowCleanup,
+		status:                flowNotStarted,
 	}
-	base.status = FlowNotStarted
-	return base
 }
 
 // GetFlowCtx is part of the Flow interface.
@@ -368,7 +373,7 @@ func (f *FlowBase) StartInternal(
 		}
 	}
 
-	f.status = FlowRunning
+	f.status = flowRunning
 
 	if log.V(1) {
 		log.Infof(ctx, "registered flow %s", f.ID.Short())
@@ -469,7 +474,7 @@ func (f *FlowBase) Wait() {
 // NOTE: this implements only the shared clean up logic between row-based and
 // vectorized flows.
 func (f *FlowBase) Cleanup(ctx context.Context) {
-	if f.status == FlowFinished {
+	if f.status == flowFinished {
 		panic("flow cleanup called twice")
 	}
 
@@ -509,10 +514,10 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 		log.Infof(ctx, "cleaning up")
 	}
 	// Local flows do not get registered.
-	if !f.IsLocal() && f.status != FlowNotStarted {
+	if !f.IsLocal() && f.Started() {
 		f.flowRegistry.UnregisterFlow(f.ID)
 	}
-	f.status = FlowFinished
+	f.status = flowFinished
 	f.ctxCancel()
 	if f.onFlowCleanup != nil {
 		f.onFlowCleanup()

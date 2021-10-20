@@ -69,6 +69,10 @@ type Context struct {
 	// on whether the session is interactive.
 	SafeUpdates OptBool
 
+	// ReadOnly indicates where to set default_transaction_read_only in the
+	// CLI shell prior to running it.
+	ReadOnly bool
+
 	// The following fields are populated during Open().
 	opened bool
 	cmdIn  *os.File
@@ -191,6 +195,19 @@ func (c *Context) Run(conn clisqlclient.Conn) error {
 		return err
 	}
 
+	c.maybeSetSafeUpdates(conn)
+	if err := c.maybeSetReadOnly(conn); err != nil {
+		return err
+	}
+
+	shell := clisqlshell.NewShell(c.CliCtx, c.ConnCtx, c.ExecCtx, &c.ShellCtx, conn)
+	return shell.RunInteractive(c.cmdIn, c.CmdOut, c.CmdErr)
+}
+
+// maybeSetSafeUpdates sets the session variable for safe updates to true
+// if the flag is specified or this is an interactive session. It prints
+// but does not do anything drastic if an error occurs.
+func (c *Context) maybeSetSafeUpdates(conn clisqlclient.Conn) {
 	hasSafeUpdates, safeUpdates := c.SafeUpdates.Get()
 	if !hasSafeUpdates {
 		safeUpdates = c.CliCtx.IsInteractive
@@ -203,7 +220,13 @@ func (c *Context) Run(conn clisqlclient.Conn) error {
 			fmt.Fprintf(c.CmdErr, "warning: cannot enable safe updates: %v\n", err)
 		}
 	}
+}
 
-	shell := clisqlshell.NewShell(c.CliCtx, c.ConnCtx, c.ExecCtx, &c.ShellCtx, conn)
-	return shell.RunInteractive(c.cmdIn, c.CmdOut, c.CmdErr)
+// maybeSetReadOnly sets the session variable default_transaction_read_only to
+// true if the user has requested it.
+func (c *Context) maybeSetReadOnly(conn clisqlclient.Conn) error {
+	if !c.ReadOnly {
+		return nil
+	}
+	return conn.Exec("SET default_transaction_read_only = TRUE", nil)
 }

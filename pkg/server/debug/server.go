@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	pebbletool "github.com/cockroachdb/pebble/tool"
 	metrics "github.com/rcrowley/go-metrics"
@@ -123,7 +122,7 @@ func NewServer(
 	mux.Handle("/debug/pprof/ui/", http.StripPrefix("/debug/pprof/ui", ps))
 
 	mux.HandleFunc("/debug/pprof/goroutineui/", func(w http.ResponseWriter, req *http.Request) {
-		dump := goroutineui.NewDump(timeutil.Now())
+		dump := goroutineui.NewDump()
 
 		_ = req.ParseForm()
 		switch req.Form.Get("sort") {

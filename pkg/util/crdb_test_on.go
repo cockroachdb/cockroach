@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//go:build crdb_test && !crdb_test_off
 // +build crdb_test,!crdb_test_off
 
 package util

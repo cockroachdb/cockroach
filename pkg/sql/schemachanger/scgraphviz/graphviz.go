@@ -143,6 +143,7 @@ func drawDeps(p *scplan.Plan) (*dot.Graph, error) {
 			ge.Attr("fontsize", "9")
 		case *scgraph.DepEdge:
 			ge.Attr("color", "red")
+			ge.Attr("label", e.Name())
 		}
 		return nil
 	})

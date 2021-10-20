@@ -259,6 +259,7 @@ func init() {
 	cmdSVG.Flags().StringVar(&railroadJar, "railroad", "", "Location of Railroad.jar; empty to use website")
 	cmdSVG.Flags().DurationVar(&railroadAPITimeout, "timeout", time.Second*120, "Timeout in seconds for railroad HTTP Api, "+
 		"only relevant when the web api is used; default 120s.")
+	cmdSVG.Flags().StringVar(&addr, "addr", "./pkg/sql/parser/sql.y", "Location of sql.y file. Can also specify an http address.")
 
 	diagramCmd := &cobra.Command{
 		Use:   "grammar",
@@ -652,7 +653,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_schedule_for_backup_stmt",
-		inline: []string{"opt_description", "string_or_placeholder_opt_list", "string_or_placeholder_list", "opt_with_backup_options", "cron_expr", "opt_full_backup_clause", "opt_with_schedule_options", "opt_backup_targets"},
+		inline: []string{"string_or_placeholder_opt_list", "string_or_placeholder_list", "opt_with_backup_options", "cron_expr", "opt_full_backup_clause", "opt_with_schedule_options", "opt_backup_targets"},
 		replace: map[string]string{
 			"string_or_placeholder 'FOR'":       "label 'FOR'",
 			"'RECURRING' sconst_or_placeholder": "'RECURRING' cronexpr",

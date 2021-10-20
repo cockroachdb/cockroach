@@ -3,16 +3,9 @@
 set -euo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
-
-tc_start_block "Get Railroad Jar"
-log_into_gcloud
-gsutil cp gs://cockroach-railroad-jar/Railroad-1.45-java7/Railroad.jar ./Railroad.jar
-railroadPath=`pwd`/Railroad.jar
-tc_end_block "Get Railroad Jar"
+source "$(dirname "${0}")/teamcity-bazel-support.sh"
 
 cockroach_ref=$(git describe --tags --exact-match 2>/dev/null || git rev-parse HEAD)
-
-make bin/docgen
 
 git clone https://github.com/cockroachdb/generated-diagrams.git
 
@@ -27,15 +20,15 @@ cd generated-diagrams
 git checkout $TC_BUILD_BRANCH || git checkout -b $TC_BUILD_BRANCH
 
 # Clean out old diagrams.
-rm -rf bnf
-rm -rf grammar_svg
+rm -rf bnf && mkdir bnf
+rm -rf grammar_svg && mkdir grammar_svg
 
 tc_start_block "Generate Diagrams"
-# docgen has to be run in the cockroach root directory to find
-# the sql.y grammar file.
+# Must run this from the root.
 cd ..
-bin/docgen grammar bnf ./generated-diagrams/bnf
-bin/docgen grammar svg ./generated-diagrams/bnf ./generated-diagrams/grammar_svg --railroad $railroadPath
+run_bazel build/teamcity/cockroach/publish-sql-grammar-diagrams-impl.sh
+cp $root/artifacts/bazel-bin/docs/generated/sql/bnf/*.bnf ./generated-diagrams/bnf
+cp $root/artifacts/bazel-bin/docs/generated/sql/bnf/*.html ./generated-diagrams/grammar_svg
 tc_end_block "Generate Diagrams"
 
 tc_start_block "Push Diagrams to Git"

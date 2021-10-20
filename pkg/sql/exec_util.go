@@ -2604,7 +2604,7 @@ func (it *sessionDataMutatorIterator) mutator(
 // SetSessionDefaultIntSize sets the default int size for the session.
 // It is exported for use in import which is a CCL package.
 func (it *sessionDataMutatorIterator) SetSessionDefaultIntSize(size int32) {
-	it.applyForEachMutator(func(m sessionDataMutator) {
+	it.applyOnEachMutator(func(m sessionDataMutator) {
 		m.SetDefaultIntSize(size)
 	})
 }
@@ -2617,17 +2617,17 @@ func (it *sessionDataMutatorIterator) applyOnTopMutator(
 	return applyFunc(it.mutator(true /* applyCallbacks */, it.sds.Top()))
 }
 
-// applyForEachMutator iterates over each mutator over all SessionData elements
+// applyOnEachMutator iterates over each mutator over all SessionData elements
 // in the stack and applies the given function to them.
 // It is the equivalent of SET SESSION x = y.
-func (it *sessionDataMutatorIterator) applyForEachMutator(applyFunc func(m sessionDataMutator)) {
+func (it *sessionDataMutatorIterator) applyOnEachMutator(applyFunc func(m sessionDataMutator)) {
 	elems := it.sds.Elems()
 	for i, sd := range elems {
 		applyFunc(it.mutator(i == 0, sd))
 	}
 }
 
-// applyOnEachMutatorError is the same as applyForEachMutator, but takes in a function
+// applyOnEachMutatorError is the same as applyOnEachMutator, but takes in a function
 // that can return an error, erroring if any of applications error.
 func (it *sessionDataMutatorIterator) applyOnEachMutatorError(
 	applyFunc func(m sessionDataMutator) error,
@@ -2944,6 +2944,10 @@ func (m *sessionDataMutator) SetExperimentalComputedColumnRewrites(val string) {
 	m.data.ExperimentalComputedColumnRewrites = val
 }
 
+func (m *sessionDataMutator) SetNullOrderedLast(b bool) {
+	m.data.NullOrderedLast = b
+}
+
 func (m *sessionDataMutator) SetPropagateInputOrdering(b bool) {
 	m.data.PropagateInputOrdering = b
 }
@@ -2966,6 +2970,10 @@ func (m *sessionDataMutator) SetTxnRowsReadErr(val int64) {
 
 func (m *sessionDataMutator) SetLargeFullScanRows(val float64) {
 	m.data.LargeFullScanRows = val
+}
+
+func (m *sessionDataMutator) SetInjectRetryErrorsEnabled(val bool) {
+	m.data.InjectRetryErrorsEnabled = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.
@@ -3051,6 +3059,18 @@ func formatStatementHideConstants(ast tree.Statement) string {
 		return ""
 	}
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
+}
+
+// formatStatementSummary formats the statement using tree.FmtSummary
+// and tree.FmtHideConstants. This returns a summarized version of the
+// query. It does *not* anonymize the statement, since the result will
+// still contain names and identifiers.
+func formatStatementSummary(ast tree.Statement) string {
+	if ast == nil {
+		return ""
+	}
+	fmtFlags := tree.FmtSummary | tree.FmtHideConstants
+	return tree.AsStringWithFlags(ast, fmtFlags)
 }
 
 // DescsTxn is a convenient method for running a transaction on descriptors

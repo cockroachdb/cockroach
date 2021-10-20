@@ -19,11 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
 func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
-	skip.WithIssue(t, 70902, "flaky test")
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, c.Range(1, 3))
 
@@ -45,14 +43,13 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 		return result
 	}
 
-	nodeStatus := func() (raw string, _ []string) {
-		out, err := c.RunWithBuffer(ctx, t.L(), c.Node(1),
-			"./cockroach node status --insecure -p {pgport:1}")
-		if err != nil {
-			t.Fatalf("%v\n%s", err, out)
+	nodeStatus := func() (_ string, _ []string, err error) {
+		var out []byte
+		if out, err = c.RunWithBuffer(ctx, t.L(), c.Node(1),
+			"./cockroach node status --insecure -p {pgport:1}"); err != nil {
+			return "", nil, err
 		}
-		raw = string(out)
-		return raw, lastWords(string(out))
+		return string(out), lastWords(string(out)), nil
 	}
 
 	{
@@ -62,19 +59,26 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 			"true true",
 			"true true",
 		}
-		raw, actual := nodeStatus()
+		raw, actual, err := nodeStatus()
+		if err != nil {
+			t.Fatalf("node status failed: %v\n%s", err, raw)
+		}
 		if !reflect.DeepEqual(expected, actual) {
 			t.Fatalf("expected %s, but found %s:\nfrom:\n%s", expected, actual, raw)
 		}
 	}
 
 	waitUntil := func(expected []string) {
-		var raw string
-		var actual []string
+		var (
+			raw    string
+			actual []string
+			err    error
+		)
 		// Node liveness takes ~9s to time out. Give the test double that time.
 		for i := 0; i < 20; i++ {
-			raw, actual = nodeStatus()
-			if reflect.DeepEqual(expected, actual) {
+			if raw, actual, err = nodeStatus(); err != nil {
+				t.L().Printf("node status failed: %v\n%s", err, raw)
+			} else if reflect.DeepEqual(expected, actual) {
 				break
 			}
 			t.L().Printf("not done: %s vs %s\n", expected, actual)
@@ -109,7 +113,7 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// Stop the cluster and restart only 2 of the nodes. Verify that three nodes
 	// show up in the node status output.
-	c.Stop(ctx, c.Range(1, 3))
+	c.Stop(ctx, c.Range(1, 2))
 	c.Start(ctx, c.Range(1, 2))
 
 	waitUntil([]string{

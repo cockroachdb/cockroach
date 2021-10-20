@@ -26,7 +26,7 @@ func withBuildChildReqOrdering(
 ) props.OrderingChoice {
 	switch childIdx {
 	case 0:
-		// No ordering required of the binding.
+		return parent.(*memo.WithExpr).BindingOrdering
 
 	case 1:
 		// We can pass through any required ordering to the main query.

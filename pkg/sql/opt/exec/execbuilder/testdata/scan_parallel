@@ -48,7 +48,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: data@primary
+  table: data@data_pkey
   spans: [/0 - /0] [/2 - /2] [/4 - /4] [/6 - /6] … (1 more)
 
 query T
@@ -81,7 +81,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: data@primary
+  table: data@data_pkey
   spans: [/0 - /0] [/2 - /2] [/4 - /4] [/6 - /6] … (1 more)
 
 # We allow to retry because the concurrency limit on the semaphore might not be

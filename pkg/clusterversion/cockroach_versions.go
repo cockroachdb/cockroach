@@ -212,9 +212,6 @@ const (
 	DeleteDeprecatedNamespaceTableDescriptorMigration
 	// FixDescriptors is for the migration to fix all descriptors.
 	FixDescriptors
-	// SQLStatsTable adds the system tables for storing persisted SQL statistics
-	// for statements and transactions.
-	SQLStatsTable
 	// DatabaseRoleSettings adds the system table for storing per-user and
 	// per-role default session settings.
 	DatabaseRoleSettings
@@ -269,10 +266,6 @@ const (
 	SpanConfigurationsTable
 	// BoundedStaleness adds capabilities to perform bounded staleness reads.
 	BoundedStaleness
-	// SQLStatsCompactionScheduledJob creates a ScheduledJob for SQL Stats
-	// compaction on cluster startup and ensures that there is only one entry for
-	// the schedule.
-	SQLStatsCompactionScheduledJob
 	// DateAndIntervalStyle enables DateStyle and IntervalStyle to be changed.
 	DateAndIntervalStyle
 	// PebbleFormatVersioned ratchets Pebble's format major version to
@@ -289,8 +282,20 @@ const (
 	// TenantUsageSingleConsumptionColumn changes the tenant_usage system table to
 	// use a single consumption column (encoding a proto).
 	TenantUsageSingleConsumptionColumn
+	// SQLStatsTables adds the system table for storing persisted SQL statistics
+	// for statements.
+	SQLStatsTables
+	// SQLStatsCompactionScheduledJob creates a ScheduledJob for SQL Stats
+	// compaction on cluster startup and ensures that there is only one entry for
+	// the schedule.
+	SQLStatsCompactionScheduledJob
 	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 	V21_2
+
+	// v22.1 versions.
+	//
+	// Start22_1 demarcates work towards CockroachDB v22.1.
+	Start22_1
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -383,10 +388,6 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1114},
 	},
 	{
-		Key:     SQLStatsTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1116},
-	},
-	{
 		Key:     DatabaseRoleSettings,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1118},
 	},
@@ -466,10 +467,6 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1156},
 	},
 	{
-		Key:     SQLStatsCompactionScheduledJob,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1158},
-	},
-	{
 		Key:     DateAndIntervalStyle,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1160},
 	},
@@ -490,10 +487,25 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1168},
 	},
 	{
+		Key:     SQLStatsTables,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1170},
+	},
+	{
+		Key:     SQLStatsCompactionScheduledJob,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1172},
+	},
+	{
 		// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 		Key:     V21_2,
 		Version: roachpb.Version{Major: 21, Minor: 2},
 	},
+
+	// v22.1 versions.
+	{
+		Key:     Start22_1,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 100},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -516,6 +528,15 @@ var (
 	// This is the version that a new cluster will use when created.
 	binaryVersion = versionsSingleton[len(versionsSingleton)-1].Version
 )
+
+func init() {
+	const isReleaseBranch = false
+	if isReleaseBranch {
+		if binaryVersion != ByKey(V21_2) {
+			panic("unexpected cluster version greater than release's binary version")
+		}
+	}
+}
 
 // ByKey returns the roachpb.Version for a given key.
 // It is a fatal error to use an invalid key.

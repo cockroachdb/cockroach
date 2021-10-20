@@ -21,7 +21,7 @@ vectorized: true
 │ filter: st_intersects('010100000000000000000008400000000000000840', geom)
 │
 └── • index join
-    │ table: geo_table2@primary
+    │ table: geo_table2@geo_table2_pkey
     │
     └── • inverted filter
         │ inverted column: geom_inverted_key
@@ -44,7 +44,7 @@ vectorized: true
 │ filter: st_intersects('010100000000000000000008400000000000000840', geom)
 │
 └── • index join
-    │ table: geo_table2@primary
+    │ table: geo_table2@geo_table2_pkey
     │
     └── • inverted filter
         │ inverted column: geom_inverted_key
@@ -67,7 +67,7 @@ vectorized: true
 │ filter: st_intersects('010100000000000000000008400000000000000840', geom)
 │
 └── • index join
-    │ table: geo_table2@primary
+    │ table: geo_table2@geo_table2_pkey
     │
     └── • inverted filter
         │ inverted column: geom_inverted_key
@@ -88,7 +88,7 @@ vectorized: true
 │ filter: st_dfullywithin('010100000000000000000008400000000000000840', geom, 1.0)
 │
 └── • index join
-    │ table: geo_table2@primary
+    │ table: geo_table2@geo_table2_pkey
     │
     └── • inverted filter
         │ inverted column: geom_inverted_key
@@ -113,7 +113,7 @@ vectorized: true
 │ filter: geom && '010100000000000000000008400000000000000840'
 │
 └── • index join
-    │ table: geo_table2@primary
+    │ table: geo_table2@geo_table2_pkey
     │
     └── • inverted filter
         │ inverted column: geom_inverted_key
@@ -134,7 +134,7 @@ vectorized: true
 │ filter: 'BOX(3 3,3 3)' && geom
 │
 └── • index join
-    │ table: geo_table2@primary
+    │ table: geo_table2@geo_table2_pkey
     │
     └── • inverted filter
         │ inverted column: geom_inverted_key
@@ -155,7 +155,7 @@ vectorized: true
 │ filter: '010200000002000000000000000000F03F000000000000F03F00000000000014400000000000001440' ~ geom
 │
 └── • index join
-    │ table: geo_table2@primary
+    │ table: geo_table2@geo_table2_pkey
     │
     └── • inverted filter
         │ inverted column: geom_inverted_key
@@ -176,7 +176,7 @@ vectorized: true
 │ filter: geom ~ 'BOX(1 1,5 5)'
 │
 └── • index join
-    │ table: geo_table2@primary
+    │ table: geo_table2@geo_table2_pkey
     │
     └── • inverted filter
         │ inverted column: geom_inverted_key

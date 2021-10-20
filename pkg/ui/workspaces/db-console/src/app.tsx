@@ -29,6 +29,7 @@ import {
   rangeIDAttr,
   sessionAttr,
   statementAttr,
+  tabAttr,
   tableNameAttr,
 } from "src/util/constants";
 import NotFound from "src/views/app/components/NotFound";
@@ -59,11 +60,9 @@ import Range from "src/views/reports/containers/range";
 import ReduxDebug from "src/views/reports/containers/redux";
 import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
+import SQLActivityPage from "src/views/sqlActivity/sqlActivityPage";
 import StatementDetails from "src/views/statements/statementDetails";
-import StatementsPage from "src/views/statements/statementsPage";
-import SessionsPage from "src/views/sessions/sessionsPage";
 import SessionDetails from "src/views/sessions/sessionDetails";
-import TransactionsPage from "src/views/transactions/transactionsPage";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
 import "styl/app.styl";
@@ -177,12 +176,24 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   component={DataDistributionPage}
                 />
 
-                {/* statement statistics */}
-                <Route exact path="/statements" component={StatementsPage} />
+                {/* SQL activity */}
+                <Route exact path="/sql-activity" component={SQLActivityPage} />
                 <Route
                   exact
-                  path={`/statements/:${appAttr}`}
-                  component={StatementsPage}
+                  path={`/sql-activity/:${tabAttr}`}
+                  component={SQLActivityPage}
+                />
+
+                {/* statement statistics */}
+                <Redirect
+                  exact
+                  from={`/statements`}
+                  to={`/sql-activity/statements`}
+                />
+                <Redirect
+                  exact
+                  from={`/statements/:${appAttr}`}
+                  to={`/statements?${appAttr}=:${appAttr}`}
                 />
                 <Route
                   exact
@@ -214,24 +225,29 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   path={`/statement/:${databaseAttr}/:${implicitTxnAttr}/:${statementAttr}`}
                   render={RedirectToStatementDetails}
                 />
-                <Route
+                <Redirect
                   exact
-                  path="/statement"
-                  component={() => <Redirect to="/statements" />}
+                  from={`/statement`}
+                  to={`/sql-activity/statements`}
                 />
 
                 {/* sessions */}
-                <Route exact path="/sessions" component={SessionsPage} />
+                <Redirect
+                  exact
+                  from={`/sessions`}
+                  to={`/sql-activity/sessions`}
+                />
                 <Route
                   exact
                   path={`/session/:${sessionAttr}`}
                   component={SessionDetails}
                 />
+
                 {/* transactions */}
-                <Route
+                <Redirect
                   exact
-                  path="/transactions"
-                  component={TransactionsPage}
+                  from={`/transactions`}
+                  to={`/sql-activity/transactions`}
                 />
 
                 {/* debug pages */}

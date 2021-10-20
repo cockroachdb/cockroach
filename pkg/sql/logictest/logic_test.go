@@ -27,7 +27,7 @@ import (
 // See the comments in logic.go for more details.
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderDeadlockWithIssue(t, 71366)
+	skip.UnderDeadlock(t, "times out and/or hangs")
 	RunLogicTest(t, TestServerArgs{}, "testdata/logic_test/[^.]*")
 }
 
@@ -35,7 +35,6 @@ func TestLogic(t *testing.T) {
 // for runSQLLiteLogicTest for more detail on these tests.
 func TestSqlLiteLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderDeadlockWithIssue(t, 71366)
 	RunSQLLiteLogicTest(t, "" /* configOverride */)
 }
 

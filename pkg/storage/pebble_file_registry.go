@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -527,7 +528,7 @@ func (r *PebbleFileRegistry) rewriteOldRegistry(newProto *enginepb.FileRegistry)
 	if err != nil {
 		return err
 	}
-	if err := SafeWriteToFile(r.FS, r.DBDir, r.oldRegistryPath, b); err != nil {
+	if err := fs.SafeWriteToFile(r.FS, r.DBDir, r.oldRegistryPath, b); err != nil {
 		return err
 	}
 	return nil

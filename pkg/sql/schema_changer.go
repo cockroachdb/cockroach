@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -192,6 +193,10 @@ func IsPermanentSchemaChangeError(err error) bool {
 		return false
 	}
 
+	if flowinfra.IsFlowRetryableError(err) {
+		return false
+	}
+
 	switch pgerror.GetPGCode(err) {
 	case pgcode.SerializationFailure, pgcode.InternalConnectionFailure:
 		return false
@@ -296,7 +301,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		defer localPlanner.curPlan.close(ctx)
 
 		res := roachpb.BulkOpSummary{}
-		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			// TODO(adityamaru): Use the BulkOpSummary for either telemetry or to
 			// return to user.
 			var counts roachpb.BulkOpSummary

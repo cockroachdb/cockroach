@@ -1007,10 +1007,12 @@ func (cm *CertificateManager) GetTenantTLSConfig() (*tls.Config, error) {
 
 	caBlob := ca.FileContents
 
-	// CA used to validate certs provided by other SQL servers.
-	tenantCA, err := cm.getTenantCACertLocked()
-	if err == nil {
-		caBlob = append(caBlob, tenantCA.FileContents...)
+	if cm.tenantCACert != nil {
+		// If it's available, we also include the tenant CA.
+		tenantCA, err := cm.getTenantCACertLocked()
+		if err == nil {
+			caBlob = AppendCertificatesToBlob(caBlob, tenantCA.FileContents)
+		}
 	}
 
 	// Client cert presented to KV nodes.
@@ -1113,10 +1115,12 @@ func (cm *CertificateManager) GetUIClientTLSConfig() (*tls.Config, error) {
 
 	caBlob := uiCA.FileContents
 
-	// If it's available, we also include the tenant CA.
-	tenantCA, err := cm.getTenantCACertLocked()
-	if err == nil {
-		caBlob = append(caBlob, tenantCA.FileContents...)
+	if cm.tenantCACert != nil {
+		// If it's available, we also include the tenant CA.
+		tenantCA, err := cm.getTenantCACertLocked()
+		if err == nil {
+			caBlob = AppendCertificatesToBlob(caBlob, tenantCA.FileContents)
+		}
 	}
 
 	cfg, err := newUIClientTLSConfig(cm.tlsSettings, caBlob)

@@ -104,7 +104,7 @@ ORDER BY enumsortorder`, name.Object(), name.Schema())
 		return nil, pgerror.Newf(pgcode.UndefinedObject, "type %s with oid %s does not exist", name.Object(), objectID)
 	}
 	// Special case CHAR to have the right width.
-	if objectID == oid.T_char || objectID == oid.T_bpchar {
+	if objectID == oid.T_bpchar {
 		t := *types.OidToType[objectID]
 		t.InternalType.Width = 1
 		return &t, nil

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -939,9 +940,13 @@ func createBackupScheduleHook(
 	return fn, scheduledBackupHeader, nil, false, nil
 }
 
-// MarshalJSONPB provides a custom Marshaller for jsonpb that redacts secrets in
-// URI fields.
-func (m ScheduledBackupExecutionArgs) MarshalJSONPB(x *jsonpb.Marshaler) ([]byte, error) {
+// MarshalJSONPB implements jsonpb.JSONPBMarshaller to provide a custom Marshaller
+// for jsonpb that redacts secrets in URI fields.
+func (m ScheduledBackupExecutionArgs) MarshalJSONPB(marshaller *jsonpb.Marshaler) ([]byte, error) {
+	if !protoreflect.ShouldRedact(marshaller) {
+		return json.Marshal(m)
+	}
+
 	stmt, err := parser.ParseOne(m.BackupStatement)
 	if err != nil {
 		return nil, err

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -167,6 +168,12 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 
 			// Index joins will always return exactly one output row per input row.
 			s.rf.setEstimatedRowCount(uint64(rowCount))
+			// Note that the fetcher takes ownership of the spans slice - it
+			// will modify it and perform the memory accounting. We don't care
+			// about the modification here, but we want to be conscious about
+			// the memory accounting - we don't double count for any memory of
+			// spans because the spanAssembler released all of the relevant
+			// memory from its account in GetSpans().
 			if err := s.rf.StartScan(
 				s.Ctx,
 				s.flowCtx.Txn,
@@ -191,6 +198,11 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			}
 			n := batch.Length()
 			if n == 0 {
+				// NB: the fetcher has just been closed automatically, so it
+				// released all of the resources. We now have to tell the
+				// ColSpanAssembler to account for the spans slice since it
+				// still has the references to it.
+				s.spanAssembler.AccountForSpans()
 				s.state = indexJoinConstructingSpans
 				continue
 			}
@@ -199,6 +211,11 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			s.mu.Unlock()
 			return batch
 		case indexJoinDone:
+			// Eagerly close the index joiner. Note that Close() is idempotent,
+			// so it's ok if it'll be closed again.
+			if err := s.Close(); err != nil {
+				colexecerror.InternalError(err)
+			}
 			return coldata.ZeroBatch
 		}
 	}
@@ -369,6 +386,7 @@ func NewColIndexJoin(
 	ctx context.Context,
 	allocator *colmem.Allocator,
 	fetcherAllocator *colmem.Allocator,
+	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
@@ -442,7 +460,7 @@ func NewColIndexJoin(
 	}
 
 	fetcher, err := initCFetcher(
-		flowCtx, fetcherAllocator, table, index, neededColumns, columnIdxMap, nil, /* invertedColumn */
+		flowCtx, fetcherAllocator, kvFetcherMemAcc, table, index, neededColumns, columnIdxMap, nil, /* invertedColumn */
 		cFetcherArgs{
 			visibility:        spec.Visibility,
 			lockingStrength:   spec.LockingStrength,

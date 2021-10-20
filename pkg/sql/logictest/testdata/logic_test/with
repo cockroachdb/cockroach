@@ -698,3 +698,350 @@ SELECT * FROM
 10  2
 10  3
 10  4
+
+# Tests with multiple mutation CTEs on different tables. These testcases vary
+# the type of mutation as well as the input to the mutation subquery and
+# the main query (sometimes another CTE, sometimes the table being mutated,
+# sometimes a different table).
+
+statement ok
+CREATE TABLE r (i INT PRIMARY KEY);
+CREATE TABLE s (i INT PRIMARY KEY);
+INSERT INTO r VALUES (0)
+
+# Multiple CTEs inserting into different tables.
+query I rowsort
+WITH
+  t AS (INSERT INTO r VALUES (1) RETURNING i),
+  u AS (INSERT INTO s SELECT * FROM r RETURNING i)
+SELECT i FROM s
+----
+
+query I rowsort
+SELECT i FROM r
+----
+0
+1
+
+query I rowsort
+SELECT i FROM s
+----
+0
+
+# Multiple CTEs deleting from different tables.
+query I rowsort
+WITH
+  t AS (DELETE FROM r WHERE i IN (SELECT i FROM s) RETURNING i),
+  u AS (DELETE FROM s WHERE i IN (SELECT i FROM t) RETURNING i)
+SELECT i FROM r WHERE i IN (SELECT i FROM s)
+----
+0
+
+query I rowsort
+SELECT i FROM r
+----
+1
+
+query I rowsort
+SELECT i FROM s
+----
+
+# Multiple CTEs upserting into different tables. The first CTE will perform both
+# a no-op update due to a conflict, and an insert. The second CTE will perform
+# two inserts.
+query I rowsort
+WITH
+  t AS (UPSERT INTO r VALUES (0), (1) RETURNING i),
+  u AS (UPSERT INTO s SELECT * FROM t RETURNING i)
+SELECT i FROM r UNION ALL SELECT i FROM t
+----
+0
+1
+1
+
+query I rowsort
+SELECT i FROM r
+----
+0
+1
+
+query I rowsort
+SELECT i FROM s
+----
+0
+1
+
+# Multiple CTEs updating different tables. Both CTEs will update two rows.
+query I rowsort
+WITH
+  t AS (UPDATE r SET i = i + 2 RETURNING i),
+  u AS (UPDATE s SET i = -r.i FROM r WHERE s.i < r.i RETURNING s.i)
+SELECT i FROM u
+----
+-1
+
+query I rowsort
+SELECT i FROM r
+----
+2
+3
+
+query I rowsort
+SELECT i FROM s
+----
+-1
+1
+
+# Multiple CTEs inserting into different tables. The second CTE will update two
+# rows instead of inserting, due to conflicts.
+query II rowsort
+WITH
+  t AS (INSERT INTO r SELECT i FROM s ON CONFLICT (i) DO UPDATE SET i = r.i + 2 RETURNING r.i),
+  u AS (INSERT INTO s SELECT i FROM t ON CONFLICT (i) DO UPDATE SET i = s.i - 2 RETURNING s.i)
+SELECT * FROM r, u
+----
+2 -3
+2 -1
+3 -3
+3 -1
+
+query I rowsort
+SELECT i FROM r
+----
+-1
+1
+2
+3
+
+query I rowsort
+SELECT i FROM s
+----
+-3
+-1
+
+# Tests with multiple mutations on the same table, modifying different rows.
+# These testcases vary the type of mutation, but use a common form of: mutation
+# CTE followed by main mutation which reads from the CTE.
+
+statement ok
+CREATE TABLE t (i INT PRIMARY KEY, j INT, INDEX (j));
+INSERT INTO t VALUES (0, 0)
+
+# Multiple inserts of different rows into the same table.
+query II rowsort
+WITH
+  u AS (INSERT INTO t VALUES (1, 1) RETURNING *)
+INSERT INTO t SELECT i + 1, j + 1 FROM u RETURNING *
+----
+2 2
+
+query II rowsort
+SELECT * FROM t
+----
+0 0
+1 1
+2 2
+
+# For INSERT ON CONFLICT, UPSERT, UPDATE, and DELETE we must explicitly allow
+# statements with multiple mutations to the same table, due to issue
+# 70731. These statements are safe to execute because the mutations modify
+# different rows.
+statement ok
+SET CLUSTER SETTING sql.multiple_modifications_of_table.enabled = true
+
+# Multiple deletes of different rows from the same table. The CTE will delete
+# one row and the main query will delete one row.
+query II rowsort
+WITH
+  u AS (DELETE FROM t WHERE i = 0 RETURNING *)
+DELETE FROM t WHERE i IN (SELECT i + 1 FROM u) RETURNING *
+----
+1 1
+
+query II rowsort
+SELECT * FROM t
+----
+2 2
+
+# Multiple upserts of different rows into the same table. The CTE will update
+# one row and insert one row. The main query will insert two rows.
+query II rowsort
+WITH
+  u AS (UPSERT INTO t VALUES (2, 3), (4, 5) RETURNING *)
+UPSERT INTO t SELECT i + 4, j + 4 FROM u RETURNING *
+----
+6 7
+8 9
+
+query II rowsort
+SELECT * FROM t
+----
+2 3
+4 5
+6 7
+8 9
+
+# Multiple updates of different rows in the same table. The CTE will update one
+# row and the main query will update the rest of the rows.
+query IIII rowsort
+WITH
+  u AS (UPDATE t SET j = j + 1 WHERE i = 2 RETURNING *)
+UPDATE t SET j = 99 FROM u WHERE t.i != u.i RETURNING *
+----
+4 99 2 4
+6 99 2 4
+8 99 2 4
+
+query II rowsort
+SELECT * FROM t
+----
+2 4
+4 99
+6 99
+8 99
+
+# Multiple inserts of different rows into the same table. The CTE will update
+# all rows due to conflicts. The main query will then insert one new row.
+query II rowsort
+WITH
+  u AS (INSERT INTO t SELECT i, j - 1 FROM t ON CONFLICT (i) DO UPDATE SET j = 100 RETURNING *)
+INSERT INTO t SELECT sum_int(i), sum_int(j) FROM u ON CONFLICT (i) DO UPDATE SET j = 1 RETURNING *
+----
+20 400
+
+query II rowsort
+SELECT * FROM t
+----
+2 100
+4 100
+6 100
+8 100
+20 400
+
+# Check for corruption. (There should be none!)
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX ALL
+----
+
+statement ok
+RESET CLUSTER SETTING sql.multiple_modifications_of_table.enabled
+
+# Tests with multiple mutations on the same table, modifying the same
+# rows. These testcases vary the type of mutation and the form. All should fail
+# with an error. When issue 70731 is fixed, some might no longer fail.
+
+statement ok
+CREATE TABLE u (i INT PRIMARY KEY, j INT, INDEX (j));
+INSERT INTO u VALUES (0, 0)
+
+# Multiple inserts of the same row into the same table. Should always fail.
+query error pgcode 23505 duplicate key value violates unique constraint
+WITH
+  v AS (INSERT INTO u VALUES (1, 1) RETURNING *)
+INSERT INTO u SELECT * FROM v
+
+query II
+SELECT i, j FROM u@u_pkey
+----
+0 0
+
+query II
+SELECT i, j FROM u@u_j_idx
+----
+0 0
+
+# Multiple upserts of the same row. Might succeed after issue 70731 is fixed,
+# depending on the implementation, but should not cause corruption.
+query error pgcode 0A000 multiple modification subqueries of the same table
+WITH
+  v AS (UPSERT INTO u VALUES (0, 1) RETURNING *),
+  w AS (UPSERT INTO u SELECT i, j + 1 FROM v RETURNING *)
+SELECT * FROM w
+
+query II
+SELECT i, j FROM u@u_pkey
+----
+0 0
+
+query II
+SELECT i, j FROM u@u_j_idx
+----
+0 0
+
+# Multiple updates of the same row. Might succeed after issue 70731 is fixed,
+# depending on the implementation, but should not cause corruption. The order of
+# CTE execution is not necessarily defined here.
+query error pgcode 0A000 multiple modification subqueries of the same table
+WITH
+  v AS (UPDATE u SET j = 3 WHERE i = 0 RETURNING *),
+  w AS (UPDATE u SET j = 4 WHERE i = 0 RETURNING *)
+SELECT * FROM u
+
+query II
+SELECT i, j FROM u@u_pkey
+----
+0 0
+
+query II
+SELECT i, j FROM u@u_j_idx
+----
+0 0
+
+# Multiple updates of the same row. Might succeed after issue 70731 is fixed,
+# depending on the implementation, but should not cause corruption. The order of
+# CTE execution should be deterministic.
+query error pgcode 0A000 multiple modification subqueries of the same table
+WITH
+  v AS (UPDATE u SET j = 5 WHERE i = 0 RETURNING *),
+  w AS (UPDATE u SET j = v.j + 1 FROM v WHERE u.i = v.i RETURNING *)
+SELECT * FROM w
+
+query II
+SELECT i, j FROM u@u_pkey
+----
+0 0
+
+query II
+SELECT i, j FROM u@u_j_idx
+----
+0 0
+
+# Multiple inserts of the same row into the same table, most should become
+# updates due to conflicts. Might succeed after issue 70731 is fixed.
+query error pgcode 0A000 multiple modification subqueries of the same table
+WITH
+  v AS (INSERT INTO u VALUES (0, 42), (1, 42) ON CONFLICT (i) DO UPDATE SET j = 52 RETURNING *)
+INSERT INTO u SELECT i, j + 1 FROM v ON CONFLICT (i) DO UPDATE SET j = v.j + 100 RETURNING *
+
+query II
+SELECT i, j FROM u@u_pkey
+----
+0 0
+
+query II
+SELECT i, j FROM u@u_j_idx
+----
+0 0
+
+# Multiple deletes of the same row. Might succeed after issue 70731 is fixed,
+# though the order of CTE execution is undefined.
+query error pgcode 0A000 multiple modification subqueries of the same table
+WITH
+  v AS (DELETE FROM u ORDER BY i LIMIT 1 RETURNING *),
+  w AS (DELETE FROM u ORDER BY i LIMIT 2 RETURNING *)
+SELECT * FROM w
+
+query II
+SELECT i, j FROM u@u_pkey
+----
+0 0
+
+query II
+SELECT i, j FROM u@u_j_idx
+----
+0 0
+
+# Check for corruption. (There should be none!)
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE u WITH OPTIONS INDEX ALL
+----

@@ -28,6 +28,6 @@ import (
 func TestExecBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer sql.TestingOverrideExplainEnvVersion("CockroachDB execbuilder test version")()
-	skip.UnderDeadlockWithIssue(t, 71366)
+	skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, "testdata/[^.]*")
 }

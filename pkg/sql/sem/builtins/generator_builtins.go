@@ -434,6 +434,10 @@ var unsuitableUseOfGeneratorFn = func(_ *tree.EvalContext, _ tree.Datums) (tree.
 	return nil, errors.AssertionFailedf("generator functions cannot be evaluated as scalars")
 }
 
+var unsuitableUseOfGeneratorFnWithExprs = func(_ *tree.EvalContext, _ tree.Exprs) (tree.Datum, error) {
+	return nil, errors.AssertionFailedf("generator functions cannot be evaluated as scalars")
+}
+
 func makeGeneratorOverloadWithReturnType(
 	in tree.TypeList,
 	retType tree.ReturnTyper,
@@ -1437,6 +1441,9 @@ func (j *jsonPopulateRecordSetGenerator) Values() (tree.Datums, error) {
 	if err != nil {
 		return nil, err
 	}
+	if obj.Type() != json.ObjectJSONType {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "argument of json_populate_recordset must be an array of objects")
+	}
 	output := tree.NewDTupleWithLen(j.input.ResolvedType(), j.input.D.Len())
 	for i := range j.input.D {
 		output.D[i] = j.input.D[i]
@@ -1768,7 +1775,7 @@ func (p *payloadsForSpanGenerator) Next(_ context.Context) (bool, error) {
 		}
 		currRecording := p.span.GetRecording()[p.recordingIndex]
 		currRecording.Structured(func(item *pbtypes.Any, _ time.Time) {
-			payload, err := protoreflect.MessageToJSON(item, true /* emitDefaults */)
+			payload, err := protoreflect.MessageToJSON(item, protoreflect.FmtFlags{EmitDefaults: true})
 			if err != nil {
 				return
 			}

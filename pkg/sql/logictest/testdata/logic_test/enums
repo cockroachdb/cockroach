@@ -376,7 +376,7 @@ SHOW CREATE t1
 t1  CREATE TABLE public.t1 (
     x public.greeting NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
     INDEX i (x ASC),
     FAMILY "primary" (x, rowid)
 )
@@ -389,7 +389,7 @@ SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_na
 CREATE TABLE public.t1 (
    x public.greeting NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
    INDEX i (x ASC),
    FAMILY "primary" (x, rowid)
 )
@@ -494,7 +494,7 @@ enum_default  CREATE TABLE public.enum_default (
               y public.greeting NULL DEFAULT 'hello':::public.greeting,
               z BOOL NULL DEFAULT 'hello':::public.greeting IS OF (public.greeting, public.greeting),
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+              CONSTRAINT enum_default_pkey PRIMARY KEY (rowid ASC),
               FAMILY fam_0_x_y_z_rowid (x, y, z, rowid)
 )
 
@@ -552,7 +552,7 @@ enum_computed  CREATE TABLE public.enum_computed (
                z BOOL NULL AS (w = 'howdy':::public.greeting) STORED,
                w public.greeting NULL,
                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-               CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+               CONSTRAINT enum_computed_pkey PRIMARY KEY (rowid ASC),
                FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
 )
 
@@ -586,7 +586,7 @@ SHOW CREATE enum_checks
 enum_checks  CREATE TABLE public.enum_checks (
              x public.greeting NULL,
              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-             CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+             CONSTRAINT enum_checks_pkey PRIMARY KEY (rowid ASC),
              FAMILY "primary" (x, rowid),
              CONSTRAINT check_x CHECK (x = 'hello':::public.greeting),
              CONSTRAINT "check" CHECK ('hello':::public.greeting = 'hello':::public.greeting)
@@ -947,7 +947,7 @@ INSERT INTO enum_referenced VALUES ('hello');
 ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
 
 # Try a foreign key insert that fails validation.
-statement error pq: insert on table "enum_origin" violates foreign key constraint "fk_x_ref_enum_referenced"
+statement error pq: insert on table "enum_origin" violates foreign key constraint "enum_origin_x_fkey"
 INSERT INTO enum_origin VALUES ('howdy')
 
 # Try the above, but in a transaction.
@@ -960,7 +960,7 @@ INSERT INTO enum_origin VALUES ('hello');
 INSERT INTO enum_referenced VALUES ('hello');
 ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
 
-statement error pq: insert on table "enum_origin" violates foreign key constraint "fk_x_ref_enum_referenced"
+statement error pq: insert on table "enum_origin" violates foreign key constraint "enum_origin_x_fkey"
 INSERT INTO enum_origin VALUES ('howdy')
 
 statement ok
@@ -1287,7 +1287,9 @@ CREATE TYPE IF NOT EXISTS ifne AS ENUM ('hi')
 statement ok
 CREATE TABLE table_ifne (x INT)
 
-statement error pq: relation "test_57196.public.table_ifne" already exists
+# This doesn't fail because there *is* already type with this name, which is
+# the implicit type with the same name as the table.
+statement ok
 CREATE TYPE IF NOT EXISTS table_ifne AS ENUM ('hi')
 
 # Regression test for incorrectly serializing NULL expression type annotation in
@@ -1480,7 +1482,7 @@ arr_t6  CREATE TABLE public.arr_t6 (
         j public.arr_typ2 NULL DEFAULT (ARRAY['b':::public.arr_typ2]:::public.arr_typ2[])[1:::INT8],
         k public.arr_typ2[] NULL DEFAULT ARRAY['c':::public.arr_typ2]:::public.arr_typ2[],
         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-        CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+        CONSTRAINT arr_t6_pkey PRIMARY KEY (rowid ASC),
         FAMILY fam_0_i_j_k_rowid (i, j, k, rowid)
 )
 
@@ -1515,3 +1517,31 @@ CREATE TABLE uses_in_index_predicate (i INT PRIMARY KEY, t enum_for_predicate, I
 
 statement error pgcode 2BP01 could not remove enum value "a" as it is being used in a predicate of index uses_in_index_predicate@uses_in_index_predicate_t_idx
 ALTER TYPE enum_for_predicate DROP VALUE 'a'
+
+subtest regression_71388
+
+statement ok
+CREATE TYPE enum_test AS ENUM ('a', 'b');
+CREATE TABLE enum_array_table (id SERIAL PRIMARY KEY, elems enum_test[]);
+INSERT INTO enum_array_table (elems) VALUES (array['a']), (array['b']), (array['a', 'b'])
+
+query TTBBBB
+SELECT
+  a.elems,
+  b.elems,
+  a.elems = b.elems,
+  a.elems < b.elems,
+  a.elems <= b.elems,
+  a.elems IS NOT DISTINCT FROM b.elems
+FROM enum_array_table a, enum_array_table b
+ORDER BY a.id, b.id
+----
+{a}    {a}    true   false  true   true
+{a}    {b}    false  true   true   false
+{a}    {a,b}  false  true   true   false
+{b}    {a}    false  false  false  false
+{b}    {b}    true   false  true   true
+{b}    {a,b}  false  false  false  false
+{a,b}  {a}    false  false  false  false
+{a,b}  {b}    false  true   true   false
+{a,b}  {a,b}  true   false  true   true

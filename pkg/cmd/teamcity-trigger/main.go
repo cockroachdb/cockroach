@@ -108,6 +108,11 @@ func runTC(queueBuild func(string, map[string]string)) {
 			maxRuns, maxTime, maxFails, parallelism)
 		queueBuild("Cockroach_Nightlies_Stress", opts)
 
+		// Run non-race build with deadlock detection.
+		opts["env.TAGS"] = "deadlock"
+		queueBuild("Cockroach_Nightlies_Stress", opts)
+		delete(opts, "env.TAGS")
+
 		// Run race build. With run with -p 1 to avoid overloading the machine.
 		noParallelism := 1
 		opts["env.GOFLAGS"] = fmt.Sprintf("-race -parallel=%d", parallelism)

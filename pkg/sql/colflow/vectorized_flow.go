@@ -309,7 +309,11 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// This cleans up all the memory and disk monitoring of the vectorized flow.
 	f.creator.cleanup(ctx)
 
-	if util.CrdbTestBuild {
+	if util.CrdbTestBuild && f.FlowBase.Started() {
+		// Check that all closers have been closed. Note that we don't check
+		// this in case the flow was never started in the first place (it is ok
+		// to not check this since closers haven't allocated any resources in
+		// such a case).
 		if numClosed := atomic.LoadInt32(f.testingInfo.numClosed); numClosed != f.testingInfo.numClosers {
 			colexecerror.InternalError(errors.AssertionFailedf("expected %d components to be closed, but found that only %d were", f.testingInfo.numClosers, numClosed))
 		}

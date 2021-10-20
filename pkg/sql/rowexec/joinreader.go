@@ -74,9 +74,19 @@ type joinReader struct {
 	// ProcessorBase.State == StateRunning.
 	runningState joinReaderState
 
-	// memAcc is used to account for the memory used by the in-memory data structures
-	// used by the joinReader and different joinReader strategies.
+	// memAcc is used to account for the memory used by the in-memory data
+	// structures used directly by the joinReader. Note that the joinReader
+	// strategies and span generators have separate accounts.
 	memAcc mon.BoundAccount
+
+	// accountedFor tracks the memory usage of scratchInputRows and
+	// groupingState that is currently registered with memAcc.
+	accountedFor struct {
+		// scratchInputRows accounts only for the slice of scratchInputRows, not
+		// the actual rows.
+		scratchInputRows int64
+		groupingState    int64
+	}
 
 	// limitedMemMonitor is a limited memory monitor to account for the memory
 	// used by buffered rows in joinReaderOrderingStrategy. If the memory limit is
@@ -147,6 +157,9 @@ type joinReader struct {
 
 	// State variables for each batch of input rows.
 	scratchInputRows rowenc.EncDatumRows
+	// resetScratchWhenReadingInput tracks whether scratchInputRows needs to be
+	// reset the next time the joinReader is in the jrReadingInput state.
+	resetScratchWhenReadingInput bool
 
 	// Fields used when this is the second join in a pair of joins that are
 	// together implementing left {outer,semi,anti} joins where the first join
@@ -340,7 +353,7 @@ func newJoinReader(
 		return nil, err
 	}
 
-	rightCols := jr.neededRightCols()
+	rightCols := jr.neededRightCols(len(columnTypes))
 	if isSecondary {
 		set := getIndexColSet(jr.index, jr.colIdxMap)
 		if !rightCols.SubsetOf(set) {
@@ -420,6 +433,8 @@ func (jr *joinReader) initJoinReaderStrategy(
 	spanBuilder := span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), jr.desc, jr.index)
 	spanBuilder.SetNeededColumns(neededRightCols)
 
+	strategyMemAcc := jr.MemMonitor.MakeBoundAccount()
+	spanGeneratorMemAcc := jr.MemMonitor.MakeBoundAccount()
 	var generator joinReaderSpanGenerator
 	if jr.lookupExpr.Expr == nil {
 		var keyToInputRowIndices map[string][]int
@@ -433,7 +448,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 			keyToInputRowIndices: keyToInputRowIndices,
 			numKeyCols:           numKeyCols,
 			lookupCols:           jr.lookupCols,
-			memAcc:               &jr.memAcc,
+			memAcc:               &spanGeneratorMemAcc,
 		}
 	} else {
 		// Since jr.lookupExpr is set, we need to use either multiSpanGenerator or
@@ -456,13 +471,14 @@ func (jr *joinReader) initJoinReaderStrategy(
 				len(jr.input.OutputTypes()),
 				&jr.lookupExpr,
 				tableOrdToIndexOrd,
-				&jr.memAcc,
+				&spanGeneratorMemAcc,
 			); err != nil {
 				return err
 			}
 			generator = multiSpanGen
 		} else {
 			localityOptSpanGen := &localityOptimizedSpanGenerator{}
+			remoteSpanGenMemAcc := jr.MemMonitor.MakeBoundAccount()
 			if err := localityOptSpanGen.init(
 				spanBuilder,
 				numKeyCols,
@@ -470,7 +486,8 @@ func (jr *joinReader) initJoinReaderStrategy(
 				&jr.lookupExpr,
 				&jr.remoteLookupExpr,
 				tableOrdToIndexOrd,
-				&jr.memAcc,
+				&spanGeneratorMemAcc,
+				&remoteSpanGenMemAcc,
 			); err != nil {
 				return err
 			}
@@ -482,6 +499,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		jr.strategy = &joinReaderIndexJoinStrategy{
 			joinerBase:              &jr.joinerBase,
 			joinReaderSpanGenerator: generator,
+			memAcc:                  &strategyMemAcc,
 		}
 		return nil
 	}
@@ -492,7 +510,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 			joinReaderSpanGenerator: generator,
 			isPartialJoin:           jr.joinType == descpb.LeftSemiJoin || jr.joinType == descpb.LeftAntiJoin,
 			groupingState:           jr.groupingState,
-			memAcc:                  &jr.memAcc,
+			memAcc:                  &strategyMemAcc,
 		}
 		return nil
 	}
@@ -524,7 +542,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		lookedUpRows:                      drc,
 		groupingState:                     jr.groupingState,
 		outputGroupContinuationForLeftRow: jr.outputGroupContinuationForLeftRow,
-		memAcc:                            &jr.memAcc,
+		memAcc:                            &strategyMemAcc,
 	}
 	return nil
 }
@@ -555,7 +573,7 @@ func (jr *joinReader) Spilled() bool {
 
 // neededRightCols returns the set of column indices which need to be fetched
 // from the right side of the join (jr.desc).
-func (jr *joinReader) neededRightCols() util.FastIntSet {
+func (jr *joinReader) neededRightCols(numRightTypes int) util.FastIntSet {
 	neededCols := jr.OutputHelper.NeededColumns()
 
 	if jr.readerType == indexJoinReaderType {
@@ -580,13 +598,7 @@ func (jr *joinReader) neededRightCols() util.FastIntSet {
 		neededRightCols.Remove(lastCol)
 	}
 
-	// Add columns needed by OnExpr.
-	for _, v := range jr.onCond.Vars.GetIndexedVars() {
-		rightIdx := v.Idx - numInputTypes
-		if rightIdx >= 0 {
-			neededRightCols.Add(rightIdx)
-		}
-	}
+	jr.addColumnsNeededByOnExpr(&neededRightCols, numInputTypes, numInputTypes+numRightTypes)
 
 	return neededRightCols
 }
@@ -650,7 +662,21 @@ func (jr *joinReader) readInput() (
 		// did the reset for this batch.
 	}
 
-	sizeBefore := jr.memUsage()
+	if jr.resetScratchWhenReadingInput {
+		// Deeply reset the rows from the previous input batch.
+		for i := range jr.scratchInputRows {
+			jr.scratchInputRows[i] = nil
+		}
+		// We've just discarded the old rows, so we have to update the memory
+		// accounting accordingly.
+		newSz := jr.accountedFor.scratchInputRows + jr.accountedFor.groupingState
+		if err := jr.memAcc.ResizeTo(jr.Ctx, newSz); err != nil {
+			jr.MoveToDraining(err)
+			return jrStateUnknown, nil, jr.DrainHelper()
+		}
+		jr.scratchInputRows = jr.scratchInputRows[:0]
+		jr.resetScratchWhenReadingInput = false
+	}
 
 	// Read the next batch of input rows.
 	for jr.curBatchSizeBytes < jr.batchSizeBytes {
@@ -661,9 +687,7 @@ func (jr *joinReader) readInput() (
 				return jrStateUnknown, nil, meta
 			}
 
-			// Perform memory accounting.
-			sizeAfter := jr.memUsage()
-			if err := jr.memAcc.Resize(jr.Ctx, sizeBefore, sizeAfter); err != nil {
+			if err := jr.performMemoryAccounting(); err != nil {
 				jr.MoveToDraining(err)
 				return jrStateUnknown, nil, meta
 			}
@@ -681,12 +705,19 @@ func (jr *joinReader) readInput() (
 				return jrStateUnknown, nil, jr.DrainHelper()
 			}
 		}
+		// Keep the copy of the row after accounting for its memory usage.
+		//
+		// We need to subtract the EncDatumRowOverhead because that is already
+		// tracked in jr.accountedFor.scratchInputRows.
+		rowSize := int64(row.Size() - rowenc.EncDatumRowOverhead)
+		if err := jr.memAcc.Grow(jr.Ctx, rowSize); err != nil {
+			jr.MoveToDraining(err)
+			return jrStateUnknown, nil, jr.DrainHelper()
+		}
 		jr.scratchInputRows = append(jr.scratchInputRows, jr.rowAlloc.CopyRow(row))
 	}
 
-	// Perform memory accounting.
-	sizeAfter := jr.memUsage()
-	if err := jr.memAcc.Resize(jr.Ctx, sizeBefore, sizeAfter); err != nil {
+	if err := jr.performMemoryAccounting(); err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
@@ -720,7 +751,7 @@ func (jr *joinReader) readInput() (
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
 	jr.curBatchInputRowCount = int64(len(jr.scratchInputRows))
-	jr.scratchInputRows = jr.scratchInputRows[:0]
+	jr.resetScratchWhenReadingInput = true
 	jr.curBatchSizeBytes = 0
 	jr.curBatchRowsRead = 0
 	if len(spans) == 0 {
@@ -763,6 +794,11 @@ func (jr *joinReader) readInput() (
 			bytesLimit = rowinfra.DefaultBatchBytesLimit
 		}
 	}
+	// Note that the fetcher takes ownership of the spans slice - it will modify
+	// it and perform the memory accounting. We don't care about the
+	// modification here, but we want to be conscious about the memory
+	// accounting - we don't double count for any memory of spans because the
+	// joinReaderStrategy doesn't account for any memory used by the spans.
 	if err := jr.fetcher.StartScan(
 		jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, rowinfra.NoRowLimit,
 		jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
@@ -867,6 +903,14 @@ func (jr *joinReader) emitRow() (
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
 	return nextState, rowToEmit, nil
+}
+
+func (jr *joinReader) performMemoryAccounting() error {
+	oldSz := jr.accountedFor.scratchInputRows + jr.accountedFor.groupingState
+	jr.accountedFor.scratchInputRows = int64(cap(jr.scratchInputRows)) * int64(rowenc.EncDatumRowOverhead)
+	jr.accountedFor.groupingState = jr.groupingState.memUsage()
+	newSz := jr.accountedFor.scratchInputRows + jr.accountedFor.groupingState
+	return jr.memAcc.Resize(jr.Ctx, oldSz, newSz)
 }
 
 // Start is part of the RowSource interface.
@@ -1026,26 +1070,6 @@ func (jr *joinReader) updateGroupingStateForNonEmptyBatch() {
 	}
 }
 
-// memUsage returns the size of the data structures in the joinReader for memory
-// accounting purposes.
-func (jr *joinReader) memUsage() int64 {
-	var size int64
-
-	// Account for scratchInputRows. Slice the full capacity so we can account for
-	// the memory used by rows past the length of scratchInputRows.
-	rowsCap := jr.scratchInputRows[:cap(jr.scratchInputRows)]
-	for i := range rowsCap {
-		size += int64(rowsCap[i].Size())
-	}
-
-	// Account for groupingState.
-	if jr.groupingState != nil {
-		size += int64(cap(jr.groupingState.groupState)) * int64(unsafe.Sizeof(groupState{}))
-		size += int64(cap(jr.groupingState.batchRowToGroupIndex)) * memsize.Int
-	}
-	return size
-}
-
 // inputBatchGroupingState encapsulates the state needed for all the
 // groups in an input batch, for lookup joins (not used for index
 // joins).
@@ -1151,4 +1175,12 @@ func (ib *inputBatchGroupingState) isUnmatched(rowIndex int) bool {
 	// group since for earlier rows, when at step (b), one does not know the
 	// match state of later rows in the group.
 	return !ib.groupState[groupIndex].matched && ib.groupState[groupIndex].lastRow == rowIndex
+}
+
+func (ib *inputBatchGroupingState) memUsage() int64 {
+	if ib == nil {
+		return 0
+	}
+	return int64(cap(ib.groupState))*int64(unsafe.Sizeof(groupState{})) +
+		int64(cap(ib.batchRowToGroupIndex))*memsize.Int
 }

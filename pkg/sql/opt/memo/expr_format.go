@@ -428,6 +428,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if private.Flags.NoZigzagJoin {
 				b.WriteString(" no-zigzag-join")
 			}
+			if private.Flags.NoFullScan {
+				b.WriteString(" no-full-scan")
+			}
 			if private.Flags.ForceZigzag {
 				if private.Flags.ZigzagIndexes.Empty() {
 					b.WriteString(" force-zigzag")
@@ -1074,8 +1077,9 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 		// We don't want to show the OriginalExpr.
 		private = nil
 
-	case *CastExpr:
-		private = t.Typ.SQLString()
+	case *CastExpr, *AssignmentCastExpr:
+		typ := scalar.Private().(*types.T)
+		private = typ.SQLString()
 
 	case *KVOptionsItem:
 		fmt.Fprintf(f.Buffer, " %s", t.Key)

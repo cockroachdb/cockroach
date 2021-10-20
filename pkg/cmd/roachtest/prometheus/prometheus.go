@@ -66,12 +66,21 @@ func Init(
 	c cluster,
 	repeatFunc func(context.Context, option.NodeListOption, string, ...string) error,
 ) (*Prometheus, error) {
+	if err := c.RunE(
+		ctx,
+		cfg.PrometheusNode,
+		"terminate existing prometheus instance, if exists",
+		"sudo systemctl stop prometheus || echo 'no prometheus is running'",
+	); err != nil {
+		return nil, err
+	}
+
 	if err := repeatFunc(
 		ctx,
 		cfg.PrometheusNode,
 		"download prometheus",
 		`rm -rf /tmp/prometheus && mkdir /tmp/prometheus && cd /tmp/prometheus &&
-			curl -fsSL prometheus.tar.gz https://github.com/prometheus/prometheus/releases/download/v2.27.1/prometheus-2.27.1.linux-amd64.tar.gz | tar zxv --strip-components=1`,
+			curl -fsSL https://storage.googleapis.com/cockroach-fixtures/prometheus/prometheus-2.27.1.linux-amd64.tar.gz | tar zxv --strip-components=1`,
 	); err != nil {
 		return nil, err
 	}

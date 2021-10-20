@@ -141,7 +141,7 @@ func decodeIndex(
 }
 
 func TestIndexKey(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	var a DatumAlloc
 
 	tests := []indexKeyTest{
@@ -185,7 +185,7 @@ func TestIndexKey(t *testing.T) {
 		valuesLen := randutil.RandIntInRange(rng, len(t.primaryInterleaves)+1, len(t.primaryInterleaves)+10)
 		t.primaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.primaryValues {
-			t.primaryValues[j] = randgen.RandDatum(rng, types.Int, true)
+			t.primaryValues[j] = randgen.RandDatum(rng, types.Int, false /* nullOk */)
 		}
 
 		t.secondaryInterleaves = make([]descpb.ID, rng.Intn(10))
@@ -195,7 +195,7 @@ func TestIndexKey(t *testing.T) {
 		valuesLen = randutil.RandIntInRange(rng, len(t.secondaryInterleaves)+1, len(t.secondaryInterleaves)+10)
 		t.secondaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.secondaryValues {
-			t.secondaryValues[j] = randgen.RandDatum(rng, types.Int, true)
+			t.secondaryValues[j] = randgen.RandDatum(rng, types.Int, true /* nullOk */)
 		}
 
 		tests = append(tests, t)
@@ -503,7 +503,7 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 	}
 
 	// Run a set of randomly generated test cases.
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
 		typ := randgen.RandArrayType(rng)
 
@@ -644,7 +644,7 @@ func TestEncodeContainedArrayInvertedIndexSpans(t *testing.T) {
 	}
 
 	// Run a set of randomly generated test cases.
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
 		typ := randgen.RandArrayType(rng)
 
@@ -1089,11 +1089,17 @@ func TestIndexKeyEquivSignature(t *testing.T) {
 			// Column values should be at the beginning of the
 			// remaining bytes of the key.
 			pkIndexDesc := desc.GetPrimaryIndex().IndexDesc()
-			colVals, null, err := EncodeColumns(pkIndexDesc.KeyColumnIDs, pkIndexDesc.KeyColumnDirections, colMap, tc.table.values, nil /*key*/)
+			colVals, nullColID, err := EncodeColumns(
+				pkIndexDesc.KeyColumnIDs,
+				pkIndexDesc.KeyColumnDirections,
+				colMap,
+				tc.table.values,
+				nil, /* keyPrefix */
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if null {
+			if nullColID != 0 {
 				t.Fatalf("unexpected null values when encoding expected column values")
 			}
 
