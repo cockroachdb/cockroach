@@ -28,12 +28,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -828,4 +830,41 @@ func TestExponentialBackoffUpgradeRacesWithUpdate(t *testing.T) {
 			run(t, tc.f)
 		})
 	}
+}
+
+// TestMixedVersionRevertFailed tests a revert failure in the mixed version
+// state before exponential backoff has been made active will result in the
+// job failing permanently rather than retrying forever without backoff.
+func TestMixedVersionRevertFailed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Override the version because in 21.2, expontential backoff and uncontitional
+	// retries are not permitted.
+	v21_1 := clusterversion.ByKey(clusterversion.V21_1)
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		v21_1, v21_1, true, /* initializeVersion */
+	)
+	sql.InterleavedTablesEnabled.Override(ctx, &settings.SV, true)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: settings,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			DistSQL: &execinfra.TestingKnobs{
+				RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+					return errors.New("boom")
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+	_, err := sqlDB.Exec("ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 32")
+	require.Regexp(t, "boom", err)
+	tdb.CheckQueryResults(t, "SELECT status, error FROM crdb_internal.jobs WHERE description LIKE '%ALTER TABLE%'", [][]string{
+		{"revert-failed", "boom"},
+	})
 }
