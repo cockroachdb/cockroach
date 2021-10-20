@@ -161,7 +161,6 @@ func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 		if !ok {
 			return nil, errors.Errorf(`unknown column id: %d`, colID)
 		}
-		datum := row.datums[idx]
 		datum, col := row.datums[idx], row.tableDesc.PublicColumns()[idx]
 		if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
 			return nil, err
