@@ -264,9 +264,7 @@ func (sr *SampleReservoir) copyRow(
 			dst[i].Datum = truncateDatum(evalCtx, dst[i].Datum, maxBytesPerSample)
 			afterSize = dst[i].Size()
 		} else {
-			if _, ok := src[i].Encoding(); ok {
-				dst[i].Datum = deepCopyDatum(evalCtx, dst[i].Datum)
-			}
+			dst[i].Datum = deepCopyDatum(evalCtx, dst[i].Datum)
 		}
 
 		// Perform memory accounting.
