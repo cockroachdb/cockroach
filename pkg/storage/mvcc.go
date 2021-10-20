@@ -2457,26 +2457,28 @@ func mvccScanToBytes(
 	defer mvccScanner.release()
 
 	*mvccScanner = pebbleMVCCScanner{
-		parent:           iter,
-		memAccount:       opts.MemoryAccount,
-		reverse:          opts.Reverse,
-		start:            key,
-		end:              endKey,
-		ts:               timestamp,
-		maxKeys:          opts.MaxKeys,
-		targetBytes:      opts.TargetBytes,
-		maxIntents:       opts.MaxIntents,
-		inconsistent:     opts.Inconsistent,
-		tombstones:       opts.Tombstones,
-		failOnMoreRecent: opts.FailOnMoreRecent,
-		keyBuf:           mvccScanner.keyBuf,
+		parent:                 iter,
+		memAccount:             opts.MemoryAccount,
+		reverse:                opts.Reverse,
+		start:                  key,
+		end:                    endKey,
+		ts:                     timestamp,
+		maxKeys:                opts.MaxKeys,
+		targetBytes:            opts.TargetBytes,
+		targetBytesAvoidExcess: opts.TargetBytesAvoidExcess,
+		targetBytesAllowEmpty:  opts.TargetBytesAllowEmpty,
+		maxIntents:             opts.MaxIntents,
+		inconsistent:           opts.Inconsistent,
+		tombstones:             opts.Tombstones,
+		failOnMoreRecent:       opts.FailOnMoreRecent,
+		keyBuf:                 mvccScanner.keyBuf,
 	}
 
 	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
 
 	var res MVCCScanResult
 	var err error
-	res.ResumeSpan, res.ResumeReason, err = mvccScanner.scan(ctx)
+	res.ResumeSpan, res.ResumeReason, res.ResumeNextBytes, err = mvccScanner.scan(ctx)
 
 	if err != nil {
 		return MVCCScanResult{}, err
@@ -2599,7 +2601,7 @@ type MVCCScanOptions struct {
 	// memory during a Scan operation. Once the target is satisfied (i.e. met or
 	// exceeded) by the emitted KV pairs, iteration stops (with a ResumeSpan as
 	// appropriate). In particular, at least one kv pair is returned (when one
-	// exists).
+	// exists), unless TargetBytesAllowEmpty is set.
 	//
 	// The number of bytes a particular kv pair accrues depends on internal data
 	// structures, but it is guaranteed to exceed that of the bytes stored in
@@ -2607,6 +2609,15 @@ type MVCCScanOptions struct {
 	//
 	// The zero value indicates no limit.
 	TargetBytes int64
+	// TargetBytesAvoidExcess will prevent TargetBytes from being exceeded
+	// unless only a single key/value pair is returned.
+	//
+	// TODO(erikgrinaker): This option exists for backwards compatibility with
+	// 21.2 RPC clients, in 22.2 it should always be enabled.
+	TargetBytesAvoidExcess bool
+	// TargetBytesAllowEmpty will return an empty result if the first kv pair
+	// exceeds the TargetBytes limit and TargetBytesAvoidExcess is set.
+	TargetBytesAllowEmpty bool
 	// MaxIntents is a maximum number of intents collected by scanner in
 	// consistent mode before returning WriteIntentError.
 	//
@@ -2638,9 +2649,10 @@ type MVCCScanResult struct {
 	// used for encoding the uncompressed kv pairs contained in the result.
 	NumBytes int64
 
-	ResumeSpan   *roachpb.Span
-	ResumeReason roachpb.ResumeReason
-	Intents      []roachpb.Intent
+	ResumeSpan      *roachpb.Span
+	ResumeReason    roachpb.ResumeReason
+	ResumeNextBytes int64 // populated if TargetBytes != 0, size of next resume kv
+	Intents         []roachpb.Intent
 }
 
 // MVCCScan scans the key range [key, endKey) in the provided reader up to some

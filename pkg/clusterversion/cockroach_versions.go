@@ -297,6 +297,12 @@ const (
 	// Start22_1 demarcates work towards CockroachDB v22.1.
 	Start22_1
 
+	// TargetBytesAvoidExcess prevents exceeding BatchRequest.Header.TargetBytes
+	// except when there is a single value in the response. 21.2 DistSender logic
+	// requires the limit to always be overshot in order to properly enforce
+	// limits when splitting requests.
+	TargetBytesAvoidExcess
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -504,6 +510,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start22_1,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 100},
+	},
+	{
+		Key:     TargetBytesAvoidExcess,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 102},
 	},
 
 	// *************************************************

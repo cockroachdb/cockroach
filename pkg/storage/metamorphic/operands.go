@@ -31,6 +31,7 @@ const (
 	operandValue
 	operandIterator
 	operandFloat
+	operandBool
 )
 
 const (
@@ -490,5 +491,38 @@ func (f *floatGenerator) count() int {
 }
 
 func (f *floatGenerator) closeAll() {
+	// No-op.
+}
+
+type boolGenerator struct {
+	rng *rand.Rand
+}
+
+func (f *boolGenerator) get() string {
+	return fmt.Sprintf("%t", f.rng.Float32() < 0.5)
+}
+
+func (f *boolGenerator) getNew() string {
+	return f.get()
+}
+
+func (f *boolGenerator) parse(input string) bool {
+	var result bool
+	if _, err := fmt.Sscanf(input, "%t", &result); err != nil {
+		panic(err)
+	}
+	return result
+}
+
+func (f *boolGenerator) opener() string {
+	// Not applicable, because count() is always nonzero.
+	return ""
+}
+
+func (f *boolGenerator) count() int {
+	return 1
+}
+
+func (f *boolGenerator) closeAll() {
 	// No-op.
 }
