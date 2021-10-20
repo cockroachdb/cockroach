@@ -10,6 +10,11 @@ package execinfrapb
 import (
 	encoding_binary "encoding/binary"
 	fmt "fmt"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+	time "time"
+
 	_ "github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	github_com_cockroachdb_cockroach_pkg_jobs_jobspb "github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -20,10 +25,6 @@ import (
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
-	io "io"
-	math "math"
-	math_bits "math/bits"
-	time "time"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -660,7 +661,9 @@ func (*SplitAndScatterSpec_RestoreEntryChunk) Descriptor() ([]byte, []int) {
 func (m *SplitAndScatterSpec_RestoreEntryChunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *SplitAndScatterSpec_RestoreEntryChunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *SplitAndScatterSpec_RestoreEntryChunk) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
