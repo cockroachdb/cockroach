@@ -65,7 +65,8 @@ message CSVOptions {
 }
 
 message ParquetOptions {
-  // null_encoding, if not nil, is the string which identifies a NULL. Can be the empty string.
+  // keeping null encoding as a stub for now. User cannot access this, nor does this option do
+  // anything.
   optional string null_encoding = 1 [(gogoproto.nullable) = true];
 }
 

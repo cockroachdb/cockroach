@@ -303,7 +303,8 @@ func (m *CSVOptions) XXX_DiscardUnknown() {
 var xxx_messageInfo_CSVOptions proto.InternalMessageInfo
 
 type ParquetOptions struct {
-	// null_encoding, if not nil, is the string which identifies a NULL. Can be the empty string.
+	// keeping null encoding as a stub for now. User cannot access this, nor does this option do
+	// anything.
 	NullEncoding *string `protobuf:"bytes,1,opt,name=null_encoding,json=nullEncoding" json:"null_encoding,omitempty"`
 }
 
