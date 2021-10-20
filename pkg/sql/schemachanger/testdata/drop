@@ -17,7 +17,7 @@ begin transaction #1
 ## stage 1 in PreCommitPhase: 1 MutationType ops
 upsert descriptor #53
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
@@ -115,21 +115,21 @@ begin transaction #1
 ## stage 1 in PreCommitPhase: 3 MutationType ops
 upsert descriptor #54
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
 upsert descriptor #56
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
 upsert descriptor #57
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
@@ -221,7 +221,7 @@ upsert descriptor #58
   +  version: "3"
 upsert descriptor #59
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
@@ -392,7 +392,7 @@ upsert descriptor #67
      viewQuery: (SELECT n2, n1 FROM db1.sc1.v2)
 upsert descriptor #68
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  referencingDescriptorIds:
   -  - 70
@@ -402,7 +402,7 @@ upsert descriptor #68
   +  version: "3"
 upsert descriptor #69
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  referencingDescriptorIds:
   -  - 70

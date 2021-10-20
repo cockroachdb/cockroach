@@ -286,6 +286,10 @@ const (
 	// table system.table_statistics that contains a new statistic.
 	AlterSystemTableStatisticsAddAvgSizeCol
 
+	// ValidateGrantOption checks whether the current user granting privileges to
+	// another user holds the grant option for those privileges
+	ValidateGrantOption
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -489,6 +493,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemTableStatisticsAddAvgSizeCol,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 12},
+	},
+	{
+		Key:     ValidateGrantOption,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 14},
 	},
 
 	// *************************************************
