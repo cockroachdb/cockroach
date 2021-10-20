@@ -344,7 +344,18 @@ func setSequenceValueHelper(
 	// TODO(vilterp): not supposed to mix usage of Inc and Put on a key,
 	// according to comments on Inc operation. Switch to Inc if `desired-current`
 	// overflows correctly.
-	return p.txn.Put(ctx, seqValueKey, newVal)
+	if err := p.txn.Put(ctx, seqValueKey, newVal); err != nil {
+		return err
+	}
+
+	// Clear out the cache and update the last value if needed.
+	p.sessionDataMutatorIterator.applyForEachMutator(func(m sessionDataMutator) {
+		m.initSequenceCache()
+		if isCalled {
+			m.RecordLatestSequenceVal(uint32(descriptor.GetID()), newVal)
+		}
+	})
+	return nil
 }
 
 // MakeSequenceKeyVal returns the key and value of a sequence being set

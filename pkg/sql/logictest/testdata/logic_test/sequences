@@ -418,16 +418,16 @@ SELECT setval('setval_test', 10)
 ----
 10
 
-# Calling setval doesn't affect currval or lastval; they return the last value obtained with nextval.
+# Calling setval changes currval and lastval.
 query I
 SELECT currval('setval_test')
 ----
-2
+10
 
 query I
 SELECT lastval()
 ----
-2
+10
 
 query I
 SELECT nextval('setval_test')
@@ -448,7 +448,7 @@ let $setval_test_id
 SELECT 'setval_test'::regclass::int
 
 query I
-SELECT setval($setval_test_id::regclass, 20)
+SELECT setval($setval_test_id::regclass, 20, false)
 ----
 20
 
@@ -461,7 +461,7 @@ SELECT currval($setval_test_id::regclass)
 query I
 SELECT nextval($setval_test_id::regclass)
 ----
-21
+20
 
 # setval doesn't let you set values outside the bounds.
 
@@ -1816,3 +1816,36 @@ SELECT * FROM "".crdb_internal.cross_db_references;
 db2  public  seq   db1  public  t  sequences owning table
 db2  public  seq2  db1  public  t  sequences owning table
 test  public  tdb3ref  db3  public  s  table column refers to sequence
+
+subtest cached_sequences_invalidate
+
+# Test for #71135 -- make sure that setval invalidates the cached sequence
+# values.
+
+statement ok
+CREATE SEQUENCE seq71135 CACHE 100
+
+query I
+SELECT nextval('seq71135')
+----
+1
+
+query I
+SELECT setval('seq71135', 200, true)
+----
+200
+
+query I
+SELECT lastval()
+----
+200
+
+query I
+SELECT currval('seq71135')
+----
+200
+
+query I
+SELECT nextval('seq71135')
+----
+201
