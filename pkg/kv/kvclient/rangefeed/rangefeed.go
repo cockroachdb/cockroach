@@ -95,9 +95,9 @@ func newFactory(stopper *stop.Stopper, client kvDB, knobs *TestingKnobs) *Factor
 	}
 }
 
-// RangeFeed constructs a new RangeFeed.
+// RangeFeed constructs a new rangefeed and runs it in an async task.
 //
-// The range feed can be stopped via Close(); otherwise, it will stop when the
+// The rangefeed can be stopped via Close(); otherwise, it will stop when the
 // server shuts down.
 //
 // The only error which can be returned will indicate that the server is being
@@ -107,48 +107,47 @@ func (f *Factory) RangeFeed(
 	name string,
 	sp roachpb.Span,
 	initialTimestamp hlc.Timestamp,
-	onValue func(ctx context.Context, value *roachpb.RangeFeedValue),
+	onValue OnValue,
 	options ...Option,
 ) (_ *RangeFeed, err error) {
+	r := f.New(name, sp, initialTimestamp, onValue, options...)
+	if err := r.Run(ctx); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// New constructs a new RangeFeed (without running it).
+func (f *Factory) New(
+	name string,
+	sp roachpb.Span,
+	initialTimestamp hlc.Timestamp,
+	onValue OnValue,
+	options ...Option,
+) *RangeFeed {
 	r := RangeFeed{
 		client:  f.client,
 		stopper: f.stopper,
 		knobs:   f.knobs,
 
 		initialTimestamp: initialTimestamp,
+		name:             name,
 		span:             sp,
 		onValue:          onValue,
 
 		stopped: make(chan struct{}),
 	}
 	initConfig(&r.config, options)
-
-	// Maintain a frontier in order to resume at a reasonable timestamp.
-	// TODO(ajwerner): Consider exposing the frontier through a RangeFeed method.
-	// Doing so would require some synchronization.
-	frontier, err := span.MakeFrontier(sp)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := frontier.Forward(sp, initialTimestamp); err != nil {
-		return nil, err
-	}
-	runWithFrontier := func(ctx context.Context) {
-		r.run(ctx, frontier)
-	}
-
-	ctx = logtags.AddTag(ctx, "rangefeed", name)
-	ctx, r.cancel = f.stopper.WithCancelOnQuiesce(ctx)
-	if err := f.stopper.RunAsyncTask(ctx, "rangefeed", runWithFrontier); err != nil {
-		r.cancel()
-		return nil, err
-	}
-	return &r, nil
+	return &r
 }
+
+// OnValue is called for each rangefeed value.
+type OnValue func(ctx context.Context, value *roachpb.RangeFeedValue)
 
 // RangeFeed represents a running RangeFeed.
 type RangeFeed struct {
 	config
+	name    string
 	client  kvDB
 	stopper *stop.Stopper
 	knobs   *TestingKnobs
@@ -156,11 +155,38 @@ type RangeFeed struct {
 	initialTimestamp hlc.Timestamp
 
 	span    roachpb.Span
-	onValue func(ctx context.Context, value *roachpb.RangeFeedValue)
+	onValue OnValue
 
 	closeOnce sync.Once
 	cancel    context.CancelFunc
 	stopped   chan struct{}
+}
+
+// Run kicks off the rangefeed in an async task. All the installed callbacks
+// (OnValue, OnCheckpoint, OnFrontierAdvance, OnInitialScanDone) are called in
+// the async task in a single thread.
+func (f *RangeFeed) Run(ctx context.Context) error {
+	// Maintain a frontier in order to resume at a reasonable timestamp.
+	// TODO(ajwerner): Consider exposing the frontier through a RangeFeed method.
+	// Doing so would require some synchronization.
+	frontier, err := span.MakeFrontier(f.span)
+	if err != nil {
+		return err
+	}
+	if _, err := frontier.Forward(f.span, f.initialTimestamp); err != nil {
+		return err
+	}
+	runWithFrontier := func(ctx context.Context) {
+		f.run(ctx, frontier)
+	}
+
+	ctx = logtags.AddTag(ctx, "rangefeed", f.name)
+	ctx, f.cancel = f.stopper.WithCancelOnQuiesce(ctx)
+	if err := f.stopper.RunAsyncTask(ctx, "rangefeed", runWithFrontier); err != nil {
+		f.cancel()
+		return err
+	}
+	return nil
 }
 
 // Close closes the RangeFeed and waits for it to shut down.
