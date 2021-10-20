@@ -211,7 +211,7 @@ func (u *sinkURL) remainingQueryParams() (res []string) {
 	return
 }
 
-func (u sinkURL) String() string {
+func (u *sinkURL) String() string {
 	if u.q != nil {
 		// If we changed query params, re-encode them.
 		u.URL.RawQuery = u.q.Encode()
