@@ -17,9 +17,9 @@ import { PayloadAction } from "src/interfaces/action";
 import { cockroach } from "src/js/protos";
 import ITimeSeriesDatapoint = cockroach.ts.tspb.ITimeSeriesDatapoint;
 
-function fakeTimeSeriesDatapoint(): ITimeSeriesDatapoint {
+function fakeTimeSeriesDatapoint(timestamp?: Long): ITimeSeriesDatapoint {
   return {
-    timestamp_nanos: Long.fromNumber(Date.now() * 1000000),
+    timestamp_nanos: timestamp || Long.fromNumber(Date.now() * 1000000),
     value: Math.ceil(Math.random() * 100),
   };
 }
@@ -57,7 +57,7 @@ export const fakeMetricsDataGenerationMiddleware = (
       const samplePoint =
         actualDatapointsCount > 0
           ? clone(res.datapoints[0])
-          : fakeTimeSeriesDatapoint();
+          : fakeTimeSeriesDatapoint(end_nanos);
 
       const datapoints = Array(expectedDatapointsCount - actualDatapointsCount)
         .fill(1)
