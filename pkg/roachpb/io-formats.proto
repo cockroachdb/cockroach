@@ -64,6 +64,11 @@ message CSVOptions {
   optional int64 row_limit = 6 [(gogoproto.nullable) = false];
 }
 
+message ParquetOptions {
+  // null_encoding, if not nil, is the string which identifies a NULL. Can be the empty string.
+  optional string null_encoding = 1 [(gogoproto.nullable) = true];
+}
+
 // MySQLOutfileOptions describe the format of mysql's outfile.
 message MySQLOutfileOptions {
   enum Enclose {
