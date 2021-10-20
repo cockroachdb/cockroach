@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/errors"
 )
@@ -111,12 +113,14 @@ func NewCustomSuperuserPrivilegeDescriptor(
 		OwnerProto: owner.EncodeProto(),
 		Users: []UserPrivileges{
 			{
-				UserProto:  security.AdminRoleName().EncodeProto(),
-				Privileges: priv.ToBitField(),
+				UserProto:       security.AdminRoleName().EncodeProto(),
+				Privileges:      priv.ToBitField(),
+				WithGrantOption: priv.ToBitField(),
 			},
 			{
-				UserProto:  security.RootUserName().EncodeProto(),
-				Privileges: priv.ToBitField(),
+				UserProto:       security.RootUserName().EncodeProto(),
+				Privileges:      priv.ToBitField(),
+				WithGrantOption: priv.ToBitField(),
 			},
 		},
 		Version: Version21_2,
@@ -128,21 +132,25 @@ func NewCustomSuperuserPrivilegeDescriptor(
 // used for virtual tables.
 func NewPublicSelectPrivilegeDescriptor() *PrivilegeDescriptor {
 	return NewPrivilegeDescriptor(
-		security.PublicRoleName(), privilege.List{privilege.SELECT}, security.NodeUserName(),
+		security.PublicRoleName(), privilege.List{privilege.SELECT}, privilege.List{}, security.NodeUserName(),
 	)
 }
 
 // NewPrivilegeDescriptor returns a privilege descriptor for the given
 // user with the specified list of privileges.
 func NewPrivilegeDescriptor(
-	user security.SQLUsername, priv privilege.List, owner security.SQLUsername,
+	user security.SQLUsername,
+	priv privilege.List,
+	grantOption privilege.List,
+	owner security.SQLUsername,
 ) *PrivilegeDescriptor {
 	return &PrivilegeDescriptor{
 		OwnerProto: owner.EncodeProto(),
 		Users: []UserPrivileges{
 			{
-				UserProto:  user.EncodeProto(),
-				Privileges: priv.ToBitField(),
+				UserProto:       user.EncodeProto(),
+				Privileges:      priv.ToBitField(),
+				WithGrantOption: grantOption.ToBitField(),
 			},
 		},
 		Version: Version21_2,
@@ -159,28 +167,107 @@ func NewDefaultPrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDescrip
 	return NewCustomSuperuserPrivilegeDescriptor(DefaultSuperuserPrivileges, owner)
 }
 
-// Grant adds new privileges to this descriptor for a given list of users.
-func (p *PrivilegeDescriptor) Grant(user security.SQLUsername, privList privilege.List) {
+// ValidateGrantPrivileges returns an error if the current user tries to grant a privilege that
+// it does not possess or was not granted WITH GRANT OPTION
+func (p *PrivilegeDescriptor) ValidateGrantPrivileges(
+	user security.SQLUsername, privList privilege.List,
+) error {
+	userPriv, _ := p.FindUser(user)
+
+	// User has ALL WITH GRANT OPTION so they can grant anything.
+	if privilege.ALL.IsSetIn(userPriv.WithGrantOption) {
+		return nil
+	}
+
+	for _, priv := range privList {
+		if userPriv.WithGrantOption&priv.Mask() == 0 {
+			return pgerror.Newf(pgcode.InvalidGrantOperation,
+				"missing WITH GRANT OPTION privilege type %s", priv.String())
+		}
+	}
+
+	return nil
+}
+
+// GranularGrant adds new privileges to this descriptor and new grant options which
+// could be different from the privileges. Unlike the normal grant, the privileges
+// and the grant options being granted could be different
+func (p *PrivilegeDescriptor) GranularGrant(
+	user security.SQLUsername, privList privilege.List, grantOptionList privilege.List,
+) {
 	userPriv := p.FindOrCreateUser(user)
-	if privilege.ALL.IsSetIn(userPriv.Privileges) {
+	if privilege.ALL.IsSetIn(userPriv.WithGrantOption) {
 		// User already has 'ALL' privilege: no-op.
+		// If userPriv.WithGrantOption has ALL, then userPriv.Privileges must also have ALL.
+		// It is possible however for userPriv.Privileges to have ALL but userPriv.WithGrantOption to not have ALL
 		return
 	}
 
+	privBits := privList.ToBitField()
+	grantBits := grantOptionList.ToBitField()
+	if privilege.ALL.IsSetIn(privBits) {
+		userPriv.Privileges = privilege.ALL.Mask()
+	} else {
+		if !privilege.ALL.IsSetIn(userPriv.Privileges) {
+			userPriv.Privileges |= privBits
+		}
+	}
+
+	if privilege.ALL.IsSetIn(grantBits) {
+		userPriv.WithGrantOption = privilege.ALL.Mask()
+	} else {
+		if !privilege.ALL.IsSetIn(userPriv.WithGrantOption) {
+			userPriv.WithGrantOption |= grantBits
+		}
+	}
+}
+
+// Grant adds new privileges to this descriptor for a given list of users.
+func (p *PrivilegeDescriptor) Grant(
+	user security.SQLUsername, privList privilege.List, withGrantOption bool,
+) {
+	userPriv := p.FindOrCreateUser(user)
+	if privilege.ALL.IsSetIn(userPriv.WithGrantOption) {
+		// User already has 'ALL' privilege: no-op.
+		// If userPriv.WithGrantOption has ALL, then userPriv.Privileges must also have ALL.
+		// It is possible however for userPriv.Privileges to have ALL but userPriv.WithGrantOption to not have ALL
+		return
+	}
+
+	if privilege.ALL.IsSetIn(userPriv.Privileges) && !withGrantOption {
+		// A user can hold all privileges but not all grant options.
+		// If a user holds all privileges but withGrantOption is False,
+		// there is nothing left to be done
+		return
+	}
+
+	// We only have to modify grant option.
 	bits := privList.ToBitField()
 	if privilege.ALL.IsSetIn(bits) {
 		// Granting 'ALL' privilege: overwrite.
 		// TODO(marc): the grammar does not allow it, but we should
 		// check if other privileges are being specified and error out.
 		userPriv.Privileges = privilege.ALL.Mask()
+		if withGrantOption {
+			userPriv.WithGrantOption = privilege.ALL.Mask()
+		}
 		return
 	}
-	userPriv.Privileges |= bits
+
+	if withGrantOption {
+		userPriv.WithGrantOption |= bits
+	}
+	if !privilege.ALL.IsSetIn(userPriv.Privileges) {
+		userPriv.Privileges |= bits
+	}
 }
 
 // Revoke removes privileges from this descriptor for a given list of users.
 func (p *PrivilegeDescriptor) Revoke(
-	user security.SQLUsername, privList privilege.List, objectType privilege.ObjectType,
+	user security.SQLUsername,
+	privList privilege.List,
+	objectType privilege.ObjectType,
+	grantOptionFor bool,
 ) {
 	userPriv, ok := p.FindUser(user)
 	if !ok || userPriv.Privileges == 0 {
@@ -190,14 +277,17 @@ func (p *PrivilegeDescriptor) Revoke(
 
 	bits := privList.ToBitField()
 	if privilege.ALL.IsSetIn(bits) {
-		// Revoking 'ALL' privilege: remove user.
-		// TODO(marc): the grammar does not allow it, but we should
-		// check if other privileges are being specified and error out.
-		p.RemoveUser(user)
+		userPriv.WithGrantOption = 0
+		if !grantOptionFor {
+			// Revoking 'ALL' privilege: remove user.
+			// TODO(marc): the grammar does not allow it, but we should
+			// check if other privileges are being specified and error out.
+			p.RemoveUser(user)
+		}
 		return
 	}
 
-	if privilege.ALL.IsSetIn(userPriv.Privileges) {
+	if privilege.ALL.IsSetIn(userPriv.Privileges) && !grantOptionFor {
 		// User has 'ALL' privilege. Remove it and set
 		// all other privileges one.
 		validPrivs := privilege.GetValidPrivilegesForObject(objectType)
@@ -209,12 +299,28 @@ func (p *PrivilegeDescriptor) Revoke(
 		}
 	}
 
-	// One doesn't see "AND NOT" very often.
-	userPriv.Privileges &^= bits
-
-	if userPriv.Privileges == 0 {
-		p.RemoveUser(user)
+	if privilege.ALL.IsSetIn(userPriv.WithGrantOption) {
+		// User has 'ALL' grant option. Remove it and set
+		// all other grant options to one.
+		validPrivs := privilege.GetValidPrivilegesForObject(objectType)
+		userPriv.WithGrantOption = 0
+		for _, v := range validPrivs {
+			if v != privilege.ALL {
+				userPriv.WithGrantOption |= v.Mask()
+			}
+		}
 	}
+
+	// One doesn't see "AND NOT" very often.
+	userPriv.WithGrantOption &^= bits
+	if !grantOptionFor {
+		userPriv.Privileges &^= bits
+
+		if userPriv.Privileges == 0 {
+			p.RemoveUser(user)
+		}
+	}
+
 }
 
 // ValidateSuperuserPrivileges ensures that superusers have exactly the maximum
