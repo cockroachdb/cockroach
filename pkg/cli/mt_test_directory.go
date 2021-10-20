@@ -42,7 +42,12 @@ func runDirectorySvr(cmd *cobra.Command, args []string) (returnErr error) {
 	}
 	defer stopper.Stop(ctx)
 
-	tds, err := tenantdirsvr.New(stopper)
+	tds, err := tenantdirsvr.New(stopper,
+		tenantdirsvr.TestDirectoryCfg{
+			CertsDir:      testDirectorySvrContext.certsDir,
+			KVAddrs:       testDirectorySvrContext.kvAddrs,
+			TenantBaseDir: testDirectorySvrContext.tenantBaseDir,
+		})
 	if err != nil {
 		return err
 	}

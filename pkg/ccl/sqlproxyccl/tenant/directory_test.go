@@ -528,7 +528,7 @@ func newTestDirectory(
 	})
 	clusterStopper := tc.Stopper()
 	var err error
-	tds, err = tenantdirsvr.New(clusterStopper)
+	tds, err = tenantdirsvr.New(clusterStopper, tenantdirsvr.TestDirectoryCfg{})
 	require.NoError(t, err)
 	tds.TenantStarterFunc = func(ctx context.Context, tenantID uint64) (*tenantdirsvr.Process, error) {
 		t.Logf("starting tenant %d", tenantID)

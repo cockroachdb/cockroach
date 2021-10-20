@@ -666,7 +666,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 	}
 
 	if tenantCert == nil && cm.tenantIdentifier != 0 {
-		return makeErrorf(errors.New("tenant client cert not found"), "for %d", cm.tenantIdentifier)
+		return makeErrorf(errors.New("tenant client cert not found"), "for %d in %s", cm.tenantIdentifier, cm.certsDir)
 	}
 
 	if nodeClientCert == nil && nodeCert != nil {

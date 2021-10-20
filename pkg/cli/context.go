@@ -635,7 +635,10 @@ func setProxyContextDefaults() {
 }
 
 var testDirectorySvrContext struct {
-	port int
+	port          int
+	certsDir      string
+	kvAddrs       string
+	tenantBaseDir string
 }
 
 func setTestDirectorySvrContextDefaults() {
