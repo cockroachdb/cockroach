@@ -291,7 +291,7 @@ func (p *planner) SetSequenceValue(
 
 // SetSequenceValueByID implements the tree.SequenceOperators interface.
 func (p *planner) SetSequenceValueByID(
-	ctx context.Context, seqID int64, newVal int64, isCalled bool,
+	ctx context.Context, seqID uint32, newVal int64, isCalled bool,
 ) error {
 	if p.EvalContext().TxnReadOnly {
 		return readOnlyError("setval()")
@@ -309,7 +309,18 @@ func (p *planner) SetSequenceValueByID(
 	if !descriptor.IsSequence() {
 		return sqlerrors.NewWrongObjectTypeError(seqName, "sequence")
 	}
-	return setSequenceValueHelper(ctx, p, descriptor, newVal, isCalled, seqName)
+	if err := setSequenceValueHelper(ctx, p, descriptor, newVal, isCalled, seqName); err != nil {
+		return err
+	}
+
+	// Clear out the cache and update the last value if needed.
+	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
+		m.initSequenceCache()
+		if isCalled {
+			m.RecordLatestSequenceVal(seqID, newVal)
+		}
+	})
+	return nil
 }
 
 // setSequenceValueHelper is shared by SetSequenceValue and SetSequenceValueByID

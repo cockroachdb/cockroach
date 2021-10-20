@@ -417,7 +417,7 @@ func (so *importSequenceOperators) SetSequenceValue(
 
 // SetSequenceValueByID implements the tree.SequenceOperators interface.
 func (so *importSequenceOperators) SetSequenceValueByID(
-	ctx context.Context, seqID int64, newVal int64, isCalled bool,
+	ctx context.Context, seqID uint32, newVal int64, isCalled bool,
 ) error {
 	return errSequenceOperators
 }

@@ -418,7 +418,8 @@ SELECT setval('setval_test', 10)
 ----
 10
 
-# Calling setval changes currval and lastval.
+# Calling setval with is_called=false doesn't affect currval or lastval; they
+# return the last value obtained with nextval.
 query I
 SELECT currval('setval_test')
 ----
@@ -432,31 +433,36 @@ SELECT lastval()
 query I
 SELECT nextval('setval_test')
 ----
-11
+10
 
 query I
 SELECT currval('setval_test')
 ----
-11
+10
 
 query I
 SELECT lastval()
 ----
-11
+10
 
 let $setval_test_id
 SELECT 'setval_test'::regclass::int
 
 query I
-SELECT setval($setval_test_id::regclass, 20, false)
+SELECT setval($setval_test_id::regclass, 20)
 ----
 20
 
-# Calling setval doesn't affect currval or lastval; they return the last value obtained with nextval.
+# Calling setval with is_called=true does affect currval and lastval.
 query I
 SELECT currval($setval_test_id::regclass)
 ----
-11
+20
+
+query I
+SELECT lastval()
+----
+20
 
 query I
 SELECT nextval($setval_test_id::regclass)
@@ -947,11 +953,13 @@ user testuser
 
 # After the grant, testuser can select, increment, and set.
 
-statement ok
+query I
 SELECT nextval('priv_test')
+----
+1
 
 statement ok
-SELECT setval('priv_test', 5)
+SELECT setval('priv_test', 5, true)
 
 query I
 SELECT last_value FROM priv_test
@@ -1849,3 +1857,24 @@ query I
 SELECT nextval('seq71135')
 ----
 201
+
+# The 2-parameter version of setval uses is_called=false.
+query I
+SELECT setval('seq71135'::regclass::oid, 500)
+----
+500
+
+query I
+SELECT lastval()
+----
+201
+
+query I
+SELECT currval('seq71135')
+----
+201
+
+query I
+SELECT nextval('seq71135')
+----
+500
