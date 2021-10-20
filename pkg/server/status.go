@@ -1279,6 +1279,9 @@ func (s *statusServer) NodesUI(
 	}
 
 	internalResp, err := s.ListNodesInternal(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return nil, err
+	}
 	resp := &serverpb.NodesResponseExternal{
 		Nodes:            make([]serverpb.NodeResponse, len(internalResp.Nodes)),
 		LivenessByNodeID: internalResp.LivenessByNodeID,
