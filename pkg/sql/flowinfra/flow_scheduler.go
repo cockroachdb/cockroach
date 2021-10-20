@@ -16,10 +16,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -160,6 +162,8 @@ func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow, locked bool) er
 func (fs *FlowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
 	return fs.stopper.RunTaskWithErr(
 		ctx, "flowinfra.FlowScheduler: scheduling flow", func(ctx context.Context) error {
+			fs.metrics.FlowsScheduled.Inc(1)
+			telemetry.Inc(sqltelemetry.DistSQLFlowsScheduled)
 			if fs.canRunFlow(f) {
 				return fs.runFlowNow(ctx, f, false /* locked */)
 			}
@@ -167,6 +171,7 @@ func (fs *FlowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
 			defer fs.mu.Unlock()
 			log.VEventf(ctx, 1, "flow scheduler enqueuing flow %s to be run later", f.GetID())
 			fs.metrics.FlowsQueued.Inc(1)
+			telemetry.Inc(sqltelemetry.DistSQLFlowsQueued)
 			fs.mu.queue.PushBack(&flowWithCtx{
 				ctx:         ctx,
 				flow:        f,
