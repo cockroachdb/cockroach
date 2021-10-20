@@ -142,7 +142,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	}
 	o.run.rows = rows
 	o.run.iterator = newRowContainerIterator(ctx, *rows, rowexec.ScrubTypes)
-	o.run.currentRow, err = o.run.iterator.next()
+	o.run.currentRow, err = o.run.iterator.Next()
 	return err
 }
 
@@ -172,7 +172,7 @@ func (o *physicalCheckOperation) Next(params runParams) (tree.Datums, error) {
 	}
 
 	// Advance to the next row.
-	o.run.currentRow, err = o.run.iterator.next()
+	o.run.currentRow, err = o.run.iterator.Next()
 	return res, err
 }
 
@@ -189,11 +189,11 @@ func (o *physicalCheckOperation) Done(context.Context) bool {
 // Close implements the checkOperation interface.
 func (o *physicalCheckOperation) Close(ctx context.Context) {
 	if o.run.rows != nil {
-		o.run.rows.close(ctx)
+		o.run.rows.Close(ctx)
 		o.run.rows = nil
 	}
 	if o.run.iterator != nil {
-		o.run.iterator.close()
+		o.run.iterator.Close()
 		o.run.iterator = nil
 	}
 }
