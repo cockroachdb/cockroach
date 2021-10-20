@@ -926,6 +926,8 @@ available replica will error.</p>
 </span></td></tr>
 <tr><td><a name="json_typeof"></a><code>json_typeof(val: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the type of the outermost JSON value as a text string.</p>
 </span></td></tr>
+<tr><td><a name="json_valid"></a><code>json_valid(string: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the given string is a valid JSON or not</p>
+</span></td></tr>
 <tr><td><a name="jsonb_array_length"></a><code>jsonb_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td></tr>
 <tr><td><a name="jsonb_build_array"></a><code>jsonb_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>

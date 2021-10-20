@@ -852,3 +852,23 @@ query T
 SELECT '{}'::JSONB[]
 ----
 {}
+
+query B
+SELECT json_valid('{"hello": {}}')
+----
+true
+
+query B
+SELECT json_valid('{"foo": {"bar": 1, "one": 1, "two": 2')
+----
+false
+
+query B
+SELECT json_valid('[{"bar": 1}, {"bar": 2}]')
+----
+true
+
+query B
+SELECT json_valid(NULL)
+----
+NULL
