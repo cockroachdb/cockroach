@@ -789,6 +789,12 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		}
 		e.emitSpans("spans", a.Table, a.Table.Index(cat.PrimaryIndex), params)
 
+	case recursiveCTEOp:
+		a := n.args.(*recursiveCTEArgs)
+		if e.ob.flags.Verbose && a.Deduplicate {
+			ob.Attrf("deduplicate", "")
+		}
+
 	case simpleProjectOp,
 		serializingProjectOp,
 		ordinalityOp,
@@ -809,7 +815,6 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		alterTableUnsplitOp,
 		alterTableUnsplitAllOp,
 		alterTableRelocateOp,
-		recursiveCTEOp,
 		controlJobsOp,
 		controlSchedulesOp,
 		cancelQueriesOp,

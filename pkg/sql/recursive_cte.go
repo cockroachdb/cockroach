@@ -35,6 +35,9 @@ type recursiveCTENode struct {
 
 	label string
 
+	// If true, all rows must be deduplicated against previous rows.
+	deduplicate bool
+
 	recursiveCTERun
 }
 
@@ -47,13 +50,23 @@ type recursiveCTERun struct {
 	iterator    *rowContainerIterator
 	currentRow  tree.Datums
 
+	// allRows contains all distinct rows produced (in all iterations); only used
+	// if deduplicating.
+	allRows rowContainerHelper
+
 	initialDone bool
 	done        bool
+
+	// err is only used to implement rowResultWriter.
+	err error
 }
 
 func (n *recursiveCTENode) startExec(params runParams) error {
 	n.typs = planTypes(n.initial)
 	n.workingRows.init(n.typs, params.extendedEvalCtx, "cte" /* opName */)
+	if n.deduplicate {
+		n.allRows.initWithDedup(n.typs, params.extendedEvalCtx, "cte-all" /* opName */)
+	}
 	return nil
 }
 
@@ -63,9 +76,9 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 	}
 
 	if !n.initialDone {
-		// Fully consume the initial rows (we could have read the initial rows
-		// one at a time and return it in the same fashion, but that would
-		// require special-case behavior).
+		// Fully consume the initial rows (we could have read the initial rows one
+		// at a time and returned them in the same fashion, but that would require
+		// special-case behavior).
 		for {
 			ok, err := n.initial.Next(params)
 			if err != nil {
@@ -74,7 +87,7 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 			if !ok {
 				break
 			}
-			if err = n.workingRows.addRow(params.ctx, n.initial.Values()); err != nil {
+			if err := n.AddRow(params.ctx, n.initial.Values()); err != nil {
 				return false, err
 			}
 		}
@@ -126,7 +139,7 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	if err := runPlanInsidePlan(params, newPlan.(*planComponents), &n.workingRows); err != nil {
+	if err := runPlanInsidePlan(params, newPlan.(*planComponents), rowResultWriter(n)); err != nil {
 		return false, err
 	}
 
@@ -144,9 +157,48 @@ func (n *recursiveCTENode) Values() tree.Datums {
 
 func (n *recursiveCTENode) Close(ctx context.Context) {
 	n.initial.Close(ctx)
+	if n.deduplicate {
+		n.allRows.close(ctx)
+	}
 	n.workingRows.close(ctx)
 	if n.iterator != nil {
 		n.iterator.close()
 		n.iterator = nil
 	}
+}
+
+// recursiveCTENode implements rowResultWriter and is used as the result writer
+// for each iteration.
+var _ rowResultWriter = (*recursiveCTENode)(nil)
+
+// AddRow is part of the rowResultWriter interface.
+//
+// If we are not deduplicating, the rows are added to the workingRows container.
+//
+// If we are deduplicating, each row is either discarded if it has a duplicate
+// in the allRows container or added to both allRows and workingRows otherwise.
+func (n *recursiveCTENode) AddRow(ctx context.Context, row tree.Datums) error {
+	if n.deduplicate {
+		if ok, err := n.allRows.addRowWithDedup(ctx, row); err != nil {
+			return err
+		} else if !ok {
+			// Duplicate row; don't add to the resulting rows.
+			return nil
+		}
+	}
+	return n.workingRows.addRow(ctx, row)
+}
+
+// IncrementRowsAffected is part of the rowResultWriter interface.
+func (n *recursiveCTENode) IncrementRowsAffected(context.Context, int) {
+}
+
+// SetError is part of the rowResultWriter interface.
+func (n *recursiveCTENode) SetError(err error) {
+	n.err = err
+}
+
+// Error is part of the rowResultWriter interface.
+func (n *recursiveCTENode) Err() error {
+	return n.err
 }

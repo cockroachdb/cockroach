@@ -701,6 +701,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *RecursiveCTEExpr:
 		if !f.HasFlags(ExprFmtHideColumns) {
+			if t.Deduplicate {
+				tp.Childf("deduplicate")
+			}
 			tp.Childf("working table binding: &%d", t.WithID)
 			f.formatColList(e, tp, "initial columns:", t.InitialCols)
 			f.formatColList(e, tp, "recursive columns:", t.RecursiveCols)

@@ -1029,12 +1029,13 @@ func (ef *execFactory) ConstructScanBuffer(ref exec.Node, label string) (exec.No
 
 // ConstructRecursiveCTE is part of the exec.Factory interface.
 func (ef *execFactory) ConstructRecursiveCTE(
-	initial exec.Node, fn exec.RecursiveCTEIterationFn, label string,
+	initial exec.Node, fn exec.RecursiveCTEIterationFn, label string, deduplicate bool,
 ) (exec.Node, error) {
 	return &recursiveCTENode{
 		initial:        initial.(planNode),
 		genIterationFn: fn,
 		label:          label,
+		deduplicate:    deduplicate,
 	}, nil
 }
 
