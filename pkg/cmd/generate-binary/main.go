@@ -148,6 +148,8 @@ const outputJSON = `[
 var inputs = map[string][]string{
 	"'%s'::decimal": {
 		"NaN",
+		"Inf",
+		"-infinity",
 		"-000.000",
 		"-0000021234.23246346000000",
 		"-1.2",
