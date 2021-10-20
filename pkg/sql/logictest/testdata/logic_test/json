@@ -867,3 +867,8 @@ query B
 SELECT json_valid('[{"bar": 1}, {"bar": 2}]')
 ----
 true
+
+query B
+SELECT json_valid(NULL)
+----
+NULL
