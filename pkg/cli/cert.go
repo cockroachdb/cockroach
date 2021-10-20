@@ -301,7 +301,7 @@ var certCmd = func() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cert",
 		Short: "create ca, node, and client certs",
-		RunE:  usageAndErr,
+		RunE:  UsageAndErr,
 	}
 	cmd.AddCommand(certCmds...)
 	return cmd
