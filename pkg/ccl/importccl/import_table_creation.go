@@ -75,6 +75,7 @@ func MakeTestingSimpleTableDescriptor(
 		Privileges: descpb.NewPrivilegeDescriptor(
 			security.PublicRoleName(),
 			privilege.SchemaPrivileges,
+			privilege.List{},
 			security.RootUserName(),
 		),
 	}).BuildCreatedMutableSchema()
