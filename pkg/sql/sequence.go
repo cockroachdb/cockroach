@@ -306,7 +306,16 @@ func (p *planner) SetSequenceValueByID(
 	if !descriptor.IsSequence() {
 		return sqlerrors.NewWrongObjectTypeError(seqName, "sequence")
 	}
-	return setSequenceValueHelper(ctx, p, descriptor, newVal, isCalled, seqName)
+	if err := setSequenceValueHelper(ctx, p, descriptor, newVal, isCalled, seqName); err != nil {
+		return err
+	}
+
+	// Clear out the cache and update the last value if needed.
+	p.sessionDataMutator.initSequenceCache()
+	if isCalled {
+		p.sessionDataMutator.RecordLatestSequenceVal(uint32(seqID), newVal)
+	}
+	return nil
 }
 
 // setSequenceValueHelper is shared by SetSequenceValue and SetSequenceValueByID

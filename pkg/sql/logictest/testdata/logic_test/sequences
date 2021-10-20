@@ -1816,3 +1816,36 @@ SELECT * FROM "".crdb_internal.cross_db_references;
 db2  public  seq   db1  public  t  sequences owning table
 db2  public  seq2  db1  public  t  sequences owning table
 test  public  tdb3ref  db3  public  s  table column refers to sequence
+
+subtest cached_sequences_invalidate
+
+# Test for #71135 -- make sure that setval invalidates the cached sequence
+# values.
+
+statement ok
+CREATE SEQUENCE seq71135 CACHE 100
+
+query I
+SELECT nextval('seq71135')
+----
+1
+
+query I
+SELECT setval('seq71135', 200, true)
+----
+200
+
+query I
+SELECT lastval()
+----
+200
+
+query I
+SELECT currval('seq71135')
+----
+200
+
+query I
+SELECT nextval('seq71135')
+----
+201
