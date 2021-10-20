@@ -7539,7 +7539,7 @@ func TestJobsWithoutMutationsAreCancelable(t *testing.T) {
 }
 
 // TestDeinterleaveRevert tests that schema changes which fail during an alter
-// primary key to remove an interleave in an unrecoverable way.
+// primary key to remove an interleave successfully reverts.
 func TestDeinterleaveRevert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -7584,9 +7584,13 @@ INSERT INTO child VALUES (1, 1, 1);
 		errCh <- err
 	}()
 
-	const errMsg = `relation "child" (53): missing interleave back reference to "child"@"child_pkey" from "parent"@"parent_pkey"`
-	tdb.CheckQueryResultsRetry(t, "SELECT status, error FROM crdb_internal.jobs WHERE description LIKE '%ALTER PRIMARY KEY%'", [][]string{
-		{"revert-failed", errMsg},
+	const errMsg = `failed to construct index entries during backfill: boom`
+	tdb.CheckQueryResultsRetry(t, `
+SELECT status, error
+  FROM crdb_internal.jobs
+ WHERE job_type = 'SCHEMA CHANGE' AND description LIKE '%ALTER PRIMARY KEY%';
+`, [][]string{
+		{"failed", errMsg},
 	})
-	require.EqualError(t, <-errCh, `pq: failed to construct index entries during backfill: boom`)
+	require.EqualError(t, <-errCh, `pq: `+errMsg)
 }
