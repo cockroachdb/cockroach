@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -532,7 +533,7 @@ func (e *distSQLSpecExecFactory) constructAggregators(
 			aggregations:         aggregationSpecs,
 			argumentsColumnTypes: argumentsColumnTypes,
 			isScalar:             isScalar,
-			groupCols:            convertOrdinalsToInts(groupCols),
+			groupCols:            convertNodeOrdinalsToInts(groupCols),
 			groupColOrdering:     groupColOrdering,
 			inputMergeOrdering:   physPlan.MergeOrdering,
 			reqOrdering:          ReqOrdering(reqOrdering),
@@ -681,6 +682,47 @@ func (e *distSQLSpecExecFactory) ConstructInvertedJoin(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: inverted join")
 }
 
+func (e *distSQLSpecExecFactory) constructZigzagJoinSide(
+	planCtx *PlanningCtx,
+	table cat.Table,
+	index cat.Index,
+	wantedCols exec.TableColumnOrdinalSet,
+	fixedVals []tree.TypedExpr,
+	eqCols []exec.TableColumnOrdinal,
+) (zigzagPlanningSide, error) {
+	desc := table.(*optTable).desc
+	colCfg := scanColumnsConfig{wantedColumns: make([]tree.ColumnID, 0, wantedCols.Len())}
+	for c, ok := wantedCols.Next(0); ok; c, ok = wantedCols.Next(c + 1) {
+		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.PublicColumns()[c].GetID()))
+	}
+	ctx := e.planner.extendedEvalCtx.Ctx()
+	if err := e.planner.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
+		return zigzagPlanningSide{}, err
+	}
+	cols, err := initColsForScan(desc, colCfg)
+	if err != nil {
+		return zigzagPlanningSide{}, err
+	}
+	typs := make([]*types.T, len(fixedVals))
+	for i := range typs {
+		typs[i] = fixedVals[i].ResolvedType()
+	}
+	valuesSpec, err := e.dsp.createValuesSpecFromTuples(planCtx, [][]tree.TypedExpr{fixedVals}, typs)
+	if err != nil {
+		return zigzagPlanningSide{}, err
+	}
+
+	// TODO (cucaroach): update indexUsageStats.
+
+	return zigzagPlanningSide{
+		desc:        desc,
+		index:       index.(*optIndex).idx,
+		cols:        cols,
+		eqCols:      convertTableOrdinalsToInts(eqCols),
+		fixedValues: valuesSpec,
+	}, nil
+}
+
 func (e *distSQLSpecExecFactory) ConstructZigzagJoin(
 	leftTable cat.Table,
 	leftIndex cat.Index,
@@ -695,7 +737,37 @@ func (e *distSQLSpecExecFactory) ConstructZigzagJoin(
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: zigzag join")
+	// Because we cannot distribute we don't need to check the onCond and fixedValue exprs
+	// with checkExpr but we would need to if we ever try to distribute ZZ joins.
+	planCtx := e.getPlanCtx(cannotDistribute)
+
+	sides := make([]zigzagPlanningSide, 2)
+	var err error
+	sides[0], err = e.constructZigzagJoinSide(planCtx, leftTable, leftIndex, leftCols, leftFixedVals, leftEqCols)
+	if err != nil {
+		return nil, err
+	}
+	sides[1], err = e.constructZigzagJoinSide(planCtx, rightTable, rightIndex, rightCols, rightFixedVals, rightEqCols)
+	if err != nil {
+		return nil, err
+	}
+
+	leftResultColumns := colinfo.ResultColumnsFromColumns(sides[0].desc.GetID(), sides[0].cols)
+	rightResultColumns := colinfo.ResultColumnsFromColumns(sides[1].desc.GetID(), sides[1].cols)
+	resultColumns := make(colinfo.ResultColumns, 0, len(leftResultColumns)+len(rightResultColumns))
+	resultColumns = append(resultColumns, leftResultColumns...)
+	resultColumns = append(resultColumns, rightResultColumns...)
+	p, err := e.dsp.planZigzagJoin(planCtx, zigzagPlanningInfo{
+		sides:       sides,
+		columns:     resultColumns,
+		onCond:      onCond,
+		reqOrdering: ReqOrdering(reqOrdering),
+	})
+	if err != nil {
+		return nil, err
+	}
+	p.ResultColumns = resultColumns
+	return makePlanMaybePhysical(p, nil /* planNodesToClose */), nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructLimit(

@@ -201,9 +201,19 @@ func getResultColumnsForGroupBy(
 	return columns
 }
 
-// convertOrdinalsToInts converts a slice of exec.NodeColumnOrdinals to a slice
+// convertNodeOrdinalsToInts converts a slice of exec.NodeColumnOrdinals to a slice
 // of ints.
-func convertOrdinalsToInts(ordinals []exec.NodeColumnOrdinal) []int {
+func convertNodeOrdinalsToInts(ordinals []exec.NodeColumnOrdinal) []int {
+	ints := make([]int, len(ordinals))
+	for i := range ordinals {
+		ints[i] = int(ordinals[i])
+	}
+	return ints
+}
+
+// convertTableOrdinalsToInts converts a slice of exec.TableColumnOrdinal to a
+// slice of ints.
+func convertTableOrdinalsToInts(ordinals []exec.TableColumnOrdinal) []int {
 	ints := make([]int, len(ordinals))
 	for i := range ordinals {
 		ints[i] = int(ordinals[i])
