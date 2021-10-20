@@ -3918,7 +3918,8 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 			UserProto:        planCtx.planner.User().EncodeProto(),
 		}
 	} else{
-		return nil, errors.Errorf("PARQUET AND CSV OPTS BOTH EMPTY?!?")
+		return nil, errors.AssertionFailedf("parquetOpts and csvOpts are both empty. " +
+			"One must be not nil")
 	}
 
 

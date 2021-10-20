@@ -725,7 +725,7 @@ func (m *CSVWriterSpec) XXX_DiscardUnknown() {
 var xxx_messageInfo_CSVWriterSpec proto.InternalMessageInfo
 
 // ParquetWriterSpec is the specification for a processor that consumes rows and
-// writes them to CSV files at uri. It outputs a row per file written with
+// writes them to Parquet files at uri. It outputs a row per file written with
 // the file name, row count and byte size.
 type ParquetWriterSpec struct {
 	// destination as a cloud.ExternalStorage URI pointing to an export store
