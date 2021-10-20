@@ -13,21 +13,22 @@
 
 import React from "react";
 import { Tabs } from "antd";
-import { commonStyles } from "@cockroachlabs/cluster-ui";
+import { commonStyles, util } from "@cockroachlabs/cluster-ui";
 import SessionsPageConnected from "src/views/sessions/sessionsPage";
 import TransactionsPageConnected from "src/views/transactions/transactionsPage";
 import StatementsPageConnected from "src/views/statements/statementsPage";
-import { getMatchParamByName } from "src/util/query";
 import { RouteComponentProps } from "react-router-dom";
 
 const { TabPane } = Tabs;
 
 const SQLActivityPage = (props: RouteComponentProps) => {
-  const defaultTab = getMatchParamByName(props.match, "tab") || "sessions";
+  const defaultTab = util.queryByName(props.location, "tab") || "sessions";
   const [currentTab, setCurrentTab] = React.useState(defaultTab);
 
   const onTabChange = (tabId: string): void => {
     setCurrentTab(tabId);
+    util.clearHistory(props.history);
+    util.syncHistory({ tab: tabId }, props.history);
   };
 
   return (

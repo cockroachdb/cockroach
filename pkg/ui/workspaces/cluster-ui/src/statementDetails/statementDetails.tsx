@@ -387,7 +387,7 @@ export class StatementDetails extends React.Component<
   };
 
   backToStatementsClick = (): void => {
-    this.props.history.push("/sql-activity/statements");
+    this.props.history.push("/sql-activity?tab=statements");
     if (this.props.onBackToStatementsClick) {
       this.props.onBackToStatementsClick();
     }
