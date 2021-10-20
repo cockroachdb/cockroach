@@ -74,23 +74,27 @@ discard_stmt ::=
 	'DISCARD' 'ALL'
 
 grant_stmt ::=
-	'GRANT' privileges 'ON' targets 'TO' role_spec_list
+	'GRANT' privileges 'ON' targets 'TO' role_spec_list opt_with_grant_option
 	| 'GRANT' privilege_list 'TO' role_spec_list
 	| 'GRANT' privilege_list 'TO' role_spec_list 'WITH' 'ADMIN' 'OPTION'
-	| 'GRANT' privileges 'ON' 'TYPE' target_types 'TO' role_spec_list
-	| 'GRANT' privileges 'ON' 'SCHEMA' schema_name_list 'TO' role_spec_list
-	| 'GRANT' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list
+	| 'GRANT' privileges 'ON' 'TYPE' target_types 'TO' role_spec_list opt_with_grant_option
+	| 'GRANT' privileges 'ON' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
+	| 'GRANT' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
 
 prepare_stmt ::=
 	'PREPARE' table_alias_name prep_type_clause 'AS' preparable_stmt
 
 revoke_stmt ::=
 	'REVOKE' privileges 'ON' targets 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' targets 'FROM' role_spec_list
 	| 'REVOKE' privilege_list 'FROM' role_spec_list
 	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' role_spec_list
 	| 'REVOKE' privileges 'ON' 'TYPE' target_types 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' 'TYPE' target_types 'FROM' role_spec_list
 	| 'REVOKE' privileges 'ON' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 	| 'REVOKE' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 
 savepoint_stmt ::=
 	'SAVEPOINT' name
@@ -320,6 +324,10 @@ targets ::=
 
 role_spec_list ::=
 	( role_spec ) ( ( ',' role_spec ) )*
+
+opt_with_grant_option ::=
+	'WITH' 'GRANT' 'OPTION'
+	| 
 
 privilege_list ::=
 	( privilege ) ( ( ',' privilege ) )*
@@ -2337,10 +2345,6 @@ alter_default_privileges_target_object ::=
 	| 'SEQUENCES'
 	| 'TYPES'
 	| 'SCHEMAS'
-
-opt_with_grant_option ::=
-	'WITH' 'GRANT' 'OPTION'
-	| 
 
 role_option ::=
 	'CREATEROLE'
