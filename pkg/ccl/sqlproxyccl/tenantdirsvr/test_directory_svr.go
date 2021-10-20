@@ -9,13 +9,14 @@
 package tenantdirsvr
 
 import (
-	"bytes"
+	"bufio"
 	"container/list"
 	"context"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
 )
@@ -63,9 +63,19 @@ func NewSubStopper(parentStopper *stop.Stopper) *stop.Stopper {
 	return subStopper
 }
 
+// TestDirectoryCfg is used to pass configuration parameters to the
+// test directory server
+type TestDirectoryCfg struct {
+	// CertsDir if set will be passed to the tenant process when instantiated.
+	CertsDir      string
+	KVAddrs       string
+	TenantBaseDir string
+}
+
 // TestDirectoryServer is a directory server implementation that is used for
 // testing.
 type TestDirectoryServer struct {
+	TestDirectoryCfg
 	stopper             *stop.Stopper
 	grpcServer          *grpc.Server
 	cockroachExecutable string
@@ -85,13 +95,14 @@ type TestDirectoryServer struct {
 }
 
 // New will create a new server.
-func New(stopper *stop.Stopper) (*TestDirectoryServer, error) {
+func New(stopper *stop.Stopper, cfg TestDirectoryCfg) (*TestDirectoryServer, error) {
 	// Determine the path to cockroach executable.
 	cockroachExecutable, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
 	dir := &TestDirectoryServer{
+		TestDirectoryCfg:    cfg,
 		grpcServer:          grpc.NewServer(),
 		stopper:             stopper,
 		cockroachExecutable: cockroachExecutable,
@@ -382,6 +393,10 @@ func (s *TestDirectoryServer) deregisterInstance(tenantID uint64, sql net.Addr) 
 	}
 }
 
+type writerFunc func(p []byte) (int, error)
+
+func (wf writerFunc) Write(p []byte) (int, error) { return wf(p) }
+
 // startTenantLocked is the default tenant process startup logic that runs the
 // cockroach db executable out of process.
 func (s *TestDirectoryServer) startTenantLocked(
@@ -398,11 +413,23 @@ func (s *TestDirectoryServer) startTenantLocked(
 	}
 	process := &Process{SQL: sql.Addr(), FakeLoad: 0.01}
 	args := []string{
-		"mt", "start-sql", "--kv-addrs=127.0.0.1:26257", "--idle-exit-after=30s",
+		"mt", "start-sql",
 		fmt.Sprintf("--sql-addr=%s", sql.Addr().String()),
 		fmt.Sprintf("--http-addr=%s", http.Addr().String()),
 		fmt.Sprintf("--tenant-id=%d", tenantID),
-		"--insecure",
+	}
+	if s.KVAddrs != "" {
+		args = append(args, fmt.Sprintf("--kv-addrs=%s", s.KVAddrs))
+	} else {
+		args = append(args, "--kv-addrs=localhost:26257")
+	}
+	if s.TenantBaseDir != "" {
+		args = append(args, fmt.Sprintf("--store=%s/store.0.%d", s.TenantBaseDir, tenantID))
+	}
+	if s.CertsDir != "" {
+		args = append(args, fmt.Sprintf("--certs-dir=%s", s.CertsDir))
+	} else {
+		args = append(args, "--insecure")
 	}
 	if err = sql.Close(); err != nil {
 		return nil, err
@@ -414,16 +441,15 @@ func (s *TestDirectoryServer) startTenantLocked(
 	c := exec.Command(s.cockroachExecutable, args...)
 	process.Cmd = c
 	c.Env = append(os.Environ(), "COCKROACH_TRUST_CLIENT_PROVIDED_SQL_REMOTE_ADDR=true")
-
-	if c.Stdout != nil {
-		return nil, errors.New("exec: Stdout already set")
+	var f writerFunc = func(p []byte) (int, error) {
+		sc := bufio.NewScanner(strings.NewReader(string(p)))
+		for sc.Scan() {
+			log.Infof(ctx, "%s", sc.Text())
+		}
+		return len(p), nil
 	}
-	if c.Stderr != nil {
-		return nil, errors.New("exec: Stderr already set")
-	}
-	var b bytes.Buffer
-	c.Stdout = &b
-	c.Stderr = &b
+	c.Stdout = f
+	c.Stderr = f
 	err = c.Start()
 	if err != nil {
 		return nil, err
@@ -436,7 +462,6 @@ func (s *TestDirectoryServer) startTenantLocked(
 	err = s.stopper.RunAsyncTask(ctx, "cmd-wait", func(ctx context.Context) {
 		if err := c.Wait(); err != nil {
 			log.Infof(ctx, "finished %s with err %s", process.Cmd.Args, err)
-			log.Infof(ctx, "output %s", b.Bytes())
 			return
 		}
 		log.Infof(ctx, "finished %s with success", process.Cmd.Args)

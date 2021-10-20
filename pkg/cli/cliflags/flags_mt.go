@@ -102,4 +102,14 @@ This rule must include the port of the SQL pod.`,
 		Name:        "port",
 		Description: "Test directory server binds and listens on this port.",
 	}
+
+	TestDirectoryTenantCertsDir = FlagInfo{
+		Name:        "certs-dir",
+		Description: CertsDir.Description,
+	}
+
+	TestDirectoryTenantBaseDir = FlagInfo{
+		Name:        "base-dir",
+		Description: "If set, the tenant processes will use it as a store location.",
+	}
 )

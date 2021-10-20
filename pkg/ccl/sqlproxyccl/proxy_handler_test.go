@@ -1131,7 +1131,7 @@ func newDirectoryServer(
 
 	// Create the tenant directory server.
 	tdsStopper := stop.NewStopper()
-	tds, err := tenantdirsvr.New(tdsStopper)
+	tds, err := tenantdirsvr.New(tdsStopper, tenantdirsvr.TestDirectoryCfg{})
 	require.NoError(t, err)
 
 	// Override the tenant starter function to start a new tenant process using
