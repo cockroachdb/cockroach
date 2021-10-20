@@ -1243,7 +1243,10 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 					privileges := privilege.ListFromBitField(
 						userPrivs.Privileges, privilegeObjectType,
 					)
-					defaclItem := createDefACLItem(user, privileges, privilegeObjectType)
+					grantOptions := privilege.ListFromBitField(
+						userPrivs.WithGrantOption, privilegeObjectType,
+					)
+					defaclItem := createDefACLItem(user, privileges, grantOptions, privilegeObjectType)
 					if err := arr.Append(
 						tree.NewDString(defaclItem)); err != nil {
 						return err
@@ -1260,7 +1263,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 						if !catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, tree.Types) &&
 							catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) {
 							defaclItem := createDefACLItem(
-								"" /* public role */, privilege.List{privilege.USAGE}, privilegeObjectType,
+								"" /* public role */, privilege.List{privilege.USAGE}, privilege.List{}, privilegeObjectType,
 							)
 							if err := arr.Append(tree.NewDString(defaclItem)); err != nil {
 								return err
@@ -1270,7 +1273,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 							defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnTypes {
 							defaclItem := createDefACLItem(
 								defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized(),
-								privilege.List{privilege.ALL}, privilegeObjectType,
+								privilege.List{privilege.ALL}, privilege.List{}, privilegeObjectType,
 							)
 							if err := arr.Append(tree.NewDString(defaclItem)); err != nil {
 								return err
@@ -1313,11 +1316,15 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 }
 
 func createDefACLItem(
-	user string, privileges privilege.List, privilegeObjectType privilege.ObjectType,
+	user string,
+	privileges privilege.List,
+	grantOptions privilege.List,
+	privilegeObjectType privilege.ObjectType,
 ) string {
 	return fmt.Sprintf(`%s=%s/%s`,
 		user,
 		privileges.ListToACL(
+			grantOptions,
 			privilegeObjectType,
 		),
 		// TODO(richardjcai): CockroachDB currently does not track grantors

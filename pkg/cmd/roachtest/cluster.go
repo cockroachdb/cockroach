@@ -2298,6 +2298,7 @@ func (c *clusterImpl) Conn(ctx context.Context, node int) *gosql.DB {
 // ConnE returns a SQL connection to the specified node.
 func (c *clusterImpl) ConnE(ctx context.Context, node int) (*gosql.DB, error) {
 	urls, err := c.ExternalPGUrl(ctx, c.Node(node))
+	fmt.Println(urls)
 	if err != nil {
 		return nil, err
 	}
