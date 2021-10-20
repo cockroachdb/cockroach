@@ -1366,6 +1366,9 @@ func (s *statusServer) NodesUI(
 	}
 
 	internalResp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
+	if err != nil {
+		return nil, err
+	}
 	resp := &serverpb.NodesResponseExternal{
 		Nodes:            make([]serverpb.NodeResponse, len(internalResp.Nodes)),
 		LivenessByNodeID: internalResp.LivenessByNodeID,
