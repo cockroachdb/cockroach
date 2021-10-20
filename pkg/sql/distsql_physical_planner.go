@@ -3881,7 +3881,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 }
 
 // createPlanForExport creates a physical plan for EXPORT.
-// We add a new stage of [filetype]Writer processors to the input plan.
+// We add a new stage of CSV/Parquet Writer processors to the input plan.
 func (dsp *DistSQLPlanner) createPlanForExport(
 	planCtx *PlanningCtx, n *exportNode,
 ) (*PhysicalPlan, error) {
@@ -3892,7 +3892,7 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 
 	var core execinfrapb.ProcessorCoreUnion
 
-	if n.csvOpts != nil{
+	if n.csvOpts != nil {
 		core.CSVWriter = &execinfrapb.CSVWriterSpec{
 			Destination:      n.destination,
 			NamePattern:      n.fileNamePattern,
@@ -3902,20 +3902,19 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 			CompressionCodec: n.fileCompression,
 			UserProto:        planCtx.planner.User().EncodeProto(),
 		}
-	} else if n.parquetOpts != nil{
+	} else if n.parquetOpts != nil {
 		core.ParquetWriter = &execinfrapb.ParquetWriterSpec{
-			Destination:      n.destination,
-			NamePattern:      n.fileNamePattern,
-			Options:          *n.parquetOpts,
-			ChunkRows:        int64(n.chunkRows),
-			ChunkSize:        n.chunkSize,
-			CompressionCodec: n.fileCompression,
-			UserProto:        planCtx.planner.User().EncodeProto(),
+			Destination: n.destination,
+			NamePattern: n.fileNamePattern,
+			Options:     *n.parquetOpts,
+			ChunkRows:   int64(n.chunkRows),
+			ChunkSize:   n.chunkSize,
+			UserProto:   planCtx.planner.User().EncodeProto(),
 		}
-	} else{
-		return nil, errors.Errorf("PARQUET AND CSV OPTS BOTH EMPTY?!?")
+	} else {
+		return nil, errors.AssertionFailedf("parquetOpts and csvOpts are both empty. " +
+			"One must be not nil")
 	}
-
 
 	resTypes := make([]*types.T, len(colinfo.ExportColumns))
 	for i := range colinfo.ExportColumns {

@@ -17,6 +17,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -35,11 +36,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
+	goparquet "github.com/fraugster/parquet-go"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
 const exportFilePattern = "export*-n*.0.csv"
+const parquetExportFilePattern = "export*-n*.0.parquet"
 
 func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, string, func()) {
 	ctx := context.Background()
@@ -261,6 +264,100 @@ func TestExportOrder(t *testing.T) {
 	if expected, got := "3,32,1,34\n2,22,2,24\n", string(content); expected != got {
 		t.Fatalf("expected %q, got %q", expected, got)
 	}
+}
+
+// validateParquetFile reads the parquet file, converts each value in the parquet file to its
+// native go type, and asserts its values match the truth.
+
+// TODO (MB): once we figure out how to export the column names properly,
+// this function should check the column names as well
+func validateParquetFile(t *testing.T, file string, truthRows [][]interface{}) error {
+	r, err := os.Open(file)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	fr, err := goparquet.NewFileReader(r)
+	if err != nil {
+		return err
+	}
+	t.Logf("Schema: %s", fr.GetSchemaDefinition())
+
+	cols := fr.SchemaReader.GetSchemaDefinition().RootColumn.Children
+
+	require.Equal(t, len(cols), len(truthRows[0]))
+	require.Equal(t, int(fr.NumRows()), len(truthRows))
+
+	count := 0
+
+	for {
+		row, err := fr.NextRow()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("reading record failed: %w", err)
+		}
+
+		t.Logf("\n Record %v:", count)
+		for i := 0; i < len(cols); i++ {
+			var decodedV interface{}
+			v := row[cols[i].SchemaElement.Name]
+			switch vv := v.(type) {
+			case []byte:
+				// the parquet exporter encodes native go strings as []byte, so an extra
+				// step is required here
+				// TODO (MB): as we add more type support, this
+				// test will be insufficient: many go native types are encoded as
+				// []byte, so in the future, each column will have to call it's own
+				// custom decoder ( this is how IMPORT Parquet will work)
+				decodedV = string(vv)
+			case int64, float64, bool:
+				decodedV = vv
+			default:
+				t.Fatalf("unexepected type: %T", vv)
+			}
+			t.Logf("\t %v", decodedV)
+			require.Equal(t, truthRows[count][i], decodedV)
+		}
+		count++
+	}
+	return nil
+}
+
+// TestBasicParquetTypes exports a relation with bool, int, float and string
+// values to a parquet file, and then asserts that the parquet exporter properly
+// encoded the values of the crdb relation.
+func TestBasicParquetTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT, a BOOL, INDEX (y))`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 14.3, true), (2, 'Bob', 2, 24.1, false), 
+(3, 'Carl', 1, 34.214,true)`)
+
+	sqlDB.Exec(t, `EXPORT INTO PARQUET 'nodelocal://0/order_parquet' FROM SELECT *
+		FROM foo ORDER BY y ASC LIMIT 2`)
+
+	paths, err := filepath.Glob(filepath.Join(dir, "order_parquet",
+		parquetExportFilePattern))
+	require.NoError(t, err)
+
+	require.Equal(t, 1, len(paths))
+
+	truth := [][]interface{}{
+		{int64(3), "Carl", int64(1), 34.214, true},
+		{int64(2), "Bob", int64(2), 24.1, false}}
+
+	err = validateParquetFile(t, paths[0], truth)
+	require.NoError(t, err)
 }
 
 func TestExportUniqueness(t *testing.T) {
