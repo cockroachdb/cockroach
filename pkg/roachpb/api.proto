@@ -117,6 +117,17 @@ message ResponseHeader {
   // When resume_span is populated, this specifies the reason why the operation
   // wasn't completed and needs to be resumed.
   ResumeReason resume_reason = 7;
+  // When resume_reason is RESUME_BYTE_LIMIT, this may contain the size of the
+  // next result entry which caused the limit to be exceeded, i.e. the size of
+  // the first entry when reading from the resume span. It is only supported by
+  // Get and Scan. In a batch, this will only be set on the first response that
+  // exceeds the limit.
+  //
+  // NB: This is best-effort, and may be 0 in some rare cases. Specifically, if
+  // TargetBytes is exactly satisfied by a result that exhausted a range scan,
+  // or by a response from a multi-request batch, we won't do additional work
+  // (e.g. send another RPC to the next range) only to obtain resume_next_bytes.
+  int64 resume_next_bytes = 9;
 
   // The number of keys operated on.
   int64 num_keys = 5;
@@ -2126,14 +2137,20 @@ message Header {
   int64 max_span_request_keys = 8;
   // If set to a non-zero value, sets a target (in bytes) for how large the
   // response may grow. This is only supported for (forward and reverse) scans
-  // and limits the number of rows scanned (and returned). The target will be
-  // overshot; in particular, at least one row will always be returned (assuming
-  // one exists). A suitable resume span will be returned.
+  // and limits the number of rows scanned (and returned). For cluster versions
+  // 21.2 and below, the target will be overshot. For 22.1 and above, the
+  // target will only be overshot when the first result is larger than the
+  // target (see TargetBytesAvoidExcess cluster version), unless
+  // target_bytes_allow_empty is set. A suitable resume span will be returned.
   //
   // The semantics around overlapping requests, unordered requests, and
   // supported requests from max_span_request_keys apply to the target_bytes
   // option as well.
   int64 target_bytes = 15;
+  // If true, allow returning an empty result when the first result exceeds
+  // target_bytes. Only effective on 22.1 clusters with TargetBytesAvoidExcess
+  // cluster version enabled. Only supported by Get, Scan, and ReverseScan.
+  bool target_bytes_allow_empty = 23;
   // If set, all of the spans in the batch are distinct. Note that the
   // calculation of distinct spans does not include intents in an
   // EndTxnRequest. Currently set conservatively: a request might be

@@ -704,7 +704,7 @@ func TestAuthenticationMux(t *testing.T) {
 	} {
 		t.Run("path="+tc.path, func(t *testing.T) {
 			// Verify normal client returns 401 Unauthorized.
-			if err := runRequest(normalClient, tc.method, tc.path, tc.body, "", http.StatusUnauthorized); err != nil {
+			if err := runRequest(normalClient, tc.method, tc.path, tc.body, tc.cookieHeader, http.StatusUnauthorized); err != nil {
 				t.Fatalf("request %s failed when not authorized: %s", tc.path, err)
 			}
 
