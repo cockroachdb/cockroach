@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -681,6 +682,14 @@ func (e *distSQLSpecExecFactory) ConstructInvertedJoin(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: inverted join")
 }
 
+type zside struct {
+	table     cat.Table
+	index     cat.Index
+	cols      exec.TableColumnOrdinalSet
+	fixedVals []tree.TypedExpr
+	eqCols    []exec.TableColumnOrdinal
+}
+
 func (e *distSQLSpecExecFactory) ConstructZigzagJoin(
 	leftTable cat.Table,
 	leftIndex cat.Index,
@@ -695,7 +704,137 @@ func (e *distSQLSpecExecFactory) ConstructZigzagJoin(
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: zigzag join")
+
+	// RFC: guessing it doesn't make sense to distribute zigzag...
+	planCtx := e.getPlanCtx(cannotDistribute)
+	plan := planCtx.NewPhysicalPlan()
+
+	err := e.constructZigzagJoin(planCtx, plan, []zside{
+		{leftTable, leftIndex, leftCols, leftFixedVals, leftEqCols},
+		{rightTable, rightIndex, rightCols, rightFixedVals, rightEqCols},
+	}, onCond, reqOrdering)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return makePlanMaybePhysical(plan, nil), nil
+}
+
+func (e *distSQLSpecExecFactory) constructZigzagJoin(
+	planCtx *PlanningCtx,
+	plan *PhysicalPlan,
+	sides []zside,
+	onCond tree.TypedExpr,
+	reqOrdering exec.OutputOrdering,
+) error {
+	nsides := len(sides)
+	tables := make([]descpb.TableDescriptor, nsides)
+	indexOrdinals := make([]uint32, nsides)
+	cols := make([]execinfrapb.Columns, nsides)
+	fixedValues := make([]*execinfrapb.ValuesCoreSpec, nsides)
+	numOutCols := 0
+
+	for i, side := range sides {
+		tdesc := side.table.(*optTable).desc
+		tables[i] = *tdesc.TableDesc()
+		ord, err := getIndexIdx(side.index.(*optIndex).idx, tdesc)
+		if err != nil {
+			return err
+		}
+		indexOrdinals[i] = ord
+		cols[i].Columns = make([]uint32, len(side.eqCols))
+		for j, col := range side.eqCols {
+			cols[i].Columns[j] = uint32(col)
+		}
+
+		fixedVals := side.fixedVals
+		typs := make([]*types.T, len(fixedVals))
+		for i := range typs {
+			col := side.index.Column(i)
+			typs[i] = col.DatumType()
+		}
+		valuesSpec, err := e.dsp.createValuesSpecFromTuples(planCtx, [][]tree.TypedExpr{fixedVals}, typs)
+		if err != nil {
+			return err
+		}
+		fixedValues[i] = valuesSpec
+		numOutCols += side.cols.Len()
+	}
+
+	// The internal schema of the zigzag joiner is:
+	//    <side 1 table columns> ... <side 2 table columns> ...
+	// with only the columns in the specified index populated.
+	//
+	// The schema of the zigzagJoinNode is:
+	//    <side 1 index columns> ... <side 2 index columns> ...
+	// so the planToStreamColMap has to basically map index ordinals
+	// to table ordinals.
+	post := execinfrapb.PostProcessSpec{Projection: true}
+	post.OutputColumns = make([]uint32, numOutCols)
+	outTypes := make([]*types.T, numOutCols)
+	planToStreamColMap := makePlanToStreamColMap(numOutCols)
+	colOffset := 0
+	i := 0
+
+	for _, side := range sides {
+		tdesc := side.table.(*optTable).desc
+		for c, ok := side.cols.Next(0); ok; c, ok = side.cols.Next(c + 1) {
+			col := tdesc.PublicColumns()[c]
+			// TODO: what's going on with visibility?  can't find where its set
+			ord := tableOrdinal(tdesc, col.GetID(), execinfra.ScanVisibilityPublicAndNotPublic)
+			post.OutputColumns[i] = uint32(colOffset + ord)
+			outTypes[i] = col.GetType()
+			planToStreamColMap[i] = i
+			i++
+		}
+
+		colOffset += len(tdesc.PublicColumns())
+	}
+
+	// The zigzag join node only represents inner joins, so hardcode Type to
+	// InnerJoin.
+	zigzagJoinerSpec := execinfrapb.ZigzagJoinerSpec{
+		Tables:        tables,
+		IndexOrdinals: indexOrdinals,
+		EqColumns:     cols,
+		Type:          descpb.InnerJoin,
+		FixedValues:   fixedValues,
+	}
+
+	// Set the ON condition.
+	if onCond != nil {
+		// Note that the ON condition refers to the *internal* columns of the
+		// processor (before the OutputColumns projection).
+		indexVarMap := makePlanToStreamColMap(numOutCols)
+		for i := 0; i < numOutCols; i++ {
+			indexVarMap[i] = int(post.OutputColumns[i])
+		}
+		onExpr, err := physicalplan.MakeExpression(
+			onCond, planCtx, indexVarMap,
+		)
+		if err != nil {
+			return err
+		}
+		zigzagJoinerSpec.OnExpr = onExpr
+	}
+
+	// Figure out the node where this zigzag joiner goes.
+	//
+	// TODO(itsbilal): Add support for restricting the Zigzag joiner
+	// to a certain set of spans (similar to the InterleavedReaderJoiner)
+	// on one side. Once that's done, we can split this processor across
+	// multiple nodes here. Until then, schedule on the current node.
+	corePlacement := []physicalplan.ProcessorCorePlacement{{
+		NodeID: e.gatewayNodeID,
+		Core:   execinfrapb.ProcessorCoreUnion{ZigzagJoiner: &zigzagJoinerSpec},
+	}}
+
+	// RFC: why isn't reqOrdering used?  Should it be used here?
+	plan.AddNoInputStage(corePlacement, post, outTypes, execinfrapb.Ordering{})
+	plan.PlanToStreamColMap = planToStreamColMap
+
+	return nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructLimit(
