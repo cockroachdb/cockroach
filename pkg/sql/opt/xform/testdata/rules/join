@@ -39,6 +39,8 @@ CREATE TABLE pqr
     r INT,
     s STRING,
     t STRING,
+    u STRING NOT NULL,
+    v STRING,
     INDEX q (q),
     INDEX r (r),
     INDEX s (s) STORING (r),
@@ -396,11 +398,11 @@ memo (optimized, ~37KB, required=[presentation: pid1:1,cid1:2,gcid1:3,gca1:4,ca1
 memo
 SELECT * FROM abc, stu, xyz, pqr WHERE a = 1
 ----
-memo (optimized, ~24KB, required=[presentation: a:1,b:2,c:3,s:6,t:7,u:8,x:10,y:11,z:12,p:15,q:16,r:17,s:18,t:19])
+memo (optimized, ~24KB, required=[presentation: a:1,b:2,c:3,s:6,t:7,u:8,x:10,y:11,z:12,p:15,q:16,r:17,s:18,t:19,u:20,v:21])
  ├── G1: (inner-join G2 G3 G4) (inner-join G2 G3 G4) (inner-join G3 G2 G4)
- │    └── [presentation: a:1,b:2,c:3,s:6,t:7,u:8,x:10,y:11,z:12,p:15,q:16,r:17,s:18,t:19]
+ │    └── [presentation: a:1,b:2,c:3,s:6,t:7,u:8,x:10,y:11,z:12,p:15,q:16,r:17,s:18,t:19,u:20,v:21]
  │         ├── best: (inner-join G3 G2 G4)
- │         └── cost: 325035492.19
+ │         └── cost: 325035532.19
  ├── G2: (select G5 G6) (scan abc@ab,cols=(1-3),constrained)
  │    └── []
  │         ├── best: (scan abc@ab,cols=(1-3),constrained)
@@ -408,7 +410,7 @@ memo (optimized, ~24KB, required=[presentation: a:1,b:2,c:3,s:6,t:7,u:8,x:10,y:1
  ├── G3: (inner-join G7 G8 G4) (inner-join G7 G8 G4) (inner-join G8 G7 G4)
  │    └── []
  │         ├── best: (inner-join G8 G7 G4)
- │         └── cost: 100035487.08
+ │         └── cost: 100035527.08
  ├── G4: (filters)
  ├── G5: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    └── []
@@ -422,16 +424,16 @@ memo (optimized, ~24KB, required=[presentation: a:1,b:2,c:3,s:6,t:7,u:8,x:10,y:1
  ├── G8: (inner-join G10 G11 G4) (inner-join G10 G11 G4) (inner-join G11 G10 G4)
  │    └── []
  │         ├── best: (inner-join G10 G11 G4)
- │         └── cost: 12208.05
+ │         └── cost: 12248.05
  ├── G9: (eq G12 G13)
  ├── G10: (scan xyz,cols=(10-12)) (scan xyz@xy,cols=(10-12)) (scan xyz@yz,cols=(10-12))
  │    └── []
  │         ├── best: (scan xyz,cols=(10-12))
  │         └── cost: 1074.02
- ├── G11: (scan pqr,cols=(15-19))
+ ├── G11: (scan pqr,cols=(15-21))
  │    └── []
- │         ├── best: (scan pqr,cols=(15-19))
- │         └── cost: 1104.02
+ │         ├── best: (scan pqr,cols=(15-21))
+ │         └── cost: 1144.02
  ├── G12: (variable a)
  └── G13: (const 1)
 
@@ -440,13 +442,13 @@ memo (optimized, ~24KB, required=[presentation: a:1,b:2,c:3,s:6,t:7,u:8,x:10,y:1
 memo join-limit=1
 SELECT *
 FROM stu, abc, xyz, pqr
-WHERE u = a AND a = x AND x = p
+WHERE stu.u = a AND a = x AND x = p
 ----
-memo (optimized, ~34KB, required=[presentation: s:1,t:2,u:3,a:5,b:6,c:7,x:10,y:11,z:12,p:15,q:16,r:17,s:18,t:19])
- ├── G1: (inner-join G2 G3 G4) (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+3,+5) (merge-join G2 G3 G5 inner-join,+3,+5) (merge-join G3 G2 G5 inner-join,+5,+3) (lookup-join G3 G5 stu@uts,keyCols=[5],outCols=(1-3,5-7,10-12,15-19))
- │    └── [presentation: s:1,t:2,u:3,a:5,b:6,c:7,x:10,y:11,z:12,p:15,q:16,r:17,s:18,t:19]
+memo (optimized, ~34KB, required=[presentation: s:1,t:2,u:3,a:5,b:6,c:7,x:10,y:11,z:12,p:15,q:16,r:17,s:18,t:19,u:20,v:21])
+ ├── G1: (inner-join G2 G3 G4) (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+3,+5) (merge-join G2 G3 G5 inner-join,+3,+5) (merge-join G3 G2 G5 inner-join,+5,+3) (lookup-join G3 G5 stu@uts,keyCols=[5],outCols=(1-3,5-7,10-12,15-21))
+ │    └── [presentation: s:1,t:2,u:3,a:5,b:6,c:7,x:10,y:11,z:12,p:15,q:16,r:17,s:18,t:19,u:20,v:21]
  │         ├── best: (merge-join G2="[ordering: +3]" G3="[ordering: +(5|10|15)]" G5 inner-join,+3,+5)
- │         └── cost: 14126.11
+ │         └── cost: 14166.11
  ├── G2: (scan stu,cols=(1-3)) (scan stu@uts,cols=(1-3))
  │    ├── [ordering: +3]
  │    │    ├── best: (scan stu@uts,cols=(1-3))
@@ -454,13 +456,13 @@ memo (optimized, ~34KB, required=[presentation: s:1,t:2,u:3,a:5,b:6,c:7,x:10,y:1
  │    └── []
  │         ├── best: (scan stu,cols=(1-3))
  │         └── cost: 10604.02
- ├── G3: (inner-join G6 G7 G8) (inner-join G6 G7 G8) (inner-join G7 G6 G8) (merge-join G6 G7 G5 inner-join,+5,+10) (merge-join G6 G7 G5 inner-join,+5,+10) (merge-join G7 G6 G5 inner-join,+10,+5) (lookup-join G7 G5 abc@ab,keyCols=[10],outCols=(5-7,10-12,15-19))
+ ├── G3: (inner-join G6 G7 G8) (inner-join G6 G7 G8) (inner-join G7 G6 G8) (merge-join G6 G7 G5 inner-join,+5,+10) (merge-join G6 G7 G5 inner-join,+5,+10) (merge-join G7 G6 G5 inner-join,+10,+5) (lookup-join G7 G5 abc@ab,keyCols=[10],outCols=(5-7,10-12,15-21))
  │    ├── [ordering: +(5|10|15)]
  │    │    ├── best: (merge-join G6="[ordering: +5]" G7="[ordering: +(10|15)]" G5 inner-join,+5,+10)
- │    │    └── cost: 3312.08
+ │    │    └── cost: 3352.08
  │    └── []
  │         ├── best: (merge-join G6="[ordering: +5]" G7="[ordering: +(10|15)]" G5 inner-join,+5,+10)
- │         └── cost: 3312.08
+ │         └── cost: 3352.08
  ├── G4: (filters G9)
  ├── G5: (filters)
  ├── G6: (scan abc,cols=(5-7)) (scan abc@ab,cols=(5-7)) (scan abc@bc,cols=(5-7))
@@ -470,13 +472,13 @@ memo (optimized, ~34KB, required=[presentation: s:1,t:2,u:3,a:5,b:6,c:7,x:10,y:1
  │    └── []
  │         ├── best: (scan abc,cols=(5-7))
  │         └── cost: 1074.02
- ├── G7: (inner-join G10 G11 G12) (inner-join G10 G11 G12) (inner-join G11 G10 G12) (merge-join G10 G11 G5 inner-join,+10,+15) (lookup-join G10 G5 pqr,keyCols=[10],outCols=(10-12,15-19)) (merge-join G10 G11 G5 inner-join,+10,+15) (lookup-join G10 G5 pqr,keyCols=[10],outCols=(10-12,15-19)) (merge-join G11 G10 G5 inner-join,+15,+10) (lookup-join G11 G5 xyz@xy,keyCols=[15],outCols=(10-12,15-19))
+ ├── G7: (inner-join G10 G11 G12) (inner-join G10 G11 G12) (inner-join G11 G10 G12) (merge-join G10 G11 G5 inner-join,+10,+15) (lookup-join G10 G5 pqr,keyCols=[10],outCols=(10-12,15-21)) (merge-join G10 G11 G5 inner-join,+10,+15) (lookup-join G10 G5 pqr,keyCols=[10],outCols=(10-12,15-21)) (merge-join G11 G10 G5 inner-join,+15,+10) (lookup-join G11 G5 xyz@xy,keyCols=[15],outCols=(10-12,15-21))
  │    ├── [ordering: +(10|15)]
  │    │    ├── best: (merge-join G10="[ordering: +10]" G11="[ordering: +15]" G5 inner-join,+10,+15)
- │    │    └── cost: 2208.05
+ │    │    └── cost: 2248.05
  │    └── []
  │         ├── best: (merge-join G10="[ordering: +10]" G11="[ordering: +15]" G5 inner-join,+10,+15)
- │         └── cost: 2208.05
+ │         └── cost: 2248.05
  ├── G8: (filters G13)
  ├── G9: (eq G14 G15)
  ├── G10: (scan xyz,cols=(10-12)) (scan xyz@xy,cols=(10-12)) (scan xyz@yz,cols=(10-12))
@@ -486,16 +488,16 @@ memo (optimized, ~34KB, required=[presentation: s:1,t:2,u:3,a:5,b:6,c:7,x:10,y:1
  │    └── []
  │         ├── best: (scan xyz,cols=(10-12))
  │         └── cost: 1074.02
- ├── G11: (scan pqr,cols=(15-19))
+ ├── G11: (scan pqr,cols=(15-21))
  │    ├── [ordering: +15]
- │    │    ├── best: (scan pqr,cols=(15-19))
- │    │    └── cost: 1104.02
+ │    │    ├── best: (scan pqr,cols=(15-21))
+ │    │    └── cost: 1144.02
  │    └── []
- │         ├── best: (scan pqr,cols=(15-19))
- │         └── cost: 1104.02
+ │         ├── best: (scan pqr,cols=(15-21))
+ │         └── cost: 1144.02
  ├── G12: (filters G16)
  ├── G13: (eq G15 G17)
- ├── G14: (variable u)
+ ├── G14: (variable stu.u)
  ├── G15: (variable a)
  ├── G16: (eq G17 G18)
  ├── G17: (variable x)
@@ -4831,22 +4833,22 @@ memo (optimized, ~13KB, required=[presentation: q:2,r:3])
  ├── G2: (scan pqr,cols=(2,3))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,3))
- │         └── cost: 1074.02
+ │         └── cost: 1094.02
  ├── G3: (filters G9 G10)
  ├── G4: (index-join G11 pqr,cols=(2,3))
  │    └── []
  │         ├── best: (index-join G11 pqr,cols=(2,3))
- │         └── cost: 75.12
+ │         └── cost: 75.32
  ├── G5: (filters G10)
  ├── G6: (index-join G12 pqr,cols=(2,3))
  │    └── []
  │         ├── best: (index-join G12 pqr,cols=(2,3))
- │         └── cost: 75.12
+ │         └── cost: 75.32
  ├── G7: (filters G9)
  ├── G8: (index-join G13 pqr,cols=(2,3))
  │    └── []
  │         ├── best: (index-join G13 pqr,cols=(2,3))
- │         └── cost: 75.22
+ │         └── cost: 75.42
  ├── G9: (eq G14 G15)
  ├── G10: (eq G16 G17)
  ├── G11: (scan pqr@q,cols=(1,2),constrained)
@@ -4908,11 +4910,11 @@ memo (optimized, ~15KB, required=[presentation: q:2,r:3,s:4])
  ├── G1: (select G2 G3) (lookup-join G4 G5 pqr,keyCols=[1],outCols=(2-4)) (select G6 G7) (select G8 G9) (select G10 G9)
  │    └── [presentation: q:2,r:3,s:4]
  │         ├── best: (lookup-join G4 G5 pqr,keyCols=[1],outCols=(2-4))
- │         └── cost: 7.48
+ │         └── cost: 7.50
  ├── G2: (scan pqr,cols=(2-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2-4))
- │         └── cost: 1084.02
+ │         └── cost: 1104.02
  ├── G3: (filters G11 G12)
  ├── G4: (zigzag-join G3 pqr@q pqr@r)
  │    └── []
@@ -4922,17 +4924,17 @@ memo (optimized, ~15KB, required=[presentation: q:2,r:3,s:4])
  ├── G6: (index-join G13 pqr,cols=(2-4))
  │    └── []
  │         ├── best: (index-join G13 pqr,cols=(2-4))
- │         └── cost: 75.22
+ │         └── cost: 75.42
  ├── G7: (filters G12)
  ├── G8: (index-join G14 pqr,cols=(2-4))
  │    └── []
  │         ├── best: (index-join G14 pqr,cols=(2-4))
- │         └── cost: 75.22
+ │         └── cost: 75.42
  ├── G9: (filters G11)
  ├── G10: (index-join G15 pqr,cols=(2-4))
  │    └── []
  │         ├── best: (index-join G15 pqr,cols=(2-4))
- │         └── cost: 75.32
+ │         └── cost: 75.52
  ├── G11: (eq G16 G17)
  ├── G12: (eq G18 G19)
  ├── G13: (scan pqr@q,cols=(1,2),constrained)
@@ -4977,17 +4979,17 @@ memo (optimized, ~11KB, required=[presentation: q:2,s:4])
  ├── G2: (scan pqr,cols=(2,4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,4))
- │         └── cost: 1074.02
+ │         └── cost: 1094.02
  ├── G3: (filters G8 G9)
  ├── G4: (index-join G10 pqr,cols=(2,4))
  │    └── []
  │         ├── best: (index-join G10 pqr,cols=(2,4))
- │         └── cost: 75.12
+ │         └── cost: 75.32
  ├── G5: (filters G9)
  ├── G6: (index-join G11 pqr,cols=(2,4))
  │    └── []
  │         ├── best: (index-join G11 pqr,cols=(2,4))
- │         └── cost: 75.22
+ │         └── cost: 75.42
  ├── G7: (filters G8)
  ├── G8: (eq G12 G13)
  ├── G9: (eq G14 G15)
@@ -5004,15 +5006,41 @@ memo (optimized, ~11KB, required=[presentation: q:2,s:4])
  ├── G14: (variable s)
  └── G15: (const 'foo')
 
-# Zigzag with implicit equality column in addition to primary key:
-# indexes on (r,s) and (t,s) should be chosen even though s is not being fixed
-# in the ON clause.
+# A zig-zag join cannot be planned on rs and ts because s is nullable, so it
+# cannot be an implicit equality column.
 opt
 SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo'
 ----
-inner-join (zigzag pqr@rs pqr@ts)
+select
  ├── columns: r:3!null t:5!null
- ├── eq columns: [4 1] = [4 1]
+ ├── fd: ()-->(3,5)
+ ├── index-join pqr
+ │    ├── columns: r:3 t:5
+ │    ├── fd: ()-->(3)
+ │    └── scan pqr@r
+ │         ├── columns: p:1!null r:3!null
+ │         ├── constraint: /3/1: [/1 - /1]
+ │         ├── key: (1)
+ │         └── fd: ()-->(3)
+ └── filters
+      └── t:5 = 'foo' [outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
+
+exec-ddl
+CREATE INDEX ru ON pqr (r, u)
+----
+
+exec-ddl
+CREATE INDEX tu ON pqr (t, u)
+----
+
+# A zig-zag join can be planned on ru and tu because u is non-nullable, so it
+# is an implicit equality column in addition to the primary key.
+opt expect=GenerateZigzagJoins
+SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo'
+----
+inner-join (zigzag pqr@ru pqr@tu)
+ ├── columns: r:3!null t:5!null
+ ├── eq columns: [6 1] = [6 1]
  ├── left fixed columns: [3] = [1]
  ├── right fixed columns: [5] = ['foo']
  ├── fd: ()-->(3,5)
@@ -5020,51 +5048,40 @@ inner-join (zigzag pqr@rs pqr@ts)
       ├── r:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
       └── t:5 = 'foo' [outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
 
-memo
-SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo'
+exec-ddl
+DROP INDEX ru
 ----
-memo (optimized, ~13KB, required=[presentation: r:3,t:5])
- ├── G1: (select G2 G3) (zigzag-join G3 pqr@rs pqr@ts) (select G4 G5) (select G6 G5) (select G7 G8)
- │    └── [presentation: r:3,t:5]
- │         ├── best: (zigzag-join G3 pqr@rs pqr@ts)
- │         └── cost: 1.95
- ├── G2: (scan pqr,cols=(3,5))
- │    └── []
- │         ├── best: (scan pqr,cols=(3,5))
- │         └── cost: 1074.02
- ├── G3: (filters G9 G10)
- ├── G4: (index-join G11 pqr,cols=(3,5))
- │    └── []
- │         ├── best: (index-join G11 pqr,cols=(3,5))
- │         └── cost: 75.12
- ├── G5: (filters G10)
- ├── G6: (index-join G12 pqr,cols=(3,5))
- │    └── []
- │         ├── best: (index-join G12 pqr,cols=(3,5))
- │         └── cost: 75.22
- ├── G7: (index-join G13 pqr,cols=(3,5))
- │    └── []
- │         ├── best: (index-join G13 pqr,cols=(3,5))
- │         └── cost: 75.22
- ├── G8: (filters G9)
- ├── G9: (eq G14 G15)
- ├── G10: (eq G16 G17)
- ├── G11: (scan pqr@r,cols=(1,3),constrained)
- │    └── []
- │         ├── best: (scan pqr@r,cols=(1,3),constrained)
- │         └── cost: 14.41
- ├── G12: (scan pqr@rs,cols=(1,3),constrained)
- │    └── []
- │         ├── best: (scan pqr@rs,cols=(1,3),constrained)
- │         └── cost: 14.51
- ├── G13: (scan pqr@ts,cols=(1,5),constrained)
- │    └── []
- │         ├── best: (scan pqr@ts,cols=(1,5),constrained)
- │         └── cost: 14.51
- ├── G14: (variable r)
- ├── G15: (const 1)
- ├── G16: (variable t)
- └── G17: (const 'foo')
+
+exec-ddl
+DROP INDEX tu
+----
+
+exec-ddl
+CREATE INDEX tv ON pqr (t, v)
+----
+
+# A zig-zag join can be planned on rs and tv even though s and v are nullable
+# because they are explicit equality columns. The query filters out rows where s
+# IS NULL or v IS NULL.
+opt expect=GenerateZigzagJoins
+SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo' AND s = v
+----
+project
+ ├── columns: r:3!null t:5!null
+ ├── fd: ()-->(3,5)
+ └── inner-join (zigzag pqr@rs pqr@tv)
+      ├── columns: r:3!null s:4!null t:5!null v:7!null
+      ├── eq columns: [4 1] = [7 1]
+      ├── left fixed columns: [3] = [1]
+      ├── right fixed columns: [5] = ['foo']
+      ├── fd: ()-->(3,5), (4)==(7), (7)==(4)
+      └── filters
+           ├── r:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+           └── t:5 = 'foo' [outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
+
+exec-ddl
+DROP INDEX tv
+----
 
 # Zigzag with choice between indexes for multiple equality predicates.
 opt
@@ -5122,7 +5139,7 @@ memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G2: (scan pqr,cols=(1-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(1-4))
- │         └── cost: 1094.02
+ │         └── cost: 1114.02
  ├── G3: (filters G14 G15 G16)
  ├── G4: (zigzag-join G17 pqr@q pqr@r)
  │    └── []
@@ -5137,21 +5154,21 @@ memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G8: (index-join G18 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G18 pqr,cols=(1-4))
- │         └── cost: 75.22
+ │         └── cost: 75.42
  ├── G9: (filters G15 G16)
  ├── G10: (index-join G19 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G19 pqr,cols=(1-4))
- │         └── cost: 75.22
+ │         └── cost: 75.42
  ├── G11: (filters G14 G16)
  ├── G12: (index-join G20 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G20 pqr,cols=(1-4))
- │         └── cost: 21.76
+ │         └── cost: 21.78
  ├── G13: (index-join G21 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G21 pqr,cols=(1-4))
- │         └── cost: 10.51
+ │         └── cost: 10.53
  ├── G14: (eq G22 G23)
  ├── G15: (eq G24 G23)
  ├── G16: (eq G25 G26)
@@ -5210,21 +5227,21 @@ memo (optimized, ~9KB, required=[presentation: q:2,t:5])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
  │    └── [presentation: q:2,t:5]
  │         ├── best: (select G4 G5)
- │         └── cost: 75.24
+ │         └── cost: 75.44
  ├── G2: (scan pqr,cols=(2,5))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,5))
- │         └── cost: 1074.02
+ │         └── cost: 1094.02
  ├── G3: (filters G8 G9)
  ├── G4: (index-join G10 pqr,cols=(2,5))
  │    └── []
  │         ├── best: (index-join G10 pqr,cols=(2,5))
- │         └── cost: 75.12
+ │         └── cost: 75.32
  ├── G5: (filters G9)
  ├── G6: (index-join G11 pqr,cols=(2,5))
  │    └── []
  │         ├── best: (index-join G11 pqr,cols=(2,5))
- │         └── cost: 75.22
+ │         └── cost: 75.42
  ├── G7: (filters G8)
  ├── G8: (eq G12 G13)
  ├── G9: (eq G14 G15)
@@ -5929,66 +5946,66 @@ opt expect=ConvertSemiToInnerJoin
 SELECT * from pqr WHERE EXISTS (SELECT * FROM zz WHERE a = 0 AND q = b AND r < c)
 ----
 project
- ├── columns: p:1!null q:2 r:3 s:4 t:5
+ ├── columns: p:1!null q:2 r:3 s:4 t:5 u:6!null v:7
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-7)
  └── project
-      ├── columns: p:1!null q:2!null r:3!null s:4 t:5
+      ├── columns: p:1!null q:2!null r:3!null s:4 t:5 u:6!null v:7
       ├── key: (1)
-      ├── fd: ()-->(2), (1)-->(3-5)
+      ├── fd: ()-->(2), (1)-->(3-7)
       └── inner-join (lookup pqr)
-           ├── columns: p:1!null q:2!null r:3!null s:4 t:5 a:7!null b:8!null c:9!null
+           ├── columns: p:1!null q:2!null r:3!null s:4 t:5 u:6!null v:7 a:9!null b:10!null c:11!null
            ├── key columns: [1] = [1]
            ├── lookup columns are key
            ├── key: (1)
-           ├── fd: ()-->(2,7-9), (1)-->(3-5), (2)==(8), (8)==(2)
+           ├── fd: ()-->(2,9-11), (1)-->(3-7), (2)==(10), (10)==(2)
            ├── inner-join (lookup pqr@q)
-           │    ├── columns: p:1!null q:2!null a:7!null b:8!null c:9
-           │    ├── key columns: [8] = [2]
+           │    ├── columns: p:1!null q:2!null a:9!null b:10!null c:11
+           │    ├── key columns: [10] = [2]
            │    ├── key: (1)
-           │    ├── fd: ()-->(2,7-9), (2)==(8), (8)==(2)
+           │    ├── fd: ()-->(2,9-11), (2)==(10), (10)==(2)
            │    ├── scan zz
-           │    │    ├── columns: a:7!null b:8 c:9
-           │    │    ├── constraint: /7: [/0 - /0]
+           │    │    ├── columns: a:9!null b:10 c:11
+           │    │    ├── constraint: /9: [/0 - /0]
            │    │    ├── cardinality: [0 - 1]
            │    │    ├── key: ()
-           │    │    └── fd: ()-->(7-9)
+           │    │    └── fd: ()-->(9-11)
            │    └── filters (true)
            └── filters
-                └── r:3 < c:9 [outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ])]
+                └── r:3 < c:11 [outer=(3,11), constraints=(/3: (/NULL - ]; /11: (/NULL - ])]
 
 # In this test we have an Or condition.
 opt expect=ConvertSemiToInnerJoin
 SELECT * from pqr WHERE EXISTS (SELECT * FROM zz WHERE a = 0 AND q = b AND (p = a OR r = c))
 ----
 project
- ├── columns: p:1!null q:2 r:3 s:4 t:5
+ ├── columns: p:1!null q:2 r:3 s:4 t:5 u:6!null v:7
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-7)
  └── project
-      ├── columns: p:1!null q:2!null r:3 s:4 t:5
+      ├── columns: p:1!null q:2!null r:3 s:4 t:5 u:6!null v:7
       ├── key: (1)
-      ├── fd: ()-->(2), (1)-->(3-5)
+      ├── fd: ()-->(2), (1)-->(3-7)
       └── inner-join (lookup pqr)
-           ├── columns: p:1!null q:2!null r:3 s:4 t:5 a:7!null b:8!null c:9
+           ├── columns: p:1!null q:2!null r:3 s:4 t:5 u:6!null v:7 a:9!null b:10!null c:11
            ├── key columns: [1] = [1]
            ├── lookup columns are key
            ├── key: (1)
-           ├── fd: ()-->(2,7-9), (1)-->(3-5), (2)==(8), (8)==(2)
+           ├── fd: ()-->(2,9-11), (1)-->(3-7), (2)==(10), (10)==(2)
            ├── inner-join (lookup pqr@q)
-           │    ├── columns: p:1!null q:2!null a:7!null b:8!null c:9
-           │    ├── key columns: [8] = [2]
+           │    ├── columns: p:1!null q:2!null a:9!null b:10!null c:11
+           │    ├── key columns: [10] = [2]
            │    ├── key: (1)
-           │    ├── fd: ()-->(2,7-9), (2)==(8), (8)==(2)
+           │    ├── fd: ()-->(2,9-11), (2)==(10), (10)==(2)
            │    ├── scan zz
-           │    │    ├── columns: a:7!null b:8 c:9
-           │    │    ├── constraint: /7: [/0 - /0]
+           │    │    ├── columns: a:9!null b:10 c:11
+           │    │    ├── constraint: /9: [/0 - /0]
            │    │    ├── cardinality: [0 - 1]
            │    │    ├── key: ()
-           │    │    └── fd: ()-->(7-9)
+           │    │    └── fd: ()-->(9-11)
            │    └── filters (true)
            └── filters
-                └── (p:1 = 0) OR (r:3 = c:9) [outer=(1,3,9)]
+                └── (p:1 = 0) OR (r:3 = c:11) [outer=(1,3,11)]
 
 # In this case we need to add the key back to zz since it was pruned during
 # normalization.
@@ -6032,10 +6049,10 @@ opt expect=PushJoinIntoIndexJoin
 SELECT * FROM abc INNER JOIN (SELECT * FROM pqr ORDER BY q LIMIT 5) ON a=q
 ----
 inner-join (lookup pqr)
- ├── columns: a:1!null b:2 c:3 p:6!null q:7!null r:8 s:9 t:10
+ ├── columns: a:1!null b:2 c:3 p:6!null q:7!null r:8 s:9 t:10 u:11!null v:12
  ├── key columns: [6] = [6]
  ├── lookup columns are key
- ├── fd: (6)-->(7-10), (1)==(7), (7)==(1)
+ ├── fd: (6)-->(7-12), (1)==(7), (7)==(1)
  ├── inner-join (lookup abc@ab)
  │    ├── columns: a:1!null b:2 c:3 p:6!null q:7!null
  │    ├── key columns: [7] = [1]
@@ -6054,15 +6071,15 @@ opt expect=PushJoinIntoIndexJoin
 SELECT * FROM abc CROSS JOIN (SELECT * FROM pqr ORDER BY q LIMIT 5)
 ----
 inner-join (cross)
- ├── columns: a:1 b:2 c:3 p:6!null q:7 r:8 s:9 t:10
- ├── fd: (6)-->(7-10)
+ ├── columns: a:1 b:2 c:3 p:6!null q:7 r:8 s:9 t:10 u:11!null v:12
+ ├── fd: (6)-->(7-12)
  ├── scan abc
  │    └── columns: a:1 b:2 c:3
  ├── index-join pqr
- │    ├── columns: p:6!null q:7 r:8 s:9 t:10
+ │    ├── columns: p:6!null q:7 r:8 s:9 t:10 u:11!null v:12
  │    ├── cardinality: [0 - 5]
  │    ├── key: (6)
- │    ├── fd: (6)-->(7-10)
+ │    ├── fd: (6)-->(7-12)
  │    └── scan pqr@q
  │         ├── columns: p:6!null q:7
  │         ├── limit: 5
@@ -6075,18 +6092,18 @@ opt expect-not=PushJoinIntoIndexJoin
 SELECT * FROM abc LEFT JOIN (SELECT * FROM pqr ORDER BY q LIMIT 5) ON a=q
 ----
 left-join (merge)
- ├── columns: a:1 b:2 c:3 p:6 q:7 r:8 s:9 t:10
+ ├── columns: a:1 b:2 c:3 p:6 q:7 r:8 s:9 t:10 u:11 v:12
  ├── left ordering: +1
  ├── right ordering: +7
- ├── fd: (6)-->(7-10)
+ ├── fd: (6)-->(7-12)
  ├── scan abc@ab
  │    ├── columns: a:1 b:2 c:3
  │    └── ordering: +1
  ├── index-join pqr
- │    ├── columns: p:6!null q:7 r:8 s:9 t:10
+ │    ├── columns: p:6!null q:7 r:8 s:9 t:10 u:11!null v:12
  │    ├── cardinality: [0 - 5]
  │    ├── key: (6)
- │    ├── fd: (6)-->(7-10)
+ │    ├── fd: (6)-->(7-12)
  │    ├── ordering: +7
  │    └── scan pqr@q
  │         ├── columns: p:6!null q:7
@@ -6101,23 +6118,23 @@ opt expect-not=PushJoinIntoIndexJoin
 SELECT * FROM (SELECT * FROM pqr ORDER BY q LIMIT 5) INNER HASH JOIN abc ON a=q
 ----
 inner-join (hash)
- ├── columns: p:1!null q:2!null r:3 s:4 t:5 a:7!null b:8 c:9
+ ├── columns: p:1!null q:2!null r:3 s:4 t:5 u:6!null v:7 a:9!null b:10 c:11
  ├── flags: force hash join (store right side)
- ├── fd: (1)-->(2-5), (2)==(7), (7)==(2)
+ ├── fd: (1)-->(2-7), (2)==(9), (9)==(2)
  ├── index-join pqr
- │    ├── columns: p:1!null q:2 r:3 s:4 t:5
+ │    ├── columns: p:1!null q:2 r:3 s:4 t:5 u:6!null v:7
  │    ├── cardinality: [0 - 5]
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
+ │    ├── fd: (1)-->(2-7)
  │    └── scan pqr@q
  │         ├── columns: p:1!null q:2
  │         ├── limit: 5
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
  ├── scan abc
- │    └── columns: a:7 b:8 c:9
+ │    └── columns: a:9 b:10 c:11
  └── filters
-      └── a:7 = q:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+      └── a:9 = q:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
 
 # No-op case because the ON condition references a column that doesn't come from
 # the input of the index join or the right side of the InnerJoin.
@@ -6125,14 +6142,14 @@ opt expect-not=PushJoinIntoIndexJoin
 SELECT * FROM (SELECT * FROM pqr ORDER BY q LIMIT 5) INNER JOIN abc ON a=r
 ----
 inner-join (lookup abc@ab)
- ├── columns: p:1!null q:2 r:3!null s:4 t:5 a:7!null b:8 c:9
- ├── key columns: [3] = [7]
- ├── fd: (1)-->(2-5), (3)==(7), (7)==(3)
+ ├── columns: p:1!null q:2 r:3!null s:4 t:5 u:6!null v:7 a:9!null b:10 c:11
+ ├── key columns: [3] = [9]
+ ├── fd: (1)-->(2-7), (3)==(9), (9)==(3)
  ├── index-join pqr
- │    ├── columns: p:1!null q:2 r:3 s:4 t:5
+ │    ├── columns: p:1!null q:2 r:3 s:4 t:5 u:6!null v:7
  │    ├── cardinality: [0 - 5]
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
+ │    ├── fd: (1)-->(2-7)
  │    └── scan pqr@q
  │         ├── columns: p:1!null q:2
  │         ├── limit: 5
@@ -6142,7 +6159,7 @@ inner-join (lookup abc@ab)
 
 # No-op case because the right side of the InnerJoin has outer columns.
 opt expect-not=PushJoinIntoIndexJoin disable=(TryDecorrelateProject)
-SELECT * 
+SELECT *
 FROM stu
 INNER JOIN LATERAL (
    SELECT *
@@ -6153,24 +6170,24 @@ INNER JOIN LATERAL (
 ON True
 ----
 inner-join-apply
- ├── columns: s:1!null t:2!null u:3!null p:5!null q:6!null r:7 s:8 t:9 a:11!null b:12 c:13 "?column?":16
+ ├── columns: s:1!null t:2!null u:3!null p:5!null q:6!null r:7 s:8 t:9 u:10!null v:11 a:13!null b:14 c:15 "?column?":18
  ├── immutable
- ├── fd: (1-3,5)-->(6-9), (1-3,11)-->(16), (6)==(11), (11)==(6)
+ ├── fd: (1-3,5)-->(6-11), (1-3,13)-->(18), (6)==(13), (13)==(6)
  ├── scan stu
- │    ├── columns: stu.s:1!null stu.t:2!null u:3!null
+ │    ├── columns: stu.s:1!null stu.t:2!null stu.u:3!null
  │    └── key: (1-3)
  ├── inner-join (merge)
- │    ├── columns: p:5!null q:6!null r:7 pqr.s:8 pqr.t:9 a:11!null b:12 c:13 "?column?":16
+ │    ├── columns: p:5!null q:6!null r:7 pqr.s:8 pqr.t:9 pqr.u:10!null v:11 a:13!null b:14 c:15 "?column?":18
  │    ├── left ordering: +6
- │    ├── right ordering: +11
+ │    ├── right ordering: +13
  │    ├── outer: (1)
  │    ├── immutable
- │    ├── fd: (5)-->(6-9), (11)-->(16), (6)==(11), (11)==(6)
+ │    ├── fd: (5)-->(6-11), (13)-->(18), (6)==(13), (13)==(6)
  │    ├── index-join pqr
- │    │    ├── columns: p:5!null q:6 r:7 pqr.s:8 pqr.t:9
+ │    │    ├── columns: p:5!null q:6 r:7 pqr.s:8 pqr.t:9 pqr.u:10!null v:11
  │    │    ├── cardinality: [0 - 5]
  │    │    ├── key: (5)
- │    │    ├── fd: (5)-->(6-9)
+ │    │    ├── fd: (5)-->(6-11)
  │    │    ├── ordering: +6
  │    │    └── scan pqr@q
  │    │         ├── columns: p:5!null q:6
@@ -6179,16 +6196,16 @@ inner-join-apply
  │    │         ├── fd: (5)-->(6)
  │    │         └── ordering: +6
  │    ├── project
- │    │    ├── columns: "?column?":16 a:11 b:12 c:13
+ │    │    ├── columns: "?column?":18 a:13 b:14 c:15
  │    │    ├── outer: (1)
  │    │    ├── immutable
- │    │    ├── fd: (11)-->(16)
- │    │    ├── ordering: +11
+ │    │    ├── fd: (13)-->(18)
+ │    │    ├── ordering: +13
  │    │    ├── scan abc@ab
- │    │    │    ├── columns: a:11 b:12 c:13
- │    │    │    └── ordering: +11
+ │    │    │    ├── columns: a:13 b:14 c:15
+ │    │    │    └── ordering: +13
  │    │    └── projections
- │    │         └── a:11 * stu.s:1 [as="?column?":16, outer=(1,11), immutable]
+ │    │         └── a:13 * stu.s:1 [as="?column?":18, outer=(1,13), immutable]
  │    └── filters (true)
  └── filters (true)
 
