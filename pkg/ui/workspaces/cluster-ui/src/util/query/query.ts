@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Location } from "history";
+import { Location, History } from "history";
 import { match as Match } from "react-router-dom";
 
 interface ParamsObj {
@@ -63,4 +63,27 @@ export function getMatchParamByName(
     return decodeURIComponent(param);
   }
   return null;
+}
+
+export function syncHistory(
+  params: Record<string, string | undefined>,
+  history: History,
+): void {
+  const nextSearchParams = new URLSearchParams(history.location.search);
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (!value) {
+      nextSearchParams.delete(key);
+    } else {
+      nextSearchParams.set(key, value);
+    }
+  });
+
+  history.location.search = nextSearchParams.toString();
+  history.replace(history.location);
+}
+
+export function clearHistory(history: History): void {
+  history.location.search = "";
+  history.replace(history.location);
 }

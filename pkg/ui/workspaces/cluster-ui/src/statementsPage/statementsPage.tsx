@@ -36,6 +36,7 @@ import {
   unique,
   containAny,
   queryByName,
+  syncHistory,
 } from "src/util";
 import {
   AggregateStatistics,
@@ -180,31 +181,18 @@ export class StatementsPage extends React.Component<
     };
   };
 
-  syncHistory = (params: Record<string, string | undefined>): void => {
-    const { history } = this.props;
-    const nextSearchParams = new URLSearchParams(history.location.search);
-
-    Object.entries(params).forEach(([key, value]) => {
-      if (!value) {
-        nextSearchParams.delete(key);
-      } else {
-        nextSearchParams.set(key, value);
-      }
-    });
-
-    history.location.search = nextSearchParams.toString();
-    history.replace(history.location);
-  };
-
   changeSortSetting = (ss: SortSetting): void => {
     this.setState({
       sortSetting: ss,
     });
 
-    this.syncHistory({
-      ascending: ss.ascending.toString(),
-      columnTitle: ss.columnTitle,
-    });
+    syncHistory(
+      {
+        ascending: ss.ascending.toString(),
+        columnTitle: ss.columnTitle,
+      },
+      this.props.history,
+    );
     if (this.props.onSortingChange) {
       this.props.onSortingChange("Statements", ss.columnTitle, ss.ascending);
     }
@@ -273,9 +261,12 @@ export class StatementsPage extends React.Component<
   onSubmitSearchField = (search: string): void => {
     this.setState({ search });
     this.resetPagination();
-    this.syncHistory({
-      q: search,
-    });
+    syncHistory(
+      {
+        q: search,
+      },
+      this.props.history,
+    );
   };
 
   onSubmitFilters = (filters: Filters): void => {
@@ -288,22 +279,28 @@ export class StatementsPage extends React.Component<
     });
 
     this.resetPagination();
-    this.syncHistory({
-      app: filters.app,
-      timeNumber: filters.timeNumber,
-      timeUnit: filters.timeUnit,
-      sqlType: filters.sqlType,
-      database: filters.database,
-      regions: filters.regions,
-      nodes: filters.nodes,
-    });
+    syncHistory(
+      {
+        app: filters.app,
+        timeNumber: filters.timeNumber,
+        timeUnit: filters.timeUnit,
+        sqlType: filters.sqlType,
+        database: filters.database,
+        regions: filters.regions,
+        nodes: filters.nodes,
+      },
+      this.props.history,
+    );
   };
 
   onClearSearchField = (): void => {
     this.setState({ search: "" });
-    this.syncHistory({
-      q: undefined,
-    });
+    syncHistory(
+      {
+        q: undefined,
+      },
+      this.props.history,
+    );
   };
 
   onClearFilters = (): void => {
@@ -314,15 +311,18 @@ export class StatementsPage extends React.Component<
       activeFilters: 0,
     });
     this.resetPagination();
-    this.syncHistory({
-      app: undefined,
-      timeNumber: undefined,
-      timeUnit: undefined,
-      sqlType: undefined,
-      database: undefined,
-      regions: undefined,
-      nodes: undefined,
-    });
+    syncHistory(
+      {
+        app: undefined,
+        timeNumber: undefined,
+        timeUnit: undefined,
+        sqlType: undefined,
+        database: undefined,
+        regions: undefined,
+        nodes: undefined,
+      },
+      this.props.history,
+    );
   };
 
   filteredStatementsData = (): AggregateStatistics[] => {
