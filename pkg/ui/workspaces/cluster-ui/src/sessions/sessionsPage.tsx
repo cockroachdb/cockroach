@@ -9,9 +9,9 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { forIn, isNil, merge } from "lodash";
+import { isNil, merge } from "lodash";
 
-import { getMatchParamByName } from "src/util/query";
+import { getMatchParamByName, syncHistory } from "src/util/query";
 import { appAttr } from "src/util/constants";
 import {
   makeSessionsColumns,
@@ -43,11 +43,9 @@ import {
   ICancelQueryRequest,
 } from "src/store/terminateQuery";
 
-import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";
 import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
 import sessionPageStyles from "./sessionPage.module.scss";
 
-const sortableTableCx = classNames.bind(sortedTableStyles);
 const statementsPageCx = classNames.bind(statementsPageStyles);
 const sessionsPageCx = classNames.bind(sessionPageStyles);
 
@@ -113,21 +111,6 @@ export class SessionsPage extends React.Component<
     };
   };
 
-  syncHistory = (params: Record<string, string | undefined>): void => {
-    const { history } = this.props;
-    const currentSearchParams = new URLSearchParams(history.location.search);
-    forIn(params, (value, key) => {
-      if (!value) {
-        currentSearchParams.delete(key);
-      } else {
-        currentSearchParams.set(key, value);
-      }
-    });
-
-    history.location.search = currentSearchParams.toString();
-    history.replace(history.location);
-  };
-
   changeSortSetting = (ss: SortSetting): void => {
     const { onSortingChange } = this.props;
     onSortingChange && onSortingChange(ss.columnTitle);
@@ -136,10 +119,13 @@ export class SessionsPage extends React.Component<
       sortSetting: ss,
     });
 
-    this.syncHistory({
-      ascending: ss.ascending.toString(),
-      columnTitle: ss.columnTitle,
-    });
+    syncHistory(
+      {
+        ascending: ss.ascending.toString(),
+        columnTitle: ss.columnTitle,
+      },
+      this.props.history,
+    );
   };
 
   resetPagination = (): void => {
