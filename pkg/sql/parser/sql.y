@@ -4363,9 +4363,9 @@ deallocate_stmt:
 //
 // %SeeAlso: REVOKE, WEBDOCS/grant.html
 grant_stmt:
-  GRANT privileges ON targets TO role_spec_list
+  GRANT privileges ON targets TO role_spec_list opt_with_grant_option
   {
-    $$.val = &tree.Grant{Privileges: $2.privilegeList(), Grantees: $6.roleSpecList(), Targets: $4.targetList()}
+    $$.val = &tree.Grant{Privileges: $2.privilegeList(), Grantees: $6.roleSpecList(), Targets: $4.targetList(), WithGrantOption: $7.bool(),}
   }
 | GRANT privilege_list TO role_spec_list
   {
@@ -4375,11 +4375,11 @@ grant_stmt:
   {
     $$.val = &tree.GrantRole{Roles: $2.nameList(), Members: $4.roleSpecList(), AdminOption: true}
   }
-| GRANT privileges ON TYPE target_types TO role_spec_list
+| GRANT privileges ON TYPE target_types TO role_spec_list opt_with_grant_option
   {
-    $$.val = &tree.Grant{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.roleSpecList()}
+    $$.val = &tree.Grant{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.roleSpecList(), WithGrantOption: $8.bool(),}
   }
-| GRANT privileges ON SCHEMA schema_name_list TO role_spec_list
+| GRANT privileges ON SCHEMA schema_name_list TO role_spec_list opt_with_grant_option
   {
     $$.val = &tree.Grant{
       Privileges: $2.privilegeList(),
@@ -4387,13 +4387,14 @@ grant_stmt:
         Schemas: $5.objectNamePrefixList(),
       },
       Grantees: $7.roleSpecList(),
+      WithGrantOption: $8.bool(),
     }
   }
 | GRANT privileges ON SCHEMA schema_name_list TO role_spec_list WITH error
   {
     return unimplemented(sqllex, "grant privileges on schema with")
   }
-| GRANT privileges ON ALL TABLES IN SCHEMA schema_name_list TO role_spec_list
+| GRANT privileges ON ALL TABLES IN SCHEMA schema_name_list TO role_spec_list opt_with_grant_option
   {
     $$.val = &tree.Grant{
       Privileges: $2.privilegeList(),
@@ -4402,6 +4403,7 @@ grant_stmt:
         AllTablesInSchema: true,
       },
       Grantees: $10.roleSpecList(),
+      WithGrantOption: $11.bool(),
     }
   }
 | GRANT privileges ON SEQUENCE error
@@ -4432,7 +4434,11 @@ grant_stmt:
 revoke_stmt:
   REVOKE privileges ON targets FROM role_spec_list
   {
-    $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Grantees: $6.roleSpecList(), Targets: $4.targetList()}
+    $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Grantees: $6.roleSpecList(), Targets: $4.targetList(), GrantOptionFor: false}
+  }
+| REVOKE GRANT OPTION FOR privileges ON targets FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{Privileges: $5.privilegeList(), Grantees: $9.roleSpecList(), Targets: $7.targetList(), GrantOptionFor: true}
   }
 | REVOKE privilege_list FROM role_spec_list
   {
@@ -4444,7 +4450,11 @@ revoke_stmt:
   }
 | REVOKE privileges ON TYPE target_types FROM role_spec_list
   {
-    $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.roleSpecList()}
+    $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.roleSpecList(), GrantOptionFor: false}
+  }
+| REVOKE GRANT OPTION FOR privileges ON TYPE target_types FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{Privileges: $5.privilegeList(), Targets: $8.targetList(), Grantees: $10.roleSpecList(), GrantOptionFor: true}
   }
 | REVOKE privileges ON SCHEMA schema_name_list FROM role_spec_list
   {
@@ -4454,6 +4464,18 @@ revoke_stmt:
         Schemas: $5.objectNamePrefixList(),
       },
       Grantees: $7.roleSpecList(),
+      GrantOptionFor: false,
+    }
+  }
+| REVOKE GRANT OPTION FOR privileges ON SCHEMA schema_name_list FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $5.privilegeList(),
+      Targets: tree.TargetList{
+        Schemas: $8.objectNamePrefixList(),
+      },
+      Grantees: $10.roleSpecList(),
+      GrantOptionFor: true,
     }
   }
 | REVOKE privileges ON ALL TABLES IN SCHEMA schema_name_list FROM role_spec_list
@@ -4465,6 +4487,19 @@ revoke_stmt:
         AllTablesInSchema: true,
       },
       Grantees: $10.roleSpecList(),
+      GrantOptionFor: false,
+    }
+  }
+| REVOKE GRANT OPTION FOR privileges ON ALL TABLES IN SCHEMA schema_name_list FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $5.privilegeList(),
+      Targets: tree.TargetList{
+        Schemas: $11.objectNamePrefixList(),
+        AllTablesInSchema: true,
+      },
+      Grantees: $13.roleSpecList(),
+      GrantOptionFor: true,
     }
   }
 | REVOKE privileges ON SEQUENCE error
@@ -4472,6 +4507,7 @@ revoke_stmt:
     return unimplemented(sqllex, "revoke privileges on sequence")
   }
 | REVOKE error // SHOW HELP: REVOKE
+
 
 // ALL can either be by itself, or with the optional PRIVILEGES keyword (which no-ops)
 privileges:
