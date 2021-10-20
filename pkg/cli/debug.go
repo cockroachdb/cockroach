@@ -1336,6 +1336,10 @@ matching via flags. If the filter regexp contains captures, such as
 	RunE: runDebugMergeLogs,
 }
 
+// filePattern matches log file paths. Redeclared here from the log package
+// due to significant test breakage when adding the fpath named capture group.
+const logFilePattern = "^(?:(?P<fpath>.*)/)?" + log.FileNamePattern + "$"
+
 // TODO(knz): this struct belongs elsewhere.
 // See: https://github.com/cockroachdb/cockroach/issues/49509
 var debugMergeLogsOpts = struct {
@@ -1344,25 +1348,26 @@ var debugMergeLogsOpts = struct {
 	filter         *regexp.Regexp
 	program        *regexp.Regexp
 	file           *regexp.Regexp
-	prefix         string
 	keepRedactable bool
+	prefix         string
 	redactInput    bool
 	format         string
 	useColor       forceColor
 }{
 	program:        nil, // match everything
-	file:           regexp.MustCompile(log.FilePattern),
+	file:           regexp.MustCompile(logFilePattern),
 	keepRedactable: true,
 	redactInput:    false,
 }
 
 func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
 	o := debugMergeLogsOpts
+	p := newFilePrefixer(withTemplate(o.prefix))
 
 	inputEditMode := log.SelectEditMode(o.redactInput, o.keepRedactable)
 
 	s, err := newMergedStreamFromPatterns(context.Background(),
-		args, o.file, o.program, o.from, o.to, inputEditMode, o.format)
+		args, o.file, o.program, o.from, o.to, inputEditMode, o.format, p)
 	if err != nil {
 		return err
 	}
@@ -1400,7 +1405,7 @@ func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return writeLogStream(s, outStream, o.filter, o.prefix, o.keepRedactable, cp)
+	return writeLogStream(s, outStream, o.filter, o.keepRedactable, cp)
 }
 
 var debugIntentCount = &cobra.Command{

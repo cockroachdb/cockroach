@@ -383,7 +383,7 @@ func ascendZoneSpecifier(
 	if actualID == keys.RootNamespaceID {
 		// We had to traverse to the top of the hierarchy, so we're showing the
 		// default zone config.
-		zs.NamedZone = zonepb.DefaultZoneName
+		zs.NamedZone = tree.UnrestrictedName(zonepb.DefaultZoneName)
 		zs.Database = ""
 		zs.TableOrIndex = tree.TableIndexName{}
 		// Since the default zone has no partition, we can erase the

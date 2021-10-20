@@ -93,6 +93,7 @@
 
 /pkg/ccl/backupccl/          @cockroachdb/bulk-prs
 /pkg/ccl/importccl/          @cockroachdb/bulk-prs
+/pkg/ccl/spanconfigccl/      @cockroachdb/kv-prs
 /pkg/ccl/storageccl/         @cockroachdb/bulk-prs
 /pkg/cloud/                  @cockroachdb/bulk-prs
 /pkg/sql/distsql_plan_csv.go @cockroachdb/bulk-prs
@@ -221,7 +222,7 @@
 /pkg/scheduledjobs/          @cockroachdb/bulk-prs
 /pkg/security/               @cockroachdb/server-prs @cockroachdb/prodsec
 /pkg/settings/               @cockroachdb/server-prs
-/pkg/spanconfig/             @cockroachdb/multiregion
+/pkg/spanconfig/             @cockroachdb/kv-prs
 /pkg/startupmigrations/      @cockroachdb/server-prs @cockroachdb/sql-schema
 /pkg/streaming/              @cockroachdb/bulk-prs
 /pkg/testutils/              @cockroachdb/test-eng-noreview
