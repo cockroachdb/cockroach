@@ -732,7 +732,7 @@ func (b *RowResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
 // AddRow implements the rowResultWriter interface.
 func (b *RowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
 	if b.rowContainer != nil {
-		return b.rowContainer.addRow(ctx, row)
+		return b.rowContainer.AddRow(ctx, row)
 	}
 	return nil
 }
@@ -1231,8 +1231,8 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		typs = subqueryPhysPlan.GetResultTypes()
 	}
 	var rows rowContainerHelper
-	rows.init(typs, evalCtx, "subquery" /* opName */)
-	defer rows.close(ctx)
+	rows.Init(typs, evalCtx, "subquery" /* opName */)
+	defer rows.Close(ctx)
 
 	// TODO(yuzefovich): consider implementing batch receiving result writer.
 	subqueryRowReceiver := NewRowResultWriter(&rows)
@@ -1245,7 +1245,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	switch subqueryPlan.execMode {
 	case rowexec.SubqueryExecModeExists:
 		// For EXISTS expressions, all we want to know if there is at least one row.
-		hasRows := rows.len() != 0
+		hasRows := rows.Len() != 0
 		subqueryPlans[planIdx].result = tree.MakeDBool(tree.DBool(hasRows))
 	case rowexec.SubqueryExecModeAllRows, rowexec.SubqueryExecModeAllRowsNormalized:
 		// TODO(yuzefovich): this is unfortunate - we're materializing all
@@ -1253,9 +1253,9 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		// accounting. Refactor it.
 		var result tree.DTuple
 		iterator := newRowContainerIterator(ctx, rows, typs)
-		defer iterator.close()
+		defer iterator.Close()
 		for {
-			row, err := iterator.next()
+			row, err := iterator.Next()
 			if err != nil {
 				return err
 			}
@@ -1278,13 +1278,13 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		}
 		subqueryPlans[planIdx].result = &result
 	case rowexec.SubqueryExecModeOneRow:
-		switch rows.len() {
+		switch rows.Len() {
 		case 0:
 			subqueryPlans[planIdx].result = tree.DNull
 		case 1:
 			iterator := newRowContainerIterator(ctx, rows, typs)
-			defer iterator.close()
-			row, err := iterator.next()
+			defer iterator.Close()
+			row, err := iterator.Next()
 			if err != nil {
 				return err
 			}

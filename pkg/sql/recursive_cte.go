@@ -63,9 +63,9 @@ type recursiveCTERun struct {
 
 func (n *recursiveCTENode) startExec(params runParams) error {
 	n.typs = planTypes(n.initial)
-	n.workingRows.init(n.typs, params.extendedEvalCtx, "cte" /* opName */)
+	n.workingRows.Init(n.typs, params.extendedEvalCtx, "cte" /* opName */)
 	if n.deduplicate {
-		n.allRows.initWithDedup(n.typs, params.extendedEvalCtx, "cte-all" /* opName */)
+		n.allRows.InitWithDedup(n.typs, params.extendedEvalCtx, "cte-all" /* opName */)
 	}
 	return nil
 }
@@ -99,14 +99,14 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 		return false, nil
 	}
 
-	if n.workingRows.len() == 0 {
+	if n.workingRows.Len() == 0 {
 		// Last iteration returned no rows.
 		n.done = true
 		return false, nil
 	}
 
 	var err error
-	n.currentRow, err = n.iterator.next()
+	n.currentRow, err = n.iterator.Next()
 	if err != nil {
 		return false, err
 	}
@@ -117,13 +117,13 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 
 	// Let's run another iteration.
 
-	n.iterator.close()
+	n.iterator.Close()
 	n.iterator = nil
 	lastWorkingRows := n.workingRows
-	defer lastWorkingRows.close(params.ctx)
+	defer lastWorkingRows.Close(params.ctx)
 
 	n.workingRows = rowContainerHelper{}
-	n.workingRows.init(n.typs, params.extendedEvalCtx, "cte" /* opName */)
+	n.workingRows.Init(n.typs, params.extendedEvalCtx, "cte" /* opName */)
 
 	// Set up a bufferNode that can be used as a reference for a scanBufferNode.
 	buf := &bufferNode{
@@ -144,7 +144,7 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 	}
 
 	n.iterator = newRowContainerIterator(params.ctx, n.workingRows, n.typs)
-	n.currentRow, err = n.iterator.next()
+	n.currentRow, err = n.iterator.Next()
 	if err != nil {
 		return false, err
 	}
@@ -158,11 +158,11 @@ func (n *recursiveCTENode) Values() tree.Datums {
 func (n *recursiveCTENode) Close(ctx context.Context) {
 	n.initial.Close(ctx)
 	if n.deduplicate {
-		n.allRows.close(ctx)
+		n.allRows.Close(ctx)
 	}
-	n.workingRows.close(ctx)
+	n.workingRows.Close(ctx)
 	if n.iterator != nil {
-		n.iterator.close()
+		n.iterator.Close()
 		n.iterator = nil
 	}
 }
@@ -179,14 +179,14 @@ var _ rowResultWriter = (*recursiveCTENode)(nil)
 // in the allRows container or added to both allRows and workingRows otherwise.
 func (n *recursiveCTENode) AddRow(ctx context.Context, row tree.Datums) error {
 	if n.deduplicate {
-		if ok, err := n.allRows.addRowWithDedup(ctx, row); err != nil {
+		if ok, err := n.allRows.AddRowWithDedup(ctx, row); err != nil {
 			return err
 		} else if !ok {
 			// Duplicate row; don't add to the resulting rows.
 			return nil
 		}
 	}
-	return n.workingRows.addRow(ctx, row)
+	return n.workingRows.AddRow(ctx, row)
 }
 
 // IncrementRowsAffected is part of the rowResultWriter interface.
