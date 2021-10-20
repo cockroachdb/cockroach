@@ -61,7 +61,7 @@ type tpch struct {
 	scaleFactor int
 	fks         bool
 
-	enableChecks              bool
+	enableChecks               bool
 	vectorize                  string
 	useClusterVectorizeSetting bool
 	verbose                    bool
