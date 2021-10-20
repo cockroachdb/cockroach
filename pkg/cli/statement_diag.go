@@ -32,7 +32,7 @@ var stmtDiagCmd = &cobra.Command{
 	Long: `This set of commands can be used to manage and download statement diagnostic
 bundles, and to cancel outstanding diagnostics activation requests. Statement
 diagnostics can be activated from the UI or using EXPLAIN ANALYZE (DEBUG).`,
-	RunE: usageAndErr,
+	RunE: UsageAndErr,
 }
 
 var stmtDiagListCmd = &cobra.Command{
