@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -2537,36 +2538,19 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	planCtx *PlanningCtx, n *zigzagJoinNode,
 ) (plan *PhysicalPlan, err error) {
-	plan = planCtx.NewPhysicalPlan()
 
-	tables := make([]descpb.TableDescriptor, len(n.sides))
-	indexOrdinals := make([]uint32, len(n.sides))
-	cols := make([]execinfrapb.Columns, len(n.sides))
-	numStreamCols := 0
+	pi := zigzagPlanningInfo{onCond: n.onCond, reqOrdering: exec.OutputOrdering(n.reqOrdering)}
+	pi.init(len(n.sides))
+
 	for i, side := range n.sides {
-		tables[i] = *side.scan.desc.TableDesc()
-		indexOrdinals[i], err = getIndexIdx(side.scan.index, side.scan.desc)
+		err = pi.initSide(i, side.scan.desc, side.scan.index, len(side.eqCols))
 		if err != nil {
 			return nil, err
 		}
-
-		cols[i].Columns = make([]uint32, len(side.eqCols))
 		for j, col := range side.eqCols {
-			cols[i].Columns[j] = uint32(col)
+			pi.eqCols[i].Columns[j] = uint32(col)
 		}
-
-		numStreamCols += len(side.scan.desc.PublicColumns())
 	}
-
-	// The zigzag join node only represents inner joins, so hardcode Type to
-	// InnerJoin.
-	zigzagJoinerSpec := execinfrapb.ZigzagJoinerSpec{
-		Tables:        tables,
-		IndexOrdinals: indexOrdinals,
-		EqColumns:     cols,
-		Type:          descpb.InnerJoin,
-	}
-	zigzagJoinerSpec.FixedValues = make([]*execinfrapb.ValuesCoreSpec, len(n.sides))
 
 	// The fixed values are represented as a Values node with one tuple.
 	for i := range n.sides {
@@ -2576,7 +2560,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		if err != nil {
 			return nil, err
 		}
-		zigzagJoinerSpec.FixedValues[i] = valuesSpec
+		pi.fixedValues[i] = valuesSpec
 	}
 
 	// The internal schema of the zigzag joiner is:
@@ -2587,12 +2571,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	//    <side 1 index columns> ... <side 2 index columns> ...
 	// so the planToStreamColMap has to basically map index ordinals
 	// to table ordinals.
-	post := execinfrapb.PostProcessSpec{Projection: true}
-	numOutCols := len(n.columns)
-
-	post.OutputColumns = make([]uint32, numOutCols)
-	types := make([]*types.T, numOutCols)
-	planToStreamColMap := makePlanToStreamColMap(numOutCols)
+	pi.initOutput(len(n.columns))
 	colOffset := 0
 	i := 0
 
@@ -2605,30 +2584,91 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		// opt/exec/execbuilder/relational_builder.go, similar to lookup joins.
 		for _, col := range side.scan.cols {
 			ord := tableOrdinal(side.scan.desc, col.GetID(), side.scan.colCfg.visibility)
-			post.OutputColumns[i] = uint32(colOffset + ord)
-			types[i] = col.GetType()
-			planToStreamColMap[i] = i
-
+			pi.outputColumns[i] = uint32(colOffset + ord)
+			pi.outputTypes[i] = col.GetType()
+			pi.planToStreamColMap[i] = i
 			i++
 		}
 
 		colOffset += len(side.scan.desc.PublicColumns())
 	}
 
+	return dsp.constructZigzagJoin(planCtx, pi)
+}
+
+type zigzagPlanningInfo struct {
+	tableDescriptors   []descpb.TableDescriptor
+	indexOrdinals      []uint32
+	fixedValues        []*execinfrapb.ValuesCoreSpec
+	eqCols             []execinfrapb.Columns
+	outputColumns      []uint32
+	outputTypes        []*types.T
+	planToStreamColMap []int
+	onCond             tree.TypedExpr
+	reqOrdering        exec.OutputOrdering
+}
+
+func (pi *zigzagPlanningInfo) init(nsides int) {
+	pi.tableDescriptors = make([]descpb.TableDescriptor, nsides)
+	pi.indexOrdinals = make([]uint32, nsides)
+	pi.fixedValues = make([]*execinfrapb.ValuesCoreSpec, nsides)
+	pi.eqCols = make([]execinfrapb.Columns, nsides)
+}
+
+func (pi *zigzagPlanningInfo) initSide(
+	i int, desc catalog.TableDescriptor, index catalog.Index, numEqCols int,
+) error {
+	pi.tableDescriptors[i] = *desc.TableDesc()
+	idxOrd, err := getIndexIdx(index, desc)
+	if err != nil {
+		return err
+	}
+	pi.indexOrdinals[i] = idxOrd
+	pi.eqCols[i].Columns = make([]uint32, numEqCols)
+
+	return nil
+}
+
+func (pi *zigzagPlanningInfo) initOutput(numCols int) {
+	pi.outputColumns = make([]uint32, numCols)
+	pi.outputTypes = make([]*types.T, numCols)
+	pi.planToStreamColMap = makePlanToStreamColMap(numCols)
+}
+
+func (dsp *DistSQLPlanner) constructZigzagJoin(
+	planCtx *PlanningCtx, pi zigzagPlanningInfo,
+) (*PhysicalPlan, error) {
+
+	plan := planCtx.NewPhysicalPlan()
+
+	post := execinfrapb.PostProcessSpec{Projection: true}
+	post.OutputColumns = pi.outputColumns
+
+	// The zigzag join node only represents inner joins, so hardcode Type to
+	// InnerJoin.
+	zigzagJoinerSpec := execinfrapb.ZigzagJoinerSpec{
+		Tables:        pi.tableDescriptors,
+		IndexOrdinals: pi.indexOrdinals,
+		EqColumns:     pi.eqCols,
+		Type:          descpb.InnerJoin,
+		FixedValues:   pi.fixedValues,
+	}
+
 	// Set the ON condition.
-	if n.onCond != nil {
+	if pi.onCond != nil {
 		// Note that the ON condition refers to the *internal* columns of the
 		// processor (before the OutputColumns projection).
-		indexVarMap := makePlanToStreamColMap(len(n.columns))
-		for i := range n.columns {
+		indexVarMap := makePlanToStreamColMap(len(pi.outputColumns))
+		for i := 0; i < len(pi.outputColumns); i++ {
 			indexVarMap[i] = int(post.OutputColumns[i])
 		}
-		zigzagJoinerSpec.OnExpr, err = physicalplan.MakeExpression(
-			n.onCond, planCtx, indexVarMap,
+		onExpr, err := physicalplan.MakeExpression(
+			pi.onCond, planCtx, indexVarMap,
 		)
 		if err != nil {
 			return nil, err
 		}
+		zigzagJoinerSpec.OnExpr = onExpr
 	}
 
 	// Figure out the node where this zigzag joiner goes.
@@ -2642,8 +2682,8 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		Core:   execinfrapb.ProcessorCoreUnion{ZigzagJoiner: &zigzagJoinerSpec},
 	}}
 
-	plan.AddNoInputStage(corePlacement, post, types, execinfrapb.Ordering{})
-	plan.PlanToStreamColMap = planToStreamColMap
+	plan.AddNoInputStage(corePlacement, post, pi.outputTypes, execinfrapb.Ordering{})
+	plan.PlanToStreamColMap = pi.planToStreamColMap
 
 	return plan, nil
 }
