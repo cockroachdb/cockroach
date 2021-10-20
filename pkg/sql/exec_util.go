@@ -2887,7 +2887,7 @@ func (m *sessionDataMutator) SetStreamReplicationEnabled(val bool) {
 	m.data.EnableStreamReplication = val
 }
 
-// RecordLatestSequenceValue records that value to which the session incremented
+// RecordLatestSequenceVal records that value to which the session incremented
 // a sequence.
 func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {
 	m.data.SequenceState.RecordValue(seqID, val)
