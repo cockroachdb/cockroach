@@ -108,7 +108,7 @@ func (a *applyJoinNode) startExec(params runParams) error {
 		}
 	}
 	a.run.out = make(tree.Datums, len(a.columns))
-	a.run.rightRows.init(a.rightTypes, params.extendedEvalCtx, "apply-join" /* opName */)
+	a.run.rightRows.Init(a.rightTypes, params.extendedEvalCtx, "apply-join" /* opName */)
 	return nil
 }
 
@@ -123,7 +123,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 			for {
 				// Note that if a.rightTypes has zero length, non-nil rrow is
 				// returned the correct number of times.
-				rrow, err := a.run.rightRowsIterator.next()
+				rrow, err := a.run.rightRowsIterator.Next()
 				if err != nil {
 					return false, err
 				}
@@ -229,10 +229,10 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 // clearRightRows clears rightRows and resets rightRowsIterator. This function
 // must be called before reusing rightRows and rightRowIterator.
 func (a *applyJoinNode) clearRightRows(params runParams) error {
-	if err := a.run.rightRows.clear(params.ctx); err != nil {
+	if err := a.run.rightRows.Clear(params.ctx); err != nil {
 		return err
 	}
-	a.run.rightRowsIterator.close()
+	a.run.rightRowsIterator.Close()
 	a.run.rightRowsIterator = nil
 	return nil
 }
@@ -325,9 +325,9 @@ func (a *applyJoinNode) Values() tree.Datums {
 
 func (a *applyJoinNode) Close(ctx context.Context) {
 	a.input.plan.Close(ctx)
-	a.run.rightRows.close(ctx)
+	a.run.rightRows.Close(ctx)
 	if a.run.rightRowsIterator != nil {
-		a.run.rightRowsIterator.close()
+		a.run.rightRowsIterator.Close()
 		a.run.rightRowsIterator = nil
 	}
 }
