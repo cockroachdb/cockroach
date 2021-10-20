@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1292,6 +1293,9 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
 		// All reverting jobs are retried.
+		if !r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+			return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusRevertFailed, err)
+		}
 		return onExecutionFailed(err)
 	case StatusFailed:
 		if jobErr == nil {
