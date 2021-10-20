@@ -249,7 +249,7 @@ func getLatestValueInSessionForSequenceHelper(
 
 // SetSequenceValueByID implements the tree.SequenceOperators interface.
 func (p *planner) SetSequenceValueByID(
-	ctx context.Context, seqID int64, newVal int64, isCalled bool,
+	ctx context.Context, seqID uint32, newVal int64, isCalled bool,
 ) error {
 	if p.EvalContext().TxnReadOnly {
 		return readOnlyError("setval()")
@@ -275,7 +275,7 @@ func (p *planner) SetSequenceValueByID(
 	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
 		m.initSequenceCache()
 		if isCalled {
-			m.RecordLatestSequenceVal(uint32(seqID), newVal)
+			m.RecordLatestSequenceVal(seqID, newVal)
 		}
 	})
 	return nil
