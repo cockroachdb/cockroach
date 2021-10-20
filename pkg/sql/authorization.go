@@ -158,6 +158,25 @@ func (p *planner) CheckPrivilege(
 	return p.CheckPrivilegeForUser(ctx, descriptor, privilege, p.User())
 }
 
+// CheckGrantOption calls ValidateGrantPrivileges(), which will return an error if a user
+// tries to grant a privilege it does not have grant options for.
+func (p *planner) CheckGrantOption(
+	ctx context.Context, descriptor catalog.Descriptor, privList privilege.List, isGrant bool,
+) error {
+	// Always allow the command to go through if performed by a superuser or the owner of the object
+	if admin, _ := p.UserHasAdminRole(ctx, p.User()); admin {
+		return nil
+	}
+
+	if IsOwner(descriptor, p.User()) {
+		return nil
+	}
+
+	privs := descriptor.GetPrivileges()
+	err := privs.ValidateGrantPrivileges(p.User(), privList, isGrant)
+	return err
+}
+
 func getOwnerOfDesc(desc catalog.Descriptor) security.SQLUsername {
 	// Descriptors created prior to 20.2 do not have owners set.
 	owner := desc.GetPrivileges().Owner()
@@ -175,7 +194,7 @@ func getOwnerOfDesc(desc catalog.Descriptor) security.SQLUsername {
 	return owner
 }
 
-// IsOwner returns if the role has ownership on the descriptor.
+//IsOwner returns if the role has ownership on the descriptor.
 func IsOwner(desc catalog.Descriptor, role security.SQLUsername) bool {
 	return role == getOwnerOfDesc(desc)
 }

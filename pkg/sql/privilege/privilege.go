@@ -256,35 +256,46 @@ func GetValidPrivilegesForObject(objectType ObjectType) List {
 	}
 }
 
+// privToACL is a map of privilege -> ACL character
+var privToACL = map[Kind]string{
+	CREATE:  "C",
+	SELECT:  "r",
+	INSERT:  "a",
+	DELETE:  "d",
+	UPDATE:  "w",
+	USAGE:   "U",
+	CONNECT: "c",
+}
+
+// orderedPrivs is the list of privileges sorted in alphanumeric order based on the ACL character -> CUacdrw
+var orderedPrivs = List{CREATE, USAGE, INSERT, CONNECT, DELETE, SELECT, UPDATE}
+
 // ListToACL converts a list of privileges to a list of Postgres
 // ACL items.
 // See: https://www.postgresql.org/docs/13/ddl-priv.html#PRIVILEGE-ABBREVS-TABLE
 //     for privileges and their ACL abbreviations.
-func (pl List) ListToACL(objectType ObjectType) string {
+func (pl List) ListToACL(grantOptions List, objectType ObjectType) string {
 	privileges := pl
 	// If ALL is present, explode ALL into the underlying privileges.
 	if pl.Contains(ALL) {
 		privileges = GetValidPrivilegesForObject(objectType)
-	}
-	chars := make([]string, len(privileges))
-	for _, privilege := range privileges {
-		switch privilege {
-		case CREATE:
-			chars = append(chars, "C")
-		case SELECT:
-			chars = append(chars, "r")
-		case INSERT:
-			chars = append(chars, "a")
-		case DELETE:
-			chars = append(chars, "d")
-		case UPDATE:
-			chars = append(chars, "w")
-		case USAGE:
-			chars = append(chars, "U")
-		case CONNECT:
-			chars = append(chars, "c")
+		if grantOptions.Contains(ALL) {
+			grantOptions = GetValidPrivilegesForObject(objectType)
 		}
 	}
-	sort.Strings(chars)
+	chars := make([]string, len(privileges))
+	for _, privilege := range orderedPrivs {
+		if _, ok := privToACL[privilege]; !ok {
+			panic(errors.AssertionFailedf("unknown privilege type %s", privilege.String()))
+		}
+		if privileges.Contains(privilege) {
+			chars = append(chars, privToACL[privilege])
+		}
+		if grantOptions.Contains(privilege) {
+			chars = append(chars, "*")
+		}
+	}
+
 	return strings.Join(chars, "")
+
 }

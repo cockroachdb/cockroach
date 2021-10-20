@@ -164,7 +164,7 @@ func TestGrantDefaultPrivileges(t *testing.T) {
 		defaultPrivilegeDescriptor := MakeNewDefaultPrivilegeDescriptor()
 		defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 
-		defaultPrivileges.GrantDefaultPrivileges(tc.defaultPrivilegesRole, tc.privileges, tc.grantees, tc.targetObject)
+		defaultPrivileges.GrantDefaultPrivileges(tc.defaultPrivilegesRole, tc.privileges, tc.grantees, tc.targetObject, false /* withGrantOption */)
 
 		newPrivileges := defaultPrivileges.CreatePrivilegesFromDefaultPrivileges(
 			nonSystemDatabaseID, tc.objectCreator, tc.targetObject, &descpb.PrivilegeDescriptor{},
@@ -282,8 +282,8 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 		defaultPrivilegeDescriptor := MakeNewDefaultPrivilegeDescriptor()
 		defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 
-		defaultPrivileges.GrantDefaultPrivileges(tc.defaultPrivilegesRole, tc.grantPrivileges, tc.grantees, tc.targetObject)
-		defaultPrivileges.RevokeDefaultPrivileges(tc.defaultPrivilegesRole, tc.revokePrivileges, tc.grantees, tc.targetObject)
+		defaultPrivileges.GrantDefaultPrivileges(tc.defaultPrivilegesRole, tc.grantPrivileges, tc.grantees, tc.targetObject, false /* withGrantOption */)
+		defaultPrivileges.RevokeDefaultPrivileges(tc.defaultPrivilegesRole, tc.revokePrivileges, tc.grantees, tc.targetObject, false /* grantOptionFor */)
 
 		newPrivileges := defaultPrivileges.CreatePrivilegesFromDefaultPrivileges(
 			nonSystemDatabaseID, tc.objectCreator, tc.targetObject, &descpb.PrivilegeDescriptor{},
@@ -308,7 +308,7 @@ func TestRevokeDefaultPrivilegesFromEmptyList(t *testing.T) {
 	fooUser := security.MakeSQLUsernameFromPreNormalizedString("foo")
 	defaultPrivileges.RevokeDefaultPrivileges(descpb.DefaultPrivilegesRole{
 		Role: creatorUser,
-	}, privilege.List{privilege.ALL}, []security.SQLUsername{fooUser}, tree.Tables)
+	}, privilege.List{privilege.ALL}, []security.SQLUsername{fooUser}, tree.Tables, false /* grantOptionFor */)
 
 	newPrivileges := defaultPrivileges.CreatePrivilegesFromDefaultPrivileges(
 		nonSystemDatabaseID, creatorUser, tree.Tables, &descpb.PrivilegeDescriptor{},
@@ -534,7 +534,7 @@ func TestDefaultPrivileges(t *testing.T) {
 				descpb.DefaultPrivilegesRole{Role: tc.defaultPrivilegesRole},
 				userAndGrant.grants,
 				[]security.SQLUsername{userAndGrant.user},
-				tc.targetObject,
+				tc.targetObject, false, /* withGrantOption */
 			)
 		}
 
@@ -595,7 +595,7 @@ func TestModifyDefaultDefaultPrivileges(t *testing.T) {
 			descpb.DefaultPrivilegesRole{Role: creatorUser},
 			tc.revokeAndGrantPrivileges,
 			[]security.SQLUsername{creatorUser},
-			tc.targetObject,
+			tc.targetObject, false, /* grantOptionFor */
 		)
 		if GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForCreator, tc.targetObject) {
 			t.Errorf("expected role to not have ALL privileges on %s", tc.targetObject)
@@ -604,7 +604,7 @@ func TestModifyDefaultDefaultPrivileges(t *testing.T) {
 			descpb.DefaultPrivilegesRole{Role: creatorUser},
 			tc.revokeAndGrantPrivileges,
 			[]security.SQLUsername{creatorUser},
-			tc.targetObject,
+			tc.targetObject, false, /* withGrantOption */
 		)
 		if !GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForCreator, tc.targetObject) {
 			t.Errorf("expected role to have ALL privileges on %s", tc.targetObject)
@@ -628,7 +628,7 @@ func TestModifyDefaultDefaultPrivilegesForPublic(t *testing.T) {
 		descpb.DefaultPrivilegesRole{Role: creatorUser},
 		privilege.List{privilege.USAGE},
 		[]security.SQLUsername{security.PublicRoleName()},
-		tree.Types,
+		tree.Types, false, /* grantOptionFor */
 	)
 	if GetPublicHasUsageOnTypes(defaultPrivilegesForCreator) {
 		t.Errorf("expected public to not have USAGE privilege on types")
@@ -637,9 +637,127 @@ func TestModifyDefaultDefaultPrivilegesForPublic(t *testing.T) {
 		descpb.DefaultPrivilegesRole{Role: creatorUser},
 		privilege.List{privilege.USAGE},
 		[]security.SQLUsername{security.PublicRoleName()},
-		tree.Types,
+		tree.Types, false, /* withGrantOption */
 	)
 	if !GetPublicHasUsageOnTypes(defaultPrivilegesForCreator) {
 		t.Errorf("expected public to have USAGE privilege on types")
+	}
+
+	// Test granting when withGrantOption is true.
+	defaultPrivileges.GrantDefaultPrivileges(
+		descpb.DefaultPrivilegesRole{Role: creatorUser},
+		privilege.List{privilege.USAGE},
+		[]security.SQLUsername{security.PublicRoleName()},
+		tree.Types, true, /* withGrantOption */
+	)
+
+	privDesc := defaultPrivilegesForCreator.DefaultPrivilegesPerObject[tree.Types]
+	user, found := privDesc.FindUser(security.PublicRoleName())
+	if !found {
+		t.Errorf("public not found on privilege descriptor when expected")
+	}
+	if !privilege.USAGE.IsSetIn(user.WithGrantOption) {
+		t.Errorf("expected public to have USAGE grant options on types")
+	}
+	// This flag should not be true since there is a "modification" - i.e. grant option bits for USAGE are active,
+	// so do not remove that user from the descriptor.
+	if GetPublicHasUsageOnTypes(defaultPrivilegesForCreator) {
+		t.Errorf("expected public to not have USAGE privilege on types")
+	}
+
+	// Test revoking when grantOptionFor is true.
+	defaultPrivileges.RevokeDefaultPrivileges(
+		descpb.DefaultPrivilegesRole{Role: creatorUser},
+		privilege.List{privilege.USAGE},
+		[]security.SQLUsername{security.PublicRoleName()},
+		tree.Types, true, /* grantOptionFor */
+	)
+
+	privDesc = defaultPrivilegesForCreator.DefaultPrivilegesPerObject[tree.Types]
+	_, found = privDesc.FindUser(security.PublicRoleName())
+	if found {
+		t.Errorf("public found on privilege descriptor when it was supposed to be removed")
+	}
+	// Public still has usage on types since only the grant option for USAGE was revoked, not the privilege itself.
+	if !GetPublicHasUsageOnTypes(defaultPrivilegesForCreator) {
+		t.Errorf("expected public to have USAGE privilege on types")
+	}
+
+	// Test a complete revoke afterwards.
+	defaultPrivileges.RevokeDefaultPrivileges(
+		descpb.DefaultPrivilegesRole{Role: creatorUser},
+		privilege.List{privilege.USAGE},
+		[]security.SQLUsername{security.PublicRoleName()},
+		tree.Types, false, /* grantOptionFor */
+	)
+	if GetPublicHasUsageOnTypes(defaultPrivilegesForCreator) {
+		t.Errorf("expected public to not have USAGE privilege on types")
+	}
+}
+
+// TestApplyDefaultPrivileges tests whether granting potentially different privileges and grant options
+// changes the privilege bits and grant option bits as expected.
+func TestApplyDefaultPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testUser := security.TestUserName()
+
+	testCases := []struct {
+		pd                  *descpb.PrivilegeDescriptor
+		user                security.SQLUsername
+		objectType          privilege.ObjectType
+		grantPrivileges     privilege.List
+		grantGrantOptions   privilege.List
+		expectedPrivileges  privilege.List
+		expectedGrantOption privilege.List
+	}{
+		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{}, privilege.List{}, security.AdminRoleName()),
+			testUser, privilege.Table,
+			privilege.List{privilege.SELECT, privilege.INSERT},
+			privilege.List{privilege.SELECT, privilege.INSERT},
+			privilege.List{privilege.SELECT, privilege.INSERT},
+			privilege.List{privilege.SELECT, privilege.INSERT}},
+		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE, privilege.INSERT}, privilege.List{privilege.INSERT}, security.AdminRoleName()),
+			testUser, privilege.Table,
+			privilege.List{privilege.ALL},
+			privilege.List{privilege.CREATE, privilege.SELECT},
+			privilege.List{privilege.ALL},
+			privilege.List{privilege.CREATE, privilege.SELECT, privilege.INSERT}},
+		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE, privilege.INSERT}, privilege.List{privilege.CREATE}, security.AdminRoleName()),
+			testUser, privilege.Table,
+			privilege.List{privilege.ALL},
+			privilege.List{privilege.ALL},
+			privilege.List{privilege.ALL},
+			privilege.List{privilege.ALL}},
+		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, privilege.List{privilege.CREATE}, security.AdminRoleName()),
+			testUser, privilege.Table,
+			privilege.List{privilege.CREATE, privilege.SELECT, privilege.INSERT, privilege.UPDATE},
+			privilege.List{privilege.SELECT},
+			privilege.List{privilege.CREATE, privilege.SELECT, privilege.INSERT, privilege.UPDATE},
+			privilege.List{privilege.CREATE, privilege.SELECT}},
+		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, privilege.List{privilege.CREATE}, security.AdminRoleName()),
+			testUser, privilege.Table,
+			privilege.List{privilege.ALL, privilege.CREATE, privilege.SELECT, privilege.INSERT, privilege.UPDATE},
+			privilege.List{privilege.ALL, privilege.SELECT},
+			privilege.List{privilege.ALL},
+			privilege.List{privilege.ALL}},
+		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, privilege.List{privilege.CREATE}, security.AdminRoleName()),
+			testUser, privilege.Table,
+			privilege.List{privilege.SELECT},
+			privilege.List{privilege.SELECT, privilege.INSERT},
+			privilege.List{privilege.CREATE},
+			privilege.List{privilege.CREATE}},
+	}
+
+	for tcNum, tc := range testCases {
+		applyDefaultPrivileges(tc.pd, tc.user, tc.grantPrivileges, tc.grantGrantOptions)
+		if tc.pd.Users[0].Privileges != tc.expectedPrivileges.ToBitField() {
+			t.Errorf("#%d: Incorrect privileges, returned %v, expected %v",
+				tcNum, privilege.ListFromBitField(tc.pd.Users[0].Privileges, tc.objectType), tc.expectedPrivileges)
+		}
+		if tc.pd.Users[0].WithGrantOption != tc.expectedGrantOption.ToBitField() {
+			t.Errorf("#%d: Incorrect grant option, returned %v, expected %v",
+				tcNum, privilege.ListFromBitField(tc.pd.Users[0].WithGrantOption, tc.objectType), tc.expectedGrantOption)
+		}
 	}
 }
