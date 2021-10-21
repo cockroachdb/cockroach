@@ -206,7 +206,16 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ctx, ca.cancel = context.WithCancel(ctx)
 	ca.Ctx = ctx
 
-	spans, err := ca.setupSpansAndFrontier()
+	initialHighWater, needsInitialScan := getKVFeedInitialParameters(ca.spec)
+
+	frontierHighWater := initialHighWater
+	if needsInitialScan {
+		// The frontier highwater marks the latest timestamp we don't need to emit
+		// spans for, and therefore should be 0 if an initial scan is needed
+		frontierHighWater = hlc.Timestamp{}
+	}
+	spans, err := ca.setupSpansAndFrontier(frontierHighWater)
+
 	if err != nil {
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -257,7 +266,6 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.sink = makeMetricsSink(ca.metrics, ca.sink)
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
-	initialHighWater, needsInitialScan := getKVFeedInitialParameters(ca.spec)
 	ca.eventProducer, err = ca.startKVFeed(ctx, spans, initialHighWater, needsInitialScan)
 	if err != nil {
 		// Early abort in the case that there is an error creating the sink.
@@ -387,18 +395,32 @@ func getKVFeedInitialParameters(
 // different SpanFrontier elsewhere for the entire changefeed. This object is
 // used to filter out some previously emitted rows, and by the cloudStorageSink
 // to name its output files in lexicographically monotonic fashion.
-func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err error) {
+func (ca *changeAggregator) setupSpansAndFrontier(
+	initialHighWater hlc.Timestamp,
+) (spans []roachpb.Span, err error) {
 	spans = make([]roachpb.Span, 0, len(ca.spec.Watches))
 	for _, watch := range ca.spec.Watches {
 		spans = append(spans, watch.Span)
 	}
 
-	ca.frontier, err = makeSchemaChangeFrontier(spans...)
+	ca.frontier, err = makeSchemaChangeFrontier(initialHighWater, spans...)
 	if err != nil {
 		return nil, err
 	}
-	for _, watch := range ca.spec.Watches {
-		if _, err := ca.frontier.Forward(watch.Span, watch.InitialResolved); err != nil {
+
+	// Checkpointed spans are spans that were above the highwater mark, and we
+	// must preserve that information in the frontier for future checkpointing.
+	// If we don't have a highwater yet (during initial scan) they must at least
+	// be from StatementTime, and given an initial highwater they must all by
+	// definition have been at or after initialHighWater.Next()
+	var checkpointedSpanTs hlc.Timestamp
+	if initialHighWater.IsEmpty() {
+		checkpointedSpanTs = ca.spec.Feed.StatementTime
+	} else {
+		checkpointedSpanTs = initialHighWater.Next()
+	}
+	for _, checkpointedSpan := range ca.spec.Checkpoint.Spans {
+		if _, err := ca.frontier.Forward(checkpointedSpan, checkpointedSpanTs); err != nil {
 			return nil, err
 		}
 	}
@@ -503,6 +525,9 @@ func (ca *changeAggregator) tick() error {
 	return nil
 }
 
+// noteResolvedSpan periodically flushes Frontier progress from the current
+// changeAggregator node to the changeFrontier node to allow the changeFrontier
+// to persist the overall changefeed's progress
 func (ca *changeAggregator) noteResolvedSpan(resolved *jobspb.ResolvedSpan) error {
 	advanced, err := ca.frontier.ForwardResolvedSpan(*resolved)
 	if err != nil {
@@ -510,13 +535,14 @@ func (ca *changeAggregator) noteResolvedSpan(resolved *jobspb.ResolvedSpan) erro
 	}
 
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
+
 	checkpointFrontier := advanced &&
 		(forceFlush || ca.lastFlush.Add(ca.flushFrequency).Before(timeutil.Now()))
 
-	// We can attempt to checkpoint initial backfill progress.
+	// If backfilling we must also consider the Backfill Checkpointing frequency
 	checkpointBackfill := ca.spec.JobID != 0 && /* enterprise changefeed */
-		ca.frontier.Frontier().IsEmpty() && /* initial backfill */
-		canCheckpointInitialScan(&ca.flowCtx.Cfg.Settings.SV, ca.lastFlush)
+		resolved.Timestamp.Equal(ca.frontier.BackfillTS()) &&
+		canCheckpointBackfill(&ca.flowCtx.Cfg.Settings.SV, ca.lastFlush)
 
 	if checkpointFrontier || checkpointBackfill {
 		defer func() {
@@ -541,10 +567,15 @@ func (ca *changeAggregator) flushFrontier() error {
 	// Iterate frontier spans and build a list of spans to emit.
 	var batch jobspb.ResolvedSpans
 	ca.frontier.Entries(func(s roachpb.Span, ts hlc.Timestamp) span.OpResult {
+		boundaryType := jobspb.ResolvedSpan_NONE
+		if ca.frontier.boundaryTime.Equal(ts) {
+			boundaryType = ca.frontier.boundaryType
+		}
+
 		batch.ResolvedSpans = append(batch.ResolvedSpans, jobspb.ResolvedSpan{
 			Span:         s,
 			Timestamp:    ts,
-			BoundaryType: ca.frontier.boundaryTypeAt(ts),
+			BoundaryType: boundaryType,
 		})
 		return span.ContinueMatch
 	})
@@ -927,7 +958,7 @@ func newJobState(
 	}
 }
 
-func canCheckpointInitialScan(sv *settings.Values, lastCheckpoint time.Time) bool {
+func canCheckpointBackfill(sv *settings.Values, lastCheckpoint time.Time) bool {
 	freq := changefeedbase.FrontierCheckpointFrequency.Get(sv)
 	if freq == 0 {
 		return false
@@ -935,8 +966,8 @@ func canCheckpointInitialScan(sv *settings.Values, lastCheckpoint time.Time) boo
 	return timeutil.Since(lastCheckpoint) > freq
 }
 
-func (j *jobState) canCheckpointInitialScan() bool {
-	return canCheckpointInitialScan(&j.settings.SV, j.lastProgressUpdate)
+func (j *jobState) canCheckpointBackfill() bool {
+	return canCheckpointBackfill(&j.settings.SV, j.lastProgressUpdate)
 }
 
 // canCheckpointHighWatermark returns true if we should update job high water mark (i.e. progress).
@@ -997,7 +1028,7 @@ func newChangeFrontierProcessor(
 ) (execinfra.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changefntr-mem")
-	sf, err := makeSchemaChangeFrontier(spec.TrackedSpans...)
+	sf, err := makeSchemaChangeFrontier(hlc.Timestamp{}, spec.TrackedSpans...)
 	if err != nil {
 		return nil, err
 	}
@@ -1098,9 +1129,22 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 				"Frontier checkpointing disabled; set changefeed.frontier_checkpoint_frequency to non-zero value to re-enable")
 		}
 
+		// Recover highwater information from job progress.
+		// Checkpoint information from job progress will eventually be sent to the
+		// changeFrontier from the changeAggregators.  Note that the changeFrontier
+		// may save a new checkpoint prior to receiving all spans of the
+		// aggregators' frontier, potentially missing spans that were previously
+		// checkpointed, so it is still possible for job progress to regress.
 		p := job.Progress()
 		if ts := p.GetHighWater(); ts != nil {
 			cf.highWaterAtStart.Forward(*ts)
+			cf.frontier.initialHighWater = *ts
+			for _, span := range cf.spec.TrackedSpans {
+				if _, err := cf.frontier.Forward(span, *ts); err != nil {
+					cf.MoveToDraining(err)
+					return
+				}
+			}
 		}
 
 		if p.RunningStatus != "" {
@@ -1266,7 +1310,7 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 	// have no distributed state whatsoever. Because of this they also do not
 	// use protected timestamps.
 	if cf.js != nil {
-		checkpointed, err := cf.maybeCheckpointJob(frontierChanged, isBehind)
+		checkpointed, err := cf.maybeCheckpointJob(resolved, frontierChanged, isBehind)
 		if err != nil {
 			return err
 		}
@@ -1292,24 +1336,27 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 	return nil
 }
 
-func (cf *changeFrontier) maybeCheckpointJob(frontierChanged, isBehind bool) (bool, error) {
-	// See if we can update highwatermark.
-	// We always update watermark when we reach schema change boundary.
-	// Otherwise, we checkpoint when  frontier changes
-	// (and we can checkpoint), or if it has changed in the past, but we skipped that update.
-	updateHighWater :=
-		cf.frontier.schemaChangeBoundaryReached() || cf.js.canCheckpointHighWatermark(frontierChanged)
+func (cf *changeFrontier) maybeCheckpointJob(
+	resolvedSpan jobspb.ResolvedSpan, frontierChanged, isBehind bool,
+) (bool, error) {
+	// When in a Backfill, the frontier remains unchanged at the backfill boundary
+	// as we receive spans from the scan request at the Backfill Timestamp
+	inBackfill := !frontierChanged && resolvedSpan.Timestamp.Equal(cf.frontier.BackfillTS())
 
-	// Update checkpoint if the frontier has not changed, but it is time to checkpoint.
-	// If the frontier has changed, we want to write an empty checkpoint record indicating
-	// that all spans have reached the frontier.
-	updateCheckpoint := !updateHighWater && cf.js.canCheckpointInitialScan()
+	// During a backfill we store a checkpoint of completed scans at a throttled rate in the job record
+	updateCheckpoint := inBackfill && cf.js.canCheckpointBackfill()
 
 	var checkpoint jobspb.ChangefeedProgress_Checkpoint
 	if updateCheckpoint {
 		maxBytes := changefeedbase.FrontierCheckpointMaxBytes.Get(&cf.flowCtx.Cfg.Settings.SV)
 		checkpoint.Spans = cf.frontier.getCheckpointSpans(maxBytes)
 	}
+
+	// If we're not in a backfill, highwater progress and an empty checkpoint will
+	// be saved. This is throttled however we always persist progress to a schema
+	// boundary.
+	updateHighWater :=
+		!inBackfill && (cf.frontier.schemaChangeBoundaryReached() || cf.js.canCheckpointHighWatermark(frontierChanged))
 
 	if updateCheckpoint || updateHighWater {
 		manageProtected := updateHighWater
@@ -1551,63 +1598,77 @@ func (s *spanFrontier) frontierTimestamp() hlc.Timestamp {
 	return s.Frontier.Frontier()
 }
 
-// schemaChangeFrontier encapsulates span frontier, keeping track of span resolved time,
-// along with the schema change boundary information.
+// schemaChangeFrontier encapsulates the span frontier, which keeps track of the
+// per-span timestamps we no longer need to emit, along with information about
+// the most recently observed schema change boundary.
 type schemaChangeFrontier struct {
 	*spanFrontier
 
-	// boundaryTime represents an hlc timestamp at which a schema change
-	// event occurred to a target watched by this frontier. If the changefeed is
-	// configured to stop on schema change then the changeFrontier will wait for
-	// the span frontier to reach the schemaChangeBoundary, will drain, and then
-	// will exit. If the changefeed is configured to backfill on schema changes,
-	// the changeFrontier will protect the scan timestamp in order to ensure that
-	// the scan complete. The protected timestamp will be released when a new scan
-	// schemaChangeBoundary is created or the changefeed reaches a timestamp that
-	// is near the present.
-	//
 	// schemaChangeBoundary values are communicated to the changeFrontier via
 	// Resolved messages send from the changeAggregators. The policy regarding
 	// which schema change events lead to a schemaChangeBoundary is controlled
 	// by the KV feed based on OptSchemaChangeEvents and OptSchemaChangePolicy.
+	//
+	// When the changeFrontier receives a ResolvedSpan with a non-none
+	// BoundaryType, it instructs the changefeed to wait for all watched spans to
+	// reach the boundary and then depending on the specific BoundaryType, either
+	// drain and exit, restart, or begin a backfill.
+	// Upon reaching a boundary, sinkful changefeeds will save a protected
+	// timestamp record in the jobs entry to ensure our ability to
+	// restart/backfill from that boundary.
+
+	// boundaryTime indicates the timestamp of the most recently observed resolved
+	// span with a non-none boundary type, i.e. the most recent schema change
+	// boundary.
 	boundaryTime hlc.Timestamp
 
-	// boundaryType indicates the type of the schemaChangeBoundary and thus the
-	// action which should be taken when the frontier reaches that boundary.
+	// boundaryType indicates the type of the most recently observed schema change
+	// boundary which corresponds to the action which should be taken when the
+	// frontier reaches that boundary.
 	boundaryType jobspb.ResolvedSpan_BoundaryType
+
+	// latestTs indicates the most recent timestamp that any span in the frontier
+	// has ever been forwarded to.
+	latestTs hlc.Timestamp
+
+	// initialHighWater is either the StatementTime for a new changefeed or the
+	// recovered highwater mark for a resumed changefeed
+	initialHighWater hlc.Timestamp
 }
 
-func makeSchemaChangeFrontier(spans ...roachpb.Span) (*schemaChangeFrontier, error) {
+func makeSchemaChangeFrontier(
+	initialHighWater hlc.Timestamp, spans ...roachpb.Span,
+) (*schemaChangeFrontier, error) {
 	sf, err := span.MakeFrontier(spans...)
 	if err != nil {
 		return nil, err
 	}
-	return &schemaChangeFrontier{spanFrontier: &spanFrontier{sf}}, nil
+	for _, span := range spans {
+		if _, err := sf.Forward(span, initialHighWater); err != nil {
+			return nil, err
+		}
+	}
+	return &schemaChangeFrontier{spanFrontier: &spanFrontier{sf}, initialHighWater: initialHighWater, latestTs: initialHighWater}, nil
 }
 
-// ForwardResolvedSpan advances the timestamp for a resolved span.
-// Takes care of updating schema change boundary information.
+// ForwardResolvedSpan advances the timestamp for a resolved span, taking care
+// of updating schema change boundary information.
 func (f *schemaChangeFrontier) ForwardResolvedSpan(r jobspb.ResolvedSpan) (bool, error) {
-	// We want to ensure that we mark the schemaChangeBoundary and then we want
-	// to detect when the frontier reaches to or past the schemaChangeBoundary.
-	// The behavior when the boundary is reached is controlled by the
-	// boundary type.
-	// NB: boundaryType and time update machinery is tricky.  In particular,
-	// we never go back to ResolvedSpan_None if we have seen newer boundary other than none.
-	switch r.BoundaryType {
-	case jobspb.ResolvedSpan_NONE:
-		if !f.boundaryTime.IsEmpty() && f.boundaryTime.Less(r.Timestamp) {
-			f.boundaryTime = hlc.Timestamp{}
-			f.boundaryType = jobspb.ResolvedSpan_NONE
-		}
-	case jobspb.ResolvedSpan_BACKFILL, jobspb.ResolvedSpan_EXIT, jobspb.ResolvedSpan_RESTART:
+	if r.BoundaryType != jobspb.ResolvedSpan_NONE {
 		if !f.boundaryTime.IsEmpty() && r.Timestamp.Less(f.boundaryTime) {
+			// Boundary resolved events should be ingested from the schema feed
+			// serially, where the changefeed won't even observe a new schema change
+			// boundary until it has progressed past the current boundary
 			return false, errors.AssertionFailedf("received boundary timestamp %v < %v "+
 				"of type %v before reaching existing boundary of type %v",
 				r.Timestamp, f.boundaryTime, r.BoundaryType, f.boundaryType)
 		}
 		f.boundaryTime = r.Timestamp
 		f.boundaryType = r.BoundaryType
+	}
+
+	if f.latestTs.Less(r.Timestamp) {
+		f.latestTs = r.Timestamp
 	}
 	return f.Forward(r.Span, r.Timestamp)
 }
@@ -1622,6 +1683,8 @@ func (f *schemaChangeFrontier) SpanFrontier() *span.Frontier {
 	return f.spanFrontier.Frontier
 }
 
+// getCheckpointSpans returns as many spans that should be checkpointed (are
+// above the highwater mark) as can fit in maxBytes.
 func (f *schemaChangeFrontier) getCheckpointSpans(maxBytes int64) (checkpoint []roachpb.Span) {
 	var used int64
 	frontier := f.frontierTimestamp()
@@ -1638,15 +1701,36 @@ func (f *schemaChangeFrontier) getCheckpointSpans(maxBytes int64) (checkpoint []
 	return checkpoint
 }
 
-// schemaChangeBoundaryReached returns true if the schema change boundary has been reached.
-func (f *schemaChangeFrontier) schemaChangeBoundaryReached() (r bool) {
-	return !f.boundaryTime.IsEmpty() && f.boundaryTime.Equal(f.Frontier())
+// BackfillTS returns the timestamp of the incoming spans for an ongoing
+// Backfill (either an Initial Scan backfill or a Schema Change backfill).
+// If no Backfill is occurring, an empty timestamp is returned.
+func (f *schemaChangeFrontier) BackfillTS() hlc.Timestamp {
+	frontier := f.Frontier()
+
+	// The scan for the initial backfill results in spans sent at StatementTime,
+	// which is what initialHighWater is set to when performing an initial scan.
+	if frontier.IsEmpty() {
+		return f.initialHighWater
+	}
+
+	// If the backfill is occurring after any initial scan (non-empty frontier),
+	// then it can only be in a schema change backfill, where the scan is
+	// performed immediately after the boundary timestamp.
+	backfilling := f.boundaryType == jobspb.ResolvedSpan_BACKFILL && frontier.Equal(f.boundaryTime)
+	// If the schema change backfill was paused and resumed, the initialHighWater
+	// is read from the job progress and is equal to the old BACKFILL boundary
+	restarted := frontier.Equal(f.initialHighWater)
+	if backfilling || restarted {
+		return frontier.Next()
+	}
+	return hlc.Timestamp{}
 }
 
-// boundaryTypeAt returns boundary type applicable at the specified timestamp.
-func (f *schemaChangeFrontier) boundaryTypeAt(ts hlc.Timestamp) jobspb.ResolvedSpan_BoundaryType {
-	if f.boundaryTime.IsEmpty() || ts.Less(f.boundaryTime) {
-		return jobspb.ResolvedSpan_NONE
-	}
-	return f.boundaryType
+// schemaChangeBoundaryReached returns true at the single moment when all spans
+// have reached a boundary however we have yet to receive any spans after the
+// boundary
+func (f *schemaChangeFrontier) schemaChangeBoundaryReached() (r bool) {
+	return f.boundaryTime.Equal(f.Frontier()) &&
+		f.latestTs.Equal(f.boundaryTime) &&
+		f.boundaryType != jobspb.ResolvedSpan_NONE
 }
