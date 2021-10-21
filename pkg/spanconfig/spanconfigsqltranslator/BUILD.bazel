@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "spanconfigsqltranslator",
@@ -19,4 +19,9 @@ go_library(
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
     ],
+)
+
+go_test(
+    name = "spanconfigsqltranslator_test",
+    srcs = ["sql_translator_test.go"],
 )
