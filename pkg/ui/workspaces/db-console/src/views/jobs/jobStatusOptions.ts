@@ -15,7 +15,7 @@ import { BadgeStatus } from "src/components";
 export enum JobStatusVisual {
   BadgeOnly,
   BadgeWithDuration,
-  BadgeWithTooltip,
+  BadgeWithNextExecutionTime,
   ProgressBarWithDuration,
   BadgeWithMessage,
   BadgeWithErrorMessage,
@@ -26,12 +26,10 @@ export function jobToVisual(job: Job): JobStatusVisual {
     return JobStatusVisual.BadgeOnly;
   }
   if (job.next_run) {
-    return JobStatusVisual.BadgeWithTooltip;
+    return JobStatusVisual.BadgeWithNextExecutionTime;
   }
   switch (job.status) {
     case JOB_STATUS_SUCCEEDED:
-      return JobStatusVisual.BadgeWithTooltip;
-      // return JobStatusVisual.BadgeWithDuration;
     case JOB_STATUS_FAILED:
       return JobStatusVisual.BadgeWithErrorMessage;
     case JOB_STATUS_CANCELED:

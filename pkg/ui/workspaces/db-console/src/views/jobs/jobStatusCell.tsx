@@ -13,9 +13,6 @@ import { cockroach } from "src/js/protos";
 import { HighwaterTimestamp } from "src/views/jobs/highwaterTimestamp";
 import { JobStatus } from "./jobStatus";
 import Job = cockroach.server.serverpb.IJobResponse;
-import { JobStatusBadge } from "src/views/jobs/progressBar";
-import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-import { Tooltip } from "antd";
 
 import classNames from "classnames/bind";
 
@@ -39,29 +36,6 @@ export const JobStatusCell: React.FC<JobStatusCellProps> = ({
         highwater={job.highwater_timestamp}
         tooltip={job.highwater_decimal}
       />
-    );
-  }
-  if (job.next_run) {
-    return (
-      <Tooltip
-        placement="bottom"
-        title={`Next Execution Time: ${job.next_run}`}
-      >
-        {/*<ToolTipWrapper text={`Next Execution Time: ${job.next_run}`}>*/}
-        {/*test*/}
-        {/*<>*/}
-        {/* tooltip library doesn't work with custom components https://github.com/ant-design/ant-design/issues/25214 */}
-        <span>
-          <JobStatusBadge jobStatus={"test"} />
-        </span>
-
-        {/*</>*/}
-        {/*<div className={cx("badge", `badge--status-default`)}>*/}
-        {/*  /!*<div className="badge__text badge__text--no-wrap">text</div>*!/*/}
-        {/*  <div className={cx("badge__text", "badge__text--no-wrap")}>text</div>*/}
-        {/*  /!*<div>text</div>*!/*/}
-        {/*</div>*/}
-      </Tooltip>
     );
   }
   return <JobStatus job={job} lineWidth={lineWidth} compact={compact} />;
