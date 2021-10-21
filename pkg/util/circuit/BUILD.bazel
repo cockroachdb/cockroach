@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "circuit",
+    srcs = [
+        "circuitbreaker.go",
+        "event_handler.go",
+        "options.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/circuit",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
+    ],
+)
+
+go_test(
+    name = "circuit_test",
+    srcs = ["circuitbreaker_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":circuit"],
+    deps = [
+        "//pkg/util/ctxgroup",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
+    ],
+)

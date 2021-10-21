@@ -352,6 +352,7 @@ ALL_TESTS = [
     "//pkg/util/cache:cache_test",
     "//pkg/util/caller:caller_test",
     "//pkg/util/cgroups:cgroups_test",
+    "//pkg/util/circuit:circuit_test",
     "//pkg/util/cloudinfo:cloudinfo_test",
     "//pkg/util/contextutil:contextutil_test",
     "//pkg/util/ctxgroup:ctxgroup_test",
