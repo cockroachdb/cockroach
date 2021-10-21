@@ -100,6 +100,22 @@ message StreamIngestionProgress {
 }
 
 
+message StreamReplicationDetails {
+  // Which tenant in the source cluster we stream replication from
+  uint64 tenant_id = 1[(gogoproto.customname) = "TenantID"];
+
+  // Key span we are replicating
+  roachpb.Span span = 2;
+
+  // Timeout after which we clean up the job
+  int64 stream_timeout = 3 [(gogoproto.casttype)="time.Duration"];
+}
+
+message StreamReplicationProgress {
+  // Last active timestamp in micros
+  int64 last_active = 1;
+}
+
 message SchedulePTSChainingRecord {
   enum PTSAction {
     UPDATE = 0;
@@ -780,6 +796,7 @@ message Payload {
     MigrationDetails migration = 25;
     AutoSpanConfigReconciliationDetails autoSpanConfigReconciliation = 27;
     AutoSQLStatsCompactionDetails autoSQLStatsCompaction = 30;
+    StreamReplicationDetails streamReplicationDetails = 33;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -791,7 +808,7 @@ message Payload {
   // the jobs.execution_errors.max_entries cluster setting.
   repeated RetriableExecutionFailure retriable_execution_failure_log = 32;
 
-  // NEXT ID: 33.
+  // NEXT ID: 34.
 }
 
 message Progress {
@@ -816,6 +833,7 @@ message Progress {
     MigrationProgress migration = 20;
     AutoSpanConfigReconciliationProgress AutoSpanConfigReconciliation = 22;
     AutoSQLStatsCompactionProgress autoSQLStatsCompaction = 23;
+    StreamReplicationProgress streamReplicationProgress = 24;
   }
 
   uint64 trace_id = 21 [(gogoproto.customname) = "TraceID"];
@@ -842,6 +860,7 @@ enum Type {
   MIGRATION = 12 [(gogoproto.enumvalue_customname) = "TypeMigration"];
   AUTO_SPAN_CONFIG_RECONCILIATION = 13 [(gogoproto.enumvalue_customname) = "TypeAutoSpanConfigReconciliation"];
   AUTO_SQL_STATS_COMPACTION = 14 [(gogoproto.enumvalue_customname) = "TypeAutoSQLStatsCompaction"];
+  STREAM_REPLICATION = 15 [(gogoproto.enumvalue_customname) = "TypeStreamReplication"];
 }
 
 message Job {

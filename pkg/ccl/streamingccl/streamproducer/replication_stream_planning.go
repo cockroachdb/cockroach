@@ -10,7 +10,6 @@ package streamproducer
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"

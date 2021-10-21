@@ -1231,6 +1231,7 @@ func (r *Registry) stepThroughStateMachine(
 			}
 			return sErr
 		}
+		// reverting
 		return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusReverting, err)
 	case StatusPauseRequested:
 		return errors.Errorf("job %s", status)

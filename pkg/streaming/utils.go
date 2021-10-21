@@ -11,14 +11,8 @@
 package streaming
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-// CompleteIngestionHook is the hook run by the
-// crdb_internal.complete_stream_ingestion_job builtin.
-// It is used to signal to a running stream ingestion job to stop ingesting data
-// and eventually move to a consistent state as of the latest resolved
-// timestamp.
-var CompleteIngestionHook func(*tree.EvalContext, *kv.Txn, int, hlc.Timestamp) error
+// StreamAPIFactoryHook is the hook for the collection of APIs that streaming replication builtins support.
+var StreamAPIFactoryHook func(apiName string, evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error)

@@ -9,11 +9,11 @@
 package streamingutils
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -21,7 +21,14 @@ import (
 )
 
 func init() {
-	streaming.CompleteIngestionHook = doCompleteIngestion
+	streamingccl.RegisterStreamAPI("complete_stream_ingestion_job",
+		func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			jobID := int(*args[0].(*tree.DInt))
+			cutoverTime := args[1].(*tree.DTimestampTZ).Time
+			cutoverTimestamp := hlc.Timestamp{WallTime: cutoverTime.UnixNano()}
+			err := doCompleteIngestion(evalCtx, evalCtx.Txn, jobID, cutoverTimestamp)
+			return tree.NewDInt(tree.DInt(jobID)), err
+		})
 }
 
 func doCompleteIngestion(

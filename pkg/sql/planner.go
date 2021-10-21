@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -593,6 +594,15 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 	}
 	return tree.ID(desc.GetID()), nil
 }
+
+func (p *planner) JobRegistry() interface{} {
+	return p.ExecCfg().JobRegistry
+}
+
+func (p *planner) ProtectedTimestampProvider() protectedts.Provider {
+	return p.ExecCfg().ProtectedTimestampProvider
+}
+
 
 // LookupTableByID looks up a table, by the given descriptor ID. Based on the
 // CommonLookupFlags, it could use or skip the Collection cache.
