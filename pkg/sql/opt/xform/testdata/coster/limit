@@ -51,7 +51,7 @@ offset
  │         │    ├── fd: ()-->(2), (1)-->(4)
  │         │    ├── ordering: +4,-1 opt(2) [actual: +4,-1]
  │         │    ├── limit hint: 1020.00
- │         │    └── scan a@secondary
+ │         │    └── scan a@a_y_s_idx
  │         │         ├── columns: x:1!null y:2!null s:4!null
  │         │         ├── constraint: /2/4/1: [/10 - /10]
  │         │         ├── stats: [rows=10, distinct(2)=1, null(2)=0, distinct(4)=9.5617925, null(4)=0]

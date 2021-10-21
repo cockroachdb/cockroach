@@ -435,7 +435,7 @@ project
  ├── stats: [rows=1.245025, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(2-4)=1, null(2-4)=0]
  ├── key: (1)
  ├── fd: ()-->(2-4)
- ├── scan t@secondary,partial
+ ├── scan t@t_pk2_idx,partial
  │    ├── columns: pk1:1(int!null) pk2:2(int!null)
  │    ├── constraint: /2/1: [/1 - /1]
  │    ├── stats: [rows=1.245025, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(2-4)=1, null(2-4)=0]

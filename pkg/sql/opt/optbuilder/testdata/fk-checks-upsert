@@ -418,7 +418,7 @@ INSERT INTO c4 SELECT x, y, z FROM xyzw ON CONFLICT (a) DO UPDATE SET other = 1
 ----
 upsert c4
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: c4_a_key
  ├── canary column: c:13
  ├── fetch columns: c:13 c4.a:14 c4.other:15
  ├── insert-mapping:
@@ -478,7 +478,7 @@ INSERT INTO c4 SELECT x, y, z FROM xyzw ON CONFLICT (a) DO UPDATE SET a = 5
 ----
 upsert c4
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: c4_a_key
  ├── canary column: c:13
  ├── fetch columns: c:13 c4.a:14 c4.other:15
  ├── insert-mapping:
@@ -1697,7 +1697,7 @@ INSERT INTO pq VALUES (1, 1, 1, 1), (2, 2, 2, 2) ON CONFLICT (p,q) DO UPDATE SET
 ----
 upsert pq
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: pq_p_q_key
  ├── canary column: k:11
  ├── fetch columns: k:11 p:12 q:13 other:14
  ├── insert-mapping:
@@ -1743,7 +1743,7 @@ INSERT INTO pq VALUES (1, 1, 1, 1), (2, 2, 2, 2) ON CONFLICT (p,q) DO UPDATE SET
 ----
 upsert pq
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: pq_p_q_key
  ├── canary column: k:11
  ├── fetch columns: k:11 pq.p:12 pq.q:13 pq.other:14
  ├── insert-mapping:
