@@ -65,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -610,27 +611,25 @@ func (s *statusServer) Allocator(
 	err = s.stores.VisitStores(func(store *kvserver.Store) error {
 		// All ranges requested:
 		if len(req.RangeIDs) == 0 {
-			// Use IterateRangeDescriptors to read from the engine only
-			// because it's already exported.
-			err := kvserver.IterateRangeDescriptors(ctx, store.Engine(),
-				func(desc roachpb.RangeDescriptor) error {
-					rep := store.GetReplicaIfExists(desc.RangeID)
-					if rep == nil {
-						return nil // continue
-					}
+			var err error
+			store.VisitReplicas(
+				func(rep *kvserver.Replica) bool {
 					if !rep.OwnsValidLease(ctx, store.Clock().NowAsClockTimestamp()) {
-						return nil
+						return true
 					}
-					allocatorSpans, err := store.AllocatorDryRun(ctx, rep)
+					var allocatorSpans tracing.Recording
+					allocatorSpans, err = store.AllocatorDryRun(ctx, rep)
 					if err != nil {
-						return err
+						return false
 					}
 					output.DryRuns = append(output.DryRuns, &serverpb.AllocatorDryRun{
-						RangeID: desc.RangeID,
+						RangeID: rep.RangeID,
 						Events:  recordedSpansToTraceEvents(allocatorSpans),
 					})
-					return nil
-				})
+					return true
+				},
+				kvserver.WithReplicasInOrder(),
+			)
 			return err
 		}
 
