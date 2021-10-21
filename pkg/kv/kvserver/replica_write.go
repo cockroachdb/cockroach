@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -33,8 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
-	"go.etcd.io/etcd/raft/v3"
 )
 
 // migrateApplicationTimeout is the duration to wait for a Migrate command
@@ -173,26 +170,6 @@ func (r *Replica) executeWriteBatch(
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
 	shouldQuiesce := r.store.stopper.ShouldQuiesce()
-	startPropTime := timeutil.Now()
-	slowTimer := timeutil.NewTimer()
-	defer slowTimer.Stop()
-	slowTimer.Reset(r.store.cfg.SlowReplicationThreshold)
-	// NOTE: this defer was moved from a case in the select statement to here
-	// because escape analysis does a better job avoiding allocations to the
-	// heap when defers are unconditional. When this was in the slowTimer select
-	// case, it was causing pErr to escape.
-	defer func() {
-		if slowTimer.Read {
-			r.store.metrics.SlowRaftRequests.Dec(1)
-			log.Infof(
-				ctx,
-				"slow command %s finished after %.2fs with error %v",
-				ba,
-				timeutil.Since(startPropTime).Seconds(),
-				pErr,
-			)
-		}
-	}()
 
 	for {
 		select {
@@ -286,15 +263,6 @@ func (r *Replica) executeWriteBatch(
 
 			return propResult.Reply, nil, propResult.Err
 
-		case <-slowTimer.C:
-			slowTimer.Read = true
-			r.store.metrics.SlowRaftRequests.Inc(1)
-
-			var s redact.StringBuilder
-			rangeUnavailableMessage(&s, r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
-				r.RaftStatus(), ba, timeutil.Since(startPropTime))
-			log.Errorf(ctx, "range unavailable: %v", s)
-
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
 			// which indicates to the caller that the command may have executed.
@@ -343,54 +311,6 @@ func (r *Replica) executeWriteBatch(
 			return nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultError("server shutdown"))
 		}
 	}
-}
-
-func rangeUnavailableMessage(
-	s *redact.StringBuilder,
-	desc *roachpb.RangeDescriptor,
-	lm liveness.IsLiveMap,
-	rs *raft.Status,
-	ba *roachpb.BatchRequest,
-	dur time.Duration,
-) {
-	var liveReplicas, otherReplicas []roachpb.ReplicaDescriptor
-	for _, rDesc := range desc.Replicas().Descriptors() {
-		if lm[rDesc.NodeID].IsLive {
-			liveReplicas = append(liveReplicas, rDesc)
-		} else {
-			otherReplicas = append(otherReplicas, rDesc)
-		}
-	}
-
-	// Ensure that these are going to redact nicely.
-	var _ redact.SafeFormatter = ba
-	var _ redact.SafeFormatter = desc
-	var _ redact.SafeFormatter = roachpb.ReplicaSet{}
-
-	s.Printf(`have been waiting %.2fs for proposing command %s.
-This range is likely unavailable.
-Please submit this message to Cockroach Labs support along with the following information:
-
-Descriptor:  %s
-Live:        %s
-Non-live:    %s
-Raft Status: %+v
-
-and a copy of https://yourhost:8080/#/reports/range/%d
-
-If you are using CockroachDB Enterprise, reach out through your
-support contract. Otherwise, please open an issue at:
-
-  https://github.com/cockroachdb/cockroach/issues/new/choose
-`,
-		dur.Seconds(),
-		ba,
-		desc,
-		roachpb.MakeReplicaSet(liveReplicas),
-		roachpb.MakeReplicaSet(otherReplicas),
-		redact.Safe(rs), // raft status contains no PII
-		desc.RangeID,
-	)
 }
 
 // canAttempt1PCEvaluation looks at the batch and decides whether it can be

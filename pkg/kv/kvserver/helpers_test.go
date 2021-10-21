@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	circuit2 "github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -219,6 +220,10 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 		},
 		/* deterministic */ false,
 	)
+}
+
+func (r *Replica) Breaker() *circuit2.Breaker {
+	return r.breaker.wrapped
 }
 
 func (r *Replica) AssertState(ctx context.Context, reader storage.Reader) {

@@ -264,6 +264,16 @@ type Replica struct {
 	// miss out on anything.
 	raftCtx context.Context
 
+	// breaker is a per-Replica circuit breaker. Its purpose is to avoid incurring
+	// large (infinite) latencies on client requests when the Replica is unable to
+	// serve commands. This circuit breaker does *not* recruit the occasional
+	// request to determine whether it is safe to heal the breaker. Instead, it
+	// has its own probe that is executed asynchronously and determines when the
+	// Replica is healthy again.
+	//
+	// See replica_circuit_breaker.go for details.
+	breaker *replicaCircuitBreaker
+
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
@@ -1227,6 +1237,9 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 		ctx, r.RangeID, r.mu.state.Lease.Replica.NodeID)
 	ri.ClosedTimestampSideTransportInfo.CentralClosed = centralClosed
 	ri.ClosedTimestampSideTransportInfo.CentralLAI = centralLAI
+	if err := r.breaker.Signal().Err(); err != nil {
+		ri.CircuitBreakerError = err.Error()
+	}
 
 	return ri
 }

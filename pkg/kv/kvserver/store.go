@@ -1059,10 +1059,6 @@ type StoreConfig struct {
 
 	// KVAdmissionController is an optional field used for admission control.
 	KVAdmissionController KVAdmissionController
-
-	// SlowReplicationThreshold is the duration after which an in-flight proposal
-	// is tracked in the requests.slow.raft metric.
-	SlowReplicationThreshold time.Duration
 }
 
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
@@ -1108,9 +1104,6 @@ func (sc *StoreConfig) SetDefaults() {
 
 	if sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction == 0 {
 		sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
-	}
-	if sc.SlowReplicationThreshold == 0 {
-		sc.SlowReplicationThreshold = base.SlowRequestThreshold
 	}
 }
 
