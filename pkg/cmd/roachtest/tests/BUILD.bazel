@@ -173,7 +173,6 @@ go_library(
         "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/search",
-        "//pkg/util/sysutil",
         "//pkg/util/timeutil",
         "//pkg/util/version",
         "//pkg/workload/histogram",

@@ -234,24 +234,15 @@ func (b *Builder) buildCTE(
 	cteScope.ctes = map[string]*cteSource{cte.Name.Alias.String(): cteSrc}
 
 	initial, recursive, isUnionAll, ok := b.splitRecursiveCTE(cte.Stmt)
-	// We don't currently support the UNION form (only UNION ALL).
-	if !ok || !isUnionAll {
+	if !ok {
 		// Build this as a non-recursive CTE, but throw a proper error message if it
 		// does have a recursive reference.
 		cteSrc.onRef = func() {
-			if !ok {
-				panic(pgerror.Newf(
-					pgcode.Syntax,
-					"recursive query %q does not have the form non-recursive-term UNION ALL recursive-term",
-					cte.Name.Alias,
-				))
-			} else {
-				panic(unimplementedWithIssueDetailf(
-					46642, "",
-					"recursive query %q uses UNION which is not implemented (only UNION ALL is supported)",
-					cte.Name.Alias,
-				))
-			}
+			panic(pgerror.Newf(
+				pgcode.Syntax,
+				"recursive query %q does not have the form non-recursive-term UNION [ALL] recursive-term",
+				cte.Name.Alias,
+			))
 		}
 		return b.buildCTE(cte, cteScope, false /* recursive */)
 	}
@@ -357,6 +348,7 @@ func (b *Builder) buildCTE(
 		InitialCols:   colsToColList(initialScope.cols),
 		RecursiveCols: colsToColList(recursiveScope.cols),
 		OutCols:       colsToColList(outScope.cols),
+		Deduplicate:   !isUnionAll,
 	}
 
 	expr := b.factory.ConstructRecursiveCTE(cteSrc.expr, initialScope.expr, recursiveScope.expr, &private)
@@ -396,9 +388,9 @@ func (b *Builder) getCTECols(cteScope *scope, name tree.AliasClause) physical.Pr
 }
 
 // splitRecursiveCTE splits a CTE statement of the form
-//   initial_query UNION ALL recursive_query
-// into the initial and recursive parts. If the statement is not of this form,
-// returns ok=false.
+//   initial_query UNION [ALL] recursive_query
+// into the initial and recursive parts.
+// If the statement is not of this form, returns ok=false.
 func (b *Builder) splitRecursiveCTE(
 	stmt tree.Statement,
 ) (initial, recursive *tree.Select, isUnionAll bool, ok bool) {

@@ -1262,6 +1262,10 @@ define RecursiveCTEPrivate {
     # These columns are also used by the Recursive query to refer to the working
     # table (see WithID).
     OutCols ColList
+
+    # Deduplicate indicates if output rows should be deduplicated against all
+    # previous output rows (UNION variant, not UNION ALL).
+    Deduplicate bool
 }
 
 # FakeRel is a mock relational operator used for testing and as a dummy binding
