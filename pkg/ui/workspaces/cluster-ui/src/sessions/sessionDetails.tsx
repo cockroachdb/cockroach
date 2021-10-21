@@ -19,6 +19,7 @@ import { Link, RouteComponentProps } from "react-router-dom";
 import { SessionInfo } from "./sessionsTable";
 
 import { SummaryCard, SummaryCardItem } from "../summaryCard";
+import SQLActivityError from "../sqlActivity/errorComponent";
 
 import { TimestampToMoment } from "src/util/convert";
 import { Bytes, DATE_FORMAT } from "src/util/format";
@@ -207,6 +208,11 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
             loading={_.isNil(this.props.session)}
             error={this.props.sessionError}
             render={this.renderContent}
+            renderError={() =>
+              SQLActivityError({
+                statsType: "sessions",
+              })
+            }
           />
         </section>
         <TerminateSessionModal
