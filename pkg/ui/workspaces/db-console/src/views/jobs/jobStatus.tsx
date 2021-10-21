@@ -15,8 +15,8 @@ import { Duration } from "src/views/jobs/duration";
 import Job = cockroach.server.serverpb.IJobResponse;
 import { cockroach } from "src/js/protos";
 import {
-  JOB_STATUS_RETRYING,
   JobStatusVisual,
+  jobToDisplayStatus,
   jobToVisual,
 } from "src/views/jobs/jobStatusOptions";
 import { InlineAlert } from "src/components";
@@ -41,14 +41,15 @@ export const JobStatus: React.FC<JobStatusProps> = ({
   lineWidth,
 }) => {
   const visualType = jobToVisual(job);
+  const jobDisplayStatus = jobToDisplayStatus(job);
 
   switch (visualType) {
     case JobStatusVisual.BadgeOnly:
-      return <JobStatusBadge jobStatus={job.status} />;
+      return <JobStatusBadge jobStatus={jobDisplayStatus} />;
     case JobStatusVisual.BadgeWithDuration:
       return (
         <div>
-          <JobStatusBadge jobStatus={job.status} />
+          <JobStatusBadge jobStatus={jobDisplayStatus} />
           <span className="jobs-table__duration">
             <Duration job={job} />
           </span>
@@ -70,14 +71,14 @@ export const JobStatus: React.FC<JobStatusProps> = ({
     case JobStatusVisual.BadgeWithMessage:
       return (
         <div>
-          <JobStatusBadge jobStatus={job.status} />
+          <JobStatusBadge jobStatus={jobDisplayStatus} />
           <span className="jobs-table__duration">{job.running_status}</span>
         </div>
       );
     case JobStatusVisual.BadgeWithErrorMessage:
       return (
         <div>
-          <JobStatusBadge jobStatus={job.status} />
+          <JobStatusBadge jobStatus={jobDisplayStatus} />
           {!compact && (
             <InlineAlert
               title={job.error}
@@ -101,11 +102,11 @@ export const JobStatus: React.FC<JobStatusProps> = ({
           }
         >
           {/*<span>*/}
-          <JobStatusBadge jobStatus={JOB_STATUS_RETRYING} />
+          <JobStatusBadge jobStatus={jobDisplayStatus} />
           {/*</span>*/}
         </Tooltip>
       );
     default:
-      return <JobStatusBadge jobStatus={job.status} />;
+      return <JobStatusBadge jobStatus={jobDisplayStatus} />;
   }
 };

@@ -46,7 +46,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
     title: (
       <Tooltip
         placement="bottom"
-        style="tableTitle"
+        // style="tableTitle"
         content={
           <p>
             The description of the job, if set, or the SQL statement if there is

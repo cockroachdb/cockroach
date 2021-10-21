@@ -1853,7 +1853,9 @@ func (s *adminServer) Jobs(
         FROM crdb_internal.jobs
        WHERE true
 	`)
-	if req.Status != "" {
+	if req.Status == "retrying" {
+		q.Append(" AND status IN ('running', 'reverting') AND next_run > now() AND num_runs > 0")
+	} else if req.Status != "" {
 		q.Append(" AND status = $", req.Status)
 	}
 	if req.Type != jobspb.TypeUnspecified {

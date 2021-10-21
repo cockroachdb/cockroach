@@ -59,11 +59,6 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648118),
             nanos: 215527000,
           }),
-
-          next_run: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648417),
-            nanos: 116912000,
-          }),
         },
         {
           id: new Long(7003330561, 70312826),
@@ -243,6 +238,41 @@ export const jobTablePropsFixture: JobTableProps = {
           }),
         },
         {
+          id: new Long(3390625793, 70312826),
+          type: "STREAM INGESTION",
+          description:
+            "RESTORE DATABASE backup_database_name FROM 'your_backup_location';",
+          username: "root",
+          descriptor_ids: [53],
+          status: "retrying",
+          created: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          started: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          finished: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121906000,
+          }),
+          modified: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121173000,
+          }),
+          fraction_completed: 1,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          num_runs: new Long(3),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(3034648417), // some long time in the future, because it needs to be in the future to show as retrying
+            nanos: 116912000,
+          }),
+        },
+        {
           id: new Long(4337653761, 70312826),
           type: "CREATE STATS",
           description: "SELECT job_id, job_type FROM [SHOW JOB 1]",
@@ -362,40 +392,6 @@ export const jobTablePropsFixture: JobTableProps = {
           fraction_completed: 1,
           last_run: new protos.google.protobuf.Timestamp({
             seconds: new Long(1634648117),
-            nanos: 116912000,
-          }),
-        },
-        {
-          id: new Long(3390625793, 70312826),
-          type: "STREAM INGESTION",
-          description:
-            "RESTORE DATABASE backup_database_name FROM 'your_backup_location';",
-          username: "root",
-          descriptor_ids: [53],
-          status: "succeeded",
-          created: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 98294000,
-          }),
-          started: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 116912000,
-          }),
-          finished: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 121906000,
-          }),
-          modified: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 121173000,
-          }),
-          fraction_completed: 1,
-          last_run: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 116912000,
-          }),
-          next_run: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648417),
             nanos: 116912000,
           }),
         },

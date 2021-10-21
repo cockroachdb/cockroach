@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { jobStatusToBadgeStatus } from "src/views/jobs/jobStatusOptions";
+import { jobDisplayStatusToBadgeStatus } from "src/views/jobs/jobStatusOptions";
 import Job = cockroach.server.serverpb.IJobResponse;
 import { cockroach } from "src/js/protos";
 import { Badge } from "src/components";
@@ -18,7 +18,7 @@ import { Line } from "rc-progress";
 export class JobStatusBadge extends React.PureComponent<{ jobStatus: string }> {
   render() {
     const jobStatus = this.props.jobStatus;
-    const badgeStatus = jobStatusToBadgeStatus(jobStatus);
+    const badgeStatus = jobDisplayStatusToBadgeStatus(jobStatus);
     return <Badge status={badgeStatus} text={jobStatus} />;
   }
 }
