@@ -422,7 +422,8 @@ SELECT setval('setval_test', 10)
 ----
 10
 
-# Calling setval doesn't affect currval or lastval; they return the last value obtained with nextval.
+# Calling setval with is_called=false doesn't affect currval or lastval; they
+# return the last value obtained with nextval.
 query I
 SELECT currval('setval_test')
 ----
@@ -436,31 +437,36 @@ SELECT lastval()
 query I
 SELECT nextval('setval_test')
 ----
-11
+10
 
 query I
 SELECT currval('setval_test')
 ----
-11
+10
 
 query I
 SELECT lastval()
 ----
-11
+10
 
 let $setval_test_id
 SELECT 'setval_test'::regclass::int
 
 query I
-SELECT setval($setval_test_id::regclass, 20)
+SELECT setval($setval_test_id::regclass, 20, true)
 ----
 20
 
-# Calling setval doesn't affect currval or lastval; they return the last value obtained with nextval.
+# Calling setval with is_called=true does affect currval and lastval.
 query I
 SELECT currval($setval_test_id::regclass)
 ----
-11
+20
+
+query I
+SELECT lastval()
+----
+20
 
 query I
 SELECT nextval($setval_test_id::regclass)
@@ -951,11 +957,13 @@ user testuser
 
 # After the grant, testuser can select, increment, and set.
 
-statement ok
+query I
 SELECT nextval('priv_test')
+----
+1
 
 statement ok
-SELECT setval('priv_test', 5)
+SELECT setval('priv_test', 5, true)
 
 query I
 SELECT last_value FROM priv_test
@@ -1837,3 +1845,102 @@ CREATE SEQUENCE db4.s;
 
 statement error pq: sequence references cannot come from other databases; \(see the 'sql\.cross_db_sequence_references\.enabled' cluster setting\)
 CREATE TABLE tDb4Ref (i INT PRIMARY KEY DEFAULT (nextval('db4.s')));
+
+subtest cached_sequences_invalidate
+
+# Test for #71135 -- make sure that setval invalidates the cached sequence
+# values.
+
+statement ok
+CREATE SEQUENCE seq71135 CACHE 100
+
+query I
+SELECT nextval('seq71135')
+----
+1
+
+query I
+SELECT setval('seq71135', 200, true)
+----
+200
+
+query I
+SELECT lastval()
+----
+200
+
+query I
+SELECT currval('seq71135')
+----
+200
+
+query I
+SELECT nextval('seq71135')
+----
+201
+
+# The 2-parameter version of setval uses is_called=false.
+query I
+SELECT setval('seq71135'::regclass::oid, 500)
+----
+500
+
+query I
+SELECT lastval()
+----
+201
+
+query I
+SELECT currval('seq71135')
+----
+201
+
+query I
+SELECT nextval('seq71135')
+----
+500
+
+subtest sequence_in_txn
+
+# Make sure that setval and next work even if the transaction is rolled back;
+# they do not respect transaction boundaries.
+
+statement ok
+CREATE SEQUENCE seq_txn
+
+statement ok
+BEGIN
+
+query I
+SELECT setval('seq_txn', 600, true)
+----
+600
+
+statement ok
+ROLLBACK
+
+query I
+SELECT nextval('seq_txn')
+----
+601
+
+statement ok
+BEGIN
+
+query I
+SELECT setval('seq_txn', 610, true)
+----
+610
+
+query I
+SELECT nextval('seq_txn')
+----
+611
+
+statement ok
+ROLLBACK
+
+query I
+SELECT nextval('seq_txn')
+----
+612
