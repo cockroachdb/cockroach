@@ -258,7 +258,7 @@ INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT DO NOTHING
 ----
 insert uniq
  ├── columns: <none>
- ├── arbiter indexes: primary uniq_v_key
+ ├── arbiter indexes: uniq_pkey uniq_v_key
  ├── arbiter constraints: unique_w unique_x_y
  ├── insert-mapping:
  │    ├── column1:8 => k:1
@@ -893,7 +893,7 @@ INSERT INTO uniq_partial VALUES (1, 2, 3), (2, 2, 3) ON CONFLICT DO NOTHING
 ----
 insert uniq_partial
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: uniq_partial_pkey
  ├── arbiter constraints: unique_a
  ├── insert-mapping:
  │    ├── column1:6 => k:1

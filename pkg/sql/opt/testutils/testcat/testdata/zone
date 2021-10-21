@@ -21,7 +21,7 @@ TABLE abc
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX abc_pkey
  │    ├── a int not null
  │    └── ZONE
  │         └── constraints: [+region=central]
@@ -47,7 +47,7 @@ TABLE abc
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX abc_pkey
  │    ├── a int not null
  │    └── ZONE
  │         └── constraints: [+region=central]
@@ -75,7 +75,7 @@ TABLE abc
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX abc_pkey
  │    ├── a int not null
  │    └── ZONE
  │         └── constraints: [+region=central]
@@ -105,7 +105,7 @@ TABLE abc
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX abc_pkey
  │    ├── a int not null
  │    └── ZONE
  │         └── constraints: [+region=us,+dc=central,+rack=1]
@@ -135,7 +135,7 @@ TABLE abc
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX abc_pkey
  │    ├── a int not null
  │    └── ZONE
  │         └── constraints: [+region=us,+dc=central,+rack=1]
@@ -165,7 +165,7 @@ TABLE abc
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX abc_pkey
  │    ├── a int not null
  │    └── ZONE
  │         └── constraints: [+region=us,+dc=central,+rack=1]
@@ -225,7 +225,7 @@ TABLE abc_part
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── CHECK (r IN ('east', 'west'))
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX abc_part_pkey
  │    └── a int not null
  ├── UNIQUE INDEX bc_idx
  │    ├── r string not null

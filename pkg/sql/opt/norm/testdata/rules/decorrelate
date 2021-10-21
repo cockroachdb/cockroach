@@ -91,7 +91,7 @@ RETURNING *
 ----
 upsert xy
  ├── columns: x:1!null y:2
- ├── arbiter indexes: primary
+ ├── arbiter indexes: xy_pkey
  ├── canary column: x:7
  ├── fetch columns: x:7 y:8
  ├── insert-mapping:
