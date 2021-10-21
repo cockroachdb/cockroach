@@ -68,6 +68,10 @@ type ProposalData struct {
 	// last (re-)proposed.
 	proposedAtTicks int
 
+	// createdAtTicks is the (logical) time at which this command was
+	// *first* proposed.
+	createdAtTicks int
+
 	// command is serialized and proposed to raft. In the event of
 	// reproposals its MaxLeaseIndex field is mutated.
 	command *kvserverpb.RaftCommand
