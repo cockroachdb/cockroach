@@ -317,6 +317,12 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	// cancellation of all contexts onto this new one, only canceling it if all
 	// coalesced requests timeout/cancel. p.cancelLocked (defined below) is the
 	// cancel function that must be called; calling just cancel is insufficient.
+	//
+	// TODO(tbg): the multiplexing makes less sense with circuit breakers. Or
+	// rather it does make sense but only if we also multiplex a "circuit breaker
+	// client" on top (who is ready to wait for up to base.SlowRequestThreshold).
+	// That seems like a reasonable approach and could be integrated with the
+	// time.AfterFunc below.
 	ctx := p.repl.AnnotateCtx(context.Background())
 	const opName = "request range lease"
 	tr := p.repl.AmbientContext.Tracer
@@ -360,7 +366,35 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		},
 		func(ctx context.Context) {
 			defer sp.Finish()
-
+			// TODO(during review): needs RunWithTimeout or linter will complain.
+			ctx, cancel := context.WithTimeout(ctx, base.SlowRequestThreshold)
+			ctx, finishAndGet := tracing.ContextWithRecordingSpan(ctx, p.repl.Tracer, "lease")
+			defer finishAndGet()
+			tBegin := timeutil.Now()
+			tmr := time.AfterFunc(base.SlowRequestThreshold, func() {
+				// TODO(tbg): this should replace the other "have been waiting ... to acquire lease"
+				// logsite that is downstream of this call (on the actual proposal). This location here
+				// is better because it closes over all interactions with the liveness range as well.
+				//
+				// TODO(tbg): a test would be nice, even if it's a manual one, to make sure the traces
+				// here are useful in the first place. In particular, it would be nice if we could
+				// temporarily configure the raft logger to report to the trace we have open. This
+				// shouldn't be too hard and would be nifty to use for the probe trace as well.
+				err := errors.Errorf(
+					"have been waiting %.2fs attempting to acquire lease", timeutil.Since(tBegin).Seconds(),
+				)
+				p.repl.breaker.Report(err)
+				// NB: careful to not do anything unless the breaker actually got
+				// tripped. (Breakers could be disabled altogether).
+				if breakerErr := p.repl.breaker.Signal().Err(); breakerErr != nil {
+					cancel()
+				}
+				// TODO(during review): can't use this API since we don't want to cancel
+				// the span here. Peel back the abstraction and create span manually.
+				log.Warningf(ctx, "%s:\n%s", err, finishAndGet())
+			})
+			defer tmr.Stop()
+			defer cancel()
 			// If requesting an epoch-based lease & current state is expired,
 			// potentially heartbeat our own liveness or increment epoch of
 			// prior owner. Note we only do this if the previous lease was
@@ -436,6 +470,11 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			// Send the RequestLeaseRequest or TransferLeaseRequest and wait for the new
 			// lease to be applied.
 			if pErr == nil {
+				// The Replica circuit breakers together with round-tripping a ProbeRequest
+				// here before asking for the lease could provide an alternative, simpler
+				// solution to the the below issue:
+				//
+				// https://github.com/cockroachdb/cockroach/issues/37906
 				ba := roachpb.BatchRequest{}
 				ba.Timestamp = p.repl.store.Clock().Now()
 				ba.RangeID = p.repl.RangeID
@@ -1220,6 +1259,12 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 			defer slowTimer.Stop()
 			slowTimer.Reset(base.SlowRequestThreshold)
 			tBegin := timeutil.Now()
+			// TODO(tbg): don't think we need to check the breaker here because
+			// the lease handle is already breaker-sensitive.
+			brSig := r.breaker.Signal()
+			if isCircuitBreakerProbe(ctx) {
+				brSig = neverTripSignaller{}
+			}
 			for {
 				select {
 				case pErr = <-llHandle.C():
@@ -1268,14 +1313,22 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					log.VEventf(ctx, 2, "lease acquisition succeeded: %+v", status.Lease)
 					return nil
 				case <-slowTimer.C:
+					// TODO(tbg): this is the one that should go away, see other "have been ... acquire lease" message
+					// introduced in this diff.
 					slowTimer.Read = true
-					log.Warningf(ctx, "have been waiting %s attempting to acquire lease",
-						base.SlowRequestThreshold)
+					err := errors.Errorf("have been waiting %s attempting to acquire lease", base.SlowRequestThreshold)
+					r.breaker.Report(err)
+					log.Warningf(ctx, "%s", err)
 					r.store.metrics.SlowLeaseRequests.Inc(1)
 					defer func() {
 						r.store.metrics.SlowLeaseRequests.Dec(1)
 						log.Infof(ctx, "slow lease acquisition finished after %s with error %v after %d attempts", timeutil.Since(tBegin), pErr, attempt)
 					}()
+				case <-brSig.C():
+					llHandle.Cancel()
+					err := brSig.Err()
+					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", err)
+					return roachpb.NewError(errors.Wrap(err, "lease acquisition failed"))
 				case <-ctx.Done():
 					llHandle.Cancel()
 					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", ctx.Err())
