@@ -1734,7 +1734,7 @@ project
  │         ├── columns: k:1!null i:2!null xy.x:8 y:9
  │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
  │         ├── key: (8)
- │         ├── fd: ()-->(1,2), (8)-->(9)
+ │         ├── fd: ()-->(1,2,9)
  │         ├── select
  │         │    ├── columns: k:1!null i:2!null
  │         │    ├── cardinality: [0 - 1]
