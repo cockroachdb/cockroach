@@ -205,7 +205,7 @@ project
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15,19,26)
-      │    │    │    │    │    │    ├── left-join (lookup flavor_projects@secondary)
+      │    │    │    │    │    │    ├── left-join (lookup flavor_projects@flavor_projects_flavor_id_project_id_key)
       │    │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 flavor_projects.flavor_id:19 project_id:20
       │    │    │    │    │    │    │    ├── key columns: [1] = [19]
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
@@ -425,7 +425,7 @@ sort
            │    │    │         │    │    │    │    │    │    │    ├── key: (19)
            │    │    │         │    │    │    │    │    │    │    ├── fd: ()-->(20)
            │    │    │         │    │    │    │    │    │    │    ├── ordering: +19 opt(20) [actual: +19]
-           │    │    │         │    │    │    │    │    │    │    ├── scan flavor_projects@secondary
+           │    │    │         │    │    │    │    │    │    │    ├── scan flavor_projects@flavor_projects_flavor_id_project_id_key
            │    │    │         │    │    │    │    │    │    │    │    ├── columns: flavor_projects.flavor_id:19!null project_id:20!null
            │    │    │         │    │    │    │    │    │    │    │    ├── key: (19,20)
            │    │    │         │    │    │    │    │    │    │    │    └── ordering: +19
@@ -477,7 +477,7 @@ sort
            │    │    │         │    │    │    │    ├── key: (27)
            │    │    │         │    │    │    │    ├── fd: ()-->(28)
            │    │    │         │    │    │    │    ├── ordering: +27 opt(28) [actual: +27]
-           │    │    │         │    │    │    │    ├── scan flavor_projects@secondary
+           │    │    │         │    │    │    │    ├── scan flavor_projects@flavor_projects_flavor_id_project_id_key
            │    │    │         │    │    │    │    │    ├── columns: flavor_projects.flavor_id:27!null project_id:28!null
            │    │    │         │    │    │    │    │    ├── key: (27,28)
            │    │    │         │    │    │    │    │    └── ordering: +27
@@ -663,7 +663,7 @@ sort
            │    │    │         │    │    │    │    ├── key: (20)
            │    │    │         │    │    │    │    ├── fd: ()-->(21,22)
            │    │    │         │    │    │    │    ├── ordering: +20 opt(21,22) [actual: +20]
-           │    │    │         │    │    │    │    ├── scan instance_type_projects@secondary
+           │    │    │         │    │    │    │    ├── scan instance_type_projects@instance_type_projects_instance_type_id_project_id_deleted_key
            │    │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:20!null project_id:21 instance_type_projects.deleted:22
            │    │    │         │    │    │    │    │    ├── lax-key: (20-22)
            │    │    │         │    │    │    │    │    └── ordering: +20
@@ -825,7 +825,7 @@ sort
            │    │    │    │    │    ├── key: (30)
            │    │    │    │    │    ├── fd: ()-->(31,32)
            │    │    │    │    │    ├── ordering: +30 opt(31,32) [actual: +30]
-           │    │    │    │    │    ├── scan instance_type_projects@secondary
+           │    │    │    │    │    ├── scan instance_type_projects@instance_type_projects_instance_type_id_project_id_deleted_key
            │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:30!null project_id:31 instance_type_projects.deleted:32
            │    │    │    │    │    │    ├── lax-key: (30-32)
            │    │    │    │    │    │    └── ordering: +30
@@ -953,7 +953,7 @@ project
       ├── immutable, has-placeholder
       ├── key: (32)
       ├── fd: ()-->(1-16,30), (32)-->(33-39), (33,35,36)~~>(32,34,37-39)
-      ├── left-join (lookup instance_type_extra_specs@secondary [as=instance_type_extra_specs_1])
+      ├── left-join (lookup instance_type_extra_specs@instance_type_extra_specs_instance_type_id_key_deleted_key [as=instance_type_extra_specs_1])
       │    ├── columns: instance_types.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:30 instance_type_extra_specs_1.id:32 key:33 instance_type_extra_specs_1.instance_type_id:35 instance_type_extra_specs_1.deleted:36
       │    ├── key columns: [1] = [35]
       │    ├── immutable, has-placeholder
@@ -989,7 +989,7 @@ project
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-16,20,29)
-      │    │    │    │    │    │    ├── left-join (lookup instance_type_projects@secondary)
+      │    │    │    │    │    │    ├── left-join (lookup instance_type_projects@instance_type_projects_instance_type_id_project_id_deleted_key)
       │    │    │    │    │    │    │    ├── columns: instance_types.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 instance_type_projects.instance_type_id:20 project_id:21 instance_type_projects.deleted:22
       │    │    │    │    │    │    │    ├── key columns: [1] = [20]
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
@@ -1008,7 +1008,7 @@ project
       │    │    │    │    │    │    │    │         ├── has-placeholder
       │    │    │    │    │    │    │    │         ├── key: ()
       │    │    │    │    │    │    │    │         ├── fd: ()-->(1,2,13)
-      │    │    │    │    │    │    │    │         ├── scan instance_types@secondary
+      │    │    │    │    │    │    │    │         ├── scan instance_types@instance_types_name_deleted_key
       │    │    │    │    │    │    │    │         │    ├── columns: instance_types.id:1!null name:2!null instance_types.deleted:13
       │    │    │    │    │    │    │    │         │    ├── constraint: /2/13: (/NULL - ]
       │    │    │    │    │    │    │    │         │    ├── key: (1)
@@ -1133,7 +1133,7 @@ project
       ├── immutable, has-placeholder
       ├── key: (32)
       ├── fd: ()-->(1-16,30), (32)-->(33-39), (33,35,36)~~>(32,34,37-39)
-      ├── left-join (lookup instance_type_extra_specs@secondary [as=instance_type_extra_specs_1])
+      ├── left-join (lookup instance_type_extra_specs@instance_type_extra_specs_instance_type_id_key_deleted_key [as=instance_type_extra_specs_1])
       │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:30 instance_type_extra_specs_1.id:32 key:33 instance_type_extra_specs_1.instance_type_id:35 instance_type_extra_specs_1.deleted:36
       │    ├── key columns: [1] = [35]
       │    ├── immutable, has-placeholder
@@ -1169,7 +1169,7 @@ project
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-16,20,29)
-      │    │    │    │    │    │    ├── left-join (lookup instance_type_projects@secondary)
+      │    │    │    │    │    │    ├── left-join (lookup instance_type_projects@instance_type_projects_instance_type_id_project_id_deleted_key)
       │    │    │    │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 instance_type_projects.instance_type_id:20 project_id:21 instance_type_projects.deleted:22
       │    │    │    │    │    │    │    ├── key columns: [1] = [20]
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
@@ -1334,7 +1334,7 @@ project
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15,19,26)
-      │    │    │    │    │    │    ├── left-join (lookup flavor_projects@secondary)
+      │    │    │    │    │    │    ├── left-join (lookup flavor_projects@flavor_projects_flavor_id_project_id_key)
       │    │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 flavor_projects.flavor_id:19 project_id:20
       │    │    │    │    │    │    │    ├── key columns: [1] = [19]
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
@@ -1491,7 +1491,7 @@ project
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15,19,26)
-      │    │    │    │    │    │    ├── left-join (lookup flavor_projects@secondary)
+      │    │    │    │    │    │    ├── left-join (lookup flavor_projects@flavor_projects_flavor_id_project_id_key)
       │    │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 flavor_projects.flavor_id:19 project_id:20
       │    │    │    │    │    │    │    ├── key columns: [1] = [19]
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
@@ -1688,7 +1688,7 @@ sort
            │    │    │         │    │    │    │    ├── key: (19)
            │    │    │         │    │    │    │    ├── fd: ()-->(20)
            │    │    │         │    │    │    │    ├── ordering: +19 opt(20) [actual: +19]
-           │    │    │         │    │    │    │    ├── scan flavor_projects@secondary
+           │    │    │         │    │    │    │    ├── scan flavor_projects@flavor_projects_flavor_id_project_id_key
            │    │    │         │    │    │    │    │    ├── columns: flavor_projects.flavor_id:19!null project_id:20!null
            │    │    │         │    │    │    │    │    ├── key: (19,20)
            │    │    │         │    │    │    │    │    └── ordering: +19
@@ -1873,7 +1873,7 @@ sort
            │    │    │         │    │    │    │    ├── key: (20)
            │    │    │         │    │    │    │    ├── fd: ()-->(21,22)
            │    │    │         │    │    │    │    ├── ordering: +20 opt(21,22) [actual: +20]
-           │    │    │         │    │    │    │    ├── scan instance_type_projects@secondary
+           │    │    │         │    │    │    │    ├── scan instance_type_projects@instance_type_projects_instance_type_id_project_id_deleted_key
            │    │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:20!null project_id:21 instance_type_projects.deleted:22
            │    │    │         │    │    │    │    │    ├── lax-key: (20-22)
            │    │    │         │    │    │    │    │    └── ordering: +20
@@ -2003,7 +2003,7 @@ project
       ├── immutable, has-placeholder
       ├── key: (32)
       ├── fd: ()-->(1-16,30), (32)-->(33-39), (33,35,36)~~>(32,34,37-39)
-      ├── left-join (lookup instance_type_extra_specs@secondary [as=instance_type_extra_specs_1])
+      ├── left-join (lookup instance_type_extra_specs@instance_type_extra_specs_instance_type_id_key_deleted_key [as=instance_type_extra_specs_1])
       │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:30 instance_type_extra_specs_1.id:32 key:33 instance_type_extra_specs_1.instance_type_id:35 instance_type_extra_specs_1.deleted:36
       │    ├── key columns: [1] = [35]
       │    ├── immutable, has-placeholder
@@ -2039,7 +2039,7 @@ project
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-16,20,29)
-      │    │    │    │    │    │    ├── left-join (lookup instance_type_projects@secondary)
+      │    │    │    │    │    │    ├── left-join (lookup instance_type_projects@instance_type_projects_instance_type_id_project_id_deleted_key)
       │    │    │    │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 instance_type_projects.instance_type_id:20 project_id:21 instance_type_projects.deleted:22
       │    │    │    │    │    │    │    ├── key columns: [1] = [20]
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
@@ -2058,7 +2058,7 @@ project
       │    │    │    │    │    │    │    │         ├── has-placeholder
       │    │    │    │    │    │    │    │         ├── key: ()
       │    │    │    │    │    │    │    │         ├── fd: ()-->(1,7,13)
-      │    │    │    │    │    │    │    │         ├── scan instance_types@secondary
+      │    │    │    │    │    │    │    │         ├── scan instance_types@instance_types_flavorid_deleted_key
       │    │    │    │    │    │    │    │         │    ├── columns: instance_types.id:1!null flavorid:7!null instance_types.deleted:13
       │    │    │    │    │    │    │    │         │    ├── constraint: /7/13: (/NULL - ]
       │    │    │    │    │    │    │    │         │    ├── key: (1)
@@ -2199,7 +2199,7 @@ sort
            │    │    │    │    │    ├── key: (27)
            │    │    │    │    │    ├── fd: ()-->(28)
            │    │    │    │    │    ├── ordering: +27 opt(28) [actual: +27]
-           │    │    │    │    │    ├── scan flavor_projects@secondary
+           │    │    │    │    │    ├── scan flavor_projects@flavor_projects_flavor_id_project_id_key
            │    │    │    │    │    │    ├── columns: flavor_projects.flavor_id:27!null project_id:28!null
            │    │    │    │    │    │    ├── key: (27,28)
            │    │    │    │    │    │    └── ordering: +27
@@ -2400,7 +2400,7 @@ sort
            │    │    │         │    │    │    │    ├── key: (20)
            │    │    │         │    │    │    │    ├── fd: ()-->(21,22)
            │    │    │         │    │    │    │    ├── ordering: +20 opt(21,22) [actual: +20]
-           │    │    │         │    │    │    │    ├── scan instance_type_projects@secondary
+           │    │    │         │    │    │    │    ├── scan instance_type_projects@instance_type_projects_instance_type_id_project_id_deleted_key
            │    │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:20!null project_id:21 instance_type_projects.deleted:22
            │    │    │         │    │    │    │    │    ├── lax-key: (20-22)
            │    │    │         │    │    │    │    │    └── ordering: +20
@@ -2572,7 +2572,7 @@ sort
            │    │    │         │    │    │    │    ├── key: (19)
            │    │    │         │    │    │    │    ├── fd: ()-->(20)
            │    │    │         │    │    │    │    ├── ordering: +19 opt(20) [actual: +19]
-           │    │    │         │    │    │    │    ├── scan flavor_projects@secondary
+           │    │    │         │    │    │    │    ├── scan flavor_projects@flavor_projects_flavor_id_project_id_key
            │    │    │         │    │    │    │    │    ├── columns: flavor_projects.flavor_id:19!null project_id:20!null
            │    │    │         │    │    │    │    │    ├── key: (19,20)
            │    │    │         │    │    │    │    │    └── ordering: +19
@@ -2801,7 +2801,7 @@ sort
            │    │    │         │    │    │    │    │    │    │    ├── key: (20)
            │    │    │         │    │    │    │    │    │    │    ├── fd: ()-->(21,22)
            │    │    │         │    │    │    │    │    │    │    ├── ordering: +20 opt(21,22) [actual: +20]
-           │    │    │         │    │    │    │    │    │    │    ├── scan instance_type_projects@secondary
+           │    │    │         │    │    │    │    │    │    │    ├── scan instance_type_projects@instance_type_projects_instance_type_id_project_id_deleted_key
            │    │    │         │    │    │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:20!null project_id:21 instance_type_projects.deleted:22
            │    │    │         │    │    │    │    │    │    │    │    ├── lax-key: (20-22)
            │    │    │         │    │    │    │    │    │    │    │    └── ordering: +20
@@ -2858,7 +2858,7 @@ sort
            │    │    │         │    │    │    │    ├── key: (30)
            │    │    │         │    │    │    │    ├── fd: ()-->(31,32)
            │    │    │         │    │    │    │    ├── ordering: +30 opt(31,32) [actual: +30]
-           │    │    │         │    │    │    │    ├── scan instance_type_projects@secondary
+           │    │    │         │    │    │    │    ├── scan instance_type_projects@instance_type_projects_instance_type_id_project_id_deleted_key
            │    │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:30!null project_id:31 instance_type_projects.deleted:32
            │    │    │         │    │    │    │    │    ├── lax-key: (30-32)
            │    │    │         │    │    │    │    │    └── ordering: +30
@@ -2981,7 +2981,7 @@ project
       ├── immutable, has-placeholder
       ├── key: (32)
       ├── fd: ()-->(1-16,30), (32)-->(33-39), (33,35,36)~~>(32,34,37-39)
-      ├── left-join (lookup instance_type_extra_specs@secondary [as=instance_type_extra_specs_1])
+      ├── left-join (lookup instance_type_extra_specs@instance_type_extra_specs_instance_type_id_key_deleted_key [as=instance_type_extra_specs_1])
       │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:30 instance_type_extra_specs_1.id:32 key:33 instance_type_extra_specs_1.instance_type_id:35 instance_type_extra_specs_1.deleted:36
       │    ├── key columns: [1] = [35]
       │    ├── immutable, has-placeholder
@@ -3017,7 +3017,7 @@ project
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-16,20,29)
-      │    │    │    │    │    │    ├── left-join (lookup instance_type_projects@secondary)
+      │    │    │    │    │    │    ├── left-join (lookup instance_type_projects@instance_type_projects_instance_type_id_project_id_deleted_key)
       │    │    │    │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 instance_type_projects.instance_type_id:20 project_id:21 instance_type_projects.deleted:22
       │    │    │    │    │    │    │    ├── key columns: [1] = [20]
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
@@ -3036,7 +3036,7 @@ project
       │    │    │    │    │    │    │    │         ├── has-placeholder
       │    │    │    │    │    │    │    │         ├── key: ()
       │    │    │    │    │    │    │    │         ├── fd: ()-->(1,7,13)
-      │    │    │    │    │    │    │    │         ├── scan instance_types@secondary
+      │    │    │    │    │    │    │    │         ├── scan instance_types@instance_types_flavorid_deleted_key
       │    │    │    │    │    │    │    │         │    ├── columns: instance_types.id:1!null flavorid:7!null instance_types.deleted:13
       │    │    │    │    │    │    │    │         │    ├── constraint: /7/13: (/NULL - ]
       │    │    │    │    │    │    │    │         │    ├── key: (1)
@@ -3188,7 +3188,7 @@ project
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15,19,26)
-      │    │    │    │    │    │    ├── left-join (lookup flavor_projects@secondary)
+      │    │    │    │    │    │    ├── left-join (lookup flavor_projects@flavor_projects_flavor_id_project_id_key)
       │    │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 flavor_projects.flavor_id:19 project_id:20
       │    │    │    │    │    │    │    ├── key columns: [1] = [19]
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
@@ -3366,7 +3366,7 @@ sort
            │    │         │    │    │    │    ├── key: (19)
            │    │         │    │    │    │    ├── fd: ()-->(20)
            │    │         │    │    │    │    ├── ordering: +19 opt(20) [actual: +19]
-           │    │         │    │    │    │    ├── scan flavor_projects@secondary
+           │    │         │    │    │    │    ├── scan flavor_projects@flavor_projects_flavor_id_project_id_key
            │    │         │    │    │    │    │    ├── columns: flavor_projects.flavor_id:19!null project_id:20!null
            │    │         │    │    │    │    │    ├── key: (19,20)
            │    │         │    │    │    │    │    └── ordering: +19

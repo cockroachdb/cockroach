@@ -87,11 +87,11 @@ TABLE g
  ├── geog_inverted_key geography not null [inverted]
  ├── PRIMARY INDEX g_pkey
  │    └── k int not null
- ├── INVERTED INDEX secondary
+ ├── INVERTED INDEX g_a_geog_idx
  │    ├── a int
  │    ├── geog_inverted_key geography not null [inverted]
  │    └── k int not null
- └── INVERTED INDEX secondary
+ └── INVERTED INDEX g_a_b_geog_idx
       ├── a int
       ├── b int
       ├── geog_inverted_key geography not null [inverted]

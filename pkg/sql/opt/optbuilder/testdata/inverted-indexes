@@ -29,7 +29,7 @@ TABLE kj
  ├── j_inverted_key jsonb not null [inverted]
  ├── PRIMARY INDEX kj_pkey
  │    └── k int not null
- └── INVERTED INDEX secondary
+ └── INVERTED INDEX kj_j_idx
       ├── j_inverted_key jsonb not null [inverted]
       └── k int not null
 

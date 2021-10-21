@@ -170,7 +170,7 @@ TABLE part2
  │         │         └── ('waldo')
  │         └── p3
  │              └── partition by list prefixes
- └── INDEX secondary
+ └── INDEX part2_c_idx
       ├── c int not null
       ├── a string not null
       ├── b string not null
@@ -208,10 +208,10 @@ TABLE inv
  ├── g_inverted_key geometry not null [inverted]
  ├── PRIMARY INDEX inv_pkey
  │    └── k int not null
- ├── INVERTED INDEX secondary
+ ├── INVERTED INDEX inv_j_idx
  │    ├── j_inverted_key jsonb not null [inverted]
  │    └── k int not null
- └── INVERTED INDEX secondary
+ └── INVERTED INDEX inv_g_idx
       ├── g_inverted_key geometry not null [inverted]
       └── k int not null
 
@@ -240,10 +240,10 @@ TABLE inv2
  ├── g_inverted_key geometry not null [inverted]
  ├── PRIMARY INDEX inv2_pkey
  │    └── rowid int not null default (unique_rowid()) [hidden]
- ├── INVERTED INDEX secondary
+ ├── INVERTED INDEX inv2_j_idx
  │    ├── j_inverted_key jsonb not null [inverted]
  │    └── rowid int not null default (unique_rowid()) [hidden]
- └── INVERTED INDEX secondary
+ └── INVERTED INDEX inv2_g_idx
       ├── g_inverted_key geometry not null [inverted]
       └── rowid int not null default (unique_rowid()) [hidden]
 
@@ -280,7 +280,7 @@ TABLE uniq
  ├── UNIQUE INDEX uniq_i_key
  │    ├── i int
  │    └── rowid int not null default (unique_rowid()) [hidden] (storing)
- ├── UNIQUE INDEX secondary
+ ├── UNIQUE INDEX uniq_k_j_key
  │    ├── k string
  │    ├── j string
  │    └── rowid int not null default (unique_rowid()) [hidden] (storing)
