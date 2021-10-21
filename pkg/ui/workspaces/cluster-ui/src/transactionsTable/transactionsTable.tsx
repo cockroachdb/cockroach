@@ -44,6 +44,7 @@ import {
   getStatementsByFingerprintIdAndTime,
   collectStatementsText,
   statementFingerprintIdsToText,
+  statementFingerprintIdsToSummarizedText,
 } from "../transactionsPage/utils";
 import classNames from "classnames/bind";
 import statsTablePageStyles from "src/statementsTable/statementsTableContent.module.scss";
@@ -127,6 +128,10 @@ export function makeTransactionsColumns(
       cell: (item: TransactionInfo) =>
         textCell({
           transactionText: statementFingerprintIdsToText(
+            item.stats_data.statement_fingerprint_ids,
+            statements,
+          ),
+          transactionSummary: statementFingerprintIdsToSummarizedText(
             item.stats_data.statement_fingerprint_ids,
             statements,
           ),

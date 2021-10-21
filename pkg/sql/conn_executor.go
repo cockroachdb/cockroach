@@ -2806,6 +2806,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			Start:          query.start.UTC(),
 			Sql:            sql,
 			SqlNoConstants: sqlNoConstants,
+			SqlSummary:     formatStatementSummary(ast),
 			IsDistributed:  query.isDistributed,
 			Phase:          (serverpb.ActiveQuery_Phase)(query.phase),
 			Progress:       float32(progress),
