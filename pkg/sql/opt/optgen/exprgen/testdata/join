@@ -80,7 +80,7 @@ inner-join (merge)
  ├── left ordering: +1
  ├── right ordering: +7
  ├── stats: [rows=9801, distinct(1)=99, null(1)=0, distinct(7)=99, null(7)=0]
- ├── cost: 2806.43387
+ ├── cost: 2808.93387
  ├── fd: (1)==(7), (7)==(1)
  ├── sort
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
