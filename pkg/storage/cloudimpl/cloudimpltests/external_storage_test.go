@@ -245,6 +245,34 @@ func testExportStoreWithExternalIOConfig(
 			t.Fatalf("wrong content")
 		}
 
+		testingFilename += "-stream"
+
+		w, err := s.Writer(ctx, testingFilename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.Copy(w, bytes.NewReader(testingContent)); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Attempt to read (or fetch) it back.
+		streamRes, err := s.ReadFile(ctx, testingFilename)
+		if err != nil {
+			t.Fatalf("Could not get reader for %s: %+v", testingFilename, err)
+		}
+		defer res.Close()
+		streamContent, err := ioutil.ReadAll(streamRes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Verify the result contains what we wrote.
+		if !bytes.Equal(streamContent, testingContent) {
+			t.Fatalf("wrong content")
+		}
+
 		t.Run("rand-readats", func(t *testing.T) {
 			for i := 0; i < 10; i++ {
 				t.Run("", func(t *testing.T) {
