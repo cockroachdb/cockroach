@@ -405,3 +405,20 @@ func (f *fileTableStorage) Size(ctx context.Context, basename string) (int64, er
 	}
 	return f.fs.FileSize(ctx, filepath)
 }
+
+// Writer implements the ExternalStorage interface and writes the file to the
+// user scoped FileToTableSystem.
+func (f *fileTableStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	filepath, err := checkBaseAndJoinFilePath(f.prefix, basename)
+	if err != nil {
+		return nil, err
+	}
+
+	// This is only possible if the method is invoked by a SQLConnFileTableStorage
+	// which should never be the case.
+	if f.ie == nil {
+		return nil, errors.New("cannot Write without a configured internal executor")
+	}
+
+	return f.fs.NewFileWriter(ctx, filepath, filetable.ChunkDefaultSize)
+}

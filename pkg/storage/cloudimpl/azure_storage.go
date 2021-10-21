@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/errors"
 )
@@ -243,4 +244,16 @@ func (s *azureStorage) Size(ctx context.Context, basename string) (int64, error)
 
 func (s *azureStorage) Close() error {
 	return nil
+}
+
+func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	blob := s.getBlob(basename)
+	return util.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
+		_, err := azblob.UploadStreamToBlockBlob(
+			ctx, r, blob, azblob.UploadStreamToBlockBlobOptions{
+				BufferSize: 4 << 20,
+			},
+		)
+		return err
+	}), nil
 }

@@ -13,6 +13,7 @@ go_library(
         "fast_int_set_str.go",
         "hash.go",
         "nocopy.go",
+        "pipe.go",
         "pluralize.go",
         "race_off.go",
         "race_on.go",
@@ -29,6 +30,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/ctxgroup",
         "//pkg/util/envutil",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",

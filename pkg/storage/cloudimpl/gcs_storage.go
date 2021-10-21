@@ -313,3 +313,11 @@ func (g *gcsStorage) Size(ctx context.Context, basename string) (int64, error) {
 func (g *gcsStorage) Close() error {
 	return g.client.Close()
 }
+
+func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
+	if !gcsChunkingEnabled.Get(&g.settings.SV) {
+		w.ChunkSize = 0
+	}
+	return w, nil
+}
