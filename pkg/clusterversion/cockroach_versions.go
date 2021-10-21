@@ -184,8 +184,8 @@ const (
 	PostTruncatedAndRangeAppliedStateMigration
 	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
 	//
-	// TODO(irfansharif): This can be removed as part of #69828 (bumping the min
-	// cluster version).
+	// TODO(irfansharif): This can be removed as part of #71708 (bump
+	// min-supported version to 21.2).
 	V21_1
 
 	// v21.1PLUS release. This is a special v21.1.x release with extra changes,
@@ -506,14 +506,14 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 2},
 	},
 
-	// v22.1 versions.
+	// v22.1 versions. Internal versions must be even.
 	{
 		Key:     Start22_1,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 100},
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 2},
 	},
 	{
 		Key:     TargetBytesAvoidExcess,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 102},
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 4},
 	},
 
 	// *************************************************
