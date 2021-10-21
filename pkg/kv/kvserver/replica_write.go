@@ -173,26 +173,6 @@ func (r *Replica) executeWriteBatch(
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
 	shouldQuiesce := r.store.stopper.ShouldQuiesce()
-	startPropTime := timeutil.Now()
-	slowTimer := timeutil.NewTimer()
-	defer slowTimer.Stop()
-	slowTimer.Reset(r.store.cfg.SlowReplicationThreshold)
-	// NOTE: this defer was moved from a case in the select statement to here
-	// because escape analysis does a better job avoiding allocations to the
-	// heap when defers are unconditional. When this was in the slowTimer select
-	// case, it was causing pErr to escape.
-	defer func() {
-		if slowTimer.Read {
-			r.store.metrics.SlowRaftRequests.Dec(1)
-			log.Infof(
-				ctx,
-				"slow command %s finished after %.2fs with error %v",
-				ba,
-				timeutil.Since(startPropTime).Seconds(),
-				pErr,
-			)
-		}
-	}()
 
 	for {
 		select {
@@ -286,15 +266,6 @@ func (r *Replica) executeWriteBatch(
 
 			return propResult.Reply, nil, propResult.Err
 
-		case <-slowTimer.C:
-			slowTimer.Read = true
-			r.store.metrics.SlowRaftRequests.Inc(1)
-
-			var s redact.StringBuilder
-			rangeUnavailableMessage(&s, r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
-				r.RaftStatus(), ba, timeutil.Since(startPropTime))
-			log.Errorf(ctx, "range unavailable: %v", s)
-
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
 			// which indicates to the caller that the command may have executed.
@@ -345,52 +316,52 @@ func (r *Replica) executeWriteBatch(
 	}
 }
 
-func rangeUnavailableMessage(
-	s *redact.StringBuilder,
+func rangeUnavailableError(
 	desc *roachpb.RangeDescriptor,
+	replDesc roachpb.ReplicaDescriptor,
 	lm liveness.IsLiveMap,
 	rs *raft.Status,
-	ba *roachpb.BatchRequest,
-	dur time.Duration,
-) {
-	var liveReplicas, otherReplicas []roachpb.ReplicaDescriptor
+) error {
+	nonLiveRepls := roachpb.MakeReplicaSet(nil)
 	for _, rDesc := range desc.Replicas().Descriptors() {
 		if lm[rDesc.NodeID].IsLive {
-			liveReplicas = append(liveReplicas, rDesc)
-		} else {
-			otherReplicas = append(otherReplicas, rDesc)
+			continue
 		}
+		nonLiveRepls.AddReplica(rDesc)
 	}
 
-	// Ensure that these are going to redact nicely.
-	var _ redact.SafeFormatter = ba
-	var _ redact.SafeFormatter = desc
-	var _ redact.SafeFormatter = roachpb.ReplicaSet{}
-
-	s.Printf(`have been waiting %.2fs for proposing command %s.
-This range is likely unavailable.
-Please submit this message to Cockroach Labs support along with the following information:
-
-Descriptor:  %s
-Live:        %s
-Non-live:    %s
-Raft Status: %+v
-
-and a copy of https://yourhost:8080/#/reports/range/%d
-
-If you are using CockroachDB Enterprise, reach out through your
-support contract. Otherwise, please open an issue at:
-
-  https://github.com/cockroachdb/cockroach/issues/new/choose
-`,
-		dur.Seconds(),
-		ba,
-		desc,
-		roachpb.MakeReplicaSet(liveReplicas),
-		roachpb.MakeReplicaSet(otherReplicas),
-		redact.Safe(rs), // raft status contains no PII
-		desc.RangeID,
+	canMakeProgress := desc.Replicas().CanMakeProgress(
+		func(replDesc roachpb.ReplicaDescriptor) bool {
+			return lm[replDesc.NodeID].IsLive
+		},
 	)
+
+	// Ensure good redaction.
+	var _ redact.SafeFormatter = nonLiveRepls
+	var _ redact.SafeFormatter = desc
+	var _ redact.SafeFormatter = replDesc
+
+	err := errors.Errorf("replica %s of %s is unavailable", desc, replDesc)
+	err = errors.Wrapf(
+		err,
+		"raft status: %+v", redact.Safe(rs), // raft status contains no PII
+	)
+	if len(nonLiveRepls.AsProto()) > 0 {
+		err = errors.Wrapf(err, "replicas on non-live nodes: %v (lost quorum: %t)", nonLiveRepls, !canMakeProgress)
+	}
+
+	return err
+}
+
+func (r *Replica) rangeUnavailableError() error {
+	desc := r.Desc()
+	replDesc, _ := desc.GetReplicaDescriptor(r.store.StoreID())
+
+	var isLiveMap liveness.IsLiveMap
+	if nl := r.store.cfg.NodeLiveness; nl != nil { // exclude unit test
+		isLiveMap = nl.GetIsLiveMap()
+	}
+	return rangeUnavailableError(desc, replDesc, isLiveMap, r.RaftStatus())
 }
 
 // canAttempt1PCEvaluation looks at the batch and decides whether it can be

@@ -1057,6 +1057,16 @@ func (r *Replica) hasRaftReadyRLocked() bool {
 	return r.mu.internalRaftGroup.HasReady()
 }
 
+func (r *Replica) slowReplicationThreshold(ba *roachpb.BatchRequest) time.Duration {
+	if knobs := r.store.TestingKnobs(); knobs != nil && knobs.SlowReplicationThresholdOverride != nil {
+		if dur := knobs.SlowReplicationThresholdOverride(ba); dur > 0 {
+			return dur
+		}
+		// Fall through.
+	}
+	return replicaCircuitBreakerSlowReplicationThreshold.Get(&r.store.cfg.Settings.SV)
+}
+
 //go:generate stringer -type refreshRaftReason
 type refreshRaftReason int
 
@@ -1092,9 +1102,23 @@ func (r *Replica) refreshProposalsLocked(
 		log.Fatalf(ctx, "refreshAtDelta specified for reason %s != reasonTicks", reason)
 	}
 
+	var tripBreakerWithBA *roachpb.BatchRequest
+	var tripBreakerWithDuration time.Duration
+	var slowProposalCount int64
 	var reproposals pendingCmdSlice
 	for _, p := range r.mu.proposals {
-		if p.command.MaxLeaseIndex == 0 {
+		if dur := r.store.cfg.RaftTickInterval * time.Duration(r.mu.ticks-p.createdAtTicks); dur > r.slowReplicationThreshold(p.Request) {
+			if tripBreakerWithDuration < dur {
+				tripBreakerWithDuration = dur
+				tripBreakerWithBA = p.Request
+				slowProposalCount++
+			}
+		}
+		// TODO(tbg): the enabled() call is a hack until we've figured out what to
+		// do about #74711. If leases are finished instead of reproposed, they can't
+		// ever trigger the breaker, which is bad as there usually isn't anything
+		// else around that will.
+		if p.command.MaxLeaseIndex == 0 && !r.breaker.enabled() {
 			// Commands without a MaxLeaseIndex cannot be reproposed, as they might
 			// apply twice. We also don't want to ask the proposer to retry these
 			// special commands.
@@ -1139,6 +1163,30 @@ func (r *Replica) refreshProposalsLocked(
 			// repropose everything.
 			reproposals = append(reproposals, p)
 		}
+	}
+
+	r.store.metrics.SlowRaftRequests.Update(slowProposalCount)
+
+	// If the breaker isn't tripped yet but we've detected commands that have
+	// taken too long to replicate, trip the breaker now.
+	//
+	// NB: we still keep reproposing commands on this and subsequent ticks
+	// even though this seems strictly counter-productive, except perhaps
+	// for the probe's proposals. We could consider being more strict here
+	// which could avoid build-up of raft log entries during outages, see
+	// for example:
+	// https://github.com/cockroachdb/cockroach/issues/60612
+	if r.breaker.Signal().Err() == nil && tripBreakerWithDuration > 0 {
+		log.Warningf(ctx,
+			"have been waiting %.2fs for slow proposal %s",
+			tripBreakerWithDuration.Seconds(), tripBreakerWithBA,
+		)
+		// NB: this is async because we're holding lots of locks here, and we want
+		// to avoid having to pass all the information about the replica into the
+		// breaker (since the breaker needs access to this information at will to
+		// power the probe anyway). Over time, we anticipate there being multiple
+		// mechanisms which trip the breaker.
+		r.breaker.TripAsync()
 	}
 
 	if log.V(1) && len(reproposals) > 0 {

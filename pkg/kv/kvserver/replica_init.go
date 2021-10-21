@@ -127,6 +127,8 @@ func newUnloadedReplica(
 
 	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)
 	r.mergeQueueThrottle = util.Every(mergeQueueThrottleDuration)
+
+	r.breaker = newReplicaCircuitBreaker(store.cfg.Settings, store.stopper, r.AmbientContext, r)
 	return r
 }
 

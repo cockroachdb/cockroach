@@ -436,6 +436,11 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			// Send the RequestLeaseRequest or TransferLeaseRequest and wait for the new
 			// lease to be applied.
 			if pErr == nil {
+				// The Replica circuit breakers together with round-tripping a ProbeRequest
+				// here before asking for the lease could provide an alternative, simpler
+				// solution to the the below issue:
+				//
+				// https://github.com/cockroachdb/cockroach/issues/37906
 				ba := roachpb.BatchRequest{}
 				ba.Timestamp = p.repl.store.Clock().Now()
 				ba.RangeID = p.repl.RangeID
@@ -1216,6 +1221,11 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 		// against this in checkRequestTimeRLocked). So instead of assuming
 		// anything, we iterate and check again.
 		pErr = func() (pErr *roachpb.Error) {
+			// NB: the slow request detection here is not particularly useful since
+			// it guards the actual lease proposal, which is a proposal and which
+			// thus already has a "slow message" trigger attached to it.
+			//
+			// TODO(during review): decide whether to remove this right now.
 			slowTimer := timeutil.NewTimer()
 			defer slowTimer.Stop()
 			slowTimer.Reset(base.SlowRequestThreshold)

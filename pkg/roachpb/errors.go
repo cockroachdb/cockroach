@@ -650,6 +650,9 @@ func (e *AmbiguousResultError) Error() string {
 }
 
 func (e *AmbiguousResultError) message(_ *Error) string {
+	if e.WrappedErr != nil {
+		return fmt.Sprintf("result is ambiguous (%v)", e.WrappedErr)
+	}
 	return fmt.Sprintf("result is ambiguous (%s)", e.Message)
 }
 
