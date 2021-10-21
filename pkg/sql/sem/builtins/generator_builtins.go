@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -1697,7 +1698,7 @@ var payloadsForSpanGeneratorType = types.MakeLabeledTuple(
 // over all recordings for a given Span.
 type payloadsForSpanGenerator struct {
 	// The span to iterate over.
-	span *tracing.Span
+	span tracing.RegistrySpan
 
 	// recordingIndex maintains the current position of the index of the iterator
 	// in the list of recordings surfaced by a given span. The payloads of the
@@ -1727,9 +1728,9 @@ func makePayloadsForSpanGenerator(
 			"only users with the admin role are allowed to use crdb_internal.payloads_for_span",
 		)
 	}
-	spanID := uint64(*(args[0].(*tree.DInt)))
-	span, found := ctx.Tracer.GetActiveSpanFromID(spanID)
-	if !found {
+	spanID := tracingpb.SpanID(*(args[0].(*tree.DInt)))
+	span := ctx.Tracer.GetActiveSpanByID(spanID)
+	if span == nil {
 		return nil, nil
 	}
 

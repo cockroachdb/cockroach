@@ -115,7 +115,7 @@ func (r Recording) String() string {
 
 // OrphanSpans returns the spans with parents missing from the recording.
 func (r Recording) OrphanSpans() []tracingpb.RecordedSpan {
-	spanIDs := make(map[uint64]struct{})
+	spanIDs := make(map[tracingpb.SpanID]struct{})
 	for _, sp := range r {
 		spanIDs[sp.SpanID] = struct{}{}
 	}
@@ -215,22 +215,20 @@ func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogDat
 		ownLogs = append(ownLogs, conv(sb.RedactableString(), l.Time, lastLog.Timestamp))
 	}
 
-	// If the span was verbose then the Structured events would have been
-	// stringified and included in the Logs above. If the span was not verbose
-	// we should add the Structured events now.
-	if !isVerbose(sp) {
-		sp.Structured(func(sr *types.Any, t time.Time) {
-			str, err := MessageToJSONString(sr, true /* emitDefaults */)
-			if err != nil {
-				return
-			}
-			lastLog := ownLogs[len(ownLogs)-1]
-			var sb redact.StringBuilder
-			sb.SafeString("structured:")
-			_, _ = sb.WriteString(str)
-			ownLogs = append(ownLogs, conv(sb.RedactableString(), t, lastLog.Timestamp))
-		})
-	}
+	// If the span was verbose at the time when the structured event was recorded,
+	// then the Structured events will also have been stringified and included in
+	// the Logs above.
+	sp.Structured(func(sr *types.Any, t time.Time) {
+		str, err := MessageToJSONString(sr, true /* emitDefaults */)
+		if err != nil {
+			return
+		}
+		lastLog := ownLogs[len(ownLogs)-1]
+		var sb redact.StringBuilder
+		sb.SafeString("structured:")
+		_, _ = sb.WriteString(str)
+		ownLogs = append(ownLogs, conv(sb.RedactableString(), t, lastLog.Timestamp))
+	})
 
 	childSpans := make([][]traceLogData, 0)
 	for _, osp := range r {
@@ -295,8 +293,8 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 	tagsCopy["statement"] = stmt
 	r[0].Tags = tagsCopy
 
-	toJaegerSpanID := func(spanID uint64) jaegerjson.SpanID {
-		return jaegerjson.SpanID(strconv.FormatUint(spanID, 10))
+	toJaegerSpanID := func(spanID tracingpb.SpanID) jaegerjson.SpanID {
+		return jaegerjson.SpanID(strconv.FormatUint(uint64(spanID), 10))
 	}
 
 	// Each Span in Jaeger belongs to a "process" that generated it. Spans
@@ -329,7 +327,7 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 	}
 
 	var t jaegerjson.Trace
-	t.TraceID = jaegerjson.TraceID(strconv.FormatUint(r[0].TraceID, 10))
+	t.TraceID = jaegerjson.TraceID(strconv.FormatUint(uint64(r[0].TraceID), 10))
 	t.Processes = processes
 
 	for _, sp := range r {

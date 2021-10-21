@@ -2293,7 +2293,7 @@ func generateSessionTraceVTable(spans []tracingpb.RecordedSpan) ([]traceRow, err
 	var allLogs []logRecordRow
 
 	// NOTE: The spans are recorded in the order in which they are started.
-	seenSpans := make(map[uint64]struct{})
+	seenSpans := make(map[tracingpb.SpanID]struct{})
 	for spanIdx, span := range spans {
 		if _, ok := seenSpans[span.SpanID]; ok {
 			continue
@@ -2393,7 +2393,9 @@ func generateSessionTraceVTable(spans []tracingpb.RecordedSpan) ([]traceRow, err
 // getOrderedChildSpans returns all the spans in allSpans that are children of
 // spanID. It assumes the input is ordered by start time, in which case the
 // output is also ordered.
-func getOrderedChildSpans(spanID uint64, allSpans []tracingpb.RecordedSpan) []spanWithIndex {
+func getOrderedChildSpans(
+	spanID tracingpb.SpanID, allSpans []tracingpb.RecordedSpan,
+) []spanWithIndex {
 	children := make([]spanWithIndex, 0)
 	for i := range allSpans {
 		if allSpans[i].ParentSpanID == spanID {
@@ -2415,7 +2417,7 @@ func getOrderedChildSpans(spanID uint64, allSpans []tracingpb.RecordedSpan) []sp
 // seenSpans is modified to record all the spans that are part of the subtrace
 // rooted at span.
 func getMessagesForSubtrace(
-	span spanWithIndex, allSpans []tracingpb.RecordedSpan, seenSpans map[uint64]struct{},
+	span spanWithIndex, allSpans []tracingpb.RecordedSpan, seenSpans map[tracingpb.SpanID]struct{},
 ) ([]logRecordRow, error) {
 	if _, ok := seenSpans[span.SpanID]; ok {
 		return nil, errors.Errorf("duplicate span %d", span.SpanID)
