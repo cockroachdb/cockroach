@@ -1998,21 +1998,21 @@ project
  ├── columns: customer1_1_0_:1!null ordernum2_1_0_:2!null orderdat3_1_0_:3!null formula101_0_:26 customer1_2_1_:6 ordernum2_2_1_:7 producti3_2_1_:8 customer1_2_2_:6 ordernum2_2_2_:7 producti3_2_2_:8 quantity4_2_2_:9
  ├── immutable
  ├── key: (8)
- ├── fd: ()-->(1-3), (8)-->(6,7,9,26)
+ ├── fd: ()-->(1-3,6,7), (8)-->(9,26)
  ├── group-by
  │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null lineitems1_.customerid:6 lineitems1_.ordernumber:7 lineitems1_.productid:8 lineitems1_.quantity:9 sum:25
  │    ├── grouping columns: lineitems1_.productid:8
  │    ├── immutable
  │    ├── key: (8)
- │    ├── fd: ()-->(1-3), (8)-->(1-3,6,7,9,25)
+ │    ├── fd: ()-->(1-3,6,7), (8)-->(1-3,6,7,9,25)
  │    ├── project
  │    │    ├── columns: column24:24 order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null lineitems1_.customerid:6 lineitems1_.ordernumber:7 lineitems1_.productid:8 lineitems1_.quantity:9 li.customerid:12 li.ordernumber:13
  │    │    ├── immutable
- │    │    ├── fd: ()-->(1-3), (8)-->(6,7,9)
+ │    │    ├── fd: ()-->(1-3,6,7), (8)-->(9)
  │    │    ├── right-join (hash)
  │    │    │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null lineitems1_.customerid:6 lineitems1_.ordernumber:7 lineitems1_.productid:8 lineitems1_.quantity:9 li.customerid:12 li.ordernumber:13 li.productid:14 li.quantity:15 p.productid:18 cost:20
  │    │    │    ├── key: (8,12,13,18)
- │    │    │    ├── fd: ()-->(1-3), (8)-->(6,7,9), (12-14)-->(15), (18)-->(20), (14)==(18), (18)==(14)
+ │    │    │    ├── fd: ()-->(1-3,6,7), (8)-->(9), (12-14)-->(15), (18)-->(20), (14)==(18), (18)==(14)
  │    │    │    ├── inner-join (hash)
  │    │    │    │    ├── columns: li.customerid:12!null li.ordernumber:13!null li.productid:14!null li.quantity:15 p.productid:18!null cost:20
  │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
@@ -2033,7 +2033,7 @@ project
  │    │    │    │    ├── left ordering: +1,+2
  │    │    │    │    ├── right ordering: +6,+7
  │    │    │    │    ├── key: (8)
- │    │    │    │    ├── fd: ()-->(1-3), (8)-->(6,7,9)
+ │    │    │    │    ├── fd: ()-->(1-3,6,7), (8)-->(9)
  │    │    │    │    ├── scan customerorder [as=order0_]
  │    │    │    │    │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null
  │    │    │    │    │    ├── constraint: /1/2: [/'c111'/0 - /'c111'/0]
@@ -2294,21 +2294,21 @@ project
  ├── columns: customer1_1_0_:1!null ordernum2_1_0_:2!null orderdat3_1_0_:3!null formula105_0_:26 customer1_2_1_:6 ordernum2_2_1_:7 producti3_2_1_:8 customer1_2_2_:6 ordernum2_2_2_:7 producti3_2_2_:8 quantity4_2_2_:9
  ├── immutable
  ├── key: (8)
- ├── fd: ()-->(1-3), (8)-->(6,7,9,26)
+ ├── fd: ()-->(1-3,6,7), (8)-->(9,26)
  ├── group-by
  │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null lineitems1_.customerid:6 lineitems1_.ordernumber:7 lineitems1_.productid:8 lineitems1_.quantity:9 sum:25
  │    ├── grouping columns: lineitems1_.productid:8
  │    ├── immutable
  │    ├── key: (8)
- │    ├── fd: ()-->(1-3), (8)-->(1-3,6,7,9,25)
+ │    ├── fd: ()-->(1-3,6,7), (8)-->(1-3,6,7,9,25)
  │    ├── project
  │    │    ├── columns: column24:24 order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null lineitems1_.customerid:6 lineitems1_.ordernumber:7 lineitems1_.productid:8 lineitems1_.quantity:9 li.customerid:12 li.ordernumber:13
  │    │    ├── immutable
- │    │    ├── fd: ()-->(1-3), (8)-->(6,7,9)
+ │    │    ├── fd: ()-->(1-3,6,7), (8)-->(9)
  │    │    ├── right-join (hash)
  │    │    │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null lineitems1_.customerid:6 lineitems1_.ordernumber:7 lineitems1_.productid:8 lineitems1_.quantity:9 li.customerid:12 li.ordernumber:13 li.productid:14 li.quantity:15 p.productid:18 cost:20
  │    │    │    ├── key: (8,12,13,18)
- │    │    │    ├── fd: ()-->(1-3), (8)-->(6,7,9), (12-14)-->(15), (18)-->(20), (14)==(18), (18)==(14)
+ │    │    │    ├── fd: ()-->(1-3,6,7), (8)-->(9), (12-14)-->(15), (18)-->(20), (14)==(18), (18)==(14)
  │    │    │    ├── inner-join (hash)
  │    │    │    │    ├── columns: li.customerid:12!null li.ordernumber:13!null li.productid:14!null li.quantity:15 p.productid:18!null cost:20
  │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
@@ -2329,7 +2329,7 @@ project
  │    │    │    │    ├── left ordering: +1,+2
  │    │    │    │    ├── right ordering: +6,+7
  │    │    │    │    ├── key: (8)
- │    │    │    │    ├── fd: ()-->(1-3), (8)-->(6,7,9)
+ │    │    │    │    ├── fd: ()-->(1-3,6,7), (8)-->(9)
  │    │    │    │    ├── scan customerorder [as=order0_]
  │    │    │    │    │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null
  │    │    │    │    │    ├── constraint: /1/2: [/'c111'/0 - /'c111'/0]

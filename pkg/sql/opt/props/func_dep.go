@@ -700,11 +700,12 @@ func (f *FuncDepSet) AreColsEquiv(col1, col2 opt.ColumnID) bool {
 //   (a)==(b)
 //   (b)==(c)
 //   (a)==(d)
+//   (e)==(f)
 //
-// The equivalence closure for (a) is (a,b,c,d) because (a) is transitively
-// equivalent to all other columns. Therefore, all columns must have equal
-// non-NULL values, or else all must be NULL (see definition for NULL= in the
-// comment for FuncDepSet).
+// The equivalence closure for (a,e) is (a,b,c,d,e,f) because all these columns
+// are transitively equal to either a or e. Therefore, all columns must have
+// equal non-NULL values, or else all must be NULL (see definition for NULL= in
+// the comment for FuncDepSet).
 func (f *FuncDepSet) ComputeEquivClosure(cols opt.ColSet) opt.ColSet {
 	// Don't need to get transitive closure, because equivalence closures are
 	// already maintained for every column.
@@ -890,8 +891,8 @@ func (f *FuncDepSet) AddEquivalency(a, b opt.ColumnID) {
 	f.addEquivalency(equiv)
 }
 
-// AddConstants adds a strict FD to the set that declares the given column as
-// having the same constant value for all rows. If the column is nullable, then
+// AddConstants adds a strict FD to the set that declares each given column as
+// having the same constant value for all rows. If a column is nullable, then
 // its value may be NULL, but then the column must be NULL for all rows. For
 // column "a", the FD looks like this:
 //
@@ -1376,6 +1377,26 @@ func (f *FuncDepSet) MakeLeftOuter(
 	// leftKey because nullExtendRightRows can remove FDs, such that the closure
 	// of oldKey ends up missing some columns from the right.
 	f.ensureKeyClosure(leftCols.Union(rightCols))
+
+	// If the left input has at most one row, any columns that - when the join
+	// filters hold - are functionally dependent on the left columns are constant
+	// in the left join output:
+	//  - either the one left row has a match, and all output rows have the same
+	//    values for the left columns
+	//  - or the left row has no match, and there is a single output row (where
+	//    any functional dependencies hold trivially).
+	//
+	// This does not hold in general when the left equality column is
+	// constant but the left input has more than one row, for example:
+	//   ab contains (1, 1), (1, 2)
+	//   cd contains (1, 1)
+	//   ab JOIN cd ON (a=c AND b=d) contains (1, 1, 1, 1), (1, 2, NULL, NULL)
+	// Here a is constant in ab but c is not constant in the result.
+	if leftFDs.HasMax1Row() {
+		constCols := filtersFDs.ComputeClosure(leftCols)
+		constCols.IntersectionWith(rightCols)
+		f.AddConstants(constCols)
+	}
 }
 
 // MakeFullOuter modifies the cartesian product FD set to reflect the impact of
