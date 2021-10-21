@@ -29,6 +29,7 @@ interface LoadingProps {
   render: () => any;
   errorClassName?: string;
   loadingClassName?: string;
+  statsType: string;
 }
 
 const cx = classNames.bind(styles);
@@ -81,7 +82,22 @@ export const Loading: React.FC<LoadingProps> = props => {
         } else {
           return {
             intent: "danger",
-            description: <span>{error.message}</span>,
+            description: (
+              <div>
+                <span>
+                  This page had an unexpected error while loading
+                  {" " + props.statsType}.
+                </span>{" "}
+                <a
+                  className={cx("action")}
+                  onClick={() => {
+                    window.location.reload();
+                  }}
+                >
+                  Reload this page
+                </a>
+              </div>
+            ),
           };
         }
       })

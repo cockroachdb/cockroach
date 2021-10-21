@@ -220,6 +220,7 @@ export class SessionsPage extends React.Component<
           loading={isNil(this.props.sessions)}
           error={this.props.sessionsError}
           render={this.renderSessions}
+          statsType={"sessions"}
         />
         <TerminateSessionModal
           ref={this.terminateSessionRef}

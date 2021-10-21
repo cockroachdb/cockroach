@@ -449,6 +449,7 @@ export class TransactionsPage extends React.Component<
               </>
             );
           }}
+          statsType={"transactions"}
         />
       </div>
     );

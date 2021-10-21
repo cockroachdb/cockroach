@@ -578,6 +578,7 @@ export class StatementsPage extends React.Component<
           loading={isNil(this.props.statements)}
           error={this.props.statementsError}
           render={this.renderStatements}
+          statsType={"statements"}
         />
         <ActivateStatementDiagnosticsModal
           ref={this.activateDiagnosticsRef}
