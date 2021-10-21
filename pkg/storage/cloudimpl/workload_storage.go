@@ -168,3 +168,7 @@ func ParseWorkloadConfig(uri *url.URL) (*roachpb.ExternalStorage_Workload, error
 	}
 	return c, nil
 }
+
+func (s *workloadStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	return nil, errors.Errorf(`workload storage does not support writing`)
+}

@@ -12,8 +12,8 @@ go_test(
     name = "ctxgroup_test",
     size = "small",
     srcs = ["ctxgroup_test.go"],
-    embed = [":ctxgroup"],
     deps = [
+        ":ctxgroup",
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_errors//:errors",

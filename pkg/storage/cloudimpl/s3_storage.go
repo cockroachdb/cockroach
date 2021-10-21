@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -561,4 +562,38 @@ func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
 
 func (s *s3Storage) Close() error {
 	return nil
+}
+
+func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	uploader, err := s.getUploader(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return util.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
+		// Upload the file to S3.
+		// TODO(dt): test and tune the uploader parameters.
+		_, err := uploader.UploadWithContext(ctx, &s3manager.UploadInput{
+			Bucket:               s.bucket,
+			Key:                  aws.String(path.Join(s.prefix, basename)),
+			Body:                 r,
+			ServerSideEncryption: nilIfEmpty(s.conf.ServerEncMode),
+			SSEKMSKeyId:          nilIfEmpty(s.conf.ServerKMSID),
+		})
+		return errors.Wrap(err, "upload failed")
+	}), nil
+}
+
+func (s *s3Storage) getUploader(ctx context.Context) (*s3manager.Uploader, error) {
+	if s.cached != nil {
+		return s.cached.uploader, nil
+	}
+	client, region, err := newClient(ctx, s.opts, s.settings)
+	if err != nil {
+		return nil, err
+	}
+	if s.opts.region == "" {
+		s.opts.region = region
+	}
+	return client.uploader, nil
 }

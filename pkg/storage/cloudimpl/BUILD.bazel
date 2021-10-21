@@ -28,6 +28,7 @@ go_library(
         "//pkg/sql",
         "//pkg/storage/cloud",
         "//pkg/storage/cloudimpl/filetable",
+        "//pkg/util",
         "//pkg/util/contextutil",
         "//pkg/util/log",
         "//pkg/util/retry",

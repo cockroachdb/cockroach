@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -345,4 +346,11 @@ func (h *httpStorage) req(
 		return nil, err
 	}
 	return resp, nil
+}
+
+func (h *httpStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	return util.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
+		_, err := h.reqNoBody(ctx, "PUT", basename, r)
+		return err
+	}), nil
 }

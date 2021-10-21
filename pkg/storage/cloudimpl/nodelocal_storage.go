@@ -206,3 +206,7 @@ func (l *localFileStorage) Size(ctx context.Context, basename string) (int64, er
 func (*localFileStorage) Close() error {
 	return nil
 }
+
+func (l *localFileStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	return l.blobClient.Writer(ctx, joinRelativePath(l.base, basename))
+}

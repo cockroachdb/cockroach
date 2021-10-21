@@ -114,7 +114,7 @@ func TestPutHttp(t *testing.T) {
 		srv, files, cleanup := makeServer()
 		defer cleanup()
 		testExportStore(t, srv.String(), false, user, nil, nil)
-		if expected, actual := 14, files(); expected != actual {
+		if expected, actual := 15, files(); expected != actual {
 			t.Fatalf("expected %d files to be written to single http store, got %d", expected, actual)
 		}
 	})
@@ -137,7 +137,7 @@ func TestPutHttp(t *testing.T) {
 		if expected, actual := 4, files2(); expected != actual {
 			t.Fatalf("expected %d files written to http host 2, got %d", expected, actual)
 		}
-		if expected, actual := 4, files3(); expected != actual {
+		if expected, actual := 5, files3(); expected != actual {
 			t.Fatalf("expected %d files written to http host 3, got %d", expected, actual)
 		}
 	})
