@@ -106,7 +106,7 @@ func (so *DummySequenceOperators) GetLatestValueInSessionForSequenceByID(
 
 // SetSequenceValueByID implements the tree.SequenceOperators interface.
 func (so *DummySequenceOperators) SetSequenceValueByID(
-	ctx context.Context, seqID int64, newVal int64, isCalled bool,
+	ctx context.Context, seqID uint32, newVal int64, isCalled bool,
 ) error {
 	return errors.WithStack(errSequenceOperators)
 }

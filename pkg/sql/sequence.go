@@ -139,8 +139,11 @@ func (p *planner) incrementSequenceUsingCache(
 	fetchNextValues := func() (currentValue, incrementAmount, sizeOfCache int64, err error) {
 		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(descriptor.GetID()))
 
+		// We *do not* use the planner txn here, since nextval does not respect
+		// transaction boundaries. This matches the specification at
+		// https://www.postgresql.org/docs/14/functions-sequence.html
 		endValue, err := kv.IncrementValRetryable(
-			ctx, p.txn.DB(), seqValueKey, seqOpts.Increment*cacheSize)
+			ctx, p.ExecCfg().DB, seqValueKey, seqOpts.Increment*cacheSize)
 
 		if err != nil {
 			if errors.HasType(err, (*roachpb.IntegerOverflowError)(nil)) {
@@ -249,7 +252,7 @@ func getLatestValueInSessionForSequenceHelper(
 
 // SetSequenceValueByID implements the tree.SequenceOperators interface.
 func (p *planner) SetSequenceValueByID(
-	ctx context.Context, seqID int64, newVal int64, isCalled bool,
+	ctx context.Context, seqID uint32, newVal int64, isCalled bool,
 ) error {
 	if p.EvalContext().TxnReadOnly {
 		return readOnlyError("setval()")
@@ -267,7 +270,18 @@ func (p *planner) SetSequenceValueByID(
 	if !descriptor.IsSequence() {
 		return sqlerrors.NewWrongObjectTypeError(seqName, "sequence")
 	}
-	return setSequenceValueHelper(ctx, p, descriptor, newVal, isCalled, seqName)
+	if err := setSequenceValueHelper(ctx, p, descriptor, newVal, isCalled, seqName); err != nil {
+		return err
+	}
+
+	// Clear out the cache and update the last value if needed.
+	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
+		m.initSequenceCache()
+		if isCalled {
+			m.RecordLatestSequenceVal(seqID, newVal)
+		}
+	})
+	return nil
 }
 
 // setSequenceValueHelper is shared by SetSequenceValue and SetSequenceValueByID
@@ -299,10 +313,13 @@ func setSequenceValueHelper(
 		return err
 	}
 
+	// We *do not* use the planner txn here, since setval does not respect
+	// transaction boundaries. This matches the specification at
+	// https://www.postgresql.org/docs/14/functions-sequence.html
 	// TODO(vilterp): not supposed to mix usage of Inc and Put on a key,
 	// according to comments on Inc operation. Switch to Inc if `desired-current`
 	// overflows correctly.
-	return p.txn.Put(ctx, seqValueKey, newVal)
+	return p.ExecCfg().DB.Put(ctx, seqValueKey, newVal)
 }
 
 // MakeSequenceKeyVal returns the key and value of a sequence being set
