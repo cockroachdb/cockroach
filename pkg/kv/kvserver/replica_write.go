@@ -50,6 +50,25 @@ var migrateApplicationTimeout = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
+type probeKey struct{}
+
+func isCircuitBreakerProbe(ctx context.Context) bool {
+	return ctx.Value(probeKey{}) != nil
+}
+
+func withCircuitBreakerProbeMarker(ctx context.Context) context.Context {
+	// TODO(tbg): put the *Replica and check for pointer identity in
+	// isCircuitBreakerProbe just in case the ctx makes its way to another
+	// Replica.
+	// TODO(tbg): we could also completely get out of this context business
+	// if we simply checked against the incoming batch (perhaps adding a
+	// BypassBreaker field to ProbeRequest). OTOH this would not ever
+	// support "remembering" that a lease request is triggered by a probe
+	// if we decide to "expand" probe coverage in that direction. (But
+	// then we can bring the context back, too).
+	return context.WithValue(ctx, probeKey{}, probeKey{})
+}
+
 // executeWriteBatch is the entry point for client requests which may mutate the
 // range's replicated state. Requests taking this path are evaluated and ultimately
 // serialized through Raft, but pass through additional machinery whose goal is
@@ -194,8 +213,15 @@ func (r *Replica) executeWriteBatch(
 		}
 	}()
 
+	brSig := r.breaker.Signal()
+	if isCircuitBreakerProbe(ctx) {
+		brSig = neverTripSignaller{}
+	}
 	for {
 		select {
+		case <-brSig.C():
+			abandon()
+			return nil, nil, roachpb.NewError(brSig.Err()) // TODO(tbg): return a structured error
 		case propResult := <-ch:
 			// Semi-synchronously process any intents that need resolving here in
 			// order to apply back pressure on the client which generated them. The
@@ -293,8 +319,24 @@ func (r *Replica) executeWriteBatch(
 			var s redact.StringBuilder
 			rangeUnavailableMessage(&s, r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
 				r.RaftStatus(), ba, timeutil.Since(startPropTime))
-			log.Errorf(ctx, "range unavailable: %v", s)
-
+			err := errors.Errorf("range unavailable: %v", s)
+			// TODO(tbg): develop a coherent story about how the breaker gets
+			// tripped in a world in which all clients have a context cancellation
+			// shorter than base.SlowRequestThreshold. Rather than trying to trip
+			// the breaker when the proportion of ctx canceled vs other results
+			// here is high, it might be better to trigger a probe (but not to
+			// trip the breaker) every couple seconds when we see lots of ctx
+			// canceled errors that took at least 1s, or something like that.
+			//
+			// We should also proactively trip breakers on node liveness events.
+			// When a node goes non-live, we should trigger probes for all of the
+			// replicas belonging to ranges that would now be expected to have
+			// lost quorum, if any, or, for even more proactivity, trip them
+			// outright.
+			r.breaker.Report(err)
+			log.Errorf(ctx, "%s", err)
+			// Continue waiting. If the breaker is now tripped, the breaker channel
+			// will fail-fast the request on the next loop around.
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
 			// which indicates to the caller that the command may have executed.

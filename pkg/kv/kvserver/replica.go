@@ -264,6 +264,8 @@ type Replica struct {
 	// miss out on anything.
 	raftCtx context.Context
 
+	breaker *replicaCircuitBreaker
+
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
