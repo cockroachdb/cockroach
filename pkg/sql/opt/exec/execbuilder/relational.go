@@ -1162,6 +1162,26 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 
 	joinType := joinOpToJoinType(join.JoinType)
 
+	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
+		// We have a partial join, and we want to make sure that the relation
+		// with smaller cardinality is on the right side. Note that we assumed
+		// it during the costing.
+		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
+		// choosing a side.
+		leftRowCount := join.Left.Relational().Stats.RowCount
+		rightRowCount := join.Right.Relational().Stats.RowCount
+		if leftRowCount < rightRowCount {
+			if joinType == descpb.LeftSemiJoin {
+				joinType = descpb.RightSemiJoin
+			} else {
+				joinType = descpb.RightAntiJoin
+			}
+			join.Left, join.Right = join.Right, join.Left
+			join.LeftEq, join.RightEq = join.RightEq, join.LeftEq
+			join.LeftOrdering, join.RightOrdering = join.RightOrdering, join.LeftOrdering
+		}
+	}
+
 	left, right, onExpr, outputCols, err := b.initJoinBuild(
 		join.Left, join.Right, join.On, joinType,
 	)
