@@ -451,7 +451,9 @@ export class StatementDetails extends React.Component<
 
     if (!stats) {
       const sourceApp = queryByName(this.props.location, appAttr);
-      const listUrl = "/statements" + (sourceApp ? "/" + sourceApp : "");
+      const listUrl =
+        "/sql-activity?tab=statements" +
+        (sourceApp ? "&" + appAttr + "=" + sourceApp : "");
 
       return (
         <React.Fragment>

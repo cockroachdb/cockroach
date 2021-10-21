@@ -3,7 +3,9 @@ def _impl(rctx):
     result = rctx.execute(["/usr/bin/xcodebuild", "-version"])
     if result.return_code:
         fail("XCode appears to not be installed: Got stdout {0}, stderr {1}".format(
-            result.stdout, result.stderr))
+            result.stdout,
+            result.stderr,
+        ))
 
     rctx.download_and_extract(
         url = [
@@ -17,20 +19,26 @@ def _impl(rctx):
     result = rctx.execute(["/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path"])
     if result.return_code:
         fail("Could not find path to macOS SDK: Got stdout {0}, stderr {1}".format(
-            result.stdout, result.stderr))
+            result.stdout,
+            result.stderr,
+        ))
     sdk_path = result.stdout.strip()
     repo_path = str(rctx.path(""))
 
-    rctx.template("BUILD",
-                  Label("@cockroach//build:toolchains/dev/darwin-x86_64/BUILD.darwin-x86_64"),
-                  executable = False)
-    rctx.template("cc_toolchain_config.bzl",
-                  Label("@cockroach//build:toolchains/dev/darwin-x86_64/cc_toolchain_config.bzl.tmpl"),
-                  substitutions = {
-                      "%{repo_path}": repo_path,
-                      "%{sdk_path}": sdk_path,
-                  },
-                  executable = False)
+    rctx.template(
+        "BUILD",
+        Label("@cockroach//build:toolchains/dev/darwin-x86_64/BUILD.darwin-x86_64"),
+        executable = False,
+    )
+    rctx.template(
+        "cc_toolchain_config.bzl",
+        Label("@cockroach//build:toolchains/dev/darwin-x86_64/cc_toolchain_config.bzl.tmpl"),
+        substitutions = {
+            "%{repo_path}": repo_path,
+            "%{sdk_path}": sdk_path,
+        },
+        executable = False,
+    )
 
 dev_darwin_x86_repo = repository_rule(
     implementation = _impl,
