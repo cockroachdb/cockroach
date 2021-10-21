@@ -1205,10 +1205,12 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 							}
 							col.ColumnDesc().DefaultExpr = lcSwap.NewRegionalByRowColumnDefaultExpr
 						}
+
 					} else {
 						// DROP is hit on cancellation, in which case we must roll back.
 						localityConfigToSwapTo = lcSwap.OldLocalityConfig
 					}
+
 					if err := setNewLocalityConfig(
 						ctx, scTable, txn, b, localityConfigToSwapTo, kvTrace, descsCol); err != nil {
 						return err
@@ -1227,48 +1229,14 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 				}
 
-				// If any old index had an interleaved parent, remove the
-				// backreference from the parent.
-				// N.B. This logic needs to be kept up to date with the
-				// corresponding piece in runSchemaChangesInTxn.
-				err := pkSwap.ForEachOldIndexIDs(func(idxID descpb.IndexID) error {
-					oldIndex, err := scTable.FindIndexWithID(idxID)
-					if err != nil {
-						return err
-					}
-					if oldIndex.NumInterleaveAncestors() != 0 {
-						ancestorInfo := oldIndex.GetInterleaveAncestor(oldIndex.NumInterleaveAncestors() - 1)
-						ancestor, err := descsCol.GetMutableTableVersionByID(ctx, ancestorInfo.TableID, txn)
-						if err != nil {
-							return err
-						}
-						ancestorIdxI, err := ancestor.FindIndexWithID(ancestorInfo.IndexID)
-						if err != nil {
-							return err
-						}
-						ancestorIdx := ancestorIdxI.IndexDesc()
-						foundAncestor := false
-						for k, ref := range ancestorIdx.InterleavedBy {
-							if ref.Table == scTable.ID && ref.Index == oldIndex.GetID() {
-								if foundAncestor {
-									return errors.AssertionFailedf(
-										"ancestor entry in %s for %s@%s found more than once",
-										ancestor.Name, scTable.Name, oldIndex.GetName())
-								}
-								ancestorIdx.InterleavedBy = append(
-									ancestorIdx.InterleavedBy[:k], ancestorIdx.InterleavedBy[k+1:]...)
-								foundAncestor = true
-								if err := descsCol.WriteDescToBatch(ctx, kvTrace, ancestor, b); err != nil {
-									return err
-								}
-							}
-						}
-					}
-					return nil
-				})
-				if err != nil {
+				if err := maybeRemoveInterleaveBackreference(ctx, txn, descsCol, m, scTable, func(
+					ctx context.Context, ancestor *tabledesc.Mutable,
+				) error {
+					return descsCol.WriteDescToBatch(ctx, kvTrace, ancestor, b)
+				}); err != nil {
 					return err
 				}
+
 				// If we performed MakeMutationComplete on a PrimaryKeySwap mutation, then we need to start
 				// a job for the index deletion mutations that the primary key swap mutation added, if any.
 				if err := sc.queueCleanupJobs(ctx, scTable, txn); err != nil {
@@ -1394,6 +1362,61 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// If this mutation is a primary key swap that is not being rolled back,
+// and the old index had an interleaved parent, remove the backreference
+// from the parent.
+func maybeRemoveInterleaveBackreference(
+	ctx context.Context,
+	txn *kv.Txn,
+	descsCol *descs.Collection,
+	mutation catalog.Mutation,
+	scTable *tabledesc.Mutable,
+	writeFunc func(ctx context.Context, ancestor *tabledesc.Mutable) error,
+) error {
+	if !mutation.Adding() {
+		return nil
+	}
+	pkSwap := mutation.AsPrimaryKeySwap()
+	if pkSwap == nil {
+		return nil
+	}
+	return pkSwap.ForEachOldIndexIDs(func(id descpb.IndexID) error {
+		oldIndex, err := scTable.FindIndexWithID(id)
+		if err != nil {
+			return err
+		}
+		if oldIndex.NumInterleaveAncestors() != 0 {
+			ancestorInfo := oldIndex.GetInterleaveAncestor(oldIndex.NumInterleaveAncestors() - 1)
+			ancestor, err := descsCol.GetMutableTableVersionByID(ctx, ancestorInfo.TableID, txn)
+			if err != nil {
+				return err
+			}
+			ancestorIdxI, err := ancestor.FindIndexWithID(ancestorInfo.IndexID)
+			if err != nil {
+				return err
+			}
+			ancestorIdx := ancestorIdxI.IndexDesc()
+			foundAncestor := false
+			for k, ref := range ancestorIdx.InterleavedBy {
+				if ref.Table == scTable.ID && ref.Index == oldIndex.GetID() {
+					if foundAncestor {
+						return errors.AssertionFailedf(
+							"ancestor entry in %s for %s@%s found more than once",
+							ancestor.Name, scTable.Name, oldIndex.GetName())
+					}
+					ancestorIdx.InterleavedBy = append(
+						ancestorIdx.InterleavedBy[:k], ancestorIdx.InterleavedBy[k+1:]...)
+					foundAncestor = true
+					if err := writeFunc(ctx, ancestor); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		return nil
+	})
 }
 
 // maybeUpdateZoneConfigsForPKChange moves zone configs for any rewritten
