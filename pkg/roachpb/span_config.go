@@ -17,6 +17,7 @@ import (
 )
 
 // Equal compares two span config entries.
+//lint:ignore U1001 unused
 func (e SpanConfigEntry) Equal(other SpanConfigEntry) bool {
 	return e.Span.Equal(other.Span) && e.Config.Equal(other.Config)
 }
