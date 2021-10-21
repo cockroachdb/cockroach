@@ -592,7 +592,7 @@ INSERT INTO partial_indexes VALUES (2, 1, 'bar') ON CONFLICT DO NOTHING
 ----
 insert partial_indexes
  ├── columns: <none>
- ├── arbiter indexes: primary secondary
+ ├── arbiter indexes: partial_indexes_pkey secondary
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
@@ -724,7 +724,7 @@ UPSERT INTO partial_indexes VALUES (2, 1, 'bar')
 ----
 upsert partial_indexes
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: partial_indexes_pkey
  ├── canary column: a:9
  ├── fetch columns: a:9 b:10 c:11
  ├── insert-mapping:
@@ -791,7 +791,7 @@ INSERT INTO comp VALUES (2, 1, 'Foo') ON CONFLICT DO NOTHING
 ----
 insert comp
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: comp_pkey
  ├── insert-mapping:
  │    ├── column1:8 => a:1
  │    ├── column2:9 => b:2
@@ -850,7 +850,7 @@ INSERT INTO comp VALUES (2, 1, 'Foo') ON CONFLICT (a) DO UPDATE SET b = comp.b +
 ----
 upsert comp
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: comp_pkey
  ├── canary column: a:13
  ├── fetch columns: a:13 b:14 c:15 d:16 e:17
  ├── insert-mapping:
@@ -937,7 +937,7 @@ UPSERT INTO comp VALUES (2, 1, 'Foo')
 ----
 upsert comp
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: comp_pkey
  ├── canary column: a:13
  ├── fetch columns: a:13 b:14 c:15 d:16 e:17
  ├── insert-mapping:
@@ -1010,7 +1010,7 @@ INSERT INTO uniq VALUES (1, 1, 'bar') ON CONFLICT DO NOTHING
 ----
 insert uniq
  ├── columns: <none>
- ├── arbiter indexes: primary secondary
+ ├── arbiter indexes: uniq_pkey secondary
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
@@ -1432,7 +1432,7 @@ INSERT INTO comp VALUES (1, 1, 'bar') ON CONFLICT DO NOTHING
 ----
 insert comp
  ├── columns: <none>
- ├── arbiter indexes: primary u1
+ ├── arbiter indexes: comp_pkey u1
  ├── insert-mapping:
  │    ├── column1:8 => a:1
  │    ├── column2:9 => b:2

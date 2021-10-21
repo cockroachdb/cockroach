@@ -122,7 +122,7 @@ CREATE TABLE speed_test (id INT PRIMARY KEY DEFAULT unique_rowid())
 ----
 
 opt
-SELECT id FROM speed_test@primary WHERE id BETWEEN 1 AND 1000 AND ((id % 16) = 0)
+SELECT id FROM speed_test@speed_test_pkey WHERE id BETWEEN 1 AND 1000 AND ((id % 16) = 0)
 ----
 select
  ├── columns: id:1!null
@@ -134,7 +134,7 @@ select
  ├── scan speed_test
  │    ├── columns: id:1!null
  │    ├── constraint: /1: [/1 - /1000]
- │    ├── flags: force-index=primary
+ │    ├── flags: force-index=speed_test_pkey
  │    ├── cardinality: [0 - 1000]
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    ├── cost: 1024.01
@@ -143,7 +143,7 @@ select
       └── (id:1 % 16) = 0 [outer=(1), immutable]
 
 opt
-SELECT id FROM speed_test@primary WHERE id BETWEEN 1 AND 2000 AND ((id % 16) = 0)
+SELECT id FROM speed_test@speed_test_pkey WHERE id BETWEEN 1 AND 2000 AND ((id % 16) = 0)
 ----
 select
  ├── columns: id:1!null
@@ -155,7 +155,7 @@ select
  ├── scan speed_test
  │    ├── columns: id:1!null
  │    ├── constraint: /1: [/1 - /2000]
- │    ├── flags: force-index=primary
+ │    ├── flags: force-index=speed_test_pkey
  │    ├── cardinality: [0 - 2000]
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    ├── cost: 1029.01
@@ -408,7 +408,7 @@ UPSERT INTO t64570 VALUES (10, 10, 10)
 ----
 upsert t64570
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: t64570_pkey
  ├── canary column: x:9
  ├── fetch columns: x:9 y:10 v:11
  ├── insert-mapping:

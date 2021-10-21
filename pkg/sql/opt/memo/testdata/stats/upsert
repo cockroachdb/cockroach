@@ -95,7 +95,7 @@ with &1
  ├── fd: ()-->(23)
  ├── upsert xyz
  │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float)
- │    ├── arbiter indexes: primary
+ │    ├── arbiter indexes: xyz_pkey
  │    ├── canary column: xyz.x:13(string)
  │    ├── fetch columns: xyz.x:13(string) xyz.y:14(int) xyz.z:15(float)
  │    ├── insert-mapping:

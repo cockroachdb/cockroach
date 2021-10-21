@@ -228,7 +228,7 @@ UPSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20)
 root
  ├── upsert parent_multi
  │    ├── columns: <none>
- │    ├── arbiter indexes: primary
+ │    ├── arbiter indexes: parent_multi_pkey
  │    ├── canary column: pk:9
  │    ├── fetch columns: pk:9 p:10 q:11
  │    ├── insert-mapping:
@@ -311,7 +311,7 @@ UPSERT INTO parent_multi(pk, p) VALUES (1, 10), (2, 20)
 root
  ├── upsert parent_multi
  │    ├── columns: <none>
- │    ├── arbiter indexes: primary
+ │    ├── arbiter indexes: parent_multi_pkey
  │    ├── canary column: pk:9
  │    ├── fetch columns: pk:9 p:10 q:11
  │    ├── insert-mapping:
@@ -613,7 +613,7 @@ UPSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20)
 root
  ├── upsert parent_multi
  │    ├── columns: <none>
- │    ├── arbiter indexes: primary
+ │    ├── arbiter indexes: parent_multi_pkey
  │    ├── canary column: pk:9
  │    ├── fetch columns: pk:9 p:10 q:11
  │    ├── insert-mapping:
@@ -927,7 +927,7 @@ UPSERT INTO parent_multi_partial VALUES (1), (2)
 root
  ├── upsert parent_multi_partial
  │    ├── columns: <none>
- │    ├── arbiter indexes: primary
+ │    ├── arbiter indexes: parent_multi_partial_pkey
  │    ├── canary column: pk:8
  │    ├── fetch columns: pk:8 p:9 q:10
  │    ├── insert-mapping:

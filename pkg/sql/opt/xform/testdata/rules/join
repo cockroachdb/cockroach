@@ -8840,21 +8840,21 @@ CREATE TABLE abc_part (
 ----
 
 exec-ddl
-ALTER PARTITION "east" OF INDEX abc_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "east" OF INDEX abc_part@abc_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=east: 2}',
   lease_preferences = '[[+region=east]]'
 ----
 
 exec-ddl
-ALTER PARTITION "west" OF INDEX abc_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "west" OF INDEX abc_part@abc_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=west: 2}',
   lease_preferences = '[[+region=west]]';
 ----
 
 exec-ddl
-ALTER PARTITION "central" OF INDEX abc_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "central" OF INDEX abc_part@abc_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=central: 2}',
   lease_preferences = '[[+region=central]]';
@@ -8929,21 +8929,21 @@ CREATE TABLE def_part (
 ----
 
 exec-ddl
-ALTER PARTITION "east" OF INDEX def_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "east" OF INDEX def_part@def_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=east: 2}',
   lease_preferences = '[[+region=east]]'
 ----
 
 exec-ddl
-ALTER PARTITION "west" OF INDEX def_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "west" OF INDEX def_part@def_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=west: 2}',
   lease_preferences = '[[+region=west]]';
 ----
 
 exec-ddl
-ALTER PARTITION "central" OF INDEX def_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "central" OF INDEX def_part@def_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=central: 2}',
   lease_preferences = '[[+region=central]]';

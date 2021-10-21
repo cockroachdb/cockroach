@@ -2086,7 +2086,7 @@ sort
       ├── volatile, mutations
       ├── upsert abc
       │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
-      │    ├── arbiter indexes: primary
+      │    ├── arbiter indexes: abc_pkey
       │    ├── canary column: abc.a:11
       │    ├── fetch columns: abc.a:11 abc.b:12 abc.c:13
       │    ├── insert-mapping:

@@ -117,14 +117,14 @@ CREATE TABLE xyzw (
 ----
 
 build
-DELETE FROM xyzw@primary
+DELETE FROM xyzw@xyzw_pkey
 ----
 delete xyzw
  ├── columns: <none>
  ├── fetch columns: x:7 y:8 z:9 w:10
  └── scan xyzw
       ├── columns: x:7!null y:8 z:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
-      └── flags: force-index=primary
+      └── flags: force-index=xyzw_pkey
 
 build
 DELETE FROM xyzw@foo

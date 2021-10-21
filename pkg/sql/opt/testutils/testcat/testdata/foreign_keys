@@ -13,7 +13,7 @@ TABLE parent
  ├── p int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX parent_pkey
  │    └── p int not null
  └── REFERENCED BY CONSTRAINT child_p_fkey FOREIGN KEY child (p) REFERENCES parent (p)
 
@@ -25,7 +25,7 @@ TABLE child
  ├── p int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX child_pkey
  │    └── c int not null
  └── CONSTRAINT child_p_fkey FOREIGN KEY child (p) REFERENCES parent (p)
 
@@ -45,7 +45,7 @@ TABLE parent2
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX parent2_pkey
  │    └── rowid int not null default (unique_rowid()) [hidden]
  ├── UNIQUE INDEX parent2_p_key
  │    ├── p int
@@ -60,7 +60,7 @@ TABLE child2
  ├── p int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX child2_pkey
  │    └── c int not null
  └── CONSTRAINT child2_p_fkey FOREIGN KEY child2 (p) REFERENCES parent2 (p)
 
@@ -97,7 +97,7 @@ TABLE parent_multicol
  ├── r int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX parent_multicol_pkey
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
@@ -113,7 +113,7 @@ TABLE child_multicol
  ├── r int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX child_multicol_pkey
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
@@ -128,7 +128,7 @@ TABLE child_multicol_full
  ├── r int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX child_multicol_full_pkey
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
@@ -145,7 +145,7 @@ TABLE parent
  ├── p int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── PRIMARY INDEX primary
+ └── PRIMARY INDEX parent_pkey
       └── p int not null
 
 exec-ddl
@@ -161,7 +161,7 @@ TABLE parent_multicol
  ├── r int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX parent_multicol_pkey
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
@@ -180,7 +180,7 @@ TABLE parent_multicol
  ├── r int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── PRIMARY INDEX primary
+ └── PRIMARY INDEX parent_multicol_pkey
       ├── p int not null
       ├── q int not null
       └── r int not null
