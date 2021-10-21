@@ -116,7 +116,7 @@
 
 /pkg/acceptance/             @cockroachdb/sql-experience
 /pkg/base/                   @cockroachdb/server-prs
-/pkg/bench/                  @cockroachdb/sql-queries
+/pkg/bench/                  @cockroachdb/sql-queries-noreview
 /pkg/bench/rttanalysis       @cockroachdb/sql-experience
 /pkg/blobs/                  @cockroachdb/bulk-prs
 /pkg/build/                  @cockroachdb/dev-inf
@@ -125,13 +125,13 @@
 /pkg/ccl/cliccl/             @cockroachdb/cli-prs
 /pkg/ccl/cmdccl/enc_utils/   @cockroachdb/storage
 /pkg/ccl/cmdccl/stub-schema-registry/ @cockroachdb/cdc-prs
-/pkg/ccl/gssapiccl/          @cockroachdb/sql-queries
+/pkg/ccl/gssapiccl/          @cockroachdb/server-prs
 /pkg/ccl/kvccl/              @cockroachdb/kv-noreview
 /pkg/ccl/migrationccl/       @cockroachdb/kv-prs-noreview
 /pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
 /pkg/ccl/multiregionccl/     @cockroachdb/multiregion
 /pkg/ccl/multitenantccl/     @cockroachdb/unowned
-/pkg/ccl/oidcccl/            @cockroachdb/sql-queries
+/pkg/ccl/oidcccl/            @cockroachdb/server-prs
 /pkg/ccl/partitionccl/       @cockroachdb/sql-schema @cockroachdb/multiregion
 /pkg/ccl/serverccl/          @cockroachdb/server-prs
 /pkg/ccl/telemetryccl/       @cockroachdb/obs-inf-prs
