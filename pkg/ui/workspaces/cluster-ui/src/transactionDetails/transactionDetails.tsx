@@ -29,7 +29,7 @@ import { SqlBox } from "../sql";
 import { aggregateStatements } from "../transactionsPage/utils";
 import { Loading } from "../loading";
 import { SummaryCard } from "../summaryCard";
-import { Bytes, Duration, formatNumberForDisplay } from "src/util";
+import { Bytes, Duration, formatNumberForDisplay, summarize } from "src/util";
 import { UIConfigState } from "../store";
 
 import summaryCardStyles from "../summaryCard/summaryCard.module.scss";
@@ -111,6 +111,11 @@ export class TransactionDetails extends React.Component<
       error,
       nodeRegions,
     } = this.props;
+    // don't show rows written if every statement is a select statement.
+    const showRowsWritten = statements.some(
+      stmt => summarize(stmt.key.key_data.query).statement !== "select",
+    );
+
     return (
       <div>
         <section className={baseHeadingClasses.wrapper}>
@@ -228,17 +233,21 @@ export class TransactionDetails extends React.Component<
                           )}
                           {unavailableTooltip}
                         </div>
-                        <div
-                          className={summaryCardStylesCx("summary--card__item")}
-                        >
-                          <Text>Mean rows written</Text>
-                          <Text>
-                            {formatNumberForDisplay(
-                              transactionStats.rows_written?.mean,
-                              formatTwoPlaces,
+                        {showRowsWritten && (
+                          <div
+                            className={summaryCardStylesCx(
+                              "summary--card__item",
                             )}
-                          </Text>
-                        </div>
+                          >
+                            <Text>Mean rows written</Text>
+                            <Text>
+                              {formatNumberForDisplay(
+                                transactionStats.rows_written?.mean,
+                                formatTwoPlaces,
+                              )}
+                            </Text>
+                          </div>
+                        )}
                         <div
                           className={summaryCardStylesCx("summary--card__item")}
                         >

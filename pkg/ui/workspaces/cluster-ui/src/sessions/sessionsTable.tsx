@@ -33,8 +33,7 @@ import {
 } from "src/dropdown/dropdown";
 import { Button } from "src/button/button";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import { summarize } from "../util";
-import { shortStatement } from "../statementsTable";
+import { getStmtSummary } from "../util";
 
 const cx = classNames.bind(styles);
 
@@ -165,8 +164,8 @@ export function makeSessionsColumns(
           return "N/A";
         }
         const stmt = session.session.active_queries[0].sql;
-        const summary = summarize(stmt);
-        return shortStatement(summary, stmt);
+        const stmtSummary = session.session.active_queries[0].sql_summary;
+        return getStmtSummary(stmt, stmtSummary);
       },
     },
   ];
