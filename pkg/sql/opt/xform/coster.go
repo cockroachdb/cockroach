@@ -843,7 +843,20 @@ func (c *coster) computeMergeJoinCost(join *memo.MergeJoinExpr) memo.Cost {
 	leftRowCount := join.Left.Relational().Stats.RowCount
 	rightRowCount := join.Right.Relational().Stats.RowCount
 
-	cost := memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
+	if (join.Op() == opt.SemiJoinOp || join.Op() == opt.AntiJoinOp) && leftRowCount < rightRowCount {
+		// If we have a semi or an anti join, during the execbuilding we choose
+		// the relation with smaller cardinality to be on the right side, so we
+		// need to swap row counts accordingly.
+		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
+		// choosing a side.
+		leftRowCount, rightRowCount = rightRowCount, leftRowCount
+	}
+
+	// The vectorized merge join in some cases buffers rows from the right side
+	// whereas the left side is processed in a streaming fashion. To account for
+	// this difference, we multiply both row counts so that a join with the
+	// smaller right side is preferred to the symmetric join.
+	cost := memo.Cost(0.9*leftRowCount+1.1*rightRowCount) * cpuCostFactor
 
 	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntMap{})
 	cost += filterSetup

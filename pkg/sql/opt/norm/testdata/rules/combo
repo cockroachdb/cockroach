@@ -339,7 +339,7 @@ ReorderJoins
               └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 ================================================================================
 GenerateMergeJoins
-  Cost: 2179.51
+  Cost: 2180.50
 ================================================================================
    project
     ├── columns: s:4
@@ -2947,7 +2947,7 @@ CommuteLeftJoin (higher cost)
          └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
 ================================================================================
 GenerateMergeJoins
-  Cost: 2249.31
+  Cost: 2248.64
 ================================================================================
    project
     ├── columns: r:12
@@ -3317,7 +3317,7 @@ GenerateMergeJoins (higher cost)
          └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
 ================================================================================
 GenerateStreamingGroupBy
-  Cost: 2239.16
+  Cost: 2238.49
 ================================================================================
    project
     ├── columns: r:12
@@ -3365,7 +3365,7 @@ GenerateStreamingGroupBy
          └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
 ================================================================================
 Final best expression
-  Cost: 2239.16
+  Cost: 2238.49
 ================================================================================
   project
    ├── columns: r:12

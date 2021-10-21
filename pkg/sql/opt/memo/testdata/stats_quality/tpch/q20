@@ -217,7 +217,7 @@ column_names   row_count  distinct_count  null_count
 {s_address}    4397       4369            0
 {s_name}       4397       4373            0
 {s_nationkey}  4397       25              0
-{s_suppkey}    4397       4434            0
+{s_suppkey}    4397       4397            0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {s_address}    0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
@@ -227,11 +227,11 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 
 ----Stats for q20_lookup_join_5----
 column_names   row_count  distinct_count  null_count
-{ps_suppkey}   4397       4434            0
+{ps_suppkey}   4397       4397            0
 {s_address}    4397       4369            0
 {s_name}       4397       4373            0
 {s_nationkey}  4397       25              0
-{s_suppkey}    4397       4434            0
+{s_suppkey}    4397       4397            0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {ps_suppkey}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
@@ -242,7 +242,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 
 ----Stats for q20_distinct_on_6----
 column_names  row_count  distinct_count  null_count
-{ps_suppkey}  4397       4434            0
+{ps_suppkey}  4397       4397            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {ps_suppkey}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
