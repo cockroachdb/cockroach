@@ -96,6 +96,68 @@ func (r *Replica) Send(
 	return r.sendWithRangeID(ctx, r.RangeID, &ba)
 }
 
+func (r *Replica) checkCircuitBreaker(
+	ctx context.Context,
+) (context.Context, func(), signaller, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	// NB: brSig will never trip if circuit breakers are not enabled.
+	brSig := r.breaker.Signal()
+	if isCircuitBreakerProbe(ctx) {
+		brSig = neverTripSignaller{}
+	}
+
+	if err := brSig.Err(); err != nil {
+		// TODO(tbg): we may want to exclude some requests from this check, or allow
+		// requests to exclude themselves from the check (via their header).
+		return ctx, nil, nil, err
+	}
+
+	// NB: this is a total crutch, see:
+	// https://github.com/cockroachdb/cockroach/issues/74707
+	// It will do until breakers default to on:
+	// https://github.com/cockroachdb/cockroach/issues/74705
+	if ch := brSig.C(); ch != nil {
+		_ = r.store.Stopper().RunAsyncTask(ctx, "watch", func(ctx context.Context) {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ch:
+				cancel()
+			}
+		})
+	}
+
+	return ctx, cancel, brSig, nil
+}
+
+func maybeAdjustWithBreakerError(pErr *roachpb.Error, brErr error) *roachpb.Error {
+	if pErr == nil || brErr == nil {
+		return pErr
+	}
+	err := pErr.GoError()
+	if ae := (&roachpb.AmbiguousResultError{}); errors.As(err, &ae) {
+		// The breaker tripped while a command was inflight, so we have to
+		// propagate an ambiguous result. We don't want to replace it, but there
+		// is a way to stash an Error in it so we use that.
+		//
+		// TODO(tbg): could also wrap it; there is no other write to WrappedErr
+		// in the codebase and it might be better to remove it. Nested *Errors
+		// are not a good idea.
+		wrappedErr := brErr
+		if ae.WrappedErr != nil {
+			wrappedErr = errors.Wrapf(brErr, "%v", ae.WrappedErr)
+		}
+		ae.WrappedErr = roachpb.NewError(wrappedErr)
+		return roachpb.NewError(ae)
+	} else if le := (&roachpb.NotLeaseHolderError{}); errors.As(err, &le) {
+		// When a lease acquisition triggered by this request is short-circuited
+		// by the breaker, it will return an opaque NotLeaseholderError, which we
+		// replace with the breaker's error.
+		return roachpb.NewError(errors.CombineErrors(brErr, le))
+	}
+	return pErr
+}
+
 // sendWithRangeID takes an unused rangeID argument so that the range
 // ID will be accessible in stack traces (both in panics and when
 // sampling goroutines from a live server). This line is subject to
@@ -109,7 +171,7 @@ func (r *Replica) Send(
 // github.com/cockroachdb/cockroach/pkg/storage.(*Replica).sendWithRangeID(0xc420d1a000, 0x64bfb80, 0xc421564b10, 0x15, 0x153fd4634aeb0193, 0x0, 0x100000001, 0x1, 0x15, 0x0, ...)
 func (r *Replica) sendWithRangeID(
 	ctx context.Context, _forStacks roachpb.RangeID, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+) (_ *roachpb.BatchResponse, rErr *roachpb.Error) {
 	var br *roachpb.BatchResponse
 	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
 		r.leaseholderStats.record(ba.Header.GatewayNodeID)
@@ -126,6 +188,16 @@ func (r *Replica) sendWithRangeID(
 		return nil, roachpb.NewError(err)
 	}
 
+	// Circuit breaker handling.
+	ctx, cancel, brSig, err := r.checkCircuitBreaker(ctx)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	defer func() {
+		rErr = maybeAdjustWithBreakerError(rErr, brSig.Err())
+		cancel()
+	}()
+
 	if err := r.maybeBackpressureBatch(ctx, ba); err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -137,7 +209,7 @@ func (r *Replica) sendWithRangeID(
 	}
 
 	// NB: must be performed before collecting request spans.
-	ba, err := maybeStripInFlightWrites(ba)
+	ba, err = maybeStripInFlightWrites(ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
