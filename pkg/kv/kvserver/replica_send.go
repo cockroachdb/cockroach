@@ -109,7 +109,7 @@ func (r *Replica) Send(
 // github.com/cockroachdb/cockroach/pkg/storage.(*Replica).sendWithRangeID(0xc420d1a000, 0x64bfb80, 0xc421564b10, 0x15, 0x153fd4634aeb0193, 0x0, 0x100000001, 0x1, 0x15, 0x0, ...)
 func (r *Replica) sendWithRangeID(
 	ctx context.Context, _forStacks roachpb.RangeID, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+) (_ *roachpb.BatchResponse, rErr *roachpb.Error) {
 	var br *roachpb.BatchResponse
 	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
 		r.leaseholderStats.record(ba.Header.GatewayNodeID)
@@ -124,6 +124,69 @@ func (r *Replica) sendWithRangeID(
 	isReadOnly := ba.IsReadOnly()
 	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
 		return nil, roachpb.NewError(err)
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	brSig := r.breaker.Signal()
+	if isCircuitBreakerProbe(ctx) {
+		brSig = neverTripSignaller{}
+	}
+	defer func() {
+		if rErr == nil {
+			return
+		}
+		// TODO(tbg): DistSender should ideally understand the circuit breaker errors.
+		// Otherwise, if its caching info is stale, it might persistently contact
+		// unavailable replicas despite there possibly existing a healthy alternative.
+		// Basically they should be treated like a NotLeaseholderError but the replica
+		// shouldn't be retried... this is probably too hard for now, better to make it
+		// a hard error but to ensure it evicts the leaseholder cache.
+		//
+		// See: https://github.com/cockroachdb/cockroach/issues/74504
+		brErr := brSig.Err()
+		if brErr == nil {
+			return
+		}
+		err := rErr.GoError()
+		if ae := (&roachpb.AmbiguousResultError{}); errors.As(err, &ae) {
+			// TODO(tbg): this is pretty janky. Basically when the breaker first trips
+			// some proposals are bound to get an ambiguous result, which we must propagate.
+			// But we also want this case to be presentable as a nice error in SQL, so it
+			// needs to contain the information coming from the breaker. We could consider
+			// wrapping the AmbiguousResultError instead.
+			wrappedErr := brErr
+			// TODO(tbg): this is the only write to WrappedErr in the codebase, so should
+			// simplify and avoid nesting `roachpb.Error` here.
+			if ae.WrappedErr != nil {
+				wrappedErr = errors.Wrapf(brErr, "%v", ae.WrappedErr)
+			}
+			ae.WrappedErr = roachpb.NewError(wrappedErr)
+			rErr = roachpb.NewError(ae)
+		} else if le := (&roachpb.NotLeaseHolderError{}); errors.As(err, &le) {
+			// When a lease acquisition is short-circuited by the breaker, it will return an opaque
+			// NotLeaseholderError, which we replace with the breaker's error.
+			rErr = roachpb.NewError(errors.CombineErrors(brErr, le))
+		}
+	}()
+	// NB: having this below the defer allows the defer to potentially annotate
+	// the error with additional information (such as how long the request was
+	// in Replica.Send) if the breaker is tripped (not done right now).
+	if err := brSig.Err(); err != nil {
+		// TODO(tbg): we may want to exclude some requests from this check, or allow requests
+		// to exclude themselves from the check (via their header).
+		return nil, roachpb.NewError(err)
+	}
+
+	if r.store.Stopper().RunAsyncTask(ctx, "watch", func(ctx context.Context) {
+		select {
+		case <-ctx.Done():
+			return
+		case <-brSig.C():
+			cancel()
+		}
+	}) != nil {
+		cancel()
 	}
 
 	if err := r.maybeBackpressureBatch(ctx, ba); err != nil {

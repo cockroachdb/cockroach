@@ -50,6 +50,25 @@ var migrateApplicationTimeout = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
+type probeKey struct{}
+
+func isCircuitBreakerProbe(ctx context.Context) bool {
+	return ctx.Value(probeKey{}) != nil
+}
+
+func withCircuitBreakerProbeMarker(ctx context.Context) context.Context {
+	// TODO(tbg): put the *Replica and check for pointer identity in
+	// isCircuitBreakerProbe just in case the ctx makes its way to another
+	// Replica.
+	// TODO(tbg): we could also completely get out of this context business
+	// if we simply checked against the incoming batch (perhaps adding a
+	// BypassBreaker field to ProbeRequest). OTOH this would not ever
+	// support "remembering" that a lease request is triggered by a probe
+	// if we decide to "expand" probe coverage in that direction. (But
+	// then we can bring the context back, too).
+	return context.WithValue(ctx, probeKey{}, probeKey{})
+}
+
 // executeWriteBatch is the entry point for client requests which may mutate the
 // range's replicated state. Requests taking this path are evaluated and ultimately
 // serialized through Raft, but pass through additional machinery whose goal is
@@ -176,7 +195,9 @@ func (r *Replica) executeWriteBatch(
 	startPropTime := timeutil.Now()
 	slowTimer := timeutil.NewTimer()
 	defer slowTimer.Stop()
-	slowTimer.Reset(r.store.cfg.SlowReplicationThreshold)
+
+	slowThreshold := r.slowReplicationThreshold(ba)
+	slowTimer.Reset(slowThreshold)
 	// NOTE: this defer was moved from a case in the select statement to here
 	// because escape analysis does a better job avoiding allocations to the
 	// heap when defers are unconditional. When this was in the slowTimer select
@@ -288,13 +309,11 @@ func (r *Replica) executeWriteBatch(
 
 		case <-slowTimer.C:
 			slowTimer.Read = true
+			// TODO(tbg): move this to the reproposal function as well.
 			r.store.metrics.SlowRaftRequests.Inc(1)
 
-			var s redact.StringBuilder
-			rangeUnavailableMessage(&s, r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
-				r.RaftStatus(), ba, timeutil.Since(startPropTime))
-			log.Errorf(ctx, "range unavailable: %v", s)
-
+			// Continue waiting. If the breaker is now tripped, the breaker channel
+			// will fail-fast the request on the next loop around.
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
 			// which indicates to the caller that the command may have executed.
@@ -345,52 +364,62 @@ func (r *Replica) executeWriteBatch(
 	}
 }
 
-func rangeUnavailableMessage(
-	s *redact.StringBuilder,
+func (r *Replica) slowReplicationThreshold(ba *roachpb.BatchRequest) time.Duration {
+	if knobs := r.store.TestingKnobs(); knobs != nil && knobs.SlowReplicationThresholdOverride != nil {
+		if dur := knobs.SlowReplicationThresholdOverride(ba); dur > 0 {
+			return dur
+		}
+		// Fall through.
+	}
+	return r.store.cfg.SlowReplicationThreshold
+}
+
+func rangeUnavailableError(
 	desc *roachpb.RangeDescriptor,
+	replDesc roachpb.ReplicaDescriptor,
 	lm liveness.IsLiveMap,
 	rs *raft.Status,
-	ba *roachpb.BatchRequest,
-	dur time.Duration,
-) {
-	var liveReplicas, otherReplicas []roachpb.ReplicaDescriptor
+) error {
+	nonLiveRepls := roachpb.MakeReplicaSet(nil)
 	for _, rDesc := range desc.Replicas().Descriptors() {
 		if lm[rDesc.NodeID].IsLive {
-			liveReplicas = append(liveReplicas, rDesc)
-		} else {
-			otherReplicas = append(otherReplicas, rDesc)
+			continue
 		}
+		nonLiveRepls.AddReplica(rDesc)
 	}
 
-	// Ensure that these are going to redact nicely.
-	var _ redact.SafeFormatter = ba
-	var _ redact.SafeFormatter = desc
-	var _ redact.SafeFormatter = roachpb.ReplicaSet{}
-
-	s.Printf(`have been waiting %.2fs for proposing command %s.
-This range is likely unavailable.
-Please submit this message to Cockroach Labs support along with the following information:
-
-Descriptor:  %s
-Live:        %s
-Non-live:    %s
-Raft Status: %+v
-
-and a copy of https://yourhost:8080/#/reports/range/%d
-
-If you are using CockroachDB Enterprise, reach out through your
-support contract. Otherwise, please open an issue at:
-
-  https://github.com/cockroachdb/cockroach/issues/new/choose
-`,
-		dur.Seconds(),
-		ba,
-		desc,
-		roachpb.MakeReplicaSet(liveReplicas),
-		roachpb.MakeReplicaSet(otherReplicas),
-		redact.Safe(rs), // raft status contains no PII
-		desc.RangeID,
+	canMakeProgress := desc.Replicas().CanMakeProgress(
+		func(replDesc roachpb.ReplicaDescriptor) bool {
+			return lm[replDesc.NodeID].IsLive
+		},
 	)
+
+	// Ensure good redaction.
+	var _ redact.SafeFormatter = nonLiveRepls
+	var _ redact.SafeFormatter = desc
+	var _ redact.SafeFormatter = replDesc
+
+	err := errors.Errorf("replica %s of %s is unavailable", desc, replDesc)
+	err = errors.Wrapf(
+		err,
+		"raft status: %+v", redact.Safe(rs), // raft status contains no PII
+	)
+	if len(nonLiveRepls.AsProto()) > 0 {
+		err = errors.Wrapf(err, "replicas on non-live nodes: %v (lost quorum: %t)", nonLiveRepls, !canMakeProgress)
+	}
+
+	return err
+}
+
+func (r *Replica) rangeUnavailableError() error {
+	desc := r.Desc()
+	replDesc, _ := desc.GetReplicaDescriptor(r.store.StoreID())
+
+	var isLiveMap liveness.IsLiveMap
+	if nl := r.store.cfg.NodeLiveness; nl != nil { // exclude unit test
+		isLiveMap = nl.GetIsLiveMap()
+	}
+	return rangeUnavailableError(desc, replDesc, isLiveMap, r.RaftStatus())
 }
 
 // canAttempt1PCEvaluation looks at the batch and decides whether it can be

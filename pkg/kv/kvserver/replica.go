@@ -264,6 +264,8 @@ type Replica struct {
 	// miss out on anything.
 	raftCtx context.Context
 
+	breaker *replicaCircuitBreaker
+
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
@@ -1227,6 +1229,11 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 		ctx, r.RangeID, r.mu.state.Lease.Replica.NodeID)
 	ri.ClosedTimestampSideTransportInfo.CentralClosed = centralClosed
 	ri.ClosedTimestampSideTransportInfo.CentralLAI = centralLAI
+	if err := r.breaker.Signal().Err(); err != nil {
+		// TODO(tbg): we could use an errorspb.EncodedError here but this wouldn't render
+		// well on the JSON endpoints.
+		ri.CircuitBreakerError = err.Error()
+	}
 
 	return ri
 }

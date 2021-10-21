@@ -1092,12 +1092,36 @@ func (r *Replica) refreshProposalsLocked(
 		log.Fatalf(ctx, "refreshAtDelta specified for reason %s != reasonTicks", reason)
 	}
 
+	var tripBreakerWithBA *roachpb.BatchRequest
+	var tripBreakerWithDuration time.Duration
 	var reproposals pendingCmdSlice
 	for _, p := range r.mu.proposals {
-		if p.command.MaxLeaseIndex == 0 {
+		if dur := r.store.cfg.RaftTickInterval * time.Duration(r.mu.ticks-p.createdAtTicks); dur > r.slowReplicationThreshold(p.Request) {
+			if tripBreakerWithDuration < dur {
+				// NB: if proposals regularly get rejected, we may never enter this branch. It might be more
+				// robust to instead trip the breaker "if applied index hasn't moved in duration X despite there
+				// having been proposals inflight".
+				tripBreakerWithDuration = dur
+				tripBreakerWithBA = p.Request
+			}
+		}
+		// TODO(tbg): this effectively disables this branch since leases are the only
+		// request without an MLI. Need to figure out if this is allowed. We definitely
+		// need to prevent the call to finishApplication, as it removes the proposal
+		// and thus the `createdAtTicks` that we ultimately are waiting to let grow large
+		// enough to trip the breaker.
+		// TODO(tbg): another thing about leases is that they don't go through Replica.Send,
+		// so they don't actually bounce on the circuit breaker. This isn't the biggest
+		// problem since all client traffic comes through Replica.Send, but it does make
+		// leases special in a way that perhaps isn't desirable and could raise questions
+		// later on.
+		if p.command.MaxLeaseIndex == 0 && !p.Request.IsLeaseRequest() {
 			// Commands without a MaxLeaseIndex cannot be reproposed, as they might
 			// apply twice. We also don't want to ask the proposer to retry these
 			// special commands.
+			//
+			// TODO(tbg): leases are one example here, but don't they have replay
+			// protection via the sequence number? What other requests are here?
 			r.cleanupFailedProposalLocked(p)
 			log.VEventf(p.ctx, 2, "refresh (reason: %s) returning AmbiguousResultError for command "+
 				"without MaxLeaseIndex: %v", reason, p.command)
@@ -1139,6 +1163,28 @@ func (r *Replica) refreshProposalsLocked(
 			// repropose everything.
 			reproposals = append(reproposals, p)
 		}
+	}
+
+	// If the breaker isn't tripped yet but we've detected commands that have
+	// taken too long to replicate, trip the breaker now.
+	//
+	// NB: we still keep reproposing commands on this and subsequent ticks
+	// even though this seems strictly counter-productive, except perhaps
+	// for the probe's proposals. We could consider being more strict here
+	// which could avoid build-up of raft log entries during outages, see
+	// for example:
+	// https://github.com/cockroachdb/cockroach/issues/60612
+	if r.breaker.Signal().Err() == nil && tripBreakerWithDuration > 0 {
+		// We hold both raftMu and r.mu here and would like to give the
+		// breaker a simple way to produce nicely annotated errors in
+		// its own probe, so we report in a goroutine. As a result, the
+		// breaker can call a method on the Replica to get the annotations
+		// without having to worry about causing deadlocks.
+		log.Warningf(ctx,
+			"have been waiting %.2fs for slow proposal %s",
+			tripBreakerWithDuration.Seconds(), tripBreakerWithBA,
+		)
+		r.breaker.TripAsync()
 	}
 
 	if log.V(1) && len(reproposals) > 0 {

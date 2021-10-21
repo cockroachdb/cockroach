@@ -81,6 +81,11 @@ type StoreTestingKnobs struct {
 	// error returned to the client, or to simulate network failures.
 	TestingResponseFilter kvserverbase.ReplicaResponseFilter
 
+	// SlowReplicationThresholdOverride is an interceptor that allows setting a
+	// per-Batch SlowReplicationThreshold. The closure may be invoked with a `nil`
+	// batch in the context of liveness heartbeats during lease handling.
+	SlowReplicationThresholdOverride func(ba *roachpb.BatchRequest) time.Duration
+
 	// TestingRangefeedFilter is called before a replica processes a rangefeed
 	// in order for unit tests to modify the request, error returned to the client
 	// or data.
