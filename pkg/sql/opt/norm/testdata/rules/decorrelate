@@ -4078,7 +4078,7 @@ project
       │    ├── left-join (hash)
       │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 y:9
       │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
-      │    │    ├── fd: ()-->(1-5)
+      │    │    ├── fd: ()-->(1-5,9)
       │    │    ├── limit hint: 1.00
       │    │    ├── select
       │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
@@ -4722,7 +4722,7 @@ values
                 ├── left-join (hash)
                 │    ├── columns: k:1!null i:2 y:9 true:13
                 │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
-                │    ├── fd: ()-->(1,2)
+                │    ├── fd: ()-->(1,2,9)
                 │    ├── limit hint: 1.00
                 │    ├── limit
                 │    │    ├── columns: k:1!null i:2
