@@ -193,11 +193,37 @@ yarn_install(
 ##############################
 
 # Load gazelle dependencies.
-load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
+load(
+    "@bazel_gazelle//:deps.bzl",
+    "gazelle_dependencies",
+    "go_repository",
+)
 
 # bazel_skylib handled above.
 
+# keep
+go_repository(
+    name = "com_github_bazelbuild_buildtools",
+    importpath = "github.com/bazelbuild/buildtools",
+    sha256 = "a9ef5103739dfb5ed2a5b47ab1654842a89695812e4af09e57d7015a5caf97e0",
+    strip_prefix = "buildtools",
+    urls = [
+        "https://storage.googleapis.com/public-bazel-artifacts/gomod/github.com/bazelbuild/buildtools/v0.0.0-20200718160251-b1667ff58f71/buildtools-v0.0.0-20200718160251-b1667ff58f71.tar.gz",
+    ],
+)
+
 # com_github_bazelbuild_rules_go handled in DEPS.bzl.
+
+# keep
+go_repository(
+    name = "com_github_bmatcuk_doublestar",
+    importpath = "github.com/bmatcuk/doublestar",
+    sha256 = "50b02a6a30e186ba189c037901719248667b595b3131a4f6b29aebe3c874e83b",
+    strip_prefix = "doublestar",
+    urls = [
+        "https://storage.googleapis.com/public-bazel-artifacts/gomod/github.com/bmatcuk/doublestar/v1.2.2/doublestar-1.2.2.tar.gz",
+    ],
+)
 
 # com_github_burntsushi_toml handled in DEPS.bzl.
 # com_github_davecgh_go_spew handled in DEPS.bzl.
