@@ -69,6 +69,13 @@ func (g *SpanGroup) Contains(k Key) bool {
 	})
 }
 
+func (g *SpanGroup) Encloses(span Span) bool {
+	if g.rg == nil {
+		return false
+	}
+	return g.rg.Encloses(s2r(span))
+}
+
 // Len returns the number of Spans currently within the SpanGroup.
 // This will always be equal to or less than the number of spans added,
 // as spans that overlap will merge to produce a single larger span.
