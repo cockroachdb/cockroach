@@ -57,12 +57,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -7763,5 +7765,59 @@ func TestLegacySchemaChangerWaitsForOtherSchemaChanges(t *testing.T) {
 			return nil
 		}
 		return errors.New("")
+	})
+}
+
+// TestMemoryMonitorErrorsDuringBackfillAreRetried tests that we properly classify memory
+// monitor errors as retriable. It's a regression test to ensure that we don't end up
+// trying to revert schema changes which encounter such errors. Prior to the commit which
+// added this test, these errors would result in failures which looked like:
+//
+//	reversing schema change \d+ due to irrecoverable error: memory budget exceeded: 1 bytes requested, 2 currently allocated, 2 bytes in budget
+func TestMemoryMonitorErrorsDuringBackfillAreRetried(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Run across both nodes to make sure that the error makes it across distsql
+	// boundaries.
+	testutils.RunTrueAndFalse(t, "local", func(t *testing.T, local bool) {
+		var shouldFail atomic.Int64
+		knobs := &execinfra.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				switch shouldFail.Add(1) {
+				case 1:
+					return mon.NewMemoryBudgetExceededError(1, 2, 2)
+				default:
+					return nil
+				}
+			},
+		}
+
+		var dataNode, otherNode int
+		if local {
+			dataNode, otherNode = 0, 1
+		} else {
+			dataNode, otherNode = 1, 0
+		}
+		tca := base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgsPerNode: map[int]base.TestServerArgs{
+				otherNode: {},
+				dataNode: {Knobs: base.TestingKnobs{
+					DistSQL:          knobs,
+					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				}},
+			},
+		}
+		tc := testcluster.StartTestCluster(t, 2, tca)
+		defer tc.Stopper().Stop(ctx)
+		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+		tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+		tdb.Exec(t, "INSERT INTO foo VALUES (1)")
+		tdb.Exec(t, `ALTER TABLE foo EXPERIMENTAL_RELOCATE SELECT ARRAY[$1], 1`,
+			tc.Server(dataNode).GetFirstStoreID())
+		tdb.Exec(t, `ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 42`)
+		require.Equalf(t, shouldFail.Load(), int64(2), "not all failure conditions were hit %d", shouldFail.Load())
 	})
 }
