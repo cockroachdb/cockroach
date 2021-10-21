@@ -8,36 +8,20 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { JobsTableProps, mapDispatchToProps } from "./index";
-import { RouteComponentProps } from "react-router-dom";
+import { JobTableProps } from "./jobTable";
 import moment from "moment";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { cockroach } from "src/js/protos";
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import Long from "long";
 
-const createdTimeSeconds = new Long(
-  Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3,
-);
-
-export const timestamp = new protos.google.protobuf.Timestamp({
-  seconds: new Long(Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3),
-});
-
-export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
+export const jobTablePropsFixture: JobTableProps = {
   sort: {
     sortKey: 3,
     ascending: false,
   },
-  status: "",
-  show: "50",
-  type: 0,
-  ...mapDispatchToProps,
-  // setSort: (() => {}) as any,
-  // setStatus: (() => {}) as any,
-  // setShow: (() => {}) as any,
-  // setType: (() => {}) as any,
-  // refreshJobs: (() => {}) as any,
+  isUsedFilter: false,
+  setSort: (() => {}) as any,
   jobs: {
     inFlight: false,
     valid: false,
@@ -46,6 +30,7 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
     ),
     setAt: moment("Mon Oct 18 2021 14:01:50 GMT-0400 (Eastern Daylight Time)"),
     lastError: null,
+    next_run: "test",
     data: JobsResponse.create({
       jobs: [
         {
@@ -55,21 +40,23 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
           username: "node",
           status: "succeeded",
           created: new protos.google.protobuf.Timestamp({
-            seconds: createdTimeSeconds,
+            seconds: new Long(1634648118),
+            nanos: 200459000,
           }),
-
           started: new protos.google.protobuf.Timestamp({
-            seconds: createdTimeSeconds.add(500),
+            seconds: new Long(1634648118),
+            nanos: 215527000,
           }),
-
           finished: new protos.google.protobuf.Timestamp({
-            seconds: createdTimeSeconds.add(1000),
+            seconds: new Long(1634648118),
+            nanos: 311522000,
           }),
-
           modified: new protos.google.protobuf.Timestamp({
-            seconds: createdTimeSeconds, // not sure what value realistically makes sense
+            seconds: new Long(1634648118),
+            nanos: 310899000,
           }),
           fraction_completed: 1,
+          next_run: "test",
         },
         {
           id: new Long(7003330561, 70312826),
@@ -99,9 +86,8 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         },
         {
           id: new Long(7002707969, 70312826),
-          type: "SCHEMA CHANGE",
-          description:
-            "ALTER TABLE movr.public.user_promo_codes ADD FOREIGN KEY (city, user_id) REFERENCES movr.public.users (city, id)",
+          type: "UNSPECIFIED",
+          description: "Unspecified",
           username: "root",
           descriptor_ids: [53],
           status: "canceled",
@@ -125,9 +111,9 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         },
         {
           id: new Long(6091954177, 70312826),
-          type: "SCHEMA CHANGE",
+          type: "BACKUP",
           description:
-            "ALTER TABLE movr.public.vehicle_location_histories ADD FOREIGN KEY (city, ride_id) REFERENCES movr.public.rides (city, id)",
+            "BACKUP DATABASE bank TO 'gs://acme-co-backup/database-bank-2017-03-29-nightly' AS OF SYSTEM TIME '-10s' INCREMENTAL FROM 'gs://acme-co-backup/database-bank-2017-03-27-weekly', 'gs://acme-co-backup/database-bank-2017-03-28-nightly' WITH revision_history\n",
           username: "root",
           descriptor_ids: [55],
           status: "paused",
@@ -151,9 +137,8 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         },
         {
           id: new Long(6093756417, 70312826),
-          type: "SCHEMA CHANGE",
-          description:
-            "ALTER TABLE movr.public.vehicle_location_histories ADD FOREIGN KEY (city, ride_id) REFERENCES movr.public.rides (city, id)",
+          type: "RESTORE",
+          description: "RESTORE data.* FROM $1 WITH OPTIONS (into_db='data2')",
           username: "root",
           descriptor_ids: [56],
           status: "running",
@@ -177,9 +162,9 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         },
         {
           id: new Long(5247850497, 70312826),
-          type: "SCHEMA CHANGE",
+          type: "IMPORT",
           description:
-            "ALTER TABLE movr.public.rides ADD FOREIGN KEY (vehicle_city, vehicle_id) REFERENCES movr.public.vehicles (city, id)",
+            "IMPORT PGDUMP 'userfile://defaultdb.public.userfiles_root/db.sql' WITH max_row_size='524288'",
           username: "root",
           descriptor_ids: [55],
           status: "pending",
@@ -203,12 +188,11 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         },
         {
           id: new Long(5246539777, 70312826),
-          type: "SCHEMA CHANGE",
-          description:
-            "ALTER TABLE movr.public.rides ADD FOREIGN KEY (vehicle_city, vehicle_id) REFERENCES movr.public.vehicles (city, id)",
+          type: "CHANGEFEED",
+          description: "CREATE CHANGEFEED FOR foo WITH updated, resolved, diff",
           username: "root",
           descriptor_ids: [54],
-          status: "succeeded",
+          status: "reverting",
           created: new protos.google.protobuf.Timestamp({
             seconds: new Long(1634648117),
             nanos: 664059000,
@@ -229,12 +213,11 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         },
         {
           id: new Long(4337653761, 70312826),
-          type: "SCHEMA CHANGE",
-          description:
-            "ALTER TABLE movr.public.rides ADD FOREIGN KEY (city, rider_id) REFERENCES movr.public.users (city, id)",
+          type: "CREATE STATS",
+          description: "SELECT job_id, job_type FROM [SHOW JOB 1]",
           username: "root",
           descriptor_ids: [53],
-          status: "succeeded",
+          status: "cancel-requested",
           created: new protos.google.protobuf.Timestamp({
             seconds: new Long(1634648117),
             nanos: 387146000,
@@ -255,12 +238,13 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         },
         {
           id: new Long(4338669569, 70312826),
-          type: "SCHEMA CHANGE",
+          type: "AUTO CREATE STATS",
           description:
-            "ALTER TABLE movr.public.rides ADD FOREIGN KEY (city, rider_id) REFERENCES movr.public.users (city, id)",
+            "FIXME. Automatic table statistics jobs are not displayed even when the Type menu is set to All. To view these jobs, set Type to Automatic-Statistics Creation as described above.",
+          //SELECT job_id, job_type FROM [SHOW AUTOMATIC JOBS];
           username: "root",
           descriptor_ids: [55],
-          status: "succeeded",
+          status: "pause-requested",
           created: new protos.google.protobuf.Timestamp({
             seconds: new Long(1634648117),
             nanos: 387146000,
@@ -281,12 +265,11 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         },
         {
           id: new Long(3391379457, 70312826),
-          type: "SCHEMA CHANGE",
-          description:
-            "ALTER TABLE movr.public.vehicles ADD FOREIGN KEY (city, owner_id) REFERENCES movr.public.users (city, id)",
+          type: "SCHEMA CHANGE GC",
+          description: "GC for DROP DATABASE t CASCADE",
           username: "root",
           descriptor_ids: [54],
-          status: "succeeded",
+          status: "revert-failed",
           created: new protos.google.protobuf.Timestamp({
             seconds: new Long(1634648117),
             nanos: 98294000,
@@ -307,9 +290,115 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         },
         {
           id: new Long(3390625793, 70312826),
-          type: "SCHEMA CHANGE",
+          type: "TYPEDESC SCHEMA CHANGE",
+          description: "ALTER TYPE status ADD VALUE 'pending';",
+          username: "root",
+          descriptor_ids: [53],
+          status: "succeeded",
+          highwater_timestamp: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          highwater_decimal: "test highwater decimal",
+          created: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          started: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          finished: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121906000,
+          }),
+          modified: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121173000,
+          }),
+          fraction_completed: 1,
+        },
+        {
+          id: new Long(3390625793, 70312826),
+          type: "STREAM INGESTION",
           description:
-            "ALTER TABLE movr.public.vehicles ADD FOREIGN KEY (city, owner_id) REFERENCES movr.public.users (city, id)",
+            "RESTORE DATABASE backup_database_name FROM 'your_backup_location';",
+          username: "root",
+          descriptor_ids: [53],
+          status: "succeeded",
+          created: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          started: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          finished: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121906000,
+          }),
+          modified: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121173000,
+          }),
+          fraction_completed: 1,
+        },
+        {
+          id: new Long(3390625793, 70312826),
+          type: "NEW SCHEMA CHANGE",
+          description: "ALTER TABLE db.t ADD COLUMN b INT DEFAULT 1",
+          username: "root",
+          descriptor_ids: [53],
+          status: "succeeded",
+          created: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          started: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          finished: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121906000,
+          }),
+          modified: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121173000,
+          }),
+          fraction_completed: 1,
+        },
+        {
+          id: new Long(3390625793, 70312826),
+          type: "MIGRATION",
+          description:
+            "IMPORT MYSQLDUMP 'https://s3-us-west-1.amazonaws.com/cockroachdb-movr/datasets/employees-db/mysqldump/employees-full.sql.gz';",
+          username: "root",
+          descriptor_ids: [53],
+          status: "succeeded",
+          created: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          started: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          finished: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121906000,
+          }),
+          modified: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121173000,
+          }),
+          fraction_completed: 1,
+        },
+        {
+          id: new Long(3390625793, 70312826),
+          type: "AUTO SPAN CONFIG RECONCILIATION",
+          description: "auto span config reconciliation",
           username: "root",
           descriptor_ids: [53],
           status: "succeeded",

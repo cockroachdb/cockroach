@@ -14,9 +14,10 @@ import { JobStatusBadge, ProgressBar } from "src/views/jobs/progressBar";
 import { Duration } from "src/views/jobs/duration";
 import Job = cockroach.server.serverpb.IJobResponse;
 import { cockroach } from "src/js/protos";
-import { JobStatusVisual, jobToVisual } from "src/views/jobs/jobStatusOptions";
+import {JOB_STATUS_RETRYING, JobStatusVisual, jobToVisual} from "src/views/jobs/jobStatusOptions";
 import { InlineAlert } from "src/components";
 import styles from "./jobStatus.module.styl";
+import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 export interface JobStatusProps {
   job: Job;
@@ -32,14 +33,21 @@ export const JobStatus: React.FC<JobStatusProps> = ({
   lineWidth,
 }) => {
   const visualType = jobToVisual(job);
+  const jobStatus = job.next_run ? JOB_STATUS_RETRYING : job.status;
 
   switch (visualType) {
     case JobStatusVisual.BadgeOnly:
-      return <JobStatusBadge jobStatus={job.status} />;
+      return <JobStatusBadge jobStatus={jobStatus} />;
+    case JobStatusVisual.BadgeWithTooltip:
+      return (
+        <ToolTipWrapper text={`Next Execution Time: ${job.next_run}`}>
+          <JobStatusBadge jobStatus={jobStatus} />
+        </ToolTipWrapper>
+      )
     case JobStatusVisual.BadgeWithDuration:
       return (
         <div>
-          <JobStatusBadge jobStatus={job.status} />
+          <JobStatusBadge jobStatus={jobStatus} />
           <span className="jobs-table__duration">
             <Duration job={job} />
           </span>
@@ -61,14 +69,14 @@ export const JobStatus: React.FC<JobStatusProps> = ({
     case JobStatusVisual.BadgeWithMessage:
       return (
         <div>
-          <JobStatusBadge jobStatus={job.status} />
+          <JobStatusBadge jobStatus={jobStatus} />
           <span className="jobs-table__duration">{job.running_status}</span>
         </div>
       );
     case JobStatusVisual.BadgeWithErrorMessage:
       return (
         <div>
-          <JobStatusBadge jobStatus={job.status} />
+          <JobStatusBadge jobStatus={jobStatus} />
           {!compact && (
             <InlineAlert
               title={job.error}
@@ -79,6 +87,6 @@ export const JobStatus: React.FC<JobStatusProps> = ({
         </div>
       );
     default:
-      return <JobStatusBadge jobStatus={job.status} />;
+      return <JobStatusBadge jobStatus={jobStatus} />;
   }
 };

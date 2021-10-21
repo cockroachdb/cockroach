@@ -10,11 +10,10 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { withRouterDecorator } from "src/util/decorators";
-import { JobsTable } from "./index";
-import {
-  jobsTablePropsFixture,
-} from "./jobsTable.fixture";
 
-storiesOf("JobsTable", module)
+import { JobTable } from "./jobTable";
+import { jobTablePropsFixture } from "./jobTable.fixture";
+
+storiesOf("JobTable", module)
   .addDecorator(withRouterDecorator)
-  .add("with data", () => <JobsTable {...jobsTablePropsFixture} />)
+  .add("with data", () => <JobTable {...jobTablePropsFixture} />);

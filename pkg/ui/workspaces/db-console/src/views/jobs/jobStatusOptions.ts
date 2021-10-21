@@ -15,6 +15,7 @@ import { BadgeStatus } from "src/components";
 export enum JobStatusVisual {
   BadgeOnly,
   BadgeWithDuration,
+  BadgeWithTooltip,
   ProgressBarWithDuration,
   BadgeWithMessage,
   BadgeWithErrorMessage,
@@ -24,9 +25,13 @@ export function jobToVisual(job: Job): JobStatusVisual {
   if (job.type === "CHANGEFEED") {
     return JobStatusVisual.BadgeOnly;
   }
+  if (job.next_run) {
+    return JobStatusVisual.BadgeWithTooltip;
+  }
   switch (job.status) {
     case JOB_STATUS_SUCCEEDED:
-      return JobStatusVisual.BadgeWithDuration;
+      return JobStatusVisual.BadgeWithTooltip;
+      // return JobStatusVisual.BadgeWithDuration;
     case JOB_STATUS_FAILED:
       return JobStatusVisual.BadgeWithErrorMessage;
     case JOB_STATUS_CANCELED:
@@ -48,6 +53,8 @@ export const JOB_STATUS_CANCELED = "canceled";
 export const JOB_STATUS_PAUSED = "paused";
 export const JOB_STATUS_RUNNING = "running";
 export const JOB_STATUS_PENDING = "pending";
+export const JOB_STATUS_REVERTING = "reverting";
+export const JOB_STATUS_RETRYING = "retrying";
 
 export const statusOptions = [
   { value: "", label: "All" },
@@ -72,6 +79,8 @@ export const jobStatusToBadgeStatus = (status: string): BadgeStatus => {
     case JOB_STATUS_CANCELED:
       return "default";
     case JOB_STATUS_PAUSED:
+      return "default";
+    case JOB_STATUS_REVERTING:
       return "default";
     case JOB_STATUS_RUNNING:
       return "info";
