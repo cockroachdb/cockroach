@@ -1086,22 +1086,15 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 	leftExpr := join.Child(0).(memo.RelExpr)
 	rightExpr := join.Child(1).(memo.RelExpr)
 	filters := join.Child(2).(*memo.FiltersExpr)
-	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
-		// We have a partial join, and we want to make sure that the relation
-		// with smaller cardinality is on the right side. Note that we assumed
-		// it during the costing.
+	leftRowCount := leftExpr.Relational().Stats.RowCount
+	rightRowCount := rightExpr.Relational().Stats.RowCount
+	if !joinType.IsSetOpJoin() && leftRowCount < rightRowCount {
+		// We want to make sure that the relation with smaller cardinality is on
+		// the right side. Note that we assumed it during the costing.
 		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
 		// choosing a side.
-		leftRowCount := leftExpr.Relational().Stats.RowCount
-		rightRowCount := rightExpr.Relational().Stats.RowCount
-		if leftRowCount < rightRowCount {
-			if joinType == descpb.LeftSemiJoin {
-				joinType = descpb.RightSemiJoin
-			} else {
-				joinType = descpb.RightAntiJoin
-			}
-			leftExpr, rightExpr = rightExpr, leftExpr
-		}
+		joinType = joinType.Commute()
+		leftExpr, rightExpr = rightExpr, leftExpr
 	}
 
 	leftEq, rightEq := memo.ExtractJoinEqualityColumns(
@@ -1161,6 +1154,18 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 	}
 
 	joinType := joinOpToJoinType(join.JoinType)
+	leftRowCount := join.Left.Relational().Stats.RowCount
+	rightRowCount := join.Right.Relational().Stats.RowCount
+	if !joinType.IsSetOpJoin() && leftRowCount < rightRowCount {
+		// We want to make sure that the relation with smaller cardinality is on
+		// the right side. Note that we assumed it during the costing.
+		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
+		// choosing a side.
+		joinType = joinType.Commute()
+		join.Left, join.Right = join.Right, join.Left
+		join.LeftEq, join.RightEq = join.RightEq, join.LeftEq
+		join.LeftOrdering, join.RightOrdering = join.RightOrdering, join.LeftOrdering
+	}
 
 	left, right, onExpr, outputCols, err := b.initJoinBuild(
 		join.Left, join.Right, join.On, joinType,

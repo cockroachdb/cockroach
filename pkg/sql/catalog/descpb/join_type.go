@@ -127,3 +127,27 @@ func (j JoinType) MakeOutputTypes(left, right []*types.T) []*types.T {
 	}
 	return outputTypes
 }
+
+// Commute returns the result of "commutation" of j (let's call it j') such that
+// `table1 j table2` is equivalent to `table2 j' table1`. It panics if j cannot
+// be commuted (which is the case for set-operation joins).
+func (j JoinType) Commute() JoinType {
+	switch j {
+	case InnerJoin, FullOuterJoin:
+		return j
+	case LeftOuterJoin:
+		return RightOuterJoin
+	case RightOuterJoin:
+		return LeftOuterJoin
+	case LeftSemiJoin:
+		return RightSemiJoin
+	case RightSemiJoin:
+		return LeftSemiJoin
+	case LeftAntiJoin:
+		return RightAntiJoin
+	case RightAntiJoin:
+		return LeftAntiJoin
+	default:
+		panic(errors.AssertionFailedf("unexpected join type in Commute: %s", j))
+	}
+}

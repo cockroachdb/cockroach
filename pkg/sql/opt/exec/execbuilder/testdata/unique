@@ -3010,6 +3010,7 @@ vectorized: true
 │               │     missing stats
 │               │     table: uniq@uniq_pkey
 │               │     spans: FULL SCAN
+│               │     locking strength: for update
 │               │
 │               └── • render
 │                   │ estimated row count: 2

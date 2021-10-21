@@ -155,40 +155,40 @@ regions: <hidden>
 │ nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
-│ equality: (a) = (b)
+│ equality: (b) = (a)
 │
-├── • sort
-│   │ nodes: <hidden>
-│   │ regions: <hidden>
-│   │ actual row count: 2
-│   │ estimated row count: 1
-│   │ order: +a
-│   │
-│   └── • scan
-│         nodes: <hidden>
-│         regions: <hidden>
-│         actual row count: 2
-│         KV time: 0µs
-│         KV contention time: 0µs
-│         KV rows read: 2
-│         KV bytes read: 16 B
-│         estimated row count: 1 (100% of the table; stats collected <hidden> ago)
-│         table: c@sec
-│         spans: FULL SCAN
+├── • scan
+│     nodes: <hidden>
+│     regions: <hidden>
+│     actual row count: 2
+│     KV time: 0µs
+│     KV contention time: 0µs
+│     KV rows read: 2
+│     KV bytes read: 16 B
+│     missing stats
+│     table: d@d_pkey
+│     spans: FULL SCAN
 │
-└── • scan
-      nodes: <hidden>
-      regions: <hidden>
-      actual row count: 2
-      KV time: 0µs
-      KV contention time: 0µs
-      KV rows read: 2
-      KV bytes read: 16 B
-      missing stats
-      table: d@d_pkey
-      spans: FULL SCAN
+└── • sort
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 2
+    │ estimated row count: 1
+    │ order: +a
+    │
+    └── • scan
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 2
+          KV time: 0µs
+          KV contention time: 0µs
+          KV rows read: 2
+          KV bytes read: 16 B
+          estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+          table: c@sec
+          spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzkU8Fq20AQvfcrhjklZBtLcuhhIWAa3OK0tosdcik-rHenioi0q-yOqI3xZ_UH-mVFUkMjx3Fr6KHQm-bNe6OZN7MbDA85SpwPPw6vbkCfK3g3m45Bw2gyGc5gPJy9H8L1dDQBA9NJQ7gEc75EgdYZmqiCAsrPGONCYOmdphCcr6FNQxiZFcpIYGbLimt4IVA7Tyg3yBnnhBJv1DKnGSlDvhehQEOssrwpqweBNAqcl8oGCa9R4LRiCYMYBX64Bc4KkhB9_xbaWDvLZDlz9lnKu68BPCkjIWmR5ZrpEYrfwFsUOL69uoLAVIJ2lWU4oRX3MsunEqKmt5ZAdP8SoVArKKhwfg0qz51WTEZC1FRfKtZ3FMBVXNZT1PymrUcgwcVWYBv9NCuwSgllvBV_bujceSbfi7teDuIzFEgr0tVzgw61XefCQw5MRQkmC_dQBZXSX5gqOWaqp2eSdEczg9JnhfLrfaeS_Gen0n_R1F9eVtZ5Q55Mx8dFrfwdZc9mxuRTunaZJd_rdzeT0xc-GcRnp5c-S-_az84j_qfu8eKYe5xRKJ0NtGvh3spR7RuZlNo9BFd5TZ-8081v2nDa6BrAUOA2G7fByLapusGn4viguN8Rx7vi5AhxsivuHxRf7LS92L76EQAA__8gyhMy
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzklM9q20AQxu99imFOCdnGkhx6WAiYBrc4re3ihFyKD-vdqSMi7Sq7I-pg_Fh9gT5Z0SqhleO4uPRQ6M0z833z52dJawz3BUq8Gn4cXlyDPlXwbjYdg4bRZDKcwXg4ez-Ey-loAgamkyg4B3O6QIHWGZqokgLKz5jiXGDlnaYQnG9S6ygYmRXKRGBuq5qb9Fygdp5QrpFzLgglXqtFQTNShnwvQYGGWOVFbGsGlc9L5R9Q4FWlbJDwGgVOa5YwyFDghxvgvCQJyfdvoY21s0yWc2eflbz7GsCTMhIezYsHpqdU-gbeosDxzcUFBKYKtKstwxGtuJdbPpaQxP1aAdHdS4JSraCk0vkHUEXhtGIyEpLYfaFY31IAV3PVXNHo41pPiQznG4Ft9AgssFoSynQj_gxq2oWqB4H0LqDpfwY0OwTolfNMvpd1WQ7SExRIK9L1c0D71m5q4b4AprICk4c7qINa0l-4qv_iVT-Pqa3zhjyZzjXzxvk7yQ40Y_JLunS5Jd_rd_kU9IWPBunJ8bnPl7ftz84L_E-hOzvkgZhRqJwNtI1wZ-ek4UZmSe3_EFztNX3yTscxbTiNvpgwFLit9ttgZGMpfgJ-Nad7zVnHnGybswMmZ9vm_l7z2dbk-ebVjwAAAP__0JQTNA==
 
 statement ok
 RESET vectorize; RESET distsql

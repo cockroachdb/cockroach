@@ -808,28 +808,28 @@ vectorized: true
 │ estimated row count: 42 (missing stats)
 │ filter: ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
 │
-└── • hash join (left outer)
-    │ columns: (n, sq, a, b)
+└── • hash join (right outer)
+    │ columns: (a, b, n, sq)
     │ estimated row count: 377 (missing stats)
-    │ equality: (sq) = (b)
+    │ equality: (b) = (sq)
     │ pred: n < 6
     │
-    ├── • scan
-    │     columns: (n, sq)
-    │     estimated row count: 333 (missing stats)
-    │     table: square@square_pkey
-    │     spans: /2-
+    ├── • filter
+    │   │ columns: (a, b)
+    │   │ estimated row count: 333 (missing stats)
+    │   │ filter: a > 1
+    │   │
+    │   └── • scan
+    │         columns: (a, b)
+    │         estimated row count: 1,000 (missing stats)
+    │         table: pairs@pairs_pkey
+    │         spans: FULL SCAN
     │
-    └── • filter
-        │ columns: (a, b)
-        │ estimated row count: 333 (missing stats)
-        │ filter: a > 1
-        │
-        └── • scan
-              columns: (a, b)
-              estimated row count: 1,000 (missing stats)
-              table: pairs@pairs_pkey
-              spans: FULL SCAN
+    └── • scan
+          columns: (n, sq)
+          estimated row count: 333 (missing stats)
+          table: square@square_pkey
+          spans: /2-
 
 # The simpler plan for an inner join, to compare.
 query T
@@ -1590,24 +1590,24 @@ vectorized: true
 │ estimated row count: 33 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (x, y, u, x, y, v)
+    │ columns: (x, y, v, x, y, u)
     │ estimated row count: 33 (missing stats)
     │ equality: (x, y) = (x, y)
     │ merge ordering: +"(x=x)",+"(y=y)"
     │
     ├── • scan
-    │     columns: (x, y, u)
+    │     columns: (x, y, v)
     │     ordering: +x,+y
-    │     estimated row count: 333 (missing stats)
-    │     table: xyu@xyu_pkey
-    │     spans: /1/2/4-
+    │     estimated row count: 1,000 (missing stats)
+    │     table: xyv@xyv_pkey
+    │     spans: FULL SCAN
     │
     └── • scan
-          columns: (x, y, v)
+          columns: (x, y, u)
           ordering: +x,+y
-          estimated row count: 1,000 (missing stats)
-          table: xyv@xyv_pkey
-          spans: FULL SCAN
+          estimated row count: 333 (missing stats)
+          table: xyu@xyu_pkey
+          spans: /1/2/4-
 
 
 # Regression test for #20765/27431.
@@ -1760,17 +1760,17 @@ vectorized: true
 ·
 • merge join
 │ equality: (a, b) = (a, b)
-│ right cols are key
+│ left cols are key
 │
 ├── • scan
 │     missing stats
-│     table: abcdef@abcdef_pkey
-│     spans: [/1/2/6/9 - ]
+│     table: abg@abg_pkey
+│     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: abg@abg_pkey
-      spans: FULL SCAN
+      table: abcdef@abcdef_pkey
+      spans: [/1/2/6/9 - ]
 
 # Regression tests for mixed-type equality columns (#22514).
 statement ok
@@ -2274,3 +2274,43 @@ vectorized: true
       missing stats
       table: customers@customers_pkey
       spans: FULL SCAN
+
+# Regression test for merge join not using the smaller table on the right
+# (#71790).
+statement ok
+CREATE TABLE f (
+  filename STRING PRIMARY KEY,
+  file_id UUID DEFAULT gen_random_uuid() NOT NULL UNIQUE
+);
+CREATE TABLE p (file_id UUID, byte_offset INT8, payload BYTES, PRIMARY KEY (file_id, byte_offset));
+INSERT INTO f VALUES ('abc', gen_random_uuid());
+INSERT INTO p SELECT (SELECT file_id FROM f LIMIT 1), i FROM generate_series(1, 35) AS g (i);
+ANALYZE f;
+ANALYZE p;
+
+query T
+EXPLAIN SELECT f.file_id, sum_int(length(p.payload)) FROM f f LEFT OUTER JOIN p p ON p.file_id = f.file_id WHERE f.filename = 'abc' GROUP BY f.file_id;
+----
+distribution: local
+vectorized: true
+·
+• group
+│ estimated row count: 1
+│
+└── • render
+    │ estimated row count: 35
+    │
+    └── • merge join (right outer)
+        │ estimated row count: 35
+        │ equality: (file_id) = (file_id)
+        │ right cols are key
+        │
+        ├── • scan
+        │     estimated row count: 35 (100% of the table; stats collected <hidden> ago)
+        │     table: p@p_pkey
+        │     spans: FULL SCAN
+        │
+        └── • scan
+              estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+              table: f@f_pkey
+              spans: [/'abc' - /'abc']

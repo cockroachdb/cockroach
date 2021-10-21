@@ -109,16 +109,19 @@ query T
 EXPLAIN (VEC) SELECT * FROM t AS t1, t AS t2 WHERE t1.b = 1 AND t1.a = t2.a
 ----
 │
-└ Node 1
-  └ *colexecjoin.mergeJoinInnerOp
-    ├ *colexecsel.selEQInt64Int64ConstOp
-    │ └ *colfetcher.ColBatchScan
-    └ *colfetcher.ColBatchScan
+├ Node 1
+│ └ *colrpc.Inbox
+└ Node 2
+  └ *colrpc.Outbox
+    └ *colexecjoin.mergeJoinInnerOp
+      ├ *colfetcher.ColBatchScan
+      └ *colexecsel.selEQInt64Int64ConstOp
+        └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t AS t1, t AS t2 WHERE t1.b = 1 AND t1.a = t2.a
 ----
-distribution: local
+distribution: full
 vectorized: true
 ·
 • merge join
@@ -127,21 +130,21 @@ vectorized: true
 │ left cols are key
 │ right cols are key
 │
-├── • filter
-│   │ estimated row count: 3,333
-│   │ filter: b = 1
-│   │
-│   └── • scan
-│         estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
-│         table: t@t_pkey
-│         spans: FULL SCAN
+├── • scan
+│     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+│     table: t@t_pkey
+│     spans: FULL SCAN
 │
-└── • scan
-      estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
-      table: t@t_pkey
-      spans: FULL SCAN
+└── • filter
+    │ estimated row count: 3,333
+    │ filter: b = 1
+    │
+    └── • scan
+          estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+          table: t@t_pkey
+          spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkFFr2zAQx9_3KY57SjatieRsDEFAYXWZR5p0cWCD4Qc1umUG1_IkGTZCvvuwPWhtmmxhb7qTfve7vw7ofxQoMf5yt1wkKxhdJ-k2_bQcQxov4_dbeAk3m_UtBFikEDj7cxDw-UO8iWEU-NU9zIGPYbG6bksNcwjiSo-RYWkNrfQDeZRfkWPGsHJ2R95b17QO7YPE_EQ5ZZiXVR2adsZwZx2hPGDIQ0EocavvC9qQNuQmU2RoKOi8aMcGVbn8QbtfyDCtdOklvMbsyNDW4XGgD3pPKPmR_bv0Ji8COXIT3jd2fQlKNMmllMlq--6kUlyifJpT_EfO6KT00VWX1hlyZHqerCH_9uSZzW_J7emjzUtyk6i_eUHfwkjxV-O5y_ffuyMyXNdBguJMCaYipmZMvWHq7clIs0v-cUO-sqWnYbRnJ0-bPGT21P2Pt7Xb0Z2zu1bTleuWaxuGfOhueVckZXfVLPgU5mfhqAfzISwugMUQjs7Cs8Ha2fHF7wAAAP__f31KBg==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykklFr2zAQgN_3K457Sja1iWRnDEFAYXWZR-p0cWCDkQc1vmUG1_IkGTZC_vuwPWgdFndd33yn--67s3RA96NAidGX2-UiTmB0Faeb9NNyDGm0jN5v4DVcr1c34GGRgufsz4eAzx-idQQjzy_vYA58DIvkqg01zMGLSz1GhqXJKNH35FB-RY4MBW4ZVtbsyDljm_ShLYqznyinDPOyqn2T3jLcGUsoD-hzXxBKTMyFqSYhMszI67xoy44MTe0fIOf1nlDOjuxRYz7ceKPvClqTzshOpr326FVl83ttfyHDtNKlk3CB56T8f6X8BVLxHOl1XniyZCeib-zyEpRo7lJKGSebd2eVwVnlg6kujc3IUnZ6XU-X_GXuG7J7-mjykuwk6I9e0Dc_UvzNeG7z_ffuExmuai9BhUzNmHrLFGdKMBWcXSnsrfTEQ1yTq0zp6J9e4rTZh7I9df_Hmdru6NaaXavpwlXLtYmMnO9OZ10Ql91RM-BjmA_CYQ_mp7AYhINhc_AMsziFw0F4emLeHl_9DgAA___4BXwe
 
 # However, if we add a selective filter, the flow is kept on the remote node.
 query T
@@ -153,9 +156,9 @@ EXPLAIN (VEC) SELECT * FROM t AS t1 INNER MERGE JOIN t AS t2 ON t1.a = t2.a WHER
 └ Node 2
   └ *colrpc.Outbox
     └ *colexecjoin.mergeJoinInnerOp
-      ├ *colexecsel.selEQInt64Int64ConstOp
-      │ └ *colfetcher.ColBatchScan
-      └ *colfetcher.ColBatchScan
+      ├ *colfetcher.ColBatchScan
+      └ *colexecsel.selEQInt64Int64ConstOp
+        └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t AS t1 INNER MERGE JOIN t AS t2 ON t1.a = t2.a WHERE t1.c = 1
@@ -169,18 +172,18 @@ vectorized: true
 │ left cols are key
 │ right cols are key
 │
-├── • filter
-│   │ estimated row count: 100
-│   │ filter: c = 1
-│   │
-│   └── • scan
-│         estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
-│         table: t@t_pkey
-│         spans: FULL SCAN
+├── • scan
+│     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+│     table: t@t_pkey
+│     spans: FULL SCAN
 │
-└── • scan
-      estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
-      table: t@t_pkey
-      spans: FULL SCAN
+└── • filter
+    │ estimated row count: 100
+    │ filter: c = 1
+    │
+    └── • scan
+          estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+          table: t@t_pkey
+          spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykktFv0zAQxt_5K073tIG31kmKkKVKniCDTG0ykkogoT6Y5CiRsjjYjgSq-r-jJEhbKpox9hZ_d7_77nO8R_ujQoHh59vVVRTD2bso22QfV-eQhavw7QZewnWarMHBVQaOQxTHYQrrMH0fwk0SxX8KHiQxOH6pYAnOu1Tw6UOYhp2SwxI4Mqx1QbG6I4viC3aCh1uGjdE5WatNJ-_7pqj4iWLOsKyb1nXylmGuDaHYoytdRSgw1he6mQXIsCCnyqpvOzDUrbuHrFM7QrE4sAeD-fTgjfpaUUqqIDObj8ajk40p75T5hQyzRtVWwAWeMuVPMb0uK0eGzIyPHQddgPS7OxRCRPHmzUlL739zes_I6Z80vfdqa20KMlQc_67HW_6y-ZrMjm50WZOZ-ePNK_rmziR_db405e778IkMk9YJkJxJj0mfyYDJBZOvT0YKRpEeeYgp2UbXlv7pJc67PFTsaLgfq1uT063ReW8zHJOe64WCrBuqi-EQ1UOpW_AhzCdhbxr2JuFgBPNj2H8C7B3DwSQ8P1p7e3jxOwAA__9d9n-X
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykklFr1EAQx9_9FMM8tbrt3SY5kYWDLZpqyl1SkwMFuYc1Gc9Amo27G1CO--6SRGhzeKm1b9n_zH9-M5nZo_1RocDw8-3qKorh7F2UbbKPq3PIwlX4dgMv4TpN1uDgKgPHIYrjMIV1mL4P4SaJ4j8BD5IYHL9UsATnXSr49CFMw07JYQkcGda6oFjdkUXxBTvBwy3DxuicrNWmk_d9UlT8RDFnWNZN6zp5yzDXhlDs0ZWuIhQY6wvdzAJkWJBTZdWnHRjq1t2brFM7QrE4sAeF-XThjfpaUUqqIDObj8qjk40p75T5hQyzRtVWwAWegvL_hfJnQL2nQK_LypEhM_PGxEEXIP1ucUKIKN68OYn0TyLvSW2tTUGGiuN1PZ7yl77XZHZ0o8uazMwft17RN3cm-avzpSl334dPZJi0ToAMmFww-ZpJzqTHpH9ypGA00iOHmJJtdG3pny5x3s1DxY6G_2N1a3K6NTrvMcMz6X29UJB1Q3QxPKJ6CHUNPjTzSXMwMvNjszdp9qfJ_hPI3rE5mDTPj8jbw4vfAQAA___9Rn-Y
