@@ -1016,7 +1016,7 @@ func (e *distSQLSpecExecFactory) ConstructScanBuffer(
 }
 
 func (e *distSQLSpecExecFactory) ConstructRecursiveCTE(
-	initial exec.Node, fn exec.RecursiveCTEIterationFn, label string,
+	initial exec.Node, fn exec.RecursiveCTEIterationFn, label string, deduplicate bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: recursive CTE")
 }

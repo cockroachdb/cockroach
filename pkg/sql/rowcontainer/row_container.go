@@ -420,14 +420,17 @@ func (f *DiskBackedRowContainer) Init(
 }
 
 // DoDeDuplicate causes DiskBackedRowContainer to behave as an implementation
-// of DeDupingRowContainer. It should not be mixed with calls to AddRow(). It
-// de-duplicates the keys such that only the first row with the given key will
-// be stored. The index returned in AddRowWithDedup() is a dense index
-// starting from 0, representing when that key was first added. This feature
-// does not combine with Sort(), Reorder() etc., and only to be used for
-// assignment of these dense indexes. The main reason to add this to
-// DiskBackedRowContainer is to avoid significant code duplication in
-// constructing another row container.
+// of DeDupingRowContainer. It should not be mixed with calls to AddRow().
+//
+// The rows are deduplicated along the columns in the ordering (the values on
+// those columns are the key). Only the first row with a given key will be
+// stored. The index returned in AddRowWithDedup() is a dense index starting
+// from 0, representing when that key was first added. This feature does not
+// combine with Sort(), Reorder() etc., and only to be used for assignment of
+// these dense indexes.
+//
+// The main reason to add this to DiskBackedRowContainer is to avoid significant
+// code duplication in constructing another row container.
 func (f *DiskBackedRowContainer) DoDeDuplicate() {
 	f.deDuplicate = true
 	f.keyToIndex = make(map[string]int)
