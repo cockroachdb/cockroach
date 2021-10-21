@@ -184,6 +184,11 @@ func checkForcedErr(
 	isLocal bool,
 	replicaState *kvserverpb.ReplicaState,
 ) (uint64, proposalReevaluationReason, *roachpb.Error) {
+	if raftCmd.ReplicatedEvalResult.IsNoopWrite {
+		// A NoopWrite is handled most simply by returning a specific error
+		// and not handing it to the caller.
+		return 0, proposalNoReevaluation, noopOnEmptyRaftCommandErr
+	}
 	leaseIndex := replicaState.LeaseAppliedIndex
 	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
 	var requestedLease roachpb.Lease

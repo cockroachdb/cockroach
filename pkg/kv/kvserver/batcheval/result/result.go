@@ -304,6 +304,11 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.PriorReadSummary = nil
 
+	if !p.Replicated.IsNoopWrite {
+		p.Replicated.IsNoopWrite = q.Replicated.IsNoopWrite
+	}
+	q.Replicated.IsNoopWrite = false
+
 	if p.Local.EncounteredIntents == nil {
 		p.Local.EncounteredIntents = q.Local.EncounteredIntents
 	} else {

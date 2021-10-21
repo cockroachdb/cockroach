@@ -167,6 +167,16 @@ message GetResponse {
   Value intent_value = 3;
 }
 
+// A NoopWriteRequest is an internal request type used to send a replicated
+// no-op through a Range as a means of probing availability.
+message NoopWriteRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+message NoopWriteResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A PutRequest is the argument to the Put() method.
 message PutRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -1921,6 +1931,7 @@ message RequestUnion {
     QueryResolvedTimestampRequest query_resolved_timestamp = 51;
     ScanInterleavedIntentsRequest scan_interleaved_intents = 52;
     BarrierRequest barrier = 53;
+    NoopWriteRequest noop_write = 54;
   }
   reserved 8, 15, 23, 25, 27, 31, 34;
 }
@@ -1974,6 +1985,7 @@ message ResponseUnion {
     QueryResolvedTimestampResponse query_resolved_timestamp = 51;
     ScanInterleavedIntentsResponse scan_interleaved_intents = 52;
     BarrierResponse barrier = 53;
+    NoopWriteResponse noop_write = 54;
   }
   reserved 8, 15, 23, 25, 27, 28, 31, 34;
 }

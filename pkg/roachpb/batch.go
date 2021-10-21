@@ -207,6 +207,12 @@ func (ba *BatchRequest) IsSingleLeaseInfoRequest() bool {
 	return ba.isSingleRequestWithMethod(LeaseInfo)
 }
 
+// IsSingleNoopWriteRequest returns true iff the batch is a single
+// NoopWrite request.
+func (ba *BatchRequest) IsSingleNoopWriteRequest() bool {
+	return ba.isSingleRequestWithMethod(NoopWrite)
+}
+
 // IsSinglePushTxnRequest returns true iff the batch contains a single
 // request, and that request is a PushTxn.
 func (ba *BatchRequest) IsSinglePushTxnRequest() bool {
@@ -283,7 +289,7 @@ func (ba *BatchRequest) IsSingleCheckConsistencyRequest() bool {
 // a no-op. The Barrier request requires consensus even though its evaluation
 // is a no-op.
 func (ba *BatchRequest) RequiresConsensus() bool {
-	return ba.isSingleRequestWithMethod(Barrier)
+	return ba.isSingleRequestWithMethod(Barrier) || ba.isSingleRequestWithMethod(NoopWrite)
 }
 
 // IsCompleteTransaction determines whether a batch contains every write in a
@@ -330,11 +336,16 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 	panic("unreachable")
 }
 
-// GetPrevLeaseForLeaseRequest returns the previous lease, at the time
-// of proposal, for a request lease or transfer lease request. If the
-// batch does not contain a single lease request, this method will panic.
-func (ba *BatchRequest) GetPrevLeaseForLeaseRequest() Lease {
-	return ba.Requests[0].GetInner().(leaseRequestor).prevLease()
+// GetPrevLeaseForLeaseRequest returns the previous lease, at the time of
+// proposal, for a batch containing a single lease request or transfer.
+// The returned bool is true if and only if the batch is a single lease
+// transfer or request.
+func (ba *BatchRequest) GetPrevLeaseForLeaseRequest() (Lease, bool) {
+	lr, ok := ba.Requests[0].GetInner().(leaseRequestor)
+	if !ok {
+		return Lease{}, false
+	}
+	return lr.prevLease(), true
 }
 
 // hasFlag returns true iff one of the requests within the batch contains the

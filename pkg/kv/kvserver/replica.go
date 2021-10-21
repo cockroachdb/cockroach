@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -240,6 +241,8 @@ type Replica struct {
 
 	// schedulerCtx is a cached instance of an annotated Raft scheduler context.
 	schedulerCtx atomic.Value // context.Context
+
+	breaker *circuit.Breaker
 
 	// raftMu protects Raft processing the replica.
 	//
@@ -665,6 +668,10 @@ func (r *Replica) ReplicaID() roachpb.ReplicaID {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.replicaID
+}
+
+func (r *Replica) Breaker() *circuit.Breaker {
+	return r.breaker
 }
 
 // cleanupFailedProposal cleans up after a proposal that has failed. It
@@ -1321,10 +1328,14 @@ func (r *Replica) checkExecutionCanProceed(
 			Now: now,
 		}
 	} else if ba.IsSingleSkipLeaseCheckRequest() {
-		// For lease commands, use the provided previous lease for verification.
-		st = kvserverpb.LeaseStatus{
-			Lease: ba.GetPrevLeaseForLeaseRequest(),
-			Now:   now,
+		if prevLease, ok := ba.GetPrevLeaseForLeaseRequest(); ok {
+			// For lease commands, use the provided previous lease for verification.
+			st = kvserverpb.LeaseStatus{
+				Lease: prevLease,
+				Now:   now,
+			}
+		} else {
+			// This is another command that skips the lease check, let it through.
 		}
 	} else {
 		// If the request is a write or a consistent read, it requires the

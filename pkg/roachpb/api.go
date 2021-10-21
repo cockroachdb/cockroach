@@ -668,6 +668,9 @@ func (*RequestLeaseRequest) Method() Method { return RequestLease }
 func (*TransferLeaseRequest) Method() Method { return TransferLease }
 
 // Method implements the Request interface.
+func (*NoopWriteRequest) Method() Method { return NoopWrite }
+
+// Method implements the Request interface.
 func (*LeaseInfoRequest) Method() Method { return LeaseInfo }
 
 // Method implements the Request interface.
@@ -895,6 +898,12 @@ func (rlr *RequestLeaseRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (tlr *TransferLeaseRequest) ShallowCopy() Request {
 	shallowCopy := *tlr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *NoopWriteRequest) ShallowCopy() Request {
+	shallowCopy := *r
 	return &shallowCopy
 }
 
@@ -1304,6 +1313,9 @@ func (*TransferLeaseRequest) flags() int {
 	// the store has registered that a transfer is in progress and
 	// `redirectOnOrAcquireLease` would already tentatively redirect to the future
 	// lease holder.
+	return isWrite | isAlone | skipLeaseCheck
+}
+func (*NoopWriteRequest) flags() int {
 	return isWrite | isAlone | skipLeaseCheck
 }
 func (*RecomputeStatsRequest) flags() int                { return isWrite | isAlone }
