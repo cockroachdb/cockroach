@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -1509,6 +1510,20 @@ func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *p
 				// Filter conjunct of the form x = $1. This filter cannot generate
 				// constraints, but still tell us that the column is constant.
 				constCols.Add(leftVar.Col)
+
+			default:
+				// We have an equality of the form
+				//   x = <some expression>.
+				// If the expression is non-volatile and is not composite sensitive,
+				// then x is functionally determined by the columns that appear in the
+				// expression.
+				if !scalar.VolatilitySet.HasVolatile() &&
+					!CanBeCompositeSensitive(b.mem.Metadata(), eq.Right) {
+					outerCols := getOuterCols(eq.Right)
+					if !outerCols.Contains(leftVar.Col) {
+						scalar.FuncDeps.AddSynthesizedCol(getOuterCols(eq.Right), leftVar.Col)
+					}
+				}
 			}
 		}
 	}
@@ -1912,6 +1927,9 @@ func (b *logicalPropsBuilder) rejectNullCols(filters FiltersExpr) opt.ColSet {
 func (b *logicalPropsBuilder) addFiltersToFuncDep(filters FiltersExpr, fdset *props.FuncDepSet) {
 	for i := range filters {
 		filterProps := filters[i].ScalarProps()
+		if util.CrdbTestBuild && !filterProps.Populated {
+			panic(errors.AssertionFailedf("filter properties not populated"))
+		}
 		fdset.AddFrom(&filterProps.FuncDeps)
 	}
 
