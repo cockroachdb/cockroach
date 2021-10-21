@@ -1362,10 +1362,10 @@ func IterateIDPrefixKeys(
 	}
 }
 
-// IterateRangeDescriptors calls the provided function with each descriptor
-// from the provided Engine. The return values of this method and fn have
-// semantics similar to engine.MVCCIterate.
-func IterateRangeDescriptors(
+// IterateRangeDescriptorsFromDisk calls the provided function with each
+// descriptor from the provided Engine. The return values of this method and fn
+// have semantics similar to engine.MVCCIterate.
+func IterateRangeDescriptorsFromDisk(
 	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
 ) error {
 	log.Event(ctx, "beginning range descriptor iteration")
@@ -1517,7 +1517,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// concurrently. Note that while we can perform this initialization
 	// concurrently, all of the initialization must be performed before we start
 	// listening for Raft messages and starting the process Raft loop.
-	err = IterateRangeDescriptors(ctx, s.engine,
+	err = IterateRangeDescriptorsFromDisk(ctx, s.engine,
 		func(desc roachpb.RangeDescriptor) error {
 			if !desc.IsInitialized() {
 				return errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
