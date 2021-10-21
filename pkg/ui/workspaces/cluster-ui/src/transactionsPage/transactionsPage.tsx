@@ -59,6 +59,7 @@ import {
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
 import ClearStats from "../sqlActivity/clearStats";
+import SQLActivityError from "../sqlActivity/errorComponent";
 import { commonStyles } from "../common";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
@@ -472,6 +473,11 @@ export class TransactionsPage extends React.Component<
               </>
             );
           }}
+          renderError={() =>
+            SQLActivityError({
+              statsType: "transactions",
+            })
+          }
         />
       </div>
     );
