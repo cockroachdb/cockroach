@@ -822,20 +822,13 @@ project
  │         ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(1-6,11-17,30), (17)-->(10-16), (1)==(10), (10)==(1)
  │         ├── inner-join (merge)
  │         │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.dealerid:9!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null transactiondetails.dealerid:20 isbuy:21 transactiondate:22 transactiondetails.cardid:23 quantity:24
- │         │    ├── left ordering: +10
- │         │    ├── right ordering: +1
+ │         │    ├── left ordering: +1
+ │         │    ├── right ordering: +10
  │         │    ├── immutable
  │         │    ├── stats: [rows=5523583.18, distinct(10)=19000, null(10)=0, distinct(23)=19000, null(23)=0]
  │         │    ├── key: (10,22-24)
  │         │    ├── fd: ()-->(9), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (1)==(10), (10)==(1), (10,22-24)-->(20,21)
- │         │    ├── ordering: +(1|10) opt(9) [actual: +10]
- │         │    ├── scan cardsinfo
- │         │    │    ├── columns: cardsinfo.dealerid:9!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null
- │         │    │    ├── constraint: /9/10: [/1 - /1]
- │         │    │    ├── stats: [rows=58333.3333, distinct(9)=1, null(9)=0, distinct(10)=37420.3552, null(10)=0, distinct(11)=40676.7278, null(11)=0, distinct(12)=40676.7278, null(12)=0, distinct(13)=40676.7278, null(13)=0, distinct(14)=40676.7278, null(14)=0, distinct(15)=40676.7278, null(15)=0, distinct(16)=40676.7278, null(16)=0, distinct(17)=58333.3333, null(17)=0]
- │         │    │    ├── key: (10)
- │         │    │    ├── fd: ()-->(9), (10)-->(11-17), (17)-->(10-16)
- │         │    │    └── ordering: +10 opt(9) [actual: +10]
+ │         │    ├── ordering: +(1|10) opt(9) [actual: +1]
  │         │    ├── left-join (lookup transactiondetails@detailscardidindex)
  │         │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null transactiondetails.dealerid:20 isbuy:21 transactiondate:22 transactiondetails.cardid:23 quantity:24
  │         │    │    ├── lookup expression
@@ -875,6 +868,13 @@ project
  │         │    │    │         ├── false [as="lookup_join_const_col_@21":43]
  │         │    │    │         └── 1 [as="lookup_join_const_col_@20":42]
  │         │    │    └── filters (true)
+ │         │    ├── scan cardsinfo
+ │         │    │    ├── columns: cardsinfo.dealerid:9!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null
+ │         │    │    ├── constraint: /9/10: [/1 - /1]
+ │         │    │    ├── stats: [rows=58333.3333, distinct(9)=1, null(9)=0, distinct(10)=37420.3552, null(10)=0, distinct(11)=40676.7278, null(11)=0, distinct(12)=40676.7278, null(12)=0, distinct(13)=40676.7278, null(13)=0, distinct(14)=40676.7278, null(14)=0, distinct(15)=40676.7278, null(15)=0, distinct(16)=40676.7278, null(16)=0, distinct(17)=58333.3333, null(17)=0]
+ │         │    │    ├── key: (10)
+ │         │    │    ├── fd: ()-->(9), (10)-->(11-17), (17)-->(10-16)
+ │         │    │    └── ordering: +10 opt(9) [actual: +10]
  │         │    └── filters (true)
  │         └── aggregations
  │              ├── sum [as=sum:30, outer=(24)]
