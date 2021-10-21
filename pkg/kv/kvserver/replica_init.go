@@ -26,10 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3"
 )
 
@@ -124,6 +127,58 @@ func newUnloadedReplica(
 
 	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)
 	r.mergeQueueThrottle = util.Every(mergeQueueThrottleDuration)
+
+	r.breaker = circuit.NewBreaker(circuit.Options{
+		Name: redact.Sprintf("breaker"), // log bridge has ctx tags
+		ShouldTrip: func(err error) error {
+			// TODO(tbg): add a cluster setting that allows turning off
+			// the breaker. We should use it here and in AsyncProbe (turning
+			// it into a guaranteed success).
+			return err
+		},
+		AsyncProbe: func(report func(error), done func()) {
+			if err := r.store.Stopper().RunAsyncTask(
+				r.AnnotateCtx(withCircuitBreakerProbeMarker(context.Background())),
+				"replica-probe", func(ctx context.Context) {
+					// TODO(tbg): timeout for the probe.
+					defer done()
+
+					ctx, finishAndGet := tracing.ContextWithRecordingSpan(ctx, r.Tracer, "probe")
+					defer finishAndGet()
+					defer func() {
+						rec := finishAndGet()
+						log.Infof(ctx, "TBG %s", rec.String())
+					}()
+
+					desc := r.Desc()
+					if !desc.IsInitialized() {
+						done()
+					}
+					ba := roachpb.BatchRequest{}
+					ba.Timestamp = r.store.Clock().Now()
+					ba.RangeID = r.RangeID
+					// TODO(tbg): need a version gate here.
+					probeReq := &roachpb.ProbeRequest{}
+					probeReq.Key = desc.StartKey.AsRawKey()
+					ba.Add(probeReq)
+					_, pErr := r.Send(ctx, ba)
+					report(pErr.GoError())
+					// TODO(tbg): if the breaker is now untripped, probe should also
+					// verify whether lease can be acquired / NotLeaseholderError with a
+					// reference to another node can be obtained.
+					// It could be better to also special case lease requests triggered
+					// by the probe so that they bypass the breaker. Then we could do
+					// this before reporting success.
+				}); err != nil {
+				done()
+			}
+		},
+		EventHandler: &circuit.EventLogger{
+			Log: func(buf redact.StringBuilder) {
+				log.Infof(r.AnnotateCtx(ctx), "%s", buf)
+			},
+		},
+	})
 	return r
 }
 

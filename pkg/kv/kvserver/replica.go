@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -240,6 +241,8 @@ type Replica struct {
 
 	// schedulerCtx is a cached instance of an annotated Raft scheduler context.
 	schedulerCtx atomic.Value // context.Context
+
+	breaker *circuit.Breaker
 
 	// raftMu protects Raft processing the replica.
 	//
@@ -672,6 +675,11 @@ func (r *Replica) ReplicaID() roachpb.ReplicaID {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.replicaID
+}
+
+// Breaker returns the circuit breaker sitting in the Replica's write path.
+func (r *Replica) Breaker() *circuit.Breaker {
+	return r.breaker
 }
 
 // cleanupFailedProposal cleans up after a proposal that has failed. It
