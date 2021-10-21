@@ -75,6 +75,23 @@ describe("<Loading>", () => {
         assert.isFalse(wrapper.find(Spinner).exists());
         assert.isTrue(wrapper.find(InlineAlert).exists());
       });
+
+      it("render custom error when provided", () => {
+        const customErrorComponent: React.FC<string> = props => {
+          return <div> Custom Error {props}</div>;
+        };
+        const wrapper = mount(
+          <Loading
+            loading={true}
+            error={Error("some error message")}
+            render={() => <SomeComponent />}
+            renderError={() => customErrorComponent("test")}
+          />,
+        );
+        assert.isFalse(wrapper.find(SomeComponent).exists());
+        assert.isFalse(wrapper.find(Spinner).exists());
+        assert.isTrue(wrapper.find(customErrorComponent).exists());
+      });
     });
   });
 
