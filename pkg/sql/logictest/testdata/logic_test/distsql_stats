@@ -823,6 +823,45 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 2            0           0                    1
 3            0           0                    1
 
+# Test that stats are not collected for virtual columns.
+statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = true
+
+statement ok
+CREATE TABLE virt (
+  a INT,
+  b INT,
+  v INT AS (a + 10) VIRTUAL,
+  INDEX (v),
+  INDEX (a, v),
+  INDEX (a, v, b),
+  INDEX (a) WHERE v > 0
+)
+
+statement ok
+INSERT INTO virt VALUES (1), (2), (3)
+
+statement ok
+CREATE STATISTICS s FROM virt
+
+query TTIIB colnames,rowsort
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE virt]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a,b}         3          0           false
+s                {a}           3          0           true
+s                {b}           3          3           true
+s                {rowid}       3          0           true
+
 # Test that non-index columns have histograms collected for them, with
 # up to 2 buckets.
 statement ok
@@ -974,6 +1013,7 @@ ORDER BY
 column_names  has_histogram
 {id}          true
 {j}           true
+{s,j}         false
 {s}           true
 
 # Regression test for #56356. Histograms on all-null columns should not cause
@@ -1091,3 +1131,28 @@ CREATE TABLE t63387 (
 );
 INSERT INTO t63387 VALUES (1, '{}');
 CREATE STATISTICS s FROM t63387;
+
+# Regression test for #71080. Stats collection should succeed on tables with NOT
+# NULL virtual columns.
+statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = true
+
+statement ok
+CREATE TABLE t71080 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT NOT NULL AS (a + 10) VIRTUAL,
+  INDEX (a, b)
+);
+
+statement ok
+INSERT INTO t71080 VALUES (1, 2);
+
+statement ok
+CREATE STATISTICS s FROM t71080;
+
+statement error cannot create statistics on virtual column \"b\"
+CREATE STATISTICS s ON b FROM t71080;
+
+statement error cannot create statistics on virtual column \"b\"
+CREATE STATISTICS s ON a, b FROM t71080;
