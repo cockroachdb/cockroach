@@ -2072,10 +2072,24 @@ func (s *Store) recordNewPerSecondStats(newQPS, newWPS float64) {
 	s.asyncGossipStore(context.TODO(), message, false /* useCached */)
 }
 
+// VisitReplicaOption optionally modifies VisitReplicas.
+type VisitReplicaOption func(*storeReplicaVisitor)
+
+// WithReplicasInOrder ensures that replicas are visited in increasing RangeID
+// order.
+func WithReplicasInOrder() VisitReplicaOption {
+	return func(visitor *storeReplicaVisitor) {
+		visitor.InOrder()
+	}
+}
+
 // VisitReplicas invokes the visitor on the Store's Replicas until the visitor returns false.
 // Replicas which are added to the Store after iteration begins may or may not be observed.
-func (s *Store) VisitReplicas(visitor func(*Replica) (wantMore bool)) {
+func (s *Store) VisitReplicas(visitor func(*Replica) (wantMore bool), opts ...VisitReplicaOption) {
 	v := newStoreReplicaVisitor(s)
+	for _, opt := range opts {
+		opt(v)
+	}
 	v.Visit(visitor)
 }
 
