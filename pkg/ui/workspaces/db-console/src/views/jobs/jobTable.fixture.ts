@@ -54,6 +54,7 @@ export const jobTablePropsFixture: JobTableProps = {
     ),
     setAt: moment("Mon Oct 18 2021 14:01:50 GMT-0400 (Eastern Daylight Time)"),
     lastError: null,
+    next_run: "test",
     data: JobsResponse.create({
       jobs: [
         {
