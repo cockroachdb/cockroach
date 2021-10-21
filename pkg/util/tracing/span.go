@@ -147,12 +147,6 @@ func (sp *Span) SetVerbose(to bool) {
 	sp.i.SetVerbose(to)
 }
 
-// SetVerboseRecursively is like SetVerbose, except it does so for all
-// descendant spans as well.
-func (sp *Span) SetVerboseRecursively(to bool) {
-	sp.i.SetVerboseRecursively(to)
-}
-
 // ResetRecording clears any previously recorded information. This doesn't
 // affect any auxiliary trace sinks such as net/trace or zipkin.
 //
@@ -219,7 +213,7 @@ func (sp *Span) SetBaggageItem(restrictedKey, value string) {
 }
 
 // TraceID retrieves a span's trace ID.
-func (sp *Span) TraceID() uint64 {
+func (sp *Span) TraceID() tracingpb.TraceID {
 	return sp.i.TraceID()
 }
 
@@ -243,8 +237,8 @@ func (sp *Span) IsSterile() bool {
 // child finishes, so that the caller can inductively construct the
 // entire trace.
 type SpanMeta struct {
-	traceID uint64
-	spanID  uint64
+	traceID tracingpb.TraceID
+	spanID  tracingpb.SpanID
 
 	// otelCtx is the OpenTelemetry span context. This is only populated when the
 	// remote Span is reporting to an external OpenTelemetry tracer. Setting this

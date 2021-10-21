@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -4377,14 +4378,14 @@ value if you rely on the HLC for accuracy.`,
 					}
 				}
 
-				traceID := uint64(*(args[0].(*tree.DInt)))
+				traceID := tracingpb.TraceID(*(args[0].(*tree.DInt)))
 				verbosity := bool(*(args[1].(*tree.DBool)))
 
-				var rootSpan *tracing.Span
+				var rootSpan tracing.RegistrySpan
 				if ctx.Tracer == nil {
 					return nil, errors.AssertionFailedf("Tracer not configured")
 				}
-				if err := ctx.Tracer.VisitSpans(func(span *tracing.Span) error {
+				if err := ctx.Tracer.VisitSpans(func(span tracing.RegistrySpan) error {
 					if span.TraceID() == traceID && rootSpan == nil {
 						rootSpan = span
 					}

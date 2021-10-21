@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -203,7 +204,7 @@ func TestGRPCInterceptors(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, sp := tr.StartSpanCtx(context.Background(), tc.name, tracing.WithForceRealSpan())
+			ctx, sp := tr.StartSpanCtx(context.Background(), "root", tracing.WithForceRealSpan())
 			sp.SetVerbose(true) // to set the tags
 			recAny, err := tc.do(ctx)
 			require.NoError(t, err)
@@ -230,7 +231,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			require.Equal(t, 1, n)
 
 			exp := fmt.Sprintf(`
-				span: %[1]s
+				span: root
 					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
 						tags: span.kind=client test-baggage-key=test-baggage-value
 					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
@@ -239,9 +240,13 @@ func TestGRPCInterceptors(t *testing.T) {
 			require.NoError(t, tracing.CheckRecordedSpans(finalRecs, exp))
 		})
 	}
+	// Force a GC so that the finalizer for the stream client span runs and closes
+	// the span. Nothing else closes that span in this test. See
+	// newTracingClientStream().
+	runtime.GC()
 	testutils.SucceedsSoon(t, func() error {
-		return tr.VisitSpans(func(sp *tracing.Span) error {
-			return errors.Newf("leaked span: %s", sp.GetRecording()[0].Operation)
+		return tr.VisitSpans(func(sp tracing.RegistrySpan) error {
+			return errors.Newf("leaked span: %s %s", sp.GetRecording()[0].Operation, sp.GetRecording()[0].Tags)
 		})
 	})
 }

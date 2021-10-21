@@ -12,6 +12,9 @@ package ring
 
 // Buffer is a deque maintained over a ring buffer.
 //
+// The zero value is ready to use. See MakeBuffer() for initializing a Buffer
+// with pre-allocated space.
+//
 // Note: it is backed by a slice (unlike container/ring which is backed by a
 // linked list).
 type Buffer struct {
@@ -22,6 +25,15 @@ type Buffer struct {
 	// Indicates whether the buffer is empty. Necessary to distinguish
 	// between an empty buffer and a buffer that uses all of its capacity.
 	nonEmpty bool
+}
+
+// MakeBuffer creates a buffer.
+//
+// scratch, if not nil, represents pre-allocated space that the Buffer takes
+// ownership of. The whole backing array of the provided slice is taken over,
+// included elements and available capacity.
+func MakeBuffer(scratch []interface{}) Buffer {
+	return Buffer{buffer: scratch}
 }
 
 // Len returns the number of elements in the Buffer.

@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -53,7 +54,7 @@ type spanOptions struct {
 	Sterile       bool                   // see WithSterile
 }
 
-func (opts *spanOptions) parentTraceID() uint64 {
+func (opts *spanOptions) parentTraceID() tracingpb.TraceID {
 	if opts.Parent != nil && !opts.Parent.IsNoop() {
 		return opts.Parent.i.crdb.traceID
 	} else if !opts.RemoteParent.Empty() {
@@ -62,20 +63,13 @@ func (opts *spanOptions) parentTraceID() uint64 {
 	return 0
 }
 
-func (opts *spanOptions) parentSpanID() uint64 {
+func (opts *spanOptions) parentSpanID() tracingpb.SpanID {
 	if opts.Parent != nil && !opts.Parent.IsNoop() {
 		return opts.Parent.i.crdb.spanID
 	} else if !opts.RemoteParent.Empty() {
 		return opts.RemoteParent.spanID
 	}
 	return 0
-}
-
-func (opts *spanOptions) deriveRootSpan() *crdbSpan {
-	if opts.Parent != nil && !opts.Parent.IsNoop() {
-		return opts.Parent.i.crdb.rootSpan
-	}
-	return nil
 }
 
 func (opts *spanOptions) recordingType() RecordingType {

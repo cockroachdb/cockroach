@@ -105,11 +105,11 @@ func CheckRecordedSpans(rec Recording, expected string) error {
 		rows = append(rows, strings.Repeat("    ", depth)+fmt.Sprintf(format, args...))
 	}
 
-	mapping := make(map[uint64]uint64) // spanID -> parentSpanID
+	mapping := make(map[tracingpb.SpanID]tracingpb.SpanID) // spanID -> parentSpanID
 	for _, rs := range rec {
 		mapping[rs.SpanID] = rs.ParentSpanID
 	}
-	depth := func(spanID uint64) int {
+	depth := func(spanID tracingpb.SpanID) int {
 		// Traverse up the parent links until one is not found.
 		curSpanID := spanID
 		d := 0

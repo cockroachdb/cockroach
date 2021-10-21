@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/logtags"
+	"github.com/gogo/protobuf/types"
 )
 
 // BenchmarkTracer_StartSpanCtx primarily helps keep
@@ -100,12 +101,26 @@ func BenchmarkSpan_GetRecording(b *testing.B) {
 	})
 }
 
+func BenchmarkRecordingWithStructuredEvent(b *testing.B) {
+	tr := NewTracerWithOpt(context.Background(),
+		WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
+
+	ev := &types.Int32Value{Value: 5}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		root := tr.StartSpan("foo")
+		root.RecordStructured(ev)
+		child := tr.StartSpan("bar", WithParentAndAutoCollection(root))
+		child.RecordStructured(ev)
+		child.Finish()
+		_ = root.GetRecording()
+	}
+}
+
 // BenchmarkSpanCreation creates traces with a couple of spans in them.
 func BenchmarkSpanCreation(b *testing.B) {
 	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{
 		ForceRealSpans: true,
-		// Disable optimizations for empty traces.
-		RecordEmptyTraces: true,
 	}))
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {

@@ -747,7 +747,9 @@ func TestStopperRunAsyncTaskTracing(t *testing.T) {
 	finish()
 	require.NoError(t, tracing.CheckRecordedSpans(getRecording(), `
 		span: parent
+			tags: _verbose=1
 			span: async child same trace
+				tags: _verbose=1
 				event: async 2`))
 }
 

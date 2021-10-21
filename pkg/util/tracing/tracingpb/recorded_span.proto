@@ -50,11 +50,11 @@ message RecordedSpan {
 
   // ID of the trace; spans that are part of the same hierarchy share
   // the same trace ID.
-  uint64 trace_id = 1 [(gogoproto.customname) = "TraceID"];
+  uint64 trace_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "TraceID"];
   // ID of the span.
-  uint64 span_id = 2 [(gogoproto.customname) = "SpanID"];
+  uint64 span_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "SpanID", (gogoproto.customtype) = "SpanID"];
   // ID of the parent span.
-  uint64 parent_span_id = 3 [(gogoproto.customname) = "ParentSpanID"];
+  uint64 parent_span_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentSpanID", (gogoproto.customtype) = "SpanID"];
   // Operation name.
   string operation = 4;
   // Baggage items get passed from parent to child spans (even through gRPC).
@@ -87,7 +87,10 @@ message RecordedSpan {
   // True if the span has been Finish()ed, false otherwise.
   bool finished = 13;
 
-  // StructuredRecords contains StructuredRecord events recorded in the span.
+  // StructuredRecords contains StructuredRecord events recorded either in this
+  // span, or in children spans that have finished while our span was not
+  // recording verbosely.
+  //
   // A StructuredRecord wraps the Payload with a RecordedAt timestamp to expose
   // information about when this event occurred.
   // DeprecatedInternalStructured only stores the Payloads.

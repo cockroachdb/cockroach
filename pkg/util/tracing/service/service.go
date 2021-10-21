@@ -49,7 +49,7 @@ func (s *Service) GetSpanRecordings(
 	_ context.Context, request *tracingservicepb.GetSpanRecordingsRequest,
 ) (*tracingservicepb.GetSpanRecordingsResponse, error) {
 	var resp tracingservicepb.GetSpanRecordingsResponse
-	err := s.tracer.VisitSpans(func(span *tracing.Span) error {
+	err := s.tracer.VisitSpans(func(span tracing.RegistrySpan) error {
 		if span.TraceID() != request.TraceID {
 			return nil
 		}

@@ -19,6 +19,12 @@ import (
 	types "github.com/gogo/protobuf/types"
 )
 
+// TraceID is a probabilistically-unique id, shared by all spans in a trace.
+type TraceID uint64
+
+// SpanID is a probabilistically-unique span id.
+type SpanID uint64
+
 // LogMessageField is the field name used for the log message in a LogRecord.
 const LogMessageField = "event"
 
@@ -57,4 +63,18 @@ func (l LogRecord) Msg() redact.RedactableString {
 		}
 	}
 	return ""
+}
+
+// MemorySize implements the sizable interface.
+func (l *LogRecord) MemorySize() int {
+	return 3*8 + // 3 words for time.Time
+		2*8 + // 2 words for StringHeader
+		len(l.Message)
+}
+
+// MemorySize implements the sizable interface.
+func (r *StructuredRecord) MemorySize() int {
+	return 3*8 + // 3 words for time.Time
+		1*8 + // 1 words for *Any
+		r.Payload.Size() // TODO(andrei): this is the encoded size, not the mem size
 }
