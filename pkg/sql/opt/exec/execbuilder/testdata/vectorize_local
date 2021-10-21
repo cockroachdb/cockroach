@@ -104,7 +104,7 @@ EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
 project
  ├── columns: a:1
  ├── stats: [rows=10]
- ├── cost: 1120.82
+ ├── cost: 1121.819
  ├── prune: (1)
  └── inner-join (merge)
       ├── columns: c.a:1 d.b:8
@@ -112,7 +112,7 @@ project
       ├── left ordering: +1
       ├── right ordering: +8
       ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
-      ├── cost: 1120.7
+      ├── cost: 1121.699
       ├── fd: (1)==(8), (8)==(1)
       ├── sort
       │    ├── columns: c.a:1

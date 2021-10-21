@@ -1161,19 +1161,40 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 	}
 
 	joinType := joinOpToJoinType(join.JoinType)
+	leftExpr, rightExpr := join.Left, join.Right
+	leftEq, rightEq := join.LeftEq, join.RightEq
+
+	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
+		// We have a partial join, and we want to make sure that the relation
+		// with smaller cardinality is on the right side. Note that we assumed
+		// it during the costing.
+		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
+		// choosing a side.
+		leftRowCount := leftExpr.Relational().Stats.RowCount
+		rightRowCount := rightExpr.Relational().Stats.RowCount
+		if leftRowCount < rightRowCount {
+			if joinType == descpb.LeftSemiJoin {
+				joinType = descpb.RightSemiJoin
+			} else {
+				joinType = descpb.RightAntiJoin
+			}
+			leftExpr, rightExpr = rightExpr, leftExpr
+			leftEq, rightEq = rightEq, leftEq
+		}
+	}
 
 	left, right, onExpr, outputCols, err := b.initJoinBuild(
-		join.Left, join.Right, join.On, joinType,
+		leftExpr, rightExpr, join.On, joinType,
 	)
 	if err != nil {
 		return execPlan{}, err
 	}
-	leftOrd := left.sqlOrdering(join.LeftEq)
-	rightOrd := right.sqlOrdering(join.RightEq)
+	leftOrd := left.sqlOrdering(leftEq)
+	rightOrd := right.sqlOrdering(rightEq)
 	ep := execPlan{outputCols: outputCols}
 	reqOrd := ep.reqOrdering(join)
-	leftEqColsAreKey := join.Left.Relational().FuncDeps.ColsAreStrictKey(join.LeftEq.ColSet())
-	rightEqColsAreKey := join.Right.Relational().FuncDeps.ColsAreStrictKey(join.RightEq.ColSet())
+	leftEqColsAreKey := leftExpr.Relational().FuncDeps.ColsAreStrictKey(leftEq.ColSet())
+	rightEqColsAreKey := rightExpr.Relational().FuncDeps.ColsAreStrictKey(rightEq.ColSet())
 	ep.root, err = b.factory.ConstructMergeJoin(
 		joinType,
 		left.root, right.root,

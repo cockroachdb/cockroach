@@ -119,7 +119,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----Stats for q14_project_3----
 column_names  row_count  distinct_count  null_count
 {column30}    75983      12638           0
-{column32}    75983      76207           0
+{column32}    75983      75983           0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {column30}    85001.00       1.12           85001.00            6.73 <==            0.00            1.00

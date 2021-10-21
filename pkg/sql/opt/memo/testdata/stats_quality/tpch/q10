@@ -193,11 +193,11 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----Stats for q10_group_by_2----
 column_names  row_count  distinct_count  null_count
 {c_acctbal}   37967      37658           0
-{c_address}   37967      38065           0
-{c_comment}   37967      38086           0
+{c_address}   37967      37967           0
+{c_comment}   37967      37967           0
 {c_custkey}   37967      37904           0
 {c_name}      37967      37859           0
-{c_phone}     37967      38026           0
+{c_phone}     37967      37967           0
 {n_name}      37967      25              0
 {sum}         37967      37685           0
 ~~~~
@@ -308,18 +308,18 @@ column_names   row_count  distinct_count  null_count
 {c_address}    150000     149937          0
 {c_comment}    150000     149323          0
 {c_custkey}    150000     148813          0
-{c_name}       150000     151126          0
+{c_name}       150000     150000          0
 {c_nationkey}  150000     25              0
-{c_phone}      150000     150872          0
+{c_phone}      150000     150000          0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {c_acctbal}    150000.00      1.00           140426.00           1.00                0.00            1.00
 {c_address}    150000.00      1.00           150000.00           1.00                0.00            1.00
 {c_comment}    150000.00      1.00           150000.00           1.00                0.00            1.00
 {c_custkey}    150000.00      1.00           148813.00           1.00                0.00            1.00
-{c_name}       150000.00      1.00           150000.00           1.01                0.00            1.00
+{c_name}       150000.00      1.00           150000.00           1.00                0.00            1.00
 {c_nationkey}  150000.00      1.00           25.00               1.00                0.00            1.00
-{c_phone}      150000.00      1.00           150000.00           1.01                0.00            1.00
+{c_phone}      150000.00      1.00           150000.00           1.00                0.00            1.00
 
 ----Stats for q10_lookup_join_7----
 column_names       row_count  distinct_count  null_count
