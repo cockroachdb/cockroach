@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/metadata"
 )
@@ -35,6 +36,9 @@ type BlobClient interface {
 	// This method will read entire content of file and send
 	// it over to another node, based on the nodeID.
 	WriteFile(ctx context.Context, file string, content io.ReadSeeker) error
+
+	// Writer opens the named payload on the requested node for writing.
+	Writer(ctx context.Context, file string) (io.WriteCloser, error)
 
 	// List lists the corresponding filenames from the requested node.
 	// The requested node can be the current node.
@@ -176,4 +180,46 @@ func NewBlobClientFactory(
 		}
 		return newRemoteClient(blobspb.NewBlobClient(conn)), nil
 	}
+}
+
+func (c *localClient) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	return util.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
+		return c.localStorage.WriteFile(basename, r)
+	}), nil
+}
+
+type streamWriter struct {
+	s   blobspb.Blob_PutStreamClient
+	buf blobspb.StreamChunk
+}
+
+func (w *streamWriter) Write(p []byte) (int, error) {
+	n := 0
+	for len(p) > 0 {
+		l := copy(w.buf.Payload[:cap(w.buf.Payload)], p)
+		w.buf.Payload = w.buf.Payload[:l]
+		p = p[l:]
+		if l > 0 {
+			if err := w.s.Send(&w.buf); err != nil {
+				return n, err
+			}
+		}
+		n += l
+	}
+	return n, nil
+}
+
+func (w *streamWriter) Close() error {
+	_, err := w.s.CloseAndRecv()
+	return err
+}
+
+func (c *remoteClient) Writer(ctx context.Context, file string) (io.WriteCloser, error) {
+	ctx = metadata.AppendToOutgoingContext(ctx, "filename", file)
+	stream, err := c.blobClient.PutStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	buf := make([]byte, 0, chunkSize)
+	return &streamWriter{s: stream, buf: blobspb.StreamChunk{Payload: buf}}, nil
 }
