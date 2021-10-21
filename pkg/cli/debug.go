@@ -1120,7 +1120,7 @@ func removeDeadReplicas(
 
 	var newDescs []roachpb.RangeDescriptor
 
-	err = kvserver.IterateRangeDescriptors(ctx, db, func(desc roachpb.RangeDescriptor) error {
+	err = kvserver.IterateRangeDescriptorsFromDisk(ctx, db, func(desc roachpb.RangeDescriptor) error {
 		numDeadPeers := 0
 		allReplicas := desc.Replicas().Descriptors()
 		maxLiveVoter := roachpb.StoreID(-1)
