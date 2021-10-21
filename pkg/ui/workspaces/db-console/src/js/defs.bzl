@@ -32,7 +32,7 @@ _PROTOBUFJS_CLI_DEPS = ["@npm//%s" % s for s in [
 
 def _proto_sources_impl(ctx):
     return DefaultInfo(files = depset(
-      transitive = [p[ProtoInfo].transitive_sources for p in ctx.attr.protos]
+        transitive = [p[ProtoInfo].transitive_sources for p in ctx.attr.protos],
     ))
 
 _proto_sources = rule(
@@ -76,7 +76,7 @@ def protobufjs_library(name, out_name, protos, **kwargs):
         args = [
             "--target=static-module",
             "--wrap=es6",
-            "--strict-long",   # Force usage of Long type with int64 fields
+            "--strict-long",  # Force usage of Long type with int64 fields
             "--keep-case",
             "--out=$@",
             "$(execpaths %s)" % proto_target,

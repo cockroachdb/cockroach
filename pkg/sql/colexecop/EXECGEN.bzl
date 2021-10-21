@@ -8,7 +8,7 @@
 def eg_go_filegroup(name, targets):
     native.filegroup(
         name = name,
-        srcs = [':{}'.format(rule_name_for(target)) for target, _ in targets],
+        srcs = [":{}".format(rule_name_for(target)) for target, _ in targets],
     )
 
 # Define gen rules for individual eg.go files.
@@ -51,4 +51,4 @@ def gen_eg_go_rules(targets):
 
 def rule_name_for(target):
     # e.g. 'vec_comparators.eg.go' -> 'gen-vec-comparators'
-    return 'gen-{}'.format(target.replace('.eg.go', '').replace('_', '-'))
+    return "gen-{}".format(target.replace(".eg.go", "").replace("_", "-"))

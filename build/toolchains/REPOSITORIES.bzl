@@ -1,9 +1,15 @@
-load("//build/toolchains:dev/darwin-x86_64/toolchain.bzl",
-     _dev_darwin_x86_repo = "dev_darwin_x86_repo")
-load("//build/toolchains:crosstool-ng/toolchain.bzl",
-     _crosstool_toolchain_repo = "crosstool_toolchain_repo")
-load("//build/toolchains:darwin-x86_64/toolchain.bzl",
-     _macos_toolchain_repo = "macos_toolchain_repo")
+load(
+    "//build/toolchains:dev/darwin-x86_64/toolchain.bzl",
+    _dev_darwin_x86_repo = "dev_darwin_x86_repo",
+)
+load(
+    "//build/toolchains:crosstool-ng/toolchain.bzl",
+    _crosstool_toolchain_repo = "crosstool_toolchain_repo",
+)
+load(
+    "//build/toolchains:darwin-x86_64/toolchain.bzl",
+    _macos_toolchain_repo = "macos_toolchain_repo",
+)
 
 def toolchain_dependencies():
     _dev_darwin_x86_repo(name = "toolchain_dev_darwin_x86-64")
