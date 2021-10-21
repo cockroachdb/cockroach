@@ -80,6 +80,18 @@ export const statementFingerprintIdsToText = (
     .join("\n");
 };
 
+// Combine all statement summaries into a string.
+export const statementFingerprintIdsToSummarizedText = (
+  statementFingerprintIds: Long[],
+  statements: Statement[],
+): string => {
+  return statementFingerprintIds
+    .map(
+      s => statements.find(stmt => stmt.id.eq(s))?.key.key_data.query_summary,
+    )
+    .join("\n");
+};
+
 // Aggregate transaction statements from different nodes.
 export const aggregateStatements = (
   statements: Statement[],
