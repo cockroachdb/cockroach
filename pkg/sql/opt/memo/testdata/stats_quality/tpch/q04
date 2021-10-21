@@ -116,7 +116,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 ----Stats for q4_index_join_4----
 column_names       row_count  distinct_count  null_count
 {o_orderdate}      57218      92              0
-{o_orderkey}       57218      57392           0
+{o_orderkey}       57218      57218           0
 {o_orderpriority}  57218      5               0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
@@ -127,7 +127,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 ----Stats for q4_scan_5----
 column_names   row_count  distinct_count  null_count
 {o_orderdate}  57218      92              0
-{o_orderkey}   57218      57392           0
+{o_orderkey}   57218      57218           0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {o_orderdate}  62887.00       1.10           92.00               1.00                0.00            1.00
