@@ -21,10 +21,11 @@ import {
 } from "src/views/jobs/jobStatusOptions";
 import { InlineAlert } from "src/components";
 import styles from "./jobStatus.module.styl";
-import { Tooltip } from "antd";
+// import { Tooltip } from "antd";
+import { Tooltip } from "@cockroachlabs/ui-components";
+
 import { TimestampToMoment } from "src/util/convert";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
-// import { NextExecutionTimeTooltip } from "src/views/jobs/nextExecutionTimeTooltip";
 
 export interface JobStatusProps {
   job: Job;
@@ -90,22 +91,20 @@ export const JobStatus: React.FC<JobStatusProps> = ({
       return (
         <Tooltip
           placement="bottom"
-          title={`Next Execution Time: ${TimestampToMoment(job.next_run).format(
-            DATE_FORMAT_24_UTC,
-          )}`}
+          style="tableTitle"
+          content={
+            <>
+              Next Execution Time:
+              <br />
+              {TimestampToMoment(job.next_run).format(DATE_FORMAT_24_UTC)}
+            </>
+          }
         >
-          <span>
-            <JobStatusBadge jobStatus={JOB_STATUS_RETRYING} />
-          </span>
+          {/*<span>*/}
+          <JobStatusBadge jobStatus={JOB_STATUS_RETRYING} />
+          {/*</span>*/}
         </Tooltip>
       );
-    // return (
-    //   <NextExecutionTimeTooltip next_run={job.next_run}>
-    //     <span>
-    //       <JobStatusBadge jobStatus={JOB_STATUS_RETRYING} />
-    //     </span>
-    //   </NextExecutionTimeTooltip>
-    // );
     default:
       return <JobStatusBadge jobStatus={job.status} />;
   }

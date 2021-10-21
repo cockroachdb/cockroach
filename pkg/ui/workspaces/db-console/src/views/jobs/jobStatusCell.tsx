@@ -14,11 +14,6 @@ import { HighwaterTimestamp } from "src/views/jobs/highwaterTimestamp";
 import { JobStatus } from "./jobStatus";
 import Job = cockroach.server.serverpb.IJobResponse;
 
-import classNames from "classnames/bind";
-
-import styles from "src/components/badge/badge.module.styl";
-const cx = classNames.bind(styles);
-
 export interface JobStatusCellProps {
   job: Job;
   lineWidth?: number;

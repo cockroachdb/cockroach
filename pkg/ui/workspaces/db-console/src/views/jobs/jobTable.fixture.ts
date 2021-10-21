@@ -30,7 +30,6 @@ export const jobTablePropsFixture: JobTableProps = {
     ),
     setAt: moment("Mon Oct 18 2021 14:01:50 GMT-0400 (Eastern Daylight Time)"),
     lastError: null,
-    next_run: "test",
     data: JobsResponse.create({
       jobs: [
         {
@@ -56,7 +55,15 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 310899000,
           }),
           fraction_completed: 1,
-          next_run: "test",
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648118),
+            nanos: 215527000,
+          }),
+
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648417),
+            nanos: 116912000,
+          }),
         },
         {
           id: new Long(7003330561, 70312826),
@@ -83,6 +90,10 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 310899000,
           }),
           fraction_completed: 1,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648118),
+            nanos: 215527000,
+          }),
         },
         {
           id: new Long(7002707969, 70312826),
@@ -108,6 +119,10 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 219907000,
           }),
           fraction_completed: 1,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648118),
+            nanos: 215515000,
+          }),
         },
         {
           id: new Long(6091954177, 70312826),
@@ -134,6 +149,10 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 940848000,
           }),
           fraction_completed: 1,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 936238000,
+          }),
         },
         {
           id: new Long(6093756417, 70312826),
@@ -159,6 +178,10 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 153272000,
           }),
           fraction_completed: 0.38,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 936268000,
+          }),
         },
         {
           id: new Long(5247850497, 70312826),
@@ -185,6 +208,10 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 882945000,
           }),
           fraction_completed: 1,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 679202000,
+          }),
         },
         {
           id: new Long(5246539777, 70312826),
@@ -210,6 +237,10 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 683189000,
           }),
           fraction_completed: 1,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 679221000,
+          }),
         },
         {
           id: new Long(4337653761, 70312826),
@@ -235,6 +266,10 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 404765000,
           }),
           fraction_completed: 1,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 401320000,
+          }),
         },
         {
           id: new Long(4338669569, 70312826),
@@ -262,6 +297,10 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 599417000,
           }),
           fraction_completed: 1,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 401344000,
+          }),
         },
         {
           id: new Long(3391379457, 70312826),
@@ -287,6 +326,10 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 310671000,
           }),
           fraction_completed: 1,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
         },
         {
           id: new Long(3390625793, 70312826),
@@ -317,6 +360,10 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 121173000,
           }),
           fraction_completed: 1,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
         },
         {
           id: new Long(3390625793, 70312826),
@@ -343,6 +390,14 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 121173000,
           }),
           fraction_completed: 1,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648417),
+            nanos: 116912000,
+          }),
         },
         {
           id: new Long(3390625793, 70312826),
@@ -368,6 +423,10 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 121173000,
           }),
           fraction_completed: 1,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
         },
         {
           id: new Long(3390625793, 70312826),
@@ -394,6 +453,10 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 121173000,
           }),
           fraction_completed: 1,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
         },
         {
           id: new Long(3390625793, 70312826),
@@ -419,6 +482,10 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 121173000,
           }),
           fraction_completed: 1,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
         },
       ],
     }),
