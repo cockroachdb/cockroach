@@ -8,8 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { JobsTableProps, mapDispatchToProps } from "./index";
-import { RouteComponentProps } from "react-router-dom";
+import { JobTableProps } from "./index";
 import moment from "moment";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { cockroach } from "src/js/protos";
@@ -23,28 +22,29 @@ const history = createMemoryHistory({ initialEntries: ["/jobs"] });
 //   seconds: new Long(Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3),
 // });
 
-export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
-  history,
-  location: {
-    pathname: "/jobs",
-    search: "",
-    hash: "",
-    state: null,
-  },
-  match: { path: "/jobs", url: "/jobs", isExact: true, params: {} },
-  // sort: {
-  //   sortKey: 3,
-  //   ascending: false,
+export const jobTablePropsFixture: JobTableProps = {
+  // history,
+  // location: {
+  //   pathname: "/jobs",
+  //   search: "",
+  //   hash: "",
+  //   state: null,
   // },
+  // match: { path: "/jobs", url: "/jobs", isExact: true, params: {} },
+  sort: {
+    sortKey: 3,
+    ascending: false,
+  },
+  isUsedFilter: false,
   // status: "",
   // show: "50",
   // type: 0,
   // ...mapDispatchToProps,
-  // setSort: (() => {}) as any,
+  setSort: (() => {}) as any,
   // setStatus: (() => {}) as any,
   // setShow: (() => {}) as any,
   // setType: (() => {}) as any,
-  refreshJobs: (() => {}) as any,
+  // refreshJobs: (() => {}) as any,
 
   jobs: {
     inFlight: false,
@@ -109,8 +109,7 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         {
           id: new Long(7002707969, 70312826),
           type: "UNSPECIFIED",
-          description:
-            "Unspecified",
+          description: "Unspecified",
           username: "root",
           descriptor_ids: [53],
           status: "canceled",
@@ -161,8 +160,7 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         {
           id: new Long(6093756417, 70312826),
           type: "RESTORE",
-          description:
-            "RESTORE data.* FROM $1 WITH OPTIONS (into_db='data2')",
+          description: "RESTORE data.* FROM $1 WITH OPTIONS (into_db='data2')",
           username: "root",
           descriptor_ids: [56],
           status: "running",
@@ -238,8 +236,7 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         {
           id: new Long(4337653761, 70312826),
           type: "CREATE STATS",
-          description:
-            "SELECT job_id, job_type FROM [SHOW JOB 1]",
+          description: "SELECT job_id, job_type FROM [SHOW JOB 1]",
           username: "root",
           descriptor_ids: [53],
           status: "cancel-requested",
@@ -291,8 +288,7 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         {
           id: new Long(3391379457, 70312826),
           type: "SCHEMA CHANGE GC",
-          description:
-            "GC for DROP DATABASE t CASCADE",
+          description: "GC for DROP DATABASE t CASCADE",
           username: "root",
           descriptor_ids: [54],
           status: "revert-failed",
@@ -317,8 +313,7 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         {
           id: new Long(3390625793, 70312826),
           type: "TYPEDESC SCHEMA CHANGE",
-          description:
-            "ALTER TYPE status ADD VALUE 'pending';",
+          description: "ALTER TYPE status ADD VALUE 'pending';",
           username: "root",
           descriptor_ids: [53],
           status: "succeeded",
@@ -369,8 +364,7 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         {
           id: new Long(3390625793, 70312826),
           type: "NEW SCHEMA CHANGE",
-          description:
-            "ALTER TABLE db.t ADD COLUMN b INT DEFAULT 1",
+          description: "ALTER TABLE db.t ADD COLUMN b INT DEFAULT 1",
           username: "root",
           descriptor_ids: [53],
           status: "succeeded",
@@ -421,8 +415,7 @@ export const jobsTablePropsFixture: JobsTableProps & RouteComponentProps = {
         {
           id: new Long(3390625793, 70312826),
           type: "AUTO SPAN CONFIG RECONCILIATION",
-          description:
-            "auto span config reconciliation",
+          description: "auto span config reconciliation",
           username: "root",
           descriptor_ids: [53],
           status: "succeeded",
