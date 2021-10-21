@@ -1,0 +1,27 @@
+# Test basic reads and writes.
+
+kvaccessor-update
+upsert [a,b):A
+upsert [b,d):B
+upsert [e,f):C
+----
+ok
+
+kvaccessor-get
+span [a,b)
+span [b,d)
+----
+[a,b):A
+[b,d):B
+
+kvaccessor-update
+upsert [a,b):D
+delete [b,d)
+----
+ok
+
+kvaccessor-get
+span [a,b)
+span [b,d)
+----
+[a,b):D

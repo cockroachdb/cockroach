@@ -26,24 +26,26 @@ go_library(
 go_test(
     name = "spanconfigkvaccessor_test",
     srcs = [
-        "kvaccessor_test.go",
+        "datadriven_test.go",
         "main_test.go",
         "validation_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":spanconfigkvaccessor"],
     deps = [
         "//pkg/base",
-        "//pkg/config/zonepb",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/sql/sqlutil",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
 )

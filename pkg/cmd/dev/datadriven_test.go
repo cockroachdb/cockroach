@@ -29,21 +29,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDatadriven makes use of datadriven to play back all operations executed
+// TestDataDriven makes use of datadriven to play back all operations executed
 // by individual `dev` invocations. The testcases are defined under testdata/*,
 // where each test files corresponds to a recording capture found in
 // testdata/recording/*.
 //
-// Datadriven divvies up these files as subtests, so individual "files" are
+// DataDriven divvies up these files as subtests, so individual "files" are
 // runnable through:
 //
-// 		go test -run TestDatadriven/<fname>
+// 		go test -run TestDataDriven/<fname>
 //
 // Recordings are used to mock out "system" behavior. During these test runs
 // (unless -record is specified), attempts to shell out to `bazel` or perform
 // other OS operations are intercepted and responses are constructed using
 // recorded data.
-func TestDatadriven(t *testing.T) {
+func TestDataDriven(t *testing.T) {
 	verbose := testing.Verbose()
 	testdata := testutils.TestDataPath(t)
 	datadriven.Walk(t, testdata, func(t *testing.T, path string) {
