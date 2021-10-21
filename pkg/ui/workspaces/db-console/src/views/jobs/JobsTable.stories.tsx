@@ -10,11 +10,40 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { withRouterDecorator } from "src/util/decorators";
-import { JobsTable } from "./index";
-import {
-  jobsTablePropsFixture,
-} from "./jobsTable.fixture";
+import { connect } from "react-redux";
 
+// import JobsTable from "./index";
+import {
+  JobsTable,
+  sortSetting,
+  typeSetting,
+  statusSetting,
+  showSetting,
+} from "./index";
+import { jobsTablePropsFixture } from "./jobsTable.fixture";
+
+function mapStateToProps(state: AdminUIState) {
+  return {
+    sort: sortSetting.selector(state),
+    status: statusSetting.selector(state),
+    show: showSetting.selector(state),
+    type: typeSetting.selector(state),
+    ...jobsTablePropsFixture,
+  };
+}
+
+export const mapDispatchToProps = {
+  setSort: sortSetting.set,
+  setStatus: statusSetting.set,
+  setShow: showSetting.set,
+  setType: typeSetting.set,
+  // refreshJobs: () => {},
+};
+
+const ConnectedJobsTable = connect(
+  mapStateToProps,
+  mapDispatchToProps,
+)(JobsTable);
 storiesOf("JobsTable", module)
   .addDecorator(withRouterDecorator)
-  .add("with data", () => <JobsTable {...jobsTablePropsFixture} />)
+  .add("with data", () => <ConnectedJobsTable />);

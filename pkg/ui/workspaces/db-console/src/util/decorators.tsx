@@ -14,6 +14,7 @@ import { Provider } from "react-redux";
 import { combineReducers, createStore } from "redux";
 import { ConnectedRouter, connectRouter } from "connected-react-router";
 import { createMemoryHistory } from "history";
+import { localSettingsReducer } from "src/redux/localsettings";
 
 const history = createMemoryHistory();
 const routerReducer = connectRouter(history);
@@ -21,6 +22,7 @@ const routerReducer = connectRouter(history);
 const store = createStore(
   combineReducers({
     router: routerReducer,
+    localSettings: localSettingsReducer,
   }),
 );
 
