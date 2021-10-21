@@ -726,7 +726,7 @@ ON CONFLICT (c1) DO UPDATE SET c3=1
 ----
 upsert nullablecols
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: nullablecols_c1_key
  ├── canary column: rowid:24
  ├── fetch columns: c1:21 c2:22 c3:23 rowid:24
  ├── insert-mapping:
@@ -2571,7 +2571,7 @@ scalar-group-by
  │    ├── grouping columns: y:2
  │    ├── internal-ordering: +2
  │    ├── key: (2)
- │    └── scan xyzbs@secondary
+ │    └── scan xyzbs@xyzbs_y_idx
  │         ├── columns: y:2
  │         └── ordering: +2
  └── aggregations
@@ -2902,7 +2902,7 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(9)
- ├── scan xyzbs@secondary
+ ├── scan xyzbs@xyzbs_y_idx
  │    ├── columns: y:2!null
  │    └── constraint: /2/1: (/NULL - /49]
  └── aggregations
@@ -3048,7 +3048,7 @@ scalar-group-by
  │    ├── columns: column8:8!null s:5!null
  │    ├── fd: ()-->(8)
  │    ├── ordering: +5 opt(8) [actual: +5]
- │    ├── scan xyzbs@secondary
+ │    ├── scan xyzbs@xyzbs_s_idx
  │    │    ├── columns: s:5!null
  │    │    ├── constraint: /5/1: (/NULL - /'abc')
  │    │    └── ordering: +5

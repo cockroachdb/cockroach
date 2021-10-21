@@ -2186,7 +2186,7 @@ update partial_indexes
       │    ├── scan partial_indexes
       │    │    ├── columns: a:7!null d:10
       │    │    ├── partial index predicates
-      │    │    │    └── secondary: filters
+      │    │    │    └── partial_indexes_c_idx: filters
       │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(10)
@@ -2225,7 +2225,7 @@ update partial_indexes
       │    ├── scan partial_indexes
       │    │    ├── columns: a:7!null b:8 c:9 d:10
       │    │    ├── partial index predicates
-      │    │    │    └── secondary: filters
+      │    │    │    └── partial_indexes_c_idx: filters
       │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(8-10)
@@ -2284,7 +2284,7 @@ upsert partial_indexes
       │    │    ├── scan partial_indexes
       │    │    │    ├── columns: a:11!null b:12 d:14
       │    │    │    ├── partial index predicates
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12,14)
@@ -2342,7 +2342,7 @@ upsert partial_indexes
       │    │    ├── scan partial_indexes
       │    │    │    ├── columns: a:11!null b:12 c:13 d:14
       │    │    │    ├── partial index predicates
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12-14)
@@ -2400,7 +2400,7 @@ upsert partial_indexes
       │    │    ├── scan partial_indexes
       │    │    │    ├── columns: a:11!null b:12 d:14
       │    │    │    ├── partial index predicates
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12,14)
@@ -2464,7 +2464,7 @@ upsert partial_indexes
       │    │    │    ├── scan partial_indexes
       │    │    │    │    ├── columns: a:11!null b:12 c:13 d:14
       │    │    │    │    ├── partial index predicates
-      │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
       │    │    │    │    ├── key: (11)
       │    │    │    │    └── fd: (11)-->(12-14)
@@ -2501,7 +2501,7 @@ delete partial_indexes
       │    ├── scan partial_indexes
       │    │    ├── columns: a:7!null b:8 c:9
       │    │    ├── partial index predicates
-      │    │    │    └── secondary: filters
+      │    │    │    └── partial_indexes_c_idx: filters
       │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(8,9)
@@ -2542,7 +2542,7 @@ update virt_partial_idx
       │    │    │    └── v:10
       │    │    │         └── b:9 + 1
       │    │    ├── partial index predicates
-      │    │    │    └── secondary: filters
+      │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │         └── b:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(12)
@@ -2591,7 +2591,7 @@ update virt_partial_idx
       │    │    │    │    └── v:10
       │    │    │    │         └── b:9 + 1
       │    │    │    ├── partial index predicates
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │         └── b:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
       │    │    │    ├── key: (8)
       │    │    │    └── fd: (8)-->(9,11,12)
@@ -2665,7 +2665,7 @@ upsert virt_partial_idx
       │    │    │    │    │    └── v:14
       │    │    │    │    │         └── b:13 + 1
       │    │    │    │    ├── partial index predicates
-      │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
       │    │    │    │    ├── key: (12)
       │    │    │    │    └── fd: (12)-->(13,16)
@@ -2738,7 +2738,7 @@ upsert virt_partial_idx
       │    │    │    │    │    └── v:15
       │    │    │    │    │         └── b:14 + 1
       │    │    │    │    ├── partial index predicates
-      │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │         └── b:14 > 0 [outer=(14), constraints=(/14: [/1 - ]; tight)]
       │    │    │    │    ├── key: (13)
       │    │    │    │    └── fd: (13)-->(14,16,17)
@@ -2810,7 +2810,7 @@ upsert virt_partial_idx
       │    │    │    │    │    └── v:14
       │    │    │    │    │         └── b:13 + 1
       │    │    │    │    ├── partial index predicates
-      │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
       │    │    │    │    ├── key: (12)
       │    │    │    │    └── fd: (12)-->(13,16)
@@ -2890,7 +2890,7 @@ upsert virt_partial_idx
       │    │    │    │    │    │    └── v:14
       │    │    │    │    │    │         └── b:13 + 1
       │    │    │    │    │    ├── partial index predicates
-      │    │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
       │    │    │    │    │    ├── key: (12)
       │    │    │    │    │    └── fd: (12)-->(13,15,16)
@@ -2934,7 +2934,7 @@ delete virt_partial_idx
       │    │    │    └── v:10
       │    │    │         └── b:9 + 1
       │    │    ├── partial index predicates
-      │    │    │    └── secondary: filters
+      │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │         └── b:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(9,11)
@@ -2977,7 +2977,7 @@ update partial_indexes
       │    │    ├── scan partial_indexes
       │    │    │    ├── columns: a:7!null b:8 c:9
       │    │    │    ├── partial index predicates
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
       │    │    │    ├── key: (7)
       │    │    │    └── fd: (7)-->(8,9)
@@ -4570,7 +4570,7 @@ project
  ├── fd: ()-->(1-3)
  └── upsert returning_test
       ├── columns: a:1 b:2 c:3 rowid:8!null
-      ├── arbiter indexes: secondary
+      ├── arbiter indexes: returning_test_a_key
       ├── canary column: rowid:23
       ├── fetch columns: a:16 b:17 c:18 rowid:23
       ├── insert-mapping:

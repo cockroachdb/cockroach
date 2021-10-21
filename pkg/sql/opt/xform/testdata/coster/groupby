@@ -39,7 +39,7 @@ group-by
  ├── cost: 1085.45
  ├── key: (2)
  ├── fd: (2)-->(7)
- ├── scan b@secondary
+ ├── scan b@b_a_b_idx
  │    ├── columns: a:2
  │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
  │    ├── cost: 1064.42
@@ -58,7 +58,7 @@ group-by
  ├── cost: 1114.55
  ├── key: (2,3)
  ├── fd: (2,3)-->(7)
- ├── scan b@secondary
+ ├── scan b@b_a_b_idx
  │    ├── columns: a:2 b:3
  │    ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
  │    ├── cost: 1074.52
@@ -86,7 +86,7 @@ limit
  │    ├── key: (2)
  │    ├── fd: (2)-->(7)
  │    ├── limit hint: 10.00
- │    ├── scan b@secondary
+ │    ├── scan b@b_a_b_idx
  │    │    ├── columns: a:2
  │    │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
  │    │    ├── cost: 118.02
@@ -115,7 +115,7 @@ limit
  │    ├── key: (2,3)
  │    ├── fd: (2,3)-->(7)
  │    ├── limit hint: 10.00
- │    ├── scan b@secondary
+ │    ├── scan b@b_a_b_idx
  │    │    ├── columns: a:2 b:3
  │    │    ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
  │    │    ├── cost: 24.52

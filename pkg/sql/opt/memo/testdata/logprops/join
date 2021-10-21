@@ -730,7 +730,7 @@ project
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(7)
       │    │    ├── prune: (7)
-      │    │    ├── scan xysd@secondary
+      │    │    ├── scan xysd@xysd_s_d_key
       │    │    └── aggregations
       │    │         └── count-rows [as=count_rows:7, type=int]
       │    └── filters

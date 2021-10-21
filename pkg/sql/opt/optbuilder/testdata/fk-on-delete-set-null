@@ -167,9 +167,9 @@ root
                 │    │    ├── scan child_partial
                 │    │    │    ├── columns: c:12!null child_partial.p:13 i:14
                 │    │    │    └── partial index predicates
-                │    │    │         ├── secondary: filters
+                │    │    │         ├── child_partial_p_idx: filters
                 │    │    │         │    └── i:14 > 0
-                │    │    │         └── secondary: filters
+                │    │    │         └── child_partial_i_idx: filters
                 │    │    │              └── child_partial.p:13 > 0
                 │    │    ├── with-scan &1
                 │    │    │    ├── columns: p:17!null

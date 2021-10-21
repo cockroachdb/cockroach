@@ -859,7 +859,7 @@ INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO NOTHING
 ----
 insert t_idx2
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: t_idx2_w_key
  ├── insert-mapping:
  │    ├── column1:8 => a:1
  │    ├── column2:9 => b:2
@@ -908,7 +908,7 @@ INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT DO NOTHING
 ----
 insert t_idx2
  ├── columns: <none>
- ├── arbiter indexes: t_idx2_pkey secondary
+ ├── arbiter indexes: t_idx2_pkey t_idx2_w_key
  ├── insert-mapping:
  │    ├── column1:8 => a:1
  │    ├── column2:9 => b:2
@@ -1101,7 +1101,7 @@ INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO UPDATE SET c=10
 ----
 upsert t_idx2
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: t_idx2_w_key
  ├── canary column: a:13
  ├── fetch columns: a:13 b:14 c:15 v:16 w:17
  ├── insert-mapping:
@@ -1172,7 +1172,7 @@ INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO UPDATE SET c=t_idx2.v+1
 ----
 upsert t_idx2
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: t_idx2_w_key
  ├── canary column: a:13
  ├── fetch columns: a:13 b:14 c:15 v:16 w:17
  ├── insert-mapping:

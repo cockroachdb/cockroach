@@ -208,7 +208,7 @@ sort
       │    │    │    │    │    │    │    │    ├── select
       │    │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24!null
       │    │    │    │    │    │    │    │    │    ├── ordering: +7
-      │    │    │    │    │    │    │    │    │    ├── scan pg_class@secondary [as=c]
+      │    │    │    │    │    │    │    │    │    ├── scan pg_class@pg_class_oid_idx [as=c]
       │    │    │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24
       │    │    │    │    │    │    │    │    │    │    └── ordering: +7
       │    │    │    │    │    │    │    │    │    └── filters
@@ -218,7 +218,7 @@ sort
       │    │    │    │    │    │    │    │    │    ├── columns: attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null
       │    │    │    │    │    │    │    │    │    ├── fd: ()-->(60)
       │    │    │    │    │    │    │    │    │    ├── ordering: +44 opt(60) [actual: +44]
-      │    │    │    │    │    │    │    │    │    ├── scan pg_attribute@secondary [as=a]
+      │    │    │    │    │    │    │    │    │    ├── scan pg_attribute@pg_attribute_attrelid_idx [as=a]
       │    │    │    │    │    │    │    │    │    │    ├── columns: attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49 atttypmod:52 a.attnotnull:56 attisdropped:60
       │    │    │    │    │    │    │    │    │    │    └── ordering: +44
       │    │    │    │    │    │    │    │    │    └── filters
