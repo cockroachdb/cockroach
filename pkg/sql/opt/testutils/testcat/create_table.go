@@ -916,7 +916,7 @@ func (tt *Table) makeIndexName(defName tree.Name, typ indexType) string {
 	name := string(defName)
 	if name == "" {
 		if typ == primaryIndex {
-			name = "primary"
+			name = tt.TabName.Table() + "_pkey"
 		} else {
 			name = "secondary"
 		}
