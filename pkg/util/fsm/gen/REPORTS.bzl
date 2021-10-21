@@ -1,9 +1,9 @@
-load("@io_bazel_rules_go//go:def.bzl", "GoArchive", "go_library", "go_binary")
+load("@io_bazel_rules_go//go:def.bzl", "GoArchive", "go_binary", "go_library")
 
 def _gen_template_impl(ctx):
     archive = ctx.attr.dep[GoArchive]
     importpath = archive.data.importpath
-    basepkg = importpath.split('/')[-1]
+    basepkg = importpath.split("/")[-1]
     ctx.actions.expand_template(
         template = ctx.file._template,
         output = ctx.outputs.write_reports,
@@ -35,7 +35,7 @@ def gen_reports(name, dep, transitions_variable, starting_state_name):
         name = template_name,
         dep = dep,
         transitions_variable = transitions_variable,
-        starting_state_name = starting_state_name
+        starting_state_name = starting_state_name,
     )
     go_library(
         name = template_name + "_lib",
@@ -53,7 +53,10 @@ def gen_reports(name, dep, transitions_variable, starting_state_name):
     native.genrule(
         name = name,
         cmd = "$(location :{template_name}_bin) $(location {lower}_diagram.gv) $(location {lower}_report.txt) 'bazel build {name}'".format(
-            template_name=template_name, lower=lower, name=name),
+            template_name = template_name,
+            lower = lower,
+            name = name,
+        ),
         outs = [
             lower + "_diagram.gv",
             lower + "_report.txt",

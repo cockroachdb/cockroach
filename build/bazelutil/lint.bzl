@@ -30,7 +30,8 @@ _gen_script = rule(
         "test": attr.label(mandatory = True),
         "_template": attr.label(
             default = "@cockroach//build/bazelutil:lint.sh.in",
-            allow_single_file = True)
+            allow_single_file = True,
+        ),
     },
 )
 
