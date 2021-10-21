@@ -25,7 +25,7 @@ export function jobToVisual(job: Job): JobStatusVisual {
   if (job.type === "CHANGEFEED") {
     return JobStatusVisual.BadgeOnly;
   }
-  if (job.nextRun) {
+  if (job.next_run) {
     return JobStatusVisual.BadgeWithTooltip;
   }
   switch (job.status) {

@@ -80,6 +80,7 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 310899000,
           }),
           fraction_completed: 1,
+          next_run: "test",
         },
         {
           id: new Long(7003330561, 70312826),
@@ -318,6 +319,11 @@ export const jobTablePropsFixture: JobTableProps = {
           username: "root",
           descriptor_ids: [53],
           status: "succeeded",
+          highwater_timestamp: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          highwater_decimal: "test highwater decimal",
           created: new protos.google.protobuf.Timestamp({
             seconds: new Long(1634648117),
             nanos: 98294000,
