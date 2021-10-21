@@ -254,7 +254,7 @@ func IsPermanentSchemaChangeError(err error) bool {
 	}
 
 	switch pgerror.GetPGCode(err) {
-	case pgcode.SerializationFailure, pgcode.InternalConnectionFailure:
+	case pgcode.SerializationFailure, pgcode.InternalConnectionFailure, pgcode.OutOfMemory, pgcode.DiskFull:
 		return false
 
 	case pgcode.Internal, pgcode.RangeUnavailable:
