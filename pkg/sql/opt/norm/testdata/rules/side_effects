@@ -137,7 +137,7 @@ project
  └── select
       ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 y:9
       ├── key: (1)
-      ├── fd: (1)-->(2-5,8,9), (8)-->(9)
+      ├── fd: (1)-->(2-5,8,9), (8)-->(9), (2,9)-->(1)
       ├── left-join (hash)
       │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 y:9
       │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
@@ -154,7 +154,7 @@ project
       │    └── filters
       │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
       └── filters
-           └── k:1 = CASE WHEN i:2 < 0 THEN 5 ELSE y:9 END [outer=(1,2,9), constraints=(/1: (/NULL - ])]
+           └── k:1 = CASE WHEN i:2 < 0 THEN 5 ELSE y:9 END [outer=(1,2,9), constraints=(/1: (/NULL - ]), fd=(2,9)-->(1)]
 
 # Don't decorrelate CASE WHEN branch if there are side effects.
 norm
@@ -302,7 +302,7 @@ project
       ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 y:9
       ├── immutable
       ├── key: (1)
-      ├── fd: (1)-->(2-5,8,9), (8)-->(9)
+      ├── fd: (1)-->(2-5,8,9), (8)-->(9), (9)-->(1)
       ├── left-join (hash)
       │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 y:9
       │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
@@ -319,4 +319,4 @@ project
       │    └── filters
       │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
       └── filters
-           └── k:1 = IFERROR((1 / 0)::INT8, y:9) [outer=(1,9), immutable, constraints=(/1: (/NULL - ])]
+           └── k:1 = IFERROR((1 / 0)::INT8, y:9) [outer=(1,9), immutable, constraints=(/1: (/NULL - ]), fd=(9)-->(1)]
