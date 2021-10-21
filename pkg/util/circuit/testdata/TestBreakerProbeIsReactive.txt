@@ -1,0 +1,5 @@
+log
+----
+mybreaker: tripped with error: boom
+mybreaker: now tripped with error: probe error #1 (previously: boom)
+mybreaker: now tripped with error: probe error #2 (previously: probe error #1)
