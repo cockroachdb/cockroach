@@ -33,7 +33,6 @@ import {
   formatNumberForDisplay,
   calculateTotalWorkload,
   unique,
-  summarize,
   queryByName,
   aggregatedTsAttr,
   aggregationIntervalAttr,
@@ -522,9 +521,6 @@ export class StatementDetails extends React.Component<
         <span className={cx("tooltip-info")}>unavailable</span>
       </Tooltip>
     );
-    const summary = summarize(statement);
-    const showRowsWritten =
-      stats.sql_type === "TypeDML" && summary.statement !== "select";
 
     // If the aggregatedTs is unset, we are aggregating over the whole date range.
     const aggregatedTs = queryByName(this.props.location, aggregatedTsAttr);
@@ -608,19 +604,15 @@ export class StatementDetails extends React.Component<
                       )}
                       {unavailableTooltip}
                     </div>
-                    {showRowsWritten && (
-                      <div
-                        className={summaryCardStylesCx("summary--card__item")}
-                      >
-                        <Text>Mean rows written</Text>
-                        <Text>
-                          {formatNumberForDisplay(
-                            stats.rows_written?.mean,
-                            formatTwoPlaces,
-                          )}
-                        </Text>
-                      </div>
-                    )}
+                    <div className={summaryCardStylesCx("summary--card__item")}>
+                      <Text>Mean rows written</Text>
+                      <Text>
+                        {formatNumberForDisplay(
+                          stats.rows_written?.mean,
+                          formatTwoPlaces,
+                        )}
+                      </Text>
+                    </div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Max memory usage</Text>
                       {statementSampled && (
@@ -900,10 +892,9 @@ export class StatementDetails extends React.Component<
                 },
               ].filter(function(r) {
                 if (
-                  (r.name === "Network Bytes Sent" &&
-                    r.value &&
-                    r.value.mean === 0) ||
-                  (r.name === "Rows Written" && !showRowsWritten)
+                  r.name === "Network Bytes Sent" &&
+                  r.value &&
+                  r.value.mean === 0
                 ) {
                   // Omit if empty.
                   return false;

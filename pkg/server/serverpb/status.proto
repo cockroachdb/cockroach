@@ -747,6 +747,9 @@ message ActiveQuery {
 
   // The SQL statement fingerprint, compatible with StatementStatisticsKey.
   string sql_no_constants = 8;
+
+  // A summarized version of the sql query.
+  string sql_summary = 9;
 }
 
 // Request object for ListSessions and ListLocalSessions.

@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
+import { shortStatement } from "../../statementsTable";
 
 export interface StatementSummary {
   statement?: string;
@@ -54,4 +55,21 @@ export function summarize(statement: string): StatementSummary {
   return {
     error: "unimplemented",
   };
+}
+
+// Check if a valid statement summary exists and is supported, or else
+// compute summary using regex.
+export function computeOrUseStmtSummary(
+  statement: string,
+  statementSummary: string,
+): string {
+  // Statement summary computed with regex.
+  const regexSummary = summarize(statement);
+
+  // Current statements that we support summaries for from the backend.
+  const summarizedStmts = new Set(["select", "insert", "upsert", "update"]);
+
+  return statementSummary && summarizedStmts.has(regexSummary.statement)
+    ? statementSummary
+    : shortStatement(regexSummary, statement);
 }

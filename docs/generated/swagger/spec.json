@@ -623,6 +623,11 @@
           "type": "string",
           "x-go-name": "SqlNoConstants"
         },
+        "sql_summary": {
+          "description": "A summarized version of the sql query.",
+          "type": "string",
+          "x-go-name": "SqlSummary"
+        },
         "start": {
           "description": "Start timestamp of this query.",
           "type": "string",

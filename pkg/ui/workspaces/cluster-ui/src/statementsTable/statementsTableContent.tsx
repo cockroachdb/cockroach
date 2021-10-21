@@ -27,11 +27,10 @@ import {
   databaseAttr,
   aggregatedTsAttr,
   propsToQueryString,
-  summarize,
   TimestampToMoment,
   aggregationIntervalAttr,
+  computeOrUseStmtSummary,
 } from "src/util";
-import { shortStatement } from "./statementsTable";
 import styles from "./statementsTableContent.module.scss";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Download } from "@cockroachlabs/icons";
@@ -185,14 +184,6 @@ export const StatementLink = ({
   database,
   onClick,
 }: StatementLinkProps): React.ReactElement => {
-  const summary = summarize(statement);
-  // current statements that we support summaries for from the backend.
-  const summarizedStmts = new Set(["select", "insert", "upsert", "update"]);
-  const shortStmt =
-    statementSummary && summarizedStmts.has(summary.statement)
-      ? statementSummary
-      : shortStatement(summary, statement);
-
   const onStatementClick = React.useCallback(() => {
     if (onClick) {
       onClick(statement);
@@ -209,6 +200,8 @@ export const StatementLink = ({
     database,
   };
 
+  const summary = computeOrUseStmtSummary(statement, statementSummary);
+
   return (
     <Link to={StatementLinkTarget(linkProps)} onClick={onStatementClick}>
       <div>
@@ -221,7 +214,7 @@ export const StatementLink = ({
           }
         >
           <div className="cl-table-link__tooltip-hover-area">
-            {getHighlightedText(shortStmt, search, false, true)}
+            {getHighlightedText(summary, search, false, true)}
           </div>
         </Tooltip>
       </div>

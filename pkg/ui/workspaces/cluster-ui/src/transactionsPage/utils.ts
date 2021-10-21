@@ -28,6 +28,7 @@ import {
   addStatementStats,
   flattenStatementStats,
   DurationToNumber,
+  computeOrUseStmtSummary,
 } from "../util";
 
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -77,6 +78,21 @@ export const statementFingerprintIdsToText = (
 ): string => {
   return statementFingerprintIds
     .map(s => statements.find(stmt => stmt.id.eq(s))?.key.key_data.query)
+    .join("\n");
+};
+
+// Combine all statement summaries into a string.
+export const statementFingerprintIdsToSummarizedText = (
+  statementFingerprintIds: Long[],
+  statements: Statement[],
+): string => {
+  return statementFingerprintIds
+    .map(s => {
+      const query = statements.find(stmt => stmt.id.eq(s))?.key.key_data.query;
+      const querySummary = statements.find(stmt => stmt.id.eq(s))?.key.key_data
+        .query_summary;
+      return computeOrUseStmtSummary(query, querySummary);
+    })
     .join("\n");
 };
 
