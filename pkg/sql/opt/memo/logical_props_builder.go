@@ -1509,6 +1509,20 @@ func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *p
 				// Filter conjunct of the form x = $1. This filter cannot generate
 				// constraints, but still tell us that the column is constant.
 				constCols.Add(leftVar.Col)
+
+			default:
+				// We have an equality of the form
+				//   x = <some expression>.
+				// If the expression is immutable and is not composite sensitive, then x
+				// is functionally determined by the columns that appear in the
+				// expression.
+				if !scalar.VolatilitySet.HasVolatile() &&
+					!CanBeCompositeSensitive(b.mem.Metadata(), eq.Right) {
+					outerCols := getOuterCols(eq.Right)
+					if !outerCols.Contains(leftVar.Col) {
+						scalar.FuncDeps.AddSynthesizedCol(getOuterCols(eq.Right), leftVar.Col)
+					}
+				}
 			}
 		}
 	}
