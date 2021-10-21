@@ -455,7 +455,7 @@ project
       │    └── projections
       │         └── a.f:3 / 2.0 [as=f:7, outer=(3)]
       └── filters
-           └── f:7 = i:2::FLOAT8 [outer=(2,7), immutable, constraints=(/7: (/NULL - ])]
+           └── f:7 = i:2::FLOAT8 [outer=(2,7), immutable, constraints=(/7: (/NULL - ]), fd=(2)-->(7)]
 
 # Detect PruneSelectCols and PushSelectIntoProject dependency cycle.
 norm
