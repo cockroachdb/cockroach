@@ -83,12 +83,6 @@ func EncryptFile(plaintext, key []byte) ([]byte, error) {
 	return encryptFile(plaintext, key, false)
 }
 
-// EncryptFileChunked is like EncryptFile but chunks the file into fixed-size
-// messages encrypted individually, allowing streaming (by-chunk) decryption.
-func EncryptFileChunked(plaintext, key []byte) ([]byte, error) {
-	return encryptFile(plaintext, key, true)
-}
-
 func encryptFile(plaintext, key []byte, chunked bool) ([]byte, error) {
 	gcm, err := aesgcm(key)
 	if err != nil {
@@ -137,7 +131,7 @@ func encryptFile(plaintext, key []byte, chunked bool) ([]byte, error) {
 		// Note: there may not be any plaintext left to seal if the chunk we just
 		// finished was the end of it, but sealing the (empty) remainder in a final
 		// chunk maintains the invariant that a chunked file always ends in a sealed
-		// chunk of less than chunk size, thus making tuncation, even along a chunk
+		// chunk of less than chunk size, thus making truncation, even along a chunk
 		// boundary, detectable.
 		if len(chunk) < encryptionChunkSizeV2 {
 			break
@@ -145,6 +139,111 @@ func encryptFile(plaintext, key []byte, chunked bool) ([]byte, error) {
 		binary.BigEndian.PutUint64(iv[4:], binary.BigEndian.Uint64(iv[4:])+1)
 	}
 	return ciphertext, nil
+}
+
+type encWriter struct {
+	gcm        cipher.AEAD
+	iv         []byte
+	ciphertext io.WriteCloser
+	buf        []byte
+	bufPos     int
+}
+
+// NopCloser wraps an io.Writer to add a no-op Close().
+type NopCloser struct {
+	io.Writer
+}
+
+// Close is a no-op.
+func (NopCloser) Close() error {
+	return nil
+}
+
+// EncryptFileChunked encrypts a file with the supplied key and a randomly chosen IV
+// which is prepended in a header on the returned ciphertext.
+func EncryptFileChunked(plaintext, key []byte) ([]byte, error) {
+	b := &bytes.Buffer{}
+	w, err := EncryptingWriter(NopCloser{b}, key)
+	if err != nil {
+		return nil, err
+	}
+	_, err = io.Copy(w, bytes.NewReader(plaintext))
+	if err != nil {
+		return nil, err
+	}
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
+// EncryptingWriter returns a writer that wraps an underlying sink writer but
+// which encrypts bytes written to it before flushing them to the wrapped sink.
+func EncryptingWriter(ciphertext io.WriteCloser, key []byte) (io.WriteCloser, error) {
+	gcm, err := aesgcm(key)
+	if err != nil {
+		return nil, err
+	}
+
+	header := make([]byte, len(encryptionPreamble)+1+nonceSize)
+	copy(header, encryptionPreamble)
+	header[len(encryptionPreamble)] = encryptionVersionChunk
+
+	// Pick a unique IV for this file and write it in the header.
+	ivStart := len(encryptionPreamble) + 1
+	iv := make([]byte, nonceSize)
+	if _, err := crypto_rand.Read(iv); err != nil {
+		return nil, err
+	}
+	copy(header[ivStart:], iv)
+
+	// Write our header (preamble+version+IV) to the ciphertext sink.
+	if n, err := ciphertext.Write(header); err != nil {
+		return nil, err
+	} else if n != len(header) {
+		return nil, io.ErrShortWrite
+	}
+
+	return &encWriter{gcm: gcm, iv: iv, ciphertext: ciphertext, buf: make([]byte, encryptionChunkSizeV2+tagSize)}, nil
+}
+
+func (e *encWriter) Write(p []byte) (int, error) {
+	var wrote int
+	for wrote < len(p) {
+		copied := copy(e.buf[e.bufPos:encryptionChunkSizeV2], p[wrote:])
+		e.bufPos += copied
+		if e.bufPos == encryptionChunkSizeV2 {
+			if err := e.flush(); err != nil {
+				return wrote, err
+			}
+		}
+		wrote += copied
+	}
+	return wrote, nil
+}
+
+func (e *encWriter) Close() error {
+	// Note: there may not be any plaintext left to seal if the chunk we just
+	// finished was the end of it, but sealing the (empty) remainder in a final
+	// chunk maintains the invariant that a chunked file always ends in a sealed
+	// chunk of less than chunk size, thus making truncation, even along a chunk
+	// boundary, detectable.
+	err := e.flush()
+	return errors.CombineErrors(err, e.ciphertext.Close())
+}
+
+func (e *encWriter) flush() error {
+	e.buf = e.gcm.Seal(e.buf[:0], e.iv, e.buf[:e.bufPos], nil)
+	for flushed := 0; flushed < len(e.buf); {
+		n, err := e.ciphertext.Write(e.buf[flushed:])
+		flushed += n
+		if err != nil {
+			return err
+		}
+	}
+	binary.BigEndian.PutUint64(e.iv[4:], binary.BigEndian.Uint64(e.iv[4:])+1)
+	e.bufPos = 0
+	return nil
 }
 
 // DecryptFile decrypts a file encrypted by EncryptFile, using the supplied key
