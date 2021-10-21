@@ -1130,22 +1130,22 @@ vectorized: true
 • filter
 │ filter: z IS NULL
 │
-└── • merge join (left outer)
-    │ equality: (a_z, a_y, a_x) = (z, y, x)
-    │ right cols are key
+└── • merge join (right outer)
+    │ equality: (z, y, x) = (a_z, a_y, a_x)
+    │ left cols are key
     │
-    ├── • filter
-    │   │ filter: (a_y IS NOT NULL) AND (a_x IS NOT NULL)
-    │   │
-    │   └── • scan
-    │         missing stats
-    │         table: b@idx
-    │         spans: (/NULL - ]
+    ├── • scan
+    │     missing stats
+    │     table: a@primary
+    │     spans: FULL SCAN
     │
-    └── • scan
-          missing stats
-          table: a@primary
-          spans: FULL SCAN
+    └── • filter
+        │ filter: (a_y IS NOT NULL) AND (a_x IS NOT NULL)
+        │
+        └── • scan
+              missing stats
+              table: b@idx
+              spans: (/NULL - ]
 
 statement ok
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref

@@ -58,7 +58,7 @@ inner-join (merge)
  ├── left ordering: +1
  ├── right ordering: +7
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(7)=99, null(7)=0]
- ├── cost: 2398.34194
+ ├── cost: 2400.84194
  ├── fd: (1)==(7), (7)==(1)
  ├── scan a
  │    ├── columns: k:1!null
@@ -922,13 +922,13 @@ WHERE
 project
  ├── columns: attname:3!null atttypid:4!null typbasetype:52 typtype:34
  ├── stats: [rows=198]
- ├── cost: 2911.11877
+ ├── cost: 2911.16877
  └── inner-join (merge)
       ├── columns: attname:3!null atttypid:4!null oid:28!null typtype:34 typbasetype:52
       ├── left ordering: +28
       ├── right ordering: +4
       ├── stats: [rows=198, distinct(4)=17.2927193, null(4)=0, distinct(28)=17.2927193, null(28)=0]
-      ├── cost: 2909.11877
+      ├── cost: 2909.16877
       ├── fd: (4)==(28), (28)==(4)
       ├── scan pg_type@pg_type_oid_idx [as=t]
       │    ├── columns: oid:28!null typtype:34 typbasetype:52

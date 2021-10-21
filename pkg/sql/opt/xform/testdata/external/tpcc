@@ -1404,8 +1404,20 @@ scalar-group-by
  │    ├── columns: o_id:1 o_d_id:2 o_w_id:3 ol_o_id:11 ol_d_id:12 ol_w_id:13
  │    ├── full-join (merge)
  │    │    ├── columns: o_id:1 o_d_id:2 o_w_id:3 ol_o_id:11 ol_d_id:12 ol_w_id:13
- │    │    ├── left ordering: +3,+2,-1
- │    │    ├── right ordering: +13,+12,-11
+ │    │    ├── left ordering: +13,+12,-11
+ │    │    ├── right ordering: +3,+2,-1
+ │    │    ├── project
+ │    │    │    ├── columns: ol_o_id:11!null ol_d_id:12!null ol_w_id:13!null
+ │    │    │    ├── ordering: +13,+12,-11
+ │    │    │    └── select
+ │    │    │         ├── columns: ol_o_id:11!null ol_d_id:12!null ol_w_id:13!null ol_delivery_d:17
+ │    │    │         ├── fd: ()-->(17)
+ │    │    │         ├── ordering: +13,+12,-11 opt(17) [actual: +13,+12,-11]
+ │    │    │         ├── scan order_line
+ │    │    │         │    ├── columns: ol_o_id:11!null ol_d_id:12!null ol_w_id:13!null ol_delivery_d:17
+ │    │    │         │    └── ordering: +13,+12,-11
+ │    │    │         └── filters
+ │    │    │              └── ol_delivery_d:17 IS NULL [outer=(17), constraints=(/17: [/NULL - /NULL]; tight), fd=()-->(17)]
  │    │    ├── project
  │    │    │    ├── columns: o_id:1!null o_d_id:2!null o_w_id:3!null
  │    │    │    ├── key: (1-3)
@@ -1422,18 +1434,6 @@ scalar-group-by
  │    │    │         │    └── ordering: +3,+2,-1
  │    │    │         └── filters
  │    │    │              └── o_carrier_id:6 IS NULL [outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
- │    │    ├── project
- │    │    │    ├── columns: ol_o_id:11!null ol_d_id:12!null ol_w_id:13!null
- │    │    │    ├── ordering: +13,+12,-11
- │    │    │    └── select
- │    │    │         ├── columns: ol_o_id:11!null ol_d_id:12!null ol_w_id:13!null ol_delivery_d:17
- │    │    │         ├── fd: ()-->(17)
- │    │    │         ├── ordering: +13,+12,-11 opt(17) [actual: +13,+12,-11]
- │    │    │         ├── scan order_line
- │    │    │         │    ├── columns: ol_o_id:11!null ol_d_id:12!null ol_w_id:13!null ol_delivery_d:17
- │    │    │         │    └── ordering: +13,+12,-11
- │    │    │         └── filters
- │    │    │              └── ol_delivery_d:17 IS NULL [outer=(17), constraints=(/17: [/NULL - /NULL]; tight), fd=()-->(17)]
  │    │    └── filters (true)
  │    └── filters
  │         └── (ol_o_id:11 IS NULL) OR (o_id:1 IS NULL) [outer=(1,11)]
