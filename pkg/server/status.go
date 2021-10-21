@@ -1839,13 +1839,14 @@ func (s *statusServer) rangesHelper(
 	includeRawKeys := debug.GatewayRemoteAllowed(ctx, s.st)
 
 	constructRangeInfo := func(
-		desc roachpb.RangeDescriptor, rep *kvserver.Replica, storeID roachpb.StoreID, metrics kvserver.ReplicaMetrics,
+		rep *kvserver.Replica, storeID roachpb.StoreID, metrics kvserver.ReplicaMetrics,
 	) serverpb.RangeInfo {
 		raftStatus := rep.RaftStatus()
 		raftState := convertRaftStatus(raftStatus)
 		leaseHistory := rep.GetLeaseHistory()
 		var span serverpb.PrettySpan
 		if includeRawKeys {
+			desc := rep.Desc()
 			span.StartKey = desc.StartKey.String()
 			span.EndKey = desc.EndKey.String()
 		} else {
@@ -1891,10 +1892,10 @@ func (s *statusServer) rangesHelper(
 
 	// There are two possibilities for ordering of ranges in the results:
 	// it could either be determined by the RangeIDs in the request (if specified),
-	// or be in RangeID order if not (as that's the ordering that
-	// IterateRangeDescriptors works on). The latter is already sorted in a
-	// stable fashion, as far as pagination is concerned. The former case requires
-	// sorting.
+	// or be in RangeID order if not (as we pass in the
+	// VisitReplicasInSortedOrder option to store.VisitReplicas below). The latter
+	// is already sorted in a stable fashion, as far as pagination is concerned.
+	// The former case requires sorting.
 	if len(req.RangeIDs) > 0 {
 		sort.Slice(req.RangeIDs, func(i, j int) bool {
 			return req.RangeIDs[i] < req.RangeIDs[j]
@@ -1905,25 +1906,19 @@ func (s *statusServer) rangesHelper(
 		now := store.Clock().NowAsClockTimestamp()
 		if len(req.RangeIDs) == 0 {
 			// All ranges requested.
-
-			// Use IterateRangeDescriptors to read from the engine only
-			// because it's already exported.
-			err := kvserver.IterateRangeDescriptors(ctx, store.Engine(),
-				func(desc roachpb.RangeDescriptor) error {
-					rep := store.GetReplicaIfExists(desc.RangeID)
-					if rep == nil {
-						return nil // continue
-					}
+			store.VisitReplicas(
+				func(rep *kvserver.Replica) bool {
 					output.Ranges = append(output.Ranges,
 						constructRangeInfo(
-							desc,
 							rep,
 							store.Ident.StoreID,
 							rep.Metrics(ctx, now, isLiveMap, clusterNodes),
 						))
-					return nil
-				})
-			return err
+					return true // continue.
+				},
+				kvserver.WithReplicasInOrder(),
+			)
+			return nil
 		}
 
 		// Specific ranges requested:
@@ -1933,10 +1928,8 @@ func (s *statusServer) rangesHelper(
 				// Not found: continue.
 				continue
 			}
-			desc := rep.Desc()
 			output.Ranges = append(output.Ranges,
 				constructRangeInfo(
-					*desc,
 					rep,
 					store.Ident.StoreID,
 					rep.Metrics(ctx, now, isLiveMap, clusterNodes),
