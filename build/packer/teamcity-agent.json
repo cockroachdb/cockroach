@@ -8,7 +8,7 @@
       "project_id": "cockroach-teamcity",
       "source_image_family": "ubuntu-1804-lts",
       "zone": "us-east1-b",
-      "machine_type": "n1-standard-32",
+      "machine_type": "n2-standard-32",
       "image_name": "{{user `image_id`}}",
       "image_description": "{{user `image_id`}}",
       "ssh_username": "packer",
