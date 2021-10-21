@@ -1854,7 +1854,7 @@ func (s *adminServer) Jobs(
        WHERE true
 	`)
 	if req.Status == "retrying" {
-		q.Append(" AND status IN ('running', 'reverting') AND next_run > now() AND num_runs > 0")
+		q.Append(" AND status IN ('running', 'reverting') AND next_run > now() AND num_runs > 1")
 	} else if req.Status != "" {
 		q.Append(" AND status = $", req.Status)
 	}

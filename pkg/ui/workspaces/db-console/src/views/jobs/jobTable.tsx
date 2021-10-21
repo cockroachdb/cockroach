@@ -62,6 +62,30 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
     sort: job => job.statement || job.description || job.type,
   },
   {
+    name: "status",
+    title: (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <p>
+            {"Current "}
+            <Anchor href={jobStatus} target="_blank">
+              job status
+            </Anchor>
+            {
+              " or completion progress, and the total time the job took to complete."
+            }
+          </p>
+        }
+      >
+        {"Status"}
+      </Tooltip>
+    ),
+    cell: job => <JobStatusCell job={job} compact />,
+    sort: job => job.fraction_completed,
+  },
+  {
     name: "jobId",
     title: (
       <Tooltip
@@ -114,36 +138,40 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
         style="tableTitle"
         content={<p>Date and time the job was created.</p>}
       >
-        {"Creation Time"}
+        {"Creation Time (UTC)"}
       </Tooltip>
     ),
     cell: job => TimestampToMoment(job?.created).format(DATE_FORMAT_24_UTC),
     sort: job => TimestampToMoment(job?.created).valueOf(),
   },
   {
-    name: "status",
+    name: "lastExecutionTime",
     title: (
       <Tooltip
         placement="bottom"
         style="tableTitle"
-        content={
-          <p>
-            {"Current "}
-            <Anchor href={jobStatus} target="_blank">
-              job status
-            </Anchor>
-            {
-              " or completion progress, and the total time the job took to complete."
-            }
-          </p>
-        }
+        content={<p>Date and time the job was last executed.</p>}
       >
-        {"Status"}
+        {"Last Execution Time (UTC)"}
       </Tooltip>
     ),
-    cell: job => <JobStatusCell job={job} compact />,
-    sort: job => job.fraction_completed,
+    cell: job => TimestampToMoment(job?.last_run).format(DATE_FORMAT_24_UTC),
+    sort: job => TimestampToMoment(job?.last_run).valueOf(),
   },
+  // {
+  //   name: "executionCount",
+  //   title: (
+  //     <Tooltip
+  //       placement="bottom"
+  //       style="tableTitle"
+  //       content={<p>Number of times the job was executed.</p>}
+  //     >
+  //       {"Execution Count"}
+  //     </Tooltip>
+  //   ),
+  //   cell: job => job?.num_runs,
+  //   sort: job => job?.num_runs,
+  // },
 ];
 
 export interface JobTableProps {

@@ -27,7 +27,7 @@ import {
 } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import "./index.styl";
-import { statusOptions } from "./jobStatusOptions";
+import { displayStatusOptions } from "./jobStatusOptions";
 import { JobTable } from "src/views/jobs/jobTable";
 import { trackFilter } from "src/util/analytics";
 import JobType = cockroach.sql.jobs.jobspb.Type;
@@ -37,7 +37,7 @@ import JobsResponse = cockroach.server.serverpb.JobsResponse;
 export const statusSetting = new LocalSetting<AdminUIState, string>(
   "jobs/status_setting",
   s => s.localSettings,
-  statusOptions[0].value,
+  displayStatusOptions[0].value,
 );
 
 const typeOptions = [
@@ -148,7 +148,7 @@ export class JobsTable extends React.Component<JobsTableProps> {
             <PageConfigItem>
               <Dropdown
                 title="Status"
-                options={statusOptions}
+                options={displayStatusOptions}
                 selected={this.props.status}
                 onChange={this.onStatusSelected}
               />

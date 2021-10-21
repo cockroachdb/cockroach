@@ -48,19 +48,6 @@ export function jobToVisual(job: Job): JobStatusVisual {
   }
 }
 
-// export enum JobStatus {
-//   BadgeOnly,
-//   BadgeWithDuration,
-//   BadgeWithNextExecutionTime,
-//   ProgressBarWithDuration,
-//   BadgeWithMessage,
-//   BadgeWithErrorMessage,
-// }
-//
-// export type JobDisplayStatus = JobStatus | enum {
-//   asdf
-// }
-
 export const JOB_STATUS_SUCCEEDED = "succeeded";
 export const JOB_STATUS_FAILED = "failed";
 export const JOB_STATUS_CANCELED = "canceled";
@@ -79,21 +66,21 @@ type JobStatus =
   | JOB_STATUS_PENDING
   | JOB_STATUS_REVERTING;
 
-type JobDisplayStatus = JobStatus | JOB_STATUS_RETRYING;
+type JobDisplayStatus = JobStatus | JOB_DISPLAY_STATUS_RETRYING;
 
 export const jobToDisplayStatus = (job: Job): JobDisplayStatus => {
   const now = moment();
   if (
     [JOB_STATUS_RUNNING, JOB_STATUS_REVERTING].includes(job.status) &&
     TimestampToMoment(job.next_run).isAfter(now) &&
-    job.num_runs > new Long(0)
+    job.num_runs > new Long(1)
   ) {
     return JOB_DISPLAY_STATUS_RETRYING;
   }
   return job.status;
 };
 
-export const statusOptions = [
+export const displayStatusOptions = [
   { value: "", label: "All" },
   { value: "succeeded", label: "Succeeded" },
   { value: "failed", label: "Failed" },
@@ -101,6 +88,8 @@ export const statusOptions = [
   { value: "paused", label: "Paused" },
   { value: "running", label: "Running" },
   { value: "pending", label: "Pending" },
+  { value: "reverting", label: "Reverting" },
+  { value: "retrying", label: "Retrying" },
 ];
 
 export function jobHasOneOfStatuses(job: Job, ...statuses: string[]) {
