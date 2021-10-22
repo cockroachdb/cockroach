@@ -252,12 +252,13 @@ func (mq *mergeQueue) process(
 		// merges, the mergeQueue will only consider a merge when it deems the
 		// maximum qps measurement from both sides to be sufficiently stable and
 		// reliable, meaning that it was a maximum measurement over some extended
-		// period of time.
-		if !lhsQPSOK {
+		// period of time. However, if the range is empty, we don't care about
+		// the QPS.
+		if !lhsQPSOK && lhsStats.LiveBytes > 0 {
 			log.VEventf(ctx, 2, "skipping merge: LHS QPS measurement not yet reliable")
 			return false, nil
 		}
-		if !rhsQPSOK {
+		if !rhsQPSOK && rhsStats.LiveBytes > 0 {
 			log.VEventf(ctx, 2, "skipping merge: RHS QPS measurement not yet reliable")
 			return false, nil
 		}
