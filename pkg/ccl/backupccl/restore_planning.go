@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -265,19 +266,12 @@ func maybeFilterMissingViews(
 }
 
 func synthesizePGTempSchema(
-	ctx context.Context, p sql.PlanHookState, schemaName string,
-) (descpb.ID, descpb.ID, error) {
+	ctx context.Context, p sql.PlanHookState, schemaName string, dbID descpb.ID,
+) (descpb.ID, error) {
 	var synthesizedSchemaID descpb.ID
-	var defaultDBID descpb.ID
 	err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
-		defaultDBID, err = lookupDatabaseID(ctx, txn, p.ExecCfg().Codec,
-			catalogkeys.DefaultDatabaseName)
-		if err != nil {
-			return err
-		}
-
-		sKey := catalogkeys.NewNameKeyComponents(defaultDBID, keys.RootNamespaceID, schemaName)
+		sKey := catalogkeys.NewNameKeyComponents(dbID, keys.RootNamespaceID, schemaName)
 		schemaID, err := catalogkv.GetDescriptorID(ctx, txn, p.ExecCfg().Codec, sKey)
 		if err != nil {
 			return err
@@ -293,7 +287,7 @@ func synthesizePGTempSchema(
 		return p.CreateSchemaNamespaceEntry(ctx, catalogkeys.EncodeNameKey(p.ExecCfg().Codec, sKey), synthesizedSchemaID)
 	})
 
-	return synthesizedSchemaID, defaultDBID, err
+	return synthesizedSchemaID, err
 }
 
 // dbSchemaKey is used when generating fake pg_temp schemas for the purpose of
@@ -482,23 +476,18 @@ func allocateDescriptorRewrites(
 		// represented as a descriptor and thus is not picked up during a full
 		// cluster BACKUP.
 		// To overcome this orphaned schema pointer problem, when restoring a
-		// temporary object we create a "fake" pg_temp schema in defaultdb and add
-		// it to the namespace table. We then remap the temporary object descriptors
-		// to point to this schema. This allows us to piggy back on the temporary
+		// temporary object we create a "fake" pg_temp schema in temp table's db and
+		// add it to the namespace table.
+		// We then remap the temporary object descriptors to point to this schema.
+		// This allows us to piggy back on the temporary
 		// reconciliation job which looks for "pg_temp" schemas linked to temporary
 		// sessions and properly cleans up the temporary objects in it.
 		haveSynthesizedTempSchema := make(map[dbSchemaKey]bool)
-		var defaultDBID descpb.ID
 		var synthesizedTempSchemaCount int
 		for _, table := range tablesByID {
 			if table.IsTemporary() {
 				// We generate a "fake" temporary schema for every unique
 				// <dbID,schemaID> tuple of the backed-up temporary table descriptors.
-				// This is important because post rewrite all the "fake" schemas and
-				// consequently temp table objects are going to be in defaultdb. Placing
-				// them under different "fake" schemas prevents name collisions if the
-				// backed up tables had the same names but were in different temp
-				// schemas/databases in the cluster which was backed up.
 				dbSchemaIDKey := dbSchemaKey{parentID: table.GetParentID(),
 					schemaID: table.GetParentSchemaID()}
 				if _, ok := haveSynthesizedTempSchema[dbSchemaIDKey]; !ok {
@@ -515,7 +504,7 @@ func allocateDescriptorRewrites(
 					// which the cluster was started.
 					schemaName := sql.TemporarySchemaNameForRestorePrefix +
 						strconv.Itoa(synthesizedTempSchemaCount)
-					synthesizedSchemaID, defaultDBID, err = synthesizePGTempSchema(ctx, p, schemaName)
+					synthesizedSchemaID, err = synthesizePGTempSchema(ctx, p, schemaName, table.GetParentID())
 					if err != nil {
 						return nil, err
 					}
@@ -527,10 +516,6 @@ func allocateDescriptorRewrites(
 					haveSynthesizedTempSchema[dbSchemaIDKey] = true
 					synthesizedTempSchemaCount++
 				}
-
-				// Remap the temp table descriptors to belong to the defaultdb where we
-				// have synthesized the temp schema.
-				descriptorRewrites[table.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: defaultDBID}
 			}
 		}
 	}
@@ -889,6 +874,25 @@ func allocateDescriptorRewrites(
 	return descriptorRewrites, nil
 }
 
+// If we're doing a full cluster restore - to treat defaultdb and postgres
+// as regular databases, we drop them before restoring them again in the
+// restore.
+func dropDefaultUserDBs(ctx context.Context, execCfg *sql.ExecutorConfig) error {
+	return sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		ie := execCfg.InternalExecutor
+		_, err := ie.Exec(ctx, "drop-defaultdb", nil, "DROP DATABASE IF EXISTS defaultdb")
+		if err != nil {
+			return err
+		}
+
+		_, err = ie.Exec(ctx, "drop-postgres", nil, "DROP DATABASE IF EXISTS postgres")
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
 func resolveTargetDB(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -902,27 +906,12 @@ func resolveTargetDB(
 		return intoDB, nil
 	}
 
-	if descriptorCoverage == tree.AllDescriptors && descriptor.GetParentID() < catalogkeys.MaxDefaultDescriptorID {
-		// This is a table that is in a database that already existed at
-		// cluster creation time.
-		defaultDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, catalogkeys.DefaultDatabaseName)
-		if err != nil {
-			return "", err
-		}
-		postgresDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, catalogkeys.PgDatabaseName)
-		if err != nil {
-			return "", err
-		}
-
+	if descriptorCoverage == tree.AllDescriptors && descriptor.GetParentID() < keys.MaxReservedDescID {
 		var targetDB string
 		if descriptor.GetParentID() == systemschema.SystemDB.GetID() {
 			// For full cluster backups, put the system tables in the temporary
 			// system table.
 			targetDB = restoreTempSystemDB
-		} else if descriptor.GetParentID() == defaultDBID {
-			targetDB = catalogkeys.DefaultDatabaseName
-		} else if descriptor.GetParentID() == postgresDBID {
-			targetDB = catalogkeys.PgDatabaseName
 		}
 		return targetDB, nil
 	}
@@ -1914,6 +1903,7 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
+
 	sqlDescs = append(sqlDescs, newTypeDescs...)
 
 	if err := maybeUpgradeDescriptors(ctx, sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
@@ -1992,6 +1982,17 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
+
+	// When running a full cluster restore, we drop the defaultdb and postgres
+	// databases that are present in a new cluster.
+	// This is done so that they can be restored the same way any other user
+	// defined database would be restored from the backup.
+	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+		if err := dropDefaultUserDBs(ctx, p.ExecCfg()); err != nil {
+			return err
+		}
+	}
+
 	descriptorRewrites, err := allocateDescriptorRewrites(
 		ctx,
 		p,
