@@ -54,8 +54,6 @@ func TestGRPCInterceptors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const (
-		k          = "test-baggage-key"
-		v          = "test-baggage-value"
 		magicValue = "magic-value"
 	)
 
@@ -64,14 +62,6 @@ func TestGRPCInterceptors(t *testing.T) {
 		if sp == nil {
 			return nil, errors.New("no span in ctx")
 		}
-		actV, ok := sp.GetRecording()[0].Baggage[k]
-		if !ok {
-			return nil, errors.Newf("%s not set in baggage", k)
-		}
-		if v != actV {
-			return nil, errors.Newf("expected %v, got %v instead", v, actV)
-		}
-
 		sp.RecordStructured(newTestStructured(magicValue))
 		sp.SetVerbose(true) // want the tags
 		recs := sp.GetRecording()
@@ -135,13 +125,8 @@ func TestGRPCInterceptors(t *testing.T) {
 	}))
 	conn, err := grpc.DialContext(context.Background(), ln.Addr().String(),
 		grpc.WithInsecure(),
-		grpc.WithUnaryInterceptor(tracing.ClientInterceptor(
-			tr, func(sp *tracing.Span) {
-				sp.SetBaggageItem(k, v)
-			})),
-		grpc.WithStreamInterceptor(tracing.StreamClientInterceptor(tr, func(sp *tracing.Span) {
-			sp.SetBaggageItem(k, v)
-		})),
+		grpc.WithUnaryInterceptor(tracing.ClientInterceptor(tr, nil /* init */)),
+		grpc.WithStreamInterceptor(tracing.StreamClientInterceptor(tr, nil /* init */)),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -233,9 +218,9 @@ func TestGRPCInterceptors(t *testing.T) {
 			exp := fmt.Sprintf(`
 				span: root
 					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
-						tags: span.kind=client test-baggage-key=test-baggage-value
+						tags: span.kind=client
 					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
-						tags: span.kind=server test-baggage-key=test-baggage-value
+						tags: span.kind=server
 						event: structured=magic-value`, tc.name)
 			require.NoError(t, tracing.CheckRecordedSpans(finalRecs, exp))
 		})
