@@ -316,19 +316,6 @@ func ensureInterleavesIncluded(tables []catalog.TableDescriptor) error {
 	return nil
 }
 
-func lookupDatabaseID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string,
-) (descpb.ID, error) {
-	found, id, err := catalogkv.LookupDatabaseID(ctx, txn, codec, name)
-	if err != nil {
-		return descpb.InvalidID, err
-	}
-	if !found {
-		return descpb.InvalidID, errors.Errorf("could not find ID for database %s", name)
-	}
-	return id, nil
-}
-
 func fullClusterTargetsRestore(
 	allDescs []catalog.Descriptor, lastBackupManifest BackupManifest,
 ) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfoWithUsage, error) {

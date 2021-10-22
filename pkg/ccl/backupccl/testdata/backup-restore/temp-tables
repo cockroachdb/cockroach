@@ -114,6 +114,7 @@ crdb_internal
 information_schema
 pg_catalog
 pg_extension
+pg_temp_0_0
 public
 
 
@@ -126,7 +127,6 @@ crdb_internal
 information_schema
 pg_catalog
 pg_extension
-pg_temp_0_0
 public
 
 # On full cluster restore we remap the temp tables to defaultdb so we should not
@@ -136,13 +136,13 @@ USE d1;
 SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
 ----
 perm_table
+temp_seq
+temp_table
 
 query-sql
 USE defaultdb;
 SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
 ----
-temp_seq
-temp_table
 
 # Wait for the temp cleanup job to run.
 sleep time=5s
