@@ -600,14 +600,14 @@ var debugDecodeProtoCmd = &cobra.Command{
 Read from stdin and attempt to decode any hex or base64 encoded proto fields and
 output them as JSON. All other fields will be outputted unchanged. Output fields
 will be separated by tabs.
-	
+
 The default value for --schema is 'cockroach.sql.sqlbase.Descriptor'.
 For example:
 
 $ decode-proto < cat debug/system.decsriptor.txt
 id	descriptor	hex_descriptor
 1	\022!\012\006system\020\001\032\025\012\011\012\005admin\0200\012\010\012\004root\0200	{"database": {"id": 1, "modificationTime": {}, "name": "system", "privileges": {"users": [{"privileges": 48, "user": "admin"}, {"privileges": 48, "user": "root"}]}}}
-...	
+...
 `,
 	Args: cobra.ArbitraryArgs,
 	RunE: runDebugDecodeProto,
@@ -1543,7 +1543,7 @@ var DebugCmd = &cobra.Command{
 These commands are useful for extracting data from the data files of a
 process that has failed and cannot restart.
 `,
-	RunE: usageAndErr,
+	RunE: UsageAndErr,
 }
 
 // mvccValueFormatter is a fmt.Formatter for MVCC values.
