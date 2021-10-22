@@ -105,21 +105,9 @@ USE defaultdb;
 RESTORE FROM 'nodelocal://0/full_cluster_backup/';
 ----
 
-# The pg_temp schema from the BACKUP should not show up after restoration.
+# The pg_temp schema from the BACKUP should show up in its original database.
 query-sql
 USE d1;
-SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY schema_name
-----
-crdb_internal
-information_schema
-pg_catalog
-pg_extension
-public
-
-
-# We should see a synthesized pg_temp schema.
-query-sql
-USE defaultdb;
 SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY schema_name
 ----
 crdb_internal
@@ -129,18 +117,23 @@ pg_extension
 pg_temp_0_0
 public
 
-# On full cluster restore we remap the temp tables to defaultdb so we should not
-# see them in the restored db.
+
+query-sql
+USE defaultdb;
+SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY schema_name
+----
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+public
+
+# On full cluster restore we restore temp tables to its original database.
 query-sql
 USE d1;
 SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
 ----
 perm_table
-
-query-sql
-USE defaultdb;
-SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
-----
 temp_seq
 temp_table
 
