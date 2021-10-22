@@ -1324,6 +1324,17 @@ message IndexUsageStatisticsRequest {
 // Response object returned by IndexUsageStatistics.
 message IndexUsageStatisticsResponse {
   repeated cockroach.sql.CollectedIndexUsageStatistics statistics = 1 [(gogoproto.nullable) = false];
+  // Timestamp of the last index usage stats reset.
+  google.protobuf.Timestamp last_reset = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+}
+
+// Request object for issuing a index usage stats reset request.
+message ResetIndexUsageStatsRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+// Response object returned by ResetIndexUsageStatsRequest.
+message ResetIndexUsageStatsResponse {
 }
 
 service Status {
@@ -1682,6 +1693,13 @@ service Status {
   rpc IndexUsageStatistics(IndexUsageStatisticsRequest) returns (IndexUsageStatisticsResponse) {
     option (google.api.http) = {
       get: "/_status/indexusagestatistics"
+    };
+  }
+
+  rpc ResetIndexUsageStats(ResetIndexUsageStatsRequest) returns (ResetIndexUsageStatsResponse) {
+    option (google.api.http) = {
+      post: "/_status/resetindexusagestats"
+      body: "*"
     };
   }
 }
