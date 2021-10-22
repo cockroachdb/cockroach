@@ -346,18 +346,19 @@ func (ds *ServerImpl) setupFlow(
 			Locality:         ds.ServerConfig.Locality,
 			// Most processors will override this Context with their own context in
 			// ProcessorBase. StartInternal().
-			Context:            ctx,
-			Planner:            &faketreeeval.DummyEvalPlanner{},
-			PrivilegedAccessor: &faketreeeval.DummyPrivilegedAccessor{},
-			SessionAccessor:    &faketreeeval.DummySessionAccessor{},
-			ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
-			Sequence:           &faketreeeval.DummySequenceOperators{},
-			Tenant:             &faketreeeval.DummyTenantOperator{},
-			Regions:            &faketreeeval.DummyRegionOperator{},
-			InternalExecutor:   ie,
-			Txn:                leafTxn,
-			SQLLivenessReader:  ds.ServerConfig.SQLLivenessReader,
-			SQLStatsController: ds.ServerConfig.SQLStatsController,
+			Context:                   ctx,
+			Planner:                   &faketreeeval.DummyEvalPlanner{},
+			PrivilegedAccessor:        &faketreeeval.DummyPrivilegedAccessor{},
+			SessionAccessor:           &faketreeeval.DummySessionAccessor{},
+			ClientNoticeSender:        &faketreeeval.DummyClientNoticeSender{},
+			Sequence:                  &faketreeeval.DummySequenceOperators{},
+			Tenant:                    &faketreeeval.DummyTenantOperator{},
+			Regions:                   &faketreeeval.DummyRegionOperator{},
+			InternalExecutor:          ie,
+			Txn:                       leafTxn,
+			SQLLivenessReader:         ds.ServerConfig.SQLLivenessReader,
+			SQLStatsController:        ds.ServerConfig.SQLStatsController,
+			IndexUsageStatsController: ds.ServerConfig.IndexUsageStatsController,
 		}
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
