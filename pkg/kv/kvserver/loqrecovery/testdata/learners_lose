@@ -1,0 +1,73 @@
+# Test verifying that learners don't become survivors.
+# With two out of five replicas remaining, check that learner
+# is not picked as a survivor even if all other criteria are met
+# Note: for replica type codes, see metadata.proto
+
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}  # voter with lower store ID must win
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2, ReplicaType: 1}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2, ReplicaType: 1}   # learner has highest storeID but must not win
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+- NodeID: 1
+  StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 6
+  NextReplicaID: 7
+
+apply-plan stores=(1,2)
+----
+ok
+
+dump-store stores=(1,2)
+----
+- NodeID: 1
+  StoreID: 1
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 6}
+- NodeID: 2
+  StoreID: 2
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 2, ReplicaType: 1}
+    - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
+    - Replica: {NodeID: 4, StoreID: 4, ReplicaID: 4}
+    - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 5}
