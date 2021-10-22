@@ -1,4 +1,5 @@
 exports_files([
+    "DEPS.bzl",
     "go.mod",
     "go.sum",
 ])
