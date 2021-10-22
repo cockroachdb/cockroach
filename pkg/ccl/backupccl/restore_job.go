@@ -2117,6 +2117,19 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}
 		}
 
 		if details.DescriptorCoverage == tree.AllDescriptors {
+			// We've dropped defaultdb and postgres in the planning phase, we must
+			// recreate them now if the full cluster restore failed.
+			ie := p.ExecCfg().InternalExecutor
+			_, err := ie.Exec(ctx, "recreate-defaultdb", txn, "CREATE DATABASE IF NOT EXISTS defaultdb")
+			if err != nil {
+				return err
+			}
+
+			_, err = ie.Exec(ctx, "recreate-postgres", txn, "CREATE DATABASE IF NOT EXISTS postgres")
+			if err != nil {
+				return err
+			}
+
 			// The temporary system table descriptors should already have been dropped
 			// in `dropDescriptors` but we still need to drop the temporary system db.
 			return r.cleanupTempSystemTables(ctx, txn)

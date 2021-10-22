@@ -177,11 +177,14 @@ CREATE TABLE data2.foo (a int);
 	// Check that zones are restored during pre-restore.
 	t.Run("ensure zones are restored during pre-restore", func(t *testing.T) {
 		<-restoredZones
-		checkZones := "SELECT * FROM system.zones"
+		// Not specifying the schema makes the query search using defaultdb first.
+		// which ends up returning the error
+		// pq: database "defaultdb" is offline: restoring
+		checkZones := "SELECT * FROM system.public.zones"
 		sqlDBRestore.CheckQueryResults(t, checkZones, sqlDB.QueryStr(t, checkZones))
 
 		// Check that the user tables are still offline.
-		sqlDBRestore.ExpectErr(t, "database \"data\" is offline: restoring", "SELECT * FROM data.bank")
+		sqlDBRestore.ExpectErr(t, "database \"data\" is offline: restoring", "SELECT * FROM data.public.bank")
 
 		// Check there is no data in the span that we expect user data to be imported.
 		store := tcRestore.GetFirstStoreFromServer(t, 0)
@@ -606,7 +609,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		// Note that the system tables here correspond to the temporary tables
 		// imported, not the system tables themselves.
 		sqlDBRestore.CheckQueryResults(t,
-			`SELECT name FROM crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
+			`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
 			[][]string{
 				{"bank"},
 				{"comments"},
@@ -696,7 +699,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		// Note that the system tables here correspond to the temporary tables
 		// imported, not the system tables themselves.
 		sqlDBRestore.CheckQueryResults(t,
-			`SELECT name FROM crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
+			`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
 			[][]string{
 				{"bank"},
 				{"comments"},
