@@ -54,7 +54,7 @@ func (d *dev) lint(cmd *cobra.Command, _ []string) error {
 		args = append(args, "-test.timeout", timeout.String())
 	}
 	if filter != "" {
-		args = append(args, "-test.run", filter)
+		args = append(args, "-test.run", fmt.Sprintf("Lint/%s", filter))
 	}
 
 	logCommand("bazel", args...)
