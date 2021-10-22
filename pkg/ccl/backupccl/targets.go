@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -228,45 +227,6 @@ func getAllDescChanges(
 	return res, nil
 }
 
-func lookupDatabaseID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string,
-) (descpb.ID, error) {
-	found, id, err := catalogkv.LookupDatabaseID(ctx, txn, codec, name)
-	if err != nil {
-		return descpb.InvalidID, err
-	}
-	if !found {
-		return descpb.InvalidID, errors.Errorf("could not find ID for database %s", name)
-	}
-	return id, nil
-}
-
-func fullClusterTargetsRestore(
-	allDescs []catalog.Descriptor, lastBackupManifest BackupManifest,
-) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfoWithUsage, error) {
-	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	filteredDescs := make([]catalog.Descriptor, 0, len(fullClusterDescs))
-	for _, desc := range fullClusterDescs {
-		if _, isDefaultDB := catalogkeys.DefaultUserDBs[desc.GetName()]; !isDefaultDB && desc.GetID() != keys.SystemDatabaseID {
-			filteredDescs = append(filteredDescs, desc)
-		}
-	}
-	filteredDBs := make([]catalog.DatabaseDescriptor, 0, len(fullClusterDBs))
-	for _, db := range fullClusterDBs {
-		if _, isDefaultDB := catalogkeys.DefaultUserDBs[db.GetName()]; !isDefaultDB && db.GetID() != keys.SystemDatabaseID {
-			filteredDBs = append(filteredDBs, db)
-		}
-	}
-
-	// Restore all tenants during full-cluster restore.
-	tenants := lastBackupManifest.GetTenants()
-
-	return filteredDescs, filteredDBs, tenants, nil
-}
-
 // fullClusterTargets returns all of the tableDescriptors to be included in a
 // full cluster backup, and all the user databases.
 func fullClusterTargets(
@@ -306,6 +266,28 @@ func fullClusterTargets(
 		}
 	}
 	return fullClusterDescs, fullClusterDBs, nil
+}
+
+func fullClusterTargetsRestore(
+	allDescs []catalog.Descriptor, lastBackupManifest BackupManifest,
+) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfoWithUsage, error) {
+	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
+	var filteredDescs []catalog.Descriptor
+	var filteredDBs []catalog.DatabaseDescriptor
+	for _, desc := range fullClusterDescs {
+		if desc.GetID() != keys.SystemDatabaseID {
+			filteredDescs = append(filteredDescs, desc)
+		}
+	}
+	for _, desc := range fullClusterDBs {
+		if desc.GetID() != keys.SystemDatabaseID {
+			filteredDBs = append(filteredDBs, desc)
+		}
+	}
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return filteredDescs, filteredDBs, lastBackupManifest.GetTenants(), nil
 }
 
 // fullClusterTargetsBackup returns the same descriptors referenced in
