@@ -765,6 +765,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!cmd/dev/**",
+			":!cmd/mirror/**",
 		)
 		if err != nil {
 			t.Fatal(err)
