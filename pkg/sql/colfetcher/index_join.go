@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -414,74 +413,55 @@ func NewColIndexJoin(
 	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated immutable from cache.
 	table := spec.BuildTableDescriptor()
-
-	cols := table.PublicColumns()
-	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = table.DeletableColumns()
-	}
-	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
-	typs := catalog.ColumnTypes(cols)
-
-	// Add all requested system columns to the output.
-	if spec.HasSystemColumns {
-		for _, sysCol := range table.SystemColumns() {
-			typs = append(typs, sysCol.GetType())
-			columnIdxMap.Set(sysCol.GetID(), columnIdxMap.Len())
-		}
-	}
-
-	// Before we can safely use types from the table descriptor, we need to
-	// make sure they are hydrated. In row execution engine it is done during
-	// the processor initialization, but neither ColIndexJoin nor cFetcher are
-	// processors, so we need to do the hydration ourselves.
-	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
-	if err := resolver.HydrateTypeSlice(ctx, typs); err != nil {
-		return nil, err
-	}
-
-	indexIdx := int(spec.IndexIdx)
-	if indexIdx >= len(table.ActiveIndexes()) {
-		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
-	}
-	index := table.ActiveIndexes()[indexIdx]
-
-	// Retrieve the set of columns that the index join needs to fetch.
-	var neededColumns util.FastIntSet
-	if post.OutputColumns != nil {
-		for _, neededColumn := range post.OutputColumns {
-			neededColumns.Add(int(neededColumn))
-		}
-	} else {
-		proc := &execinfra.ProcOutputHelper{}
-		if err := proc.Init(post, typs, semaCtx, evalCtx); err != nil {
-			colexecerror.InternalError(err)
-		}
-		neededColumns = proc.NeededColumns()
-	}
-
-	fetcher, err := initCFetcher(
-		flowCtx, fetcherAllocator, kvFetcherMemAcc, table, index, neededColumns, columnIdxMap, nil, /* invertedColumn */
-		cFetcherArgs{
-			visibility:        spec.Visibility,
-			lockingStrength:   spec.LockingStrength,
-			lockingWaitPolicy: spec.LockingWaitPolicy,
-			hasSystemColumns:  spec.HasSystemColumns,
-			memoryLimit:       execinfra.GetWorkMemLimit(flowCtx),
-		},
+	index := table.ActiveIndexes()[spec.IndexIdx]
+	tableArgs, err := populateTableArgs(
+		ctx, flowCtx, evalCtx, table, index,
+		nil /* invertedCol */, spec.Visibility, spec.HasSystemColumns,
 	)
 	if err != nil {
 		return nil, err
 	}
 
+	// Retrieve the set of columns that the index join needs to fetch.
+	if post.OutputColumns != nil {
+		for _, neededColumn := range post.OutputColumns {
+			tableArgs.ValNeededForCol.Add(int(neededColumn))
+		}
+	} else {
+		proc := &execinfra.ProcOutputHelper{}
+		if err = proc.Init(post, tableArgs.typs, semaCtx, evalCtx); err != nil {
+			return nil, err
+		}
+		tableArgs.ValNeededForCol = proc.NeededColumns()
+	}
+
+	fetcher := cFetcherPool.Get().(*cFetcher)
+	fetcher.cFetcherArgs = cFetcherArgs{
+		spec.LockingStrength,
+		spec.LockingWaitPolicy,
+		flowCtx.EvalCtx.SessionData().LockTimeout,
+		execinfra.GetWorkMemLimit(flowCtx),
+		// Note that the correct estimated row count will be set by the index
+		// joiner for each set of spans to read.
+		0,     /* estimatedRowCount */
+		false, /* reverse */
+		flowCtx.TraceKV,
+	}
+	if err = fetcher.Init(flowCtx.Codec(), fetcherAllocator, kvFetcherMemAcc, tableArgs); err != nil {
+		fetcher.Release()
+		return nil, err
+	}
+
 	spanAssembler := colexecspan.NewColSpanAssembler(
-		flowCtx.Codec(), allocator, table, index, inputTypes, neededColumns)
+		flowCtx.Codec(), allocator, table, index, inputTypes, tableArgs.ValNeededForCol,
+	)
 
 	op := &ColIndexJoin{
 		OneInputNode:     colexecop.NewOneInputNode(input),
 		flowCtx:          flowCtx,
 		rf:               fetcher,
 		spanAssembler:    spanAssembler,
-		ResultTypes:      typs,
+		ResultTypes:      tableArgs.typs,
 		maintainOrdering: spec.MaintainOrdering,
 	}
 	op.prepareMemLimit(inputTypes)

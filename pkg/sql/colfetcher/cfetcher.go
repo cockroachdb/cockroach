@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -50,14 +49,8 @@ import (
 type cTableInfo struct {
 	// -- Fields initialized once --
 
-	desc             catalog.TableDescriptor
-	index            catalog.Index
-	isSecondaryIndex bool
-	indexColumnDirs  []descpb.IndexDescriptor_Direction
-
-	// The table columns to use for fetching, possibly including ones currently in
-	// schema changes.
-	cols []catalog.Column
+	*cFetcherTableArgs
+	indexColumnDirs []descpb.IndexDescriptor_Direction
 
 	// The ordered list of ColumnIDs that are required.
 	neededColsList []int
@@ -66,18 +59,19 @@ type cTableInfo struct {
 	neededValueColsByIdx util.FastIntSet
 
 	// The set of ordinals of the columns that are **not** required. cFetcher
-	// creates an output batch that includes all columns in cols, yet only
+	// creates an output batch that includes all columns of the table, yet only
 	// needed columns are actually populated. The vectors at positions in
 	// notNeededColOrdinals will be set to have all null values.
 	notNeededColOrdinals []int
 
-	// Map used to get the index for columns in cols.
+	// Map used to get the column index based on the descpb.ColumnID.
 	// It's kept as a pointer so we don't have to re-allocate to sort it each
 	// time.
 	colIdxMap *colIdxMap
 
 	// One value per column that is part of the key; each value is a column
-	// index (into cols); -1 if we don't need the value for that column.
+	// ordinal among all columns of the table; -1 if we don't need the value for
+	// that column.
 	//
 	// Note that if the tracing is enabled on the cFetcher (traceKV == true),
 	// then values for all columns are needed and, thus, there will be no -1 in
@@ -89,8 +83,8 @@ type cTableInfo struct {
 	compositeIndexColOrdinals util.FastIntSet
 
 	// One number per column coming from the "key suffix" that is part of the
-	// value; each number is a column index (into cols); -1 if we don't need the
-	// value for that column.
+	// value; each number is a column ordinal among all columns of the table; -1
+	// if we don't need the value for that column.
 	//
 	// The "key suffix" columns are only used for secondary indexes:
 	// - for non-unique indexes, these columns are appended to the key (and will
@@ -104,9 +98,9 @@ type cTableInfo struct {
 	// extraValColOrdinals.
 	extraValColOrdinals []int
 
-	// invertedColOrdinal is a column index (into cols), indicating the inverted
-	// column; -1 if there is no inverted column or we don't need the value for
-	// that column.
+	// invertedColOrdinal is a column ordinal among all columns of the table,
+	// indicating the inverted column; -1 if there is no inverted column or we
+	// don't need the value for that column.
 	invertedColOrdinal int
 
 	// maxColumnFamilyID is the maximum possible family id for the configured
@@ -155,39 +149,40 @@ func newCTableInfo() *cTableInfo {
 
 // Release implements the execinfra.Releasable interface.
 func (c *cTableInfo) Release() {
+	c.cFetcherTableArgs.Release()
 	// Note that all slices are being reused, but there is no need to deeply
 	// reset them since all of the slices are of Go native types.
 	c.colIdxMap.ords = c.colIdxMap.ords[:0]
 	c.colIdxMap.vals = c.colIdxMap.vals[:0]
 	*c = cTableInfo{
+		neededColsList:       c.neededColsList[:0],
+		notNeededColOrdinals: c.notNeededColOrdinals[:0],
 		colIdxMap:            c.colIdxMap,
+		indexColOrdinals:     c.indexColOrdinals[:0],
+		extraValColOrdinals:  c.extraValColOrdinals[:0],
 		keyValTypes:          c.keyValTypes[:0],
 		extraTypes:           c.extraTypes[:0],
 		extraValDirections:   c.extraValDirections[:0],
-		neededColsList:       c.neededColsList[:0],
-		notNeededColOrdinals: c.notNeededColOrdinals[:0],
-		indexColOrdinals:     c.indexColOrdinals[:0],
-		extraValColOrdinals:  c.extraValColOrdinals[:0],
 	}
 	cTableInfoPool.Put(c)
 }
 
-// colIdxMap is a "map" that contains the ordinal in cols for each ColumnID
-// in the table to fetch. This map is used to figure out what index within a
-// row a particular value-component column goes into. Value-component columns
-// are encoded with a column id prefix, with the guarantee that within any
-// given row, the column ids are always increasing. Because of this guarantee,
-// we can store this map as two sorted lists that the fetcher keeps an index
-// into, giving fast access during decoding.
+// colIdxMap is a "map" that contains the ordinal among all columns of the table
+// for each ColumnID to fetch. This map is used to figure out what index within
+// a row a particular value-component column goes into. Value-component columns
+// are encoded with a column id prefix, with the guarantee that within any given
+// row, the column ids are always increasing. Because of this guarantee, we can
+// store this map as two sorted lists that the fetcher keeps an index into,
+// giving fast access during decoding.
 //
 // It implements sort.Interface to be sortable on vals, while keeping ords
 // matched up to the order of vals.
 type colIdxMap struct {
 	// vals is the sorted list of descpb.ColumnIDs in the table to fetch.
 	vals descpb.ColumnIDs
-	// colIdxOrds is the list of ordinals in cols for each column in colIdxVals.
-	// The ith entry in colIdxOrds is the ordinal within cols for the ith column
-	// in colIdxVals.
+	// ords is the list of ordinals into all columns of the table for each
+	// column in vals. The ith entry in ords is the ordinal among all columns of
+	// the table for the ith column in vals.
 	ords []int
 }
 
@@ -216,6 +211,30 @@ func (m colIdxMap) get(c descpb.ColumnID) (int, bool) {
 	return 0, false
 }
 
+type cFetcherArgs struct {
+	// lockStrength represents the row-level locking mode to use when fetching
+	// rows.
+	lockStrength descpb.ScanLockingStrength
+	// lockWaitPolicy represents the policy to be used for handling conflicting
+	// locks held by other active transactions.
+	lockWaitPolicy descpb.ScanLockingWaitPolicy
+	// lockTimeout specifies the maximum amount of time that the fetcher will
+	// wait while attempting to acquire a lock on a key or while blocking on an
+	// existing lock in order to perform a non-locking read on a key.
+	lockTimeout time.Duration
+	// memoryLimit determines the maximum memory footprint of the output batch.
+	memoryLimit int64
+	// estimatedRowCount is the optimizer-derived number of expected rows that
+	// this fetch will produce, if non-zero.
+	estimatedRowCount uint64
+	// reverse denotes whether or not the spans should be read in reverse or not
+	// when StartScan is invoked.
+	reverse bool
+	// traceKV indicates whether or not session tracing is enabled. It is set
+	// when initializing the fetcher.
+	traceKV bool
+}
+
 // noOutputColumn is a sentinel value to denote that a system column is not
 // part of the output.
 const noOutputColumn = -1
@@ -239,12 +258,10 @@ const noOutputColumn = -1
 //   }
 //   rf.Close(ctx)
 type cFetcher struct {
+	cFetcherArgs
+
 	// table is the table that's configured for fetching.
 	table *cTableInfo
-
-	// reverse denotes whether or not the spans should be read in reverse
-	// or not when StartScan is invoked.
-	reverse bool
 
 	// maxKeysPerRow memoizes the maximum number of keys per row
 	// out of all the tables. This is used to calculate the kvBatchFetcher's
@@ -256,22 +273,6 @@ type cFetcher struct {
 	// interleave children, and the tracing is not enabled.
 	mustDecodeIndexKey bool
 
-	// lockStrength represents the row-level locking mode to use when fetching rows.
-	lockStrength descpb.ScanLockingStrength
-
-	// lockWaitPolicy represents the policy to be used for handling conflicting
-	// locks held by other active transactions.
-	lockWaitPolicy descpb.ScanLockingWaitPolicy
-
-	// lockTimeout specifies the maximum amount of time that the fetcher will
-	// wait while attempting to acquire a lock on a key or while blocking on an
-	// existing lock in order to perform a non-locking read on a key.
-	lockTimeout time.Duration
-
-	// traceKV indicates whether or not session tracing is enabled. It is set
-	// when initializing the fetcher.
-	traceKV bool
-
 	// mvccDecodeStrategy controls whether or not MVCC timestamps should
 	// be decoded from KV's fetched. It is set if any of the requested tables
 	// are required to produce an MVCC timestamp system column.
@@ -279,10 +280,6 @@ type cFetcher struct {
 
 	// fetcher is the underlying fetcher that provides KVs.
 	fetcher *row.KVFetcher
-
-	// estimatedRowCount is the optimizer-derived number of expected rows that
-	// this fetch will produce, if non-zero.
-	estimatedRowCount uint64
 
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
@@ -334,9 +331,7 @@ type cFetcher struct {
 	// keys.
 	scratch []byte
 
-	typs             []*types.T
 	accountingHelper colmem.SetAccountingHelper
-	memoryLimit      int64
 
 	// kvFetcherMemAcc is a memory account that will be used by the underlying
 	// KV fetcher.
@@ -377,7 +372,7 @@ func (rf *cFetcher) resetBatch() {
 		}
 	}
 	rf.machine.batch, reallocated = rf.accountingHelper.ResetMaybeReallocate(
-		rf.typs, rf.machine.batch, minDesiredCapacity, rf.memoryLimit,
+		rf.table.typs, rf.machine.batch, minDesiredCapacity, rf.memoryLimit,
 	)
 	if reallocated {
 		rf.machine.colvecs = rf.machine.batch.ColVecs()
@@ -394,36 +389,22 @@ func (rf *cFetcher) resetBatch() {
 	}
 }
 
-// Init sets up a Fetcher for a given table and index. If we are using a
-// non-primary index, tables.ValNeededForCol can only refer to columns in the
-// index.
+// Init sets up a Fetcher based on the table args. If we are using a non-primary
+// index, tableArgs.ValNeededForCol can only refer to columns in the index.
 func (rf *cFetcher) Init(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
-	memoryLimit int64,
-	reverse bool,
-	lockStrength descpb.ScanLockingStrength,
-	lockWaitPolicy descpb.ScanLockingWaitPolicy,
-	lockTimeout time.Duration,
-	tableArgs row.FetcherTableArgs,
-	traceKV bool,
+	tableArgs *cFetcherTableArgs,
 ) error {
 	rf.kvFetcherMemAcc = kvFetcherMemAcc
-	rf.memoryLimit = memoryLimit
-	rf.reverse = reverse
-	rf.lockStrength = lockStrength
-	rf.lockWaitPolicy = lockWaitPolicy
-	rf.lockTimeout = lockTimeout
-	rf.traceKV = traceKV
-
 	table := newCTableInfo()
 	nCols := tableArgs.ColIdxMap.Len()
 	if cap(table.colIdxMap.vals) < nCols {
 		table.colIdxMap.vals = make(descpb.ColumnIDs, 0, nCols)
 		table.colIdxMap.ords = make([]int, 0, nCols)
 	}
-	colDescriptors := tableArgs.Cols
+	colDescriptors := tableArgs.cols
 	for i := range colDescriptors {
 		//gcassert:bce
 		id := colDescriptors[i].GetID()
@@ -432,31 +413,18 @@ func (rf *cFetcher) Init(
 	}
 	sort.Sort(table.colIdxMap)
 	*table = cTableInfo{
-		desc:                tableArgs.Desc,
-		colIdxMap:           table.colIdxMap,
-		index:               tableArgs.Index,
-		isSecondaryIndex:    tableArgs.IsSecondaryIndex,
-		cols:                colDescriptors,
-		neededColsList:      table.neededColsList[:0],
-		indexColOrdinals:    table.indexColOrdinals[:0],
-		extraValColOrdinals: table.extraValColOrdinals[:0],
-		timestampOutputIdx:  noOutputColumn,
-		oidOutputIdx:        noOutputColumn,
+		cFetcherTableArgs:    tableArgs,
+		neededColsList:       table.neededColsList[:0],
+		notNeededColOrdinals: table.notNeededColOrdinals[:0],
+		colIdxMap:            table.colIdxMap,
+		indexColOrdinals:     table.indexColOrdinals[:0],
+		extraValColOrdinals:  table.extraValColOrdinals[:0],
+		keyValTypes:          table.keyValTypes[:0],
+		extraTypes:           table.extraTypes[:0],
+		extraValDirections:   table.extraValDirections[:0],
+		timestampOutputIdx:   noOutputColumn,
+		oidOutputIdx:         noOutputColumn,
 	}
-
-	if cap(rf.typs) < len(colDescriptors) {
-		rf.typs = make([]*types.T, len(colDescriptors))
-	} else {
-		rf.typs = rf.typs[:len(colDescriptors)]
-	}
-	typs := rf.typs
-	_ = typs[len(colDescriptors)-1]
-	for i := range colDescriptors {
-		//gcassert:bce
-		typs[i] = colDescriptors[i].GetType()
-	}
-
-	var err error
 
 	var neededCols util.FastIntSet
 	numNeededCols := tableArgs.ValNeededForCol.Len()
@@ -530,7 +498,7 @@ func (rf *cFetcher) Init(
 			//gcassert:bce
 			indexColOrdinals[i] = colIdx
 			rf.mustDecodeIndexKey = true
-			needToDecodeDecimalKey = needToDecodeDecimalKey || typs[colIdx].Family() == types.DecimalFamily
+			needToDecodeDecimalKey = needToDecodeDecimalKey || tableArgs.typs[colIdx].Family() == types.DecimalFamily
 			// A composite column might also have a value encoding which must be
 			// decoded. Others can be removed from neededValueColsByIdx.
 			if compositeColumnIDs.Contains(int(id)) {
@@ -663,7 +631,7 @@ func (rf *cFetcher) Init(
 	})
 
 	rf.table = table
-	rf.accountingHelper.Init(allocator, rf.typs, rf.table.notNeededColOrdinals)
+	rf.accountingHelper.Init(allocator, rf.table.typs, rf.table.notNeededColOrdinals)
 
 	return nil
 }
@@ -1380,7 +1348,7 @@ func (rf *cFetcher) processValueSingle(
 			if len(val.RawBytes) == 0 {
 				return prettyKey, "", nil
 			}
-			typ := rf.typs[idx]
+			typ := rf.table.typs[idx]
 			err := colencoding.UnmarshalColumnValueToCol(
 				&table.da, rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val,
 			)
@@ -1480,7 +1448,7 @@ func (rf *cFetcher) processValueBytes(
 
 		vec := rf.machine.colvecs[idx]
 
-		valTyp := rf.typs[idx]
+		valTyp := rf.table.typs[idx]
 		valueBytes, err = colencoding.DecodeTableValueToCol(
 			&table.da, vec, rf.machine.rowIdx, typ, dataOffset, valTyp, valueBytes,
 		)
@@ -1602,60 +1570,13 @@ var cFetcherPool = sync.Pool{
 
 func (rf *cFetcher) Release() {
 	rf.accountingHelper.Release()
-	rf.table.Release()
+	if rf.table != nil {
+		rf.table.Release()
+	}
 	*rf = cFetcher{
-		// The types are small objects, so we don't bother deeply resetting this
-		// slice.
-		typs:    rf.typs[:0],
 		scratch: rf.scratch[:0],
 	}
 	cFetcherPool.Put(rf)
-}
-
-type cFetcherArgs struct {
-	visibility        execinfrapb.ScanVisibility
-	lockingStrength   descpb.ScanLockingStrength
-	lockingWaitPolicy descpb.ScanLockingWaitPolicy
-	hasSystemColumns  bool
-	reverse           bool
-	memoryLimit       int64
-	estimatedRowCount uint64
-}
-
-// initCFetcher extracts common logic for operators in the colfetcher package
-// that need to use cFetcher operators.
-func initCFetcher(
-	flowCtx *execinfra.FlowCtx,
-	allocator *colmem.Allocator,
-	kvFetcherMemAcc *mon.BoundAccount,
-	desc catalog.TableDescriptor,
-	index catalog.Index,
-	neededCols util.FastIntSet,
-	colIdxMap catalog.TableColMap,
-	invertedCol catalog.Column,
-	args cFetcherArgs,
-) (*cFetcher, error) {
-	fetcher := cFetcherPool.Get().(*cFetcher)
-	fetcher.setEstimatedRowCount(args.estimatedRowCount)
-
-	tableArgs := row.FetcherTableArgs{
-		Desc:             desc,
-		Index:            index,
-		ColIdxMap:        colIdxMap,
-		IsSecondaryIndex: !index.Primary(),
-		ValNeededForCol:  neededCols,
-	}
-
-	tableArgs.InitCols(desc, args.visibility, args.hasSystemColumns, invertedCol)
-
-	if err := fetcher.Init(
-		flowCtx.Codec(), allocator, kvFetcherMemAcc, args.memoryLimit, args.reverse, args.lockingStrength,
-		args.lockingWaitPolicy, flowCtx.EvalCtx.SessionData().LockTimeout, tableArgs, flowCtx.TraceKV,
-	); err != nil {
-		return nil, err
-	}
-
-	return fetcher, nil
 }
 
 func (rf *cFetcher) Close(ctx context.Context) {
