@@ -31,6 +31,10 @@ type Rule interface {
 	// IsKV returns true if the metrics involved in the
 	// rule are for the KV layer.
 	IsKV() bool
+	// ToPrometheusRuleNode converts the rule to a prometheus equivalent
+	// rule.This is used by the PrometheusRuleExporter to export all
+	// rules in a prometheus compatible format.
+	ToPrometheusRuleNode() (ruleGroupName string, ruleNode PrometheusRuleNode)
 }
 
 // AlertingRule encapsulates an alert specification
@@ -135,6 +139,19 @@ func (a *AlertingRule) IsKV() bool {
 	return a.isKV
 }
 
+// ToPrometheusRuleNode implements the Rule interface.
+func (a *AlertingRule) ToPrometheusRuleNode() (ruleGroupName string, ruleNode PrometheusRuleNode) {
+	var node PrometheusRuleNode
+	node.Alert = a.name
+	node.Expr = a.expr
+	if a.recommendedHoldDuration > 0*time.Second {
+		node.For = a.recommendedHoldDuration.String()
+	}
+	node.Labels = getLabelMap(a.labels)
+	node.Annotations = getLabelMap(a.annotations)
+	return alertRuleGroupName, node
+}
+
 // Name implements the Rule interface.
 func (ag *AggregationRule) Name() string {
 	return ag.name
@@ -158,4 +175,26 @@ func (ag *AggregationRule) Help() string {
 // IsKV implements the Rule interface.
 func (ag *AggregationRule) IsKV() bool {
 	return ag.isKV
+}
+
+// ToPrometheusRuleNode implements the Rule interface.
+func (ag *AggregationRule) ToPrometheusRuleNode() (
+	ruleGroupName string,
+	ruleNode PrometheusRuleNode,
+) {
+	var node PrometheusRuleNode
+	node.Record = ag.name
+	node.Expr = ag.expr
+	node.Labels = getLabelMap(ag.labels)
+	return recordingRuleGroupName, node
+}
+
+func getLabelMap(labels []LabelPair) map[string]string {
+	labelMap := make(map[string]string)
+	for _, label := range labels {
+		if label.Name != nil && label.Value != nil {
+			labelMap[*label.Name] = *label.Value
+		}
+	}
+	return labelMap
 }
