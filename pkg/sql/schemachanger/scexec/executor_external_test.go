@@ -16,23 +16,22 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -49,6 +48,21 @@ type testInfra struct {
 	lm       *lease.Manager
 	tsql     *sqlutils.SQLRunner
 	cf       *descs.CollectionFactory
+}
+
+func (ti testInfra) newExecDeps(
+	txn *kv.Txn, descsCollection *descs.Collection, phase scop.Phase,
+) scexec.Dependencies {
+	return scdeps.NewExecutorDependencies(
+		ti.lm.Codec(),
+		txn,
+		descsCollection,
+		nil,              /* jobRegistry */
+		noopBackfiller{}, /* indexBackfiller */
+		nil,              /* testingKnobs */
+		nil,              /* statements */
+		phase,
+	)
 }
 
 func setupTestInfra(t testing.TB) *testInfra {
@@ -128,11 +142,11 @@ CREATE TABLE db.t (
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			ex := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), nil, nil, nil, nil, nil)
+			exDeps := ti.newExecDeps(txn, descriptors, scop.PreCommitPhase)
 			_, orig, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.orig(), orig)
-			require.NoError(t, ex.ExecuteOps(ctx, c.ops(), scexec.TestingKnobMetadata{}))
+			require.NoError(t, scexec.ExecuteOps(ctx, exDeps, c.ops()))
 			_, after, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.exp(), after)
@@ -304,17 +318,8 @@ func TestSchemaChanger(t *testing.T) {
 				require.NoError(t, err)
 				stages := sc.Stages
 				for _, s := range stages {
-					exec := scexec.NewExecutor(
-						txn,
-						descriptors,
-						ti.lm.Codec(),
-						noopBackfiller{},
-						nil,
-						nil,
-						nil,
-						nil,
-					)
-					require.NoError(t, exec.ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
+					exDeps := ti.newExecDeps(txn, descriptors, phase)
+					require.NoError(t, scexec.ExecuteOps(ctx, exDeps, s.Ops))
 					ts = s.After
 				}
 			}
@@ -329,8 +334,8 @@ func TestSchemaChanger(t *testing.T) {
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {
-				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil)
-				require.NoError(t, exec.ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
+				exDeps := ti.newExecDeps(txn, descriptors, scop.PostCommitPhase)
+				require.NoError(t, scexec.ExecuteOps(ctx, exDeps, s.Ops))
 				after = s.After
 			}
 			return nil
@@ -361,49 +366,28 @@ func TestSchemaChanger(t *testing.T) {
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
-			execCfg := ti.tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
-			ip, cleanup := sql.NewInternalPlanner(
-				"foo",
-				kv.NewTxn(context.Background(), ti.db, ti.tc.Server(0).NodeID()),
-				security.RootUserName(),
-				&sql.MemoryMetrics{},
-				&execCfg,
-				sessiondatapb.SessionData{},
-			)
-			planner := ip.(interface {
-				resolver.SchemaResolver
-				SemaCtx() *tree.SemaContext
-				EvalContext() *tree.EvalContext
-				scbuild.AuthorizationAccessor
-			})
-			defer cleanup()
-			buildDeps := scbuild.Dependencies{
-				Res:          planner,
-				SemaCtx:      planner.SemaCtx(),
-				EvalCtx:      planner.EvalContext(),
-				Descs:        descriptors,
-				AuthAccessor: planner,
-			}
-			parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
-			require.NoError(t, err)
-			require.Len(t, parsed, 1)
-			outputNodes, err := scbuild.Build(ctx, buildDeps, nil, parsed[0].AST.(*tree.AlterTable))
-			require.NoError(t, err)
-
-			for _, phase := range []scop.Phase{
-				scop.StatementPhase,
-				scop.PreCommitPhase,
-			} {
-				sc, err := scplan.MakePlan(outputNodes, scplan.Params{
-					ExecutionPhase: phase,
-				})
+			sctestutils.WithBuilderDependenciesFromTestServer(ti.tc.Server(0), func(buildDeps scbuild.Dependencies) {
+				parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 				require.NoError(t, err)
-				for _, s := range sc.Stages {
-					require.NoError(t, scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil).
-						ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
-					ts = s.After
+				require.Len(t, parsed, 1)
+				outputNodes, err := scbuild.Build(ctx, buildDeps, nil, parsed[0].AST.(*tree.AlterTable))
+				require.NoError(t, err)
+
+				for _, phase := range []scop.Phase{
+					scop.StatementPhase,
+					scop.PreCommitPhase,
+				} {
+					sc, err := scplan.MakePlan(outputNodes, scplan.Params{
+						ExecutionPhase: phase,
+					})
+					require.NoError(t, err)
+					for _, s := range sc.Stages {
+						exDeps := ti.newExecDeps(txn, descriptors, phase)
+						require.NoError(t, scexec.ExecuteOps(ctx, exDeps, s.Ops))
+						ts = s.After
+					}
 				}
-			}
+			})
 			return nil
 		}))
 		require.NoError(t, ti.txn(ctx, func(
@@ -414,8 +398,8 @@ func TestSchemaChanger(t *testing.T) {
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {
-				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil)
-				require.NoError(t, exec.ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
+				exDeps := ti.newExecDeps(txn, descriptors, scop.PostCommitPhase)
+				require.NoError(t, scexec.ExecuteOps(ctx, exDeps, s.Ops))
 			}
 			return nil
 		}))
