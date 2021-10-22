@@ -139,8 +139,13 @@ function filterByRouterParamsPredicate(
 ): (stat: ExecutionStatistics) => boolean {
   const statement = getMatchParamByName(match, statementAttr);
   const implicitTxn = getMatchParamByName(match, implicitTxnAttr) === "true";
-  const database = queryByName(location, databaseAttr);
-  let app = queryByName(location, appAttr);
+  const database =
+    queryByName(location, databaseAttr) === "(unset)"
+      ? ""
+      : queryByName(location, databaseAttr);
+  const apps = queryByName(location, appAttr)
+    ? queryByName(location, appAttr).split(",")
+    : null;
   // If the aggregatedTs is unset, we will aggregate across the current date range.
   const aggregatedTs = queryByName(location, aggregatedTsAttr);
   const aggInterval = queryByName(location, aggregationIntervalAttr);
@@ -153,20 +158,21 @@ function filterByRouterParamsPredicate(
     stmt.implicit_txn === implicitTxn &&
     (stmt.database === database || database === null);
 
-  if (!app) {
+  if (!apps) {
     return filterByKeys;
   }
-
-  if (app === "(unset)") {
-    app = "";
+  if (apps.includes("(unset)")) {
+    apps.push("");
+  }
+  let showInternal = false;
+  if (apps.includes(internalAppNamePrefix)) {
+    showInternal = true;
   }
 
-  if (app === internalAppNamePrefix) {
-    return (stmt: ExecutionStatistics) =>
-      filterByKeys(stmt) && stmt.app.startsWith(internalAppNamePrefix);
-  }
-
-  return (stmt: ExecutionStatistics) => filterByKeys(stmt) && stmt.app === app;
+  return (stmt: ExecutionStatistics) =>
+    filterByKeys(stmt) &&
+    ((showInternal && stmt.app.startsWith(internalAppNamePrefix)) ||
+      apps.includes(stmt.app));
 }
 
 export const selectStatement = createSelector(
@@ -174,7 +180,6 @@ export const selectStatement = createSelector(
   (_state: AdminUIState, props: RouteComponentProps) => props,
   (statementsState, props) => {
     const statements = statementsState.data?.statements;
-
     if (!statements) {
       return null;
     }

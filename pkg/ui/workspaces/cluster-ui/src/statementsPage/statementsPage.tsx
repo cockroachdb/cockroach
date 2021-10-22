@@ -339,6 +339,9 @@ export class StatementsPage extends React.Component<
         : [];
     const databases =
       filters.database.length > 0 ? filters.database.split(",") : [];
+    if (databases.includes("(unset)")) {
+      databases.push("");
+    }
     const regions =
       filters.regions.length > 0 ? filters.regions.split(",") : [];
     const nodes = filters.nodes.length > 0 ? filters.nodes.split(",") : [];
@@ -409,6 +412,7 @@ export class StatementsPage extends React.Component<
     const { pagination, search, filters, activeFilters } = this.state;
     const {
       statements,
+      apps,
       databases,
       location,
       onDiagnosticsReportDownload,
@@ -421,8 +425,6 @@ export class StatementsPage extends React.Component<
     } = this.props;
     const appAttrValue = queryByName(location, appAttr);
     const selectedApp = appAttrValue || "";
-    const appOptions = [{ value: "", label: "All" }];
-    this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
     const data = this.filteredStatementsData();
     const totalWorkload = calculateTotalWorkload(data);
     const totalCount = data.length;
@@ -495,7 +497,7 @@ export class StatementsPage extends React.Component<
           <PageConfigItem>
             <Filter
               onSubmitFilters={this.onSubmitFilters}
-              appNames={appOptions}
+              appNames={apps}
               dbNames={databases}
               regions={regions}
               nodes={nodes.map(n => "n" + n)}
