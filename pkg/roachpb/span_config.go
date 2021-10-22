@@ -16,11 +16,6 @@ import (
 	"time"
 )
 
-// Equal compares two span config entries.
-func (e SpanConfigEntry) Equal(other SpanConfigEntry) bool {
-	return e.Span.Equal(other.Span) && e.Config.Equal(other.Config)
-}
-
 // StoreMatchesConstraint returns whether a store's attributes or node's
 // locality match the constraint's spec. It notably ignores whether the
 // constraint is required, prohibited, positive, or otherwise.
