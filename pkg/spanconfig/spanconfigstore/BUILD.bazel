@@ -28,6 +28,7 @@ go_test(
         "//pkg/roachpb:with-mocks",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigtestutils",
+        "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_datadriven//:datadriven",

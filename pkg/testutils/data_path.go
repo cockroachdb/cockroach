@@ -29,7 +29,9 @@ func TestDataPath(t testing.TB, relative ...string) string {
 	relative = append([]string{"testdata"}, relative...)
 	// dev notifies the library that the test is running in a subdirectory of the
 	// workspace with the environment variable below.
-	if bazel.BuiltWithBazel() && os.Getenv("YOU_ARE_IN_THE_WORKSPACE") != "" {
+	if os.Getenv("COCKROACH_WORKSPACE") != "" {
+		return path.Join(os.Getenv("COCKROACH_WORKSPACE"), bazel.RelativeTestTargetPath(), path.Join(relative...))
+	} else if bazel.BuiltWithBazel() {
 		runfiles, err := bazel.RunfilesPath()
 		require.NoError(t, err)
 		return path.Join(runfiles, bazel.RelativeTestTargetPath(), path.Join(relative...))
