@@ -68,6 +68,7 @@ func initCLIDefaults() {
 	setTestDirectorySvrContextDefaults()
 	setUserfileContextDefaults()
 	setCertContextDefaults()
+	setDebugRecoverContextDefaults()
 
 	initPreFlagsDefaults()
 
