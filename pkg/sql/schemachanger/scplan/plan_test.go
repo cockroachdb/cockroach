@@ -191,3 +191,81 @@ func marshalOps(t *testing.T, plan *scplan.Plan) string {
 	}
 	return stages.String()
 }
+
+// TestPlanGraphSort sanity checks sorting of
+// the operators.
+func TestPlanGraphSort(t *testing.T) {
+	state := scpb.State{
+		&scpb.Node{
+			Target: scpb.NewTarget(scpb.Target_ADD,
+				&scpb.Table{
+					TableID: 1,
+				}),
+			Status: scpb.Status_ABSENT,
+		},
+		&scpb.Node{
+			Target: scpb.NewTarget(scpb.Target_ADD,
+				&scpb.Table{
+					TableID: 2,
+				}),
+			Status: scpb.Status_ABSENT,
+		},
+		&scpb.Node{
+			Target: scpb.NewTarget(scpb.Target_ADD,
+				&scpb.Table{
+					TableID: 3,
+				}),
+			Status: scpb.Status_ABSENT,
+		},
+		&scpb.Node{
+			Target: scpb.NewTarget(scpb.Target_ADD,
+				&scpb.Table{
+					TableID: 4,
+				}),
+			Status: scpb.Status_ABSENT,
+		},
+	}
+	ops := []scop.Op{
+		&scop.AddTypeBackRef{},
+		&scop.AddTypeBackRef{},
+		&scop.AddTypeBackRef{},
+		&scop.AddTypeBackRef{},
+	}
+	opsToSort := make([]scop.Op, len(ops))
+	copy(opsToSort, ops)
+
+	// Start off with a graph with 4 nodes.
+	graph, err := scgraph.New(state)
+	require.NoError(t, err)
+	// Setup op edges for all the nodes
+	for idx := range ops {
+		graph.AddOpEdges(state[idx].Target, scpb.Status_ABSENT, scpb.Status_PUBLIC, true, ops[idx])
+	}
+	// We will set up the dependency graph, so that:
+	// 1) 0 depends on 1
+	// 2) 3 depends on 0
+	// 3) 2 depends on nothing
+	graph.AddDepEdge("0 to 1", state[0].Target, scpb.Status_PUBLIC, state[1].Target, scpb.Status_PUBLIC)
+	graph.AddDepEdge("3 to 0", state[3].Target, scpb.Status_PUBLIC, state[0].Target, scpb.Status_PUBLIC)
+	// Sort the ops validate we get the correct order
+	scplan.SortOps(graph, opsToSort)
+	// Validate the order matches what we expect
+	expectedOrder := []scop.Op{ops[1], ops[2], ops[0], ops[3]}
+	for idx := range expectedOrder {
+		if expectedOrder[idx] != opsToSort[idx] {
+			require.Failf(t, "array order does not match", "got: %v. expected: %v", opsToSort, expectedOrder)
+		}
+	}
+	// Sanity for cycles return the same order
+	// as before.
+	copy(opsToSort, ops)
+	graph.AddDepEdge("1 to 3", state[1].Target, scpb.Status_PUBLIC, state[3].Target, scpb.Status_PUBLIC)
+	graph.AddDepEdge("3 to 1", state[3].Target, scpb.Status_PUBLIC, state[1].Target, scpb.Status_PUBLIC)
+	expectedOrder = []scop.Op{ops[0], ops[1], ops[2], ops[3]}
+	scplan.SortOps(graph, opsToSort)
+	for idx := range expectedOrder {
+		if expectedOrder[idx] != opsToSort[idx] {
+			require.Failf(t, "array order does not match", "got: %v. expected: %v", opsToSort, expectedOrder)
+		}
+	}
+}
