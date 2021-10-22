@@ -4965,7 +4965,13 @@ func (d *DOid) Format(ctx *FmtCtx) {
 		// important flag set by FmtParsable which is supposed to be
 		// roundtrippable. Since in this branch, a DOid is a thin wrapper around
 		// a DInt, I _think_ it's correct to just delegate to the DInt's Format.
-		d.DInt.Format(ctx)
+		if d.DInt != 0 {
+			d.DInt.Format(ctx)
+		} else {
+			ctx.WriteByte('\'')
+			ctx.WriteByte('-')
+			ctx.WriteByte('\'')
+		}
 	} else if ctx.HasFlags(fmtDisambiguateDatumTypes) {
 		ctx.WriteString("crdb_internal.create_")
 		ctx.WriteString(d.semanticType.SQLStandardName())
