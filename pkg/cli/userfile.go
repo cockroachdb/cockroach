@@ -697,7 +697,7 @@ var userFileCmd = &cobra.Command{
 	Use:   "userfile [command]",
 	Short: "upload, list and delete user scoped files",
 	Long:  "Upload, list and delete files from the user scoped file storage.",
-	RunE:  usageAndErr,
+	RunE:  UsageAndErr,
 }
 
 func init() {

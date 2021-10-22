@@ -234,7 +234,7 @@ var importCmd = &cobra.Command{
 	Use:   "import [command]",
 	Short: "import a db or table from a local PGDUMP or MYSQLDUMP file",
 	Long:  "import a db or table from a local PGDUMP or MYSQLDUMP file",
-	RunE:  usageAndErr,
+	RunE:  UsageAndErr,
 }
 
 func init() {
