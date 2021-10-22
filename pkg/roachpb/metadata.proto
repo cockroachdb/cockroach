@@ -133,19 +133,22 @@ message ReplicaDescriptor {
   option (gogoproto.populate) = true;
 
   optional int32 node_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
+      (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID",
+      (gogoproto.moretags) = "yaml:\"NodeID\""];
   optional int32 store_id = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
+      (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID",
+      (gogoproto.moretags) = "yaml:\"StoreID\""];
 
   // replica_id uniquely identifies a replica instance. If a range is removed from
   // a store and then re-added to the same store, the new instance will have a
   // higher replica_id.
   optional int32 replica_id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "ReplicaID", (gogoproto.casttype) = "ReplicaID"];
+      (gogoproto.customname) = "ReplicaID", (gogoproto.casttype) = "ReplicaID",
+      (gogoproto.moretags) = "yaml:\"ReplicaID\""];
 
   // Type indicates which raft activities a replica participates in. A nil type
   // is equivalent to VOTER.
-  optional ReplicaType type = 4;
+  optional ReplicaType type = 4 [(gogoproto.moretags) = "yaml:\"ReplicaType,omitempty\""];
 }
 
 // ReplicaIdent uniquely identifies a specific replica.
@@ -377,7 +380,7 @@ message NodeDescriptor {
   optional string cluster_name = 9 [(gogoproto.nullable) = false];
   // The SQL address. If empty, indicates that the base address field
   // is also used to accept SQL connections.
-  optional util.UnresolvedAddr sql_address = 10 [(gogoproto.nullable) = false, 
+  optional util.UnresolvedAddr sql_address = 10 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "SQLAddress"];
 }
 
