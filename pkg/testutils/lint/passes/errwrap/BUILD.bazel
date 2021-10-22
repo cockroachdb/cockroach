@@ -1,33 +1,27 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "fmtsafe",
+    name = "errwrap",
     srcs = [
-        "fmtsafe.go",
+        "errwrap.go",
         "functions.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/fmtsafe",
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errwrap",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/testutils/lint/passes/errwrap",
-        "//pkg/util/log/logpb",
-        "@com_github_cockroachdb_errors//:errors",
+        "//pkg/testutils/lint/passes/passesutil",
         "@org_golang_x_tools//go/analysis",
         "@org_golang_x_tools//go/analysis/passes/inspect",
         "@org_golang_x_tools//go/ast/inspector",
-        "@org_golang_x_tools//go/types/typeutil",
     ],
 )
 
 go_test(
-    name = "fmtsafe_test",
-    size = "small",
-    srcs = ["fmtsafe_test.go"],
-    data = glob(["testdata/**"]) + [
-        "@go_sdk//:files",
-    ],
+    name = "errwrap_test",
+    srcs = ["errwrap_test.go"],
+    data = glob(["testdata/**"]),
     deps = [
-        ":fmtsafe",
+        ":errwrap",
         "//pkg/build/bazel",
         "//pkg/testutils",
         "//pkg/testutils/skip",
