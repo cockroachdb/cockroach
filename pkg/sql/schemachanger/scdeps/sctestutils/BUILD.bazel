@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sctestutils",
+    srcs = ["sctestutils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/security",
+        "//pkg/sql",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/resolver",
+        "//pkg/sql/schemachanger/scbuild",
+        "//pkg/sql/schemachanger/scdeps",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
+        "//pkg/testutils/serverutils",
+    ],
+)

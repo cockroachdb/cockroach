@@ -13,30 +13,27 @@ package scbuild
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
-func (b *buildContext) canModifyType(ctx context.Context, desc *typedesc.Mutable) {
-	hasAdmin, err := b.AuthAccessor.HasAdminRole(ctx)
-	if err != nil {
-		panic(err)
-	}
+func (b *buildContext) canModifyType(ctx context.Context, desc catalog.TypeDescriptor) {
+	hasAdmin, err := b.AuthorizationAccessor().HasAdminRole(ctx)
+	onErrPanic(err)
 	if hasAdmin {
 		return
 	}
-	hasOwnership, err := b.AuthAccessor.HasOwnership(ctx, desc)
-	if err != nil {
-		panic(err)
-	}
+	hasOwnership, err := b.AuthorizationAccessor().HasOwnership(ctx, desc)
+	onErrPanic(err)
 	if !hasOwnership {
 		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
 			"must be owner of type %s", tree.Name(desc.GetName())))
@@ -44,31 +41,31 @@ func (b *buildContext) canModifyType(ctx context.Context, desc *typedesc.Mutable
 }
 
 func (b *buildContext) canDropTypeDesc(
-	ctx context.Context, typeDesc *typedesc.Mutable, behavior tree.DropBehavior,
+	ctx context.Context, typ catalog.TypeDescriptor, behavior tree.DropBehavior,
 ) {
-	b.canModifyType(ctx, typeDesc)
-	if len(typeDesc.ReferencingDescriptorIDs) > 0 && behavior != tree.DropCascade {
-		dependentNames := make([]*tree.TableName, 0, len(typeDesc.ReferencingDescriptorIDs))
-		for _, descID := range typeDesc.ReferencingDescriptorIDs {
-			name, err := b.Res.GetQualifiedTableNameByID(ctx, int64(descID), tree.ResolveAnyTableKind)
+	b.canModifyType(ctx, typ)
+	if len(typ.TypeDesc().ReferencingDescriptorIDs) > 0 && behavior != tree.DropCascade {
+		dependentNames := make([]*tree.TableName, 0, len(typ.TypeDesc().ReferencingDescriptorIDs))
+		for _, descID := range typ.TypeDesc().ReferencingDescriptorIDs {
+			name, err := b.CatalogReader().GetQualifiedTableNameByID(ctx, int64(descID), tree.ResolveAnyTableKind)
 			if err != nil {
-				panic(errors.Wrapf(err, "type %q has dependent objects", typeDesc.Name))
+				panic(errors.Wrapf(err, "type %q has dependent objects", typ.GetName()))
 			}
 			dependentNames = append(dependentNames, name)
 		}
 		panic(pgerror.Newf(
 			pgcode.DependentObjectsStillExist,
 			"cannot drop type %q because other objects (%v) still depend on it",
-			typeDesc.Name,
+			typ.GetName(),
 			dependentNames,
 		))
 	}
 }
 
 func (b *buildContext) dropTypeDesc(
-	ctx context.Context, typeDesc *typedesc.Mutable, behavior tree.DropBehavior, ignoreAliases bool,
+	ctx context.Context, typ catalog.TypeDescriptor, behavior tree.DropBehavior, ignoreAliases bool,
 ) {
-	switch typeDesc.Kind {
+	switch typ.GetKind() {
 	case descpb.TypeDescriptor_ALIAS:
 		if ignoreAliases {
 			return
@@ -77,7 +74,7 @@ func (b *buildContext) dropTypeDesc(
 		panic(pgerror.Newf(
 			pgcode.DependentObjectsStillExist,
 			"%q is an implicit array type and cannot be modified",
-			typeDesc.GetName(),
+			typ.GetName(),
 		))
 	case descpb.TypeDescriptor_MULTIREGION_ENUM:
 		// Multi-region enums are not directly droppable.
@@ -85,23 +82,20 @@ func (b *buildContext) dropTypeDesc(
 			pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
 				"%q is a multi-region enum and cannot be modified directly",
-				typeDesc.GetName(),
+				typ.GetName(),
 			),
-			"try ALTER DATABASE DROP REGION %s", typeDesc.GetName()))
+			"try ALTER DATABASE DROP REGION %s", typ.GetName()))
 	case descpb.TypeDescriptor_ENUM:
 		sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumDrop)
 	}
-	b.canDropTypeDesc(ctx, typeDesc, behavior)
+	b.canDropTypeDesc(ctx, typ, behavior)
 	// Get the array type that needs to be dropped as well.
-	mutArrayDesc, err := b.Descs.GetMutableTypeVersionByID(ctx, b.EvalCtx.Txn, typeDesc.ArrayTypeID)
-	if err != nil {
-		panic(err)
-	}
+	mutArrayDesc := mustReadType(ctx, b, typ.GetArrayTypeID())
 	// Ensure that we can drop the array type as well.
 	b.canDropTypeDesc(ctx, mutArrayDesc, behavior)
 	// Create drop elements for both.
 	typeDescElem := &scpb.Type{
-		TypeID: typeDesc.GetID(),
+		TypeID: typ.GetID(),
 	}
 	b.addNode(scpb.Target_DROP, typeDescElem)
 	mutArrayDescElem := &scpb.Type{
@@ -115,14 +109,14 @@ func (b *buildContext) dropType(ctx context.Context, n *tree.DropType) {
 		panic(unimplemented.NewWithIssue(51480, "DROP TYPE CASCADE is not yet supported"))
 	}
 	for _, name := range n.Names {
-		// Resolve the desired type descriptor.
-		_, typeDesc, err := resolver.ResolveMutableType(ctx, b.Res, name, !n.IfExists)
-		if err != nil {
-			panic(err)
+		_, typ := b.CatalogReader().MayResolveType(ctx, *name)
+		if typ == nil {
+			if n.IfExists {
+				continue
+			}
+			panic(sqlerrors.NewUndefinedTypeError(name))
 		}
-		if typeDesc == nil {
-			continue
-		}
-		b.dropTypeDesc(ctx, typeDesc, n.DropBehavior, false /* ignoreAliases */)
+		onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, typ, privilege.DROP))
+		b.dropTypeDesc(ctx, typ, n.DropBehavior, false /* ignoreAliases */)
 	}
 }
