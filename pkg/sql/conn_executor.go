@@ -669,6 +669,17 @@ func (s *Server) GetLocalIndexStatistics() *idxusage.LocalIndexUsageStats {
 	return s.indexUsageStats
 }
 
+// ResetLocalIndexStatistics clears idxusage.LocalIndexUsageStats.
+func (s *Server) ResetLocalIndexStatistics() {
+	s.indexUsageStats.Reset()
+}
+
+// GetLastResetIndexStatistics returns the last reset time for
+// idxusage.LocalIndexUsageStats.
+func (s *Server) GetLastResetIndexStatistics() time.Time {
+	return s.indexUsageStats.GetLastReset()
+}
+
 // newSessionData a SessionData that can be passed to newConnExecutor.
 func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{

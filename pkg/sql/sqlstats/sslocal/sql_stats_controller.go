@@ -59,3 +59,13 @@ func (s *Controller) ResetLocalSQLStats(ctx context.Context) {
 		}
 	}
 }
+
+// ResetIndexUsageStats implements the tree.SQLStatsController interface.
+func (s *Controller) ResetIndexUsageStats(ctx context.Context) error {
+	req := &serverpb.ResetIndexUsageStatsRequest{}
+	_, err := s.statusServer.ResetIndexUsageStats(ctx, req)
+	if err != nil {
+		return err
+	}
+	return nil
+}
