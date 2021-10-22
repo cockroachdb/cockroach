@@ -1,0 +1,539 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package cli
+
+import (
+	"context"
+	"sort"
+	"strconv"
+	"testing"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/cli/quorum"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/raft/v3/raftpb"
+	"gopkg.in/yaml.v2"
+)
+
+/*
+TODO:
+- existing functionality
+-- test no dead peers - don't touch
+-- test not lost quorum - don't touch
+-- max live voter selected
+-- all stores accounted for (if we forgot a store on node that is referred to, we should ask)
+- future functionality
+-- test range complete coverage
+-- test greatest applied index wins
+*/
+
+// Range info used for test data to avoid providing unnecessary fields that are not used in
+// replica removal.
+type testReplicaInfo struct {
+	// Replica location
+	NodeID  roachpb.NodeID  `yaml:"NodeID"`
+	StoreID roachpb.StoreID `yaml:"StoreID"`
+
+	// Descriptor as seen by replica
+	RangeID    roachpb.RangeID         `yaml:"RangeID"`
+	StartKey   string                  `yaml:"StartKey"`
+	EndKey     string                  `yaml:"EndKey"`
+	Replicas   []replicaDescriptorView `yaml:"Replicas,flow"`
+	Generation roachpb.RangeGeneration `yaml:"Generation,omitempty"`
+
+	// Raft state
+	RangeAppliedIndex         uint64 `yaml:"RangeAppliedIndex"`
+	RaftCommittedIndex        uint64 `yaml:"RaftCommittedIndex"`
+	HasUncommittedDescriptors bool   `yaml:"HasUncommittedDescriptors"`
+
+	// Intent presence?
+}
+
+type storeView struct {
+	NodeID  roachpb.NodeID  `yaml:"NodeID"`
+	StoreID roachpb.StoreID `yaml:"StoreID"`
+
+	Descriptors []storeDescriptorView `yaml:"Descriptors"`
+}
+
+// storeDescriptorView contains important fields from the range
+// descriptor that tests want to assert against when diffing outputs.
+// It is used as a meaningful yaml serializable format since using
+// default indented json produces incomprehensible diffs.
+type storeDescriptorView struct {
+	// Descriptor as seen by replica
+	RangeID  roachpb.RangeID         `yaml:"RangeID"`
+	StartKey string                  `yaml:"StartKey"`
+	Replicas []descriptorViewWrapper `yaml:"Replicas"`
+}
+
+// descriptorViewWrapper wrapper type to customize representation of replicas
+// slice elements in test expectations.
+type descriptorViewWrapper struct {
+	Replica replicaDescriptorView `yaml:"Replica,flow"`
+}
+
+// replicaDescriptorView contains a copy of roachpb.ReplicaDescriptor
+// for the purpose of yaml representation and to avoid leaking test
+// specific code into production.
+type replicaDescriptorView struct {
+	NodeID      roachpb.NodeID       `yaml:"NodeID"`
+	StoreID     roachpb.StoreID      `yaml:"StoreID"`
+	ReplicaID   roachpb.ReplicaID    `yaml:"ReplicaID"`
+	ReplicaType *roachpb.ReplicaType `yaml:"ReplicaType,omitempty"`
+}
+
+// Store with its owning NodeID for easier grouping by owning nodes
+type wrappedStore struct {
+	engine storage.Engine
+	nodeID roachpb.NodeID
+}
+
+type quorumRecoveryEnv struct {
+	// Stores with data
+	stores map[roachpb.StoreID]wrappedStore
+
+	// Collected info from nodes
+	replicas [][]quorum.LocalRangeInfo
+
+	// plan to update replicas
+	plan []quorum.ReplicaUpdate
+}
+
+func (e *quorumRecoveryEnv) Handle(t *testing.T, d datadriven.TestData) string {
+	var err error
+	var out string
+	switch d.Cmd {
+	case "replication-data":
+		// Populate in-mem engines with data
+		out = e.handleReplicationData(t, d)
+	case "collect-replica-info":
+		// Collect one or more range info "files" from stores
+		out, err = e.handleCollectReplicas(t, d)
+	case "make-plan":
+		// Make plan out of multiple collected replica info
+		out, err = e.handleMakePlan(t, d)
+	case "dump-store":
+		// Dump the content of the store (all descriptors) for verification
+		out = e.handleDumpStore(t, d)
+	case "apply-plan":
+		// Create a plan from listed replicas
+		out, err = e.handleApplyPlan(t, d)
+	default:
+		t.Fatalf("%s: unknown command %s", d.Pos, d.Cmd)
+	}
+	if err != nil {
+		return err.Error()
+	}
+	if len(out) > 0 {
+		return out
+	}
+	return "ok"
+}
+
+func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.TestData) string {
+	ctx := context.Background()
+	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond*100)
+
+	// Drop existing data
+	e.stores = make(map[roachpb.StoreID]wrappedStore)
+
+	// load yaml from data into local range info
+	var replicaData []testReplicaInfo
+	err := yaml.UnmarshalStrict([]byte(d.Input), &replicaData)
+	if err != nil {
+		t.Fatalf("failed to unmarshal test replica data: %v", err)
+	}
+	for _, replica := range replicaData {
+		key, desc, replicaState, hardState := buildReplicaDescriptorFromTestData(t, replica)
+
+		eng := e.getStore(ctx, t, replica.StoreID, replica.NodeID)
+		if err = storage.MVCCPutProto(ctx, eng, nil, key, clock.Now(), nil /* txn */, &desc); err != nil {
+			t.Fatalf("failed to write range descriptor into store: %v", err)
+		}
+
+		sl := stateloader.Make(replica.RangeID)
+		if _, err := sl.Save(ctx, eng, replicaState); err != nil {
+			t.Fatalf("failed to save raft replica state into store: %v", err)
+		}
+		if err := sl.SetHardState(ctx, eng, hardState); err != nil {
+			t.Fatalf("failed to save raft hard state: %v", err)
+		}
+	}
+	return "ok"
+}
+
+func buildReplicaDescriptorFromTestData(
+	t *testing.T, replica testReplicaInfo,
+) (roachpb.Key, roachpb.RangeDescriptor, kvserverpb.ReplicaState, raftpb.HardState) {
+	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond*100)
+
+	startKey := parsePrettyKey(t, replica.StartKey)
+	endKey := parsePrettyKey(t, replica.EndKey)
+	key := keys.RangeDescriptorKey(startKey)
+	var replicas []roachpb.ReplicaDescriptor
+	maxReplicaID := replica.Replicas[0].ReplicaID
+	for _, r := range replica.Replicas {
+		if r.ReplicaID > maxReplicaID {
+			maxReplicaID = r.ReplicaID
+		}
+		replicas = append(replicas, roachpb.ReplicaDescriptor{
+			NodeID:    r.NodeID,
+			StoreID:   r.StoreID,
+			ReplicaID: r.ReplicaID,
+			Type:      r.ReplicaType,
+		})
+	}
+	if replica.Generation == 0 {
+		replica.Generation = roachpb.RangeGeneration(maxReplicaID)
+	}
+	desc := roachpb.RangeDescriptor{
+		RangeID:                        replica.RangeID,
+		StartKey:                       startKey,
+		EndKey:                         endKey,
+		InternalReplicas:               replicas,
+		NextReplicaID:                  maxReplicaID + 1,
+		Generation:                     replica.Generation,
+		DeprecatedGenerationComparable: nil,
+		StickyBit:                      nil,
+	}
+	localReplica, ok := desc.GetReplicaDescriptor(replica.StoreID)
+	if !ok {
+		t.Fatalf("descriptor on replica doesn't contain itself")
+	}
+	lease := roachpb.Lease{
+		Start:           clock.Now().Add(5*time.Minute.Nanoseconds(), 0).UnsafeToClockTimestamp(),
+		Expiration:      nil,
+		Replica:         localReplica,
+		ProposedTS:      nil,
+		Epoch:           0,
+		Sequence:        0,
+		AcquisitionType: 0,
+	}
+	replicaState := kvserverpb.ReplicaState{
+		RaftAppliedIndex:  replica.RangeAppliedIndex,
+		LeaseAppliedIndex: 0,
+		Desc:              &desc,
+		Lease:             &lease,
+		TruncatedState: &roachpb.RaftTruncatedState{
+			Index: 1,
+			Term:  1,
+		},
+		GCThreshold:         &hlc.Timestamp{},
+		Version:             nil,
+		Stats:               &enginepb.MVCCStats{},
+		RaftClosedTimestamp: clock.Now().Add(-30*time.Second.Nanoseconds(), 0),
+	}
+	hardState := raftpb.HardState{
+		Term:   0,
+		Vote:   0,
+		Commit: replica.RaftCommittedIndex,
+	}
+	return key, desc, replicaState, hardState
+}
+
+func parsePrettyKey(t *testing.T, pretty string) roachpb.RKey {
+	scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
+	key, err := scanner.Scan(pretty)
+	if err != nil {
+		t.Fatalf("failed to parse key %s: %v", pretty, err)
+	}
+	return roachpb.RKey(key)
+}
+
+func (e *quorumRecoveryEnv) handleMakePlan(t *testing.T, d datadriven.TestData) (string, error) {
+	var rangeInfo []quorum.LocalRangeInfo
+	for _, nodeRanges := range e.replicas {
+		rangeInfo = append(rangeInfo, nodeRanges...)
+	}
+	var err error
+	stores := e.parseStoresArg(t, d, false /* defaultToAll */)
+	e.plan, err = planReplicas(rangeInfo, stores, defaultedDialog{result: true})
+	if err != nil {
+		return "", err
+	}
+	out, err := yaml.Marshal(e.plan)
+	if err != nil {
+		t.Fatalf("failed to marshal plan into yaml for verification: %v", err)
+	}
+	return string(out), nil
+}
+
+func (e *quorumRecoveryEnv) getStore(
+	ctx context.Context, t *testing.T, storeID roachpb.StoreID, nodeID roachpb.NodeID,
+) storage.Engine {
+	wrapped := e.stores[storeID]
+	if wrapped.nodeID == 0 {
+		var err error
+		eng, err := storage.Open(ctx, storage.InMemory(), storage.CacheSize(1<<20 /* 1 MiB */))
+		if err != nil {
+			t.Fatalf("failed to crate in mem store: %v", err)
+		}
+		sIdent := roachpb.StoreIdent{
+			ClusterID: uuid.MakeV4(),
+			NodeID:    nodeID,
+			StoreID:   storeID,
+		}
+		if err = storage.MVCCPutProto(
+			context.Background(), eng, nil, keys.StoreIdentKey(), hlc.Timestamp{}, nil, &sIdent); err != nil {
+			t.Fatalf("failed to populate test store ident: %v", err)
+		}
+		wrapped.engine = eng
+		wrapped.nodeID = nodeID
+		e.stores[storeID] = wrapped
+	}
+	return wrapped.engine
+}
+
+func (e *quorumRecoveryEnv) handleCollectReplicas(
+	t *testing.T, d datadriven.TestData,
+) (string, error) {
+	ctx := context.Background()
+	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
+	nodes := e.groupStoresByNode(t, stores)
+	// save collected results into environment
+	e.replicas = nil
+	for _, nodeStores := range nodes {
+		info, err := collectReplicaInfo(ctx, nodeStores)
+		if err != nil {
+			return "", err
+		}
+		e.replicas = append(e.replicas, info)
+	}
+	return "ok", nil
+}
+
+func (e *quorumRecoveryEnv) groupStoresByNode(
+	t *testing.T, storeIDs []roachpb.StoreID,
+) map[roachpb.NodeID][]storage.Engine {
+	nodes := make(map[roachpb.NodeID][]storage.Engine)
+	iterateSelectedStores(t, storeIDs, e.stores, func(store storage.Engine, nodeID roachpb.NodeID, storeID roachpb.StoreID) {
+		nodes[nodeID] = append(nodes[nodeID], store)
+	})
+	return nodes
+}
+
+func (e *quorumRecoveryEnv) groupStoresByNodeStore(
+	t *testing.T, storeIDs []roachpb.StoreID,
+) map[roachpb.NodeID]map[roachpb.StoreID]storage.Engine {
+	nodes := make(map[roachpb.NodeID]map[roachpb.StoreID]storage.Engine)
+	iterateSelectedStores(t, storeIDs, e.stores, func(store storage.Engine, nodeID roachpb.NodeID, storeID roachpb.StoreID) {
+		nodeStores, ok := nodes[nodeID]
+		if !ok {
+			nodeStores = make(map[roachpb.StoreID]storage.Engine)
+			nodes[nodeID] = nodeStores
+		}
+		nodeStores[storeID] = store
+	})
+	return nodes
+}
+
+func iterateSelectedStores(
+	t *testing.T,
+	storeIDs []roachpb.StoreID,
+	stores map[roachpb.StoreID]wrappedStore,
+	f func(store storage.Engine, nodeID roachpb.NodeID, storeID roachpb.StoreID),
+) {
+	for _, id := range storeIDs {
+		wrappedStore, ok := stores[id]
+		if !ok {
+			t.Fatalf("replica info requested from store that was not populated: %d", id)
+		}
+		f(wrappedStore.engine, wrappedStore.nodeID, id)
+	}
+}
+
+// parseStoresArg parses StoreIDs from stores arg if available, or
+// lists all loaded stores.
+// Results are returned in sorted order to allow consistent output.
+func (e *quorumRecoveryEnv) parseStoresArg(
+	t *testing.T, d datadriven.TestData, defaultToAll bool,
+) []roachpb.StoreID {
+	// Prepare replica info
+	var stores []roachpb.StoreID
+	if d.HasArg("stores") {
+		for _, arg := range d.CmdArgs {
+			for _, id := range arg.Vals {
+				id, err := strconv.ParseInt(id, 10, 32)
+				if err != nil {
+					t.Fatalf("failed to parse store id: %v", err)
+				}
+				stores = append(stores, roachpb.StoreID(id))
+			}
+		}
+	} else {
+		if defaultToAll {
+			for id := range e.stores {
+				stores = append(stores, id)
+			}
+		} else {
+			stores = []roachpb.StoreID{}
+		}
+	}
+	sort.Slice(stores, func(i, j int) bool { return i < j })
+	return stores
+}
+
+func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData) string {
+	ctx := context.Background()
+	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
+	var storesView []storeView
+	for _, storeID := range stores {
+		var descriptorViews []storeDescriptorView
+		store := e.stores[storeID]
+		err := kvserver.IterateRangeDescriptorsFromDisk(ctx, store.engine, func(desc roachpb.RangeDescriptor) error {
+			descriptorViews = append(descriptorViews, descriptorView(desc))
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("failed to make a dump of store replica data: %v", err)
+		}
+		storesView = append(storesView, storeView{
+			NodeID:      e.stores[storeID].nodeID,
+			StoreID:     storeID,
+			Descriptors: descriptorViews,
+		})
+	}
+	out, err := yaml.Marshal(storesView)
+	if err != nil {
+		t.Fatalf("failed to serialize range descriptors from store: %v", err)
+	}
+	return string(out)
+}
+
+func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData) (string, error) {
+	ctx := context.Background()
+	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
+	nodes := e.groupStoresByNodeStore(t, stores)
+	for nodeID, stores := range nodes {
+		if err := removeReplicas(ctx, e.plan, nodeID, stores, defaultedDialog{result: true}); err != nil {
+			return "", err
+		}
+	}
+	return "ok", nil
+}
+
+func (e *quorumRecoveryEnv) cleanup() {
+	for _, store := range e.stores {
+		store.engine.Close()
+	}
+}
+
+func descriptorView(desc roachpb.RangeDescriptor) storeDescriptorView {
+	var replicas []descriptorViewWrapper
+	for _, desc := range desc.InternalReplicas {
+		replicas = append(replicas, descriptorViewWrapper{replicaDescriptorView{
+			NodeID:      desc.NodeID,
+			StoreID:     desc.StoreID,
+			ReplicaID:   desc.ReplicaID,
+			ReplicaType: desc.Type,
+		}})
+	}
+	return storeDescriptorView{
+		RangeID:  desc.RangeID,
+		StartKey: desc.StartKey.String(),
+		Replicas: replicas,
+	}
+}
+
+func TestQuorumRecovery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	datadriven.Walk(t, "testdata/quorum", func(t *testing.T, path string) {
+		env := quorumRecoveryEnv{}
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			return env.Handle(t, *d)
+		})
+		env.cleanup()
+	})
+}
+
+func TestValidatePlanReplicaSet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	desc := func(storeID int, replicaStores ...int) (result quorum.LocalRangeInfo) {
+		result.StoreID = roachpb.StoreID(storeID)
+		result.NodeID = roachpb.NodeID(storeID)
+		var replicas []roachpb.ReplicaDescriptor
+		for i, rs := range replicaStores {
+			replicas = append(replicas, roachpb.ReplicaDescriptor{
+				NodeID: roachpb.NodeID(rs), StoreID: roachpb.StoreID(rs), ReplicaID: roachpb.ReplicaID(i)})
+		}
+		result.Desc = roachpb.RangeDescriptor{InternalReplicas: replicas}
+		return
+	}
+
+	node1 := []quorum.LocalRangeInfo{desc(1, 1, 2, 3), desc(1, 3, 2, 1)}
+	node2 := []quorum.LocalRangeInfo{desc(2, 1, 2, 3), desc(2, 2, 3, 1)}
+	node3 := []quorum.LocalRangeInfo{desc(3, 3, 2, 1), desc(3, 2, 3, 1)}
+
+	cluster := func(nodes ...[]quorum.LocalRangeInfo) (result []quorum.LocalRangeInfo) {
+		for _, node := range nodes {
+			result = append(result, node...)
+		}
+		return
+	}
+
+	storeSet := func(storeIDs ...int) storeIDSet {
+		result := make(storeIDSet)
+		for _, storeID := range storeIDs {
+			result[roachpb.StoreID(storeID)] = struct{}{}
+		}
+		return result
+	}
+
+	stores := func(storeIDs ...int) (result []roachpb.StoreID) {
+		for _, storeID := range storeIDs {
+			result = append(result, roachpb.StoreID(storeID))
+		}
+		return
+	}
+
+	for _, td := range []struct {
+		name string
+		// Test data.
+		descriptors []quorum.LocalRangeInfo
+		deadStores  []roachpb.StoreID
+		// Outcomes.
+		liveStores      storeIDSet
+		missingStoreIDs storeIDSet
+		err             bool
+	}{
+		{name: "no_dead_stores", descriptors: cluster(node1, node2, node3), deadStores: nil, liveStores: storeSet(1, 2, 3), missingStoreIDs: storeSet()},
+		{name: "no_explicit_dead_stores", descriptors: cluster(node1, node2), deadStores: nil, liveStores: storeSet(1, 2), missingStoreIDs: storeSet(3)},
+		{name: "explicit_dead_stores", descriptors: cluster(node1, node2, node3), deadStores: stores(1), liveStores: storeSet(1, 2, 3), missingStoreIDs: storeSet()},
+		{name: "explicit_dead_stores_present", descriptors: cluster(node1, node2), deadStores: stores(1), err: true},
+		{name: "explicit_dead_stores_mismatch", descriptors: cluster(node1), deadStores: stores(2), err: true},
+	} {
+		t.Run(td.name, func(t *testing.T) {
+			liveStoreIDs, missingStoreIDs, err := validateReplicaSets(td.descriptors, td.deadStores)
+			if td.err {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, td.liveStores, liveStoreIDs)
+				require.Equal(t, td.missingStoreIDs, missingStoreIDs)
+			}
+		})
+	}
+}

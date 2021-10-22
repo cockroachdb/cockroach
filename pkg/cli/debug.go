@@ -31,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -1501,10 +1502,10 @@ func runDebugIntentCount(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// DebugCmdsForPebble lists debug commands that access Pebble through the engine
+// debugCmdsForPebble lists debug commands that access Pebble through the engine
 // and need encryption flags (injected by CCL code).
 // Note: do NOT include commands that just call Pebble code without setting up an engine.
-var DebugCmdsForPebble = []*cobra.Command{
+var debugCmdsForPebble = []*cobra.Command{
 	debugCheckStoreCmd,
 	debugCompactCmd,
 	debugGCCmd,
@@ -1516,8 +1517,18 @@ var DebugCmdsForPebble = []*cobra.Command{
 	debugUnsafeRemoveDeadReplicasCmd,
 }
 
+// debugSubCommandsForRocksDB lists debug subcommands that access rocksdb through the engine
+// and need encryption flags (injected by CCL code).
+// This list is separate from debugCmdsForRocksDB as it is used to enable encryption options
+// but not when building top level debug command list.
+// Note: do NOT include commands that just call rocksdb code without setting up an engine.
+var debugSubCommandsForPebble = []*cobra.Command{
+	recoverDeadReplicaCollectCmd,
+	recoverDeadReplicaExecuteCmd,
+}
+
 // All other debug commands go here.
-var debugCmds = append(DebugCmdsForPebble,
+var debugCmds = append(debugCmdsForPebble,
 	debugBallastCmd,
 	debugCheckLogConfigCmd,
 	debugDecodeKeyCmd,
@@ -1532,7 +1543,24 @@ var debugCmds = append(DebugCmdsForPebble,
 	debugMergeLogsCmd,
 	debugListFilesCmd,
 	debugResetQuorumCmd,
+	debugRecoverCmd,
 )
+
+// DebugCommandsRequiringEncryption lists debug (sub)commands that access rocksdb through the engine
+// and need encryption flags (injected by CCL code).
+// Note: do NOT include commands that just call rocksdb code without setting up an engine.
+var DebugCommandsRequiringEncryption = append(debugCmdsForPebble, debugSubCommandsForPebble...)
+
+// debugInteractive contains commands that need a confirmation flag
+var debugInteractive = []*cobra.Command{
+	recoverDeadReplicaCollectCmd,
+	recoverDeadReplicaPlanCmd,
+	recoverDeadReplicaExecuteCmd,
+}
+
+var interactivePromptOpts struct {
+	action string
+}
 
 // DebugCmd is the root of all debug commands. Exported to allow modification by CCL code.
 var DebugCmd = &cobra.Command{
@@ -1630,6 +1658,18 @@ func init() {
 	f.IntSliceVar(&removeDeadReplicasOpts.deadStoreIDs, "dead-store-ids", nil,
 		"list of dead store IDs")
 
+	f = recoverDeadReplicaCollectCmd.Flags()
+	f.VarP(&debugDeadReplicaCollectOpts.Stores, cliflags.RecoverStore.Name, cliflags.RecoverStore.Shorthand, cliflags.RecoverStore.Usage())
+
+	f = recoverDeadReplicaPlanCmd.Flags()
+	f.StringVarP(&debugDeadReplicaPlanOpts.outputFileName, "plan", "o", "replica-remove-plan.json",
+		"filename to write plan to")
+	f.IntSliceVar(&debugDeadReplicaPlanOpts.deadStoreIDs, "dead-store-ids", nil,
+		"list of dead store IDs")
+
+	f = recoverDeadReplicaExecuteCmd.Flags()
+	f.VarP(&debugDeadReplicaRemoveOpts.Stores, cliflags.RecoverStore.Name, cliflags.RecoverStore.Shorthand, cliflags.RecoverStore.Usage())
+
 	f = debugMergeLogsCmd.Flags()
 	f.Var(flagutil.Time(&debugMergeLogsOpts.from), "from",
 		"time before which messages should be filtered")
@@ -1667,6 +1707,24 @@ func init() {
 	f.Var(&debugTimeSeriesDumpOpts.format, "format", "output format (text, csv, tsv, raw)")
 	f.Var(&debugTimeSeriesDumpOpts.from, "from", "oldest timestamp to include (inclusive)")
 	f.Var(&debugTimeSeriesDumpOpts.to, "to", "newest timestamp to include (inclusive)")
+
+	for _, cmd := range debugInteractive {
+		AddPersistentPreRunE(cmd, validateConfirmationFlag)
+		f = cmd.Flags()
+		f.StringVar(&interactivePromptOpts.action, "confirm", "p",
+			"confirm action: y - yes to all prompts, n - no/abort to all prompts, p - prompt interactively")
+	}
+}
+
+func validateConfirmationFlag(command *cobra.Command, args []string) error {
+	f := command.Flag("confirm")
+	if f == nil {
+		return nil
+	}
+	if interactivePromptOpts.action == "y" || interactivePromptOpts.action == "n" || interactivePromptOpts.action == "p" {
+		return nil
+	}
+	return errors.Errorf("unrecognized value %s for --confirm flag", interactivePromptOpts.action)
 }
 
 func initPebbleCmds(cmd *cobra.Command) {
