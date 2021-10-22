@@ -280,3 +280,8 @@ SELECT 128::"char";
 
 statement error pgcode 22003 \"char\" out of range
 SELECT (-129)::"char";
+
+query IFRB
+SELECT ' 1 '::int, ' 1.2 '::float, ' 2.3 '::decimal, ' true '::bool
+----
+1  1.2  2.3  true
