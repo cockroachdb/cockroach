@@ -132,7 +132,6 @@ func TestOpenReadOnlyStore(t *testing.T) {
 
 func TestRemoveDeadReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 71789, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	// This test is pretty slow under race (200+ cpu-seconds) because it
