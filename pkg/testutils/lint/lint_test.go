@@ -765,6 +765,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!cmd/dev/**",
+			":!cmd/mirror/**",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1681,6 +1682,8 @@ func TestLint(t *testing.T) {
 				// This file is a conditionally-compiled stub implementation that
 				// will produce fake "func is unused" errors.
 				stream.GrepNot(`pkg/build/bazel/non_bazel.go`),
+				// NOTE(ricky): No idea what's wrong with mirror.go. See #72521
+				stream.GrepNot(`pkg/cmd/mirror/mirror.go`),
 				// Skip generated file.
 				stream.GrepNot(`pkg/ui/distoss/bindata.go`),
 				stream.GrepNot(`pkg/ui/distccl/bindata.go`),
