@@ -306,6 +306,10 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 		vec := b.ColVec(i)
 		d := data[i]
 
+		if d == nil {
+			return nil
+		}
+
 		// Eagerly release our data references to make sure they can be collected
 		// as quickly as possible as we copy each (or simply reference each) by
 		// coldata.Vecs below.
