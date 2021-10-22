@@ -36,6 +36,11 @@ func TestTmpDir() string {
 	panic("not built with Bazel")
 }
 
+// NewTmpDir is not implemented.
+func NewTmpDir(prefix string) (string, error) {
+	panic("not built with Bazel")
+}
+
 // RelativeTestTargetPath is not implemented.
 func RelativeTestTargetPath() string {
 	panic("not built with Bazel")
