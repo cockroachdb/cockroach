@@ -300,6 +300,99 @@ func TestResetSQLStatsRPCForTenant(t *testing.T) {
 	}
 }
 
+func TestResetIndexUsageStatsRPCForTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "expensive tests")
+
+	ctx := context.Background()
+
+	statsIngestionCb, statsIngestionNotifier := idxusage.CreateIndexStatsIngestedCallbackForTest()
+
+	knobs := tests.CreateTestingKnobs()
+	knobs.IndexUsageStatsKnobs = &idxusage.TestingKnobs{
+		OnIndexUsageStatsProcessedCallback: statsIngestionCb,
+	}
+
+	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
+	defer testHelper.cleanup(ctx, t)
+
+	testingCluster := testHelper.testCluster()
+
+	// Create tables and insert data.
+	testingCluster.tenantConn(0).Exec(t, `
+CREATE TABLE test (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX(a)
+)
+`)
+
+	testingCluster.tenantConn(0).Exec(t, `
+INSERT INTO test
+VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
+`)
+
+	// Record scan on primary index.
+	testingCluster.tenantConn(0).Exec(t, "SELECT * FROM test")
+
+	// Record scan on secondary index.
+	testingCluster.tenantConn(1).Exec(t, "SELECT * FROM test@test_a_idx")
+	testTableIDStr := testingCluster.tenantConn(2).QueryStr(t, "SELECT 'test'::regclass::oid")[0][0]
+	testTableID, err := strconv.Atoi(testTableIDStr)
+	require.NoError(t, err)
+
+	// Wait for the stats to be ingested.
+	require.NoError(t,
+		idxusage.WaitForIndexStatsIngestionForTest(statsIngestionNotifier, map[roachpb.IndexUsageKey]struct{}{
+			{
+				TableID: roachpb.TableID(testTableID),
+				IndexID: 1,
+			}: {},
+			{
+				TableID: roachpb.TableID(testTableID),
+				IndexID: 2,
+			}: {},
+		}, 2 /* expectedEventCnt*/, 5*time.Second /* timeout */),
+	)
+
+	query := `
+SELECT
+  table_id,
+  index_id,
+  total_reads,
+  extract_duration('second', now() - last_read) < 5
+FROM
+  crdb_internal.index_usage_statistics
+WHERE
+  table_id = $1
+`
+	// Assert index usage data was inserted.
+	actual := testingCluster.tenantConn(2).QueryStr(t, query, testTableID)
+	expected := [][]string{
+		{testTableIDStr, "1", "1", "true"},
+		{testTableIDStr, "2", "1", "true"},
+	}
+	require.Equal(t, expected, actual)
+
+	status := testingCluster.tenantStatusSrv(1 /* idx */)
+
+	// Reset index usage stats.
+	_, err = status.ResetIndexUsageStats(ctx, &serverpb.ResetIndexUsageStatsRequest{})
+	require.NoError(t, err)
+
+	resp, err := status.IndexUsageStatistics(ctx, &serverpb.IndexUsageStatisticsRequest{})
+	require.NoError(t, err)
+
+	// Require index usage metrics to be reset.
+	for _, stats := range resp.Statistics {
+		require.Equal(t, uint64(0), stats.Stats.TotalReadCount)
+		require.Equal(t, time.Time{}, stats.Stats.LastRead)
+	}
+}
+
 func ensureExpectedStmtFingerprintExistsInRPCResponse(
 	t *testing.T, expectedStmts []string, resp *serverpb.StatementsResponse, clusterType string,
 ) {

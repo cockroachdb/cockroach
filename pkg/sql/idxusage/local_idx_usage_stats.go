@@ -14,6 +14,7 @@ import (
 	"context"
 	"math"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -66,6 +67,9 @@ type LocalIndexUsageStats struct {
 
 		// usageStats stores index usage statistics per unique roachpb.TableID.
 		usageStats map[roachpb.TableID]*tableIndexStats
+
+		// lastReset is the last time the index usage statistics were reset.
+		lastReset time.Time
 	}
 
 	// testingKnobs provide utilities for tests to hook into the internal states
@@ -268,6 +272,13 @@ func (s *LocalIndexUsageStats) clear() {
 	for _, tableStats := range s.mu.usageStats {
 		tableStats.clear()
 	}
+	s.mu.lastReset = timeutil.Now()
+}
+
+// Reset resets read info for index usage metrics, although leaves the
+// table and index mappings in place.
+func (s *LocalIndexUsageStats) Reset() {
+	s.clear()
 }
 
 func (s *LocalIndexUsageStats) insertIndexUsage(idxUse *indexUse) {
@@ -349,6 +360,13 @@ func (t *tableIndexStats) getStatsForIndexID(
 		return newUsageEntry
 	}
 	return nil
+}
+
+// GetLastReset returns the last time the table was reset.
+func (s *LocalIndexUsageStats) GetLastReset() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.lastReset
 }
 
 func (t *tableIndexStats) iterateIndexStats(
