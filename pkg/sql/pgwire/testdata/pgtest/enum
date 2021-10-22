@@ -106,15 +106,30 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+send noncrdb_only
+Parse {"Name": "s1", "Query": "INSERT INTO tb VALUES ($1)"}
+Bind {"DestinationPortal": "p", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [{"text":"hi"}]}
+Execute {"Portal": "p"}
+Sync
+----
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 # Ensure that our value was successfully inserted.
-send crdb_only
+send
 Query {"String": "SELECT * FROM tb"}
 ----
 
-until crdb_only
+until ignore_type_oids ignore_table_oids ignore_data_type_sizes
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"x","TableOID":54,"TableAttributeNumber":1,"DataTypeOID":100052,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"x","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":0,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"hi"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
@@ -192,4 +207,41 @@ ReadyForQuery
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
 {"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "ALTER TYPE te ADD VALUE 'hola'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ALTER TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Reuse original prepared statement now that there's a new enum value.
+send
+Bind {"DestinationPortal": "p", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [{"text":"hola"}]}
+Execute {"Portal": "p"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Ensure that our value was successfully inserted.
+send
+Query {"String": "SELECT * FROM tb WHERE x = 'hola'"}
+----
+
+until ignore_type_oids ignore_table_oids ignore_data_type_sizes
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"x","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":0,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"hola"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
