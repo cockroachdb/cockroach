@@ -1,6 +1,6 @@
 try-import %workspace%/.bazelrc.user
 
-build --symlink_prefix=_bazel/ --ui_event_filters=-DEBUG --define gotags=bazel,crdb_test_off,gss --experimental_proto_descriptor_sets_include_source_info
+build --symlink_prefix=_bazel/ --ui_event_filters=-DEBUG --define gotags=bazel,crdb_test_off,gss --experimental_proto_descriptor_sets_include_source_info --incompatible_strict_action_env
 test --config=test
 build:with_ui --define cockroach_with_ui=y
 build:test --define gotags=bazel,crdb_test,gss
@@ -48,3 +48,5 @@ build:devdarwinx86_64 --crosstool_top=@toolchain_dev_darwin_x86-64//:suite
 build:devdarwinx86_64 --config=dev
 build:dev --define cockroach_bazel_dev=y
 build:dev --stamp --workspace_status_command=./build/bazelutil/stamp.sh
+
+# vi: ft=sh
