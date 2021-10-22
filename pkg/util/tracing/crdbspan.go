@@ -538,6 +538,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		StartTime:      s.startTime,
 		Duration:       s.mu.duration,
 		RedactableLogs: true,
+		Verbose:        s.recordingType() == RecordingVerbose,
 	}
 
 	if rs.Duration == -1 {

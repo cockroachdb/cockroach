@@ -80,6 +80,9 @@ message RecordedSpan {
   bool redactable_logs = 15;
   // Events logged in the span.
   repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
+  // verbose indicates whether the span was recording in verbose mode at the
+  // time the recording was produced.
+  bool verbose = 16;
 
   // The ID of the goroutine on which the span was created.
   uint64 goroutine_id = 12 [(gogoproto.customname) = "GoroutineID"];
