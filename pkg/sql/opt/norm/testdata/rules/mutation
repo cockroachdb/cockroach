@@ -49,12 +49,12 @@ update t
       │    ├── scan t
       │    │    ├── columns: k:12!null a:13 b:14 c:15 d:16 e:17 f:18 g:19 h:20
       │    │    ├── partial index predicates
-      │    │    │    ├── secondary: filters
+      │    │    │    ├── t_c_idx: filters
       │    │    │    │    └── d:16 > 1 [outer=(16), constraints=(/16: [/2 - ]; tight)]
-      │    │    │    ├── secondary: filters
+      │    │    │    ├── t_e_idx: filters
       │    │    │    │    ├── f:18 > 1 [outer=(18), constraints=(/18: [/2 - ]; tight)]
       │    │    │    │    └── g:19 > 1 [outer=(19), constraints=(/19: [/2 - ]; tight)]
-      │    │    │    └── secondary: filters
+      │    │    │    └── t_d_idx: filters
       │    │    │         └── c:15 > 1 [outer=(15), constraints=(/15: [/2 - ]; tight)]
       │    │    ├── key: (12)
       │    │    └── fd: (12)-->(13-20)
@@ -94,12 +94,12 @@ update t
       │    ├── scan t
       │    │    ├── columns: k:12!null a:13 b:14 c:15 d:16 e:17 f:18 g:19 h:20
       │    │    ├── partial index predicates
-      │    │    │    ├── secondary: filters
+      │    │    │    ├── t_c_idx: filters
       │    │    │    │    └── d:16 > 1 [outer=(16), constraints=(/16: [/2 - ]; tight)]
-      │    │    │    ├── secondary: filters
+      │    │    │    ├── t_e_idx: filters
       │    │    │    │    ├── f:18 > 1 [outer=(18), constraints=(/18: [/2 - ]; tight)]
       │    │    │    │    └── g:19 > 1 [outer=(19), constraints=(/19: [/2 - ]; tight)]
-      │    │    │    └── secondary: filters
+      │    │    │    └── t_d_idx: filters
       │    │    │         └── c:15 > 1 [outer=(15), constraints=(/15: [/2 - ]; tight)]
       │    │    ├── key: (12)
       │    │    └── fd: (12)-->(13-20)
@@ -140,12 +140,12 @@ update t
       │    ├── scan t
       │    │    ├── columns: k:12!null a:13 b:14 c:15 d:16 e:17 f:18 g:19 h:20
       │    │    ├── partial index predicates
-      │    │    │    ├── secondary: filters
+      │    │    │    ├── t_c_idx: filters
       │    │    │    │    └── d:16 > 1 [outer=(16), constraints=(/16: [/2 - ]; tight)]
-      │    │    │    ├── secondary: filters
+      │    │    │    ├── t_e_idx: filters
       │    │    │    │    ├── f:18 > 1 [outer=(18), constraints=(/18: [/2 - ]; tight)]
       │    │    │    │    └── g:19 > 1 [outer=(19), constraints=(/19: [/2 - ]; tight)]
-      │    │    │    └── secondary: filters
+      │    │    │    └── t_d_idx: filters
       │    │    │         └── c:15 > 1 [outer=(15), constraints=(/15: [/2 - ]; tight)]
       │    │    ├── key: (12)
       │    │    └── fd: (12)-->(13-20)
@@ -193,12 +193,12 @@ update t
       │    │    ├── scan t
       │    │    │    ├── columns: k:12!null a:13 b:14 c:15 d:16 e:17 f:18 g:19 h:20
       │    │    │    ├── partial index predicates
-      │    │    │    │    ├── secondary: filters
+      │    │    │    │    ├── t_c_idx: filters
       │    │    │    │    │    └── d:16 > 1 [outer=(16), constraints=(/16: [/2 - ]; tight)]
-      │    │    │    │    ├── secondary: filters
+      │    │    │    │    ├── t_e_idx: filters
       │    │    │    │    │    ├── f:18 > 1 [outer=(18), constraints=(/18: [/2 - ]; tight)]
       │    │    │    │    │    └── g:19 > 1 [outer=(19), constraints=(/19: [/2 - ]; tight)]
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── t_d_idx: filters
       │    │    │    │         └── c:15 > 1 [outer=(15), constraints=(/15: [/2 - ]; tight)]
       │    │    │    ├── key: (12)
       │    │    │    └── fd: (12)-->(13-20)
@@ -241,12 +241,12 @@ update t
       │    ├── scan t
       │    │    ├── columns: k:12!null a:13 b:14 c:15 d:16 e:17 f:18 g:19 h:20
       │    │    ├── partial index predicates
-      │    │    │    ├── secondary: filters
+      │    │    │    ├── t_c_idx: filters
       │    │    │    │    └── d:16 > 1 [outer=(16), constraints=(/16: [/2 - ]; tight)]
-      │    │    │    ├── secondary: filters
+      │    │    │    ├── t_e_idx: filters
       │    │    │    │    ├── f:18 > 1 [outer=(18), constraints=(/18: [/2 - ]; tight)]
       │    │    │    │    └── g:19 > 1 [outer=(19), constraints=(/19: [/2 - ]; tight)]
-      │    │    │    └── secondary: filters
+      │    │    │    └── t_d_idx: filters
       │    │    │         └── c:15 > 1 [outer=(15), constraints=(/15: [/2 - ]; tight)]
       │    │    ├── key: (12)
       │    │    └── fd: (12)-->(13-20)

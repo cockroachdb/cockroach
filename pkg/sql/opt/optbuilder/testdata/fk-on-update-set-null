@@ -280,7 +280,7 @@ UPSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20)
 root
  ├── upsert parent_multi
  │    ├── columns: <none>
- │    ├── arbiter indexes: primary
+ │    ├── arbiter indexes: parent_multi_pkey
  │    ├── canary column: pk:9
  │    ├── fetch columns: pk:9 p:10 q:11
  │    ├── insert-mapping:
@@ -384,7 +384,7 @@ UPSERT INTO parent_multi(pk, p) VALUES (1, 10), (2, 20)
 root
  ├── upsert parent_multi
  │    ├── columns: <none>
- │    ├── arbiter indexes: primary
+ │    ├── arbiter indexes: parent_multi_pkey
  │    ├── canary column: pk:9
  │    ├── fetch columns: pk:9 p:10 q:11
  │    ├── insert-mapping:
@@ -491,7 +491,7 @@ INSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20) ON CONFLICT (p,q) DO UP
 root
  ├── upsert parent_multi
  │    ├── columns: <none>
- │    ├── arbiter indexes: secondary
+ │    ├── arbiter indexes: parent_multi_p_q_key
  │    ├── canary column: pk:9
  │    ├── fetch columns: pk:9 p:10 q:11
  │    ├── insert-mapping:
@@ -646,9 +646,9 @@ root
                 │    │    ├── scan child_partial
                 │    │    │    ├── columns: c:13!null child_partial.p:14!null i:15
                 │    │    │    └── partial index predicates
-                │    │    │         ├── secondary: filters
+                │    │    │         ├── child_partial_p_idx: filters
                 │    │    │         │    └── i:15 > 0
-                │    │    │         └── secondary: filters
+                │    │    │         └── child_partial_i_idx: filters
                 │    │    │              └── child_partial.p:14 > 0
                 │    │    ├── select
                 │    │    │    ├── columns: p:18!null p_new:19!null

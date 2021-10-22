@@ -461,7 +461,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan virtual@secondary,partial
+ └── scan virtual@virtual_a_idx,partial
       ├── columns: k:1!null
       └── key: (1)
 
@@ -492,11 +492,11 @@ project
       │    │    └── upper_s:7
       │    │         └── upper(s:5)
       │    ├── partial index predicates
-      │    │    ├── secondary: filters
+      │    │    ├── virtual_a_idx: filters
       │    │    │    └── (b:3 + 10) IN (10, 20, 30) [outer=(3), immutable]
-      │    │    ├── secondary: filters
+      │    │    ├── virtual_a_idx1: filters
       │    │    │    └── upper(s:5) = 'FOO' [outer=(5), immutable]
-      │    │    └── secondary: filters
+      │    │    └── virtual_c_idx: filters
       │    │         └── b:3 > 90 [outer=(3), constraints=(/3: [/91 - ]; tight)]
       │    ├── key: (1)
       │    └── fd: (1)-->(3)
@@ -510,7 +510,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan virtual@secondary,partial
+ └── scan virtual@virtual_a_idx,partial
       ├── columns: k:1!null
       └── key: (1)
 
@@ -1543,7 +1543,7 @@ CREATE TABLE with_time_index (k INT PRIMARY KEY, time TIMESTAMP, INDEX(time))
 opt
 SELECT * FROM with_time_index WHERE time > now() - INTERVAL '1 hour'
 ----
-scan with_time_index@secondary
+scan with_time_index@with_time_index_"time"_idx
  ├── columns: k:1!null time:2!null
  ├── constraint: /2/1: [/'2017-05-10 12:00:00.000001' - ]
  ├── key: (1)
@@ -1552,7 +1552,7 @@ scan with_time_index@secondary
 opt
 SELECT * FROM with_time_index WHERE time >= 'today'
 ----
-scan with_time_index@secondary
+scan with_time_index@with_time_index_"time"_idx
  ├── columns: k:1!null time:2!null
  ├── constraint: /2/1: [/'2017-05-10 00:00:00' - ]
  ├── key: (1)
@@ -1567,7 +1567,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan virtual@secondary
+ └── scan virtual@virtual_lower_s_idx
       ├── columns: k:1!null
       ├── constraint: /6/1: [/'foo' - /'foo']
       └── key: (1)
@@ -1940,7 +1940,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan virtual@secondary,partial
+ └── scan virtual@virtual_a_idx,partial
       ├── columns: k:1!null a:2!null
       ├── constraint: /2/1: [/11 - /19]
       ├── key: (1)
@@ -1973,11 +1973,11 @@ project
       │    │    └── upper_s:7
       │    │         └── upper(s:5)
       │    ├── partial index predicates
-      │    │    ├── secondary: filters
+      │    │    ├── virtual_a_idx: filters
       │    │    │    └── (b:3 + 10) IN (10, 20, 30) [outer=(3), immutable]
-      │    │    ├── secondary: filters
+      │    │    ├── virtual_a_idx1: filters
       │    │    │    └── upper(s:5) = 'FOO' [outer=(5), immutable]
-      │    │    └── secondary: filters
+      │    │    └── virtual_c_idx: filters
       │    │         └── b:3 > 90 [outer=(3), constraints=(/3: [/91 - ]; tight)]
       │    ├── key: (1)
       │    └── fd: (1)-->(2,3)
@@ -1994,7 +1994,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan virtual@secondary,partial
+ └── scan virtual@virtual_a_idx1,partial
       ├── columns: k:1!null a:2!null
       ├── constraint: /2/1: [/2 - /9]
       ├── key: (1)
@@ -2019,7 +2019,7 @@ project
       │    ├── columns: k:1!null b:3
       │    ├── key: (1)
       │    ├── fd: (1)-->(3)
-      │    └── scan virtual@secondary,partial
+      │    └── scan virtual@virtual_c_idx,partial
       │         ├── columns: k:1!null
       │         ├── constraint: /4/1: [/150 - /150]
       │         └── key: (1)
@@ -2045,7 +2045,7 @@ project
       │    ├── columns: k:1!null b:3
       │    ├── key: (1)
       │    ├── fd: (1)-->(3)
-      │    └── scan virtual@secondary,partial
+      │    └── scan virtual@virtual_c_idx,partial
       │         ├── columns: k:1!null
       │         ├── constraint: /4/1: [/150 - /150]
       │         └── key: (1)
@@ -2082,7 +2082,7 @@ project
       │         ├── columns: k:1!null b:3!null
       │         ├── key: (1)
       │         ├── fd: (1)-->(3)
-      │         ├── scan t55387@secondary,partial
+      │         ├── scan t55387@t55387_b_idx,partial
       │         │    ├── columns: k:1!null b:3!null
       │         │    ├── key: (1)
       │         │    └── fd: (1)-->(3)
@@ -7816,9 +7816,9 @@ memo (optimized, ~19KB, required=[presentation: k:1,a:2,b:3,c:4])
  │         ├── best: (scan t58390,cols=(1-4))
  │         └── cost: 1104.82
  ├── G3: (filters G7)
- ├── G4: (scan t58390@secondary,partial,cols=(1,4))
+ ├── G4: (scan t58390@t58390_c_idx,partial,cols=(1,4))
  │    └── []
- │         ├── best: (scan t58390@secondary,partial,cols=(1,4))
+ │         ├── best: (scan t58390@t58390_c_idx,partial,cols=(1,4))
  │         └── cost: 707.35
  ├── G5: (union-all G8 G9)
  │    ├── [ordering: +1]
@@ -7883,20 +7883,20 @@ memo (optimized, ~19KB, required=[presentation: k:1,a:2,b:3,c:4])
  ├── G23: (variable c)
  ├── G24: (const 1)
  ├── G25: (gt G29 G24)
- ├── G26: (scan t58390@secondary,partial,cols=(7,10))
+ ├── G26: (scan t58390@t58390_c_idx,partial,cols=(7,10))
  │    ├── [ordering: +7]
  │    │    ├── best: (sort G26)
  │    │    └── cost: 859.18
  │    └── []
- │         ├── best: (scan t58390@secondary,partial,cols=(7,10))
+ │         ├── best: (scan t58390@t58390_c_idx,partial,cols=(7,10))
  │         └── cost: 707.35
  ├── G27: (gt G30 G24)
- ├── G28: (scan t58390@secondary,partial,cols=(13,16))
+ ├── G28: (scan t58390@t58390_c_idx,partial,cols=(13,16))
  │    ├── [ordering: +13]
  │    │    ├── best: (sort G28)
  │    │    └── cost: 859.18
  │    └── []
- │         ├── best: (scan t58390@secondary,partial,cols=(13,16))
+ │         ├── best: (scan t58390@t58390_c_idx,partial,cols=(13,16))
  │         └── cost: 707.35
  ├── G29: (variable a)
  └── G30: (variable b)
@@ -7993,12 +7993,12 @@ memo (optimized, ~29KB, required=[presentation: a:1] [ordering: +2])
  ├── G18: (variable t1.b)
  ├── G19: (eq G32 G33)
  ├── G20: (ne G18 G34)
- ├── G21: (scan t61795@secondary [as=t1],cols=(1,2),constrained)
+ ├── G21: (scan t61795@t61795_b_key [as=t1],cols=(1,2),constrained)
  │    ├── [ordering: +2]
- │    │    ├── best: (scan t61795@secondary [as=t1],cols=(1,2),constrained)
+ │    │    ├── best: (scan t61795@t61795_b_key [as=t1],cols=(1,2),constrained)
  │    │    └── cost: 1043.62
  │    └── []
- │         ├── best: (scan t61795@secondary [as=t1],cols=(1,2),constrained)
+ │         ├── best: (scan t61795@t61795_b_key [as=t1],cols=(1,2),constrained)
  │         └── cost: 1043.62
  ├── G22: (filters G11)
  ├── G23: (scan t61795 [as=t1],cols=(11-13))
@@ -8062,23 +8062,23 @@ memo (optimized, ~29KB, required=[presentation: a:1] [ordering: +2])
  ├── G42: (variable t1.c)
  ├── G43: (variable t1.b)
  ├── G44: (variable t1.a)
- ├── G45: (scan t61795@secondary [as=t1],cols=(11,12),constrained)
+ ├── G45: (scan t61795@t61795_b_key [as=t1],cols=(11,12),constrained)
  │    └── []
- │         ├── best: (scan t61795@secondary [as=t1],cols=(11,12),constrained)
+ │         ├── best: (scan t61795@t61795_b_key [as=t1],cols=(11,12),constrained)
  │         └── cost: 1043.62
  ├── G46: (filters G36)
  ├── G47: (variable t1.c)
  ├── G48: (variable t1.b)
  ├── G49: (function G52 abs)
- ├── G50: (scan t61795@secondary [as=t1],cols=(16,17),constrained)
+ ├── G50: (scan t61795@t61795_b_key [as=t1],cols=(16,17),constrained)
  │    ├── [ordering: +16]
  │    │    ├── best: (sort G50)
  │    │    └── cost: 1280.42
  │    ├── [ordering: +17]
- │    │    ├── best: (scan t61795@secondary [as=t1],cols=(16,17),constrained)
+ │    │    ├── best: (scan t61795@t61795_b_key [as=t1],cols=(16,17),constrained)
  │    │    └── cost: 1043.62
  │    └── []
- │         ├── best: (scan t61795@secondary [as=t1],cols=(16,17),constrained)
+ │         ├── best: (scan t61795@t61795_b_key [as=t1],cols=(16,17),constrained)
  │         └── cost: 1043.62
  ├── G51: (filters G39)
  └── G52: (scalar-list G48)

@@ -212,7 +212,7 @@ CREATE TABLE p (i INT, INDEX (i) WHERE 1 = 1)
 opt
 SELECT i FROM p ORDER BY i
 ----
-scan p@secondary,partial
+scan p@p_i_idx,partial
  ├── columns: i:1
  └── ordering: +1
 

@@ -33,7 +33,7 @@ project
  ├── prune: (1-3)
  └── upsert abc
       ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
-      ├── arbiter indexes: secondary
+      ├── arbiter indexes: abc_b_c_key
       ├── canary column: rowid:17(int)
       ├── fetch columns: a:14(int) b:15(int) c:16(int) rowid:17(int)
       ├── insert-mapping:
@@ -221,7 +221,7 @@ project
  ├── prune: (1-3)
  └── insert abc
       ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
-      ├── arbiter indexes: primary secondary secondary
+      ├── arbiter indexes: abc_pkey abc_a_key abc_b_c_key
       ├── insert-mapping:
       │    ├── x:7 => a:1
       │    ├── y:8 => b:2
@@ -386,7 +386,7 @@ project
  ├── prune: (21)
  ├── upsert abc
  │    ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
- │    ├── arbiter indexes: primary
+ │    ├── arbiter indexes: abc_pkey
  │    ├── canary column: rowid:14(int)
  │    ├── fetch columns: a:11(int) b:12(int) c:13(int) rowid:14(int)
  │    ├── insert-mapping:
@@ -533,7 +533,7 @@ UPDATE SET b=2
 ----
 upsert abc
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: abc_a_key
  ├── canary column: a:15(int)
  ├── fetch columns: a:15(int) b:16(int) c:17(int) rowid:18(int)
  ├── insert-mapping:

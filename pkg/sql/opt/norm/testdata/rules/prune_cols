@@ -2186,7 +2186,7 @@ update partial_indexes
       │    ├── scan partial_indexes
       │    │    ├── columns: a:7!null d:10
       │    │    ├── partial index predicates
-      │    │    │    └── secondary: filters
+      │    │    │    └── partial_indexes_c_idx: filters
       │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(10)
@@ -2225,7 +2225,7 @@ update partial_indexes
       │    ├── scan partial_indexes
       │    │    ├── columns: a:7!null b:8 c:9 d:10
       │    │    ├── partial index predicates
-      │    │    │    └── secondary: filters
+      │    │    │    └── partial_indexes_c_idx: filters
       │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(8-10)
@@ -2245,7 +2245,7 @@ UPSERT INTO partial_indexes (a, d) VALUES (1, 2)
 ----
 upsert partial_indexes
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: partial_indexes_pkey
  ├── canary column: a:11
  ├── fetch columns: a:11 d:14
  ├── insert-mapping:
@@ -2284,7 +2284,7 @@ upsert partial_indexes
       │    │    ├── scan partial_indexes
       │    │    │    ├── columns: a:11!null b:12 d:14
       │    │    │    ├── partial index predicates
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12,14)
@@ -2302,7 +2302,7 @@ UPSERT INTO partial_indexes (a, b, d) VALUES (1, 2, 3)
 ----
 upsert partial_indexes
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: partial_indexes_pkey
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 d:14
  ├── insert-mapping:
@@ -2342,7 +2342,7 @@ upsert partial_indexes
       │    │    ├── scan partial_indexes
       │    │    │    ├── columns: a:11!null b:12 c:13 d:14
       │    │    │    ├── partial index predicates
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12-14)
@@ -2361,7 +2361,7 @@ INSERT INTO partial_indexes (a, d) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET d
 ----
 upsert partial_indexes
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: partial_indexes_pkey
  ├── canary column: a:11
  ├── fetch columns: a:11 d:14
  ├── insert-mapping:
@@ -2400,7 +2400,7 @@ upsert partial_indexes
       │    │    ├── scan partial_indexes
       │    │    │    ├── columns: a:11!null b:12 d:14
       │    │    │    ├── partial index predicates
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12,14)
@@ -2419,7 +2419,7 @@ INSERT INTO partial_indexes (a, d) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b
 ----
 upsert partial_indexes
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: partial_indexes_pkey
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 d:14
  ├── insert-mapping:
@@ -2464,7 +2464,7 @@ upsert partial_indexes
       │    │    │    ├── scan partial_indexes
       │    │    │    │    ├── columns: a:11!null b:12 c:13 d:14
       │    │    │    │    ├── partial index predicates
-      │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
       │    │    │    │    ├── key: (11)
       │    │    │    │    └── fd: (11)-->(12-14)
@@ -2501,7 +2501,7 @@ delete partial_indexes
       │    ├── scan partial_indexes
       │    │    ├── columns: a:7!null b:8 c:9
       │    │    ├── partial index predicates
-      │    │    │    └── secondary: filters
+      │    │    │    └── partial_indexes_c_idx: filters
       │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(8,9)
@@ -2542,7 +2542,7 @@ update virt_partial_idx
       │    │    │    └── v:10
       │    │    │         └── b:9 + 1
       │    │    ├── partial index predicates
-      │    │    │    └── secondary: filters
+      │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │         └── b:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(12)
@@ -2591,7 +2591,7 @@ update virt_partial_idx
       │    │    │    │    └── v:10
       │    │    │    │         └── b:9 + 1
       │    │    │    ├── partial index predicates
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │         └── b:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
       │    │    │    ├── key: (8)
       │    │    │    └── fd: (8)-->(9,11,12)
@@ -2614,7 +2614,7 @@ UPSERT INTO virt_partial_idx (a, d) VALUES (1, 2)
 ----
 upsert virt_partial_idx
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: virt_partial_idx_pkey
  ├── canary column: a:12
  ├── fetch columns: a:12 d:16
  ├── insert-mapping:
@@ -2665,7 +2665,7 @@ upsert virt_partial_idx
       │    │    │    │    │    └── v:14
       │    │    │    │    │         └── b:13 + 1
       │    │    │    │    ├── partial index predicates
-      │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
       │    │    │    │    ├── key: (12)
       │    │    │    │    └── fd: (12)-->(13,16)
@@ -2685,7 +2685,7 @@ UPSERT INTO virt_partial_idx (a, b, d) VALUES (1, 2, 3)
 ----
 upsert virt_partial_idx
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: virt_partial_idx_pkey
  ├── canary column: a:13
  ├── fetch columns: a:13 b:14 v:15 c:16 d:17
  ├── insert-mapping:
@@ -2738,7 +2738,7 @@ upsert virt_partial_idx
       │    │    │    │    │    └── v:15
       │    │    │    │    │         └── b:14 + 1
       │    │    │    │    ├── partial index predicates
-      │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │         └── b:14 > 0 [outer=(14), constraints=(/14: [/1 - ]; tight)]
       │    │    │    │    ├── key: (13)
       │    │    │    │    └── fd: (13)-->(14,16,17)
@@ -2759,7 +2759,7 @@ INSERT INTO virt_partial_idx (a, d) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET 
 ----
 upsert virt_partial_idx
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: virt_partial_idx_pkey
  ├── canary column: a:12
  ├── fetch columns: a:12 d:16
  ├── insert-mapping:
@@ -2810,7 +2810,7 @@ upsert virt_partial_idx
       │    │    │    │    │    └── v:14
       │    │    │    │    │         └── b:13 + 1
       │    │    │    │    ├── partial index predicates
-      │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
       │    │    │    │    ├── key: (12)
       │    │    │    │    └── fd: (12)-->(13,16)
@@ -2831,7 +2831,7 @@ INSERT INTO virt_partial_idx (a, d) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET 
 ----
 upsert virt_partial_idx
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: virt_partial_idx_pkey
  ├── canary column: a:12
  ├── fetch columns: a:12 b:13 v:14 c:15 d:16
  ├── insert-mapping:
@@ -2890,7 +2890,7 @@ upsert virt_partial_idx
       │    │    │    │    │    │    └── v:14
       │    │    │    │    │    │         └── b:13 + 1
       │    │    │    │    │    ├── partial index predicates
-      │    │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
       │    │    │    │    │    ├── key: (12)
       │    │    │    │    │    └── fd: (12)-->(13,15,16)
@@ -2934,7 +2934,7 @@ delete virt_partial_idx
       │    │    │    └── v:10
       │    │    │         └── b:9 + 1
       │    │    ├── partial index predicates
-      │    │    │    └── secondary: filters
+      │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │         └── b:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(9,11)
@@ -2977,7 +2977,7 @@ update partial_indexes
       │    │    ├── scan partial_indexes
       │    │    │    ├── columns: a:7!null b:8 c:9
       │    │    │    ├── partial index predicates
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
       │    │    │    ├── key: (7)
       │    │    │    └── fd: (7)-->(8,9)
@@ -3104,7 +3104,7 @@ INSERT INTO a (k, s) VALUES (1, 'foo') ON CONFLICT (k) DO UPDATE SET i=a.i+1
 ----
 upsert a
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: a_pkey
  ├── canary column: k:11
  ├── fetch columns: k:11 i:12 f:13 s:14
  ├── insert-mapping:
@@ -3156,7 +3156,7 @@ INSERT INTO a (k, s) VALUES (1, 'foo') ON CONFLICT (k) DO UPDATE SET i=a.i+1 RET
 ----
 upsert a
  ├── columns: k:1!null i:2 f:3 s:4
- ├── arbiter indexes: primary
+ ├── arbiter indexes: a_pkey
  ├── canary column: k:11
  ├── fetch columns: k:11 i:12 f:13 s:14
  ├── insert-mapping:
@@ -3217,7 +3217,7 @@ UPSERT INTO family (a, b) VALUES (1, 2)
 ----
 upsert family
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: family_pkey
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12
  ├── insert-mapping:
@@ -3266,7 +3266,7 @@ project
  ├── fd: ()-->(5)
  └── upsert family
       ├── columns: a:1!null e:5
-      ├── arbiter indexes: primary
+      ├── arbiter indexes: family_pkey
       ├── canary column: a:13
       ├── fetch columns: a:13 c:15 d:16 e:17
       ├── insert-mapping:
@@ -3325,7 +3325,7 @@ INSERT INTO family VALUES (1, 2, 3, 4) ON CONFLICT (a) DO UPDATE SET d=10
 ----
 upsert family
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: family_pkey
  ├── canary column: a:13
  ├── fetch columns: a:13 c:15 d:16
  ├── insert-mapping:
@@ -3376,7 +3376,7 @@ INSERT INTO mutation VALUES (1, 2, 3) ON CONFLICT (a) DO UPDATE SET b=10
 ----
 upsert mutation
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: mutation_pkey
  ├── canary column: a:12
  ├── fetch columns: a:12 b:13 c:14 d:15 e:16
  ├── insert-mapping:
@@ -3533,7 +3533,7 @@ UPSERT INTO checks (a, c, d) VALUES (1, 3, 4)
 ----
 upsert checks
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: checks_pkey
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 d:14
  ├── insert-mapping:
@@ -3757,7 +3757,7 @@ INSERT INTO uniq_fk_parent VALUES (2, 1) ON CONFLICT (k) DO UPDATE SET c = 1
 ----
 upsert uniq_fk_parent
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: uniq_fk_parent_pkey
  ├── canary column: uniq_fk_parent.k:11
  ├── fetch columns: uniq_fk_parent.k:11 uniq_fk_parent.b:13 uniq_fk_parent.c:14
  ├── insert-mapping:
@@ -3869,7 +3869,7 @@ INSERT INTO uniq_fk_parent VALUES (1) ON CONFLICT (k) DO UPDATE SET d = 1
 ----
 upsert uniq_fk_parent
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: uniq_fk_parent_pkey
  ├── canary column: uniq_fk_parent.k:10
  ├── fetch columns: uniq_fk_parent.k:10 uniq_fk_parent.d:14
  ├── insert-mapping:
@@ -4570,7 +4570,7 @@ project
  ├── fd: ()-->(1-3)
  └── upsert returning_test
       ├── columns: a:1 b:2 c:3 rowid:8!null
-      ├── arbiter indexes: secondary
+      ├── arbiter indexes: returning_test_a_key
       ├── canary column: rowid:23
       ├── fetch columns: a:16 b:17 c:18 rowid:23
       ├── insert-mapping:
@@ -4668,7 +4668,7 @@ project
  ├── fd: ()-->(1-4)
  └── upsert returning_test
       ├── columns: a:1!null b:2!null c:3!null d:4 rowid:8!null
-      ├── arbiter indexes: primary
+      ├── arbiter indexes: returning_test_pkey
       ├── canary column: rowid:23
       ├── fetch columns: a:16 b:17 c:18 d:19 rowid:23
       ├── insert-mapping:
