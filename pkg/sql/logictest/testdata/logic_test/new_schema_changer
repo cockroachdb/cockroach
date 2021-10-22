@@ -363,7 +363,7 @@ statement error cannot drop type "typ6" because other objects \(\[test.public.t6
 DROP TYPE typ6
 
 
-subtest view-sanity
+subtest view_sanity
 
 statement ok
 CREATE TABLE t1 (id INT PRIMARY KEY, name varchar(256));
@@ -516,7 +516,7 @@ ALTER TABLE t8 DROP COLUMN x;
 statement ok
 DROP TYPE typ8
 
-subtest drop-type-in-single-transaction
+subtest drop_type_in_single_transaction
 
 statement ok
 CREATE TYPE defaultdb.typ AS ENUM('a');
@@ -537,7 +537,7 @@ statement ok
 COMMIT;
 
 # Drop schema testing
-subtest drop-schema
+subtest drop_schema
 
 statement ok
 CREATE DATABASE db1;
@@ -576,7 +576,7 @@ statement ok
 DROP DATABASE db1
 
 # Drop database testing
-subtest drop-database
+subtest drop_database
 
 statement ok
 CREATE DATABASE db1;
@@ -617,7 +617,7 @@ CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1
 statement error schema "sc1" is not empty and CASCADE was not specified
 DROP SCHEMA db1.sc1
 
-statement error database "db1" is not empty and CASCADE was not specified
+statement error database "db1" has a non-empty schema "public" and CASCADE was not specified
 DROP DATABASE db1
 
 statement ok
