@@ -386,6 +386,8 @@ github.com/cockroachdb/gostdlib v1.13.0 h1:TzSEPYgkKDNei3gbLc0rrHu4iHyBp7/+NxPOF
 github.com/cockroachdb/gostdlib v1.13.0/go.mod h1:eXX95p9QDrYwJfJ6AgeN9QnRa/lqqid9LAzWz/l5OgA=
 github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f h1:o/kfcElHqOiXqcou5a3rIlMc7oJbMQkeLk0VQJ7zgqY=
 github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f/go.mod h1:i/u985jwjWRlyHXQbwatDASoW0RMlZ/3i9yJHE2xLkI=
+github.com/cockroachdb/panicparse/v2 v2.0.0-20211103220158-604c82a44f1e h1:FrERdkPlRj+v7fc+PGpey3GUiDGuTR5CsmLCA54YJ8I=
+github.com/cockroachdb/panicparse/v2 v2.0.0-20211103220158-604c82a44f1e/go.mod h1:pMxsKyCewnV3xPaFvvT9NfwvDTcIx2Xqg0qL5Gq0SjM=
 github.com/cockroachdb/pebble v0.0.0-20211019184201-7fec828fc1af h1:NY+UDVTyU+Y2wKr0ocnBSbXGYTHEGwnQ9ukP+qg7xfY=
 github.com/cockroachdb/pebble v0.0.0-20211019184201-7fec828fc1af/go.mod h1:buxOO9GBtOcq1DiXDpIPYrmxY020K2A8lOrwno5FetU=
 github.com/cockroachdb/redact v1.0.8/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
@@ -998,6 +1000,8 @@ github.com/google/pprof v0.0.0-20210827144239-02619b876842 h1:JCrt5MIE1fHQtdy182
 github.com/google/pprof v0.0.0-20210827144239-02619b876842/go.mod h1:kpwsk12EmLew5upagYY7GY0pfYCcupk39gWOCRROcvE=
 github.com/google/renameio v0.1.0/go.mod h1:KWCgfxg9yswjAJkECMjeO8J8rahYeXnNhOm40UhjYkI=
 github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510/go.mod h1:pupxD2MaaD3pAXIBCelhxNneeOaAeabZDe5s4K6zSpQ=
+github.com/google/skylark v0.0.0-20181101142754-a5f7082aabed h1:rZdD1GeRTHD1aG+VIvhQEYXurx6Wfg4QIT5YVl2tSC8=
+github.com/google/skylark v0.0.0-20181101142754-a5f7082aabed/go.mod h1:CKSX6SxHW1vp20ZNaeGe3TFFBIwCG6vaYrpAiOzX+NA=
 github.com/google/uuid v0.0.0-20161128191214-064e2069ce9c/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/google/uuid v1.0.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/google/uuid v1.1.1/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
@@ -1389,8 +1393,6 @@ github.com/marstr/guid v1.1.0/go.mod h1:74gB1z2wpxxInTG6yaqA7KrtM0NZ+RbrcqDvYHef
 github.com/martini-contrib/auth v0.0.0-20150219114609-fa62c19b7ae8/go.mod h1:ahTFgV/NtzY/CALneRrC67m1dis5arHTQDfyIhKk69E=
 github.com/martini-contrib/gzip v0.0.0-20151124214156-6c035326b43f/go.mod h1:jhUB0rZB2TPWqy0yGugKRRictO591eSO7If7O4MfCaA=
 github.com/martini-contrib/render v0.0.0-20150707142108-ec18f8345a11/go.mod h1:Ah2dBMoxZEqk118as2T4u4fjfXarE0pPnMJaArZQZsI=
-github.com/maruel/panicparse/v2 v2.2.0 h1:4/Pd1VuUKlxD7+Dwx9sm49vgAr/tTMexKSh6uPnZQkw=
-github.com/maruel/panicparse/v2 v2.2.0/go.mod h1:pMxsKyCewnV3xPaFvvT9NfwvDTcIx2Xqg0qL5Gq0SjM=
 github.com/marusama/semaphore v0.0.0-20190110074507-6952cef993b2 h1:sq+a5mb8zHbmHhrIH06oqIMGsanjpbxNgxEgZVfgpvQ=
 github.com/marusama/semaphore v0.0.0-20190110074507-6952cef993b2/go.mod h1:TmeOqAKoDinfPfSohs14CO3VcEf7o+Bem6JiNe05yrQ=
 github.com/matryer/moq v0.0.0-20190312154309-6cfb0558e1bd/go.mod h1:9ELz6aaclSIGnZBoaSLZ3NAl1VTufbOrXBPvtcy6WiQ=
