@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "loqrecovery",
+    srcs = ["recovery.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
+        "//pkg/kv/kvserver/stateloader",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/storage",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "loqrecovery_test",
+    srcs = [
+        "recovery_env_test.go",
+        "recovery_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":loqrecovery"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
+        "//pkg/kv/kvserver/stateloader",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
+        "//pkg/util/keysutil",
+        "//pkg/util/leaktest",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+        "@io_etcd_go_etcd_raft_v3//raftpb",
+    ],
+)
