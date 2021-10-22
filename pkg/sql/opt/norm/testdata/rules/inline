@@ -876,16 +876,16 @@ project
       ├── inner-join (merge)
       │    ├── inner-join (merge)
       │    │    ├── project
-      │    │    │    ├── scan t63794_bc@secondary
+      │    │    │    ├── scan t63794_bc@t63794_bc_b_idx
       │    │    │    └── projections
       │    │    │         └── b % 2
       │    │    ├── project
-      │    │    │    ├── scan t63794_bc@secondary
+      │    │    │    ├── scan t63794_bc@t63794_bc_b_idx
       │    │    │    └── projections
       │    │    │         └── b % 2
       │    │    └── filters (true)
       │    ├── project
-      │    │    ├── scan t63794_bc@secondary
+      │    │    ├── scan t63794_bc@t63794_bc_b_idx
       │    │    └── projections
       │    │         └── b % 2
       │    └── filters (true)

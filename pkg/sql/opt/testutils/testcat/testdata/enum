@@ -15,5 +15,5 @@ TABLE t
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── PRIMARY INDEX primary
+ └── PRIMARY INDEX t_pkey
       └── rowid int not null default (unique_rowid()) [hidden]

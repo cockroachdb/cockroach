@@ -19,7 +19,7 @@ UPSERT INTO uniq VALUES (1, 1, 1, 1, 1), (2, 2, 2, 2, 2)
 ----
 upsert uniq
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: uniq_pkey
  ├── canary column: uniq.k:13
  ├── fetch columns: uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
  ├── insert-mapping:
@@ -106,7 +106,7 @@ UPSERT INTO uniq (k, v, w) VALUES (1, 1, 1), (2, 2, 2)
 ----
 upsert uniq
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: uniq_pkey
  ├── canary column: uniq.k:13
  ├── fetch columns: uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
  ├── insert-mapping:
@@ -199,7 +199,7 @@ UPSERT INTO uniq (k, w, x) VALUES (1, NULL, 1), (2, NULL, NULL)
 ----
 upsert uniq
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: uniq_pkey
  ├── canary column: uniq.k:13
  ├── fetch columns: uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
  ├── insert-mapping:
@@ -292,7 +292,7 @@ UPSERT INTO uniq SELECT k, v, w FROM other
 ----
 upsert uniq
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: uniq_pkey
  ├── canary column: uniq.k:18
  ├── fetch columns: uniq.k:18 uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22
  ├── insert-mapping:
@@ -386,7 +386,7 @@ INSERT INTO uniq VALUES (100, 1), (200, 1) ON CONFLICT (k) DO UPDATE SET w = exc
 ----
 upsert uniq
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: uniq_pkey
  ├── canary column: uniq.k:12
  ├── fetch columns: uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16
  ├── insert-mapping:
@@ -482,7 +482,7 @@ INSERT INTO uniq SELECT k, v FROM other ON CONFLICT (k) DO UPDATE SET w = uniq.k
 ----
 upsert uniq
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: uniq_pkey
  ├── canary column: uniq.k:18
  ├── fetch columns: uniq.k:18 uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22
  ├── insert-mapping:
@@ -1104,7 +1104,7 @@ UPSERT INTO uniq_hidden_pk (a, b, d) VALUES (1, 1, 1), (2, 2, 2)
 ----
 upsert uniq_hidden_pk
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: uniq_hidden_pk_pkey
  ├── canary column: uniq_hidden_pk.rowid:17
  ├── fetch columns: uniq_hidden_pk.a:13 uniq_hidden_pk.b:14 uniq_hidden_pk.c:15 uniq_hidden_pk.d:16 uniq_hidden_pk.rowid:17
  ├── insert-mapping:
@@ -1428,7 +1428,7 @@ UPSERT INTO uniq_fk_parent (a) VALUES (1)
 ----
 upsert uniq_fk_parent
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: uniq_fk_parent_pkey
  ├── canary column: uniq_fk_parent.rowid:8
  ├── fetch columns: uniq_fk_parent.a:7 uniq_fk_parent.rowid:8
  ├── insert-mapping:
@@ -1801,7 +1801,7 @@ ON CONFLICT (a) WHERE b > 10 DO UPDATE SET a = 10
 ----
 upsert uniq_partial_constraint_and_index
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: uniq_partial_constraint_and_index_a_key
  ├── canary column: uniq_partial_constraint_and_index.k:10
  ├── fetch columns: uniq_partial_constraint_and_index.k:10 uniq_partial_constraint_and_index.a:11 uniq_partial_constraint_and_index.b:12
  ├── insert-mapping:
@@ -1825,7 +1825,7 @@ upsert uniq_partial_constraint_and_index
  │    │    │    ├── scan uniq_partial_constraint_and_index
  │    │    │    │    ├── columns: uniq_partial_constraint_and_index.k:10!null uniq_partial_constraint_and_index.a:11 uniq_partial_constraint_and_index.b:12
  │    │    │    │    └── partial index predicates
- │    │    │    │         └── secondary: filters (true)
+ │    │    │    │         └── uniq_partial_constraint_and_index_a_key: filters (true)
  │    │    │    └── filters
  │    │    │         └── uniq_partial_constraint_and_index.a:11 = 1
  │    │    └── filters (true)
@@ -1855,7 +1855,7 @@ upsert uniq_partial_constraint_and_index
                      │    ├── scan uniq_partial_constraint_and_index
                      │    │    ├── columns: uniq_partial_constraint_and_index.k:20!null uniq_partial_constraint_and_index.a:21 uniq_partial_constraint_and_index.b:22
                      │    │    └── partial index predicates
-                     │    │         └── secondary: filters (true)
+                     │    │         └── uniq_partial_constraint_and_index_a_key: filters (true)
                      │    └── filters
                      │         └── uniq_partial_constraint_and_index.b:22 > 10
                      └── filters
@@ -1905,7 +1905,7 @@ upsert uniq_constraint_and_partial_index
  │    │    │    ├── scan uniq_constraint_and_partial_index
  │    │    │    │    ├── columns: uniq_constraint_and_partial_index.k:10!null uniq_constraint_and_partial_index.a:11 uniq_constraint_and_partial_index.b:12
  │    │    │    │    └── partial index predicates
- │    │    │    │         └── secondary: filters
+ │    │    │    │         └── uniq_constraint_and_partial_index_a_key: filters
  │    │    │    │              └── uniq_constraint_and_partial_index.b:12 > 0
  │    │    │    └── filters
  │    │    │         └── uniq_constraint_and_partial_index.a:11 = 1
@@ -1929,7 +1929,7 @@ upsert uniq_constraint_and_partial_index
                      ├── scan uniq_constraint_and_partial_index
                      │    ├── columns: uniq_constraint_and_partial_index.k:21!null uniq_constraint_and_partial_index.a:22
                      │    └── partial index predicates
-                     │         └── secondary: filters
+                     │         └── uniq_constraint_and_partial_index_a_key: filters
                      │              └── uniq_constraint_and_partial_index.b:23 > 0
                      └── filters
                           ├── a:27 = uniq_constraint_and_partial_index.a:22
@@ -1979,7 +1979,7 @@ UPSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'a', 1.0), (2, 'b', 2.0)
 ----
 upsert uniq_computed_pk
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: uniq_computed_pk_pkey
  ├── canary column: uniq_computed_pk.c_i_expr:18
  ├── fetch columns: uniq_computed_pk.i:15 uniq_computed_pk.s:16 uniq_computed_pk.d:17 uniq_computed_pk.c_i_expr:18 uniq_computed_pk.c_s:19 uniq_computed_pk.c_d:20 uniq_computed_pk.c_d_expr:21
  ├── insert-mapping:

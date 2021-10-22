@@ -30,7 +30,7 @@ inner-join (lookup abcd)
  ├── lookup columns are key
  ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int) abcd.rowid:9(int!null)
  │    ├── key columns: [1] = [6]
  │    ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
@@ -52,7 +52,7 @@ inner-join (lookup abcd)
  ├── lookup columns are key
  ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, distinct(6)=9.9, null(6)=0]
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1(int!null) n:2(int!null) a:6(int!null) b:7(int) abcd.rowid:9(int!null)
  │    ├── key columns: [1] = [6]
  │    ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, distinct(6)=9.9, null(6)=0]
@@ -79,7 +79,7 @@ inner-join (lookup abcd)
  ├── lookup columns are key
  ├── stats: [rows=33.5823697, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int!null) abcd.rowid:9(int!null)
  │    ├── lookup expression
  │    │    └── filters
@@ -103,7 +103,7 @@ inner-join (lookup abcd)
  ├── lookup columns are key
  ├── stats: [rows=33.5823697, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int) abcd.rowid:9(int!null)
  │    ├── key columns: [1] = [6]
  │    ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
@@ -125,7 +125,7 @@ inner-join (lookup abcd)
  ├── lookup columns are key
  ├── stats: [rows=0.334949339, distinct(1)=0.334949339, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(6)=0.334949339, null(6)=0, distinct(7)=1e-10, null(7)=0]
  ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1(int!null) n:2(int!null) a:6(int!null) b:7(int!null) abcd.rowid:9(int!null)
  │    ├── key columns: [1 2] = [6 7]
  │    ├── stats: [rows=0.970299, distinct(1)=0.970299, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(6)=0.970299, null(6)=0, distinct(7)=1e-10, null(7)=0]
@@ -402,7 +402,7 @@ inner-join (lookup wxyz)
  ├── lookup columns are key
  ├── stats: [rows=49.3441882, distinct(1)=39.1263061, null(1)=0, distinct(7)=39.1263061, null(7)=0]
  ├── fd: ()-->(8), (1)==(7), (7)==(1)
- ├── inner-join (lookup wxyz@secondary)
+ ├── inner-join (lookup wxyz@wxyz_x_y_z_idx)
  │    ├── columns: m:1(int!null) n:2(int) x:7(int!null) y:8(int!null) z:9(int) wxyz.rowid:10(int!null)
  │    ├── key columns: [1 13] = [7 8]
  │    ├── stats: [rows=19.8, distinct(1)=19.8, null(1)=0, distinct(7)=19.8, null(7)=0, distinct(8)=1, null(8)=0, distinct(13)=1, null(13)=0]

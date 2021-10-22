@@ -312,7 +312,7 @@ CREATE TABLE xyzw (
 ----
 
 build
-UPDATE xyzw@primary SET x=2 WHERE z=1
+UPDATE xyzw@xyzw_pkey SET x=2 WHERE z=1
 ----
 update xyzw
  ├── columns: <none>
@@ -325,7 +325,7 @@ update xyzw
       │    ├── columns: x:7!null y:8 z:9!null w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── scan xyzw
       │    │    ├── columns: x:7!null y:8 z:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    └── flags: force-index=primary
+      │    │    └── flags: force-index=xyzw_pkey
       │    └── filters
       │         └── z:9 = 1
       └── projections

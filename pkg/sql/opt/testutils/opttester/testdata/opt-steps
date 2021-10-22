@@ -134,7 +134,7 @@ GenerateIndexScans (higher cost)
     ├── key: (1)
     ├── fd: ()-->(2)
   - ├── scan ab
-  + ├── scan ab@secondary
+  + ├── scan ab@ab_b_idx
     │    ├── columns: a:1(int!null) b:2(int)
     │    ├── key: (1)
     │    └── fd: (1)-->(2)
@@ -150,7 +150,7 @@ GenerateConstrainedScans
   Cost: 24.42
 ================================================================================
   -select
-  +scan ab@secondary
+  +scan ab@ab_b_idx
     ├── columns: a:1(int!null) b:2(int!null)
   + ├── constraint: /2/1: [/1 - /1]
     ├── key: (1)
@@ -171,7 +171,7 @@ GenerateZigzagJoins (no changes)
 Final best expression
   Cost: 24.42
 ================================================================================
-  scan ab@secondary
+  scan ab@ab_b_idx
    ├── columns: a:1(int!null) b:2(int!null)
    ├── constraint: /2/1: [/1 - /1]
    ├── key: (1)
@@ -693,7 +693,7 @@ GenerateIndexScans (higher cost)
     ├── columns: k:1(int!null) c:2(bool)
     ├── fd: ()-->(1,2)
   - ├── scan comp
-  + ├── scan comp@secondary
+  + ├── scan comp@comp_c_k_idx
     │    ├── columns: k:1(int) c:2(bool)
   - │    ├── computed column expressions
   - │    │    └── c:2
@@ -719,7 +719,7 @@ FoldComparison
   Cost: 24.52
 ================================================================================
   -select
-  +scan comp@secondary
+  +scan comp@comp_c_k_idx
     ├── columns: k:1(int!null) c:2(bool)
   - ├── fd: ()-->(1,2)
   - ├── scan comp
@@ -746,7 +746,7 @@ GenerateZigzagJoins (no changes)
 Final best expression
   Cost: 24.52
 ================================================================================
-  scan comp@secondary
+  scan comp@comp_c_k_idx
    ├── columns: k:1(int!null) c:2(bool)
    ├── constraint: /2/1/3: [/true/1 - /true/1]
    └── fd: ()-->(1,2)

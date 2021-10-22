@@ -98,13 +98,13 @@ limit
  │    ├── cardinality: [0 - 10]
  │    ├── ordering: +2
  │    ├── limit hint: 5.00
- │    ├── scan def@secondary
+ │    ├── scan def@def_d_e_f_idx
  │    │    ├── columns: e:8 f:9
  │    │    ├── constraint: /7/8/9/10: [/1 - /1]
  │    │    ├── limit: 5
  │    │    ├── ordering: +8
  │    │    └── limit hint: 5.00
- │    └── scan def@secondary
+ │    └── scan def@def_d_e_f_idx
  │         ├── columns: e:14 f:15
  │         ├── constraint: /13/14/15/16: [/3 - /3]
  │         ├── limit: 5
@@ -1711,7 +1711,7 @@ except-all
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    └── ordering: +1
- └── scan t69497_abc@secondary
+ └── scan t69497_abc@t69497_abc_a_b_c_idx
       ├── columns: a:6 b:7 c:8
       └── ordering: +6,+7,-8
 
@@ -1743,7 +1743,7 @@ except-all
  └── sort (segmented)
       ├── columns: a:7 b:8 c:9 d:10
       ├── ordering: +7,+8,-9,+10
-      └── scan t69497_abcd@secondary
+      └── scan t69497_abcd@t69497_abcd_a_b_c_idx
            ├── columns: a:7 b:8 c:9 d:10
            └── ordering: +7,+8,-9
 
@@ -2086,7 +2086,7 @@ sort
       ├── volatile, mutations
       ├── upsert abc
       │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
-      │    ├── arbiter indexes: primary
+      │    ├── arbiter indexes: abc_pkey
       │    ├── canary column: abc.a:11
       │    ├── fetch columns: abc.a:11 abc.b:12 abc.c:13
       │    ├── insert-mapping:
@@ -2389,7 +2389,7 @@ distinct-on
  ├── grouping columns: b:5!null
  ├── key: (5)
  ├── ordering: +5
- └── inner-join (lookup t44469_cd@secondary)
+ └── inner-join (lookup t44469_cd@t44469_cd_c_d_idx)
       ├── columns: a:1!null b:5!null c:9!null d:10!null
       ├── flags: force lookup join (into right side)
       ├── key columns: [14 1] = [9 10]
@@ -2399,13 +2399,13 @@ distinct-on
       │    ├── columns: "lookup_join_const_col_@9":14!null a:1!null b:5!null
       │    ├── fd: ()-->(14), (1)==(5), (5)==(1)
       │    ├── ordering: +(1|5) [actual: +1]
-      │    ├── inner-join (lookup t44469_b@secondary)
+      │    ├── inner-join (lookup t44469_b@t44469_b_b_idx)
       │    │    ├── columns: a:1!null b:5!null
       │    │    ├── flags: force lookup join (into right side)
       │    │    ├── key columns: [1] = [5]
       │    │    ├── fd: (1)==(5), (5)==(1)
       │    │    ├── ordering: +(1|5) [actual: +1]
-      │    │    ├── scan t44469_a@secondary
+      │    │    ├── scan t44469_a@t44469_a_a_idx
       │    │    │    ├── columns: a:1
       │    │    │    └── ordering: +1
       │    │    └── filters (true)

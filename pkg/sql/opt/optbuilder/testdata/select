@@ -368,13 +368,13 @@ CREATE TABLE xyzw (
 # SELECT with index hints.
 
 build
-SELECT * FROM xyzw@primary
+SELECT * FROM xyzw@xyzw_pkey
 ----
 project
  ├── columns: x:1!null y:2 z:3 w:4
  └── scan xyzw
       ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
-      └── flags: force-index=primary
+      └── flags: force-index=xyzw_pkey
 
 build
 SELECT * FROM xyzw@foo
@@ -1178,7 +1178,7 @@ project
  ├── columns: a:1!null y:2 b:3 c:4
  └── scan tab53 [as=t]
       ├── columns: a:1!null y:2 b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
-      └── flags: force-index=primary
+      └── flags: force-index=tab53_pkey
 
 build
 SELECT * FROM [53 AS t]@[2]

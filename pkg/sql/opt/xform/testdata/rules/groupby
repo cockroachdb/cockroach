@@ -2466,13 +2466,13 @@ project
       │    │    │    ├── right columns: a:21 b:22
       │    │    │    ├── ordering: +2,+3
       │    │    │    ├── limit hint: 3.00
-      │    │    │    ├── scan regional@secondary
+      │    │    │    ├── scan regional@regional_r_a_b_key
       │    │    │    │    ├── columns: a:12!null b:13!null
       │    │    │    │    ├── constraint: /11/12/13: [/'east' - /'east']
       │    │    │    │    ├── key: (12,13)
       │    │    │    │    ├── ordering: +12,+13
       │    │    │    │    └── limit hint: 3.00
-      │    │    │    └── scan regional@secondary
+      │    │    │    └── scan regional@regional_r_a_b_key
       │    │    │         ├── columns: a:21!null b:22!null
       │    │    │         ├── constraint: /20/21/22: [/'west' - /'west']
       │    │    │         ├── key: (21,22)
@@ -2526,7 +2526,7 @@ project
       │    │    │    │    ├── columns: d:33!null e:34!null
       │    │    │    │    ├── ordering: +33,+34
       │    │    │    │    ├── limit hint: 3.00
-      │    │    │    │    ├── scan regional@secondary
+      │    │    │    │    ├── scan regional@regional_r_d_e_key
       │    │    │    │    │    ├── columns: d:33!null e:34
       │    │    │    │    │    ├── constraint: /29/33/34: (/'east'/NULL - /'east']
       │    │    │    │    │    ├── ordering: +33,+34
@@ -2537,7 +2537,7 @@ project
       │    │    │         ├── columns: d:42!null e:43!null
       │    │    │         ├── ordering: +42,+43
       │    │    │         ├── limit hint: 3.00
-      │    │    │         ├── scan regional@secondary
+      │    │    │         ├── scan regional@regional_r_d_e_key
       │    │    │         │    ├── columns: d:42!null e:43
       │    │    │         │    ├── constraint: /38/42/43: (/'west'/NULL - /'west']
       │    │    │         │    ├── ordering: +42,+43
@@ -2677,12 +2677,12 @@ distinct-on
       ├── left columns: a:11 b:12
       ├── right columns: a:20 b:21
       ├── ordering: +2,+3
-      ├── scan regional@secondary
+      ├── scan regional@regional_r_a_b_key
       │    ├── columns: a:11!null b:12!null
       │    ├── constraint: /10/11/12: [/'east' - /'east']
       │    ├── key: (11,12)
       │    └── ordering: +11,+12
-      └── scan regional@secondary
+      └── scan regional@regional_r_a_b_key
            ├── columns: a:20!null b:21!null
            ├── constraint: /19/20/21: [/'west' - /'west']
            ├── key: (20,21)
@@ -2707,7 +2707,7 @@ distinct-on
       │    ├── columns: a:11!null b:12!null
       │    ├── key: (11,12)
       │    ├── ordering: +11,+12
-      │    ├── scan regional@secondary
+      │    ├── scan regional@regional_r_a_b_key
       │    │    ├── columns: a:11!null b:12!null
       │    │    ├── constraint: /10/11/12: [/'east' - /'east']
       │    │    ├── key: (11,12)
@@ -2718,7 +2718,7 @@ distinct-on
            ├── columns: a:20!null b:21!null
            ├── key: (20,21)
            ├── ordering: +20,+21
-           ├── scan regional@secondary
+           ├── scan regional@regional_r_a_b_key
            │    ├── columns: a:20!null b:21!null
            │    ├── constraint: /19/20/21: [/'west' - /'west']
            │    ├── key: (20,21)
@@ -2732,7 +2732,7 @@ INSERT INTO xyz SELECT a, b, c FROM regional ON CONFLICT (x) DO UPDATE SET z=2.0
 ----
 upsert xyz
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: xyz_pkey
  ├── canary column: x:15
  ├── fetch columns: x:15 y:16 z:17
  ├── insert-mapping:
@@ -2770,13 +2770,13 @@ upsert xyz
       │    │    │    ├── left columns: a:25 b:26 c:27
       │    │    │    ├── right columns: a:34 b:35 c:36
       │    │    │    ├── ordering: +7
-      │    │    │    ├── scan regional@secondary
+      │    │    │    ├── scan regional@regional_r_a_b_key
       │    │    │    │    ├── columns: a:25!null b:26!null c:27
       │    │    │    │    ├── constraint: /24/25/26: [/'east' - /'east']
       │    │    │    │    ├── key: (25,26)
       │    │    │    │    ├── fd: (25,26)-->(27)
       │    │    │    │    └── ordering: +25
-      │    │    │    └── scan regional@secondary
+      │    │    │    └── scan regional@regional_r_a_b_key
       │    │    │         ├── columns: a:34!null b:35!null c:36
       │    │    │         ├── constraint: /33/34/35: [/'west' - /'west']
       │    │    │         ├── key: (34,35)
@@ -2798,7 +2798,7 @@ ON CONFLICT (x) DO UPDATE SET z=2.0
 ----
 upsert xyz
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: xyz_pkey
  ├── canary column: x:15
  ├── fetch columns: x:15 y:16 z:17
  ├── insert-mapping:
@@ -2841,7 +2841,7 @@ upsert xyz
       │    │    │    │    ├── key: (25,26)
       │    │    │    │    ├── fd: (25,26)-->(27)
       │    │    │    │    ├── ordering: +25
-      │    │    │    │    ├── scan regional@secondary
+      │    │    │    │    ├── scan regional@regional_r_a_b_key
       │    │    │    │    │    ├── columns: a:25!null b:26!null c:27
       │    │    │    │    │    ├── constraint: /24/25/26: [/'east' - /'east']
       │    │    │    │    │    ├── key: (25,26)
@@ -2854,7 +2854,7 @@ upsert xyz
       │    │    │         ├── key: (34,35)
       │    │    │         ├── fd: (34,35)-->(36)
       │    │    │         ├── ordering: +34
-      │    │    │         ├── scan regional@secondary
+      │    │    │         ├── scan regional@regional_r_a_b_key
       │    │    │         │    ├── columns: a:34!null b:35!null c:36
       │    │    │         │    ├── constraint: /33/34/35: [/'west' - /'west']
       │    │    │         │    ├── key: (34,35)
@@ -2888,12 +2888,12 @@ group-by
  │    ├── left columns: a:12 b:13
  │    ├── right columns: a:21 b:22
  │    ├── ordering: +2,+3
- │    ├── scan regional@secondary
+ │    ├── scan regional@regional_r_a_b_key
  │    │    ├── columns: a:12!null b:13!null
  │    │    ├── constraint: /11/12/13: [/'east' - /'east']
  │    │    ├── key: (12,13)
  │    │    └── ordering: +12,+13
- │    └── scan regional@secondary
+ │    └── scan regional@regional_r_a_b_key
  │         ├── columns: a:21!null b:22!null
  │         ├── constraint: /20/21/22: [/'west' - /'west']
  │         ├── key: (21,22)
@@ -2917,7 +2917,7 @@ group-by
  ├── sort
  │    ├── columns: a:2!null c:4
  │    ├── ordering: +4 opt(2) [actual: +4]
- │    └── scan regional@secondary
+ │    └── scan regional@regional_r_a_b_key
  │         └── columns: a:2!null c:4
  └── aggregations
       └── array-agg [as=array_agg:10, outer=(4)]
@@ -2934,7 +2934,7 @@ distinct-on
  ├── grouping columns: r:1!null a:2!null
  ├── internal-ordering: +1,+2
  ├── key: (1,2)
- └── scan regional@secondary
+ └── scan regional@regional_r_a_b_key
       ├── columns: r:1!null a:2!null
       └── ordering: +1,+2
 
@@ -2950,7 +2950,7 @@ group-by
  ├── internal-ordering: +1 opt(2)
  ├── key: (2)
  ├── fd: (2)-->(10)
- ├── scan regional@secondary
+ ├── scan regional@regional_r_a_b_key
  │    ├── columns: r:1!null a:2!null
  │    └── ordering: +1 opt(2) [actual: +1]
  └── aggregations
@@ -3057,7 +3057,7 @@ INSERT INTO xyz SELECT a, a, b FROM abcd WHERE c > 0 ON CONFLICT (x) DO UPDATE S
 ----
 upsert xyz
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: xyz_pkey
  ├── canary column: x:13
  ├── fetch columns: x:13 y:14 z:15
  ├── insert-mapping:
@@ -3108,7 +3108,7 @@ INSERT INTO xyz SELECT c, c, b FROM abcd WHERE d = 1 ON CONFLICT (x) DO UPDATE S
 ----
 upsert xyz
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: xyz_pkey
  ├── canary column: x:13
  ├── fetch columns: x:13 y:14 z:15
  ├── insert-mapping:

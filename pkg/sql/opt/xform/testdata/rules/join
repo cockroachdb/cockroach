@@ -1822,7 +1822,7 @@ semi-join (merge)
  │    ├── columns: cust_id:6 order_date:7!null
  │    ├── fd: ()-->(7)
  │    ├── ordering: +6 opt(7) [actual: +6]
- │    └── scan orders@secondary [as=o]
+ │    └── scan orders@orders_order_date_idx [as=o]
  │         ├── columns: cust_id:6 order_date:7!null
  │         ├── constraint: /7/5: [/'2019-01-01' - /'2019-01-01']
  │         └── fd: ()-->(7)
@@ -1849,7 +1849,7 @@ project
       │    ├── columns: cust_id:6
       │    ├── grouping columns: cust_id:6
       │    ├── key: (6)
-      │    └── scan orders@secondary [as=o]
+      │    └── scan orders@orders_order_date_idx [as=o]
       │         ├── columns: cust_id:6 order_date:7!null
       │         ├── constraint: /7/5: [/'2019-01-01' - /'2019-01-01']
       │         └── fd: ()-->(7)
@@ -2331,10 +2331,10 @@ inner-join (merge)
  ├── left ordering: +1
  ├── right ordering: +5
  ├── fd: (1)==(5), (5)==(1)
- ├── scan partial_a@secondary,partial
+ ├── scan partial_a@partial_a_a_idx,partial
  │    ├── columns: a:1!null
  │    └── ordering: +1
- ├── scan partial_b@secondary,partial
+ ├── scan partial_b@partial_b_b_idx,partial
  │    ├── columns: b:5!null
  │    └── ordering: +5
  └── filters (true)
@@ -2355,7 +2355,7 @@ CREATE TABLE abcde (a INT, b INT, c INT, d INT, e INT, INDEX (a,b,c))
 opt expect=GenerateLookupJoins
 SELECT a,b,n,m FROM small JOIN abcd ON a=m
 ----
-inner-join (lookup abcd@secondary)
+inner-join (lookup abcd@abcd_a_b_idx)
  ├── columns: a:6!null b:7 n:2 m:1!null
  ├── key columns: [1] = [6]
  ├── fd: (1)==(6), (6)==(1)
@@ -2367,7 +2367,7 @@ inner-join (lookup abcd@secondary)
 opt expect=GenerateLookupJoins
 SELECT a,b,n,m FROM small LEFT JOIN abcd ON a=m
 ----
-left-join (lookup abcd@secondary)
+left-join (lookup abcd@abcd_a_b_idx)
  ├── columns: a:6 b:7 n:2 m:1
  ├── key columns: [1] = [6]
  ├── scan small
@@ -2378,7 +2378,7 @@ left-join (lookup abcd@secondary)
 opt expect=GenerateLookupJoins
 SELECT a,b,n,m FROM small LEFT JOIN abcd ON a=m AND b>n
 ----
-left-join (lookup abcd@secondary)
+left-join (lookup abcd@abcd_a_b_idx)
  ├── columns: a:6 b:7 n:2 m:1
  ├── key columns: [1] = [6]
  ├── scan small
@@ -2395,7 +2395,7 @@ inner-join (lookup abcd)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7 abcd.rowid:9!null
  │    ├── key columns: [1] = [6]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
@@ -2412,7 +2412,7 @@ left-join (lookup abcd)
  ├── columns: m:1 n:2 a:6 b:7 c:8
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── left-join (lookup abcd@secondary)
+ ├── left-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9
  │    ├── key columns: [1] = [6]
  │    ├── fd: (9)-->(6,7)
@@ -2430,7 +2430,7 @@ inner-join (lookup abcd)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1!null n:2!null a:6!null b:7!null abcd.rowid:9!null
  │    ├── key columns: [1] = [6]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
@@ -2448,7 +2448,7 @@ left-join (lookup abcd)
  ├── columns: m:1 n:2 a:6 b:7 c:8
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── left-join (lookup abcd@secondary)
+ ├── left-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9
  │    ├── key columns: [1] = [6]
  │    ├── fd: (9)-->(6,7)
@@ -2467,7 +2467,7 @@ inner-join (lookup abcd)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7 abcd.rowid:9!null
  │    ├── key columns: [1] = [6]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
@@ -2717,9 +2717,9 @@ memo (optimized, ~8KB, required=[presentation: a:6,b:7,n:2,m:1])
  │    └── []
  │         ├── best: (scan small,cols=(1,2))
  │         └── cost: 35.02
- ├── G3: (scan abcd,cols=(6,7)) (scan abcd@secondary,cols=(6,7))
+ ├── G3: (scan abcd,cols=(6,7)) (scan abcd@abcd_a_b_idx,cols=(6,7))
  │    └── []
- │         ├── best: (scan abcd@secondary,cols=(6,7))
+ │         ├── best: (scan abcd@abcd_a_b_idx,cols=(6,7))
  │         └── cost: 1074.52
  ├── G4: (filters G5)
  ├── G5: (eq G6 G7)
@@ -2730,7 +2730,7 @@ memo (optimized, ~8KB, required=[presentation: a:6,b:7,n:2,m:1])
 opt expect=GenerateLookupJoins
 SELECT m, n FROM small WHERE EXISTS(SELECT 1 FROM abcd WHERE m = a)
 ----
-semi-join (lookup abcd@secondary)
+semi-join (lookup abcd@abcd_a_b_idx)
  ├── columns: m:1 n:2
  ├── key columns: [1] = [6]
  ├── scan small
@@ -2756,7 +2756,7 @@ semi-join (hash)
 opt expect=GenerateLookupJoins
 SELECT m, n FROM small WHERE NOT EXISTS(SELECT 1 FROM abcd WHERE m = a)
 ----
-anti-join (lookup abcd@secondary)
+anti-join (lookup abcd@abcd_a_b_idx)
  ├── columns: m:1 n:2
  ├── key columns: [1] = [6]
  ├── scan small
@@ -3065,7 +3065,7 @@ left-join (lookup t59738_ab)
  ├── key columns: [8] = [8]
  ├── lookup columns are key
  ├── fd: (6)~~>(7)
- ├── left-join (lookup t59738_ab@secondary)
+ ├── left-join (lookup t59738_ab@t59738_ab_a_idx)
  │    ├── columns: c:1 d:2 a:6 t59738_ab.rowid:8
  │    ├── flags: force lookup join (into right side)
  │    ├── key columns: [1] = [6]
@@ -3088,7 +3088,7 @@ left-join (lookup t59738_ab)
 opt expect=GenerateLookupJoinsWithFilter
 SELECT a,b,n,m FROM small JOIN abcd ON a=m AND b>1
 ----
-inner-join (lookup abcd@secondary)
+inner-join (lookup abcd@abcd_a_b_idx)
  ├── columns: a:6!null b:7!null n:2 m:1!null
  ├── lookup expression
  │    └── filters
@@ -3103,7 +3103,7 @@ inner-join (lookup abcd@secondary)
 opt expect=GenerateLookupJoinsWithFilter
 SELECT a,b,n,m FROM small LEFT JOIN abcd ON a=m AND b>1
 ----
-left-join (lookup abcd@secondary)
+left-join (lookup abcd@abcd_a_b_idx)
  ├── columns: a:6 b:7 n:2 m:1
  ├── lookup expression
  │    └── filters
@@ -3122,7 +3122,7 @@ inner-join (lookup abcd)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null abcd.rowid:9!null
  │    ├── lookup expression
  │    │    └── filters
@@ -3142,7 +3142,7 @@ left-join (lookup abcd)
  ├── columns: m:1 n:2 a:6 b:7 c:8
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── left-join (lookup abcd@secondary)
+ ├── left-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9
  │    ├── lookup expression
  │    │    └── filters
@@ -3163,7 +3163,7 @@ inner-join (lookup abcd)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1!null n:2!null a:6!null b:7!null abcd.rowid:9!null
  │    ├── lookup expression
  │    │    └── filters
@@ -3184,7 +3184,7 @@ left-join (lookup abcd)
  ├── columns: m:1 n:2 a:6 b:7 c:8
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── left-join (lookup abcd@secondary)
+ ├── left-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9
  │    ├── lookup expression
  │    │    └── filters
@@ -3206,7 +3206,7 @@ inner-join (lookup abcd)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null abcd.rowid:9!null
  │    ├── lookup expression
  │    │    └── filters
@@ -3248,7 +3248,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcde.rowid:11!null
  │    ├── key columns: [1 14] = [6 7]
  │    ├── fd: ()-->(7), (11)-->(6,8), (1)==(6), (6)==(1)
@@ -3271,7 +3271,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(8), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7 c:8!null abcde.rowid:11!null
  │    ├── key columns: [1] = [6]
  │    ├── fd: ()-->(8), (11)-->(6,7), (1)==(6), (6)==(1)
@@ -3290,7 +3290,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7,8), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcde.rowid:11!null
  │    ├── key columns: [1 14 15] = [6 7 8]
  │    ├── fd: ()-->(7,8), (11)-->(6), (1)==(6), (6)==(1)
@@ -3314,7 +3314,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcde.rowid:11!null
  │    ├── key columns: [1 14] = [6 7]
  │    ├── fd: (11)-->(6-8), (1)==(6), (6)==(1)
@@ -3344,7 +3344,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcde.rowid:11!null
  │    ├── flags: force lookup join (into right side)
  │    ├── key columns: [1 14] = [6 7]
@@ -3374,7 +3374,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(8), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcde.rowid:11!null
  │    ├── key columns: [1 14 15] = [6 7 8]
  │    ├── fd: ()-->(8), (11)-->(6,7), (1)==(6), (6)==(1)
@@ -3407,7 +3407,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcde.rowid:11!null
  │    ├── key columns: [1 14 15] = [6 7 8]
  │    ├── fd: (11)-->(6-8), (1)==(6), (6)==(1)
@@ -3443,7 +3443,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7-9), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcde.rowid:11!null
  │    ├── key columns: [1 14 15] = [6 7 8]
  │    ├── fd: ()-->(7,8), (11)-->(6), (1)==(6), (6)==(1)
@@ -3468,7 +3468,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcde.rowid:11!null
  │    ├── lookup expression
  │    │    └── filters
@@ -3488,7 +3488,7 @@ SELECT a, b, c FROM small INNER LOOKUP JOIN abcde ON m=b AND a=10 AND c=10
 project
  ├── columns: a:6!null b:7!null c:8!null
  ├── fd: ()-->(6,8)
- └── inner-join (lookup abcde@secondary)
+ └── inner-join (lookup abcde@abcde_a_b_c_idx)
       ├── columns: m:1!null a:6!null b:7!null c:8!null
       ├── flags: force lookup join (into right side)
       ├── key columns: [14 1 15] = [6 7 8]
@@ -3517,7 +3517,7 @@ inner-join (lookup bool_col)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7,8), (1)==(6), (6)==(1)
- ├── inner-join (lookup bool_col@secondary)
+ ├── inner-join (lookup bool_col@bool_col_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null bool_col.rowid:11!null
  │    ├── key columns: [1 14 15] = [6 7 8]
  │    ├── fd: ()-->(7,8), (11)-->(6), (1)==(6), (6)==(1)
@@ -3540,7 +3540,7 @@ inner-join (lookup bool_col)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7,8), (1)==(6), (6)==(1)
- ├── inner-join (lookup bool_col@secondary)
+ ├── inner-join (lookup bool_col@bool_col_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null bool_col.rowid:11!null
  │    ├── key columns: [1 14 15] = [6 7 8]
  │    ├── fd: ()-->(7,8), (11)-->(6), (1)==(6), (6)==(1)
@@ -3563,7 +3563,7 @@ inner-join (lookup bool_col)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7,8), (1)==(6), (6)==(1)
- ├── inner-join (lookup bool_col@secondary)
+ ├── inner-join (lookup bool_col@bool_col_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null bool_col.rowid:11!null
  │    ├── key columns: [1 14 15] = [6 7 8]
  │    ├── fd: ()-->(7,8), (11)-->(6), (1)==(6), (6)==(1)
@@ -3591,7 +3591,7 @@ inner-join (lookup abcd_check)
  ├── key columns: [10] = [10]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd_check@secondary)
+ ├── inner-join (lookup abcd_check@abcd_check_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcd_check.rowid:10!null
  │    ├── key columns: [1 13] = [6 7]
  │    ├── fd: (10)-->(6-8), (1)==(6), (6)==(1)
@@ -3617,7 +3617,7 @@ inner-join (lookup abcd_check)
  ├── key columns: [10] = [10]
  ├── lookup columns are key
  ├── fd: ()-->(8), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd_check@secondary)
+ ├── inner-join (lookup abcd_check@abcd_check_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcd_check.rowid:10!null
  │    ├── key columns: [1 13 14] = [6 7 8]
  │    ├── fd: ()-->(8), (10)-->(6,7), (1)==(6), (6)==(1)
@@ -3653,7 +3653,7 @@ inner-join (lookup abcd_comp)
  ├── key columns: [10] = [10]
  ├── lookup columns are key
  ├── fd: ()-->(7,9), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd_comp@secondary)
+ ├── inner-join (lookup abcd_comp@abcd_comp_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcd_comp.rowid:10!null
  │    ├── key columns: [1 13] = [6 7]
  │    ├── fd: ()-->(7), (10)-->(6,8), (1)==(6), (6)==(1)
@@ -3676,7 +3676,7 @@ inner-join (lookup abcd_comp)
  ├── key columns: [10] = [10]
  ├── lookup columns are key
  ├── fd: ()-->(7-9), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd_comp@secondary)
+ ├── inner-join (lookup abcd_comp@abcd_comp_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcd_comp.rowid:10!null
  │    ├── key columns: [1 13 14] = [6 7 8]
  │    ├── fd: ()-->(7,8), (10)-->(6), (1)==(6), (6)==(1)
@@ -3720,7 +3720,7 @@ project
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(1,2,4,5)
-      │    │    └── scan t@secondary
+      │    │    └── scan t@t_col2_key
       │    │         ├── columns: pk:1!null col2:4!null
       │    │         ├── constraint: /4: [/1 - /1]
       │    │         ├── cardinality: [0 - 1]
@@ -3737,7 +3737,7 @@ project
       │    │    ├── columns: col0:9 col2:11
       │    │    ├── lax-key: (9,11)
       │    │    ├── fd: ()-->(11), (11)~~>(9)
-      │    │    └── scan t@secondary
+      │    │    └── scan t@t_col2_key
       │    │         ├── columns: pk:8!null col2:11
       │    │         ├── constraint: /11: [/NULL - /NULL]
       │    │         ├── key: (8)
@@ -3750,7 +3750,7 @@ project
 opt expect=GenerateLookupJoinsWithFilter
 SELECT m, n FROM small WHERE EXISTS(SELECT 1 FROM abcd WHERE m = a AND a > b)
 ----
-semi-join (lookup abcd@secondary)
+semi-join (lookup abcd@abcd_a_b_idx)
  ├── columns: m:1 n:2
  ├── key columns: [1] = [6]
  ├── scan small
@@ -3780,7 +3780,7 @@ semi-join (hash)
 opt expect=GenerateLookupJoinsWithFilter
 SELECT m, n FROM small WHERE NOT EXISTS(SELECT 1 FROM abcd WHERE m = a AND a > b)
 ----
-anti-join (lookup abcd@secondary)
+anti-join (lookup abcd@abcd_a_b_idx)
  ├── columns: m:1 n:2
  ├── key columns: [1] = [6]
  ├── scan small
@@ -7193,7 +7193,7 @@ project
       ├── lookup columns are key
       ├── immutable
       ├── fd: (7)-->(9)
-      ├── inner-join (inverted json_check@secondary [as=t1])
+      ├── inner-join (inverted json_check@json_check_i_j_idx [as=t1])
       │    ├── columns: t2.j:3 t1.k:14!null i:15!null
       │    ├── flags: force inverted join (into right side)
       │    ├── prefix key columns: [13] = [15]
@@ -7712,7 +7712,7 @@ ON b.k = 1 AND b.j @> a.j AND b.i = a.k
 project
  └── inner-join (lookup t59859_b [as=b])
       ├── lookup columns are key
-      ├── inner-join (inverted t59859_b@secondary [as=b])
+      ├── inner-join (inverted t59859_b@t59859_b_k_j_idx [as=b])
       │    ├── flags: force inverted join (into right side)
       │    ├── inverted-expr
       │    │    └── b.j @> a.j
@@ -7755,7 +7755,7 @@ ON a.k = 15 AND b.j @> a.j AND b.y = a.k
 ----
 inner-join (lookup t63735_b [as=b])
  ├── lookup columns are key
- ├── inner-join (inverted t63735_b@secondary [as=b])
+ ├── inner-join (inverted t63735_b@t63735_b_x_y_j_idx [as=b])
  │    ├── flags: force inverted join (into right side)
  │    ├── inverted-expr
  │    │    └── b.j @> a.j
@@ -8607,7 +8607,7 @@ project
  ├── columns: m:1!null n:2 a:6!null "?column?":12
  ├── immutable
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7
  │    ├── key columns: [1] = [6]
  │    ├── fd: (1)==(6), (6)==(1)
@@ -8625,7 +8625,7 @@ project
  ├── columns: a:1!null "?column?":7 m:8!null n:9
  ├── immutable
  ├── fd: (1)==(8), (8)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: a:1!null b:2 m:8!null n:9
  │    ├── key columns: [8] = [1]
  │    ├── fd: (1)==(8), (8)==(1)
@@ -8647,7 +8647,7 @@ inner-join (hash)
  ├── project
  │    ├── columns: "?column?":12 a:6
  │    ├── immutable
- │    ├── scan abcd@secondary
+ │    ├── scan abcd@abcd_a_b_idx
  │    │    └── columns: a:6 b:7
  │    └── projections
  │         └── a:6 + b:7 [as="?column?":12, outer=(6,7), immutable]
@@ -8671,7 +8671,7 @@ inner-join (merge)
  │    ├── columns: "?column?":12 random:13 a:6
  │    ├── volatile
  │    ├── ordering: +6
- │    ├── scan abcd@secondary
+ │    ├── scan abcd@abcd_a_b_idx
  │    │    ├── columns: a:6 b:7
  │    │    └── ordering: +6
  │    └── projections
@@ -8715,7 +8715,7 @@ SELECT * FROM small LEFT JOIN (SELECT a, a+b FROM abcd) ON a=m
 project
  ├── columns: m:1 n:2 a:6 "?column?":12
  ├── immutable
- ├── left-join (lookup abcd@secondary)
+ ├── left-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1 n:2 a:6 b:7
  │    ├── key columns: [1] = [6]
  │    ├── scan small
@@ -8753,7 +8753,7 @@ right-join (cross)
  ├── project
  │    ├── columns: "?column?":12 a:6
  │    ├── immutable
- │    ├── scan abcd@secondary
+ │    ├── scan abcd@abcd_a_b_idx
  │    │    └── columns: a:6 b:7
  │    └── projections
  │         └── a:6 + b:7 [as="?column?":12, outer=(6,7), immutable]
@@ -8773,7 +8773,7 @@ right-join (hash)
  ├── project
  │    ├── columns: "?column?":12 a:6
  │    ├── immutable
- │    ├── scan abcd@secondary
+ │    ├── scan abcd@abcd_a_b_idx
  │    │    └── columns: a:6 b:7
  │    └── projections
  │         └── a:6 + b:7 [as="?column?":12, outer=(6,7), immutable]
@@ -8840,21 +8840,21 @@ CREATE TABLE abc_part (
 ----
 
 exec-ddl
-ALTER PARTITION "east" OF INDEX abc_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "east" OF INDEX abc_part@abc_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=east: 2}',
   lease_preferences = '[[+region=east]]'
 ----
 
 exec-ddl
-ALTER PARTITION "west" OF INDEX abc_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "west" OF INDEX abc_part@abc_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=west: 2}',
   lease_preferences = '[[+region=west]]';
 ----
 
 exec-ddl
-ALTER PARTITION "central" OF INDEX abc_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "central" OF INDEX abc_part@abc_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=central: 2}',
   lease_preferences = '[[+region=central]]';
@@ -8929,21 +8929,21 @@ CREATE TABLE def_part (
 ----
 
 exec-ddl
-ALTER PARTITION "east" OF INDEX def_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "east" OF INDEX def_part@def_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=east: 2}',
   lease_preferences = '[[+region=east]]'
 ----
 
 exec-ddl
-ALTER PARTITION "west" OF INDEX def_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "west" OF INDEX def_part@def_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=west: 2}',
   lease_preferences = '[[+region=west]]';
 ----
 
 exec-ddl
-ALTER PARTITION "central" OF INDEX def_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "central" OF INDEX def_part@def_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=central: 2}',
   lease_preferences = '[[+region=central]]';
@@ -9873,10 +9873,10 @@ project
  │    ├── left ordering: -1
  │    ├── right ordering: -6
  │    ├── fd: (1)==(6), (6)==(1)
- │    ├── scan t68975@secondary [as=t1]
+ │    ├── scan t68975@t68975_s_idx [as=t1]
  │    │    ├── columns: t1.s:1
  │    │    └── ordering: -1
- │    ├── scan t68975@secondary [as=t2]
+ │    ├── scan t68975@t68975_s_idx [as=t2]
  │    │    ├── columns: t2.s:6
  │    │    └── ordering: -6
  │    └── filters (true)

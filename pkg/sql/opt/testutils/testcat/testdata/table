@@ -13,7 +13,7 @@ TABLE kv
  ├── v int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── PRIMARY INDEX primary
+ └── PRIMARY INDEX kv_pkey
       └── k int not null
 
 exec-ddl
@@ -45,7 +45,7 @@ TABLE abcdef
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── CHECK (f > 2)
- └── PRIMARY INDEX primary
+ └── PRIMARY INDEX abcdef_pkey
       └── rowid int not null default (unique_rowid()) [hidden]
 
 exec-ddl
@@ -77,7 +77,7 @@ TABLE uvwxy
  ├── FAMILY family1 (u, v, w, crdb_internal_mvcc_timestamp, tableoid)
  ├── FAMILY family2 (x)
  ├── FAMILY family3 (y)
- └── PRIMARY INDEX primary
+ └── PRIMARY INDEX uvwxy_pkey
       ├── u int not null
       └── v int not null
 
@@ -93,7 +93,7 @@ TABLE a
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX a_pkey
  │    └── rowid int not null default (unique_rowid()) [hidden]
  └── UNIQUE INDEX a_a_key
       ├── a int
@@ -115,7 +115,7 @@ TABLE part1
  ├── b int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── PRIMARY INDEX primary
+ └── PRIMARY INDEX part1_pkey
       ├── a int not null
       └── partitions
            ├── p1
@@ -155,7 +155,7 @@ TABLE part2
  ├── c int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX part2_pkey
  │    ├── a string not null
  │    ├── b string not null
  │    ├── c int not null
@@ -170,7 +170,7 @@ TABLE part2
  │         │         └── ('waldo')
  │         └── p3
  │              └── partition by list prefixes
- └── INDEX secondary
+ └── INDEX part2_c_idx
       ├── c int not null
       ├── a string not null
       ├── b string not null
@@ -206,12 +206,12 @@ TABLE inv
  ├── tableoid oid [hidden] [system]
  ├── j_inverted_key jsonb not null [inverted]
  ├── g_inverted_key geometry not null [inverted]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX inv_pkey
  │    └── k int not null
- ├── INVERTED INDEX secondary
+ ├── INVERTED INDEX inv_j_idx
  │    ├── j_inverted_key jsonb not null [inverted]
  │    └── k int not null
- └── INVERTED INDEX secondary
+ └── INVERTED INDEX inv_g_idx
       ├── g_inverted_key geometry not null [inverted]
       └── k int not null
 
@@ -238,12 +238,12 @@ TABLE inv2
  ├── tableoid oid [hidden] [system]
  ├── j_inverted_key jsonb not null [inverted]
  ├── g_inverted_key geometry not null [inverted]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX inv2_pkey
  │    └── rowid int not null default (unique_rowid()) [hidden]
- ├── INVERTED INDEX secondary
+ ├── INVERTED INDEX inv2_j_idx
  │    ├── j_inverted_key jsonb not null [inverted]
  │    └── rowid int not null default (unique_rowid()) [hidden]
- └── INVERTED INDEX secondary
+ └── INVERTED INDEX inv2_g_idx
       ├── g_inverted_key geometry not null [inverted]
       └── rowid int not null default (unique_rowid()) [hidden]
 
@@ -275,12 +275,12 @@ TABLE uniq
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── CHECK (k IN ('foo', 'bar', 'baz'))
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX uniq_pkey
  │    └── rowid int not null default (unique_rowid()) [hidden]
  ├── UNIQUE INDEX uniq_i_key
  │    ├── i int
  │    └── rowid int not null default (unique_rowid()) [hidden] (storing)
- ├── UNIQUE INDEX secondary
+ ├── UNIQUE INDEX uniq_k_j_key
  │    ├── k string
  │    ├── j string
  │    └── rowid int not null default (unique_rowid()) [hidden] (storing)
@@ -313,7 +313,7 @@ TABLE mutations
  ├── d int [delete-only]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX mutations_pkey
  │    └── rowid int not null default (unique_rowid()) [hidden]
  ├── INDEX idxa (mutation)
  │    ├── a int
@@ -341,7 +341,7 @@ TABLE generated_as_identity
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── PRIMARY INDEX primary
+ └── PRIMARY INDEX generated_as_identity_pkey
       └── rowid int not null default (unique_rowid()) [hidden]
 
 # Table with generated_as_identity constraints and sequence option.
@@ -363,5 +363,5 @@ TABLE generated_as_identity_seq_opt
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── PRIMARY INDEX primary
+ └── PRIMARY INDEX generated_as_identity_seq_opt_pkey
       └── rowid int not null default (unique_rowid()) [hidden]

@@ -1353,7 +1353,7 @@ ALTER TABLE def INJECT STATISTICS '[
 expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 colstat=3 colstat=(1, 2, 3)
 (MakeLookupJoin
   (Scan [ (Table "abc") (Cols "a,b,c") ])
-  [ (JoinType "inner-join") (Table "def") (Index "def@primary") (KeyCols "a,b") (Cols "a,b,c,d,f,e") ]
+  [ (JoinType "inner-join") (Table "def") (Index "def@def_pkey") (KeyCols "a,b") (Cols "a,b,c,d,f,e") ]
   [ ]
 )
 ----
@@ -1381,7 +1381,7 @@ inner-join (lookup t.public.def)
 expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 colstat=3 colstat=(1, 2, 3)
 (MakeLookupJoin
   (Scan [ (Table "abc") (Cols "a,b,c") ])
-  [ (JoinType "semi-join") (Table "def") (Index "def@primary") (KeyCols "a,b") (Cols "a,b,c,d,e") ]
+  [ (JoinType "semi-join") (Table "def") (Index "def@def_pkey") (KeyCols "a,b") (Cols "a,b,c,d,e") ]
   [ ]
 )
 ----
@@ -1406,7 +1406,7 @@ semi-join (lookup t.public.def)
 expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 colstat=3 colstat=(1, 2, 3)
 (MakeLookupJoin
   (Scan [ (Table "abc") (Cols "a,b,c") ])
-  [ (JoinType "anti-join") (Table "def") (Index "def@primary") (KeyCols "a,b") (Cols "a,b,c,d,e") ]
+  [ (JoinType "anti-join") (Table "def") (Index "def@def_pkey") (KeyCols "a,b") (Cols "a,b,c,d,e") ]
   [ ]
 )
 ----
@@ -1431,7 +1431,7 @@ anti-join (lookup t.public.def)
 expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 colstat=3 colstat=(1, 2, 3)
 (MakeLookupJoin
   (Scan [ (Table "abc") (Cols "a,b,c") ])
-  [ (JoinType "semi-join") (Table "def") (Index "def@primary") (KeyCols "a,b") (Cols "a,b,c,d,e") ]
+  [ (JoinType "semi-join") (Table "def") (Index "def@def_pkey") (KeyCols "a,b") (Cols "a,b,c,d,e") ]
   [ (False) ]
 )
 ----
@@ -1457,7 +1457,7 @@ semi-join (lookup t.public.def)
 expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 colstat=3 colstat=(1, 2, 3)
 (MakeLookupJoin
   (Scan [ (Table "abc") (Cols "a,b,c") ])
-  [ (JoinType "anti-join") (Table "def") (Index "def@primary") (KeyCols "a,b") (Cols "a,b,c,d,e") ]
+  [ (JoinType "anti-join") (Table "def") (Index "def@def_pkey") (KeyCols "a,b") (Cols "a,b,c,d,e") ]
   [ (False) ]
 )
 ----

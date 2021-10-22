@@ -134,7 +134,7 @@ inner-join (lookup g [as=g2])
  ├── cost: 1101964.47
  ├── key: (1,6)
  ├── fd: (1)-->(2), (6)-->(7)
- ├── inner-join (inverted g@secondary [as=g2])
+ ├── inner-join (inverted g@g_geom_idx [as=g2])
  │    ├── columns: g1.k:1!null g1.geom:2 g2.k:11!null
  │    ├── flags: force inverted join (into right side)
  │    ├── inverted-expr
@@ -930,7 +930,7 @@ project
       ├── stats: [rows=198, distinct(4)=17.2927193, null(4)=0, distinct(28)=17.2927193, null(28)=0]
       ├── cost: 2909.11877
       ├── fd: (4)==(28), (28)==(4)
-      ├── scan pg_type@secondary [as=t]
+      ├── scan pg_type@pg_type_oid_idx [as=t]
       │    ├── columns: oid:28!null typtype:34 typbasetype:52
       │    ├── stats: [rows=1000, distinct(28)=100, null(28)=0]
       │    ├── cost: 1477.52
@@ -972,7 +972,7 @@ project
  ├── stats: [rows=99]
  ├── cost: 2851.52
  ├── fd: ()-->(3)
- └── inner-join (lookup pg_type@secondary [as=t])
+ └── inner-join (lookup pg_type@pg_type_oid_idx [as=t])
       ├── columns: attname:3!null atttypid:4!null oid:28!null typtype:34 typbasetype:52
       ├── key columns: [4] = [28]
       ├── stats: [rows=99, distinct(4)=8.5617925, null(4)=0, distinct(28)=8.5617925, null(28)=0]

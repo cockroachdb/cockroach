@@ -169,7 +169,7 @@ distinct-on
 opt
 SELECT s, d, x FROM a WHERE (s <= 'aaa') OR (s >= 'bar' AND s <= 'foo')
 ----
-scan a@secondary
+scan a@a_s_d_key
  ├── columns: s:3(string!null) d:4(decimal!null) x:1(int!null)
  ├── constraint: /-3/4
  │    ├── [/'foo' - /'bar']
@@ -181,7 +181,7 @@ scan a@secondary
 opt
 SELECT s, d, x FROM a WHERE (s <= 'aaa') OR (s >= 'bar' AND s <= 'foo') OR s IS NULL
 ----
-scan a@secondary
+scan a@a_s_d_key
  ├── columns: s:3(string) d:4(decimal!null) x:1(int!null)
  ├── constraint: /-3/4
  │    ├── [/'foo' - /'bar']
@@ -193,7 +193,7 @@ scan a@secondary
 opt
 SELECT s, d, x FROM a WHERE s IS NOT NULL
 ----
-scan a@secondary
+scan a@a_s_d_key
  ├── columns: s:3(string!null) d:4(decimal!null) x:1(int!null)
  ├── constraint: /-3/4: [ - /NULL)
  ├── stats: [rows=3000, distinct(3)=2, null(3)=0]
@@ -203,7 +203,7 @@ scan a@secondary
 opt
 SELECT s, d, x FROM a WHERE (s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')
 ----
-scan a@secondary
+scan a@a_s_d_key
  ├── columns: s:3(string!null) d:4(decimal!null) x:1(int!null)
  ├── constraint: /-3/4
  │    ├── [ - /'foobar']
@@ -328,7 +328,7 @@ distinct-on
 opt
 SELECT s, d, x FROM a WHERE ((s <= 'aaa') OR (s >= 'bar' AND s <= 'foo')) AND s IS NOT NULL
 ----
-scan a@secondary
+scan a@a_s_d_key
  ├── columns: s:3(string!null) d:4(decimal!null) x:1(int!null)
  ├── constraint: /-3/4
  │    ├── [/'foo' - /'bar']
@@ -340,7 +340,7 @@ scan a@secondary
 opt
 SELECT s, d, x FROM a WHERE (s <= 'aaa') OR (s >= 'bar' AND s <= 'foo') OR s IS NULL
 ----
-scan a@secondary
+scan a@a_s_d_key
  ├── columns: s:3(string) d:4(decimal!null) x:1(int!null)
  ├── constraint: /-3/4
  │    ├── [/'foo' - /'bar']
@@ -352,7 +352,7 @@ scan a@secondary
 opt
 SELECT s, d, x FROM a WHERE s IS NOT NULL
 ----
-scan a@secondary
+scan a@a_s_d_key
  ├── columns: s:3(string!null) d:4(decimal!null) x:1(int!null)
  ├── constraint: /-3/4: [ - /NULL)
  ├── stats: [rows=2000, distinct(3)=3, null(3)=0]
@@ -362,7 +362,7 @@ scan a@secondary
 opt
 SELECT s, d, x FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND s IS NOT NULL
 ----
-scan a@secondary
+scan a@a_s_d_key
  ├── columns: s:3(string!null) d:4(decimal!null) x:1(int!null)
  ├── constraint: /-3/4
  │    ├── [ - /'foobar']
@@ -386,7 +386,7 @@ index-join a
       ├── stats: [rows=333.333333, distinct(4)=98.265847, null(4)=0]
       ├── key: (1)
       ├── fd: (1)-->(3,4), (3,4)-->(1)
-      ├── scan a@secondary
+      ├── scan a@a_s_d_key
       │    ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
       │    ├── constraint: /-3/4
       │    │    ├── [ - /'foobar'/5.0]
@@ -2068,7 +2068,7 @@ index-join t
  ├── stats: [rows=167.000668, distinct(2)=2, null(2)=167.000668]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- └── scan t@secondary
+ └── scan t@t_y_idx
       ├── columns: x:1(int!null) y:2(int)
       ├── constraint: /2/1
       │    ├── [/NULL/5 - /NULL/5]
@@ -2085,7 +2085,7 @@ index-join t
  ├── stats: [rows=111.111111, distinct(4)=11.1111111, null(4)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- └── scan t@secondary
+ └── scan t@t_s_idx
       ├── columns: x:1(int!null) s:4(string!null)
       ├── constraint: /4/1
       │    ├── [/'a' - /'b']
