@@ -33,14 +33,13 @@ const (
 )
 
 // DefaultUserDBs is a set of the databases which are present in a new cluster.
-var DefaultUserDBs = map[string]struct{}{
-	DefaultDatabaseName: {},
-	PgDatabaseName:      {},
+var DefaultUserDBs = []string{
+	DefaultDatabaseName, PgDatabaseName,
 }
 
 // MaxDefaultDescriptorID is the maximum ID of a descriptor that exists in a
 // new cluster.
-var MaxDefaultDescriptorID = keys.MaxReservedDescID + descpb.ID(len(DefaultUserDBs))
+var MaxDefaultDescriptorID = descpb.ID(keys.MaxReservedDescID) + descpb.ID(len(DefaultUserDBs))
 
 // IsDefaultCreatedDescriptor returns whether or not a given descriptor ID is
 // present at the time of starting a cluster.
