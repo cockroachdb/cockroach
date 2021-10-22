@@ -37,10 +37,15 @@ type Graph struct {
 	// from it. A Node may have at most one opEdge from it.
 	nodeOpEdgesFrom map[*scpb.Node]*OpEdge
 
-	// nodeDepEdges maps a Node to its dependencies.
+	// nodeDepEdgesFrom maps a Node from its dependencies.
 	// A Node dependency is another target node which must be
 	// reached before or concurrently with this node.
-	nodeDepEdges map[*scpb.Node][]*DepEdge
+	nodeDepEdgesFrom map[*scpb.Node][]*DepEdge
+
+	// nodeDepEdgesTo maps a Node to its dependencies.
+	// A Node dependency is another target node which must be
+	// reached before or concurrently with this node.
+	nodeDepEdgesTo map[*scpb.Node][]*DepEdge
 
 	// opToNode maps from an operation back to the
 	// opEdge that generated it as an index.
@@ -70,11 +75,12 @@ func New(initial scpb.State) (*Graph, error) {
 		return nil, err
 	}
 	g := Graph{
-		targetIdxMap:    map[*scpb.Target]int{},
-		nodeOpEdgesFrom: map[*scpb.Node]*OpEdge{},
-		nodeDepEdges:    map[*scpb.Node][]*DepEdge{},
-		opToNode:        map[scop.Op]*scpb.Node{},
-		entities:        db,
+		targetIdxMap:     map[*scpb.Target]int{},
+		nodeOpEdgesFrom:  map[*scpb.Node]*OpEdge{},
+		nodeDepEdgesFrom: map[*scpb.Node][]*DepEdge{},
+		nodeDepEdgesTo:   map[*scpb.Node][]*DepEdge{},
+		opToNode:         map[scop.Op]*scpb.Node{},
+		entities:         db,
 	}
 	for _, n := range initial {
 		if existing, ok := g.targetIdxMap[n.Target]; ok {
@@ -145,7 +151,14 @@ func (g *Graph) GetOpEdgeFrom(n *scpb.Node) (*OpEdge, bool) {
 // GetDepEdgesFrom returns the unique outgoing op edge from the specified node,
 // if one exists.
 func (g *Graph) GetDepEdgesFrom(n *scpb.Node) ([]*DepEdge, bool) {
-	de, ok := g.nodeDepEdges[n]
+	de, ok := g.nodeDepEdgesFrom[n]
+	return de, ok
+}
+
+// GetDepEdgesTo returns the unique outgoing op edge to the specified node,
+// if one exists.
+func (g *Graph) GetDepEdgesTo(n *scpb.Node) ([]*DepEdge, bool) {
+	de, ok := g.nodeDepEdgesTo[n]
 	return de, ok
 }
 
@@ -198,7 +211,8 @@ func (g *Graph) AddDepEdge(
 		return err
 	}
 	g.edges = append(g.edges, de)
-	g.nodeDepEdges[de.from] = append(g.nodeDepEdges[de.from], de)
+	g.nodeDepEdgesFrom[de.from] = append(g.nodeDepEdgesFrom[de.from], de)
+	g.nodeDepEdgesTo[de.to] = append(g.nodeDepEdgesTo[de.to], de)
 	return nil
 }
 
