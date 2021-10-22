@@ -133,6 +133,7 @@ ALL_TESTS = [
     "//pkg/kv/kvserver/idalloc:idalloc_test",
     "//pkg/kv/kvserver/intentresolver:intentresolver_test",
     "//pkg/kv/kvserver/liveness:liveness_test",
+    "//pkg/kv/kvserver/loqrecovery:loqrecovery_test",
     "//pkg/kv/kvserver/protectedts/ptcache:ptcache_test",
     "//pkg/kv/kvserver/protectedts/ptreconcile:ptreconcile_test",
     "//pkg/kv/kvserver/protectedts/ptstorage:ptstorage_test",

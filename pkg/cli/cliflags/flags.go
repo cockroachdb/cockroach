@@ -1662,4 +1662,36 @@ verbatim.
 For example: 'userfile://foo.bar.baz_root/path/to/dir'
 `,
 	}
+
+	RecoverStore = FlagInfo{
+		Name:      "store",
+		Shorthand: "s",
+		Description: `
+The file path to a storage device. This flag must be specified separately for
+each storage device.
+<PRE>
+
+  --store=/mnt/ssd01 --store=/mnt/ssd02 --store=/mnt/hda1
+
+</PRE>
+Flag is syntactically identical to --store flag of start command, but only path
+part is used. This is done to make flags interoperable between start and recover
+commands.
+
+See start --help for more flag details and examples.
+`,
+	}
+
+	ConfirmActions = FlagInfo{
+		Name:      "confirm",
+		Shorthand: "p",
+		Description: `
+Confirm action:
+<PRE>
+y - assume yes to all prompts
+n - assume no/abort to all prompts
+p - prompt interactively for a confirmation
+</PRE>
+`,
+	}
 )
