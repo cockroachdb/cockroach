@@ -191,3 +191,84 @@ func marshalOps(t *testing.T, plan *scplan.Plan) string {
 	}
 	return stages.String()
 }
+
+// TestPlanGraphSort sanity checks sorting of the graph.
+func TestPlanGraphSort(t *testing.T) {
+	state := scpb.State{
+		&scpb.Node{
+			Target: scpb.NewTarget(scpb.Target_ADD,
+				&scpb.Table{
+					TableID: 1,
+				}),
+			Status: scpb.Status_ABSENT,
+		},
+		&scpb.Node{
+			Target: scpb.NewTarget(scpb.Target_ADD,
+				&scpb.Table{
+					TableID: 2,
+				}),
+			Status: scpb.Status_ABSENT,
+		},
+		&scpb.Node{
+			Target: scpb.NewTarget(scpb.Target_ADD,
+				&scpb.Table{
+					TableID: 3,
+				}),
+			Status: scpb.Status_ABSENT,
+		},
+		&scpb.Node{
+			Target: scpb.NewTarget(scpb.Target_ADD,
+				&scpb.Table{
+					TableID: 4,
+				}),
+			Status: scpb.Status_ABSENT,
+		},
+	}
+	validateNodeRanks := func(graph *scgraph.Graph, expectedOrder []*scpb.Node, originalNodes []*scpb.Node) {
+		rank := graph.GetNodeRanks()
+		unsortedNodes := make([]*scpb.Node, len(originalNodes))
+		copy(unsortedNodes, originalNodes)
+		sort.SliceStable(unsortedNodes, func(i, j int) bool {
+			return rank[unsortedNodes[i]] > rank[unsortedNodes[j]]
+		})
+		require.EqualValues(t, expectedOrder, unsortedNodes, "ranks are not in expected order")
+	}
+	ops := []scop.Op{
+		&scop.AddTypeBackRef{},
+		&scop.AddTypeBackRef{},
+		&scop.AddTypeBackRef{},
+		&scop.AddTypeBackRef{},
+	}
+
+	// Start off with a graph with 4 nodes.
+	graph, err := scgraph.New(state)
+	require.NoError(t, err)
+	// Setup op edges for all the nodes
+	for idx := range ops {
+		graph.AddOpEdges(state[idx].Target, scpb.Status_ABSENT, scpb.Status_PUBLIC, true, ops[idx])
+	}
+	// Fetch the new Ndoes that will be added
+	nodes := make([]*scpb.Node, 0, len(state))
+	graph.ForEachNode(func(n *scpb.Node) error {
+		if n.Status == scpb.Status_PUBLIC {
+			nodes = append(nodes, n)
+		}
+		return nil
+	})
+	// We will set up the dependency graph, so that:
+	// 1) 0 depends on 1
+	// 2) 3 depends on 0
+	// 3) 2 depends on nothing
+	graph.AddDepEdge("0 to 1", state[0].Target, scpb.Status_PUBLIC, state[1].Target, scpb.Status_PUBLIC)
+	graph.AddDepEdge("3 to 0", state[3].Target, scpb.Status_PUBLIC, state[0].Target, scpb.Status_PUBLIC)
+	// Validate the ranks matches what we expect
+	expectedOrder := []*scpb.Node{nodes[1], nodes[0], nodes[2], nodes[3]}
+	validateNodeRanks(graph, expectedOrder, nodes)
+	// Sanity cycles should always lead to panics.
+	graph.AddDepEdge("1 to 3", state[1].Target, scpb.Status_PUBLIC, state[3].Target, scpb.Status_PUBLIC)
+	graph.AddDepEdge("3 to 1", state[3].Target, scpb.Status_PUBLIC, state[1].Target, scpb.Status_PUBLIC)
+	expectedOrder = []*scpb.Node{nodes[0], nodes[1], nodes[2], nodes[3]}
+	require.Panicsf(t, func() {
+		graph.GetNodeRanks()
+	}, "non dag graphs should panic")
+}
