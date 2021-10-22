@@ -1,0 +1,58 @@
+# Test verifies that two replicas are enough to keep quorum and no changes are applied.
+
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+[]
+
+apply-plan stores=(1,2)
+----
+ok
+
+dump-store stores=(1,2)
+----
+- NodeID: 1
+  StoreID: 1
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 2}
+    - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
+- NodeID: 2
+  StoreID: 2
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 2}
+    - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
