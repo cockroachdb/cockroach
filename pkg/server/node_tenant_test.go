@@ -98,12 +98,12 @@ func TestRedactRecordingForTenant(t *testing.T) {
 			SpanID            tracingpb.SpanID
 			ParentSpanID      tracingpb.SpanID
 			Operation         string
-			Baggage           map[string]string
 			Tags              map[string]string
 			StartTime         time.Time
 			Duration          time.Duration
 			RedactableLogs    bool
 			Logs              []tracingpb.LogRecord
+			Verbose           bool
 			GoroutineID       uint64
 			Finished          bool
 			StructuredRecords []tracingpb.StructuredRecord
