@@ -59,7 +59,7 @@ type DepEdgeIterator func(de *DepEdge) error
 
 // ForEachDepEdgeFrom iterates the dep edges in the graph.
 func (g *Graph) ForEachDepEdgeFrom(n *scpb.Node, it DepEdgeIterator) error {
-	edges := g.nodeDepEdges[n]
+	edges := g.nodeDepEdgesFrom[n]
 	for _, e := range edges {
 		if err := it(e); err != nil {
 			if iterutil.Done(err) {
