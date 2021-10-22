@@ -1,3 +1,8 @@
+exports_files([
+    "go.mod",
+    "go.sum",
+])
+
 load("@bazel_gazelle//:def.bzl", "gazelle")
 
 # The following directives inform gazelle how to auto-generate BUILD.bazel

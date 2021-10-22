@@ -41,15 +41,13 @@ http_archive(
 )
 
 # Load up cockroachdb's go dependencies (the ones listed under go.mod). The
-# `DEPS.bzl` file is kept up to date using the `update-repos` Gazelle command
-# (see `build/bazelutil/bazel-generate.sh`).
-#
-# gazelle:repository_macro DEPS.bzl%go_deps
+# `DEPS.bzl` file is kept up to date using `build/bazelutil/bazel-generate.sh`.
 load("//:DEPS.bzl", "go_deps")
 
 # VERY IMPORTANT that we call into this function to prefer our pinned versions
 # of the dependencies to any that might be pulled in via functions like
 # `go_rules_dependencies`, `gazelle_dependencies`, etc.
+# gazelle:repository_macro DEPS.bzl%go_deps
 go_deps()
 
 ####### THIRD-PARTY DEPENDENCIES #######
