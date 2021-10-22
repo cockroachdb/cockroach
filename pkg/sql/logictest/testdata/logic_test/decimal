@@ -562,3 +562,15 @@ select exp('nan'::numeric), exp('inf'::numeric), exp('-inf'::numeric)
 ----
 NaN  Infinity  0
 
+query R
+WITH v(x) AS
+(VALUES (' inf '), (' +inf '), (' -inf '), (' Infinity '), (' +inFinity '), (' -INFINITY '))
+SELECT x1::decimal
+FROM v AS v1(x1)
+----
+Infinity
+Infinity
+-Infinity
+Infinity
+Infinity
+-Infinity
