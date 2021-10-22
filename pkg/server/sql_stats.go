@@ -27,7 +27,7 @@ func (s *statusServer) ResetSQLStats(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
 		return nil, err
 	}
 
