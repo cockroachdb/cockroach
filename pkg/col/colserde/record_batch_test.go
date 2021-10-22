@@ -373,7 +373,7 @@ func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 			b.SetBytes(numBytes)
 			for i := 0; i < b.N; i++ {
 				buf.Reset()
-				if _, _, err := s.Serialize(&buf, data, dataLen); err != nil {
+				if _, _, err := s.SerializeNoClear(&buf, data, dataLen); err != nil {
 					b.Fatal(err)
 				}
 			}
