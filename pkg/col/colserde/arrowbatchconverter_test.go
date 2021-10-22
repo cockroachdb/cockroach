@@ -232,7 +232,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					// Using require.NoError here causes large enough allocations to
 					// affect the result.
-					if err := c.ArrowToBatch(data, batch.Length(), result); err != nil {
+					if err := c.ArrowToBatchNoClear(data, batch.Length(), result, false); err != nil {
 						b.Fatal(err)
 					}
 					if result.Width() != 1 {

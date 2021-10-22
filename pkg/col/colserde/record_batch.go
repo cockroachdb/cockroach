@@ -99,6 +99,20 @@ func calculatePadding(numBytes int) int {
 func (s *RecordBatchSerializer) Serialize(
 	w io.Writer, data []*array.Data, headerLength int,
 ) (metadataLen uint32, dataLen uint64, _ error) {
+	return s.serialize(w, data, headerLength, true)
+}
+
+// SerializeNoClear is same as Serialize but it doesn't clear the data buffer
+// so it can be called repeatedly in a benchmark situation.
+func (s *RecordBatchSerializer) SerializeNoClear(
+	w io.Writer, data []*array.Data, headerLength int,
+) (metadataLen uint32, dataLen uint64, _ error) {
+	return s.serialize(w, data, headerLength, false)
+}
+
+func (s *RecordBatchSerializer) serialize(
+	w io.Writer, data []*array.Data, headerLength int, clearBuffer bool,
+) (metadataLen uint32, dataLen uint64, _ error) {
 	if len(data) != len(s.numBuffers) {
 		return 0, 0, errors.Errorf("mismatched schema length and number of columns: %d != %d", len(s.numBuffers), len(data))
 	}
@@ -217,7 +231,9 @@ func (s *RecordBatchSerializer) Serialize(
 			}
 		}
 		// Eagerly discard the buffer; we have no use for it any longer.
-		data[i] = nil
+		if clearBuffer {
+			data[i] = nil
+		}
 	}
 
 	// Add body padding. The body also needs to be a multiple of 8 bytes.

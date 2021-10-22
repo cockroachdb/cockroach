@@ -298,6 +298,20 @@ func unsafeCastOffsetsArray(offsetsInt32 []int32, offsetsBytes *[]byte) {
 func (c *ArrowBatchConverter) ArrowToBatch(
 	data []*array.Data, batchLength int, b coldata.Batch,
 ) error {
+	return c.arrowToBatch(data, batchLength, b, true)
+}
+
+// ArrowToBatchNoClear is the same as ArrowToBatch but it doesn't clear the data
+// so it can be called repeatedly in a benchmark situation.
+func (c *ArrowBatchConverter) ArrowToBatchNoClear(
+	data []*array.Data, batchLength int, b coldata.Batch, clearBuffer bool,
+) error {
+	return c.arrowToBatch(data, batchLength, b, false)
+}
+
+func (c *ArrowBatchConverter) arrowToBatch(
+	data []*array.Data, batchLength int, b coldata.Batch, clearBuffer bool,
+) error {
 	if len(data) != len(c.typs) {
 		return errors.Errorf("mismatched data and schema length: %d != %d", len(data), len(c.typs))
 	}
@@ -309,7 +323,9 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 		// Eagerly release our data references to make sure they can be collected
 		// as quickly as possible as we copy each (or simply reference each) by
 		// coldata.Vecs below.
-		data[i] = nil
+		if clearBuffer {
+			data[i] = nil
+		}
 
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 		case types.BoolFamily:
