@@ -1323,6 +1323,15 @@ message IndexUsageStatisticsResponse {
   repeated cockroach.sql.CollectedIndexUsageStatistics statistics = 1 [(gogoproto.nullable) = false];
 }
 
+// Request object for issuing a index usage stats reset request.
+message ResetIndexUsageStatsRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+// Response object returned by ResetIndexUsageStatsRequest.
+message ResetIndexUsageStatsResponse {
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -1679,6 +1688,13 @@ service Status {
   rpc IndexUsageStatistics(IndexUsageStatisticsRequest) returns (IndexUsageStatisticsResponse) {
     option (google.api.http) = {
       get: "/_status/indexusagestatistics"
+    };
+  }
+
+  rpc ResetIndexUsageStats(ResetIndexUsageStatsRequest) returns (ResetIndexUsageStatsResponse) {
+    option (google.api.http) = {
+      post: "/_status/resetindexusagestats"
+      body: "*"
     };
   }
 }

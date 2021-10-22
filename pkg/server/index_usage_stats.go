@@ -110,3 +110,70 @@ func indexUsageStatsLocal(
 	}
 	return resp, nil
 }
+
+func (s *statusServer) ResetIndexUsageStats(
+	ctx context.Context, req *serverpb.ResetIndexUsageStatsRequest,
+) (*serverpb.ResetIndexUsageStatsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if _, err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	localReq := &serverpb.ResetIndexUsageStatsRequest{
+		NodeID: "local",
+	}
+	resp := &serverpb.ResetIndexUsageStatsResponse{}
+
+	if len(req.NodeID) > 0 {
+		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		if local {
+			s.sqlServer.pgServer.SQLServer.ResetLocalIndexStatistics()
+			return resp, nil
+		}
+
+		statusClient, err := s.dialNode(ctx, requestedNodeID)
+		if err != nil {
+			return nil, err
+		}
+
+		// We issue a localReq instead of the incoming req to other nodes. This is
+		// to instruct other nodes to only return us their node-local stats and
+		// do not further propagates the RPC call.
+		return statusClient.ResetIndexUsageStats(ctx, localReq)
+	}
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+
+	resetIndexUsageStats := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		return statusClient.ResetIndexUsageStats(ctx, localReq)
+	}
+
+	aggFn := func(_ roachpb.NodeID, nodeResp interface{}) {
+		// Nothing to do here.
+	}
+
+	var combinedError error
+	errFn := func(_ roachpb.NodeID, nodeFnError error) {
+		combinedError = errors.CombineErrors(combinedError, nodeFnError)
+	}
+
+	// It's unfortunate that we cannot use paginatedIterateNodes here because we
+	// need to aggregate all stats before returning. Returning a partial result
+	// yields an incorrect result.
+	if err := s.iterateNodes(ctx,
+		fmt.Sprintf("Resetting index usage stats for node %s", req.NodeID),
+		dialFn, resetIndexUsageStats, aggFn, errFn); err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}

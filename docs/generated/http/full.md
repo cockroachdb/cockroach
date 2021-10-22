@@ -3961,6 +3961,46 @@ Response object returned by IndexUsageStatistics.
 
 
 
+## ResetIndexUsageStats
+
+`POST /_status/resetindexusagestats`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for issuing a index usage stats reset request.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.ResetIndexUsageStatsRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response object returned by ResetIndexUsageStatsRequest.
+
+
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`
