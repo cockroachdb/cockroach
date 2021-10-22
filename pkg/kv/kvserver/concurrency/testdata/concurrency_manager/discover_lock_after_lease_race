@@ -156,6 +156,7 @@ sequence req=req4
 handle-write-intent-error req=req2 lease-seq=1
   intent txn=txn1 key=k
 ----
+[6] handle write intent error req2: intent on "k" discovered but not added to disabled lock table
 [6] handle write intent error req2: handled conflicting intents on "k", released latches
 
 debug-lock-table
