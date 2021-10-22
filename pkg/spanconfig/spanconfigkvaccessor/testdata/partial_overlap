@@ -1,0 +1,23 @@
+# Test retrieving configs for spans that partially overlap, or are fully
+# enclosed, by whatever's stored.
+
+kvaccessor-update
+upsert [c,f):X
+----
+ok
+
+kvaccessor-get
+span [a,g)
+span [b,d)
+span [e,g)
+span [d,e)
+----
+[c,f):X
+[c,f):X
+[c,f):X
+[c,f):X
+
+kvaccessor-update
+upsert [d,e):Y
+----
+err: expected to find single row containing upserted spans
