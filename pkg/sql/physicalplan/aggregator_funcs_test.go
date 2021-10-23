@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -127,16 +128,16 @@ func checkDistAggregationInfo(
 	makeTableReader := func(startPK, endPK int, streamID int) execinfrapb.ProcessorSpec {
 		tr := execinfrapb.TableReaderSpec{
 			Table:         *tableDesc.TableDesc(),
-			Spans:         make([]execinfrapb.TableReaderSpan, 1),
+			Spans:         make([]roachpb.Span, 1),
 			NeededColumns: []uint32{uint32(colIdx)},
 		}
 
 		var err error
-		tr.Spans[0].Span.Key, err = randgen.TestingMakePrimaryIndexKey(tableDesc, startPK)
+		tr.Spans[0].Key, err = randgen.TestingMakePrimaryIndexKey(tableDesc, startPK)
 		if err != nil {
 			t.Fatal(err)
 		}
-		tr.Spans[0].Span.EndKey, err = randgen.TestingMakePrimaryIndexKey(tableDesc, endPK)
+		tr.Spans[0].EndKey, err = randgen.TestingMakePrimaryIndexKey(tableDesc, endPK)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -142,9 +142,9 @@ func (b *backfiller) mainLoop(ctx context.Context) (roachpb.Spans, error) {
 
 	for i := range b.spec.Spans {
 		log.VEventf(ctx, 2, "%s backfiller starting span %d of %d: %s",
-			b.name, i+1, len(b.spec.Spans), b.spec.Spans[i].Span)
+			b.name, i+1, len(b.spec.Spans), b.spec.Spans[i])
 		chunks := 0
-		todo := b.spec.Spans[i].Span
+		todo := b.spec.Spans[i]
 		for todo.Key != nil {
 			log.VEventf(ctx, 3, "%s backfiller starting chunk %d: %s", b.name, chunks, todo)
 			var err error
@@ -168,13 +168,13 @@ func (b *backfiller) mainLoop(ctx context.Context) (roachpb.Spans, error) {
 			log.VEventf(ctx, 2,
 				"%s backfiller ran out of time on span %d of %d, will resume it at %s next time",
 				b.name, i+1, len(b.spec.Spans), todo)
-			finishedSpans = append(finishedSpans, roachpb.Span{Key: b.spec.Spans[i].Span.Key, EndKey: todo.Key})
+			finishedSpans = append(finishedSpans, roachpb.Span{Key: b.spec.Spans[i].Key, EndKey: todo.Key})
 			break
 		}
 		log.VEventf(ctx, 2, "%s backfiller finished span %d of %d: %s",
-			b.name, i+1, len(b.spec.Spans), b.spec.Spans[i].Span)
+			b.name, i+1, len(b.spec.Spans), b.spec.Spans[i])
 		totalSpans++
-		finishedSpans = append(finishedSpans, b.spec.Spans[i].Span)
+		finishedSpans = append(finishedSpans, b.spec.Spans[i])
 	}
 
 	log.VEventf(ctx, 3, "%s backfiller flushing...", b.name)

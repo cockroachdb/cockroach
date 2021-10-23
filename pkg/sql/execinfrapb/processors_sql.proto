@@ -19,6 +19,7 @@ syntax = "proto2";
 package cockroach.sql.distsqlrun;
 option go_package = "execinfrapb";
 
+import "roachpb/data.proto";
 import "sql/catalog/descpb/structured.proto";
 import "sql/catalog/descpb/join_type.proto";
 import "sql/catalog/descpb/locking.proto";
@@ -68,7 +69,8 @@ message TableReaderSpec {
   // i.e. table.indexes[index_idx-1]
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
   optional bool reverse = 3 [(gogoproto.nullable) = false];
-  repeated TableReaderSpan spans = 4 [(gogoproto.nullable) = false];
+  reserved 4;
+  repeated roachpb.Span spans = 18 [(gogoproto.nullable) = false];
 
   // A hint for how many rows the consumer of the table reader output might
   // need. This is used to size the initial KV batches to try to avoid reading
@@ -176,7 +178,8 @@ message IndexSkipTableReaderSpec {
   // i.e. table.indexes[index_idx-1]
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
 
-  repeated TableReaderSpan spans = 3 [(gogoproto.nullable) = false];
+  reserved 3;
+  repeated roachpb.Span spans = 8 [(gogoproto.nullable) = false];
 
   // Indicates the visibility level of the columns that should be returned.
   // Normally, will be set to PUBLIC. Will be set to PUBLIC_AND_NOT_PUBLIC if
