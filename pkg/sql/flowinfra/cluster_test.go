@@ -73,13 +73,13 @@ func TestClusterFlow(t *testing.T) {
 
 	kvDB := tc.Server(0).DB()
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
-	makeIndexSpan := func(start, end int) execinfrapb.TableReaderSpan {
+	makeIndexSpan := func(start, end int) roachpb.Span {
 		var span roachpb.Span
 		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PublicNonPrimaryIndexes()[0].GetID()))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
 		span.EndKey = append(span.EndKey, prefix...)
 		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
-		return execinfrapb.TableReaderSpan{Span: span}
+		return span
 	}
 
 	// successful indicates whether the flow execution is successful.
@@ -110,21 +110,21 @@ func TestClusterFlow(t *testing.T) {
 		tr1 := execinfrapb.TableReaderSpec{
 			Table:         *desc.TableDesc(),
 			IndexIdx:      1,
-			Spans:         []execinfrapb.TableReaderSpan{makeIndexSpan(0, 8)},
+			Spans:         []roachpb.Span{makeIndexSpan(0, 8)},
 			NeededColumns: []uint32{0, 1},
 		}
 
 		tr2 := execinfrapb.TableReaderSpec{
 			Table:         *desc.TableDesc(),
 			IndexIdx:      1,
-			Spans:         []execinfrapb.TableReaderSpan{makeIndexSpan(8, 12)},
+			Spans:         []roachpb.Span{makeIndexSpan(8, 12)},
 			NeededColumns: []uint32{0, 1},
 		}
 
 		tr3 := execinfrapb.TableReaderSpec{
 			Table:         *desc.TableDesc(),
 			IndexIdx:      1,
-			Spans:         []execinfrapb.TableReaderSpan{makeIndexSpan(12, 100)},
+			Spans:         []roachpb.Span{makeIndexSpan(12, 100)},
 			NeededColumns: []uint32{0, 1},
 		}
 

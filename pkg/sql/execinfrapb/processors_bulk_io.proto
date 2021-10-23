@@ -46,7 +46,8 @@ message BackfillerSpec {
   optional sqlbase.TableDescriptor table = 2 [(gogoproto.nullable) = false];
 
   // Sections of the table to be backfilled.
-  repeated TableReaderSpan spans = 3 [(gogoproto.nullable) = false];
+  reserved 3;
+  repeated roachpb.Span spans = 10 [(gogoproto.nullable) = false];
 
   // Run the backfill for approximately this duration.
   // The backfill will always process at least one backfill chunk.
