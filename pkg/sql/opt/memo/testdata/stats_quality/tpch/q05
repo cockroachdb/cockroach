@@ -195,7 +195,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 
 ----Stats for q5_project_3----
 column_names  row_count  distinct_count  null_count
-{column60}    7243       7245            0
+{column60}    7243       7243            0
 {n_name}      7243       5               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
@@ -301,21 +301,21 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 column_names   row_count  distinct_count  null_count
 {o_custkey}    227597     86427           0
 {o_orderdate}  227597     365             0
-{o_orderkey}   227597     229152          0
+{o_orderkey}   227597     227597          0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {o_custkey}    233988.00      1.03           92038.00            1.06                0.00            1.00
 {o_orderdate}  233988.00      1.03           365.00              1.00                0.00            1.00
-{o_orderkey}   233988.00      1.03           233988.00           1.02                0.00            1.00
+{o_orderkey}   233988.00      1.03           233988.00           1.03                0.00            1.00
 
 ----Stats for q5_scan_8----
 column_names   row_count  distinct_count  null_count
 {o_orderdate}  227597     365             0
-{o_orderkey}   227597     229152          0
+{o_orderkey}   227597     227597          0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {o_orderdate}  233988.00      1.03           365.00              1.00                0.00            1.00
-{o_orderkey}   233988.00      1.03           233988.00           1.02                0.00            1.00
+{o_orderkey}   233988.00      1.03           233988.00           1.03                0.00            1.00
 
 ----Stats for q5_lookup_join_9----
 column_names   row_count  distinct_count  null_count
