@@ -15,6 +15,7 @@ import { Spinner, InlineAlert } from "@cockroachlabs/ui-components";
 import { Loading } from "./loading";
 
 const SomeComponent = () => <div>Hello, world!</div>;
+const SomeCustomErrorComponent = () => <div>Custom Error</div>;
 
 describe("<Loading>", () => {
   describe("when error is null", () => {
@@ -73,7 +74,22 @@ describe("<Loading>", () => {
         );
         assert.isFalse(wrapper.find(SomeComponent).exists());
         assert.isFalse(wrapper.find(Spinner).exists());
+        assert.isFalse(wrapper.find(SomeCustomErrorComponent).exists());
         assert.isTrue(wrapper.find(InlineAlert).exists());
+      });
+
+      it("render custom error when provided", () => {
+        const wrapper = mount(
+          <Loading
+            loading={true}
+            error={Error("some error message")}
+            render={() => <SomeComponent />}
+            renderError={() => <SomeCustomErrorComponent />}
+          />,
+        );
+        assert.isFalse(wrapper.find(SomeComponent).exists());
+        assert.isFalse(wrapper.find(Spinner).exists());
+        assert.isTrue(wrapper.find(SomeCustomErrorComponent).exists());
       });
     });
   });

@@ -31,6 +31,7 @@ import { Loading } from "../loading";
 import { SummaryCard } from "../summaryCard";
 import { Bytes, Duration, formatNumberForDisplay } from "src/util";
 import { UIConfigState } from "../store";
+import SQLActivityError from "../sqlActivity/errorComponent";
 
 import summaryCardStyles from "../summaryCard/summaryCard.module.scss";
 import transactionDetailsStyles from "./transactionDetails.modules.scss";
@@ -306,6 +307,11 @@ export class TransactionDetails extends React.Component<
               </React.Fragment>
             );
           }}
+          renderError={() =>
+            SQLActivityError({
+              statsType: "transactions",
+            })
+          }
         />
       </div>
     );

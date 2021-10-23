@@ -66,6 +66,7 @@ import { NodeSummaryStats } from "../nodes";
 import { UIConfigState } from "../store";
 import moment, { Moment } from "moment";
 import { StatementsRequest } from "src/api/statementsApi";
+import SQLActivityError from "../sqlActivity/errorComponent";
 
 const { TabPane } = Tabs;
 
@@ -418,6 +419,11 @@ export class StatementDetails extends React.Component<
             loading={_.isNil(this.props.statement)}
             error={this.props.statementsError}
             render={this.renderContent}
+            renderError={() =>
+              SQLActivityError({
+                statsType: "statements",
+              })
+            }
           />
         </section>
       </div>
