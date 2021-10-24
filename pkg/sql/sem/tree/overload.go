@@ -801,6 +801,67 @@ func typeCheckOverloadedExprs(
 		}
 	}
 
+	// This is a total hack for AnyEnum whilst we don't have postgres type resolution.
+	// This enables AnyEnum array ops to not need a cast, e.g. array['a']::enum[] = '{a}'.
+	// If we have one remaining candidate containing AnyEnum, cast all remaining
+	// arguments to a known enum and check that the rest match. This is a poor man's
+	// implicit cast / postgres "same argument" resolution clone.
+	if len(s.overloadIdxs) == 1 {
+		params := s.overloads[s.overloadIdxs[0]].params()
+		var knownEnum *types.T
+
+		// Check we have all "AnyEnum" (or "AnyEnum" array) arguments and that
+		// one argument is typed with an enum.
+		attemptAnyEnumCast := func() bool {
+			for i := 0; i < params.Length(); i++ {
+				typ := params.GetAt(i)
+				// Note we are deliberately looking at whether the built-in takes in
+				// AnyEnum as an argument, not the exprs given to the overload itself.
+				if !(typ.Identical(types.AnyEnum) || typ.Identical(types.MakeArray(types.AnyEnum))) {
+					return false
+				}
+				if s.typedExprs[i] != nil {
+					// Assign the known enum if it was previously unassigned.
+					// Otherwise, double check it matches a previously defined enum.
+					posEnum := s.typedExprs[i].ResolvedType()
+					if !posEnum.UserDefined() {
+						return false
+					}
+					if posEnum.Family() == types.ArrayFamily {
+						posEnum = posEnum.ArrayContents()
+					}
+					if knownEnum == nil {
+						knownEnum = posEnum
+					} else if !posEnum.Identical(knownEnum) {
+						return false
+					}
+				}
+			}
+			return knownEnum != nil
+		}()
+
+		// If we have all arguments as AnyEnum, and we know at least one of the
+		// enum's actual type, try type cast the rest.
+		if attemptAnyEnumCast {
+			// Copy exprs to prevent any overwrites of underlying s.exprs array later.
+			sCopy := s
+			sCopy.exprs = make([]Expr, len(s.exprs))
+			copy(sCopy.exprs, s.exprs)
+			if ok, typedExprs, fns, err := filterAttempt(ctx, semaCtx, &sCopy, func() {
+				for _, idx := range append(s.constIdxs, s.placeholderIdxs...) {
+					p := params.GetAt(idx)
+					typCast := knownEnum
+					if p.Family() == types.ArrayFamily {
+						typCast = types.MakeArray(knownEnum)
+					}
+					sCopy.exprs[idx] = &CastExpr{Expr: sCopy.exprs[idx], Type: typCast, SyntaxMode: CastShort}
+				}
+			}); ok {
+				return typedExprs, fns, err
+			}
+		}
+	}
+
 	// In a binary expression, in the case of one of the arguments being untyped NULL,
 	// we prefer overloads where we infer the type of the NULL to be the same as the
 	// other argument. This is used to differentiate the behavior of

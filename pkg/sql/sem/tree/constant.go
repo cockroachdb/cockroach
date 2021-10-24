@@ -492,6 +492,7 @@ var (
 		types.Jsonb,
 		types.VarBit,
 		types.AnyEnum,
+		types.AnyEnumArray,
 		types.INetArray,
 		types.VarBitArray,
 	}

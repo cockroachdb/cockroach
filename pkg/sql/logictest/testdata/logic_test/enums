@@ -1522,8 +1522,31 @@ subtest regression_71388
 
 statement ok
 CREATE TYPE enum_test AS ENUM ('a', 'b');
+CREATE TABLE enum_table (id SERIAL PRIMARY KEY, elem enum_test);
+INSERT INTO enum_table (elem) VALUES ('a'), ('b');
 CREATE TABLE enum_array_table (id SERIAL PRIMARY KEY, elems enum_test[]);
 INSERT INTO enum_array_table (elems) VALUES (array['a']), (array['b']), (array['a', 'b'])
+
+query TB
+SELECT
+  elem,
+  elem = 'a'
+FROM enum_table
+ORDER BY id
+----
+a  true
+b  false
+
+query TB
+SELECT
+  elems,
+  elems = '{a}'
+FROM enum_array_table
+ORDER BY id
+----
+{a}    true
+{b}    false
+{a,b}  false
 
 query TTBBBB
 SELECT
@@ -1545,6 +1568,14 @@ ORDER BY a.id, b.id
 {a,b}  {a}    false  false  false  false
 {a,b}  {b}    false  true   true   false
 {a,b}  {a,b}  true   false  true   true
+
+query B
+SELECT '{a,b}'::enum_test[] = '{a,b}'
+----
+true
+
+statement ok
+DROP TABLE enum_table
 
 # Make sure that adding a new enum value works well with PREPARE/EXECUTE.
 subtest regression_70378
