@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
@@ -421,6 +422,9 @@ func TestFormatPgwireText(t *testing.T) {
 			typeChecked, err = evalCtx.NormalizeExpr(typeChecked)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if strings.Contains(test.expr, "(1,2),(3,4)") {
+				fmt.Println()
 			}
 			exprStr := tree.AsStringWithFlags(typeChecked, tree.FmtPgwireText)
 			if exprStr != test.expected {
