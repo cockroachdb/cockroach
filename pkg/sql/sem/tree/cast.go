@@ -2409,6 +2409,9 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 		return ret, nil
 
 	default:
+		if v == 0 {
+			return wrapWithOid(NewDString("-"), t.Oid()), nil
+		}
 		oid, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, NewDOid(v))
 		if err != nil {
 			oid = NewDOid(v)
