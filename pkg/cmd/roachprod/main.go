@@ -565,50 +565,30 @@ directory is removed.
 			len(clusterNames),
 			func(ctx context.Context, idx int) error {
 				name := clusterNames[idx]
-				if name == config.Local {
-					return destroyLocalCluster()
-				}
-				if cld == nil {
-					var err error
-					cld, err = cloud.ListCloud()
-					if err != nil {
-						return err
+				var c *cloud.Cluster
+				if local.IsLocal(name) {
+					// This is an optimization to avoid calling ListCloud.
+					c = local.GetCluster(name)
+				} else {
+					if cld == nil {
+						var err error
+						cld, err = cloud.ListCloud()
+						if err != nil {
+							return err
+						}
 					}
+					c = cld.Clusters[name]
 				}
-				return destroyCluster(cld, name)
+				if c == nil {
+					return fmt.Errorf("cluster %s does not exist", name)
+				}
+				return cloud.DestroyCluster(c)
 			}); err != nil {
 			return err
 		}
 		fmt.Println("OK")
 		return nil
 	}),
-}
-
-func destroyCluster(cld *cloud.Cloud, clusterName string) error {
-	c, ok := cld.Clusters[clusterName]
-	if !ok {
-		return fmt.Errorf("cluster %s does not exist", clusterName)
-	}
-	fmt.Printf("Destroying cluster %s with %d nodes\n", clusterName, len(c.VMs))
-	return cloud.DestroyCluster(c)
-}
-
-func destroyLocalCluster() error {
-	if _, ok := install.Clusters[config.Local]; !ok {
-		return fmt.Errorf("cluster %s does not exist", config.Local)
-	}
-	c, err := newCluster(config.Local)
-	if err != nil {
-		return err
-	}
-	c.Wipe(false)
-	for _, i := range c.Nodes {
-		err := os.RemoveAll(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), i))
-		if err != nil {
-			return err
-		}
-	}
-	return os.Remove(filepath.Join(os.ExpandEnv(config.DefaultHostDir), c.Name))
 }
 
 var cachedHostsCmd = &cobra.Command{
