@@ -49,8 +49,10 @@ const (
 	tagSubnet    = "subnetPrefix"
 )
 
-// init registers Provider with the top-level vm package.
-func init() {
+// Init registers the Azure provider with vm.Providers.
+//
+// If the Azure CLI utilities are not installed, the provider is a stub.
+func Init() {
 	const unimplemented = "please install the Azure CLI utilities +" +
 		"(https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)"
 
