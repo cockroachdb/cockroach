@@ -264,16 +264,16 @@ WHERE b.v = 'bar' AND a.c = 'foo'
 1  bar  1  foo
 
 query ITI
-SELECT i, i::"char", length(i::"char")
+SELECT i, i::"char"::bytea, length(i::"char")
 FROM (VALUES (32), (97), (127), (0), (-1), (-127), (-128)) v(i);
 ----
-32      1
-97   a  1
-127    1
-0    ¬∑  0
--1   ˇ	1	
--127	Å	1	
--128	Ä	1	
+32           1
+97    a      1
+127         1
+0     ¬∑      0
+-1    [255]  1
+-127  [129]  1
+-128  [128]  1
 
 statement error pgcode 22003 \"char\" out of range
 SELECT 128::"char";
@@ -285,3 +285,34 @@ query IFRB
 SELECT ' 1 '::int, ' 1.2 '::float, ' 2.3 '::decimal, ' true '::bool
 ----
 1  1.2  2.3  true
+
+query IOTOOOOOO
+SELECT i, i::oid, i::oid::text,
+  i::oid::regproc, i::oid::regprocedure, i::oid::regnamespace, i::oid::regclass, i::oid::regtype, i::oid::regrole
+FROM (VALUES (0), (1)) v(i)
+----
+0  0  0  -  -  -  -  -  -
+1  1  1  1  1  1  1  1  1
+
+query TOOOOOOOOOOOO
+SELECT i, i::regproc::oid, i::regprocedure::oid, i::regnamespace::oid, i::regtype::oid, i::regclass::oid, i::regrole::oid,
+  i::regproc, i::regprocedure, i::regnamespace, i::regtype, i::regclass, i::regrole
+FROM (VALUES ('-')) v(i)
+----
+-  0  0  0  0  0  0  -  -  -  -  -  -
+
+statement error invalid input syntax for type oid: "-"
+SELECT i, i::oid FROM (VALUES ('-')) v(i)
+
+statement error invalid input syntax for type oid: "-"
+SELECT '-'::oid
+
+query OOOOOOOOOOOO
+SELECT '-'::regclass, '-'::regclass::oid,
+  '-'::regproc, '-'::regproc::oid,
+  '-'::regprocedure, '-'::regprocedure::oid,
+  '-'::regnamespace, '-'::regnamespace::oid,
+  '-'::regtype, '-'::regtype::oid,
+  '-'::regrole, '-'::regrole::oid
+----
+-  0  -  0  -  0  -  0  -  0  -  0
