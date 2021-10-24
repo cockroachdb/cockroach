@@ -2380,7 +2380,7 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 	case oid.T_oid:
 		return &DOid{semanticType: t, DInt: v}, nil
 	case oid.T_regtype:
-		// Mapping an oid to a regtype is easy: we have a hardcoded map.
+		// Mapping an dOid to a regtype is easy: we have a hardcoded map.
 		ret := &DOid{semanticType: t, DInt: v}
 		if typ, ok := types.OidToType[oid.Oid(v)]; ok {
 			ret.name = typ.PGName()
@@ -2396,7 +2396,7 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 		return ret, nil
 
 	case oid.T_regproc, oid.T_regprocedure:
-		// Mapping an oid to a regproc is easy: we have a hardcoded map.
+		// Mapping an dOid to a regproc is easy: we have a hardcoded map.
 		name, ok := OidToBuiltinName[oid.Oid(v)]
 		ret := &DOid{semanticType: t, DInt: v}
 		if !ok {
@@ -2412,12 +2412,21 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 		if v == 0 {
 			return wrapWithOid(NewDString("-"), t.Oid()), nil
 		}
-		oid, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, NewDOid(v))
-		if err != nil {
-			oid = NewDOid(v)
-			oid.semanticType = t
+
+		var err error = nil
+		dOid := NewDOid(v)
+		dOid.semanticType = t
+
+		// ctx.Planner will be nil only for 'make test PKG=./pkg/sql/sem/tree TESTS=TestEval'
+		// we just perform a nil check and keep backward compatibility
+		if ctx.Planner != nil {
+			dOid, err = ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, NewDOid(v))
+			if err != nil {
+				dOid = NewDOid(v)
+				dOid.semanticType = t
+			}
 		}
-		return oid, nil
+		return dOid, nil
 	}
 }
 
