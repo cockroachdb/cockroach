@@ -2390,6 +2390,8 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 				return nil, err
 			}
 			ret.name = typ.PGName()
+		} else if v == 0 {
+			return wrapWithOid(NewDString("-"), t.Oid()), nil
 		}
 		return ret, nil
 
@@ -2398,6 +2400,9 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 		name, ok := OidToBuiltinName[oid.Oid(v)]
 		ret := &DOid{semanticType: t, DInt: v}
 		if !ok {
+			if v == 0 {
+				return wrapWithOid(NewDString("-"), t.Oid()), nil
+			}
 			return ret, nil
 		}
 		ret.name = name
