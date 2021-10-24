@@ -5043,7 +5043,10 @@ type DOidWrapper struct {
 	Oid     oid.Oid
 }
 
-// wrapWithOid wraps a Datum with a custom Oid.
+// ZeroOidValue postgres represents the 0 oid value as '-'.
+const ZeroOidValue = "-"
+
+// wrapAsZeroOid wraps ZeroOidValue with a custom Oid.
 func wrapWithOid(d Datum, oid oid.Oid) Datum {
 	switch v := d.(type) {
 	case nil:
@@ -5064,6 +5067,16 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 		Wrapped: d,
 		Oid:     oid,
 	}
+}
+
+// wrapAsZeroOid wraps and oid as zero oid value
+func wrapAsZeroOid(t *types.T) Datum {
+	tmpOid := NewDOid(0)
+	tmpOid.semanticType = t
+	if t.Oid() != oid.T_oid {
+		tmpOid.name = ZeroOidValue
+	}
+	return tmpOid
 }
 
 // UnwrapDatum returns the base Datum type for a provided datum, stripping

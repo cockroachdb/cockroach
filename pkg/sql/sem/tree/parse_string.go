@@ -64,11 +64,15 @@ func ParseAndRequireString(
 	case types.JsonFamily:
 		d, err = ParseDJSON(s)
 	case types.OidFamily:
-		i, err := ParseDInt(s)
-		if err != nil {
-			return nil, false, err
+		if s == ZeroOidValue {
+			d = NewDString(s)
+		} else {
+			i, err := ParseDInt(s)
+			if err != nil {
+				return nil, false, err
+			}
+			d = NewDOid(*i)
 		}
-		d = NewDOid(*i)
 	case types.StringFamily:
 		// If the string type specifies a limit we truncate to that limit:
 		//   'hello'::CHAR(2) -> 'he'
