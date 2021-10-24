@@ -151,7 +151,7 @@ func formatArray(
 		intArray := []int64{}
 		backingArray = &intArray
 		parsingArray = (*pq.Int64Array)(&intArray)
-	case "TEXT", "VARCHAR", "NAME", "CHAR", "BPCHAR":
+	case "TEXT", "VARCHAR", "NAME", "CHAR", "BPCHAR", "RECORD":
 		stringArray := []string{}
 		backingArray = &stringArray
 		parsingArray = (*pq.StringArray)(&stringArray)
