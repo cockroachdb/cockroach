@@ -508,6 +508,12 @@ var (
 	AnyTuple = &T{InternalType: InternalType{
 		Family: TupleFamily, TupleContents: []*T{Any}, Oid: oid.T_record, Locale: &emptyLocale}}
 
+	// AnyTupleArray is a special type used only during static analysis as a wildcard
+	// type that matches an array of tuples with any number of fields of any type (including
+	// tuple types). Execution-time values should never have this type.
+	AnyTupleArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: AnyTuple, Oid: oid.T__record, Locale: &emptyLocale}}
+
 	// AnyCollatedString is a special type used only during static analysis as a
 	// wildcard type that matches a collated string with any locale. Execution-
 	// time values should never have this type.
