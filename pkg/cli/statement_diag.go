@@ -23,7 +23,7 @@ import (
 )
 
 var stmtDiagCmd = &cobra.Command{
-	Use:   "statement-diag [command]",
+	Use:   "statement-diag [command] [options]",
 	Short: "commands for managing statement diagnostics bundles",
 	Long: `This set of commands can be used to manage and download statement diagnostic
 bundles, and to cancel outstanding diagnostics activation requests. Statement
@@ -32,7 +32,7 @@ diagnostics can be activated from the UI or using EXPLAIN ANALYZE (DEBUG).`,
 }
 
 var stmtDiagListCmd = &cobra.Command{
-	Use:   "list [options]",
+	Use:   "list",
 	Short: "list available bundles and outstanding activation requests",
 	Long: `List statement diagnostics that are available for download and outstanding
 diagnostics activation requests.`,
@@ -94,20 +94,25 @@ func runStmtDiagList(cmd *cobra.Command, args []string) (resErr error) {
 }
 
 var stmtDiagDownloadCmd = &cobra.Command{
-	Use:   "download <bundle id> <file> [options]",
+	Use:   "download <bundle id> [<filename>]",
 	Short: "download statement diagnostics bundle into a zip file",
 	Long: `Download statement diagnostics bundle into a zip file, using an ID returned by
 the list command.`,
-	Args: cobra.ExactArgs(2),
+	Args: cobra.RangeArgs(1, 2),
 	RunE: clierrorplus.MaybeDecorateError(runStmtDiagDownload),
 }
 
 func runStmtDiagDownload(cmd *cobra.Command, args []string) (resErr error) {
 	id, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil || id < 0 {
-		return errors.New("invalid bundle id")
+		return errors.New("invalid bundle ID")
 	}
-	filename := args[1]
+	var filename string
+	if len(args) > 1 {
+		filename = args[1]
+	} else {
+		filename = fmt.Sprintf("stmt-bundle-%d.zip", id)
+	}
 
 	conn, err := makeSQLClient("cockroach statement-diag", useSystemDb)
 	if err != nil {
@@ -115,7 +120,11 @@ func runStmtDiagDownload(cmd *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
-	return clisqlclient.StmtDiagDownloadBundle(conn, id, filename)
+	if err := clisqlclient.StmtDiagDownloadBundle(conn, id, filename); err != nil {
+		return err
+	}
+	fmt.Printf("Bundle saved to %q\n", filename)
+	return nil
 }
 
 var stmtDiagDeleteCmd = &cobra.Command{
@@ -146,7 +155,7 @@ func runStmtDiagDelete(cmd *cobra.Command, args []string) (resErr error) {
 
 	id, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil || id < 0 {
-		return errors.New("invalid id")
+		return errors.New("invalid ID")
 	}
 
 	return clisqlclient.StmtDiagDeleteBundle(conn, id)
@@ -180,7 +189,7 @@ func runStmtDiagCancel(cmd *cobra.Command, args []string) (resErr error) {
 
 	id, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil || id < 0 {
-		return errors.New("invalid id")
+		return errors.New("invalid ID")
 	}
 
 	return clisqlclient.StmtDiagCancelOutstandingRequest(conn, id)
