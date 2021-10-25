@@ -508,3 +508,36 @@ query TT
 SELECT * FROM tbl
 ----
 2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
+
+# Verify that custom session variables are handled correctly.
+statement ok
+SET custom_option.local_setting = 'abc';
+SET custom_option.session_setting = 'abc'
+
+statement ok
+BEGIN;
+SET LOCAL custom_option.local_setting = 'def';
+SET custom_option.session_setting = 'def'
+
+query T
+SHOW custom_option.local_setting
+----
+def
+
+query T
+SHOW custom_option.session_setting
+----
+def
+
+statement ok
+COMMIT
+
+query T
+SHOW custom_option.local_setting
+----
+abc
+
+query T
+SHOW custom_option.session_setting
+----
+def

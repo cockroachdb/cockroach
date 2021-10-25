@@ -1800,6 +1800,9 @@ func init() {
 		res := make([]string, 0, len(varGen))
 		for vName := range varGen {
 			res = append(res, vName)
+			if strings.Contains(vName, ".") {
+				panic(fmt.Sprintf(`no session variables with "." can be created as they are reserved for custom options, found %s`, vName))
+			}
 		}
 		sort.Strings(res)
 		return res
@@ -1960,6 +1963,13 @@ func IsSessionVariableConfigurable(varName string) (exists, configurable bool) {
 	return exists, v.Set != nil
 }
 
+// IsCustomOptionSessionVariable returns whether the given varName is a custom
+// session variable.
+func IsCustomOptionSessionVariable(varName string) bool {
+	isCustom, _ := getCustomOptionSessionVar(varName)
+	return isCustom
+}
+
 // CheckSessionVariableValueValid returns an error if the value is not valid
 // for the given variable. It also returns an error if there is no variable with
 // the given name or if the variable is not configurable.
@@ -1995,6 +2005,9 @@ func getSessionVar(name string, missingOk bool) (bool, sessionVar, error) {
 
 	v, ok := varGen[name]
 	if !ok {
+		if isCustom, v := getCustomOptionSessionVar(name); isCustom {
+			return true, v, nil
+		}
 		if missingOk {
 			return false, sessionVar{}, nil
 		}
@@ -2002,6 +2015,25 @@ func getSessionVar(name string, missingOk bool) (bool, sessionVar, error) {
 			"unrecognized configuration parameter %q", name)
 	}
 	return true, v, nil
+}
+
+func getCustomOptionSessionVar(varName string) (isCustom bool, sv sessionVar) {
+	if strings.Contains(varName, ".") {
+		return true, sessionVar{
+			Get: func(evalCtx *extendedEvalContext) string {
+				return evalCtx.SessionData().CustomOptions[varName]
+			},
+			Set: func(ctx context.Context, m sessionDataMutator, val string) error {
+				// TODO(#72026): do some memory accounting.
+				m.SetCustomOption(varName, val)
+				return nil
+			},
+			GlobalDefault: func(sv *settings.Values) string {
+				return ""
+			},
+		}
+	}
+	return false, sessionVar{}
 }
 
 // GetSessionVar implements the EvalSessionAccessor interface.
