@@ -68,6 +68,7 @@ export function getMatchParamByName(
 export function syncHistory(
   params: Record<string, string | undefined>,
   history: History,
+  push?: boolean,
 ): void {
   const nextSearchParams = new URLSearchParams(history.location.search);
 
@@ -80,10 +81,9 @@ export function syncHistory(
   });
 
   history.location.search = nextSearchParams.toString();
-  history.replace(history.location);
-}
-
-export function clearHistory(history: History): void {
-  history.location.search = "";
-  history.replace(history.location);
+  if (push) {
+    history.push(history.location);
+  } else {
+    history.replace(history.location);
+  }
 }
