@@ -11,6 +11,7 @@ go_library(
         "make_query.go",
         "parse_bool.go",
         "rows.go",
+        "statement_diag.go",
         "string_to_duration.go",
         "txn_shim.go",
     ],

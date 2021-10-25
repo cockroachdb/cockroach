@@ -82,6 +82,7 @@ func Example_statement_diag() {
 	c.RunWithArgs([]string{"statement-diag", "cancel", "--all", "5"})
 	c.RunWithArgs([]string{"statement-diag", "cancel", "4"})
 	c.RunWithArgs([]string{"statement-diag", "list"})
+	c.RunWithArgs([]string{"statement-diag", "cancel", "123"})
 	c.RunWithArgs([]string{"statement-diag", "cancel", "--all"})
 	c.RunWithArgs([]string{"statement-diag", "list"})
 
@@ -99,7 +100,7 @@ func Example_statement_diag() {
 	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _
 	//   4   2010-01-02 03:04:10 UTC  SELECT _ + _
 	// statement-diag download 13 foo.zip
-	// ERROR: no statement diagnostics bundle with ID 13
+	// ERROR: failed to download statement diagnostics bundle 13 to file 'foo.zip': no statement diagnostics bundle with ID 13
 	// statement-diag download 20 tempfile.zip
 	// bundle data: chunk1chunk2chunk3
 	// statement-diag download xx
@@ -145,6 +146,8 @@ func Example_statement_diag() {
 	//   ID  Activation time          Statement
 	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _
 	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _
+	// statement-diag cancel 123
+	// ERROR: no outstanding activation request with ID 123
 	// statement-diag cancel --all
 	// statement-diag list
 	// No statement diagnostics bundles available.
