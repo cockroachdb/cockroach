@@ -45,7 +45,8 @@ func FormatVal(
 			return formatArray(b, colType[1:], showPrintableUnicode, showNewLinesAndTabs)
 		}
 
-		if colType == "NAME" {
+		// Names, records, and user-defined types should all be displayed as strings.
+		if colType == "NAME" || colType == "RECORD" || colType == "" {
 			val = string(b)
 			colType = "VARCHAR"
 		}
