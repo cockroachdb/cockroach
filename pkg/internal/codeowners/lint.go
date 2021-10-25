@@ -59,8 +59,8 @@ func LintEverythingIsOwned(
 	// - ./pkg/asd/generated.go
 	skip := map[string]struct{}{
 		filepath.Join("ccl", "ccl_init.go"): {},
-		filepath.Join("ui", "node_modules"): {},
-		filepath.Join("ui", "yarn-vendor"):  {},
+		filepath.Join("node_modules"):       {},
+		filepath.Join("yarn-vendor"):        {},
 		"Makefile":                          {},
 		"BUILD.bazel":                       {},
 		".gitignore":                        {},
