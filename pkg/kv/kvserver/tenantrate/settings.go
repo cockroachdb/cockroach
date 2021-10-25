@@ -30,12 +30,12 @@ type Config struct {
 
 	// ReadRequestUnits is the baseline cost of a read, in KV Compute Units.
 	ReadRequestUnits float64
-	// ReadRequestUnits is the size-dependent cost of a read, in KV Compute Units
+	// ReadUnitsPerByte is the size-dependent cost of a read, in KV Compute Units
 	// per byte.
 	ReadUnitsPerByte float64
 	// WriteRequestUnits is the baseline cost of a write, in KV Compute Units.
 	WriteRequestUnits float64
-	// WriteRequestUnits is the size-dependent cost of a write, in KV Compute
+	// WriteUnitsPerByte is the size-dependent cost of a write, in KV Compute
 	// Units per byte.
 	WriteUnitsPerByte float64
 }
