@@ -11,7 +11,7 @@
 // All changes made on this file, should also be done on the equivalent
 // file on managed-service repo.
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Tabs } from "antd";
 import { commonStyles, util } from "@cockroachlabs/cluster-ui";
 import SessionsPageConnected from "src/views/sessions/sessionsPage";
@@ -23,13 +23,20 @@ const { TabPane } = Tabs;
 
 const SQLActivityPage = (props: RouteComponentProps) => {
   const defaultTab = util.queryByName(props.location, "tab") || "sessions";
-  const [currentTab, setCurrentTab] = React.useState(defaultTab);
+  const [currentTab, setCurrentTab] = useState(defaultTab);
 
   const onTabChange = (tabId: string): void => {
     setCurrentTab(tabId);
-    util.clearHistory(props.history);
-    util.syncHistory({ tab: tabId }, props.history);
+    props.history.location.search = "";
+    util.syncHistory({ tab: tabId }, props.history, true);
   };
+
+  useEffect(() => {
+    const queryTab = util.queryByName(props.location, "tab") || "sessions";
+    if (queryTab !== currentTab) {
+      setCurrentTab(queryTab);
+    }
+  }, [props.location, currentTab]);
 
   return (
     <div>
