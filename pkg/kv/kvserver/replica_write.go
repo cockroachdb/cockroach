@@ -139,7 +139,8 @@ func (r *Replica) executeWriteBatch(
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose.
-	ch, abandon, _, pErr := r.evalAndPropose(ctx, ba, g, st, localUncertaintyLimit, tok.Move(ctx))
+	ch, abandon, finishLocal, _, pErr := r.evalAndPropose(
+		ctx, ba, g, st, localUncertaintyLimit, tok.Move(ctx))
 	if pErr != nil {
 		r.readOnlyCmdMu.RUnlock()
 		if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
@@ -155,6 +156,16 @@ func (r *Replica) executeWriteBatch(
 	// We are done with pre-Raft evaluation at this point, and have to release the
 	// read-only command lock to avoid deadlocks during Raft evaluation.
 	r.readOnlyCmdMu.RUnlock()
+
+	// If request evaluation did not yield a Raft command (e.g. due to a noop or
+	// an evaluation error), it may still return a local result that needs
+	// processing without going through Raft, so we finish it below. This cannot
+	// be done in evalAndPropose() because applying local side-effects may take
+	// out raftMu and we have to release readOnlyCmdMu above first. The proposal
+	// result will be returned on the proposal channel as usual.
+	if finishLocal != nil {
+		finishLocal(ctx)
+	}
 
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()

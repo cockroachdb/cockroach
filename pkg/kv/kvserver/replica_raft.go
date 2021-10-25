@@ -73,6 +73,10 @@ func makeIDKey() kvserverbase.CmdIDKey {
 //   the command's context from its Raft proposal. The client is then free to
 //   terminate execution, although it is given no guarantee that the proposal
 //   won't still go on to commit and apply at some later time.
+// - a closure used to finish a local result if no Raft command was proposed. If
+//   non-nil, the caller must call this to process the local result and yield
+//   a channel response. The closure may take out raftMu and thus must not be
+//   invoked while holding readOnlyCmdMu.
 // - the proposal's ID.
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
@@ -83,7 +87,7 @@ func (r *Replica) evalAndPropose(
 	st kvserverpb.LeaseStatus,
 	lul hlc.Timestamp,
 	tok TrackedRequestToken,
-) (chan proposalResult, func(), kvserverbase.CmdIDKey, *roachpb.Error) {
+) (chan proposalResult, func(), func(context.Context), kvserverbase.CmdIDKey, *roachpb.Error) {
 	defer tok.DoneIfNotMoved(ctx)
 	idKey := makeIDKey()
 	proposal, pErr := r.requestToProposal(ctx, idKey, ba, st, lul, g.LatchSpans())
@@ -93,9 +97,9 @@ func (r *Replica) evalAndPropose(
 	// proagate the error. Don't assume ownership of the concurrency guard.
 	if isConcurrencyRetryError(pErr) {
 		pErr = maybeAttachLease(pErr, &st.Lease)
-		return nil, nil, "", pErr
+		return nil, nil, nil, "", pErr
 	} else if _, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
-		return nil, nil, "", pErr
+		return nil, nil, nil, "", pErr
 	}
 
 	// Attach the endCmds to the proposal and assume responsibility for
@@ -112,19 +116,24 @@ func (r *Replica) evalAndPropose(
 	//    and that no Raft command needs to be proposed.
 	// 2. pErr != nil corresponds to a failed proposal - the command resulted
 	//    in an error.
+	// The caller must finish the proposal by calling the returned finishLocal()
+	// closure. We cannot do this here, since it may take out raftMu, which is
+	// illegal since our caller is already holding readOnlyCmdMu.
 	if proposal.command == nil {
-		intents := proposal.Local.DetachEncounteredIntents()
-		endTxns := proposal.Local.DetachEndTxns(pErr != nil /* alwaysOnly */)
-		r.handleReadWriteLocalEvalResult(ctx, *proposal.Local, false /* raftMuHeld */)
+		finishLocal := func(ctx context.Context) {
+			intents := proposal.Local.DetachEncounteredIntents()
+			endTxns := proposal.Local.DetachEndTxns(pErr != nil /* alwaysOnly */)
+			r.handleReadWriteLocalEvalResult(ctx, *proposal.Local, false /* raftMuHeld */)
 
-		pr := proposalResult{
-			Reply:              proposal.Local.Reply,
-			Err:                pErr,
-			EncounteredIntents: intents,
-			EndTxns:            endTxns,
+			pr := proposalResult{
+				Reply:              proposal.Local.Reply,
+				Err:                pErr,
+				EncounteredIntents: intents,
+				EndTxns:            endTxns,
+			}
+			proposal.finishApplication(ctx, pr)
 		}
-		proposal.finishApplication(ctx, pr)
-		return proposalCh, func() {}, "", nil
+		return proposalCh, func() {}, finishLocal, "", nil
 	}
 
 	log.VEventf(proposal.ctx, 2,
@@ -144,7 +153,7 @@ func (r *Replica) evalAndPropose(
 			// Disallow async consensus for commands with EndTxnIntents because
 			// any !Always EndTxnIntent can't be cleaned up until after the
 			// command succeeds.
-			return nil, nil, "", roachpb.NewErrorf("cannot perform consensus asynchronously for "+
+			return nil, nil, nil, "", roachpb.NewErrorf("cannot perform consensus asynchronously for "+
 				"proposal with EndTxnIntents=%v; %v", ets, ba)
 		}
 
@@ -185,14 +194,14 @@ func (r *Replica) evalAndPropose(
 	// behavior.
 	quotaSize := uint64(proposal.command.Size())
 	if maxSize := uint64(MaxCommandSize.Get(&r.store.cfg.Settings.SV)); quotaSize > maxSize {
-		return nil, nil, "", roachpb.NewError(errors.Errorf(
+		return nil, nil, nil, "", roachpb.NewError(errors.Errorf(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
 	}
 	var err error
 	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, quotaSize)
 	if err != nil {
-		return nil, nil, "", roachpb.NewError(err)
+		return nil, nil, nil, "", roachpb.NewError(err)
 	}
 	// Make sure we clean up the proposal if we fail to insert it into the
 	// proposal buffer successfully. This ensures that we always release any
@@ -212,13 +221,13 @@ func (r *Replica) evalAndPropose(
 			Req:        *ba,
 		}
 		if pErr = filter(filterArgs); pErr != nil {
-			return nil, nil, "", pErr
+			return nil, nil, nil, "", pErr
 		}
 	}
 
 	pErr = r.propose(ctx, proposal, tok.Move(ctx))
 	if pErr != nil {
-		return nil, nil, "", pErr
+		return nil, nil, nil, "", pErr
 	}
 	// Abandoning a proposal unbinds its context so that the proposal's client
 	// is free to terminate execution. However, it does nothing to try to
@@ -240,7 +249,7 @@ func (r *Replica) evalAndPropose(
 		// We'd need to make sure the span is finished eventually.
 		proposal.ctx = r.AnnotateCtx(context.TODO())
 	}
-	return proposalCh, abandon, idKey, nil
+	return proposalCh, abandon, nil, idKey, nil
 }
 
 // propose encodes a command, starts tracking it, and proposes it to Raft.
