@@ -13,6 +13,7 @@ package config
 import (
 	"log"
 	"os/user"
+	"strings"
 )
 
 var (
@@ -39,7 +40,8 @@ const (
 	// EmailDomain is used to form the full account name for GCE and Slack.
 	EmailDomain = "@cockroachlabs.com"
 
-	// Local is the name of the local cluster.
+	// Local is the prefix used to identify local clusters.
+	// It is also used as the zone for local clusters.
 	Local = "local"
 
 	// ClustersDir is the directory where we cache information about clusters.
@@ -60,3 +62,18 @@ const (
 	// listening for HTTP connections for the Admin UI.
 	DefaultAdminUIPort = 26258
 )
+
+// IsLocalClusterName returns true if the given name is for a local cluster.
+//
+// Local cluster names are either "local" or start with a "local-" prefix.
+func IsLocalClusterName(clusterName string) bool {
+	if !strings.HasPrefix(clusterName, Local) {
+		return false
+	}
+	clusterName = strings.TrimPrefix(clusterName, Local)
+	if clusterName == "" {
+		// clusterName is "local"
+		return true
+	}
+	return len(clusterName) >= 2 && strings.HasPrefix(clusterName, "-")
+}

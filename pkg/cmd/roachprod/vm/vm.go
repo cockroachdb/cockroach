@@ -65,6 +65,9 @@ type VM struct {
 	// HTTP traffic for the Admin UI.
 	// Usually config.DefaultAdminUIPort, except for local clusters.
 	AdminUIPort int `json:"adminui_port"`
+
+	// LocalClusterName is only set for VMs in a local cluster.
+	LocalClusterName string `json:"local_cluster_name,omitempty"`
 }
 
 // Name generates the name for the i'th node in a cluster.

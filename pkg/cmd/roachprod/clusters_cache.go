@@ -105,7 +105,7 @@ func loadClusters() error {
 
 		install.Clusters[sc.Name] = sc
 
-		if local.IsLocal(c.Name) {
+		if config.IsLocalClusterName(c.Name) {
 			// Add the local cluster to the local provider.
 			local.AddCluster(c)
 		}
