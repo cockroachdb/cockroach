@@ -268,9 +268,8 @@ type cFetcher struct {
 	// firstBatchLimit.
 	maxKeysPerRow int
 
-	// True if the index key must be decoded.
-	// This is only false if there are no needed columns, the table has no
-	// interleave children, and the tracing is not enabled.
+	// True if the index key must be decoded. This is only false if there are no
+	// needed columns and the tracing is not enabled.
 	mustDecodeIndexKey bool
 
 	// mvccDecodeStrategy controls whether or not MVCC timestamps should
@@ -292,8 +291,6 @@ type cFetcher struct {
 		rowIdx int
 		// nextKV is the kv to process next.
 		nextKV roachpb.KeyValue
-		// seekPrefix is the prefix to seek to in stateSeekPrefix.
-		seekPrefix roachpb.Key
 
 		// limitHint is a hint as to the number of rows that the caller expects
 		// to be returned from this fetch. It will be decremented whenever a
@@ -547,15 +544,6 @@ func (rf *cFetcher) Init(
 		}
 	}
 
-	// - If there are interleaves, we need to read the index key in order to
-	//   determine whether this row is actually part of the index we're scanning.
-	// - If there are needed columns from the index key, we need to read it.
-	//
-	// Otherwise, we can completely avoid decoding the index key.
-	if table.index.NumInterleavedBy() > 0 || table.index.NumInterleaveAncestors() > 0 {
-		rf.mustDecodeIndexKey = true
-	}
-
 	if table.isSecondaryIndex {
 		colIDs := table.index.CollectKeyColumnIDs()
 		colIDs.UnionWith(table.index.CollectSecondaryStoredColumnIDs())
@@ -725,26 +713,12 @@ const (
 	// set.
 	//   1. skip common prefix
 	//   2. parse key (past common prefix) into row buffer, setting last row prefix buffer
-	//   3. interleave detected?
-	//      - set skip prefix
-	//      -> seekPrefix(decodeFirstKVOfRow)
-	//   4. parse value into row buffer.
-	//   5. 1-cf or secondary index?
+	//   3. parse value into row buffer.
+	//   4. 1-cf or secondary index?
 	//     -> doneRow(initFetch)
 	//   else:
 	//     -> fetchNextKVWithUnfinishedRow
 	stateDecodeFirstKVOfRow
-
-	// stateSeekPrefix is the state of skipping all keys that sort before
-	// (or after, in the case of a reverse scan) a prefix. s.machine.seekPrefix
-	// must be set to the prefix to seek to. state[1] must be set, and seekPrefix
-	// will transition to that state once it finds the first key with that prefix.
-	//   1. fetch next kv into nextKV buffer
-	//   2. kv doesn't match seek prefix?
-	//     -> seekPrefix
-	//   else:
-	//     -> nextState
-	stateSeekPrefix
 
 	// stateFetchNextKVWithUnfinishedRow is the state of getting a new key for
 	// the current row. The machine will read a new key from the underlying
@@ -756,9 +730,6 @@ const (
 	//   4. no?
 	//     -> finalizeRow(decodeFirstKVOfRow)
 	//   5. skip to end of last row prefix buffer
-	//   6. interleave detected?
-	//     - set skip prefix
-	//     -> finalizeRow(seekPrefix(decodeFirstKVOfRow))
 	//   6. parse value into row buffer
 	//   7. -> fetchNextKVWithUnfinishedRow
 	stateFetchNextKVWithUnfinishedRow
@@ -876,25 +847,23 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 					log.Infof(ctx, "decoding first key %s", rf.machine.nextKV.Key)
 				}
 				var (
-					key     []byte
-					matches bool
-					err     error
+					key []byte
+					err error
 				)
 				// For unique secondary indexes on tables with multiple column
 				// families, we must check all columns for NULL values in order
 				// to determine whether a KV belongs to the same row as the
 				// previous KV or a different row.
 				checkAllColsForNull := rf.table.isSecondaryIndex && rf.table.index.IsUnique() && rf.table.desc.NumFamilies() != 1
-				key, matches, foundNull, rf.scratch, err = colencoding.DecodeIndexKeyToCols(
+				key, foundNull, rf.scratch, err = colencoding.DecodeKeyValsToCols(
 					&rf.table.da,
 					rf.machine.colvecs,
 					rf.machine.rowIdx,
-					rf.table.desc,
-					rf.table.index,
 					rf.table.indexColOrdinals,
 					checkAllColsForNull,
 					rf.table.keyValTypes,
 					rf.table.indexColumnDirs,
+					nil, /* unseen */
 					rf.machine.nextKV.Key[rf.table.knownPrefixLength:],
 					rf.table.invertedColOrdinal,
 					rf.scratch,
@@ -902,23 +871,9 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				if err != nil {
 					return nil, err
 				}
-				if !matches {
-					// We found an interleave. Set our skip prefix.
-					seekPrefix := rf.machine.nextKV.Key[:len(key)+rf.table.knownPrefixLength]
-					if debugState {
-						log.Infof(ctx, "setting seek prefix to %s", seekPrefix)
-					}
-					rf.machine.seekPrefix = seekPrefix
-					rf.machine.state[0] = stateSeekPrefix
-					rf.machine.state[1] = stateDecodeFirstKVOfRow
-					continue
-				}
 				prefix := rf.machine.nextKV.Key[:len(rf.machine.nextKV.Key)-len(key)]
 				rf.machine.lastRowPrefix = prefix
 			} else {
-				// If mustDecodeIndexKey was false, we can't possibly have an
-				// interleaved row on our hands, so we can figure out our row prefix
-				// without parsing any keys by using GetRowPrefixLength.
 				prefixLen, err := keys.GetRowPrefixLength(rf.machine.nextKV.Key)
 				if err != nil {
 					return nil, err
@@ -993,39 +948,6 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			// If the table has more than one column family, then the next KV
 			// may belong to the same row as the current KV.
 			rf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
-		case stateSeekPrefix:
-			// Note: seekPrefix is only used for interleaved tables.
-			for {
-				moreKVs, kv, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
-				if err != nil {
-					return nil, rf.convertFetchError(ctx, err)
-				}
-				if debugState {
-					log.Infof(ctx, "found kv %s, seeking to prefix %s", kv.Key, rf.machine.seekPrefix)
-				}
-				if !moreKVs {
-					// We ran out of data, so ignore whatever our next state was going to
-					// be and emit the final batch.
-					rf.machine.state[1] = stateEmitLastBatch
-					break
-				}
-				// The order we perform the comparison in depends on whether we are
-				// performing a reverse scan or not. If we are performing a reverse
-				// scan, then we want to seek until we find a key less than seekPrefix.
-				var comparison int
-				if rf.reverse {
-					comparison = bytes.Compare(rf.machine.seekPrefix, kv.Key)
-				} else {
-					comparison = bytes.Compare(kv.Key, rf.machine.seekPrefix)
-				}
-				// TODO(jordan): if nextKV returns newSpan = true, set the new span
-				//  prefix and indicate that it needs decoding.
-				if comparison >= 0 {
-					rf.setNextKV(kv, finalReferenceToBatch)
-					break
-				}
-			}
-			rf.shiftState()
 
 		case stateFetchNextKVWithUnfinishedRow:
 			moreKVs, kv, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
@@ -1051,18 +973,6 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				// The kv we just found is from a different row.
 				rf.machine.state[0] = stateFinalizeRow
 				rf.machine.state[1] = stateDecodeFirstKVOfRow
-				continue
-			}
-
-			key := kv.Key[len(rf.machine.lastRowPrefix):]
-			_, foundInterleave := encoding.DecodeIfInterleavedSentinel(key)
-
-			if foundInterleave {
-				// The key we just found isn't relevant to the current row, so finalize
-				// the current row, then skip all KVs with the current interleave prefix.
-				rf.machine.state[0] = stateFinalizeRow
-				rf.machine.state[1] = stateSeekPrefix
-				rf.machine.state[2] = stateDecodeFirstKVOfRow
 				continue
 			}
 

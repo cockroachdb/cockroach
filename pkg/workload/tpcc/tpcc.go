@@ -798,7 +798,7 @@ func (w *tpcc) Ops(
 	}
 	var partitionDBs [][]*workload.MultiConnPool
 	if w.clientPartitions > 0 {
-		// Client partitons simply emulates the behavior of data partitions
+		// Client partitions simply emulates the behavior of data partitions
 		// w/r/t database connections, though all of the connections will
 		// be for the same partition.
 		partitionDBs = make([][]*workload.MultiConnPool, w.clientPartitions)

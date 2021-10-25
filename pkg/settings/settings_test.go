@@ -534,7 +534,7 @@ func TestCache(t *testing.T) {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		// If the updater doesn't have a key, e.g. if the setting has been deleted,
-		// Doneing it from the cache.
+		// Resetting it from the cache.
 		settings.NewUpdater(sv).ResetRemaining(ctx)
 
 		if expected, actual := 2, changes.boolTA; expected != actual {
@@ -564,7 +564,7 @@ func TestCache(t *testing.T) {
 		}
 		before := i2A.Get(sv)
 
-		// Doneing after attempting to set with wrong type preserves the current
+		// Resetting after attempting to set with wrong type preserves the current
 		// value.
 		{
 			u := settings.NewUpdater(sv)
@@ -580,7 +580,7 @@ func TestCache(t *testing.T) {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
-		// Doneing after attempting to set with the wrong type preserves the
+		// Resetting after attempting to set with the wrong type preserves the
 		// current value.
 		{
 			u := settings.NewUpdater(sv)
@@ -596,7 +596,7 @@ func TestCache(t *testing.T) {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
-		// Doneing after attempting to set with invalid value preserves the
+		// Resetting after attempting to set with invalid value preserves the
 		// current value.
 		beforestrVal := strVal.Get(sv)
 		{

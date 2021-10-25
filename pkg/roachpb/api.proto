@@ -1058,7 +1058,7 @@ message QueryIntentRequest {
   // transaction could have performed overlapping writes, in which case only the
   // latest sequence number will remain. We assume that if a transaction has
   // successfully written an intent at a larger sequence number then it must
-  // have succeeeded in writing an intent at the smaller sequence number as
+  // have succeeded in writing an intent at the smaller sequence number as
   // well.
   //
   // QueryIntentRequests may be issued in non-transactional BatchRequests or in
@@ -1405,7 +1405,7 @@ message ExportRequest {
   // is used as a lower bound and header Timestamp as higher bound or exported
   // entries.
   MVCCFilter mvcc_filter = 4 [(gogoproto.customname) = "MVCCFilter"];
-  // StartTime is only used whe MVCCFilter is set to All.
+  // StartTime is only used when MVCCFilter is set to All.
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
 
   // Split large rows in the middle of key sequence. This option will allow

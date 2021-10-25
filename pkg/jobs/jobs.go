@@ -212,7 +212,7 @@ var (
 )
 
 // HasErrJobCanceled returns true if the error contains the error set as the
-// job's FinalResumError when it has been canceled.
+// job's FinalResumeError when it has been canceled.
 func HasErrJobCanceled(err error) bool {
 	return errors.Is(err, errJobCanceled)
 }

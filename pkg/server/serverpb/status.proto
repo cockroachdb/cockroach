@@ -853,7 +853,7 @@ message CancelSessionRequest {
   bytes session_id = 2 [(gogoproto.customname) = "SessionID"];
   // Username of the user making this cancellation request. This may be omitted
   // if the user is the same as the one issuing the CancelSessionRequest.
-  // The caller is responsiblef or case-folding and NFC normalization.
+  // The caller is responsible for case-folding and NFC normalization.
   string username = 3;
 }
 
@@ -1024,7 +1024,7 @@ message ProblemRangesResponse {
 // API: PUBLIC ALPHA
 message HotRangesRequest {
   // NodeID indicates which node to query for a hot range report.
-  // It is posssible to populate any node ID; if the node receiving
+  // It is possible to populate any node ID; if the node receiving
   // the request is not the target node, it will forward the
   // request to the target node.
   //

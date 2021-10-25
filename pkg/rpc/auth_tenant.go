@@ -310,7 +310,7 @@ func tenantPrefix(tenID roachpb.TenantID) roachpb.RSpan {
 
 // wrappedServerStream is a thin wrapper around grpc.ServerStream that allows
 // modifying its context and overriding its RecvMsg method. It can be used to
-// intercept each messsage and inject custom validation logic.
+// intercept each message and inject custom validation logic.
 type wrappedServerStream struct {
 	grpc.ServerStream
 	ctx  context.Context

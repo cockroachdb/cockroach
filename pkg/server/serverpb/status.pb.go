@@ -2863,7 +2863,7 @@ type CancelSessionRequest struct {
 	SessionID []byte `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// Username of the user making this cancellation request. This may be omitted
 	// if the user is the same as the one issuing the CancelSessionRequest.
-	// The caller is responsiblef or case-folding and NFC normalization.
+	// The caller is responsible for case-folding and NFC normalization.
 	Username string `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
 }
 
@@ -3379,7 +3379,7 @@ var xxx_messageInfo_ProblemRangesResponse_NodeProblems proto.InternalMessageInfo
 // API: PUBLIC ALPHA
 type HotRangesRequest struct {
 	// NodeID indicates which node to query for a hot range report.
-	// It is posssible to populate any node ID; if the node receiving
+	// It is possible to populate any node ID; if the node receiving
 	// the request is not the target node, it will forward the
 	// request to the target node.
 	//
