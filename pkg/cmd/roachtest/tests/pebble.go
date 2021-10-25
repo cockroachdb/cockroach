@@ -34,7 +34,7 @@ func registerPebble(r registry.Registry) {
 
 		const initialKeys = 10_000_000
 		const cache = 4 << 30 // 4 GB
-		const duration = 10 * time.Minute
+		const duration = 90 * time.Minute
 		const dataDir = "$(dirname {store-dir})"
 		const dataTar = dataDir + "/data.tar"
 		const benchDir = dataDir + "/bench"
@@ -108,7 +108,7 @@ func registerPebble(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("pebble/ycsb/size=%d", size),
 			Owner:   registry.OwnerStorage,
-			Timeout: 2 * time.Hour,
+			Timeout: 12 * time.Hour,
 			Cluster: r.MakeClusterSpec(5, spec.CPU(16)),
 			Tags:    []string{"pebble"},
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
