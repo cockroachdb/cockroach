@@ -29,7 +29,7 @@ import { MultiSelectCheckbox } from "../multiSelectCheckbox/multiSelectCheckbox"
 interface QueryFilter {
   onSubmitFilters: (filters: Filters) => void;
   smth?: string;
-  appNames: SelectOptions[];
+  appNames: string[];
   activeFilters: number;
   filters: Filters;
   dbNames?: string[];
@@ -69,7 +69,7 @@ const timeUnit = [
 ];
 
 export const defaultFilters: Filters = {
-  app: "All",
+  app: "",
   timeNumber: "0",
   timeUnit: "seconds",
   fullScan: false,
@@ -116,7 +116,7 @@ export const getFiltersFromQueryString = (
  * we want to consider 0 active Filters
  */
 export const inactiveFiltersState: Filters = {
-  app: "All",
+  app: "",
   timeNumber: "0",
   fullScan: false,
   sqlType: "",
@@ -289,6 +289,27 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       border: "none",
     });
 
+    const appsOptions = appNames.map(app => ({
+      label: app,
+      value: app,
+      isSelected: this.isOptionSelected(app, filters.app),
+    }));
+    const appValue = appsOptions.filter(option => {
+      return filters.app.split(",").includes(option.label);
+    });
+    const appFilter = (
+      <div>
+        <div className={filterLabel.margin}>App</div>
+        <MultiSelectCheckbox
+          options={appsOptions}
+          placeholder="All"
+          field="app"
+          parent={this}
+          value={appValue}
+        />
+      </div>
+    );
+
     const databasesOptions = showDB
       ? dbNames.map(db => ({
           label: db,
@@ -413,14 +434,6 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     );
     // TODO replace all onChange actions in Selects and Checkboxes with one onSubmit in <form />
 
-    // Some app names could be empty strings, so we're adding " " to those names,
-    // this way it's easier for the user to recognize the blank name.
-    const apps = appNames.map(app => {
-      const label =
-        app.label.trim().length === 0 ? '"' + app.label + '"' : app.label;
-      return { label: label, value: app.value };
-    });
-
     return (
       <div onClick={this.insideClick} ref={this.dropdownRef}>
         <div className={dropdownButton} onClick={this.toggleFilters}>
@@ -429,14 +442,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
         </div>
         <div className={dropdownArea}>
           <div className={dropdownContentWrapper}>
-            <div className={filterLabel.top}>App</div>
-            <Select
-              options={apps}
-              onChange={e => this.handleSelectChange(e, "app")}
-              value={apps.filter(app => app.value === filters.app)}
-              placeholder="All"
-              styles={customStyles}
-            />
+            {appFilter}
             {showDB ? dbFilter : ""}
             {showSqlType ? sqlTypeFilter : ""}
             {showRegions ? regionsFilter : ""}

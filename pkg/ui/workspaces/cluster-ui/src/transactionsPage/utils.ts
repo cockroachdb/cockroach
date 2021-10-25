@@ -11,7 +11,6 @@
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import {
   Filters,
-  SelectOptions,
   getTimeValueInSeconds,
   calculateActiveFilters,
 } from "../queryFilter";
@@ -39,20 +38,15 @@ type Timestamp = protos.google.protobuf.ITimestamp;
 export const getTrxAppFilterOptions = (
   transactions: Transaction[],
   prefix: string,
-): SelectOptions[] => {
-  const defaultAppFilters = ["All", prefix];
+): string[] => {
+  const defaultAppFilters = [prefix];
   const uniqueAppNames = new Set(
     transactions
       .filter(t => !t.stats_data.app.startsWith(prefix))
-      .map(t => t.stats_data.app),
+      .map(t => (t.stats_data.app ? t.stats_data.app : "(unset)")),
   );
 
-  return defaultAppFilters
-    .concat(Array.from(uniqueAppNames))
-    .map(filterValue => ({
-      label: filterValue,
-      value: filterValue,
-    }));
+  return defaultAppFilters.concat(Array.from(uniqueAppNames));
 };
 
 export const collectStatementsText = (statements: Statement[]): string =>
@@ -165,13 +159,25 @@ export const filterTransactions = (
   // transaction must match all selected filters.
   // Current filters: app, service latency, nodes and regions.
   const filteredTransactions = data
-    .filter(
-      (t: Transaction) =>
-        filters.app === "All" ||
+    .filter((t: Transaction) => {
+      const isInternal = (t: Transaction) =>
+        t.stats_data.app.startsWith(internalAppNamePrefix);
+      const apps = filters.app.split(",");
+      let showInternal = false;
+      if (apps.includes(internalAppNamePrefix)) {
+        showInternal = true;
+      }
+      if (apps.includes("(unset)")) {
+        apps.push("");
+      }
+
+      return (
+        filters.app === "" ||
+        (showInternal && isInternal(t)) ||
         t.stats_data.app === filters.app ||
-        (filters.app === internalAppNamePrefix &&
-          t.stats_data.app.includes(filters.app)),
-    )
+        apps.includes(t.stats_data.app)
+      );
+    })
     .filter(
       (t: Transaction) =>
         t.stats_data.stats.service_lat.mean >= timeValue ||
