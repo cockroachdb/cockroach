@@ -218,6 +218,6 @@ func (m *Manager) createAndStartJobIfNoneExists(ctx context.Context) (bool, erro
 	if fn := m.knobs.ManagerCreatedJobInterceptor; fn != nil {
 		fn(job)
 	}
-	err := m.jr.NotifyToAdoptJobs(ctx)
-	return true, err
+	m.jr.NotifyToAdoptJobs(ctx)
+	return true, nil
 }

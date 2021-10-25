@@ -138,10 +138,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		}); err != nil {
 			return err
 		}
-		err := execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
-		if err != nil {
-			return err
-		}
+		execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
 	}
 
 	// If no stages exist, then execute a singe transaction
@@ -159,10 +156,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		if err != nil {
 			return err
 		}
-		err = execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
-		if err != nil {
-			return err
-		}
+		execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
 	}
 	return nil
 }
