@@ -37,6 +37,7 @@ go_test(
     srcs = [
         "connector_test.go",
         "main_test.go",
+        "tenant_kv_test.go",
         "tenant_trace_test.go",
         "tenant_upgrade_test.go",
     ],
