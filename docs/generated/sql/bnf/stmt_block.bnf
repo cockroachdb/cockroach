@@ -1556,6 +1556,7 @@ insert_column_item ::=
 
 session_var ::=
 	'identifier'
+	| 'identifier' session_var_parts
 	| 'ALL'
 	| 'DATABASE'
 	| 'NAMES'
@@ -2117,6 +2118,9 @@ like_table_option_list ::=
 
 column_name ::=
 	name
+
+session_var_parts ::=
+	( '.' 'identifier' ) ( ( '.' 'identifier' ) )*
 
 attrs ::=
 	( '.' unrestricted_name ) ( ( '.' unrestricted_name ) )*

@@ -206,6 +206,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.ShowTableStats(ctx, n)
 	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
+	case *tree.ShowVar:
+		return p.ShowVar(ctx, n)
 	case *tree.ShowZoneConfig:
 		return p.ShowZoneConfig(ctx, n)
 	case *tree.ShowFingerprints:
@@ -293,6 +295,7 @@ func init() {
 		&tree.ShowTraceForSession{},
 		&tree.ShowZoneConfig{},
 		&tree.ShowFingerprints{},
+		&tree.ShowVar{},
 		&tree.Truncate{},
 
 		// CCL statements (without Export which has an optimizer operator).
