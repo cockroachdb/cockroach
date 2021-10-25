@@ -39,3 +39,6 @@ build/Railroad.jar
 
 # Per-user .bazelrc
 /.bazelrc.user
+
+# Mac specific
+.DS_Store
