@@ -176,7 +176,7 @@ function statementsRequestFromProps(
 
 function AppLink(props: { app: string }) {
   if (!props.app) {
-    return <span className={cx("app-name", "app-name__unset")}>(unset)</span>;
+    return <Text className={cx("app-name", "app-name__unset")}>(unset)</Text>;
   }
 
   const searchParams = new URLSearchParams({ [appAttr]: props.app });
@@ -184,7 +184,7 @@ function AppLink(props: { app: string }) {
   return (
     <Link
       className={cx("app-name")}
-      to={`/statements/?${searchParams.toString()}`}
+      to={`/sql-activity?tab=statements&${searchParams.toString()}`}
     >
       {props.app}
     </Link>
@@ -544,6 +544,12 @@ export class StatementDetails extends React.Component<
             .utc()
         : this.props.dateRange[1];
 
+    const db = database ? (
+      <Text>{database}</Text>
+    ) : (
+      <Text className={cx("app-name", "app-name__unset")}>(unset)</Text>
+    );
+
     return (
       <Tabs
         defaultActiveKey="1"
@@ -698,7 +704,7 @@ export class StatementDetails extends React.Component<
 
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Database</Text>
-                  <Text>{database}</Text>
+                  {db}
                 </div>
                 <p
                   className={summaryCardStylesCx(
