@@ -11,6 +11,7 @@ package coldata
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
@@ -68,6 +69,18 @@ type TypedVecs struct {
 	//                       |  2nd among all Int64's
 	//                       1st among all Int64's
 	ColsMap []int
+}
+
+var typedVecsPool = sync.Pool{
+	New: func() interface{} {
+		return &TypedVecs{}
+	},
+}
+
+// NewTypedVecs creates a new TypedVecs object that should be Release()'d once
+// no longer needed.
+func NewTypedVecs() *TypedVecs {
+	return typedVecsPool.Get().(*TypedVecs)
 }
 
 // SetBatch updates TypedVecs to represent all vectors from batch.
@@ -208,6 +221,12 @@ func (v *TypedVecs) Reset() {
 	for i := range v.DatumCols {
 		v.DatumCols[i] = nil
 	}
+}
+
+// Release puts v back into the pool.
+func (v *TypedVecs) Release() {
+	v.Reset()
+	typedVecsPool.Put(v)
 }
 
 func (m *memColumn) Append(args SliceArgs) {
