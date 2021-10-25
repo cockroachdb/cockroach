@@ -14,9 +14,11 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -73,9 +75,10 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 			},
 		},
 	}
-
 	var settingsCache []roachpb.KeyValue
 	testServer, _, _ := serverutils.StartServer(t, serverArgs)
+	closedts.TargetDuration.Override(ctx, &testServer.ClusterSettings().SV, 10*time.Millisecond)
+	closedts.SideTransportCloseInterval.Override(ctx, &testServer.ClusterSettings().SV, 10*time.Millisecond)
 	testutils.SucceedsSoon(t, func() error {
 		store, err := testServer.GetStores().(*kvserver.Stores).GetStore(1)
 		if err != nil {
