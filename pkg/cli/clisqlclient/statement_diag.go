@@ -129,7 +129,7 @@ func stmtDiagListOutstandingRequestsInternal(conn Conn) ([]StmtDiagActivationReq
 func StmtDiagDownloadBundle(conn Conn, id int64, filename string) error {
 	if err := stmtDiagDownloadBundleInternal(conn, id, filename); err != nil {
 		return errors.Wrapf(
-			err, "failed to download statement diagnostics bundle %d to file '%s'", id, filename,
+			err, "failed to download statement diagnostics bundle %d to '%s'", id, filename,
 		)
 	}
 	return nil
