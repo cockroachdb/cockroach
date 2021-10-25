@@ -13,18 +13,47 @@ package tests
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	c "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
+
+func readCreateTableFromFixture(
+	ctx context.Context, uri string, user security.SQLUsername,
+) (string, error) {
+	conf, err := cloud.ExternalStorageConfFromURI(uri, user)
+	if err != nil {
+		return "", err
+	}
+	// Setup a sink for the given args.
+	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
+		c.MakeTestingClusterSettings(), blobs.TestEmptyBlobClientFactory,
+		nil /* ie */, nil /* kvDB */)
+	if err != nil {
+	}
+	defer s.Close()
+	reader, err := s.ReadFile(ctx, "")
+	if err != nil {
+		return "", err
+	}
+	defer reader.Close()
+	tableDefStr, err := ioutil.ReadAll(reader)
+	return string(tableDefStr), err
+}
 
 func registerImportNodeShutdown(r registry.Registry) {
 	getImportRunner := func(ctx context.Context, gatewayNode int) jobStarter {
@@ -35,9 +64,10 @@ func registerImportNodeShutdown(r registry.Registry) {
 				// part is 2.264 GiB.
 				tableName = "part"
 			}
+			createStmt, err := readCreateTableFromFixture(ctx,
+				fmt.Sprintf("gs://cockroach-fixtures/tpch-csv/schema/%s.sql?AUTH=implicit", tableName), security.RootUserName())
 			importStmt := fmt.Sprintf(`
-				IMPORT TABLE %[1]s
-				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/%[1]s.sql?AUTH=implicit'
+				IMPORT INTO %[1]s
 				CSV DATA (
 				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.1?AUTH=implicit',
 				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.2?AUTH=implicit',
@@ -51,6 +81,11 @@ func registerImportNodeShutdown(r registry.Registry) {
 			`, tableName)
 			gatewayDB := c.Conn(ctx, gatewayNode)
 			defer gatewayDB.Close()
+
+			// Create the table to be imported into.
+			if _, err = gatewayDB.ExecContext(ctx, createStmt); err != nil {
+				return jobID, err
+			}
 
 			err = gatewayDB.QueryRowContext(ctx, importStmt).Scan(&jobID)
 			return
@@ -239,13 +274,22 @@ func registerImportTPCH(r registry.Registry) {
 					t.WorkerStatus(`running import`)
 					defer t.WorkerStatus()
 
+					createStmt, err := readCreateTableFromFixture(ctx, "gs://cockroach-fixtures/tpch-csv/schema/lineitem.sql?AUTH=implicit", security.RootUserName())
+					if err != nil {
+						return err
+					}
+
+					// Create table to import into.
+					if _, err := conn.ExecContext(ctx, createStmt); err != nil {
+						return err
+					}
+
 					// Tick once before starting the import, and once after to capture the
 					// total elapsed time. This is used by roachperf to compute and display
 					// the average MB/sec per node.
 					tick()
-					_, err := conn.Exec(`
-						IMPORT TABLE csv.lineitem
-						CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/lineitem.sql?AUTH=implicit'
+					_, err = conn.Exec(`
+						IMPORT INTO csv.lineitem
 						CSV DATA (
 						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.1?AUTH=implicit',
 						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.2?AUTH=implicit',

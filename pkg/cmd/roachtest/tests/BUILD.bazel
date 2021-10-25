@@ -134,6 +134,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/blobs",
         "//pkg/ccl/changefeedccl/cdctest",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/cli",
@@ -153,8 +154,10 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/kv",
         "//pkg/roachpb:with-mocks",
+        "//pkg/security",
         "//pkg/server",
         "//pkg/server/serverpb",
+        "//pkg/settings/cluster",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
