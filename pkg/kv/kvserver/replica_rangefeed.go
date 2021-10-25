@@ -137,7 +137,7 @@ func (i iteratorWithCloser) Close() {
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
 // the provided stream and returns with an optional error when the rangefeed is
 // complete. The provided ConcurrentRequestLimiter is used to limit the number
-// of rangefeeds using catchup iterators at the same time.
+// of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
 	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) *roachpb.Error {
@@ -189,10 +189,10 @@ func (r *Replica) rangeFeedWithRangeID(
 
 	// If we will be using a catch-up iterator, wait for the limiter here before
 	// locking raftMu.
-	usingCatchupIter := false
+	usingCatchUpIter := false
 	var iterSemRelease func()
 	if !args.Timestamp.IsEmpty() {
-		usingCatchupIter = true
+		usingCatchUpIter = true
 		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(ctx)
 		if err != nil {
 			return roachpb.NewError(err)
@@ -200,10 +200,10 @@ func (r *Replica) rangeFeedWithRangeID(
 		// Finish the iterator limit if we exit before the iterator finishes.
 		// The release function will be hooked into the Close method on the
 		// iterator below. The sync.Once prevents any races between exiting early
-		// from this call and finishing the catchup scan underneath the
+		// from this call and finishing the catch-up scan underneath the
 		// rangefeed.Processor. We need to release here in case we fail to
 		// register the processor, or, more perniciously, in the case where the
-		// processor gets registered by shut down before starting the catchup
+		// processor gets registered by shut down before starting the catch-up
 		// scan.
 		var iterSemReleaseOnce sync.Once
 		iterSemRelease = func() {
@@ -224,16 +224,18 @@ func (r *Replica) rangeFeedWithRangeID(
 
 	// Register the stream with a catch-up iterator.
 	var catchUpIterFunc rangefeed.IteratorConstructor
-	if usingCatchupIter {
+	if usingCatchUpIter {
 		catchUpIterFunc = func() storage.SimpleMVCCIterator {
-
+			// Assert that we still hold the raftMu when this is called to ensure
+			// that the catchUpIter reads from the current snapshot.
+			r.raftMu.AssertHeld()
 			innerIter := r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 				UpperBound: args.Span.EndKey,
 				// RangeFeed originally intended to use the time-bound iterator
 				// performance optimization. However, they've had correctness issues in
 				// the past (#28358, #34819) and no-one has the time for the due-diligence
 				// necessary to be confidant in their correctness going forward. Not using
-				// them causes the total time spent in RangeFeed catchup on changefeed
+				// them causes the total time spent in RangeFeed catch-up on changefeed
 				// over tpcc-1000 to go from 40s -> 4853s, which is quite large but still
 				// workable. See #35122 for details.
 				// MinTimestampHint: args.Timestamp,
@@ -327,7 +329,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	ctx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchupIter rangefeed.IteratorConstructor,
+	catchUpIter rangefeed.IteratorConstructor,
 	withDiff bool,
 	stream rangefeed.Stream,
 	errC chan<- *roachpb.Error,
@@ -338,7 +340,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	r.rangefeedMu.Lock()
 	p := r.rangefeedMu.proc
 	if p != nil {
-		reg, filter := p.Register(span, startTS, catchupIter, withDiff, stream, errC)
+		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, errC)
 		if reg {
 			// Registered successfully with an existing processor.
 			// Update the rangefeed filter to avoid filtering ops
@@ -374,6 +376,11 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 	// Start it with an iterator to initialize the resolved timestamp.
 	rtsIter := func() storage.SimpleMVCCIterator {
+		// Assert that we still hold the raftMu when this is called to ensure
+		// that the rtsIter reads from the current snapshot. The replica
+		// synchronizes with the rangefeed Processor calling this function by
+		// waiting for the Register call below to return.
+		r.raftMu.AssertHeld()
 		return r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 			UpperBound: desc.EndKey.AsRawKey(),
 			// TODO(nvanbenschoten): To facilitate fast restarts of rangefeed
@@ -392,7 +399,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// any other goroutines are able to stop the processor. In other words,
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
-	reg, filter := p.Register(span, startTS, catchupIter, withDiff, stream, errC)
+	reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, errC)
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():
