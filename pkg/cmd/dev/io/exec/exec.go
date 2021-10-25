@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -169,7 +168,7 @@ func (e *Exec) commandContextImpl(
 		cmd := exec.CommandContext(ctx, name, args...)
 		if silent {
 			cmd.Stdout = &buffer
-			cmd.Stderr = ioutil.Discard
+			cmd.Stderr = nil
 		} else {
 			cmd.Stdout = io.MultiWriter(e.stdout, &buffer)
 			cmd.Stderr = e.stderr
