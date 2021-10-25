@@ -55,7 +55,15 @@ type crdbSpan struct {
 
 type crdbSpanMu struct {
 	syncutil.Mutex
-	parent   *crdbSpan
+
+	// parent is the span's local parent; nil if the span is a root or the parent
+	// is remote.
+	//
+	// Note that parent is mutable; a span can start by having a parent but then,
+	// if the parent finishes before the child does (which is uncommon), the
+	// child's parent is set to nil.
+	parent *crdbSpan
+
 	finished bool
 	// duration is initialized to -1 and set on Finish().
 	duration  time.Duration
