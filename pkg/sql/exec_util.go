@@ -2803,6 +2803,13 @@ func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 	m.bufferParamStatusUpdate("TimeZone", sessionDataTimeZoneFormat(loc))
 }
 
+func (m *sessionDataMutator) SetCustomOption(name, val string) {
+	if m.data.CustomOptions == nil {
+		m.data.CustomOptions = make(map[string]string)
+	}
+	m.data.CustomOptions[name] = val
+}
+
 func (m *sessionDataMutator) SetReadOnly(val bool) {
 	// The read-only state is special; it's set as a session variable (SET
 	// transaction_read_only=<>), but it represents per-txn state, not

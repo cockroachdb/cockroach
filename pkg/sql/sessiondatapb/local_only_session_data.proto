@@ -211,6 +211,9 @@ message LocalOnlySessionData {
   // NULLS FIRST for ascending order by default, whereas postgres defaults
   // to NULLS LAST.
   bool null_ordered_last = 55;
+  // CustomOptions contains a map of all custom session settings.
+  // These session variables have at least one period in their name.
+  map<string, string> custom_options = 56;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

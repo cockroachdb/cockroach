@@ -41,6 +41,10 @@ func (d *delegator) delegateShowVar(n *tree.ShowVar) (tree.Statement, error) {
 	}
 
 	if _, ok := ValidVars[name]; !ok {
+		// Allow for custom options.
+		if strings.Contains(name, ".") {
+			return nil, nil
+		}
 		return nil, pgerror.Newf(pgcode.UndefinedObject,
 			"unrecognized configuration parameter %q", origName)
 	}

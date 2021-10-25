@@ -1783,6 +1783,9 @@ func init() {
 		res := make([]string, 0, len(varGen))
 		for vName := range varGen {
 			res = append(res, vName)
+			if strings.Contains(vName, ".") {
+				panic(fmt.Sprintf(`no session variables with "." can be created as they are reserved for custom options, found %s`, vName))
+			}
 		}
 		sort.Strings(res)
 		return res
@@ -1978,6 +1981,21 @@ func getSessionVar(name string, missingOk bool) (bool, sessionVar, error) {
 
 	v, ok := varGen[name]
 	if !ok {
+		if strings.Contains(name, ".") {
+			return true, sessionVar{
+				Get: func(evalCtx *extendedEvalContext) string {
+					return evalCtx.SessionData().CustomOptions[name]
+				},
+				Set: func(ctx context.Context, m sessionDataMutator, val string) error {
+					// TODO(#sql-experience): do some memory accounting.
+					m.SetCustomOption(name, val)
+					return nil
+				},
+				GlobalDefault: func(sv *settings.Values) string {
+					return ""
+				},
+			}, nil
+		}
 		if missingOk {
 			return false, sessionVar{}, nil
 		}
