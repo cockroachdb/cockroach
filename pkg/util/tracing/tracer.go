@@ -718,7 +718,7 @@ func (t *Tracer) startSpanGeneric(
 		// remote parent, if any. If neither are specified, we're not recording.
 		if opts.Parent != nil && opts.Parent.i.crdb != nil {
 			s.i.crdb.mu.parent = opts.Parent.i.crdb
-			defer opts.Parent.i.crdb.addChild(s.i.crdb)
+			opts.Parent.i.crdb.addChild(s.i.crdb)
 		}
 		s.i.crdb.enableRecording(opts.recordingType())
 	}
