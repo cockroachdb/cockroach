@@ -1905,6 +1905,7 @@ func (s *statusServer) rangesHelper(
 				WaitingWriters: lm.WaitingWriters,
 			})
 		}
+		qps, _ := rep.QueriesPerSecond()
 		return serverpb.RangeInfo{
 			Span:          span,
 			RaftState:     raftState,
@@ -1913,7 +1914,7 @@ func (s *statusServer) rangesHelper(
 			SourceStoreID: storeID,
 			LeaseHistory:  leaseHistory,
 			Stats: serverpb.RangeStatistics{
-				QueriesPerSecond: rep.QueriesPerSecond(),
+				QueriesPerSecond: qps,
 				WritesPerSecond:  rep.WritesPerSecond(),
 			},
 			Problems: serverpb.RangeProblems{
