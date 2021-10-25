@@ -1621,9 +1621,8 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		if err := sql.DescsTxn(ctx, r.execCfg, publishDescriptors); err != nil {
 			return err
 		}
-		if err := p.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx); err != nil {
-			return err
-		}
+
+		p.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
 		if fn := r.testingKnobs.afterPublishingDescriptors; fn != nil {
 			if err := fn(); err != nil {
 				return err
@@ -1728,9 +1727,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 	// Reload the details as we may have updated the job.
 	details = r.job.Details().(jobspb.RestoreDetails)
-	if err := p.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx); err != nil {
-		return err
-	}
+	p.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
 
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		// We restore the system tables from the main data bundle so late because it

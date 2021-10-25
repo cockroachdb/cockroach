@@ -502,7 +502,8 @@ func startGCJob(
 		return err
 	}
 	log.Infof(ctx, "starting GC job %d", jobID)
-	return jobRegistry.NotifyToAdoptJobs(ctx)
+	jobRegistry.NotifyToAdoptJobs(ctx)
+	return nil
 }
 
 func (sc *SchemaChanger) execLogTags() *logtags.Buffer {
@@ -895,7 +896,8 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 		return err
 	}
 	log.Infof(ctx, "starting GC job %d", gcJobID)
-	return sc.jobRegistry.NotifyToAdoptJobs(ctx)
+	sc.jobRegistry.NotifyToAdoptJobs(ctx)
+	return nil
 }
 
 // RunStateMachineBeforeBackfill moves the state machine forward
@@ -1350,9 +1352,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		return err
 	}
 	// Notify the job registry to start jobs, in case we started any.
-	if err := sc.jobRegistry.NotifyToAdoptJobs(ctx); err != nil {
-		return err
-	}
+	sc.jobRegistry.NotifyToAdoptJobs(ctx)
 
 	// If any operations was skipped because a mutation was made
 	// redundant due to a column getting dropped later on then we should
