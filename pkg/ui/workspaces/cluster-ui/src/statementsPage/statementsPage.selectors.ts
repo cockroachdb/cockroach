@@ -169,6 +169,11 @@ export const selectStatements = createSelector(
           (showInternal && isInternal(statement)) ||
           criteria.includes(statement.app),
       );
+    } else {
+      // We don't want to show internal statements by default.
+      statements = statements.filter(
+        (statement: ExecutionStatistics) => !isInternal(statement),
+      );
     }
 
     const statsByStatementKey: {
