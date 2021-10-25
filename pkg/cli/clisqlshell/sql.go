@@ -87,6 +87,10 @@ Configuration
   \set [NAME]       set a client-side flag or (without argument) print the current settings.
   \unset NAME       unset a flag.
 
+Statement diagnostics
+  \statement-diag list                               list available bundles.
+  \statement-diag download <bundle-id> [<filename>]  download bundle.
+
 %s
 More documentation about our SQL dialect and the CLI shell is available online:
 %s
@@ -1187,6 +1191,9 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	case `\demo`:
 		return c.handleDemo(cmd[1:], loopState, errState)
+
+	case `\statement-diag`:
+		return c.handleStatementDiag(cmd[1:], loopState, errState)
 
 	default:
 		if strings.HasPrefix(cmd[0], `\d`) {
