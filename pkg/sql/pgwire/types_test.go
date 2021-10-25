@@ -304,17 +304,22 @@ func benchmarkWriteColumnar(b *testing.B, batch coldata.Batch, format pgwirebase
 
 	buf := newWriteBuffer(nil /* bytecount */)
 	buf.bytecount = metric.NewCounter(metric.Metadata{Name: ""})
+	var vecs coldata.TypedVecs
 
 	writeMethod := func(ctx context.Context, batch coldata.Batch, loc *time.Location) {
 		defaultConv, _ := makeTestingConvCfg()
+		vecs.SetBatch(batch)
+		defer vecs.Reset()
 		for rowIdx := 0; rowIdx < batch.Length(); rowIdx++ {
-			buf.writeTextColumnarElement(ctx, batch.ColVec(0), rowIdx, defaultConv, loc)
+			buf.writeTextColumnarElement(ctx, &vecs, 0 /* vecIdx */, rowIdx, defaultConv, loc)
 		}
 	}
 	if format == pgwirebase.FormatBinary {
 		writeMethod = func(ctx context.Context, batch coldata.Batch, loc *time.Location) {
+			vecs.SetBatch(batch)
+			defer vecs.Reset()
 			for rowIdx := 0; rowIdx < batch.Length(); rowIdx++ {
-				buf.writeBinaryColumnarElement(ctx, batch.ColVec(0), rowIdx, loc)
+				buf.writeBinaryColumnarElement(ctx, &vecs, 0 /* vecIdx */, rowIdx, loc)
 			}
 		}
 	}
