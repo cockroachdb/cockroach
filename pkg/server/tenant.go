@@ -270,14 +270,16 @@ func StartTenant(
 	// The InstanceID subsystem is not available until `preStart`.
 	args.rpcContext.NodeID.Set(ctx, roachpb.NodeID(s.SQLInstanceID()))
 
-	// Register the server's identifiers so that log events are
-	// decorated with the server's identity. This helps when gathering
-	// log events from multiple servers into the same log collector.
-	//
-	// We do this only here, as the identifiers may not be known before this point.
-	clusterID := args.rpcContext.ClusterID.Get().String()
-	log.SetNodeIDs(clusterID, 0 /* nodeID is not known for a SQL-only server. */)
-	log.SetTenantIDs(args.TenantID.String(), int32(s.SQLInstanceID()))
+	if knobs, ok := baseCfg.TestingKnobs.TenantTestingKnobs.(*sql.TenantTestingKnobs); !ok || !knobs.DisableLogTags {
+		// Register the server's identifiers so that log events are
+		// decorated with the server's identity. This helps when gathering
+		// log events from multiple servers into the same log collector.
+		//
+		// We do this only here, as the identifiers may not be known before this point.
+		clusterID := args.rpcContext.ClusterID.Get().String()
+		log.SetNodeIDs(clusterID, 0 /* nodeID is not known for a SQL-only server. */)
+		log.SetTenantIDs(args.TenantID.String(), int32(s.SQLInstanceID()))
+	}
 
 	externalUsageFn := func(ctx context.Context) multitenant.ExternalUsage {
 		userTimeMillis, _, err := status.GetCPUTime(ctx)
