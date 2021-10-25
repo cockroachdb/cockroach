@@ -224,15 +224,19 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		for _, nullFraction := range nullFractions {
 			setNullFraction(batch, nullFraction)
 			data, err := c.BatchToArrow(batch)
+			dataCopy := make([]*array.Data, len(data))
 			require.NoError(b, err)
 			testPrefix := fmt.Sprintf("%s/nullFraction=%0.2f", typ.String(), nullFraction)
 			result := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{typ})
 			b.Run(testPrefix+"/ArrowToBatch", func(b *testing.B) {
 				b.SetBytes(numBytes[typIdx])
 				for i := 0; i < b.N; i++ {
+					// Since ArrowToBatch eagerly nils things out, we have to make a
+					// shallow copy each time.
+					copy(dataCopy, data)
 					// Using require.NoError here causes large enough allocations to
 					// affect the result.
-					if err := c.ArrowToBatch(data, batch.Length(), result); err != nil {
+					if err := c.ArrowToBatch(dataCopy, batch.Length(), result); err != nil {
 						b.Fatal(err)
 					}
 					if result.Width() != 1 {
