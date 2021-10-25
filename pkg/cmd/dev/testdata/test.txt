@@ -31,12 +31,12 @@ bazel test //pkg/util/tracing:tracing_test --nocache_test_results '--test_filter
 dev test --stress pkg/util/tracing --filter TestStartChild*
 ----
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
-bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under '@com_github_cockroachdb_stress//:stress ' '--test_filter=TestStartChild*' --test_output errors
+bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under '@com_github_cockroachdb_stress//:stress ' '--test_filter=TestStartChild*' --test_output streamed
 
 dev test --stress pkg/util/tracing --filter TestStartChild* --timeout=10s -v
 ----
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
-bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under '@com_github_cockroachdb_stress//:stress -maxtime=10s ' --test_timeout=11 '--test_filter=TestStartChild*' --test_output all --test_arg -test.v
+bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under '@com_github_cockroachdb_stress//:stress -maxtime=10s ' --test_timeout=11 '--test_filter=TestStartChild*' --test_output streamed
 
 dev test //pkg/testutils --timeout=10s
 ----
