@@ -192,7 +192,7 @@ func MakeRegistry(
 		execCtx:             execCtxFn,
 		preventAdoptionFile: preventAdoptionFile,
 		td:                  td,
-		adoptionCh:          make(chan adoptionNotice),
+		adoptionCh:          make(chan adoptionNotice, 1),
 	}
 	if knobs != nil {
 		r.knobs = *knobs
@@ -251,13 +251,10 @@ func (r *Registry) MakeJobID() jobspb.JobID {
 }
 
 // NotifyToAdoptJobs notifies the job adoption loop to start claimed jobs.
-func (r *Registry) NotifyToAdoptJobs(ctx context.Context) error {
+func (r *Registry) NotifyToAdoptJobs(context.Context) error {
 	select {
 	case r.adoptionCh <- resumeClaimedJobs:
-	case <-r.stopper.ShouldQuiesce():
-		return stop.ErrUnavailable
-	case <-ctx.Done():
-		return ctx.Err()
+	default:
 	}
 	return nil
 }
