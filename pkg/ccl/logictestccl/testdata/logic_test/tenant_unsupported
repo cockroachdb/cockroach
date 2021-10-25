@@ -65,6 +65,3 @@ ALTER TABLE kv EXPERIMENTAL_RELOCATE LEASE VALUES (1, 'k')
 
 statement error operation is unsupported in multi-tenancy mode
 SELECT crdb_internal.check_consistency(true, '', '')
-
-statement error operation is unsupported in multi-tenancy mode
-EXPLAIN ANALYZE (DEBUG) SELECT * FROM kv
