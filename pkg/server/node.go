@@ -955,6 +955,18 @@ func (n *Node) Batch(
 	if !ok {
 		tenantID = roachpb.SystemTenantID
 	}
+
+	// Requests from tenants don't have gateway node id set but are required for
+	// the QPS based rebalancing to work. The only other type of request with
+	// GatewayNodeID == 0 are range lookup calls and for these the RangeID is 1.
+	// The GatewayNodeID is used as a proxy for the locality of the origin of
+	// the request. The replica stats aggregate all incoming BatchRequests and
+	// which localities they come from in order to compute per second stats
+	// used for the rebalancing decisions.
+	if args.GatewayNodeID == 0 && tenantID != roachpb.SystemTenantID {
+		args.GatewayNodeID = n.Descriptor.NodeID
+	}
+
 	handle, err := n.admissionController.AdmitKVWork(ctx, tenantID, args)
 	if err != nil {
 		return nil, err
