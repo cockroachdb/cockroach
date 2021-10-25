@@ -730,8 +730,9 @@ func parseClientProvidedSessionParameters(
 	trustClientProvidedRemoteAddr bool,
 ) (sql.SessionArgs, error) {
 	args := sql.SessionArgs{
-		SessionDefaults: make(map[string]string),
-		RemoteAddr:      origRemoteAddr,
+		SessionDefaults:             make(map[string]string),
+		CustomOptionSessionDefaults: make(map[string]string),
+		RemoteAddr:                  origRemoteAddr,
 	}
 	foundBufferSize := false
 
@@ -854,7 +855,8 @@ func loadParameter(ctx context.Context, key, value string, args *sql.SessionArgs
 	switch {
 	case exists && configurable:
 		args.SessionDefaults[key] = value
-
+	case sql.IsCustomOptionSessionVariable(key):
+		args.CustomOptionSessionDefaults[key] = value
 	case !exists:
 		if _, ok := sql.UnsupportedVars[key]; ok {
 			counter := sqltelemetry.UnimplementedClientStatusParameterCounter(key)

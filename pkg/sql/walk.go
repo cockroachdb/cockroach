@@ -428,6 +428,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&showFingerprintsNode{}):           "show fingerprints",
 	reflect.TypeOf(&showTraceNode{}):                  "show trace for",
 	reflect.TypeOf(&showTraceReplicaNode{}):           "replica trace",
+	reflect.TypeOf(&showVarNode{}):                    "show",
 	reflect.TypeOf(&sortNode{}):                       "sort",
 	reflect.TypeOf(&splitNode{}):                      "split",
 	reflect.TypeOf(&topKNode{}):                       "top-k",
