@@ -194,7 +194,9 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if short {
 		args = append(args, "--test_arg", "-test.short")
 	}
-	if verbose {
+	if stress {
+		args = append(args, "--test_output", "streamed")
+	} else if verbose {
 		args = append(args, "--test_output", "all", "--test_arg", "-test.v")
 	} else {
 		args = append(args, "--test_output", "errors")
