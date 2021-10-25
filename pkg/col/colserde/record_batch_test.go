@@ -369,11 +369,15 @@ func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 		// Only calculate useful bytes.
 		numBytes := int64(dataLen * 8)
 		data := []*array.Data{randomDataFromType(rng, typs[0], dataLen, 0 /* nullProbability */)}
+		dataCopy := make([]*array.Data, len(data))
 		b.Run(fmt.Sprintf("Serialize/dataLen=%d", dataLen), func(b *testing.B) {
 			b.SetBytes(numBytes)
 			for i := 0; i < b.N; i++ {
 				buf.Reset()
-				if _, _, err := s.Serialize(&buf, data, dataLen); err != nil {
+				// Since Serialize eagerly nils things out, we have to make a shallow
+				// copy each time.
+				copy(dataCopy, data)
+				if _, _, err := s.Serialize(&buf, dataCopy, dataLen); err != nil {
 					b.Fatal(err)
 				}
 			}
