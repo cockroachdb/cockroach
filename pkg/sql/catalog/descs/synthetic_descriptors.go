@@ -20,10 +20,6 @@ type syntheticDescriptors struct {
 	descs nstree.Map
 }
 
-func makeSyntheticDescriptors() syntheticDescriptors {
-	return syntheticDescriptors{descs: nstree.MakeMap()}
-}
-
 func (sd *syntheticDescriptors) set(descs []catalog.Descriptor) {
 	sd.descs.Clear()
 	for _, desc := range descs {
