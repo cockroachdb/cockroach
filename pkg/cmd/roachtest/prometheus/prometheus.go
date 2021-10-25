@@ -69,7 +69,6 @@ func Init(
 	if err := c.RunE(
 		ctx,
 		cfg.PrometheusNode,
-		"terminate existing prometheus instance, if exists",
 		"sudo systemctl stop prometheus || echo 'no prometheus is running'",
 	); err != nil {
 		return nil, err
