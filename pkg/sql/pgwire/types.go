@@ -387,17 +387,23 @@ func writeBinaryDecimal(b *writeBuffer, v *apd.Decimal) {
 		b.putInt32(8)
 		// 0 digits.
 		b.putInt32(0)
-		// https://github.com/postgres/postgres/blob/ffa4cbd623dd69f9fa99e5e92426928a5782cf1a/src/backend/utils/adt/numeric.c#L169
-		b.write([]byte{0xc0, 0, 0, 0})
-
 		if v.Form == apd.Infinite {
-			// TODO(mjibson): #32489
-			// The above encoding is not correct for Infinity, but since that encoding
-			// doesn't exist in postgres, it's unclear what to do. For now use the NaN
-			// encoding and count it to see if anyone even needs this.
+			// The 0x20 in the DScale byte does not actually seem to be part of the
+			// spec, but that's what PostgreSQL outputs.
+			if v.Negative {
+				// https://github.com/postgres/postgres/blob/a57d312a7706321d850faa048a562a0c0c01b835/src/backend/utils/adt/numeric.c#L200
+				b.write([]byte{0xf0, 0, 0, 0x20})
+			} else {
+				// https://github.com/postgres/postgres/blob/a57d312a7706321d850faa048a562a0c0c01b835/src/backend/utils/adt/numeric.c#L201
+				b.write([]byte{0xd0, 0, 0, 0x20})
+			}
+			// Official Infinity support for DECIMAL was added in CockroachDB 22.1,
+			// so let's keep tracking usage.
 			telemetry.Inc(sqltelemetry.BinaryDecimalInfinityCounter)
+		} else {
+			// https://github.com/postgres/postgres/blob/ffa4cbd623dd69f9fa99e5e92426928a5782cf1a/src/backend/utils/adt/numeric.c#L169
+			b.write([]byte{0xc0, 0, 0, 0})
 		}
-
 		return
 	}
 

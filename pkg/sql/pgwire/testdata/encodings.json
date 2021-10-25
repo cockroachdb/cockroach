@@ -273,6 +273,20 @@
 		"Binary": [0, 0, 0, 0, 192, 0, 0, 0]
 	},
 	{
+		"SQL": "'Inf'::decimal",
+		"Oid": 1700,
+		"Text": "Infinity",
+		"TextAsBinary": [73, 110, 102, 105, 110, 105, 116, 121],
+		"Binary": [0, 0, 0, 0, 208, 0, 0, 32]
+	},
+	{
+		"SQL": "'-infinity'::decimal",
+		"Oid": 1700,
+		"Text": "-Infinity",
+		"TextAsBinary": [45, 73, 110, 102, 105, 110, 105, 116, 121],
+		"Binary": [0, 0, 0, 0, 240, 0, 0, 32]
+	},
+	{
 		"SQL": "'-000.000'::decimal",
 		"Oid": 1700,
 		"Text": "0.000",
