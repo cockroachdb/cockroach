@@ -20,6 +20,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed:with-mocks",
+        "//pkg/multitenant",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/settings",
