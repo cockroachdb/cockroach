@@ -130,35 +130,35 @@ column_names  row_count  distinct_count  null_count
 {c_custkey}   1533923    148813          0
 {o_comment}   1533923    1454164         50005
 {o_custkey}   1533923    99846           50005
-{o_orderkey}  1533923    1511432         50005
+{o_orderkey}  1533923    1483919         50005
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {c_custkey}   503988.00      3.04 <==       148813.00           1.00                0.00            1.00
 {o_comment}   503988.00      3.04 <==       317522.00           4.58 <==            0.00            +Inf <==
 {o_custkey}   503988.00      3.04 <==       99627.00            1.00                0.00            +Inf <==
-{o_orderkey}  503988.00      3.04 <==       317522.00           4.76 <==            0.00            +Inf <==
+{o_orderkey}  503988.00      3.04 <==       317522.00           4.67 <==            0.00            +Inf <==
 
 ----Stats for q13_select_5----
 column_names  row_count  distinct_count  null_count
 {o_comment}   1483918    1454164         0
 {o_custkey}   1483918    99846           0
-{o_orderkey}  1483918    1511432         0
+{o_orderkey}  1483918    1483918         0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {o_comment}   500000.00      2.97 <==       500000.00           2.91 <==            0.00            1.00
 {o_custkey}   500000.00      2.97 <==       99627.00            1.00                0.00            1.00
-{o_orderkey}  500000.00      2.97 <==       500000.00           3.02 <==            0.00            1.00
+{o_orderkey}  500000.00      2.97 <==       500000.00           2.97 <==            0.00            1.00
 
 ----Stats for q13_scan_6----
 column_names  row_count  distinct_count  null_count
 {o_comment}   1500000    1469402         0
 {o_custkey}   1500000    99846           0
-{o_orderkey}  1500000    1527270         0
+{o_orderkey}  1500000    1500000         0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {o_comment}   1500000.00     1.00           1473851.00          1.00                0.00            1.00
 {o_custkey}   1500000.00     1.00           99853.00            1.00                0.00            1.00
-{o_orderkey}  1500000.00     1.00           1500000.00          1.02                0.00            1.00
+{o_orderkey}  1500000.00     1.00           1500000.00          1.00                0.00            1.00
 
 ----Stats for q13_scan_7----
 column_names  row_count  distinct_count  null_count

@@ -385,10 +385,6 @@ func TestOtelTracer(t *testing.T) {
 	// Put something in the span.
 	s.Record("hello")
 
-	const testBaggageKey = "test-baggage"
-	const testBaggageVal = "test-val"
-	s.SetBaggageItem(testBaggageKey, testBaggageVal)
-
 	carrier := metadataCarrier{metadata.MD{}}
 	if err := tr.InjectMetaInto(s.Meta(), carrier); err != nil {
 		t.Fatal(err)
@@ -400,28 +396,12 @@ func TestOtelTracer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s2 := tr.StartSpan("child", WithParentAndManualCollection(wireSpanMeta))
-
-	exp := map[string]string{
-		testBaggageKey: testBaggageVal,
-	}
-	require.Equal(t, exp, s2.Meta().Baggage)
-	// Note: we don't propagate baggage to the otel spans very well - we don't use
-	// the otel baggage features. We do, however, set attributes on the shadow
-	// spans when we can, which happens to be sufficient for this test.
+	tr.StartSpan("child", WithParentAndManualCollection(wireSpanMeta))
 
 	rs := sr.Started()
 	require.Len(t, rs, 2)
 	require.Len(t, rs[0].Events(), 1)
 	require.Equal(t, "hello", rs[0].Events()[0].Name)
-	require.Len(t, rs[0].Attributes(), 1)
-	require.Equal(t,
-		attribute.KeyValue{Key: testBaggageKey, Value: attribute.StringValue(testBaggageVal)},
-		rs[0].Attributes()[0])
-	require.Len(t, rs[1].Attributes(), 1)
-	require.Equal(t,
-		attribute.KeyValue{Key: testBaggageKey, Value: attribute.StringValue(testBaggageVal)},
-		rs[1].Attributes()[0])
 	require.Equal(t, rs[0].SpanContext().TraceID(), rs[1].Parent().TraceID())
 	require.Equal(t, rs[0].SpanContext().SpanID(), rs[1].Parent().SpanID())
 }

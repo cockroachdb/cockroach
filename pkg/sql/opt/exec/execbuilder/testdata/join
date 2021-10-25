@@ -1590,24 +1590,24 @@ vectorized: true
 │ estimated row count: 33 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (x, y, u, x, y, v)
+    │ columns: (x, y, v, x, y, u)
     │ estimated row count: 33 (missing stats)
     │ equality: (x, y) = (x, y)
     │ merge ordering: +"(x=x)",+"(y=y)"
     │
     ├── • scan
-    │     columns: (x, y, u)
+    │     columns: (x, y, v)
     │     ordering: +x,+y
-    │     estimated row count: 333 (missing stats)
-    │     table: xyu@xyu_pkey
-    │     spans: /1/2/4-
+    │     estimated row count: 1,000 (missing stats)
+    │     table: xyv@xyv_pkey
+    │     spans: FULL SCAN
     │
     └── • scan
-          columns: (x, y, v)
+          columns: (x, y, u)
           ordering: +x,+y
-          estimated row count: 1,000 (missing stats)
-          table: xyv@xyv_pkey
-          spans: FULL SCAN
+          estimated row count: 333 (missing stats)
+          table: xyu@xyu_pkey
+          spans: /1/2/4-
 
 
 # Regression test for #20765/27431.
@@ -1760,17 +1760,17 @@ vectorized: true
 ·
 • merge join
 │ equality: (a, b) = (a, b)
-│ right cols are key
+│ left cols are key
 │
 ├── • scan
 │     missing stats
-│     table: abcdef@abcdef_pkey
-│     spans: [/1/2/6/9 - ]
+│     table: abg@abg_pkey
+│     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: abg@abg_pkey
-      spans: FULL SCAN
+      table: abcdef@abcdef_pkey
+      spans: [/1/2/6/9 - ]
 
 # Regression tests for mixed-type equality columns (#22514).
 statement ok

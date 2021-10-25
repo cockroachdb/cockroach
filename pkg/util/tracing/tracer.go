@@ -43,14 +43,6 @@ import (
 	"golang.org/x/net/trace"
 )
 
-// verboseTracingBaggageKey is set as Baggage on traces which are used for verbose tracing,
-// meaning that a) spans derived from this one will not be no-op spans and b) they will
-// start recording.
-//
-// This is "sb" for historical reasons; this concept used to be called "[S]now[b]all" tracing
-// and since this string goes on the wire, it's a hassle to change it now.
-const verboseTracingBaggageKey = "sb"
-
 const (
 	// maxRecordedBytesPerSpan limits the size of logs and structured in a span;
 	// use a comfortable limit.
@@ -70,7 +62,6 @@ const (
 // information in "carriers" to be transported across RPC boundaries.
 const (
 	prefixTracerState = "crdb-tracer-"
-	prefixBaggage     = "crdb-baggage-"
 
 	fieldNameTraceID = prefixTracerState + "traceid"
 	fieldNameSpanID  = prefixTracerState + "spanid"
@@ -78,6 +69,13 @@ const (
 	// encoded.
 	fieldNameOtelTraceID = prefixTracerState + "otel_traceid"
 	fieldNameOtelSpanID  = prefixTracerState + "otel_spanid"
+
+	// verboseTracingKey is the carrier key indicating that the trace has verbose
+	// recording enabled. It means that a) spans derived from this one will not be
+	// no-op spans and b) they will start recording.
+	//
+	// The key is named the way it is for backwards compatibility reasons.
+	verboseTracingKey = "crdb-baggage-sb"
 
 	spanKindTagKey = "span.kind"
 )
@@ -138,9 +136,7 @@ var ZipkinCollector = settings.RegisterValidatedStringSetting(
 //
 //  - forwarding events to x/net/trace instances
 //
-//  - recording traces. Recording is started automatically for spans that have
-//    the verboseTracingBaggageKey baggage and can be started explicitly as well. Recorded
-//    events can be retrieved at any time.
+//  - recording traces. Recorded events can be retrieved at any time.
 //
 //  - OpenTelemetry tracing. This is implemented by maintaining a "shadow"
 //    OpenTelemetry Span inside each of our spans.
@@ -630,8 +626,8 @@ func (t *Tracer) startSpanGeneric(
 
 	// First, create any external spans that we may need (OpenTelemetry, net/trace).
 	// We do this early so that they are available when we construct the main Span,
-	// which makes it easier to avoid one-offs when populating the tags and baggage
-	// items for the top-level Span.
+	// which makes it easier to avoid one-offs when populating the tags items for
+	// the top-level Span.
 	var otelSpan oteltrace.Span
 	if otelTr := t.getOtelTracer(); otelTr != nil {
 		parentSpan, parentContext := opts.otelContext()
@@ -727,30 +723,13 @@ func (t *Tracer) startSpanGeneric(
 		s.i.crdb.enableRecording(opts.recordingType())
 	}
 
-	// Copy baggage from parent. This similarly fans out over the various
-	// spans contained in Span.
+	// If the span is a local root, put it into the registry of active local root
+	// spans. Span.Finish will take care of removing it.
 	//
-	// NB: this could be optimized.
 	// NB: (opts.Parent != nil && opts.Parent.i.crdb == nil) is not possible at
 	// the moment, but let's not rely on that.
-	if opts.Parent != nil && opts.Parent.i.crdb != nil {
-		opts.Parent.i.crdb.mu.Lock()
-		m := opts.Parent.i.crdb.mu.baggage
-		opts.Parent.i.crdb.mu.Unlock()
-
-		for k, v := range m {
-			s.SetBaggageItem(k, v)
-		}
-	} else {
-		// Local root span - put it into the registry of active local root
-		// spans. `Span.Finish` takes care of deleting it again.
+	if opts.Parent == nil || opts.Parent.i.crdb == nil {
 		t.activeSpansRegistry.addSpan(s.i.crdb)
-
-		if !opts.RemoteParent.Empty() {
-			for k, v := range opts.RemoteParent.Baggage {
-				s.SetBaggageItem(k, v)
-			}
-		}
 	}
 
 	return maybeWrapCtx(ctx, &helper.octx, s)
@@ -804,8 +783,9 @@ func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) error {
 	carrier.Set(fieldNameTraceID, strconv.FormatUint(uint64(sm.traceID), 16))
 	carrier.Set(fieldNameSpanID, strconv.FormatUint(uint64(sm.spanID), 16))
 
-	for k, v := range sm.Baggage {
-		carrier.Set(prefixBaggage+k, v)
+	if sm.recordingType == RecordingVerbose {
+		// This key is dictated by backwards compatibility.
+		carrier.Set(verboseTracingKey, "1")
 	}
 	if sm.otelCtx.TraceID().IsValid() {
 		carrier.Set(fieldNameOtelTraceID, sm.otelCtx.TraceID().String())
@@ -825,7 +805,7 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 	var spanID tracingpb.SpanID
 	var otelTraceID oteltrace.TraceID
 	var otelSpanID oteltrace.SpanID
-	var baggage map[string]string
+	var recordingType RecordingType
 
 	iterFn := func(k, v string) error {
 		switch k = strings.ToLower(k); k {
@@ -855,13 +835,8 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 			if err != nil {
 				return err
 			}
-		default:
-			if strings.HasPrefix(k, prefixBaggage) {
-				if baggage == nil {
-					baggage = make(map[string]string)
-				}
-				baggage[strings.TrimPrefix(k, prefixBaggage)] = v
-			}
+		case verboseTracingKey:
+			recordingType = RecordingVerbose
 		}
 		return nil
 	}
@@ -885,11 +860,6 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 		return noopSpanMeta, nil
 	}
 
-	var recordingType RecordingType
-	if baggage[verboseTracingBaggageKey] != "" {
-		recordingType = RecordingVerbose
-	}
-
 	var otelCtx oteltrace.SpanContext
 	if otelTraceID.IsValid() && otelSpanID.IsValid() {
 		otelCtx = otelCtx.WithRemote(true).WithTraceID(otelTraceID).WithSpanID(otelSpanID)
@@ -900,7 +870,6 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 		spanID:        spanID,
 		otelCtx:       otelCtx,
 		recordingType: recordingType,
-		Baggage:       baggage,
 		// The sterile field doesn't make it across the wire. The simple fact that
 		// there was any tracing info in the carrier means that the parent span was
 		// not sterile.

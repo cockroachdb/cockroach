@@ -111,9 +111,9 @@ EXPLAIN (VEC) SELECT * FROM t AS t1, t AS t2 WHERE t1.b = 1 AND t1.a = t2.a
 │
 └ Node 1
   └ *colexecjoin.mergeJoinInnerOp
-    ├ *colexecsel.selEQInt64Int64ConstOp
-    │ └ *colfetcher.ColBatchScan
-    └ *colfetcher.ColBatchScan
+    ├ *colfetcher.ColBatchScan
+    └ *colexecsel.selEQInt64Int64ConstOp
+      └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t AS t1, t AS t2 WHERE t1.b = 1 AND t1.a = t2.a
@@ -127,21 +127,21 @@ vectorized: true
 │ left cols are key
 │ right cols are key
 │
-├── • filter
-│   │ estimated row count: 3,333
-│   │ filter: b = 1
-│   │
-│   └── • scan
-│         estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
-│         table: t@t_pkey
-│         spans: FULL SCAN
+├── • scan
+│     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+│     table: t@t_pkey
+│     spans: FULL SCAN
 │
-└── • scan
-      estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
-      table: t@t_pkey
-      spans: FULL SCAN
+└── • filter
+    │ estimated row count: 3,333
+    │ filter: b = 1
+    │
+    └── • scan
+          estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+          table: t@t_pkey
+          spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkFFr2zAQx9_3KY57SjatieRsDEFAYXWZR5p0cWCD4Qc1umUG1_IkGTZCvvuwPWhtmmxhb7qTfve7vw7ofxQoMf5yt1wkKxhdJ-k2_bQcQxov4_dbeAk3m_UtBFikEDj7cxDw-UO8iWEU-NU9zIGPYbG6bksNcwjiSo-RYWkNrfQDeZRfkWPGsHJ2R95b17QO7YPE_EQ5ZZiXVR2adsZwZx2hPGDIQ0EocavvC9qQNuQmU2RoKOi8aMcGVbn8QbtfyDCtdOklvMbsyNDW4XGgD3pPKPmR_bv0Ji8COXIT3jd2fQlKNMmllMlq--6kUlyifJpT_EfO6KT00VWX1hlyZHqerCH_9uSZzW_J7emjzUtyk6i_eUHfwkjxV-O5y_ffuyMyXNdBguJMCaYipmZMvWHq7clIs0v-cUO-sqWnYbRnJ0-bPGT21P2Pt7Xb0Z2zu1bTleuWaxuGfOhueVckZXfVLPgU5mfhqAfzISwugMUQjs7Cs8Ha2fHF7wAAAP__f31KBg==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykklFr2zAQx9_3KY57Sja1iWRnDEFAYXWZR-p0cWCD4Qc1vmUG1_IkGTZCvvuwPegSmmze3nQn_f4_6dAe3bcSJUaf7peLOIHRTZxu0g_LMaTRMnq7gZdwu17dgYdFCp6zXwsBH99F6whGnl8_wBz4GBbJTVdqmIMX13qMDCuTU6IfyaH8jBwzhrU1W3LO2La17w7E-XeUU4ZFVTe-bWcMt8YSyj36wpeEEjf6oaQ16ZzsZIoMc_K6KLtYr2pbPGr7Axmmta6chCvMDgxN458Cndc7QskP7N-k_D-kYoj0tig9WbITcWzs-xKUaMctpYyTzZuzyuCs8snUVMbmZCk_EmUt-acjz9z7juyO3puiIjsJjq9e0hc_UvzVeG6L3dd-iQxXjZegQqZmTL1mijMlmArOPikcMsXEXJl6Ep6-7Nng2ZDgNbnaVI7-KnnaDoryHfWDd6axW7q3Zttp-nLVcV0jJ-f73aAv4qrb6j7t7zC_CIsjeHoKiwFmcQoHF-Hwsjm8CM9O4Ozw4mcAAAD__1A-e3k=
 
 # However, if we add a selective filter, the flow is kept on the remote node.
 query T

@@ -412,7 +412,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 
 ----Stats for q8_lookup_join_10----
 column_names   row_count  distinct_count  null_count
-{c_custkey}    29952      30253           0
+{c_custkey}    29952      29952           0
 {c_nationkey}  29952      5               0
 {n_nationkey}  29952      5               0
 {n_regionkey}  29952      1               0
@@ -420,7 +420,7 @@ column_names   row_count  distinct_count  null_count
 {r_regionkey}  29952      1               0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_custkey}    30000.00       1.00           27672.00            1.09                0.00            1.00
+{c_custkey}    30000.00       1.00           27672.00            1.08                0.00            1.00
 {c_nationkey}  30000.00       1.00           5.00                1.00                0.00            1.00
 {n_nationkey}  30000.00       1.00           5.00                1.00                0.00            1.00
 {n_regionkey}  30000.00       1.00           1.00                1.00                0.00            1.00
@@ -462,12 +462,12 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 column_names       row_count  distinct_count  null_count
 {l_discount}       13389      11              0
 {l_extendedprice}  13389      12076           0
-{l_orderkey}       13389      13400           0
+{l_orderkey}       13389      13389           0
 {l_partkey}        13389      1451            0
 {l_suppkey}        13389      4044            0
 {o_custkey}        13389      12274           0
 {o_orderdate}      13389      731             0
-{o_orderkey}       13389      13400           0
+{o_orderkey}       13389      13389           0
 {p_partkey}        13389      1451            0
 {p_type}           13389      1               0
 ~~~~

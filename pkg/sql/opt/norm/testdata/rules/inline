@@ -874,6 +874,10 @@ project
  └── inner-join (hash)
       ├── scan t63794_a [as=a]
       ├── inner-join (merge)
+      │    ├── project
+      │    │    ├── scan t63794_bc@t63794_bc_b_idx
+      │    │    └── projections
+      │    │         └── b % 2
       │    ├── inner-join (merge)
       │    │    ├── project
       │    │    │    ├── scan t63794_bc@t63794_bc_b_idx
@@ -884,10 +888,6 @@ project
       │    │    │    └── projections
       │    │    │         └── b % 2
       │    │    └── filters (true)
-      │    ├── project
-      │    │    ├── scan t63794_bc@t63794_bc_b_idx
-      │    │    └── projections
-      │    │         └── b % 2
       │    └── filters (true)
       └── filters
            └── a = b

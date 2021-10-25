@@ -62,6 +62,7 @@ go_library(
         "@com_github_gogo_protobuf//types",
         "@com_github_gorhill_cronexpr//:cronexpr",
         "@com_github_prometheus_client_model//go",
+        "@io_opentelemetry_go_otel//attribute",
     ],
 )
 

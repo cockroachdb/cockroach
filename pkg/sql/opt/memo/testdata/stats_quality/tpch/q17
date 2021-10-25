@@ -179,7 +179,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 column_names    row_count  distinct_count  null_count
 {?column?}      6088       194             0
 {l_linenumber}  6088       7               0
-{l_orderkey}    6088       6116            0
+{l_orderkey}    6088       6088            0
 {l_partkey}     6088       204             0
 {p_partkey}     6088       204             0
 ~~~~
@@ -226,7 +226,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 ----Stats for q17_lookup_join_8----
 column_names    row_count  distinct_count  null_count
 {l_linenumber}  6088       7               0
-{l_orderkey}    6088       6116            0
+{l_orderkey}    6088       6088            0
 {l_partkey}     6088       204             0
 {p_brand}       6088       1               0
 {p_container}   6088       1               0

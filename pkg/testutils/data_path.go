@@ -11,12 +11,12 @@
 package testutils
 
 import (
-	"os"
 	"path"
 	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,7 +29,12 @@ func TestDataPath(t testing.TB, relative ...string) string {
 	relative = append([]string{"testdata"}, relative...)
 	// dev notifies the library that the test is running in a subdirectory of the
 	// workspace with the environment variable below.
-	if bazel.BuiltWithBazel() && os.Getenv("YOU_ARE_IN_THE_WORKSPACE") != "" {
+	if bazel.BuiltWithBazel() {
+		//lint:ignore SA4006 apparently a linter bug.
+		cockroachWorkspace, set := envutil.EnvString("COCKROACH_WORKSPACE", 0)
+		if set {
+			return path.Join(cockroachWorkspace, bazel.RelativeTestTargetPath(), path.Join(relative...))
+		}
 		runfiles, err := bazel.RunfilesPath()
 		require.NoError(t, err)
 		return path.Join(runfiles, bazel.RelativeTestTargetPath(), path.Join(relative...))

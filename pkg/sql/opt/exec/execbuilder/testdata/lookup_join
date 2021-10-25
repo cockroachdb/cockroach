@@ -388,7 +388,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck1Fv2jAQx9_3K
 query T
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • project
@@ -419,7 +419,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM books CROSS JOIN books2
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • cross join (inner)
@@ -441,7 +441,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join
@@ -457,7 +457,7 @@ vectorized: true
           table: authors@authors_pkey
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkd-L00AQx9_9K4Z5Upm7a1JPZOFgRSPmqMmZFhSkD3vd4VyvtxN3N6CU_u-S5Iqt0KpvmR-fbz7JbDB-X6PC4vPN7HVZwdO35Xwx_zh7BvNiVrxZwHN419QfwHTpq4QIZVUVDVzXZQW3Ivcxh3r3dM7WJSceriCDT--LptgNkktrhqtdyHnfRkIvlivzwBHVF8yQ8BKXhG2QFccooW9vhqXS_kA1IXS-7VLfXhKuJDCqDQ7ZqLCSM2kvciS0nIxbD2tbQunSbygmc8eoplvaC85OBy_M7ZobNpbDxeQgHh-_R7fBPZjwEwnnrfFRwRkSNuwtBwWZUqqsFq8IdEagczxmlf2P1bU4_yiVHUqN_3zPaSZy37XwTZwH8Qr0lHTP1F1SoHPq6xekL0m_POqWH7j95RQNx1Z85H-6xWS7JGR7x-O5o3RhxTdBVsNrxrIeuKFhOaZxOh2L0o-jXnAfzk7C-Wk4PwlP_oCX2ye_AgAA__98nw4O
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVFr1EAQx9_9FMM8qUzbS05FFgorGjHlTGruQEHysL0d6trrTtzdgHLcd5ckPWyFHr23zH_y-8-PZIvx1wYVFt8uF-_KCp5_KJer5ZfFC1gWi-L9Cl7Cx6b-DKZPPyREKKuqaOCiLiu4ErmJOdT7p1O2LjnxcA4ZfP1UNMV-kVzaMJzvS06HGAm9WK7MLUdU3zHDlrALsuYYJQzRdnyhtL9RzQid7_o0xC3hWgKj2uLYiwpX5mrDDRvL4WyGhJaTcZux9u6k7oK7NeEPEi4746OCEyRs2FsOCjKlVFmt3hLojEDn2O4IpU__LsZkrhlVtqOnW12I83dS2UOp6bPcc1qI3PQd_BTnQbwCPSc9MHWfFOichvkV6dek3zzqlh_jVsmJdGf5A63HiufHFDccO_GRn9Q827WEbK95-t1R-rDmyyDr8cw01iM3BpZjmrbZNJR-Wg2C9-HsIJwfhvOD8Pw_uN09-xsAAP__HEsNaA==
 
 ####################################
 #  LOOKUP JOIN ON SECONDARY INDEX  #

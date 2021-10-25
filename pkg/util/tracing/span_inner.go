@@ -124,21 +124,10 @@ func (s *spanInner) Meta() SpanMeta {
 	var traceID tracingpb.TraceID
 	var spanID tracingpb.SpanID
 	var recordingType RecordingType
-	var baggage map[string]string
 	var sterile bool
 
 	if s.crdb != nil {
 		traceID, spanID = s.crdb.traceID, s.crdb.spanID
-		s.crdb.mu.Lock()
-		defer s.crdb.mu.Unlock()
-		n := len(s.crdb.mu.baggage)
-		// In the common case, we have no baggage, so avoid making an empty map.
-		if n > 0 {
-			baggage = make(map[string]string, n)
-		}
-		for k, v := range s.crdb.mu.baggage {
-			baggage[k] = v
-		}
 		recordingType = s.crdb.mu.recording.recordingType.load()
 		sterile = s.isSterile()
 	}
@@ -152,7 +141,6 @@ func (s *spanInner) Meta() SpanMeta {
 		spanID == 0 &&
 		!otelCtx.TraceID().IsValid() &&
 		recordingType == 0 &&
-		baggage == nil &&
 		!sterile {
 		return SpanMeta{}
 	}
@@ -161,7 +149,6 @@ func (s *spanInner) Meta() SpanMeta {
 		spanID:        spanID,
 		otelCtx:       otelCtx,
 		recordingType: recordingType,
-		Baggage:       baggage,
 		sterile:       sterile,
 	}
 }
@@ -246,22 +233,6 @@ func (s *spanInner) hasVerboseSink() bool {
 		return false
 	}
 	return true
-}
-
-func (s *spanInner) SetBaggageItem(restrictedKey, value string) *spanInner {
-	if s.isNoop() {
-		return s
-	}
-	s.crdb.setBaggageItemAndTag(restrictedKey, value)
-	if s.otelSpan != nil {
-		// In OpenTelemetry, baggage is stored directly in the context, separately
-		// from the span. We don't go through the trouble. We'll set a tag on the
-		// current span, however.
-		s.otelSpan.SetAttributes(attribute.String(restrictedKey, value))
-	}
-	// NB: nothing to do for net/trace.
-
-	return s
 }
 
 // Tracer exports the tracer this span was created using.

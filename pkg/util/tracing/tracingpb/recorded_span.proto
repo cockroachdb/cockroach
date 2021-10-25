@@ -57,9 +57,6 @@ message RecordedSpan {
   uint64 parent_span_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentSpanID", (gogoproto.customtype) = "SpanID"];
   // Operation name.
   string operation = 4;
-  // Baggage items get passed from parent to child spans (even through gRPC).
-  // Notably, verbose tracing uses a special baggage item.
-  map<string, string> baggage = 5;
   // Tags associated with the span.
   map<string, string> tags = 6;
   // Time when the span was started.
@@ -80,6 +77,9 @@ message RecordedSpan {
   bool redactable_logs = 15;
   // Events logged in the span.
   repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
+  // verbose indicates whether the span was recording in verbose mode at the
+  // time the recording was produced.
+  bool verbose = 16;
 
   // The ID of the goroutine on which the span was created.
   uint64 goroutine_id = 12 [(gogoproto.customname) = "GoroutineID"];
@@ -96,7 +96,7 @@ message RecordedSpan {
   // DeprecatedInternalStructured only stores the Payloads.
   repeated StructuredRecord structured_records = 14 [(gogoproto.nullable) = false];
 
-  reserved 10,11;
+  reserved 5,10,11;
 }
 
 // NormalizedSpan is a representation of a RecordedSpan from a trace with all
