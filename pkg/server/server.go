@@ -785,6 +785,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	})
 	registry.AddMetricStruct(kvProber.Metrics())
 
+	settingsWriter := &settingsCacheWriter{eng: engines[0]}
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			nodesStatusServer:        serverpb.MakeOptionalNodesStatusServer(sStatus),
@@ -824,6 +825,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		regionsServer:            sStatus,
 		tenantUsageServer:        tenantUsage,
 		monitorAndMetrics:        sqlMonitorAndMetrics,
+		settingsStorage:          settingsWriter,
 	})
 	if err != nil {
 		return nil, err
@@ -1545,7 +1547,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Apply any cached initial settings (and start the gossip listener) as early
 	// as possible, to avoid spending time with stale settings.
-	if err := s.refreshSettings(state.initialSettingsKVs); err != nil {
+	if err := initializeCachedSettings(
+		ctx, keys.SystemSQLCodec, s.st.MakeUpdater(), state.initialSettingsKVs,
+	); err != nil {
 		return errors.Wrap(err, "during initializing settings updater")
 	}
 
