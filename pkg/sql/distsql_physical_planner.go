@@ -4082,8 +4082,15 @@ func maybeMoveSingleFlowToGateway(planCtx *PlanningCtx, plan *PhysicalPlan, rowC
 		nodeID := plan.Processors[0].Node
 		for _, p := range plan.Processors[1:] {
 			if p.Node != nodeID {
-				singleFlow = false
-				break
+				if p.Node != plan.GatewayNodeID || p.Spec.Core.Noop == nil {
+					// We want to ignore the noop processors planned on the
+					// gateway because their job is to simply communicate the
+					// results back to the client. If, however, there is another
+					// non-noop processor on the gateway, then we'll correctly
+					// treat the plan as having multiple flows.
+					singleFlow = false
+					break
+				}
 			}
 			core := p.Spec.Core
 			if core.JoinReader != nil || core.MergeJoiner != nil || core.HashJoiner != nil ||

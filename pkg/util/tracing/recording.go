@@ -217,7 +217,8 @@ func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogDat
 
 	// If the span was verbose at the time when the structured event was recorded,
 	// then the Structured events will also have been stringified and included in
-	// the Logs above.
+	// the Logs above. We conservatively serialize the structured events again
+	// here, for the case when the span had not been verbose at the time.
 	sp.Structured(func(sr *types.Any, t time.Time) {
 		str, err := MessageToJSONString(sr, true /* emitDefaults */)
 		if err != nil {
@@ -367,10 +368,14 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 			s.Logs = append(s.Logs, jl)
 		}
 
-		// If the span was verbose then the Structured events would have been
-		// stringified and included in the Logs above. If the span was not verbose
-		// we should add the Structured events now.
-		if !isVerbose(sp) {
+		// If the span was verbose at the time when each structured event was
+		// recorded, then the respective events would have been stringified and
+		// included in the Logs above. If the span was not verbose at the time, we
+		// need to produce a string now. We don't know whether the span was verbose
+		// or not at the time each event was recorded, so we make a guess based on
+		// whether the span was verbose at the moment when the Recording was
+		// produced.
+		if !sp.Verbose {
 			sp.Structured(func(sr *types.Any, t time.Time) {
 				jl := jaegerjson.Log{Timestamp: uint64(t.UnixNano() / 1000)}
 				jsonStr, err := MessageToJSONString(sr, true /* emitDefaults */)
@@ -409,13 +414,4 @@ type TraceCollection struct {
 	// Comment is a dummy field we use to put instructions on how to load the trace.
 	Comment string             `json:"_comment"`
 	Data    []jaegerjson.Trace `json:"data"`
-}
-
-// isVerbose returns true if the RecordedSpan was started is a verbose mode.
-func isVerbose(s tracingpb.RecordedSpan) bool {
-	if s.Baggage == nil {
-		return false
-	}
-	_, isVerbose := s.Baggage[verboseTracingBaggageKey]
-	return isVerbose
 }

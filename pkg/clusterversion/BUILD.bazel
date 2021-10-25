@@ -30,11 +30,16 @@ go_library(
 go_test(
     name = "clusterversion_test",
     size = "small",
-    srcs = ["cockroach_versions_test.go"],
+    srcs = [
+        "clusterversion_test.go",
+        "cockroach_versions_test.go",
+    ],
     embed = [":clusterversion"],
     deps = [
         "//pkg/roachpb:with-mocks",
+        "//pkg/settings",
         "//pkg/util/leaktest",
+        "//pkg/util/protoutil",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_stretchr_testify//require",

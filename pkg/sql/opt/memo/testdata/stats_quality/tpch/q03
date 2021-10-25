@@ -222,7 +222,7 @@ column_names      row_count_est  row_count_err  distinct_count_est  distinct_cou
 column_names      row_count  distinct_count  null_count
 {o_custkey}       727305     99492           0
 {o_orderdate}     727305     1169            0
-{o_orderkey}      727305     730170          0
+{o_orderkey}      727305     727305          0
 {o_shippriority}  727305     1               0
 ~~~~
 column_names      row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
@@ -235,13 +235,13 @@ column_names      row_count_est  row_count_err  distinct_count_est  distinct_cou
 column_names      row_count  distinct_count  null_count
 {o_custkey}       1500000    99846           0
 {o_orderdate}     1500000    2406            0
-{o_orderkey}      1500000    1527270         0
+{o_orderkey}      1500000    1500000         0
 {o_shippriority}  1500000    1               0
 ~~~~
 column_names      row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {o_custkey}       1500000.00     1.00           99853.00            1.00                0.00            1.00
 {o_orderdate}     1500000.00     1.00           2406.00             1.00                0.00            1.00
-{o_orderkey}      1500000.00     1.00           1500000.00          1.02                0.00            1.00
+{o_orderkey}      1500000.00     1.00           1500000.00          1.00                0.00            1.00
 {o_shippriority}  1500000.00     1.00           1.00                1.00                0.00            1.00
 
 ----Stats for q3_select_8----

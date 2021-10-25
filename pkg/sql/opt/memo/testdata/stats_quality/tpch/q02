@@ -626,11 +626,11 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 ----Stats for q2_scan_12----
 column_names   row_count  distinct_count  null_count
 {s_acctbal}    10000      9967            0
-{s_address}    10000      10027           0
+{s_address}    10000      10000           0
 {s_comment}    10000      9934            0
 {s_name}       10000      9990            0
 {s_nationkey}  10000      25              0
-{s_phone}      10000      10021           0
+{s_phone}      10000      10000           0
 {s_suppkey}    10000      9920            0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err

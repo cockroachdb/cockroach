@@ -124,7 +124,7 @@ func (m *Manager) run(ctx context.Context) {
 	checkReconciliationJobInterval.SetOnChange(&m.settings.SV, func(ctx context.Context) {
 		triggerJobCheck()
 	})
-	m.settings.Version.SetOnChange(func(ctx context.Context) {
+	m.settings.Version.SetOnChange(func(_ context.Context, _ clusterversion.ClusterVersion) {
 		triggerJobCheck()
 	})
 

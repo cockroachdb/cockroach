@@ -53,8 +53,9 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	testCmd.Flags().String(stressArgsFlag, "", "Additional arguments to pass to stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
-	testCmd.Flags().Bool(rewriteFlag, false, "rewrite test files (only applicable for certain tests, e.g. logic and datadriven tests)")
+	testCmd.Flags().String(rewriteFlag, "", "argument to pass to underlying (only applicable for certain tests, e.g. logic and datadriven tests). If unspecified, -rewrite will be passed to the test binary.")
 	testCmd.Flags().String(rewriteArgFlag, "", "additional argument to pass to -rewrite (implies --rewrite)")
+	testCmd.Flags().Lookup(rewriteFlag).NoOptDefVal = "-rewrite"
 	return testCmd
 }
 
@@ -73,7 +74,10 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	ignoreCache := mustGetFlagBool(cmd, ignoreCacheFlag)
 	verbose := mustGetFlagBool(cmd, vFlag)
 	rewriteArg := mustGetFlagString(cmd, rewriteArgFlag)
-	rewrite := mustGetFlagBool(cmd, rewriteFlag) || (rewriteArg != "")
+	rewrite := mustGetFlagString(cmd, rewriteFlag)
+	if rewriteArg != "" && rewrite == "" {
+		rewrite = "-rewrite"
+	}
 
 	d.log.Printf("unit test args: stress=%t  race=%t  filter=%s  timeout=%s  ignore-cache=%t  pkgs=%s",
 		stress, race, filter, timeout, ignoreCache, pkgs)
@@ -150,31 +154,22 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if ignoreCache {
 		args = append(args, "--nocache_test_results")
 	}
-	if rewrite {
+	if rewrite != "" {
 		if stress {
-			// Both of these flags require --run_under, and their usages would conflict.
 			return fmt.Errorf("cannot combine --%s and --%s", stressFlag, rewriteFlag)
 		}
 		workspace, err := d.getWorkspace(ctx)
 		if err != nil {
 			return err
 		}
-		var cdDir string
-		for _, testTarget := range testTargets {
-			dir := getDirectoryFromTarget(testTarget)
-			if cdDir != "" && cdDir != dir {
-				// We can't pass different run_under arguments for different tests
-				// in different packages.
-				return fmt.Errorf("cannot --%s for selected targets: %s. Hint: try only specifying one test target",
-					rewriteFlag, strings.Join(testTargets, ","))
-			}
-			cdDir = dir
-		}
-		args = append(args, "--run_under", fmt.Sprintf("cd %s && ", filepath.Join(workspace, cdDir)))
-		args = append(args, "--test_env=YOU_ARE_IN_THE_WORKSPACE=1")
-		args = append(args, "--test_arg", "-rewrite")
+		args = append(args, fmt.Sprintf("--test_env=COCKROACH_WORKSPACE=%s", workspace))
+		args = append(args, "--test_arg", rewrite)
 		if rewriteArg != "" {
 			args = append(args, "--test_arg", rewriteArg)
+		}
+		for _, testTarget := range testTargets {
+			dir := getDirectoryFromTarget(testTarget)
+			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
 		}
 	}
 	if stress && timeout > 0 {
