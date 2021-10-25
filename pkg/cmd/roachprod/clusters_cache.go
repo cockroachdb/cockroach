@@ -92,7 +92,7 @@ func loadClusters() error {
 		}
 
 		sc := &install.SyncedCluster{
-			Name:     c.Name,
+			Cluster:  *c,
 			DebugDir: debugDir,
 		}
 
@@ -100,10 +100,7 @@ func loadClusters() error {
 			return errors.Errorf("found no VMs in %s", clusterFilename(name))
 		}
 		for _, vm := range c.VMs {
-			sc.VMs = append(sc.VMs, vm.Name)
-			sc.Users = append(sc.Users, vm.RemoteUser)
 			sc.Localities = append(sc.Localities, vm.Locality())
-			sc.VPCs = append(sc.VPCs, vm.VPC)
 		}
 
 		install.Clusters[sc.Name] = sc

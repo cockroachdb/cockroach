@@ -481,7 +481,7 @@ func setupSSH(clusterName string) error {
 	// requested the shared user.
 	for i := range installCluster.VMs {
 		if cloudCluster.VMs[i].Provider == gce.ProviderName {
-			installCluster.Users[i] = config.OSUser.Username
+			installCluster.VMs[i].RemoteUser = config.OSUser.Username
 		}
 	}
 	if err := installCluster.Wait(); err != nil {
@@ -1514,7 +1514,7 @@ var pgurlCmd = &cobra.Command{
 
 		if external {
 			for i := 0; i < len(nodes); i++ {
-				ips[i] = c.VMs[nodes[i]-1]
+				ips[i] = c.VMs[nodes[i]-1].Name
 			}
 		} else {
 			c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
@@ -1593,7 +1593,7 @@ Examples:
 		httpClient := httputil.NewClientWithTimeout(timeout)
 		startTime := timeutil.Now().Unix()
 		failed, err := c.ParallelE(description, len(c.ServerNodes()), 0, func(i int) ([]byte, error) {
-			host := c.VMs[i]
+			host := c.VMs[i].Name
 			port := install.GetAdminUIPort(c.Impl.NodePort(c, i))
 			scheme := "http"
 			if c.Secure {
@@ -1708,7 +1708,7 @@ var adminurlCmd = &cobra.Command{
 			}
 
 			if adminurlIPs {
-				host = c.VMs[node-1]
+				host = c.VMs[node-1].Name
 			}
 			port := install.GetAdminUIPort(c.Impl.NodePort(c, node))
 			scheme := "http"
@@ -1748,7 +1748,7 @@ var ipCmd = &cobra.Command{
 
 		if external {
 			for i := 0; i < len(nodes); i++ {
-				ips[i] = c.VMs[nodes[i]-1]
+				ips[i] = c.VMs[nodes[i]-1].Name
 			}
 		} else {
 			c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
