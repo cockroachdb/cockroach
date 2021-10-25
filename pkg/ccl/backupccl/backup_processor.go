@@ -54,10 +54,10 @@ var (
 	)
 	priorityAfter = settings.RegisterDurationSetting(
 		"bulkio.backup.read_with_priority_after",
-		"age of read-as-of time above which a BACKUP should read with priority",
+		"amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads",
 		time.Minute,
 		settings.NonNegativeDuration,
-	)
+	).WithPublic()
 	delayPerAttmpt = settings.RegisterDurationSetting(
 		"bulkio.backup.read_retry_delay",
 		"amount of time since the read-as-of time, per-prior attempt, to wait before making another attempt",
@@ -66,22 +66,23 @@ var (
 	)
 	timeoutPerAttempt = settings.RegisterDurationSetting(
 		"bulkio.backup.read_timeout",
-		"amount of time after which a read attempt is considered timed out and is canceled. "+
-			"Hitting this timeout will cause the backup job to fail.",
+		"amount of time after which a read attempt is considered timed out, which causes the backup to fail",
 		time.Minute*5,
 		settings.NonNegativeDuration,
-	)
+	).WithPublic()
 	targetFileSize = settings.RegisterByteSizeSetting(
 		"bulkio.backup.file_size",
-		"target file size",
+		"target size for individual data files produced during BACKUP",
 		128<<20,
-	)
+	).WithPublic()
+
 	smallFileBuffer = settings.RegisterByteSizeSetting(
 		"bulkio.backup.merge_file_buffer_size",
 		"size limit used when buffering backup files before merging them",
 		16<<20,
 		settings.NonNegativeInt,
 	)
+
 	splitKeysOnTimestamps = settings.RegisterBoolSetting(
 		"bulkio.backup.split_keys_on_timestamps",
 		"split backup data on timestamps when writing revision history",
