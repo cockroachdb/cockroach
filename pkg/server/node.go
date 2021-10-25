@@ -943,15 +943,23 @@ func (n *Node) Batch(
 	// log tags more expensive and makes local calls differ from remote calls.
 	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(ctx)
 
+	tenantID, ok := roachpb.TenantFromContext(ctx)
+	if !ok {
+		tenantID = roachpb.SystemTenantID
+	}
+
+	// Requests from tenants don't have gateway node id set but are required for
+	// the QPS based rebalancing to work. The GatewayNodeID is used as a proxy
+	// for the locality of the origin of the request. The replica stats aggregate
+	// all incoming BatchRequests and which localities they come from in order to
+	// compute per second stats used for the rebalancing decisions.
+	if args.GatewayNodeID == 0 && tenantID != roachpb.SystemTenantID {
+		args.GatewayNodeID = n.Descriptor.NodeID
+	}
+
 	var callAdmittedWorkDoneOnKVAdmissionQ bool
-	var tenantID roachpb.TenantID
 	var storeAdmissionQ *admission.WorkQueue
 	if n.kvAdmissionQ != nil {
-		var ok bool
-		tenantID, ok = roachpb.TenantFromContext(ctx)
-		if !ok {
-			tenantID = roachpb.SystemTenantID
-		}
 		bypassAdmission := args.IsAdmin()
 		source := args.AdmissionHeader.Source
 		if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {

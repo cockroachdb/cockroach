@@ -6657,6 +6657,8 @@ type Header struct {
 	// RangeInfo with up-to-date information.
 	ClientRangeInfo ClientRangeInfo `protobuf:"bytes,17,opt,name=client_range_info,json=clientRangeInfo,proto3" json:"client_range_info"`
 	// gateway_node_id is the ID of the gateway node where the request originated.
+	// For requests from tenants, this is set to the NodeID of the KV node handling
+	// the BatchRequest.
 	GatewayNodeID NodeID `protobuf:"varint,11,opt,name=gateway_node_id,json=gatewayNodeId,proto3,casttype=NodeID" json:"gateway_node_id,omitempty"`
 	// If set, the request will return to the client before proposing the
 	// request into Raft. All consensus processing will be performed
