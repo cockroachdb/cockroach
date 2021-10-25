@@ -29,7 +29,7 @@ import { SqlBox } from "../sql";
 import { aggregateStatements } from "../transactionsPage/utils";
 import { Loading } from "../loading";
 import { SummaryCard } from "../summaryCard";
-import { Bytes, Duration, formatNumberForDisplay } from "src/util";
+import { Bytes, Duration, formatNumberForDisplay, summarize } from "src/util";
 import { UIConfigState } from "../store";
 import SQLActivityError from "../sqlActivity/errorComponent";
 
