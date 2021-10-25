@@ -1945,12 +1945,12 @@ var xxx_messageInfo_ChangefeedTarget proto.InternalMessageInfo
 type ChangefeedDetails struct {
 	// Targets contains the user-specified tables and databases to watch, mapping
 	// the descriptor id to the name at the time of changefeed creating. There is
-	// a 1:1 correspondance between unique targets in the original sql query and
+	// a 1:1 correspondence between unique targets in the original sql query and
 	// entries in this map.
 	//
 	// - A watched table is stored here under its table id
 	// - TODO(dan): A watched database is stored here under its database id
-	// - TODO(dan): A db.* expansion is treated identicially to watching the
+	// - TODO(dan): A db.* expansion is treated identically to watching the
 	//   database
 	//
 	// Note that the TODOs mean this field currently is guaranteed to only hold
@@ -2069,7 +2069,7 @@ type ChangefeedProgress struct {
 	// corresponding to this job. While the job ought to clean up the record
 	// when it enters a terminal state, there may be cases where it cannot or
 	// does not run the code to do so. To deal with this there is a background
-	// reconcilliation loop to ensure that protected timestamps are cleaned up.
+	// reconciliation loop to ensure that protected timestamps are cleaned up.
 	//
 	// A record is created with the job if the job requires an initial backfill.
 	// Furthermore, once subsequent backfills begin, record will be created and
@@ -2108,7 +2108,7 @@ var xxx_messageInfo_ChangefeedProgress proto.InternalMessageInfo
 
 // Checkpoint describes changefeed checkpoint.
 // Checkpoints are needed when performing certain operations, such as backfill.
-// When changefeed restarts from previouis high water mark timestamp, all
+// When changefeed restarts from previous high water mark timestamp, all
 // spans in checkpoint fill be filtered out during initial scan.
 // That is: this checkpoint describes spans that have already advanced to the high water mark.
 type ChangefeedProgress_Checkpoint struct {

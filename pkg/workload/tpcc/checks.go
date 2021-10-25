@@ -427,7 +427,7 @@ func beginAsOfSystemTime(db *gosql.DB, asOfSystemTime string) (txn *gosql.Tx, er
 	return txn, nil
 }
 
-// selectTimestamp retreives an unqouted string literal of a decimal value
+// selectTimestamp retrieves an unquoted string literal of a decimal value
 // representing the hlc timestamp of the provided txn.
 func selectTimestamp(txn *gosql.Tx) (ts string, err error) {
 	err = txn.QueryRow("SELECT cluster_logical_timestamp()::string").Scan(&ts)

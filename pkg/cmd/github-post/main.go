@@ -158,7 +158,7 @@ func listFailures(
 ) error {
 	// Tests that took less than this are not even considered for slow test
 	// reporting. This is so that we protect against large number of
-	// programatically-generated subtests.
+	// programmatically-generated subtests.
 	const shortTestFilterSecs float64 = 0.5
 	var timeoutMsg = "panic: test timed out after"
 

@@ -55,7 +55,7 @@ foreground TPC-C workload`,
 		g.flags.StringSliceVar(&g.checks, "checks", checkNames,
 			"Name of checks to be run.")
 		g.connFlags = workload.NewConnFlags(&g.flags)
-		{ // Set the dbOveride to default to "tpcc".
+		{ // Set the dbOverride to default to "tpcc".
 			dbOverrideFlag := g.flags.Lookup(`db`)
 			dbOverrideFlag.DefValue = `tpcc`
 			if err := dbOverrideFlag.Value.Set(`tpcc`); err != nil {

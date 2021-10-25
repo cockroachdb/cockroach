@@ -155,7 +155,7 @@ const (
 	// UsernameValidation indicates that the SQLUsername is
 	// being input for the purpose of looking up an existing
 	// user, or to compare with an existing username.
-	// This skips the stuctural restrictions imposed
+	// This skips the structural restrictions imposed
 	// for the purpose UsernameCreation.
 	UsernameValidation UsernamePurpose = true
 )

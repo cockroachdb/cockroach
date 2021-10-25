@@ -99,7 +99,7 @@ type MVCCIncrementalIterator struct {
 var _ SimpleMVCCIterator = &MVCCIncrementalIterator{}
 
 // MVCCIncrementalIterIntentPolicy controls how the
-// MVCCIncrementalInterator will handle intents that it encounters
+// MVCCIncrementalIterator will handle intents that it encounters
 // when iterating.
 type MVCCIncrementalIterIntentPolicy int
 

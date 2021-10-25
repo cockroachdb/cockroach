@@ -411,7 +411,7 @@ type TableDetailsResponse struct {
 	// is more accurate than this one; TableDetails calculates this number using
 	// a potentially faster method that is subject to cache staleness. We should
 	// consider removing or renaming this field to reflect that difference. See
-	// Github issue #5435 for more information.
+	// GitHub issue #5435 for more information.
 	RangeCount int64 `protobuf:"varint,4,opt,name=range_count,json=rangeCount,proto3" json:"range_count,omitempty"`
 	// create_table_statement is the output of "SHOW CREATE" for this table;
 	// it is a SQL statement that would re-create the table's current schema if
@@ -2512,7 +2512,7 @@ func (m *MetricMetadataRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_MetricMetadataRequest proto.InternalMessageInfo
 
-// MetricMetadataResponse contains the metadata for all metics.
+// MetricMetadataResponse contains the metadata for all metrics.
 type MetricMetadataResponse struct {
 	Metadata map[string]metric.Metadata `protobuf:"bytes,1,rep,name=metadata,proto3" json:"metadata" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
@@ -2830,7 +2830,7 @@ func (m *CertBundleRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_CertBundleRequest proto.InternalMessageInfo
 
-// CertBundleResponse contains a copy of all CAs needed to intialize TLS for
+// CertBundleResponse contains a copy of all CAs needed to initialize TLS for
 // a new node.
 type CertBundleResponse struct {
 	Bundle []byte `protobuf:"bytes,1,opt,name=bundle,proto3" json:"bundle,omitempty"`

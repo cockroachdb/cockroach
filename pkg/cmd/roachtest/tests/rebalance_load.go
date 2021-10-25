@@ -38,7 +38,7 @@ func registerRebalanceLoad(r registry.Registry) {
 	// kv.allocator.stat_based_rebalancing.enabled is set to true, we'd expect
 	// load-based rebalancing to distribute the load evenly across the nodes in
 	// the cluster. Without that setting, the fact that the kv table has so few
-	// ranges means that they probablistically won't have their leases evenly
+	// ranges means that they probabilistically won't have their leases evenly
 	// spread across all the nodes (they'll often just end up staying on n1).
 	//
 	// In other words, this test should always pass with

@@ -934,7 +934,7 @@ func (ts *TestServer) GetNode() *Node {
 	return ts.node
 }
 
-// DistSenderI is part of DistSendeInterface.
+// DistSenderI is part of DistSenderInterface.
 func (ts *TestServer) DistSenderI() interface{} {
 	return ts.distSender
 }

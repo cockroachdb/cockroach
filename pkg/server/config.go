@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -282,7 +283,7 @@ type KVConfig struct {
 	// do nontrivial work.
 	ReadyFn func(waitForInit bool)
 
-	// DelayedBootstrapFn is called if the boostrap process does not complete
+	// DelayedBootstrapFn is called if the bootstrap process does not complete
 	// in a timely fashion, typically 30s after the server starts listening.
 	DelayedBootstrapFn func()
 
@@ -493,6 +494,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 	log.Event(ctx, "initializing engines")
 
+	var tableCache *pebble.TableCache
+	if physicalStores > 0 {
+		perStoreLimit := pebble.TableCacheSize(int(openFileLimitPerStore))
+		totalFileLimit := perStoreLimit * physicalStores
+		tableCache = pebble.NewTableCache(pebbleCache, runtime.GOMAXPROCS(0), totalFileLimit)
+	}
+
 	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
 		cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs).SkipMinSizeCheck
 	disableSeparatedIntents := cfg.TestingKnobs.Store != nil &&
@@ -579,6 +587,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				Opts:          storage.DefaultPebbleOptions(),
 			}
 			pebbleConfig.Opts.Cache = pebbleCache
+			pebbleConfig.Opts.TableCache = tableCache
 			pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
 			// If the spec contains Pebble options, set those too.
 			if len(spec.PebbleOptions) > 0 {
@@ -595,6 +604,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				return Engines{}, err
 			}
 			engines = append(engines, eng)
+		}
+	}
+
+	if tableCache != nil {
+		// Unref the table cache now that the engines hold references to it.
+		if err := tableCache.Unref(); err != nil {
+			return nil, err
 		}
 	}
 

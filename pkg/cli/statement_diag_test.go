@@ -48,7 +48,7 @@ func Example_statement_diag() {
 		}
 	}
 	c.RunWithArgs([]string{"statement-diag", "list"})
-	c.RunWithArgs([]string{"statement-diag", "download", "13", "foo.zip"})
+	c.RunWithArgs([]string{"statement-diag", "download", "13"})
 	tmpfile, err := ioutil.TempFile("", "bundle-*.zip")
 	if err != nil {
 		log.Fatalf(context.Background(), "Couldn't execute sql: %s", err)
@@ -82,6 +82,7 @@ func Example_statement_diag() {
 	c.RunWithArgs([]string{"statement-diag", "cancel", "--all", "5"})
 	c.RunWithArgs([]string{"statement-diag", "cancel", "4"})
 	c.RunWithArgs([]string{"statement-diag", "list"})
+	c.RunWithArgs([]string{"statement-diag", "cancel", "123"})
 	c.RunWithArgs([]string{"statement-diag", "cancel", "--all"})
 	c.RunWithArgs([]string{"statement-diag", "list"})
 
@@ -98,18 +99,18 @@ func Example_statement_diag() {
 	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _
 	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _
 	//   4   2010-01-02 03:04:10 UTC  SELECT _ + _
-	// statement-diag download 13 foo.zip
-	// ERROR: no statement diagnostics bundle with ID 13
+	// statement-diag download 13
+	// ERROR: failed to download statement diagnostics bundle 13 to 'stmt-bundle-13.zip': no statement diagnostics bundle with ID 13
 	// statement-diag download 20 tempfile.zip
 	// bundle data: chunk1chunk2chunk3
 	// statement-diag download xx
-	// ERROR: accepts 2 arg(s), received 1
+	// ERROR: invalid bundle ID
 	// statement-diag delete --all 20
 	// ERROR: extra arguments with --all
 	// statement-diag delete 20 30
 	// ERROR: accepts at most 1 arg(s), received 2
 	// statement-diag delete xx
-	// ERROR: invalid id
+	// ERROR: invalid ID
 	// statement-diag delete 13
 	// ERROR: no statement diagnostics bundle with ID 13
 	// statement-diag delete 10
@@ -133,7 +134,7 @@ func Example_statement_diag() {
 	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _
 	//   4   2010-01-02 03:04:10 UTC  SELECT _ + _
 	// statement-diag cancel xx
-	// ERROR: invalid id
+	// ERROR: invalid ID
 	// statement-diag cancel 5 6
 	// ERROR: accepts at most 1 arg(s), received 2
 	// statement-diag cancel --all 5
@@ -145,6 +146,8 @@ func Example_statement_diag() {
 	//   ID  Activation time          Statement
 	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _
 	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _
+	// statement-diag cancel 123
+	// ERROR: no outstanding activation request with ID 123
 	// statement-diag cancel --all
 	// statement-diag list
 	// No statement diagnostics bundles available.

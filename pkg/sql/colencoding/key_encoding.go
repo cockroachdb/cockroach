@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -27,125 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
-
-// DecodeIndexKeyToCols decodes an index key into the idx'th position of the
-// provided slices of colexec.Vecs. The input index key must already have its
-// tenant id and first table id / index id prefix removed. If matches is false,
-// the key is from a different table, and the returned remainingKey indicates a
-// "seek prefix": the next key that might be part of the table being searched
-// for. See the analog in sqlbase/index_encoding.go.
-//
-// Sometimes it is necessary to determine if the value of a column is NULL even
-// though the value itself is not needed. If checkAllColsForNull is true, then
-// foundNull=true will be returned if any columns in the key are NULL,
-// regardless of whether or not indexColIdx indicates that the column should be
-// decoded.
-func DecodeIndexKeyToCols(
-	da *rowenc.DatumAlloc,
-	vecs []coldata.Vec,
-	idx int,
-	desc catalog.TableDescriptor,
-	index catalog.Index,
-	indexColIdx []int,
-	checkAllColsForNull bool,
-	types []*types.T,
-	colDirs []descpb.IndexDescriptor_Direction,
-	key roachpb.Key,
-	invertedColIdx int,
-	scratch []byte,
-) (remainingKey roachpb.Key, matches bool, foundNull bool, retScratch []byte, _ error) {
-	var decodedTableID descpb.ID
-	var decodedIndexID descpb.IndexID
-	var err error
-
-	origKey := key
-
-	if index.NumInterleaveAncestors() > 0 {
-		for i := 0; i < index.NumInterleaveAncestors(); i++ {
-			ancestor := index.GetInterleaveAncestor(i)
-			// Our input key had its first table id / index id chopped off, so
-			// don't try to decode those for the first ancestor.
-			if i != 0 {
-				lastKeyComponentLength := len(key)
-				key, decodedTableID, decodedIndexID, err = rowenc.DecodePartialTableIDIndexID(key)
-				if err != nil {
-					return nil, false, false, scratch, err
-				}
-				if decodedTableID != ancestor.TableID || decodedIndexID != ancestor.IndexID {
-					// We don't match. Return a key with the table ID / index ID we're
-					// searching for, so the caller knows what to seek to.
-					curPos := len(origKey) - lastKeyComponentLength
-					// Prevent unwanted aliasing on the origKey by setting the capacity.
-					key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos:curPos], ancestor.TableID, ancestor.IndexID)
-					return key, false, false, scratch, nil
-				}
-			}
-
-			length := int(ancestor.SharedPrefixLen)
-			// We don't care about whether this call to DecodeKeyVals found a null or not, because
-			// it is a interleaving ancestor.
-			var isNull bool
-			key, isNull, scratch, err = DecodeKeyValsToCols(
-				da, vecs, idx, indexColIdx[:length], checkAllColsForNull, types[:length],
-				colDirs[:length], nil /* unseen */, key, invertedColIdx, scratch,
-			)
-			if err != nil {
-				return nil, false, false, scratch, err
-			}
-			indexColIdx, types, colDirs = indexColIdx[length:], types[length:], colDirs[length:]
-			foundNull = foundNull || isNull
-
-			// Consume the interleaved sentinel.
-			var ok bool
-			key, ok = encoding.DecodeIfInterleavedSentinel(key)
-			if !ok {
-				// We're expecting an interleaved sentinel but didn't find one. Append
-				// one so the caller can seek to it.
-				curPos := len(origKey) - len(key)
-				// Prevent unwanted aliasing on the origKey by setting the capacity.
-				key = encoding.EncodeInterleavedSentinel(origKey[:curPos:curPos])
-				return key, false, false, scratch, nil
-			}
-		}
-
-		lastKeyComponentLength := len(key)
-		key, decodedTableID, decodedIndexID, err = rowenc.DecodePartialTableIDIndexID(key)
-		if err != nil {
-			return nil, false, false, scratch, err
-		}
-		if decodedTableID != desc.GetID() || decodedIndexID != index.GetID() {
-			// We don't match. Return a key with the table ID / index ID we're
-			// searching for, so the caller knows what to seek to.
-			curPos := len(origKey) - lastKeyComponentLength
-			// Prevent unwanted aliasing on the origKey by setting the capacity.
-			key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos:curPos], desc.GetID(), index.GetID())
-			return key, false, false, scratch, nil
-		}
-	}
-
-	var isNull bool
-	key, isNull, scratch, err = DecodeKeyValsToCols(
-		da, vecs, idx, indexColIdx, checkAllColsForNull, types, colDirs,
-		nil /* unseen */, key, invertedColIdx, scratch,
-	)
-	if err != nil {
-		return nil, false, false, scratch, err
-	}
-	foundNull = foundNull || isNull
-
-	// We're expecting a column family id next (a varint). If
-	// interleavedSentinel is actually next, then this key is for a child
-	// table.
-	lastKeyComponentLength := len(key)
-	if _, ok := encoding.DecodeIfInterleavedSentinel(key); ok {
-		curPos := len(origKey) - lastKeyComponentLength
-		// Prevent unwanted aliasing on the origKey by setting the capacity.
-		key = encoding.EncodeNullDescending(origKey[:curPos:curPos])
-		return key, false, false, scratch, nil
-	}
-
-	return key, true, foundNull, scratch, nil
-}
 
 // DecodeKeyValsToCols decodes the values that are part of the key, writing the
 // result to the idx'th slot of the input slice of coldata.Vecs.
@@ -223,10 +103,6 @@ func decodeTableKeyToCol(
 		vec.Nulls().SetNull(idx)
 		return key, true, scratch, nil
 	}
-	// We might have read a NULL value in the interleaved child table which
-	// would update the nulls vector, so we need to explicitly unset the null
-	// value here.
-	vec.Nulls().UnsetNull(idx)
 
 	// Inverted columns should not be decoded, but should instead be
 	// passed on as a DBytes datum.
