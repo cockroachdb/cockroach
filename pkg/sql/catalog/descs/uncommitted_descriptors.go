@@ -83,11 +83,7 @@ type uncommittedDescriptors struct {
 }
 
 func makeUncommittedDescriptors() uncommittedDescriptors {
-	ud := uncommittedDescriptors{
-		descs:     nstree.MakeMap(),
-		descNames: nstree.MakeSet(),
-	}
-	ud.reset()
+	ud := uncommittedDescriptors{}
 	return ud
 }
 
