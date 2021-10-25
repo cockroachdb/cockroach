@@ -1649,7 +1649,7 @@ func performCastWithoutPrecisionTruncation(
 		case *DDecimal:
 			return MakeDBool(v.Sign() != 0), nil
 		case *DString:
-			return ParseDBool(string(*v))
+			return ParseDBool(strings.TrimSpace(string(*v)))
 		case *DCollatedString:
 			return ParseDBool(v.Contents)
 		case *DJSON:
@@ -1696,7 +1696,7 @@ func performCastWithoutPrecisionTruncation(
 			res = NewDInt(DInt(i))
 		case *DString:
 			var err error
-			if res, err = ParseDInt(string(*v)); err != nil {
+			if res, err = ParseDInt(strings.TrimSpace(string(*v))); err != nil {
 				return nil, err
 			}
 		case *DCollatedString:
@@ -1769,7 +1769,7 @@ func performCastWithoutPrecisionTruncation(
 			}
 			return NewDFloat(DFloat(f)), nil
 		case *DString:
-			return ParseDFloat(string(*v))
+			return ParseDFloat(strings.TrimSpace(string(*v)))
 		case *DCollatedString:
 			return ParseDFloat(v.Contents)
 		case *DTimestamp:
@@ -1824,7 +1824,7 @@ func performCastWithoutPrecisionTruncation(
 			}
 			dd.Set(&v.Decimal)
 		case *DString:
-			err = dd.SetString(string(*v))
+			err = dd.SetString(strings.TrimSpace(string(*v)))
 		case *DCollatedString:
 			err = dd.SetString(v.Contents)
 		case *DTimestamp:
