@@ -36,6 +36,20 @@ func (m *MockkvDB) EXPECT() *MockkvDBMockRecorder {
 	return m.recorder
 }
 
+// Clock mocks base method.
+func (m *MockkvDB) Clock() *hlc.Clock {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Clock")
+	ret0, _ := ret[0].(*hlc.Clock)
+	return ret0
+}
+
+// Clock indicates an expected call of Clock.
+func (mr *MockkvDBMockRecorder) Clock() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Clock", reflect.TypeOf((*MockkvDB)(nil).Clock))
+}
+
 // RangeFeed mocks base method.
 func (m *MockkvDB) RangeFeed(ctx context.Context, span roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- *roachpb.RangeFeedEvent) error {
 	m.ctrl.T.Helper()

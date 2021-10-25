@@ -27,6 +27,10 @@ type dbAdapter struct {
 	targetScanBytes int64
 }
 
+func (dbc *dbAdapter) Clock() *hlc.Clock {
+	return dbc.Clock()
+}
+
 var _ kvDB = (*dbAdapter)(nil)
 
 // TODO(ajwerner): Hook up a memory monitor. Fortunately most users of the

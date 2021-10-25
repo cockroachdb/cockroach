@@ -30,6 +30,8 @@ import (
 )
 
 type mockClient struct {
+	clock *hlc.Clock
+
 	rangefeed func(
 		ctx context.Context,
 		span roachpb.Span,
@@ -44,6 +46,13 @@ type mockClient struct {
 		asOf hlc.Timestamp,
 		rowFn func(value roachpb.KeyValue),
 	) error
+}
+
+func (m *mockClient) Clock() *hlc.Clock {
+	if m.clock == nil {
+		m.clock = hlc.NewClock(hlc.UnixNano, 0)
+	}
+	return m.clock
 }
 
 func (m *mockClient) RangeFeed(
@@ -340,6 +349,9 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	db := rangefeed.NewMockkvDB(ctrl)
+
+	// Make sure Clock get called.
+	db.EXPECT().Clock().Return(hlc.NewClock(hlc.UnixNano, 0))
 
 	// Make sure scan failure gets retried.
 	db.EXPECT().Scan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("scan failed"))

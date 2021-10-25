@@ -59,6 +59,8 @@ type kvDB interface {
 		asOf hlc.Timestamp,
 		rowFn func(value roachpb.KeyValue),
 	) error
+
+	Clock() *hlc.Clock
 }
 
 // Factory is used to construct RangeFeeds.
@@ -290,6 +292,9 @@ func (f *RangeFeed) maybeRunInitialScan(
 ) (canceled bool) {
 	if !f.withInitialScan {
 		return false // canceled
+	}
+	if f.initialTimestamp.IsEmpty() {
+		f.initialTimestamp = f.client.Clock().Now()
 	}
 	scan := func(kv roachpb.KeyValue) {
 		v := roachpb.RangeFeedValue{
