@@ -286,4 +286,8 @@ type TestTenantArgs struct {
 	// Locality is used to initialize the same-named field on the server.Config
 	// struct.
 	Locality roachpb.Locality
+
+	// SSLCertsDir is a path to a custom certs dir. If empty, will use the default
+	// embedded certs.
+	SSLCertsDir string
 }

@@ -594,6 +594,9 @@ func (ts *TestServer) StartTenant(
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.Insecure = params.ForceInsecure
 	baseCfg.Locality = params.Locality
+	if params.SSLCertsDir != "" {
+		baseCfg.SSLCertsDir = params.SSLCertsDir
+	}
 	if params.AllowSettingClusterSettings {
 		tenantKnobs, ok := baseCfg.TestingKnobs.TenantTestingKnobs.(*sql.TenantTestingKnobs)
 		if !ok {

@@ -250,6 +250,13 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 # You are connected to a temporary, in-memory CockroachDB cluster of %d node%s.
 `, demoCtx.NumNodes, util.Pluralize(int64(demoCtx.NumNodes)))
 
+		if demoCtx.Multitenant {
+			cliCtx.PrintfUnlessEmbedded(`#
+# You are connected to tenant 1, but can connect to the system tenant with
+# \connect and the SQL url below.
+`)
+		}
+
 		if demoCtx.SimulateLatency {
 			cliCtx.PrintfUnlessEmbedded(
 				`# Communication between nodes will simulate real world latencies.
