@@ -190,11 +190,453 @@ The underlying response type is something we're looking to get rid of.
 
 
 
+## NodesUI
+
+`GET /_status/nodes_ui`
+
+
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| nodes | [NodeResponse](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeResponse) | repeated | nodes carries the status payloads for all nodes in the cluster. API: PUBLIC ALPHA |
+| liveness_by_node_id | [NodesResponseExternal.LivenessByNodeIdEntry](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodesResponseExternal.LivenessByNodeIdEntry) | repeated | liveness_by_node_id maps each node ID to a liveness status. |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeResponse"></a>
+#### NodeResponse
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| desc | [NodeDescriptor](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeDescriptor) |  | desc is the node descriptor. |
+| build_info | [cockroach.build.Info](#cockroach.server.serverpb.NodesResponseExternal-cockroach.build.Info) |  | build_info describes the `cockroach` executable file. API: PUBLIC ALPHA |
+| started_at | [int64](#cockroach.server.serverpb.NodesResponseExternal-int64) |  | started_at is the unix timestamp at which the node process was last started. API: PUBLIC ALPHA |
+| updated_at | [int64](#cockroach.server.serverpb.NodesResponseExternal-int64) |  | updated_at is the unix timestamp at which the node status record was last updated. API: PUBLIC ALPHA |
+| metrics | [NodeResponse.MetricsEntry](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeResponse.MetricsEntry) | repeated | metrics contains the last sampled values for the node metrics. |
+| store_statuses | [StoreStatus](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.StoreStatus) | repeated | store_statuses provides the store status payloads for all the stores on that node. |
+| args | [string](#cockroach.server.serverpb.NodesResponseExternal-string) | repeated | args is the list of command-line arguments used to last start the node. args should only be visible by the Admin role. |
+| env | [string](#cockroach.server.serverpb.NodesResponseExternal-string) | repeated | env is the list of environment variables that influenced the node's configuration. env should only be visible by the Admin role. |
+| latencies | [NodeResponse.LatenciesEntry](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeResponse.LatenciesEntry) | repeated | latencies is a map of nodeIDs to nanoseconds which is the latency between this node and the other node.<br><br>NOTE: this is deprecated and is only set if the min supported       cluster version is >= VersionRPCNetworkStats. |
+| activity | [NodeResponse.ActivityEntry](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeResponse.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. |
+| total_system_memory | [int64](#cockroach.server.serverpb.NodesResponseExternal-int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. API: PUBLIC ALPHA |
+| num_cpus | [int32](#cockroach.server.serverpb.NodesResponseExternal-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. API: PUBLIC ALPHA |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeDescriptor"></a>
+#### NodeDescriptor
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| node_id | [int32](#cockroach.server.serverpb.NodesResponseExternal-int32) |  |  |
+| address | [cockroach.util.UnresolvedAddr](#cockroach.server.serverpb.NodesResponseExternal-cockroach.util.UnresolvedAddr) |  | address should only be visible by the Admin role. |
+| attrs | [cockroach.roachpb.Attributes](#cockroach.server.serverpb.NodesResponseExternal-cockroach.roachpb.Attributes) |  | attrs should only be visible by the Admin role. |
+| locality | [Locality](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.Locality) |  |  |
+| ServerVersion | [Version](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.Version) |  |  |
+| build_tag | [string](#cockroach.server.serverpb.NodesResponseExternal-string) |  |  |
+| started_at | [int64](#cockroach.server.serverpb.NodesResponseExternal-int64) |  |  |
+| locality_address | [cockroach.roachpb.LocalityAddress](#cockroach.server.serverpb.NodesResponseExternal-cockroach.roachpb.LocalityAddress) | repeated | locality_address should only be visible by the Admin role. |
+| cluster_name | [string](#cockroach.server.serverpb.NodesResponseExternal-string) |  |  |
+| sql_address | [cockroach.util.UnresolvedAddr](#cockroach.server.serverpb.NodesResponseExternal-cockroach.util.UnresolvedAddr) |  | The SQL address. If empty, indicates that the base address field is also used to accept SQL connections. sql_address should only be visible by the Admin role. |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.Locality"></a>
+#### Locality
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| tiers | [Tier](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.Tier) | repeated |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.Tier"></a>
+#### Tier
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#cockroach.server.serverpb.NodesResponseExternal-string) |  | Key is the name of tier and should match all other nodes. |
+| value | [string](#cockroach.server.serverpb.NodesResponseExternal-string) |  | Value is node specific value corresponding to the key. |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.Version"></a>
+#### Version
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| major_val | [int32](#cockroach.server.serverpb.NodesResponseExternal-int32) |  | The names "major" and "minor" are reserved in C in some platforms (e.g. FreeBSD). |
+| minor_val | [int32](#cockroach.server.serverpb.NodesResponseExternal-int32) |  |  |
+| patch | [int32](#cockroach.server.serverpb.NodesResponseExternal-int32) |  | Note that patch is a placeholder and will always be zero. |
+| internal | [int32](#cockroach.server.serverpb.NodesResponseExternal-int32) |  | The internal version is used to introduce migrations during the development cycle. They are subversions that are never the end versions of a release, i.e. users of stable, public release will only use binaries with the internal version set to 0. |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeResponse.MetricsEntry"></a>
+#### NodeResponse.MetricsEntry
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#cockroach.server.serverpb.NodesResponseExternal-string) |  |  |
+| value | [double](#cockroach.server.serverpb.NodesResponseExternal-double) |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.StoreStatus"></a>
+#### StoreStatus
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| desc | [StoreDescriptor](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.StoreDescriptor) |  | desc is the store descriptor. |
+| metrics | [StoreStatus.MetricsEntry](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.StoreStatus.MetricsEntry) | repeated | metrics contains the last sampled values for the node metrics. |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.StoreDescriptor"></a>
+#### StoreDescriptor
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| store_id | [int32](#cockroach.server.serverpb.NodesResponseExternal-int32) |  |  |
+| attrs | [cockroach.roachpb.Attributes](#cockroach.server.serverpb.NodesResponseExternal-cockroach.roachpb.Attributes) |  |  |
+| node | [NodeDescriptor](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeDescriptor) |  |  |
+| capacity | [cockroach.roachpb.StoreCapacity](#cockroach.server.serverpb.NodesResponseExternal-cockroach.roachpb.StoreCapacity) |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeDescriptor"></a>
+#### NodeDescriptor
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| node_id | [int32](#cockroach.server.serverpb.NodesResponseExternal-int32) |  |  |
+| address | [cockroach.util.UnresolvedAddr](#cockroach.server.serverpb.NodesResponseExternal-cockroach.util.UnresolvedAddr) |  | address should only be visible by the Admin role. |
+| attrs | [cockroach.roachpb.Attributes](#cockroach.server.serverpb.NodesResponseExternal-cockroach.roachpb.Attributes) |  | attrs should only be visible by the Admin role. |
+| locality | [Locality](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.Locality) |  |  |
+| ServerVersion | [Version](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.Version) |  |  |
+| build_tag | [string](#cockroach.server.serverpb.NodesResponseExternal-string) |  |  |
+| started_at | [int64](#cockroach.server.serverpb.NodesResponseExternal-int64) |  |  |
+| locality_address | [cockroach.roachpb.LocalityAddress](#cockroach.server.serverpb.NodesResponseExternal-cockroach.roachpb.LocalityAddress) | repeated | locality_address should only be visible by the Admin role. |
+| cluster_name | [string](#cockroach.server.serverpb.NodesResponseExternal-string) |  |  |
+| sql_address | [cockroach.util.UnresolvedAddr](#cockroach.server.serverpb.NodesResponseExternal-cockroach.util.UnresolvedAddr) |  | The SQL address. If empty, indicates that the base address field is also used to accept SQL connections. sql_address should only be visible by the Admin role. |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.StoreStatus.MetricsEntry"></a>
+#### StoreStatus.MetricsEntry
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#cockroach.server.serverpb.NodesResponseExternal-string) |  |  |
+| value | [double](#cockroach.server.serverpb.NodesResponseExternal-double) |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeResponse.LatenciesEntry"></a>
+#### NodeResponse.LatenciesEntry
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [int32](#cockroach.server.serverpb.NodesResponseExternal-int32) |  |  |
+| value | [int64](#cockroach.server.serverpb.NodesResponseExternal-int64) |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeResponse.ActivityEntry"></a>
+#### NodeResponse.ActivityEntry
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [int32](#cockroach.server.serverpb.NodesResponseExternal-int32) |  |  |
+| value | [NodeResponse.NetworkActivity](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeResponse.NetworkActivity) |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeResponse.NetworkActivity"></a>
+#### NodeResponse.NetworkActivity
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| incoming | [int64](#cockroach.server.serverpb.NodesResponseExternal-int64) |  | in bytes |
+| outgoing | [int64](#cockroach.server.serverpb.NodesResponseExternal-int64) |  | in bytes |
+| latency | [int64](#cockroach.server.serverpb.NodesResponseExternal-int64) |  | in nanoseconds |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodesResponseExternal.LivenessByNodeIdEntry"></a>
+#### NodesResponseExternal.LivenessByNodeIdEntry
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [int32](#cockroach.server.serverpb.NodesResponseExternal-int32) |  |  |
+| value | [cockroach.kv.kvserver.storagepb.NodeLivenessStatus](#cockroach.server.serverpb.NodesResponseExternal-cockroach.kv.kvserver.storagepb.NodeLivenessStatus) |  |  |
+
+
+
+
+
+
+## NodeUI
+
+`GET /_status/nodes_ui/{node_id}`
+
+
+
+#### Request Parameters
+
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| node_id | [string](#cockroach.server.serverpb.NodeRequest-string) |  | node_id is a string so that "local" can be used to specify that no forwarding is necessary. |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| desc | [NodeDescriptor](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeDescriptor) |  | desc is the node descriptor. |
+| build_info | [cockroach.build.Info](#cockroach.server.serverpb.NodeResponse-cockroach.build.Info) |  | build_info describes the `cockroach` executable file. API: PUBLIC ALPHA |
+| started_at | [int64](#cockroach.server.serverpb.NodeResponse-int64) |  | started_at is the unix timestamp at which the node process was last started. API: PUBLIC ALPHA |
+| updated_at | [int64](#cockroach.server.serverpb.NodeResponse-int64) |  | updated_at is the unix timestamp at which the node status record was last updated. API: PUBLIC ALPHA |
+| metrics | [NodeResponse.MetricsEntry](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeResponse.MetricsEntry) | repeated | metrics contains the last sampled values for the node metrics. |
+| store_statuses | [StoreStatus](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.StoreStatus) | repeated | store_statuses provides the store status payloads for all the stores on that node. |
+| args | [string](#cockroach.server.serverpb.NodeResponse-string) | repeated | args is the list of command-line arguments used to last start the node. args should only be visible by the Admin role. |
+| env | [string](#cockroach.server.serverpb.NodeResponse-string) | repeated | env is the list of environment variables that influenced the node's configuration. env should only be visible by the Admin role. |
+| latencies | [NodeResponse.LatenciesEntry](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeResponse.LatenciesEntry) | repeated | latencies is a map of nodeIDs to nanoseconds which is the latency between this node and the other node.<br><br>NOTE: this is deprecated and is only set if the min supported       cluster version is >= VersionRPCNetworkStats. |
+| activity | [NodeResponse.ActivityEntry](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeResponse.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. |
+| total_system_memory | [int64](#cockroach.server.serverpb.NodeResponse-int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. API: PUBLIC ALPHA |
+| num_cpus | [int32](#cockroach.server.serverpb.NodeResponse-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. API: PUBLIC ALPHA |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeDescriptor"></a>
+#### NodeDescriptor
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| node_id | [int32](#cockroach.server.serverpb.NodeResponse-int32) |  |  |
+| address | [cockroach.util.UnresolvedAddr](#cockroach.server.serverpb.NodeResponse-cockroach.util.UnresolvedAddr) |  | address should only be visible by the Admin role. |
+| attrs | [cockroach.roachpb.Attributes](#cockroach.server.serverpb.NodeResponse-cockroach.roachpb.Attributes) |  | attrs should only be visible by the Admin role. |
+| locality | [Locality](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.Locality) |  |  |
+| ServerVersion | [Version](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.Version) |  |  |
+| build_tag | [string](#cockroach.server.serverpb.NodeResponse-string) |  |  |
+| started_at | [int64](#cockroach.server.serverpb.NodeResponse-int64) |  |  |
+| locality_address | [cockroach.roachpb.LocalityAddress](#cockroach.server.serverpb.NodeResponse-cockroach.roachpb.LocalityAddress) | repeated | locality_address should only be visible by the Admin role. |
+| cluster_name | [string](#cockroach.server.serverpb.NodeResponse-string) |  |  |
+| sql_address | [cockroach.util.UnresolvedAddr](#cockroach.server.serverpb.NodeResponse-cockroach.util.UnresolvedAddr) |  | The SQL address. If empty, indicates that the base address field is also used to accept SQL connections. sql_address should only be visible by the Admin role. |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.Locality"></a>
+#### Locality
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| tiers | [Tier](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.Tier) | repeated |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.Tier"></a>
+#### Tier
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#cockroach.server.serverpb.NodeResponse-string) |  | Key is the name of tier and should match all other nodes. |
+| value | [string](#cockroach.server.serverpb.NodeResponse-string) |  | Value is node specific value corresponding to the key. |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.Version"></a>
+#### Version
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| major_val | [int32](#cockroach.server.serverpb.NodeResponse-int32) |  | The names "major" and "minor" are reserved in C in some platforms (e.g. FreeBSD). |
+| minor_val | [int32](#cockroach.server.serverpb.NodeResponse-int32) |  |  |
+| patch | [int32](#cockroach.server.serverpb.NodeResponse-int32) |  | Note that patch is a placeholder and will always be zero. |
+| internal | [int32](#cockroach.server.serverpb.NodeResponse-int32) |  | The internal version is used to introduce migrations during the development cycle. They are subversions that are never the end versions of a release, i.e. users of stable, public release will only use binaries with the internal version set to 0. |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeResponse.MetricsEntry"></a>
+#### NodeResponse.MetricsEntry
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#cockroach.server.serverpb.NodeResponse-string) |  |  |
+| value | [double](#cockroach.server.serverpb.NodeResponse-double) |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.StoreStatus"></a>
+#### StoreStatus
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| desc | [StoreDescriptor](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.StoreDescriptor) |  | desc is the store descriptor. |
+| metrics | [StoreStatus.MetricsEntry](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.StoreStatus.MetricsEntry) | repeated | metrics contains the last sampled values for the node metrics. |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.StoreDescriptor"></a>
+#### StoreDescriptor
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| store_id | [int32](#cockroach.server.serverpb.NodeResponse-int32) |  |  |
+| attrs | [cockroach.roachpb.Attributes](#cockroach.server.serverpb.NodeResponse-cockroach.roachpb.Attributes) |  |  |
+| node | [NodeDescriptor](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeDescriptor) |  |  |
+| capacity | [cockroach.roachpb.StoreCapacity](#cockroach.server.serverpb.NodeResponse-cockroach.roachpb.StoreCapacity) |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeDescriptor"></a>
+#### NodeDescriptor
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| node_id | [int32](#cockroach.server.serverpb.NodeResponse-int32) |  |  |
+| address | [cockroach.util.UnresolvedAddr](#cockroach.server.serverpb.NodeResponse-cockroach.util.UnresolvedAddr) |  | address should only be visible by the Admin role. |
+| attrs | [cockroach.roachpb.Attributes](#cockroach.server.serverpb.NodeResponse-cockroach.roachpb.Attributes) |  | attrs should only be visible by the Admin role. |
+| locality | [Locality](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.Locality) |  |  |
+| ServerVersion | [Version](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.Version) |  |  |
+| build_tag | [string](#cockroach.server.serverpb.NodeResponse-string) |  |  |
+| started_at | [int64](#cockroach.server.serverpb.NodeResponse-int64) |  |  |
+| locality_address | [cockroach.roachpb.LocalityAddress](#cockroach.server.serverpb.NodeResponse-cockroach.roachpb.LocalityAddress) | repeated | locality_address should only be visible by the Admin role. |
+| cluster_name | [string](#cockroach.server.serverpb.NodeResponse-string) |  |  |
+| sql_address | [cockroach.util.UnresolvedAddr](#cockroach.server.serverpb.NodeResponse-cockroach.util.UnresolvedAddr) |  | The SQL address. If empty, indicates that the base address field is also used to accept SQL connections. sql_address should only be visible by the Admin role. |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.StoreStatus.MetricsEntry"></a>
+#### StoreStatus.MetricsEntry
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#cockroach.server.serverpb.NodeResponse-string) |  |  |
+| value | [double](#cockroach.server.serverpb.NodeResponse-double) |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeResponse.LatenciesEntry"></a>
+#### NodeResponse.LatenciesEntry
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [int32](#cockroach.server.serverpb.NodeResponse-int32) |  |  |
+| value | [int64](#cockroach.server.serverpb.NodeResponse-int64) |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeResponse.ActivityEntry"></a>
+#### NodeResponse.ActivityEntry
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [int32](#cockroach.server.serverpb.NodeResponse-int32) |  |  |
+| value | [NodeResponse.NetworkActivity](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeResponse.NetworkActivity) |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeResponse.NetworkActivity"></a>
+#### NodeResponse.NetworkActivity
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| incoming | [int64](#cockroach.server.serverpb.NodeResponse-int64) |  | in bytes |
+| outgoing | [int64](#cockroach.server.serverpb.NodeResponse-int64) |  | in bytes |
+| latency | [int64](#cockroach.server.serverpb.NodeResponse-int64) |  | in nanoseconds |
+
+
+
+
+
+
 ## RaftDebug
 
 `GET /_status/raft`
 
-
+RaftDebug requests internal details about Raft.
 
 #### Request Parameters
 
