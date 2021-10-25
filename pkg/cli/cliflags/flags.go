@@ -682,6 +682,13 @@ Instead, require the user to always specify access keys.`,
 		Description: `
 Disable use of "external" IO, such as to S3, GCS, or the file system (nodelocal), or anything other than userfile.`,
 	}
+	ExternalIOEnableNonAdminImplicitAndArbitraryOutbound = FlagInfo{
+		Name: "external-io-enable-non-admin-implicit-access",
+		Description: `
+Allow non-admin users to specify arbitrary network addressses (e.g. https:// URIs or custom endpoints in s3:// URIs) and 
+implicit credentials (machine account/role providers) when running operations like IMPORT/EXPORT/BACKUP/etc. 
+Note: that --external-io-disable-http or --external-io-disable-implicit-credentials still apply, this only removes the admin-user requirement.`,
+	}
 
 	// KeySize, CertificateLifetime, AllowKeyReuse, and OverwriteFiles are used for
 	// certificate generation functions.

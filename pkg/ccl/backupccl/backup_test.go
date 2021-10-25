@@ -116,16 +116,12 @@ func (d *datadrivenTestState) cleanup(ctx context.Context) {
 }
 
 func (d *datadrivenTestState) addServer(
-	t *testing.T, name, iodir, tempCleanupFrequency string, allowImplicitAccess bool,
+	t *testing.T, name, iodir, tempCleanupFrequency string, ioConf base.ExternalIODirConfig,
 ) error {
 	var tc serverutils.TestClusterInterface
 	var cleanup func()
 	params := base.TestClusterArgs{}
-	if allowImplicitAccess {
-		params.ServerArgs.Knobs.BackupRestore = &sql.BackupRestoreTestingKnobs{
-			AllowImplicitAccess: true,
-		}
-	}
+	params.ServerArgs.ExternalIODirConfig = ioConf
 	if tempCleanupFrequency != "" {
 		duration, err := time.ParseDuration(tempCleanupFrequency)
 		if err != nil {
@@ -199,6 +195,10 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1 min under race")
 
+	// This test uses this mock HTTP server to pass the backup files between tenants.
+	httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
+	defer httpServerCleanup()
+
 	ctx := context.Background()
 	datadriven.Walk(t, "testdata/backup-restore/", func(t *testing.T, path string) {
 		var lastCreatedServer string
@@ -221,7 +221,7 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 				return ""
 			case "new-server":
 				var name, shareDirWith, iodir, tempCleanupFrequency string
-				var allowImplicitAccess bool
+				var io base.ExternalIODirConfig
 				d.ScanArgs(t, "name", &name)
 				if d.HasArg("share-io-dir") {
 					d.ScanArgs(t, "share-io-dir", &shareDirWith)
@@ -230,13 +230,16 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 					iodir = ds.getIODir(t, shareDirWith)
 				}
 				if d.HasArg("allow-implicit-access") {
-					allowImplicitAccess = true
+					io.EnableNonAdminImplicitAndArbitraryOutbound = true
+				}
+				if d.HasArg("disable-http") {
+					io.DisableHTTP = true
 				}
 				if d.HasArg("temp-cleanup-freq") {
 					d.ScanArgs(t, "temp-cleanup-freq", &tempCleanupFrequency)
 				}
 				lastCreatedServer = name
-				err := ds.addServer(t, name, iodir, tempCleanupFrequency, allowImplicitAccess)
+				err := ds.addServer(t, name, iodir, tempCleanupFrequency, io)
 				if err != nil {
 					return err.Error()
 				}
@@ -250,6 +253,7 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 				if d.HasArg("user") {
 					d.ScanArgs(t, "user", &user)
 				}
+				d.Input = strings.ReplaceAll(d.Input, "http://COCKROACH_TEST_HTTP_SERVER/", httpAddr)
 				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
 				if err == nil {
 					return ""
