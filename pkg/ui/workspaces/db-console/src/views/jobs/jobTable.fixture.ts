@@ -59,6 +59,11 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648118),
             nanos: 215527000,
           }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648118),
+            nanos: 215527100,
+          }),
+          num_runs: new Long(1),
         },
         {
           id: new Long(7003330561, 70312826),
@@ -89,6 +94,11 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648118),
             nanos: 215527000,
           }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648118),
+            nanos: 215527100,
+          }),
+          num_runs: new Long(1),
         },
         {
           id: new Long(7002707969, 70312826),
@@ -118,6 +128,11 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648118),
             nanos: 215515000,
           }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648118),
+            nanos: 215515100,
+          }),
+          num_runs: new Long(1),
         },
         {
           id: new Long(6091954177, 70312826),
@@ -148,6 +163,11 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648117),
             nanos: 936238000,
           }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 936238100,
+          }),
+          num_runs: new Long(1),
         },
         {
           id: new Long(6093756417, 70312826),
@@ -177,6 +197,7 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648117),
             nanos: 936268000,
           }),
+          num_runs: new Long(1),
         },
         {
           id: new Long(5247850497, 70312826),
@@ -207,6 +228,11 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648117),
             nanos: 679202000,
           }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 679202100,
+          }),
+          num_runs: new Long(1),
         },
         {
           id: new Long(5246539777, 70312826),
@@ -236,6 +262,11 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648117),
             nanos: 679221000,
           }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 679221100,
+          }),
+          num_runs: new Long(1),
         },
         {
           id: new Long(3390625793, 70312826),
@@ -266,11 +297,11 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648117),
             nanos: 116912000,
           }),
-          num_runs: new Long(3),
           next_run: new protos.google.protobuf.Timestamp({
             seconds: new Long(3034648417), // some long time in the future, because it needs to be in the future to show as retrying
             nanos: 116912000,
           }),
+          num_runs: new Long(3),
         },
         {
           id: new Long(4337653761, 70312826),
@@ -300,13 +331,16 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648117),
             nanos: 401320000,
           }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 401320100,
+          }),
+          num_runs: new Long(1),
         },
         {
           id: new Long(4338669569, 70312826),
           type: "AUTO CREATE STATS",
-          description:
-            "FIXME. Automatic table statistics jobs are not displayed even when the Type menu is set to All. To view these jobs, set Type to Automatic-Statistics Creation as described above.",
-          //SELECT job_id, job_type FROM [SHOW AUTOMATIC JOBS];
+          description: "SELECT job_id, job_type FROM [SHOW AUTOMATIC JOBS];",
           username: "root",
           descriptor_ids: [55],
           status: "pause-requested",
@@ -331,6 +365,11 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648117),
             nanos: 401344000,
           }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 401344100,
+          }),
+          num_runs: new Long(1),
         },
         {
           id: new Long(3391379457, 70312826),
@@ -360,6 +399,11 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648117),
             nanos: 116912000,
           }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912100,
+          }),
+          num_runs: new Long(1),
         },
         {
           id: new Long(3390625793, 70312826),
@@ -394,6 +438,11 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648117),
             nanos: 116912000,
           }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912100,
+          }),
+          num_runs: new Long(1),
         },
         {
           id: new Long(3390625793, 70312826),
@@ -423,6 +472,11 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648117),
             nanos: 116912000,
           }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912100,
+          }),
+          num_runs: new Long(1),
         },
         {
           id: new Long(3390625793, 70312826),
@@ -453,11 +507,16 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648117),
             nanos: 116912000,
           }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912100,
+          }),
+          num_runs: new Long(1),
         },
         {
           id: new Long(3390625793, 70312826),
           type: "AUTO SPAN CONFIG RECONCILIATION",
-          description: "auto span config reconciliation",
+          description: "automatic Span Config reconciliation",
           username: "root",
           descriptor_ids: [53],
           status: "succeeded",
@@ -482,6 +541,11 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648117),
             nanos: 116912000,
           }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912100,
+          }),
+          num_runs: new Long(1),
         },
       ],
     }),

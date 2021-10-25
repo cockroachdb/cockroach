@@ -1912,10 +1912,6 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 	var fractionCompletedOrNil *float32
 	var highwaterOrNil *apd.Decimal
 	var runningStatusOrNil *string
-	//var lastRunOrNil *time.Time
-	//var nexRunOrNil *time.Time
-	//var numRunsOrNil *int64
-	//var executionErrorsOrNil *string
 	if err := scanner.ScanAll(
 		row,
 		&job.ID,
@@ -1936,7 +1932,6 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 		&job.LastRun,
 		&job.NextRun,
 		&job.NumRuns,
-		//&numRunsOrNil,
 		&job.ExecutionErrors,
 	); err != nil {
 		return err
@@ -1956,9 +1951,6 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 	if runningStatusOrNil != nil {
 		job.RunningStatus = *runningStatusOrNil
 	}
-	//if numRunsOrNil != nil {
-	//	job.NumRuns = *numRunsOrNil
-	//}
 	return nil
 }
 

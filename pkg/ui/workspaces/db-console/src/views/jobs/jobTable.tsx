@@ -46,7 +46,6 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
     title: (
       <Tooltip
         placement="bottom"
-        // style="tableTitle"
         content={
           <p>
             The description of the job, if set, or the SQL statement if there is
@@ -158,20 +157,20 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
     cell: job => TimestampToMoment(job?.last_run).format(DATE_FORMAT_24_UTC),
     sort: job => TimestampToMoment(job?.last_run).valueOf(),
   },
-  // {
-  //   name: "executionCount",
-  //   title: (
-  //     <Tooltip
-  //       placement="bottom"
-  //       style="tableTitle"
-  //       content={<p>Number of times the job was executed.</p>}
-  //     >
-  //       {"Execution Count"}
-  //     </Tooltip>
-  //   ),
-  //   cell: job => job?.num_runs,
-  //   sort: job => job?.num_runs,
-  // },
+  {
+    name: "executionCount",
+    title: (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={<p>Number of times the job was executed.</p>}
+      >
+        {"Execution Count"}
+      </Tooltip>
+    ),
+    cell: job => String(job.num_runs),
+    sort: job => job.num_runs?.toNumber(),
+  },
 ];
 
 export interface JobTableProps {
