@@ -22,12 +22,12 @@ import {
   aggregateNumericStats,
   FixLong,
   longToInt,
-  statementKey,
   TimestampToNumber,
   addStatementStats,
   flattenStatementStats,
   DurationToNumber,
   computeOrUseStmtSummary,
+  transactionScopedStatementKey,
 } from "../util";
 
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -97,7 +97,7 @@ export const aggregateStatements = (
   const statsKey: { [key: string]: AggregateStatistics } = {};
 
   flattenStatementStats(statements).forEach(s => {
-    const key = statementKey(s);
+    const key = transactionScopedStatementKey(s);
     if (!(key in statsKey)) {
       statsKey[key] = {
         label: s.statement,
