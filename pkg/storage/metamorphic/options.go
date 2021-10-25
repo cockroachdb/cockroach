@@ -11,9 +11,8 @@
 package metamorphic
 
 import (
-	"math/rand"
-
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/pebble"
 )
 
@@ -104,10 +103,10 @@ func standardOptions(i int) *pebble.Options {
 	return opts
 }
 
-func randomOptions(offset int, seed int64) *pebble.Options {
+func randomOptions() *pebble.Options {
 	opts := storage.DefaultPebbleOptions()
 
-	rng := rand.New(rand.NewSource(seed + int64(offset)))
+	rng, _ := randutil.NewTestRand()
 	opts.BytesPerSync = 1 << rngIntRange(rng, 8, 30)
 	opts.FlushSplitBytes = 1 << rng.Intn(20)
 	opts.LBaseMaxBytes = 1 << rngIntRange(rng, 8, 30)

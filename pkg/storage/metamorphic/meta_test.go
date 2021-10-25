@@ -31,7 +31,6 @@ import (
 var (
 	keep    = flag.Bool("keep", false, "keep temp directories after test")
 	check   = flag.String("check", "", "run operations in specified file and check output for equality")
-	seed    = flag.Int64("seed", randutil.NewPseudoSeed(), "specify seed to use for random number generator")
 	opCount = flag.Int("operations", 100000, "number of MVCC operations to generate and run")
 )
 
@@ -168,6 +167,7 @@ func TestPebbleEquivalence(t *testing.T) {
 	ctx := context.Background()
 	// This test times out with the race detector enabled.
 	skip.UnderRace(t)
+	_, seed := randutil.NewTestRand()
 
 	engineSeqs := make([]engineSequence, 0, numStandardOptions+numRandomOptions)
 
@@ -186,7 +186,7 @@ func TestPebbleEquivalence(t *testing.T) {
 		engineSeq := engineSequence{
 			configs: []engineConfig{{
 				name: fmt.Sprintf("random=%d", i),
-				opts: randomOptions(i, *seed),
+				opts: randomOptions(),
 			}},
 		}
 		engineSeq.name = engineSeq.configs[0].name
@@ -196,7 +196,7 @@ func TestPebbleEquivalence(t *testing.T) {
 	run := testRun{
 		ctx:             ctx,
 		t:               t,
-		seed:            *seed,
+		seed:            seed,
 		restarts:        false,
 		inMem:           true,
 		engineSequences: engineSeqs,
@@ -212,6 +212,7 @@ func TestPebbleRestarts(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	// This test times out with the race detector enabled.
 	skip.UnderRace(t)
+	_, seed := randutil.NewTestRand()
 
 	engineConfigs := make([]engineConfig, 0, numStandardOptions+numRandomOptions-1)
 	// Create one config sequence that contains all options.
@@ -229,7 +230,7 @@ func TestPebbleRestarts(t *testing.T) {
 	for i := 0; i < numRandomOptions; i++ {
 		engineConfigs = append(engineConfigs, engineConfig{
 			name: fmt.Sprintf("random=%d", i),
-			opts: randomOptions(i, *seed),
+			opts: randomOptions(),
 		})
 	}
 
@@ -237,7 +238,7 @@ func TestPebbleRestarts(t *testing.T) {
 	run := testRun{
 		ctx:      ctx,
 		t:        t,
-		seed:     *seed,
+		seed:     seed,
 		inMem:    true,
 		restarts: true,
 		engineSequences: []engineSequence{
@@ -281,7 +282,7 @@ func TestPebbleCheck(t *testing.T) {
 			engineSeq := engineSequence{
 				configs: []engineConfig{{
 					name: fmt.Sprintf("random=%d", i),
-					opts: randomOptions(i, *seed),
+					opts: randomOptions(),
 				}},
 			}
 			engineSeq.name = engineSeq.configs[0].name

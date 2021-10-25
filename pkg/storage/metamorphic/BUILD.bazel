@@ -19,6 +19,7 @@ go_library(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",
+        "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
