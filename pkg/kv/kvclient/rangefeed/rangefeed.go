@@ -330,6 +330,9 @@ func (f *RangeFeed) maybeRunInitialScan(
 				log.Warningf(ctx, "failed to perform initial scan: %v", err)
 			}
 		} else /* err == nil */ {
+			if f.onFrontierAdvance != nil {
+				f.onFrontierAdvance(ctx, f.initialTimestamp)
+			}
 			if f.onInitialScanDone != nil {
 				f.onInitialScanDone(ctx)
 			}
