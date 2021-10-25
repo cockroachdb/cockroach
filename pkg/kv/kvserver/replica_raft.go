@@ -115,7 +115,7 @@ func (r *Replica) evalAndPropose(
 	if proposal.command == nil {
 		intents := proposal.Local.DetachEncounteredIntents()
 		endTxns := proposal.Local.DetachEndTxns(pErr != nil /* alwaysOnly */)
-		r.handleReadWriteLocalEvalResult(ctx, *proposal.Local, false /* raftMuHeld */)
+		r.handleReadWriteLocalEvalResult(ctx, *proposal.Local)
 
 		pr := proposalResult{
 			Reply:              proposal.Local.Reply,
