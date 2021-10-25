@@ -123,11 +123,6 @@ func getCockroachVersion(c *SyncedCluster, node int) (*version.Version, error) {
 	return version.Parse(verString)
 }
 
-// GetAdminUIPort returns the admin UI port for ths specified RPC port.
-func GetAdminUIPort(connPort int) int {
-	return connPort + 1
-}
-
 func argExists(args []string, target string) int {
 	for i, arg := range args {
 		if arg == target || strings.HasPrefix(arg, target+"=") {
@@ -285,17 +280,12 @@ func (Cockroach) NodeURL(c *SyncedCluster, host string, port int) string {
 
 // NodePort implements the ClusterImpl.NodeDir interface.
 func (Cockroach) NodePort(c *SyncedCluster, index int) int {
-	const basePort = 26257
-	port := basePort
-	if c.IsLocal() {
-		port += (index - 1) * 2
-	}
-	return port
+	return c.VMs[index-1].SQLPort
 }
 
 // NodeUIPort implements the ClusterImpl.NodeDir interface.
 func (r Cockroach) NodeUIPort(c *SyncedCluster, index int) int {
-	return GetAdminUIPort(r.NodePort(c, index))
+	return c.VMs[index-1].AdminUIPort
 }
 
 // SQL implements the ClusterImpl.NodeDir interface.
@@ -539,9 +529,10 @@ func (h *crdbInstallHelper) generateStartArgs(
 		}
 	}
 
-	port := h.r.NodePort(h.c, nodes[nodeIdx])
-	args = append(args, fmt.Sprintf("--port=%d", port))
-	args = append(args, fmt.Sprintf("--http-port=%d", GetAdminUIPort(port)))
+	args = append(args,
+		fmt.Sprintf("--port=%d", h.r.NodePort(h.c, nodes[nodeIdx])),
+		fmt.Sprintf("--http-port=%d", h.r.NodeUIPort(h.c, nodes[nodeIdx])),
+	)
 	if locality := h.c.locality(nodes[nodeIdx]); locality != "" {
 		if idx := argExists(extraArgs, "--locality"); idx == -1 {
 			args = append(args, "--locality="+locality)

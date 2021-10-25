@@ -28,6 +28,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/profiles/latest/resources/mgmt/subscriptions"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/to"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -412,7 +413,9 @@ func (p *Provider) List() (vm.List, error) {
 			MachineType: string(found.HardwareProfile.VMSize),
 			// We add a fake availability-zone suffix since other roachprod
 			// code assumes particular formats. For example, "eastus2z".
-			Zone: *found.Location + "z",
+			Zone:        *found.Location + "z",
+			SQLPort:     config.DefaultSQLPort,
+			AdminUIPort: config.DefaultAdminUIPort,
 		}
 
 		if createdPtr := found.Tags[tagCreated]; createdPtr == nil {

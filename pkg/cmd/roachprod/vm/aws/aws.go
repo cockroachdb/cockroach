@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -747,6 +748,8 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 				VPC:         in.VpcID,
 				MachineType: in.InstanceType,
 				Zone:        in.Placement.AvailabilityZone,
+				SQLPort:     config.DefaultSQLPort,
+				AdminUIPort: config.DefaultAdminUIPort,
 			}
 			ret = append(ret, m)
 		}

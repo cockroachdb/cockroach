@@ -1594,7 +1594,7 @@ Examples:
 		startTime := timeutil.Now().Unix()
 		failed, err := c.ParallelE(description, len(c.ServerNodes()), 0, func(i int) ([]byte, error) {
 			host := c.VMs[i].Name
-			port := install.GetAdminUIPort(c.Impl.NodePort(c, i))
+			port := c.Impl.NodeUIPort(c, i)
 			scheme := "http"
 			if c.Secure {
 				scheme = "https"
@@ -1710,7 +1710,7 @@ var adminurlCmd = &cobra.Command{
 			if adminurlIPs {
 				host = c.VMs[node-1].Name
 			}
-			port := install.GetAdminUIPort(c.Impl.NodePort(c, node))
+			port := c.Impl.NodeUIPort(c, node)
 			scheme := "http"
 			if c.Secure {
 				scheme = "https"

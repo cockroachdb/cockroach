@@ -51,4 +51,12 @@ const (
 	// MemoryMax is passed to systemd-run; the cockroach process is killed if it
 	// uses more than this percentage of the host's memory.
 	MemoryMax = "95%"
+
+	// DefaultSQLPort is the default port on which the cockroach process is
+	// listening for SQL connections.
+	DefaultSQLPort = 26257
+
+	// DefaultAdminUIPort is the default port on which the cockroach process is
+	// listening for HTTP connections for the Admin UI.
+	DefaultAdminUIPort = 26258
 )
