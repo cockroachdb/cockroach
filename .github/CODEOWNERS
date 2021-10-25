@@ -215,9 +215,27 @@
 /pkg/migration/              @cockroachdb/kv-prs-noreview @cockroachdb/sql-schema
 /pkg/multitenant             @cockroachdb/unowned
 /pkg/release/                @cockroachdb/dev-inf
-/pkg/roachpb/                @cockroachdb/kv-prs
+/pkg/roachpb/.gitattributes  @cockroachdb/dev-inf
+/pkg/roachpb/api*            @cockroachdb/kv-prs
+/pkg/roachpb/batch*          @cockroachdb/kv-prs
+/pkg/roachpb/BUILD.bazel     @cockroachdb/kv-prs-noreview
+/pkg/roachpb/data*           @cockroachdb/kv-prs
+/pkg/roachpb/dep_test.go     @cockroachdb/dev-inf
+/pkg/roachpb/error*          @cockroachdb/kv-prs
+/pkg/roachpb/gen             @cockroachdb/dev-inf
 /pkg/roachpb/app*            @cockroachdb/sql-observability
 /pkg/roachpb/index*          @cockroachdb/sql-observability
+/pkg/roachpb/internal*       @cockroachdb/kv-prs
+/pkg/roachpb/io-formats*     @cockroachdb/bulk-io
+/pkg/roachpb/main_test.go    @cockroachdb/kv-prs-noreview
+/pkg/roachpb/merge_spans*    @cockroachdb/kv-prs
+/pkg/roachpb/metadata*       @cockroachdb/kv-prs
+/pkg/roachpb/method*         @cockroachdb/kv-prs
+/pkg/roachpb/mocks*          @cockroachdb/kv-prs
+/pkg/roachpb/span*           @cockroachdb/kv-prs
+/pkg/roachpb/string_test.go  @cockroachdb/kv-prs
+/pkg/roachpb/tenant*         @cockroachdb/kv-prs
+/pkg/roachpb/version*        @cockroachdb/server
 /pkg/rpc/                    @cockroachdb/server-prs
 /pkg/scheduledjobs/          @cockroachdb/bulk-prs
 /pkg/security/               @cockroachdb/server-prs @cockroachdb/prodsec
