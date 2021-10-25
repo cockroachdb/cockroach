@@ -14,11 +14,13 @@ package settingswatcher
 
 import (
 	"context"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -27,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/errors"
 )
 
@@ -42,6 +46,24 @@ type SettingsWatcher struct {
 
 	// Running state, access underneath the rangefeed callback.
 	updater settings.Updater
+
+	storage Storage
+
+	// State used to store settings values to disk.
+	buffer *rangefeedbuffer.Buffer
+	g      singleflight.Group
+	mu     struct {
+		syncutil.Mutex
+		frontierSaved  hlc.Timestamp
+		frontierToSave hlc.Timestamp
+		data           []roachpb.KeyValue
+	}
+}
+
+// Storage is used to store a snapshot of KVs which can then be used to
+// bootstrap settings state.
+type Storage interface {
+	WriteKVs(ctx context.Context, kvs []roachpb.KeyValue) error
 }
 
 // New constructs a new SettingsWatcher.
@@ -51,6 +73,7 @@ func New(
 	settingsToUpdate *cluster.Settings,
 	f *rangefeed.Factory,
 	stopper *stop.Stopper,
+	storage Storage,
 ) *SettingsWatcher {
 	return &SettingsWatcher{
 		clock:    clock,
@@ -59,6 +82,7 @@ func New(
 		f:        f,
 		stopper:  stopper,
 		dec:      MakeRowDecoder(codec),
+		storage:  storage,
 	}
 }
 
@@ -104,6 +128,15 @@ func (s *SettingsWatcher) onEntry(ctx context.Context, kv *roachpb.RangeFeedValu
 			log.Safe(k), val, err)
 	}
 
+	if s.buffer != nil {
+		if err := s.buffer.Add((*event)(kv)); err != nil {
+			// TODO(ajwerner): What do I do here? Stop buffering?
+			// I really wish there were no limit.
+			log.Warningf(ctx, "failed to buffer setting for storage, "+
+				"giving up on storing settings")
+			s.buffer = nil
+		}
+	}
 }
 
 // Start will start the SettingsWatcher. It returns after the initial settings
@@ -144,7 +177,18 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		rangefeed.WithInitialScan(initialScanFunc),
 		rangefeed.WithOnInitialScanError(initialScanErrorFunc),
 	}
-
+	if s.storage != nil {
+		const aNumberThatBetterBeLargeEnough = 1 << 16
+		s.buffer = rangefeedbuffer.New(aNumberThatBetterBeLargeEnough)
+		opts = append(opts, rangefeed.WithOnFrontierAdvance(func(
+			ctx context.Context, timestamp hlc.Timestamp,
+		) {
+			if !s.setFrontierToSnapshot(timestamp) {
+				return
+			}
+			s.snapshotFrontier(ctx, timestamp)
+		}))
+	}
 	now := s.clock.Now()
 	rf, err := s.f.RangeFeed(
 		ctx, "settings", []roachpb.Span{settingsTableSpan}, now, s.onEntry, opts...,
@@ -166,4 +210,104 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		return errors.Wrap(ctx.Err(),
 			"failed to retrieve initial cluster settings")
 	}
+}
+
+// setFrontierToSnapshot sets the frontier timestamp for which there is
+// a pending snapshot.
+func (s *SettingsWatcher) setFrontierToSnapshot(timestamp hlc.Timestamp) (forwarded bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.frontierToSave.Forward(timestamp)
+}
+
+func (s *SettingsWatcher) getFrontierState() (toSnapshop, stored hlc.Timestamp) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.frontierToSave, s.mu.frontierSaved
+}
+
+func (s *SettingsWatcher) snapshotFrontier(ctx context.Context, toSnapshot hlc.Timestamp) {
+	// If this returns an error, it's because we are shutting down. Ignore it.
+	_ = s.stopper.RunAsyncTask(ctx, "snapshot-settings", func(
+		ctx context.Context,
+	) {
+		for {
+			tsInterface, _, err := s.g.Do("", func() (interface{}, error) {
+				toSave, saved := s.getFrontierState()
+				if toSave.Equal(saved) {
+					return nil, nil
+				}
+				newData := s.copyEventsToData(s.buffer.Flush(ctx, toSave))
+				if err := s.storage.WriteKVs(ctx, newData); err != nil {
+					return nil, err
+				}
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				s.mu.frontierSaved = toSave
+				return toSave, nil
+			})
+			if err != nil {
+				return
+			}
+			if ts, ok := tsInterface.(hlc.Timestamp); ok && toSnapshot.LessEq(ts) {
+				return
+			}
+		}
+	})
+}
+
+type event roachpb.RangeFeedValue
+
+func (r *event) Timestamp() hlc.Timestamp {
+	return r.Value.Timestamp
+}
+
+var _ rangefeedbuffer.Event = (*event)(nil)
+
+func (s *SettingsWatcher) copyEventsToData(events []rangefeedbuffer.Event) []roachpb.KeyValue {
+	var kvs []roachpb.KeyValue
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		kvs = append(kvs, s.mu.data...)
+	}()
+	for _, ev := range events {
+		ev := ev.(*event)
+		kvs = append(kvs, roachpb.KeyValue{Key: ev.Key, Value: ev.Value})
+	}
+	// Sort the keys data before compacting it away.
+	sort.Slice(kvs, func(i, j int) bool {
+		cmp := kvs[i].Key.Compare(kvs[j].Key)
+		switch {
+		case cmp < 0:
+			return true
+		case cmp > 0:
+			return false
+		default:
+			// Sort larger timestamps earlier.
+			return !kvs[i].Value.Timestamp.LessEq(kvs[j].Value.Timestamp)
+		}
+	})
+	// Remove the older entries.
+	truncated := kvs[:0]
+	for _, kv := range kvs {
+		if len(truncated) > 0 &&
+			truncated[len(truncated)-1].Key.Equal(kv.Key) {
+			continue
+		}
+		truncated = append(truncated, kv)
+	}
+	// Remove the tombstones.
+	kvs, truncated = truncated, truncated[:0]
+	for _, kv := range kvs {
+		if !kv.Value.IsPresent() {
+			continue
+		}
+		truncated = append(truncated, kv)
+	}
+	// Clear the memory in the rest of the slice.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.data = append(make([]roachpb.KeyValue, 0, len(truncated)), kvs...)
+	return s.mu.data
 }

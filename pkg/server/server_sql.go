@@ -939,7 +939,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	var settingsWatcher *settingswatcher.SettingsWatcher
 	if !codec.ForSystemTenant() {
 		settingsWatcher = settingswatcher.New(
-			cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper,
+			cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper, nil, /* storage */
 		)
 	}
 
