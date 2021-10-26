@@ -11,14 +11,10 @@
 package local
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -28,12 +24,40 @@ import (
 // ProviderName is config.Local.
 const ProviderName = config.Local
 
-func init() {
-	vm.Providers[ProviderName] = &Provider{}
+// Init initializes the Local provider and registers it into vm.Providers.
+func Init(storage VMStorage) {
+	vm.Providers[ProviderName] = &Provider{
+		clusters: make(cloud.Clusters),
+		storage:  storage,
+	}
+}
+
+// IsLocal returns true if the given cluster name is a local cluster.
+func IsLocal(clusterName string) bool {
+	return clusterName == config.Local
+}
+
+// AddCluster adds information about a local cluster; used when loading the
+// saved metadata for local clusters.
+func AddCluster(cluster *cloud.Cluster) {
+	p := vm.Providers[ProviderName].(*Provider)
+	p.clusters[cluster.Name] = cluster
+}
+
+// VMStorage is the interface for saving metadata for local clusters.
+type VMStorage interface {
+	// SaveCluster saves the metadata for a local cluster. It is expected that
+	// when the program runs again, this same metadata will be reported via
+	// AddCluster.
+	SaveCluster(cluster *cloud.Cluster) error
 }
 
 // A Provider is used to create stub VM objects.
-type Provider struct{}
+type Provider struct {
+	clusters cloud.Clusters
+
+	storage VMStorage
+}
 
 // No-op implementation of ProviderFlags
 type emptyFlags struct{}
@@ -62,27 +86,32 @@ func (p *Provider) ConfigSSH() error {
 
 // Create just creates fake host-info entries in the local filesystem
 func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
-	path := filepath.Join(os.ExpandEnv(config.DefaultHostDir), config.Local)
-	file, err := os.Create(path)
-	if err != nil {
-		return errors.Wrapf(err, "problem creating file %s", path)
+	now := timeutil.Now()
+	c := &cloud.Cluster{
+		Name:      opts.ClusterName,
+		CreatedAt: now,
+		Lifetime:  time.Hour,
+		VMs:       make(vm.List, len(names)),
 	}
-	defer file.Close()
-
-	// Align columns left and separate with at least two spaces.
-	tw := tabwriter.NewWriter(file, 0, 8, 2, ' ', 0)
-	if _, err := tw.Write([]byte("# user@host\tlocality\n")); err != nil {
-		return err
-	}
-	for i := 0; i < len(names); i++ {
-		if _, err := tw.Write([]byte(fmt.Sprintf(
-			"%s@%s\t%s\n", config.OSUser.Username, "127.0.0.1", "region=local,zone=local"))); err != nil {
-			return err
+	for i := range names {
+		c.VMs[i] = vm.VM{
+			Name:        "localhost",
+			CreatedAt:   now,
+			Lifetime:    time.Hour,
+			PrivateIP:   "127.0.0.1",
+			Provider:    ProviderName,
+			ProviderID:  ProviderName,
+			PublicIP:    "127.0.0.1",
+			RemoteUser:  config.OSUser.Username,
+			VPC:         ProviderName,
+			MachineType: ProviderName,
+			Zone:        ProviderName,
 		}
 	}
-	if err := tw.Flush(); err != nil {
-		return errors.Wrapf(err, "problem writing file %s", path)
+	if err := p.storage.SaveCluster(c); err != nil {
+		return err
 	}
+	p.clusters[c.Name] = c
 	return nil
 }
 
@@ -111,28 +140,14 @@ func (p *Provider) Flags() vm.ProviderFlags {
 	return &emptyFlags{}
 }
 
-// List constructs N-many localhost VM instances, using SyncedCluster as a way to remember
-// how many nodes we should have
-func (p *Provider) List() (ret vm.List, _ error) {
-	if sc, ok := install.Clusters[ProviderName]; ok {
-		now := timeutil.Now()
-		for range sc.VMs {
-			ret = append(ret, vm.VM{
-				Name:        "localhost",
-				CreatedAt:   now,
-				Lifetime:    time.Hour,
-				PrivateIP:   "127.0.0.1",
-				Provider:    ProviderName,
-				ProviderID:  ProviderName,
-				PublicIP:    "127.0.0.1",
-				RemoteUser:  config.OSUser.Username,
-				VPC:         ProviderName,
-				MachineType: ProviderName,
-				Zone:        ProviderName,
-			})
-		}
+// List reports all the local cluster "VM" instances.
+func (p *Provider) List() (vm.List, error) {
+	var result vm.List
+	for _, clusterName := range p.clusters.Names() {
+		c := p.clusters[clusterName]
+		result = append(result, c.VMs...)
 	}
-	return
+	return result, nil
 }
 
 // Name returns the name of the Provider, which will also surface in VM.Provider
