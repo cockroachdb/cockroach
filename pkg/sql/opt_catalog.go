@@ -1108,7 +1108,7 @@ func (ot *optTable) OutboundForeignKeyCount() int {
 	return len(ot.outboundFKs)
 }
 
-// OutboundForeignKeyCount is part of the cat.Table interface.
+// OutboundForeignKey is part of the cat.Table interface.
 func (ot *optTable) OutboundForeignKey(i int) cat.ForeignKeyConstraint {
 	return &ot.outboundFKs[i]
 }

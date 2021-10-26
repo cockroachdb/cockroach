@@ -14,15 +14,19 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -527,6 +531,16 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		}
 	}
 
+	// For index recommendations, after optimizing we must interrupt to find index
+	// candidates in the optimized memo.
+	if stmt, isExplain := opc.p.stmt.AST.(*tree.Explain); isExplain {
+		if stmt.ExplainOptions.Flags[tree.ExplainFlagIndexRec] {
+			if err := opc.makeQueryIndexRecommendation(ctx, f); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	// If this statement doesn't have placeholders and we have not constant-folded
 	// any VolatilityStable operators, add it to the cache.
 	// Note that non-prepared statements from pgwire clients cannot have
@@ -646,4 +660,66 @@ func (opc *optPlanningCtx) runExecBuilder(
 // there a better way?
 func (p *planner) DecodeGist(gist string) ([]string, error) {
 	return explain.DecodePlanGistToRows(gist, &p.optPlanningCtx.catalog)
+}
+
+// makeQueryIndexRecommendation builds/optimizes a statement and walks through
+// it to find potential index candidates. It then builds and optimizes the
+// statement with those indexes hypothetically added to the table. An index
+// recommendation for the query is outputted based on which hypothetical indexes
+// are helpful in the optimal plan.
+func (opc *optPlanningCtx) makeQueryIndexRecommendation(
+	ctx context.Context, f *norm.Factory,
+) error {
+	indexCandidates := indexrec.FindIndexCandidates(f.Memo().RootExpr(), f.Metadata())
+	oldTables, hypTables := indexrec.BuildHypotheticalTables(
+		indexCandidates, getTableZones(indexCandidates),
+	)
+
+	err := opc.buildAndOptimizeWithTables(ctx, f, hypTables)
+	if err != nil {
+		return err
+	}
+
+	indexes := make(map[cat.StableID][]int)
+	indexrec.WalkOptExprIndexesUsed(f.Memo().RootExpr(), f.Metadata(), indexes)
+	// TODO(neha): Output index recommendation information in the EXPLAIN
+
+	// Revert to executable plan without hypothetical indexes.
+	err = opc.buildAndOptimizeWithTables(ctx, f, oldTables)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// buildAndOptimizeWithTables builds and optimizes a query with each TableMeta
+// updated to store the corresponding table in the tables map.
+func (opc *optPlanningCtx) buildAndOptimizeWithTables(
+	ctx context.Context, f *norm.Factory, tables map[cat.StableID]cat.Table,
+) error {
+	opc.reset()
+	bld := optbuilder.New(ctx, &opc.p.semaCtx, opc.p.EvalContext(), &opc.catalog, f, opc.p.stmt.AST)
+	if err := bld.Build(); err != nil {
+		return err
+	}
+
+	opc.optimizer.Memo().Metadata().UpdateTableMeta(tables)
+	if _, err := opc.optimizer.Optimize(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// getTableInfo casts the table keys of an indexCandidates map to *optTable in
+// order to map tables to their corresponding zones.
+func getTableZones(
+	indexCandidates map[cat.Table][][]cat.IndexColumn,
+) (tableZones map[cat.Table]*zonepb.ZoneConfig) {
+	tableZones = make(map[cat.Table]*zonepb.ZoneConfig)
+	for t := range indexCandidates {
+		tableZones[t] = t.(*optTable).zone
+	}
+	return tableZones
 }
