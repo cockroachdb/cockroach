@@ -259,3 +259,8 @@ func (localVMStorage) SaveCluster(cluster *cloud.Cluster) error {
 	}
 	return nil
 }
+
+// DeleteCluster is part of the LocalVMStorage interface.
+func (localVMStorage) DeleteCluster(name string) error {
+	return os.Remove(filepath.Join(os.ExpandEnv(config.DefaultHostDir), name))
+}

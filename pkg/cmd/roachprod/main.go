@@ -565,8 +565,8 @@ directory is removed.
 			len(clusterNames),
 			func(ctx context.Context, idx int) error {
 				name := clusterNames[idx]
-				if name == config.Local {
-					return destroyLocalCluster()
+				if local.IsLocal(name) {
+					return destroyLocalCluster(name)
 				}
 				if cld == nil {
 					var err error
@@ -593,22 +593,16 @@ func destroyCluster(cld *cloud.Cloud, clusterName string) error {
 	return cloud.DestroyCluster(c)
 }
 
-func destroyLocalCluster() error {
-	if _, ok := install.Clusters[config.Local]; !ok {
-		return fmt.Errorf("cluster %s does not exist", config.Local)
+func destroyLocalCluster(clusterName string) error {
+	if _, ok := install.Clusters[clusterName]; !ok {
+		return fmt.Errorf("cluster %s does not exist", clusterName)
 	}
-	c, err := newCluster(config.Local)
+	c, err := newCluster(clusterName)
 	if err != nil {
 		return err
 	}
 	c.Wipe(false)
-	for _, i := range c.Nodes {
-		err := os.RemoveAll(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), i))
-		if err != nil {
-			return err
-		}
-	}
-	return os.Remove(filepath.Join(os.ExpandEnv(config.DefaultHostDir), c.Name))
+	return local.DeleteCluster(clusterName)
 }
 
 var cachedHostsCmd = &cobra.Command{

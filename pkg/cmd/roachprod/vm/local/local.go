@@ -11,6 +11,8 @@
 package local
 
 import (
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cloud"
@@ -37,11 +39,35 @@ func IsLocal(clusterName string) bool {
 	return clusterName == config.Local
 }
 
-// AddCluster adds information about a local cluster; used when loading the
-// saved metadata for local clusters.
+// AddCluster adds the metadata of a local cluster; used when loading the saved
+// metadata for local clusters.
 func AddCluster(cluster *cloud.Cluster) {
 	p := vm.Providers[ProviderName].(*Provider)
 	p.clusters[cluster.Name] = cluster
+}
+
+// DeleteCluster destroys a local cluster. It assumes that the cockroach
+// processes are stopped.
+func DeleteCluster(name string) error {
+	p := vm.Providers[ProviderName].(*Provider)
+	c := p.clusters[name]
+	if c == nil {
+		return fmt.Errorf("local cluster %s does not exist", name)
+	}
+
+	for i := range c.VMs {
+		err := os.RemoveAll(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), i+1))
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := p.storage.DeleteCluster(name); err != nil {
+		return err
+	}
+
+	delete(p.clusters, name)
+	return nil
 }
 
 // VMStorage is the interface for saving metadata for local clusters.
@@ -50,6 +76,9 @@ type VMStorage interface {
 	// when the program runs again, this same metadata will be reported via
 	// AddCluster.
 	SaveCluster(cluster *cloud.Cluster) error
+
+	// DeleteCluster deletes the metadata for a local cluster.
+	DeleteCluster(name string) error
 }
 
 // A Provider is used to create stub VM objects.
@@ -111,9 +140,9 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	return nil
 }
 
-// Delete is part of the vm.Provider interface. This implementation is a no-op.
+// Delete is part of the vm.Provider interface.
 func (p *Provider) Delete(vms vm.List) error {
-	return nil
+	panic("DeleteCluster should be used")
 }
 
 // Reset is part of the vm.Provider interface. This implementation is a no-op.
