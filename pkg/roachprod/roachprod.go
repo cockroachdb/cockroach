@@ -124,7 +124,9 @@ func verifyClusterName(clusterName, username string) error {
 // DefaultSyncedCluster returns install.SyncedCluster with default values.
 func DefaultSyncedCluster() install.SyncedCluster {
 	return install.SyncedCluster{
-		Name:        "",
+		Cluster: cloud.Cluster{
+			Name: "",
+		},
 		Tag:         "",
 		CertsDir:    "./certs",
 		Secure:      false,
@@ -452,7 +454,7 @@ func IP(clusterOpts install.SyncedCluster, external bool) ([]string, error) {
 
 	if external {
 		for i := 0; i < len(nodes); i++ {
-			ips[i] = c.VMs[nodes[i]-1]
+			ips[i] = c.VMs[nodes[i]-1].PublicIP
 		}
 	} else {
 		c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
@@ -568,7 +570,7 @@ func SetupSSH(clusterOpts install.SyncedCluster, username string) error {
 	// requested the shared user.
 	for i := range installCluster.VMs {
 		if cloudCluster.VMs[i].Provider == gce.ProviderName {
-			installCluster.Users[i] = config.OSUser.Username
+			installCluster.VMs[i].RemoteUser = config.OSUser.Username
 		}
 	}
 	if err := installCluster.Wait(); err != nil {
@@ -779,7 +781,7 @@ func PgURL(clusterOpts install.SyncedCluster, external bool) error {
 
 	if external {
 		for i := 0; i < len(nodes); i++ {
-			ips[i] = c.VMs[nodes[i]-1]
+			ips[i] = c.VMs[nodes[i]-1].PublicIP
 		}
 	} else {
 		c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
@@ -824,7 +826,7 @@ func AdminURL(
 		}
 
 		if adminurlIPs {
-			host = c.VMs[node-1]
+			host = c.VMs[node-1].PublicIP
 		}
 		port := install.GetAdminUIPort(c.Impl.NodePort(c, node))
 		scheme := "http"
@@ -878,7 +880,7 @@ func Pprof(
 	httpClient := httputil.NewClientWithTimeout(timeout)
 	startTime := timeutil.Now().Unix()
 	failed, err := c.ParallelE(description, len(c.ServerNodes()), 0, func(i int) ([]byte, error) {
-		host := c.VMs[i]
+		host := c.VMs[i].PublicIP
 		port := install.GetAdminUIPort(c.Impl.NodePort(c, i))
 		scheme := "http"
 		if c.Secure {

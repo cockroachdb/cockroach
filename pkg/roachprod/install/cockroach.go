@@ -722,8 +722,8 @@ func (h *crdbInstallHelper) shouldAdvertisePublicIP() bool {
 	// If we're creating nodes that span VPC (e.g. AWS multi-region or
 	// multi-cloud), we'll tell the nodes to advertise their public IPs
 	// so that attaching nodes to the cluster Just Works.
-	for i, vpc := range h.c.VPCs {
-		if i > 0 && vpc != h.c.VPCs[0] {
+	for i := range h.c.VMs {
+		if i > 0 && h.c.VMs[i].VPC != h.c.VMs[0].VPC {
 			return true
 		}
 	}
