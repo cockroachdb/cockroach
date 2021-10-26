@@ -549,6 +549,15 @@ var (
 	binaryVersion = versionsSingleton[len(versionsSingleton)-1].Version
 )
 
+func init() {
+	const isReleaseBranch = true
+	if isReleaseBranch {
+		if binaryVersion != ByKey(V21_1) {
+			panic("unexpected cluster version greater than release's binary version")
+		}
+	}
+}
+
 // ByKey returns the roachpb.Version for a given key.
 // It is a fatal error to use an invalid key.
 func ByKey(key Key) roachpb.Version {
