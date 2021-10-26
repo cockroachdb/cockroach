@@ -304,8 +304,8 @@ func FmtPlaceholderFormat(placeholderFn func(_ *FmtCtx, _ *Placeholder)) FmtCtxO
 	}
 }
 
-// FmtReformatTableNames modifies FmtCtx to to substitute the printing of table
-// naFmtParsable using the provided function.
+// FmtReformatTableNames modifies FmtCtx to to substitute the printing of
+// tableNameFmtParsable using the provided function.
 func FmtReformatTableNames(tableNameFmt func(*FmtCtx, *TableName)) FmtCtxOption {
 	return func(ctx *FmtCtx) {
 		ctx.tableNameFormatter = tableNameFmt

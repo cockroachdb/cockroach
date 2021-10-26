@@ -72,6 +72,14 @@ func (e *plannerJobExecContext) SpanConfigReconciler() spanconfig.Reconciler {
 }
 func (e *plannerJobExecContext) Txn() *kv.Txn { return e.p.Txn() }
 
+// LookupSchema to return an object consisting of the parent database and
+// resolved target schema.
+func (e *plannerJobExecContext) LookupSchema(
+	ctx context.Context, dbName, scName string,
+) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
+	return e.p.LookupSchema(ctx, dbName, scName)
+}
+
 // ConstrainPrimaryIndexSpanByExpr implements SpanConstrainer
 func (e *plannerJobExecContext) ConstrainPrimaryIndexSpanByExpr(
 	ctx context.Context,
@@ -107,4 +115,7 @@ type JobExecContext interface {
 	MigrationJobDeps() upgrade.JobDeps
 	SpanConfigReconciler() spanconfig.Reconciler
 	Txn() *kv.Txn
+	LookupSchema(
+		ctx context.Context, dbName, scName string,
+	) (found bool, scMeta catalog.ResolvedObjectPrefix, err error)
 }

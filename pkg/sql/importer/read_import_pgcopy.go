@@ -32,9 +32,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// defaultScanBuffer is the default max row size of the PGCOPY and PGDUMP
+// DefaultScanBuffer is the default max row size of the PGCOPY and PGDUMP
 // scanner.
-const defaultScanBuffer = 1024 * 1024 * 4
+const DefaultScanBuffer = 1024 * 1024 * 4
 
 type pgCopyReader struct {
 	importCtx *parallelImportContext
