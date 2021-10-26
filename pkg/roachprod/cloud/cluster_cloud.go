@@ -150,16 +150,17 @@ func (c *Cluster) PrintDetails() {
 	}
 }
 
-// IsLocal TODO(peter): document
+// IsLocal returns true if c is a local cluster.
 func (c *Cluster) IsLocal() bool {
-	return c.Name == config.Local
+	return config.IsLocalClusterName(c.Name)
 }
 
 const vmNameFormat = "user-<clusterid>-<nodeid>"
 
-func namesFromVM(v vm.VM) (string, string, error) {
+// namesFromVM determines the user name and the cluster name from a VM.
+func namesFromVM(v vm.VM) (userName string, clusterName string, _ error) {
 	if v.IsLocal() {
-		return config.Local, config.Local, nil
+		return config.Local, v.LocalClusterName, nil
 	}
 	name := v.Name
 	parts := strings.Split(name, "-")

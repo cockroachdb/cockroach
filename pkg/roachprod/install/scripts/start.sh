@@ -17,8 +17,6 @@ set -euo pipefail
 LOCAL=#{if .Local#}true#{end#}
 ADVERTISE_FIRST_IP=#{if .AdvertiseFirstIP#}true#{end#}
 LOG_DIR=#{shesc .LogDir#}
-NODE_NUM=#{shesc .NodeNum#}
-TAG=#{shesc .Tag#}
 BINARY=#{shesc .Binary#}
 START_CMD=#{shesc .StartCmd#}
 KEY_CMD=#{.KeyCmd#}
@@ -36,7 +34,6 @@ ENV_VARS=(
 
 # End of templated code.
 
-ENV_VARS+=("ROACHPROD=${NODE_NUM}${TAG}")
 if [[ -n "${ADVERTISE_FIRST_IP}" ]]; then
   ARGS+=("--advertise-host" "$(hostname -I | awk '{print $1}')")
 fi

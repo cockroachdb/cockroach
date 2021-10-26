@@ -277,7 +277,7 @@ func GCClusters(cloud *Cloud, dryrun bool) error {
 
 	var names []string
 	for name := range cloud.Clusters {
-		if name != config.Local {
+		if !config.IsLocalClusterName(name) {
 			names = append(names, name)
 		}
 	}
