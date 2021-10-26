@@ -34,6 +34,14 @@ type TablePattern interface {
 	// not an UnresolvedName. This converts the UnresolvedName to an
 	// AllTablesSelector or TableName as necessary.
 	NormalizeTablePattern() (TablePattern, error)
+
+	// GetExplicitCatalog returns the catalog specified on the object, if it exists.
+	// If not, returns an empty string.
+	GetExplicitCatalog() (Name, bool)
+
+	// SetExplicitCatalog sets the explicit catalog if it already exists.
+	// It returns true if the explicit catalog is successfully set.
+	SetExplicitCatalog(Name) bool
 }
 
 var _ TablePattern = &UnresolvedName{}
@@ -48,6 +56,24 @@ func (n *UnresolvedName) NormalizeTablePattern() (TablePattern, error) {
 
 // NormalizeTablePattern implements the TablePattern interface.
 func (t *TableName) NormalizeTablePattern() (TablePattern, error) { return t, nil }
+
+// GetExplicitCatalog returns the explicit catalog name of a table.
+// If it doesn't have one, returns empty string.
+func (t *TableName) GetExplicitCatalog() (Name, bool) {
+	if !t.ExplicitCatalog {
+		return "", false
+	}
+	return t.CatalogName, true
+}
+
+// SetExplicitCatalog sets the explicit catalog if it already exists.
+func (t *TableName) SetExplicitCatalog(n Name) bool {
+	if !t.ExplicitCatalog {
+		return false
+	}
+	t.CatalogName = n
+	return true
+}
 
 // AllTablesSelector corresponds to a selection of all
 // tables in a database, e.g. when used with GRANT.
@@ -67,6 +93,24 @@ func (at *AllTablesSelector) String() string { return AsString(at) }
 
 // NormalizeTablePattern implements the TablePattern interface.
 func (at *AllTablesSelector) NormalizeTablePattern() (TablePattern, error) { return at, nil }
+
+// GetExplicitCatalog returns the explicit catalog name of an object.
+// If it doesn't have one, returns empty string.
+func (at *AllTablesSelector) GetExplicitCatalog() (Name, bool) {
+	if !at.ExplicitCatalog {
+		return "", false
+	}
+	return at.CatalogName, true
+}
+
+// SetExplicitCatalog sets the explicit catalog if it already exists.
+func (at *AllTablesSelector) SetExplicitCatalog(n Name) bool {
+	if !at.ExplicitCatalog {
+		return false
+	}
+	at.CatalogName = n
+	return true
+}
 
 // TablePatterns implement a comma-separated list of table patterns.
 // Used by e.g. the GRANT statement.
