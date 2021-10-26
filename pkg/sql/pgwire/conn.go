@@ -101,6 +101,9 @@ type conn struct {
 
 	// alwaysLogAuthActivity is used force-enables logging of authn events.
 	alwaysLogAuthActivity bool
+
+	// afterReadMsgTestingKnob is called after reading every message.
+	afterReadMsgTestingKnob func(context.Context) error
 }
 
 // serveConn creates a conn that will serve the netConn. It returns once the
@@ -155,6 +158,7 @@ func (s *Server) serveConn(
 
 	c := newConn(netConn, sArgs, &s.metrics, connStart, &s.execCfg.Settings.SV)
 	c.alwaysLogAuthActivity = alwaysLogAuthActivity || atomic.LoadInt32(&s.testingAuthLogEnabled) > 0
+	c.afterReadMsgTestingKnob = s.execCfg.PGWireTestingKnobs.AfterReadMsgTestingKnob
 
 	// Do the reading of commands from the network.
 	c.serveImpl(ctx, s.IsDraining, s.SQLServer, reserved, authOpt)
@@ -207,6 +211,11 @@ func (c *conn) GetErr() error {
 func (c *conn) authLogEnabled() bool {
 	return c.alwaysLogAuthActivity || logSessionAuth.Get(c.sv)
 }
+
+// maxRepeatedErrorCount is the number of times an error can be received
+// while reading from the network connection before the server decides to give
+// up and abort the connection.
+const maxRepeatedErrorCount = 1 << 15
 
 // serveImpl continuously reads from the network connection and pushes execution
 // instructions into a sql.StmtBuf, from where they'll be processed by a command
@@ -347,6 +356,9 @@ func (c *conn) serveImpl(
 		breakLoop, err := func() (bool, error) {
 			typ, n, err := c.readBuf.ReadTypedMsg(&c.rd)
 			c.metrics.BytesInCount.Inc(int64(n))
+			if err == nil && c.afterReadMsgTestingKnob != nil {
+				err = c.afterReadMsgTestingKnob(ctx)
+			}
 			if err != nil {
 				if pgwirebase.IsMessageTooBigError(err) {
 					log.VInfof(ctx, 1, "pgwire: found big error message; attempting to slurp bytes and return error: %s", err)
@@ -357,30 +369,29 @@ func (c *conn) serveImpl(
 					if slurpErr != nil {
 						return false, errors.Wrap(slurpErr, "pgwire: error slurping remaining bytes")
 					}
-
-					// Write out the error over pgwire.
-					if err := c.stmtBuf.Push(ctx, sql.SendError{Err: err}); err != nil {
-						return false, errors.New("pgwire: error writing too big error message to the client")
-					}
-
-					// If this is a simple query, we have to send the sync message back as
-					// well. Otherwise, we ignore all messages until receiving a sync.
-					if typ == pgwirebase.ClientMsgSimpleQuery {
-						if err = c.stmtBuf.Push(ctx, sql.Sync{}); err != nil {
-							return false, errors.New("pgwire: error writing sync to the client whilst message is too big")
-						}
-					} else {
-						ignoreUntilSync = true
-					}
-
-					// We need to continue processing here for pgwire clients to be able to
-					// successfully read the error message off pgwire.
-					//
-					// If break here, we terminate the connection. The client will instead see that
-					// we terminated the connection prematurely (as opposed to seeing a ClientMsgTerminate
-					// packet) and instead return a broken pipe or io.EOF error message.
-					return false, nil
 				}
+
+				// Write out the error over pgwire.
+				if err := c.stmtBuf.Push(ctx, sql.SendError{Err: err}); err != nil {
+					return false, errors.New("pgwire: error writing too big error message to the client")
+				}
+
+				// If this is a simple query, we have to send the sync message back as
+				// well. Otherwise, we ignore all messages until receiving a sync.
+				if typ == pgwirebase.ClientMsgSimpleQuery {
+					if err := c.stmtBuf.Push(ctx, sql.Sync{}); err != nil {
+						return false, errors.New("pgwire: error writing sync to the client whilst message is too big")
+					}
+				} else {
+					ignoreUntilSync = true
+				}
+
+				// We need to continue processing here for pgwire clients to be able to
+				// successfully read the error message off pgwire.
+				//
+				// If break here, we terminate the connection. The client will instead see that
+				// we terminated the connection prematurely (as opposed to seeing a ClientMsgTerminate
+				// packet) and instead return a broken pipe or io.EOF error message.
 				return false, errors.Wrap(err, "pgwire: error reading input")
 			}
 			timeReceived := timeutil.Now()
@@ -483,7 +494,6 @@ func (c *conn) serveImpl(
 			log.VEventf(ctx, 1, "pgwire: error processing message: %s", err)
 			ignoreUntilSync = true
 			repeatedErrorCount++
-			const maxRepeatedErrorCount = 1 << 15
 			// If we can't read data because of any one of the following conditions,
 			// then we should break:
 			// 1. the connection was closed.
