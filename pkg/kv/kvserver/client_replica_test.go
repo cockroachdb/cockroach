@@ -499,6 +499,84 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	}
 }
 
+// TestTxnReadWithinUncertaintyInterval tests cases where a transaction observes
+// a committed value below its global uncertainty limit while performing a read.
+//
+// In one variant of the test, the transaction does not have an observed
+// timestamp from the KV node serving the read, so its uncertainty interval
+// during its read extends all the way to its global uncertainty limit. As a
+// result, it observes the committed value in its uncertain future and receives
+// a ReadWithinUncertaintyIntervalError.
+//
+// In a second variant of the test, the transaction does have an observed
+// timestamp from the KV node serving the read, so its uncertainty interval
+// during its read extends only up to this observed timestamp. This observed
+// timestamp is below the committed value's timestamp. As a result, the
+// transaction observes the committed value in its certain future, allowing it
+// to avoid the ReadWithinUncertaintyIntervalError.
+func TestTxnReadWithinUncertaintyInterval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "observedTS", func(t *testing.T, observedTS bool) {
+		ctx := context.Background()
+		manual := hlc.NewHybridManualClock()
+		srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ClockSource: manual.UnixNano,
+				},
+			},
+		})
+		s := srv.(*server.TestServer)
+		defer s.Stopper().Stop(ctx)
+		store, err := s.Stores().GetStore(s.GetFirstStoreID())
+		require.NoError(t, err)
+
+		// Split off a scratch range.
+		key, err := s.ScratchRange()
+		require.NoError(t, err)
+
+		// Pause the server's clocks going forward.
+		manual.Pause()
+
+		// Create a new transaction.
+		now := s.Clock().Now()
+		maxOffset := s.Clock().MaxOffset().Nanoseconds()
+		require.NotZero(t, maxOffset)
+		txn := roachpb.MakeTransaction("test", key, 1, now, maxOffset)
+		require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
+		require.Len(t, txn.ObservedTimestamps, 0)
+
+		// If the test variant wants an observed timestamp from the server at a
+		// timestamp below the value, collect one now.
+		if observedTS {
+			get := getArgs(key)
+			resp, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: &txn}, get)
+			require.Nil(t, pErr)
+			txn.Update(resp.Header().Txn)
+			require.Len(t, txn.ObservedTimestamps, 1)
+		}
+
+		// Perform a non-txn write. This will grab a timestamp from the clock.
+		put := putArgs(key, []byte("val"))
+		_, pErr := kv.SendWrapped(ctx, store.TestSender(), put)
+		require.Nil(t, pErr)
+
+		// Perform another read on the same key. Depending on whether or not the txn
+		// had collected an observed timestamp, it may or may not observe the value
+		// in its uncertainty interval and throw an error.
+		get := getArgs(key)
+		_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: &txn}, get)
+		if observedTS {
+			require.Nil(t, pErr)
+		} else {
+			require.NotNil(t, pErr)
+			require.IsType(t, &roachpb.ReadWithinUncertaintyIntervalError{}, pErr.GetDetail())
+		}
+	})
+}
+
 // TestRangeLookupUseReverse tests whether the results and the results count
 // are correct when scanning in reverse order.
 func TestRangeLookupUseReverse(t *testing.T) {
