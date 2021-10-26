@@ -1,5 +1,5 @@
 show_default_privileges_stmt ::=
-	'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ROLE' role_spec_list
-	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'USER' role_spec_list
+	'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ROLE' name ( ( ',' name ) )*
+	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'USER' name ( ( ',' name ) )*
 	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 
 	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES'
