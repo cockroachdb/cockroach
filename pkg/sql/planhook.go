@@ -127,6 +127,9 @@ type PlanHookState interface {
 	SpanConfigReconciler() spanconfig.Reconciler
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
 	Txn() *kv.Txn
+	LookupSchema(
+		ctx context.Context, dbName, scName string,
+	) (found bool, scMeta catalog.ResolvedObjectPrefix, err error)
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
