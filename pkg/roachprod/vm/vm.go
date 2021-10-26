@@ -56,6 +56,16 @@ type VM struct {
 	// Project represents the project to which this vm belongs, if the VM is in a
 	// cloud that supports project (i.e. GCE). Empty otherwise.
 	Project string `json:"project"`
+
+	// SQLPort is the port on which the cockroach process is listening for SQL
+	// connections.
+	// Usually config.DefaultSQLPort, except for local clusters.
+	SQLPort int `json:"sql_port"`
+
+	// AdminUIPort is the port on which the cockroach process is listening for
+	// HTTP traffic for the Admin UI.
+	// Usually config.DefaultAdminUIPort, except for local clusters.
+	AdminUIPort int `json:"adminui_port"`
 }
 
 // Name generates the name for the i'th node in a cluster.
