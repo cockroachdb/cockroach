@@ -33,7 +33,9 @@ func TestCommentOnConstraint(t *testing.T) {
 		CREATE DATABASE d;
 		SET DATABASE = d;
 		CREATE TABLE t ( a int UNIQUE, b numeric CONSTRAINT positive_price CHECK (b > 0), c int CHECK (b > c), CONSTRAINT pkey PRIMARY KEY (a,c));
-		CREATE TABLE t2 (a UUID PRIMARY KEY, b int NOT NULL REFERENCES  t (a))
+		CREATE TABLE t2 (a UUID PRIMARY KEY, b int NOT NULL REFERENCES  t (a));
+		CREATE SCHEMA s;
+		CREATE TABLE s.t ( a int UNIQUE, b numeric CONSTRAINT positive_price CHECK (b > 0), c int CHECK (b > c), CONSTRAINT pkey PRIMARY KEY (a,c));
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -45,6 +47,11 @@ func TestCommentOnConstraint(t *testing.T) {
 	}{
 		{
 			`COMMENT ON CONSTRAINT t_a_key ON t IS 'unique_comment'`,
+			`SELECT obj_description(oid, 'pg_constraint') FROM pg_constraint WHERE conname='t_a_key'`,
+			gosql.NullString{String: `unique_comment`, Valid: true},
+		},
+		{
+			`COMMENT ON CONSTRAINT t_a_key ON s.t IS 'unique_comment'`,
 			`SELECT obj_description(oid, 'pg_constraint') FROM pg_constraint WHERE conname='t_a_key'`,
 			gosql.NullString{String: `unique_comment`, Valid: true},
 		},
