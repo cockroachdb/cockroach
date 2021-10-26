@@ -84,6 +84,7 @@ var (
 	username          string
 	dryrun            bool
 	destroyAllMine    bool
+	destroyAllLocal   bool
 	extendLifetime    time.Duration
 	wipePreserveCerts bool
 	listDetails       bool
@@ -204,16 +205,16 @@ func verifyClusterName(clusterName string) error {
 	if clusterName == "" {
 		return fmt.Errorf("cluster name cannot be blank")
 	}
-	if clusterName == config.Local {
-		return nil
-	}
-
 	alphaNum, err := regexp.Compile(`^[a-zA-Z0-9\-]+$`)
 	if err != nil {
 		return err
 	}
 	if !alphaNum.MatchString(clusterName) {
 		return errors.Errorf("cluster name must match %s", alphaNum.String())
+	}
+
+	if config.IsLocalClusterName(clusterName) {
+		return nil
 	}
 
 	// Use the vm.Provider account names, or --username.
@@ -347,9 +348,8 @@ Cloud Clusters
 Local Clusters
 
   A local cluster stores the per-node data in ${HOME}/local on the machine
-  roachprod is being run on. Local clusters requires local ssh access. Unlike
-  cloud clusters there can be only a single local cluster, the local cluster is
-  always named "local", and has no expiration (unlimited lifetime).
+	roachprod is being run on. Local clusters names are always either "local" or
+	start with "local-" (e.g. "local-foo"). Local clusters do not expire.
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
@@ -365,7 +365,7 @@ Local Clusters
 		createVMOpts.ClusterName = clusterName
 
 		defer func() {
-			if retErr == nil || clusterName == config.Local {
+			if retErr == nil || config.IsLocalClusterName(clusterName) {
 				return
 			}
 			if errors.HasType(retErr, (*clusterAlreadyExistsError)(nil)) {
@@ -379,7 +379,7 @@ Local Clusters
 			}
 		}()
 
-		if clusterName != config.Local {
+		if !config.IsLocalClusterName(clusterName) {
 			cld, err := cloud.ListCloud()
 			if err != nil {
 				return err
@@ -411,14 +411,8 @@ Local Clusters
 			return createErr
 		}
 
-		// Just create directories for the local cluster as there's no need for ssh.
-		if clusterName == config.Local {
-			for i := 0; i < numNodes; i++ {
-				err := os.MkdirAll(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), i+1), 0755)
-				if err != nil {
-					return err
-				}
-			}
+		if config.IsLocalClusterName(clusterName) {
+			// No need for ssh for local clusters.
 			return nil
 		}
 		return setupSSH(clusterName)
@@ -511,18 +505,19 @@ func cleanupFailedCreate(clusterName string) error {
 }
 
 var destroyCmd = &cobra.Command{
-	Use:   "destroy [ --all-mine | <cluster 1> [<cluster 2> ...] ]",
+	Use:   "destroy [ --all-mine | --all-local | <cluster 1> [<cluster 2> ...] ]",
 	Short: "destroy clusters",
 	Long: `Destroy one or more local or cloud-based clusters.
 
 The destroy command accepts the names of the clusters to destroy. Alternatively,
-the --all-mine flag can be provided to destroy all clusters that are owned by the
-current user.
+the --all-mine flag can be provided to destroy all (non-local) clusters that are
+owned by the current user, or the --all-local flag can be provided to destroy
+all local clusters.
 
 Destroying a cluster releases the resources for a cluster. For a cloud-based
 cluster the machine and associated disk resources are freed. For a local
-cluster, any processes started by roachprod are stopped, and the ${HOME}/local
-directory is removed.
+cluster, any processes started by roachprod are stopped, and the node
+directories inside ${HOME}/local directory are removed.
 `,
 	Args: cobra.ArbitraryArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
@@ -530,12 +525,15 @@ directory is removed.
 		// We want to avoid running ListCloud() if we are only trying to destroy a
 		// local cluster.
 		var cld *cloud.Cloud
-		switch len(args) {
-		case 0:
-			if !destroyAllMine {
-				return errors.New("no cluster name provided")
-			}
 
+		switch {
+		case destroyAllMine:
+			if len(args) != 0 {
+				return errors.New("--all-mine cannot be combined with cluster names")
+			}
+			if destroyAllLocal {
+				return errors.New("--all-mine cannot be combined with --all-local")
+			}
 			destroyPattern, err := userClusterNameRegexp()
 			if err != nil {
 				return err
@@ -547,9 +545,16 @@ directory is removed.
 			clusters := cld.Clusters.FilterByName(destroyPattern)
 			clusterNames = clusters.Names()
 
+		case destroyAllLocal:
+			if len(args) != 0 {
+				return errors.New("--all-local cannot be combined with cluster names")
+			}
+
+			clusterNames = local.Clusters()
+
 		default:
-			if destroyAllMine {
-				return errors.New("--all-mine cannot be combined with cluster names")
+			if len(args) == 0 {
+				return errors.New("no cluster name provided")
 			}
 
 			for _, clusterName := range args {
@@ -565,7 +570,7 @@ directory is removed.
 			len(clusterNames),
 			func(ctx context.Context, idx int) error {
 				name := clusterNames[idx]
-				if local.IsLocal(name) {
+				if config.IsLocalClusterName(name) {
 					return destroyLocalCluster(name)
 				}
 				if cld == nil {
@@ -1291,7 +1296,7 @@ environments and will fall back to a no-op.`,
 			return err
 		}
 
-		if clusterName == config.Local {
+		if config.IsLocalClusterName(clusterName) {
 			return nil
 		}
 
@@ -1916,7 +1921,9 @@ func main() {
 	}
 
 	destroyCmd.Flags().BoolVarP(&destroyAllMine,
-		"all-mine", "m", false, "Destroy all clusters belonging to the current user")
+		"all-mine", "m", false, "Destroy all non-local clusters belonging to the current user")
+	destroyCmd.Flags().BoolVarP(&destroyAllLocal,
+		"all-local", "l", false, "Destroy all local clusters")
 
 	extendCmd.Flags().DurationVarP(&extendLifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")

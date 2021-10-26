@@ -26,6 +26,7 @@ go_library(
         "//pkg/cmd/roachprod/ssh",
         "//pkg/cmd/roachprod/ui",
         "//pkg/cmd/roachprod/vm/aws",
+        "//pkg/cmd/roachprod/vm/local",
         "//pkg/util/envutil",
         "//pkg/util/httputil",
         "//pkg/util/log",
