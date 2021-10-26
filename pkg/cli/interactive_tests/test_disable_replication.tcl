@@ -7,7 +7,9 @@ send "PS1=':''/# '\r"
 eexpect ":/# "
 
 start_test "Check that demo disables replication properly"
-send "$argv demo -e 'show zone configuration for range default'\r"
+# Disable multitenant until zone configs are properly enabled in tenants.
+# See 67679 for more details.
+send "$argv demo --multitenant=false -e 'show zone configuration for range default'\r"
 eexpect "num_replicas = 1"
 eexpect ":/# "
 end_test

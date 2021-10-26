@@ -585,6 +585,7 @@ func setDemoContextDefaults() {
 	demoCtx.SQLPort, _ = strconv.Atoi(base.DefaultPort)
 	demoCtx.HTTPPort, _ = strconv.Atoi(base.DefaultHTTPPort)
 	demoCtx.WorkloadMaxQPS = 25
+	demoCtx.Multitenant = true
 }
 
 // stmtDiagCtx captures the command-line parameters of the 'statement-diag'

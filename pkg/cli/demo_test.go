@@ -22,21 +22,22 @@ func Example_demo() {
 
 	defer democluster.TestingForceRandomizeDemoPorts()()
 
+	// Disable multi-tenant, as it requires a CCL binary
 	testData := [][]string{
-		{`demo`, `-e`, `show database`},
-		{`demo`, `-e`, `show database`, `--no-example-database`},
-		{`demo`, `-e`, `show application_name`},
-		{`demo`, `--format=table`, `-e`, `show database`},
-		{`demo`, `-e`, `select 1 as "1"`, `-e`, `select 3 as "3"`},
-		{`demo`, `--echo-sql`, `-e`, `select 1 as "1"`},
-		{`demo`, `--set=errexit=0`, `-e`, `select nonexistent`, `-e`, `select 123 as "123"`},
-		{`demo`, `startrek`, `-e`, `SELECT database_name, owner FROM [show databases]`},
-		{`demo`, `startrek`, `-e`, `SELECT database_name, owner FROM [show databases]`, `--format=table`},
+		{`demo`, `--multitenant=false`, `-e`, `show database`},
+		{`demo`, `--multitenant=false`, `-e`, `show database`, `--no-example-database`},
+		{`demo`, `--multitenant=false`, `-e`, `show application_name`},
+		{`demo`, `--multitenant=false`, `--format=table`, `-e`, `show database`},
+		{`demo`, `--multitenant=false`, `-e`, `select 1 as "1"`, `-e`, `select 3 as "3"`},
+		{`demo`, `--multitenant=false`, `--echo-sql`, `-e`, `select 1 as "1"`},
+		{`demo`, `--multitenant=false`, `--set=errexit=0`, `-e`, `select nonexistent`, `-e`, `select 123 as "123"`},
+		{`demo`, `--multitenant=false`, `startrek`, `-e`, `SELECT database_name, owner FROM [show databases]`},
+		{`demo`, `--multitenant=false`, `startrek`, `-e`, `SELECT database_name, owner FROM [show databases]`, `--format=table`},
 		// Test that if we start with --insecure we cannot perform
 		// commands that require a secure cluster.
-		{`demo`, `-e`, `CREATE USER test WITH PASSWORD 'testpass'`},
-		{`demo`, `--insecure`, `-e`, `CREATE USER test WITH PASSWORD 'testpass'`},
-		{`demo`, `--geo-partitioned-replicas`, `--disable-demo-license`},
+		{`demo`, `--multitenant=false`, `-e`, `CREATE USER test WITH PASSWORD 'testpass'`},
+		{`demo`, `--multitenant=false`, `--insecure`, `-e`, `CREATE USER test WITH PASSWORD 'testpass'`},
+		{`demo`, `--multitenant=false`, `--geo-partitioned-replicas`, `--disable-demo-license`},
 	}
 	setCLIDefaultsForTests()
 	// We must reset the security asset loader here, otherwise the dummy
@@ -52,41 +53,41 @@ func Example_demo() {
 	}
 
 	// Output:
-	// demo -e show database
+	// demo --multitenant=false -e show database
 	// database
 	// movr
-	// demo -e show database --no-example-database
+	// demo --multitenant=false -e show database --no-example-database
 	// database
 	// defaultdb
-	// demo -e show application_name
+	// demo --multitenant=false -e show application_name
 	// application_name
 	// $ cockroach demo
-	// demo --format=table -e show database
+	// demo --multitenant=false --format=table -e show database
 	//   database
 	// ------------
 	//   movr
 	// (1 row)
-	// demo -e select 1 as "1" -e select 3 as "3"
+	// demo --multitenant=false -e select 1 as "1" -e select 3 as "3"
 	// 1
 	// 1
 	// 3
 	// 3
-	// demo --echo-sql -e select 1 as "1"
+	// demo --multitenant=false --echo-sql -e select 1 as "1"
 	// > select 1 as "1"
 	// 1
 	// 1
-	// demo --set=errexit=0 -e select nonexistent -e select 123 as "123"
+	// demo --multitenant=false --set=errexit=0 -e select nonexistent -e select 123 as "123"
 	// ERROR: column "nonexistent" does not exist
 	// SQLSTATE: 42703
 	// 123
 	// 123
-	// demo startrek -e SELECT database_name, owner FROM [show databases]
+	// demo --multitenant=false startrek -e SELECT database_name, owner FROM [show databases]
 	// database_name	owner
 	// defaultdb	root
 	// postgres	root
 	// startrek	demo
 	// system	node
-	// demo startrek -e SELECT database_name, owner FROM [show databases] --format=table
+	// demo --multitenant=false startrek -e SELECT database_name, owner FROM [show databases] --format=table
 	//   database_name | owner
 	// ----------------+--------
 	//   defaultdb     | root
@@ -94,11 +95,11 @@ func Example_demo() {
 	//   startrek      | demo
 	//   system        | node
 	// (4 rows)
-	// demo -e CREATE USER test WITH PASSWORD 'testpass'
+	// demo --multitenant=false -e CREATE USER test WITH PASSWORD 'testpass'
 	// CREATE ROLE
-	// demo --insecure -e CREATE USER test WITH PASSWORD 'testpass'
+	// demo --multitenant=false --insecure -e CREATE USER test WITH PASSWORD 'testpass'
 	// ERROR: setting or updating a password is not supported in insecure mode
 	// SQLSTATE: 28P01
-	// demo --geo-partitioned-replicas --disable-demo-license
+	// demo --multitenant=false --geo-partitioned-replicas --disable-demo-license
 	// ERROR: enterprise features are needed for this demo (--geo-partitioned-replicas)
 }
