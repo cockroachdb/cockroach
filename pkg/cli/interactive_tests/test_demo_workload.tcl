@@ -39,7 +39,8 @@ end_test
 start_test "Check that controlling ranges of the movr dataset works"
 # Reset the timeout.
 set timeout 30
-spawn $argv demo movr --num-ranges=6
+# Need to disable multi-tenant mode here, as splitting is not supported.
+spawn $argv demo movr --num-ranges=6 --multitenant=false
 
 eexpect "movr>"
 
