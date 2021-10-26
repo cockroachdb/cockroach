@@ -1600,6 +1600,10 @@ var charts = []sectionDescription{
 				Title:   "Total",
 				Metrics: []string{"sql.distsql.flows.total"},
 			},
+			{
+				Title:   "Scheduled",
+				Metrics: []string{"sql.distsql.flows.scheduled"},
+			},
 		},
 	},
 	{
