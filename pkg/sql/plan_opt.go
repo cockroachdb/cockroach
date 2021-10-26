@@ -527,6 +527,14 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		}
 	}
 
+	if stmt, isExplain := opc.p.stmt.AST.(*tree.Explain); isExplain {
+		if stmt.ExplainOptions.Flags[tree.ExplainFlagIndexRec] {
+			if err := opc.makeQueryIndexRecommendation(ctx, f); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	// If this statement doesn't have placeholders and we have not constant-folded
 	// any VolatilityStable operators, add it to the cache.
 	// Note that non-prepared statements from pgwire clients cannot have
