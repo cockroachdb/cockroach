@@ -120,6 +120,7 @@ func incrementTelemetryCounters(cmd *cobra.Command) {
 func checkDemoConfiguration(
 	cmd *cobra.Command, gen workload.Generator,
 ) (workload.Generator, error) {
+	f := flagSetForCmd(cmd)
 	if gen == nil && !demoCtx.NoExampleDatabase {
 		// Use a default dataset unless prevented by --no-example-database.
 		gen = defaultGenerator
@@ -169,7 +170,7 @@ func checkDemoConfiguration(
 		}
 
 		// If the geo-partitioned replicas flag was given and the nodes have changed, throw an error.
-		if flagSetForCmd(cmd).Lookup(cliflags.DemoNodes.Name).Changed {
+		if f.Lookup(cliflags.DemoNodes.Name).Changed {
 			if demoCtx.NumNodes != 9 {
 				return nil, errors.Newf("--nodes with a value different from 9 cannot be used with %s", geoFlag)
 			}
@@ -193,6 +194,13 @@ func checkDemoConfiguration(
 		if hookser.Hooks().Partition == nil {
 			return nil, configErr
 		}
+	}
+
+	// If the user has specified the --global flag, disable multi-tenant mode
+	// unless the user has requested it explicitly. This is required until we
+	// address #72231.
+	if demoCtx.SimulateLatency && !f.Lookup(cliflags.DemoMultitenant.Name).Changed {
+		demoCtx.Multitenant = false
 	}
 
 	return gen, nil

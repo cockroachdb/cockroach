@@ -1151,7 +1151,7 @@ func (c *transientCluster) SetupWorkload(ctx context.Context, licenseDone <-chan
 		if c.demoCtx.RunWorkload {
 			var sqlURLs []string
 			for i := range c.servers {
-				sqlURL, err := c.getNetworkURLForServer(ctx, i, true /* includeAppName */, false /* isTenant */)
+				sqlURL, err := c.getNetworkURLForServer(ctx, i, true /* includeAppName */, c.demoCtx.Multitenant)
 				if err != nil {
 					return err
 				}
