@@ -63,6 +63,9 @@ type NodeStatusState = Pick<AdminUIState, "cachedData", "nodes">;
 export const nodeStatusesSelector = (state: NodeStatusState) =>
   state.cachedData.nodes.data;
 
+export const selectNodesLastError = (state: AdminUIState) =>
+  state.cachedData.nodes.lastError;
+
 /*
  * clusterSelector returns information about cluster.
  */
@@ -381,6 +384,7 @@ export const nodesSummarySelector = createSelector(
   livenessStatusByNodeIDSelector,
   livenessByNodeIDSelector,
   selectStoreIDsByNodeID,
+  selectNodesLastError,
   (
     nodeStatuses,
     nodeIDs,
@@ -390,6 +394,7 @@ export const nodesSummarySelector = createSelector(
     livenessStatusByNodeID,
     livenessByNodeID,
     storeIDsByNodeID,
+    nodeLastError,
   ) => {
     return {
       nodeStatuses,
@@ -400,6 +405,7 @@ export const nodesSummarySelector = createSelector(
       livenessStatusByNodeID,
       livenessByNodeID,
       storeIDsByNodeID,
+      nodeLastError,
     };
   },
 );

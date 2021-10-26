@@ -22,12 +22,12 @@ import {
   aggregateNumericStats,
   FixLong,
   longToInt,
-  statementKey,
   TimestampToNumber,
   addStatementStats,
   flattenStatementStats,
   DurationToNumber,
   computeOrUseStmtSummary,
+  transactionScopedStatementKey,
 } from "../util";
 
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -97,7 +97,7 @@ export const aggregateStatements = (
   const statsKey: { [key: string]: AggregateStatistics } = {};
 
   flattenStatementStats(statements).forEach(s => {
-    const key = statementKey(s);
+    const key = transactionScopedStatementKey(s);
     if (!(key in statsKey)) {
       statsKey[key] = {
         label: s.statement,
@@ -157,26 +157,32 @@ export const filterTransactions = (
 
   // Return transactions filtered by the values selected on the filter. A
   // transaction must match all selected filters.
+  // We don't want to show statements that are internal or with unset App names by default.
   // Current filters: app, service latency, nodes and regions.
   const filteredTransactions = data
     .filter((t: Transaction) => {
       const isInternal = (t: Transaction) =>
         t.stats_data.app.startsWith(internalAppNamePrefix);
-      const apps = filters.app.split(",");
-      let showInternal = false;
-      if (apps.includes(internalAppNamePrefix)) {
-        showInternal = true;
-      }
-      if (apps.includes("(unset)")) {
-        apps.push("");
-      }
 
-      return (
-        filters.app === "" ||
-        (showInternal && isInternal(t)) ||
-        t.stats_data.app === filters.app ||
-        apps.includes(t.stats_data.app)
-      );
+      if (filters.app && filters.app != "All") {
+        const apps = filters.app.split(",");
+        let showInternal = false;
+        if (apps.includes(internalAppNamePrefix)) {
+          showInternal = true;
+        }
+        if (apps.includes("(unset)")) {
+          apps.push("");
+        }
+
+        return (
+          (showInternal && isInternal(t)) ||
+          t.stats_data.app === filters.app ||
+          apps.includes(t.stats_data.app)
+        );
+      } else {
+        // We don't want to show internal transactions by default.
+        return !isInternal(t);
+      }
     })
     .filter(
       (t: Transaction) =>
