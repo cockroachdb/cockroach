@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "exportcsv.go",
         "import_job.go",
+        "import_pgdump.go",
         "import_planning.go",
         "import_processor.go",
         "import_processor_planning.go",
@@ -110,6 +111,7 @@ go_test(
         "exportcsv_test.go",
         "import_csv_mark_redaction_test.go",
         "import_into_test.go",
+        "import_pgdump_test.go",
         "import_processor_test.go",
         "import_stmt_test.go",
         "main_test.go",

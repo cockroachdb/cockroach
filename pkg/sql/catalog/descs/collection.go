@@ -285,12 +285,10 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 // collection's cached descriptors before defaulting to a key-value scan, if
 // necessary.
 func (tc *Collection) GetAllTableDescriptorsInDatabase(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID,
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
 ) ([]catalog.TableDescriptor, error) {
 	// Ensure the given ID does indeed belong to a database.
-	found, _, err := tc.getDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
-		AvoidCached: false,
-	})
+	found, _, err := tc.getDatabaseByID(ctx, txn, dbID, flags)
 	if err != nil {
 		return nil, err
 	}
@@ -306,6 +304,36 @@ func (tc *Collection) GetAllTableDescriptorsInDatabase(
 		if desc.GetParentID() == dbID {
 			if table, ok := desc.(catalog.TableDescriptor); ok {
 				ret = append(ret, table)
+			}
+		}
+	}
+	return ret, nil
+}
+
+// GetAllTableDescriptorsInDatabase returns all the table descriptors visible to
+// the transaction under the database with the given ID. It first checks the
+// collection's cached descriptors before defaulting to a key-value scan, if
+// necessary.
+func (tc *Collection) GetAllSchemaDescriptorsInDatabase(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
+) ([]catalog.SchemaDescriptor, error) {
+	// Ensure the given ID does indeed belong to a database.
+	found, _, err := tc.getDatabaseByID(ctx, txn, dbID, flags)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
+	}
+	descs, err := tc.GetAllDescriptors(ctx, txn)
+	if err != nil {
+		return nil, err
+	}
+	var ret []catalog.SchemaDescriptor
+	for _, desc := range descs {
+		if desc.GetParentID() == dbID {
+			if schema, ok := desc.(catalog.SchemaDescriptor); ok {
+				ret = append(ret, schema)
 			}
 		}
 	}
