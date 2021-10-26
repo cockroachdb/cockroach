@@ -68,6 +68,7 @@ var (
 	username           string
 	dryrun             bool
 	destroyAllMine     bool
+	destroyAllLocal    bool
 	extendLifetime     time.Duration
 	wipePreserveCerts  bool
 	listDetails        bool
@@ -230,18 +231,19 @@ if the user would like to update the keys on the remote hosts.
 }
 
 var destroyCmd = &cobra.Command{
-	Use:   "destroy [ --all-mine | <cluster 1> [<cluster 2> ...] ]",
+	Use:   "destroy [ --all-mine | --all-local | <cluster 1> [<cluster 2> ...] ]",
 	Short: "destroy clusters",
 	Long: `Destroy one or more local or cloud-based clusters.
 
 The destroy command accepts the names of the clusters to destroy. Alternatively,
-the --all-mine flag can be provided to destroy all clusters that are owned by the
-current user.
+the --all-mine flag can be provided to destroy all (non-local) clusters that are
+owned by the current user, or the --all-local flag can be provided to destroy
+all local clusters.
 
 Destroying a cluster releases the resources for a cluster. For a cloud-based
 cluster the machine and associated disk resources are freed. For a local
-cluster, any processes started by roachprod are stopped, and the ${HOME}/local
-directory is removed.
+cluster, any processes started by roachprod are stopped, and the node
+directories inside ${HOME}/local directory are removed.
 `,
 	Args: cobra.ArbitraryArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
@@ -249,7 +251,7 @@ directory is removed.
 		for _, clusterName := range args {
 			clusters = append(clusters, clusterOpts(clusterName))
 		}
-		return roachprod.Destroy(clusters, destroyAllMine, username)
+		return roachprod.Destroy(clusters, destroyAllMine, destroyAllLocal, username)
 	}),
 }
 
@@ -479,17 +481,16 @@ var stopCmd = &cobra.Command{
 
 Stop roachprod created processes running on the nodes in a cluster, including
 processes started by the "start", "run" and "ssh" commands. Every process
-started by roachprod is tagged with a ROACHPROD=<node> environment variable
-which is used by "stop" to locate the processes and terminate them. By default
-processes are killed with signal 9 (SIGKILL) giving them no chance for a graceful
-exit.
+started by roachprod is tagged with a ROACHPROD environment variable which is
+used by "stop" to locate the processes and terminate them. By default processes
+are killed with signal 9 (SIGKILL) giving them no chance for a graceful exit.
 
 The --sig flag will pass a signal to kill to allow us finer control over how we
 shutdown cockroach. The --wait flag causes stop to loop waiting for all
-processes with the ROACHPROD=<node> environment variable to exit. Note that
-stop will wait forever if you specify --wait with a non-terminating signal
-(e.g. SIGHUP). --wait defaults to true for signal 9 (SIGKILL) and false for all
-other signals.
+processes with the right ROACHPROD environment variable to exit. Note that stop
+will wait forever if you specify --wait with a non-terminating signal (e.g.
+SIGHUP). --wait defaults to true for signal 9 (SIGKILL) and false for all other
+signals.
 ` + tagHelp + `
 `,
 	Args: cobra.ExactArgs(1),
@@ -1005,7 +1006,9 @@ func main() {
 	}
 
 	destroyCmd.Flags().BoolVarP(&destroyAllMine,
-		"all-mine", "m", false, "Destroy all clusters belonging to the current user")
+		"all-mine", "m", false, "Destroy all non-local clusters belonging to the current user")
+	destroyCmd.Flags().BoolVarP(&destroyAllLocal,
+		"all-local", "l", false, "Destroy all local clusters")
 
 	extendCmd.Flags().DurationVarP(&extendLifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")

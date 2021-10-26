@@ -13,11 +13,14 @@ package local
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
@@ -26,17 +29,35 @@ import (
 // ProviderName is config.Local.
 const ProviderName = config.Local
 
+// VMDir returns the local directory for a given node in a cluster.
+// Node indexes start at 1.
+//
+// If the cluster name is "local", node 1 directory is:
+//   ${HOME}/local/1
+//
+// If the cluster name is "local-foo", node 1 directory is:
+//   ${HOME}/local/foo-1
+//
+// WARNING: when we destroy a local cluster, we remove these directories so it's
+// important that this function never returns things like "" or "/".
+func VMDir(clusterName string, nodeIdx int) string {
+	if nodeIdx < 1 {
+		panic("invalid nodeIdx")
+	}
+	localDir := os.ExpandEnv("${HOME}/local")
+	if clusterName == config.Local {
+		return filepath.Join(localDir, fmt.Sprintf("%d", nodeIdx))
+	}
+	name := strings.TrimPrefix(clusterName, config.Local+"-")
+	return filepath.Join(localDir, fmt.Sprintf("%s-%d", name, nodeIdx))
+}
+
 // Init initializes the Local provider and registers it into vm.Providers.
 func Init(storage VMStorage) {
 	vm.Providers[ProviderName] = &Provider{
 		clusters: make(cloud.Clusters),
 		storage:  storage,
 	}
-}
-
-// IsLocal returns true if the given cluster name is a local cluster.
-func IsLocal(clusterName string) bool {
-	return clusterName == config.Local
 }
 
 // AddCluster adds the metadata of a local cluster; used when loading the saved
@@ -54,10 +75,10 @@ func DeleteCluster(name string) error {
 	if c == nil {
 		return fmt.Errorf("local cluster %s does not exist", name)
 	}
+	fmt.Printf("Deleting local cluster %s\n", name)
 
 	for i := range c.VMs {
-		err := os.RemoveAll(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), i+1))
-		if err != nil {
+		if err := os.RemoveAll(VMDir(c.Name, i+1)); err != nil {
 			return err
 		}
 	}
@@ -68,6 +89,12 @@ func DeleteCluster(name string) error {
 
 	delete(p.clusters, name)
 	return nil
+}
+
+// Clusters returns a list of all known local clusters.
+func Clusters() []string {
+	p := vm.Providers[ProviderName].(*Provider)
+	return p.clusters.Names()
 }
 
 // VMStorage is the interface for saving metadata for local clusters.
@@ -122,21 +149,56 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		Lifetime:  time.Hour,
 		VMs:       make(vm.List, len(names)),
 	}
+
+	if !config.IsLocalClusterName(c.Name) {
+		return errors.Errorf("'%s' is not a valid local cluster name", c.Name)
+	}
+
+	// We will need to assign ports to the nodes, and they must not conflict with
+	// any other local clusters.
+	var portsTaken util.FastIntSet
+	for _, c := range p.clusters {
+		for i := range c.VMs {
+			portsTaken.Add(c.VMs[i].SQLPort)
+			portsTaken.Add(c.VMs[i].AdminUIPort)
+		}
+	}
+	sqlPort := config.DefaultSQLPort
+	adminUIPort := config.DefaultAdminUIPort
+
+	// getPort returns the first available port (starting at *port), and modifies
+	// (*port) to be the following value.
+	getPort := func(port *int) int {
+		for portsTaken.Contains(*port) {
+			(*port)++
+		}
+		result := *port
+		portsTaken.Add(result)
+		(*port)++
+		return result
+	}
+
 	for i := range names {
 		c.VMs[i] = vm.VM{
-			Name:        "localhost",
-			CreatedAt:   now,
-			Lifetime:    time.Hour,
-			PrivateIP:   "127.0.0.1",
-			Provider:    ProviderName,
-			ProviderID:  ProviderName,
-			PublicIP:    "127.0.0.1",
-			RemoteUser:  config.OSUser.Username,
-			VPC:         ProviderName,
-			MachineType: ProviderName,
-			Zone:        ProviderName,
-			SQLPort:     config.DefaultSQLPort + 2*i,
-			AdminUIPort: config.DefaultAdminUIPort + 2*i,
+			Name:             "localhost",
+			CreatedAt:        now,
+			Lifetime:         time.Hour,
+			PrivateIP:        "127.0.0.1",
+			Provider:         ProviderName,
+			ProviderID:       ProviderName,
+			PublicIP:         "127.0.0.1",
+			RemoteUser:       config.OSUser.Username,
+			VPC:              ProviderName,
+			MachineType:      ProviderName,
+			Zone:             ProviderName,
+			SQLPort:          getPort(&sqlPort),
+			AdminUIPort:      getPort(&adminUIPort),
+			LocalClusterName: c.Name,
+		}
+
+		err := os.MkdirAll(VMDir(c.Name, i+1), 0755)
+		if err != nil {
+			return err
 		}
 	}
 	if err := p.storage.SaveCluster(c); err != nil {
