@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -34,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -7536,61 +7534,4 @@ func TestJobsWithoutMutationsAreCancelable(t *testing.T) {
 		`SELECT job_id FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE'`,
 	).Scan(&id)
 	require.Equal(t, scJobID, id)
-}
-
-// TestDeinterleaveRevert tests that schema changes which fail during an alter
-// primary key to remove an interleave successfully reverts.
-func TestDeinterleaveRevert(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	// Override the version because in 21.2, interleaves are not permitted.
-	v21_1 := clusterversion.ByKey(clusterversion.V21_1)
-	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		v21_1, v21_1, true, /* initializeVersion */
-	)
-	sql.InterleavedTablesEnabled.Override(ctx, &settings.SV, true)
-	const shortInterval = 100 * time.Millisecond
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Settings: settings,
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(
-				shortInterval, shortInterval, time.Second, time.Hour, // retryMaxDelay
-			),
-			DistSQL: &execinfra.TestingKnobs{
-				RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-					return errors.New("boom")
-				},
-			},
-			Server: &server.TestingKnobs{
-				BinaryVersionOverride:          v21_1,
-				DisableAutomaticVersionUpgrade: 1,
-			},
-		},
-	})
-	defer s.Stopper().Stop(ctx)
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, `
-CREATE TABLE parent (i INT PRIMARY KEY);
-CREATE TABLE child (i INT, j INT, k INT, PRIMARY KEY (i, j)) INTERLEAVE IN PARENT "parent" (i);
-INSERT INTO parent VALUES (1);
-INSERT INTO child VALUES (1, 1, 1);
-`)
-
-	errCh := make(chan error)
-	go func() {
-		_, err := sqlDB.Exec(`ALTER TABLE child ALTER PRIMARY KEY USING COLUMNS (i, j)`)
-		errCh <- err
-	}()
-
-	const errMsg = `failed to construct index entries during backfill: boom`
-	tdb.CheckQueryResultsRetry(t, `
-SELECT status, error
-  FROM crdb_internal.jobs
- WHERE job_type = 'SCHEMA CHANGE' AND description LIKE '%ALTER PRIMARY KEY%';
-`, [][]string{
-		{"failed", errMsg},
-	})
-	require.EqualError(t, <-errCh, `pq: `+errMsg)
 }
