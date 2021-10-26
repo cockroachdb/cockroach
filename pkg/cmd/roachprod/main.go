@@ -32,7 +32,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	cld "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/install"
@@ -200,20 +200,20 @@ Available clusters:
 // our naming pattern of "<username>-<clustername>". The
 // username must match one of the vm.Provider account names
 // or the --username override.
-func verifyClusterName(clusterName string) (string, error) {
-	if len(clusterName) == 0 {
-		return "", fmt.Errorf("cluster name cannot be blank")
+func verifyClusterName(clusterName string) error {
+	if clusterName == "" {
+		return fmt.Errorf("cluster name cannot be blank")
 	}
 	if clusterName == config.Local {
-		return clusterName, nil
+		return nil
 	}
 
 	alphaNum, err := regexp.Compile(`^[a-zA-Z0-9\-]+$`)
 	if err != nil {
-		return "", err
+		return err
 	}
 	if !alphaNum.MatchString(clusterName) {
-		return "", errors.Errorf("cluster name must match %s", alphaNum.String())
+		return errors.Errorf("cluster name must match %s", alphaNum.String())
 	}
 
 	// Use the vm.Provider account names, or --username.
@@ -224,7 +224,7 @@ func verifyClusterName(clusterName string) (string, error) {
 		seenAccounts := map[string]bool{}
 		active, err := vm.FindActiveAccounts()
 		if err != nil {
-			return "", err
+			return err
 		}
 		for _, account := range active {
 			if !seenAccounts[account] {
@@ -241,7 +241,7 @@ func verifyClusterName(clusterName string) (string, error) {
 	// If we see <account>-<something>, accept it.
 	for _, account := range accounts {
 		if strings.HasPrefix(clusterName, account+"-") && len(clusterName) > len(account)+1 {
-			return clusterName, nil
+			return nil
 		}
 	}
 
@@ -266,7 +266,7 @@ func verifyClusterName(clusterName string) (string, error) {
 	for _, account := range accounts {
 		suggestions = append(suggestions, fmt.Sprintf("%s-%s", account, suffix))
 	}
-	return "", fmt.Errorf("malformed cluster name %s, did you mean one of %s",
+	return fmt.Errorf("malformed cluster name %s, did you mean one of %s",
 		clusterName, suggestions)
 }
 
@@ -358,8 +358,8 @@ Local Clusters
 			return fmt.Errorf("number of nodes must be in [1..999]")
 		}
 
-		clusterName, err := verifyClusterName(args[0])
-		if err != nil {
+		clusterName := args[0]
+		if err := verifyClusterName(clusterName); err != nil {
 			return err
 		}
 		createVMOpts.ClusterName = clusterName
@@ -380,11 +380,11 @@ Local Clusters
 		}()
 
 		if clusterName != config.Local {
-			cloud, err := cld.ListCloud()
+			cld, err := cloud.ListCloud()
 			if err != nil {
 				return err
 			}
-			if _, ok := cloud.Clusters[clusterName]; ok {
+			if _, ok := cld.Clusters[clusterName]; ok {
 				return newClusterAlreadyExistsError(clusterName)
 			}
 		} else {
@@ -407,7 +407,7 @@ Local Clusters
 		}
 
 		fmt.Printf("Creating cluster %s with %d nodes\n", clusterName, numNodes)
-		if createErr := cld.CreateCluster(numNodes, createVMOpts); createErr != nil {
+		if createErr := cloud.CreateCluster(numNodes, createVMOpts); createErr != nil {
 			return createErr
 		}
 
@@ -440,8 +440,8 @@ if the user would like to update the keys on the remote hosts.
 
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
-		clusterName, err := verifyClusterName(args[0])
-		if err != nil {
+		clusterName := args[0]
+		if err := verifyClusterName(clusterName); err != nil {
 			return err
 		}
 		return setupSSH(clusterName)
@@ -449,11 +449,11 @@ if the user would like to update the keys on the remote hosts.
 }
 
 func setupSSH(clusterName string) error {
-	cloud, err := syncCloud(quiet)
+	cld, err := syncCloud(quiet)
 	if err != nil {
 		return err
 	}
-	cloudCluster, ok := cloud.Clusters[clusterName]
+	cloudCluster, ok := cld.Clusters[clusterName]
 	if !ok {
 		return fmt.Errorf("could not find %s in list of cluster", clusterName)
 	}
@@ -497,17 +497,17 @@ func setupSSH(clusterName string) error {
 }
 
 func cleanupFailedCreate(clusterName string) error {
-	cloud, err := cld.ListCloud()
+	cld, err := cloud.ListCloud()
 	if err != nil {
 		return err
 	}
-	c, ok := cloud.Clusters[clusterName]
+	c, ok := cld.Clusters[clusterName]
 	if !ok {
 		// If the cluster doesn't exist, we didn't manage to create any VMs
 		// before failing. Not an error.
 		return nil
 	}
-	return cld.DestroyCluster(c)
+	return cloud.DestroyCluster(c)
 }
 
 var destroyCmd = &cobra.Command{
@@ -526,11 +526,10 @@ directory is removed.
 `,
 	Args: cobra.ArbitraryArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		type cloudAndName struct {
-			name  string
-			cloud *cld.Cloud
-		}
-		var cns []cloudAndName
+		var clusterNames []string
+		// We want to avoid running ListCloud() if we are only trying to destroy a
+		// local cluster.
+		var cld *cloud.Cloud
 		switch len(args) {
 		case 0:
 			if !destroyAllMine {
@@ -541,50 +540,43 @@ directory is removed.
 			if err != nil {
 				return err
 			}
-
-			cloud, err := cld.ListCloud()
+			cld, err = cloud.ListCloud()
 			if err != nil {
 				return err
 			}
-
-			for name := range cloud.Clusters {
-				if destroyPattern.MatchString(name) {
-					cns = append(cns, cloudAndName{name: name, cloud: cloud})
-				}
-			}
+			clusters := cld.Clusters.FilterByName(destroyPattern)
+			clusterNames = clusters.Names()
 
 		default:
 			if destroyAllMine {
 				return errors.New("--all-mine cannot be combined with cluster names")
 			}
 
-			var cloud *cld.Cloud
-			for _, arg := range args {
-				clusterName, err := verifyClusterName(arg)
-				if err != nil {
+			for _, clusterName := range args {
+				if err := verifyClusterName(clusterName); err != nil {
 					return err
 				}
-
-				if clusterName != config.Local {
-					if cloud == nil {
-						cloud, err = cld.ListCloud()
-						if err != nil {
-							return err
-						}
-					}
-
-					cns = append(cns, cloudAndName{name: clusterName, cloud: cloud})
-				} else {
-					if err := destroyLocalCluster(); err != nil {
-						return err
-					}
-				}
+				clusterNames = append(clusterNames, clusterName)
 			}
 		}
 
-		if err := ctxgroup.GroupWorkers(cmd.Context(), len(cns), func(ctx context.Context, idx int) error {
-			return destroyCluster(cns[idx].cloud, cns[idx].name)
-		}); err != nil {
+		if err := ctxgroup.GroupWorkers(
+			cmd.Context(),
+			len(clusterNames),
+			func(ctx context.Context, idx int) error {
+				name := clusterNames[idx]
+				if name == config.Local {
+					return destroyLocalCluster()
+				}
+				if cld == nil {
+					var err error
+					cld, err = cloud.ListCloud()
+					if err != nil {
+						return err
+					}
+				}
+				return destroyCluster(cld, name)
+			}); err != nil {
 			return err
 		}
 		fmt.Println("OK")
@@ -592,13 +584,13 @@ directory is removed.
 	}),
 }
 
-func destroyCluster(cloud *cld.Cloud, clusterName string) error {
-	c, ok := cloud.Clusters[clusterName]
+func destroyCluster(cld *cloud.Cloud, clusterName string) error {
+	c, ok := cld.Clusters[clusterName]
 	if !ok {
 		return fmt.Errorf("cluster %s does not exist", clusterName)
 	}
 	fmt.Printf("Destroying cluster %s with %d nodes\n", clusterName, len(c.VMs))
-	return cld.DestroyCluster(c)
+	return cloud.DestroyCluster(c)
 }
 
 func destroyLocalCluster() error {
@@ -723,38 +715,34 @@ hosts file.
 			return errors.New("only a single pattern may be listed")
 		}
 
-		cloud, err := syncCloud(quiet)
+		cld, err := syncCloud(quiet)
 		if err != nil {
 			return err
 		}
 
 		// Filter and sort by cluster names for stable output.
-		var names []string
-		filteredCloud := cloud.Clone()
-		for name := range cloud.Clusters {
-			if listPattern.MatchString(name) {
-				names = append(names, name)
-			} else {
-				delete(filteredCloud.Clusters, name)
-			}
-		}
-		sort.Strings(names)
+		filteredClusters := cld.Clusters.FilterByName(listPattern)
 
 		if listJSON {
 			if listDetails {
 				return errors.New("--json cannot be combined with --detail")
 			}
 
+			// Encode the filtered clusters and all the bad instances.
+			filteredCloud := cloud.Cloud{
+				Clusters:     filteredClusters,
+				BadInstances: cld.BadInstances,
+			}
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
-			if err := enc.Encode(filteredCloud); err != nil {
+			if err := enc.Encode(&filteredCloud); err != nil {
 				return err
 			}
 		} else {
 			// Align columns left and separate with at least two spaces.
 			tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
-			for _, name := range names {
-				c := filteredCloud.Clusters[name]
+			for _, name := range filteredClusters.Names() {
+				c := filteredClusters[name]
 				if listDetails {
 					c.PrintDetails()
 				} else {
@@ -773,7 +761,7 @@ hosts file.
 
 			// Optionally print any dangling instances with errors
 			if listDetails {
-				collated := filteredCloud.BadInstanceErrors()
+				collated := cld.BadInstanceErrors()
 
 				// Sort by Error() value for stable output
 				var errors ui.ErrorsByError
@@ -839,7 +827,7 @@ var bashCompletion = os.ExpandEnv("$HOME/.roachprod/bash-completion.sh")
 // protects both the reading and the writing in order to prevent the hazard
 // caused by concurrent goroutines reading cloud state in a different order
 // than writing it to disk.
-func syncCloud(quiet bool) (*cld.Cloud, error) {
+func syncCloud(quiet bool) (*cloud.Cloud, error) {
 	if !quiet {
 		fmt.Println("Syncing...")
 	}
@@ -853,7 +841,7 @@ func syncCloud(quiet bool) (*cld.Cloud, error) {
 		return nil, errors.Wrap(err, "acquiring lock on %q")
 	}
 	defer f.Close()
-	cloud, err := cld.ListCloud()
+	cloud, err := cloud.ListCloud()
 	if err != nil {
 		return nil, err
 	}
@@ -931,12 +919,12 @@ hourly by a cronjob so it is not necessary to run manually.
 `,
 	Args: cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		cloud, err := cld.ListCloud()
+		cld, err := cloud.ListCloud()
 		if err == nil {
 			// GCClusters depends on ListCloud so only call it if ListCloud runs without errors
-			err = cld.GCClusters(cloud, dryrun)
+			err = cloud.GCClusters(cld, dryrun)
 		}
-		otherErr := cld.GCAWSKeyPairs(dryrun)
+		otherErr := cloud.GCAWSKeyPairs(dryrun)
 		return errors.CombineErrors(err, otherErr)
 	}),
 }
@@ -951,32 +939,32 @@ destroyed:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterName, err := verifyClusterName(args[0])
+		clusterName := args[0]
+		if err := verifyClusterName(clusterName); err != nil {
+			return err
+		}
+
+		cld, err := cloud.ListCloud()
 		if err != nil {
 			return err
 		}
 
-		cloud, err := cld.ListCloud()
-		if err != nil {
-			return err
-		}
-
-		c, ok := cloud.Clusters[clusterName]
+		c, ok := cld.Clusters[clusterName]
 		if !ok {
 			return fmt.Errorf("cluster %s does not exist", clusterName)
 		}
 
-		if err := cld.ExtendCluster(c, extendLifetime); err != nil {
+		if err := cloud.ExtendCluster(c, extendLifetime); err != nil {
 			return err
 		}
 
 		// Reload the clusters and print details.
-		cloud, err = cld.ListCloud()
+		cld, err = cloud.ListCloud()
 		if err != nil {
 			return err
 		}
 
-		c, ok = cloud.Clusters[clusterName]
+		c, ok = cld.Clusters[clusterName]
 		if !ok {
 			return fmt.Errorf("cluster %s does not exist", clusterName)
 		}
@@ -1081,8 +1069,8 @@ default cluster settings. It's intended to be used in conjunction with
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterName, err := verifyClusterName(args[0])
-		if err != nil {
+		clusterName := args[0]
+		if err := verifyClusterName(clusterName); err != nil {
 			return err
 		}
 
@@ -1304,8 +1292,8 @@ environments and will fall back to a no-op.`,
 			return fmt.Errorf("number of nodes must be in [1..999]")
 		}
 
-		clusterName, err := verifyClusterName(args[0])
-		if err != nil {
+		clusterName := args[0]
+		if err := verifyClusterName(clusterName); err != nil {
 			return err
 		}
 
@@ -1313,11 +1301,11 @@ environments and will fall back to a no-op.`,
 			return nil
 		}
 
-		cloud, err := cld.ListCloud()
+		cld, err := cloud.ListCloud()
 		if err != nil {
 			return err
 		}
-		c, ok := cloud.Clusters[clusterName]
+		c, ok := cld.Clusters[clusterName]
 		if !ok {
 			return errors.New("cluster not found")
 		}
