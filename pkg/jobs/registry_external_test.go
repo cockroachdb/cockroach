@@ -846,7 +846,6 @@ func TestMixedVersionRevertFailed(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
 		v21_1, v21_1, true, /* initializeVersion */
 	)
-	sql.InterleavedTablesEnabled.Override(ctx, &settings.SV, true)
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
 		Knobs: base.TestingKnobs{
