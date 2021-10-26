@@ -30,10 +30,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -59,14 +61,16 @@ type ClusterImpl interface {
 //
 // TODO(benesch): unify with CloudCluster.
 type SyncedCluster struct {
-	// name, vms, users, localities are populated at init time.
-	Name       string
-	VMs        []string
-	Users      []string
-	NumRacks   int
+	// Cluster metadata, obtained from the respective cloud provider.
+	cloud.Cluster
+
+	NumRacks int
+
+	// Localities are initialized from the VM metadata (VMs[i].Locality()) but can
+	// be modified by newCluster (see numRacks).
 	Localities []string
-	VPCs       []string
-	// all other fields are populated in newCluster.
+
+	// All other fields are populated in newCluster.
 	Nodes          []int
 	Secure         bool
 	CertsDir       string
@@ -85,11 +89,11 @@ type SyncedCluster struct {
 }
 
 func (c *SyncedCluster) host(index int) string {
-	return c.VMs[index-1]
+	return c.VMs[index-1].PublicIP
 }
 
 func (c *SyncedCluster) user(index int) string {
-	return c.Users[index-1]
+	return c.VMs[index-1].RemoteUser
 }
 
 func (c *SyncedCluster) locality(index int) string {
@@ -616,9 +620,9 @@ func (c *SyncedCluster) SetupSSH() error {
 		return nil
 	}
 
-	if len(c.Nodes) == 0 || len(c.Users) == 0 || len(c.VMs) == 0 {
-		return fmt.Errorf("%s: invalid cluster: nodes=%d users=%d hosts=%d",
-			c.Name, len(c.Nodes), len(c.Users), len(c.VMs))
+	if len(c.Nodes) == 0 || len(c.VMs) == 0 {
+		return fmt.Errorf("%s: invalid cluster: nodes=%d hosts=%d",
+			c.Name, len(c.Nodes), len(c.VMs))
 	}
 
 	// Generate an ssh key that we'll distribute to all of the nodes in the
@@ -870,18 +874,20 @@ func (c *SyncedCluster) DistributeCerts() {
 		var nodeNames []string
 		if c.IsLocal() {
 			// For local clusters, we only need to add one of the VM IP addresses.
-			nodeNames = append(nodeNames, "$(hostname)", c.VMs[0])
+			nodeNames = append(nodeNames, "$(hostname)", c.VMs[0].PublicIP)
 		} else {
 			// Add both the local and external IP addresses, as well as the
 			// hostnames to the node certificate.
 			nodeNames = append(nodeNames, ips...)
-			nodeNames = append(nodeNames, c.VMs...)
+			for i := range c.VMs {
+				nodeNames = append(nodeNames, c.VMs[i].PublicIP)
+			}
 			for i := range c.VMs {
 				nodeNames = append(nodeNames, fmt.Sprintf("%s-%04d", c.Name, i+1))
 				// On AWS nodes internally have a DNS name in the form ip-<ip address>
 				// where dots have been replaces with dashes.
 				// See https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html#vpc-dns-hostnames
-				if strings.Contains(c.Localities[i], "cloud=aws") {
+				if c.VMs[i].Provider == aws.ProviderName {
 					nodeNames = append(nodeNames, "ip-"+strings.ReplaceAll(ips[i], ".", "-"))
 				}
 			}

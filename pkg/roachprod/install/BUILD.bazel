@@ -21,10 +21,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cli/exit",
+        "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
         "//pkg/roachprod/errors",
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/ui",
+        "//pkg/roachprod/vm/aws",
         "//pkg/util/envutil",
         "//pkg/util/httputil",
         "//pkg/util/log",
