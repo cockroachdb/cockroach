@@ -691,7 +691,7 @@ func importPlanHook(
 			if override, ok := opts[pgCopyNull]; ok {
 				format.PgCopy.Null = override
 			}
-			maxRowSize := int32(defaultScanBuffer)
+			maxRowSize := int32(DefaultScanBuffer)
 			if override, ok := opts[optMaxRowSize]; ok {
 				sz, err := humanizeutil.ParseBytes(override)
 				if err != nil {
@@ -708,7 +708,7 @@ func importPlanHook(
 				return err
 			}
 			format.Format = roachpb.IOFileFormat_PgDump
-			maxRowSize := int32(defaultScanBuffer)
+			maxRowSize := int32(DefaultScanBuffer)
 			if override, ok := opts[optMaxRowSize]; ok {
 				sz, err := humanizeutil.ParseBytes(override)
 				if err != nil {

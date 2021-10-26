@@ -11,8 +11,11 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -72,5 +75,13 @@ func (p *FakeJobExecContext) MigrationJobDeps() upgrade.JobDeps {
 
 // SpanConfigReconciler implements the JobExecContext interface.
 func (p *FakeJobExecContext) SpanConfigReconciler() spanconfig.Reconciler {
+	panic("unimplemented")
+}
+
+// LookupSchema to return an object consisting of the parent database and
+// resolved target schema.
+func (p *FakeJobExecContext) LookupSchema(
+	ctx context.Context, dbName, scName string,
+) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
 	panic("unimplemented")
 }

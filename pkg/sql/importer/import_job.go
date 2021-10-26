@@ -114,8 +114,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	if details.Tables != nil {
 		// Skip prepare stage on job resumption, if it has already been completed.
 		if !details.PrepareComplete {
+			// TODO(janexing): use logic in import_pgdump.go for IMPORT PGDUMP.
+			// TODO(janexing): add resume breakpoints via ImportDetails.ProcessDDLStmtStage.
 			var schemaMetadata *preparedSchemaMetadata
-			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
+			if err := p.ExecCfg().InternalExecutorFactory.DescsTxn(ctx, p.ExecCfg().DB, func(
 				ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 			) error {
 				var preparedDetails jobspb.ImportDetails

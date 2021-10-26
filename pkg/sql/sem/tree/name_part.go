@@ -237,3 +237,31 @@ func (u *UnresolvedName) ToFunctionName() (FunctionName, error) {
 	}
 	return un.ToFunctionName(), nil
 }
+
+// GetExplicitCatalog returns the explicit catalog name of a table.
+// If it doesn't have one, returns empty string.
+func (u *UnresolvedName) GetExplicitCatalog() (Name, error) {
+	pattern, err := u.NormalizeTablePattern()
+	if err != nil {
+		return "", errors.Wrapf(
+			err,
+			"cannot check if the unresolved name %q has explicit catalog",
+			u.String(),
+		)
+	}
+	return pattern.GetExplicitCatalog()
+}
+
+// SetExplicitCatalog sets the explicit catalog if it already exists.
+func (u *UnresolvedName) SetExplicitCatalog(n Name) error {
+	pattern, err := u.NormalizeTablePattern()
+	if err != nil {
+		return errors.Wrapf(
+			err,
+			"cannot set the explicit catalog for object %q because cannot check"+
+				" if it has explicit catalog",
+			u.String(),
+		)
+	}
+	return pattern.SetExplicitCatalog(n)
+}
