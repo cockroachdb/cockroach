@@ -20,6 +20,7 @@ set -euo pipefail
 LOCAL=true
 ADVERTISE_FIRST_IP=
 LOG_DIR='./path with spaces/logs/$THIS_DOES_NOT_EVER_GET_EXPANDED'
+CLUSTER_NAME=user-foo
 NODE_NUM=1
 TAG=tigtag
 BINARY=./cockroach
@@ -37,7 +38,7 @@ ROCKCOACH=17%
 
 # End of templated code.
 
-ENV_VARS+=("ROACHPROD=${NODE_NUM}${TAG}")
+ENV_VARS+=("ROACHPROD=${CLUSTER_NAME}/${NODE_NUM}${TAG}")
 if [[ -n "${ADVERTISE_FIRST_IP}" ]]; then
   ARGS+=("--advertise-host" "$(hostname -I | awk '{print $1}')")
 fi

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/aws"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/local"
 	clog "github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -103,7 +104,11 @@ func (c *SyncedCluster) locality(index int) string {
 // TODO(tschottdorf): roachprod should cleanly encapsulate the home directory
 // which is currently the biggest culprit for awkward one-offs.
 func (c *SyncedCluster) IsLocal() bool {
-	return c.Name == config.Local
+	return config.IsLocalClusterName(c.Name)
+}
+
+func (c *SyncedCluster) localVMDir(nodeIdx int) string {
+	return local.VMDir(c.Name, nodeIdx)
 }
 
 // ServerNodes is the fully expanded, ordered list of nodes that any given
@@ -204,16 +209,17 @@ echo ">>> roachprod stop: $(date)" >> %[1]s/roachprod.log
 ps axeww -o pid -o command >> %[1]s/roachprod.log
 pids=$(ps axeww -o pid -o command | \
   sed 's/export ROACHPROD=//g' | \
-  awk '/ROACHPROD=(%[2]d%[3]s)[ \/]/ { print $1 }')
+  awk '/ROACHPROD=(%[2]s\/%[3]d%[4]s)[ \/]/ { print $1 }')
 if [ -n "${pids}" ]; then
-  kill -%[4]d ${pids}
-%[5]s
+  kill -%[5]d ${pids}
+%[6]s
 fi`,
 			c.Impl.LogDir(c, c.Nodes[i]), // [1]
-			c.Nodes[i],                   // [2]
-			c.escapedTag(),               // [3]
-			sig,                          // [4]
-			waitCmd,                      // [5]
+			c.Name,                       // [2]
+			c.Nodes[i],                   // [3]
+			c.escapedTag(),               // [4]
+			sig,                          // [5]
+			waitCmd,                      // [6]
 		)
 		return sess.CombinedOutput(cmd)
 	})
@@ -238,7 +244,7 @@ func (c *SyncedCluster) Wipe(preserveCerts bool) {
 				dirs = append(dirs, "certs*")
 			}
 			for _, dir := range dirs {
-				cmd += fmt.Sprintf(`rm -fr ${HOME}/local/%d/%s ;`, c.Nodes[i], dir)
+				cmd += fmt.Sprintf(`rm -fr %s/%s ;`, c.localVMDir(c.Nodes[i]), dir)
 			}
 		} else {
 			cmd = `sudo find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \; &&
@@ -268,8 +274,8 @@ func (c *SyncedCluster) Status() {
 		binary := cockroachNodeBinary(c, c.Nodes[i])
 		cmd := fmt.Sprintf(`out=$(ps axeww -o pid -o ucomm -o command | \
   sed 's/export ROACHPROD=//g' | \
-  awk '/ROACHPROD=(%d%s)[ \/]/ {print $2, $1}'`,
-			c.Nodes[i], c.escapedTag())
+  awk '/ROACHPROD=(%s\/%d%s)[ \/]/ {print $2, $1}'`,
+			c.Name, c.Nodes[i], c.escapedTag())
 		cmd += ` | sort | uniq);
 vers=$(` + binary + ` version 2>/dev/null | awk '/Build Tag:/ {print $NF}')
 if [ -n "${out}" -a -n "${vers}" ]; then
@@ -520,10 +526,10 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 		//
 		// That command should return immediately. And a "roachprod status" should
 		// reveal that the sleep command is running on the cluster.
-		nodeCmd := fmt.Sprintf(`export ROACHPROD=%d%s GOTRACEBACK=crash && bash -c %s`,
-			nodes[i], c.Tag, ssh.Escape1(expandedCmd))
+		nodeCmd := fmt.Sprintf(`export ROACHPROD=%s/%d%s GOTRACEBACK=crash && bash -c %s`,
+			c.Name, nodes[i], c.Tag, ssh.Escape1(expandedCmd))
 		if c.IsLocal() {
-			nodeCmd = fmt.Sprintf("cd ${HOME}/local/%d ; %s", nodes[i], nodeCmd)
+			nodeCmd = fmt.Sprintf("cd %s; %s", c.localVMDir(nodes[i]), nodeCmd)
 		}
 
 		if stream {
@@ -825,7 +831,7 @@ fi
 func (c *SyncedCluster) DistributeCerts() {
 	dir := ""
 	if c.IsLocal() {
-		dir = `${HOME}/local/1`
+		dir = c.localVMDir(1)
 	}
 
 	// Check to see if the certs have already been initialized.
@@ -893,7 +899,7 @@ func (c *SyncedCluster) DistributeCerts() {
 
 		var cmd string
 		if c.IsLocal() {
-			cmd = `cd ${HOME}/local/1 ; `
+			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
 		}
 		cmd += fmt.Sprintf(`
 rm -fr certs
@@ -961,7 +967,7 @@ tar cvf certs.tar certs
 		sess.SetStdin(bytes.NewReader(certsTar))
 		var cmd string
 		if c.IsLocal() {
-			cmd = fmt.Sprintf(`cd ${HOME}/local/%d ; `, nodes[i])
+			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(nodes[i]))
 		}
 		cmd += `tar xf -`
 		if out, err := sess.CombinedOutput(cmd); err != nil {
@@ -1084,7 +1090,7 @@ func (c *SyncedCluster) Put(src, dest string) {
 				if filepath.IsAbs(dest) {
 					to = dest
 				} else {
-					to = fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d/%s"), c.Nodes[i], dest)
+					to = filepath.Join(c.localVMDir(c.Nodes[i]), dest)
 				}
 				// Remove the destination if it exists, ignoring errors which we'll
 				// handle via the os.Symlink() call.
@@ -1392,7 +1398,7 @@ func (c *SyncedCluster) Get(src, dest string) {
 
 			if c.IsLocal() {
 				if !filepath.IsAbs(src) {
-					src = filepath.Join(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), c.Nodes[i]), src)
+					src = filepath.Join(c.localVMDir(c.Nodes[i]), src)
 				}
 
 				var copy func(src, dest string, info os.FileInfo) error
@@ -1611,12 +1617,12 @@ func (c *SyncedCluster) SSH(sshArgs, args []string) error {
 		allArgs = []string{
 			"/bin/bash", "-c",
 		}
-		cmd := fmt.Sprintf("cd ${HOME}/local/%d ; ", c.Nodes[0])
+		cmd := fmt.Sprintf("cd %s ; ", c.localVMDir(c.Nodes[0]))
 		if len(args) == 0 /* interactive */ {
 			cmd += "/bin/bash "
 		}
 		if len(args) > 0 {
-			cmd += fmt.Sprintf("export ROACHPROD=%d%s ; ", c.Nodes[0], c.Tag)
+			cmd += fmt.Sprintf("export ROACHPROD=%s/%d%s ; ", c.Name, c.Nodes[0], c.Tag)
 			cmd += strings.Join(expandedArgs, " ")
 		}
 		allArgs = append(allArgs, cmd)
@@ -1630,7 +1636,7 @@ func (c *SyncedCluster) SSH(sshArgs, args []string) error {
 		allArgs = append(allArgs, sshAuthArgs()...)
 		allArgs = append(allArgs, sshArgs...)
 		if len(args) > 0 {
-			allArgs = append(allArgs, fmt.Sprintf("export ROACHPROD=%d%s ;", c.Nodes[0], c.Tag))
+			allArgs = append(allArgs, fmt.Sprintf("export ROACHPROD=%s/%d%s ;", c.Name, c.Nodes[0], c.Tag))
 		}
 		allArgs = append(allArgs, expandedArgs...)
 	}

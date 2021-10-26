@@ -17,6 +17,7 @@ set -euo pipefail
 LOCAL=#{if .Local#}true#{end#}
 ADVERTISE_FIRST_IP=#{if .AdvertiseFirstIP#}true#{end#}
 LOG_DIR=#{shesc .LogDir#}
+CLUSTER_NAME=#{shesc .ClusterName#}
 NODE_NUM=#{shesc .NodeNum#}
 TAG=#{shesc .Tag#}
 BINARY=#{shesc .Binary#}
@@ -36,7 +37,7 @@ ENV_VARS=(
 
 # End of templated code.
 
-ENV_VARS+=("ROACHPROD=${NODE_NUM}${TAG}")
+ENV_VARS+=("ROACHPROD=${CLUSTER_NAME}/${NODE_NUM}${TAG}")
 if [[ -n "${ADVERTISE_FIRST_IP}" ]]; then
   ARGS+=("--advertise-host" "$(hostname -I | awk '{print $1}')")
 fi

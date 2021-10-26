@@ -81,6 +81,7 @@ ALL_TESTS = [
     "//pkg/cmd/publish-artifacts:publish-artifacts_test",
     "//pkg/cmd/publish-provisional-artifacts:publish-provisional-artifacts_test",
     "//pkg/cmd/roachprod/cloud:cloud_test",
+    "//pkg/cmd/roachprod/config:config_test",
     "//pkg/cmd/roachprod/install:install_test",
     "//pkg/cmd/roachprod/ssh:ssh_test",
     "//pkg/cmd/roachprod/vm:vm_test",
