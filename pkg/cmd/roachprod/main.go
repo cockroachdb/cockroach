@@ -839,7 +839,7 @@ func syncCloud(quiet bool) (*cloud.Cloud, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syncHosts(cloud); err != nil {
+	if err := syncClustersCache(cloud); err != nil {
 		return nil, err
 	}
 
