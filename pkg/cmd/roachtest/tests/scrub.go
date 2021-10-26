@@ -88,8 +88,9 @@ func makeScrubTPCCTest(
 					}
 					return nil
 				},
-				Duration:  length,
-				SetupType: usingImport,
+				DisablePrometheus: true,
+				Duration:          length,
+				SetupType:         usingImport,
 			})
 		},
 	}

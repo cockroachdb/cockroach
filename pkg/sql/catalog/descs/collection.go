@@ -53,8 +53,6 @@ func makeCollection(
 		hydratedTables: hydratedTables,
 		virtual:        makeVirtualDescriptors(virtualSchemas),
 		leased:         makeLeasedDescriptors(leaseMgr),
-		synthetic:      makeSyntheticDescriptors(),
-		uncommitted:    makeUncommittedDescriptors(),
 		kv:             makeKVDescriptors(codec),
 		temporary:      makeTemporaryDescriptors(codec, temporarySchemaProvider),
 	}

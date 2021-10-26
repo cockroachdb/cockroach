@@ -50,14 +50,17 @@ const (
 )
 
 type tpccOptions struct {
-	Warehouses       int
-	ExtraRunArgs     string
-	ExtraSetupArgs   string
-	Chaos            func() Chaos                // for late binding of stopper
-	During           func(context.Context) error // for running a function during the test
-	Duration         time.Duration               // if zero, TPCC is not invoked
-	SetupType        tpccSetupType
+	Warehouses     int
+	ExtraRunArgs   string
+	ExtraSetupArgs string
+	Chaos          func() Chaos                // for late binding of stopper
+	During         func(context.Context) error // for running a function during the test
+	Duration       time.Duration               // if zero, TPCC is not invoked
+	SetupType      tpccSetupType
+	// PrometheusConfig, if set, overwrites the default prometheus config settings.
 	PrometheusConfig *prometheus.Config
+	// DisablePrometheus will force prometheus to not start up.
+	DisablePrometheus bool
 	// WorkloadInstances contains a list of instances for
 	// workloads to run against.
 	// If unset, it will run one workload which talks to
@@ -1435,6 +1438,9 @@ func setupPrometheus(
 		if c.IsLocal() {
 			return nil, func() {}
 		}
+		if opts.DisablePrometheus {
+			return nil, func() {}
+		}
 		workloadNode := c.Node(c.Spec().NodeCount)
 		cfg = &prometheus.Config{
 			PrometheusNode: workloadNode,
@@ -1447,6 +1453,9 @@ func setupPrometheus(
 				prometheus.MakeWorkloadScrapeConfig("workload", makeWorkloadScrapeNodes(workloadNode, workloadInstances)),
 			},
 		}
+	}
+	if opts.DisablePrometheus {
+		t.Fatal("test has PrometheusConfig but DisablePrometheus was on")
 	}
 	if c.IsLocal() {
 		t.Skip("skipping test as prometheus is needed, but prometheus does not yet work locally")
