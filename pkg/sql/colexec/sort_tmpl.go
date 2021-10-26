@@ -133,9 +133,9 @@ func newSingleSorter(
 // {{range .WidthOverloads}}
 
 type sort_TYPE_DIR_HANDLES_NULLSOp struct {
-	allocator *colmem.Allocator
-	sortCol   _GOTYPESLICE
+	sortCol _GOTYPESLICE
 	// {{if .CanAbbreviate}}
+	allocator          *colmem.Allocator
 	abbreviatedSortCol []uint64
 	// {{end}}
 	nulls         *coldata.Nulls
@@ -146,9 +146,9 @@ type sort_TYPE_DIR_HANDLES_NULLSOp struct {
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) init(
 	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
 ) {
-	s.allocator = allocator
 	s.sortCol = col.TemplateType()
 	// {{if .CanAbbreviate}}
+	s.allocator = allocator
 	s.allocator.AdjustMemoryUsage(memsize.Uint64 * int64(s.sortCol.Len()))
 	s.abbreviatedSortCol = s.sortCol.Abbreviated()
 	// {{end}}
@@ -160,12 +160,12 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) init(
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) reset() {
 	// {{if .CanAbbreviate}}
 	s.allocator.AdjustMemoryUsage(0 - memsize.Uint64*int64(s.sortCol.Len()))
+	s.allocator = nil
 	s.abbreviatedSortCol = nil
 	// {{end}}
 	s.sortCol = nil
 	s.nulls = nil
 	s.order = nil
-	s.allocator = nil
 }
 
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sort() {
@@ -191,6 +191,15 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sortPartitions(partitions []int) {
 	}
 }
 
+// {{/*
+// TODO(yuzefovich): think through how we can inline more implementations of
+// Less method - this has non-trivial performance improvements.
+// */}}
+// {{$isInt := or (eq .VecMethod "Int16") (eq .VecMethod "Int32")}}
+// {{$isInt = or ($isInt) (eq .VecMethod "Int64")}}
+// {{if and ($isInt) (not $nulls)}}
+//gcassert:inline
+// {{end}}
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) Less(i, j int) bool {
 	// {{if $nulls}}
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
@@ -216,15 +225,12 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) Less(i, j int) bool {
 	// {{end}}
 	// {{end}}
 
-	order1 := s.order[i]
-	order2 := s.order[j]
-
 	// {{if .CanAbbreviate}}
 	// If the type can be abbreviated as a uint64, compare the abbreviated
 	// values first. If they are not equal, we are done with the comparison. If
 	// they are equal, we must fallback to a full comparison of the datums.
-	abbr1 := s.abbreviatedSortCol[order1]
-	abbr2 := s.abbreviatedSortCol[order2]
+	abbr1 := s.abbreviatedSortCol[s.order[i]]
+	abbr2 := s.abbreviatedSortCol[s.order[j]]
 	if abbr1 != abbr2 {
 		// {{if eq $dir "Asc"}}
 		return abbr1 < abbr2
@@ -236,8 +242,8 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) Less(i, j int) bool {
 
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(order1)
-	arg2 := s.sortCol.Get(order2)
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 	_ASSIGN_LT(lt, arg1, arg2, _, s.sortCol, s.sortCol)
 	return lt
 }
