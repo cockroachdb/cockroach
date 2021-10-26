@@ -326,7 +326,8 @@ func (s *SQLTranslator) findDescendantLeafIDsForDescriptor(
 
 	// Expand the database descriptor to all the tables inside it and return their
 	// IDs.
-	tables, err := descsCol.GetAllTableDescriptorsInDatabase(ctx, txn, desc.GetID())
+	tables, err := descsCol.GetAllTableDescriptorsInDatabase(ctx, txn, desc.GetID(),
+		tree.DatabaseLookupFlags{AvoidCached: false})
 	if err != nil {
 		return nil, err
 	}
