@@ -164,6 +164,8 @@ func (jsonVM *jsonVM) toVM(project string, opts *ProviderOpts) (ret *vm.VM) {
 		MachineType: machineType,
 		Zone:        zone,
 		Project:     project,
+		SQLPort:     config.DefaultSQLPort,
+		AdminUIPort: config.DefaultAdminUIPort,
 	}
 }
 

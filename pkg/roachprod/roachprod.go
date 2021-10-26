@@ -827,7 +827,7 @@ func AdminURL(
 		if adminurlIPs {
 			host = c.VMs[node-1].PublicIP
 		}
-		port := install.GetAdminUIPort(c.Impl.NodePort(c, node))
+		port := c.Impl.NodeUIPort(c, node)
 		scheme := "http"
 		if c.Secure {
 			scheme = "https"
@@ -880,7 +880,7 @@ func Pprof(
 	startTime := timeutil.Now().Unix()
 	failed, err := c.ParallelE(description, len(c.ServerNodes()), 0, func(i int) ([]byte, error) {
 		host := c.VMs[i].PublicIP
-		port := install.GetAdminUIPort(c.Impl.NodePort(c, i))
+		port := c.Impl.NodeUIPort(c, i)
 		scheme := "http"
 		if c.Secure {
 			scheme = "https"
