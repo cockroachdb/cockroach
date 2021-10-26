@@ -43,15 +43,17 @@ func DefaultProject() string {
 // projects for which a cron GC job exists.
 var projectsWithGC = []string{defaultProject, "andrei-jepsen"}
 
-// init will inject the GCE provider into vm.Providers, but only if the gcloud tool is available on the local path.
-func init() {
-	var p vm.Provider = &Provider{}
+// Init registers the GCE provider into vm.Providers.
+//
+// If the gcloud tool is not available on the local path, the provider is a
+// stub.
+func Init() {
+	var p vm.Provider
 	if _, err := exec.LookPath("gcloud"); err != nil {
-		p = flagstub.New(p, "please install the gcloud CLI utilities "+
+		p = flagstub.New(&Provider{}, "please install the gcloud CLI utilities "+
 			"(https://cloud.google.com/sdk/downloads)")
 	} else {
-		gceP := makeProvider()
-		p = &gceP
+		p = newProvider()
 	}
 	vm.Providers[ProviderName] = p
 }
@@ -321,8 +323,8 @@ type Provider struct {
 	opts providerOpts
 }
 
-func makeProvider() Provider {
-	return Provider{opts: makeProviderOpts()}
+func newProvider() *Provider {
+	return &Provider{opts: makeProviderOpts()}
 }
 
 // CleanSSH TODO(peter): document

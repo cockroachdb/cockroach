@@ -40,7 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/aws"
-	_ "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/azure"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -1796,6 +1796,12 @@ var versionCmd = &cobra.Command{
 }
 
 func main() {
+	// Initialize providers.
+	aws.Init()
+	gce.Init()
+	azure.Init()
+	local.Init(localVMStorage{})
+
 	// The commands are displayed in the order they are added to rootCmd. Note
 	// that gcCmd and adminurlCmd contain a trailing \n in their Short help in
 	// order to separate the commands into logical groups.
