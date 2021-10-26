@@ -131,6 +131,8 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 			VPC:         ProviderName,
 			MachineType: ProviderName,
 			Zone:        ProviderName,
+			SQLPort:     config.DefaultSQLPort + 2*i,
+			AdminUIPort: config.DefaultAdminUIPort + 2*i,
 		}
 	}
 	if err := p.storage.SaveCluster(c); err != nil {
