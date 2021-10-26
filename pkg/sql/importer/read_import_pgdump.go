@@ -1439,6 +1439,6 @@ func wrapWithLineTooLongHint(err error) error {
 	return errors.WithHintf(
 		err,
 		"use `max_row_size` to increase the maximum line limit (default: %s).",
-		humanizeutil.IBytes(defaultScanBuffer),
+		humanizeutil.IBytes(DefaultScanBuffer),
 	)
 }
