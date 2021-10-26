@@ -13,6 +13,7 @@ package config
 import (
 	"context"
 	"os/user"
+	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -41,7 +42,8 @@ const (
 	// EmailDomain is used to form the full account name for GCE and Slack.
 	EmailDomain = "@cockroachlabs.com"
 
-	// Local is the name of the local cluster.
+	// Local is the prefix used to identify local clusters.
+	// It is also used as the zone for local clusters.
 	Local = "local"
 
 	// ClustersDir is the directory where we cache information about clusters.
@@ -62,3 +64,13 @@ const (
 	// listening for HTTP connections for the Admin UI.
 	DefaultAdminUIPort = 26258
 )
+
+// IsLocalClusterName returns true if the given name is a valid name for a local
+// cluster.
+//
+// Local cluster names are either "local" or start with a "local-" prefix.
+func IsLocalClusterName(clusterName string) bool {
+	return localClusterRegex.MatchString(clusterName)
+}
+
+var localClusterRegex = regexp.MustCompile(`^local(|-[a-zA-Z0-9\-]+)$`)

@@ -56,9 +56,6 @@ func verifyClusterName(clusterName, username string) error {
 	if clusterName == "" {
 		return fmt.Errorf("cluster name cannot be blank")
 	}
-	if clusterName == config.Local {
-		return nil
-	}
 
 	alphaNum, err := regexp.Compile(`^[a-zA-Z0-9\-]+$`)
 	if err != nil {
@@ -66,6 +63,10 @@ func verifyClusterName(clusterName, username string) error {
 	}
 	if !alphaNum.MatchString(clusterName) {
 		return errors.Errorf("cluster name must match %s", alphaNum.String())
+	}
+
+	if config.IsLocalClusterName(clusterName) {
+		return nil
 	}
 
 	// Use the vm.Provider account names, or --username.
@@ -208,9 +209,7 @@ Available clusters:
 	c.CertsDir = opts.CertsDir
 	c.Env = opts.Env
 	c.Args = opts.Args
-	if opts.Tag != "" {
-		c.Tag = "/" + opts.Tag
-	}
+	c.Tag = opts.Tag
 	c.UseTreeDist = opts.UseTreeDist
 	c.Quiet = opts.Quiet || !term.IsTerminal(int(os.Stdout.Fd()))
 	c.MaxConcurrency = opts.MaxConcurrency
@@ -514,7 +513,7 @@ func Reset(clusterOpts install.SyncedCluster, numNodes int, username string) err
 		return err
 	}
 
-	if clusterName == config.Local {
+	if config.IsLocalClusterName(clusterName) {
 		return nil
 	}
 
@@ -970,67 +969,70 @@ func Pprof(
 }
 
 // Destroy TODO
-func Destroy(clusters []install.SyncedCluster, destroyAllMine bool, username string) error {
-	type cloudAndName struct {
-		name string
-		cld  *cloud.Cloud
-	}
-	var cns []cloudAndName
-	switch len(clusters) {
-	case 0:
-		if !destroyAllMine {
-			return errors.New("no cluster name provided")
-		}
+func Destroy(
+	clusters []install.SyncedCluster, destroyAllMine bool, destroyAllLocal bool, username string,
+) error {
+	var clusterNames []string
+	// We want to avoid running ListCloud() if we are only trying to destroy a
+	// local cluster.
+	var cld *cloud.Cloud
 
+	switch {
+	case destroyAllMine:
+		if len(clusters) != 0 {
+			return errors.New("--all-mine cannot be combined with cluster names")
+		}
+		if destroyAllLocal {
+			return errors.New("--all-mine cannot be combined with --all-local")
+		}
 		destroyPattern, err := userClusterNameRegexp()
 		if err != nil {
 			return err
 		}
-
-		cld, err := cloud.ListCloud()
+		cld, err = cloud.ListCloud()
 		if err != nil {
 			return err
 		}
+		clusters := cld.Clusters.FilterByName(destroyPattern)
+		clusterNames = clusters.Names()
 
-		for name := range cld.Clusters {
-			if destroyPattern.MatchString(name) {
-				cns = append(cns, cloudAndName{name: name, cld: cld})
-			}
+	case destroyAllLocal:
+		if len(clusters) != 0 {
+			return errors.New("--all-local cannot be combined with cluster names")
 		}
+
+		clusterNames = local.Clusters()
 
 	default:
-		if destroyAllMine {
-			return errors.New("--all-mine cannot be combined with cluster names")
+		if len(clusters) == 0 {
+			return errors.New("no cluster name provided")
 		}
 
-		var cld *cloud.Cloud
 		for _, cluster := range clusters {
-			clusterName := cluster.Name
-			if err := verifyClusterName(clusterName, username); err != nil {
+			if err := verifyClusterName(cluster.Name, username); err != nil {
 				return err
 			}
-
-			if !local.IsLocal(clusterName) {
-				if cld == nil {
-					var err error
-					cld, err = cloud.ListCloud()
-					if err != nil {
-						return err
-					}
-				}
-
-				cns = append(cns, cloudAndName{name: clusterName, cld: cld})
-			} else {
-				if err := destroyLocalCluster(cluster); err != nil {
-					return err
-				}
-			}
+			clusterNames = append(clusterNames, cluster.Name)
 		}
 	}
 
-	if err := ctxgroup.GroupWorkers(context.TODO(), len(cns), func(ctx context.Context, idx int) error {
-		return destroyCluster(cns[idx].cld, cns[idx].name)
-	}); err != nil {
+	if err := ctxgroup.GroupWorkers(
+		context.TODO(),
+		len(clusterNames),
+		func(ctx context.Context, idx int) error {
+			name := clusterNames[idx]
+			if config.IsLocalClusterName(name) {
+				return destroyLocalCluster(name)
+			}
+			if cld == nil {
+				var err error
+				cld, err = cloud.ListCloud()
+				if err != nil {
+					return err
+				}
+			}
+			return destroyCluster(cld, name)
+		}); err != nil {
 		return err
 	}
 	fmt.Println("OK")
@@ -1046,16 +1048,17 @@ func destroyCluster(cld *cloud.Cloud, clusterName string) error {
 	return cloud.DestroyCluster(c)
 }
 
-func destroyLocalCluster(clusterOpts install.SyncedCluster) error {
-	if _, ok := install.Clusters[clusterOpts.Name]; !ok {
-		return fmt.Errorf("cluster %s does not exist", clusterOpts.Name)
+func destroyLocalCluster(clusterName string) error {
+	cluster, ok := install.Clusters[clusterName]
+	if !ok {
+		return fmt.Errorf("cluster %s does not exist", clusterName)
 	}
-	c, err := newCluster(clusterOpts)
+	c, err := newCluster(*cluster)
 	if err != nil {
 		return err
 	}
 	c.Wipe(false)
-	return local.DeleteCluster(clusterOpts.Name)
+	return local.DeleteCluster(clusterName)
 }
 
 type clusterAlreadyExistsError struct {
@@ -1100,7 +1103,7 @@ func Create(
 	createVMOpts.ClusterName = clusterName
 
 	defer func() {
-		if retErr == nil || clusterName == config.Local {
+		if retErr == nil || config.IsLocalClusterName(clusterName) {
 			return
 		}
 		if errors.HasType(retErr, (*clusterAlreadyExistsError)(nil)) {
@@ -1114,7 +1117,7 @@ func Create(
 		}
 	}()
 
-	if clusterName != config.Local {
+	if !config.IsLocalClusterName(clusterName) {
 		cld, err := cloud.ListCloud()
 		if err != nil {
 			return err
@@ -1146,14 +1149,8 @@ func Create(
 		return createErr
 	}
 
-	// Just create directories for the local cluster as there's no need for ssh.
-	if clusterName == config.Local {
-		for i := 0; i < numNodes; i++ {
-			err := os.MkdirAll(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), i+1), 0755)
-			if err != nil {
-				return err
-			}
-		}
+	if config.IsLocalClusterName(clusterName) {
+		// No need for ssh for local clusters.
 		return nil
 	}
 	return SetupSSH(clusterOpts, username)
