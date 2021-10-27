@@ -848,6 +848,7 @@ func parseClientProvidedSessionParameters(
 }
 
 func loadParameter(ctx context.Context, key, value string, args *sql.SessionArgs) error {
+	key = strings.ToLower(key)
 	exists, configurable := sql.IsSessionVariableConfigurable(key)
 
 	switch {
