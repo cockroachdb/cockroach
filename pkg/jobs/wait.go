@@ -20,19 +20,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 // NotifyToAdoptJobs notifies the job adoption loop to start claimed jobs.
-func (r *Registry) NotifyToAdoptJobs(context.Context) error {
+func (r *Registry) NotifyToAdoptJobs(context.Context) {
 	select {
 	case r.adoptionCh <- resumeClaimedJobs:
 	default:
 	}
-	return nil
+}
+
+// NotifyToResume is used to notify the registry that it should attempt
+// to resume the specified jobs. The assumption is that these jobs were
+// created by this registry and thus are pre-claimed by it. This bypasses
+// the loop to discover jobs already claimed by this registry. If the jobs
+// turn out to not be claimed by this registry, it's not a problem.
+func (r *Registry) NotifyToResume(ctx context.Context, jobs ...jobspb.JobID) {
+	m := newJobIDSet(jobs...)
+	_ = r.stopper.RunAsyncTask(ctx, "resume-jobs", func(ctx context.Context) {
+		r.withSession(ctx, func(ctx context.Context, s sqlliveness.Session) {
+			r.filterAlreadyRunningAndCancelFromPreviousSessions(ctx, s, m)
+			r.resumeClaimedJobs(ctx, s, m)
+		})
+	})
 }
 
 // WaitForJobs waits for a given list of jobs to reach some sort
@@ -40,6 +56,16 @@ func (r *Registry) NotifyToAdoptJobs(context.Context) error {
 func (r *Registry) WaitForJobs(
 	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
 ) error {
+	log.Infof(ctx, "waiting for %d %v queued jobs to complete", len(jobs), jobs)
+	done, cleanup := r.installWaitingSet(jobs...)
+	defer cleanup()
+	return r.waitForJobs(ctx, ex, jobs, done)
+}
+
+func (r *Registry) waitForJobs(
+	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID, done <-chan struct{},
+) error {
+
 	if len(jobs) == 0 {
 		return nil
 	}
@@ -57,11 +83,15 @@ func (r *Registry) WaitForJobs(
 		`SELECT count(*) FROM system.jobs WHERE id IN (%s)
        AND (status != $1 AND status != $2 AND status != $3 AND status != $4)`,
 		buf.String())
-	for r := retry.StartWithCtx(ctx, retry.Options{
-		InitialBackoff: 5 * time.Millisecond,
-		MaxBackoff:     1 * time.Second,
+	start := timeutil.Now()
+	ret := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: 500 * time.Millisecond,
+		MaxBackoff:     3 * time.Second,
 		Multiplier:     1.5,
-	}); r.Next(); {
+		Closer:         done,
+	})
+	ret.Next() // wait at least one InitialBackoff
+	for ret.Next() {
 		// We poll the number of queued jobs that aren't finished. As with SHOW JOBS
 		// WHEN COMPLETE, if one of the jobs is missing from the jobs table for
 		// whatever reason, we'll fail later when we try to load the job.
@@ -90,6 +120,10 @@ func (r *Registry) WaitForJobs(
 			break
 		}
 	}
+	defer func() {
+		log.Infof(ctx, "waited for %d %v queued jobs to complete %v",
+			len(jobs), jobs, timeutil.Since(start))
+	}()
 	for i, id := range jobs {
 		j, err := r.LoadJob(ctx, id)
 		if err != nil {
@@ -116,13 +150,80 @@ func (r *Registry) Run(
 	if len(jobs) == 0 {
 		return nil
 	}
-	log.Infof(ctx, "scheduled jobs %+v", jobs)
-	if err := r.NotifyToAdoptJobs(ctx); err != nil {
-		return err
+	done, cleanup := r.installWaitingSet(jobs...)
+	defer cleanup()
+	r.NotifyToResume(ctx, jobs...)
+	return r.waitForJobs(ctx, ex, jobs, done)
+}
+
+// waitingSet is a set of job IDs that a local client is waiting to complete.
+type waitingSet struct {
+	// done is closed when the set becomes empty.
+	done chan struct{}
+	// Note that the set itself is only ever mutated under the registry's mu.
+	// This choice is made to remove any concerns regarding lock ordering.
+	set jobIDSet
+}
+
+// jobIDSet is a set of job IDs.
+type jobIDSet map[jobspb.JobID]struct{}
+
+func newJobIDSet(ids ...jobspb.JobID) jobIDSet {
+	m := make(map[jobspb.JobID]struct{}, len(ids))
+	for _, j := range ids {
+		m[j] = struct{}{}
 	}
-	err := r.WaitForJobs(ctx, ex, jobs)
-	if err != nil {
-		return err
+	return m
+}
+
+// installWaitingSet constructs a waiting set and installs it in the registry.
+// If all the jobs execute to a terminal status in this registry, the done
+// channel will be closed. The cleanup function must be called to avoid
+// leaking memory.
+func (r *Registry) installWaitingSet(ids ...jobspb.JobID) (done <-chan struct{}, cleanup func()) {
+	ws := &waitingSet{
+		done: make(chan struct{}),
+		set:  newJobIDSet(ids...),
 	}
-	return nil
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, id := range ids {
+		sets, ok := r.mu.waiting[id]
+		if !ok {
+			sets = make(map[*waitingSet]struct{}, 1)
+			r.mu.waiting[id] = sets
+		}
+		sets[ws] = struct{}{}
+	}
+	return ws.done, func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		for id := range ws.set {
+			set, ok := r.mu.waiting[id]
+			if !ok {
+				log.Fatalf(
+					r.ac.AnnotateCtx(context.Background()),
+					"corruption detected in waiting set for id %d", id,
+				)
+			}
+			delete(set, ws)
+			delete(ws.set, id)
+			if len(set) == 0 {
+				delete(r.mu.waiting, id)
+			}
+		}
+	}
+}
+
+func (r *Registry) removeFromWaitingSets(id jobspb.JobID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	sets := r.mu.waiting[id]
+	for s := range sets {
+		delete(s.set, id)
+		if len(s.set) == 0 {
+			close(s.done)
+		}
+	}
+	delete(r.mu.waiting, id)
 }

@@ -1710,6 +1710,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 
 		p.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
+
 		if fn := r.testingKnobs.afterPublishingDescriptors; fn != nil {
 			if err := fn(); err != nil {
 				return err
