@@ -330,11 +330,6 @@ func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Tena
 }
 
 // DestroyTenant implements the tree.TenantOperator interface.
-// TODO(spaskob): this function currently does not actually delete the data but
-// just marks it as DROP. This is for done for safety in case we would like to
-// restore the tenant later.
-// We should just add a new function DropTenant to the interface and convert
-// this one to really remove the tenant and its data.
 func (p *planner) DestroyTenant(ctx context.Context, tenID uint64) error {
 	const op = "destroy"
 	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
@@ -356,7 +351,11 @@ func (p *planner) DestroyTenant(ctx context.Context, tenID uint64) error {
 
 	// Mark the tenant as dropping.
 	info.State = descpb.TenantInfo_DROP
-	return errors.Wrap(updateTenantRecord(ctx, p.execCfg, p.txn, info), "destroying tenant")
+	if err := updateTenantRecord(ctx, p.execCfg, p.txn, info); err != nil {
+		return errors.Wrap(err, "destroying tenant")
+	}
+
+	return errors.Wrap(gcTenantJob(ctx, p.execCfg, p.txn, p.User(), tenID), "scheduling gc job")
 }
 
 // GCTenantSync clears the tenant's data and removes its record.
@@ -394,8 +393,8 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 	return errors.Wrapf(err, "deleting tenant %d record", info.ID)
 }
 
-// GCTenantJob clears the tenant's data and removes its record using a GC job.
-func GCTenantJob(
+// gcTenantJob clears the tenant's data and removes its record using a GC job.
+func gcTenantJob(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
@@ -425,6 +424,8 @@ func GCTenantJob(
 
 // GCTenant implements the tree.TenantOperator interface.
 func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
+	// TODO(jeffswenson): Delete internal_crdb.gc_tenant after the DestroyTenant
+	// changes are deployed to all Cockroach Cloud serverless hosts.
 	if !p.ExtendedEvalContext().TxnImplicit {
 		return errors.Errorf("gc_tenant cannot be used inside a transaction")
 	}
@@ -442,7 +443,7 @@ func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
 		return errors.Errorf("tenant %d is not in state DROP", info.ID)
 	}
 
-	return GCTenantJob(ctx, p.ExecCfg(), p.Txn(), p.User(), tenID)
+	return gcTenantJob(ctx, p.ExecCfg(), p.Txn(), p.User(), tenID)
 }
 
 // UpdateTenantResourceLimits implements the tree.TenantOperator interface.
