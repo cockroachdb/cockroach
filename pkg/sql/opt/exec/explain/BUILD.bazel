@@ -7,8 +7,10 @@ go_library(
         "explain_factory.go",
         "flags.go",
         "output.go",
+        "plan_gist_factory.go",
         "result_columns.go",
         ":gen-explain-factory",  # keep
+        ":gen-gist-factory",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain",
     visibility = ["//visibility:public"],
@@ -42,6 +44,7 @@ go_test(
         "explain_factory_test.go",
         "main_test.go",
         "output_test.go",
+        "plan_gist_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":explain"],
@@ -50,7 +53,11 @@ go_test(
         "//pkg/server",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/execinfra",
+        "//pkg/sql/opt/cat",
         "//pkg/sql/opt/exec",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/testutils/opttester",
+        "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/testutils/serverutils",
@@ -75,6 +82,20 @@ genrule(
     outs = ["explain_factory.og.go"],
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ execexplain $(locations //pkg/sql/opt/exec:defs)
+    """,
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+)
+
+# Define a generator for gist factory code.
+genrule(
+    name = "gen-gist-factory",
+    srcs = [
+        "//pkg/sql/opt:ops",
+        "//pkg/sql/opt/exec:defs",
+    ],
+    outs = ["plan_gist_factory.og.go"],
+    cmd = """
+      $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ execplangist $(locations //pkg/sql/opt/exec:defs)
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
 )

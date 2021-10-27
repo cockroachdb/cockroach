@@ -16,6 +16,7 @@ sql.plan.explain-analyze
 sql.plan.explain-opt
 sql.plan.explain-opt-verbose
 sql.plan.explain-distsql
+sql.plan.explain-gist
 ----
 
 feature-usage
@@ -46,6 +47,11 @@ feature-usage
 EXPLAIN (OPT, VERBOSE) SELECT * FROM x
 ----
 sql.plan.explain-opt-verbose
+
+feature-usage
+EXPLAIN (GIST) SELECT * FROM x
+----
+sql.plan.explain-gist
 
 # Tests for hints.
 

@@ -2052,11 +2052,10 @@ func (ef *execFactory) ConstructExplain(
 		return nil, errors.New("ENV only supported with (OPT) option")
 	}
 
-	explainFactory := explain.NewFactory(&execFactory{
+	plan, err := buildFn(&execFactory{
 		planner:   ef.planner,
 		isExplain: true,
 	})
-	plan, err := buildFn(explainFactory)
 	if err != nil {
 		return nil, err
 	}

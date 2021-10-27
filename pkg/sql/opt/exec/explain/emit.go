@@ -179,6 +179,9 @@ func (e *emitter) nodeName(n *Node) (string, error) {
 	switch n.op {
 	case scanOp:
 		a := n.args.(*scanArgs)
+		if a.Table == nil {
+			return "unknown table", nil
+		}
 		if a.Table.IsVirtualTable() {
 			return "virtual table", nil
 		}
@@ -242,6 +245,9 @@ func (e *emitter) nodeName(n *Node) (string, error) {
 
 	case opaqueOp:
 		a := n.args.(*opaqueArgs)
+		if a.Metadata == nil {
+			return "<unknown>", nil
+		}
 		return strings.ToLower(a.Metadata.String()), nil
 	}
 
@@ -457,7 +463,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		a := n.args.(*scanArgs)
 		e.emitTableAndIndex("table", a.Table, a.Index)
 		// Omit spans for virtual tables, unless we actually have a constraint.
-		if !(a.Table.IsVirtualTable() && a.Params.IndexConstraint == nil) {
+		if a.Table != nil && !(a.Table.IsVirtualTable() && a.Params.IndexConstraint == nil) {
 			e.emitSpans("spans", a.Table, a.Index, a.Params)
 		}
 
@@ -507,7 +513,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 	case topKOp:
 		a := n.args.(*topKArgs)
 		ob.Attr("order", colinfo.ColumnOrdering(a.Ordering).String(n.Columns()))
-		ob.Attr("k", a.K)
+		if a.K > 0 {
+			ob.Attr("k", a.K)
+		}
 
 	case unionAllOp:
 		a := n.args.(*unionAllArgs)
@@ -521,7 +529,11 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		cols := make([]string, len(a.KeyCols))
 		inputCols := a.Input.Columns()
 		for i, c := range a.KeyCols {
-			cols[i] = inputCols[c].Name
+			if len(inputCols) > int(c) {
+				cols[i] = inputCols[c].Name
+			} else {
+				cols[i] = "_"
+			}
 		}
 		ob.VAttr("key columns", strings.Join(cols, ", "))
 
@@ -829,6 +841,10 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 }
 
 func (e *emitter) emitTableAndIndex(field string, table cat.Table, index cat.Index) {
+	if table == nil || index == nil {
+		e.ob.Attr(field, "?@?")
+		return
+	}
 	partial := ""
 	if _, isPartial := index.Predicate(); isPartial {
 		partial = " (partial index)"
@@ -975,7 +991,11 @@ func printColumnList(inputCols colinfo.ResultColumns, cols []exec.NodeColumnOrdi
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(inputCols[col].Name)
+		if len(inputCols) > 0 && len(inputCols[col].Name) > 0 {
+			buf.WriteString(inputCols[col].Name)
+		} else {
+			buf.WriteString("_")
+		}
 	}
 	return buf.String()
 }
