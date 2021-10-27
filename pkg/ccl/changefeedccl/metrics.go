@@ -141,9 +141,9 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
-	metaChangefeedProcessingNanos = metric.Metadata{
-		Name:        "changefeed.processing_nanos",
-		Help:        "Time spent processing KV changes into SQL rows",
+	metaEventQueueTime = metric.Metadata{
+		Name:        "changefeed.queue_time_nanos",
+		Help:        "Time KV event spent waiting to be processed",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -223,9 +223,9 @@ type Metrics struct {
 	ErrorRetries     *metric.Counter
 	Failures         *metric.Counter
 
-	ProcessingNanos *metric.Counter
-	EmitNanos       *metric.Counter
-	FlushNanos      *metric.Counter
+	QueueTimeNanos *metric.Counter
+	EmitNanos      *metric.Counter
+	FlushNanos     *metric.Counter
 
 	CheckpointHistNanos *metric.Histogram
 	EmitHistNanos       *metric.Histogram
@@ -259,9 +259,9 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		ErrorRetries:      metric.NewCounter(metaChangefeedErrorRetries),
 		Failures:          metric.NewCounter(metaChangefeedFailures),
 
-		ProcessingNanos: metric.NewCounter(metaChangefeedProcessingNanos),
-		EmitNanos:       metric.NewCounter(metaChangefeedEmitNanos),
-		FlushNanos:      metric.NewCounter(metaChangefeedFlushNanos),
+		QueueTimeNanos: metric.NewCounter(metaEventQueueTime),
+		EmitNanos:      metric.NewCounter(metaChangefeedEmitNanos),
+		FlushNanos:     metric.NewCounter(metaChangefeedFlushNanos),
 
 		CheckpointHistNanos: metric.NewHistogram(metaChangefeedCheckpointHistNanos, histogramWindow,
 			changefeedCheckpointHistMaxLatency.Nanoseconds(), 2),
