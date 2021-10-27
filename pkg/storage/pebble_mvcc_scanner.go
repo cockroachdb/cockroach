@@ -39,6 +39,71 @@ var maxItersBeforeSeek = util.ConstantWithMetamorphicTestRange(
 	3,  /* max */
 )
 
+// MVCCDecodingStrategy controls if and how the fetcher should decode MVCC
+// timestamps from returned KV's.
+type MVCCDecodingStrategy int
+
+const (
+	// MVCCDecodingNotRequired is used when timestamps aren't needed.
+	MVCCDecodingNotRequired MVCCDecodingStrategy = iota
+	// MVCCDecodingRequired is used when timestamps are needed.
+	MVCCDecodingRequired
+)
+
+type results interface {
+	clear()
+	put(ctx context.Context, key []byte, value []byte, memAccount *mon.BoundAccount) error
+	finish() [][]byte
+	getCount() int64
+	getBytes() int64
+	getLastKV() roachpb.KeyValue
+}
+
+type KeyValue struct {
+	key   MVCCKey
+	value []byte
+}
+
+type singleResults struct {
+	count, bytes int64
+	key          []byte
+	value        []byte
+}
+
+func (s *singleResults) clear() {
+	*s = singleResults{}
+}
+
+func (s *singleResults) put(
+	_ context.Context, key []byte, value []byte, acc *mon.BoundAccount,
+) error {
+	s.count++
+	s.bytes += int64(len(key) + len(value))
+	s.key = key
+	s.value = value
+	return nil
+}
+
+func (s *singleResults) finish() [][]byte {
+	// TODO(jordan)
+	return nil
+}
+
+func (s *singleResults) getCount() int64 {
+	return s.count
+}
+
+func (s *singleResults) getBytes() int64 {
+	return s.bytes
+}
+
+func (s *singleResults) getLastKV() roachpb.KeyValue {
+	return roachpb.KeyValue{
+		Key:   s.key,
+		Value: roachpb.Value{RawBytes: s.value},
+	}
+}
+
 // Struct to store MVCCScan / MVCCGet in the same binary format as that
 // expected by MVCCScanDecodeKeyValue.
 type pebbleResults struct {
@@ -74,8 +139,20 @@ type pebbleResults struct {
 	lastOffsetIdx      int
 }
 
+func (p *pebbleResults) getLastKV() roachpb.KeyValue {
+	panic("never should get here i hope")
+}
+
 func (p *pebbleResults) clear() {
 	*p = pebbleResults{}
+}
+
+func (p *pebbleResults) getCount() int64 {
+	return p.count
+}
+
+func (p *pebbleResults) getBytes() int64 {
+	return p.bytes
 }
 
 // The repr that MVCCScan / MVCCGet expects to provide as output goes:
@@ -94,7 +171,7 @@ func (p *pebbleResults) put(
 	// needs capacity greater than maxSize, we allocate exactly the size needed.
 	lenKey := len(key)
 	lenValue := len(value)
-	lenToAdd := p.sizeOf(lenKey, lenValue)
+	lenToAdd := pebbleSizeOf(lenKey, lenValue)
 	if len(p.repr)+lenToAdd > cap(p.repr) {
 		newSize := 2 * cap(p.repr)
 		if newSize == 0 || newSize > maxSize {
@@ -142,7 +219,7 @@ func (p *pebbleResults) put(
 	return nil
 }
 
-func (p *pebbleResults) sizeOf(lenKey, lenValue int) int {
+func pebbleSizeOf(lenKey, lenValue int) int {
 	return kvLenSize + lenKey + lenValue
 }
 
@@ -348,7 +425,7 @@ type pebbleMVCCScanner struct {
 	curUnsafeKey MVCCKey
 	curRawKey    []byte
 	curValue     []byte
-	results      pebbleResults
+	results      results
 	intents      pebble.Batch
 	// mostRecentTS stores the largest timestamp observed that is equal to or
 	// above the scan timestamp. Only applicable if failOnMoreRecent is true. If
@@ -385,6 +462,7 @@ func (p *pebbleMVCCScanner) init(
 	txn *roachpb.Transaction, ui uncertainty.Interval, trackLastOffsets int,
 ) {
 	p.itersBeforeSeek = maxItersBeforeSeek / 2
+	p.results = &pebbleResults{}
 	if trackLastOffsets > 0 {
 		p.results.lastOffsetsEnabled = true
 		p.results.lastOffsets = make([]int, trackLastOffsets)
@@ -414,6 +492,19 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 	}
 	p.getAndAdvance(ctx)
 	p.maybeFailOnMoreRecent()
+}
+
+func (p *pebbleMVCCScanner) seekToStartOfScan() error {
+	if p.reverse {
+		if !p.iterSeekReverse(MVCCKey{Key: p.end}) {
+			return p.err
+		}
+	} else {
+		if !p.iterSeek(MVCCKey{Key: p.start}) {
+			return p.err
+		}
+	}
+	return nil
 }
 
 // scan iterates until a limit is exceeded, the underlying iterator is
@@ -910,12 +1001,12 @@ func (p *pebbleMVCCScanner) addAndAdvance(
 	}
 
 	// Check if adding the key would exceed a limit.
-	if p.targetBytes > 0 && (p.results.bytes >= p.targetBytes || (p.targetBytesAvoidExcess &&
-		p.results.bytes+int64(p.results.sizeOf(len(rawKey), len(val))) > p.targetBytes)) {
+	if p.targetBytes > 0 && (p.results.getBytes() >= p.targetBytes || (p.targetBytesAvoidExcess &&
+		p.results.bytes+int64(pebbleSizeOf(len(rawKey), len(val))) > p.targetBytes)) {
 		p.resumeReason = roachpb.RESUME_BYTE_LIMIT
-		p.resumeNextBytes = int64(p.results.sizeOf(len(rawKey), len(val)))
+		p.resumeNextBytes = int64(pebbleSizeOf(len(rawKey), len(val)))
 
-	} else if p.maxKeys > 0 && p.results.count >= p.maxKeys {
+	} else if p.maxKeys > 0 && p.results.getCount() >= p.maxKeys {
 		p.resumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 
@@ -924,7 +1015,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(
 		// then make sure we include the first key in the result. If wholeRows is
 		// enabled, then also make sure we complete the first SQL row.
 		if !p.allowEmpty &&
-			(p.results.count == 0 || (p.wholeRows && p.results.continuesFirstRow(key))) {
+			(p.results.getCount() == 0 || (p.wholeRows && p.results.continuesFirstRow(key))) {
 			p.resumeReason = 0
 			p.resumeNextBytes = 0
 		} else {
@@ -954,7 +1045,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(
 	// checking the key limit above on the next iteration. This has a small cost
 	// (~0.5% for large scans), but avoids the potentially large cost of scanning
 	// lots of garbage before the next key -- especially when maxKeys is small.
-	if p.maxKeys > 0 && p.results.count >= p.maxKeys {
+	if p.maxKeys > 0 && p.results.getCount() >= p.maxKeys {
 		// If we're not allowed to return partial SQL rows, check whether the last
 		// KV pair in the result has the maximum column family ID of the row. If so,
 		// we can return early. However, if it doesn't then we can't know yet

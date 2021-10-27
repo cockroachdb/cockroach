@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -221,10 +222,10 @@ type cFetcher struct {
 	// mvccDecodeStrategy controls whether or not MVCC timestamps should
 	// be decoded from KV's fetched. It is set if any of the requested tables
 	// are required to produce an MVCC timestamp system column.
-	mvccDecodeStrategy row.MVCCDecodingStrategy
+	mvccDecodeStrategy storage.MVCCDecodingStrategy
 
 	// fetcher is the underlying fetcher that provides KVs.
-	fetcher *row.KVFetcher
+	fetcher storage.NextKVer
 	// bytesRead stores the cumulative number of bytes read by this cFetcher
 	// throughout its whole existence (i.e. between its construction and
 	// Release()). It accumulates the bytes read statistic across StartScan* and
@@ -387,7 +388,7 @@ func (cf *cFetcher) Init(
 			switch colinfo.GetSystemColumnKindFromColumnID(colID) {
 			case catpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
-				cf.mvccDecodeStrategy = row.MVCCDecodingRequired
+				cf.mvccDecodeStrategy = storage.MVCCDecodingRequired
 				table.neededValueColsByIdx.Remove(idx)
 			case catpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
@@ -479,6 +480,9 @@ func (cf *cFetcher) Init(
 
 	cf.table = table
 	cf.accountingHelper.Init(allocator, cf.table.typs)
+
+	rf.machine.state[0] = stateResetBatch
+	rf.machine.state[1] = stateInitFetch
 
 	return nil
 }

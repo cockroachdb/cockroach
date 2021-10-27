@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -50,13 +52,13 @@ const noOutputColumn = -1
 
 // KVBatchFetcher abstracts the logic of fetching KVs in batches.
 type KVBatchFetcher interface {
-	// nextBatch returns the next batch of rows. Returns false in the first
+	// NextBatch returns the next batch of rows. Returns false in the first
 	// parameter if there are no more keys in the scan. May return either a slice
 	// of KeyValues or a batchResponse, numKvs pair, depending on the server
 	// version - both must be handled by calling code.
-	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error)
+	NextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error)
 
-	close(ctx context.Context)
+	Close(ctx context.Context)
 }
 
 type tableInfo struct {
@@ -153,7 +155,7 @@ type Fetcher struct {
 
 	// mvccDecodeStrategy controls whether or not MVCC timestamps should
 	// be decoded from KV's fetched.
-	mvccDecodeStrategy MVCCDecodingStrategy
+	mvccDecodeStrategy storage.MVCCDecodingStrategy
 
 	// -- Fields updated during a scan --
 
@@ -254,8 +256,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			switch colinfo.GetSystemColumnKindFromColumnID(colID) {
 			case catpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
-				rf.mvccDecodeStrategy = MVCCDecodingRequired
-
+				rf.mvccDecodeStrategy = storage.MVCCDecodingRequired
 			case catpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
 				table.tableOid = tree.NewDOid(tree.DInt(args.Spec.TableID))
@@ -358,7 +359,7 @@ func (rf *Fetcher) StartScan(
 		return errors.AssertionFailedf("no spans")
 	}
 
-	f, err := makeKVBatchFetcher(
+	f, err := MakeKVBatchFetcher(
 		ctx,
 		kvBatchFetcherArgs{
 			sendFn:                     makeKVBatchFetcherDefaultSendFunc(txn),
@@ -366,6 +367,10 @@ func (rf *Fetcher) StartScan(
 			reverse:                    rf.reverse,
 			batchBytesLimit:            batchBytesLimit,
 			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
+            format:                     roachpb.BATCH_RESPONSE,
+		    colFormatArgs:              ColFormatArgs{
+                TenantID: roachpb.SystemTenantID,
+            },
 			lockStrength:               rf.lockStrength,
 			lockWaitPolicy:             rf.lockWaitPolicy,
 			lockTimeout:                rf.lockTimeout,
@@ -378,7 +383,7 @@ func (rf *Fetcher) StartScan(
 	if err != nil {
 		return err
 	}
-	return rf.StartScanFrom(ctx, &f, traceKV)
+	return rf.StartScanFrom(ctx, f, traceKV)
 }
 
 // TestingInconsistentScanSleep introduces a sleep inside the fetcher after
@@ -461,7 +466,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	// TODO(radu): we should commit the last txn. Right now the commit is a no-op
 	// on read transactions, but perhaps one day it will release some resources.
 
-	f, err := makeKVBatchFetcher(
+	f, err := MakeKVBatchFetcher(
 		ctx,
 		kvBatchFetcherArgs{
 			sendFn:                     sendFn,
@@ -469,6 +474,8 @@ func (rf *Fetcher) StartInconsistentScan(
 			reverse:                    rf.reverse,
 			batchBytesLimit:            batchBytesLimit,
 			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
+		    format:                     roachpb.BATCH_RESPONSE,
+		    colFormatArgs:              ColFormatArgs{TenantID: roachpb.SystemTenantID},
 			lockStrength:               rf.lockStrength,
 			lockWaitPolicy:             rf.lockWaitPolicy,
 			lockTimeout:                rf.lockTimeout,
@@ -481,7 +488,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	if err != nil {
 		return err
 	}
-	return rf.StartScanFrom(ctx, &f, traceKV)
+	return rf.StartScanFrom(ctx, f, traceKV)
 }
 
 func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint rowinfra.RowLimit) rowinfra.KeyLimit {

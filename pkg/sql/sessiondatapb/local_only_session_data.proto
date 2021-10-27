@@ -250,6 +250,8 @@ message LocalOnlySessionData {
   // ON CONFLICT, UPSERT, UPDATE, or DELETE subqueries modifying the same table,
   // at the risk of data corruption if the same row is modified multiple times.
   bool multiple_modifications_of_table = 68;
+  // PlanDirectScan indicates whether we should plan ColBatchDirectScans.
+  bool plan_direct_scan = 69;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

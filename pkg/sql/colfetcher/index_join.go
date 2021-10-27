@@ -419,6 +419,9 @@ func (s *ColIndexJoin) DrainMeta() []execinfrapb.ProducerMetadata {
 func (s *ColIndexJoin) GetBytesRead() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.cf.fetcher == nil {
+		return 0
+	}
 	return s.cf.getBytesRead()
 }
 

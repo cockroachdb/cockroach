@@ -33,8 +33,8 @@ type singleKVFetcher struct {
 	done bool
 }
 
-// nextBatch implements the KVBatchFetcher interface.
-func (f *singleKVFetcher) nextBatch(
+// NextBatch implements the KVBatchFetcher interface.
+func (f *singleKVFetcher) NextBatch(
 	ctx context.Context,
 ) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error) {
 	if f.done {
@@ -305,4 +305,4 @@ func DecodeRowInfo(
 	return index, names, values, nil
 }
 
-func (f *singleKVFetcher) close(context.Context) {}
+func (f *singleKVFetcher) Close(context.Context) {}

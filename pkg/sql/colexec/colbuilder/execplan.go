@@ -725,14 +725,30 @@ func NewColOperator(
 				ctx, flowCtx, "kvfetcher" /* opName */, spec.ProcessorID,
 			)
 			estimatedRowCount := spec.EstimatedRowCount
-			scanOp, err := colfetcher.NewColBatchScan(
-				ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
-				flowCtx, core.TableReader, post, estimatedRowCount,
-			)
-			if err != nil {
-				return r, err
+			var scanOp colfetcher.ScanOperator
+			var resultTypes []*types.T
+			if evalCtx.SessionData().LocalOnlySessionData.PlanDirectScan {
+				scan, err := colfetcher.NewColDirectBatchScan(
+					ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
+					flowCtx, core.TableReader, post, estimatedRowCount,
+				)
+				if err != nil {
+					return r, err
+				}
+				resultTypes = scan.ResultTypes
+				scanOp = scan
+			} else {
+                scanOp, err := colfetcher.NewColBatchScan(
+                    ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
+                    flowCtx, core.TableReader, post, estimatedRowCount,
+                )
+                if err != nil {
+                    return r, err
+				}
+				resultTypes = scan.ResultTypes
+				scanOp = scan
 			}
-			result.finishScanPlanning(scanOp, scanOp.ResultTypes)
+			result.finishScanPlanning(scanOp, resultTypes)
 
 		case core.JoinReader != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
