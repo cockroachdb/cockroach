@@ -183,10 +183,6 @@ func IsPermanentSchemaChangeError(err error) bool {
 	if errors.IsAny(err,
 		context.Canceled,
 		context.DeadlineExceeded,
-		errExistingSchemaChangeLease,
-		errExpiredSchemaChangeLease,
-		errNotHitGCTTLDeadline,
-		errSchemaChangeDuringDrain,
 		errSchemaChangeNotFirstInLine,
 		errTableVersionMismatchSentinel,
 	) {
@@ -210,13 +206,7 @@ func IsPermanentSchemaChangeError(err error) bool {
 	return true
 }
 
-var (
-	errExistingSchemaChangeLease  = errors.Newf("an outstanding schema change lease exists")
-	errExpiredSchemaChangeLease   = errors.Newf("the schema change lease has expired")
-	errSchemaChangeNotFirstInLine = errors.Newf("schema change not first in line")
-	errNotHitGCTTLDeadline        = errors.Newf("not hit gc ttl deadline")
-	errSchemaChangeDuringDrain    = errors.Newf("a schema change ran during the drain phase, re-increment")
-)
+var errSchemaChangeNotFirstInLine = errors.Newf("schema change not first in line")
 
 type errTableVersionMismatch struct {
 	version  descpb.DescriptorVersion
