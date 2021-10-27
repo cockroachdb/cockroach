@@ -1966,7 +1966,7 @@ func (st *SessionTracing) getSessionTrace() ([]traceRow, error) {
 		return st.lastRecording, nil
 	}
 
-	return generateSessionTraceVTable(st.connSpan.GetRecording())
+	return generateSessionTraceVTable(st.connSpan.GetRecording(tracing.RecordingVerbose))
 }
 
 // StartTracing starts "session tracing". From this moment on, everything
@@ -2070,7 +2070,7 @@ func (st *SessionTracing) StopTracing() error {
 	st.recordingType = tracing.RecordingOff
 
 	// Accumulate all recordings and finish the tracing spans.
-	rec := st.connSpan.GetRecording()
+	rec := st.connSpan.GetRecording(tracing.RecordingVerbose)
 	// We're about to finish this span, but there might be a child that remains
 	// open - the child corresponding to the current transaction. We don't want
 	// that span to be recording any more.

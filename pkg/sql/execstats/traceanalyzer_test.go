@@ -128,7 +128,7 @@ func TestTraceAnalyzer(t *testing.T) {
 		)
 		sp.Finish()
 		require.NoError(t, err)
-		trace := sp.GetRecording()
+		trace := sp.GetRecording(tracing.RecordingVerbose)
 		analyzer := <-analyzerChan
 		require.NoError(t, analyzer.AddTrace(trace, true /* makeDeterministic */))
 		require.NoError(t, analyzer.ProcessStats())
