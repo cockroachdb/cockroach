@@ -41,6 +41,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/sql/colflow_test @cockroach//pkg/sql/colflow:colflow_test
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/caller_test @cockroach//pkg/util/caller:caller_test
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/json_test @cockroach//pkg/util/json:json_test
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests @cockroach//pkg/cmd/roachtest/tests:tests
 
 # These packages use github.com/golang/mock to generate mocks. The target
 # generating mocks for a given package necessarily depends on the package's
@@ -117,6 +118,8 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/testutils/**/testdata/**
 # gazelle:exclude pkg/security/securitytest/embedded.go
 # gazelle:exclude pkg/cmd/roachprod/vm/aws/embedded.go
+# gazelle:exclude pkg/cmd/roachtest/prometheus/mock_generated.go
+# gazelle:exclude pkg/cmd/roachtest/tests/drt_generated.go
 # gazelle:exclude pkg/**/*_string.go
 # gazelle:exclude pkg/geo/wkt/wkt_generated.go
 # gazelle:exclude pkg/sql/schemachanger/scop/backfill_visitor_generated.go

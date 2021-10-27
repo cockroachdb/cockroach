@@ -1,28 +1,49 @@
+load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+# gazelle:exclude prometheus.go
+
+# keep
+go_library(
+    name = "prometheuslib",
+    srcs = ["prometheus.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/cmd/roachtest/logger",
+        "//pkg/cmd/roachtest/option",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
 
 go_library(
     name = "prometheus",
     srcs = [
-        "mock_generated.go",
-        "prometheus.go",
+        ":prometheus_mocks",  # keep
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus",
+    embed = [":prometheuslib"],  # keep
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus",  # keep
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/cmd/roachtest/logger",
-        "//pkg/cmd/roachtest/option",
-        "@com_github_golang_mock//gomock",
-        "@in_gopkg_yaml_v2//:yaml_v2",
+        "@com_github_golang_mock//gomock",  # keep
     ],
 )
 
 go_test(
     name = "prometheus_test",
     srcs = ["prometheus_test.go"],
-    embed = [":prometheus"],
+    embed = [":prometheus"],  # keep
     deps = [
         "//pkg/cmd/roachtest/option",
         "@com_github_golang_mock//gomock",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+gomock(
+    name = "prometheus_mocks",
+    out = "mock_generated.go",
+    interfaces = ["Cluster"],
+    library = ":prometheuslib",
+    package = "prometheus",
 )
