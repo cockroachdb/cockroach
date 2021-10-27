@@ -14,11 +14,7 @@ import { JobStatusBadge, ProgressBar } from "src/views/jobs/progressBar";
 import { Duration } from "src/views/jobs/duration";
 import Job = cockroach.server.serverpb.IJobResponse;
 import { cockroach } from "src/js/protos";
-import {
-  JobStatusVisual,
-  jobToDisplayStatus,
-  jobToVisual,
-} from "src/views/jobs/jobStatusOptions";
+import { JobStatusVisual, jobToVisual } from "src/views/jobs/jobStatusOptions";
 import { InlineAlert } from "src/components";
 import styles from "./jobStatus.module.styl";
 // import { Tooltip } from "antd";
@@ -41,15 +37,14 @@ export const JobStatus: React.FC<JobStatusProps> = ({
   lineWidth,
 }) => {
   const visualType = jobToVisual(job);
-  const jobDisplayStatus = jobToDisplayStatus(job);
 
   switch (visualType) {
     case JobStatusVisual.BadgeOnly:
-      return <JobStatusBadge jobStatus={jobDisplayStatus} />;
+      return <JobStatusBadge jobStatus={job.status} />;
     case JobStatusVisual.BadgeWithDuration:
       return (
         <div>
-          <JobStatusBadge jobStatus={jobDisplayStatus} />
+          <JobStatusBadge jobStatus={job.status} />
           <span className="jobs-table__duration">
             <Duration job={job} />
           </span>
@@ -71,14 +66,14 @@ export const JobStatus: React.FC<JobStatusProps> = ({
     case JobStatusVisual.BadgeWithMessage:
       return (
         <div>
-          <JobStatusBadge jobStatus={jobDisplayStatus} />
+          <JobStatusBadge jobStatus={job.status} />
           <span className="jobs-table__duration">{job.running_status}</span>
         </div>
       );
     case JobStatusVisual.BadgeWithErrorMessage:
       return (
         <div>
-          <JobStatusBadge jobStatus={jobDisplayStatus} />
+          <JobStatusBadge jobStatus={job.status} />
           {!compact && (
             <InlineAlert
               title={job.error}
@@ -102,11 +97,11 @@ export const JobStatus: React.FC<JobStatusProps> = ({
           }
         >
           {/*<span>*/}
-          <JobStatusBadge jobStatus={jobDisplayStatus} />
+          <JobStatusBadge jobStatus={job.status} />
           {/*</span>*/}
         </Tooltip>
       );
     default:
-      return <JobStatusBadge jobStatus={jobDisplayStatus} />;
+      return <JobStatusBadge jobStatus={job.status} />;
   }
 };
