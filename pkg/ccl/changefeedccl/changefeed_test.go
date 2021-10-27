@@ -582,6 +582,8 @@ func TestChangefeedMVCCTimestamps(t *testing.T) {
 }
 
 func TestChangefeedResolvedFrequency(t *testing.T) {
+	t.Skip("disabled flaky test: https://github.com/cockroachdb/cockroach/issues/72799")
+
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
