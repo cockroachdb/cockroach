@@ -594,6 +594,10 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 	return tree.ID(desc.GetID()), nil
 }
 
+func (p *planner) JobRegistry() interface{} {
+	return p.ExecCfg().JobRegistry
+}
+
 // LookupTableByID looks up a table, by the given descriptor ID. Based on the
 // CommonLookupFlags, it could use or skip the Collection cache.
 func (p *planner) LookupTableByID(
