@@ -401,8 +401,7 @@ func TestLimitScans(t *testing.T) {
 
 	// Now we're going to run the tableReader and trace it.
 	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("root", tracing.WithForceRealSpan())
-	sp.SetVerbose(true)
+	sp := tracer.StartSpan("root", tracing.WithRecording(tracing.RecordingVerbose))
 	ctx = tracing.ContextWithSpan(ctx, sp)
 	flowCtx.EvalCtx.Context = ctx
 	flowCtx.CollectStats = true

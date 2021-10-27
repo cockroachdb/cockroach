@@ -116,8 +116,7 @@ func TestEventLogAndTrace(t *testing.T) {
 	VErrEvent(ctxWithEventLog, NoLogV(), "testerr")
 
 	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("s", tracing.WithForceRealSpan())
-	sp.SetVerbose(true)
+	sp := tracer.StartSpan("s", tracing.WithRecording(tracing.RecordingVerbose))
 	ctxWithBoth := tracing.ContextWithSpan(ctxWithEventLog, sp)
 	// Events should only go to the trace.
 	Event(ctxWithBoth, "test3")
