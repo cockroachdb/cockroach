@@ -123,6 +123,17 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	clusterTags[tagCreated] = to.StringPtr(timeutil.Now().Format(time.RFC3339))
 	clusterTags[tagLifetime] = to.StringPtr(opts.Lifetime.String())
 	clusterTags[tagRoachprod] = to.StringPtr("true")
+	for _, opt := range opts.LabelOpts {
+		parts := strings.Split(opt, "=")
+		if len(parts) != 2 {
+			return fmt.Errorf("wrong label defintion: %s, must be 'name=value' format, example: usage=cloud-report-2020", opt)
+		}
+		key := parts[0]
+		if _, ok := clusterTags[key]; ok {
+			return fmt.Errorf("duplicate tag name defined: %s", key)
+		}
+		clusterTags[key] = to.StringPtr(parts[1])
+	}
 
 	getClusterResourceGroupName := func(location string) string {
 		return fmt.Sprintf("%s-%s", opts.ClusterName, location)
@@ -393,7 +404,6 @@ func (p *Provider) List() (vm.List, error) {
 	var ret vm.List
 	for it.NotDone() {
 		found := it.Value()
-
 		if _, ok := found.Tags[tagRoachprod]; !ok {
 			if err := it.NextWithContext(ctx); err != nil {
 				return nil, err
@@ -401,8 +411,14 @@ func (p *Provider) List() (vm.List, error) {
 			continue
 		}
 
+		var sb strings.Builder
+		for key, value := range found.Tags {
+			sb.WriteString(fmt.Sprintf("%s=%s,", key, *value))
+		}
+
 		m := vm.VM{
 			Name:        *found.Name,
+			Labels:      sb.String(),
 			Provider:    ProviderName,
 			ProviderID:  *found.ID,
 			RemoteUser:  remoteUser,
@@ -497,6 +513,17 @@ func (p *Provider) createVM(
 	tags[tagCreated] = to.StringPtr(timeutil.Now().Format(time.RFC3339))
 	tags[tagLifetime] = to.StringPtr(opts.Lifetime.String())
 	tags[tagRoachprod] = to.StringPtr("true")
+	for _, opt := range opts.LabelOpts {
+		parts := strings.Split(opt, "=")
+		if len(parts) != 2 {
+			return vm, fmt.Errorf("wrong label defintion: %s, must be 'name=value' format, example: usage=cloud-report-2020", opt)
+		}
+		key := parts[0]
+		if _, ok := tags[key]; ok {
+			return vm, fmt.Errorf("duplicate tag name defined: %s", key)
+		}
+		tags[key] = to.StringPtr(parts[1])
+	}
 
 	osVolumeSize := int32(opts.OsVolumeSize)
 	if osVolumeSize < 32 {

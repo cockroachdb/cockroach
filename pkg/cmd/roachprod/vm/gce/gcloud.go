@@ -104,14 +104,19 @@ func (jsonVM *jsonVM) toVM(project string, opts *providerOpts) (ret *vm.VM) {
 
 	// Check "lifetime" label.
 	var lifetime time.Duration
-	if lifetimeStr, ok := jsonVM.Labels["lifetime"]; ok {
-		if lifetime, err = time.ParseDuration(lifetimeStr); err != nil {
-			vmErrors = append(vmErrors, vm.ErrNoExpiration)
+	var sb strings.Builder
+	for key, value := range jsonVM.Labels {
+		if key == "lifetime" {
+			if lifetimeStr, ok := jsonVM.Labels[key]; ok {
+				if lifetime, err = time.ParseDuration(lifetimeStr); err != nil {
+					vmErrors = append(vmErrors, vm.ErrNoExpiration)
+				}
+			} else {
+				vmErrors = append(vmErrors, vm.ErrNoExpiration)
+			}
 		}
-	} else {
-		vmErrors = append(vmErrors, vm.ErrNoExpiration)
+		sb.WriteString(fmt.Sprintf("%s=%s,", key, value))
 	}
-
 	// lastComponent splits a url path and returns only the last part. This is
 	// used because some of the fields in jsonVM are defined using URLs like:
 	//  "https://www.googleapis.com/compute/v1/projects/cockroach-shared/zones/us-east1-b/machineTypes/n1-standard-16"
@@ -153,6 +158,7 @@ func (jsonVM *jsonVM) toVM(project string, opts *providerOpts) (ret *vm.VM) {
 		Errors:      vmErrors,
 		DNS:         fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
 		Lifetime:    lifetime,
+		Labels:      sb.String(),
 		PrivateIP:   privateIP,
 		Provider:    ProviderName,
 		ProviderID:  jsonVM.Name,
@@ -453,7 +459,29 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	if p.opts.MinCPUPlatform != "" {
 		args = append(args, "--min-cpu-platform", p.opts.MinCPUPlatform)
 	}
-	args = append(args, "--labels", fmt.Sprintf("lifetime=%s", opts.Lifetime))
+
+	opts.LabelOpts = append(
+		[]string{
+			fmt.Sprintf("lifetime=%s", opts.Lifetime),
+			"roachprod=true"},
+		opts.LabelOpts...)
+	var sb strings.Builder
+	tags := make(map[string]string)
+	for _, opt := range opts.LabelOpts {
+		parts := strings.Split(opt, "=")
+		if len(parts) != 2 {
+			return fmt.Errorf("wrong label defintion: %s, must be 'name=value' format, example: usage=cloud-report-2020", opt)
+		}
+		key := parts[0]
+		value := parts[1]
+		if _, ok := tags[key]; ok {
+			return fmt.Errorf("duplicate tag name defined: %s", key)
+		}
+		tags[key] = value
+
+		sb.WriteString(fmt.Sprintf("%s=%s,", key, value))
+	}
+	args = append(args, "--labels", sb.String())
 
 	args = append(args, "--metadata-from-file", fmt.Sprintf("startup-script=%s", filename))
 	args = append(args, "--project", project)

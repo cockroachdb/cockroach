@@ -76,6 +76,7 @@ type Cluster struct {
 	// This is the earliest creation and shortest lifetime across VMs.
 	CreatedAt time.Time     `json:"created_at"`
 	Lifetime  time.Duration `json:"lifetime"`
+	Labels    string        `json:"labels"`
 	VMs       vm.List       `json:"vms"`
 }
 

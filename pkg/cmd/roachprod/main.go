@@ -1913,6 +1913,11 @@ func main() {
 		fmt.Sprintf("The cloud provider(s) to use when creating new vm instances: %s", vm.AllProviderNames()))
 	createCmd.Flags().BoolVar(&createVMOpts.GeoDistributed,
 		"geo", false, "Create geo-distributed cluster")
+
+	createCmd.Flags().StringSliceVarP(&createVMOpts.LabelOpts,
+		"label", "s", []string{},
+		"The label(s) to be used when creating new vm instances, must be in '-s name=value' format, example:-s usage=cloud-report-2020")
+
 	// Allow each Provider to inject additional configuration flags
 	for _, p := range vm.Providers {
 		p.Flags().ConfigureCreateFlags(createCmd.Flags())

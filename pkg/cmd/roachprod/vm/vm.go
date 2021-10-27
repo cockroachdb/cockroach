@@ -34,6 +34,7 @@ type VM struct {
 	// is not present or otherwise invalid.
 	Errors   []error       `json:"errors"`
 	Lifetime time.Duration `json:"lifetime"`
+	Labels   string        `json:"labels"`
 	// The provider-internal DNS name for the VM instance
 	DNS string `json:"dns"`
 	// The name of the cloud provider that hosts the VM instance
@@ -139,6 +140,7 @@ const (
 type CreateOpts struct {
 	ClusterName    string
 	Lifetime       time.Duration
+	LabelOpts      []string
 	GeoDistributed bool
 	VMProviders    []string
 	SSDOpts        struct {

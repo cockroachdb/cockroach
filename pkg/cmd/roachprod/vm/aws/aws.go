@@ -708,8 +708,10 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 
 			// Convert the tag map into a more useful representation
 			tagMap := make(map[string]string, len(in.Tags))
+			var sb strings.Builder
 			for _, entry := range in.Tags {
 				tagMap[entry.Key] = entry.Value
+				sb.WriteString(fmt.Sprintf("{Key=%s,Value=%s},", entry.Key, entry.Value))
 			}
 			// Ignore any instances that we didn't create
 			if tagMap["Roachprod"] != "true" {
@@ -723,7 +725,7 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 			}
 
 			var lifetime time.Duration
-			if lifeText, ok := tagMap["Lifetime"]; ok {
+			if lifeText, ok := tagMap["lifetime"]; ok {
 				lifetime, err = time.ParseDuration(lifeText)
 				if err != nil {
 					errs = append(errs, err)
@@ -738,6 +740,7 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 				Name:        tagMap["Name"],
 				Errors:      errs,
 				Lifetime:    lifetime,
+				Labels:      fmt.Sprintf("[%s]", sb.String()),
 				PrivateIP:   in.PrivateIPAddress,
 				Provider:    ProviderName,
 				ProviderID:  in.InstanceID,
@@ -798,12 +801,29 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 
 	// We avoid the need to make a second call to set the tags by jamming
 	// all of our metadata into the TagSpec.
-	tagSpecs := fmt.Sprintf(
-		"ResourceType=instance,Tags=["+
-			"{Key=Lifetime,Value=%s},"+
-			"{Key=Name,Value=%s},"+
-			"{Key=Roachprod,Value=true},"+
-			"]", opts.Lifetime, name)
+	opts.LabelOpts = append(
+		[]string{
+			fmt.Sprintf("lifetime=%s", opts.Lifetime),
+			fmt.Sprintf("name=%s", name),
+			"roachprod=true"},
+			opts.LabelOpts...)
+	var sb strings.Builder
+	tags := make(map[string]string)
+	for _, opt := range opts.LabelOpts {
+		parts := strings.Split(opt, "=")
+		if len(parts) != 2 {
+			return fmt.Errorf("wrong label defintion: %s, must be 'name=value' format, example: usage=cloud-report-2020", opt)
+		}
+		key := parts[0]
+		value := parts[1]
+		if _, ok := tags[key]; ok {
+			return fmt.Errorf("duplicate tag name defined: %s", key)
+		}
+		tags[key] = value
+
+		sb.WriteString(fmt.Sprintf("{Key=%s,Value=%s},", key, value))
+	}
+	tagSpecs := fmt.Sprintf("ResourceType=instance,Tags=[%s]", sb.String())
 
 	var data struct {
 		Instances []struct {
