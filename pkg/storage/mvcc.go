@@ -3201,6 +3201,7 @@ func mvccResolveWriteIntent(
 	// remains, the rolledBackVal is set to a non-nil value.
 	var rolledBackVal []byte
 	if len(intent.IgnoredSeqNums) > 0 {
+		// NOTE: mvccMaybeRewriteIntentHistory mutates its meta argument.
 		var removeIntent bool
 		removeIntent, rolledBackVal, err = mvccMaybeRewriteIntentHistory(ctx, rw, intent.IgnoredSeqNums, meta, latestKey)
 		if err != nil {
@@ -3210,10 +3211,19 @@ func mvccResolveWriteIntent(
 		if removeIntent {
 			// This intent should be cleared. Set commit, pushed, and inProgress to
 			// false so that this intent isn't updated, gets cleared, and committed
-			// values are left untouched.
+			// values are left untouched. Also ensure that rolledBackVal is set to nil
+			// or we could end up trying to update the intent instead of removing it.
 			commit = false
 			pushed = false
 			inProgress = false
+			rolledBackVal = nil
+		}
+
+		if rolledBackVal != nil {
+			// If we need to update the intent to roll back part of its intent
+			// history, make sure that we don't regress its timestamp, even if the
+			// caller provided an outdated timestamp.
+			intent.Txn.WriteTimestamp.Forward(metaTimestamp)
 		}
 	}
 
@@ -3239,6 +3249,14 @@ func mvccResolveWriteIntent(
 		// The intent might be committing at a higher timestamp, or it might be
 		// getting pushed.
 		newTimestamp := intent.Txn.WriteTimestamp
+
+		// Assert that the intent timestamp never regresses. The logic above should
+		// not allow this, regardless of the input to this function.
+		if newTimestamp.Less(metaTimestamp) {
+			return false, errors.AssertionFailedf("timestamp regression (%s -> %s) "+
+				"during intent resolution, commit=%t pushed=%t rolledBackVal=%t",
+				metaTimestamp, newTimestamp, commit, pushed, rolledBackVal != nil)
+		}
 
 		buf.newMeta = *meta
 		// Set the timestamp for upcoming write (or at least the stats update).
