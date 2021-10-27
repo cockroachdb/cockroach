@@ -151,8 +151,7 @@ func TestNoDuplicateHeartbeatLoops(t *testing.T) {
 	key := roachpb.Key("a")
 
 	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("test", tracing.WithForceRealSpan())
-	sp.SetVerbose(true)
+	sp := tracer.StartSpan("test", tracing.WithRecording(tracing.RecordingVerbose))
 	txnCtx := tracing.ContextWithSpan(context.Background(), sp)
 
 	push := func(ctx context.Context, key roachpb.Key) error {

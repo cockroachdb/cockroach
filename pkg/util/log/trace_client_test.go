@@ -31,8 +31,7 @@ func TestTrace(t *testing.T) {
 			name: "verbose",
 			init: func(ctx context.Context) (context.Context, *tracing.Span) {
 				tracer := tracing.NewTracer()
-				sp := tracer.StartSpan("s", tracing.WithForceRealSpan())
-				sp.SetVerbose(true)
+				sp := tracer.StartSpan("s", tracing.WithRecording(tracing.RecordingVerbose))
 				ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
 				return ctxWithSpan, sp
 			},
@@ -95,9 +94,8 @@ func TestTraceWithTags(t *testing.T) {
 	ctx = logtags.AddTag(ctx, "tag", 1)
 
 	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("s", tracing.WithForceRealSpan())
+	sp := tracer.StartSpan("s", tracing.WithRecording(tracing.RecordingVerbose))
 	ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
-	sp.SetVerbose(true)
 
 	log.Event(ctxWithSpan, "test1")
 	log.VEvent(ctxWithSpan, log.NoLogV(), "test2")
