@@ -151,9 +151,8 @@ func (*mockInternalClient) ResetQuorum(
 func (m *mockInternalClient) Batch(
 	ctx context.Context, in *roachpb.BatchRequest, opts ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
-	sp := m.tr.StartSpan("mock", tracing.WithForceRealSpan())
+	sp := m.tr.StartSpan("mock", tracing.WithRecording(tracing.RecordingVerbose))
 	defer sp.Finish()
-	sp.SetVerbose(true)
 	ctx = tracing.ContextWithSpan(ctx, sp)
 
 	log.Eventf(ctx, "mockInternalClient processing batch")

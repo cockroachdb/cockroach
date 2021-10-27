@@ -710,8 +710,7 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 // 		root2.child								<-- traceID2
 func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, func()) {
 	// Start a root span on "node 1".
-	root := t1.StartSpan("root", tracing.WithForceRealSpan())
-	root.SetVerbose(true)
+	root := t1.StartSpan("root", tracing.WithRecording(tracing.RecordingVerbose))
 
 	time.Sleep(10 * time.Millisecond)
 
@@ -737,8 +736,7 @@ func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, func()) {
 
 	// Start another remote child span on "node 2" that we finish. This will have
 	// a different trace_id from the spans created above.
-	root2 := t2.StartSpan("root2", tracing.WithForceRealSpan())
-	root2.SetVerbose(true)
+	root2 := t2.StartSpan("root2", tracing.WithRecording(tracing.RecordingVerbose))
 
 	// Start a child span on "node 2".
 	child2 := t2.StartSpan("root2.child", tracing.WithParentAndAutoCollection(root2))
