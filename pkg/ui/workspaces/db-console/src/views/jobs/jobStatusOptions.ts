@@ -52,7 +52,7 @@ export const JOB_STATUS_PENDING = "pending";
 export const JOB_STATUS_REVERTING = "reverting";
 export const JOB_STATUS_RETRY_REVERTING = "retry-reverting";
 
-export const displayStatusOptions = [
+export const statusOptions = [
   { value: "", label: "All" },
   { value: "succeeded", label: "Succeeded" },
   { value: "failed", label: "Failed" },
