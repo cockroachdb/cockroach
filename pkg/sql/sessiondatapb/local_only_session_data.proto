@@ -212,6 +212,8 @@ message LocalOnlySessionData {
   // to NULLS LAST.
   bool null_ordered_last = 55;
 
+  bool plan_direct_scan = 56;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

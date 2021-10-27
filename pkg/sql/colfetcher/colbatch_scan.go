@@ -11,11 +11,14 @@
 package colfetcher
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -27,11 +30,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TODO(yuzefovich): reading the data through a pair of ColBatchScan and
@@ -155,6 +160,9 @@ func (s *ColBatchScan) GetBytesRead() int64 {
 	// GetBytesRead() will return 0. We are also holding the mutex, so a
 	// concurrent call to Init() will have to wait, and the fetcher will remain
 	// uninitialized until we return.
+	if s.rf.fetcher == nil {
+		return 0
+	}
 	return s.rf.fetcher.GetBytesRead()
 }
 
@@ -179,6 +187,92 @@ var colBatchScanPool = sync.Pool{
 	New: func() interface{} {
 		return &ColBatchScan{}
 	},
+}
+
+func newCFetcherWrapper(
+	ctx context.Context,
+	acc *mon.BoundAccount,
+	codec keys.SQLCodec,
+	specMessage proto.Message,
+	isProjection bool,
+	neededCols util.FastIntSet,
+	nexter storage.NextKVer,
+) (storage.CFetcherWrapper, error) {
+	spec, ok := specMessage.(*execinfrapb.TableReaderSpec)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected a TableReaderSpec, but found a %T", specMessage)
+	}
+	// TODO(ajwerner): The need to construct an ImmutableTableDescriptor here
+	// indicates that we're probably doing this wrong. Instead we should be
+	// just seting the ID and Version in the spec or something like that and
+	// retrieving the hydrated ImmutableTableDescriptor from cache.
+	table := spec.BuildTableDescriptor()
+	invertedColumn := tabledesc.FindInvertedColumn(table, spec.InvertedColumn)
+	tableArgs, err := populateTableArgs(
+		ctx, nil, nil, table, table.ActiveIndexes()[spec.IndexIdx],
+		invertedColumn, spec.Visibility, spec.HasSystemColumns,
+	)
+
+	for _, neededColumn := range spec.NeededColumns {
+		tableArgs.ValNeededForCol.Add(int(neededColumn))
+	}
+
+	fetcher := cFetcherPool.Get().(*cFetcher)
+	fetcher.cFetcherArgs = cFetcherArgs{
+		memoryLimit:    execinfra.DefaultMemoryLimit,
+		lockStrength:   spec.LockingStrength,
+		lockWaitPolicy: spec.LockingWaitPolicy,
+		reverse:        spec.Reverse,
+	}
+
+	if err = fetcher.Init(codec, colmem.NewAllocator(ctx, acc, coldata.StandardColumnFactory), acc, tableArgs); err != nil {
+		fetcher.Release()
+		return nil, err
+	}
+	wrapper := cfetcherWrapper{}
+	wrapper.fetcher = *fetcher
+	wrapper.fetcher.fetcher = nexter
+	wrapper.converter, err = colserde.NewArrowBatchConverter(tableArgs.typs)
+	if err != nil {
+		return nil, err
+	}
+	wrapper.serializer, err = colserde.NewRecordBatchSerializer(tableArgs.typs)
+	if err != nil {
+		return nil, err
+	}
+	return &wrapper, nil
+}
+
+type cfetcherWrapper struct {
+	fetcher    cFetcher
+	converter  *colserde.ArrowBatchConverter
+	serializer *colserde.RecordBatchSerializer
+}
+
+func (c *cfetcherWrapper) NextBatch(ctx context.Context) ([]byte, error) {
+	batch, err := c.fetcher.NextBatch(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if batch.Length() == 0 {
+		return nil, nil
+	}
+	data, err := c.converter.BatchToArrow(batch)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	_, _, err = c.serializer.Serialize(&buf, data, batch.Length())
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+var _ storage.CFetcherWrapper = &cfetcherWrapper{}
+
+func init() {
+	storage.GetCFetcherWrapper = newCFetcherWrapper
 }
 
 // NewColBatchScan creates a new ColBatchScan operator.
@@ -378,8 +472,14 @@ func populateTableArgs(
 	// make sure they are hydrated. In row execution engine it is done during
 	// the processor initialization, but neither ColBatchScan nor cFetcher are
 	// processors, so we need to do the hydration ourselves.
-	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
-	return args, resolver.HydrateTypeSlice(ctx, args.typs)
+	if flowCtx != nil {
+		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
+		err := resolver.HydrateTypeSlice(ctx, args.typs)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return args, nil
 }
 
 // Release implements the execinfra.Releasable interface.

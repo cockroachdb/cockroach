@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -275,10 +276,10 @@ type cFetcher struct {
 	// mvccDecodeStrategy controls whether or not MVCC timestamps should
 	// be decoded from KV's fetched. It is set if any of the requested tables
 	// are required to produce an MVCC timestamp system column.
-	mvccDecodeStrategy row.MVCCDecodingStrategy
+	mvccDecodeStrategy storage.MVCCDecodingStrategy
 
 	// fetcher is the underlying fetcher that provides KVs.
-	fetcher *row.KVFetcher
+	fetcher storage.NextKVer
 
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
@@ -445,7 +446,7 @@ func (rf *cFetcher) Init(
 			switch colinfo.GetSystemColumnKindFromColumnID(col) {
 			case descpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
-				rf.mvccDecodeStrategy = row.MVCCDecodingRequired
+				rf.mvccDecodeStrategy = storage.MVCCDecodingRequired
 			case descpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
 			}
@@ -620,6 +621,9 @@ func (rf *cFetcher) Init(
 
 	rf.table = table
 	rf.accountingHelper.Init(allocator, rf.table.typs, rf.table.notNeededColOrdinals)
+
+	rf.machine.state[0] = stateResetBatch
+	rf.machine.state[1] = stateInitFetch
 
 	return nil
 }

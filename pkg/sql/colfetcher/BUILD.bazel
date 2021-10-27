@@ -5,6 +5,7 @@ go_library(
     name = "colfetcher",
     srcs = [
         "cfetcher.go",
+        "colbatch_direct_scan.go",
         "colbatch_scan.go",
         "index_join.go",
         ":gen-fetcherstate-stringer",  # keep
@@ -13,6 +14,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/col/coldata",
+        "//pkg/col/colserde",
         "//pkg/col/typeconv",
         "//pkg/keys",
         "//pkg/kv",
@@ -36,6 +38,7 @@ go_library(
         "//pkg/sql/scrub",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/storage",
         "//pkg/util",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
@@ -43,8 +46,11 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
+        "@com_github_apache_arrow_go_arrow//array",
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_protobuf//types",
     ],
 )
 

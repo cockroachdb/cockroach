@@ -28,14 +28,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// singleKVFetcher is a kvBatchFetcher that returns a single kv.
+// singleKVFetcher is a KVBatchFetcher that returns a single kv.
 type singleKVFetcher struct {
 	kvs  [1]roachpb.KeyValue
 	done bool
 }
 
-// nextBatch implements the kvBatchFetcher interface.
-func (f *singleKVFetcher) nextBatch(
+// nextBatch implements the KVBatchFetcher interface.
+func (f *singleKVFetcher) NextBatch(
 	ctx context.Context,
 ) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error) {
 	if f.done {
@@ -289,4 +289,4 @@ func DecodeRowInfo(
 	return index, names, values, nil
 }
 
-func (f *singleKVFetcher) close(context.Context) {}
+func (f *singleKVFetcher) Close(context.Context) {}
