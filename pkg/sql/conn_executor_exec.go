@@ -707,7 +707,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmtThresholdSpan.Finish()
 		logTraceAboveThreshold(
 			ctx,
-			stmtThresholdSpan.GetRecording(),
+			stmtThresholdSpan.GetRecording(tracing.RecordingVerbose),
 			fmt.Sprintf("SQL stmt %s", stmt.AST.String()),
 			stmtTraceThreshold,
 			timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived)),

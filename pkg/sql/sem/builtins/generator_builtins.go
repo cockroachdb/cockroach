@@ -1846,10 +1846,10 @@ func (p *payloadsForSpanGenerator) Next(_ context.Context) (bool, error) {
 	for p.payloads == nil {
 		p.recordingIndex++
 		// If there are no more recordings, then we cannot continue.
-		if !(p.recordingIndex < p.span.GetRecording().Len()) {
+		if !(p.recordingIndex < p.span.GetRecording(tracing.RecordingVerbose).Len()) {
 			return false, nil
 		}
-		currRecording := p.span.GetRecording()[p.recordingIndex]
+		currRecording := p.span.GetRecording(tracing.RecordingVerbose)[p.recordingIndex]
 		currRecording.Structured(func(item *pbtypes.Any, _ time.Time) {
 			payload, err := protoreflect.MessageToJSON(item, protoreflect.FmtFlags{EmitDefaults: true})
 			if err != nil {

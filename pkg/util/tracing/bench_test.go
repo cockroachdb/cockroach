@@ -82,7 +82,7 @@ func BenchmarkSpan_GetRecording(b *testing.B) {
 	run := func(b *testing.B, sp *Span) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			_ = sp.GetRecording()
+			_ = sp.GetRecording(RecordingStructured)
 		}
 	}
 
@@ -113,7 +113,7 @@ func BenchmarkRecordingWithStructuredEvent(b *testing.B) {
 		child := tr.StartSpan("bar", WithParentAndAutoCollection(root))
 		child.RecordStructured(ev)
 		child.Finish()
-		_ = root.GetRecording()
+		_ = root.GetRecording(RecordingStructured)
 	}
 }
 

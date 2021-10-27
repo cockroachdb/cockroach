@@ -34,6 +34,15 @@ const (
 	// in the span's recording (so the name RecordingOff is a misnomer). Child
 	// spans will behave the same.
 	RecordingOff RecordingType = iota
+
+	// RecordingStructured is the same as RecordingOff.
+	//
+	// TODO(andrei): RecordingStructured is WIP. For now, it is never set on a
+	// span; it is only used with GetRecording(RecordingStructured) to ask for the
+	// structured recording. In the future, a span with RecordingOff will not
+	// collect structured events.
+	RecordingStructured
+
 	// RecordingVerbose means that the Span collects events passed in through
 	// Recordf() in its recording and that derived spans will do so as well.
 	RecordingVerbose

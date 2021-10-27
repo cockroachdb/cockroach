@@ -53,7 +53,7 @@ func (s *Service) GetSpanRecordings(
 		if span.TraceID() != request.TraceID {
 			return nil
 		}
-		recording := span.GetRecording()
+		recording := span.GetRecording(tracing.RecordingVerbose)
 		if recording != nil {
 			resp.Recordings = append(resp.Recordings,
 				tracingservicepb.GetSpanRecordingsResponse_Recording{RecordedSpans: recording})

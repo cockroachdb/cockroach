@@ -243,11 +243,17 @@ func (s *crdbSpan) TraceID() tracingpb.TraceID {
 }
 
 // GetRecording is part of the RegistrySpan interface.
-func (s *crdbSpan) GetRecording() Recording {
-	switch s.recordingType() {
+func (s *crdbSpan) GetRecording(recType RecordingType) Recording {
+	switch recType {
 	case RecordingVerbose:
 		return s.getVerboseRecording()
+	case RecordingStructured:
+		return s.getStructuredRecording()
 	case RecordingOff:
+		// TODO(andrei): For now, GetRecording(RecordingOff) is the same as
+		// GetRecording(RecordingStructured).
+		// This is so that callers can do sp.GetRecording(sp.RecordingType) -- for
+		// now, callers doing this expect structured recording.
 		return s.getStructuredRecording()
 	default:
 		panic("unreachable")
@@ -284,7 +290,7 @@ func (s *crdbSpan) getVerboseRecording() Recording {
 
 // getStructuredRecording returns the structured events in this span and
 // in all the children. The results are returned as a Recording for the caller's
-// convenience (and for optimizing memory allocations). The Recording will by
+// convenience (and for optimizing memory allocations). The Recording will be
 // nil if there are no structured events. If not nil, the Recording will have
 // exactly one span corresponding to the receiver, will all events handing from
 // this span (even if the events had been recorded on different spans).
@@ -599,7 +605,7 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 	var verbose bool
 	if s.recordingType() == RecordingVerbose {
 		verbose = true
-		rec = child.GetRecording()
+		rec = child.GetRecording(RecordingVerbose)
 	} else {
 		verbose = false
 		events = make([]*tracingpb.StructuredRecord, 0, 3)
