@@ -68,30 +68,6 @@ func _ASSIGN_LT(_, _, _, _, _, _ string) bool {
 
 // */}}
 
-func isSorterSupported(t *types.T, dir execinfrapb.Ordering_Column_Direction) bool {
-	// {{range .}}
-	// {{if .Nulls}}
-	switch dir {
-	// {{range .DirOverloads}}
-	case _DIR_ENUM:
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-		// {{range .FamilyOverloads}}
-		case _CANONICAL_TYPE_FAMILY:
-			switch t.Width() {
-			// {{range .WidthOverloads}}
-			case _TYPE_WIDTH:
-				return true
-				// {{end}}
-			}
-			// {{end}}
-		}
-		// {{end}}
-	}
-	// {{end}}
-	// {{end}}
-	return false
-}
-
 // {{range .}}
 // {{$nulls := .Nulls}}
 func newSingleSorter_WITH_NULLS(t *types.T, dir execinfrapb.Ordering_Column_Direction) colSorter {

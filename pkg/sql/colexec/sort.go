@@ -34,7 +34,7 @@ func NewSorter(
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	maxOutputBatchMemSize int64,
-) (colexecop.Operator, error) {
+) colexecop.Operator {
 	return newSorter(
 		allocator, newAllSpooler(allocator, input, inputTypes),
 		inputTypes, orderingCols, maxOutputBatchMemSize,
@@ -47,22 +47,11 @@ func newSorter(
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	maxOutputBatchMemSize int64,
-) (colexecop.ResettableOperator, error) {
+) colexecop.ResettableOperator {
 	partitioners := make([]partitioner, len(orderingCols)-1)
-
-	var err error
-	for i, ord := range orderingCols {
-		if !isSorterSupported(inputTypes[ord.ColIdx], ord.Direction) {
-			return nil, errors.Errorf("sorter for type: %s and direction: %s not supported", inputTypes[ord.ColIdx], ord.Direction)
-		}
-		if i < len(orderingCols)-1 {
-			partitioners[i], err = newPartitioner(inputTypes[ord.ColIdx], false /* nullsAreDistinct */)
-			if err != nil {
-				return nil, err
-			}
-		}
+	for i, ord := range orderingCols[:len(orderingCols)-1] {
+		partitioners[i] = newPartitioner(inputTypes[ord.ColIdx], false /* nullsAreDistinct */)
 	}
-
 	return &sortOp{
 		allocator:             allocator,
 		input:                 input,
@@ -72,7 +61,7 @@ func newSorter(
 		orderingCols:          orderingCols,
 		state:                 sortSpooling,
 		maxOutputBatchMemSize: maxOutputBatchMemSize,
-	}, nil
+	}
 }
 
 // spooler is a column vector operator that spools the data from its input.
