@@ -169,6 +169,7 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.kv.reset()
 	tc.synthetic.reset()
 	tc.deletedDescs = nil
+	tc.skipValidationOnWrite = false
 }
 
 // HasUncommittedTables returns true if the Collection contains uncommitted
