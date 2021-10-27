@@ -442,24 +442,26 @@ func (r *OutputRouterSpec) summary() (string, []string) {
 
 // summary implements the diagramCellType interface.
 func (post *PostProcessSpec) summary() []string {
-	return post.summaryWithPrefix("")
-}
-
-// prefix is prepended to every line outputted to disambiguate processors
-// (namely InterleavedReaderJoiner) that have multiple PostProcessors.
-func (post *PostProcessSpec) summaryWithPrefix(prefix string) []string {
 	var res []string
 	if post.Projection {
 		outputColumns := "None"
-		if len(post.OutputColumns) > 0 {
-			outputColumns = colListStr(post.OutputColumns)
+		outputCols := post.OutputColumns
+		if post.OriginalOutputColumns != nil {
+			outputCols = post.OriginalOutputColumns
 		}
-		res = append(res, fmt.Sprintf("%sOut: %s", prefix, outputColumns))
+		if len(outputCols) > 0 {
+			outputColumns = colListStr(outputCols)
+		}
+		res = append(res, fmt.Sprintf("Out: %s", outputColumns))
 	}
-	if len(post.RenderExprs) > 0 {
+	renderExprs := post.RenderExprs
+	if post.OriginalRenderExprs != nil {
+		renderExprs = post.OriginalRenderExprs
+	}
+	if len(renderExprs) > 0 {
 		var buf bytes.Buffer
-		buf.WriteString(fmt.Sprintf("%sRender: ", prefix))
-		for i, expr := range post.RenderExprs {
+		buf.WriteString("Render: ")
+		for i, expr := range renderExprs {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
@@ -472,13 +474,13 @@ func (post *PostProcessSpec) summaryWithPrefix(prefix string) []string {
 	if post.Limit != 0 || post.Offset != 0 {
 		var buf bytes.Buffer
 		if post.Limit != 0 {
-			fmt.Fprintf(&buf, "%sLimit %d", prefix, post.Limit)
+			fmt.Fprintf(&buf, "Limit %d", post.Limit)
 		}
 		if post.Offset != 0 {
 			if buf.Len() != 0 {
 				buf.WriteByte(' ')
 			}
-			fmt.Fprintf(&buf, "%sOffset %d", prefix, post.Offset)
+			fmt.Fprintf(&buf, "Offset %d", post.Offset)
 		}
 		res = append(res, buf.String())
 	}

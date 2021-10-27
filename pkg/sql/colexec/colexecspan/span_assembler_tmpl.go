@@ -42,16 +42,19 @@ import (
 
 // NewColSpanAssembler returns a ColSpanAssembler operator that is able to
 // generate lookup spans from input batches.
+// - neededColOrdsInWholeTable is a set containing the ordinals of all columns
+// that need to be fetched. These ordinals are based on the schema of the whole
+// table rather than only among the needed columns.
 func NewColSpanAssembler(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
 	table catalog.TableDescriptor,
 	index catalog.Index,
 	inputTypes []*types.T,
-	neededCols util.FastIntSet,
+	neededColOrdsInWholeTable util.FastIntSet,
 ) ColSpanAssembler {
 	base := spanAssemblerPool.Get().(*spanAssemblerBase)
-	base.colFamStartKeys, base.colFamEndKeys = getColFamilyEncodings(neededCols, table, index)
+	base.colFamStartKeys, base.colFamEndKeys = getColFamilyEncodings(neededColOrdsInWholeTable, table, index)
 	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, table, index.GetID())
 	base.scratchKey = append(base.scratchKey[:0], keyPrefix...)
 	base.prefixLength = len(keyPrefix)

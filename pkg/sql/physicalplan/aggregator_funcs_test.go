@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package physicalplan
+package physicalplan_test
 
 import (
 	"context"
@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -119,7 +120,7 @@ func checkDistAggregationInfo(
 	colIdx int,
 	numRows int,
 	fn execinfrapb.AggregatorSpec_Func,
-	info DistAggregationInfo,
+	info physicalplan.DistAggregationInfo,
 ) {
 	colType := tableDesc.PublicColumns()[colIdx].GetType()
 
@@ -211,7 +212,7 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 		var expr execinfrapb.Expression
-		expr, err = MakeExpression(renderExpr, nil, nil)
+		expr, err = physicalplan.MakeExpression(renderExpr, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -314,7 +315,7 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 		var expr execinfrapb.Expression
-		expr, err = MakeExpression(renderExpr, nil, nil)
+		expr, err = physicalplan.MakeExpression(renderExpr, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -462,7 +463,7 @@ func TestDistAggregationTable(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
-	for fn, info := range DistAggregationTable {
+	for fn, info := range physicalplan.DistAggregationTable {
 		if fn == execinfrapb.AnyNotNull {
 			// ANY_NOT_NULL only has a definite result if all rows have the same value
 			// on the relevant column; skip testing this trivial case.
