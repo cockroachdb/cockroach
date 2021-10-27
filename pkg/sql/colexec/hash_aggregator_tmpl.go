@@ -362,7 +362,7 @@ func getNext(op *hashAggregator, partialOrder bool) coldata.Batch {
 			}
 			if op.curOutputBucketIdx >= len(op.buckets) {
 				if partialOrder {
-					if op.bufferingState.pendingBatch.Length() > 0 {
+					if l := op.bufferingState.pendingBatch.Length(); l > 0 {
 						// Clear the buckets.
 						op.state = hashAggregatorBuffering
 						op.resetBucketsAndTrackingState(op.Ctx)
@@ -373,13 +373,16 @@ func getNext(op *hashAggregator, partialOrder bool) coldata.Batch {
 						// in the buffering state, since it only contains tuples that still
 						// need to be aggregated, so we do not need to reset to the original
 						// batch state.
-						if op.inputTrackingState.tuples != nil && op.bufferingState.unprocessedIdx < op.bufferingState.pendingBatch.Length() {
+						if op.inputTrackingState.tuples != nil && op.bufferingState.unprocessedIdx < l {
 							sel := op.bufferingState.pendingBatch.Selection()
 							if sel != nil {
-								copy(sel, sel[op.bufferingState.unprocessedIdx:op.bufferingState.pendingBatch.Length()])
-								op.bufferingState.pendingBatch.SetLength(op.bufferingState.pendingBatch.Length() - op.bufferingState.unprocessedIdx)
+								copy(sel, sel[op.bufferingState.unprocessedIdx:l])
+								op.bufferingState.pendingBatch.SetLength(l - op.bufferingState.unprocessedIdx)
 							} else {
-								colexecutils.UpdateBatchState(op.bufferingState.pendingBatch, op.bufferingState.pendingBatch.Length()-op.bufferingState.unprocessedIdx, true, defaultSelectionVector[op.bufferingState.unprocessedIdx:op.bufferingState.pendingBatch.Length()])
+								colexecutils.UpdateBatchState(
+									op.bufferingState.pendingBatch, l-op.bufferingState.unprocessedIdx, true, /* usesSel */
+									colexecutils.DefaultSelectionVector[op.bufferingState.unprocessedIdx:l],
+								)
 							}
 							op.inputTrackingState.tuples.Enqueue(op.Ctx, op.bufferingState.pendingBatch)
 							// We modified pendingBatch to only contain unprocessed
@@ -404,17 +407,6 @@ func getNext(op *hashAggregator, partialOrder bool) coldata.Batch {
 			// This code is unreachable, but the compiler cannot infer that.
 			return nil
 		}
-	}
-}
-
-// defaultSelectionVector contains all integers in [0, coldata.MaxBatchSize)
-// range.
-var defaultSelectionVector []int
-
-func init() {
-	defaultSelectionVector = make([]int, coldata.MaxBatchSize)
-	for i := range defaultSelectionVector {
-		defaultSelectionVector[i] = i
 	}
 }
 
