@@ -170,6 +170,9 @@ func ListCloud() (*Cloud, error) {
 		for _, v := range vms {
 			// Parse cluster/user from VM name, but only for non-local VMs
 			userName, clusterName, err := namesFromVM(v)
+			if p.Name() == "azure" {
+				fmt.Printf("username:%s, clustername:%s, error:%s\n", userName, clusterName, err)
+			}
 			if err != nil {
 				v.Errors = append(v.Errors, vm.ErrInvalidName)
 			}

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
@@ -399,6 +400,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 			zones[i] = expandedZones[z]
 		}
 	}
+
 	var g errgroup.Group
 	limiter := rate.NewLimiter(rate.Limit(p.opts.CreateRateLimit), 2 /* buckets */)
 	for i := range names {
@@ -708,8 +710,10 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 
 			// Convert the tag map into a more useful representation
 			tagMap := make(map[string]string, len(in.Tags))
+			var sb strings.Builder
 			for _, entry := range in.Tags {
 				tagMap[entry.Key] = entry.Value
+				sb.WriteString(fmt.Sprintf("{Key=%s,Value=%s},", entry.Key, entry.Value))
 			}
 			// Ignore any instances that we didn't create
 			if tagMap["Roachprod"] != "true" {
@@ -738,6 +742,7 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 				Name:        tagMap["Name"],
 				Errors:      errs,
 				Lifetime:    lifetime,
+				Labels:      tagMap,
 				PrivateIP:   in.PrivateIPAddress,
 				Provider:    ProviderName,
 				ProviderID:  in.InstanceID,
@@ -797,13 +802,27 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 	cpuOptions := p.opts.CPUOptions
 
 	// We avoid the need to make a second call to set the tags by jamming
-	// all of our metadata into the TagSpec.
-	tagSpecs := fmt.Sprintf(
-		"ResourceType=instance,Tags=["+
-			"{Key=Lifetime,Value=%s},"+
-			"{Key=Name,Value=%s},"+
-			"{Key=Roachprod,Value=true},"+
-			"]", opts.Lifetime, name)
+	// all of our metadata into the tagSpec.
+	m := make(map[string]string)
+	m["Name"] = opts.ClusterName
+	m["Lifetime"] = opts.Lifetime.String()
+	m["Roachprod"] = "true"
+	m["Created"] = timeutil.Now().Format(time.RFC3339)
+
+	var sb strings.Builder
+	sb.WriteString("ResourceType=instance,Tags=[")
+	for key, value := range opts.CustomLabelMap {
+		_, ok := m[key]
+		if ok {
+				return fmt.Errorf("duplicate label name defined: %s", key)
+		}
+		fmt.Fprintf(&sb, "{Key=%s,Value=%s},", key, value)
+	}
+	for key, value := range m {
+		fmt.Fprintf(&sb, "{Key=%s,Value=%s},", key, value)
+	}
+	s := sb.String()
+	tagSpecs := fmt.Sprintf("%s]", s[:len(s)-1])
 
 	var data struct {
 		Instances []struct {

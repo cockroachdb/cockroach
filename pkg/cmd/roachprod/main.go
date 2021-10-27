@@ -453,6 +453,9 @@ func setupSSH(clusterName string) error {
 	if err != nil {
 		return err
 	}
+	for key, value := range cloud.Clusters {
+		fmt.Printf("cluster key:%s, value: %s\n", key, value)
+	}
 	cloudCluster, ok := cloud.Clusters[clusterName]
 	if !ok {
 		return fmt.Errorf("could not find %s in list of cluster", clusterName)
@@ -1913,6 +1916,15 @@ func main() {
 		fmt.Sprintf("The cloud provider(s) to use when creating new vm instances: %s", vm.AllProviderNames()))
 	createCmd.Flags().BoolVar(&createVMOpts.GeoDistributed,
 		"geo", false, "Create geo-distributed cluster")
+
+	defaultMap := make(map[string]string)
+
+	createCmd.Flags().StringToStringVar(&createVMOpts.CustomLabelMap,
+		"label", defaultMap,
+		"The label(s) to be used when creating new vm instances, must be in '--label name=value' format and value " +
+		"can't be empty string after trimming space, a value that has space must be quoted by single quotes. " +
+		"Examples: usage=cloud-report-2021, namewithspaceinvalue='s o s'")
+
 	// Allow each Provider to inject additional configuration flags
 	for _, p := range vm.Providers {
 		p.Flags().ConfigureCreateFlags(createCmd.Flags())
