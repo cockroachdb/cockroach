@@ -62,24 +62,10 @@ func (s *spanInner) RecordingType() RecordingType {
 }
 
 func (s *spanInner) SetVerbose(to bool) {
-	// TODO(tbg): when always-on tracing is firmly established, we can remove the ugly
-	// caveat that SetVerbose(true) is a panic on a noop span because there will be no
-	// noop span.
 	if s.isNoop() {
 		panic(errors.AssertionFailedf("SetVerbose called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
 	}
-	if to {
-		s.crdb.enableRecording(RecordingVerbose)
-	} else {
-		s.crdb.disableRecording()
-	}
-}
-
-func (s *spanInner) SetVerboseRecursively(to bool) {
-	if s.isNoop() {
-		panic(errors.AssertionFailedf("SetVerboseRecursively called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
-	}
-	s.crdb.SetVerboseRecursively(to)
+	s.crdb.SetVerbose(to)
 }
 
 func (s *spanInner) ResetRecording() {
