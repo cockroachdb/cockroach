@@ -778,9 +778,9 @@ func (p *pebbleIterator) SupportsPrev() bool {
 // CheckForKeyCollisions indicates if the provided SST data collides with this
 // iterator in the specified range.
 func (p *pebbleIterator) CheckForKeyCollisions(
-	sstData []byte, start, end roachpb.Key,
+	sstData []byte, start, end roachpb.Key, maxIntents int64,
 ) (enginepb.MVCCStats, error) {
-	return checkForKeyCollisionsGo(p, sstData, start, end)
+	return checkForKeyCollisionsGo(p, sstData, start, end, maxIntents)
 }
 
 // GetRawIter is part of the EngineIterator interface.
