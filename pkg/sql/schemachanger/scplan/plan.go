@@ -368,12 +368,8 @@ func compareOps(
 		// Equal, only implicit order determines which is first.
 		return firstImplicitOrder < secondImplicitOrder
 	}
-	// We need to check for dependencies between the To edges,
-	// not the starting point.
-	firstNodeEdge, _ := graph.GetOpEdgeFrom(firstNode)
-	secondNodeEdge, _ := graph.GetOpEdgeFrom(secondNode)
-	firstExists := doesPathExistToNode(graph, firstNodeEdge.To(), secondNodeEdge.To())
-	secondExists := doesPathExistToNode(graph, secondNodeEdge.To(), firstNodeEdge.To())
+	firstExists := doesPathExistToNode(graph, firstNode, secondNode)
+	secondExists := doesPathExistToNode(graph, secondNode, firstNode)
 
 	// If both paths exist, then we care about the direction of nodes,
 	// otherwise we have a cycle, and we can't sort.

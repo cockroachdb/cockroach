@@ -21,7 +21,7 @@ func init() {
 		scpb.Target_ADD,
 		scpb.Status_ABSENT,
 		to(scpb.Status_PUBLIC,
-			minPhase(scop.StatementPhase),
+			minPhase(scop.PreCommitPhase),
 			emit(func(this *scpb.ColumnName) scop.Op {
 				return &scop.SetColumnName{
 					TableID:  this.TableID,

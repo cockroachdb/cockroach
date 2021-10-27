@@ -269,3 +269,64 @@ func init() {
 		[]interface{}{(*scpb.InboundForeignKey)(nil), (*scpb.TypeReference)(nil)},
 		screl.ReferencedDescID)
 }
+
+func init() {
+	// Ensures that a namespace is only cleaned up after the descriptor.
+	ns, nsTarget, nsNode := targetNodeVars("namespace")
+	dep, depTarget, depNode := targetNodeVars("dep")
+	tabID := rel.Var("desc-id")
+	register(
+		"namespace needs descriptor to be dropped",
+		ns, dep,
+		screl.MustQuery(
+
+			ns.Type((*scpb.Namespace)(nil)),
+			dep.Type((*scpb.Table)(nil), (*scpb.View)(nil), (*scpb.Sequence)(nil), (*scpb.Database)(nil), (*scpb.Schema)(nil)),
+
+			tabID.Entities(screl.DescID, dep, ns),
+
+			joinTargetNode(ns, nsTarget, nsNode, drop, absent),
+			joinTargetNode(dep, depTarget, depNode, drop, absent),
+		),
+	)
+}
+
+/*func init() {
+	// FIXME: ColumnName
+	columnName, columnNameTarget, columnNameNode := targetNodeVars("column-name")
+	column, columnTarget, columnNode := targetNodeVars("column")
+	tabID := rel.Var("desc-id")
+	columnID := rel.Var("column-id")
+
+	register(
+		"namespace needs descriptor to be dropped",
+		columnName, column,
+		screl.MustQuery(
+
+			columnName.Type((*scpb.ColumnName)(nil)),
+			column.Type((*scpb.Column)(nil)),
+
+			tabID.Entities(screl.DescID, column, columnName),
+			columnID.Entities(screl.ColumnID, column, columnName),
+
+			joinTargetNode(columnName, columnNameTarget, columnNameNode, add, public),
+			joinTargetNode(column, columnTarget, columnNode, add, deleteOnly),
+		),
+	)
+
+	register(
+		"namespace needs descriptor to be dropped",
+		column, columnName,
+		screl.MustQuery(
+
+			columnName.Type((*scpb.ColumnName)(nil)),
+			column.Type((*scpb.Column)(nil)),
+
+			tabID.Entities(screl.DescID, column, columnName),
+			columnID.Entities(screl.ColumnID, column, columnName),
+
+			joinTargetNode(columnName, columnNameTarget, columnNameNode, add, public),
+			joinTargetNode(column, columnTarget, columnNode, add, deleteAndWriteOnly),
+		),
+	)
+}*/
