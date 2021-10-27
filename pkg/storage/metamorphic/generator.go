@@ -23,8 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 const zipfMax uint64 = 100000
@@ -36,26 +38,25 @@ func makeStorageConfig(path string) base.StorageConfig {
 	}
 }
 
-func createTestPebbleEngine(path string, seed int64) (storage.Engine, error) {
-	return storage.Open(
-		context.Background(),
-		storage.Filesystem(path),
-		storage.CacheSize(1<<20 /* 1 MiB */),
-		storage.Settings(cluster.MakeTestingClusterSettings()))
+func rngIntRange(rng *rand.Rand, min int64, max int64) int64 {
+	return min + rng.Int63n(max-min)
 }
 
-func createTestPebbleManySSTs(path string, seed int64) (storage.Engine, error) {
+type engineConfig struct {
+	name string
+	opts *pebble.Options
+}
+
+func (e *engineConfig) create(path string, fs vfs.FS) (storage.Engine, error) {
 	pebbleConfig := storage.PebbleConfig{
 		StorageConfig: makeStorageConfig(path),
-		Opts:          storage.DefaultPebbleOptions(),
+		Opts:          e.opts,
 	}
-	levels := pebbleConfig.Opts.Levels
-	for i := range levels {
-		if i == 0 {
-			levels[i].TargetFileSize = 1 << 8 // 256 bytes
-		} else {
-			levels[i].TargetFileSize = levels[i-1].TargetFileSize * 2
-		}
+	if pebbleConfig.Opts == nil {
+		pebbleConfig.Opts = storage.DefaultPebbleOptions()
+	}
+	if fs != nil {
+		pebbleConfig.Opts.FS = fs
 	}
 	pebbleConfig.Opts.Cache = pebble.NewCache(1 << 20)
 	defer pebbleConfig.Opts.Cache.Unref()
@@ -63,65 +64,18 @@ func createTestPebbleManySSTs(path string, seed int64) (storage.Engine, error) {
 	return storage.NewPebble(context.Background(), pebbleConfig)
 }
 
-func rngIntRange(rng *rand.Rand, min int64, max int64) int64 {
-	return min + rng.Int63n(max-min)
-}
+var _ fmt.Stringer = &engineConfig{}
 
-func createTestPebbleVarOpts(path string, seed int64) (storage.Engine, error) {
-	opts := storage.DefaultPebbleOptions()
-
-	rng := rand.New(rand.NewSource(seed))
-	opts.BytesPerSync = 1 << rngIntRange(rng, 8, 30)
-	opts.FlushSplitBytes = 1 << rng.Intn(20)
-	opts.LBaseMaxBytes = 1 << rngIntRange(rng, 8, 30)
-	opts.L0CompactionThreshold = int(rngIntRange(rng, 1, 10))
-	opts.L0StopWritesThreshold = int(rngIntRange(rng, 1, 32))
-	if opts.L0StopWritesThreshold < opts.L0CompactionThreshold {
-		opts.L0StopWritesThreshold = opts.L0CompactionThreshold
-	}
-	for i := range opts.Levels {
-		if i == 0 {
-			opts.Levels[i].BlockRestartInterval = int(rngIntRange(rng, 1, 64))
-			opts.Levels[i].BlockSize = 1 << rngIntRange(rng, 1, 20)
-			opts.Levels[i].BlockSizeThreshold = int(rngIntRange(rng, 50, 100))
-			opts.Levels[i].IndexBlockSize = opts.Levels[i].BlockSize
-			opts.Levels[i].TargetFileSize = 1 << rngIntRange(rng, 1, 20)
-		} else {
-			opts.Levels[i] = opts.Levels[i-1]
-			opts.Levels[i].TargetFileSize = opts.Levels[i-1].TargetFileSize * 2
-		}
-	}
-	opts.MaxManifestFileSize = 1 << rngIntRange(rng, 1, 28)
-	opts.MaxOpenFiles = int(rngIntRange(rng, 20, 2000))
-	opts.MemTableSize = 1 << rngIntRange(rng, 10, 28)
-	opts.MemTableStopWritesThreshold = int(rngIntRange(rng, 2, 7))
-	opts.MaxConcurrentCompactions = int(rngIntRange(rng, 1, 4))
-
-	opts.Cache = pebble.NewCache(1 << rngIntRange(rng, 1, 30))
-	defer opts.Cache.Unref()
-
-	pebbleConfig := storage.PebbleConfig{
-		StorageConfig: makeStorageConfig(path),
-		Opts:          opts,
-	}
-
-	return storage.NewPebble(context.Background(), pebbleConfig)
-}
-
-type engineImpl struct {
-	name   string
-	create func(path string, seed int64) (storage.Engine, error)
-}
-
-var _ fmt.Stringer = &engineImpl{}
-
-func (e *engineImpl) String() string {
+func (e *engineConfig) String() string {
 	return e.name
 }
 
-var engineImplPebble = engineImpl{"pebble", createTestPebbleEngine}
-var engineImplPebbleManySSTs = engineImpl{"pebble_many_ssts", createTestPebbleManySSTs}
-var engineImplPebbleVarOpts = engineImpl{"pebble_var_opts", createTestPebbleVarOpts}
+var engineConfigStandard = engineConfig{"standard=0", storage.DefaultPebbleOptions()}
+
+type engineSequence struct {
+	name    string
+	configs []engineConfig
+}
 
 // Object to store info corresponding to one metamorphic test run. Responsible
 // for generating and executing operations.
@@ -132,16 +86,19 @@ type metaTestRunner struct {
 	rng             *rand.Rand
 	seed            int64
 	path            string
-	engineImpls     []engineImpl
+	engineFS        vfs.FS
+	engineSeq       engineSequence
 	curEngine       int
 	restarts        bool
 	engine          storage.Engine
 	tsGenerator     tsGenerator
 	opGenerators    map[operandType]operandGenerator
 	txnGenerator    *txnGenerator
+	spGenerator     *savepointGenerator
 	rwGenerator     *readWriterGenerator
 	iterGenerator   *iteratorGenerator
 	keyGenerator    *keyGenerator
+	txnKeyGenerator *txnKeyGenerator
 	valueGenerator  *valueGenerator
 	pastTSGenerator *pastTSGenerator
 	nextTSGenerator *nextTSGenerator
@@ -150,6 +107,7 @@ type metaTestRunner struct {
 	openIters       map[iteratorID]iteratorInfo
 	openBatches     map[readWriterID]storage.ReadWriter
 	openTxns        map[txnID]*roachpb.Transaction
+	openSavepoints  map[txnID][]enginepb.TxnSeq
 	nameToGenerator map[string]*opGenerator
 	ops             []opRun
 	weights         []int
@@ -161,9 +119,11 @@ func (m *metaTestRunner) init() {
 	m.rng = rand.New(rand.NewSource(m.seed))
 	m.tsGenerator.init(m.rng)
 	m.curEngine = 0
+	m.printComment(fmt.Sprintf("seed: %d", m.seed))
 
 	var err error
-	m.engine, err = m.engineImpls[0].create(m.path, m.seed)
+	m.engine, err = m.engineSeq.configs[0].create(m.path, m.engineFS)
+	m.printComment(fmt.Sprintf("engine options: %s", m.engineSeq.configs[0].opts.String()))
 	if err != nil {
 		m.engine = nil
 		m.t.Fatal(err)
@@ -172,11 +132,17 @@ func (m *metaTestRunner) init() {
 	// Initialize opGenerator structs. These retain all generation time
 	// state of open objects.
 	m.txnGenerator = &txnGenerator{
-		rng:         m.rng,
-		tsGenerator: &m.tsGenerator,
-		txnIDMap:    make(map[txnID]*roachpb.Transaction),
-		openBatches: make(map[txnID]map[readWriterID]struct{}),
-		testRunner:  m,
+		rng:            m.rng,
+		tsGenerator:    &m.tsGenerator,
+		txnIDMap:       make(map[txnID]*roachpb.Transaction),
+		openBatches:    make(map[txnID]map[readWriterID]struct{}),
+		inUseKeys:      make(map[txnID][]writtenKeySpan),
+		openSavepoints: make(map[txnID]int),
+		testRunner:     m,
+	}
+	m.spGenerator = &savepointGenerator{
+		rng:          m.rng,
+		txnGenerator: m.txnGenerator,
 	}
 	m.rwGenerator = &readWriterGenerator{
 		rng:        m.rng,
@@ -191,6 +157,10 @@ func (m *metaTestRunner) init() {
 	m.keyGenerator = &keyGenerator{
 		rng:         m.rng,
 		tsGenerator: &m.tsGenerator,
+	}
+	m.txnKeyGenerator = &txnKeyGenerator{
+		txns: m.txnGenerator,
+		keys: m.keyGenerator,
 	}
 	m.valueGenerator = &valueGenerator{m.rng}
 	m.pastTSGenerator = &pastTSGenerator{
@@ -207,27 +177,34 @@ func (m *metaTestRunner) init() {
 	m.boolGenerator = &boolGenerator{rng: m.rng}
 
 	m.opGenerators = map[operandType]operandGenerator{
-		operandTransaction: m.txnGenerator,
-		operandReadWriter:  m.rwGenerator,
-		operandMVCCKey:     m.keyGenerator,
-		operandPastTS:      m.pastTSGenerator,
-		operandNextTS:      m.nextTSGenerator,
-		operandValue:       m.valueGenerator,
-		operandIterator:    m.iterGenerator,
-		operandFloat:       m.floatGenerator,
-		operandBool:        m.boolGenerator,
+		operandTransaction:   m.txnGenerator,
+		operandReadWriter:    m.rwGenerator,
+		operandMVCCKey:       m.keyGenerator,
+		operandUnusedMVCCKey: m.txnKeyGenerator,
+		operandPastTS:        m.pastTSGenerator,
+		operandNextTS:        m.nextTSGenerator,
+		operandValue:         m.valueGenerator,
+		operandIterator:      m.iterGenerator,
+		operandFloat:         m.floatGenerator,
+		operandBool:          m.boolGenerator,
+		operandSavepoint:     m.spGenerator,
 	}
 
 	m.nameToGenerator = make(map[string]*opGenerator)
 	m.weights = make([]int, len(opGenerators))
 	for i := range opGenerators {
 		m.weights[i] = opGenerators[i].weight
+		if !m.restarts && opGenerators[i].name == "restart" {
+			// Don't generate restarts.
+			m.weights[i] = 0
+		}
 		m.nameToGenerator[opGenerators[i].name] = &opGenerators[i]
 	}
 	m.ops = nil
 	m.openIters = make(map[iteratorID]iteratorInfo)
 	m.openBatches = make(map[readWriterID]storage.ReadWriter)
 	m.openTxns = make(map[txnID]*roachpb.Transaction)
+	m.openSavepoints = make(map[txnID][]enginepb.TxnSeq)
 }
 
 func (m *metaTestRunner) closeGenerators() {
@@ -259,6 +236,7 @@ func (m *metaTestRunner) closeAll() {
 	m.openIters = make(map[iteratorID]iteratorInfo)
 	m.openBatches = make(map[readWriterID]storage.ReadWriter)
 	m.openTxns = make(map[txnID]*roachpb.Transaction)
+	m.openSavepoints = make(map[txnID][]enginepb.TxnSeq)
 	if m.engine != nil {
 		m.engine.Close()
 		m.engine = nil
@@ -328,25 +306,25 @@ func (m *metaTestRunner) generateAndRun(n int) {
 }
 
 // Closes the current engine and starts another one up, with the same path.
-// Returns the engine transition that
-func (m *metaTestRunner) restart() (string, string) {
+// Returns the old and new engine configs.
+func (m *metaTestRunner) restart() (engineConfig, engineConfig) {
 	m.closeAll()
-	oldEngineName := m.engineImpls[m.curEngine].name
+	oldEngine := m.engineSeq.configs[m.curEngine]
 	// TODO(itsbilal): Select engines at random instead of cycling through them.
 	m.curEngine++
-	if m.curEngine >= len(m.engineImpls) {
+	if m.curEngine >= len(m.engineSeq.configs) {
 		// If we're restarting more times than the number of engine implementations
 		// specified, loop back around to the first engine type specified.
 		m.curEngine = 0
 	}
 
 	var err error
-	m.engine, err = m.engineImpls[m.curEngine].create(m.path, m.seed)
+	m.engine, err = m.engineSeq.configs[m.curEngine].create(m.path, m.engineFS)
 	if err != nil {
 		m.engine = nil
 		m.t.Fatal(err)
 	}
-	return oldEngineName, m.engineImpls[m.curEngine].name
+	return oldEngine, m.engineSeq.configs[m.curEngine]
 }
 
 func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
@@ -434,7 +412,7 @@ func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
 			if strings.Contains(op.expectedOutput, "error") && strings.Contains(actualOutput, "error") {
 				continue
 			}
-			m.t.Fatalf("mismatching output at line %d: expected %s, got %s", op.lineNum, op.expectedOutput, actualOutput)
+			m.t.Fatalf("mismatching output at line %d, operation index %d: expected %s, got %s", op.lineNum, i, op.expectedOutput, actualOutput)
 		}
 	}
 }
@@ -461,27 +439,38 @@ func (m *metaTestRunner) generateAndAddOp(run opReference) mvccOp {
 
 // Resolve all operands (including recursively queueing openers for operands as
 // necessary) and add the specified operation to the operations list.
-func (m *metaTestRunner) resolveAndAddOp(op *opGenerator) {
+func (m *metaTestRunner) resolveAndAddOp(op *opGenerator, fixedArgs ...string) {
 	argStrings := make([]string, len(op.operands))
+	copy(argStrings, fixedArgs)
 
 	// Operation op depends on some operands to exist in an open state.
 	// If those operands' opGenerators report a zero count for that object's open
 	// instances, recursively call generateAndAddOp with that operand type's
 	// opener.
 	for i, operand := range op.operands {
+		if i < len(fixedArgs) {
+			continue
+		}
 		opGenerator := m.opGenerators[operand]
 		// Special case: if this is an opener operation, and the operand is the
 		// last one in the list of operands, call getNew() to get a new ID instead.
 		if i == len(op.operands)-1 && op.isOpener {
-			argStrings[i] = opGenerator.getNew()
+			argStrings[i] = opGenerator.getNew(argStrings[:i])
 			continue
 		}
-		if opGenerator.count() == 0 {
+		if opGenerator.count(argStrings[:i]) == 0 {
+			var args []string
+			// Special case: Savepoints need to be created on transactions, so affix
+			// the txn when recursing.
+			switch opGenerator.opener() {
+			case "txn_create_savepoint":
+				args = append(args, argStrings[0])
+			}
 			// Add this operation to the list first, so that it creates the
 			// dependency.
-			m.resolveAndAddOp(m.nameToGenerator[opGenerator.opener()])
+			m.resolveAndAddOp(m.nameToGenerator[opGenerator.opener()], args...)
 		}
-		argStrings[i] = opGenerator.get()
+		argStrings[i] = opGenerator.get(argStrings[:i])
 	}
 
 	m.generateAndAddOp(opReference{
@@ -505,6 +494,7 @@ func (m *metaTestRunner) printOp(opName string, argStrings []string, output stri
 // printComment prints a comment line into the output file. Supports single-line
 // comments only.
 func (m *metaTestRunner) printComment(comment string) {
+	comment = strings.ReplaceAll(comment, "\n", "\n# ")
 	fmt.Fprintf(m.w, "# %s\n", comment)
 }
 

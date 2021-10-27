@@ -7,6 +7,7 @@ go_library(
         "generator.go",
         "operands.go",
         "operations.go",
+        "options.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/metamorphic",
     visibility = ["//visibility:public"],
@@ -18,10 +19,12 @@ go_library(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",
+        "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_pebble//:pebble",
+        "@com_github_cockroachdb_pebble//vfs",
     ],
 )
 
@@ -38,6 +41,8 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//oserror",
+        "@com_github_cockroachdb_pebble//vfs",
     ],
 )

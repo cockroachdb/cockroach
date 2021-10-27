@@ -13,6 +13,7 @@ package metamorphic
 import (
 	"fmt"
 	"math/rand"
+	"sort"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,12 +27,14 @@ const (
 	operandTransaction operandType = iota
 	operandReadWriter
 	operandMVCCKey
+	operandUnusedMVCCKey
 	operandPastTS
 	operandNextTS
 	operandValue
 	operandIterator
 	operandFloat
 	operandBool
+	operandSavepoint
 )
 
 const (
@@ -52,19 +55,23 @@ type operandGenerator interface {
 	// keys), it could also generate and return a new type of an instance. An
 	// operand is represented as a serializable string, that can be converted into
 	// a concrete instance type during execution by calling a get<concrete type>()
-	// or parse() method on the concrete operand generator.
-	get() string
+	// or parse() method on the concrete operand generator. Operands generated
+	// so far are passed in, in case this generator relies on them to generate
+	// new ones.
+	get(args []string) string
 	// getNew retrieves a new instance of this type of operand. Called when an
 	// opener operation (with isOpener = true) needs an ID to store its output.
-	getNew() string
+	getNew(args []string) string
 	// opener returns the name of an operation generator (defined in
 	// operations.go) that always creates a new instance of this object. Called by
 	// the test runner when an operation requires one instance of this
 	// operand to exist, and count() == 0.
 	opener() string
 	// count returns the number of live objects being managed by this generator.
-	// If 0, the opener() operation can be called when necessary.
-	count() int
+	// If this generator depends on some other previously-generated args, those
+	// can be obtained from the args list. If 0, the opener() operation can be
+	// called when necessary.
+	count(args []string) int
 	// closeAll closes all managed operands. Used when the test exits, or when a
 	// restart operation executes.
 	closeAll()
@@ -93,7 +100,7 @@ func (k *keyGenerator) opener() string {
 	return ""
 }
 
-func (k *keyGenerator) count() int {
+func (k *keyGenerator) count(args []string) int {
 	// Always return a nonzero value so opener() is never called directly.
 	return len(k.liveKeys) + 1
 }
@@ -111,7 +118,7 @@ func (k *keyGenerator) toString(key storage.MVCCKey) string {
 	return fmt.Sprintf("%s/%d", key.Key, key.Timestamp.WallTime)
 }
 
-func (k *keyGenerator) get() string {
+func (k *keyGenerator) get(args []string) string {
 	// 15% chance of returning a new key even if some exist.
 	if len(k.liveKeys) == 0 || k.rng.Float64() < 0.30 {
 		return k.toString(k.open())
@@ -120,8 +127,8 @@ func (k *keyGenerator) get() string {
 	return k.toString(k.liveKeys[k.rng.Intn(len(k.liveKeys))])
 }
 
-func (k *keyGenerator) getNew() string {
-	return k.get()
+func (k *keyGenerator) getNew(args []string) string {
+	return k.get(args)
 }
 
 func (k *keyGenerator) closeAll() {
@@ -138,6 +145,59 @@ func (k *keyGenerator) parse(input string) storage.MVCCKey {
 	return key
 }
 
+// txnKeyGenerator generates keys that are currently unused by other writers
+// on the same txn.
+//
+// Requires: the last two args to be (readWriterID, txnID).
+type txnKeyGenerator struct {
+	txns *txnGenerator
+	keys *keyGenerator
+}
+
+var _ operandGenerator = &keyGenerator{}
+
+func (k *txnKeyGenerator) opener() string {
+	return ""
+}
+
+func (k *txnKeyGenerator) count(args []string) int {
+	// Always return a nonzero value so opener() is never called directly.
+	txn := txnID(args[1])
+	openKeys := k.txns.inUseKeys[txn]
+	return len(openKeys) + 1
+}
+
+func (k *txnKeyGenerator) get(args []string) string {
+	writer := readWriterID(args[0])
+	txn := txnID(args[1])
+
+	for {
+		rawKey := k.keys.get(args)
+		key := k.keys.parse(rawKey)
+
+		conflictFound := false
+		k.txns.forEachConflict(writer, txn, key.Key, nil, func(span roachpb.Span) bool {
+			conflictFound = true
+			return false
+		})
+		if !conflictFound {
+			return rawKey
+		}
+	}
+}
+
+func (k *txnKeyGenerator) getNew(args []string) string {
+	return k.get(args)
+}
+
+func (k *txnKeyGenerator) closeAll() {
+	// No-op.
+}
+
+func (k *txnKeyGenerator) parse(input string) storage.MVCCKey {
+	return k.keys.parse(input)
+}
+
 type valueGenerator struct {
 	rng *rand.Rand
 }
@@ -148,16 +208,16 @@ func (v *valueGenerator) opener() string {
 	return ""
 }
 
-func (v *valueGenerator) count() int {
+func (v *valueGenerator) count(args []string) int {
 	return 1
 }
 
-func (v *valueGenerator) get() string {
+func (v *valueGenerator) get(args []string) string {
 	return v.toString(generateBytes(v.rng, 4, maxValueSize))
 }
 
-func (v *valueGenerator) getNew() string {
-	return v.get()
+func (v *valueGenerator) getNew(args []string) string {
+	return v.get(args)
 }
 
 func (v *valueGenerator) closeAll() {
@@ -174,13 +234,26 @@ func (v *valueGenerator) parse(input string) []byte {
 
 type txnID string
 
+type writtenKeySpan struct {
+	key    roachpb.Span
+	writer readWriterID
+}
+
 type txnGenerator struct {
 	rng         *rand.Rand
 	testRunner  *metaTestRunner
 	tsGenerator *tsGenerator
 	liveTxns    []txnID
 	txnIDMap    map[txnID]*roachpb.Transaction
+	// Set of batches with written-to keys for each txn. Does not track writes
+	// directly to the engine.
 	openBatches map[txnID]map[readWriterID]struct{}
+	// Number of open savepoints for each transaction. As savepoints cannot be
+	// "closed", this count can only go up.
+	openSavepoints map[txnID]int
+	// Stores keys written to by each transaction during operation generation.
+	// The slices are sorted in key order.
+	inUseKeys map[txnID][]writtenKeySpan
 	// Counts "generated" transactions - i.e. how many txn_open()s have been
 	// inserted so far. Could stay 0 in check mode.
 	txnGenCounter uint64
@@ -192,11 +265,11 @@ func (t *txnGenerator) opener() string {
 	return "txn_open"
 }
 
-func (t *txnGenerator) count() int {
+func (t *txnGenerator) count(args []string) int {
 	return len(t.txnIDMap)
 }
 
-func (t *txnGenerator) get() string {
+func (t *txnGenerator) get(args []string) string {
 	if len(t.liveTxns) == 0 {
 		panic("no open txns")
 	}
@@ -206,7 +279,7 @@ func (t *txnGenerator) get() string {
 // getNew returns a transaction ID, and saves this transaction as a "live"
 // transaction for generation purposes. Called only during generation, and
 // must be matched with a generateClose call.
-func (t *txnGenerator) getNew() string {
+func (t *txnGenerator) getNew(args []string) string {
 	t.txnGenCounter++
 	id := txnID(fmt.Sprintf("t%d", t.txnGenCounter))
 	// Increment the timestamp.
@@ -221,6 +294,8 @@ func (t *txnGenerator) getNew() string {
 func (t *txnGenerator) generateClose(id txnID) {
 	delete(t.openBatches, id)
 	delete(t.txnIDMap, id)
+	delete(t.openSavepoints, id)
+	delete(t.inUseKeys, id)
 
 	for i := range t.liveTxns {
 		if t.liveTxns[i] == id {
@@ -237,7 +312,109 @@ func (t *txnGenerator) clearBatch(batch readWriterID) {
 	}
 }
 
-func (t *txnGenerator) trackWriteOnBatch(w readWriterID, txn txnID) {
+func (t *txnGenerator) forEachConflict(
+	w readWriterID, txn txnID, key roachpb.Key, endKey roachpb.Key, fn func(roachpb.Span) bool,
+) {
+	if endKey == nil {
+		endKey = key.Next()
+	}
+
+	openKeys := t.inUseKeys[txn]
+	start := sort.Search(len(openKeys), func(i int) bool {
+		return key.Compare(openKeys[i].key.EndKey) < 0
+	})
+	end := sort.Search(len(openKeys), func(i int) bool {
+		return endKey.Compare(openKeys[i].key.Key) <= 0
+	})
+
+	for i := start; i < end; i++ {
+		if openKeys[i].writer != w {
+			// Conflict found.
+			if cont := fn(openKeys[i].key); !cont {
+				return
+			}
+		}
+	}
+}
+
+func (t *txnGenerator) addWrittenKeySpan(
+	w readWriterID, txn txnID, key roachpb.Key, endKey roachpb.Key,
+) {
+	span := roachpb.Span{Key: key, EndKey: endKey}
+	if endKey == nil {
+		endKey = key.Next()
+		span.EndKey = endKey
+	}
+	// writtenKeys is sorted in key order, and no two spans are overlapping.
+	// However we do _not_ merge perfectly-adjacent spans when adding;
+	// as it is legal to have [a,b) and [b,c) belonging to two different writers.
+	writtenKeys := t.inUseKeys[txn]
+	// start is the earliest span that either contains key, or if there is no such
+	// span, is the first span beyond key. end is the earliest span that does not
+	// include any keys in [key, endKey).
+	start := sort.Search(len(writtenKeys), func(i int) bool {
+		return key.Compare(writtenKeys[i].key.EndKey) < 0
+	})
+	end := sort.Search(len(writtenKeys), func(i int) bool {
+		return endKey.Compare(writtenKeys[i].key.Key) <= 0
+	})
+	if start == len(writtenKeys) {
+		// Append at end.
+		writtenKeys = append(writtenKeys, writtenKeySpan{
+			key:    span,
+			writer: w,
+		})
+		t.inUseKeys[txn] = writtenKeys
+		return
+	}
+	if start == end {
+		// start == end implies that the span cannot contain start, and by
+		// definition it is beyond end. So [key, endKey) does not overlap with an
+		// existing span and needs to be placed before start.
+		writtenKeys = append(writtenKeys, writtenKeySpan{})
+		copy(writtenKeys[start+1:], writtenKeys[start:])
+		writtenKeys[start] = writtenKeySpan{
+			key:    span,
+			writer: w,
+		}
+		t.inUseKeys[txn] = writtenKeys
+		return
+	} else if start > end {
+		panic(fmt.Sprintf("written keys not in sorted order: %d > %d", start, end))
+	}
+	// INVARIANT: start < end. The start span may or may not contain key. And we
+	// know end > 0. We will be merging existing spans, and need to compute which
+	// spans to merge and what keys to use for the resulting span. The resulting
+	// span will go into `span`, and will replace writtenKeys[start:end].
+	if writtenKeys[start].key.Key.Compare(key) < 0 {
+		// The start span contains key. So use the start key of the start span since
+		// it will result in the wider span.
+		span.Key = writtenKeys[start].key.Key
+	}
+	// Else, span.Key is equal to key which is the wider span. Note that no span
+	// overlaps with key so we are not extending this into the span at start-1.
+	//
+	// The span at end-1 may end at a key less or greater than endKey.
+	if writtenKeys[end-1].key.EndKey.Compare(endKey) > 0 {
+		// Existing span ends at a key greater than endKey, so construct the wider
+		// span.
+		span.EndKey = writtenKeys[end-1].key.EndKey
+	}
+	// We blindly replace the existing spans in writtenKeys[start:end] with the
+	// new one. This is okay as long as any conflicting operation looks at
+	// inUseKeys before generating itself; this method is only called once no
+	// conflicts are found and the write operation is successfully generated.
+	writtenKeys[start] = writtenKeySpan{
+		key:    span,
+		writer: w,
+	}
+	n := copy(writtenKeys[start+1:], writtenKeys[end:])
+	writtenKeys = writtenKeys[:start+1+n]
+	t.inUseKeys[txn] = writtenKeys
+}
+
+func (t *txnGenerator) trackTransactionalWrite(w readWriterID, txn txnID, key, endKey roachpb.Key) {
+	t.addWrittenKeySpan(w, txn, key, endKey)
 	if w == "engine" {
 		return
 	}
@@ -253,6 +430,42 @@ func (t *txnGenerator) closeAll() {
 	t.liveTxns = nil
 	t.txnIDMap = make(map[txnID]*roachpb.Transaction)
 	t.openBatches = make(map[txnID]map[readWriterID]struct{})
+	t.inUseKeys = make(map[txnID][]writtenKeySpan)
+	t.openSavepoints = make(map[txnID]int)
+}
+
+type savepointGenerator struct {
+	rng          *rand.Rand
+	txnGenerator *txnGenerator
+}
+
+var _ operandGenerator = &savepointGenerator{}
+
+func (s *savepointGenerator) get(args []string) string {
+	// Since get is being called as opposed to getNew, there must be a nonzero
+	// value at s.txnGenerator.openSavepoints[id].
+	id := txnID(args[len(args)-1])
+	n := s.rng.Intn(s.txnGenerator.openSavepoints[id])
+	return strconv.Itoa(n)
+}
+
+func (s *savepointGenerator) getNew(args []string) string {
+	id := txnID(args[len(args)-1])
+	s.txnGenerator.openSavepoints[id]++
+	return strconv.Itoa(s.txnGenerator.openSavepoints[id] - 1)
+}
+
+func (s *savepointGenerator) opener() string {
+	return "txn_create_savepoint"
+}
+
+func (s *savepointGenerator) count(args []string) int {
+	id := txnID(args[len(args)-1])
+	return s.txnGenerator.openSavepoints[id]
+}
+
+func (s *savepointGenerator) closeAll() {
+	// No-op.
 }
 
 type pastTSGenerator struct {
@@ -266,7 +479,7 @@ func (t *pastTSGenerator) opener() string {
 	return ""
 }
 
-func (t *pastTSGenerator) count() int {
+func (t *pastTSGenerator) count(args []string) int {
 	// Always return a non-zero count so opener() is never called.
 	return int(t.tsGenerator.lastTS.WallTime) + 1
 }
@@ -289,12 +502,12 @@ func (t *pastTSGenerator) parse(input string) hlc.Timestamp {
 	return ts
 }
 
-func (t *pastTSGenerator) get() string {
+func (t *pastTSGenerator) get(args []string) string {
 	return t.toString(t.tsGenerator.randomPastTimestamp(t.rng))
 }
 
-func (t *pastTSGenerator) getNew() string {
-	return t.get()
+func (t *pastTSGenerator) getNew(args []string) string {
+	return t.get(args)
 }
 
 // Similar to pastTSGenerator, except it always increments the "current" timestamp
@@ -303,12 +516,12 @@ type nextTSGenerator struct {
 	pastTSGenerator
 }
 
-func (t *nextTSGenerator) get() string {
+func (t *nextTSGenerator) get(args []string) string {
 	return t.toString(t.tsGenerator.generate())
 }
 
-func (t *nextTSGenerator) getNew() string {
-	return t.get()
+func (t *nextTSGenerator) getNew(args []string) string {
+	return t.get(args)
 }
 
 type readWriterID string
@@ -323,7 +536,7 @@ type readWriterGenerator struct {
 
 var _ operandGenerator = &readWriterGenerator{}
 
-func (w *readWriterGenerator) get() string {
+func (w *readWriterGenerator) get(args []string) string {
 	// 25% chance of returning the engine, even if there are live batches.
 	if len(w.liveBatches) == 0 || w.rng.Float64() < 0.25 {
 		return "engine"
@@ -333,7 +546,7 @@ func (w *readWriterGenerator) get() string {
 }
 
 // getNew is called during generation to generate a batch ID.
-func (w *readWriterGenerator) getNew() string {
+func (w *readWriterGenerator) getNew(args []string) string {
 	w.batchGenCounter++
 	id := readWriterID(fmt.Sprintf("batch%d", w.batchGenCounter))
 	w.batchIDMap[id] = nil
@@ -363,7 +576,7 @@ func (w *readWriterGenerator) generateClose(id readWriterID) {
 	w.m.txnGenerator.clearBatch(id)
 }
 
-func (w *readWriterGenerator) count() int {
+func (w *readWriterGenerator) count(args []string) int {
 	return len(w.batchIDMap) + 1
 }
 
@@ -395,7 +608,7 @@ type iteratorGenerator struct {
 
 var _ operandGenerator = &iteratorGenerator{}
 
-func (i *iteratorGenerator) get() string {
+func (i *iteratorGenerator) get(args []string) string {
 	if len(i.liveIters) == 0 {
 		panic("no open iterators")
 	}
@@ -403,7 +616,7 @@ func (i *iteratorGenerator) get() string {
 	return string(i.liveIters[i.rng.Intn(len(i.liveIters))])
 }
 
-func (i *iteratorGenerator) getNew() string {
+func (i *iteratorGenerator) getNew(args []string) string {
 	i.iterGenCounter++
 	id := fmt.Sprintf("iter%d", i.iterGenCounter)
 	return id
@@ -451,7 +664,7 @@ func (i *iteratorGenerator) opener() string {
 	return "iterator_open"
 }
 
-func (i *iteratorGenerator) count() int {
+func (i *iteratorGenerator) count(args []string) int {
 	return len(i.iterInfo)
 }
 
@@ -465,12 +678,12 @@ type floatGenerator struct {
 	rng *rand.Rand
 }
 
-func (f *floatGenerator) get() string {
+func (f *floatGenerator) get(args []string) string {
 	return fmt.Sprintf("%.4f", f.rng.Float32())
 }
 
-func (f *floatGenerator) getNew() string {
-	return f.get()
+func (f *floatGenerator) getNew(args []string) string {
+	return f.get(args)
 }
 
 func (f *floatGenerator) parse(input string) float32 {
@@ -486,7 +699,7 @@ func (f *floatGenerator) opener() string {
 	return ""
 }
 
-func (f *floatGenerator) count() int {
+func (f *floatGenerator) count(args []string) int {
 	return 1
 }
 
@@ -498,12 +711,12 @@ type boolGenerator struct {
 	rng *rand.Rand
 }
 
-func (f *boolGenerator) get() string {
+func (f *boolGenerator) get(args []string) string {
 	return fmt.Sprintf("%t", f.rng.Float32() < 0.5)
 }
 
-func (f *boolGenerator) getNew() string {
-	return f.get()
+func (f *boolGenerator) getNew(args []string) string {
+	return f.get(args)
 }
 
 func (f *boolGenerator) parse(input string) bool {
@@ -519,7 +732,7 @@ func (f *boolGenerator) opener() string {
 	return ""
 }
 
-func (f *boolGenerator) count() int {
+func (f *boolGenerator) count(args []string) int {
 	return 1
 }
 
