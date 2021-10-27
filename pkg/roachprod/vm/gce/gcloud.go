@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
@@ -153,6 +154,7 @@ func (jsonVM *jsonVM) toVM(project string, opts *ProviderOpts) (ret *vm.VM) {
 		Errors:      vmErrors,
 		DNS:         fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
 		Lifetime:    lifetime,
+		Labels:      jsonVM.Labels,
 		PrivateIP:   privateIP,
 		Provider:    ProviderName,
 		ProviderID:  jsonVM.Name,
@@ -474,7 +476,26 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	if p.opts.MinCPUPlatform != "" {
 		args = append(args, "--min-cpu-platform", p.opts.MinCPUPlatform)
 	}
-	args = append(args, "--labels", fmt.Sprintf("lifetime=%s", opts.Lifetime))
+
+	m := vm.GetDefaultLabelMap(opts)
+	// Format according to gce label naming convention requirement.
+	time := timeutil.Now().Format(time.RFC3339)
+	time = strings.ToLower(strings.ReplaceAll(time, ":", "_"))
+	m[vm.TagCreated] = time
+
+	var sb strings.Builder
+	for key, value := range opts.CustomLabelMap {
+		_, ok := m[key]
+		if ok {
+			return fmt.Errorf("duplicate label name defined: %s", key)
+		}
+		fmt.Fprintf(&sb, "%s=%s,", key, value)
+	}
+	for key, value := range m {
+		fmt.Fprintf(&sb, "%s=%s,", key, value)
+	}
+	s := sb.String()
+	args = append(args, "--labels", s[:len(s)-1])
 
 	args = append(args, "--metadata-from-file", fmt.Sprintf("startup-script=%s", filename))
 	args = append(args, "--project", project)
