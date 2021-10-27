@@ -47,6 +47,22 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 }
 
 func resetSessionVars(ctx context.Context, m sessionDataMutator) error {
+	// Some variables, like datestyle_enabled and intervalstyle_enabled,
+	// gate other variables, so they need to be applied first. This is a pretty
+	// ugly way of doing it, but the plan is to eventually remove
+	// datestyle_enabled and intervalstyle_enabled anyway.
+	varsWithPrecedence := []string{"datestyle_enabled", "intervalstyle_enabled"}
+	for _, varName := range varsWithPrecedence {
+		v := varGen[varName]
+		if v.Set != nil {
+			hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
+			if hasDefault {
+				if err := v.Set(ctx, m, defVal); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	for _, varName := range varNames {
 		v := varGen[varName]
 		if v.Set != nil {
