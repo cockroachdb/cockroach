@@ -220,7 +220,7 @@ func (g *Graph) MergeOpEdges(oe *OpEdge, next *OpEdge) {
 			}
 		}
 	}
-	for _, edge := range g.nodeOpEdges {
+	for _, edge := range g.nodeOpEdgesFrom {
 		if edge == next {
 			continue
 		}
@@ -255,7 +255,7 @@ func (g *Graph) MergeOpEdges(oe *OpEdge, next *OpEdge) {
 	}
 	g.edges = newEdges
 	delete(g.nodeDepEdges, next.from)
-	delete(g.nodeOpEdges, next.from)
+	delete(g.nodeOpEdgesFrom, next.from)
 	// Fix reverse references
 	for _, values := range g.nodeDepEdges {
 		for _, edge := range values {
