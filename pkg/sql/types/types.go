@@ -1194,20 +1194,25 @@ func (t *T) TypeModifier() int32 {
 	if t.Family() == ArrayFamily {
 		return t.ArrayContents().TypeModifier()
 	}
-	if width := t.Width(); width != 0 {
-		switch t.Family() {
-		case StringFamily, CollatedStringFamily:
+
+	switch t.Family() {
+	case StringFamily, CollatedStringFamily:
+		if width := t.Width(); width != 0 {
 			// Postgres adds 4 to the attypmod for bounded string types, the
 			// var header size.
-			typeModifier = width + 4
-		case BitFamily:
-			typeModifier = width
-		case DecimalFamily:
-			// attTypMod is calculated by putting the precision in the upper
-			// bits and the scale in the lower bits of a 32-bit int, and adding
-			// 4 (the var header size). We mock this for clients' sake. See
-			// numeric.c.
-			typeModifier = ((t.Precision() << 16) | width) + 4
+			return width + 4
+		}
+	case BitFamily:
+		if width := t.Width(); width != 0 {
+			return width
+		}
+	case DecimalFamily:
+		// attTypMod is calculated by putting the precision in the upper
+		// bits and the scale in the lower bits of a 32-bit int, and adding
+		// 4 (the var header size). We mock this for clients' sake. See
+		// https://github.com/postgres/postgres/blob/5a2832465fd8984d089e8c44c094e6900d987fcd/src/backend/utils/adt/numeric.c#L1242.
+		if width, precision := t.Width(), t.Precision(); precision != 0 || width != 0 {
+			return ((precision << 16) | width) + 4
 		}
 	}
 	return typeModifier
