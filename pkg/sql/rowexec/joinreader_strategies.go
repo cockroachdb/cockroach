@@ -61,6 +61,10 @@ type joinReaderStrategy interface {
 	generatedRemoteSpans() bool
 	// processLookupRows consumes the rows the joinReader has buffered and returns
 	// the lookup spans.
+	//
+	// The returned spans are not accounted for, so it is the caller's
+	// responsibility to register the spans memory usage with our memory
+	// accounting system.
 	processLookupRows(rows []rowenc.EncDatumRow) (roachpb.Spans, error)
 	// processLookedUpRow processes a looked up row. A joinReaderState is returned
 	// to indicate the next state to transition to. If this next state is

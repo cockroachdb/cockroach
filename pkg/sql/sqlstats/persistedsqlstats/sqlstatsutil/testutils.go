@@ -110,6 +110,7 @@ var fieldBlacklist = map[string]struct{}{
 	"LegacyLastErrRedacted":   {},
 	"StatementFingerprintIDs": {},
 	"AggregatedTs":            {},
+	"AggregationInterval":     {},
 }
 
 func fillObject(t *testing.T, val reflect.Value, data *randomData) {

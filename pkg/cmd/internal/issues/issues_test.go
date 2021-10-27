@@ -28,7 +28,7 @@ import (
 
 func TestPost(t *testing.T) {
 	const (
-		assignee    = "hodor" // fake Github handle we're returning as assignee
+		assignee    = "hodor" // fake GitHub handle we're returning as assignee
 		milestone   = 2       // fake milestone we're using here
 		issueID     = 1337    // issue ID returned in select test cases
 		issueNumber = 30      // issue # returned in select test cases
@@ -280,16 +280,16 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 					ctx := context.Background()
 					repro := ReproductionCommandFromString(c.reproCmd)
 					if c.reproTitle != "" {
-						repro = ReproductionAsLink(c.reproTitle, c.reproURL)
+						repro = HelpCommandAsLink(c.reproTitle, c.reproURL)
 					}
 					req := PostRequest{
-						PackageName:         c.packageName,
-						TestName:            c.testName,
-						Message:             c.message,
-						Artifacts:           c.artifacts,
-						AuthorEmail:         c.author,
-						ReproductionCommand: repro,
-						ExtraLabels:         []string{"release-blocker"},
+						PackageName: c.packageName,
+						TestName:    c.testName,
+						Message:     c.message,
+						Artifacts:   c.artifacts,
+						AuthorEmail: c.author,
+						HelpCommand: repro,
+						ExtraLabels: []string{"release-blocker"},
 					}
 					require.NoError(t, p.post(ctx, UnitTestFormatter, req))
 					path := filepath.Join("testdata", "post", c.name+"-"+foundIssue+".txt")

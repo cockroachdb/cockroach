@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -84,6 +85,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -461,7 +463,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			// also remove the record after the temp directory is
 			// removed.
 			recordPath := filepath.Join(useStore.Path, TempDirsRecordFilename)
-			err = storage.CleanupTempDirs(recordPath)
+			err = fs.CleanupTempDirs(recordPath)
 		}
 		if err != nil {
 			log.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
@@ -839,6 +841,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// Instantiate a span config manager. If we're the host tenant we'll
 		// only do it if COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is set.
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
+		sqlTranslator := spanconfigsqltranslator.New(execCfg, codec)
 		spanConfigMgr = spanconfigmanager.New(
 			cfg.db,
 			jobRegistry,
@@ -846,6 +849,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.stopper,
 			cfg.Settings,
 			cfg.spanConfigAccessor,
+			sqlTranslator,
 			spanConfigKnobs,
 		)
 		execCfg.SpanConfigReconciliationJobDeps = spanConfigMgr

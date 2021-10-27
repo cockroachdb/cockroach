@@ -135,7 +135,7 @@ func (ef *execFactory) ConstructExport(
 	if err != nil {
 		panic(err)
 	}
-	if !admin {
+	if !admin && !ef.planner.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
 		conf, err := cloud.ExternalStorageConfFromURI(string(*destination), ef.planner.User())
 		if err != nil {
 			return nil, err

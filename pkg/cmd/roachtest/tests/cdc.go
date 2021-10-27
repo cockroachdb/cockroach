@@ -92,7 +92,7 @@ func cdcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
 
 const randomSettingPercent = 0.50
 
-var rng, _ = randutil.NewTestPseudoRand()
+var rng, _ = randutil.NewTestRand()
 
 func randomlyRun(t test.Test, db *sqlutils.SQLRunner, query string) {
 	if rng.Float64() < randomSettingPercent {
@@ -1110,7 +1110,7 @@ fi
 `, confluentDownloadURL, confluentSHA256, confluentInstallBase, confluentCLIVersion, confluentCLIDownloadURLBase)
 
 const (
-	// kafkaJAASConfig is a JAAS configuration file that creats a
+	// kafkaJAASConfig is a JAAS configuration file that creates a
 	// user called "plain" with password "plain-secret" that can
 	// authenticate via SASL/PLAIN.
 	//

@@ -65,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -610,27 +611,25 @@ func (s *statusServer) Allocator(
 	err = s.stores.VisitStores(func(store *kvserver.Store) error {
 		// All ranges requested:
 		if len(req.RangeIDs) == 0 {
-			// Use IterateRangeDescriptors to read from the engine only
-			// because it's already exported.
-			err := kvserver.IterateRangeDescriptors(ctx, store.Engine(),
-				func(desc roachpb.RangeDescriptor) error {
-					rep := store.GetReplicaIfExists(desc.RangeID)
-					if rep == nil {
-						return nil // continue
-					}
+			var err error
+			store.VisitReplicas(
+				func(rep *kvserver.Replica) bool {
 					if !rep.OwnsValidLease(ctx, store.Clock().NowAsClockTimestamp()) {
-						return nil
+						return true // continue.
 					}
-					allocatorSpans, err := store.AllocatorDryRun(ctx, rep)
+					var allocatorSpans tracing.Recording
+					allocatorSpans, err = store.AllocatorDryRun(ctx, rep)
 					if err != nil {
-						return err
+						return false // break and bubble up the error.
 					}
 					output.DryRuns = append(output.DryRuns, &serverpb.AllocatorDryRun{
-						RangeID: desc.RangeID,
+						RangeID: rep.RangeID,
 						Events:  recordedSpansToTraceEvents(allocatorSpans),
 					})
-					return nil
-				})
+					return true // continue.
+				},
+				kvserver.WithReplicasInOrder(),
+			)
 			return err
 		}
 
@@ -948,7 +947,7 @@ func (s *statusServer) GetFiles(
 	var dir string
 	switch req.Type {
 	//TODO(ridwanmsharif): Serve logfiles so debug-zip can fetch them
-	// intead of reading indididual entries.
+	// instead of reading individual entries.
 	case serverpb.FileType_HEAP: // Requesting for saved Heap Profiles.
 		dir = s.admin.server.cfg.HeapProfileDirName
 	case serverpb.FileType_GOROUTINES: // Requesting for saved Goroutine dumps.
@@ -1411,6 +1410,9 @@ func (s *statusServer) NodesUI(
 	}
 
 	internalResp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
+	if err != nil {
+		return nil, err
+	}
 	resp := &serverpb.NodesResponseExternal{
 		Nodes:            make([]serverpb.NodeResponse, len(internalResp.Nodes)),
 		LivenessByNodeID: internalResp.LivenessByNodeID,
@@ -1879,12 +1881,13 @@ func (s *statusServer) rangesHelper(
 	}
 
 	constructRangeInfo := func(
-		desc roachpb.RangeDescriptor, rep *kvserver.Replica, storeID roachpb.StoreID, metrics kvserver.ReplicaMetrics,
+		rep *kvserver.Replica, storeID roachpb.StoreID, metrics kvserver.ReplicaMetrics,
 	) serverpb.RangeInfo {
 		raftStatus := rep.RaftStatus()
 		raftState := convertRaftStatus(raftStatus)
 		leaseHistory := rep.GetLeaseHistory()
 		var span serverpb.PrettySpan
+		desc := rep.Desc()
 		span.StartKey = desc.StartKey.String()
 		span.EndKey = desc.EndKey.String()
 		state := rep.State(ctx)
@@ -1902,6 +1905,7 @@ func (s *statusServer) rangesHelper(
 				WaitingWriters: lm.WaitingWriters,
 			})
 		}
+		qps, _ := rep.QueriesPerSecond()
 		return serverpb.RangeInfo{
 			Span:          span,
 			RaftState:     raftState,
@@ -1910,7 +1914,7 @@ func (s *statusServer) rangesHelper(
 			SourceStoreID: storeID,
 			LeaseHistory:  leaseHistory,
 			Stats: serverpb.RangeStatistics{
-				QueriesPerSecond: rep.QueriesPerSecond(),
+				QueriesPerSecond: qps,
 				WritesPerSecond:  rep.WritesPerSecond(),
 			},
 			Problems: serverpb.RangeProblems{
@@ -1940,10 +1944,10 @@ func (s *statusServer) rangesHelper(
 
 	// There are two possibilities for ordering of ranges in the results:
 	// it could either be determined by the RangeIDs in the request (if specified),
-	// or be in RangeID order if not (as that's the ordering that
-	// IterateRangeDescriptors works on). The latter is already sorted in a
-	// stable fashion, as far as pagination is concerned. The former case requires
-	// sorting.
+	// or be in RangeID order if not (as we pass in the
+	// VisitReplicasInSortedOrder option to store.VisitReplicas below). The latter
+	// is already sorted in a stable fashion, as far as pagination is concerned.
+	// The former case requires sorting.
 	if len(req.RangeIDs) > 0 {
 		sort.Slice(req.RangeIDs, func(i, j int) bool {
 			return req.RangeIDs[i] < req.RangeIDs[j]
@@ -1954,25 +1958,19 @@ func (s *statusServer) rangesHelper(
 		now := store.Clock().NowAsClockTimestamp()
 		if len(req.RangeIDs) == 0 {
 			// All ranges requested.
-
-			// Use IterateRangeDescriptors to read from the engine only
-			// because it's already exported.
-			err := kvserver.IterateRangeDescriptors(ctx, store.Engine(),
-				func(desc roachpb.RangeDescriptor) error {
-					rep := store.GetReplicaIfExists(desc.RangeID)
-					if rep == nil {
-						return nil // continue
-					}
+			store.VisitReplicas(
+				func(rep *kvserver.Replica) bool {
 					output.Ranges = append(output.Ranges,
 						constructRangeInfo(
-							desc,
 							rep,
 							store.Ident.StoreID,
 							rep.Metrics(ctx, now, isLiveMap, clusterNodes),
 						))
-					return nil
-				})
-			return err
+					return true // continue.
+				},
+				kvserver.WithReplicasInOrder(),
+			)
+			return nil
 		}
 
 		// Specific ranges requested:
@@ -1982,10 +1980,8 @@ func (s *statusServer) rangesHelper(
 				// Not found: continue.
 				continue
 			}
-			desc := rep.Desc()
 			output.Ranges = append(output.Ranges,
 				constructRangeInfo(
-					*desc,
 					rep,
 					store.Ident.StoreID,
 					rep.Metrics(ctx, now, isLiveMap, clusterNodes),

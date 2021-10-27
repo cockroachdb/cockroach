@@ -17,7 +17,7 @@ TABLE kv
  ├── v int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX kv_pkey
  │    └── k int not null
  └── INDEX idx
       ├── v int
@@ -55,7 +55,7 @@ TABLE kv
  ├── v int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX kv_pkey
  │    └── k int not null
  └── INDEX idx
       ├── v int
@@ -85,13 +85,13 @@ TABLE g
  ├── tableoid oid [hidden] [system]
  ├── geog_inverted_key geography not null [inverted]
  ├── geog_inverted_key geography not null [inverted]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX g_pkey
  │    └── k int not null
- ├── INVERTED INDEX secondary
+ ├── INVERTED INDEX g_a_geog_idx
  │    ├── a int
  │    ├── geog_inverted_key geography not null [inverted]
  │    └── k int not null
- └── INVERTED INDEX secondary
+ └── INVERTED INDEX g_a_b_geog_idx
       ├── a int
       ├── b int
       ├── geog_inverted_key geography not null [inverted]
@@ -142,7 +142,7 @@ TABLE xyz
  ├── crdb_internal_idx_expr_7 int as (x + y) virtual [hidden]
  ├── crdb_internal_idx_expr_8 jsonb as (j->'a') virtual [hidden]
  ├── crdb_internal_idx_expr_8_inverted_key jsonb not null [inverted]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX xyz_pkey
  │    └── x int not null
  ├── INDEX idx1
  │    ├── crdb_internal_idx_expr string as (lower(z)) virtual [hidden]

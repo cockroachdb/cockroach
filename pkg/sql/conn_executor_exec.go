@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -375,9 +374,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	if e, ok := ast.(*tree.ExplainAnalyze); ok {
 		switch e.Mode {
 		case tree.ExplainDebug:
-			if !p.ExecCfg().Codec.ForSystemTenant() {
-				return makeErrEvent(errorutil.UnsupportedWithMultiTenancy(70931))
-			}
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
 			ih.SetOutputMode(explainAnalyzeDebugOutput, explain.Flags{})
 
@@ -428,7 +424,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		var err error
-		pinfo, err = fillInPlaceholders(ctx, ps, name, e.Params, ex.sessionData().SearchPath)
+		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
 		if err != nil {
 			return makeErrEvent(err)
 		}

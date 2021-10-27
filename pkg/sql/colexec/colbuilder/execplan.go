@@ -181,14 +181,6 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		if spec.Core.JoinReader.LookupColumns != nil || !spec.Core.JoinReader.LookupExpr.Empty() {
 			return errLookupJoinUnsupported
 		}
-		for i := range spec.Core.JoinReader.Table.Indexes {
-			if spec.Core.JoinReader.Table.Indexes[i].IsInterleaved() {
-				// Interleaved indexes are going to be removed anyway, so there is no
-				// point in handling the extra complexity. Just let the row engine
-				// handle this.
-				return errInterleavedIndexJoin
-			}
-		}
 		return nil
 
 	case spec.Core.Filterer != nil:
@@ -263,7 +255,6 @@ var (
 	errExperimentalWrappingProhibited = errors.New("wrapping for non-JoinReader and non-LocalPlanNode cores is prohibited in vectorize=experimental_always")
 	errWrappedCast                    = errors.New("mismatched types in NewColOperator and unsupported casts")
 	errLookupJoinUnsupported          = errors.New("lookup join reader is unsupported in vectorized")
-	errInterleavedIndexJoin           = errors.New("vectorized join reader is unsupported for interleaved indexes")
 )
 
 func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
@@ -707,6 +698,7 @@ func NewColOperator(
 	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
 	if args.ExprHelper == nil {
 		args.ExprHelper = colexecargs.NewExprHelper()
+		args.ExprHelper.SemaCtx = flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
 	}
 
 	core := &spec.Core
@@ -762,10 +754,13 @@ func NewColOperator(
 			cFetcherMemAcc := result.createUnlimitedMemAccount(
 				ctx, flowCtx, "cfetcher" /* opName */, spec.ProcessorID,
 			)
+			kvFetcherMemAcc := result.createUnlimitedMemAccount(
+				ctx, flowCtx, "kvfetcher" /* opName */, spec.ProcessorID,
+			)
 			estimatedRowCount := spec.EstimatedRowCount
 			scanOp, err := colfetcher.NewColBatchScan(
-				ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), flowCtx,
-				evalCtx, core.TableReader, post, estimatedRowCount,
+				ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
+				flowCtx, evalCtx, args.ExprHelper, core.TableReader, post, estimatedRowCount,
 			)
 			if err != nil {
 				return r, err
@@ -786,12 +781,15 @@ func NewColOperator(
 			cFetcherMemAcc := result.createUnlimitedMemAccount(
 				ctx, flowCtx, "cfetcher" /* opName */, spec.ProcessorID,
 			)
-			semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
+			kvFetcherMemAcc := result.createUnlimitedMemAccount(
+				ctx, flowCtx, "kvfetcher" /* opName */, spec.ProcessorID,
+			)
 			inputTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(inputTypes, spec.Input[0].ColumnTypes)
 			indexJoinOp, err := colfetcher.NewColIndexJoin(
-				ctx, streamingAllocator, colmem.NewAllocator(ctx, cFetcherMemAcc, factory),
-				flowCtx, evalCtx, semaCtx, inputs[0].Root, core.JoinReader, post, inputTypes)
+				ctx, streamingAllocator, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
+				flowCtx, evalCtx, args.ExprHelper, inputs[0].Root, core.JoinReader, post, inputTypes,
+			)
 			if err != nil {
 				return r, err
 			}
@@ -852,9 +850,8 @@ func NewColOperator(
 				Spec:       aggSpec,
 				EvalCtx:    evalCtx,
 			}
-			semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
 			newAggArgs.Constructors, newAggArgs.ConstArguments, newAggArgs.OutputTypes, err = colexecagg.ProcessAggregations(
-				evalCtx, semaCtx, aggSpec.Aggregations, inputTypes,
+				evalCtx, args.ExprHelper.SemaCtx, aggSpec.Aggregations, inputTypes,
 			)
 			if err != nil {
 				return r, err
@@ -1395,9 +1392,8 @@ func NewColOperator(
 							Func:   aggType,
 							ColIdx: colIdx,
 						}}
-						semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
 						aggArgs.Constructors, aggArgs.ConstArguments, aggArgs.OutputTypes, err =
-							colexecagg.ProcessAggregations(evalCtx, semaCtx, aggregations, argTypes)
+							colexecagg.ProcessAggregations(evalCtx, args.ExprHelper.SemaCtx, aggregations, argTypes)
 						var toClose colexecop.Closers
 						var aggFnsAlloc *colexecagg.AggregateFuncsAlloc
 						if (aggType != execinfrapb.Min && aggType != execinfrapb.Max) ||
@@ -1632,10 +1628,9 @@ func (r *postProcessResult) planPostProcessSpec(
 	if post.Projection {
 		r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, post.OutputColumns)
 	} else if post.RenderExprs != nil {
-		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
 		var renderedCols []uint32
 		for _, renderExpr := range post.RenderExprs {
-			expr, err := args.ExprHelper.ProcessExpr(renderExpr, semaCtx, evalCtx, r.ColumnTypes)
+			expr, err := args.ExprHelper.ProcessExpr(renderExpr, evalCtx, r.ColumnTypes)
 			if err != nil {
 				return err
 			}
@@ -1812,8 +1807,7 @@ func planFilterExpr(
 	helper *colexecargs.ExprHelper,
 	releasables *[]execinfra.Releasable,
 ) (colexecop.Operator, error) {
-	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
-	expr, err := helper.ProcessExpr(filter, semaCtx, evalCtx, columnTypes)
+	expr, err := helper.ProcessExpr(filter, evalCtx, columnTypes)
 	if err != nil {
 		return nil, err
 	}

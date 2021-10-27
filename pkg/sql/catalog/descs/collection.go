@@ -15,6 +15,7 @@ package descs
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -51,8 +53,6 @@ func makeCollection(
 		hydratedTables: hydratedTables,
 		virtual:        makeVirtualDescriptors(virtualSchemas),
 		leased:         makeLeasedDescriptors(leaseMgr),
-		synthetic:      makeSyntheticDescriptors(),
-		uncommitted:    makeUncommittedDescriptors(),
 		kv:             makeKVDescriptors(codec),
 		temporary:      makeTemporaryDescriptors(codec, temporarySchemaProvider),
 	}
@@ -169,6 +169,7 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.kv.reset()
 	tc.synthetic.reset()
 	tc.deletedDescs = nil
+	tc.skipValidationOnWrite = false
 }
 
 // HasUncommittedTables returns true if the Collection contains uncommitted
@@ -278,6 +279,38 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 	return tc.kv.getAllDatabaseDescriptors(ctx, txn)
 }
 
+// GetAllTableDescriptorsInDatabase returns all the table descriptors visible to
+// the transaction under the database with the given ID. It first checks the
+// collection's cached descriptors before defaulting to a key-value scan, if
+// necessary.
+func (tc *Collection) GetAllTableDescriptorsInDatabase(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID,
+) ([]catalog.TableDescriptor, error) {
+	// Ensure the given ID does indeed belong to a database.
+	found, _, err := tc.getDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
+		AvoidCached: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
+	}
+	descs, err := tc.GetAllDescriptors(ctx, txn)
+	if err != nil {
+		return nil, err
+	}
+	var ret []catalog.TableDescriptor
+	for _, desc := range descs {
+		if desc.GetParentID() == dbID {
+			if table, ok := desc.(catalog.TableDescriptor); ok {
+				ret = append(ret, table)
+			}
+		}
+	}
+	return ret, nil
+}
+
 // GetSchemasForDatabase returns the schemas for a given database
 // visible by the transaction. This uses the schema cache locally
 // if possible, or else performs a scan on kv.
@@ -349,6 +382,19 @@ func (tc *Collection) GetObjectNamesAndIDs(
 // documentation on syntheticDescriptors.
 func (tc *Collection) SetSyntheticDescriptors(descs []catalog.Descriptor) {
 	tc.synthetic.set(descs)
+}
+
+// AddSyntheticDescriptor replaces a descriptor with a synthetic
+// one temporarily for a given transaction. This synthetic descriptor
+// will be immutable.
+func (tc *Collection) AddSyntheticDescriptor(desc catalog.Descriptor) {
+	tc.synthetic.add(desc)
+}
+
+// RemoveSyntheticDescriptor removes a synthetic descriptor
+// override that temporarily exists for a given transaction.
+func (tc *Collection) RemoveSyntheticDescriptor(id descpb.ID) {
+	tc.synthetic.remove(id)
 }
 
 func (tc *Collection) codec() keys.SQLCodec {

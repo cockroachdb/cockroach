@@ -106,7 +106,7 @@ func (so *DummySequenceOperators) GetLatestValueInSessionForSequenceByID(
 
 // SetSequenceValueByID implements the tree.SequenceOperators interface.
 func (so *DummySequenceOperators) SetSequenceValueByID(
-	ctx context.Context, seqID int64, newVal int64, isCalled bool,
+	ctx context.Context, seqID uint32, newVal int64, isCalled bool,
 ) error {
 	return errors.WithStack(errSequenceOperators)
 }
@@ -230,6 +230,11 @@ func (*DummyEvalPlanner) ExternalReadFile(ctx context.Context, uri string) ([]by
 // ExternalWriteFile is part of the EvalPlanner interface.
 func (*DummyEvalPlanner) ExternalWriteFile(ctx context.Context, uri string, content []byte) error {
 	return errors.WithStack(errEvalPlanner)
+}
+
+// DecodeGist is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) DecodeGist(gist string) ([]string, error) {
+	return nil, errors.WithStack(errEvalPlanner)
 }
 
 var _ tree.EvalPlanner = &DummyEvalPlanner{}

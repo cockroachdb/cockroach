@@ -296,12 +296,11 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			}
 
 			inSnap := IncomingSnapshot{
-				UsesUnreplicatedTruncatedState: header.UnreplicatedTruncatedState,
-				SnapUUID:                       snapUUID,
-				SSTStorageScratch:              kvSS.scratch,
-				LogEntries:                     logEntries,
-				State:                          &header.State,
-				snapType:                       header.Type,
+				SnapUUID:          snapUUID,
+				SSTStorageScratch: kvSS.scratch,
+				LogEntries:        logEntries,
+				State:             &header.State,
+				snapType:          header.Type,
 			}
 
 			expLen := inSnap.State.RaftAppliedIndex - inSnap.State.TruncatedState.Index
@@ -831,7 +830,7 @@ func validatePositive(v int64) error {
 var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_rebalance.max_rate",
 	"the rate limit (bytes/sec) to use for rebalance and upreplication snapshots",
-	envutil.EnvOrDefaultBytes("COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 8<<20),
+	envutil.EnvOrDefaultBytes("COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 32<<20),
 	validatePositive,
 ).WithPublic().WithSystemOnly()
 
@@ -844,7 +843,7 @@ var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 var recoverySnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_recovery.max_rate",
 	"the rate limit (bytes/sec) to use for recovery snapshots",
-	envutil.EnvOrDefaultBytes("COCKROACH_RAFT_SNAPSHOT_RATE", 8<<20),
+	envutil.EnvOrDefaultBytes("COCKROACH_RAFT_SNAPSHOT_RATE", 32<<20),
 	validatePositive,
 ).WithPublic().WithSystemOnly()
 
@@ -930,7 +929,6 @@ func SendEmptySnapshot(
 		desc,
 		roachpb.Lease{},
 		hlc.Timestamp{}, // gcThreshold
-		stateloader.TruncatedStateUnreplicated,
 		st.Version.ActiveVersionOrEmpty(ctx).Version,
 	)
 	if err != nil {
@@ -994,14 +992,14 @@ func SendEmptySnapshot(
 	}
 
 	header := SnapshotRequest_Header{
-		State:                      state,
-		RaftMessageRequest:         req,
-		RangeSize:                  ms.Total(),
-		CanDecline:                 false,
-		Priority:                   SnapshotRequest_RECOVERY,
-		Strategy:                   SnapshotRequest_KV_BATCH,
-		Type:                       SnapshotRequest_VIA_SNAPSHOT_QUEUE,
-		UnreplicatedTruncatedState: true,
+		State:                                state,
+		RaftMessageRequest:                   req,
+		RangeSize:                            ms.Total(),
+		CanDecline:                           false,
+		Priority:                             SnapshotRequest_RECOVERY,
+		Strategy:                             SnapshotRequest_KV_BATCH,
+		Type:                                 SnapshotRequest_VIA_SNAPSHOT_QUEUE,
+		DeprecatedUnreplicatedTruncatedState: true,
 	}
 
 	stream, err := NewMultiRaftClient(cc).RaftSnapshot(ctx)

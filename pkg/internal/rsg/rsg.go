@@ -54,7 +54,7 @@ func NewRSG(seed int64, y string, allowDuplicates bool) (*RSG, error) {
 
 // Generate generates a unique random syntax from the root node. At most depth
 // levels of token expansion are performed. An empty string is returned on
-// error or if depth is exceeded. Generate is safe to call from mulitipule
+// error or if depth is exceeded. Generate is safe to call from multiple
 // goroutines. If Generate is called more times than it can generate unique
 // output, it will block forever.
 func (r *RSG) Generate(root string, depth int) string {

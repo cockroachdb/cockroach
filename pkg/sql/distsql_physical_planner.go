@@ -239,9 +239,12 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 	case *tree.CastExpr:
 		// TODO (rohany): I'm not sure why this CastExpr doesn't have a type
 		//  annotation at this stage of processing...
-		if typ, ok := tree.GetStaticallyKnownType(t.Type); ok && typ.Family() == types.OidFamily {
-			v.err = newQueryNotSupportedErrorf("cast to %s is not supported by distsql", t.Type)
-			return false, expr
+		if typ, ok := tree.GetStaticallyKnownType(t.Type); ok {
+			switch typ.Family() {
+			case types.OidFamily:
+				v.err = newQueryNotSupportedErrorf("cast to %s is not supported by distsql", t.Type)
+				return false, expr
+			}
 		}
 	case *tree.DArray:
 		// We need to check for arrays of untyped tuples here since constant-folding
@@ -3963,9 +3966,6 @@ func checkScanParallelizationIfLocal(
 				}
 				return true, nil
 			case *indexJoinNode:
-				// Vectorized index join is only supported for non-interleaved
-				// tables.
-				prohibitParallelization = n.table.desc.TableDesc().PrimaryIndex.IsInterleaved()
 				return true, nil
 			case *joinNode:
 				prohibitParallelization = n.pred.onCond != nil
@@ -4082,8 +4082,15 @@ func maybeMoveSingleFlowToGateway(planCtx *PlanningCtx, plan *PhysicalPlan, rowC
 		nodeID := plan.Processors[0].Node
 		for _, p := range plan.Processors[1:] {
 			if p.Node != nodeID {
-				singleFlow = false
-				break
+				if p.Node != plan.GatewayNodeID || p.Spec.Core.Noop == nil {
+					// We want to ignore the noop processors planned on the
+					// gateway because their job is to simply communicate the
+					// results back to the client. If, however, there is another
+					// non-noop processor on the gateway, then we'll correctly
+					// treat the plan as having multiple flows.
+					singleFlow = false
+					break
+				}
 			}
 			core := p.Spec.Core
 			if core.JoinReader != nil || core.MergeJoiner != nil || core.HashJoiner != nil ||

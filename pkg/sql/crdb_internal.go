@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1275,14 +1276,14 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
 )`,
 	indexes: []virtualIndex{{populate: func(ctx context.Context, constraint tree.Datum, p *planner,
 		db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-		var traceID uint64
+		var traceID tracingpb.TraceID
 		d := tree.UnwrapDatum(p.EvalContext(), constraint)
 		if d == tree.DNull {
 			return false, nil
 		}
 		switch t := d.(type) {
 		case *tree.DInt:
-			traceID = uint64(*t)
+			traceID = tracingpb.TraceID(*t)
 		default:
 			return false, errors.AssertionFailedf(
 				"unexpected type %T for trace_id column in virtual table crdb_internal.cluster_inflight_traces", d)
@@ -1348,7 +1349,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
 				"only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans")
 		}
-		return p.ExecCfg().AmbientCtx.Tracer.VisitSpans(func(span *tracing.Span) error {
+		return p.ExecCfg().AmbientCtx.Tracer.VisitSpans(func(span tracing.RegistrySpan) error {
 			for _, rec := range span.GetRecording() {
 				traceID := rec.TraceID
 				parentSpanID := rec.ParentSpanID
@@ -5124,7 +5125,8 @@ CREATE TABLE crdb_internal.statement_statistics (
     app_name                   STRING NOT NULL,
     metadata                   JSONB NOT NULL,
     statistics                 JSONB NOT NULL,
-    sampled_plan               JSONB NOT NULL
+    sampled_plan               JSONB NOT NULL,
+    aggregation_interval       INTERVAL NOT NULL
 );`,
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// TODO(azhng): we want to eventually implement memory accounting within the
@@ -5191,6 +5193,10 @@ CREATE TABLE crdb_internal.statement_statistics (
 				}
 				plan := sqlstatsutil.ExplainTreePlanNodeToJSON(&statistics.Stats.SensitiveInfo.MostRecentPlanDescription)
 
+				aggInterval := tree.NewDInterval(
+					duration.MakeDuration(statistics.AggregationInterval.Nanoseconds(), 0, 0),
+					types.DefaultIntervalTypeMetadata)
+
 				row = row[:0]
 				row = append(row,
 					aggregatedTs,                        // aggregated_ts
@@ -5201,6 +5207,7 @@ CREATE TABLE crdb_internal.statement_statistics (
 					tree.NewDJSON(metadataJSON),         // metadata
 					tree.NewDJSON(statisticsJSON),       // statistics
 					tree.NewDJSON(plan),                 // plan
+					aggInterval,                         // aggregation_interval
 				)
 
 				return pusher.pushRow(row...)
@@ -5262,11 +5269,12 @@ var crdbInternalTxnStatsTable = virtualSchemaTable{
 		`cluster-wide RPC-fanout.`,
 	schema: `
 CREATE TABLE crdb_internal.transaction_statistics (
-    aggregated_ts  TIMESTAMPTZ NOT NULL,
-    fingerprint_id BYTES NOT NULL,
-    app_name       STRING NOT NULL,
-    metadata       JSONB NOT NULL,
-    statistics     JSONB NOT NULL
+    aggregated_ts         TIMESTAMPTZ NOT NULL,
+    fingerprint_id        BYTES NOT NULL,
+    app_name              STRING NOT NULL,
+    metadata              JSONB NOT NULL,
+    statistics            JSONB NOT NULL,
+    aggregation_interval  INTERVAL NOT NULL
 );`,
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// TODO(azhng): we want to eventually implement memory accounting within the
@@ -5330,6 +5338,10 @@ CREATE TABLE crdb_internal.transaction_statistics (
 					return err
 				}
 
+				aggInterval := tree.NewDInterval(
+					duration.MakeDuration(statistics.AggregationInterval.Nanoseconds(), 0, 0),
+					types.DefaultIntervalTypeMetadata)
+
 				row = row[:0]
 				row = append(row,
 					aggregatedTs,                    // aggregated_ts
@@ -5337,6 +5349,7 @@ CREATE TABLE crdb_internal.transaction_statistics (
 					tree.NewDString(statistics.App), // app_name
 					tree.NewDJSON(metadataJSON),     // metadata
 					tree.NewDJSON(statisticsJSON),   // statistics
+					aggInterval,                     // aggregation_interval
 				)
 
 				return pusher.pushRow(row...)

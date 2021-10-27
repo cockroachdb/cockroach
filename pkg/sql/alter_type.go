@@ -77,6 +77,12 @@ func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, e
 		}
 	case descpb.TypeDescriptor_ENUM:
 		sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumAlter)
+	case descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE:
+		return nil, pgerror.Newf(
+			pgcode.WrongObjectType,
+			"%q is a table's record type and cannot be modified",
+			tree.AsStringWithFQNames(n.Type, &p.semaCtx.Annotations),
+		)
 	}
 
 	return &alterTypeNode{
@@ -111,7 +117,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		// See https://github.com/cockroachdb/cockroach/issues/57741
 		err = params.p.setTypeSchema(params.ctx, n, string(t.Schema))
 	case *tree.AlterTypeOwner:
-		owner, err := t.Owner.ToSQLUsername(params.SessionData())
+		owner, err := t.Owner.ToSQLUsername(params.SessionData(), security.UsernameValidation)
 		if err != nil {
 			return err
 		}

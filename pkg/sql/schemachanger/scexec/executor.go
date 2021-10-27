@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/descriptorutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -85,7 +84,7 @@ func (*NewSchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 // schema change that is used by the testing knobs.
 type TestingKnobMetadata struct {
 	Statements []string
-	Phase      scplan.Phase
+	Phase      scop.Phase
 }
 
 // ExecuteOps executes the provided ops. The ops must all be of the same type.
@@ -281,12 +280,15 @@ func UpdateDescriptorJobIDs(
 			return err
 		}
 		// Currently all "locking" schema changes are on tables. This will probably
-		// need to be expanded at least to types.
+		// need to be expanded at least to types. Synthetic descriptors are intentionally
+		// ignore, since we may inject these in the statement phase to mark things as
+		// dropped for example.
 		table, err := descriptors.GetMutableTableByID(ctx, txn, id,
 			tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{
 					Required:       true,
-					IncludeDropped: true},
+					IncludeDropped: true,
+					AvoidSynthetic: true},
 			})
 		if err != nil {
 			return err

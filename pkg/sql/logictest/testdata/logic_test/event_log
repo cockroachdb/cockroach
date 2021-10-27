@@ -24,12 +24,12 @@ FROM system.eventlog
 WHERE "eventType" IN ('create_role', 'drop_role', 'alter_role')
 ORDER BY "timestamp", info
 ----
-1  create_role  {"EventType": "create_role", "RoleName": "testuser", "Statement": "CREATE USER 'testuser'", "Tag": "CREATE ROLE", "User": "root"}
-1  create_role  {"EventType": "create_role", "RoleName": "r", "Statement": "CREATE ROLE 'r'", "Tag": "CREATE ROLE", "User": "root"}
-1  create_role  {"EventType": "create_role", "RoleName": "r2", "Statement": "CREATE ROLE IF NOT EXISTS 'r2'", "Tag": "CREATE ROLE", "User": "root"}
-1  alter_role   {"EventType": "alter_role", "Options": ["CONTROLCHANGEFEED"], "RoleName": "r", "Statement": "ALTER ROLE 'r' WITH CONTROLCHANGEFEED", "Tag": "ALTER ROLE", "User": "root"}
-1  drop_role    {"EventType": "drop_role", "RoleName": "r", "Statement": "DROP ROLE 'r', 'r2'", "Tag": "DROP ROLE", "User": "root"}
-1  drop_role    {"EventType": "drop_role", "RoleName": "r2", "Statement": "DROP ROLE 'r', 'r2'", "Tag": "DROP ROLE", "User": "root"}
+1  create_role  {"EventType": "create_role", "RoleName": "testuser", "Statement": "CREATE USER testuser", "Tag": "CREATE ROLE", "User": "root"}
+1  create_role  {"EventType": "create_role", "RoleName": "r", "Statement": "CREATE ROLE r", "Tag": "CREATE ROLE", "User": "root"}
+1  create_role  {"EventType": "create_role", "RoleName": "r2", "Statement": "CREATE ROLE IF NOT EXISTS r2", "Tag": "CREATE ROLE", "User": "root"}
+1  alter_role   {"EventType": "alter_role", "Options": ["CONTROLCHANGEFEED"], "RoleName": "r", "Statement": "ALTER ROLE r WITH CONTROLCHANGEFEED", "Tag": "ALTER ROLE", "User": "root"}
+1  drop_role    {"EventType": "drop_role", "RoleName": "r", "Statement": "DROP ROLE r, r2", "Tag": "DROP ROLE", "User": "root"}
+1  drop_role    {"EventType": "drop_role", "RoleName": "r2", "Statement": "DROP ROLE r, r2", "Tag": "DROP ROLE", "User": "root"}
 
 # Create two tables + superfluous "IF NOT EXISTS"
 ##################
@@ -305,7 +305,7 @@ FROM system.eventlog
 WHERE "eventType" = 'rename_table'
   AND info::JSONB->>'Statement' LIKE 'ALTER TABLE %toberenamed% RENAME TO %renamedtable%'
 ----
-1  {"EventType": "rename_table", "NewTableName": "test.public.renamedtable", "Statement": "ALTER TABLE toberenamed RENAME TO renamedtable", "TableName": "test.public.toberenamed", "Tag": "RENAME TABLE", "User": "root"}
+1  {"EventType": "rename_table", "NewTableName": "test.public.renamedtable", "Statement": "ALTER TABLE toberenamed RENAME TO renamedtable", "TableName": "test.public.toberenamed", "Tag": "ALTER TABLE", "User": "root"}
 
 
 ##################
@@ -413,7 +413,7 @@ FROM system.eventlog
 WHERE "eventType" = 'rename_database'
   AND info::JSONB->>'Statement' LIKE 'ALTER DATABASE %eventlogtorename% RENAME TO %eventlogtonewname%'
 ----
-1  {"DatabaseName": "eventlogtorename", "EventType": "rename_database", "NewDatabaseName": "eventlogtonewname", "Statement": "ALTER DATABASE eventlogtorename RENAME TO eventlogtonewname", "Tag": "RENAME DATABASE", "User": "root"}
+1  {"DatabaseName": "eventlogtorename", "EventType": "rename_database", "NewDatabaseName": "eventlogtonewname", "Statement": "ALTER DATABASE eventlogtorename RENAME TO eventlogtonewname", "Tag": "ALTER DATABASE", "User": "root"}
 
 statement ok
 SET DATABASE = test
@@ -469,7 +469,6 @@ ORDER BY "timestamp", info
 0  1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
 0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.range_merge.queue_enabled", "Statement": "SET CLUSTER SETTING \"kv.range_merge.queue_enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
 0  1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["5"], "SettingName": "sql.stats.automatic_collection.min_stale_rows", "Statement": "SET CLUSTER SETTING \"sql.stats.automatic_collection.min_stale_rows\" = $1::INT8", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "5"}
-0  1  {"EventType": "set_cluster_setting", "SettingName": "sql.defaults.interleaved_tables.enabled", "Statement": "SET CLUSTER SETTING \"sql.defaults.interleaved_tables.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
 0  1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
 0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
 0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = DEFAULT", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "DEFAULT"}

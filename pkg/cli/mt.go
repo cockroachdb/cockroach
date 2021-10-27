@@ -35,7 +35,7 @@ Commands related to multi-tenancy.
 
 This functionality is **experimental** and for internal use only.
 `,
-	RunE:   usageAndErr,
+	RunE:   UsageAndErr,
 	Hidden: true,
 }
 
@@ -50,5 +50,5 @@ command.
 
 This functionality is **experimental** and for internal use only.
 `,
-	RunE: usageAndErr,
+	RunE: UsageAndErr,
 }

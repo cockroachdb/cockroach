@@ -259,6 +259,7 @@ func init() {
 	cmdSVG.Flags().StringVar(&railroadJar, "railroad", "", "Location of Railroad.jar; empty to use website")
 	cmdSVG.Flags().DurationVar(&railroadAPITimeout, "timeout", time.Second*120, "Timeout in seconds for railroad HTTP Api, "+
 		"only relevant when the web api is used; default 120s.")
+	cmdSVG.Flags().StringVar(&addr, "addr", "./pkg/sql/parser/sql.y", "Location of sql.y file. Can also specify an http address.")
 
 	diagramCmd := &cobra.Command{
 		Use:   "grammar",
@@ -380,6 +381,11 @@ var specs = []stmtSpec{
 	{
 		name: "alter_database_drop_region",
 		stmt: "alter_database_drop_region_stmt",
+	},
+	{
+		name:    "alter_default_privileges_stmt",
+		inline:  []string{"opt_for_roles", "role_or_group_or_user", "name_list", "opt_in_schemas", "schema_name_list", "abbreviated_grant_stmt", "opt_with_grant_option", "alter_default_privileges_target_object", "abbreviated_revoke_stmt", "opt_drop_behavior"},
+		nosplit: true,
 	},
 	{
 		name:   "alter_primary_key",
@@ -1241,6 +1247,10 @@ var specs = []stmtSpec{
 	{
 		name:   "show_databases_stmt",
 		inline: []string{"with_comment"},
+	},
+	{
+		name:   "show_default_privileges_stmt",
+		inline: []string{"opt_for_roles", "role_or_group_or_user", "name_list"},
 	},
 	{
 		name: "show_enums",

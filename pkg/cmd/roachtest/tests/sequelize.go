@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -20,7 +21,7 @@ import (
 )
 
 var sequelizeCockroachDBReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedSequelizeCockroachDBRelease = "v6.0.2"
+var supportedSequelizeCockroachDBRelease = "v6.0.3"
 
 // This test runs sequelize's full test suite against a single cockroach node.
 
@@ -140,7 +141,7 @@ func registerSequelize(r registry.Registry) {
 		// Version telemetry is already disabled in the sequelize-cockroachdb test suite.
 		t.Status("running Sequelize test suite")
 		rawResults, err := c.RunWithBuffer(ctx, t.L(), node,
-			`cd /mnt/data1/sequelize/ && npm test`,
+			fmt.Sprintf(`cd /mnt/data1/sequelize/ && CRDB_VERSION=%s npm test`, version),
 		)
 		rawResultsStr := string(rawResults)
 		t.L().Printf("Test Results: %s", rawResultsStr)

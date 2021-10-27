@@ -61,7 +61,7 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 	if err != nil {
 		return nil, err
 	}
-	inputMembers, err := n.Members.ToSQLUsernames(p.SessionData())
+	inputMembers, err := n.Members.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return nil, err
 	}

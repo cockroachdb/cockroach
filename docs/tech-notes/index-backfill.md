@@ -160,7 +160,7 @@ for `6`.
 
 ### The `InitPut` fails due to a duplicate value
 
-In the case where an entry was written that violates a uniquness constraint by
+In the case where an entry was written that violates a uniqueness constraint by
 duplicating a value that had been written before `tWrite`, the backfill
 encounters a mismatched value and fails. When retried, the entry is still there
 and fails `InitPut` again, which fails the backfill.

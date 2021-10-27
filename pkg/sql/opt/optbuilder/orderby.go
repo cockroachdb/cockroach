@@ -13,12 +13,14 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -158,13 +160,15 @@ func (b *Builder) analyzeOrderByArg(
 		return
 	}
 
-	// Set NULL order. The default order is nulls first for ascending order and
-	// nulls last for descending order.
+	// Set NULL order. The default order in Cockroach if null_ordered_last=False
+	// is nulls first for ascending order and nulls last for descending order.
 	nullsDefaultOrder := true
-	if order.NullsOrder != tree.DefaultNullsOrder &&
-		((order.NullsOrder == tree.NullsFirst && order.Direction == tree.Descending) ||
-			(order.NullsOrder == tree.NullsLast && order.Direction != tree.Descending)) {
+	if (b.evalCtx.SessionData().NullOrderedLast && order.NullsOrder == tree.DefaultNullsOrder) ||
+		(order.NullsOrder != tree.DefaultNullsOrder &&
+			((order.NullsOrder == tree.NullsFirst && order.Direction == tree.Descending) ||
+				(order.NullsOrder == tree.NullsLast && order.Direction != tree.Descending))) {
 		nullsDefaultOrder = false
+		telemetry.Inc(sqltelemetry.OrderByNullsNonStandardCounter)
 	}
 
 	// Analyze the ORDER BY column(s).

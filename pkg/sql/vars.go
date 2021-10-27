@@ -455,6 +455,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`disable_plan_gists`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`disable_plan_gists`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("disable_plan_gists", s)
+			if err != nil {
+				return err
+			}
+			m.SetDisablePlanGists(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DisablePlanGists)
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`distsql`: {
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
 			mode, ok := sessiondatapb.DistSQLExecModeFromString(s)
@@ -1597,6 +1614,24 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return formatBoolAsPostgresSetting(copyPartitioningWhenDeinterleavingTable.Get(sv))
+		},
+	},
+
+	`null_ordered_last`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`null_ordered_last`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`null_ordered_last`, s)
+			if err != nil {
+				return err
+			}
+			m.SetNullOrderedLast(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().NullOrderedLast)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(false)
 		},
 	},
 

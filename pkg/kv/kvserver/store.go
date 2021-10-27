@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -758,6 +759,9 @@ type StoreConfig struct {
 	// SpanConfigsEnabled determines whether we're able to use the span configs
 	// infrastructure.
 	SpanConfigsEnabled bool
+
+	// KVAdmissionController is an optional field used for admission control.
+	KVAdmissionController KVAdmissionController
 }
 
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
@@ -1358,10 +1362,10 @@ func IterateIDPrefixKeys(
 	}
 }
 
-// IterateRangeDescriptors calls the provided function with each descriptor
-// from the provided Engine. The return values of this method and fn have
-// semantics similar to engine.MVCCIterate.
-func IterateRangeDescriptors(
+// IterateRangeDescriptorsFromDisk calls the provided function with each
+// descriptor from the provided Engine. The return values of this method and fn
+// have semantics similar to engine.MVCCIterate.
+func IterateRangeDescriptorsFromDisk(
 	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
 ) error {
 	log.Event(ctx, "beginning range descriptor iteration")
@@ -1513,7 +1517,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// concurrently. Note that while we can perform this initialization
 	// concurrently, all of the initialization must be performed before we start
 	// listening for Raft messages and starting the process Raft loop.
-	err = IterateRangeDescriptors(ctx, s.engine,
+	err = IterateRangeDescriptorsFromDisk(ctx, s.engine,
 		func(desc roachpb.RangeDescriptor) error {
 			if !desc.IsInitialized() {
 				return errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
@@ -2068,10 +2072,24 @@ func (s *Store) recordNewPerSecondStats(newQPS, newWPS float64) {
 	s.asyncGossipStore(context.TODO(), message, false /* useCached */)
 }
 
+// VisitReplicasOption optionally modifies store.VisitReplicas.
+type VisitReplicasOption func(*storeReplicaVisitor)
+
+// WithReplicasInOrder is a VisitReplicasOption that ensures replicas are
+// visited in increasing RangeID order.
+func WithReplicasInOrder() VisitReplicasOption {
+	return func(visitor *storeReplicaVisitor) {
+		visitor.InOrder()
+	}
+}
+
 // VisitReplicas invokes the visitor on the Store's Replicas until the visitor returns false.
 // Replicas which are added to the Store after iteration begins may or may not be observed.
-func (s *Store) VisitReplicas(visitor func(*Replica) (wantMore bool)) {
+func (s *Store) VisitReplicas(visitor func(*Replica) (wantMore bool), opts ...VisitReplicasOption) {
 	v := newStoreReplicaVisitor(s)
+	for _, opt := range opts {
+		opt(v)
+	}
 	v.Visit(visitor)
 }
 
@@ -2956,4 +2974,125 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// KVAdmissionController provides admission control for the KV layer.
+type KVAdmissionController interface {
+	// AdmitKVWork must be called before performing KV work.
+	// BatchRequest.AdmissionHeader and BatchRequest.Replica.StoreID must be
+	// populated for admission to work correctly. If err is non-nil, the
+	// returned handle can be ignored. If err is nil, AdmittedKVWorkDone must be
+	// called after the KV work is done executing.
+	AdmitKVWork(
+		ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
+	) (handle interface{}, err error)
+	// AdmittedKVWorkDone is called after the admitted KV work is done
+	// executing.
+	AdmittedKVWorkDone(handle interface{})
+}
+
+// KVAdmissionControllerImpl implements KVAdmissionController interface.
+type KVAdmissionControllerImpl struct {
+	// Admission control queues and coordinators. Both should be nil or non-nil.
+	kvAdmissionQ     *admission.WorkQueue
+	storeGrantCoords *admission.StoreGrantCoordinators
+}
+
+var _ KVAdmissionController = KVAdmissionControllerImpl{}
+
+type admissionHandle struct {
+	tenantID                           roachpb.TenantID
+	callAdmittedWorkDoneOnKVAdmissionQ bool
+	storeAdmissionQ                    *admission.WorkQueue
+}
+
+func isSingleHeartbeatTxnRequest(b *roachpb.BatchRequest) bool {
+	if len(b.Requests) != 1 {
+		return false
+	}
+	_, ok := b.Requests[0].GetInner().(*roachpb.HeartbeatTxnRequest)
+	return ok
+}
+
+// MakeKVAdmissionController returns a KVAdmissionController. Both parameters
+// must together either be nil or non-nil.
+func MakeKVAdmissionController(
+	kvAdmissionQ *admission.WorkQueue, storeGrantCoords *admission.StoreGrantCoordinators,
+) KVAdmissionController {
+	return KVAdmissionControllerImpl{
+		kvAdmissionQ:     kvAdmissionQ,
+		storeGrantCoords: storeGrantCoords,
+	}
+}
+
+// AdmitKVWork implements the KVAdmissionController interface.
+func (n KVAdmissionControllerImpl) AdmitKVWork(
+	ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
+) (handle interface{}, err error) {
+	ah := admissionHandle{tenantID: tenantID}
+	if n.kvAdmissionQ != nil {
+		bypassAdmission := ba.IsAdmin()
+		source := ba.AdmissionHeader.Source
+		if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {
+			// Request is from a SQL node.
+			bypassAdmission = false
+			source = roachpb.AdmissionHeader_FROM_SQL
+		}
+		if source == roachpb.AdmissionHeader_OTHER {
+			bypassAdmission = true
+		}
+		createTime := ba.AdmissionHeader.CreateTime
+		if !bypassAdmission && createTime == 0 {
+			// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
+			// of zero CreateTime needs to be revisited. It should use high priority.
+			createTime = timeutil.Now().UnixNano()
+		}
+		admissionInfo := admission.WorkInfo{
+			TenantID:        tenantID,
+			Priority:        admission.WorkPriority(ba.AdmissionHeader.Priority),
+			CreateTime:      createTime,
+			BypassAdmission: bypassAdmission,
+		}
+		var err error
+		// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
+		// it would bypass admission, it would consume a slot. When writes are
+		// throttled, we start generating more txn heartbeats, which then consume
+		// all the slots, causing no useful work to happen. We do want useful work
+		// to continue even when throttling since there are often significant
+		// number of tokens available.
+		if ba.IsWrite() && !isSingleHeartbeatTxnRequest(ba) {
+			ah.storeAdmissionQ = n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
+		}
+		admissionEnabled := true
+		if ah.storeAdmissionQ != nil {
+			if admissionEnabled, err = ah.storeAdmissionQ.Admit(ctx, admissionInfo); err != nil {
+				return admissionHandle{}, err
+			}
+			if !admissionEnabled {
+				// Set storeAdmissionQ to nil so that we don't call AdmittedWorkDone
+				// on it. Additionally, the code below will not call
+				// kvAdmissionQ.Admit, and so callAdmittedWorkDoneOnKVAdmissionQ will
+				// stay false.
+				ah.storeAdmissionQ = nil
+			}
+		}
+		if admissionEnabled {
+			ah.callAdmittedWorkDoneOnKVAdmissionQ, err = n.kvAdmissionQ.Admit(ctx, admissionInfo)
+			if err != nil {
+				return admissionHandle{}, err
+			}
+		}
+	}
+	return ah, nil
+}
+
+// AdmittedKVWorkDone implement the KVAdmissionController interface.
+func (n KVAdmissionControllerImpl) AdmittedKVWorkDone(handle interface{}) {
+	ah := handle.(admissionHandle)
+	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
+		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID)
+	}
+	if ah.storeAdmissionQ != nil {
+		ah.storeAdmissionQ.AdmittedWorkDone(ah.tenantID)
+	}
 }

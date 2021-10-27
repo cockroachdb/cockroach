@@ -53,8 +53,20 @@ DROP USER usER1
 statement ok
 DROP USER IF EXISTS user1
 
-statement error username "node" reserved
+statement error pgcode 42939 role name "node" is reserved
 DROP USER node
+
+statement error pgcode 42939 role name "public" is reserved
+DROP USER public
+
+statement error pgcode 42939 role name "none" is reserved
+DROP USER "none"
+
+statement error pgcode 22023 cannot use special role specifier in DROP ROLE
+DROP ROLE CURRENT_USER
+
+statement error pgcode 22023 cannot use special role specifier in DROP ROLE
+DROP ROLE user4, SESSION_USER
 
 statement error pq: "foo☂": username is invalid
 DROP USER foo☂
@@ -129,8 +141,8 @@ REVOKE SELECT, CONNECT ON DATABASE test FROM user1;
 DROP USER IF EXISTS user1,user3
 
 statement ok
-PREPARE du AS DROP USER $1;
-EXECUTE du('user4')
+PREPARE du AS DROP USER user4;
+EXECUTE du
 
 query TTT colnames
 SHOW USERS
@@ -161,3 +173,4 @@ INSERT INTO system.scheduled_jobs (schedule_name, owner, executor_type,execution
 
 statement error pq: cannot drop role/user user1; it owns 1 scheduled jobs.
 DROP USER user1
+

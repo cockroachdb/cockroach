@@ -714,7 +714,7 @@ UPSERT INTO t(a) VALUES (1)
 ----
 upsert t
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: t_pkey
  ├── canary column: a:9
  ├── fetch columns: a:9 b:10 v:11
  ├── insert-mapping:
@@ -820,7 +820,7 @@ project
  ├── columns: v:3!null
  └── insert t
       ├── columns: a:1!null b:2!null v:3!null
-      ├── arbiter indexes: primary
+      ├── arbiter indexes: t_pkey
       ├── insert-mapping:
       │    ├── column1:6 => a:1
       │    ├── column2:7 => b:2
@@ -859,7 +859,7 @@ INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO NOTHING
 ----
 insert t_idx2
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: t_idx2_w_key
  ├── insert-mapping:
  │    ├── column1:8 => a:1
  │    ├── column2:9 => b:2
@@ -908,7 +908,7 @@ INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT DO NOTHING
 ----
 insert t_idx2
  ├── columns: <none>
- ├── arbiter indexes: primary secondary
+ ├── arbiter indexes: t_idx2_pkey t_idx2_w_key
  ├── insert-mapping:
  │    ├── column1:8 => a:1
  │    ├── column2:9 => b:2
@@ -985,7 +985,7 @@ INSERT INTO t VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET a=t.v+1
 ----
 upsert t
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: t_pkey
  ├── canary column: a:9
  ├── fetch columns: a:9 b:10 v:11
  ├── insert-mapping:
@@ -1043,7 +1043,7 @@ INSERT INTO t VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET a=excluded.v+1
 ----
 upsert t
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: t_pkey
  ├── canary column: a:9
  ├── fetch columns: a:9 b:10 v:11
  ├── insert-mapping:
@@ -1101,7 +1101,7 @@ INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO UPDATE SET c=10
 ----
 upsert t_idx2
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: t_idx2_w_key
  ├── canary column: a:13
  ├── fetch columns: a:13 b:14 c:15 v:16 w:17
  ├── insert-mapping:
@@ -1172,7 +1172,7 @@ INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO UPDATE SET c=t_idx2.v+1
 ----
 upsert t_idx2
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: t_idx2_w_key
  ├── canary column: a:13
  ├── fetch columns: a:13 b:14 c:15 v:16 w:17
  ├── insert-mapping:

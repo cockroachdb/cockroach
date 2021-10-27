@@ -90,7 +90,7 @@ var (
 //
 // The nomenclature for certificates is as follows, all within the certs-dir.
 // - ca.crt             main CA certificate.
-//                      Used to verify everything unless overridden by more specifica CAs.
+//                      Used to verify everything unless overridden by more specific CAs.
 // - ca-client.crt      CA certificate to verify client certificates. If it does not exist,
 //                      fall back on 'ca.crt'.
 // - node.crt           node certificate.
@@ -119,7 +119,7 @@ type CertificateManager struct {
 	// Set of certs. These are swapped in during Load(), and never mutated afterwards.
 	caCert         *CertInfo // default CA certificate
 	clientCACert   *CertInfo // optional: certificate to verify client certificates
-	uiCACert       *CertInfo // optional: certificate to verify UI certficates
+	uiCACert       *CertInfo // optional: certificate to verify UI certificates
 	nodeCert       *CertInfo // certificate for nodes (always server cert, sometimes client cert)
 	nodeClientCert *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'
 	uiCert         *CertInfo // optional: server certificate for the admin UI.
@@ -1007,10 +1007,12 @@ func (cm *CertificateManager) GetTenantTLSConfig() (*tls.Config, error) {
 
 	caBlob := ca.FileContents
 
-	// CA used to validate certs provided by other SQL servers.
-	tenantCA, err := cm.getTenantCACertLocked()
-	if err == nil {
-		caBlob = append(caBlob, tenantCA.FileContents...)
+	if cm.tenantCACert != nil {
+		// If it's available, we also include the tenant CA.
+		tenantCA, err := cm.getTenantCACertLocked()
+		if err == nil {
+			caBlob = AppendCertificatesToBlob(caBlob, tenantCA.FileContents)
+		}
 	}
 
 	// Client cert presented to KV nodes.
@@ -1113,10 +1115,12 @@ func (cm *CertificateManager) GetUIClientTLSConfig() (*tls.Config, error) {
 
 	caBlob := uiCA.FileContents
 
-	// If it's available, we also include the tenant CA.
-	tenantCA, err := cm.getTenantCACertLocked()
-	if err == nil {
-		caBlob = append(caBlob, tenantCA.FileContents...)
+	if cm.tenantCACert != nil {
+		// If it's available, we also include the tenant CA.
+		tenantCA, err := cm.getTenantCACertLocked()
+		if err == nil {
+			caBlob = AppendCertificatesToBlob(caBlob, tenantCA.FileContents)
+		}
 	}
 
 	cfg, err := newUIClientTLSConfig(cm.tlsSettings, caBlob)

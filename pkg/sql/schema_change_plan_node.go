@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -33,6 +33,9 @@ import (
 func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNode, bool, error) {
 	// TODO(ajwerner): Call featureflag.CheckEnabled appropriately.
 	mode := p.extendedEvalCtx.SchemaChangerState.mode
+	// When new schema changer is on we will not support it for explicit
+	// transaction, since we don't know if subsequent statements don't
+	// support it.
 	if mode == sessiondatapb.UseNewSchemaChangerOff ||
 		(mode == sessiondatapb.UseNewSchemaChangerOn && !p.extendedEvalCtx.TxnImplicit) {
 		return nil, false, nil
@@ -126,7 +129,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		nil /* backfiller */, nil /* jobTracker */, p.ExecCfg().NewSchemaChangerTestingKnobs,
 		params.extendedEvalCtx.ExecCfg.JobRegistry, params.p.execCfg.InternalExecutor)
 	after, err := runNewSchemaChanger(
-		params.ctx, scplan.StatementPhase, s.plannedState, executor, scs.stmts,
+		params.ctx, scop.StatementPhase, s.plannedState, executor, scs.stmts,
 	)
 	if err != nil {
 		return err

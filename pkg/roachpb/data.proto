@@ -188,7 +188,7 @@ message MergeTrigger {
   // RaftCommand.WriteBatch. The persisted summary may be identical to the
   // summary in this field, but it does not have to be. Notably, we intended for
   // the summary included in the ReplicatedEvalResult.Merge.Trigger to
-  // eventually be a much higher-resolution version of the ReadSummmary than the
+  // eventually be a much higher-resolution version of the ReadSummary than the
   // version persisted. This scheme of persisting a compressed ReadSummary
   // indefinitely and including a higher-resolution ReadSummary on the
   // RaftCommand allows us to optimize for the common case where the merge is
@@ -524,7 +524,7 @@ message TransactionRecord {
 //
 // Note: avoid constructing Intent directly; consider using MakeIntent() instead.
 message Intent {
-  // SingleKeySpan preseves wire compatibility with an earlier version of this
+  // SingleKeySpan preserves wire compatibility with an earlier version of this
   // proto which used a Span. An Intent never spans keys, so there was no need
   // for this to contain an EndKey.
   message SingleKeySpan {
@@ -537,7 +537,7 @@ message Intent {
 }
 
 // A LockAcquisition represents the action of a Transaction acquiring a lock
-// with a specified durbility level over a Span of keys.
+// with a specified durability level over a Span of keys.
 message LockAcquisition {
   Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];

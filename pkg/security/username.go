@@ -111,7 +111,7 @@ func (s SQLUsername) IsPublicRole() bool { return s.u == PublicRole }
 // IsReserved is true if the given username is reserved.
 // Matches Postgres and also includes crdb_internal_.
 func (s SQLUsername) IsReserved() bool {
-	return s.IsPublicRole() || s.u == NoneRole ||
+	return s.IsPublicRole() || s.u == NoneRole || s.IsNodeUser() ||
 		strings.HasPrefix(s.u, "pg_") ||
 		strings.HasPrefix(s.u, "crdb_internal_")
 }
@@ -155,7 +155,7 @@ const (
 	// UsernameValidation indicates that the SQLUsername is
 	// being input for the purpose of looking up an existing
 	// user, or to compare with an existing username.
-	// This skips the stuctural restrictions imposed
+	// This skips the structural restrictions imposed
 	// for the purpose UsernameCreation.
 	UsernameValidation UsernamePurpose = true
 )

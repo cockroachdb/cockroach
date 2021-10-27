@@ -319,14 +319,6 @@ var preferLookupJoinsForFKs = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-// InterleavedTablesEnabled is the setting that controls whether it's possible
-// to create interleaved indexes or tables.
-var InterleavedTablesEnabled = settings.RegisterBoolSetting(
-	"sql.defaults.interleaved_tables.enabled",
-	"allows creation of interleaved tables or indexes",
-	false,
-).WithPublic()
-
 // optUseHistogramsClusterMode controls the cluster default for whether
 // histograms are used by the optimizer for cardinality estimation.
 // Note that it does not control histogram collection; regardless of the
@@ -1343,6 +1335,10 @@ type TenantTestingKnobs struct {
 	// OverrideTokenBucketProvider allows a test-only TokenBucketProvider (which
 	// can optionally forward requests to the real provider).
 	OverrideTokenBucketProvider func(origProvider kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider
+
+	// DisableLogTags can be set to true to cause the tenant server to avoid
+	// setting any global log tags for cluster id or node id.
+	DisableLogTags bool
 }
 
 var _ base.ModuleTestingKnobs = &TenantTestingKnobs{}
@@ -1352,10 +1348,6 @@ func (*TenantTestingKnobs) ModuleTestingKnobs() {}
 
 // BackupRestoreTestingKnobs contains knobs for backup and restore behavior.
 type BackupRestoreTestingKnobs struct {
-	// AllowImplicitAccess allows implicit access to data sources for non-admin
-	// users. This enables using nodelocal for testing BACKUP/RESTORE permissions.
-	AllowImplicitAccess bool
-
 	// CaptureResolvedTableDescSpans allows for intercepting the spans which are
 	// resolved during backup planning, and will eventually be backed up during
 	// execution.
@@ -2297,7 +2289,7 @@ func generateSessionTraceVTable(spans []tracingpb.RecordedSpan) ([]traceRow, err
 	var allLogs []logRecordRow
 
 	// NOTE: The spans are recorded in the order in which they are started.
-	seenSpans := make(map[uint64]struct{})
+	seenSpans := make(map[tracingpb.SpanID]struct{})
 	for spanIdx, span := range spans {
 		if _, ok := seenSpans[span.SpanID]; ok {
 			continue
@@ -2397,7 +2389,9 @@ func generateSessionTraceVTable(spans []tracingpb.RecordedSpan) ([]traceRow, err
 // getOrderedChildSpans returns all the spans in allSpans that are children of
 // spanID. It assumes the input is ordered by start time, in which case the
 // output is also ordered.
-func getOrderedChildSpans(spanID uint64, allSpans []tracingpb.RecordedSpan) []spanWithIndex {
+func getOrderedChildSpans(
+	spanID tracingpb.SpanID, allSpans []tracingpb.RecordedSpan,
+) []spanWithIndex {
 	children := make([]spanWithIndex, 0)
 	for i := range allSpans {
 		if allSpans[i].ParentSpanID == spanID {
@@ -2419,7 +2413,7 @@ func getOrderedChildSpans(spanID uint64, allSpans []tracingpb.RecordedSpan) []sp
 // seenSpans is modified to record all the spans that are part of the subtrace
 // rooted at span.
 func getMessagesForSubtrace(
-	span spanWithIndex, allSpans []tracingpb.RecordedSpan, seenSpans map[uint64]struct{},
+	span spanWithIndex, allSpans []tracingpb.RecordedSpan, seenSpans map[tracingpb.SpanID]struct{},
 ) ([]logRecordRow, error) {
 	if _, ok := seenSpans[span.SpanID]; ok {
 		return nil, errors.Errorf("duplicate span %d", span.SpanID)
@@ -2604,7 +2598,7 @@ func (it *sessionDataMutatorIterator) mutator(
 // SetSessionDefaultIntSize sets the default int size for the session.
 // It is exported for use in import which is a CCL package.
 func (it *sessionDataMutatorIterator) SetSessionDefaultIntSize(size int32) {
-	it.applyForEachMutator(func(m sessionDataMutator) {
+	it.applyOnEachMutator(func(m sessionDataMutator) {
 		m.SetDefaultIntSize(size)
 	})
 }
@@ -2617,17 +2611,17 @@ func (it *sessionDataMutatorIterator) applyOnTopMutator(
 	return applyFunc(it.mutator(true /* applyCallbacks */, it.sds.Top()))
 }
 
-// applyForEachMutator iterates over each mutator over all SessionData elements
+// applyOnEachMutator iterates over each mutator over all SessionData elements
 // in the stack and applies the given function to them.
 // It is the equivalent of SET SESSION x = y.
-func (it *sessionDataMutatorIterator) applyForEachMutator(applyFunc func(m sessionDataMutator)) {
+func (it *sessionDataMutatorIterator) applyOnEachMutator(applyFunc func(m sessionDataMutator)) {
 	elems := it.sds.Elems()
 	for i, sd := range elems {
 		applyFunc(it.mutator(i == 0, sd))
 	}
 }
 
-// applyOnEachMutatorError is the same as applyForEachMutator, but takes in a function
+// applyOnEachMutatorError is the same as applyOnEachMutator, but takes in a function
 // that can return an error, erroring if any of applications error.
 func (it *sessionDataMutatorIterator) applyOnEachMutatorError(
 	applyFunc func(m sessionDataMutator) error,
@@ -2716,6 +2710,10 @@ func (m *sessionDataMutator) SetEnableSeqScan(val bool) {
 
 func (m *sessionDataMutator) SetSynchronousCommit(val bool) {
 	m.data.SynchronousCommit = val
+}
+
+func (m *sessionDataMutator) SetDisablePlanGists(val bool) {
+	m.data.DisablePlanGists = val
 }
 
 func (m *sessionDataMutator) SetDistSQLMode(val sessiondatapb.DistSQLExecMode) {
@@ -2891,7 +2889,7 @@ func (m *sessionDataMutator) SetStreamReplicationEnabled(val bool) {
 	m.data.EnableStreamReplication = val
 }
 
-// RecordLatestSequenceValue records that value to which the session incremented
+// RecordLatestSequenceVal records that value to which the session incremented
 // a sequence.
 func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {
 	m.data.SequenceState.RecordValue(seqID, val)
@@ -2942,6 +2940,10 @@ func (m *sessionDataMutator) SetCopyPartitioningWhenDeinterleavingTable(b bool) 
 
 func (m *sessionDataMutator) SetExperimentalComputedColumnRewrites(val string) {
 	m.data.ExperimentalComputedColumnRewrites = val
+}
+
+func (m *sessionDataMutator) SetNullOrderedLast(b bool) {
+	m.data.NullOrderedLast = b
 }
 
 func (m *sessionDataMutator) SetPropagateInputOrdering(b bool) {
@@ -3055,6 +3057,18 @@ func formatStatementHideConstants(ast tree.Statement) string {
 		return ""
 	}
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
+}
+
+// formatStatementSummary formats the statement using tree.FmtSummary
+// and tree.FmtHideConstants. This returns a summarized version of the
+// query. It does *not* anonymize the statement, since the result will
+// still contain names and identifiers.
+func formatStatementSummary(ast tree.Statement) string {
+	if ast == nil {
+		return ""
+	}
+	fmtFlags := tree.FmtSummary | tree.FmtHideConstants
+	return tree.AsStringWithFlags(ast, fmtFlags)
 }
 
 // DescsTxn is a convenient method for running a transaction on descriptors

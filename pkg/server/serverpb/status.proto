@@ -38,6 +38,7 @@ import "etcd/raft/v3/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 message CertificatesRequest {
   // node_id is a string so that "local" can be used to specify that no
@@ -746,6 +747,9 @@ message ActiveQuery {
 
   // The SQL statement fingerprint, compatible with StatementStatisticsKey.
   string sql_no_constants = 8;
+
+  // A summarized version of the sql query.
+  string sql_summary = 9;
 }
 
 // Request object for ListSessions and ListLocalSessions.
@@ -849,7 +853,7 @@ message CancelSessionRequest {
   bytes session_id = 2 [(gogoproto.customname) = "SessionID"];
   // Username of the user making this cancellation request. This may be omitted
   // if the user is the same as the one issuing the CancelSessionRequest.
-  // The caller is responsiblef or case-folding and NFC normalization.
+  // The caller is responsible for case-folding and NFC normalization.
   string username = 3;
 }
 
@@ -1020,7 +1024,7 @@ message ProblemRangesResponse {
 // API: PUBLIC ALPHA
 message HotRangesRequest {
   // NodeID indicates which node to query for a hot range report.
-  // It is posssible to populate any node ID; if the node receiving
+  // It is possible to populate any node ID; if the node receiving
   // the request is not the target node, it will forward the
   // request to the target node.
   //
@@ -1198,6 +1202,9 @@ message StatementsResponse {
     int32 node_id = 2 [(gogoproto.customname) = "NodeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
     google.protobuf.Timestamp aggregated_ts = 3 [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
+    // The aggregation duration.
+    google.protobuf.Duration aggregation_interval = 4 [(gogoproto.nullable) = false,
+      (gogoproto.stdduration) = true];
   }
 
   message CollectedStatementStatistics {
@@ -1434,6 +1441,14 @@ service Status {
     option (google.api.http) = {
       post : "/_status/cancel_query/{node_id}"
 			body: "*"
+    };
+  }
+
+  // CancelLocalQuery cancels a SQL query running on this node given its ID.
+  rpc CancelLocalQuery(CancelQueryRequest) returns (CancelQueryResponse) {
+    option (google.api.http) = {
+      post : "/_status/cancel_local_query"
+      body: "*"
     };
   }
 

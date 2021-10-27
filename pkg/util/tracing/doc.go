@@ -59,7 +59,6 @@
 // - An operation name
 // - Timing information (start timestamp, duration)
 // - A set of zero or more tags (for annotation, visible when rendering spans)
-// - A set of zero or more baggage items (data that crosses process boundaries)
 // - References to other spans (mediated by the relations described above)
 // - Recording data[7] (structured data/messages visible when rendering spans)
 //

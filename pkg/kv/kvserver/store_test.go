@@ -313,8 +313,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	rng := rand.New(rand.NewSource(seed))
 
 	ops := []func(rangeID roachpb.RangeID) roachpb.Key{
-		keys.RaftAppliedIndexLegacyKey, // replicated; sorts before tombstone
-		keys.RaftHardStateKey,          // unreplicated; sorts after tombstone
+		keys.RaftHardStateKey, // unreplicated; sorts after tombstone
 		// Replicated key-anchored local key (i.e. not one we should care about).
 		// Will be written at zero timestamp, but that's ok.
 		func(rangeID roachpb.RangeID) roachpb.Key {
@@ -3137,8 +3136,8 @@ func TestSnapshotRateLimit(t *testing.T) {
 		expectedErr   string
 	}{
 		{SnapshotRequest_UNKNOWN, 0, "unknown snapshot priority"},
-		{SnapshotRequest_RECOVERY, 8 << 20, ""},
-		{SnapshotRequest_REBALANCE, 8 << 20, ""},
+		{SnapshotRequest_RECOVERY, 32 << 20, ""},
+		{SnapshotRequest_REBALANCE, 32 << 20, ""},
 	}
 	for _, c := range testCases {
 		t.Run(c.priority.String(), func(t *testing.T) {

@@ -66,7 +66,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
 colbatchscan            Scan /Table/55/1/2/0
-colbatchscan            fetched: /kv/primary/2/v -> /3
+colbatchscan            fetched: /kv/kv_pkey/2/v -> /3
 batch flow coordinator  Put /Table/55/1/2/0 -> /TUPLE/2:2:Int/2
 batch flow coordinator  Del /Table/55/2/3/0
 batch flow coordinator  CPut /Table/55/2/2/0 -> /BYTES/0x8a (expecting does not exist)

@@ -133,7 +133,7 @@ func waitForSchemaChanges(ctx context.Context, l *logger.Logger, db *gosql.DB) e
 	}
 	// Queries to hone in on index validation problems.
 	indexValidationQueries := []string{
-		"SELECT count(k) FROM test.kv@primary AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at <= $2",
+		"SELECT count(k) FROM test.kv@kv_pkey AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at <= $2",
 		"SELECT count(v) FROM test.kv@foo AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at <= $2",
 	}
 	return runValidationQueries(ctx, l, db, start, validationQueries, indexValidationQueries)
@@ -461,7 +461,7 @@ func makeSchemaChangeDuringTPCC(
 
 						// The FK constraint on tpcc.district referencing tpcc.warehouse is
 						// unvalidated, thus this operation will not be a noop.
-						`ALTER TABLE tpcc.district VALIDATE CONSTRAINT fk_d_w_id_ref_warehouse;`,
+						`ALTER TABLE tpcc.district VALIDATE CONSTRAINT district_d_w_id_fkey;`,
 
 						`ALTER TABLE tpcc.orderpks RENAME TO tpcc.readytodrop;`,
 						`TRUNCATE TABLE tpcc.readytodrop CASCADE;`,

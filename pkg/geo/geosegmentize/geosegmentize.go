@@ -28,7 +28,7 @@ import (
 // represents maximum segment distance.
 // segmentizeCoords represents the function's definition which allows
 // us to segmentize given two-points. We have to specify segmentizeCoords
-// explicitly, as the algorithm for segmentization is significantly
+// explicitly, as the algorithm for segmentation is significantly
 // different for geometry and geography.
 func Segmentize(
 	geometry geom.T,

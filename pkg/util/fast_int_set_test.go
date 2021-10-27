@@ -23,7 +23,7 @@ func TestFastIntSet(t *testing.T) {
 		m := mVal
 		t.Run(fmt.Sprintf("%d", m), func(t *testing.T) {
 			t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
-			rng, _ := randutil.NewPseudoRand()
+			rng, _ := randutil.NewTestRand()
 			in := make([]bool, m)
 			forEachRes := make([]bool, m)
 
@@ -100,7 +100,7 @@ func TestFastIntSet(t *testing.T) {
 }
 
 func TestFastIntSetTwoSetOps(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	// genSet creates a set of numElem values in [minVal, minVal + valRange)
 	// It also adds and then removes numRemoved elements.
 	genSet := func(numElem, numRemoved, minVal, valRange int) (FastIntSet, map[int]bool) {

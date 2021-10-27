@@ -70,7 +70,7 @@ type ExternalStorage interface {
 	// A Writer *must* be closed via either Close, and if closing returns a
 	// non-nil error, that error should be handled or reported to the user -- an
 	// implementation may buffer written data until Close and only then return
-	// an error, or Write may retrun an opaque io.EOF with the underlying cause
+	// an error, or Write may return an opaque io.EOF with the underlying cause
 	// returned by the subsequent Close().
 	Writer(ctx context.Context, basename string) (io.WriteCloser, error)
 
@@ -148,7 +148,7 @@ type ExternalStorageContext struct {
 }
 
 // ExternalStorageConstructor is a function registered to create instances
-// of a given external storage implamentation.
+// of a given external storage implementation.
 type ExternalStorageConstructor func(
 	context.Context, ExternalStorageContext, roachpb.ExternalStorage,
 ) (ExternalStorage, error)

@@ -71,7 +71,7 @@ func TestIntentResolution(t *testing.T) {
 	for i, tc := range testCases {
 		// Use deterministic randomness to randomly put the writes in separate
 		// batches or commit them with EndTxn.
-		rnd, seed := randutil.NewPseudoRand()
+		rnd, seed := randutil.NewTestRand()
 		log.Infof(context.Background(), "%d: using intent test seed %d", i, seed)
 
 		results := map[string]struct{}{}

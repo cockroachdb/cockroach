@@ -415,7 +415,7 @@ func TestTransactionBumpEpoch(t *testing.T) {
 // advertised.
 func TestTransactionObservedTimestamp(t *testing.T) {
 	var txn Transaction
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	t.Logf("running with seed %d", seed)
 	ids := append([]int{109, 104, 102, 108, 1000}, rand.Perm(100)...)
 	timestamps := make(map[NodeID]hlc.ClockTimestamp, len(ids))

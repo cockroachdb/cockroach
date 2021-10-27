@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -53,10 +54,10 @@ var (
 	)
 	priorityAfter = settings.RegisterDurationSetting(
 		"bulkio.backup.read_with_priority_after",
-		"age of read-as-of time above which a BACKUP should read with priority",
+		"amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads",
 		time.Minute,
 		settings.NonNegativeDuration,
-	)
+	).WithPublic()
 	delayPerAttmpt = settings.RegisterDurationSetting(
 		"bulkio.backup.read_retry_delay",
 		"amount of time since the read-as-of time, per-prior attempt, to wait before making another attempt",
@@ -65,22 +66,23 @@ var (
 	)
 	timeoutPerAttempt = settings.RegisterDurationSetting(
 		"bulkio.backup.read_timeout",
-		"amount of time after which a read attempt is considered timed out and is canceled. "+
-			"Hitting this timeout will cause the backup job to fail.",
+		"amount of time after which a read attempt is considered timed out, which causes the backup to fail",
 		time.Minute*5,
 		settings.NonNegativeDuration,
-	)
+	).WithPublic()
 	targetFileSize = settings.RegisterByteSizeSetting(
 		"bulkio.backup.file_size",
-		"target file size",
+		"target size for individual data files produced during BACKUP",
 		128<<20,
-	)
+	).WithPublic()
+
 	smallFileBuffer = settings.RegisterByteSizeSetting(
 		"bulkio.backup.merge_file_buffer_size",
 		"size limit used when buffering backup files before merging them",
 		16<<20,
 		settings.NonNegativeInt,
 	)
+
 	splitKeysOnTimestamps = settings.RegisterBoolSetting(
 		"bulkio.backup.split_keys_on_timestamps",
 		"split backup data on timestamps when writing revision history",
@@ -335,7 +337,19 @@ func runBackupProcessor(
 					// value. The sentinel value of 1 forces the ExportRequest to paginate
 					// after creating a single SST.
 					header.TargetBytes = 1
-
+					admissionHeader := roachpb.AdmissionHeader{
+						// Export requests are currently assigned NormalPri.
+						//
+						// TODO(bulkio): the priority should vary based on the urgency of
+						// these background requests. These exports should get LowPri,
+						// unless they are being retried and need to be completed in a
+						// timely manner for compliance with RPO and data retention
+						// policies. Consider deriving this from the UserPriority field.
+						Priority:                 int32(admission.NormalPri),
+						CreateTime:               timeutil.Now().UnixNano(),
+						Source:                   roachpb.AdmissionHeader_ROOT_KV,
+						NoMemoryReservedAtSource: true,
+					}
 					log.Infof(ctx, "sending ExportRequest for span %s (attempt %d, priority %s)",
 						span.span, span.attempts+1, header.UserPriority.String())
 					var rawRes roachpb.Response
@@ -353,8 +367,8 @@ func runBackupProcessor(
 								ReqSentTime: reqSentTime.String(),
 							})
 
-							rawRes, pErr = kv.SendWrappedWith(ctx, flowCtx.Cfg.DB.NonTransactionalSender(),
-								header, req)
+							rawRes, pErr = kv.SendWrappedWithAdmission(
+								ctx, flowCtx.Cfg.DB.NonTransactionalSender(), header, admissionHeader, req)
 							respReceivedTime = timeutil.Now()
 							if pErr != nil {
 								return pErr.GoError()

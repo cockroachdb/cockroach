@@ -701,6 +701,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *RecursiveCTEExpr:
 		if !f.HasFlags(ExprFmtHideColumns) {
+			if t.Deduplicate {
+				tp.Childf("deduplicate")
+			}
 			tp.Childf("working table binding: &%d", t.WithID)
 			f.formatColList(e, tp, "initial columns:", t.InitialCols)
 			f.formatColList(e, tp, "recursive columns:", t.RecursiveCols)
@@ -1077,8 +1080,9 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 		// We don't want to show the OriginalExpr.
 		private = nil
 
-	case *CastExpr:
-		private = t.Typ.SQLString()
+	case *CastExpr, *AssignmentCastExpr:
+		typ := scalar.Private().(*types.T)
+		private = typ.SQLString()
 
 	case *KVOptionsItem:
 		fmt.Fprintf(f.Buffer, " %s", t.Key)

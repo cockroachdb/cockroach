@@ -60,6 +60,7 @@ type Manager struct {
 	knobs    *spanconfig.TestingKnobs
 
 	spanconfig.KVAccessor
+	spanconfig.SQLTranslator
 }
 
 var _ spanconfig.ReconciliationDependencies = &Manager{}
@@ -72,19 +73,21 @@ func New(
 	stopper *stop.Stopper,
 	settings *cluster.Settings,
 	kvAccessor spanconfig.KVAccessor,
+	sqlTranslator spanconfig.SQLTranslator,
 	knobs *spanconfig.TestingKnobs,
 ) *Manager {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
 	return &Manager{
-		db:         db,
-		jr:         jr,
-		ie:         ie,
-		stopper:    stopper,
-		settings:   settings,
-		knobs:      knobs,
-		KVAccessor: kvAccessor,
+		db:            db,
+		jr:            jr,
+		ie:            ie,
+		stopper:       stopper,
+		settings:      settings,
+		KVAccessor:    kvAccessor,
+		SQLTranslator: sqlTranslator,
+		knobs:         knobs,
 	}
 }
 
@@ -121,7 +124,7 @@ func (m *Manager) run(ctx context.Context) {
 	checkReconciliationJobInterval.SetOnChange(&m.settings.SV, func(ctx context.Context) {
 		triggerJobCheck()
 	})
-	m.settings.Version.SetOnChange(func(ctx context.Context) {
+	m.settings.Version.SetOnChange(func(_ context.Context, _ clusterversion.ClusterVersion) {
 		triggerJobCheck()
 	})
 
@@ -215,6 +218,6 @@ func (m *Manager) createAndStartJobIfNoneExists(ctx context.Context) (bool, erro
 	if fn := m.knobs.ManagerCreatedJobInterceptor; fn != nil {
 		fn(job)
 	}
-	err := m.jr.NotifyToAdoptJobs(ctx)
-	return true, err
+	m.jr.NotifyToAdoptJobs(ctx)
+	return true, nil
 }

@@ -196,7 +196,7 @@ release of that major version. For example, `21.1.6` is a version released in 20
 is part of the first major release of that year, and the seventh release in that
 series (`21.1.0` being the first).
 
-npm package versions must be parseable by [semantic versioning](https://docs.npmjs.com/cli/v6/using-npm/semver). To denote what versions of the cluster-ui package are intended for use with specific major version of CockroachDB, cluster-ui mimicks the version of CockroachDB. For example `cluster-ui@21.1.4` is a version of cluster-ui compatible with the API of CockroachDB version `21.1` and is the fourth release in this major version. It's important to note that `cluster-ui@21.1.4` is **not** directly published from CockroachDB version `21.1.4`. Only that `cluster-ui@21.1.x` was published from CockroachDB branch `release-21.1`.
+npm package versions must be parseable by [semantic versioning](https://docs.npmjs.com/cli/v6/using-npm/semver). To denote what versions of the cluster-ui package are intended for use with specific major version of CockroachDB, cluster-ui mimics the version of CockroachDB. For example `cluster-ui@21.1.4` is a version of cluster-ui compatible with the API of CockroachDB version `21.1` and is the fourth release in this major version. It's important to note that `cluster-ui@21.1.4` is **not** directly published from CockroachDB version `21.1.4`. Only that `cluster-ui@21.1.x` was published from CockroachDB branch `release-21.1`.
 
 So when incrementing (or "bumping") the version of cluster-ui the only number that should change will be the "patch"
 version (the third number). For example, if you're working on master and find the version to be `21.2.1` you would
@@ -227,7 +227,7 @@ $ make ui-generate -B
 If you have not done so already, request publishing permissions from the Cluster
 UI team at Cockroach Labs. You will be required to create an account on [npm](https://www.npmjs.com/)
 and configure two factor authentication. You will then be added to the `@cockroachlabs`
-npm organization and given permission to publish the `clutser-ui` package.
+npm organization and given permission to publish the `cluster-ui` package.
 
 #### Setup your npm registry login details
 

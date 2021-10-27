@@ -224,7 +224,7 @@ func (bse *boundedStalenessEvents) onStmtTrace(nodeIdx int, rec tracing.Recordin
 	defer bse.mu.Unlock()
 
 	if bse.mu.stmt != "" && bse.mu.stmt == stmt {
-		spans := make(map[uint64]tracingpb.RecordedSpan)
+		spans := make(map[tracingpb.SpanID]tracingpb.RecordedSpan)
 		for _, sp := range rec {
 			spans[sp.SpanID] = sp
 			if sp.Operation == "dist sender send" && spans[sp.ParentSpanID].Operation == "colbatchscan" {

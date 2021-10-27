@@ -24,10 +24,17 @@ go_library(
 
 go_test(
     name = "netutil_test",
-    srcs = ["srv_test.go"],
+    srcs = [
+        "net_test.go",
+        "srv_test.go",
+    ],
     embed = [":netutil"],
     deps = [
+        "//pkg/util/contextutil",
+        "@com_github_cockroachdb_cmux//:cmux",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:go_default_library",
     ],
 )

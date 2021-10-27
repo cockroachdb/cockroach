@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -134,7 +135,7 @@ type Registry struct {
 		syncutil.Mutex
 
 		// adoptedJobs holds a map from job id to its context cancel func and epoch.
-		// It contains the that are adopted and rpobably being run. One exception is
+		// It contains the jobs that are adopted and probably being run. One exception is
 		// jobs scheduled inside a transaction, they will show in this map but will
 		// only be run when the transaction commits.
 		adoptedJobs map[jobspb.JobID]*adoptedJob
@@ -149,7 +150,7 @@ type Registry struct {
 // function that must be called once the caller is done with the planner.
 //
 // TODO(mjibson): Can we do something to avoid passing an interface{} here
-// that must be type casted in a Resumer? It cannot be done here because
+// that must be cast in a Resumer? It cannot be done here because
 // JobExecContext lives in the sql package, which would create a dependency
 // cycle if listed here. Furthermore, moving JobExecContext into a common
 // subpackage like sqlbase is difficult because of the amount of sql-only
@@ -191,7 +192,10 @@ func MakeRegistry(
 		execCtx:             execCtxFn,
 		preventAdoptionFile: preventAdoptionFile,
 		td:                  td,
-		adoptionCh:          make(chan adoptionNotice),
+		// Use a non-zero buffer to allow queueing of notifications.
+		// The writing method will use a default case to avoid blocking
+		// if a notification is already queued.
+		adoptionCh: make(chan adoptionNotice, 1),
 	}
 	if knobs != nil {
 		r.knobs = *knobs
@@ -232,7 +236,7 @@ func (r *Registry) CurrentlyRunningJobs() []jobspb.JobID {
 	return jobs
 }
 
-// ID returns a unique during the lifetume of the registry id that is
+// ID returns a unique during the lifetime of the registry id that is
 // used for keying sqlliveness claims held by the registry.
 func (r *Registry) ID() base.SQLInstanceID {
 	return r.nodeID.SQLInstanceID()
@@ -250,15 +254,11 @@ func (r *Registry) MakeJobID() jobspb.JobID {
 }
 
 // NotifyToAdoptJobs notifies the job adoption loop to start claimed jobs.
-func (r *Registry) NotifyToAdoptJobs(ctx context.Context) error {
+func (r *Registry) NotifyToAdoptJobs(context.Context) {
 	select {
 	case r.adoptionCh <- resumeClaimedJobs:
-	case <-r.stopper.ShouldQuiesce():
-		return stop.ErrUnavailable
-	case <-ctx.Done():
-		return ctx.Err()
+	default:
 	}
-	return nil
 }
 
 // WaitForJobs waits for a given list of jobs to reach some sort
@@ -343,9 +343,7 @@ func (r *Registry) Run(
 		return nil
 	}
 	log.Infof(ctx, "scheduled jobs %+v", jobs)
-	if err := r.NotifyToAdoptJobs(ctx); err != nil {
-		return err
-	}
+	r.NotifyToAdoptJobs(ctx)
 	err := r.WaitForJobs(ctx, ex, jobs)
 	if err != nil {
 		return err
@@ -1292,6 +1290,9 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
 		// All reverting jobs are retried.
+		if !r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+			return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusRevertFailed, err)
+		}
 		return onExecutionFailed(err)
 	case StatusFailed:
 		if jobErr == nil {
@@ -1400,7 +1401,7 @@ func (r *Registry) RetryMaxDelay() float64 {
 	return retryMaxDelaySetting.Get(&r.settings.SV).Seconds()
 }
 
-// maybeRecordRetriableExeuctionFailure will record a
+// maybeRecordExecutionFailure will record a
 // RetriableExecutionFailureError into the job payload.
 func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j *Job) {
 	var efe *retriableExecutionError

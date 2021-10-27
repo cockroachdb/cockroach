@@ -281,10 +281,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{}
 	}
 
-	// For test servers, leave interleaved tables enabled by default. We'll remove
-	// this when we remove interleaved tables altogether.
-	sql.InterleavedTablesEnabled.Override(context.Background(), &cfg.Settings.SV, true)
-
 	return cfg
 }
 
@@ -594,6 +590,9 @@ func (ts *TestServer) StartTenant(
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.Insecure = params.ForceInsecure
 	baseCfg.Locality = params.Locality
+	if params.SSLCertsDir != "" {
+		baseCfg.SSLCertsDir = params.SSLCertsDir
+	}
 	if params.AllowSettingClusterSettings {
 		tenantKnobs, ok := baseCfg.TestingKnobs.TenantTestingKnobs.(*sql.TenantTestingKnobs)
 		if !ok {
@@ -843,7 +842,7 @@ func (ts *TestServer) createAuthUser(userName security.SQLUsername, isAdmin bool
 	if _, err := ts.Server.sqlServer.internalExecutor.ExecEx(context.TODO(),
 		"create-auth-user", nil,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		"CREATE USER $1", userName.Normalized(),
+		fmt.Sprintf("CREATE USER %s", userName.Normalized()),
 	); err != nil {
 		return err
 	}
@@ -931,7 +930,7 @@ func (ts *TestServer) GetNode() *Node {
 	return ts.node
 }
 
-// DistSenderI is part of DistSendeInterface.
+// DistSenderI is part of DistSenderInterface.
 func (ts *TestServer) DistSenderI() interface{} {
 	return ts.distSender
 }
@@ -950,6 +949,16 @@ func (ts *TestServer) MigrationServer() interface{} {
 // SpanConfigAccessor is part of TestServerInterface.
 func (ts *TestServer) SpanConfigAccessor() interface{} {
 	return ts.Server.node.spanConfigAccessor
+}
+
+// SpanConfigSQLTranslator is part of TestServerInterface.
+func (ts *TestServer) SpanConfigSQLTranslator() interface{} {
+	if ts.sqlServer.spanconfigMgr == nil {
+		panic(
+			"span config manager uninitialized; see EnableSpanConfigs testing knob to use span configs",
+		)
+	}
+	return ts.sqlServer.spanconfigMgr.SQLTranslator
 }
 
 // SQLServer is part of TestServerInterface.

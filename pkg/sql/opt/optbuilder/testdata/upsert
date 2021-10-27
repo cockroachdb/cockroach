@@ -101,7 +101,7 @@ UPDATE SET a=5
 ----
 upsert abc
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: abc_a_key
  ├── canary column: a:14
  ├── fetch columns: a:14 b:15 c:16 rowid:17
  ├── insert-mapping:
@@ -170,7 +170,7 @@ project
  ├── columns: a:1!null b:2 c:3
  └── upsert abc
       ├── columns: a:1!null b:2 c:3 rowid:4!null
-      ├── arbiter indexes: secondary
+      ├── arbiter indexes: abc_b_c_key
       ├── canary column: rowid:16
       ├── fetch columns: a:13 b:14 c:15 rowid:16
       ├── insert-mapping:
@@ -242,7 +242,7 @@ WHERE abc.a>0
 ----
 upsert abc
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: abc_a_key
  ├── canary column: a:14
  ├── fetch columns: a:14 b:15 c:16 rowid:17
  ├── insert-mapping:
@@ -319,7 +319,7 @@ sort
       │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
       │    └── upsert abc
       │         ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null rowid:4!null
-      │         ├── arbiter indexes: secondary
+      │         ├── arbiter indexes: abc_a_key
       │         ├── canary column: abc.a:11
       │         ├── fetch columns: abc.a:11 abc.b:12 abc.c:13 rowid:14
       │         ├── insert-mapping:
@@ -397,7 +397,7 @@ UPDATE SET a=tab.a*excluded.a
 ----
 upsert abc [as=tab]
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: abc_a_key
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 rowid:14
  ├── insert-mapping:
@@ -462,7 +462,7 @@ UPDATE SET a=5
 ----
 upsert abc
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: abc_b_c_key
  ├── canary column: rowid:14
  ├── fetch columns: a:11 b:12 c:13 rowid:14
  ├── insert-mapping:
@@ -556,7 +556,7 @@ ON CONFLICT DO NOTHING
 ----
 insert xyz
  ├── columns: <none>
- ├── arbiter indexes: primary secondary secondary
+ ├── arbiter indexes: xyz_pkey xyz_y_z_key xyz_z_y_key
  ├── insert-mapping:
  │    ├── column1:6 => x:1
  │    ├── column2:7 => y:2
@@ -614,7 +614,7 @@ ON CONFLICT (y, z) DO NOTHING
 ----
 insert xyz
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: xyz_y_z_key
  ├── insert-mapping:
  │    ├── column1:6 => x:1
  │    ├── column2:7 => y:2
@@ -643,7 +643,7 @@ ON CONFLICT DO NOTHING
 ----
 insert uniq
  ├── columns: <none>
- ├── arbiter indexes: primary uniq_y_key uniq_z_key
+ ├── arbiter indexes: uniq_pkey uniq_y_key uniq_z_key
  ├── insert-mapping:
  │    ├── column1:6 => x:1
  │    ├── column2:7 => y:2
@@ -712,7 +712,7 @@ project
  ├── columns: "?column?":20!null "?column?":21
  ├── upsert xyz
  │    ├── columns: x:1!null y:2 z:3!null
- │    ├── arbiter indexes: secondary
+ │    ├── arbiter indexes: xyz_y_z_key
  │    ├── canary column: x:9
  │    ├── fetch columns: x:9 y:10 z:11
  │    ├── insert-mapping:
@@ -796,7 +796,7 @@ UPDATE SET (b, a)=(SELECT x, y+excluded.b FROM xyz WHERE x=excluded.a)
 ----
 upsert abc
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: abc_a_key
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 rowid:14
  ├── insert-mapping:
@@ -874,7 +874,7 @@ UPDATE SET a=DEFAULT, b=DEFAULT
 ----
 upsert abc
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: abc_a_key
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 rowid:14
  ├── insert-mapping:
@@ -945,7 +945,7 @@ UPDATE SET m=mutation.m+1
 ----
 upsert mutation
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: mutation_pkey
  ├── canary column: m:12
  ├── fetch columns: m:12 n:13 o:14 p:15 q:16
  ├── insert-mapping:
@@ -1016,7 +1016,7 @@ UPSERT INTO xyz VALUES (1)
 ----
 upsert xyz
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: xyz_pkey
  ├── canary column: x:8
  ├── fetch columns: x:8 y:9 z:10
  ├── insert-mapping:
@@ -1073,7 +1073,7 @@ with &1
  │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
  │    └── upsert abc
  │         ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null rowid:4!null
- │         ├── arbiter indexes: primary
+ │         ├── arbiter indexes: abc_pkey
  │         ├── canary column: rowid:14
  │         ├── fetch columns: abc.a:11 abc.b:12 abc.c:13 rowid:14
  │         ├── insert-mapping:
@@ -1138,7 +1138,7 @@ UPSERT INTO xyz (z, x, y) VALUES (1, 2, 3)
 ----
 upsert xyz
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: xyz_pkey
  ├── canary column: x:9
  ├── fetch columns: x:9 y:10 z:11
  ├── insert-mapping:
@@ -1193,7 +1193,7 @@ UPSERT INTO checks (a, b, c) VALUES (1, 2, 3)
 ----
 upsert checks
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: checks_pkey
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 d:14
  ├── insert-mapping:
@@ -1251,7 +1251,7 @@ UPSERT INTO mutation (m, n) VALUES (1, 2)
 ----
 upsert mutation
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: mutation_pkey
  ├── canary column: m:12
  ├── fetch columns: m:12 n:13 o:14 p:15 q:16
  ├── insert-mapping:
@@ -1309,7 +1309,7 @@ UPSERT INTO mutation VALUES (1, 2)
 ----
 upsert mutation
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: mutation_pkey
  ├── canary column: m:12
  ├── fetch columns: m:12 n:13 o:14 p:15 q:16
  ├── insert-mapping:
@@ -1376,7 +1376,7 @@ INSERT INTO checks (a, b) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b=3, c=4
 ----
 upsert checks
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: checks_pkey
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 d:14
  ├── insert-mapping:
@@ -1449,7 +1449,7 @@ INSERT INTO checks (a, b) VALUES (1, 2) ON CONFLICT (a) DO NOTHING
 ----
 insert checks
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: checks_pkey
  ├── insert-mapping:
  │    ├── column1:7 => a:1
  │    ├── column2:8 => b:2
@@ -1500,7 +1500,7 @@ UPSERT INTO checks (a, b) VALUES (1, 2)
 ----
 upsert checks
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: checks_pkey
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 d:14
  ├── insert-mapping:
@@ -1567,7 +1567,7 @@ ON CONFLICT (a) DO UPDATE SET a=excluded.a, b=(SELECT x FROM xyz WHERE x=checks.
 ----
 upsert checks
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: checks_pkey
  ├── canary column: checks.a:15
  ├── fetch columns: checks.a:15 checks.b:16 checks.c:17 d:18
  ├── insert-mapping:
@@ -1653,7 +1653,7 @@ ON CONFLICT (z, y) DO UPDATE SET y=5
 ----
 upsert xyz
  ├── columns: <none>
- ├── arbiter indexes: secondary
+ ├── arbiter indexes: xyz_y_z_key
  ├── canary column: x:12
  ├── fetch columns: x:12 y:13 z:14
  ├── insert-mapping:
@@ -1703,7 +1703,7 @@ UPSERT INTO decimals (a, b) VALUES (1.1, ARRAY[0.95])
 ----
 upsert decimals
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: decimals_pkey
  ├── canary column: decimals.a:15
  ├── fetch columns: decimals.a:15 decimals.b:16 c:17 d:18
  ├── insert-mapping:
@@ -1776,7 +1776,7 @@ UPSERT INTO decimals (a) VALUES (1.1)
 ----
 upsert decimals
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: decimals_pkey
  ├── canary column: decimals.a:15
  ├── fetch columns: decimals.a:15 b:16 c:17 d:18
  ├── insert-mapping:
@@ -1851,7 +1851,7 @@ DO UPDATE SET b=ARRAY[0.99]
 ----
 upsert decimals
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: decimals_pkey
  ├── canary column: decimals.a:15
  ├── fetch columns: decimals.a:15 decimals.b:16 c:17 d:18
  ├── insert-mapping:
@@ -1979,7 +1979,7 @@ UPSERT INTO on_update_bare (a) VALUES (1)
 ----
 upsert on_update_bare
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: on_update_bare_pkey
  ├── canary column: a:7
  ├── fetch columns: a:7 v:8
  ├── insert-mapping:
@@ -2034,7 +2034,7 @@ UPSERT INTO on_update_with_default (a, b) VALUES (1, 2)
 ----
 upsert on_update_with_default
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: on_update_with_default_pkey
  ├── canary column: a:9
  ├── fetch columns: a:9 b:10 v:11
  ├── insert-mapping:
@@ -2083,7 +2083,7 @@ UPDATE SET (a, v) = (5, 4)
 ----
 upsert on_update_with_default
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: on_update_with_default_pkey
  ├── canary column: a:9
  ├── fetch columns: a:9 b:10 v:11
  ├── insert-mapping:
@@ -2134,7 +2134,7 @@ UPDATE SET a=5
 ----
 upsert on_update_with_default
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: on_update_with_default_pkey
  ├── canary column: a:9
  ├── fetch columns: a:9 b:10 v:11
  ├── insert-mapping:
@@ -2210,7 +2210,7 @@ UPSERT INTO generated_as_identity (a) VALUES (2)
 ----
 upsert generated_as_identity
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: generated_as_identity_pkey
  ├── canary column: rowid:14
  ├── fetch columns: a:11 b:12 c:13 rowid:14
  ├── insert-mapping:
@@ -2262,7 +2262,7 @@ UPSERT INTO generated_as_identity (a, c) VALUES (3, 30)
 ----
 upsert generated_as_identity
  ├── columns: <none>
- ├── arbiter indexes: primary
+ ├── arbiter indexes: generated_as_identity_pkey
  ├── canary column: rowid:14
  ├── fetch columns: a:11 b:12 c:13 rowid:14
  ├── insert-mapping:

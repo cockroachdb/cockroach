@@ -11,11 +11,15 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/alessio/shellescape"
 	"github.com/spf13/cobra"
 )
 
@@ -53,8 +57,9 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	testCmd.Flags().String(stressArgsFlag, "", "Additional arguments to pass to stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
-	testCmd.Flags().Bool(rewriteFlag, false, "rewrite test files (only applicable for certain tests, e.g. logic and datadriven tests)")
+	testCmd.Flags().String(rewriteFlag, "", "argument to pass to underlying (only applicable for certain tests, e.g. logic and datadriven tests). If unspecified, -rewrite will be passed to the test binary.")
 	testCmd.Flags().String(rewriteArgFlag, "", "additional argument to pass to -rewrite (implies --rewrite)")
+	testCmd.Flags().Lookup(rewriteFlag).NoOptDefVal = "-rewrite"
 	return testCmd
 }
 
@@ -73,7 +78,10 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	ignoreCache := mustGetFlagBool(cmd, ignoreCacheFlag)
 	verbose := mustGetFlagBool(cmd, vFlag)
 	rewriteArg := mustGetFlagString(cmd, rewriteArgFlag)
-	rewrite := mustGetFlagBool(cmd, rewriteFlag) || (rewriteArg != "")
+	rewrite := mustGetFlagString(cmd, rewriteFlag)
+	if rewriteArg != "" && rewrite == "" {
+		rewrite = "-rewrite"
+	}
 
 	d.log.Printf("unit test args: stress=%t  race=%t  filter=%s  timeout=%s  ignore-cache=%t  pkgs=%s",
 		stress, race, filter, timeout, ignoreCache, pkgs)
@@ -126,7 +134,8 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			// where we define `Stringer` separately for the `RemoteOffset`
 			// type.
 			{
-				out, err := d.exec.CommandContextSilent(ctx, "bazel", "query", fmt.Sprintf("kind(go_test,  //%s)", pkg))
+				queryArgs := []string{fmt.Sprintf("kind(go_test,  //%s)", pkg)}
+				out, err := d.getQueryOutput(ctx, queryArgs...)
 				if err != nil {
 					return err
 				}
@@ -136,7 +145,8 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		} else if strings.Contains(pkg, ":") {
 			testTargets = append(testTargets, pkg)
 		} else {
-			out, err := d.exec.CommandContextSilent(ctx, "bazel", "query", fmt.Sprintf("kind(go_test, //%s:all)", pkg))
+			queryArgs := []string{fmt.Sprintf("kind(go_test, //%s:all)", pkg)}
+			out, err := d.getQueryOutput(ctx, queryArgs...)
 			if err != nil {
 				return err
 			}
@@ -150,31 +160,22 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if ignoreCache {
 		args = append(args, "--nocache_test_results")
 	}
-	if rewrite {
+	if rewrite != "" {
 		if stress {
-			// Both of these flags require --run_under, and their usages would conflict.
 			return fmt.Errorf("cannot combine --%s and --%s", stressFlag, rewriteFlag)
 		}
 		workspace, err := d.getWorkspace(ctx)
 		if err != nil {
 			return err
 		}
-		var cdDir string
-		for _, testTarget := range testTargets {
-			dir := getDirectoryFromTarget(testTarget)
-			if cdDir != "" && cdDir != dir {
-				// We can't pass different run_under arguments for different tests
-				// in different packages.
-				return fmt.Errorf("cannot --%s for selected targets: %s. Hint: try only specifying one test target",
-					rewriteFlag, strings.Join(testTargets, ","))
-			}
-			cdDir = dir
-		}
-		args = append(args, "--run_under", fmt.Sprintf("cd %s && ", filepath.Join(workspace, cdDir)))
-		args = append(args, "--test_env=YOU_ARE_IN_THE_WORKSPACE=1")
-		args = append(args, "--test_arg", "-rewrite")
+		args = append(args, fmt.Sprintf("--test_env=COCKROACH_WORKSPACE=%s", workspace))
+		args = append(args, "--test_arg", rewrite)
 		if rewriteArg != "" {
 			args = append(args, "--test_arg", rewriteArg)
+		}
+		for _, testTarget := range testTargets {
+			dir := getDirectoryFromTarget(testTarget)
+			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
 		}
 	}
 	if stress && timeout > 0 {
@@ -194,7 +195,9 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if short {
 		args = append(args, "--test_arg", "-test.short")
 	}
-	if verbose {
+	if stress {
+		args = append(args, "--test_output", "streamed")
+	} else if verbose {
 		args = append(args, "--test_output", "all", "--test_arg", "-test.v")
 	} else {
 		args = append(args, "--test_output", "errors")
@@ -212,4 +215,26 @@ func getDirectoryFromTarget(target string) string {
 		return target
 	}
 	return target[:colon]
+}
+
+// getQueryOutput runs `bazel query` w/ the given arguments, but returns
+// a more informative error if the query fails.
+func (d *dev) getQueryOutput(ctx context.Context, args ...string) ([]byte, error) {
+	queryArgs := []string{"query"}
+	queryArgs = append(queryArgs, args...)
+	stdoutBytes, err := d.exec.CommandContextSilent(ctx, "bazel", queryArgs...)
+	if err == nil {
+		return stdoutBytes, err
+	}
+	var cmderr *exec.ExitError
+	var stdout, stderr string
+	if len(stdoutBytes) > 0 {
+		stdout = fmt.Sprintf("stdout: \"%s\" ", string(stdoutBytes))
+	}
+	if errors.As(err, &cmderr) && len(cmderr.Stderr) > 0 {
+		stderr = fmt.Sprintf("stderr: \"%s\" ", strings.TrimSpace(string(cmderr.Stderr)))
+	}
+	return nil, fmt.Errorf("failed to run `bazel %s` %s%s(%w)",
+		shellescape.QuoteCommand(queryArgs), stdout, stderr, err)
+
 }

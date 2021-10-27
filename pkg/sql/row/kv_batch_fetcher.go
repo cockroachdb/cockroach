@@ -64,9 +64,10 @@ type txnKVFetcher struct {
 	// individual Span has only a start key, it will be interpreted as a
 	// single-key fetch and may use a GetRequest under the hood.
 	spans roachpb.Spans
-	// spansScratch is the largest allocated slice of roachpb.Spans that we need
-	// to hold on to since we're slicing off spans in nextBatch(). Any resume
-	// spans are copied into this slice when processing each response.
+	// spansScratch is the initial state of spans (given to the fetcher when
+	// starting the scan) that we need to hold on to since we're slicing off
+	// spans in nextBatch(). Any resume spans are copied into this slice when
+	// processing each response.
 	spansScratch roachpb.Spans
 	// newFetchSpansIdx tracks the number of resume spans we have copied into
 	// spansScratch after the last fetch.
@@ -106,7 +107,7 @@ type txnKVFetcher struct {
 	responses        []roachpb.ResponseUnion
 	remainingBatches [][]byte
 
-	acc mon.BoundAccount
+	acc *mon.BoundAccount
 	// spansAccountedFor and batchResponseAccountedFor track the number of bytes
 	// that we've already registered with acc in regards to spans and the batch
 	// response, respectively.
@@ -238,7 +239,16 @@ func makeKVBatchFetcherDefaultSendFunc(txn *kv.Txn) sendFunc {
 // limit grows between subsequent batches, starting at firstBatchKeyLimit (if not
 // 0) to ProductionKVBatchSize.
 //
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly (if acc is non-nil). The
+// caller can only reuse the spans slice after the fetcher has been closed, and
+// if the caller does, it becomes responsible for the memory accounting.
+//
 // Batch limits can only be used if the spans are ordered.
+//
+// The passed-in memory account is owned by the fetcher throughout its lifetime
+// but is **not** closed - it is the caller's responsibility to close acc if it
+// is non-nil.
 func makeKVBatchFetcher(
 	ctx context.Context,
 	sendFn sendFunc,
@@ -249,7 +259,7 @@ func makeKVBatchFetcher(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockTimeout time.Duration,
-	mon *mon.BytesMonitor,
+	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 	requestAdmissionHeader roachpb.AdmissionHeader,
 	responseAdmissionQ *admission.WorkQueue,
@@ -310,32 +320,37 @@ func makeKVBatchFetcher(
 		lockStrength:               lockStrength,
 		lockWaitPolicy:             lockWaitPolicy,
 		lockTimeout:                lockTimeout,
-		acc:                        mon.MakeBoundAccount(),
+		acc:                        acc,
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
 		requestAdmissionHeader:     requestAdmissionHeader,
 		responseAdmissionQ:         responseAdmissionQ,
 	}
 
-	// Account for the memory we're about to allocate below.
-	if f.acc.Monitor() != nil {
+	// Account for the memory of the spans that we're taking the ownership of.
+	if f.acc != nil {
 		f.spansAccountedFor = spans.MemUsage()
 		if err := f.acc.Grow(ctx, f.spansAccountedFor); err != nil {
 			return txnKVFetcher{}, err
 		}
 	}
 
-	// Make a copy of the spans because we update them.
-	f.spans = make(roachpb.Spans, len(spans))
+	// Since the fetcher takes ownership of the spans slice, we don't need to
+	// perform the deep copy. Notably, the spans might be modified (when the
+	// fetcher receives the resume spans), but the fetcher will always keep the
+	// memory accounting up to date.
+	f.spans = spans
 	if reverse {
-		// Reverse scans receive the spans in decreasing order.
-		for i := range spans {
-			f.spans[len(spans)-i-1] = spans[i]
+		// Reverse scans receive the spans in decreasing order. Note that we
+		// need to be this tricky since we're updating the spans slice in place.
+		i, j := 0, len(spans)-1
+		for i < j {
+			f.spans[i], f.spans[j] = f.spans[j], f.spans[i]
+			i++
+			j--
 		}
-	} else {
-		copy(f.spans, spans)
 	}
-	// Keep the reference to the newly allocated spans slice. We will never need
-	// larger slice for the resume spans.
+	// Keep the reference to the full spans slice. We will never need larger
+	// slice for the resume spans.
 	f.spansScratch = f.spans
 
 	return f, nil
@@ -426,7 +441,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		log.VEventf(ctx, 2, "Scan %s", buf.String())
 	}
 
-	monitoring := f.acc.Monitor() != nil
+	monitoring := f.acc != nil
 
 	const tokenFetchAllocation = 1 << 10
 	if !monitoring || f.batchResponseAccountedFor < tokenFetchAllocation {
@@ -595,7 +610,7 @@ func (f *txnKVFetcher) nextBatch(
 		}
 		// We have some resume spans.
 		f.spans = f.spansScratch[:f.newFetchSpansIdx]
-		if f.acc.Monitor() != nil {
+		if f.acc != nil {
 			used := f.acc.Used()
 			delta := f.spans.MemUsage() - f.spansAccountedFor
 			if err := f.acc.Resize(ctx, used, used+delta); err != nil {
@@ -618,5 +633,5 @@ func (f *txnKVFetcher) close(ctx context.Context) {
 	f.remainingBatches = nil
 	f.spans = nil
 	f.spansScratch = nil
-	f.acc.Close(ctx)
+	f.acc.Clear(ctx)
 }

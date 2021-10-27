@@ -726,9 +726,9 @@ EXPLAIN (VEC) SELECT nation, o_year, sum(amount) AS sum_profit FROM ( SELECT n_n
                     │   └ *rowexec.joinReader
                     │     └ *rowexec.joinReader
                     │       └ *colexecjoin.mergeJoinInnerOp
-                    │         ├ *colexecsel.selContainsBytesBytesConstOp
-                    │         │ └ *colfetcher.ColBatchScan
-                    │         └ *colfetcher.ColBatchScan
+                    │         ├ *colfetcher.ColBatchScan
+                    │         └ *colexecsel.selContainsBytesBytesConstOp
+                    │           └ *colfetcher.ColBatchScan
                     └ *colfetcher.ColBatchScan
 
 # Query 10
@@ -889,12 +889,12 @@ EXPLAIN (VEC) SELECT c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, s
     └ *colexec.hashAggregator
       └ *colexecjoin.hashJoiner
         ├ *colexecjoin.mergeJoinInnerOp
-        │ ├ *colexecjoin.mergeJoinLeftSemiOp
-        │ │ ├ *colfetcher.ColBatchScan
-        │ │ └ *colexecsel.selGTFloat64Float64ConstOp
-        │ │   └ *colexec.orderedAggregator
-        │ │     └ *colfetcher.ColBatchScan
-        │ └ *colfetcher.ColBatchScan
+        │ ├ *colfetcher.ColBatchScan
+        │ └ *colexecjoin.mergeJoinLeftSemiOp
+        │   ├ *colfetcher.ColBatchScan
+        │   └ *colexecsel.selGTFloat64Float64ConstOp
+        │     └ *colexec.orderedAggregator
+        │       └ *colfetcher.ColBatchScan
         └ *colfetcher.ColBatchScan
 
 # Query 19

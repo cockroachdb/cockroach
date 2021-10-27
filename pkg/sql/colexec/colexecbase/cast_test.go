@@ -40,7 +40,7 @@ func TestRandomizedCast(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	evalCtx.Planner = &faketreeeval.DummyEvalPlanner{}
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	getValidSupportedCast := func() (from, to *types.T) {
 		for {
@@ -109,7 +109,7 @@ func BenchmarkCastOp(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for _, typePair := range [][]*types.T{
 		{types.Int, types.Float},
 		{types.Int, types.Decimal},

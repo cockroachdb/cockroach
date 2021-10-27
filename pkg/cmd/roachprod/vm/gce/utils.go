@@ -249,7 +249,7 @@ func SyncDNS(vms vm.List) error {
 	return errors.Wrapf(err, "Command: %s\nOutput: %s\nZone file contents:\n%s", cmd, output, zoneBuilder.String())
 }
 
-// GetUserAuthorizedKeys retreives reads a list of user public keys from the
+// GetUserAuthorizedKeys retrieves reads a list of user public keys from the
 // gcloud cockroach-ephemeral project and returns them formatted for use in
 // an authorized_keys file.
 func GetUserAuthorizedKeys() (authorizedKeys []byte, err error) {

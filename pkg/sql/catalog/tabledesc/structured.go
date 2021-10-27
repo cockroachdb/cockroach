@@ -50,8 +50,8 @@ type Mutable struct {
 }
 
 const (
-	// PrimaryKeyIndexName is the name of the index for the primary key.
-	PrimaryKeyIndexName = "primary"
+	// LegacyPrimaryKeyIndexName is the pre 22.1 default PRIMARY KEY index name.
+	LegacyPrimaryKeyIndexName = "primary"
 	// SequenceColumnID is the ID of the sole column in a sequence.
 	SequenceColumnID = 1
 	// SequenceColumnName is the name of the sole column in a sequence.
@@ -993,33 +993,6 @@ func (desc *wrapper) ValidateIndexNameIsUnique(indexName string) error {
 	return nil
 }
 
-// PrimaryKeyString implements the TableDescriptor interface.
-func (desc *wrapper) PrimaryKeyString() string {
-	primaryIdx := &desc.PrimaryIndex
-	f := tree.NewFmtCtx(tree.FmtSimple)
-	f.WriteString("PRIMARY KEY (")
-	startIdx := primaryIdx.ExplicitColumnStartIdx()
-	for i, n := startIdx, len(primaryIdx.KeyColumnNames); i < n; i++ {
-		if i > startIdx {
-			f.WriteString(", ")
-		}
-		// Primary key columns cannot be inaccessible computed columns, so it is
-		// safe to always print the column name. For secondary indexes, we have
-		// to print inaccessible computed column expressions. See
-		// catformat.FormatIndexElements.
-		f.FormatNameP(&primaryIdx.KeyColumnNames[i])
-		f.WriteByte(' ')
-		f.WriteString(primaryIdx.KeyColumnDirections[i].String())
-	}
-	f.WriteByte(')')
-	if desc.PrimaryIndex.IsSharded() {
-		f.WriteString(
-			fmt.Sprintf(" USING HASH WITH BUCKET_COUNT = %v", primaryIdx.Sharded.ShardBuckets),
-		)
-	}
-	return f.CloseAndGetString()
-}
-
 // FamilyHeuristicTargetBytes is the target total byte size of columns that the
 // current heuristic will assign to a family.
 const FamilyHeuristicTargetBytes = 256
@@ -1128,7 +1101,7 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 	}
 	if idx.Name == "" {
 		// Only override the index name if it hasn't been set by the user.
-		idx.Name = PrimaryKeyIndexName
+		idx.Name = PrimaryKeyIndexName(desc.Name)
 	}
 	idx.EncodingType = descpb.PrimaryIndexEncoding
 	if idx.Version < descpb.PrimaryIndexWithStoredColumnsVersion {
@@ -1714,7 +1687,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 			{
 				primaryIndex := newIndex.IndexDescDeepCopy()
 				if args.NewPrimaryIndexName == "" {
-					primaryIndex.Name = PrimaryKeyIndexName
+					primaryIndex.Name = PrimaryKeyIndexName(desc.Name)
 				} else {
 					primaryIndex.Name = args.NewPrimaryIndexName
 				}
@@ -2499,4 +2472,10 @@ func LocalityConfigGlobal() descpb.TableDescriptor_LocalityConfig {
 			Global: &descpb.TableDescriptor_LocalityConfig_Global{},
 		},
 	}
+}
+
+// PrimaryKeyIndexName returns an appropriate PrimaryKey index name for the
+// given table.
+func PrimaryKeyIndexName(tableName string) string {
+	return tableName + "_pkey"
 }

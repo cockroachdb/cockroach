@@ -1159,7 +1159,7 @@ project
  ├── key: (1)
  ├── prune: (1)
  ├── interesting orderings: (+1)
- └── scan t.public.e@secondary
+ └── scan t.public.e@e_i_idx
       ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int)
       ├── constraint: /2/1: [/NULL - /NULL]
       ├── stats: [rows=10.0000001, distinct(2)=1, null(2)=10]
@@ -1179,7 +1179,7 @@ project
  ├── key: (1)
  ├── prune: (1)
  ├── interesting orderings: (+1)
- └── scan t.public.e@secondary
+ └── scan t.public.e@e_i_idx
       ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int!null)
       ├── constraint: /2/1: (/NULL - ]
       ├── stats: [rows=990, distinct(2)=100, null(2)=0]
@@ -1215,7 +1215,7 @@ project
       ├── stable
       ├── key: (1)
       ├── fd: (1)-->(4)
-      ├── scan e@secondary
+      ├── scan e@e_tz_idx
       │    ├── columns: k:1!null tz:4!null
       │    ├── constraint: /4/1: (/NULL - ]
       │    ├── key: (1)
@@ -1229,7 +1229,7 @@ SELECT k FROM e WHERE tz > '2017-11-12 07:35:01+00:00'::TIMESTAMP
 project
  ├── columns: k:1!null
  ├── key: (1)
- └── scan e@secondary
+ └── scan e@e_tz_idx
       ├── columns: k:1!null tz:4!null
       ├── constraint: /4/1: [/'2017-11-12 07:35:01.000001+00:00' - ]
       ├── key: (1)
@@ -1243,7 +1243,7 @@ SELECT k FROM e WHERE d > '2018-07-01' AND d < '2018-07-01'::DATE + '1w'::INTERV
 project
  ├── columns: k:1!null
  ├── key: (1)
- └── scan e@secondary
+ └── scan e@e_d_idx
       ├── columns: k:1!null d:5!null
       ├── constraint: /5/1: [/'2018-07-02' - /'2018-07-07']
       ├── key: (1)
@@ -1263,7 +1263,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(5)
-      ├── scan e@secondary
+      ├── scan e@e_d_idx
       │    ├── columns: k:1!null d:5!null
       │    ├── constraint: /5/1: [/'2018-07-02' - ]
       │    ├── key: (1)
@@ -1278,7 +1278,7 @@ SELECT k FROM e WHERE tz IS NOT NULL
 project
  ├── columns: k:1!null
  ├── key: (1)
- └── scan e@secondary
+ └── scan e@e_tz_idx
       ├── columns: k:1!null tz:4!null
       ├── constraint: /4/1: (/NULL - ]
       ├── key: (1)
@@ -1291,7 +1291,7 @@ SELECT k FROM e WHERE d - '1w'::INTERVAL > '2018-07-01'::DATE
 project
  ├── columns: k:1!null
  ├── key: (1)
- └── scan e@secondary
+ └── scan e@e_d_idx
       ├── columns: k:1!null d:5!null
       ├── constraint: /5/1: [/'2018-07-09' - ]
       ├── key: (1)

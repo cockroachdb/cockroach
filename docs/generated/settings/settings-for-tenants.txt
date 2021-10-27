@@ -2,6 +2,9 @@ Setting	Type	Default	Description
 admission.kv.enabled	boolean	false	when true, work performed by the KV layer is subject to admission control
 admission.sql_kv_response.enabled	boolean	false	when true, work performed by the SQL layer when receiving a KV response is subject to admission control
 admission.sql_sql_response.enabled	boolean	false	when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control
+bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP
+bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attempt is considered timed out, which causes the backup to fail
+bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads
 bulkio.stream_ingestion.minimum_flush_interval	duration	5s	the minimum timestamp between flushes; flushes may still occur if internal buffers fill up
 changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds
 cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage
@@ -96,7 +99,6 @@ sql.defaults.idle_in_session_timeout	duration	0s	default value for the idle_in_s
 sql.defaults.idle_in_transaction_session_timeout	duration	0s	default value for the idle_in_transaction_session_timeout; controls the duration a session is permitted to idle in a transaction before the session is terminated; if set to 0, there is no timeout
 sql.defaults.implicit_select_for_update.enabled	boolean	true	default value for enable_implicit_select_for_update session setting; enables FOR UPDATE locking during the row-fetch phase of mutation statements
 sql.defaults.insert_fast_path.enabled	boolean	true	default value for enable_insert_fast_path session setting; enables a specialized insert path
-sql.defaults.interleaved_tables.enabled	boolean	false	allows creation of interleaved tables or indexes
 sql.defaults.intervalstyle	enumeration	postgres	default value for IntervalStyle session setting [postgres = 0, iso_8601 = 1, sql_standard = 2]
 sql.defaults.intervalstyle.enabled	boolean	false	default value for intervalstyle_enabled session setting
 sql.defaults.large_full_scan_rows	float	1000	default value for large_full_scan_rows session setting which determines the maximum table size allowed for a full scan when disallow_full_table_scans is set to true
@@ -119,7 +121,7 @@ sql.defaults.transaction_rows_written_err	integer	0	the limit for the number of 
 sql.defaults.transaction_rows_written_log	integer	0	the threshold for the number of rows written by a SQL transaction which - once exceeded - will trigger a logging event to SQL_PERF (or SQL_INTERNAL_PERF for internal transactions); use 0 to disable
 sql.defaults.vectorize	enumeration	on	default vectorize mode [on = 0, on = 2, experimental_always = 3, off = 4]
 sql.defaults.zigzag_join.enabled	boolean	true	default value for enable_zigzag_join session setting; allows use of zig-zag join by default
-sql.distsql.max_running_flows	integer	500	maximum number of concurrent flows that can be run on a node
+sql.distsql.max_running_flows	integer	-128	the value - when positive - used as is, or the value - when negative - multiplied by the number of CPUs on a node, to determine the maximum number of concurrent remote flows that can be run on the node
 sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in bytes a processor can use before falling back to temp storage
 sql.guardrails.max_row_size_err	byte size	512 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an error is returned; use 0 to disable
 sql.guardrails.max_row_size_log	byte size	64 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); use 0 to disable
@@ -137,6 +139,7 @@ sql.metrics.statement_details.plan_collection.enabled	boolean	true	periodically 
 sql.metrics.statement_details.plan_collection.period	duration	5m0s	the time until a new logical plan is collected
 sql.metrics.statement_details.threshold	duration	0s	minimum execution time to cause statement statistics to be collected. If configured, no transaction stats are collected.
 sql.metrics.transaction_details.enabled	boolean	true	collect per-application transaction statistics
+sql.multiple_modifications_of_table.enabled	boolean	false	if true, allow statements containing multiple INSERT ON CONFLICT, UPSERT, UPDATE, or DELETE subqueries modifying the same table, at the risk of data corruption if the same row is modified multiple times by a single statement (multiple INSERT subqueries without ON CONFLICT cannot cause corruption and are always allowed)
 sql.multiregion.drop_primary_region.enabled	boolean	true	allows dropping the PRIMARY REGION of a database if it is the last region
 sql.notices.enabled	boolean	true	enable notices in the server/client protocol being sent
 sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if enabled, uniqueness checks may be planned for mutations of UUID columns updated with gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability
@@ -165,4 +168,4 @@ trace.debug.enable	boolean	false	if set, traces for recent requests can be seen 
 trace.jaeger.agent	string		the address of a Jaeger agent to receive traces using the Jaeger UDP Thrift protocol, as <host>:<port>. If no port is specified, 6381 will be used.
 trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.
-version	version	21.2	set the active cluster version in the format '<major>.<minor>'
+version	version	21.2-4	set the active cluster version in the format '<major>.<minor>'

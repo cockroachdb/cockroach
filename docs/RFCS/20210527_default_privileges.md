@@ -38,7 +38,7 @@ No privileges are granted to the `public` role by default on tables, table colum
 CONNECT and TEMPORARY are granted to the `public` role by default for databases.
 EXECUTE is granted to the `public` role by default for functions and procedures.
 USAGE is granted to the `public` role by default for languages / data types (including domains)
-Since CockroachDB does tsnot support all the objec listed, the matrix below does a comparison to show how the default privileges in Postgres (for the PUBLIC role) will map to CockroachDB.
+Since CockroachDB does tsnot support all the object listed, the matrix below does a comparison to show how the default privileges in Postgres (for the PUBLIC role) will map to CockroachDB.
 
 |                               | Postgres           | CockroachDB                                    |
 | ----------------------------- | ------------------ | ---------------------------------------------- |

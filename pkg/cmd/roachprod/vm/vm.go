@@ -197,7 +197,7 @@ type Provider interface {
 
 	// Active returns true if the provider is properly installed and capable of
 	// operating, false if it's just a stub. This allows one to test whether a
-	// particular provider is functioning properly by doin, for example,
+	// particular provider is functioning properly by calling, for example,
 	// Providers[gce.ProviderName].Active. Note that just looking at
 	// Providers[gce.ProviderName] != nil doesn't work because
 	// Providers[gce.ProviderName] can be a stub.

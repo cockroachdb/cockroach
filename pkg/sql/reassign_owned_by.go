@@ -43,7 +43,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 		return nil, err
 	}
 
-	normalizedOldRoles, err := n.OldRoles.ToSQLUsernames(p.SessionData())
+	normalizedOldRoles, err := n.OldRoles.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", oldRole)
 		}
 	}
-	newRole, err := n.NewRole.ToSQLUsername(p.SessionData())
+	newRole, err := n.NewRole.ToSQLUsername(p.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +167,7 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 	if err != nil {
 		return err
 	}
-	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData())
+	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return err
 	}
@@ -192,7 +192,7 @@ func (n *reassignOwnedByNode) reassignSchemaOwner(
 	if err != nil {
 		return err
 	}
-	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData())
+	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return err
 	}
@@ -223,7 +223,7 @@ func (n *reassignOwnedByNode) reassignTableOwner(
 		return err
 	}
 
-	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData())
+	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return err
 	}
@@ -262,7 +262,7 @@ func (n *reassignOwnedByNode) reassignTypeOwner(
 		return err
 	}
 
-	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData())
+	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return err
 	}

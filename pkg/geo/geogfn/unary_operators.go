@@ -159,7 +159,7 @@ func Project(g geo.Geography, distance float64, azimuth s1.Angle) (geo.Geography
 	return geo.MakeGeographyFromGeomT(ret)
 }
 
-// length returns the sum of the lengtsh and perimeters in the shapes of the Geography.
+// length returns the sum of the lengths and perimeters in the shapes of the Geography.
 // In OGC parlance, length returns both LineString lengths _and_ Polygon perimeters.
 func length(
 	regions []s2.Region, spheroid *geographiclib.Spheroid, useSphereOrSpheroid UseSphereOrSpheroid,

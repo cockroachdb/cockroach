@@ -221,7 +221,7 @@ situations can arise:
 - no similar functionality *as a whole* is available elsewhere:
   - does the functionality "group" with other existing SQL statements?
     - if so, reuse at least the first keyword and the general structure
-  - does the functionality create / delete entitites?
+  - does the functionality create / delete entities?
     - do not forget about IF EXISTS / IF NOT EXISTS
   - does the functionality take optional parameters?
     - consider WITH
@@ -289,7 +289,7 @@ General principles:
 - Do not forget contextual inline help. Check out `sql/parser/README.md`.
 
 - If your feature needs to use SQL expressions:
-  - try at all costs to avoid changes or contraints to the typing system!
+  - try at all costs to avoid changes or constraints to the typing system!
   - look at how other statements use `analyzeExpr()` and do the same;
   - use `RunFilter()` for conditions instead of evaluating manually and comparing
     the `DBool` value.

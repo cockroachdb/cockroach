@@ -486,6 +486,7 @@ func init() {
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableOutbound, cliflags.ExternalIODisabled)
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials, cliflags.ExternalIODisableImplicitCredentials)
+		boolFlag(f, &serverCfg.ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound, cliflags.ExternalIOEnableNonAdminImplicitAndArbitraryOutbound)
 
 		// Certificate principal map.
 		stringSliceFlag(f, &startCtx.serverCertPrincipalMap, cliflags.CertPrincipalMap)
@@ -824,6 +825,7 @@ func init() {
 				"For details, see: "+build.MakeIssueURL(53404))
 
 		boolFlag(f, &demoCtx.DisableLicenseAcquisition, cliflags.DemoNoLicense)
+		boolFlag(f, &demoCtx.Multitenant, cliflags.DemoMultitenant)
 		boolFlag(f, &demoCtx.SimulateLatency, cliflags.Global)
 		// The --empty flag is only valid for the top level demo command,
 		// so we use the regular flag set.
@@ -951,6 +953,7 @@ func init() {
 		varFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
 
 		varFlag(f, &serverCfg.Stores, cliflags.Store)
+		stringFlag(f, &startCtx.pidFile, cliflags.PIDFile)
 		stringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
 
 		stringSliceFlag(f, &serverCfg.SQLConfig.TenantKVAddrs, cliflags.KVAddrs)
@@ -967,6 +970,10 @@ func init() {
 		// refers to becomes known.
 		varFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
 		stringFlag(f, &startCtx.tempDir, cliflags.TempDir)
+
+		if backgroundFlagDefined {
+			boolFlag(f, &startBackground, cliflags.Background)
+		}
 	}
 
 	// Multi-tenancy proxy command flags.
@@ -984,8 +991,7 @@ func init() {
 		durationFlag(f, &proxyContext.ValidateAccessInterval, cliflags.ValidateAccessInterval)
 		durationFlag(f, &proxyContext.PollConfigInterval, cliflags.PollConfigInterval)
 		durationFlag(f, &proxyContext.DrainTimeout, cliflags.DrainTimeout)
-		intFlag(f, &proxyContext.ThrottlePolicy.Capacity, cliflags.TokenBucketPeriod)
-		durationFlag(f, &proxyContext.ThrottlePolicy.FillPeriod, cliflags.TokenBucketSize)
+		durationFlag(f, &proxyContext.ThrottleBaseDelay, cliflags.ThrottleBaseDelay)
 	}
 	// Multi-tenancy test directory command flags.
 	{

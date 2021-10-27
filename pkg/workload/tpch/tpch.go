@@ -61,7 +61,7 @@ type tpch struct {
 	scaleFactor int
 	fks         bool
 
-	disableChecks              bool
+	enableChecks               bool
 	vectorize                  string
 	useClusterVectorizeSetting bool
 	verbose                    bool
@@ -103,7 +103,7 @@ var tpchMeta = workload.Meta{
 		g.flags.StringVar(&g.queriesRaw, `queries`,
 			`1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22`,
 			`Queries to run. Use a comma separated list of query numbers`)
-		g.flags.BoolVar(&g.disableChecks, `enable-checks`, false,
+		g.flags.BoolVar(&g.enableChecks, `enable-checks`, false,
 			"Enable checking the output against the expected rows (default false). "+
 				"Note that the checks are only supported for scale factor 1 of the backup "+
 				"stored at 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'")
@@ -131,7 +131,7 @@ func (w *tpch) Hooks() workload.Hooks {
 			if w.scaleFactor != 1 {
 				fmt.Printf("check for expected rows is only supported with " +
 					"scale factor 1, so it was disabled\n")
-				w.disableChecks = true
+				w.enableChecks = false
 			}
 			for _, queryName := range strings.Split(w.queriesRaw, `,`) {
 				queryNum, err := strconv.Atoi(queryName)
@@ -363,7 +363,7 @@ func (w *worker) run(ctx context.Context) error {
 	// can only be accessed after we fully consumed the rows.
 	checkExpectedOutput := func() error {
 		for rows.Next() {
-			if !w.config.disableChecks {
+			if w.config.enableChecks {
 				if _, checkOnlyRowCount := numExpectedRowsByQueryNumber[queryNum]; !checkOnlyRowCount {
 					if err = rows.Scan(vals[:numColsByQueryNumber[queryNum]]...); err != nil {
 						return errors.Errorf("[q%d]: %s", queryNum, err)
@@ -457,7 +457,7 @@ func (w *worker) run(ctx context.Context) error {
 	if expectedOutputError != nil {
 		return wrongOutputError{error: expectedOutputError}
 	}
-	if !w.config.disableChecks {
+	if w.config.enableChecks {
 		numRowsExpected, checkOnlyRowCount := numExpectedRowsByQueryNumber[queryNum]
 		if checkOnlyRowCount && numRows != numRowsExpected {
 			return wrongOutputError{

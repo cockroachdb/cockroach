@@ -616,7 +616,9 @@ type initServerCfg struct {
 	testingKnobs base.TestingKnobs
 }
 
-func newInitServerConfig(cfg Config, dialOpts []grpc.DialOption) initServerCfg {
+func newInitServerConfig(
+	ctx context.Context, cfg Config, dialOpts []grpc.DialOption,
+) initServerCfg {
 	binaryVersion := cfg.Settings.Version.BinaryVersion()
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		if ov := knobs.(*TestingKnobs).BinaryVersionOverride; ov != (roachpb.Version{}) {
@@ -624,6 +626,11 @@ func newInitServerConfig(cfg Config, dialOpts []grpc.DialOption) initServerCfg {
 		}
 	}
 	binaryMinSupportedVersion := cfg.Settings.Version.BinaryMinSupportedVersion()
+	if binaryVersion.Less(binaryMinSupportedVersion) {
+		log.Fatalf(ctx, "binary version (%s) less than min supported version (%s)",
+			binaryVersion, binaryMinSupportedVersion)
+	}
+
 	bootstrapAddresses := cfg.FilterGossipBootstrapAddresses(context.Background())
 	return initServerCfg{
 		advertiseAddr:             cfg.AdvertiseAddr,

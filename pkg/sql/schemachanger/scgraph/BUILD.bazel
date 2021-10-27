@@ -9,8 +9,10 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/screl",
         "//pkg/util/iterutil",
         "@com_github_cockroachdb_errors//:errors",
     ],

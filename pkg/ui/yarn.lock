@@ -1392,7 +1392,7 @@
     minimist "^1.2.0"
 
 "@cockroachlabs/cluster-ui@link:workspaces/cluster-ui":
-  version "21.2.0-prerelease-3"
+  version "22.1.0-prerelease-1"
   dependencies:
     "@babel/runtime" "^7.12.13"
 
@@ -1416,20 +1416,20 @@
   resolved "https://registry.yarnpkg.com/@cockroachlabs/icons/-/icons-0.3.0.tgz#160573074396f266e92fcbe5e520c5ba1d8750f9"
   integrity sha512-GJxhlXy8Z3/PYFb9C3iM1dvU9wajGoaA/+VCj0an2ipfbkI2fhToq+h0b33vu7JuZ3dS4QMRjfVE4uhlyIUH2Q==
 
-"@cockroachlabs/icons@^0.4.1":
-  version "0.4.1"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/icons/-/icons-0.4.1.tgz#5772f94ce625279a4789f8e48c9b4e903c5bc5d7"
-  integrity sha512-JaiYFDhqhvGPqAFkHGCnEYiBe6Gas2HjqhLOQa4T5FRRMJ07liswOPARXyX120hTPwqEUaQyaHLxzqYDFwfdzQ==
+"@cockroachlabs/icons@^0.4.3":
+  version "0.4.3"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/icons/-/icons-0.4.3.tgz#cf42bd0398a71c3d70ff83f631689310e42091fb"
+  integrity sha512-PLbsDsZmgj9p/2fZkWQ+MENvxEPpdWhJBm6AqiWIYQ4A1X7+F6sfgXeHBE19qceu299MjxsjLDK+UlyU0uvlMA==
 
-"@cockroachlabs/ui-components@0.2.19-alpha.11":
-  version "0.2.19-alpha.11"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/ui-components/-/ui-components-0.2.19-alpha.11.tgz#41e285d65e1d1bb20000c43e473f05ba84e050b3"
-  integrity sha512-HoSNnpxiWa7ZBamexRf/ihV6NDN+e+OsWZha7Bt3v9TBqXznY+nCdTNGperJAK+RXTBM/WhpmiLtlgC8MRWuxQ==
+"@cockroachlabs/ui-components@0.2.20":
+  version "0.2.20"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/ui-components/-/ui-components-0.2.20.tgz#7b4102f5063683aed625c4399fb1fec149a5c5e5"
+  integrity sha512-MXjcDrFVoP2/EKwe7pixol9l2+5r6hb4/FXvbNU0NW5wkufYBLp26CX3GjMbxobwy8NG+AkSZ3X0Vkhh9O9OXw==
   dependencies:
-    "@cockroachlabs/icons" "^0.4.1"
-    "@popperjs/core" "^2.4.3"
+    "@cockroachlabs/icons" "^0.4.3"
+    "@popperjs/core" "^2.9.2"
     npm-run-all "^4.1.5"
-    react-popper "^2.2.3"
+    react-popper "^2.2.5"
 
 "@cypress/listr-verbose-renderer@^0.4.1":
   version "0.4.1"
@@ -2057,10 +2057,15 @@
     schema-utils "^2.6.5"
     source-map "^0.7.3"
 
-"@popperjs/core@^2.4.0", "@popperjs/core@^2.4.3", "@popperjs/core@^2.5.4", "@popperjs/core@^2.6.0":
+"@popperjs/core@^2.4.0", "@popperjs/core@^2.5.4", "@popperjs/core@^2.6.0":
   version "2.9.2"
   resolved "https://registry.yarnpkg.com/@popperjs/core/-/core-2.9.2.tgz#adea7b6953cbb34651766b0548468e743c6a2353"
   integrity sha512-VZMYa7+fXHdwIq1TDhSXoVmSPEGM/aa+6Aiq3nVVJ9bXr24zScr+NlKFKC3iPljA7ho/GAZr+d2jOf5GIRC30Q==
+
+"@popperjs/core@^2.9.2":
+  version "2.10.2"
+  resolved "https://registry.yarnpkg.com/@popperjs/core/-/core-2.10.2.tgz#0798c03351f0dea1a5a4cabddf26a55a7cbee590"
+  integrity sha512-IXf3XA7+XyN7CP9gGh/XB0UxVMlvARGEgGXLubFICsUMGz6Q+DU+i4gGlpOxTjKvXjkJDJC8YdqdKkDj9qZHEQ==
 
 "@protobufjs/aspromise@^1.1.1", "@protobufjs/aspromise@^1.1.2":
   version "1.1.2"
@@ -14635,7 +14640,7 @@ react-popper-tooltip@^3.1.1:
     "@popperjs/core" "^2.5.4"
     react-popper "^2.2.4"
 
-react-popper@^2.2.3, react-popper@^2.2.4:
+react-popper@^2.2.3, react-popper@^2.2.4, react-popper@^2.2.5:
   version "2.2.5"
   resolved "https://registry.yarnpkg.com/react-popper/-/react-popper-2.2.5.tgz#1214ef3cec86330a171671a4fbcbeeb65ee58e96"
   integrity sha512-kxGkS80eQGtLl18+uig1UIf9MKixFSyPxglsgLBxlYnyDf65BiY9B3nZSc6C9XUNDgStROB0fMQlTEz1KxGddw==

@@ -39,23 +39,19 @@ Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
-Stage 2
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
-Stage 3
+Stage 2
   *scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 4
+Stage 3
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
     TableID: 52
-Stage 5
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
+Stage 4
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -84,15 +80,18 @@ Stage 5
       - 1
       KeyColumnNames:
       - i
-      Name: primary
+      Name: foo_pkey
       Unique: true
       Version: 4
     TableID: 52
-Stage 6
+  *scop.MakeColumnPublic
+    ColumnID: 2
+    TableID: 52
+Stage 5 (non-revertible)
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 52
-Stage 7
+Stage 6 (non-revertible)
   *scop.MakeIndexAbsent
     IndexID: 1
     TableID: 52
@@ -135,23 +134,19 @@ Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
-Stage 2
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
-Stage 3
+Stage 2
   *scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 4
+Stage 3
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
     TableID: 52
-Stage 5
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
+Stage 4
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -180,15 +175,18 @@ Stage 5
       - 1
       KeyColumnNames:
       - i
-      Name: primary
+      Name: foo_pkey
       Unique: true
       Version: 4
     TableID: 52
-Stage 6
+  *scop.MakeColumnPublic
+    ColumnID: 2
+    TableID: 52
+Stage 5 (non-revertible)
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 52
-Stage 7
+Stage 6 (non-revertible)
   *scop.MakeIndexAbsent
     IndexID: 1
     TableID: 52
@@ -246,26 +244,22 @@ Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
-Stage 2
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 3
     TableID: 52
-Stage 3
+Stage 2
   *scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 4
+Stage 3
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
     TableID: 52
-Stage 5
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
+Stage 4
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -296,18 +290,21 @@ Stage 5
       - 1
       KeyColumnNames:
       - i
-      Name: primary
+      Name: foo_pkey
       Unique: true
       Version: 4
     TableID: 52
   *scop.MakeColumnPublic
+    ColumnID: 2
+    TableID: 52
+  *scop.MakeColumnPublic
     ColumnID: 3
     TableID: 52
-Stage 6
+Stage 5 (non-revertible)
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 52
-Stage 7
+Stage 6 (non-revertible)
   *scop.MakeIndexAbsent
     IndexID: 1
     TableID: 52
@@ -350,23 +347,19 @@ Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
-Stage 2
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
-Stage 3
+Stage 2
   *scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 4
+Stage 3
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
     TableID: 52
-Stage 5
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
+Stage 4
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -395,15 +388,18 @@ Stage 5
       - 1
       KeyColumnNames:
       - i
-      Name: primary
+      Name: foo_pkey
       Unique: true
       Version: 4
     TableID: 52
-Stage 6
+  *scop.MakeColumnPublic
+    ColumnID: 2
+    TableID: 52
+Stage 5 (non-revertible)
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 52
-Stage 7
+Stage 6 (non-revertible)
   *scop.MakeIndexAbsent
     IndexID: 1
     TableID: 52
@@ -482,36 +478,32 @@ Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
+  *scop.MakeAddedColumnDeleteAndWriteOnly
+    ColumnID: 2
+    TableID: 52
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 53
-Stage 2
-  *scop.MakeAddedColumnDeleteAndWriteOnly
-    ColumnID: 2
-    TableID: 52
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 3
     TableID: 53
-Stage 3
+Stage 2
   *scop.BackfillIndex
     IndexID: 2
     TableID: 52
   *scop.BackfillIndex
     IndexID: 2
+    TableID: 53
+Stage 3
+  *scop.ValidateUniqueIndex
+    IndexID: 2
+    PrimaryIndexID: 1
+    TableID: 52
+  *scop.ValidateUniqueIndex
+    IndexID: 2
+    PrimaryIndexID: 1
     TableID: 53
 Stage 4
-  *scop.ValidateUniqueIndex
-    IndexID: 2
-    PrimaryIndexID: 1
-    TableID: 52
-  *scop.ValidateUniqueIndex
-    IndexID: 2
-    PrimaryIndexID: 1
-    TableID: 53
-Stage 5
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -540,13 +532,13 @@ Stage 5
       - 1
       KeyColumnNames:
       - i
-      Name: primary
+      Name: foo_pkey
       Unique: true
       Version: 4
     TableID: 52
   *scop.MakeColumnPublic
-    ColumnID: 3
-    TableID: 53
+    ColumnID: 2
+    TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -577,7 +569,7 @@ Stage 5
       - 2
       KeyColumnNames:
       - rowid
-      Name: primary
+      Name: bar_pkey
       StoreColumnIDs:
       - 1
       StoreColumnNames:
@@ -585,14 +577,17 @@ Stage 5
       Unique: true
       Version: 4
     TableID: 53
-Stage 6
+  *scop.MakeColumnPublic
+    ColumnID: 3
+    TableID: 53
+Stage 5 (non-revertible)
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 52
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
     TableID: 53
-Stage 7
+Stage 6 (non-revertible)
   *scop.MakeIndexAbsent
     IndexID: 1
     TableID: 52

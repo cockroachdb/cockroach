@@ -1865,7 +1865,7 @@ func TestStatusAPIStatements(t *testing.T) {
 	}
 
 	// Grant VIEWACTIVITY.
-	thirdServerSQL.Exec(t, "ALTER USER $1 VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized())
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
 
 	testPath := func(path string, expectedStmts []string) {
 		// Hit query endpoint.
@@ -1968,7 +1968,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	}
 
 	// Grant VIEWACTIVITY.
-	thirdServerSQL.Exec(t, "ALTER USER $1 VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized())
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
 
 	testPath := func(path string, expectedStmts []string) {
 		// Hit query endpoint.
@@ -2160,7 +2160,7 @@ func TestListActivitySecurity(t *testing.T) {
 			// Note that for this query to work, it is crucial that
 			// getStatusJSONProtoWithAdminOption below is called at least once,
 			// on the previous test case, so that the user exists.
-			_, err := db.Exec("ALTER USER $1 VIEWACTIVITY", myUser)
+			_, err := db.Exec(fmt.Sprintf("ALTER USER %s VIEWACTIVITY", myUser))
 			require.NoError(t, err)
 		}
 		err := getStatusJSONProtoWithAdminOption(s, tc.endpoint, tc.response, tc.requestWithAdmin)
@@ -2182,7 +2182,7 @@ func TestListActivitySecurity(t *testing.T) {
 			}
 		}
 		if tc.requestWithViewActivityGranted {
-			_, err := db.Exec("ALTER USER $1 NOVIEWACTIVITY", myUser)
+			_, err := db.Exec(fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", myUser))
 			require.NoError(t, err)
 		}
 	}

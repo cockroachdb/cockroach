@@ -527,8 +527,8 @@ func TestSetUserPasswordInsecure(t *testing.T) {
 		sql       string
 		errString string
 	}{
-		{"CREATE USER $1 WITH PASSWORD $2", errFail},
-		{"ALTER USER $1 WITH PASSWORD $2", errFail},
+		{"CREATE USER user3 WITH PASSWORD $1", errFail},
+		{"ALTER USER user3 WITH PASSWORD $1", errFail},
 	}
 
 	for _, testCase := range testCases {
@@ -537,7 +537,7 @@ func TestSetUserPasswordInsecure(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = stmt.Exec("user3", "cockroach")
+			_, err = stmt.Exec("cockroach")
 			if testCase.errString != "" {
 				if !testutils.IsError(err, testCase.errString) {
 					t.Fatal(err)

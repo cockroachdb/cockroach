@@ -72,7 +72,7 @@ message TxnMeta {
   //       up to t15. Now the txn commits at ts11 and bumps the intent to ts11.
   //       But the client thinks it has seen all changes up to t15, and so never
   //       sees the intent! We avoid this problem by writing intents at the
-  //       provisional commit timestamp insteadr. In this example, the intent
+  //       provisional commit timestamp instead. In this example, the intent
   //       would instead be written at ts11 and picked up by the client's next
   //       read from (ts10, ts15].
   //

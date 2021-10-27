@@ -64,7 +64,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	if err != nil {
 		return nil, err
 	}
-	inputMembers, err := n.Members.ToSQLUsernames(p.SessionData())
+	inputMembers, err := n.Members.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return nil, err
 	}

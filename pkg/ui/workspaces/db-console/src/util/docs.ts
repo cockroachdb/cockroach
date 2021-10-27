@@ -75,7 +75,7 @@ export const statementsTimeInterval = docsURL(
   "ui-statements-page.html#time-interval",
 );
 export const capacityMetrics = docsURL(
-  "ui-cluster-overview.html#capacity-metrics",
+  "ui-cluster-overview-page.html#capacity-metrics",
 );
 export const nodeLivenessIssues = docsURL(
   "cluster-setup-troubleshooting.html#node-liveness-issues",

@@ -34,7 +34,7 @@ type bufferNode struct {
 
 func (n *bufferNode) startExec(params runParams) error {
 	n.typs = planTypes(n.plan)
-	n.rows.init(n.typs, params.extendedEvalCtx, n.label)
+	n.rows.Init(n.typs, params.extendedEvalCtx, n.label)
 	return nil
 }
 
@@ -50,7 +50,7 @@ func (n *bufferNode) Next(params runParams) (bool, error) {
 		return false, nil
 	}
 	n.currentRow = n.plan.Values()
-	if err = n.rows.addRow(params.ctx, n.currentRow); err != nil {
+	if err = n.rows.AddRow(params.ctx, n.currentRow); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -62,7 +62,7 @@ func (n *bufferNode) Values() tree.Datums {
 
 func (n *bufferNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
-	n.rows.close(ctx)
+	n.rows.Close(ctx)
 }
 
 // scanBufferNode behaves like an iterator into the bufferNode it is
@@ -85,7 +85,7 @@ func (n *scanBufferNode) startExec(params runParams) error {
 
 func (n *scanBufferNode) Next(runParams) (bool, error) {
 	var err error
-	n.currentRow, err = n.iterator.next()
+	n.currentRow, err = n.iterator.Next()
 	if n.currentRow == nil || err != nil {
 		return false, err
 	}
@@ -98,7 +98,7 @@ func (n *scanBufferNode) Values() tree.Datums {
 
 func (n *scanBufferNode) Close(context.Context) {
 	if n.iterator != nil {
-		n.iterator.close()
+		n.iterator.Close()
 		n.iterator = nil
 	}
 }

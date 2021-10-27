@@ -41,7 +41,7 @@ c  CREATE TABLE public.c (
    foo JSONB NULL,
    "bAr" JSONB NULL,
    "qUuX" JSONB NULL,
-   CONSTRAINT "primary" PRIMARY KEY (id ASC),
+   CONSTRAINT c_pkey PRIMARY KEY (id ASC),
    INVERTED INDEX c_foo_idx (foo),
    INVERTED INDEX "c_bAr_idx" ("bAr"),
    FAMILY "primary" (id, foo, "bAr", "qUuX")
@@ -690,7 +690,7 @@ SELECT * from update_cascade_test ORDER BY update_cascade;
 2  {"a": "b", "c": "d"}
 3  ["b", "c"]
 
-statement error pq: update on table "update_test" violates foreign key constraint "fk_delete_cascade_ref_update_test" on table "del_cascade_test"\nDETAIL: Key \(i\)=\(1\) is still referenced from table "del_cascade_test"\.
+statement error pq: update on table "update_test" violates foreign key constraint "del_cascade_test_delete_cascade_fkey" on table "del_cascade_test"\nDETAIL: Key \(i\)=\(1\) is still referenced from table "del_cascade_test"\.
 UPDATE update_test SET (i,j)  = (5, '{"a":"b", "a":"b"}') WHERE i = 1;
 
 statement ok
@@ -1116,7 +1116,7 @@ c  CREATE TABLE public.c (
    id INT8 NOT NULL,
    foo INT8[] NULL,
    bar STRING[] NULL,
-   CONSTRAINT "primary" PRIMARY KEY (id ASC),
+   CONSTRAINT c_pkey PRIMARY KEY (id ASC),
    INVERTED INDEX c_foo_idx (foo),
    INVERTED INDEX c_bar_idx (bar),
    FAMILY "primary" (id, foo, bar)

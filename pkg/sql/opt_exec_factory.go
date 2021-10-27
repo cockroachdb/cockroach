@@ -149,7 +149,7 @@ func generateScanSpans(
 ) (roachpb.Spans, error) {
 	sb := span.MakeBuilder(evalCtx, codec, tabDesc, index)
 	if params.InvertedConstraint != nil {
-		return sb.SpansFromInvertedSpans(params.InvertedConstraint, params.IndexConstraint)
+		return sb.SpansFromInvertedSpans(params.InvertedConstraint, params.IndexConstraint, nil /* scratch */)
 	}
 	return sb.SpansFromConstraint(params.IndexConstraint, params.NeededCols, false /* forDelete */)
 }
@@ -1029,12 +1029,13 @@ func (ef *execFactory) ConstructScanBuffer(ref exec.Node, label string) (exec.No
 
 // ConstructRecursiveCTE is part of the exec.Factory interface.
 func (ef *execFactory) ConstructRecursiveCTE(
-	initial exec.Node, fn exec.RecursiveCTEIterationFn, label string,
+	initial exec.Node, fn exec.RecursiveCTEIterationFn, label string, deduplicate bool,
 ) (exec.Node, error) {
 	return &recursiveCTENode{
 		initial:        initial.(planNode),
 		genIterationFn: fn,
 		label:          label,
+		deduplicate:    deduplicate,
 	}, nil
 }
 
@@ -1727,7 +1728,6 @@ func (ef *execFactory) ConstructDeleteRange(
 	table cat.Table,
 	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
-	interleavedTables []cat.Table,
 	autoCommit bool,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
@@ -1745,19 +1745,11 @@ func (ef *execFactory) ConstructDeleteRange(
 	}
 
 	dr := &deleteRangeNode{
-		interleavedFastPath: false,
-		spans:               spans,
-		desc:                tabDesc,
-		autoCommitEnabled:   autoCommit,
+		spans:             spans,
+		desc:              tabDesc,
+		autoCommitEnabled: autoCommit,
 	}
 
-	if len(interleavedTables) > 0 {
-		dr.interleavedFastPath = true
-		dr.interleavedDesc = make([]catalog.TableDescriptor, len(interleavedTables))
-		for i := range dr.interleavedDesc {
-			dr.interleavedDesc[i] = interleavedTables[i].(*optTable).desc
-		}
-	}
 	return dr, nil
 }
 
@@ -2060,11 +2052,10 @@ func (ef *execFactory) ConstructExplain(
 		return nil, errors.New("ENV only supported with (OPT) option")
 	}
 
-	explainFactory := explain.NewFactory(&execFactory{
+	plan, err := buildFn(&execFactory{
 		planner:   ef.planner,
 		isExplain: true,
 	})
-	plan, err := buildFn(explainFactory)
 	if err != nil {
 		return nil, err
 	}

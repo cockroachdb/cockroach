@@ -953,6 +953,23 @@ func OutputColumnIsAlwaysNull(e RelExpr, col opt.ColumnID) bool {
 	return false
 }
 
+// CollectContiguousOrExprs finds all OrExprs in 'e' that are connected via
+// a parent-child relationship, and returns them in an array of ScalarExprs.
+func CollectContiguousOrExprs(e opt.ScalarExpr) []opt.ScalarExpr {
+	var disjunctions = make([]opt.ScalarExpr, 0, 2)
+	var collectDisjunctions func(e opt.ScalarExpr)
+	collectDisjunctions = func(e opt.ScalarExpr) {
+		if or, ok := e.(*OrExpr); ok {
+			collectDisjunctions(or.Left)
+			collectDisjunctions(or.Right)
+		} else {
+			disjunctions = append(disjunctions, e)
+		}
+	}
+	collectDisjunctions(e)
+	return disjunctions
+}
+
 // FKCascades stores metadata necessary for building cascading queries.
 type FKCascades []FKCascade
 

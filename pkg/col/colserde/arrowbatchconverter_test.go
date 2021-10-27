@@ -29,7 +29,7 @@ import (
 
 func randomBatch(allocator *colmem.Allocator) ([]*types.T, coldata.Batch) {
 	const maxTyps = 16
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	typs := make([]*types.T, rng.Intn(maxTyps)+1)
 	for i := range typs {
@@ -87,7 +87,7 @@ func roundTripBatch(
 func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for run := 0; run < 10; run++ {
 		var typs []*types.T
 		var src coldata.Batch
@@ -137,7 +137,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	// to in order to reduce benchmark noise.
 	const fixedLen = 64
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	typs := []*types.T{
 		types.Bool,
@@ -224,15 +224,19 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		for _, nullFraction := range nullFractions {
 			setNullFraction(batch, nullFraction)
 			data, err := c.BatchToArrow(batch)
+			dataCopy := make([]*array.Data, len(data))
 			require.NoError(b, err)
 			testPrefix := fmt.Sprintf("%s/nullFraction=%0.2f", typ.String(), nullFraction)
 			result := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{typ})
 			b.Run(testPrefix+"/ArrowToBatch", func(b *testing.B) {
 				b.SetBytes(numBytes[typIdx])
 				for i := 0; i < b.N; i++ {
+					// Since ArrowToBatch eagerly nils things out, we have to make a
+					// shallow copy each time.
+					copy(dataCopy, data)
 					// Using require.NoError here causes large enough allocations to
 					// affect the result.
-					if err := c.ArrowToBatch(data, batch.Length(), result); err != nil {
+					if err := c.ArrowToBatch(dataCopy, batch.Length(), result); err != nil {
 						b.Fatal(err)
 					}
 					if result.Width() != 1 {

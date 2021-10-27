@@ -85,7 +85,7 @@ func TestInternalExecutor(t *testing.T) {
 	}
 
 	// Reset the sequence to a clear value. Next nextval() will return 2.
-	if _, err := db.Exec("SELECT setval('test.seq', 1)"); err != nil {
+	if _, err := db.Exec("SELECT setval('test.seq', 1, true)"); err != nil {
 		t.Fatal(err)
 	}
 

@@ -46,7 +46,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 	)
 
 	var (
-		rng, _ = randutil.NewPseudoRand()
+		rng, _ = randutil.NewTestRand()
 		typs   = []*types.T{types.Int}
 		// We want at least two inputs (one regular and one possibly blocking).
 		numInputs     = rng.Intn(maxInputs-1) + 2

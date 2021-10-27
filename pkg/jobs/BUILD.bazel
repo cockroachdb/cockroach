@@ -62,6 +62,7 @@ go_library(
         "@com_github_gogo_protobuf//types",
         "@com_github_gorhill_cronexpr//:cronexpr",
         "@com_github_prometheus_client_model//go",
+        "@io_opentelemetry_go_otel//attribute",
     ],
 )
 
@@ -106,6 +107,7 @@ go_test(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/execinfra",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlliveness",

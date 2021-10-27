@@ -25,12 +25,17 @@ func init() {
 // if an expression tree contains only scalar expressions; if so, it tries to
 // execbuild them and print the SQL expressions.
 func fmtInterceptor(f *memo.ExprFmtCtx, scalar opt.ScalarExpr) string {
-	if !onlyScalars(scalar) {
+	// An AssignmentCastExpr is built as a crdb_internal.assignment_cast
+	// function call by execbuilder. Formatting it as such would be confusing in
+	// an opt tree, because it would look like a FunctionExpr. So we print the
+	// full nodes instead.
+	if !onlyScalarsWithoutAssignmentCasts(scalar) {
 		return ""
 	}
 
-	// Let the filters node show up; we will apply the code on each filter.
-	if scalar.Op() == opt.FiltersOp {
+	switch scalar.Op() {
+	case opt.FiltersOp:
+		// Let the filters node show up; we will apply the code on each filter.
 		return ""
 	}
 
@@ -59,12 +64,12 @@ func fmtInterceptor(f *memo.ExprFmtCtx, scalar opt.ScalarExpr) string {
 	return fmtCtx.String()
 }
 
-func onlyScalars(expr opt.Expr) bool {
-	if !opt.IsScalarOp(expr) {
+func onlyScalarsWithoutAssignmentCasts(expr opt.Expr) bool {
+	if !opt.IsScalarOp(expr) || expr.Op() == opt.AssignmentCastOp {
 		return false
 	}
 	for i, n := 0, expr.ChildCount(); i < n; i++ {
-		if !onlyScalars(expr.Child(i)) {
+		if !onlyScalarsWithoutAssignmentCasts(expr.Child(i)) {
 			return false
 		}
 	}

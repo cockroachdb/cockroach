@@ -12,7 +12,6 @@ package jobs
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"sync"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
@@ -382,8 +382,6 @@ func (r *Registry) runJob(
 	// Bookkeeping.
 	execCtx, cleanup := r.execCtx("resume-"+taskName, username)
 	defer cleanup()
-	spanName := fmt.Sprintf(`%s-%d`, typ, job.ID())
-	var span *tracing.Span
 
 	// Create a new root span to trace the execution of the current instance of
 	// `job`. Creating a root span allows us to track all the spans linked to this
@@ -397,7 +395,8 @@ func (r *Registry) runJob(
 	// TODO(ajwerner): Move this writing up the trace ID down into
 	// stepThroughStateMachine where we're already often (and soon with
 	// exponential backoff, always) updating the job in that call.
-	ctx, span = r.ac.Tracer.StartSpanCtx(ctx, spanName, spanOptions...)
+	ctx, span := r.ac.Tracer.StartSpanCtx(ctx, typ.String(), spanOptions...)
+	span.SetTag("job-id", attribute.Int64Value(int64(job.ID())))
 	defer span.Finish()
 	if span.TraceID() != 0 {
 		if err := job.Update(ctx, nil /* txn */, func(txn *kv.Txn, md JobMetadata,

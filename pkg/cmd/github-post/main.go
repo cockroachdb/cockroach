@@ -60,14 +60,18 @@ func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, is
 		}
 	}
 	return issues.UnitTestFormatter, issues.PostRequest{
-		TestName:            f.testName,
-		PackageName:         f.packageName,
-		Message:             f.testMessage,
-		Artifacts:           "/", // best we can do for unit tests
-		AuthorEmail:         authorEmail,
-		ReproductionCommand: issues.ReproductionCommandFromString(repro),
-		Mention:             mentions,
-		ProjectColumnID:     projColID,
+		TestName:    f.testName,
+		PackageName: f.packageName,
+		Message:     f.testMessage,
+		Artifacts:   "/", // best we can do for unit tests
+		AuthorEmail: authorEmail,
+		HelpCommand: func(r *issues.Renderer) {
+			issues.ReproductionCommandFromString(repro)
+			r.Escaped("See also: ")
+			r.A("How To Investigate a Go Test Failure (internal)", "https://cockroachlabs.atlassian.net/l/c/HgfXfJgM")
+		},
+		Mention:         mentions,
+		ProjectColumnID: projColID,
 	}
 }
 
@@ -154,7 +158,7 @@ func listFailures(
 ) error {
 	// Tests that took less than this are not even considered for slow test
 	// reporting. This is so that we protect against large number of
-	// programatically-generated subtests.
+	// programmatically-generated subtests.
 	const shortTestFilterSecs float64 = 0.5
 	var timeoutMsg = "panic: test timed out after"
 
@@ -571,11 +575,11 @@ func formatPebbleMetamorphicIssue(
 		}
 	}
 	return issues.UnitTestFormatter, issues.PostRequest{
-		TestName:            f.testName,
-		PackageName:         f.packageName,
-		Message:             f.testMessage,
-		Artifacts:           "meta",
-		ReproductionCommand: issues.ReproductionCommandFromString(repro),
-		ExtraLabels:         []string{"metamorphic-failure"},
+		TestName:    f.testName,
+		PackageName: f.packageName,
+		Message:     f.testMessage,
+		Artifacts:   "meta",
+		HelpCommand: issues.ReproductionCommandFromString(repro),
+		ExtraLabels: []string{"metamorphic-failure"},
 	}
 }

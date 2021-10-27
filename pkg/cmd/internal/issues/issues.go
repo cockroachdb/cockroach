@@ -191,7 +191,7 @@ func newPoster(client *github.Client, opts *Options) *poster {
 
 // Options configures the issue poster.
 type Options struct {
-	Token        string // Github API token
+	Token        string // GitHub API token
 	Org          string
 	Repo         string
 	SHA          string
@@ -272,7 +272,7 @@ type TemplateData struct {
 	CondensedMessage CondensedMessage
 	// The commit SHA.
 	Commit string
-	// Link to the commit on Github.
+	// Link to the commit on GitHub.
 	CommitURL string
 	// The branch.
 	Branch string
@@ -475,15 +475,16 @@ type PostRequest struct {
 	// A path to the test artifacts relative to the artifacts root. If nonempty,
 	// allows the poster formatter to construct a direct URL to this directory.
 	Artifacts string
-	// The email of the author. It will be translated into a Github handle and
+	// The email of the author. It will be translated into a GitHub handle and
 	// appended to the Mention slice below. This increases the chances of the
 	// "right person" seeing the failure early.
 	AuthorEmail string
-	// Mention is a slice of Github handles (@foo, @cockroachdb/some-team, etc)
+	// Mention is a slice of GitHub handles (@foo, @cockroachdb/some-team, etc)
 	// that should be mentioned in the message.
 	Mention []string
-	// The instructions to reproduce the failure.
-	ReproductionCommand func(*Renderer)
+	// A help section of the issue, for example with links to documentation or
+	// instructions on how to reproduce the issue.
+	HelpCommand func(*Renderer)
 	// Additional labels that will be added to the issue. They will be created
 	// as necessary (as a side effect of creating an issue with them). An
 	// existing issue may be adopted even if it does not have these labels.
@@ -495,7 +496,7 @@ type PostRequest struct {
 }
 
 // Post either creates a new issue for a failed test, or posts a comment to an
-// existing open issue. GITHUB_API_TOKEN must be set to a valid Github token
+// existing open issue. GITHUB_API_TOKEN must be set to a valid GitHub token
 // that has permissions to search and create issues and comments or an error
 // will be returned.
 func Post(ctx context.Context, formatter IssueFormatter, req PostRequest) error {
@@ -511,7 +512,7 @@ func Post(ctx context.Context, formatter IssueFormatter, req PostRequest) error 
 }
 
 // ReproductionCommandFromString returns a value for the
-// PostRequest.ReproductionCommand field that is a command to run. It is
+// PostRequest.HelpCommand field that is a command to run. It is
 // formatted as a bash code block.
 func ReproductionCommandFromString(repro string) func(*Renderer) {
 	if repro == "" {
@@ -523,9 +524,9 @@ func ReproductionCommandFromString(repro string) func(*Renderer) {
 	}
 }
 
-// ReproductionAsLink returns a value for the PostRequest.ReproductionCommand field
+// HelpCommandAsLink returns a value for the PostRequest.HelpCommand field
 // that prints a link to documentation to refer to.
-func ReproductionAsLink(title, href string) func(r *Renderer) {
+func HelpCommandAsLink(title, href string) func(r *Renderer) {
 	return func(r *Renderer) {
 		// Bit of weird formatting here but apparently markdown links don't work inside
 		// of a line that also has a <p> tag. Putting it on its own line makes it work.

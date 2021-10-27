@@ -19,6 +19,7 @@ import { Link, RouteComponentProps } from "react-router-dom";
 import { SessionInfo } from "./sessionsTable";
 
 import { SummaryCard, SummaryCardItem } from "../summaryCard";
+import SQLActivityError from "../sqlActivity/errorComponent";
 
 import { TimestampToMoment } from "src/util/convert";
 import { Bytes, DATE_FORMAT } from "src/util/format";
@@ -48,6 +49,7 @@ import { UIConfigState } from "src/store";
 import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
 import styles from "./sessionDetails.module.scss";
 import classNames from "classnames/bind";
+import { commonStyles } from "src/common";
 
 const cx = classNames.bind(styles);
 const statementsPageCx = classNames.bind(statementsPageStyles);
@@ -98,7 +100,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
     isTenant: false,
   };
 
-  componentDidMount() {
+  componentDidMount(): void {
     if (!this.props.isTenant) {
       this.props.refreshNodes();
       this.props.refreshNodesLiveness();
@@ -106,7 +108,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
     this.props.refreshSessions();
   }
 
-  componentDidUpdate() {
+  componentDidUpdate(): void {
     // Normally, we would refresh the sessions here, but we don't want to
     // have the per-session page update whenever our data source updates
     // because in real workloads, sessions change what they're doing very
@@ -122,16 +124,13 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
     this.terminateQueryRef = React.createRef();
   }
 
-  backToSessionsPage = () => {
-    const { history, location, onBackButtonClick } = this.props;
+  backToSessionsPage = (): void => {
+    const { history, onBackButtonClick } = this.props;
     onBackButtonClick && onBackButtonClick();
-    history.push({
-      ...location,
-      pathname: "/sessions",
-    });
+    history.push("/sql-activity?tab=sessions");
   };
 
-  render() {
+  render(): React.ReactElement {
     const sessionID = getMatchParamByName(this.props.match, sessionAttr);
     const {
       sessionError,
@@ -159,7 +158,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
           </Button>
           <div className={cx("heading-with-controls")}>
             <h3
-              className={`${statementsPageCx("base-heading")} ${cx(
+              className={`${commonStyles("base-heading")} ${cx(
                 "page--header__title",
               )}`}
             >
@@ -209,6 +208,11 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
             loading={_.isNil(this.props.session)}
             error={this.props.sessionError}
             render={this.renderContent}
+            renderError={() =>
+              SQLActivityError({
+                statsType: "sessions",
+              })
+            }
           />
         </section>
         <TerminateSessionModal
@@ -223,7 +227,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
     );
   }
 
-  renderContent = () => {
+  renderContent = (): React.ReactElement => {
     if (!this.props.session) {
       return null;
     }
@@ -273,7 +277,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
               className={cx("details-item")}
             />
           </Col>
-          <Col className="gutter-row" span={4}></Col>
+          <Col className="gutter-row" span={4} />
           <Col className="gutter-row" span={10}>
             <SummaryCardItem
               label={"Priority"}
@@ -308,7 +312,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
       const stmt = session.active_queries[0];
       curStmtInfo = (
         <React.Fragment>
-          <SqlBox value={stmt.sql}></SqlBox>
+          <SqlBox value={stmt.sql} />
           <SummaryCard className={cx("details-section")}>
             <Row>
               <Col className="gutter-row" span={10}>
@@ -331,7 +335,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                   View Statement Details
                 </Link>
               </Col>
-              <Col className="gutter-row" span={4}></Col>
+              <Col className="gutter-row" span={4} />
               <Col className="gutter-row" span={10}>
                 <SummaryCardItem
                   label={"Distributed Execution?"}
@@ -372,7 +376,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 />
               )}
             </Col>
-            <Col className="gutter-row" span={4}></Col>
+            <Col className="gutter-row" span={4} />
             <Col className="gutter-row" span={10}>
               <SummaryCardItem
                 label={"Client Address"}
