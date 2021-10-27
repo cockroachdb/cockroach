@@ -341,8 +341,8 @@ func (c *conn) serveImpl(
 	}
 
 	var terminateSeen bool
-
 	var authDone, ignoreUntilSync bool
+	var repeatedErrorCount int
 	for {
 		breakLoop, err := func() (bool, error) {
 			typ, n, err := c.readBuf.ReadTypedMsg(&c.rd)
@@ -482,11 +482,20 @@ func (c *conn) serveImpl(
 		if err != nil {
 			log.VEventf(ctx, 1, "pgwire: error processing message: %s", err)
 			ignoreUntilSync = true
-			// If we can't read data because the connection was closed or the context
-			// was canceled (e.g. during authentication), then we should break.
-			if netutil.IsClosedConnection(err) || errors.Is(err, context.Canceled) {
+			repeatedErrorCount++
+			const maxRepeatedErrorCount = 1 << 15
+			// If we can't read data because of any one of the following conditions,
+			// then we should break:
+			// 1. the connection was closed.
+			// 2. the context was canceled (e.g. during authentication).
+			// 3. we reached an arbitrary threshold of repeated errors.
+			if netutil.IsClosedConnection(err) ||
+				errors.Is(err, context.Canceled) ||
+				repeatedErrorCount > maxRepeatedErrorCount {
 				break
 			}
+		} else {
+			repeatedErrorCount = 0
 		}
 		if breakLoop {
 			break

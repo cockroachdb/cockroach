@@ -367,6 +367,7 @@ ALL_TESTS = [
     "//pkg/util/metric:metric_test",
     "//pkg/util/mon:mon_test",
     "//pkg/util/netutil/addr:addr_test",
+    "//pkg/util/netutil:netutil_test",
     "//pkg/util/optional:optional_test",
     "//pkg/util/pretty:pretty_test",
     "//pkg/util/protoutil:protoutil_test",
