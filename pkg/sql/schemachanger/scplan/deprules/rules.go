@@ -35,8 +35,12 @@ func joinTargetNode(
 const (
 	add, drop = scpb.Target_ADD, scpb.Target_DROP
 
-	public, absent, deleteOnly, deleteAndWriteOnly = scpb.Status_PUBLIC,
-		scpb.Status_ABSENT, scpb.Status_DELETE_ONLY, scpb.Status_DELETE_AND_WRITE_ONLY
+	public, txnDropped, dropped, absent, deleteOnly, deleteAndWriteOnly = scpb.Status_PUBLIC,
+		scpb.Status_TXN_DROPPED, scpb.Status_DROPPED, scpb.Status_ABSENT, scpb.Status_DELETE_ONLY,
+		scpb.Status_DELETE_AND_WRITE_ONLY
+	// Make the linter happy
+	_ = txnDropped
+	_ = deleteOnly
 )
 
 func init() {
@@ -44,7 +48,8 @@ func init() {
 		parent, parentTarget, parentNode = targetNodeVars("parent")
 		other, otherTarget, otherNode    = targetNodeVars("other")
 	)
-	// TODO(ajwerner): These rules are suspect.
+	// Ensures that child objects under a database or schema
+	// are dropped before any children are dealt with.
 	register(
 		"parent dependencies",
 		parentNode, otherNode,
@@ -76,7 +81,7 @@ func init() {
 
 			screl.JoinTargetNode(parent, parentTarget, parentNode),
 			parentTarget.AttrEq(screl.Direction, drop),
-			parentNode.AttrIn(screl.Status, deleteOnly, deleteAndWriteOnly),
+			parentNode.AttrIn(screl.Status, absent),
 
 			joinTargetNode(other, otherTarget, otherNode, drop, absent),
 		),
@@ -84,68 +89,8 @@ func init() {
 }
 
 func init() {
-	ownedBy, ownedByTarget, ownedByNode := targetNodeVars("owned-by")
-	seq, seqTarget, seqNode := targetNodeVars("seq")
-	var id rel.Var = "id"
-	register(
-		"sequence owned by being dropped relies on sequence entering delete only",
-		ownedByNode, seqNode,
-		screl.MustQuery(
-			ownedBy.Type((*scpb.SequenceOwnedBy)(nil)),
-			seq.Type((*scpb.Sequence)(nil)),
-
-			id.Entities(screl.DescID, ownedBy, seq),
-
-			joinTargetNode(ownedBy, ownedByTarget, ownedByNode, drop, absent),
-			joinTargetNode(seq, seqTarget, seqNode, drop, absent),
-		))
-}
-
-func init() {
-	ownedBy, ownedByTarget, ownedByNode := targetNodeVars("owned-by")
-	id := rel.Var("id")
-	// TODO(ajwerner): What is this about? It seems, if anything, just wrong.
-	tab, tabTarget, tabNode := targetNodeVars("tab")
-	register(
-		"table drop in public depends on absent sequence owned by?",
-		tabNode, ownedByNode,
-		screl.MustQuery(
-			tab.Type((*scpb.Table)(nil)),
-			ownedBy.Type((*scpb.SequenceOwnedBy)(nil)),
-
-			tab.AttrEqVar(screl.DescID, id),
-			ownedBy.AttrEqVar(screl.ReferencedDescID, id),
-
-			joinTargetNode(tab, tabTarget, tabNode, drop, public),
-			joinTargetNode(ownedBy, ownedByTarget, ownedByNode, drop, absent),
-		))
-}
-
-func init() {
-
-	typ, typTarget, typNode := targetNodeVars("type")
-	typRef, typRefTarget, typRefNode := targetNodeVars("type-ref")
-	var id rel.Var = "id"
-	register(
-		"type reference something",
-		typNode, typRefNode,
-		screl.MustQuery(
-			typ.Type((*scpb.Type)(nil)),
-			typRef.Type((*scpb.TypeReference)(nil)),
-
-			typ.AttrEqVar(screl.DescID, id),
-			typRef.AttrEqVar(screl.ReferencedDescID, id),
-
-			joinTargetNode(typ, typTarget, typNode, drop, public),
-			joinTargetNode(typRef, typRefTarget, typRefNode, drop, absent),
-		),
-	)
-}
-
-func init() {
 	from, fromTarget, fromNode := targetNodeVars("from")
 	to, toTarget, toNode := targetNodeVars("to")
-	var id rel.Var = "id"
 	register(
 		"view depends on view",
 		fromNode, toNode,
@@ -178,20 +123,6 @@ func init() {
 			)(func(to *scpb.View, from *scpb.Table) bool {
 				return idInIDs(to.DependsOn, from.TableID)
 			}),
-
-			joinTargetNode(from, fromTarget, fromNode, drop, public),
-			joinTargetNode(to, toTarget, toNode, drop, absent),
-		),
-	)
-
-	register(
-		"view depends on type",
-		fromNode, toNode,
-		screl.MustQuery(
-
-			from.Type((*scpb.View)(nil)),
-			to.Type((*scpb.TypeReference)(nil)),
-			id.Entities(screl.DescID, from, to),
 
 			joinTargetNode(from, fromTarget, fromNode, drop, absent),
 			joinTargetNode(to, toTarget, toNode, drop, absent),
@@ -275,98 +206,66 @@ func init() {
 	)
 }
 
-// TODO(ajwerner): What does this even mean? The sequence starts in
-// public.
-
 func init() {
-	seq, seqTarget, seqNode := targetNodeVars("seq")
-	defExpr, defExprTarget, defExprNode := targetNodeVars("def-expr")
-	register(
-		"sequence default expr",
-		seqNode, defExprNode,
-		screl.MustQuery(
-			seq.Type((*scpb.Sequence)(nil)),
-			defExpr.Type((*scpb.DefaultExpression)(nil)),
+	depNeedsRelationToExitSynthDrop := func(ruleName string, depTypes []interface{}, depDescIDMatch rel.Attr) {
+		// Before any parts of a relation/type can be dropped, the relation
+		// should exit the synthetic drop state.
+		relation, relationTarget, relationNode := targetNodeVars("relation")
+		dep, depTarget, depNode := targetNodeVars("dep")
+		var id rel.Var = "id"
+		register(
+			"dependency needs relation/type as non-synthetically dropped",
+			depNode, relationNode,
+			screl.MustQuery(
 
-			rel.Filter("defaultExpressionUsesSequence", seq, defExpr)(func(
-				this *scpb.Sequence, that *scpb.DefaultExpression,
-			) bool {
-				return idInIDs(that.UsesSequenceIDs, this.SequenceID)
-			}),
+				relation.Type((*scpb.Table)(nil), (*scpb.View)(nil), (*scpb.Sequence)(nil), (*scpb.Type)(nil)),
+				dep.Type(depTypes[0], depTypes[1:]...),
 
-			joinTargetNode(seq, seqTarget, seqNode, drop, public),
-			joinTargetNode(defExpr, defExprTarget, defExprNode, drop, absent),
-		),
-	)
+				relation.AttrEqVar(screl.DescID, id),
+				dep.AttrEqVar(depDescIDMatch, id),
+				joinTargetNode(relation, relationTarget, relationNode, drop, dropped),
+				joinTargetNode(dep, depTarget, depNode, drop, absent),
+			),
+		)
+	}
+	depNeedsRelationToExitSynthDrop("dependency needs relation/type as non-synthetically dropped",
+		[]interface{}{(*scpb.DefaultExpression)(nil), (*scpb.RelationDependedOnBy)(nil),
+			(*scpb.SequenceOwnedBy)(nil), (*scpb.OutboundForeignKey)(nil)},
+		screl.DescID)
+
+	depNeedsRelationToExitSynthDrop("dependency (ref desc) needs relation/type as non-synthetically dropped",
+		[]interface{}{(*scpb.InboundForeignKey)(nil), (*scpb.TypeReference)(nil)},
+		screl.ReferencedDescID)
 }
 
 func init() {
+	relationNeedsDepToBeRemoved := func(ruleName string, depTypes []interface{}, depDescIDMatch rel.Attr) {
+		// Before any parts of a relation can be dropped, the relation
+		// should exit the synthetic drop state.
+		relation, relationTarget, relationNode := targetNodeVars("relation")
+		dep, depTarget, depNode := targetNodeVars("dep")
+		var id rel.Var = "id"
+		register(
+			"relation/type needs dependency as dropped",
+			relationNode, depNode,
+			screl.MustQuery(
 
-	// TODO(ajwerner): What does this even mean? The table starts in
-	// public.
-	tab, tabTarget, tabNode := targetNodeVars("tab")
-	defExpr, defExprTarget, defExprNode := targetNodeVars("def-expr")
-	id := rel.Var("id")
-	register(
-		"table default expr",
-		tabNode, defExprNode,
-		screl.MustQuery(
+				relation.Type((*scpb.Table)(nil), (*scpb.View)(nil), (*scpb.Sequence)(nil), (*scpb.Type)(nil)),
+				dep.Type(depTypes[0], depTypes[1:]...),
 
-			tab.Type((*scpb.Table)(nil)),
-			defExpr.Type((*scpb.DefaultExpression)(nil)),
+				id.Entities(screl.DescID, relation, dep),
 
-			id.Entities(screl.DescID, tab, defExpr),
+				joinTargetNode(relation, relationTarget, relationNode, drop, absent),
+				joinTargetNode(dep, depTarget, depNode, drop, absent),
+			),
+		)
+	}
+	relationNeedsDepToBeRemoved("relation/type needs dependency as dropped",
+		[]interface{}{(*scpb.DefaultExpression)(nil), (*scpb.RelationDependedOnBy)(nil),
+			(*scpb.SequenceOwnedBy)(nil), (*scpb.OutboundForeignKey)(nil)},
+		screl.DescID)
 
-			joinTargetNode(tab, tabTarget, tabNode, drop, public),
-			joinTargetNode(defExpr, defExprTarget, defExprNode, drop, absent),
-		),
-	)
-}
-
-func init() {
-
-	// TODO(ajwerner): What does this even mean? The table starts in
-	// public.
-	tab, tabTarget, tabNode := targetNodeVars("tab")
-	relDepOnBy, relDepOnByTarget, relDepOnByNode := targetNodeVars("rel-dep")
-	tabID := rel.Var("dep-id")
-	register(
-		"table drop relation depended on",
-		tabNode, relDepOnByNode,
-		screl.MustQuery(
-
-			tab.Type((*scpb.Table)(nil)),
-			relDepOnBy.Type((*scpb.RelationDependedOnBy)(nil)),
-
-			tab.AttrEqVar(screl.DescID, tabID),
-			relDepOnBy.AttrEqVar(screl.ReferencedDescID, tabID),
-
-			joinTargetNode(tab, tabTarget, tabNode, drop, public),
-			joinTargetNode(relDepOnBy, relDepOnByTarget, relDepOnByNode, drop, absent),
-		),
-	)
-}
-
-func init() {
-
-	// These are more weird rules where the public drop table
-	// depends on something else.
-	tab, tabTarget, tabNode := targetNodeVars("tab")
-	fkBy, fkByTarget, fkByNode := targetNodeVars("fk")
-	tabID := rel.Var("dep-id")
-	register(
-		"table drop depends on outbound fk",
-		tabNode, fkByNode,
-		screl.MustQuery(
-
-			tab.Type((*scpb.Table)(nil)),
-			fkBy.Type((*scpb.OutboundForeignKey)(nil)),
-
-			tab.AttrEqVar(screl.DescID, tabID),
-			fkBy.AttrEqVar(screl.DescID, tabID),
-
-			joinTargetNode(tab, tabTarget, tabNode, drop, public),
-			joinTargetNode(fkBy, fkByTarget, fkByNode, drop, absent),
-		),
-	)
+	relationNeedsDepToBeRemoved("relation/type (ref desc) needs dependency as dropped",
+		[]interface{}{(*scpb.InboundForeignKey)(nil), (*scpb.TypeReference)(nil)},
+		screl.ReferencedDescID)
 }

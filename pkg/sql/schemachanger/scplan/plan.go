@@ -85,6 +85,21 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 	}, nil
 }
 
+// validateStages sanity checks stages to ensure no
+// invalid execution plans are made.
+func validateStages(stages []Stage) {
+	revertibleAllowed := true
+	for idx, stage := range stages {
+		if !stage.Revertible {
+			revertibleAllowed = false
+		}
+		if stage.Revertible && !revertibleAllowed {
+			panic(errors.AssertionFailedf(
+				"invalid execution plan revertability flipped at stage (%d): %v", idx, stage))
+		}
+	}
+}
+
 func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 	// TODO(ajwerner): deal with the case where the target status was
 	// fulfilled by something that preceded the initial state.
@@ -212,6 +227,7 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 		stages = append(stages, s)
 		cur = s.After
 	}
+	validateStages(stages)
 	return stages
 }
 
@@ -244,24 +260,47 @@ func doesPathExistToNode(graph *scgraph.Graph, start *scpb.Node, target *scpb.No
 // sortOps sorts the operations into order based on
 // graph dependencies
 func sortOps(graph *scgraph.Graph, ops []scop.Op) {
-	for i := 1; i < len(ops); i++ {
-		for j := i; j > 0; j-- {
-			if compareOps(graph, ops[j], ops[j-1]) {
-				tmp := ops[j]
-				ops[j] = ops[j-1]
-				ops[j-1] = tmp
+	// Original implicit order of the ops will
+	// be kept to keep ordering of equal values.
+	implicitOrder := make([]int, 0, len(ops))
+	for i := range ops {
+		implicitOrder = append(implicitOrder, i)
+	}
+	// Unfortunately, we are forced to do an inefficient
+	// bubble sort, since with unrelated dependencies will
+	// be equal to each other. But, still have a relative order
+	// across the entire set of nodes.
+	for i := 0; i < len(ops); i++ {
+		for j := i + 1; j < len(ops); j++ {
+			if i == j {
+				continue
+			}
+			if !compareOps(graph, ops[i], ops[j], implicitOrder[i], implicitOrder[j]) &&
+				compareOps(graph, ops[j], ops[i], implicitOrder[j], implicitOrder[i]) {
+				tmpOrder := implicitOrder[i]
+				tmp := ops[i]
+				ops[i] = ops[j]
+				ops[j] = tmp
+				implicitOrder[i] = implicitOrder[j]
+				implicitOrder[j] = tmpOrder
 			}
 		}
 	}
-	// Sanity: Graph order is sane across all of
-	// the ops.
+	// Sanity: Graph order is sane across all the ops.
 	for i := 0; i < len(ops); i++ {
 		for j := i + 1; j < len(ops); j++ {
-			if !compareOps(graph, ops[i], ops[j]) && // Greater, but not equal (if equal opposite comparison would match).
-				compareOps(graph, ops[j], ops[i]) {
-				panic(errors.AssertionFailedf("Operators are not completely sorted %d %d", i, j))
-			} else if compareOps(graph, ops[j], ops[i]) {
-				compareOps(graph, ops[j], ops[i])
+			// Validate that the list is sorted by checking
+			// 1) i is always less than j.
+			//   1a) If it is not less than its equal based on the opposite comparison.
+			// 2) j should always be greater or equal to i, so our comparison
+			//    should never be true.
+			// Note: We will intentionally ignore the implicit order for the
+			// validation phase because we will have non-comparable items.
+			if !compareOps(graph, ops[i], ops[j], 1, 0) &&
+				compareOps(graph, ops[j], ops[i], 1, 0) {
+				panic(errors.AssertionFailedf("Operators are not completely sorted %d %d, "+
+					"not strictly increasing", i, j))
+			} else if compareOps(graph, ops[j], ops[i], 1, 0) {
 				panic(errors.AssertionFailedf("Operators are not completely sorted %d %d", i, j))
 			}
 		}
@@ -270,20 +309,27 @@ func sortOps(graph *scgraph.Graph, ops []scop.Op) {
 
 // compareOps compares operations and orders them based on
 // followed by the graph dependencies.
-func compareOps(graph *scgraph.Graph, firstOp scop.Op, secondOp scop.Op) (less bool) {
+func compareOps(
+	graph *scgraph.Graph, firstOp,
+	secondOp scop.Op, firstImplicitOrder, secondImplicitOrder int,
+) (less bool) {
 	// Otherwise, lets compare attributes
 	firstNode := graph.GetNodeFromOp(firstOp)
 	secondNode := graph.GetNodeFromOp(secondOp)
 	if firstNode == secondNode {
-		return false // Equal
+		// Equal, only implicit order determines which is first.
+		return firstImplicitOrder < secondImplicitOrder
 	}
 	firstExists := doesPathExistToNode(graph, firstNode, secondNode)
 	secondExists := doesPathExistToNode(graph, secondNode, firstNode)
+
+	// If both paths exist, then we care about the direction of nodes,
+	// otherwise we have a cycle, and we can't sort.
 	if firstExists && secondExists {
 		if firstNode.Target.Direction == scpb.Target_DROP {
-			return true
-		} else if secondNode.Target.Direction == scpb.Target_DROP {
 			return false
+		} else if secondNode.Target.Direction == scpb.Target_DROP {
+			return true
 		} else {
 			panic(errors.AssertionFailedf("A potential cycle exists in plan the graph, without any"+
 				"nodes transitioning in opposite directions\n %s\n%s\n",
@@ -291,7 +337,18 @@ func compareOps(graph *scgraph.Graph, firstOp scop.Op, secondOp scop.Op) (less b
 				secondNode))
 		}
 	}
+	// If a path exists from first to second, then the first node depends
+	// on the second.
+	if firstExists {
+		return false
+	}
+	// If a path exists to the second to the first node, then
+	// the second node depends on the first.
+	if secondExists {
+		return true
+	}
 
-	// Path exists from first to second, so we depend on second.
-	return firstExists
+	// Otherwise, no paths exists and the two are equal.
+	// Only the implicit order determines the first one.
+	return firstImplicitOrder < secondImplicitOrder
 }
