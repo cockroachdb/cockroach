@@ -43,13 +43,14 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 		return result
 	}
 
-	nodeStatus := func() (_ string, _ []string, err error) {
-		var out []byte
-		if out, err = c.RunWithBuffer(ctx, t.L(), c.Node(1),
-			"./cockroach node status --insecure -p {pgport:1}"); err != nil {
-			return "", nil, err
+	nodeStatus := func() (raw string, _ []string) {
+		out, err := c.RunWithBuffer(ctx, t.L(), c.Node(1),
+			"./cockroach node status --insecure -p {pgport:1}")
+		if err != nil {
+			t.Fatalf("%v\n%s", err, out)
 		}
-		return string(out), lastWords(string(out)), nil
+		raw = string(out)
+		return raw, lastWords(string(out))
 	}
 
 	{
@@ -59,26 +60,19 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 			"true true",
 			"true true",
 		}
-		raw, actual, err := nodeStatus()
-		if err != nil {
-			t.Fatalf("node status failed: %v\n%s", err, raw)
-		}
+		raw, actual := nodeStatus()
 		if !reflect.DeepEqual(expected, actual) {
 			t.Fatalf("expected %s, but found %s:\nfrom:\n%s", expected, actual, raw)
 		}
 	}
 
 	waitUntil := func(expected []string) {
-		var (
-			raw    string
-			actual []string
-			err    error
-		)
+		var raw string
+		var actual []string
 		// Node liveness takes ~9s to time out. Give the test double that time.
 		for i := 0; i < 20; i++ {
-			if raw, actual, err = nodeStatus(); err != nil {
-				t.L().Printf("node status failed: %v\n%s", err, raw)
-			} else if reflect.DeepEqual(expected, actual) {
+			raw, actual = nodeStatus()
+			if reflect.DeepEqual(expected, actual) {
 				break
 			}
 			t.L().Printf("not done: %s vs %s\n", expected, actual)
@@ -113,7 +107,7 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// Stop the cluster and restart only 2 of the nodes. Verify that three nodes
 	// show up in the node status output.
-	c.Stop(ctx, c.Range(1, 2))
+	c.Stop(ctx, c.Range(1, 3))
 	c.Start(ctx, c.Range(1, 2))
 
 	// Wait for the cluster to come back up.
