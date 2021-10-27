@@ -153,6 +153,7 @@ func (jsonVM *jsonVM) toVM(project string, opts *providerOpts) (ret *vm.VM) {
 		Errors:      vmErrors,
 		DNS:         fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
 		Lifetime:    lifetime,
+		Labels:      jsonVM.Labels,
 		PrivateIP:   privateIP,
 		Provider:    ProviderName,
 		ProviderID:  jsonVM.Name,
@@ -453,7 +454,14 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	if p.opts.MinCPUPlatform != "" {
 		args = append(args, "--min-cpu-platform", p.opts.MinCPUPlatform)
 	}
-	args = append(args, "--labels", fmt.Sprintf("lifetime=%s", opts.Lifetime))
+
+	opts.CustomLabelMap.TryAddDefaultTags(opts)
+
+	var sb strings.Builder
+	for key, value := range opts.CustomLabelMap {
+		sb.WriteString(fmt.Sprintf("%s=%s,", key, value))
+	}
+	args = append(args, "--labels", sb.String())
 
 	args = append(args, "--metadata-from-file", fmt.Sprintf("startup-script=%s", filename))
 	args = append(args, "--project", project)

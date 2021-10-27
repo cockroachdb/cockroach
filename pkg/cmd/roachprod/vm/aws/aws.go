@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
@@ -708,8 +709,10 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 
 			// Convert the tag map into a more useful representation
 			tagMap := make(map[string]string, len(in.Tags))
+			var sb strings.Builder
 			for _, entry := range in.Tags {
 				tagMap[entry.Key] = entry.Value
+				sb.WriteString(fmt.Sprintf("{Key=%s,Value=%s},", entry.Key, entry.Value))
 			}
 			// Ignore any instances that we didn't create
 			if tagMap["Roachprod"] != "true" {
@@ -723,7 +726,7 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 			}
 
 			var lifetime time.Duration
-			if lifeText, ok := tagMap["Lifetime"]; ok {
+			if lifeText, ok := tagMap["lifetime"]; ok {
 				lifetime, err = time.ParseDuration(lifeText)
 				if err != nil {
 					errs = append(errs, err)
@@ -738,6 +741,7 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 				Name:        tagMap["Name"],
 				Errors:      errs,
 				Lifetime:    lifetime,
+				Labels:      tagMap,
 				PrivateIP:   in.PrivateIPAddress,
 				Provider:    ProviderName,
 				ProviderID:  in.InstanceID,
@@ -797,13 +801,17 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 	cpuOptions := p.opts.CPUOptions
 
 	// We avoid the need to make a second call to set the tags by jamming
-	// all of our metadata into the TagSpec.
-	tagSpecs := fmt.Sprintf(
-		"ResourceType=instance,Tags=["+
-			"{Key=Lifetime,Value=%s},"+
-			"{Key=Name,Value=%s},"+
-			"{Key=Roachprod,Value=true},"+
-			"]", opts.Lifetime, name)
+	// all of our metadata into the tagSpec.
+	opts.CustomLabelMap.CheckAndAdd("Lifetime", opts.Lifetime.String())
+	opts.CustomLabelMap.CheckAndAdd("Created", timeutil.Now().Format(time.RFC3339))
+	opts.CustomLabelMap.CheckAndAdd("Roachprod", "true")
+	opts.CustomLabelMap.CheckAndAdd("Name", name)
+
+	var sb strings.Builder
+	for key, value := range opts.CustomLabelMap {
+		sb.WriteString(fmt.Sprintf("{Key=%s,Value=%s},", key, value))
+	}
+	tagSpecs := fmt.Sprintf("ResourceType=instance,Tags=[%s]", sb.String())
 
 	var data struct {
 		Instances []struct {

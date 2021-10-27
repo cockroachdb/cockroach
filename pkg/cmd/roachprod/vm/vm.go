@@ -16,14 +16,90 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
 )
+
+const (
+	TagCluster   = "cluster"
+	// RFC3339-formatted timestamp.
+	TagCreated   = "created"
+	TagLifetime  = "lifetime"
+	TagRoachprod = "roachprod"
+)
+
+type customLabelMap map[string]string
+var labelMapMutex = sync.RWMutex{}
+
+// Set implements flag Value interface.
+func (m *customLabelMap) Set(s string) error {
+	parts := strings.Split(s, "=")
+	if len(parts) != 2 {
+		return fmt.Errorf("wrong label defintion: %s, must be 'name=value' format, example: usage=cloud-report-2020", s)
+	}
+
+	key := parts[0]
+	labelMapMutex.RLock()
+	_, ok := (*m)[key]
+	labelMapMutex.RUnlock()
+	if ok {
+		return fmt.Errorf("duplicate label name defined: %s", key)
+	}
+
+	labelMapMutex.Lock()
+	(*m)[key] = parts[1]
+	labelMapMutex.Unlock()
+
+	return nil
+}
+
+// Type implements flag Value interface.
+func (m *customLabelMap) Type() string {
+	return "JSON"
+}
+
+// String Implements flag Value interface.
+func (m *customLabelMap) String() string {
+	return "CustomLabelMap"
+}
+
+// TryAddDefaultTags checks if a common set of labels exist in m, add any that
+// doesn't exist.
+func (m *customLabelMap) TryAddDefaultTags(opts CreateOpts) {
+	m.CheckAndAdd(TagCluster, opts.ClusterName)
+	time := timeutil.Now().Format(time.RFC3339)
+	// Format according to gce label naming convention requirement.
+	if len(opts.VMProviders) > 0 && opts.VMProviders[0] == "gce" {
+		time = strings.ToLower(strings.ReplaceAll(time, ":", "_"))
+	}
+	m.CheckAndAdd(TagCreated, time)
+	m.CheckAndAdd(TagLifetime, opts.Lifetime.String())
+	m.CheckAndAdd(TagRoachprod, "true")
+}
+
+// CheckAndAdd checks label name doesn't exists in m, then add it into m,
+// else returns error.
+func (m *customLabelMap) CheckAndAdd(name string, value string) error {
+	labelMapMutex.RLock()
+	_, ok := (*m)[name]
+	labelMapMutex.RUnlock()
+	if ok {
+		return fmt.Errorf("duplicate label name defined: %s", name)
+	}
+
+	labelMapMutex.Lock()
+	(*m)[name] = value
+	labelMapMutex.Unlock()
+
+	return nil
+}
 
 // A VM is an abstract representation of a specific machine instance.  This type is used across
 // the various cloud providers supported by roachprod.
@@ -34,6 +110,7 @@ type VM struct {
 	// is not present or otherwise invalid.
 	Errors   []error       `json:"errors"`
 	Lifetime time.Duration `json:"lifetime"`
+	Labels   customLabelMap `json:"labels"`
 	// The provider-internal DNS name for the VM instance
 	DNS string `json:"dns"`
 	// The name of the cloud provider that hosts the VM instance
@@ -139,6 +216,8 @@ const (
 type CreateOpts struct {
 	ClusterName    string
 	Lifetime       time.Duration
+	CustomLabelMap customLabelMap
+
 	GeoDistributed bool
 	VMProviders    []string
 	SSDOpts        struct {
