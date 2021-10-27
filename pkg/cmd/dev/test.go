@@ -11,11 +11,15 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/alessio/shellescape"
 	"github.com/spf13/cobra"
 )
 
@@ -130,7 +134,8 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			// where we define `Stringer` separately for the `RemoteOffset`
 			// type.
 			{
-				out, err := d.exec.CommandContextSilent(ctx, "bazel", "query", fmt.Sprintf("kind(go_test,  //%s)", pkg))
+				queryArgs := []string{fmt.Sprintf("kind(go_test,  //%s)", pkg)}
+				out, err := d.getQueryOutput(ctx, queryArgs...)
 				if err != nil {
 					return err
 				}
@@ -140,7 +145,8 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		} else if strings.Contains(pkg, ":") {
 			testTargets = append(testTargets, pkg)
 		} else {
-			out, err := d.exec.CommandContextSilent(ctx, "bazel", "query", fmt.Sprintf("kind(go_test, //%s:all)", pkg))
+			queryArgs := []string{fmt.Sprintf("kind(go_test, //%s:all)", pkg)}
+			out, err := d.getQueryOutput(ctx, queryArgs...)
 			if err != nil {
 				return err
 			}
@@ -209,4 +215,26 @@ func getDirectoryFromTarget(target string) string {
 		return target
 	}
 	return target[:colon]
+}
+
+// getQueryOutput runs `bazel query` w/ the given arguments, but returns
+// a more informative error if the query fails.
+func (d *dev) getQueryOutput(ctx context.Context, args ...string) ([]byte, error) {
+	queryArgs := []string{"query"}
+	queryArgs = append(queryArgs, args...)
+	stdoutBytes, err := d.exec.CommandContextSilent(ctx, "bazel", queryArgs...)
+	if err == nil {
+		return stdoutBytes, err
+	}
+	var cmderr *exec.ExitError
+	var stdout, stderr string
+	if len(stdoutBytes) > 0 {
+		stdout = fmt.Sprintf("stdout: \"%s\" ", string(stdoutBytes))
+	}
+	if errors.As(err, &cmderr) && len(cmderr.Stderr) > 0 {
+		stderr = fmt.Sprintf("stderr: \"%s\" ", strings.TrimSpace(string(cmderr.Stderr)))
+	}
+	return nil, fmt.Errorf("failed to run `bazel %s` %s%s(%w)",
+		shellescape.QuoteCommand(queryArgs), stdout, stderr, err)
+
 }
