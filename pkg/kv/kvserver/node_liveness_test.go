@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -1059,67 +1060,75 @@ func TestNodeLivenessRetryAmbiguousResultOnCreateError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var injectError atomic.Value
-	type injectErrorData struct {
-		shouldError bool
-		count       int32
+	errorsToTest := []error{
+		roachpb.NewAmbiguousResultError("test"),
+		roachpb.NewTransactionStatusError(roachpb.TransactionStatusError_REASON_UNKNOWN, "foo"),
+		kv.OnePCNotAllowedError{},
 	}
 
-	injectError.Store(map[roachpb.NodeID]injectErrorData{
-		roachpb.NodeID(1): {true, 0},
-		roachpb.NodeID(2): {true, 0},
-		roachpb.NodeID(3): {true, 0},
-	})
-	testingEvalFilter := func(args kvserverbase.FilterArgs) *roachpb.Error {
-		if req, ok := args.Req.(*roachpb.ConditionalPutRequest); ok {
-			if val := injectError.Load(); val != nil {
-				var liveness livenesspb.Liveness
-				if err := req.Value.GetProto(&liveness); err != nil {
-					return nil
-				}
-				injectErrorMap := val.(map[roachpb.NodeID]injectErrorData)
-				if injectErrorMap[liveness.NodeID].shouldError {
-					if liveness.NodeID != 1 {
-						// We expect this to come from the create code path on all nodes
-						// except the first. Make sure that is actually true.
-						assert.Equal(t, liveness.Epoch, int64(0))
+	for _, errorToTest := range errorsToTest {
+		var injectError atomic.Value
+		type injectErrorData struct {
+			shouldError bool
+			count       int32
+		}
+
+		injectError.Store(map[roachpb.NodeID]injectErrorData{
+			roachpb.NodeID(1): {true, 0},
+			roachpb.NodeID(2): {true, 0},
+			roachpb.NodeID(3): {true, 0},
+		})
+		testingEvalFilter := func(args kvserverbase.FilterArgs) *roachpb.Error {
+			if req, ok := args.Req.(*roachpb.ConditionalPutRequest); ok {
+				if val := injectError.Load(); val != nil {
+					var liveness livenesspb.Liveness
+					if err := req.Value.GetProto(&liveness); err != nil {
+						return nil
 					}
-					injectErrorMap[liveness.NodeID] = injectErrorData{false, injectErrorMap[liveness.NodeID].count + 1}
-					injectError.Store(injectErrorMap)
-					return roachpb.NewError(roachpb.NewAmbiguousResultError("test"))
+					injectErrorMap := val.(map[roachpb.NodeID]injectErrorData)
+					if injectErrorMap[liveness.NodeID].shouldError {
+						if liveness.NodeID != 1 {
+							// We expect this to come from the create code path on all nodes
+							// except the first. Make sure that is actually true.
+							assert.Equal(t, liveness.Epoch, int64(0))
+						}
+						injectErrorMap[liveness.NodeID] = injectErrorData{false, injectErrorMap[liveness.NodeID].count + 1}
+						injectError.Store(injectErrorMap)
+						return roachpb.NewError(errorToTest)
+					}
 				}
 			}
+			return nil
 		}
-		return nil
-	}
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					Store: &kvserver.StoreTestingKnobs{
-						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-							TestingEvalFilter: testingEvalFilter,
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 3,
+			base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						Store: &kvserver.StoreTestingKnobs{
+							EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+								TestingEvalFilter: testingEvalFilter,
+							},
 						},
 					},
 				},
-			},
-		})
-	defer tc.Stopper().Stop(ctx)
+			})
+		defer tc.Stopper().Stop(ctx)
 
-	for _, s := range tc.Servers {
-		// Verify retry of the ambiguous result for heartbeat loop.
-		testutils.SucceedsSoon(t, func() error {
-			return verifyLivenessServer(s, 3)
-		})
-		nl := s.NodeLiveness().(*liveness.NodeLiveness)
-		_, ok := nl.Self()
-		assert.True(t, ok)
+		for _, s := range tc.Servers {
+			// Verify retry of the ambiguous result for heartbeat loop.
+			testutils.SucceedsSoon(t, func() error {
+				return verifyLivenessServer(s, 3)
+			})
+			nl := s.NodeLiveness().(*liveness.NodeLiveness)
+			_, ok := nl.Self()
+			assert.True(t, ok)
 
-		injectErrorMap := injectError.Load().(map[roachpb.NodeID]injectErrorData)
-		assert.NotNil(t, injectErrorMap)
-		assert.Equal(t, int32(1), injectErrorMap[s.NodeID()].count)
+			injectErrorMap := injectError.Load().(map[roachpb.NodeID]injectErrorData)
+			assert.NotNil(t, injectErrorMap)
+			assert.Equal(t, int32(1), injectErrorMap[s.NodeID()].count)
+		}
 	}
 }
 
