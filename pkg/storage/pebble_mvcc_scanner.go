@@ -34,6 +34,71 @@ const (
 	kvLenSize = 8
 )
 
+// MVCCDecodingStrategy controls if and how the fetcher should decode MVCC
+// timestamps from returned KV's.
+type MVCCDecodingStrategy int
+
+const (
+	// MVCCDecodingNotRequired is used when timestamps aren't needed.
+	MVCCDecodingNotRequired MVCCDecodingStrategy = iota
+	// MVCCDecodingRequired is used when timestamps are needed.
+	MVCCDecodingRequired
+)
+
+type results interface {
+	clear()
+	put(ctx context.Context, key []byte, value []byte, memAccount *mon.BoundAccount) error
+	finish() [][]byte
+	getCount() int64
+	getBytes() int64
+	getLastKV() roachpb.KeyValue
+}
+
+type KeyValue struct {
+	key   MVCCKey
+	value []byte
+}
+
+type singleResults struct {
+	count, bytes int64
+	key          []byte
+	value        []byte
+}
+
+func (s *singleResults) clear() {
+	*s = singleResults{}
+}
+
+func (s *singleResults) put(
+	_ context.Context, key []byte, value []byte, acc *mon.BoundAccount,
+) error {
+	s.count++
+	s.bytes += int64(len(key) + len(value))
+	s.key = key
+	s.value = value
+	return nil
+}
+
+func (s *singleResults) finish() [][]byte {
+	// TODO(jordan)
+	return nil
+}
+
+func (s *singleResults) getCount() int64 {
+	return s.count
+}
+
+func (s *singleResults) getBytes() int64 {
+	return s.bytes
+}
+
+func (s *singleResults) getLastKV() roachpb.KeyValue {
+	return roachpb.KeyValue{
+		Key:   s.key,
+		Value: roachpb.Value{RawBytes: s.value},
+	}
+}
+
 // Struct to store MVCCScan / MVCCGet in the same binary format as that
 // expected by MVCCScanDecodeKeyValue.
 type pebbleResults struct {
@@ -43,8 +108,20 @@ type pebbleResults struct {
 	bufs  [][]byte
 }
 
+func (p *pebbleResults) getLastKV() roachpb.KeyValue {
+	panic("never should get here i hope")
+}
+
 func (p *pebbleResults) clear() {
 	*p = pebbleResults{}
+}
+
+func (p *pebbleResults) getCount() int64 {
+	return p.count
+}
+
+func (p *pebbleResults) getBytes() int64 {
+	return p.bytes
 }
 
 // The repr that MVCCScan / MVCCGet expects to provide as output goes:
@@ -63,7 +140,7 @@ func (p *pebbleResults) put(
 	// needs capacity greater than maxSize, we allocate exactly the size needed.
 	lenKey := len(key)
 	lenValue := len(value)
-	lenToAdd := p.sizeOf(lenKey, lenValue)
+	lenToAdd := pebbleSizeOf(lenKey, lenValue)
 	if len(p.repr)+lenToAdd > cap(p.repr) {
 		newSize := 2 * cap(p.repr)
 		if newSize == 0 || newSize > maxSize {
@@ -99,7 +176,7 @@ func (p *pebbleResults) put(
 	return nil
 }
 
-func (p *pebbleResults) sizeOf(lenKey, lenValue int) int {
+func pebbleSizeOf(lenKey, lenValue int) int {
 	return kvLenSize + lenKey + lenValue
 }
 
@@ -170,7 +247,7 @@ type pebbleMVCCScanner struct {
 	curRawKey    []byte
 	curValue     []byte
 	curExcluded  bool
-	results      pebbleResults
+	results      results
 	intents      pebble.Batch
 	// mostRecentTS stores the largest timestamp observed that is equal to or
 	// above the scan timestamp. Only applicable if failOnMoreRecent is true. If
@@ -204,6 +281,7 @@ func (p *pebbleMVCCScanner) release() {
 func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction, localUncertaintyLimit hlc.Timestamp) {
 	p.itersBeforeSeek = maxItersBeforeSeek / 2
 	p.curExcluded = false
+	p.results = &pebbleResults{}
 
 	if txn != nil {
 		p.txn = txn
@@ -229,6 +307,19 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 	}
 	p.getAndAdvance(ctx)
 	p.maybeFailOnMoreRecent()
+}
+
+func (p *pebbleMVCCScanner) seekToStartOfScan() error {
+	if p.reverse {
+		if !p.iterSeekReverse(MVCCKey{Key: p.end}) {
+			return p.err
+		}
+	} else {
+		if !p.iterSeek(MVCCKey{Key: p.start}) {
+			return p.err
+		}
+	}
+	return nil
 }
 
 // scan iterates until a limit is exceeded, the underlying iterator is
@@ -279,7 +370,7 @@ func (p *pebbleMVCCScanner) scan(
 		}
 		var resumeNextBytes int64
 		if p.resumeReason == roachpb.RESUME_BYTE_LIMIT && p.curExcluded {
-			resumeNextBytes = int64(p.results.sizeOf(len(p.curRawKey), len(p.curValue)))
+			resumeNextBytes = int64(pebbleSizeOf(len(p.curRawKey), len(p.curValue)))
 		}
 		return resumeSpan, p.resumeReason, resumeNextBytes, nil
 	}
@@ -718,9 +809,9 @@ func (p *pebbleMVCCScanner) addAndAdvance(ctx context.Context, rawKey []byte, va
 	if len(val) > 0 || p.tombstones {
 		// Check if we should apply the targetBytes limit at all. We do this either
 		// if this is not the first result or if targetBytesAllowEmpty is true.
-		if p.targetBytes > 0 && (p.results.count > 0 || p.targetBytesAllowEmpty) {
-			size := p.results.bytes
-			nextSize := int64(p.results.sizeOf(len(rawKey), len(val)))
+		if p.targetBytes > 0 && (p.results.getCount() > 0 || p.targetBytesAllowEmpty) {
+			size := p.results.getBytes()
+			nextSize := int64(pebbleSizeOf(len(rawKey), len(val)))
 			// Check if we actually exceeded the limit.
 			if size >= p.targetBytes || (p.targetBytesAvoidExcess && size+nextSize > p.targetBytes) {
 				p.curExcluded = true
@@ -732,7 +823,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(ctx context.Context, rawKey []byte, va
 			p.err = errors.Wrapf(err, "scan with start key %s", p.start)
 			return false
 		}
-		if p.maxKeys > 0 && p.results.count >= p.maxKeys {
+		if p.maxKeys > 0 && p.results.getCount() >= p.maxKeys {
 			p.curExcluded = false
 			p.resumeReason = roachpb.RESUME_KEY_LIMIT
 			return false

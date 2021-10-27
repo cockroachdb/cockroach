@@ -364,6 +364,9 @@ func (s *ColIndexJoin) GetBytesRead() int64 {
 	// GetBytesRead() will return 0. We are also holding the mutex, so a
 	// concurrent call to Init() will have to wait, and the fetcher will remain
 	// uninitialized until we return.
+	if s.rf.fetcher == nil {
+		return 0
+	}
 	return s.rf.fetcher.GetBytesRead()
 }
 

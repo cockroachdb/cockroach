@@ -2914,6 +2914,10 @@ func (m *sessionDataMutator) SetNullOrderedLast(b bool) {
 	m.data.NullOrderedLast = b
 }
 
+func (m *sessionDataMutator) SetPlanDirectScan(b bool) {
+	m.data.PlanDirectScan = b
+}
+
 func (m *sessionDataMutator) SetPropagateInputOrdering(b bool) {
 	m.data.PropagateInputOrdering = b
 }
