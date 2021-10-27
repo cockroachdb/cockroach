@@ -101,6 +101,7 @@ type Registry struct {
 	// adoptionChan is used to nudge the registry to resume claimed jobs and
 	// potentially attempt to claim jobs.
 	adoptionCh  chan adoptionNotice
+	runCh       chan []jobspb.JobID
 	sqlInstance sqlliveness.Instance
 
 	// sessionBoundInternalExecutorFactory provides a way for jobs to create
@@ -135,7 +136,18 @@ type Registry struct {
 		// jobs scheduled inside a transaction, they will show in this map but will
 		// only be run when the transaction commits.
 		adoptedJobs map[jobspb.JobID]*adoptedJob
+
+		// waiting is a set of jobs for which we're waiting to complete. In general,
+		// we expect these jobs to have been started with a claim by this instance.
+		// That may not have lasted to completion. Separately a goroutine will be
+		// passively polling for these jobs to complete. If they complete locally,
+		// the waitingSet will be updated appropriately.
+		waiting map[jobspb.JobID]map[*waitingSet]struct{}
 	}
+
+	// withSessionEvery ensures that logging when failing to get a live session
+	// is not too loud.
+	withSessionEvery log.EveryN
 
 	TestingResumerCreationKnobs map[jobspb.Type]func(Resumer) Resumer
 }
@@ -189,6 +201,8 @@ func MakeRegistry(
 		preventAdoptionFile: preventAdoptionFile,
 		td:                  td,
 		adoptionCh:          make(chan adoptionNotice, 1),
+		runCh:               make(chan []jobspb.JobID),
+		withSessionEvery:    log.Every(time.Second),
 	}
 	if knobs != nil {
 		r.knobs = *knobs
@@ -197,6 +211,7 @@ func MakeRegistry(
 		}
 	}
 	r.mu.adoptedJobs = make(map[jobspb.JobID]*adoptedJob)
+	r.mu.waiting = make(map[jobspb.JobID]map[*waitingSet]struct{})
 	r.metrics.init(histogramWindowInterval)
 	return r
 }
@@ -641,26 +656,28 @@ SELECT claim_session_id
  FETCH FIRST $2 ROWS ONLY)
 `
 
+type withSessionFunc func(ctx context.Context, s sqlliveness.Session)
+
+func (r *Registry) withSession(ctx context.Context, f withSessionFunc) {
+	s, err := r.sqlInstance.Session(ctx)
+	if err != nil {
+		if log.ExpensiveLogEnabled(ctx, 2) ||
+			(ctx.Err() == nil && r.withSessionEvery.ShouldLog()) {
+			log.Errorf(ctx, "error getting live session: %s", err)
+		}
+		return
+	}
+
+	log.VEventf(ctx, 1, "registry live claim (instance_id: %s, sid: %s)", r.ID(), s.ID())
+	f(ctx, s)
+}
+
 // Start polls the current node for liveness failures and cancels all registered
 // jobs if it observes a failure. Otherwise it starts all the main daemons of
 // registry that poll the jobs table and start/cancel/gc jobs.
 func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
-	every := log.Every(time.Second)
-	withSession := func(
-		f func(ctx context.Context, s sqlliveness.Session),
-	) func(ctx context.Context) {
-		return func(ctx context.Context) {
-			s, err := r.sqlInstance.Session(ctx)
-			if err != nil {
-				if log.ExpensiveLogEnabled(ctx, 2) || (ctx.Err() == nil && every.ShouldLog()) {
-					log.Errorf(ctx, "error getting live session: %s", err)
-				}
-				return
-			}
-
-			log.VEventf(ctx, 1, "registry live claim (instance_id: %s, sid: %s)", r.ID(), s.ID())
-			f(ctx, s)
-		}
+	wrapWithSession := func(f withSessionFunc) func(ctx context.Context) {
+		return func(ctx context.Context) { r.withSession(ctx, f) }
 	}
 
 	// removeClaimsFromDeadSessions queries the jobs table for non-terminal
@@ -693,14 +710,14 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			log.Errorf(ctx, "failed to serve pause and cancel requests: %v", err)
 		}
 	}
-	cancelLoopTask := withSession(func(ctx context.Context, s sqlliveness.Session) {
+	cancelLoopTask := wrapWithSession(func(ctx context.Context, s sqlliveness.Session) {
 		removeClaimsFromDeadSessions(ctx, s)
 		r.maybeCancelJobs(ctx, s)
 		servePauseAndCancelRequests(ctx, s)
 	})
 	// claimJobs iterates the set of jobs which are not currently claimed and
 	// claims jobs up to maxAdoptionsPerLoop.
-	claimJobs := withSession(func(ctx context.Context, s sqlliveness.Session) {
+	claimJobs := wrapWithSession(func(ctx context.Context, s sqlliveness.Session) {
 		r.metrics.AdoptIterations.Inc(1)
 		if err := r.claimJobs(ctx, s); err != nil {
 			log.Errorf(ctx, "error claiming jobs: %s", err)
@@ -709,7 +726,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// processClaimedJobs iterates the jobs claimed by the current node that
 	// are in the running or reverting state, and then it starts those jobs if
 	// they are not already running.
-	processClaimedJobs := withSession(func(ctx context.Context, s sqlliveness.Session) {
+	processClaimedJobs := wrapWithSession(func(ctx context.Context, s sqlliveness.Session) {
 		if r.adoptionDisabled(ctx) {
 			log.Warningf(ctx, "canceling all adopted jobs due to liveness failure")
 			r.cancelAllAdoptedJobs()
@@ -1133,6 +1150,7 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Wrapf(err, "job %d: could not mark as canceled: %v", job.ID(), jobErr)
 		}
 		telemetry.Inc(TelemetryMetrics[jobType].Canceled)
+		r.removeFromWaitingSets(job.ID())
 		return errors.WithSecondaryError(errors.Errorf("job %s", status), jobErr)
 	case StatusSucceeded:
 		if jobErr != nil {
@@ -1148,6 +1166,7 @@ func (r *Registry) stepThroughStateMachine(
 			// restarted during the next adopt loop and it will be retried.
 			err = errors.Wrapf(err, "job %d: could not mark as succeeded", job.ID())
 		}
+		r.removeFromWaitingSets(job.ID())
 		return err
 	case StatusReverting:
 		if err := job.reverted(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
@@ -1207,6 +1226,7 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Wrapf(err, "job %d: could not mark as failed: %s", job.ID(), jobErr)
 		}
 		telemetry.Inc(TelemetryMetrics[jobType].Failed)
+		r.removeFromWaitingSets(job.ID())
 		return jobErr
 	case StatusRevertFailed:
 		if jobErr == nil {
