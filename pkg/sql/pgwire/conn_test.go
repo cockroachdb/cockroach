@@ -1278,13 +1278,6 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// The test server is used only incidentally by this test: this is not the
-	// server that the client will connect to; we just use it on the side to
-	// execute some metadata queries that pgx sends whenever it opens a
-	// connection.
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true, UseDatabase: "system"})
-	defer s.Stopper().Stop(context.Background())
-
 	// Start a pgwire "server".
 	addr := util.TestAddr
 	ln, err := net.Listen(addr.Network(), addr.String())
@@ -1447,6 +1440,22 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 				require.Equal(t, "2.3.4.5:5432", args.RemoteAddr.String())
 			},
 		},
+		{
+			desc:  "normalize to lower case in options parameter",
+			query: "user=root&options=-c DateStyle=YMD,ISO",
+			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+				require.NoError(t, err)
+				require.Equal(t, "YMD,ISO", args.SessionDefaults["datestyle"])
+			},
+		},
+		{
+			desc:  "normalize to lower case in query parameters",
+			query: "user=root&DateStyle=ISO,YMD",
+			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+				require.NoError(t, err)
+				require.Equal(t, "ISO,YMD", args.SessionDefaults["datestyle"])
+			},
+		},
 	}
 
 	baseURL := fmt.Sprintf("postgres://%s/system?sslmode=disable", serverAddr)
@@ -1454,20 +1463,22 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 
+			var connErr error
 			go func() {
-				url := fmt.Sprintf("%s&%s", baseURL, tc.query)
-				c, err := gosql.Open("postgres", url)
-				require.NoError(t, err)
-
 				ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 				defer cancel()
+				url := fmt.Sprintf("%s&%s", baseURL, tc.query)
+				var c *pgx.Conn
+				c, connErr = pgx.Connect(ctx, url)
+				if connErr != nil {
+					return
+				}
 				// ignore the error because there is no answer from the server, we are
 				// interested in parsing session arguments only
-				_ = c.PingContext(ctx)
+				_ = c.Ping(ctx)
 				// closing connection immediately, since getSessionArgs is blocking
-				_ = c.Close()
+				_ = c.Close(ctx)
 			}()
-
 			// Wait for the client to connect and perform the handshake.
 			_, args, err := getSessionArgs(ln, true /* trustRemoteAddr */)
 			tc.assert(t, args, err)
@@ -1478,9 +1489,15 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 func TestSetSessionArguments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
+	defer db.Close()
+
+	_, err := db.Exec("SET CLUSTER SETTING sql.defaults.datestyle.enabled = true")
+	require.NoError(t, err)
+	_, err = db.Exec("SET CLUSTER SETTING sql.defaults.intervalstyle.enabled = true")
+	require.NoError(t, err)
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
 		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(security.RootUser),
@@ -1488,7 +1505,11 @@ func TestSetSessionArguments(t *testing.T) {
 	defer cleanupFunc()
 
 	q := pgURL.Query()
-	q.Add("options", "  --user=test -c    search_path=public,testsp %20 --default-transaction-isolation=read\\ uncommitted   -capplication_name=test  --datestyle=iso\\ ,\\ mdy\\  ")
+	q.Add("options", "  --user=test -c    search_path=public,testsp %20 "+
+		"--default-transaction-isolation=read\\ uncommitted   "+
+		"-capplication_name=test  "+
+		"--DateStyle=ymd\\ ,\\ iso\\  "+
+		"-c intervalstyle%3DISO_8601")
 	pgURL.RawQuery = q.Encode()
 	noBufferDB, err := gosql.Open("postgres", pgURL.String())
 
@@ -1518,7 +1539,8 @@ func TestSetSessionArguments(t *testing.T) {
 		// all transactions execute with serializable isolation.
 		"default_transaction_isolation": "serializable",
 		"application_name":              "test",
-		"datestyle":                     "ISO, MDY",
+		"datestyle":                     "ISO, YMD",
+		"intervalstyle":                 "iso_8601",
 	}
 	expectedFoundOptions := len(expectedOptions)
 
