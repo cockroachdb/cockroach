@@ -54,7 +54,7 @@ func populateSpecs(status scpb.Status, specs []transitionSpec) {
 			continue
 		}
 		specs[i].from = specs[i-1].to
-
+		specs[i].revertible = specs[i].revertible && specs[i-1].revertible
 		prevMinPhase := specs[i-1].minPhase
 		switch curMinPhase := specs[i].minPhase; curMinPhase {
 		case 0:

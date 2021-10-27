@@ -22,7 +22,7 @@ func init() {
 		scpb.Status_PUBLIC,
 		to(scpb.Status_ABSENT,
 			minPhase(scop.PreCommitPhase),
-			// TODO(ajwerner): This feels like it should be marked non-revertible.
+			revertible(false),
 			emit(func(this *scpb.TypeReference) scop.Op {
 				return &scop.RemoveTypeBackRef{
 					TypeID: this.TypeID,

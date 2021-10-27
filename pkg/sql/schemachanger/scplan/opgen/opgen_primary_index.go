@@ -80,6 +80,7 @@ func init() {
 			})),
 		to(scpb.Status_DELETE_ONLY,
 			minPhase(scop.PostCommitPhase),
+			revertible(false),
 			// TODO(ajwerner): This should be marked as not revertible.
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.MakeDroppedIndexDeleteOnly{

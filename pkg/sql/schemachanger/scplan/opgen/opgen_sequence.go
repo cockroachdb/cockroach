@@ -22,14 +22,25 @@ func init() {
 		(*scpb.Sequence)(nil),
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
-		to(scpb.Status_ABSENT,
+		to(scpb.Status_TXN_DROPPED,
+			minPhase(scop.StatementPhase),
+			emit(func(this *scpb.Sequence) scop.Op {
+				return &scop.MarkDescriptorAsDroppedSynthetically{
+					DescID: this.SequenceID,
+				}
+			})),
+		to(scpb.Status_DROPPED,
 			minPhase(scop.PreCommitPhase),
 			revertible(false),
 			emit(func(this *scpb.Sequence) scop.Op {
 				return &scop.MarkDescriptorAsDropped{
-					TableID: this.SequenceID,
+					DescID: this.SequenceID,
 				}
 			}),
+		),
+		to(scpb.Status_ABSENT,
+			minPhase(scop.PreCommitPhase),
+			revertible(false),
 			emit(func(this *scpb.Sequence) scop.Op {
 				return &scop.DrainDescriptorName{
 					TableID: this.SequenceID,
