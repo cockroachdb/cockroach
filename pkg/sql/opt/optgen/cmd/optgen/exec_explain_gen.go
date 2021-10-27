@@ -87,7 +87,7 @@ func (g *execExplainGen) genExplainFactory() {
 				fmt.Fprintf(&nodesBuf, ", %sNode", n)
 			}
 		}
-		g.w.writeIndent("_n, err := f.newNode(%sOp, args, %s%s)\n", opName, ordering, nodesBuf.String())
+		g.w.writeIndent("_n, err := newNode(%sOp, args, %s%s)\n", opName, ordering, nodesBuf.String())
 		g.w.nestIndent("if err != nil {\n")
 		g.w.writeIndent("return nil, err\n")
 		g.w.unnest("}\n")
@@ -121,6 +121,7 @@ func (g *execExplainGen) genEnum() {
 	for _, define := range g.compiled.Defines {
 		g.w.writeIndent("%sOp\n", unTitle(string(define.Name)))
 	}
+	g.w.writeIndent("numOperators\n")
 	g.w.unnest(")\n")
 }
 
