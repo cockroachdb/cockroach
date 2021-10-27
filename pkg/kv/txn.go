@@ -1637,3 +1637,13 @@ func (txn *Txn) AdmissionHeader() roachpb.AdmissionHeader {
 	}
 	return h
 }
+
+// OnePCNotAllowedError signifies that a request had the Require1PC flag set,
+// but 1PC evaluation was not possible for one reason or another.
+type OnePCNotAllowedError struct{}
+
+var _ error = OnePCNotAllowedError{}
+
+func (OnePCNotAllowedError) Error() string {
+	return "could not commit in one phase as requested"
+}

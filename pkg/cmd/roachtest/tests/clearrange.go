@@ -44,6 +44,7 @@ func registerClearRange(r registry.Registry) {
 		// and may need to be tweaked.
 		r.Add(registry.TestSpec{
 			Name:  fmt.Sprintf(`clearrange/zfs/checks=%t`, checks),
+			Skip:  "Consistently failing. See #70306 and #68420 for context.",
 			Owner: registry.OwnerStorage,
 			// 5h for import, 120 for the test. The import should take closer
 			// to <3:30h but it varies.
