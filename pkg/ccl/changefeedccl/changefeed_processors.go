@@ -497,16 +497,8 @@ func (ca *changeAggregator) tick() error {
 		return err
 	}
 
-	if event.BufferGetTimestamp() == (time.Time{}) {
-		// We could gracefully handle this instead of panic'ing, but
-		// we'd really like to be able to reason about this data, so
-		// instead we're defensive. If this is ever seen in prod without
-		// breaking a unit test, then we have a pretty severe test
-		// coverage issue.
-		panic(`unreachable: bufferGetTimestamp is set by all codepaths`)
-	}
-	processingNanos := timeutil.Since(event.BufferGetTimestamp()).Nanoseconds()
-	ca.metrics.ProcessingNanos.Inc(processingNanos)
+	queuedNanos := timeutil.Since(event.BufferAddTimestamp()).Nanoseconds()
+	ca.metrics.QueueTimeNanos.Inc(queuedNanos)
 
 	switch event.Type() {
 	case kvevent.TypeKV:
