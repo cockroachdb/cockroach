@@ -1718,7 +1718,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	}
 	leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsLeft, nTuples)
 	rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsRight, nTuples)
-	a, err := colexecjoin.NewMergeJoinOp(
+	a := colexecjoin.NewMergeJoinOp(
 		testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
 		colexecop.NewTestingSemaphore(mjFDLimit), descpb.FullOuterJoin,
 		leftSource, rightSource, typs, typs,
@@ -1726,9 +1726,6 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 		testDiskAcc, &evalCtx,
 	)
-	if err != nil {
-		t.Fatal("error in merge join op constructor", err)
-	}
 	a.Init(ctx)
 	i, count, expVal := 0, 0, int64(0)
 	for b := a.Next(); b.Length() != 0; b = a.Next() {
@@ -1791,7 +1788,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 				}
 				leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 				rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
-				a, err := colexecjoin.NewMergeJoinOp(
+				a := colexecjoin.NewMergeJoinOp(
 					testAllocator, execinfra.DefaultMemoryLimit,
 					queueCfg, colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 					leftSource, rightSource, typs, typs,
@@ -1799,9 +1796,6 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					testDiskAcc, &evalCtx,
 				)
-				if err != nil {
-					t.Fatal("error in merge join op constructor", err)
-				}
 				a.Init(ctx)
 				i := 0
 				count := 0
@@ -1869,7 +1863,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					}
 					leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 					rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
-					a, err := colexecjoin.NewMergeJoinOp(
+					a := colexecjoin.NewMergeJoinOp(
 						testAllocator, execinfra.DefaultMemoryLimit,
 						queueCfg, colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 						leftSource, rightSource, typs, typs,
@@ -1877,9 +1871,6 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
 						testDiskAcc, &evalCtx,
 					)
-					if err != nil {
-						t.Fatal("error in merge join op constructor", err)
-					}
 					a.Init(ctx)
 					i := 0
 					count := 0
@@ -1999,7 +1990,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 					leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, lCols, nTuples)
 					rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, rCols, nTuples)
 
-					a, err := colexecjoin.NewMergeJoinOp(
+					a := colexecjoin.NewMergeJoinOp(
 						testAllocator, execinfra.DefaultMemoryLimit,
 						queueCfg, colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 						leftSource, rightSource, typs, typs,
@@ -2007,9 +1998,6 @@ func TestMergeJoinerRandomized(t *testing.T) {
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 						testDiskAcc, &evalCtx,
 					)
-					if err != nil {
-						t.Fatal("error in merge join op constructor", err)
-					}
 					a.Init(ctx)
 					i := 0
 					count := 0

@@ -70,7 +70,7 @@ const (
 // aggType is a helper struct that allows tests to test both the ordered and
 // hash aggregators at the same time.
 type aggType struct {
-	new   func(*colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error)
+	new   func(*colexecagg.NewAggregatorArgs) colexecop.ResettableOperator
 	name  string
 	order ordering
 }
@@ -79,7 +79,7 @@ var aggTypesWithPartial = []aggType{
 	{
 		// This is a wrapper around NewHashAggregator so its signature is
 		// compatible with NewOrderedAggregator.
-		new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
+		new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
 			return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
 		},
 		name:  "hash",
@@ -93,7 +93,7 @@ var aggTypesWithPartial = []aggType{
 	{
 		// This is a wrapper around NewHashAggregator so its signature is
 		// compatible with NewOrderedAggregator.
-		new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
+		new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
 			return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
 		},
 		name:  "hash-partial-order",
@@ -815,7 +815,7 @@ func TestAggregators(t *testing.T) {
 						Constructors:   constructors,
 						ConstArguments: constArguments,
 						OutputTypes:    outputTypes,
-					})
+					}), nil
 				})
 		}
 	}
@@ -932,7 +932,7 @@ func TestAggregatorRandom(t *testing.T) {
 						&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 					)
 					require.NoError(t, err)
-					a, err := agg.new(&colexecagg.NewAggregatorArgs{
+					a := agg.new(&colexecagg.NewAggregatorArgs{
 						Allocator:      testAllocator,
 						MemAccount:     testMemAcc,
 						Input:          source,
@@ -943,9 +943,6 @@ func TestAggregatorRandom(t *testing.T) {
 						ConstArguments: constArguments,
 						OutputTypes:    outputTypes,
 					})
-					if err != nil {
-						t.Fatal(err)
-					}
 					a.Init(context.Background())
 
 					testOutput := colexectestutils.NewOpTestOutput(a, expectedTuples)
@@ -1134,7 +1131,7 @@ func benchmarkAggregateFunction(
 			b.SetBytes(int64(argumentsSize * numInputRows))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				a, err := agg.new(&colexecagg.NewAggregatorArgs{
+				a := agg.new(&colexecagg.NewAggregatorArgs{
 					Allocator:      testAllocator,
 					MemAccount:     testMemAcc,
 					Input:          source,
@@ -1145,9 +1142,6 @@ func benchmarkAggregateFunction(
 					ConstArguments: constArguments,
 					OutputTypes:    outputTypes,
 				})
-				if err != nil {
-					b.Fatal(err)
-				}
 				a.Init(ctx)
 				// Exhaust aggregator until all batches have been read or limit, if
 				// non-zero, is reached.

@@ -13,7 +13,6 @@ package colexec
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -74,14 +73,10 @@ func NewExternalDistinct(
 			projection[i] = uint32(i)
 		}
 		diskBackedWithoutOrdinality := colexecbase.NewSimpleProjectOp(diskBackedSorter, len(sortTypes), projection)
-		diskBackedFallbackOp, err := colexecbase.NewOrderedDistinct(
+		return colexecbase.NewOrderedDistinct(
 			diskBackedWithoutOrdinality, distinctCols, inputTypes,
 			distinctSpec.NullsAreDistinct, distinctSpec.ErrorOnDup,
 		)
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
-		return diskBackedFallbackOp
 	}
 	// We have to be careful to not emit duplicates of already emitted by the
 	// in-memory operator tuples, so we plan a special filterer operator to
