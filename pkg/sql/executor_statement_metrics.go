@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // EngineMetrics groups a set of SQL metrics.
@@ -273,7 +274,7 @@ func getNodesFromPlanner(planner *planner) []int64 {
 	// Retrieve the list of all nodes which the statement was executed on.
 	var nodes []int64
 	if planner.instrumentation.sp != nil {
-		trace := planner.instrumentation.sp.GetRecording()
+		trace := planner.instrumentation.sp.GetRecording(tracing.RecordingStructured)
 		// ForEach returns nodes in order.
 		execinfrapb.ExtractNodesFromSpans(planner.EvalContext().Context, trace).ForEach(func(i int) {
 			nodes = append(nodes, int64(i))

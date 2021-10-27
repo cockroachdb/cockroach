@@ -53,7 +53,7 @@ func TestTracerRecording(t *testing.T) {
 	noop1.Record("hello")
 
 	// Noop span returns empty recording.
-	require.Equal(t, Recording(nil), noop1.GetRecording())
+	require.Equal(t, Recording(nil), noop1.GetRecording(RecordingVerbose))
 
 	noop2 := tr.StartSpan("noop2", WithParentAndManualCollection(noop1.Meta()))
 	if !noop2.IsNoop() {
@@ -71,10 +71,10 @@ func TestTracerRecording(t *testing.T) {
 	}
 
 	// Initial recording of this fresh (real) span.
-	require.Nil(t, s1.GetRecording())
+	require.Nil(t, s1.GetRecording(RecordingStructured))
 
 	s1.RecordStructured(&types.Int32Value{Value: 5})
-	if err := CheckRecording(s1.GetRecording(), `
+	if err := CheckRecording(s1.GetRecording(RecordingStructured), `
 		=== operation:a
 		structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":5}
 	`); err != nil {
@@ -82,7 +82,7 @@ func TestTracerRecording(t *testing.T) {
 	}
 
 	s1.SetVerbose(true)
-	if err := CheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(RecordingVerbose), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 	`); err != nil {
@@ -106,7 +106,7 @@ func TestTracerRecording(t *testing.T) {
 	}
 	s2.Recordf("x=%d", 3)
 
-	if err := CheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(RecordingVerbose), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 			event: x=2
@@ -117,7 +117,7 @@ func TestTracerRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := CheckRecordedSpans(s2.GetRecording(), `
+	if err := CheckRecordedSpans(s2.GetRecording(RecordingVerbose), `
 		span: b
 			tags: _unfinished=1 _verbose=1
 			event: x=3
@@ -131,7 +131,7 @@ func TestTracerRecording(t *testing.T) {
 
 	s2.Finish()
 
-	if err := CheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(RecordingVerbose), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 			event: x=2
@@ -147,7 +147,7 @@ func TestTracerRecording(t *testing.T) {
 	// We Finish() s3, but note that the recording shows it as _unfinished. That's
 	// because s2's recording was snapshotted at the time s2 was finished, above.
 	s3.Finish()
-	if err := CheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(RecordingVerbose), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 			event: x=2
@@ -163,11 +163,11 @@ func TestTracerRecording(t *testing.T) {
 	s1.ResetRecording()
 	s1.SetVerbose(false)
 	s1.Recordf("x=%d", 100)
-	require.Nil(t, s1.GetRecording())
+	require.Nil(t, s1.GetRecording(RecordingStructured))
 
 	// The child Span, now finished, will drop future recordings.
 	s3.Recordf("x=%d", 5)
-	if err := CheckRecordedSpans(s3.GetRecording(), `
+	if err := CheckRecordedSpans(s3.GetRecording(RecordingVerbose), `
 		span: c
 			tags: _verbose=1 tag=val
 			event: x=4
@@ -185,7 +185,7 @@ func TestStartChildSpan(t *testing.T) {
 	sp2.Finish()
 	sp1.Finish()
 
-	if err := CheckRecordedSpans(sp1.GetRecording(), `
+	if err := CheckRecordedSpans(sp1.GetRecording(RecordingVerbose), `
 		span: parent
 			tags: _verbose=1
 			span: child
@@ -199,13 +199,13 @@ func TestStartChildSpan(t *testing.T) {
 	sp2 = tr.StartSpan("child", WithParentAndManualCollection(sp1.Meta()))
 	sp2.Finish()
 	sp1.Finish()
-	if err := CheckRecordedSpans(sp1.GetRecording(), `
+	if err := CheckRecordedSpans(sp1.GetRecording(RecordingVerbose), `
 		span: parent
 			tags: _verbose=1
 	`); err != nil {
 		t.Fatal(err)
 	}
-	if err := CheckRecordedSpans(sp2.GetRecording(), `
+	if err := CheckRecordedSpans(sp2.GetRecording(RecordingVerbose), `
 		span: child
 			tags: _verbose=1
 	`); err != nil {
@@ -218,7 +218,7 @@ func TestStartChildSpan(t *testing.T) {
 		WithLogTags(logtags.SingleTagBuffer("key", "val")))
 	sp2.Finish()
 	sp1.Finish()
-	if err := CheckRecordedSpans(sp1.GetRecording(), `
+	if err := CheckRecordedSpans(sp1.GetRecording(RecordingVerbose), `
 		span: parent
 			tags: _verbose=1
 			span: child
@@ -246,7 +246,7 @@ func TestSterileSpan(t *testing.T) {
 
 	sp2.Finish()
 	sp3.Finish()
-	require.NoError(t, CheckRecordedSpans(sp1.GetRecording(), `
+	require.NoError(t, CheckRecordedSpans(sp1.GetRecording(RecordingVerbose), `
 		span: parent
 			tags: _unfinished=1 _verbose=1
 	`))
@@ -316,7 +316,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	s2.Finish()
 
 	// Verify that recording was started automatically.
-	rec := s2.GetRecording()
+	rec := s2.GetRecording(RecordingVerbose)
 	if err := CheckRecordedSpans(rec, `
 		span: remote op
 			tags: _verbose=1
@@ -325,7 +325,7 @@ func TestTracerInjectExtract(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := CheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(RecordingVerbose), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 	`); err != nil {
@@ -335,7 +335,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	s1.ImportRemoteSpans(rec)
 	s1.Finish()
 
-	if err := CheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(RecordingVerbose), `
 		span: a
 			tags: _verbose=1
 			span: remote op
@@ -452,7 +452,7 @@ func getSpanOpsWithFinished(t *testing.T, tr *Tracer) map[string]bool {
 	spanOpsWithFinished := make(map[string]bool)
 
 	require.NoError(t, tr.VisitSpans(func(sp RegistrySpan) error {
-		for _, rec := range sp.GetRecording() {
+		for _, rec := range sp.GetRecording(RecordingVerbose) {
 			spanOpsWithFinished[rec.Operation] = rec.Finished
 		}
 		return nil
@@ -469,7 +469,7 @@ func getSortedSpanOps(t *testing.T, tr *Tracer) []string {
 	var spanOps []string
 
 	require.NoError(t, tr.VisitSpans(func(sp RegistrySpan) error {
-		for _, rec := range sp.GetRecording() {
+		for _, rec := range sp.GetRecording(RecordingVerbose) {
 			spanOps = append(spanOps, rec.Operation)
 		}
 		return nil
@@ -494,7 +494,7 @@ func TestTracer_VisitSpans(t *testing.T) {
 	childChildFinished := tr2.StartSpan("root.child.remotechilddone", WithParentAndManualCollection(child.Meta()))
 	require.Len(t, tr2.activeSpansRegistry.mu.m, 2)
 
-	child.ImportRemoteSpans(childChildFinished.GetRecording())
+	child.ImportRemoteSpans(childChildFinished.GetRecording(RecordingVerbose))
 
 	childChildFinished.Finish()
 	require.Len(t, tr2.activeSpansRegistry.mu.m, 1)
@@ -528,7 +528,7 @@ func TestSpanRecordingFinished(t *testing.T) {
 
 	tr2 := NewTracer()
 	remoteChildChild := tr2.StartSpan("root.child.remotechild", WithParentAndManualCollection(child.Meta()))
-	child.ImportRemoteSpans(remoteChildChild.GetRecording())
+	child.ImportRemoteSpans(remoteChildChild.GetRecording(RecordingVerbose))
 
 	// All spans are un-finished.
 	sortedSpanOps := getSortedSpanOps(t, tr1)
@@ -559,7 +559,7 @@ func TestSpanRecordingFinished(t *testing.T) {
 	remoteChildChild.Finish()
 	// NB: importing a span twice is essentially a bad idea. It's ok in
 	// this test though.
-	child.ImportRemoteSpans(remoteChildChild.GetRecording())
+	child.ImportRemoteSpans(remoteChildChild.GetRecording(RecordingVerbose))
 	child.Finish()
 	spanOpsWithFinished = getSpanOpsWithFinished(t, tr1)
 
@@ -621,7 +621,7 @@ func TestConcurrentChildAndRecording(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			_ = rootSp.GetRecording()
+			_ = rootSp.GetRecording(RecordingVerbose)
 		}()
 	}
 	wg.Wait()
@@ -636,7 +636,7 @@ func TestFinishedSpanInRecording(t *testing.T) {
 
 	// Check that s2 is included in the recording both before and after it's
 	// finished.
-	require.NoError(t, CheckRecordedSpans(s1.GetRecording(), `
+	require.NoError(t, CheckRecordedSpans(s1.GetRecording(RecordingVerbose), `
 span: a
     tags: _unfinished=1 _verbose=1
     span: b
@@ -645,7 +645,7 @@ span: a
             tags: _unfinished=1 _verbose=1
 `))
 	s3.Finish()
-	require.NoError(t, CheckRecordedSpans(s1.GetRecording(), `
+	require.NoError(t, CheckRecordedSpans(s1.GetRecording(RecordingVerbose), `
 span: a
     tags: _unfinished=1 _verbose=1
     span: b
@@ -654,7 +654,7 @@ span: a
             tags: _verbose=1
 `))
 	s2.Finish()
-	require.NoError(t, CheckRecordedSpans(s1.GetRecording(), `
+	require.NoError(t, CheckRecordedSpans(s1.GetRecording(RecordingVerbose), `
 span: a
     tags: _unfinished=1 _verbose=1
     span: b
@@ -671,7 +671,7 @@ span: a
 
 	s2.Finish()
 	s1.Finish()
-	require.NoError(t, CheckRecordedSpans(s1.GetRecording(), `
+	require.NoError(t, CheckRecordedSpans(s1.GetRecording(RecordingVerbose), `
 span: a
     tags: _verbose=1
     span: b

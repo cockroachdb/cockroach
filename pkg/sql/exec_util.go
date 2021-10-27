@@ -1999,9 +1999,9 @@ func (st *SessionTracing) getSessionTrace() ([]traceRow, error) {
 func (st *SessionTracing) getRecording() []tracingpb.RecordedSpan {
 	var spans []tracingpb.RecordedSpan
 	if st.firstTxnSpan != nil {
-		spans = append(spans, st.firstTxnSpan.GetRecording()...)
+		spans = append(spans, st.firstTxnSpan.GetRecording(tracing.RecordingVerbose)...)
 	}
-	return append(spans, st.connSpan.GetRecording()...)
+	return append(spans, st.connSpan.GetRecording(tracing.RecordingVerbose)...)
 }
 
 // StartTracing starts "session tracing". From this moment on, everything
@@ -2106,11 +2106,11 @@ func (st *SessionTracing) StopTracing() error {
 	// Accumulate all recordings and finish the tracing spans.
 	var spans []tracingpb.RecordedSpan
 	if st.firstTxnSpan != nil {
-		spans = append(spans, st.firstTxnSpan.GetRecording()...)
+		spans = append(spans, st.firstTxnSpan.GetRecording(tracing.RecordingVerbose)...)
 		st.firstTxnSpan.Finish()
 		st.firstTxnSpan = nil
 	}
-	spans = append(spans, st.connSpan.GetRecording()...)
+	spans = append(spans, st.connSpan.GetRecording(tracing.RecordingVerbose)...)
 	st.connSpan.Finish()
 	st.connSpan = nil
 	st.ex.ctxHolder.unhijack()

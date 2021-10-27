@@ -56,7 +56,7 @@ func TestTxnVerboseTrace(t *testing.T) {
 	}
 	log.Event(ctx, "txn complete")
 	sp.Finish()
-	collectedSpans := sp.GetRecording()
+	collectedSpans := sp.GetRecording(tracing.RecordingVerbose)
 	dump := collectedSpans.String()
 	// dump:
 	//    0.105ms      0.000ms    event:inside txn

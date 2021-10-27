@@ -883,7 +883,7 @@ type RegistrySpan interface {
 	TraceID() tracingpb.TraceID
 
 	// GetRecording returns the recording of the trace rooted at this span.
-	GetRecording() Recording
+	GetRecording(recType RecordingType) Recording
 
 	// SetVerboseRecursively sets the verbosity of the span appropriately and
 	// recurses on its children.
@@ -1061,7 +1061,11 @@ func ContextWithRecordingSpan(
 		sp.Finish()
 		tr.Close()
 	}
-	return ctx, sp.GetRecording, cancel
+	return ctx,
+		func() Recording {
+			return sp.GetRecording(RecordingVerbose)
+		},
+		cancel
 }
 
 // makeOtelSpan creates an OpenTelemetry span. If either of localParent or
