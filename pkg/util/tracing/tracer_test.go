@@ -179,8 +179,7 @@ func TestTracerRecording(t *testing.T) {
 
 func TestStartChildSpan(t *testing.T) {
 	tr := NewTracer()
-	sp1 := tr.StartSpan("parent", WithForceRealSpan())
-	sp1.SetVerbose(true)
+	sp1 := tr.StartSpan("parent", WithRecording(RecordingVerbose))
 	sp2 := tr.StartSpan("child", WithParentAndAutoCollection(sp1))
 	sp2.Finish()
 	sp1.Finish()
@@ -194,8 +193,7 @@ func TestStartChildSpan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sp1 = tr.StartSpan("parent", WithForceRealSpan())
-	sp1.SetVerbose(true)
+	sp1 = tr.StartSpan("parent", WithRecording(RecordingVerbose))
 	sp2 = tr.StartSpan("child", WithParentAndManualCollection(sp1.Meta()))
 	sp2.Finish()
 	sp1.Finish()
@@ -212,8 +210,7 @@ func TestStartChildSpan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sp1 = tr.StartSpan("parent", WithForceRealSpan())
-	sp1.SetVerbose(true)
+	sp1 = tr.StartSpan("parent", WithRecording(RecordingVerbose))
 	sp2 = tr.StartSpan("child", WithParentAndAutoCollection(sp1),
 		WithLogTags(logtags.SingleTagBuffer("key", "val")))
 	sp2.Finish()
@@ -232,10 +229,9 @@ func TestSterileSpan(t *testing.T) {
 	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
 
 	// Check that a children of sterile spans are roots.
-	sp1 := tr.StartSpan("parent", WithSterile())
 	// Make the span verbose so that we can use its recording below to assert that
 	// there were no children.
-	sp1.SetVerbose(true)
+	sp1 := tr.StartSpan("parent", WithSterile(), WithRecording(RecordingVerbose))
 	sp2 := tr.StartSpan("child", WithParentAndAutoCollection(sp1))
 	require.Zero(t, sp2.i.crdb.parentSpanID)
 
@@ -292,8 +288,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	// Verify that verbose tracing is propagated and triggers verbosity on the
 	// remote side.
 
-	s1 := tr.StartSpan("a", WithForceRealSpan())
-	s1.SetVerbose(true)
+	s1 := tr.StartSpan("a", WithRecording(RecordingVerbose))
 
 	carrier = metadataCarrier{metadata.MD{}}
 	if err := tr.InjectMetaInto(s1.Meta(), carrier); err != nil {
@@ -485,8 +480,7 @@ func TestTracer_VisitSpans(t *testing.T) {
 	tr1 := NewTracer()
 	tr2 := NewTracer()
 
-	root := tr1.StartSpan("root", WithForceRealSpan())
-	root.SetVerbose(true)
+	root := tr1.StartSpan("root", WithRecording(RecordingVerbose))
 	child := tr1.StartSpan("root.child", WithParentAndAutoCollection(root))
 	require.Len(t, tr1.activeSpansRegistry.mu.m, 1)
 
@@ -520,8 +514,7 @@ func TestTracer_VisitSpans(t *testing.T) {
 // in-flight trace have recordings indicating that they have, in fact, finished.
 func TestSpanRecordingFinished(t *testing.T) {
 	tr1 := NewTracer()
-	root := tr1.StartSpan("root", WithForceRealSpan())
-	root.SetVerbose(true)
+	root := tr1.StartSpan("root", WithRecording(RecordingVerbose))
 
 	child := tr1.StartSpan("root.child", WithParentAndAutoCollection(root))
 	childChild := tr1.StartSpan("root.child.child", WithParentAndAutoCollection(child))
@@ -605,8 +598,7 @@ func TestSpanWithNoopParentIsInActiveSpans(t *testing.T) {
 
 func TestConcurrentChildAndRecording(t *testing.T) {
 	tr := NewTracer()
-	rootSp := tr.StartSpan("root", WithForceRealSpan())
-	rootSp.SetVerbose(true)
+	rootSp := tr.StartSpan("root", WithRecording(RecordingVerbose))
 	var wg sync.WaitGroup
 	const n = 1000
 	wg.Add(2 * n)
@@ -629,8 +621,7 @@ func TestConcurrentChildAndRecording(t *testing.T) {
 
 func TestFinishedSpanInRecording(t *testing.T) {
 	tr := NewTracer()
-	s1 := tr.StartSpan("a", WithForceRealSpan())
-	s1.SetVerbose(true)
+	s1 := tr.StartSpan("a", WithRecording(RecordingVerbose))
 	s2 := tr.StartSpan("b", WithParentAndAutoCollection(s1))
 	s3 := tr.StartSpan("c", WithParentAndAutoCollection(s2))
 
@@ -664,8 +655,7 @@ span: a
 `))
 
 	// Now the same thing, but finish s2 first.
-	s1 = tr.StartSpan("a", WithForceRealSpan())
-	s1.SetVerbose(true)
+	s1 = tr.StartSpan("a", WithRecording(RecordingVerbose))
 	s2 = tr.StartSpan("b", WithParentAndAutoCollection(s1))
 	tr.StartSpan("c", WithParentAndAutoCollection(s2))
 

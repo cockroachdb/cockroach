@@ -34,8 +34,7 @@ func TestRecordingString(t *testing.T) {
 	tr := NewTracer()
 	tr2 := NewTracer()
 
-	root := tr.StartSpan("root", WithForceRealSpan())
-	root.SetVerbose(true)
+	root := tr.StartSpan("root", WithRecording(RecordingVerbose))
 	root.Record("root 1")
 	{
 		// Hackily fix the timing on the first log message, so that we can check it later.
@@ -145,10 +144,8 @@ func parseLine(s string) (traceLine, error) {
 func TestRecordingInRecording(t *testing.T) {
 	tr := NewTracer()
 
-	root := tr.StartSpan("root", WithForceRealSpan())
-	root.SetVerbose(true)
-	child := tr.StartSpan("child", WithParentAndAutoCollection(root), WithForceRealSpan())
-	child.SetVerbose(true)
+	root := tr.StartSpan("root", WithRecording(RecordingVerbose))
+	child := tr.StartSpan("child", WithParentAndAutoCollection(root), WithRecording(RecordingVerbose))
 	// The remote grandchild is also recording, however since it's remote the spans
 	// have to be imported into the parent manually (this would usually happen via
 	// code at the RPC boundaries).
@@ -187,7 +184,7 @@ func TestRecordingInRecording(t *testing.T) {
 func TestImportRemoteSpans(t *testing.T) {
 	for _, verbose := range []bool{false, true} {
 		t.Run(fmt.Sprintf("%s=%t", "verbose-child=", verbose), func(t *testing.T) {
-			tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
+			tr := NewTracerWithOpt(context.Background())
 			sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 			ch := tr.StartSpan("child", WithParentAndManualCollection(sp.Meta()))
 			ch.RecordStructured(&types.Int32Value{Value: 4})
@@ -297,9 +294,8 @@ func TestSpanRecordLimit(t *testing.T) {
 	clock := &timeutil.ManualTime{}
 	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{Clock: clock}))
 
-	sp := tr.StartSpan("root", WithForceRealSpan())
+	sp := tr.StartSpan("root", WithRecording(RecordingVerbose))
 	defer sp.Finish()
-	sp.SetVerbose(true)
 
 	msg := func(i int) string { return fmt.Sprintf("msg: %10d", i) }
 
@@ -350,9 +346,8 @@ func TestSpanReset(t *testing.T) {
 	clock := &timeutil.ManualTime{}
 	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{Clock: clock}))
 
-	sp := tr.StartSpan("root", WithForceRealSpan())
+	sp := tr.StartSpan("root", WithRecording(RecordingVerbose))
 	defer sp.Finish()
-	sp.SetVerbose(true)
 
 	for i := 1; i <= 10; i++ {
 		if i%2 == 0 {

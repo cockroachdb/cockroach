@@ -187,8 +187,7 @@ func TestGRPCInterceptors(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, sp := tr.StartSpanCtx(context.Background(), "root", tracing.WithForceRealSpan())
-			sp.SetVerbose(true) // to set the tags
+			ctx, sp := tr.StartSpanCtx(context.Background(), "root", tracing.WithRecording(tracing.RecordingVerbose))
 			recAny, err := tc.do(ctx)
 			require.NoError(t, err)
 			var rec tracingpb.RecordedSpan
