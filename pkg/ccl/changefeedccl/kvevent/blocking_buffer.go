@@ -129,7 +129,6 @@ func (b *blockingBuffer) Get(ctx context.Context) (ev Event, err error) {
 		if got != nil {
 			b.metrics.BufferEntriesOut.Inc(1)
 			e := got.e
-			e.bufferGetTimestamp = timeutil.Now()
 			bufferEntryPool.Put(got)
 			return e, nil
 		}
@@ -203,6 +202,7 @@ func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 		entries: 1,
 		ap:      &b.qp,
 	}
+	e.bufferAddTimestamp = timeutil.Now()
 	be := newBufferEntry(e)
 
 	if err := b.qp.Acquire(ctx, be); err != nil {
