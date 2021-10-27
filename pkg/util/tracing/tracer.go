@@ -927,9 +927,9 @@ type RegistrySpan interface {
 	// GetRecording returns the recording of the trace rooted at this span.
 	GetRecording(recType RecordingType) Recording
 
-	// SetVerboseRecursively sets the verbosity of the span appropriately and
+	// SetVerbose sets the verbosity of the span appropriately and
 	// recurses on its children.
-	SetVerboseRecursively(to bool)
+	SetVerbose(to bool)
 }
 
 var _ RegistrySpan = &crdbSpan{}

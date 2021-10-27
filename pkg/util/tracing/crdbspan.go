@@ -665,8 +665,8 @@ func (s *crdbSpan) parentFinished() {
 	s.mu.parent = nil
 }
 
-// SetVerboseRecursively is part of the RegistrySpan interface.
-func (s *crdbSpan) SetVerboseRecursively(to bool) {
+// SetVerbose is part of the RegistrySpan interface.
+func (s *crdbSpan) SetVerbose(to bool) {
 	if to {
 		s.enableRecording(RecordingVerbose)
 	} else {
@@ -676,7 +676,7 @@ func (s *crdbSpan) SetVerboseRecursively(to bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, child := range s.mu.recording.openChildren {
-		child.SetVerboseRecursively(to)
+		child.SetVerbose(to)
 	}
 
 	// TODO(andrei): The children that have started while this span was not
