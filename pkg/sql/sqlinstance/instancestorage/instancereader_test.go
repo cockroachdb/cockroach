@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sltest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -44,7 +44,7 @@ func TestReader(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	setup := func(t *testing.T) (
-		*stop.Stopper, *instancestorage.Storage, *slstorage.FakeStorage, *hlc.Clock, *instancestorage.Reader,
+		*stop.Stopper, *instancestorage.Storage, *sltest.FakeStorage, *hlc.Clock, *instancestorage.Reader,
 	) {
 		dbName := t.Name()
 		tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
@@ -57,7 +57,7 @@ func TestReader(t *testing.T) {
 			return timeutil.NewTestTimeSource().Now().UnixNano()
 		}, base.DefaultMaxClockOffset)
 		stopper := stop.NewStopper()
-		slStorage := slstorage.NewFakeStorage()
+		slStorage := sltest.NewFakeStorage()
 		storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage)
 		reader := instancestorage.NewReader(storage, slStorage)
 		return stopper, storage, slStorage, clock, reader

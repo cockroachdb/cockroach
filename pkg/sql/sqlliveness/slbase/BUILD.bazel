@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "slbase",
+    srcs = ["testing_knobs.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/sqlliveness",
+        "//pkg/util/timeutil",
+    ],
+)

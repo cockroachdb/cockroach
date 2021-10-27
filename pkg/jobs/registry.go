@@ -105,7 +105,7 @@ type Registry struct {
 	// adoptionChan is used to nudge the registry to resume claimed jobs and
 	// potentially attempt to claim jobs.
 	adoptionCh  chan adoptionNotice
-	sqlInstance sqlliveness.Instance
+	sqlInstance sqlliveness.SessionFactory
 
 	// sessionBoundInternalExecutorFactory provides a way for jobs to create
 	// internal executors. This is rarely needed, and usually job resumers should
@@ -172,7 +172,7 @@ func MakeRegistry(
 	db *kv.DB,
 	ex sqlutil.InternalExecutor,
 	nodeID *base.SQLIDContainer,
-	sqlInstance sqlliveness.Instance,
+	sqlInstance sqlliveness.SessionFactory,
 	settings *cluster.Settings,
 	histogramWindowInterval time.Duration,
 	execCtxFn jobExecCtxMaker,

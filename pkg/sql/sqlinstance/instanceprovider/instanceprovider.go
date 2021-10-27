@@ -39,7 +39,7 @@ type provider struct {
 	storage      writer
 	stopper      *stop.Stopper
 	instanceAddr string
-	session      sqlliveness.Instance
+	session      sqlliveness.SessionFactory
 	initOnce     sync.Once
 	initialized  chan struct{}
 	instanceID   base.SQLInstanceID

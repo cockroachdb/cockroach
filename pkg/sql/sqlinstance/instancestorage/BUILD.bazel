@@ -51,7 +51,7 @@ go_test(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlliveness",
-        "//pkg/sql/sqlliveness/slstorage",
+        "//pkg/sql/sqlliveness/sltest",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

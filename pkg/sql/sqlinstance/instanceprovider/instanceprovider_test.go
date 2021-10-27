@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instanceprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slsession"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sltest"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -39,7 +39,7 @@ func TestInstanceProvider(t *testing.T) {
 
 	ctx := context.Background()
 	setup := func(t *testing.T) (
-		*stop.Stopper, *slinstance.Instance, *hlc.Clock,
+		*stop.Stopper, *slsession.Factory, *hlc.Clock,
 	) {
 		timeSource := timeutil.NewTestTimeSource()
 		clock := hlc.NewClock(func() int64 {
@@ -50,8 +50,8 @@ func TestInstanceProvider(t *testing.T) {
 			clusterversion.TestingBinaryMinSupportedVersion,
 			true /* initializeVersion */)
 		stopper := stop.NewStopper()
-		fakeStorage := slstorage.NewFakeStorage()
-		slInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+		fakeStorage := sltest.NewFakeStorage()
+		slInstance := slsession.NewFactory(stopper, clock, fakeStorage, settings, nil)
 		return stopper, slInstance, clock
 	}
 

@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sltest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -51,7 +51,7 @@ func TestStorage(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	setup := func(t *testing.T) (
-		*stop.Stopper, *instancestorage.Storage, *slstorage.FakeStorage, *hlc.Clock,
+		*stop.Stopper, *instancestorage.Storage, *sltest.FakeStorage, *hlc.Clock,
 	) {
 		dbName := t.Name()
 		tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
@@ -64,7 +64,7 @@ func TestStorage(t *testing.T) {
 			return timeutil.NewTestTimeSource().Now().UnixNano()
 		}, base.DefaultMaxClockOffset)
 		stopper := stop.NewStopper()
-		slStorage := slstorage.NewFakeStorage()
+		slStorage := sltest.NewFakeStorage()
 		storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage)
 		return stopper, storage, slStorage, clock
 	}
@@ -211,7 +211,7 @@ func TestSQLAccess(t *testing.T) {
 	tableID := getTableID(t, tDB, dbName, "sql_instances")
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slstorage.NewFakeStorage())
+	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, sltest.NewFakeStorage())
 	const (
 		sessionID       = sqlliveness.SessionID("session")
 		addr            = "addr"
@@ -264,7 +264,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 	tDB.Exec(t, schema)
 	tableID := getTableID(t, tDB, dbName, "sql_instances")
 	stopper := stop.NewStopper()
-	slStorage := slstorage.NewFakeStorage()
+	slStorage := sltest.NewFakeStorage()
 	defer stopper.Stop(ctx)
 	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage)
 

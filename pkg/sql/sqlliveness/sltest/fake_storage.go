@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package slstorage
+package sltest
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -32,6 +33,21 @@ func NewFakeStorage() *FakeStorage {
 	fs := &FakeStorage{}
 	fs.mu.sessions = make(map[sqlliveness.SessionID]hlc.Timestamp)
 	return fs
+}
+
+var _ slstorage.Writer = (*FakeStorage)(nil)
+
+// DeleteExpiredSessions implements the slstorage.Writer interface.
+func (s *FakeStorage) DeleteExpiredSessions(
+	ctx context.Context, now hlc.Timestamp, excluded sqlliveness.SessionID,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for sid, exp := range s.mu.sessions {
+		if exp.Less(now) && sid != excluded {
+			delete(s.mu.sessions, sid)
+		}
+	}
 }
 
 // IsAlive implements the sqlliveness.Storage interface.

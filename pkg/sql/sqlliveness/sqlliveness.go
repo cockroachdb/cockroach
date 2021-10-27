@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/hex"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -43,10 +42,10 @@ type Provider interface {
 	CachedReader() Reader
 }
 
-// Liveness exposes Reader and Instance interfaces.
+// Liveness exposes Reader and SessionFactory interfaces.
 type Liveness interface {
 	Reader
-	Instance
+	SessionFactory
 }
 
 // String returns a hex-encoded version of the SessionID.
@@ -64,10 +63,14 @@ func (s SessionID) UnsafeBytes() []byte {
 	return encoding.UnsafeConvertStringToBytes(string(s))
 }
 
-// Instance represents a SQL tenant server instance and is responsible for
-// maintaining at most once session for this instance and heart beating the
+// SessionFactory represents a SQL server instance and is responsible for
+// maintaining sessions for this instance and heart beating the
 // current live one if it exists and otherwise creating a new live one.
-type Instance interface {
+//
+// In tenant pods, this factory only ever creates one session.
+type SessionFactory interface {
+
+	// Session blocks until a live session can be returned.
 	Session(context.Context) (Session, error)
 }
 
@@ -77,7 +80,7 @@ type Session interface {
 
 	// Expiration is the current expiration value for this Session. If the Session
 	// expires, this function will return a zero-value timestamp.
-	// Transactions run by this Instance which ensure that they commit before
+	// Transactions run by this SessionFactory which ensure that they commit before
 	// this time will be assured that any resources claimed under this session
 	// are known to be valid.
 	Expiration() hlc.Timestamp
@@ -88,21 +91,9 @@ type Session interface {
 // Reader abstracts over the state of session records.
 type Reader interface {
 	// IsAlive is used to query the liveness of a Session typically by another
-	// Instance that is attempting to claim expired resources.
+	// SessionFactory that is attempting to claim expired resources.
 	IsAlive(context.Context, SessionID) (alive bool, err error)
 }
-
-// TestingKnobs contains test knobs for sqlliveness system behavior.
-type TestingKnobs struct {
-	// SessionOverride is used to override the returned session.
-	// If it returns nil, nil the underlying instance will be used.
-	SessionOverride func(ctx context.Context) (Session, error)
-}
-
-var _ base.ModuleTestingKnobs = &TestingKnobs{}
-
-// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
-func (*TestingKnobs) ModuleTestingKnobs() {}
 
 // NotStartedError can be returned from calls to the sqlliveness subsystem
 // prior to its being started.
