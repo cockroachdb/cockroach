@@ -162,6 +162,7 @@ func runMetaTest(run testRun) {
 // for matching outputs by the test suite between different options of Pebble.
 func TestPebbleEquivalence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 72077, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
