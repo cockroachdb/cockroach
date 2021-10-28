@@ -692,6 +692,26 @@ func TestSleepUntilContextCancellation(t *testing.T) {
 	require.Equal(t, context.DeadlineExceeded, err)
 }
 
+func TestTryStripSynthetic(t *testing.T) {
+	m := NewManualClock(100000)
+	c := NewClock(m.UnixNano, 0)
+
+	// Equal.
+	tsBefore := c.Now().Add(0, 1).WithSynthetic(true)
+	tsAfter := c.TryStripSynthetic(tsBefore)
+	require.Equal(t, tsBefore.WithSynthetic(false), tsAfter)
+
+	// Less.
+	tsBefore = c.Now().Add(-100, 0).WithSynthetic(true)
+	tsAfter = c.TryStripSynthetic(tsBefore)
+	require.Equal(t, tsBefore.WithSynthetic(false), tsAfter)
+
+	// Greater.
+	tsBefore = c.Now().Add(100, 0).WithSynthetic(true)
+	tsAfter = c.TryStripSynthetic(tsBefore)
+	require.Equal(t, tsBefore.WithSynthetic(true), tsAfter)
+}
+
 func BenchmarkUpdate(b *testing.B) {
 	b.StopTimer()
 

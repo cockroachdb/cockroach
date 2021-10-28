@@ -295,6 +295,7 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 	tc.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
 		st:    tcf.st,
 		knobs: &tcf.testingKnobs,
+		clock: tc.clock,
 		riGen: riGen,
 		// We can only allow refresh span retries on root transactions
 		// because those are the only places where we have all of the

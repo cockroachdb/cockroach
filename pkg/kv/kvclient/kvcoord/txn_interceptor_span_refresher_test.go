@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -28,9 +29,11 @@ import (
 
 func makeMockTxnSpanRefresher() (txnSpanRefresher, *mockLockedSender) {
 	mockSender := &mockLockedSender{}
+	manual := hlc.NewManualClock(123)
 	return txnSpanRefresher{
 		st:                            cluster.MakeTestingClusterSettings(),
 		knobs:                         new(ClientTestingKnobs),
+		clock:                         hlc.NewClock(manual.UnixNano, time.Nanosecond),
 		wrapped:                       mockSender,
 		canAutoRetry:                  true,
 		refreshSuccess:                metric.NewCounter(metaRefreshSuccess),
@@ -386,10 +389,12 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 	txn := makeTxnProto()
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 
-	// Push the txn so that it needs a refresh.
-	txn.WriteTimestamp = txn.WriteTimestamp.Add(1, 0)
+	// Push the txn so that it needs a refresh. Mark the timestamp as synthetic,
+	// which will be stripped before a refresh because the timestamp trails the
+	// local clock.
+	txn.WriteTimestamp = txn.WriteTimestamp.Add(1, 0).WithSynthetic(true)
 	origReadTs := txn.ReadTimestamp
-	pushedWriteTs := txn.WriteTimestamp
+	pushedWriteTs := txn.WriteTimestamp.WithSynthetic(false)
 
 	// Send an EndTxn request that will need a refresh to succeed. Because
 	// no refresh spans have been recorded, the preemptive refresh should be

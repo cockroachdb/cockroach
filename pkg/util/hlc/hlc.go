@@ -563,3 +563,15 @@ func (c *Clock) SleepUntil(ctx context.Context, t Timestamp) error {
 		}
 	}
 }
+
+// TryStripSynthetic uses the clock to try to strip the synthetic bit from the
+// provided timestamp, if the bit is set. This is possible if the clock leads
+// the provided timestamp, because in that case we know that the timestamp is a
+// representation of real time.
+func (c *Clock) TryStripSynthetic(t Timestamp) Timestamp {
+	if !t.Synthetic {
+		// Fast-path.
+		return t
+	}
+	return t.WithSynthetic(c.Now().Less(t))
+}

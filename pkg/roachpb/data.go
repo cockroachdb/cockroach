@@ -1425,12 +1425,10 @@ func PrepareTransactionForRetry(
 	}
 
 	txn := *pErr.GetTxn()
-	aborted := false
 	switch tErr := pErr.GetDetail().(type) {
 	case *TransactionAbortedError:
 		// The txn coming with a TransactionAbortedError is not supposed to be used
 		// for the restart. Instead, a brand new transaction is created.
-		aborted = true
 		// TODO(andrei): Should we preserve the ObservedTimestamps across the
 		// restart?
 		errTxnPri := txn.Priority
@@ -1449,6 +1447,8 @@ func PrepareTransactionForRetry(
 		)
 		// Use the priority communicated back by the server.
 		txn.Priority = errTxnPri
+		// Don't fall through to the restart.
+		return txn
 	case *ReadWithinUncertaintyIntervalError:
 		txn.WriteTimestamp.Forward(readWithinUncertaintyIntervalRetryTimestamp(tErr))
 	case *TransactionPushError:
@@ -1466,12 +1466,15 @@ func PrepareTransactionForRetry(
 	default:
 		log.Fatalf(ctx, "invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
 	}
-	if !aborted {
-		if txn.Status.IsFinalized() {
-			log.Fatalf(ctx, "transaction unexpectedly finalized in (%T): %s", pErr.GetDetail(), pErr)
-		}
-		txn.Restart(pri, txn.Priority, txn.WriteTimestamp)
+
+	// Use the clock to try to strip a synthetic bit from the transaction
+	// timestamp before retrying, if necessary.
+	txn.WriteTimestamp = clock.TryStripSynthetic(txn.WriteTimestamp)
+	// Assert that the transaction is not finalized.
+	if txn.Status.IsFinalized() {
+		log.Fatalf(ctx, "transaction unexpectedly finalized in (%T): %s", pErr.GetDetail(), pErr)
 	}
+	txn.Restart(pri, txn.Priority, txn.WriteTimestamp)
 	return txn
 }
 
@@ -1492,7 +1495,9 @@ func PrepareTransactionForRefresh(txn *Transaction, timestamp hlc.Timestamp) (bo
 // supplied error can be retried at a refreshed timestamp to avoid a client-side
 // transaction restart. If true, returns a cloned, updated Transaction object
 // with the provisional commit timestamp and read timestamp set appropriately.
-func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction) {
+func CanTransactionRefresh(
+	ctx context.Context, pErr *Error, clock *hlc.Clock,
+) (bool, *Transaction) {
 	txn := pErr.GetTxn()
 	if txn == nil {
 		return false, nil
@@ -1515,6 +1520,9 @@ func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction
 	default:
 		return false, nil
 	}
+	// Use the clock to try to strip a synthetic bit from the transaction
+	// timestamp before refreshing, if necessary.
+	timestamp = clock.TryStripSynthetic(timestamp)
 	return PrepareTransactionForRefresh(txn, timestamp)
 }
 

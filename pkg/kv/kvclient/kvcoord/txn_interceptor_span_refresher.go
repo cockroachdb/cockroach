@@ -104,6 +104,7 @@ var MaxTxnRefreshSpansBytes = settings.RegisterIntSetting(
 type txnSpanRefresher struct {
 	st      *cluster.Settings
 	knobs   *ClientTestingKnobs
+	clock   *hlc.Clock
 	riGen   rangeIteratorFactory
 	wrapped lockedSender
 
@@ -296,7 +297,7 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	ctx context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error, maxRefreshAttempts int,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Check for an error which can be retried after updating spans.
-	canRefreshTxn, refreshTxn := roachpb.CanTransactionRefresh(ctx, pErr)
+	canRefreshTxn, refreshTxn := roachpb.CanTransactionRefresh(ctx, pErr, sr.clock)
 	if !canRefreshTxn || !sr.canAutoRetry {
 		return nil, pErr
 	}
@@ -445,7 +446,9 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
 		return ba, nil
 	}
 
-	canRefreshTxn, refreshTxn := roachpb.PrepareTransactionForRefresh(ba.Txn, ba.Txn.WriteTimestamp)
+	refreshTs := ba.Txn.WriteTimestamp
+	refreshTs = sr.clock.TryStripSynthetic(refreshTs)
+	canRefreshTxn, refreshTxn := roachpb.PrepareTransactionForRefresh(ba.Txn, refreshTs)
 	if !canRefreshTxn || !sr.canAutoRetry {
 		return roachpb.BatchRequest{}, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn)
 	}

@@ -530,6 +530,7 @@ func canDoServersideRetry(
 	br *roachpb.BatchResponse,
 	latchSpans *spanset.SpanSet,
 	deadline *hlc.Timestamp,
+	clock *hlc.Clock,
 ) bool {
 	if ba.Txn != nil {
 		if !ba.CanForwardReadTimestamp {
@@ -580,5 +581,8 @@ func canDoServersideRetry(
 	if deadline != nil && deadline.LessEq(newTimestamp) {
 		return false
 	}
+	// Use the clock to try to strip a synthetic bit from the transaction
+	// timestamp before bumping the batch timestamp, if necessary.
+	newTimestamp = clock.TryStripSynthetic(newTimestamp)
 	return tryBumpBatchTimestamp(ctx, ba, newTimestamp, latchSpans)
 }
