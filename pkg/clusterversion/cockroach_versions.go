@@ -277,6 +277,10 @@ const (
 	// descriptors have draining names.
 	DrainingNamesMigration
 
+	// MVCCAddSSTable supports MVCC-compliant AddSSTable requests via the new
+	// WriteAtRequestTimestamp and DisallowConflicts parameters.
+	MVCCAddSSTable
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -472,6 +476,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DrainingNamesMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 8},
+	},
+	{
+		Key:     MVCCAddSSTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 10},
 	},
 
 	// *************************************************

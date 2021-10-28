@@ -1323,8 +1323,12 @@ func (*CheckConsistencyRequest) flags() int              { return isAdmin | isRa
 func (*ExportRequest) flags() int                        { return isRead | isRange | updatesTSCache }
 func (*AdminScatterRequest) flags() int                  { return isAdmin | isRange | isAlone }
 func (*AdminVerifyProtectedTimestampRequest) flags() int { return isAdmin | isRange | isAlone }
-func (*AddSSTableRequest) flags() int {
-	return isWrite | isRange | isAlone | isUnsplittable | canBackpressure
+func (r *AddSSTableRequest) flags() int {
+	flags := isWrite | isRange | isAlone | isUnsplittable | canBackpressure
+	if r.WriteAtRequestTimestamp {
+		flags |= checksTSCache
+	}
+	return flags
 }
 func (*MigrateRequest) flags() int { return isWrite | isRange | isAlone }
 

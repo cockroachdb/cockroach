@@ -664,17 +664,23 @@ func (db *DB) AdminRelocateRange(
 
 // AddSSTable links a file into the RocksDB log-structured merge-tree. Existing
 // data in the range is cleared.
+//
+// The disallowConflicts and writeAtBatchTs parameters require the
+// MVCCAddSSTable version gate, as they are new in 22.1.
 func (db *DB) AddSSTable(
 	ctx context.Context,
 	begin, end interface{},
 	data []byte,
+	disallowConflicts bool,
 	disallowShadowing bool,
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
 	batchTs hlc.Timestamp,
+	writeAtBatchTs bool,
 ) error {
 	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
-	b.addSSTable(begin, end, data, disallowShadowing, stats, ingestAsWrites)
+	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, stats,
+		ingestAsWrites, writeAtBatchTs)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
