@@ -1,7 +1,7 @@
 Setting	Type	Default	Description
-admission.kv.enabled	boolean	false	when true, work performed by the KV layer is subject to admission control
-admission.sql_kv_response.enabled	boolean	false	when true, work performed by the SQL layer when receiving a KV response is subject to admission control
-admission.sql_sql_response.enabled	boolean	false	when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control
+admission.kv.enabled	boolean	true	when true, work performed by the KV layer is subject to admission control
+admission.sql_kv_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a KV response is subject to admission control
+admission.sql_sql_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control
 bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP
 bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attempt is considered timed out, which causes the backup to fail
 bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads
