@@ -120,11 +120,11 @@ func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) sca
 }
 
 // getResultColumnsForSimpleProject populates result columns for a simple
-// projection. It supports two configurations:
+// projection. inputCols must be non-nil and contain the result columns before
+// the projection has been applied. It supports two configurations:
 // 1. colNames and resultTypes are non-nil. resultTypes indicates the updated
 //    types (after the projection has been applied)
-// 2. if colNames is nil, then inputCols must be non-nil (which are the result
-//    columns before the projection has been applied).
+// 2. colNames is nil.
 func getResultColumnsForSimpleProject(
 	cols []exec.NodeColumnOrdinal,
 	colNames []string,
@@ -140,8 +140,10 @@ func getResultColumnsForSimpleProject(
 			resultCols[i].Hidden = false
 		} else {
 			resultCols[i] = colinfo.ResultColumn{
-				Name: colNames[i],
-				Typ:  resultTypes[i],
+				Name:           colNames[i],
+				Typ:            resultTypes[i],
+				TableID:        inputCols[col].TableID,
+				PGAttributeNum: inputCols[col].PGAttributeNum,
 			}
 		}
 	}
