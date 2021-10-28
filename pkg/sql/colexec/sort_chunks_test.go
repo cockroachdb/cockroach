@@ -189,7 +189,7 @@ func TestSortChunks(t *testing.T) {
 
 	for _, tc := range sortChunksTestCases {
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return NewSortChunks(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen, execinfra.DefaultMemoryLimit)
+			return NewSortChunks(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen, execinfra.DefaultMemoryLimit), nil
 		})
 	}
 }
@@ -231,7 +231,7 @@ func TestSortChunksRandomized(t *testing.T) {
 				sort.Slice(expected, less(expected, ordCols))
 
 				colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{sortedTups}, expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-					return NewSortChunks(testAllocator, input[0], typs[:nCols], ordCols, matchLen, execinfra.DefaultMemoryLimit)
+					return NewSortChunks(testAllocator, input[0], typs[:nCols], ordCols, matchLen, execinfra.DefaultMemoryLimit), nil
 				})
 			}
 		}
@@ -243,9 +243,9 @@ func BenchmarkSortChunks(b *testing.B) {
 	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
 
-	sorterConstructors := []func(*colmem.Allocator, colexecop.Operator, []*types.T, []execinfrapb.Ordering_Column, int, int64) (colexecop.Operator, error){
+	sorterConstructors := []func(*colmem.Allocator, colexecop.Operator, []*types.T, []execinfrapb.Ordering_Column, int, int64) colexecop.Operator{
 		NewSortChunks,
-		func(allocator *colmem.Allocator, input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, _ int, maxOutputBatchMemSize int64) (colexecop.Operator, error) {
+		func(allocator *colmem.Allocator, input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, _ int, maxOutputBatchMemSize int64) colexecop.Operator {
 			return NewSorter(allocator, input, inputTypes, orderingCols, maxOutputBatchMemSize)
 		},
 	}
@@ -275,10 +275,7 @@ func BenchmarkSortChunks(b *testing.B) {
 								b.ResetTimer()
 								for n := 0; n < b.N; n++ {
 									source := colexectestutils.NewFiniteChunksSource(testAllocator, batch, typs, nBatches, matchLen)
-									sorter, err := sorterConstructor(testAllocator, source, typs, ordCols, matchLen, execinfra.DefaultMemoryLimit)
-									if err != nil {
-										b.Fatal(err)
-									}
+									sorter := sorterConstructor(testAllocator, source, typs, ordCols, matchLen, execinfra.DefaultMemoryLimit)
 
 									sorter.Init(ctx)
 									for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {

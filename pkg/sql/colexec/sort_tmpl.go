@@ -60,10 +60,6 @@ const _TYPE_WIDTH = 0
 // _DIR_ENUM is the template variable.
 const _DIR_ENUM = 0
 
-// _ISNULL is the template type variable for whether the sorter handles nulls
-// or not. It will be replaced by the appropriate boolean.
-const _ISNULL = false
-
 // _ASSIGN_LT is the template equality function for assigning the first input
 // to the result of the second input < the third input.
 func _ASSIGN_LT(_, _, _, _, _, _ string) bool {
@@ -72,11 +68,12 @@ func _ASSIGN_LT(_, _, _, _, _, _ string) bool {
 
 // */}}
 
-func isSorterSupported(t *types.T, dir execinfrapb.Ordering_Column_Direction) bool {
-	// {{range .}}
-	// {{if .Nulls}}
+// {{range .}}
+// {{$nulls := .Nulls}}
+func newSingleSorter_WITH_NULLS(t *types.T, dir execinfrapb.Ordering_Column_Direction) colSorter {
 	switch dir {
 	// {{range .DirOverloads}}
+	// {{$dir := .DirString}}
 	case _DIR_ENUM:
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 		// {{range .FamilyOverloads}}
@@ -84,48 +81,19 @@ func isSorterSupported(t *types.T, dir execinfrapb.Ordering_Column_Direction) bo
 			switch t.Width() {
 			// {{range .WidthOverloads}}
 			case _TYPE_WIDTH:
-				return true
+				return &sort_TYPE_DIR_HANDLES_NULLSOp{}
 				// {{end}}
 			}
 			// {{end}}
 		}
 		// {{end}}
 	}
-	// {{end}}
-	// {{end}}
-	return false
-}
-
-func newSingleSorter(
-	t *types.T, dir execinfrapb.Ordering_Column_Direction, hasNulls bool,
-) colSorter {
-	switch hasNulls {
-	// {{range .}}
-	// {{$nulls := .Nulls}}
-	case _ISNULL:
-		switch dir {
-		// {{range .DirOverloads}}
-		// {{$dir := .DirString}}
-		case _DIR_ENUM:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-			// {{range .FamilyOverloads}}
-			case _CANONICAL_TYPE_FAMILY:
-				switch t.Width() {
-				// {{range .WidthOverloads}}
-				case _TYPE_WIDTH:
-					return &sort_TYPE_DIR_HANDLES_NULLSOp{}
-					// {{end}}
-				}
-				// {{end}}
-			}
-			// {{end}}
-		}
-		// {{end}}
-	}
-	colexecerror.InternalError(errors.AssertionFailedf("isSorterSupported should have caught this"))
+	colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", t))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
+
+// {{end}}
 
 // {{range .}}
 // {{$nulls := .Nulls}}

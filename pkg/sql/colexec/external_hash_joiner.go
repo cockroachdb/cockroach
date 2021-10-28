@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -130,15 +129,11 @@ func NewExternalHashJoiner(
 		rightPartitionSorter := createDiskBackedSorter(
 			partitionedInputs[1], spec.Right.SourceTypes, rightOrdering, externalSorterMaxNumberPartitions,
 		)
-		diskBackedSortMerge, err := colexecjoin.NewMergeJoinOp(
+		return colexecjoin.NewMergeJoinOp(
 			unlimitedAllocator, memoryLimit, args.DiskQueueCfg, fdSemaphore, spec.JoinType,
 			leftPartitionSorter, rightPartitionSorter, spec.Left.SourceTypes,
 			spec.Right.SourceTypes, leftOrdering, rightOrdering, diskAcc, flowCtx.EvalCtx,
 		)
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
-		return diskBackedSortMerge
 	}
 	return newHashBasedPartitioner(
 		unlimitedAllocator,

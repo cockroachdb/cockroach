@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -226,7 +227,7 @@ func NewMergeJoinOp(
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
 	evalCtx *tree.EvalContext,
-) (colexecop.ResettableOperator, error) {
+) colexecop.ResettableOperator {
 	// Merge joiner only supports the case when the physical types in the
 	// equality columns in both inputs are the same. We, however, also need to
 	// support joining on numeric columns of different types or widths. If we
@@ -277,7 +278,7 @@ func NewMergeJoinOp(
 				castColumnIdx := len(actualLeftTypes)
 				left, err = colexecbase.GetCastOperator(unlimitedAllocator, left, int(leftColIdx), castColumnIdx, leftType, rightType, evalCtx)
 				if err != nil {
-					return nil, err
+					colexecerror.InternalError(err)
 				}
 				actualLeftTypes = append(actualLeftTypes, rightType)
 				actualLeftOrdering[i].ColIdx = uint32(castColumnIdx)
@@ -285,7 +286,7 @@ func NewMergeJoinOp(
 				castColumnIdx := len(actualRightTypes)
 				right, err = colexecbase.GetCastOperator(unlimitedAllocator, right, int(rightColIdx), castColumnIdx, rightType, leftType, evalCtx)
 				if err != nil {
-					return nil, err
+					colexecerror.InternalError(err)
 				}
 				actualRightTypes = append(actualRightTypes, leftType)
 				actualRightOrdering[i].ColIdx = uint32(castColumnIdx)
@@ -293,13 +294,10 @@ func NewMergeJoinOp(
 			needProjection = true
 		}
 	}
-	base, err := newMergeJoinBase(
+	base := newMergeJoinBase(
 		unlimitedAllocator, memoryLimit, diskQueueCfg, fdSemaphore, joinType, left, right,
 		actualLeftTypes, actualRightTypes, actualLeftOrdering, actualRightOrdering, diskAcc,
 	)
-	if err != nil {
-		return nil, err
-	}
 	var mergeJoinerOp colexecop.ResettableOperator
 	switch joinType {
 	case descpb.InnerJoin:
@@ -323,12 +321,12 @@ func NewMergeJoinOp(
 	case descpb.ExceptAllJoin:
 		mergeJoinerOp = &mergeJoinExceptAllOp{base}
 	default:
-		return nil, errors.AssertionFailedf("merge join of type %s not supported", joinType)
+		colexecerror.InternalError(errors.AssertionFailedf("merge join of type %s not supported", joinType))
 	}
 	if !needProjection {
 		// We didn't add any cast operators, so we can just return the operator
 		// right away.
-		return mergeJoinerOp, nil
+		return mergeJoinerOp
 	}
 	// We need to add a projection to remove all the cast columns we have added
 	// above. Note that all extra columns were appended to the corresponding
@@ -359,7 +357,7 @@ func NewMergeJoinOp(
 	}
 	return colexecbase.NewSimpleProjectOp(
 		mergeJoinerOp, numActualLeftTypes+numActualRightTypes, projection,
-	).(colexecop.ResettableOperator), nil
+	).(colexecop.ResettableOperator)
 }
 
 // Const declarations for the merge joiner cross product (MJCP) zero state.
@@ -402,7 +400,7 @@ func newMergeJoinBase(
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
-) (*mergeJoinBase, error) {
+) *mergeJoinBase {
 	lEqCols := make([]uint32, len(leftOrdering))
 	lDirections := make([]execinfrapb.Ordering_Column_Direction, len(leftOrdering))
 	for i, c := range leftOrdering {
@@ -442,22 +440,15 @@ func newMergeJoinBase(
 		},
 		diskAcc: diskAcc,
 	}
-	var err error
 	base.left.distincterInput = &colexecop.FeedOperator{}
-	base.left.distincter, base.left.distinctOutput, err = colexecbase.OrderedDistinctColsToOperators(
+	base.left.distincter, base.left.distinctOutput = colexecbase.OrderedDistinctColsToOperators(
 		base.left.distincterInput, lEqCols, leftTypes, false, /* nullsAreDistinct */
 	)
-	if err != nil {
-		return base, err
-	}
 	base.right.distincterInput = &colexecop.FeedOperator{}
-	base.right.distincter, base.right.distinctOutput, err = colexecbase.OrderedDistinctColsToOperators(
+	base.right.distincter, base.right.distinctOutput = colexecbase.OrderedDistinctColsToOperators(
 		base.right.distincterInput, rEqCols, rightTypes, false, /* nullsAreDistinct */
 	)
-	if err != nil {
-		return base, err
-	}
-	return base, err
+	return base
 }
 
 // mergeJoinBase extracts the common logic between all merge join operators.

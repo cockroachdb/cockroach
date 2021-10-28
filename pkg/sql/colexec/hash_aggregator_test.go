@@ -445,7 +445,7 @@ func TestHashAggregator(t *testing.T) {
 					nil, /* newSpillingQueueArgs */
 					testAllocator,
 					math.MaxInt64,
-				)
+				), nil
 			})
 	}
 }
@@ -475,14 +475,14 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 		for _, groupSize := range groupSizes {
 			for _, agg := range []aggType{
 				{
-					new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
+					new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
 						return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
 					},
 					name:  "tracking=false",
 					order: unordered,
 				},
 				{
-					new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
+					new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
 						spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
 						memAccounts = append(memAccounts, &spillingQueueMemAcc)
 						return NewHashAggregator(args, &colexecutils.NewSpillingQueueArgs{
@@ -539,7 +539,7 @@ func BenchmarkHashAggregatorPartialOrder(b *testing.B) {
 		groupSizes = []int{1, coldata.BatchSize()}
 	}
 	var memAccounts []*mon.BoundAccount
-	f := func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
+	f := func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
 		spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
 		memAccounts = append(memAccounts, &spillingQueueMemAcc)
 		return NewHashAggregator(args, &colexecutils.NewSpillingQueueArgs{

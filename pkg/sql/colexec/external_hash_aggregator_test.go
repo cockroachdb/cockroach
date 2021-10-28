@@ -204,11 +204,14 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 			for _, groupSize := range groupSizes {
 				benchmarkAggregateFunction(
 					b, aggType{
-						new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
+						new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
 							op, accs, mons, _, err := createExternalHashAggregator(
 								ctx, flowCtx, args, queueCfg,
 								&colexecop.TestingSemaphore{}, 0, /* numForcedRepartitions */
 							)
+							if err != nil {
+								b.Fatal(err)
+							}
 							memAccounts = append(memAccounts, accs...)
 							memMonitors = append(memMonitors, mons...)
 							// The hash-based partitioner is not a
@@ -216,7 +219,7 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 							// signatures of the aggregator constructors, we
 							// wrap it with a noop operator. It is ok for the
 							// purposes of this benchmark.
-							return colexecop.NewNoop(op), err
+							return colexecop.NewNoop(op)
 						},
 						name:  fmt.Sprintf("spilled=%t", spillForced),
 						order: unordered,

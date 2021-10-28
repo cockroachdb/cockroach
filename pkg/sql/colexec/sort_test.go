@@ -146,7 +146,7 @@ func TestSort(t *testing.T) {
 	for _, tc := range sortAllTestCases {
 		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
-				return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols, execinfra.DefaultMemoryLimit)
+				return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols, execinfra.DefaultMemoryLimit), nil
 			})
 	}
 }
@@ -178,9 +178,9 @@ func TestSortRandomized(t *testing.T) {
 				}
 				colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 					if topK {
-						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, matchLen, uint64(k), execinfra.DefaultMemoryLimit)
+						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, matchLen, uint64(k), execinfra.DefaultMemoryLimit), nil
 					}
-					return NewSorter(testAllocator, input[0], typs[:nCols], ordCols, execinfra.DefaultMemoryLimit)
+					return NewSorter(testAllocator, input[0], typs[:nCols], ordCols, execinfra.DefaultMemoryLimit), nil
 				})
 			}
 		}
@@ -321,14 +321,10 @@ func BenchmarkSort(b *testing.B) {
 					for n := 0; n < b.N; n++ {
 						source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
 						var sorter colexecop.Operator
-						var err error
 						if topK {
-							sorter, err = NewTopKSorter(testAllocator, source, typs, ordCols, 0 /* matchLen */, k, execinfra.DefaultMemoryLimit)
+							sorter = NewTopKSorter(testAllocator, source, typs, ordCols, 0 /* matchLen */, k, execinfra.DefaultMemoryLimit)
 						} else {
-							sorter, err = NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
-						}
-						if err != nil {
-							b.Fatal(err)
+							sorter = NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
 						}
 						sorter.Init(ctx)
 						for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
@@ -394,10 +390,7 @@ func BenchmarkSortUUID(b *testing.B) {
 					b.ResetTimer()
 					for n := 0; n < b.N; n++ {
 						source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
-						sorter, err := NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
-						if err != nil {
-							b.Fatal(err)
-						}
+						sorter := NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
 						sorter.Init(ctx)
 						for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
 						}
