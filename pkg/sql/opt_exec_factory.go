@@ -247,11 +247,6 @@ func constructSimpleProjectForPlanNode(
 		r.reqOrdering = ReqOrdering(reqOrdering)
 		return r, nil
 	}
-	var inputCols colinfo.ResultColumns
-	if colNames == nil {
-		// We will need the names of the input columns.
-		inputCols = planColumns(n.(planNode))
-	}
 
 	var rb renderBuilder
 	rb.init(n, reqOrdering)
@@ -268,7 +263,7 @@ func constructSimpleProjectForPlanNode(
 			resultTypes[i] = exprs[i].ResolvedType()
 		}
 	}
-	resultCols := getResultColumnsForSimpleProject(cols, colNames, resultTypes, inputCols)
+	resultCols := getResultColumnsForSimpleProject(cols, colNames, resultTypes, planColumns(n.(planNode)))
 	rb.setOutput(exprs, resultCols)
 	return rb.res, nil
 }
