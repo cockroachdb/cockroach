@@ -209,6 +209,7 @@ func TestPebbleEquivalence(t *testing.T) {
 // engine sequences with restarts in between.
 func TestPebbleRestarts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 72078, "flaky test")
 	defer log.Scope(t).Close(t)
 	// This test times out with the race detector enabled.
 	skip.UnderRace(t)
