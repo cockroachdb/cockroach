@@ -315,6 +315,7 @@ func TestTenantConsumptionAddSub(t *testing.T) {
 func TestFlagDeps(t *testing.T) {
 	// Any non-zero-valued request variants that conditionally affect flags.
 	reqVariants := []Request{
+		&AddSSTableRequest{WriteAtRequestTimestamp: true},
 		&DeleteRangeRequest{Inline: true},
 		&GetRequest{KeyLocking: lock.Exclusive},
 		&ReverseScanRequest{KeyLocking: lock.Exclusive},
