@@ -1,0 +1,50 @@
+# Test the basic control flow: writes to the span configurations table should
+# appear to the subscriber. Incremental updates should as well, and the exposed
+# store reader reflecting said updates appropriately.
+
+kvsubscriber-subscribe
+----
+ok
+
+kvaccessor-update
+upsert [a,c):A
+upsert [d,f):D
+----
+ok
+
+kvaccessor-get
+span [a,f)
+----
+[a,c):A
+[d,f):D
+
+kvsubscriber-updates
+----
+/M{in-ax}
+[a,c)
+[d,f)
+
+kvsubscriber-reader key=a
+----
+conf=A
+
+kvsubscriber-reader key=d
+----
+conf=D
+
+kvsubscriber-reader compute-split=[a,e)
+----
+d
+
+kvaccessor-update
+delete [d,f)
+----
+ok
+
+kvsubscriber-updates
+----
+[d,f)
+
+kvsubscriber-reader key=d
+----
+conf=MISSING
