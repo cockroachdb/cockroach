@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -134,10 +133,7 @@ func newScrubTableReader(
 	}
 	tr.fetcher = &fetcher
 
-	tr.Spans = make(roachpb.Spans, len(spec.Spans))
-	for i, s := range spec.Spans {
-		tr.Spans[i] = s.Span
-	}
+	tr.Spans = spec.Spans
 	tr.MakeSpansCopy()
 
 	return tr, nil

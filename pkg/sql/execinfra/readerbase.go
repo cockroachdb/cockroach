@@ -98,6 +98,8 @@ func MisplannedRanges(
 
 // SpansWithCopy tracks a set of spans (which can be modified) along with the
 // copy of the original one if needed.
+// NB: Spans field is **not** owned by SpansWithCopy (it comes from the
+// TableReader spec).
 type SpansWithCopy struct {
 	Spans     roachpb.Spans
 	SpansCopy roachpb.Spans
@@ -116,12 +118,9 @@ func (s *SpansWithCopy) MakeSpansCopy() {
 
 // Reset deeply resets s.
 func (s *SpansWithCopy) Reset() {
-	for i := range s.Spans {
-		s.Spans[i] = roachpb.Span{}
-	}
 	for i := range s.SpansCopy {
 		s.SpansCopy[i] = roachpb.Span{}
 	}
-	s.Spans = s.Spans[:0]
+	s.Spans = nil
 	s.SpansCopy = s.SpansCopy[:0]
 }

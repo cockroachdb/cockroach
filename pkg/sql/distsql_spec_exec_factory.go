@@ -231,12 +231,10 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	colsToTableOrdinalMap := toTableOrdinals(cols, tabDesc, colCfg.visibility)
 	trSpec := physicalplan.NewTableReaderSpec()
 	*trSpec = execinfrapb.TableReaderSpec{
-		Table:      *tabDesc.TableDesc(),
-		Reverse:    params.Reverse,
-		IsCheck:    false,
-		Visibility: colCfg.visibility,
-		// Retain the capacity of the spans slice.
-		Spans:            trSpec.Spans[:0],
+		Table:            *tabDesc.TableDesc(),
+		Reverse:          params.Reverse,
+		IsCheck:          false,
+		Visibility:       colCfg.visibility,
 		HasSystemColumns: scanContainsSystemColumns(&colCfg),
 		NeededColumns:    colCfg.wantedColumnsOrdinals,
 	}

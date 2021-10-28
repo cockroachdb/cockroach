@@ -1105,10 +1105,8 @@ func initTableReaderSpec(
 		Visibility:        n.colCfg.visibility,
 		LockingStrength:   n.lockingStrength,
 		LockingWaitPolicy: n.lockingWaitPolicy,
-		// Retain the capacity of the spans slice.
-		Spans:            s.Spans[:0],
-		HasSystemColumns: n.containsSystemColumns,
-		NeededColumns:    n.colCfg.wantedColumnsOrdinals,
+		HasSystemColumns:  n.containsSystemColumns,
+		NeededColumns:     n.colCfg.wantedColumnsOrdinals,
 	}
 	if vc := getInvertedColumn(n.colCfg.invertedColumn, n.cols); vc != nil {
 		s.InvertedColumn = vc.ColumnDesc()
@@ -1503,15 +1501,12 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		} else {
 			// For the rest, we have to copy the spec into a fresh spec.
 			tr = physicalplan.NewTableReaderSpec()
-			// Grab the Spans field of the new spec, and reuse it in case the pooled
-			// TableReaderSpec we got has pre-allocated Spans memory.
-			newSpansSlice := tr.Spans
 			*tr = *info.spec
-			tr.Spans = newSpansSlice
 		}
-		for j := range sp.Spans {
-			tr.Spans = append(tr.Spans, execinfrapb.TableReaderSpan{Span: sp.Spans[j]})
-		}
+		// TODO(yuzefovich): figure out how we could reuse the Spans slice if we
+		// kept the reference to it in TableReaderSpec (rather than allocating
+		// new slices in generateScanSpans and PartitionSpans).
+		tr.Spans = sp.Spans
 
 		tr.Parallelize = info.parallelize
 		if !tr.Parallelize {

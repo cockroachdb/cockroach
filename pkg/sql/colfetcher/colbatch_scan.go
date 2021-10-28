@@ -256,12 +256,7 @@ func NewColBatchScan(
 	}
 
 	s := colBatchScanPool.Get().(*ColBatchScan)
-	s.Spans = s.Spans[:0]
-	specSpans := spec.Spans
-	for i := range specSpans {
-		//gcassert:bce
-		s.Spans = append(s.Spans, specSpans[i].Span)
-	}
+	s.Spans = spec.Spans
 	if !flowCtx.Local {
 		// Make a copy of the spans so that we could get the misplanned ranges
 		// info.

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
@@ -71,8 +72,8 @@ func TestColBatchScanMeta(t *testing.T) {
 	spec := execinfrapb.ProcessorSpec{
 		Core: execinfrapb.ProcessorCoreUnion{
 			TableReader: &execinfrapb.TableReaderSpec{
-				Spans: []execinfrapb.TableReaderSpan{
-					{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)},
+				Spans: []roachpb.Span{
+					td.PrimaryIndexSpan(keys.SystemSQLCodec),
 				},
 				NeededColumns: []uint32{0},
 				Table:         *td.TableDesc(),
@@ -128,8 +129,8 @@ func BenchmarkColBatchScan(b *testing.B) {
 				Core: execinfrapb.ProcessorCoreUnion{
 					TableReader: &execinfrapb.TableReaderSpec{
 						Table: *tableDesc.TableDesc(),
-						Spans: []execinfrapb.TableReaderSpan{
-							{Span: tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)},
+						Spans: []roachpb.Span{
+							tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec),
 						},
 						NeededColumns: []uint32{0, 1},
 					}},
