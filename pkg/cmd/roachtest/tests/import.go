@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func readCreateTableFromFixture(fixtureURI string, gatewayDB *gosql.DB) (string, error) {
+	row := make([]byte, 0)
+	err := gatewayDB.QueryRow(fmt.Sprintf(`SELECT crdb_internal.read_file('%s')`, fixtureURI)).Scan(&row)
+	if err != nil {
+		return "", err
+	}
+	return string(row), err
+}
+
 func registerImportNodeShutdown(r registry.Registry) {
 	getImportRunner := func(ctx context.Context, gatewayNode int) jobStarter {
 		startImport := func(c cluster.Cluster) (jobID string, err error) {
@@ -36,8 +46,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 				tableName = "part"
 			}
 			importStmt := fmt.Sprintf(`
-				IMPORT TABLE %[1]s
-				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/%[1]s.sql?AUTH=implicit'
+				IMPORT INTO %[1]s
 				CSV DATA (
 				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.1?AUTH=implicit',
 				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.2?AUTH=implicit',
@@ -51,6 +60,17 @@ func registerImportNodeShutdown(r registry.Registry) {
 			`, tableName)
 			gatewayDB := c.Conn(ctx, gatewayNode)
 			defer gatewayDB.Close()
+
+			createStmt, err := readCreateTableFromFixture(
+				fmt.Sprintf("gs://cockroach-fixtures/tpch-csv/schema/%s.sql?AUTH=implicit", tableName), gatewayDB)
+			if err != nil {
+				return "", err
+			}
+
+			// Create the table to be imported into.
+			if _, err = gatewayDB.ExecContext(ctx, createStmt); err != nil {
+				return jobID, err
+			}
 
 			err = gatewayDB.QueryRowContext(ctx, importStmt).Scan(&jobID)
 			return
@@ -239,13 +259,23 @@ func registerImportTPCH(r registry.Registry) {
 					t.WorkerStatus(`running import`)
 					defer t.WorkerStatus()
 
+					createStmt, err := readCreateTableFromFixture(
+						"gs://cockroach-fixtures/tpch-csv/schema/lineitem.sql?AUTH=implicit", conn)
+					if err != nil {
+						return err
+					}
+
+					// Create table to import into.
+					if _, err := conn.ExecContext(ctx, createStmt); err != nil {
+						return err
+					}
+
 					// Tick once before starting the import, and once after to capture the
 					// total elapsed time. This is used by roachperf to compute and display
 					// the average MB/sec per node.
 					tick()
-					_, err := conn.Exec(`
-						IMPORT TABLE csv.lineitem
-						CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/lineitem.sql?AUTH=implicit'
+					_, err = conn.Exec(`
+						IMPORT INTO csv.lineitem
 						CSV DATA (
 						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.1?AUTH=implicit',
 						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.2?AUTH=implicit',
