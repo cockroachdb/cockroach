@@ -25,12 +25,16 @@ type jobStarter func(c *cluster) (string, error)
 // jobSurvivesNodeShutdown is a helper that tests that a given job,
 // running on the specified gatewayNode will still complete successfully
 // if nodeToShutdown is shutdown partway through execution.
+//
 // This helper assumes:
 // - That the job is long running and will take a least a minute to complete.
 // - That the necessary setup is done (e.g. any data that the job relies on is
 // already loaded) so that `query` can be run on its own to kick off the job.
 // - That the statement running the job is a detached statement, and does not
 // block until the job completes.
+//
+// The helper waits for 3x replication on existing ranges before
+// running the provided jobStarter.
 func jobSurvivesNodeShutdown(
 	ctx context.Context, t *test, c *cluster, nodeToShutdown int, startJob jobStarter,
 ) {
@@ -44,7 +48,17 @@ func jobSurvivesNodeShutdown(
 	m := newMonitor(ctx, c)
 	m.Go(func(ctx context.Context) error {
 		defer close(jobIDCh)
-		t.Status(`running job`)
+
+		watcherDB := c.Conn(ctx, watcherNode)
+		defer watcherDB.Close()
+
+		// Wait for 3x replication to ensure that the cluster
+		// is in a healthy state before we start bringing any
+		// nodes down.
+		t.Status("waiting for cluster to be 3x replicated")
+		waitForFullReplication(t, watcherDB)
+
+		t.Status("running job")
 		var jobID string
 		jobID, err := startJob(c)
 		if err != nil {
@@ -55,9 +69,6 @@ func jobSurvivesNodeShutdown(
 
 		pollInterval := 5 * time.Second
 		ticker := time.NewTicker(pollInterval)
-
-		watcherDB := c.Conn(ctx, watcherNode)
-		defer watcherDB.Close()
 
 		var status string
 		for {
