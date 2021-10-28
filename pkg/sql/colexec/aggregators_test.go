@@ -1073,10 +1073,11 @@ func benchmarkAggregateFunction(
 		aggCols[i] = uint32(numGroupCol + i)
 	}
 	tc := aggregatorTestCase{
-		typs:      typs,
-		groupCols: groupCols,
-		aggCols:   [][]uint32{aggCols},
-		aggFns:    []execinfrapb.AggregatorSpec_Func{aggFn},
+		typs:           typs,
+		groupCols:      groupCols,
+		aggCols:        [][]uint32{aggCols},
+		aggFns:         []execinfrapb.AggregatorSpec_Func{aggFn},
+		unorderedInput: agg.order == unordered,
 	}
 	if distinctProb > 0 {
 		if !typs[0].Identical(types.Int) {
@@ -1090,7 +1091,6 @@ func benchmarkAggregateFunction(
 		}
 	}
 	if agg.order == partial {
-		tc.unorderedInput = false
 		tc.orderedCols = []uint32{0}
 	}
 	require.NoError(b, tc.init())
