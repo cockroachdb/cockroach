@@ -443,7 +443,21 @@ func evaluateBatch(
 
 	// Update the batch response timestamp field to the timestamp at which the
 	// batch's reads were evaluated.
-	if baHeader.Txn != nil {
+	if !mergedResult.Local.ReplyTS.IsEmpty() {
+		// If the result contains an updated timestamp, use that for the response.
+		if baHeader.Txn != nil {
+			return nil, mergedResult, roachpb.NewError(errors.AssertionFailedf(
+				"received response timestamp %s for transactional batch: %s (%s)",
+				mergedResult.Local.ReplyTS, redact.Safe(ba.Summary()), baHeader.Txn))
+		}
+		if mergedResult.Local.ReplyTS.Less(baHeader.Timestamp) {
+			return nil, mergedResult, roachpb.NewError(errors.AssertionFailedf(
+				"received response timestamp %s before request timestamp %s for batch: %s",
+				mergedResult.Local.ReplyTS, baHeader.Timestamp, redact.Safe(ba.Summary())))
+		}
+		br.Timestamp = mergedResult.Local.ReplyTS
+
+	} else if baHeader.Txn != nil {
 		// If transactional, send out the final transaction entry with the reply.
 		br.Txn = baHeader.Txn
 		// Note that br.Txn.ReadTimestamp might be higher than baHeader.Timestamp if

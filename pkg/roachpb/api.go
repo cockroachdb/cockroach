@@ -1312,8 +1312,16 @@ func (*CheckConsistencyRequest) flags() int              { return isAdmin | isRa
 func (*ExportRequest) flags() int                        { return isRead | isRange | updatesTSCache }
 func (*AdminScatterRequest) flags() int                  { return isAdmin | isRange | isAlone }
 func (*AdminVerifyProtectedTimestampRequest) flags() int { return isAdmin | isRange | isAlone }
-func (*AddSSTableRequest) flags() int {
-	return isWrite | isRange | isAlone | isUnsplittable | canBackpressure
+func (r *AddSSTableRequest) flags() int {
+	flags := isWrite | isRange | isAlone | isUnsplittable | canBackpressure
+	// FIXME: isIntentWrite is not accurate, because we never write intents, but
+	// the tscache and closedts use this as a condition for bumping the timestamp.
+	// This also implies that we're transactional and take out locks, which is
+	// false. We may need a new flag for this.
+	if r.WriteAtRequestTimestamp && !r.Blind {
+		flags |= isIntentWrite
+	}
+	return flags
 }
 func (*MigrateRequest) flags() int { return isWrite | isRange | isAlone }
 

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -27,6 +28,11 @@ import (
 // so any side effects here are only best-effort.
 type LocalResult struct {
 	Reply *roachpb.BatchResponse
+
+	// ReplyTS holds the response timestamp. Only a single response in a
+	// non-transactional batch may set this, and it must be at or above the
+	// request timestamp.
+	ReplyTS hlc.Timestamp
 
 	// EncounteredIntents stores any intents from other transactions that the
 	// request encountered but did not conflict with. They should be handed off
@@ -366,6 +372,13 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		}
 	}
 	q.LogicalOpLog = nil
+
+	if p.Local.ReplyTS.IsEmpty() {
+		p.Local.ReplyTS = q.Local.ReplyTS
+	} else if p.Local.ReplyTS.Equal(q.Local.ReplyTS) {
+		return errors.AssertionFailedf("conflicting local timestamp")
+	}
+	q.Local.ReplyTS = hlc.Timestamp{}
 
 	if !q.IsZero() {
 		log.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, Result{}))
