@@ -10,9 +10,7 @@
 
 package streaming
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 // StreamAPIFactoryHook is the hook for the collection of APIs that streaming replication builtins support.
 var StreamAPIFactoryHook func(apiName string, evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error)

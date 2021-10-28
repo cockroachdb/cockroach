@@ -1,3 +1,13 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 package builtins
 
 import (
@@ -17,7 +27,9 @@ func initReplicationBuiltins() {
 	}
 }
 
-func streamingAPI(apiName string) func(evalCtx *tree.EvalContext, args tree.Datums)(tree.Datum, error) {
+func streamingAPI(
+	apiName string,
+) func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 	return func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		if streaming.StreamAPIFactoryHook == nil {
 			return nil, errors.New("invoking a streaming replication API requires a CCL binary")
@@ -25,7 +37,6 @@ func streamingAPI(apiName string) func(evalCtx *tree.EvalContext, args tree.Datu
 		return streaming.StreamAPIFactoryHook(apiName, evalCtx, args)
 	}
 }
-
 
 // replication builtins contains the cluster to cluster replication built-in functions indexed by name.
 //
@@ -42,7 +53,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				{"cutover_ts", types.TimestampTZ},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: streamingAPI("complete_stream_ingestion_job"),
+			Fn:         streamingAPI("complete_stream_ingestion_job"),
 			Info: "This function can be used to signal a running stream ingestion job to complete. " +
 				"The job will eventually stop ingesting, revert to the specified timestamp and leave the " +
 				"cluster in a consistent state. The specified timestamp can only be specified up to the" +
