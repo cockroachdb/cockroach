@@ -13,6 +13,7 @@ package descs
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -64,13 +65,18 @@ func (cf *CollectionFactory) Txn(
 					break
 				}
 			}
+			retryOpts := retry.Options{
+				InitialBackoff: 5 * time.Millisecond,
+				MaxBackoff:     500 * time.Millisecond,
+				Multiplier:     1.1,
+			}
 			if waitForNoVersion {
-				err := cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retry.Options{})
+				err := cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retryOpts)
 				if err != nil {
 					return err
 				}
 			} else {
-				_, err := cf.leaseMgr.WaitForOneVersion(ctx, ld.ID, retry.Options{})
+				_, err := cf.leaseMgr.WaitForOneVersion(ctx, ld.ID, retryOpts)
 				if err != nil {
 					return err
 				}
