@@ -2032,7 +2032,8 @@ func (st *SessionTracing) StartTracing(
 	}
 
 	// If we're inside a transaction, hijack the txn's ctx with one that has a
-	// recording span.
+	// recording span. The recording of this first transaction will be collected
+	// separately from the recording of future transactions.
 	if _, ok := st.ex.machine.CurState().(stateNoTxn); !ok {
 		txnCtx := st.ex.state.Ctx
 		if sp := tracing.SpanFromContext(txnCtx); sp == nil {
@@ -2051,8 +2052,8 @@ func (st *SessionTracing) StartTracing(
 	st.showResults = showResults
 	st.recordingType = recType
 
-	// Now hijack the conn's ctx with one that has a recording span.
-
+	// Now hijack the conn's ctx with one that has a recording span. All future
+	// transactions will inherit from this span, so they'll all be recorded.
 	connCtx := st.ex.ctxHolder.connCtx
 	opName := "session recording"
 	newConnCtx, sp := tracing.EnsureChildSpan(
@@ -2063,8 +2064,6 @@ func (st *SessionTracing) StartTracing(
 	)
 	sp.SetVerbose(true)
 	st.connSpan = sp
-
-	// Hijack the connections context.
 	st.ex.ctxHolder.hijack(newConnCtx)
 
 	return nil
