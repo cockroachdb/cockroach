@@ -4937,7 +4937,6 @@ JobResponse contains the job record for a job.
 | last_run | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | next_run | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | num_runs | [int64](#cockroach.server.serverpb.JobsResponse-int64) |  |  | [reserved](#support-status) |
-| execution_errors | [string](#cockroach.server.serverpb.JobsResponse-string) | repeated |  | [reserved](#support-status) |
 
 
 
@@ -4999,7 +4998,6 @@ JobResponse contains the job record for a job.
 | last_run | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | next_run | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | num_runs | [int64](#cockroach.server.serverpb.JobResponse-int64) |  |  | [reserved](#support-status) |
-| execution_errors | [string](#cockroach.server.serverpb.JobResponse-string) | repeated |  | [reserved](#support-status) |
 
 
 

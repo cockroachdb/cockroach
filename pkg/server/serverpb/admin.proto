@@ -609,7 +609,6 @@ message JobResponse {
   google.protobuf.Timestamp last_run = 17 [(gogoproto.stdtime) = true];
   google.protobuf.Timestamp next_run = 18 [(gogoproto.stdtime) = true];
   int64 num_runs = 19;
-  repeated string execution_errors = 20;
 }
 
 // LocationsRequest requests system locality location information.

@@ -1849,7 +1849,7 @@ func (s *adminServer) Jobs(
       SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
 						 running_status, created, started, finished, modified,
 						 fraction_completed, high_water_timestamp, error, last_run,
-						 next_run, num_runs, execution_errors
+						 next_run, num_runs
         FROM crdb_internal.jobs
        WHERE true
 	`)
@@ -1932,7 +1932,6 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 		&job.LastRun,
 		&job.NextRun,
 		&job.NumRuns,
-		&job.ExecutionErrors,
 	); err != nil {
 		return err
 	}
@@ -1977,7 +1976,7 @@ func (s *adminServer) Job(
       SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
 						 running_status, created, started, finished, modified,
 						 fraction_completed, high_water_timestamp, error, last_run,
-						 next_run, num_runs, execution_errors
+						 next_run, num_runs
         FROM crdb_internal.jobs
        WHERE job_id = $1`
 
