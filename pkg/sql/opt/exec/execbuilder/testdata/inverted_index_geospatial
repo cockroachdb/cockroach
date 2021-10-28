@@ -35,6 +35,8 @@ regions: <hidden>
 │ nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
 │ order: +k
 │
 └── • filter
@@ -51,12 +53,15 @@ regions: <hidden>
         │ KV contention time: 0µs
         │ KV rows read: 2
         │ KV bytes read: 16 B
+        │ estimated max memory allocated: 0 B
         │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
             │ nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 2
+            │ estimated max memory allocated: 0 B
+            │ estimated max sql temp disk usage: 0 B
             │ inverted column: geom_inverted_key
             │ num spans: 31
             │
@@ -68,6 +73,7 @@ regions: <hidden>
                   KV contention time: 0µs
                   KV rows read: 4
                   KV bytes read: 32 B
+                  estimated max memory allocated: 0 B
                   missing stats
                   table: geo_table@geom_index
                   spans: 31 spans
@@ -113,6 +119,8 @@ regions: <hidden>
 │ nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
 │ order: +k
 │
 └── • filter
@@ -129,12 +137,15 @@ regions: <hidden>
         │ KV contention time: 0µs
         │ KV rows read: 2
         │ KV bytes read: 16 B
+        │ estimated max memory allocated: 0 B
         │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
             │ nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 2
+            │ estimated max memory allocated: 0 B
+            │ estimated max sql temp disk usage: 0 B
             │ inverted column: geom_inverted_key
             │ num spans: 31
             │
@@ -146,6 +157,7 @@ regions: <hidden>
                   KV contention time: 0µs
                   KV rows read: 2
                   KV bytes read: 16 B
+                  estimated max memory allocated: 0 B
                   missing stats
                   table: geo_table@geom_index
                   spans: 31 spans
@@ -175,6 +187,8 @@ regions: <hidden>
 │ nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
 │ order: +k
 │
 └── • filter
@@ -191,12 +205,15 @@ regions: <hidden>
         │ KV contention time: 0µs
         │ KV rows read: 2
         │ KV bytes read: 16 B
+        │ estimated max memory allocated: 0 B
         │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
             │ nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 2
+            │ estimated max memory allocated: 0 B
+            │ estimated max sql temp disk usage: 0 B
             │ inverted column: geom_inverted_key
             │ num spans: 31
             │
@@ -208,6 +225,7 @@ regions: <hidden>
                   KV contention time: 0µs
                   KV rows read: 2
                   KV bytes read: 16 B
+                  estimated max memory allocated: 0 B
                   missing stats
                   table: geo_table@geom_index
                   spans: 31 spans

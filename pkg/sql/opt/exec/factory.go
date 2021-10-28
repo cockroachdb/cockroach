@@ -331,6 +331,9 @@ type ExecutionStats struct {
 	SeekCount         optional.Uint
 	InternalSeekCount optional.Uint
 
+	MaxAllocatedMem  optional.Uint
+	MaxAllocatedDisk optional.Uint
+
 	// Nodes on which this operator was executed.
 	Nodes []string
 
