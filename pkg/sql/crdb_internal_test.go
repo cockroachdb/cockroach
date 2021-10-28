@@ -330,26 +330,28 @@ INSERT INTO t.t VALUES (1);
 		t.Fatal(err)
 	}
 
-	if _, err := sqlDB.Exec(`BEGIN`); err != nil {
-		t.Fatal(err)
-	}
+	txn, err := sqlDB.Begin()
+	require.NoError(t, err)
+	defer func() {
+		_ = txn.Rollback()
+	}()
 
 	// Look up the schema first so only the read txn is recorded in
 	// kv trace logs. We explicitly specify the schema to avoid an extra failed
 	// lease acquisition, which occurs in a separate transaction, to work around
 	// a current limitation in schema resolution. See #53301.
-	if _, err := sqlDB.Exec(`SELECT * FROM t.public.t`); err != nil {
+	if _, err := txn.Exec(`SELECT * FROM t.public.t`); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := sqlDB.Exec(
+	if _, err := txn.Exec(
 		`SET tracing=on,kv; SELECT * FROM t.public.t; SET TRACING=off`); err != nil {
 		t.Fatal(err)
 	}
 
 	// The log messages we are looking for are structured like
 	// [....,txn=<txnID>], so search for those and extract the id.
-	row := sqlDB.QueryRow(`
+	row := txn.QueryRow(`
 SELECT
 	string_to_array(regexp_extract(tag, 'txn=[a-zA-Z0-9]*'), '=')[2]
 FROM
@@ -364,7 +366,7 @@ WHERE
 	// Now, run a SHOW QUERIES statement, in the same transaction.
 	// The txn_id we find there should be the same as the one we parsed,
 	// and the txn_start time should be before the start time of the statement.
-	row = sqlDB.QueryRow(`
+	row = txn.QueryRow(`
 SELECT
 	txn_id, start
 FROM
@@ -385,7 +387,7 @@ WHERE
 	}
 
 	// Find the transaction start time and ensure that the query started after it.
-	row = sqlDB.QueryRow(`SELECT start FROM crdb_internal.node_transactions WHERE id = $1`, foundTxnID)
+	row = txn.QueryRow(`SELECT start FROM crdb_internal.node_transactions WHERE id = $1`, foundTxnID)
 	if err := row.Scan(&txnStart); err != nil {
 		t.Fatal(err)
 	}
