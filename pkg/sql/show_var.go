@@ -39,8 +39,8 @@ func (s *showVarNode) Next(params runParams) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	s.val = v.Get(params.extendedEvalCtx)
-	return true, nil
+	s.val, err = v.Get(params.extendedEvalCtx)
+	return true, err
 }
 
 func (s *showVarNode) Values() tree.Datums {
