@@ -12,9 +12,11 @@ package tracing
 
 import (
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"go.opentelemetry.io/otel/attribute"
@@ -53,6 +55,12 @@ type Span struct {
 	// to guard spanInner against use-after-Finish.
 	i               spanInner
 	numFinishCalled int32 // atomic
+	// noop, if set, allows this Span to be used even after finish. This allows a
+	// single Span instance to be shared for many operations. When set, i is set
+	// such that i.isNoop() also returns true - so all operations are
+	// short-circuited.
+	noop        bool
+	finishStack string // !!!
 }
 
 // IsNoop returns true if this span is a black hole - it doesn't correspond to a
@@ -66,7 +74,15 @@ func (sp *Span) done() bool {
 	if sp == nil {
 		return true
 	}
-	return atomic.LoadInt32(&sp.numFinishCalled) != 0
+	if sp.noop {
+		return true
+	}
+	alreadyFinished := atomic.LoadInt32(&sp.numFinishCalled) != 0
+	if alreadyFinished && util.CrdbTestBuild {
+		panic(fmt.Sprintf("!!! finish again on %p after previous finish at: %s",
+			sp, sp.finishStack))
+	}
+	return alreadyFinished
 }
 
 // Tracer exports the tracer this span was created using.
@@ -85,10 +101,12 @@ func (sp *Span) SetOperationName(operationName string) {
 // Finish idempotently marks the Span as completed (at which point it will
 // silently drop any new data added to it). Finishing a nil *Span is a noop.
 func (sp *Span) Finish() {
-	if sp == nil || sp.IsNoop() || atomic.AddInt32(&sp.numFinishCalled, 1) != 1 {
+	if sp == nil || sp.IsNoop() || sp.done() {
 		return
 	}
+	atomic.StoreInt32(&sp.numFinishCalled, 1)
 	sp.i.Finish()
+	sp.finishStack = string(debug.Stack())
 }
 
 // FinishAndGetRecording finishes the span and gets a recording at the same
@@ -235,6 +253,11 @@ func (sp *Span) TraceID() tracingpb.TraceID {
 // being a root span.
 func (sp *Span) IsSterile() bool {
 	return sp.i.sterile
+}
+
+// !!!
+func (sp *Span) IsFinished() bool {
+	return atomic.LoadInt32(&sp.numFinishCalled) == 1
 }
 
 // SpanMeta is information about a Span that is not local to this

@@ -308,7 +308,8 @@ func NewTracer() *Tracer {
 	}
 	// The noop span is marked as finished so that even in the case of a bug,
 	// it won't soak up data.
-	t.noopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t, sterile: true}}
+	// !!! comment
+	t.noopSpan = &Span{noop: true, i: spanInner{tracer: t, sterile: true}}
 	return t
 }
 
