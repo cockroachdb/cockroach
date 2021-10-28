@@ -24,7 +24,10 @@ import (
 type KVAccessor interface {
 	// GetSpanConfigEntriesFor returns the span configurations that overlap with
 	// the given spans.
-	GetSpanConfigEntriesFor(ctx context.Context, spans []roachpb.Span) ([]roachpb.SpanConfigEntry, error)
+	GetSpanConfigEntriesFor(
+		ctx context.Context,
+		spans []roachpb.Span,
+	) ([]roachpb.SpanConfigEntry, error)
 
 	// UpdateSpanConfigEntries updates configurations for the given spans. This
 	// is a "targeted" API: the spans being deleted are expected to have been
@@ -33,35 +36,72 @@ type KVAccessor interface {
 	// divvying up an existing span into multiple others with distinct configs,
 	// callers are to issue a delete for the previous span and upserts for the
 	// new ones.
-	UpdateSpanConfigEntries(ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry) error
+	UpdateSpanConfigEntries(
+		ctx context.Context,
+		toDelete []roachpb.Span,
+		toUpsert []roachpb.SpanConfigEntry,
+	) error
+}
+
+// KVSubscriber presents a consistent[1] snapshot of a StoreReader that's
+// incrementally maintained with changes made to the global span configurations
+// state (system.span_configurations). The maintenance happens transparently;
+// callers can subscribe to learn about what key spans may have seen a
+// configuration change. After learning about a span update through a callback
+// invocation, subscribers can consult the embedded StoreReader to retrieve an
+// up-to-date[2] config for the updated span. The callback is called in a single
+// goroutine; it should avoid doing any long-running or blocking work.
+//
+// When a callback is first installed, it's invoked with the [min,max) span --
+// a shorthand to indicate that subscribers should consult the StoreReader for all
+// spans of interest. Subsequent updates are of the more incremental kind. It's
+// possible that the span updates received are no-ops, i.e. consulting the
+// StoreReader for the given span would still retrieve the last config observed
+// for the span[3].
+//
+// [1]: The contents of the StoreReader at t1 corresponds exactly to the
+//      contents of the global span configuration state at t0 where t0 <= t1. If
+//      the StoreReader is read from at t2 where t2 > t1, it's guaranteed to
+//      observe a view of the global state at t >= t0.
+// [2]: For the canonical KVSubscriber implementation, this is typically lagging
+//      by the closed timestamp target duration.
+// [3]: The canonical KVSubscriber implementation is bounced whenever errors
+//      occur, which may result in the re-transmission of earlier updates
+//      (typically through a coarsely targeted [min,max) span).
+type KVSubscriber interface {
+	StoreReader
+	Subscribe(func(updated roachpb.Span))
 }
 
 // SQLTranslator translates SQL descriptors and their corresponding zone
 // configurations to constituent spans and span configurations.
 //
 // Concretely, for the following zone configuration hierarchy:
+//
 //    CREATE DATABASE db;
 //    CREATE TABLE db.t1();
 //    ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
 //    ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters=5;
+//
 // The SQLTranslator produces the following translation (represented as a diff
 // against RANGE DEFAULT for brevity):
+//
 // 		Table/5{3-4}                  num_replicas=7 num_voters=5
 type SQLTranslator interface {
-	// Translate generates the implied span configuration state given a list of
 	// Translate generates the span configuration state given a list of
-	// {descriptor, named zone} IDs. No entry is returned for an ID if it doesn't
-	// exist or has been dropped. The timestamp at which the translation is valid
-	// is also returned.
+	// {descriptor, named zone} IDs. No entry is returned for an ID if it
+	// doesn't exist or if it's dropped. The timestamp at which the translation
+	// is valid is also returned.
 	//
-	// For every ID we first descend the zone configuration hierarchy with the ID
-	// as the root to accumulate IDs of all leaf objects. Leaf objects are tables
-	// and named zones (other than RANGE DEFAULT) which have actual span
-	// configurations associated with them (as opposed to non-leaf nodes that only
-	// serve to hold zone configurations for inheritance purposes). Then, for
-	// for every one of these accumulated IDs, we generate <span, span config>
-	// tuples by following up the inheritance chain to fully hydrate the span
-	// configuration. Translate also accounts for and negotiates subzone spans.
+	// For every ID we first descend the zone configuration hierarchy with the
+	// ID as the root to accumulate IDs of all leaf objects. Leaf objects are
+	// tables and named zones (other than RANGE DEFAULT) which have actual span
+	// configurations associated with them (as opposed to non-leaf nodes that
+	// only serve to hold zone configurations for inheritance purposes). Then,
+	// for each one of these accumulated IDs, we generate <span, span
+	// config> tuples by following up the inheritance chain to fully hydrate the
+	// span configuration. Translate also accounts for and negotiates subzone
+	// spans.
 	Translate(ctx context.Context, ids descpb.IDs) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error)
 }
 
@@ -178,8 +218,8 @@ type StoreReader interface {
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 }
 
-// Update captures what span has seen a config change. It will be the unit of
-// what a {SQL,KV}Watcher emits, and what can be applied to a StoreWriter.
+// Update captures a span and the corresponding config change. It's the unit of
+// what can be applied to a StoreWriter.
 type Update struct {
 	// Span captures the key span being updated.
 	Span roachpb.Span

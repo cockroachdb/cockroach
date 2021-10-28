@@ -10,7 +10,10 @@
 
 package spanconfig
 
-import "github.com/cockroachdb/cockroach/pkg/base"
+import (
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
 
 // TestingKnobs provide fine-grained control over the various span config
 // components for testing.
@@ -31,6 +34,25 @@ type TestingKnobs struct {
 	// manager has checked if the auto span config reconciliation job exists or
 	// not.
 	ManagerAfterCheckedReconciliationJobExistsInterceptor func(exists bool)
+
+	// KVSubscriberPostRangefeedStartInterceptor is invoked after the rangefeed is started.
+	KVSubscriberPostRangefeedStartInterceptor func()
+
+	// KVSubscriberPreExitInterceptor is invoked right before returning from
+	// subscribeInner, after tearing down internal components.
+	KVSubscriberPreExitInterceptor func()
+
+	// KVSubscriberOnTimestampAdvanceInterceptor is invoked each time the
+	// KVSubscriber has process all updates before the provided timestamp.
+	KVSubscriberOnTimestampAdvanceInterceptor func(hlc.Timestamp)
+
+	// KVSubscriberErrorInjectionCh is a way for tests to conveniently inject
+	// buffer overflow errors into the subscriber in order to test recovery.
+	KVSubscriberErrorInjectionCh chan error
+
+	// StoreKVSubscriberOverride is used to override the KVSubscriber used when
+	// setting up a new store.
+	StoreKVSubscriberOverride KVSubscriber
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

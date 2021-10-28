@@ -21,6 +21,10 @@ import (
 
 // ShadowReader wraps around two spanconfig.StoreReaders and logs warnings (if
 // expensive logging is enabled) when there are divergent results from the two.
+//
+// TODO(irfansharif): This was added as a convenient way to diagnose the
+// differences between span configs infrastructure and system config span.
+// Remove it when we actually start issuing RPCs (#71994) have better tests.
 type ShadowReader struct {
 	new, old spanconfig.StoreReader
 }
