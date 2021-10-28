@@ -2360,13 +2360,10 @@ func TestChangefeedMonitoring(t *testing.T) {
 		if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 0 {
 			t.Errorf(`expected 0 got %d`, c)
 		}
-		if c := s.MustGetSQLCounter(`changefeed.emit_nanos`); c != 0 {
+		if c := s.MustGetSQLCounter(`changefeed.flushed_bytes`); c != 0 {
 			t.Errorf(`expected 0 got %d`, c)
 		}
 		if c := s.MustGetSQLCounter(`changefeed.flushes`); c != 0 {
-			t.Errorf(`expected 0 got %d`, c)
-		}
-		if c := s.MustGetSQLCounter(`changefeed.flush_nanos`); c != 0 {
 			t.Errorf(`expected 0 got %d`, c)
 		}
 		if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c != 0 {
@@ -2391,17 +2388,14 @@ func TestChangefeedMonitoring(t *testing.T) {
 			if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 22 {
 				return errors.Errorf(`expected 22 got %d`, c)
 			}
-			if c := s.MustGetSQLCounter(`changefeed.emit_nanos`); c <= 0 {
-				return errors.Errorf(`expected > 0 got %d`, c)
+			if c := s.MustGetSQLCounter(`changefeed.flushed_bytes`); c != 22 {
+				return errors.Errorf(`expected 22 got %d`, c)
 			}
 			if c := s.MustGetSQLCounter(`changefeed.flushes`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
 			if c := s.MustGetSQLCounter(`changefeed.running`); c != 1 {
 				return errors.Errorf(`expected 1 got %d`, c)
-			}
-			if c := s.MustGetSQLCounter(`changefeed.flush_nanos`); c <= 0 {
-				return errors.Errorf(`expected > 0 got %d`, c)
 			}
 			if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
