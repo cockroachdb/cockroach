@@ -1315,6 +1315,7 @@ func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 
 func TestChangefeedColumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 71796, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
