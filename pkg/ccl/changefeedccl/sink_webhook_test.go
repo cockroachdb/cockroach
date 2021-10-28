@@ -61,7 +61,7 @@ func setupWebhookSinkWithDetails(
 		return nil, err
 	}
 
-	sinkSrc, err := makeWebhookSink(ctx, sinkURL{URL: u}, details.Opts, parallelism, source)
+	sinkSrc, err := makeWebhookSink(ctx, sinkURL{URL: u}, details.Opts, parallelism, source, nil)
 	if err != nil {
 		return nil, err
 	}
