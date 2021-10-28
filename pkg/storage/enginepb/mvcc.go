@@ -293,6 +293,11 @@ func (meta *MVCCMetadata) SafeFormat(w redact.SafePrinter, _ rune) {
 			w.Printf(" rawlen=%d", len(meta.RawBytes))
 		}
 	}
+
+	if meta.MergeTimestamp != nil {
+		w.Printf(" mergeTs=%s", meta.MergeTimestamp)
+	}
+
 	if nih := len(meta.IntentHistory); nih > 0 {
 		if expand {
 			w.Printf(" ih={")
@@ -309,7 +314,7 @@ func (meta *MVCCMetadata) SafeFormat(w redact.SafePrinter, _ rune) {
 	if meta.TxnDidNotUpdateMeta != nil {
 		txnDidNotUpdateMeta = *meta.TxnDidNotUpdateMeta
 	}
-	w.Printf(" mergeTs=%s txnDidNotUpdateMeta=%t", meta.MergeTimestamp, txnDidNotUpdateMeta)
+	w.Printf(" txnDidNotUpdateMeta=%t", txnDidNotUpdateMeta)
 }
 
 func (meta *MVCCMetadataSubsetForMergeSerialization) String() string {

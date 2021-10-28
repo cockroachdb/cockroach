@@ -16,7 +16,7 @@ with t=A
 ----
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=123.000000000,0 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=1} ts=123.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=1} ts=123.000000000,0 del=false klen=12 vlen=6 txnDidNotUpdateMeta=false
 data: "k"/123.000000000,0 -> /BYTES/v
 
 # Now, overwrite value1 with value2 from same txn; should see value1
@@ -29,7 +29,7 @@ with t=A
 ----
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=123.000000000,0 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=2} ts=123.000000000,0 del=false klen=12 vlen=7 ih={{1 /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=2} ts=123.000000000,0 del=false klen=12 vlen=7 ih={{1 /BYTES/v}} txnDidNotUpdateMeta=false
 data: "k"/123.000000000,0 -> /BYTES/v2
 
 # Writing value3 from a new epoch should see nil again.
@@ -42,7 +42,7 @@ with t=A
 ----
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=123.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=123.000000000,0 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=123.000000000,0 min=0,0 seq=1} ts=123.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=123.000000000,0 min=0,0 seq=1} ts=123.000000000,0 del=false klen=12 vlen=7 txnDidNotUpdateMeta=false
 data: "k"/123.000000000,0 -> /BYTES/v3
 
 # Commit value3 at a later timestamp.
@@ -90,7 +90,7 @@ with t=A
 ----
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=2.000000000,0 wto=false gul=0,0
-meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1} ts=2.000000000,0 del=false klen=12 vlen=9 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1} ts=2.000000000,0 del=false klen=12 vlen=9 txnDidNotUpdateMeta=false
 data: "c"/2.000000000,0 -> /BYTES/cput
 data: "c"/1.000000000,0 -> /BYTES/value
 
@@ -108,6 +108,6 @@ txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=3.000000000,0 min=0,
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=3.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
 >> cput k=c v=cput cond=value t=A
 called PutIntent("c", _, ExistingIntentSeparated, TDNUM(false), 00000000-0000-0000-0000-000000000002)
-meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=9 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=9 txnDidNotUpdateMeta=false
 data: "c"/3.000000000,0 -> /BYTES/cput
 data: "c"/1.000000000,0 -> /BYTES/value
