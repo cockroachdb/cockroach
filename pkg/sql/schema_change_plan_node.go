@@ -19,9 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,14 +43,17 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	}
 	scs := p.extendedEvalCtx.SchemaChangerState
 	scs.stmts = append(scs.stmts, p.stmt.SQL)
-	buildDeps := scbuild.Dependencies{
-		Res:          p,
-		SemaCtx:      p.SemaCtx(),
-		EvalCtx:      p.EvalContext(),
-		Descs:        p.Descriptors(),
-		AuthAccessor: p,
-	}
-	outputNodes, err := scbuild.Build(ctx, buildDeps, p.extendedEvalCtx.SchemaChangerState.state, stmt)
+	deps := scdeps.NewBuilderDependencies(
+		p.ExecCfg().Codec,
+		p.Txn(),
+		p.Descriptors(),
+		p,
+		p,
+		p.SessionData(),
+		p.ExecCfg().Settings,
+		scs.stmts,
+	)
+	outputNodes, err := scbuild.Build(ctx, deps, scs.state, stmt)
 	if scbuild.HasNotImplemented(err) && mode == sessiondatapb.UseNewSchemaChangerOn {
 		return nil, false, nil
 	}
@@ -124,13 +128,18 @@ type schemaChangePlanNode struct {
 
 func (s *schemaChangePlanNode) startExec(params runParams) error {
 	p := params.p
-	scs := p.extendedEvalCtx.SchemaChangerState
-	executor := scexec.NewExecutor(p.txn, p.Descriptors(), p.EvalContext().Codec,
-		nil /* backfiller */, nil /* jobTracker */, p.ExecCfg().NewSchemaChangerTestingKnobs,
-		params.extendedEvalCtx.ExecCfg.JobRegistry, params.p.execCfg.InternalExecutor)
-	after, err := runNewSchemaChanger(
-		params.ctx, scop.StatementPhase, s.plannedState, executor, scs.stmts,
+	scs := p.ExtendedEvalContext().SchemaChangerState
+	deps := scdeps.NewExecutorDependencies(
+		p.EvalContext().Codec,
+		p.Txn(),
+		p.Descriptors(),
+		p.ExecCfg().JobRegistry,
+		p.ExecCfg().IndexBackfiller,
+		p.ExecCfg().NewSchemaChangerTestingKnobs,
+		scs.stmts,
+		scop.StatementPhase,
 	)
+	after, err := scrun.RunSchemaChangesInTxn(params.ctx, deps, s.plannedState)
 	if err != nil {
 		return err
 	}

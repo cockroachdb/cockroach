@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -32,10 +31,7 @@ func (b *buildContext) maybeDropViewAndDependents(
 	ctx context.Context, view catalog.TableDescriptor, behavior tree.DropBehavior,
 ) {
 	// Validate we have drop privileges.
-	err := b.AuthAccessor.CheckPrivilege(ctx, view, privilege.DROP)
-	if err != nil {
-		panic(err)
-	}
+	onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, view, privilege.DROP))
 	// Create a node for the view we are going to drop.
 	viewNode := &scpb.View{
 		TableID:      view.GetID(),
@@ -74,25 +70,14 @@ func (b *buildContext) maybeDropViewAndDependents(
 	// Remove any type back refs.
 	b.removeTypeBackRefDeps(ctx, view)
 	// Drop any dependent views next.
-	err = view.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
-		dependentDesc, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, dep.ID, tree.ObjectLookupFlagsWithRequired())
-		if err != nil {
-			return err
-		}
-		err = b.AuthAccessor.CheckPrivilege(ctx, dependentDesc, privilege.DROP)
-		if err != nil {
-			return err
-		}
+	_ = view.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+		dependentDesc := mustReadTable(ctx, b, dep.ID)
+		onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, dependentDesc, privilege.DROP))
 		if behavior != tree.DropCascade {
-			name, err := b.Res.GetQualifiedTableNameByID(ctx, int64(view.GetID()), tree.ResolveRequireViewDesc)
-			if err != nil {
-				return err
-			}
-
-			depViewName, err := b.Res.GetQualifiedTableNameByID(ctx, int64(dep.ID), tree.ResolveRequireViewDesc)
-			if err != nil {
-				return err
-			}
+			name, err := b.CatalogReader().GetQualifiedTableNameByID(ctx, int64(view.GetID()), tree.ResolveRequireViewDesc)
+			onErrPanic(err)
+			depViewName, err := b.CatalogReader().GetQualifiedTableNameByID(ctx, int64(dep.ID), tree.ResolveRequireViewDesc)
+			onErrPanic(err)
 			panic(errors.WithHintf(
 				sqlerrors.NewDependentObjectErrorf("cannot drop view %q because view %q depends on it",
 					name, depViewName.FQString()),
@@ -101,10 +86,6 @@ func (b *buildContext) maybeDropViewAndDependents(
 		b.maybeDropViewAndDependents(ctx, dependentDesc, behavior)
 		return nil
 	})
-	if err != nil {
-		panic(err)
-	}
-
 }
 
 // dropView builds targets and transforms the provided schema change nodes
@@ -112,26 +93,24 @@ func (b *buildContext) maybeDropViewAndDependents(
 func (b *buildContext) dropView(ctx context.Context, n *tree.DropView) {
 	// Find the view first.
 	for _, name := range n.Names {
-		_, view, err := resolver.ResolveExistingTableObject(ctx, b.Res, &name,
-			tree.ObjectLookupFlagsWithRequired())
-		if err != nil {
-			if errors.Is(err, catalog.ErrDescriptorNotFound) && n.IfExists {
+		_, table := b.CatalogReader().MayResolveTable(ctx, *name.ToUnresolvedObjectName())
+		if table == nil {
+			if n.IfExists {
 				continue
 			}
-			panic(err)
+			panic(sqlerrors.NewUndefinedRelationError(&name))
 		}
-		if view == nil {
-			panic(errors.AssertionFailedf("Unable to resolve view %s",
-				name.FQString()))
+		if !table.IsView() {
+			panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a view", table.GetName()))
 		}
-		// Check if its materialized or not correctly.
-		isMaterialized := view.MaterializedView()
-		if isMaterialized && !n.IsMaterialized {
-			panic(errors.WithHint(pgerror.Newf(pgcode.WrongObjectType, "%q is a materialized view", view.GetName()),
+		if table.MaterializedView() && !n.IsMaterialized {
+			panic(errors.WithHint(pgerror.Newf(pgcode.WrongObjectType, "%q is a materialized view", table.GetName()),
 				"use the corresponding MATERIALIZED VIEW command"))
-		} else if !isMaterialized && n.IsMaterialized {
-			panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a materialized view", view.GetName()))
 		}
-		b.maybeDropViewAndDependents(ctx, view, n.DropBehavior)
+		if !table.MaterializedView() && n.IsMaterialized {
+			panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a materialized view", table.GetName()))
+		}
+		onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, table, privilege.DROP))
+		b.maybeDropViewAndDependents(ctx, table, n.DropBehavior)
 	}
 }

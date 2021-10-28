@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -43,14 +42,16 @@ func (b *buildContext) alterTable(ctx context.Context, n *tree.AlterTable) {
 	// that is bad.
 	n.HoistAddColumnConstraints()
 
-	// Resolve the table.
 	tn := n.Table.ToTableName()
-	table, err := b.getTableDescriptorForLockingChange(ctx, &tn)
-	if err != nil {
-		if errors.Is(err, catalog.ErrDescriptorNotFound) && n.IfExists {
+	_, table := b.CatalogReader().MayResolveTable(ctx, *n.Table)
+	if table == nil {
+		if n.IfExists {
 			return
 		}
-		panic(err)
+		panic(sqlerrors.NewUndefinedRelationError(n.Table))
+	}
+	if HasConcurrentSchemaChanges(table) {
+		panic(&ConcurrentSchemaChangeError{descID: table.GetID()})
 	}
 	for _, cmd := range n.Cmds {
 		b.alterTableCmd(ctx, table, cmd, &tn)
@@ -77,15 +78,13 @@ func (b *buildContext) alterTableAddColumn(
 	d := t.ColumnDef
 
 	if d.IsComputed() {
-		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.EvalCtx.SessionData())
+		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.SessionData())
 	}
 
-	toType, err := tree.ResolveType(ctx, d.Type, b.SemaCtx.GetTypeResolver())
-	if err != nil {
-		panic(err)
-	}
+	toType, err := tree.ResolveType(ctx, d.Type, b.CatalogReader())
+	onErrPanic(err)
 
-	version := b.EvalCtx.Settings.Version.ActiveVersionOrEmpty(ctx)
+	version := b.ClusterSettings().Version.ActiveVersionOrEmpty(ctx)
 	supported := types.IsTypeSupportedInVersion(version, toType)
 	if !supported {
 		panic(pgerror.Newf(
@@ -109,10 +108,9 @@ func (b *buildContext) alterTableAddColumn(
 	if d.Unique.IsUnique {
 		panic(&notImplementedError{n: t.ColumnDef, detail: "contains unique constraint"})
 	}
-	col, idx, defaultExpr, err := tabledesc.MakeColumnDefDescs(ctx, d, b.SemaCtx, b.EvalCtx)
-	if err != nil {
-		panic(err)
-	}
+	col, idx, defaultExpr, err := tabledesc.MakeColumnDefDescs(ctx, d, semaCtx(b), evalCtx(ctx, b))
+	onErrPanic(err)
+
 	colID := b.nextColumnID(table)
 	col.ID = colID
 
@@ -144,29 +142,22 @@ func (b *buildContext) alterTableAddColumn(
 		// TODO (lucy): This is not going to work when the computed column
 		// references columns created in the same transaction.
 		serializedExpr, _, err := schemaexpr.ValidateComputedColumnExpression(
-			ctx, table, d, tn, "computed column", b.SemaCtx,
+			ctx, table, d, tn, "computed column", semaCtx(b),
 		)
-		if err != nil {
-			panic(err)
-		}
+		onErrPanic(err)
 		col.ComputeExpr = &serializedExpr
 	}
 
 	if toType.UserDefined() {
 		typeID, err := typedesc.UserDefinedTypeOIDToID(toType.Oid())
-		if err != nil {
-			panic(err)
-		}
-		typeDesc, err := b.Descs.GetMutableTypeByID(ctx, b.EvalCtx.Txn, typeID, tree.ObjectLookupFlagsWithRequired())
-		if err != nil {
-			panic(err)
-		}
+		onErrPanic(err)
+		typeDesc := mustReadType(ctx, b, typeID)
 		// Only add a type reference node only if there isn't
 		// any existing reference inside this table. This makes
 		// it easier to handle drop columns and other operations,
 		// since those can for example only remove nodes.
 		found := false
-		for _, refID := range typeDesc.GetReferencingDescriptorIDs() {
+		for _, refID := range typeDesc.TypeDesc().GetReferencingDescriptorIDs() {
 			if refID == table.GetID() {
 				found = true
 				break
@@ -279,7 +270,7 @@ func (b *buildContext) findOrAddColumnFamily(
 func (b *buildContext) alterTableDropColumn(
 	ctx context.Context, table catalog.TableDescriptor, t *tree.AlterTableDropColumn,
 ) {
-	if b.EvalCtx.SessionData().SafeUpdates {
+	if b.SessionData().SafeUpdates {
 		panic(pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will " +
 			"remove all data in that column"))
 	}
@@ -335,15 +326,10 @@ func (b *buildContext) alterTableDropColumn(
 		}
 		if needsDrop {
 			typeID, err := typedesc.UserDefinedTypeOIDToID(colType.Oid())
-			if err != nil {
-				panic(err)
-			}
-			typeDesc, err := b.Descs.GetMutableTypeByID(ctx, b.EvalCtx.Txn, typeID, tree.ObjectLookupFlagsWithRequired())
-			if err != nil {
-				panic(err)
-			}
+			onErrPanic(err)
+			typ := mustReadType(ctx, b, typeID)
 			b.addNode(scpb.Target_DROP, &scpb.TypeReference{
-				TypeID: typeDesc.GetID(),
+				TypeID: typ.GetID(),
 				DescID: table.GetID(),
 			})
 		}
@@ -366,37 +352,25 @@ func (b *buildContext) maybeAddSequenceReferenceDependencies(
 	ctx context.Context, tableID descpb.ID, col *descpb.ColumnDescriptor, defaultExpr tree.TypedExpr,
 ) {
 	seqIdentifiers, err := seqexpr.GetUsedSequences(defaultExpr)
-	if err != nil {
-		panic(err)
-	}
+	onErrPanic(err)
 
-	var tn tree.TableName
 	seqNameToID := make(map[string]int64)
 	for _, seqIdentifier := range seqIdentifiers {
+		var seq catalog.TableDescriptor
 		if seqIdentifier.IsByID() {
-			name, err := b.SemaCtx.TableNameResolver.GetQualifiedTableNameByID(
-				ctx, seqIdentifier.SeqID, tree.ResolveRequireSequenceDesc)
-			if err != nil {
-				panic(err)
-			}
-			tn = *name
+			seq = mustReadTable(ctx, b, descpb.ID(seqIdentifier.SeqID))
 		} else {
 			parsedSeqName, err := parser.ParseTableName(seqIdentifier.SeqName)
-			if err != nil {
-				panic(err)
+			onErrPanic(err)
+			_, seq = b.CatalogReader().MayResolveTable(ctx, *parsedSeqName)
+			if seq == nil {
+				panic(errors.WithAssertionFailure(sqlerrors.NewUndefinedRelationError(parsedSeqName)))
 			}
-			tn = parsedSeqName.ToTableName()
+			seqNameToID[seqIdentifier.SeqName] = int64(seq.GetID())
 		}
-
-		seqDesc, err := b.getTableDescriptor(ctx, &tn)
-		if err != nil {
-			panic(err)
-		}
-		seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.GetID())
-
-		col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.GetID())
+		col.UsesSequenceIds = append(col.UsesSequenceIds, seq.GetID())
 		b.addNode(scpb.Target_ADD, &scpb.SequenceDependency{
-			SequenceID: seqDesc.GetID(),
+			SequenceID: seq.GetID(),
 			TableID:    tableID,
 			ColumnID:   col.ID,
 		})
@@ -404,9 +378,7 @@ func (b *buildContext) maybeAddSequenceReferenceDependencies(
 
 	if len(seqIdentifiers) > 0 {
 		newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(defaultExpr, seqNameToID)
-		if err != nil {
-			panic(err)
-		}
+		onErrPanic(err)
 		s := tree.Serialize(newExpr)
 		col.DefaultExpr = &s
 	}
@@ -584,22 +556,16 @@ func (b *buildContext) maybeCleanTableSequenceRefs(
 		// Loop over owned sequences
 		for seqIdx := 0; seqIdx < col.NumOwnsSequences(); seqIdx++ {
 			seqID := col.GetOwnsSequenceID(seqIdx)
-			table, err := b.Descs.GetMutableTableByID(ctx, b.EvalCtx.Txn, seqID, tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc))
-			if err != nil {
-				panic(err)
-			}
+			seq := mustReadTable(ctx, b, seqID)
 			if behavior != tree.DropCascade {
 				panic(pgerror.Newf(
 					pgcode.DependentObjectsStillExist,
 					"cannot drop table %s because other objects depend on it",
-					table.GetName(),
+					seq.GetName(),
 				))
 			}
-			err = b.AuthAccessor.CheckPrivilege(ctx, table, privilege.DROP)
-			if err != nil {
-				panic(err)
-			}
-			b.dropSequenceDesc(ctx, table, tree.DropCascade)
+			onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, seq, privilege.DROP))
+			b.dropSequenceDesc(ctx, seq, tree.DropCascade)
 		}
 		// Setup logic to clean up the default expression always.
 		defaultExpr := &scpb.DefaultExpression{
@@ -617,15 +583,11 @@ func (b *buildContext) maybeCleanTableSequenceRefs(
 		}
 		if col.HasDefault() && !col.ColumnDesc().HasNullDefault() {
 			expr, err := parser.ParseExpr(col.GetDefaultExpr())
-			if err != nil {
-				panic(err)
-			}
+			onErrPanic(err)
 			tree.WalkExpr(visitor, expr)
 			for oid := range visitor.OIDs {
 				typeID, err := typedesc.UserDefinedTypeOIDToID(oid)
-				if err != nil {
-					panic(err)
-				}
+				onErrPanic(err)
 				typeRef := &scpb.TypeReference{
 					TypeID: typeID,
 					DescID: table.GetID(),
@@ -657,19 +619,13 @@ func (b *buildContext) maybeCleanTableFKs(
 ) { // Loop through and update inbound and outbound
 	// foreign key references.
 	_ = table.ForeachInboundFK(func(fk *descpb.ForeignKeyConstraint) error {
-		dependentTable, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, fk.OriginTableID, tree.ObjectLookupFlagsWithRequired())
-		if err != nil {
-			panic(err)
-		}
+		dependentTable := mustReadTable(ctx, b, fk.OriginTableID)
 		if behavior != tree.DropCascade {
 			panic(pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
 				"%q is referenced by foreign key from table %q", fk.Name, dependentTable.GetName()))
 		}
-		err = b.AuthAccessor.CheckPrivilege(ctx, dependentTable, privilege.DROP)
-		if err != nil {
-			panic(err)
-		}
+		onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, dependentTable, privilege.DROP))
 		outFkNode := &scpb.OutboundForeignKey{
 			OriginID:         fk.OriginTableID,
 			OriginColumns:    fk.OriginColumnIDs,
@@ -737,26 +693,17 @@ func (b *buildContext) dropTableDesc(
 	}
 
 	// Drop dependent views
-	err := table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
-		dependentDesc, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, dep.ID, tree.ObjectLookupFlagsWithRequired())
-		if err != nil {
-			panic(err)
-		}
+	onErrPanic(table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+		dependentDesc := mustReadTable(ctx, b, dep.ID)
 		if behavior != tree.DropCascade {
 			return pgerror.Newf(
 				pgcode.DependentObjectsStillExist, "cannot drop table %q because view %q depends on it",
 				table.GetName(), dependentDesc.GetName())
 		}
-		err = b.AuthAccessor.CheckPrivilege(ctx, dependentDesc, privilege.DROP)
-		if err != nil {
-			panic(err)
-		}
+		onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, dependentDesc, privilege.DROP))
 		b.maybeDropViewAndDependents(ctx, dependentDesc, behavior)
 		return nil
-	})
-	if err != nil {
-		panic(err)
-	}
+	}))
 
 	// Clean up foreign key references (both inbound
 	// and out bound).
@@ -773,18 +720,17 @@ func (b *buildContext) dropTableDesc(
 func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
 	// Find the table first.
 	for _, name := range n.Names {
-		_, table, err := resolver.ResolveExistingTableObject(ctx, b.Res, &name,
-			tree.ObjectLookupFlagsWithRequired())
-		if err != nil {
-			if errors.Is(err, catalog.ErrDescriptorNotFound) && n.IfExists {
-				return
-			}
-			panic(err)
-		}
+		_, table := b.CatalogReader().MayResolveTable(ctx, *name.ToUnresolvedObjectName())
 		if table == nil {
-			panic(errors.AssertionFailedf("Unable to resolve table %s",
-				name.FQString()))
+			if n.IfExists {
+				continue
+			}
+			panic(sqlerrors.NewUndefinedRelationError(&name))
 		}
+		if !table.IsTable() {
+			panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a table", table.GetName()))
+		}
+		onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, table, privilege.DROP))
 		b.dropTableDesc(ctx, table, n.DropBehavior)
 	}
 }

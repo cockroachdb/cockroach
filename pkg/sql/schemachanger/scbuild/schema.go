@@ -12,118 +12,95 @@ package scbuild
 
 import (
 	"context"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 )
 
 func (b *buildContext) dropSchemaDesc(
-	ctx context.Context, sc catalog.SchemaDescriptor, db *dbdesc.Mutable, behavior tree.DropBehavior,
-) (nodeAdded bool, dropIDs []descpb.ID) {
-	nodeAdded = false
+	ctx context.Context,
+	db catalog.DatabaseDescriptor,
+	schema catalog.SchemaDescriptor,
+	behavior tree.DropBehavior,
+) (nodeAdded bool, dropIDs catalog.DescriptorIDSet) {
 	// For non-user defined schemas, another check will be
 	// done each object as we go to drop them.
-	if sc.SchemaKind() == catalog.SchemaUserDefined {
-		isAdmin, err := b.AuthAccessor.HasAdminRole(ctx)
-		if err != nil {
-			panic(err)
-		}
-		hasOwnership, err := b.AuthAccessor.HasOwnership(ctx, sc)
-		if err != nil {
-			panic(err)
-		}
+	if schema.SchemaKind() == catalog.SchemaUserDefined {
+		isAdmin, err := b.AuthorizationAccessor().HasAdminRole(ctx)
+		onErrPanic(err)
+		hasOwnership, err := b.AuthorizationAccessor().HasOwnership(ctx, schema)
+		onErrPanic(err)
 		if !(isAdmin || hasOwnership) {
-			panic(pgerror.Newf(pgcode.InsufficientPrivilege, "permission denied to drop schema %q", sc.GetName()))
+			panic(pgerror.Newf(pgcode.InsufficientPrivilege, "permission denied to drop schema %q", schema.GetName()))
 		}
 	}
-	_, dropIDs, err := resolver.GetObjectNamesAndIDs(ctx, b.EvalCtx.Txn, b.Res, b.EvalCtx.Codec, db, sc.GetName(), true /* explicitPrefix */)
-	if err != nil {
-		panic(err)
+	_, objectIDs := b.CatalogReader().ReadObjectNamesAndIDs(ctx, db, schema)
+	for _, id := range objectIDs {
+		dropIDs.Add(id)
 	}
-	if behavior != tree.DropCascade && len(dropIDs) > 0 {
+	if behavior != tree.DropCascade && !dropIDs.Empty() {
 		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
-			"schema %q is not empty and CASCADE was not specified", sc.GetName()))
+			"schema %q is not empty and CASCADE was not specified", schema.GetName()))
 	}
-	// Sort the dropped IDs to ensure a consistent order of
-	// operations.
-	sort.SliceStable(dropIDs, func(i, j int) bool {
-		return dropIDs[i] < dropIDs[j]
-	})
-	schemaNode := scpb.Schema{
-		SchemaID:         sc.GetID(),
-		DependentObjects: dropIDs,
-	}
-	for _, descID := range dropIDs {
-		tableDesc, err := b.Descs.GetMutableTableByID(ctx, b.EvalCtx.Txn, descID, tree.ObjectLookupFlagsWithRequired())
-		if err == nil {
-			if tableDesc.IsView() {
-				b.maybeDropViewAndDependents(ctx, tableDesc, behavior)
-			} else if tableDesc.IsSequence() {
-				b.dropSequenceDesc(ctx, tableDesc, behavior)
-			} else if tableDesc.IsTable() {
-				b.dropTableDesc(ctx, tableDesc, behavior)
+
+	for _, id := range dropIDs.Ordered() {
+		desc := b.CatalogReader().MustReadDescriptor(ctx, id)
+		switch t := desc.(type) {
+		case catalog.TableDescriptor:
+			if t.IsView() {
+				b.maybeDropViewAndDependents(ctx, t, behavior)
+			} else if t.IsSequence() {
+				b.dropSequenceDesc(ctx, t, behavior)
+			} else if t.IsTable() {
+				b.dropTableDesc(ctx, t, behavior)
+			} else {
+				panic(errors.AssertionFailedf("Table descriptor %q (%d) is neither table, sequence or view",
+					t.GetName(), t.GetID()))
 			}
-		} else if pgerror.GetPGCode(err) == pgcode.UndefinedTable {
-			typeDesc, err := b.Descs.GetMutableTypeByID(ctx, b.EvalCtx.Txn, descID, tree.ObjectLookupFlagsWithRequired())
-			if err != nil {
-				panic(err)
-			}
-			b.dropTypeDesc(ctx, typeDesc, behavior, true /* ignoreAlises*/)
-		} else {
-			panic(err)
+		case catalog.TypeDescriptor:
+			b.dropTypeDesc(ctx, t, behavior, true /* ignoreAliases */)
+		default:
+			panic(errors.AssertionFailedf("Expected table or type descriptor, instead %q (%d) is %q",
+				t.GetName(), t.GetID(), t.DescriptorType()))
 		}
 	}
 
-	if sc.SchemaKind() != catalog.SchemaPublic &&
-		sc.SchemaKind() != catalog.SchemaVirtual &&
-		sc.SchemaKind() != catalog.SchemaTemporary {
-		// Add a schema node with all the dependencies.
-		b.addNode(scpb.Target_DROP, &schemaNode)
-		nodeAdded = true
+	switch schema.SchemaKind() {
+	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
+		return false, dropIDs
+	case catalog.SchemaUserDefined:
+		b.addNode(scpb.Target_DROP, &scpb.Schema{
+			SchemaID:         schema.GetID(),
+			DependentObjects: dropIDs.Ordered(),
+		})
+		return true, dropIDs
 	}
-	return nodeAdded, dropIDs
+	panic(errors.AssertionFailedf("Unexpected schema kind %q for schema %q (%d)",
+		schema.SchemaKind(), schema.GetName(), schema.GetID()))
 }
+
 func (b *buildContext) dropSchema(ctx context.Context, n *tree.DropSchema) {
 	for _, name := range n.Names {
-		dbName := b.Res.CurrentDatabase()
-		if name.ExplicitCatalog {
-			dbName = name.Catalog()
-		}
-		scName := name.Schema()
-		db, err := b.Descs.GetMutableDatabaseByName(ctx, b.EvalCtx.Txn, dbName,
-			tree.DatabaseLookupFlags{Required: true})
-		if err != nil {
-			panic(err)
-		}
-
-		sc, err := b.Descs.GetSchemaByName(ctx, b.EvalCtx.Txn, db, scName, tree.SchemaLookupFlags{
-			Required: true,
-		})
-		if err != nil {
-			panic(err)
-		}
-		if sc == nil {
+		db, schema := b.CatalogReader().MayResolveSchema(ctx, name)
+		if schema == nil {
 			if n.IfExists {
 				continue
 			}
-			panic(pgerror.Newf(pgcode.InvalidSchemaName, "unknown schema %q", scName))
+			panic(sqlerrors.NewUndefinedSchemaError(name.String()))
 		}
-
-		switch sc.SchemaKind() {
+		switch schema.SchemaKind() {
 		case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
-			panic(pgerror.Newf(pgcode.InvalidSchemaName, "cannot drop schema %q", sc.GetName()))
+			panic(pgerror.Newf(pgcode.InsufficientPrivilege, "cannot drop schema %q", schema.GetName()))
 		case catalog.SchemaUserDefined:
-			b.dropSchemaDesc(ctx, sc, db, n.DropBehavior)
+			// break
 		default:
-			panic(errors.AssertionFailedf("unknown schema kind %d", sc.SchemaKind()))
+			panic(errors.AssertionFailedf("unknown schema kind %d", schema.SchemaKind()))
 		}
+		b.dropSchemaDesc(ctx, db, schema, n.DropBehavior)
 	}
 }

@@ -253,7 +253,7 @@ func TestSterileSpan(t *testing.T) {
 
 	// Check that the meta of a sterile span doesn't get injected into carriers.
 	carrier := metadataCarrier{metadata.MD{}}
-	require.NoError(t, tr.InjectMetaInto(sp1.Meta(), carrier))
+	tr.InjectMetaInto(sp1.Meta(), carrier)
 	require.Len(t, carrier.MD, 0)
 }
 
@@ -268,9 +268,7 @@ func TestTracerInjectExtract(t *testing.T) {
 		t.Fatalf("expected noop Span: %+v", noop1)
 	}
 	carrier := metadataCarrier{metadata.MD{}}
-	if err := tr.InjectMetaInto(noop1.Meta(), carrier); err != nil {
-		t.Fatal(err)
-	}
+	tr.InjectMetaInto(noop1.Meta(), carrier)
 	if len(carrier.MD) != 0 {
 		t.Errorf("noop Span has carrier: %+v", carrier)
 	}
@@ -296,9 +294,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	s1.SetVerbose(true)
 
 	carrier = metadataCarrier{metadata.MD{}}
-	if err := tr.InjectMetaInto(s1.Meta(), carrier); err != nil {
-		t.Fatal(err)
-	}
+	tr.InjectMetaInto(s1.Meta(), carrier)
 
 	wireSpanMeta, err = tr2.ExtractMetaFrom(carrier)
 	if err != nil {
@@ -355,7 +351,7 @@ func TestTracer_PropagateNonRecordingRealSpanAcrossRPCBoundaries(t *testing.T) {
 	defer sp1.Finish()
 	carrier := metadataCarrier{MD: metadata.MD{}}
 	require.True(t, spanInclusionFuncForClient(sp1))
-	require.NoError(t, tr1.InjectMetaInto(sp1.Meta(), carrier))
+	tr1.InjectMetaInto(sp1.Meta(), carrier)
 	require.Equal(t, 2, carrier.Len(), "%+v", carrier) // trace id and span id
 
 	tr2 := NewTracer()
@@ -386,9 +382,7 @@ func TestOtelTracer(t *testing.T) {
 	s.Record("hello")
 
 	carrier := metadataCarrier{metadata.MD{}}
-	if err := tr.InjectMetaInto(s.Meta(), carrier); err != nil {
-		t.Fatal(err)
-	}
+	tr.InjectMetaInto(s.Meta(), carrier)
 
 	// ExtractMetaFrom also extracts the embedded OpenTelemetry context.
 	wireSpanMeta, err := tr.ExtractMetaFrom(carrier)

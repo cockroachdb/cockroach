@@ -767,17 +767,17 @@ func (c MapCarrier) ForEach(fn func(key, val string) error) error {
 // InjectMetaInto is used to serialize the given span metadata into the given
 // Carrier. This, alongside ExtractMetaFrom, can be used to carry span metadata
 // across process boundaries. See serializationFormat for more details.
-func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) error {
+func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) {
 	if sm.Empty() {
 		// Fast path when tracing is disabled. ExtractMetaFrom will accept an
 		// empty map as a noop context.
-		return nil
+		return
 	}
 	// If the span has been marked as not wanting children, we don't propagate any
 	// information about it through the carrier (the point of propagating span
 	// info is to create a child from it).
 	if sm.sterile {
-		return nil
+		return
 	}
 
 	carrier.Set(fieldNameTraceID, strconv.FormatUint(uint64(sm.traceID), 16))
@@ -791,8 +791,6 @@ func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) error {
 		carrier.Set(fieldNameOtelTraceID, sm.otelCtx.TraceID().String())
 		carrier.Set(fieldNameOtelSpanID, sm.otelCtx.SpanID().String())
 	}
-
-	return nil
 }
 
 var noopSpanMeta = SpanMeta{}

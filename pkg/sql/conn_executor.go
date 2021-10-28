@@ -39,11 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -2915,95 +2913,35 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 // mutate descriptors prior to committing a SQL transaction.
 func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	scs := &ex.extraTxnState.schemaChangerState
-	if len(scs.state) == 0 {
-		return nil
-	}
-	executor := scexec.NewExecutor(
-		ex.planner.txn, &ex.extraTxnState.descCollection, ex.server.cfg.Codec,
-		nil /* backfiller */, nil /* jobTracker */, ex.server.cfg.NewSchemaChangerTestingKnobs,
-		ex.server.cfg.JobRegistry, ex.planner.execCfg.InternalExecutor,
-	)
-	after, err := runNewSchemaChanger(
-		ctx,
-		scop.PreCommitPhase,
-		ex.extraTxnState.schemaChangerState.state,
-		executor,
+	execDeps := scdeps.NewExecutorDependencies(
+		ex.server.cfg.Codec,
+		ex.planner.txn,
+		&ex.extraTxnState.descCollection,
+		ex.server.cfg.JobRegistry,
+		ex.server.cfg.IndexBackfiller,
+		ex.server.cfg.NewSchemaChangerTestingKnobs,
 		scs.stmts,
+		scop.PreCommitPhase,
 	)
-	if err != nil {
-		return err
+	{
+		after, err := scrun.RunSchemaChangesInTxn(ctx, execDeps, scs.state)
+		if err != nil {
+			return err
+		}
+		scs.state = after
 	}
-	scs.state = after
-	targetSlice := make([]*scpb.Target, len(scs.state))
-	states := make([]scpb.Status, len(scs.state))
-	// TODO(ajwerner): It may be better in the future to have the builder be
-	// responsible for determining this set of descriptors. As of the time of
-	// writing, the descriptors to be "locked," descriptors that need schema
-	// change jobs, and descriptors with schema change mutations all coincide. But
-	// there are future schema changes to be implemented in the new schema changer
-	// (e.g., RENAME TABLE) for which this may no longer be true.
-	descIDSet := catalog.MakeDescriptorIDSet()
-	for i := range scs.state {
-		targetSlice[i] = scs.state[i].Target
-		states[i] = scs.state[i].Status
-		// Depending on the element type either a single descriptor ID
-		// will exist or multiple (i.e. foreign keys).
-		if id := screl.GetDescID(scs.state[i].Element()); id != descpb.InvalidID {
-			descIDSet.Add(id)
+	{
+		jobDeps := scdeps.NewJobCreationDependencies(execDeps, ex.planner.User())
+		jobID, err := scrun.CreateSchemaChangeJob(ctx, jobDeps, scs.state)
+		if jobID != jobspb.InvalidJobID {
+			ex.extraTxnState.jobs = append(ex.extraTxnState.jobs, jobID)
+			log.Infof(ctx, "queued new schema change job %d using the new schema changer", jobID)
+		}
+		if err != nil {
+			return err
 		}
 	}
-	descIDs := descIDSet.Ordered()
-	job, err := ex.planner.extendedEvalCtx.QueueJob(ctx, jobs.Record{
-		Description:   "Schema change job", // TODO(ajwerner): use const
-		Statements:    scs.stmts,
-		Username:      ex.planner.User(),
-		DescriptorIDs: descIDs,
-		Details: jobspb.NewSchemaChangeDetails{
-			Targets: targetSlice,
-		},
-		Progress:      jobspb.NewSchemaChangeProgress{States: states},
-		RunningStatus: "",
-		NonCancelable: false,
-	})
-	if err != nil {
-		return err
-	}
-	// Write the job ID to the affected descriptors.
-	if err := scexec.UpdateDescriptorJobIDs(
-		ctx, ex.planner.Txn(), &ex.extraTxnState.descCollection, descIDs, jobspb.InvalidJobID, job.ID(),
-	); err != nil {
-		return err
-	}
-	log.Infof(ctx, "queued new schema change job %d using the new schema changer", job.ID())
 	return nil
-}
-
-func runNewSchemaChanger(
-	ctx context.Context,
-	phase scop.Phase,
-	state scpb.State,
-	executor *scexec.Executor,
-	stmts []string,
-) (after scpb.State, _ error) {
-	sc, err := scplan.MakePlan(state, scplan.Params{
-		ExecutionPhase: phase,
-		// TODO(ajwerner): Populate the set of new descriptors
-	})
-	if err != nil {
-		return nil, err
-	}
-	after = state
-	for _, s := range sc.Stages {
-		if err := executor.ExecuteOps(ctx, s.Ops,
-			scexec.TestingKnobMetadata{
-				Statements: stmts,
-				Phase:      phase,
-			}); err != nil {
-			return nil, err
-		}
-		after = s.After
-	}
-	return after, nil
 }
 
 // StatementCounters groups metrics for counting different types of
