@@ -315,6 +315,10 @@ func (meta *MVCCMetadata) SafeFormat(w redact.SafePrinter, _ rune) {
 		txnDidNotUpdateMeta = *meta.TxnDidNotUpdateMeta
 	}
 	w.Printf(" txnDidNotUpdateMeta=%t", txnDidNotUpdateMeta)
+
+	if meta.WrittenTimestamp != nil {
+		w.Printf(" writtenTs=%s", meta.WrittenTimestamp)
+	}
 }
 
 func (meta *MVCCMetadataSubsetForMergeSerialization) String() string {

@@ -15,6 +15,7 @@ option go_package = "enginepb";
 
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/legacy_timestamp.proto";
+import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/mvcc.go.
@@ -47,6 +48,9 @@ message MVCCMetadata {
   // value inlined, and with empty timestamp, key_bytes, and
   // val_bytes.
   optional bytes raw_bytes = 6;
+  // This provides a measure of protection against replays caused by
+  // Raft duplicating merge commands.
+  optional util.hlc.LegacyTimestamp merge_timestamp = 7;
   // SequencedIntent stores a value at a given key and the sequence number it was
   // written at - to be stored in an IntentHistory of a key during a transaction.
   message SequencedIntent {
@@ -61,17 +65,13 @@ message MVCCMetadata {
     // the above Sequence.
     optional bytes value = 2;
   }
-
   // IntentHistory of the transaction stores the older values the txn wrote
   // for the key along with each values corresponding Sequence. It doesn't
   // contain the latest intent value but rather stores all the values that have
   // been overwritten by the transaction.
-  // IntentHistory will be empty for non-transactional requests.
+  //
+  // Empty for MVCCMetadata structs that do not represent intents.
   repeated SequencedIntent intent_history = 8 [(gogoproto.nullable) = false];
-  // This provides a measure of protection against replays caused by
-  // Raft duplicating merge commands.
-  optional util.hlc.LegacyTimestamp merge_timestamp = 7;
-
   // Set to true iff we can guarantee that the transaction did not do more
   // than one Put without an intervening Delete. We assume that it is common
   // for this to be true. The default is false to accommodate code that did
@@ -83,7 +83,33 @@ message MVCCMetadata {
   // separated lock table key space, where the key for MVCCMetadata is unique
   // per transaction. In that case, when this is true, one can optimize
   // removal of the MVCCMetadata by doing a SingleDelete instead of Delete.
+  //
+  // Empty for MVCCMetadata structs that do not represent intents.
   optional bool txn_did_not_update_meta = 9;
+  // The timestamp that the intent was last written at by its own transaction,
+  // in cases where the intent has been pushed to a higher timestamp than this
+  // by a conflicting transaction. The timestamp is originally empty before the
+  // intent has been pushed and is reset to empty if the intent is rewritten by
+  // its own transaction with a newer epoch or sequence number.
+  //
+  // If set, the timestamp represents the highest time that the intent held in
+  // response to an action taken by its own transaction before committing. As a
+  // result, if the transaction does commit, this timestamp also serves as a
+  // lower bound on the clock of the leaseholder that holds this intent at the
+  // time that the transaction committed, because leaseholders forward their
+  // clock to the timestamp of incoming writes. By extension, it also serves as
+  // a lower bound on the clock of any leaseholder that holds the intent at any
+  // time after the transaction committed, because the clock across subsequent
+  // leaseholders for a range increases monotonically.
+  //
+  // Is set, written_timestamp < timestamp.
+  //
+  // If unset, the intent has not been pushed by a conflicting transaction since
+  // it was last written by its own transaction, so this is already represented
+  // by the timestamp field. Morally, written_timestamp == timestamp.
+  //
+  // Empty for MVCCMetadata structs that do not represent intents.
+  optional util.hlc.Timestamp written_timestamp = 10;
 }
 
 // A mirror of MVCCMetadata intended for serializing non-MVCC data that is

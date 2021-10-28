@@ -1,0 +1,88 @@
+run ok
+with t=A
+  txn_begin   ts=10
+  put         k=k v=v1
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=7 txnDidNotUpdateMeta=true
+data: "k"/10.000000000,0 -> /BYTES/v1
+
+# Push intent. Should add written timestamp.
+run ok
+with t=A
+  txn_advance    ts=15
+  resolve_intent k=k status=PENDING
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} ts=15.000000000,0 del=false klen=12 vlen=7 txnDidNotUpdateMeta=false writtenTs=10.000000000,0
+data: "k"/15.000000000,0 -> /BYTES/v1
+
+# Push intent again. Should retain existing written timestamp.
+run ok
+with t=A
+  txn_advance    ts=20
+  resolve_intent k=k status=PENDING
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=7 txnDidNotUpdateMeta=false writtenTs=10.000000000,0
+data: "k"/20.000000000,0 -> /BYTES/v1
+
+# Rewrite intent. Should strip written timestamp.
+run ok
+with t=A
+  txn_step
+  put k=k v=v2
+  txn_step
+  put k=k v=v3
+  txn_step
+  put k=k v=v4
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=3} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=3} ts=20.000000000,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}{1 /BYTES/v2}{2 /BYTES/v3}} txnDidNotUpdateMeta=false
+data: "k"/20.000000000,0 -> /BYTES/v4
+
+# Roll back seqnum without pushing. Should not add written timestamp.
+run ok
+with t=A
+  txn_ignore_seqs seqs=(3-3)
+  resolve_intent  k=k status=PENDING
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=3} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=2} ts=20.000000000,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}{1 /BYTES/v2}} txnDidNotUpdateMeta=false
+data: "k"/20.000000000,0 -> /BYTES/v3
+
+# Roll back seqnum while pushing. Should add written timestamp.
+run ok
+with t=A
+  txn_advance     ts=25
+  txn_ignore_seqs seqs=(2-2)
+  resolve_intent  k=k status=PENDING
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=25.000000000,0 min=0,0 seq=3} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=25.000000000,0 min=0,0 seq=1} ts=25.000000000,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}} txnDidNotUpdateMeta=false writtenTs=20.000000000,0
+data: "k"/25.000000000,0 -> /BYTES/v2
+
+# Roll back seqnum without pushing. Should retain written timestamp.
+run ok
+with t=A
+  txn_ignore_seqs seqs=(1-1)
+  resolve_intent  k=k status=PENDING
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=25.000000000,0 min=0,0 seq=3} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=25.000000000,0 min=0,0 seq=0} ts=25.000000000,0 del=false klen=12 vlen=7 txnDidNotUpdateMeta=false writtenTs=20.000000000,0
+data: "k"/25.000000000,0 -> /BYTES/v1
+
+# Commit intent.
+run ok
+with t=A
+  resolve_intent k=k status=COMMITTED
+----
+>> at end:
+data: "k"/25.000000000,0 -> /BYTES/v1

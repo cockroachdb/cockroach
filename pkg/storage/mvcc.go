@@ -3263,6 +3263,21 @@ func mvccResolveWriteIntent(
 		buf.newMeta.Timestamp = newTimestamp.ToLegacyTimestamp()
 		buf.newMeta.Txn.WriteTimestamp = newTimestamp
 
+		// If the intent is being pushed to a later timestamp, record its current
+		// timestamp as its "written timestamp". However, only do so if it hasn't
+		// already been assigned a written timestamp, which indicates that it has
+		// already been pushed at least once since it was last written by its own
+		// transaction.
+		//
+		// NOTE (for v22.1): we do not put this behind a version gate. Doing so is
+		// valid because even if the field does not round-trip through a v21.2 node
+		// and gets stripped during a subsequent push, we're no worse off than if we
+		// did not set it in the first place.
+		if pushed && buf.newMeta.WrittenTimestamp == nil {
+			writtenTimestamp := metaTimestamp // only alloc on this path
+			buf.newMeta.WrittenTimestamp = &writtenTimestamp
+		}
+
 		// Update or remove the metadata key.
 		var metaKeySize, metaValSize int64
 		if !commit {

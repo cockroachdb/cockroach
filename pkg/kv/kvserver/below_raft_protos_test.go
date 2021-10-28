@@ -68,6 +68,7 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 				m.MergeTimestamp.Synthetic = nil // never populated below Raft
 			}
 			m.TxnDidNotUpdateMeta = nil // never populated below Raft
+			m.WrittenTimestamp = nil    // never populated below Raft
 			return m
 		},
 		emptySum:     7551962144604783939,

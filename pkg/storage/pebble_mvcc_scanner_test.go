@@ -58,9 +58,10 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 		KeyBytes:            2, // arbitrary
 		ValBytes:            2, // arbitrary
 		RawBytes:            nil,
-		IntentHistory:       nil,
 		MergeTimestamp:      nil,
+		IntentHistory:       nil,
 		TxnDidNotUpdateMeta: nil,
+		WrittenTimestamp:    nil,
 	}
 
 	metaBytes, err := protoutil.Marshal(&meta)
