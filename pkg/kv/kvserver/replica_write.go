@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -68,6 +69,9 @@ import (
 func (r *Replica) executeWriteBatch(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
+	var tm *metric.Timing // TODO(tbg): should be plumbed in
+	tm.Event(ctx, "read-write pre-raft evaluation begins")
+	defer tm.Event(ctx, "read-write operation completed")
 	startTime := timeutil.Now()
 
 	// Even though we're not a read-only operation by definition, we have to
@@ -156,6 +160,7 @@ func (r *Replica) executeWriteBatch(
 	// We are done with pre-Raft evaluation at this point, and have to release the
 	// read-only command lock to avoid deadlocks during Raft evaluation.
 	r.readOnlyCmdMu.RUnlock()
+	_, replIdx := tm.Event(ctx, "waiting for raft replication")
 
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
@@ -184,6 +189,12 @@ func (r *Replica) executeWriteBatch(
 	for {
 		select {
 		case propResult := <-ch:
+			_, ackedIdx := tm.Event(ctx, "raft replication acked")
+			// TODO(tbg): this isn't really the right way to measure the replication
+			// latency since many callers don't wait for replication here. But for
+			// those that do, this is the delay they experience so it is a quantity
+			// of interest.
+			_ = tm.Between(replIdx, ackedIdx)
 			// Semi-synchronously process any intents that need resolving here in
 			// order to apply back pressure on the client which generated them. The
 			// resolution is semi-synchronous in that there is a limited number of

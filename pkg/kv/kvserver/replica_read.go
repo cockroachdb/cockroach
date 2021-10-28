@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/kr/pretty"
 )
@@ -36,6 +37,10 @@ import (
 func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
+	var tm *metric.Timing // TODO(tbg): dummy
+	// TODO(tbg): for the many events that come in pairs, need a better convention
+	// for what their string representation (i.e. trace message) should be.
+	tm.Event(ctx, "read begins")
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
 
@@ -176,7 +181,7 @@ func (r *Replica) executeReadOnlyBatch(
 	if pErr != nil {
 		log.VErrEventf(ctx, 3, "%v", pErr.String())
 	} else {
-		log.Event(ctx, "read completed")
+		tm.Event(ctx, "read completed")
 	}
 	return br, nil, pErr
 }

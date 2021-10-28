@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -154,13 +155,14 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 // callComplete records very high-level metrics about the number of completed
 // calls and their latency. Currently, this only records statistics at the batch
 // level; stats on specific lower-level kv operations are not recorded.
-func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
+func (nm nodeMetrics) callComplete(ctx context.Context, et *metric.Timing, pErr *roachpb.Error) {
 	if pErr != nil && pErr.TransactionRestart() == roachpb.TransactionRestart_NONE {
 		nm.Err.Inc(1)
 	} else {
 		nm.Success.Inc(1)
 	}
-	nm.Latency.RecordValue(d.Nanoseconds())
+	_, idx := et.Event(ctx, "node execution ends")
+	nm.Latency.RecordValue(et.Between(0, idx).Nanoseconds())
 }
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -903,6 +905,18 @@ func checkNoUnknownRequest(reqs []roachpb.RequestUnion) *roachpb.UnsupportedRequ
 	return nil
 }
 
+var execTrackerPool = sync.Pool{
+	New: func() interface{} {
+		return &metric.Timing{
+			Now: timeutil.Now,
+			OnEvent: func(ctx context.Context, i interface{}, t time.Time) {
+				// TODO(tbg): this should be in its own file for better vmodule usage.
+				log.VEventfDepth(ctx, 3, 4 /* level */, "%v", i)
+			},
+		}
+	},
+}
+
 func (n *Node) batchInternal(
 	ctx context.Context, tenID roachpb.TenantID, args *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
@@ -923,7 +937,16 @@ func (n *Node) batchInternal(
 			log.Eventf(ctx, "node received request: %s", args.Summary())
 		}
 
-		tStart := timeutil.Now()
+		// TODO(tbg): this should be created at the top of Node.Batch and passed
+		// down. Keeping the diff small while this is a POC though.
+		tm := execTrackerPool.Get().(*metric.Timing)
+		defer func() {
+			execTrackerPool.Put(tm)
+		}()
+		// TODO(tbg): the events here should generally be singleton pointers at
+		// a protobuf enum of structured events, so that we can surface structured
+		// timing information across RPC boundaries (for example in Replica.State).
+		tm.Event(ctx, "node execution starts")
 		var pErr *roachpb.Error
 		br, pErr = n.stores.Send(ctx, *args)
 		if pErr != nil {
@@ -933,7 +956,7 @@ func (n *Node) batchInternal(
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
 		}
-		n.metrics.callComplete(timeutil.Since(tStart), pErr)
+		n.metrics.callComplete(ctx, tm, pErr)
 		br.Error = pErr
 		return nil
 	}); err != nil {
@@ -965,6 +988,7 @@ func (n *Node) Batch(
 		args.GatewayNodeID = n.Descriptor.NodeID
 	}
 
+	// TODO(tbg): instrument.
 	handle, err := n.admissionController.AdmitKVWork(ctx, tenantID, args)
 	if err != nil {
 		return nil, err

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -125,12 +126,28 @@ func (r *Replica) sendWithRangeID(
 		return nil, roachpb.NewError(err)
 	}
 
+	// TODO(tbg): Pass this around. We don't want to pass it via the context (at
+	// least not without a lot of scrutiny) since Timings only support sequential
+	// access, and are typically pooled. One option is to generally pass a
+	// `*BatchRequestWithAuxInfo` instead of a `*BatchRequest`. This is a bit of
+	// plumbing at first, but it generally seems like a good idea anyway as we
+	// have jumped through hoops to (transparently) get data into lower layers
+	// before and could solve this problem once and for all.
+	var tm *metric.Timing
+
+	tm.Event(ctx, "begin backpressure")
 	if err := r.maybeBackpressureBatch(ctx, ba); err != nil {
 		return nil, roachpb.NewError(err)
 	}
+	dur, _ := tm.Event(ctx, "end backpressure")
+	_ = dur // TODO(tbg): someMetric.Record(dur)
+
+	// TODO(tbg): instrument.
 	if err := r.maybeRateLimitBatch(ctx, ba); err != nil {
 		return nil, roachpb.NewError(err)
 	}
+
+	// TODO(tbg): instrument.
 	if err := r.maybeCommitWaitBeforeCommitTrigger(ctx, ba); err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -150,7 +167,7 @@ func (r *Replica) sendWithRangeID(
 	// Differentiate between read-write, read-only, and admin.
 	var pErr *roachpb.Error
 	if isReadOnly {
-		log.Event(ctx, "read-only path")
+		tm.Event(ctx, "read-only path")
 		fn := (*Replica).executeReadOnlyBatch
 		br, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
 	} else if ba.IsWrite() {
@@ -395,6 +412,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			r.concMgr.FinishReq(g)
 		}
 	}()
+	var tm *metric.Timing // TODO(tbg): this is a dummy
 	for {
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {
@@ -406,6 +424,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// to ensure that the request has full isolation during evaluation. This
 		// returns a request guard that must be eventually released.
 		var resp []roachpb.ResponseUnion
+		tm.Event(ctx, "start sequencing event")
 		g, resp, pErr = r.concMgr.SequenceReq(ctx, g, concurrency.Request{
 			Txn:             ba.Txn,
 			Timestamp:       ba.Timestamp,
@@ -417,6 +436,8 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			LatchSpans:      latchSpans, // nil if g != nil
 			LockSpans:       lockSpans,  // nil if g != nil
 		}, requestEvalKind)
+		dur, _ := tm.Event(ctx, "sequenced event")
+		_ = dur // TODO(tbg): metrics?
 		if pErr != nil {
 			return nil, pErr
 		} else if resp != nil {
@@ -453,11 +474,14 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		switch t := pErr.GetDetail().(type) {
 		case *roachpb.WriteIntentError:
 			// Drop latches, but retain lock wait-queues.
+			tm.Event(ctx, "handling WriteIntentError")
 			if g, pErr = r.handleWriteIntentError(ctx, ba, g, pErr, t); pErr != nil {
 				return nil, pErr
 			}
+			tm.Event(ctx, "handled WriteIntentError")
 		case *roachpb.TransactionPushError:
 			// Drop latches, but retain lock wait-queues.
+			// TODO(tbg): instrument.
 			if g, pErr = r.handleTransactionPushError(ctx, ba, g, pErr, t); pErr != nil {
 				return nil, pErr
 			}
@@ -467,6 +491,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			r.concMgr.FinishReq(g)
 			g = nil
 			// Then launch a task to handle the indeterminate commit error.
+			// TODO(tbg): instrument.
 			if pErr = r.handleIndeterminateCommitError(ctx, ba, pErr, t); pErr != nil {
 				return nil, pErr
 			}
@@ -478,6 +503,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			// Then attempt to acquire the lease if not currently held by any
 			// replica or redirect to the current leaseholder if currently held
 			// by a different replica.
+			// TODO(tbg): instrument.
 			if pErr = r.handleInvalidLeaseError(ctx, ba); pErr != nil {
 				return nil, pErr
 			}
@@ -487,6 +513,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			r.concMgr.FinishReq(g)
 			g = nil
 			// Then listen for the merge to complete.
+			// TODO(tbg): instrument.
 			if pErr = r.handleMergeInProgressError(ctx, ba, pErr, t); pErr != nil {
 				return nil, pErr
 			}
