@@ -73,6 +73,7 @@ func getSink(
 	timestampOracle timestampLowerBoundOracle,
 	user security.SQLUsername,
 	jobID jobspb.JobID,
+	m *SinkMetrics,
 ) (Sink, error) {
 	u, err := url.Parse(feedCfg.SinkURI)
 	if err != nil {
@@ -93,7 +94,7 @@ func getSink(
 
 	newSink := func() (Sink, error) {
 		if feedCfg.SinkURI == "" {
-			return &bufferSink{}, nil
+			return &bufferSink{metrics: m}, nil
 		}
 
 		switch {
@@ -101,22 +102,23 @@ func getSink(
 			return makeNullSink(sinkURL{URL: u})
 		case u.Scheme == changefeedbase.SinkSchemeKafka:
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
-				return makeKafkaSink(ctx, sinkURL{URL: u}, feedCfg.Targets, feedCfg.Opts)
+				return makeKafkaSink(ctx, sinkURL{URL: u}, feedCfg.Targets, feedCfg.Opts, m)
 			})
 		case isWebhookSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
-				return makeWebhookSink(ctx, sinkURL{URL: u}, feedCfg.Opts, defaultWorkerCount(), timeutil.DefaultTimeSource{})
+				return makeWebhookSink(ctx, sinkURL{URL: u}, feedCfg.Opts,
+					defaultWorkerCount(), timeutil.DefaultTimeSource{}, m)
 			})
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
 				return makeCloudStorageSink(
 					ctx, sinkURL{URL: u}, serverCfg.NodeID.SQLInstanceID(), serverCfg.Settings,
-					feedCfg.Opts, timestampOracle, serverCfg.ExternalStorageFromURI, user,
+					feedCfg.Opts, timestampOracle, serverCfg.ExternalStorageFromURI, user, m,
 				)
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
 			return validateOptionsAndMakeSink(changefeedbase.SQLValidOptions, func() (Sink, error) {
-				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, feedCfg.Targets)
+				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, feedCfg.Targets, m)
 			})
 		case u.Scheme == "":
 			return nil, errors.Errorf(`no scheme found for sink URL %q`, feedCfg.SinkURI)
@@ -289,6 +291,7 @@ type bufferSink struct {
 	alloc   rowenc.DatumAlloc
 	scratch bufalloc.ByteAllocator
 	closed  bool
+	metrics *SinkMetrics
 }
 
 // EmitRow implements the Sink interface.
@@ -300,6 +303,7 @@ func (s *bufferSink) EmitRow(
 	r kvevent.Alloc,
 ) error {
 	defer r.Release(ctx)
+	defer s.metrics.recordEmittedMessages()(1, len(key)+len(value), sinkDoesNotCompress)
 
 	if s.closed {
 		return errors.New(`cannot EmitRow on a closed sink`)
@@ -320,6 +324,8 @@ func (s *bufferSink) EmitResolvedTimestamp(
 	if s.closed {
 		return errors.New(`cannot EmitResolvedTimestamp on a closed sink`)
 	}
+	defer s.metrics.recordResolvedCallback()()
+
 	var noTopic string
 	payload, err := encoder.EncodeResolvedTimestamp(ctx, noTopic, resolved)
 	if err != nil {
@@ -337,6 +343,7 @@ func (s *bufferSink) EmitResolvedTimestamp(
 
 // Flush implements the Sink interface.
 func (s *bufferSink) Flush(_ context.Context) error {
+	defer s.metrics.recordFlushRequestCallback()()
 	return nil
 }
 
