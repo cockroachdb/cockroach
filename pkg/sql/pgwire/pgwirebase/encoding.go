@@ -783,7 +783,7 @@ func DecodeDatum(
 		return tree.MakeDEnumFromLogicalRepresentation(t, string(b))
 	}
 	switch id {
-	case oid.T_text, oid.T_varchar:
+	case oid.T_text, oid.T_varchar, oid.T_unknown:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}

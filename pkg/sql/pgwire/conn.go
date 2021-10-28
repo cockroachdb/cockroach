@@ -865,9 +865,9 @@ func (c *conn) handleParse(
 			if t == 0 {
 				continue
 			}
-			// If the OID is user defined, then write nil into the type hints and let
-			// the consumer of the PrepareStmt resolve the types.
-			if types.IsOIDUserDefinedType(t) {
+			// If the OID is user defined or unknown, then write nil into the type
+			// hints and let the consumer of the PrepareStmt resolve the types.
+			if t == oid.T_unknown || types.IsOIDUserDefinedType(t) {
 				sqlTypeHints[i] = nil
 				continue
 			}
