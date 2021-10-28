@@ -15,15 +15,27 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// EnabledSetting is a hidden cluster setting to enable the use of the span
+// configs infrastructure in KV. It switches each store in the cluster from
+// using the gossip backed system config span to instead using the span configs
+// infrastructure. It has no effect unless COCKROACH_EXPERIMENTAL_SPAN_CONFIGS
+// is set.
+var EnabledSetting = settings.RegisterBoolSetting(
+	"spanconfig.experimental_store.enabled",
+	`use the span config infrastructure in KV instead of the system config span`,
+	false,
+).WithSystemOnly()
+
 // Store is an in-memory data structure to store and retrieve span configs.
 // Internally it makes use of an interval tree to store non-overlapping span
-// configs.
+// configs. It's safe for concurrent use.
 type Store struct {
 	mu struct {
 		syncutil.RWMutex
