@@ -3228,6 +3228,7 @@ type EvalPlanner interface {
 }
 
 // ExecConfigAccessor is a limited interface to access ExecutorConfig's states.
+// It is defined independently to prevent a circular dependency on sql, tree and sqlbase.
 type ExecConfigAccessor interface {
 
 	// JobRegistry returns jobs.Registry from ExecutorConfig

@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func producerJob(
+func makeProducerJobRecord(
 	registry *jobs.Registry, tenantID uint64, timeout time.Duration, username security.SQLUsername,
 ) (jobspb.JobID, jobs.Record) {
 	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenantID))
@@ -39,7 +39,8 @@ func producerJob(
 			Spans: spans,
 		},
 		Progress: jobspb.StreamReplicationProgress{
-			Expiration: timeutil.Now().Add(timeout)},
+			Expiration: timeutil.Now().Add(timeout),
+		},
 	}
 	return registry.MakeJobID(), jr
 }
@@ -51,7 +52,7 @@ func doInitStream(evalCtx *tree.EvalContext, txn *kv.Txn, tenantID uint64) (jobs
 	registry := evalCtx.ExecConfigAccessor.JobRegistry().(*jobs.Registry)
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
 
-	jobID, jr := producerJob(registry, tenantID, timeout, evalCtx.Username)
+	jobID, jr := makeProducerJobRecord(registry, tenantID, timeout, evalCtx.Username)
 	if _, err := registry.CreateAdoptableJobWithTxn(evalCtx.Ctx(), jr, jobID, txn); err != nil {
 		return 0, err
 	}
@@ -62,6 +63,7 @@ type producerJobResumer struct {
 	job *jobs.Job
 
 	timeSource timeutil.TimeSource
+	timer      timeutil.TimerI
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -76,24 +78,27 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 		return errors.Errorf("replication stream %d timed out", p.job.ID())
 	}
 
-	t := p.timeSource.NewTimer()
-	t.Reset(streamingccl.DefaultJobLivenessTrackingFrequency)
+	//t := p.timeSource.NewTimer()
+	p.timer.Reset(streamingccl.DefaultJobLivenessTrackingFrequency)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-t.Ch():
-			t.MarkRead()
-			t.Reset(streamingccl.DefaultJobLivenessTrackingFrequency)
-			if j, err := execCfg.JobRegistry.LoadJob(ctx, p.job.ID()); err != nil {
+		case <-p.timer.Ch():
+			p.timer.MarkRead()
+			p.timer.Reset(streamingccl.DefaultJobLivenessTrackingFrequency)
+			j, err := execCfg.JobRegistry.LoadJob(ctx, p.job.ID())
+			if err != nil {
 				return err
-			} else if isTimedOut(j) {
+			}
+			if isTimedOut(j) {
 				return errors.Errorf("replication stream %d timed out", p.job.ID())
 			}
 		}
 	}
 }
 
+// OnFailOrCancel implements jobs.Resumer interface
 func (p *producerJobResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	return nil
 }
@@ -108,9 +113,11 @@ func init() {
 	jobs.RegisterConstructor(
 		jobspb.TypeStreamReplication,
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+			ts := timeutil.DefaultTimeSource{}
 			return &producerJobResumer{
 				job:        job,
-				timeSource: timeutil.DefaultTimeSource{},
+				timeSource: ts,
+				timer:      ts.NewTimer(),
 			}
 		},
 	)

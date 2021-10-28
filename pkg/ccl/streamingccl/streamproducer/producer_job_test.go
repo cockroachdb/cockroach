@@ -26,7 +26,48 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
+
+type coordinatedTimer struct {
+	timer timeutil.TimerI
+	in    <-chan struct{}
+	out   chan<- struct{}
+}
+
+// Reset resets the timer and waits for a new time to be
+// assigned to the underlying manual time source.
+func (s *coordinatedTimer) Reset(duration time.Duration) {
+	s.timer.Reset(duration)
+	s.out <- struct{}{}
+}
+
+// Stop behaves the same as the normal timer.
+func (s *coordinatedTimer) Stop() bool {
+	return s.timer.Stop()
+}
+
+// Ch returns next timer event after a new time is assigned to
+// the underlying manual time source.
+func (s *coordinatedTimer) Ch() <-chan time.Time {
+	<-s.in
+	return s.timer.Ch()
+}
+
+// MarkRead behaves the same as the normal timer.
+func (s *coordinatedTimer) MarkRead() {
+	s.timer.MarkRead()
+}
+
+func makeCoordinatedTimer(
+	i timeutil.TimerI, in <-chan struct{}, out chan<- struct{},
+) timeutil.TimerI {
+	return &coordinatedTimer{
+		timer: i,
+		in:    in,
+		out:   out,
+	}
+}
 
 func TestStreamReplicationProducerJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -47,15 +88,23 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 	sql := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	registry := source.JobRegistry().(*jobs.Registry)
 
-	registerConstructor := func(initialTime time.Time) *timeutil.ManualTime {
+	registerConstructor := func(initialTime time.Time) (*timeutil.ManualTime, func(), func()) {
 		mt := timeutil.NewManualTime(initialTime)
+		in, out := make(chan struct{}, 1), make(chan struct{}, 1)
 		jobs.RegisterConstructor(jobspb.TypeStreamReplication, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return &producerJobResumer{
 				job:        job,
 				timeSource: mt,
+				timer:      makeCoordinatedTimer(mt.NewTimer(), in, out),
 			}
 		})
-		return mt
+		return mt,
+			func() {
+				in <- struct{}{} // Signals the timer that a new time is assigned to time source
+			},
+			func() {
+				<-out // Waits until caller starts waiting for a new timer event
+			}
 	}
 
 	startJob := func(jobID jobspb.JobID, jr jobs.Record) error {
@@ -69,62 +118,37 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 	}
 
 	timeout, username := 1*time.Second, security.MakeSQLUsernameFromPreNormalizedString("user")
-	t.Run("inactive-job-fails-at-beginning", func(t *testing.T) {
-		jobID, jr := producerJob(registry, 10, timeout, username)
-		expiration := jr.Progress.(jobspb.StreamReplicationProgress).Expiration
+	jobsQuery := func(jobID jobspb.JobID) string {
+		return fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", jobID)
+	}
+	expirationTime := func(record jobs.Record) time.Time {
+		return record.Progress.(jobspb.StreamReplicationProgress).Expiration
+	}
+	t.Run("producer-job", func(t *testing.T) {
+		jobID, jr := makeProducerJobRecord(registry, 10, timeout, username)
 
-		// Set the initial time to be after the timeout
-		_ = registerConstructor(expiration.Add(1 * time.Millisecond))
-		if err := startJob(jobID, jr); err != nil {
-			t.Fatal(err)
-		}
+		// Case 1: Resumer wakes up and finds the job timed out.
+		_, _, _ = registerConstructor(expirationTime(jr).Add(1 * time.Millisecond))
+		require.NoError(t, startJob(jobID, jr))
 
-		jobsQuery := fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", jobID)
 		sql.SucceedsSoonDuration = 1 * time.Second
-		sql.CheckQueryResultsRetry(t, jobsQuery, [][]string{{"failed"}})
-	})
+		sql.CheckQueryResultsRetry(t, jobsQuery(jobID), [][]string{{"failed"}})
 
-	t.Run("inactive-job-eventually-fails", func(t *testing.T) {
-		reset := streamingccl.TestingSetDefaultJobLivenessTrackingFrequency(100 * time.Millisecond)
-		defer reset()
-
-		jobID, jr := producerJob(registry, 20, timeout, username)
-		jobsQuery := fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", jobID)
-		expiration := jr.Progress.(jobspb.StreamReplicationProgress).Expiration
-
-		// Set the initial time to be after the timeout
-		mt := registerConstructor(expiration.Add(-1 * time.Millisecond))
-		if err := startJob(jobID, jr); err != nil {
-			t.Fatal(err)
-		}
-		sql.CheckQueryResults(t, jobsQuery, [][]string{{"running"}})
-
-		// Reset the time to be after the timeout
-		mt.AdvanceTo(expiration.Add(1 * time.Millisecond))
-		sql.SucceedsSoonDuration = time.Second
-		sql.CheckQueryResultsRetry(t, jobsQuery, [][]string{{"failed"}})
-	})
-
-	t.Run("active-job-continuously-running", func(t *testing.T) {
+		// Shorten the tracking frequency to make timer easy to be triggerred.
 		reset := streamingccl.TestingSetDefaultJobLivenessTrackingFrequency(1 * time.Millisecond)
 		defer reset()
 
-		jobID, jr := producerJob(registry, 30, timeout, username)
-		jobsQuery := fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", jobID)
-		expiration := jr.Progress.(jobspb.StreamReplicationProgress).Expiration
+		// Case 2: Resumer wakes up and find the job still active.
+		jobID, jr = makeProducerJobRecord(registry, 20, timeout, username)
+		mt, timeGiven, waitForTimeRequest := registerConstructor(expirationTime(jr).Add(-5 * time.Millisecond))
+		require.NoError(t, startJob(jobID, jr))
+		waitForTimeRequest()
+		sql.CheckQueryResults(t, jobsQuery(jobID), [][]string{{"running"}})
 
-		// Set the initial time to be after the timeout
-		mt := registerConstructor(expiration.Add(-10 * time.Millisecond))
-		if err := startJob(jobID, jr); err != nil {
-			t.Fatal(err)
-		}
-		sql.CheckQueryResults(t, jobsQuery, [][]string{{"running"}})
-
-		// Reset the time to be still before the timeout
-		mt.AdvanceTo(expiration.Add(-5 * time.Millisecond))
-
-		// Wait for the resumer to be invoked
-		time.Sleep(200 * time.Millisecond)
-		sql.CheckQueryResults(t, jobsQuery, [][]string{{"running"}})
+		// Reset the time to be after the timeout
+		mt.AdvanceTo(expirationTime(jr).Add(2 * time.Millisecond))
+		timeGiven()
+		sql.SucceedsSoonDuration = time.Second
+		sql.CheckQueryResultsRetry(t, jobsQuery(jobID), [][]string{{"failed"}})
 	})
 }
