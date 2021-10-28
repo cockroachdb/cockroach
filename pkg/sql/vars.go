@@ -49,6 +49,11 @@ const (
 	PgServerVersion = "13.0.0"
 	// PgServerVersionNum is the latest version of postgres that we claim to support in the numeric format of "server_version_num".
 	PgServerVersionNum = "130000"
+	// PgCompatLocale is the locale string we advertise in `LC_*` session
+	// variables. C.UTF-8 is the only locale that is allowed in CREATE DATABASE
+	// at the time of writing.
+	// See https://www.postgresql.org/docs/14/locale.html
+	PgCompatLocale = "C.UTF-8"
 )
 
 type getStringValFn = func(
@@ -1122,6 +1127,32 @@ var varGen = map[string]sessionVar{
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html#GUC-SERVER-VERSION-NUM
 	`server_version_num`: makeReadOnlyVar(PgServerVersionNum),
+
+	// This is read-only in Postgres also.
+	// See https://www.postgresql.org/docs/14/sql-show.html and
+	// https://www.postgresql.org/docs/14/locale.html
+	`lc_collate`: makeReadOnlyVar(PgCompatLocale),
+
+	// This is read-only in Postgres also.
+	// See https://www.postgresql.org/docs/14/sql-show.html and
+	// https://www.postgresql.org/docs/14/locale.html
+	`lc_ctype`: makeReadOnlyVar(PgCompatLocale),
+
+	// See https://www.postgresql.org/docs/14/sql-show.html and
+	// https://www.postgresql.org/docs/14/locale.html
+	`lc_messages`: makeCompatStringVar("lc_messages", PgCompatLocale),
+
+	// See https://www.postgresql.org/docs/14/sql-show.html and
+	// https://www.postgresql.org/docs/14/locale.html
+	`lc_monetary`: makeCompatStringVar("lc_monetary", PgCompatLocale),
+
+	// See https://www.postgresql.org/docs/14/sql-show.html and
+	// https://www.postgresql.org/docs/14/locale.html
+	`lc_numeric`: makeCompatStringVar("lc_numeric", PgCompatLocale),
+
+	// See https://www.postgresql.org/docs/14/sql-show.html and
+	// https://www.postgresql.org/docs/14/locale.html
+	`lc_time`: makeCompatStringVar("lc_time", PgCompatLocale),
 
 	// See https://www.postgresql.org/docs/9.4/runtime-config-connection.html
 	`ssl_renegotiation_limit`: {
