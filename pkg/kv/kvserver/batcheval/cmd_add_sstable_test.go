@@ -571,7 +571,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"a\"") {
+				if !testutils.IsError(err, "SST key \"a\"/0.000000007,0 shadows existing key \"a\"/0.000000002,0") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -598,7 +598,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"g\"") {
+				if !testutils.IsError(err, "WriteTooOldError: write at timestamp 0.000000004,0 too old; wrote at 0.000000005,1") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -627,7 +627,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"z\"") {
+				if !testutils.IsError(err, "SST key \"z\"/0.000000003,0 shadows existing key \"z\"/0.000000002,0") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -689,7 +689,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
+				if !testutils.IsError(err, "WriteTooOldError: write at timestamp 0.000000003,0 too old; wrote at 0.000000005,1") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -718,7 +718,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"b\"") {
+				if !testutils.IsError(err, "WriteTooOldError: write at timestamp 0.000000004,0 too old; wrote at 0.000000006,1") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -748,7 +748,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
+				if !testutils.IsError(err, "WriteTooOldError: write at timestamp 0.000000004,0 too old; wrote at 0.000000005,1") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -844,7 +844,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "inline values are unsupported when checking for key collisions") {
+				if !testutils.IsError(err, "inline values are unsupported") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -904,7 +904,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
+				if !testutils.IsError(err, "SST key \"y\"/0.000000006,0 shadows existing key \"y\"/0.000000005,0") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -933,7 +933,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
+				if !testutils.IsError(err, "WriteTooOldError: write at timestamp 0.000000005,0 too old; wrote at 0.000000005,1") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -962,7 +962,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"z\"") {
+				if !testutils.IsError(err, "SST key \"z\"/0.000000003,0 shadows existing key \"z\"/0.000000002,0") {
 					t.Fatalf("%+v", err)
 				}
 			}

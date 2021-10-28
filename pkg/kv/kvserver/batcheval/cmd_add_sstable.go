@@ -93,7 +93,7 @@ func declareKeysAddSSTable(
 	// | Streaming replication  | false             | Key TS       | Offline tenant    |
 	//
 	args := req.(*roachpb.AddSSTableRequest)
-	if args.DisallowShadowing {
+	if args.WriteAtRequestTimestamp || args.DisallowShadowing {
 		DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans)
 	} else {
 		DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans)
@@ -110,20 +110,26 @@ func EvalAddSSTable(
 	h := cArgs.Header
 	ms := cArgs.Stats
 	mvccStartKey, mvccEndKey := storage.MVCCKey{Key: args.Key}, storage.MVCCKey{Key: args.EndKey}
+	sst := args.Data
 
 	var span *tracing.Span
+	var err error
 	ctx, span = tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", args.Key, args.EndKey))
 	defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
-	// IMPORT INTO should not proceed if any KVs from the SST shadow existing data
-	// entries - #38044.
-	var skippedKVStats enginepb.MVCCStats
-	var err error
-	if args.DisallowShadowing {
+	if args.WriteAtRequestTimestamp {
+		sst, err = storage.UpdateSSTTimestamps(sst, h.WriteTimestamp())
+		if err != nil {
+			return result.Result{}, errors.Wrap(err, "updating SST timestamps")
+		}
+	}
+
+	var statsDiff enginepb.MVCCStats
+	if args.WriteAtRequestTimestamp || args.DisallowShadowing {
 		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
-		skippedKVStats, err = checkForKeyCollisions(
-			ctx, readWriter, mvccStartKey, mvccEndKey, args.Data, maxIntents)
+		statsDiff, err = storage.CheckSSTConflicts(
+			ctx, sst, readWriter, mvccStartKey, mvccEndKey, args.DisallowShadowing, maxIntents)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
 		}
@@ -132,7 +138,7 @@ func EvalAddSSTable(
 	// Verify that the keys in the sstable are within the range specified by the
 	// request header, and if the request did not include pre-computed stats,
 	// compute the expected MVCC stats delta of ingesting the SST.
-	dataIter, err := storage.NewMemSSTIterator(args.Data, true)
+	dataIter, err := storage.NewMemSSTIterator(sst, true)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -244,7 +250,7 @@ func EvalAddSSTable(
 	// stats of the SST being ingested before adding them to the running
 	// cumulative for this command. These stats can then be marked as accurate.
 	if args.DisallowShadowing {
-		stats.Subtract(skippedKVStats)
+		stats.Add(statsDiff)
 		stats.ContainsEstimates = 0
 	} else {
 		stats.ContainsEstimates++
@@ -253,8 +259,8 @@ func EvalAddSSTable(
 	ms.Add(stats)
 
 	if args.IngestAsWrites {
-		span.RecordStructured(&types.StringValue{Value: fmt.Sprintf("ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(args.Data))})
-		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(args.Data))
+		span.RecordStructured(&types.StringValue{Value: fmt.Sprintf("ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(sst))})
+		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(sst))
 		dataIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
 		for {
 			ok, err := dataIter.Valid()
@@ -272,7 +278,10 @@ func EvalAddSSTable(
 					return result.Result{}, err
 				}
 			} else {
-				if err := readWriter.PutMVCC(dataIter.UnsafeKey(), dataIter.UnsafeValue()); err != nil {
+				if args.WriteAtRequestTimestamp {
+					k.Timestamp = h.WriteTimestamp()
+				}
+				if err := readWriter.PutMVCC(k, dataIter.UnsafeValue()); err != nil {
 					return result.Result{}, err
 				}
 			}
@@ -284,31 +293,9 @@ func EvalAddSSTable(
 	return result.Result{
 		Replicated: kvserverpb.ReplicatedEvalResult{
 			AddSSTable: &kvserverpb.ReplicatedEvalResult_AddSSTable{
-				Data:  args.Data,
-				CRC32: util.CRC32(args.Data),
+				Data:  sst,
+				CRC32: util.CRC32(sst),
 			},
 		},
 	}, nil
-}
-
-func checkForKeyCollisions(
-	_ context.Context,
-	reader storage.Reader,
-	mvccStartKey storage.MVCCKey,
-	mvccEndKey storage.MVCCKey,
-	data []byte,
-	maxIntents int64,
-) (enginepb.MVCCStats, error) {
-	// Create iterator over the existing data.
-	existingDataIter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: mvccEndKey.Key})
-	defer existingDataIter.Close()
-	existingDataIter.SeekGE(mvccStartKey)
-	if ok, err := existingDataIter.Valid(); err != nil {
-		return enginepb.MVCCStats{}, errors.Wrap(err, "checking for key collisions")
-	} else if !ok {
-		// Target key range is empty, so it is safe to ingest.
-		return enginepb.MVCCStats{}, nil
-	}
-
-	return existingDataIter.CheckForKeyCollisions(data, mvccStartKey.Key, mvccEndKey.Key, maxIntents)
 }

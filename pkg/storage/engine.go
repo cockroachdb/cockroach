@@ -176,12 +176,6 @@ type MVCCIterator interface {
 	// package-level MVCCFindSplitKey instead. For correct operation, the caller
 	// must set the upper bound on the iterator before calling this method.
 	FindSplitKey(start, end, minSplitKey roachpb.Key, targetSize int64) (MVCCKey, error)
-	// CheckForKeyCollisions checks whether any keys collide between the iterator
-	// and the encoded SST data specified, within the provided key range.
-	// maxIntents specifies the number of intents to collect and return in a
-	// WriteIntentError. Returns stats on skipped KVs, or an error if a collision
-	// is found.
-	CheckForKeyCollisions(sstData []byte, start, end roachpb.Key, maxIntents int64) (enginepb.MVCCStats, error)
 	// SetUpperBound installs a new upper bound for this iterator. The caller
 	// can modify the parameter after this function returns. This must not be a
 	// nil key. When Reader.ConsistentIterators is true, prefer creating a new
