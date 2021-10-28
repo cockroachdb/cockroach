@@ -136,7 +136,7 @@ func (m *metaTestRunner) init() {
 		tsGenerator:    &m.tsGenerator,
 		txnIDMap:       make(map[txnID]*roachpb.Transaction),
 		openBatches:    make(map[txnID]map[readWriterID]struct{}),
-		inUseKeys:      make(map[txnID][]writtenKeySpan),
+		inUseKeys:      make([]writtenKeySpan, 0),
 		openSavepoints: make(map[txnID]int),
 		testRunner:     m,
 	}

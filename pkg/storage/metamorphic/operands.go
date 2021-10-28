@@ -161,10 +161,8 @@ func (k *txnKeyGenerator) opener() string {
 }
 
 func (k *txnKeyGenerator) count(args []string) int {
-	// Always return a nonzero value so opener() is never called directly.
-	txn := txnID(args[1])
-	openKeys := k.txns.inUseKeys[txn]
-	return len(openKeys) + 1
+	// Always return a non-zero count so opener() is never called.
+	return len(k.txns.inUseKeys) + 1
 }
 
 func (k *txnKeyGenerator) get(args []string) string {
@@ -237,6 +235,7 @@ type txnID string
 type writtenKeySpan struct {
 	key    roachpb.Span
 	writer readWriterID
+	txn    txnID
 }
 
 type txnGenerator struct {
@@ -251,9 +250,9 @@ type txnGenerator struct {
 	// Number of open savepoints for each transaction. As savepoints cannot be
 	// "closed", this count can only go up.
 	openSavepoints map[txnID]int
-	// Stores keys written to by each transaction during operation generation.
-	// The slices are sorted in key order.
-	inUseKeys map[txnID][]writtenKeySpan
+	// Stores keys written to by each writer/txn during operation generation.
+	// Sorted in key order, with no overlaps.
+	inUseKeys []writtenKeySpan
 	// Counts "generated" transactions - i.e. how many txn_open()s have been
 	// inserted so far. Could stay 0 in check mode.
 	txnGenCounter uint64
@@ -295,7 +294,17 @@ func (t *txnGenerator) generateClose(id txnID) {
 	delete(t.openBatches, id)
 	delete(t.txnIDMap, id)
 	delete(t.openSavepoints, id)
-	delete(t.inUseKeys, id)
+
+	// Delete all keys in inUseKeys where inUseKeys[i].txn == id. j points to the
+	// next slot in t.inUseKeys where a key span being retained will go.
+	j := 0
+	for i := range t.inUseKeys {
+		if t.inUseKeys[i].txn != id {
+			t.inUseKeys[j] = t.inUseKeys[i]
+			j++
+		}
+	}
+	t.inUseKeys = t.inUseKeys[:j]
 
 	for i := range t.liveTxns {
 		if t.liveTxns[i] == id {
@@ -319,18 +328,17 @@ func (t *txnGenerator) forEachConflict(
 		endKey = key.Next()
 	}
 
-	openKeys := t.inUseKeys[txn]
-	start := sort.Search(len(openKeys), func(i int) bool {
-		return key.Compare(openKeys[i].key.EndKey) < 0
+	start := sort.Search(len(t.inUseKeys), func(i int) bool {
+		return key.Compare(t.inUseKeys[i].key.EndKey) < 0
 	})
-	end := sort.Search(len(openKeys), func(i int) bool {
-		return endKey.Compare(openKeys[i].key.Key) <= 0
+	end := sort.Search(len(t.inUseKeys), func(i int) bool {
+		return endKey.Compare(t.inUseKeys[i].key.Key) <= 0
 	})
 
 	for i := start; i < end; i++ {
-		if openKeys[i].writer != w {
+		if t.inUseKeys[i].writer != w || t.inUseKeys[i].txn != txn {
 			// Conflict found.
-			if cont := fn(openKeys[i].key); !cont {
+			if cont := fn(t.inUseKeys[i].key); !cont {
 				return
 			}
 		}
@@ -348,36 +356,35 @@ func (t *txnGenerator) addWrittenKeySpan(
 	// writtenKeys is sorted in key order, and no two spans are overlapping.
 	// However we do _not_ merge perfectly-adjacent spans when adding;
 	// as it is legal to have [a,b) and [b,c) belonging to two different writers.
-	writtenKeys := t.inUseKeys[txn]
 	// start is the earliest span that either contains key, or if there is no such
 	// span, is the first span beyond key. end is the earliest span that does not
 	// include any keys in [key, endKey).
-	start := sort.Search(len(writtenKeys), func(i int) bool {
-		return key.Compare(writtenKeys[i].key.EndKey) < 0
+	start := sort.Search(len(t.inUseKeys), func(i int) bool {
+		return key.Compare(t.inUseKeys[i].key.EndKey) < 0
 	})
-	end := sort.Search(len(writtenKeys), func(i int) bool {
-		return endKey.Compare(writtenKeys[i].key.Key) <= 0
+	end := sort.Search(len(t.inUseKeys), func(i int) bool {
+		return endKey.Compare(t.inUseKeys[i].key.Key) <= 0
 	})
-	if start == len(writtenKeys) {
+	if start == len(t.inUseKeys) {
 		// Append at end.
-		writtenKeys = append(writtenKeys, writtenKeySpan{
+		t.inUseKeys = append(t.inUseKeys, writtenKeySpan{
 			key:    span,
 			writer: w,
+			txn:    txn,
 		})
-		t.inUseKeys[txn] = writtenKeys
 		return
 	}
 	if start == end {
 		// start == end implies that the span cannot contain start, and by
 		// definition it is beyond end. So [key, endKey) does not overlap with an
 		// existing span and needs to be placed before start.
-		writtenKeys = append(writtenKeys, writtenKeySpan{})
-		copy(writtenKeys[start+1:], writtenKeys[start:])
-		writtenKeys[start] = writtenKeySpan{
+		t.inUseKeys = append(t.inUseKeys, writtenKeySpan{})
+		copy(t.inUseKeys[start+1:], t.inUseKeys[start:])
+		t.inUseKeys[start] = writtenKeySpan{
 			key:    span,
 			writer: w,
+			txn:    txn,
 		}
-		t.inUseKeys[txn] = writtenKeys
 		return
 	} else if start > end {
 		panic(fmt.Sprintf("written keys not in sorted order: %d > %d", start, end))
@@ -386,31 +393,31 @@ func (t *txnGenerator) addWrittenKeySpan(
 	// know end > 0. We will be merging existing spans, and need to compute which
 	// spans to merge and what keys to use for the resulting span. The resulting
 	// span will go into `span`, and will replace writtenKeys[start:end].
-	if writtenKeys[start].key.Key.Compare(key) < 0 {
+	if t.inUseKeys[start].key.Key.Compare(key) < 0 {
 		// The start span contains key. So use the start key of the start span since
 		// it will result in the wider span.
-		span.Key = writtenKeys[start].key.Key
+		span.Key = t.inUseKeys[start].key.Key
 	}
 	// Else, span.Key is equal to key which is the wider span. Note that no span
 	// overlaps with key so we are not extending this into the span at start-1.
 	//
 	// The span at end-1 may end at a key less or greater than endKey.
-	if writtenKeys[end-1].key.EndKey.Compare(endKey) > 0 {
+	if t.inUseKeys[end-1].key.EndKey.Compare(endKey) > 0 {
 		// Existing span ends at a key greater than endKey, so construct the wider
 		// span.
-		span.EndKey = writtenKeys[end-1].key.EndKey
+		span.EndKey = t.inUseKeys[end-1].key.EndKey
 	}
 	// We blindly replace the existing spans in writtenKeys[start:end] with the
 	// new one. This is okay as long as any conflicting operation looks at
 	// inUseKeys before generating itself; this method is only called once no
 	// conflicts are found and the write operation is successfully generated.
-	writtenKeys[start] = writtenKeySpan{
+	t.inUseKeys[start] = writtenKeySpan{
 		key:    span,
 		writer: w,
+		txn:    txn,
 	}
-	n := copy(writtenKeys[start+1:], writtenKeys[end:])
-	writtenKeys = writtenKeys[:start+1+n]
-	t.inUseKeys[txn] = writtenKeys
+	n := copy(t.inUseKeys[start+1:], t.inUseKeys[end:])
+	t.inUseKeys = t.inUseKeys[:start+1+n]
 }
 
 func (t *txnGenerator) trackTransactionalWrite(w readWriterID, txn txnID, key, endKey roachpb.Key) {
@@ -430,7 +437,7 @@ func (t *txnGenerator) closeAll() {
 	t.liveTxns = nil
 	t.txnIDMap = make(map[txnID]*roachpb.Transaction)
 	t.openBatches = make(map[txnID]map[readWriterID]struct{})
-	t.inUseKeys = make(map[txnID][]writtenKeySpan)
+	t.inUseKeys = t.inUseKeys[:0]
 	t.openSavepoints = make(map[txnID]int)
 }
 
