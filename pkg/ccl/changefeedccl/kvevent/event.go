@@ -187,6 +187,11 @@ func (b *Event) DetachAlloc() Alloc {
 func MakeResolvedEvent(
 	span roachpb.Span, ts hlc.Timestamp, boundaryType jobspb.ResolvedSpan_BoundaryType,
 ) Event {
+	// Strip synthetic bit from CDC events. It can confuse consumers.
+	// TODO DURING PR: this is needed to fix a few tests, but hints at a larger
+	// question of whether we like that the synthetic timestamp flag can escape
+	// outside the system.
+	ts.Synthetic = false
 	return Event{
 		resolved: &jobspb.ResolvedSpan{
 			Span:         span,
@@ -201,6 +206,11 @@ func MakeResolvedEvent(
 func MakeKVEvent(
 	kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
 ) Event {
+	// Strip synthetic bit from CDC events. It can confuse consumers.
+	// TODO DURING PR: this is needed to fix a few tests, but hints at a larger
+	// question of whether we like that the synthetic timestamp flag can escape
+	// outside the system.
+	kv.Value.Timestamp.Synthetic = false
 	return Event{
 		kv:                kv,
 		prevVal:           prevVal,

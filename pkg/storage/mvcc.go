@@ -2798,8 +2798,15 @@ func MVCCIterate(
 
 // MVCCResolveWriteIntent either commits, aborts (rolls back), or moves forward
 // in time an extant write intent for a given txn according to commit parameter.
-// ResolveWriteIntent will skip write intents of other txns. It returns
-// whether or not an intent was found to resolve.
+// ResolveWriteIntent will skip write intents of other txns. It returns whether
+// or not an intent was found to resolve.
+//
+// The function's asyncResolution parameter indicates whether intent resolution
+// is being performed asynchronously from the corresponding transaction's
+// commit. It must be true if the resolution could be taking place after the
+// transaction has committed and acknowledged that commit to its client. It must
+// be false if the resolution is synchronous with the transaction commit. The
+// parameter is ignored if the intent is not being committed.
 //
 // Transaction epochs deserve a bit of explanation. The epoch for a
 // transaction is incremented on transaction retries. A transaction
@@ -2817,7 +2824,11 @@ func MVCCIterate(
 // epoch matching the commit epoch), and which intents get aborted,
 // even if the transaction succeeds.
 func MVCCResolveWriteIntent(
-	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate,
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	intent roachpb.LockUpdate,
+	asyncResolution bool,
 ) (bool, error) {
 	if len(intent.Key) == 0 {
 		return false, emptyKeyError()
@@ -2828,7 +2839,7 @@ func MVCCResolveWriteIntent(
 
 	iterAndBuf := GetBufUsingIter(rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true}))
 	iterAndBuf.iter.SeekIntentGE(intent.Key, intent.Txn.ID)
-	ok, err := mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
+	ok, err := mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, asyncResolution, iterAndBuf.buf)
 	// Using defer would be more convenient, but it is measurably slower.
 	iterAndBuf.Cleanup()
 	return ok, err
@@ -3113,6 +3124,7 @@ func mvccResolveWriteIntent(
 	iter iterForKeyVersions,
 	ms *enginepb.MVCCStats,
 	intent roachpb.LockUpdate,
+	asyncResolution bool,
 	buf *putBuffer,
 ) (bool, error) {
 	metaKey := MakeMVCCMetadataKey(intent.Key)
@@ -3249,6 +3261,29 @@ func mvccResolveWriteIntent(
 		// The intent might be committing at a higher timestamp, or it might be
 		// getting pushed.
 		newTimestamp := intent.Txn.WriteTimestamp
+
+		// If the intent is being resolved asynchronously from its commit and its
+		// timestamp is either being changed now or has changed due to a push since
+		// the last time that its transaction wrote it (as indicated by the presence
+		// of a WrittenTimestamp), then we mark the timestamp of the committed value
+		// as synthetic. This indicates to readers that the value's timestamp was
+		// disconnected from the clock on the value's leaseholder and that observed
+		// timestamps from that leaseholder cannot be used to avoid uncertainty.
+		//
+		// This is a form of compression that avoids the need for us to store the
+		// intent's written timestamp in its committed value (in cases where it
+		// differs from the commit timestamp). If we were to do that, then we could
+		// apply observed timestamps to this written timestamp and still avoid
+		// uncertainty in some cases. However, this would require us to store two
+		// timestamps in some committed values. To avoid this cost and complexity,
+		// we instead use the synthetic bit as a blunt but convenient instrument to
+		// disable all use of observed timestamps with this value.
+		//
+		// See commentary in pkg/kv/kvserver/observedts/doc.go for more details.
+		if commit && asyncResolution && (timestampChanged || meta.WrittenTimestamp != nil) {
+			newTimestamp.Synthetic = true
+			timestampChanged = newTimestamp != metaTimestamp // recompute
+		}
 
 		// Assert that the intent timestamp never regresses. The logic above should
 		// not allow this, regardless of the input to this function.
@@ -3548,6 +3583,7 @@ func MVCCResolveWriteIntentRange(
 	ms *enginepb.MVCCStats,
 	intent roachpb.LockUpdate,
 	max int64,
+	asyncResolution bool,
 	onlySeparatedIntents bool,
 ) (int64, *roachpb.Span, error) {
 	if max < 0 {
@@ -3663,7 +3699,7 @@ func MVCCResolveWriteIntentRange(
 		if !key.IsValue() {
 			// NB: This if-condition is always true for the sepIter != nil path.
 			intent.Key = key.Key
-			ok, err = mvccResolveWriteIntent(ctx, rw, iter, ms, intent, putBuf)
+			ok, err = mvccResolveWriteIntent(ctx, rw, iter, ms, intent, asyncResolution, putBuf)
 		}
 		if err != nil {
 			log.Warningf(ctx, "failed to resolve intent for key %q: %+v", key.Key, err)

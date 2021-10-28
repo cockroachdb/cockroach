@@ -45,11 +45,14 @@ func ResolveIntentRange(
 
 	update := args.AsLockUpdate()
 
+	// This intent resolution operation is asynchronous with its transaction and
+	// may be occurring after the transaction has already committed.
+	const asyncResolution = true
 	onlySeparatedIntents :=
 		cArgs.EvalCtx.ClusterSettings().Version.ActiveVersionOrEmpty(ctx).IsActive(
 			clusterversion.PostSeparatedIntentsMigration)
 	numKeys, resumeSpan, err := storage.MVCCResolveWriteIntentRange(
-		ctx, readWriter, ms, update, h.MaxSpanRequestKeys, onlySeparatedIntents)
+		ctx, readWriter, ms, update, h.MaxSpanRequestKeys, asyncResolution, onlySeparatedIntents)
 	if err != nil {
 		return result.Result{}, err
 	}

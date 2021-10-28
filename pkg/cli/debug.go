@@ -1299,7 +1299,7 @@ func removeDeadReplicas(
 				Txn:    intent.Txn,
 				Status: roachpb.ABORTED,
 			}
-			if _, err := storage.MVCCResolveWriteIntent(ctx, batch, &ms, update); err != nil {
+			if _, err := storage.MVCCResolveWriteIntent(ctx, batch, &ms, update, false /* asyncResolution */); err != nil {
 				return nil, err
 			}
 			// With the intent resolved, we can try again.

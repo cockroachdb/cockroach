@@ -1,0 +1,157 @@
+# Test cases:
+#
+# for asyncResolution in (false, true):
+#   for pushWhilePending in (false, true):
+#     for pushWhileCommitting in (false, true):
+#       testCase()
+#
+
+run ok
+txn_begin t=A ts=5
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+
+run ok
+with t=A k=k1
+  # setup
+  txn_advance    ts=5
+  put            v=a
+  # test
+  resolve_intent status=COMMITTED
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+data: "k1"/5.000000000,0 -> /BYTES/a
+
+run ok
+with t=A k=k2
+  # setup
+  txn_advance    ts=5
+  put            v=a
+  # test
+  txn_advance    ts=10
+  resolve_intent status=COMMITTED
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+data: "k1"/5.000000000,0 -> /BYTES/a
+data: "k2"/10.000000000,0 -> /BYTES/a
+
+run ok
+with t=A k=k3
+  # setup
+  txn_advance    ts=5
+  put            v=a
+  # test
+  txn_advance    ts=10
+  resolve_intent status=PENDING
+  check_intent
+  resolve_intent status=COMMITTED
+----
+meta: "k3" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=6 txnDidNotUpdateMeta=false writtenTs=5.000000000,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+data: "k1"/5.000000000,0 -> /BYTES/a
+data: "k2"/10.000000000,0 -> /BYTES/a
+data: "k3"/10.000000000,0 -> /BYTES/a
+
+run ok
+with t=A k=k4
+  # setup
+  txn_advance    ts=5
+  put            v=a
+  # test
+  txn_advance    ts=10
+  resolve_intent status=PENDING
+  check_intent
+  txn_advance    ts=15
+  resolve_intent status=COMMITTED
+----
+meta: "k4" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=6 txnDidNotUpdateMeta=false writtenTs=5.000000000,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+data: "k1"/5.000000000,0 -> /BYTES/a
+data: "k2"/10.000000000,0 -> /BYTES/a
+data: "k3"/10.000000000,0 -> /BYTES/a
+data: "k4"/15.000000000,0 -> /BYTES/a
+
+run ok
+with t=A k=k5
+  # setup
+  txn_advance    ts=5
+  put            v=a
+  # test
+  resolve_intent status=COMMITTED  asyncResolution
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+data: "k1"/5.000000000,0 -> /BYTES/a
+data: "k2"/10.000000000,0 -> /BYTES/a
+data: "k3"/10.000000000,0 -> /BYTES/a
+data: "k4"/15.000000000,0 -> /BYTES/a
+data: "k5"/5.000000000,0 -> /BYTES/a
+
+run ok
+with t=A k=k6
+  # setup
+  txn_advance    ts=5
+  put            v=a
+  # test
+  txn_advance    ts=10
+  resolve_intent status=COMMITTED asyncResolution
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+data: "k1"/5.000000000,0 -> /BYTES/a
+data: "k2"/10.000000000,0 -> /BYTES/a
+data: "k3"/10.000000000,0 -> /BYTES/a
+data: "k4"/15.000000000,0 -> /BYTES/a
+data: "k5"/5.000000000,0 -> /BYTES/a
+data: "k6"/10.000000000,0? -> /BYTES/a
+
+run ok
+with t=A k=k7
+  # setup
+  txn_advance    ts=5
+  put            v=a
+  # test
+  txn_advance    ts=10
+  resolve_intent status=PENDING
+  check_intent
+  resolve_intent status=COMMITTED asyncResolution
+----
+meta: "k7" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=6 txnDidNotUpdateMeta=false writtenTs=5.000000000,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+data: "k1"/5.000000000,0 -> /BYTES/a
+data: "k2"/10.000000000,0 -> /BYTES/a
+data: "k3"/10.000000000,0 -> /BYTES/a
+data: "k4"/15.000000000,0 -> /BYTES/a
+data: "k5"/5.000000000,0 -> /BYTES/a
+data: "k6"/10.000000000,0? -> /BYTES/a
+data: "k7"/10.000000000,0? -> /BYTES/a
+
+run ok
+with t=A k=k8
+  # setup
+  txn_advance    ts=5
+  put            v=a
+  # test
+  txn_advance    ts=10
+  resolve_intent status=PENDING
+  check_intent
+  txn_advance    ts=15
+  resolve_intent status=COMMITTED asyncResolution
+----
+meta: "k8" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=6 txnDidNotUpdateMeta=false writtenTs=5.000000000,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+data: "k1"/5.000000000,0 -> /BYTES/a
+data: "k2"/10.000000000,0 -> /BYTES/a
+data: "k3"/10.000000000,0 -> /BYTES/a
+data: "k4"/15.000000000,0 -> /BYTES/a
+data: "k5"/5.000000000,0 -> /BYTES/a
+data: "k6"/10.000000000,0? -> /BYTES/a
+data: "k7"/10.000000000,0? -> /BYTES/a
+data: "k8"/15.000000000,0? -> /BYTES/a

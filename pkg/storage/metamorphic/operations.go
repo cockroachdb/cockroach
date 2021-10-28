@@ -432,7 +432,7 @@ func (t txnCommitOp) run(ctx context.Context) string {
 	for _, span := range txn.LockSpans {
 		intent := roachpb.MakeLockUpdate(txn, span)
 		intent.Status = roachpb.COMMITTED
-		_, err := storage.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent)
+		_, err := storage.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent, false)
 		if err != nil {
 			panic(err)
 		}
@@ -455,7 +455,7 @@ func (t txnAbortOp) run(ctx context.Context) string {
 	for _, span := range txn.LockSpans {
 		intent := roachpb.MakeLockUpdate(txn, span)
 		intent.Status = roachpb.ABORTED
-		_, err := storage.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent)
+		_, err := storage.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent, false /* asyncResolution */)
 		if err != nil {
 			panic(err)
 		}

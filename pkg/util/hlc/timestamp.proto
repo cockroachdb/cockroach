@@ -55,6 +55,15 @@ message Timestamp {
   // can tighten the uncertainty interval that is applied to MVCC versions
   // with clock timestamp.
   //
+  // This property of disconnecting committed MVCC versions from observed
+  // timestamps is also used during asynchronous intent resolution in
+  // cases where an intent is being committed at a later time than it was
+  // synchronously written at (i.e. before committing) by its transaction.
+  // In such cases, a clock reading from the leaseholder of the committed
+  // value does not place an upper bound on the timestamp that the value
+  // may eventually be resolved to, so observed timestamps cannot be used
+  // to limit uncertainty when reading the value.
+  //
   // This flag does not affect the sort order of Timestamps. However, it
   // is considered when performing structural equality checks (e.g. using
   // the == operator). Consider use of the EqOrdering method when testing

@@ -261,7 +261,7 @@ func setupKeysWithIntent(
 					// is not one that should be resolved.
 					continue
 				}
-				found, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lu)
+				found, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lu, false)
 				require.Equal(b, true, found)
 				require.NoError(b, err)
 			}
@@ -494,7 +494,7 @@ func BenchmarkIntentResolution(b *testing.B) {
 									b.StartTimer()
 								}
 								lockUpdate.Key = keys[i%numIntentKeys]
-								found, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lockUpdate)
+								found, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lockUpdate, false)
 								if !found || err != nil {
 									b.Fatalf("intent not found or err %s", err)
 								}
@@ -559,7 +559,7 @@ func BenchmarkIntentRangeResolution(b *testing.B) {
 												lockUpdate.Key = keys[rangeNum*numKeysPerRange]
 												lockUpdate.EndKey = keys[(rangeNum+1)*numKeysPerRange]
 												resolved, span, err := MVCCResolveWriteIntentRange(
-													context.Background(), batch, nil, lockUpdate, 1000 /* max */, sep)
+													context.Background(), batch, nil, lockUpdate, 1000 /* max */, false, sep)
 												if err != nil {
 													b.Fatal(err)
 												}
@@ -776,7 +776,7 @@ func setupMVCCData(
 			Span:   roachpb.Span{Key: key},
 			Status: roachpb.COMMITTED,
 			Txn:    txnMeta,
-		}); err != nil {
+		}, false); err != nil {
 			b.Fatal(err)
 		}
 	}

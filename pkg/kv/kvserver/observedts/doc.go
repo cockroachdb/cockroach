@@ -112,14 +112,7 @@ var D4 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 //
 // There are two invariants necessary for this property to hold:
 //  1. a leaseholder's clock must always be equal to or greater than the timestamp
-//     of all writes that it has served. This is trivial to enforce for
-//     non-transactional writes. It is more complicated for transactional writes
-//     which may move their commit timestamp forward over their lifetime before
-//     committing, even after writing intents on remote Ranges. To accommodate
-//     this situation, transactions ensure that at the time of their commit, any
-//     leaseholder for a Range that contains one of its intent has an HLC clock
-//     with an equal or greater timestamp than the transaction's commit timestamp.
-//     TODO(nvanbenschoten): This is violated by txn refreshes. See #36431.
+//     of all writes that it has served.
 //  2. a leaseholder's clock must always be equal to or greater than the timestamp
 //     of all writes that previous leaseholders for its Range have served. We
 //     enforce that when a Replica acquires a lease it bumps its node's clock to a
@@ -129,6 +122,66 @@ var D4 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 //     follows by induction that, in conjunction with the previous invariant, this
 //     invariant holds for all leaseholders, given that a Range's initial
 //     leaseholder assumes responsibility for an empty range with no writes.
+//
+// Unfortunately, this first invariant does not always hold. It does hold for
+// non-transactional writes. It also holds for transactions that perform all of
+// their intent writes at the same timestamp and then commit at this timestamp.
+// However, it does not hold for transactions which move their commit timestamp
+// forward over their lifetime before committing, writing intents at different
+// timestamps along the way and "pulling them up" to the commit timestamp after
+// committing.
+//
+// In violating invariant 1, this third case reveals an ambiguity in what it
+// means for a leaseholder to "serve a write at a timestamp". The meaning of
+// this phrase is straightforward for non-transactional writes. However, for an
+// intent write whose original timestamp is provisional and whose eventual
+// commit timestamp is stored indirectly in its transaction record at its time
+// of commit, the meaning is less clear. This reconciliation to move the intent
+// write's timestamp up to its transaction's commit timestamp is asynchronous
+// from the transaction commit (and after it has been externally acknowledged).
+// So even if a leaseholder has only served writes with provisional timestamps
+// up to timestamp 100 (placing a lower bound on its clock of 100), it can be in
+// possession of intents that, when resolved, will carry a timestamp of 200. To
+// uphold the real-time ordering property, this value must be observed by any
+// transaction that begins after the value's transaction committed and was
+// acknowledged. So for observed timestamps to be correct as currently written,
+// we would need a guarantee that this value's leaseholder would never return an
+// observed timestamp < 200 at any point after the transaction commits. But with
+// the transaction commit possibly occurring on another node and with
+// communication to resolve the intent occurring asynchronously, this seems like
+// an impossible guarantee to make.
+//
+// This would appear to undermine observed timestamps to the point where they
+// cannot be used. However, we can claw back some utility by recognizing that
+// only a small fraction of transactions commit at a different timestamps than
+// the one they used while writing intents. We can also recognize that if we
+// were to compare observed timestamps against the timestamp that a committed
+// value was originally written (its provisional value if it was once an intent)
+// instead of the timestamp that it had been moved to on commit, then invariant
+// 1 would hold.
+//
+// We currently do not take full advantage of this second observation, because
+// we do not retain "written timestamps" in committed values. Instead, we do
+// something less optimal but cheaper and more convenient. Any intent whose
+// timestamp is changed during asynchronous intent resolution is marked as
+// "synthetic". Doing so is a compressed way of saying that the value could have
+// originally been written as an intent at any time (even min_timestamp) and so
+// observed timestamps cannot be used to limit uncertainty by pulling a read's
+// uncertainty interval below the value's timestamp.
+//
+// As a result of this refinement, the following property does properly hold:
+//
+//    Any writes that the transaction may later see written by leaseholders on
+//    this node at higher timestamps than the observed timestamp *and that are
+//    not marked as synthetic* could not have taken place causally before this
+//    transaction and can be ignored for the purposes of uncertainty.
+//
+// This application of the synthetic bit prevents observed timestamps from being
+// used to avoid uncertainty restarts with the set of committed values whose
+// timestamps do not reflect their original write time and therefore do not make
+// a claim about the clock of their leaseholder at the time that they were
+// committed. It does not change the interaction between observed timestamps and
+// any other committed value.
 //
 // Usage
 //

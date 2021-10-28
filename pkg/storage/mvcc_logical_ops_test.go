@@ -80,14 +80,14 @@ func TestMVCCOpLogWriter(t *testing.T) {
 				roachpb.MakeLockUpdate(
 					&txn1CommitTS,
 					roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}),
-				math.MaxInt64, onlySeparatedIntents); err != nil {
+				math.MaxInt64, false, onlySeparatedIntents); err != nil {
 				t.Fatal(err)
 			}
 			if _, _, err := MVCCResolveWriteIntentRange(ctx, ol, nil,
 				roachpb.MakeLockUpdate(
 					&txn1CommitTS,
 					roachpb.Span{Key: localKey, EndKey: localKey.Next()}),
-				math.MaxInt64, onlySeparatedIntents); err != nil {
+				math.MaxInt64, false, onlySeparatedIntents); err != nil {
 				t.Fatal(err)
 			}
 
@@ -99,14 +99,14 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			txn2Pushed := *txn2
 			txn2Pushed.WriteTimestamp = hlc.Timestamp{Logical: 6}
 			if _, err := MVCCResolveWriteIntent(ctx, ol, nil,
-				roachpb.MakeLockUpdate(&txn2Pushed, roachpb.Span{Key: testKey3}),
+				roachpb.MakeLockUpdate(&txn2Pushed, roachpb.Span{Key: testKey3}), false,
 			); err != nil {
 				t.Fatal(err)
 			}
 			txn2Abort := txn2Pushed
 			txn2Abort.Status = roachpb.ABORTED
 			if _, err := MVCCResolveWriteIntent(ctx, ol, nil,
-				roachpb.MakeLockUpdate(&txn2Abort, roachpb.Span{Key: testKey3}),
+				roachpb.MakeLockUpdate(&txn2Abort, roachpb.Span{Key: testKey3}), false,
 			); err != nil {
 				t.Fatal(err)
 			}

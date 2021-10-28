@@ -84,7 +84,10 @@ func ResolveIntent(
 	}
 
 	update := args.AsLockUpdate()
-	ok, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update)
+	// This intent resolution operation is asynchronous with its transaction and
+	// may be occurring after the transaction has already committed.
+	const asyncResolution = true
+	ok, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update, asyncResolution)
 	if err != nil {
 		return result.Result{}, err
 	}

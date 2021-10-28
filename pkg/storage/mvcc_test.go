@@ -2599,7 +2599,7 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 			txnCommit.Status = roachpb.COMMITTED
 			txnCommit.WriteTimestamp = clock.Now().Add(1, 0)
 			if _, err := MVCCResolveWriteIntent(ctx, engine, nil,
-				roachpb.MakeLockUpdate(&txnCommit, roachpb.Span{Key: testKey1})); err != nil {
+				roachpb.MakeLockUpdate(&txnCommit, roachpb.Span{Key: testKey1}), false); err != nil {
 				t.Fatal(err)
 			}
 
@@ -2917,7 +2917,7 @@ func TestMVCCResolveTxn(t *testing.T) {
 
 			// Resolve will write with txn1's timestamp which is 0,1.
 			if _, err := MVCCResolveWriteIntent(ctx, engine, nil,
-				roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: testKey1})); err != nil {
+				roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: testKey1}), false); err != nil {
 				t.Fatal(err)
 			}
 
@@ -2960,7 +2960,7 @@ func TestMVCCResolveNewerIntent(t *testing.T) {
 
 			// Resolve will succeed but should remove the intent.
 			if _, err := MVCCResolveWriteIntent(ctx, engine, nil,
-				roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: testKey1})); err != nil {
+				roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: testKey1}), false); err != nil {
 				t.Fatal(err)
 			}
 
@@ -3003,7 +3003,7 @@ func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 
 			// A bug (see #7654) caused intents to just stay where they were instead
 			// of being moved forward in the situation set up above.
-			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, intent); err != nil {
+			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, intent, false); err != nil {
 				t.Fatal(err)
 			}
 
@@ -3226,7 +3226,7 @@ func TestMVCCAbortTxn(t *testing.T) {
 			txn1AbortWithTS.WriteTimestamp = hlc.Timestamp{Logical: 1}
 
 			if _, err := MVCCResolveWriteIntent(ctx, engine, nil,
-				roachpb.MakeLockUpdate(txn1AbortWithTS, roachpb.Span{Key: testKey1}),
+				roachpb.MakeLockUpdate(txn1AbortWithTS, roachpb.Span{Key: testKey1}), false,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -3272,7 +3272,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 			txn1AbortWithTS.WriteTimestamp = hlc.Timestamp{WallTime: 2}
 
 			if _, err := MVCCResolveWriteIntent(ctx, engine, nil,
-				roachpb.MakeLockUpdate(txn1AbortWithTS, roachpb.Span{Key: testKey1}),
+				roachpb.MakeLockUpdate(txn1AbortWithTS, roachpb.Span{Key: testKey1}), false,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -3341,7 +3341,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 			txne2Commit.Status = roachpb.COMMITTED
 			txne2Commit.WriteTimestamp = hlc.Timestamp{WallTime: 1}
 			if _, err := MVCCResolveWriteIntent(ctx, engine, nil,
-				roachpb.MakeLockUpdate(&txne2Commit, roachpb.Span{Key: testKey1})); err != nil {
+				roachpb.MakeLockUpdate(&txne2Commit, roachpb.Span{Key: testKey1}), false); err != nil {
 				t.Fatal(err)
 			}
 
@@ -3651,7 +3651,7 @@ func TestMVCCGetWithPushedTimestamp(t *testing.T) {
 			// Resolve the intent, pushing its timestamp forward.
 			txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
 			if _, err := MVCCResolveWriteIntent(ctx, engine, nil,
-				roachpb.MakeLockUpdate(txn, roachpb.Span{Key: testKey1})); err != nil {
+				roachpb.MakeLockUpdate(txn, roachpb.Span{Key: testKey1}), false); err != nil {
 				t.Fatal(err)
 			}
 			// Attempt to read using naive txn's previous timestamp.
@@ -3683,7 +3683,7 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 			}
 			num, _, err := MVCCResolveWriteIntentRange(ctx, engine, nil,
 				roachpb.MakeLockUpdate(txn1e2Commit, roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}),
-				2, engine.IsSeparatedIntentsEnabledForTesting(ctx))
+				2, false, engine.IsSeparatedIntentsEnabledForTesting(ctx))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3718,48 +3718,39 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
+			testutils.RunTrueAndFalse(t, "asyncResolution", func(t *testing.T, asyncResolution bool) {
+				engine := engineImpl.create()
+				defer engine.Close()
 
-			if err := MVCCPut(ctx, engine, nil, testKey1, txn1.ReadTimestamp, value1, txn1); err != nil {
-				t.Fatal(err)
-			}
+				err := MVCCPut(ctx, engine, nil, testKey1, txn1.ReadTimestamp, value1, txn1)
+				require.NoError(t, err)
 
-			value, _, err := MVCCGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 1}, MVCCGetOptions{
-				Txn: txn1,
+				value, _, err := MVCCGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 1}, MVCCGetOptions{
+					Txn: txn1,
+				})
+				require.NoError(t, err)
+				require.Equal(t, value1.RawBytes, value.RawBytes)
+
+				// Resolve with a higher commit timestamp -- this should rewrite the
+				// intent when making it permanent.
+				txn := makeTxn(*txn1Commit, hlc.Timestamp{WallTime: 1})
+				update := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: testKey1})
+				_, err = MVCCResolveWriteIntent(ctx, engine, nil, update, asyncResolution)
+				require.NoError(t, err)
+
+				value, _, err = MVCCGet(ctx, engine, testKey1, hlc.Timestamp{Logical: 1}, MVCCGetOptions{})
+				require.NoError(t, err)
+				require.Nil(t, value)
+
+				value, _, err = MVCCGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 1}, MVCCGetOptions{})
+				require.NoError(t, err)
+				require.Equal(t, value1.RawBytes, value.RawBytes)
+				// If intent resolution was asynchronous with the transaction commit,
+				// the value's timestamp should have been marked as synthetic when it
+				// was moved.
+				expTS := hlc.Timestamp{WallTime: 1}.WithSynthetic(asyncResolution)
+				require.Equal(t, expTS, value.Timestamp)
 			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(value1.RawBytes, value.RawBytes) {
-				t.Fatalf("the value %s in get result does not match the value %s in request",
-					value1.RawBytes, value.RawBytes)
-			}
-
-			// Resolve with a higher commit timestamp -- this should rewrite the
-			// intent when making it permanent.
-			txn := makeTxn(*txn1Commit, hlc.Timestamp{WallTime: 1})
-			if _, err = MVCCResolveWriteIntent(ctx, engine, nil,
-				roachpb.MakeLockUpdate(txn, roachpb.Span{Key: testKey1})); err != nil {
-				t.Fatal(err)
-			}
-
-			value, _, err = MVCCGet(ctx, engine, testKey1, hlc.Timestamp{Logical: 1}, MVCCGetOptions{})
-			if value != nil || err != nil {
-				t.Fatalf("expected both value and err to be nil: %+v, %v", value, err)
-			}
-
-			value, _, err = MVCCGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 1}, MVCCGetOptions{})
-			if err != nil {
-				t.Error(err)
-			}
-			if expTS := (hlc.Timestamp{WallTime: 1}); value.Timestamp != expTS {
-				t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, expTS)
-			}
-			if !bytes.Equal(value1.RawBytes, value.RawBytes) {
-				t.Fatalf("the value %s in get result does not match the value %s in request",
-					value1.RawBytes, value.RawBytes)
-			}
 		})
 	}
 }
@@ -3774,47 +3765,34 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			if err := MVCCPut(ctx, engine, nil, testKey1, txn1.ReadTimestamp, value1, txn1); err != nil {
-				t.Fatal(err)
-			}
+			err := MVCCPut(ctx, engine, nil, testKey1, txn1.ReadTimestamp, value1, txn1)
+			require.NoError(t, err)
+
 			value, _, err := MVCCGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 1}, MVCCGetOptions{
 				Txn: txn1,
 			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(value1.RawBytes, value.RawBytes) {
-				t.Fatalf("the value %s in get result does not match the value %s in request",
-					value1.RawBytes, value.RawBytes)
-			}
+			require.NoError(t, err)
+			require.Equal(t, value1.RawBytes, value.RawBytes)
 
 			// Resolve with a higher commit timestamp, but with still-pending transaction.
 			// This represents a straightforward push (i.e. from a read/write conflict).
 			txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
-			if _, err = MVCCResolveWriteIntent(ctx, engine, nil,
-				roachpb.MakeLockUpdate(txn, roachpb.Span{Key: testKey1})); err != nil {
-				t.Fatal(err)
-			}
+			update := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: testKey1})
+			_, err = MVCCResolveWriteIntent(ctx, engine, nil, update, false /* asyncResolution */)
+			require.NoError(t, err)
 
 			value, _, err = MVCCGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 1}, MVCCGetOptions{})
-			if value != nil || err == nil {
-				t.Fatalf("expected both value nil and err to be a writeIntentError: %+v", value)
-			}
+			require.Nil(t, value)
+			require.Error(t, err)
+			require.True(t, errors.HasType(err, &roachpb.WriteIntentError{}))
 
 			// Can still fetch the value using txn1.
 			value, _, err = MVCCGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 1}, MVCCGetOptions{
 				Txn: txn1,
 			})
-			if err != nil {
-				t.Error(err)
-			}
-			if expTS := (hlc.Timestamp{WallTime: 1}); value.Timestamp != expTS {
-				t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, expTS)
-			}
-			if !bytes.Equal(value1.RawBytes, value.RawBytes) {
-				t.Fatalf("the value %s in get result does not match the value %s in request",
-					value1.RawBytes, value.RawBytes)
-			}
+			require.NoError(t, err)
+			require.Equal(t, value1.RawBytes, value.RawBytes)
+			require.Equal(t, hlc.Timestamp{WallTime: 1}, value.Timestamp)
 		})
 	}
 }
@@ -3831,7 +3809,7 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 
 			// Resolve a non existent key; noop.
 			if _, err := MVCCResolveWriteIntent(ctx, engine, nil,
-				roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: testKey1})); err != nil {
+				roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: testKey1}), false); err != nil {
 				t.Fatal(err)
 			}
 
@@ -3840,7 +3818,7 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 				t.Fatal(err)
 			}
 			if _, err := MVCCResolveWriteIntent(ctx, engine, nil,
-				roachpb.MakeLockUpdate(txn2Commit, roachpb.Span{Key: testKey1})); err != nil {
+				roachpb.MakeLockUpdate(txn2Commit, roachpb.Span{Key: testKey1}), false); err != nil {
 				t.Fatal(err)
 			}
 
@@ -3852,7 +3830,7 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 			txn1CommitWithTS := txn2Commit.Clone()
 			txn1CommitWithTS.WriteTimestamp = hlc.Timestamp{WallTime: 1}
 			if _, err := MVCCResolveWriteIntent(ctx, engine, nil,
-				roachpb.MakeLockUpdate(txn1CommitWithTS, roachpb.Span{Key: testKey2})); err != nil {
+				roachpb.MakeLockUpdate(txn1CommitWithTS, roachpb.Span{Key: testKey2}), false); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -3884,7 +3862,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 
 			num, resumeSpan, err := MVCCResolveWriteIntentRange(ctx, engine, nil,
 				roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: testKey1, EndKey: testKey4.Next()}),
-				math.MaxInt64, engine.IsSeparatedIntentsEnabledForTesting(ctx))
+				math.MaxInt64, false, engine.IsSeparatedIntentsEnabledForTesting(ctx))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3977,7 +3955,7 @@ func TestMVCCResolveTxnRangeResume(t *testing.T) {
 			// Resolve up to 6 intents: the keys are 000, 033, 066, 099, 1212, 1515.
 			num, resumeSpan, err := MVCCResolveWriteIntentRange(ctx, rw, nil,
 				roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: roachpb.Key("00"), EndKey: roachpb.Key("33")}),
-				6, engine.IsSeparatedIntentsEnabledForTesting(ctx))
+				6, false, engine.IsSeparatedIntentsEnabledForTesting(ctx))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -4025,7 +4003,7 @@ func TestMVCCResolveTxnRangeResumeWithManyVersions(t *testing.T) {
 			for {
 				// Resolve up to 20 intents.
 				num, resumeSpan, err := MVCCResolveWriteIntentRange(ctx, engine, nil, lockUpdate,
-					20, engine.IsSeparatedIntentsEnabledForTesting(ctx))
+					20, false, engine.IsSeparatedIntentsEnabledForTesting(ctx))
 				require.NoError(t, err)
 				if resumeSpan == nil {
 					// Last call resolves 0 intents.
@@ -4247,7 +4225,7 @@ func TestRandomizedMVCCResolveWriteIntentRange(t *testing.T) {
 		func() {
 			batch := engs[i].eng.NewBatch()
 			defer batch.Close()
-			_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0, i == 0)
+			_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0, false, i == 0)
 			require.NoError(t, err)
 			require.NoError(t, batch.Commit(false))
 		}()
@@ -4265,7 +4243,7 @@ func TestRandomizedMVCCResolveWriteIntentRange(t *testing.T) {
 			func() {
 				batch := engs[i].eng.NewBatch()
 				defer batch.Close()
-				_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0, i == 0)
+				_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0, false, i == 0)
 				require.NoError(t, err)
 				require.NoError(t, batch.Commit(false))
 			}()
@@ -4354,7 +4332,7 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	}
 	// All the writes are ignored, so DEL is written for the intent. These
 	// should be buffered in the memtable.
-	_, _, err = MVCCResolveWriteIntentRange(ctx, eng, nil, lu, 0, true)
+	_, _, err = MVCCResolveWriteIntentRange(ctx, eng, nil, lu, 0, false, true)
 	require.NoError(t, err)
 	{
 		iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
@@ -4386,7 +4364,7 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	if debug {
 		log.Infof(ctx, "LockUpdate: %s", lu.String())
 	}
-	_, _, err = MVCCResolveWriteIntentRange(ctx, eng, nil, lu, 0, false)
+	_, _, err = MVCCResolveWriteIntentRange(ctx, eng, nil, lu, 0, false, false)
 	require.NoError(t, err)
 	// Compact the engine so that SINGLEDEL consumes the SETWITHDEL, becoming a
 	// DEL.
@@ -5439,7 +5417,7 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 			}
 			// Resolve the intent with a low epoch.
 			if _, err := MVCCResolveWriteIntent(ctx, engine, nil,
-				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: testKey1})); err != nil {
+				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: testKey1}), false); err != nil {
 				t.Fatal(err)
 			}
 

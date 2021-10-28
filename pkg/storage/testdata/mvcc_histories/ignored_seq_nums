@@ -174,7 +174,7 @@ data: "k/20"/11.000000000,0 -> /BYTES/20
 meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 
-# Ensure that the deleted value doens't surface. Instead, if we ignore the
+# Ensure that the deleted value doesn't surface. Instead, if we ignore the
 # now-newest seq, we get the write before it.
 
 run ok

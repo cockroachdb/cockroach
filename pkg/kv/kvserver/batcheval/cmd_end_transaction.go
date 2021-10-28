@@ -451,7 +451,9 @@ func resolveLocalLocks(
 		desc = &mergeTrigger.LeftDesc
 	}
 
-	var resolveAllowance int64 = lockResolutionBatchSize
+	// Any intent resolved here is resolved synchronously with the txn commit.
+	const asyncResolution = false
+	resolveAllowance := int64(lockResolutionBatchSize)
 	if args.InternalCommitTrigger != nil {
 		// If this is a system transaction (such as a split or merge), don't enforce the resolve allowance.
 		// These transactions rely on having their locks resolved synchronously.
@@ -486,7 +488,7 @@ func resolveLocalLocks(
 				//
 				// Note that the underlying pebbleIterator will still be reused
 				// since readWriter is a pebbleBatch in the typical case.
-				ok, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update)
+				ok, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update, asyncResolution)
 				if err != nil {
 					return err
 				}
@@ -504,7 +506,7 @@ func resolveLocalLocks(
 			if inSpan != nil {
 				update.Span = *inSpan
 				num, resumeSpan, err := storage.MVCCResolveWriteIntentRange(
-					ctx, readWriter, ms, update, resolveAllowance, onlySeparatedIntents)
+					ctx, readWriter, ms, update, resolveAllowance, asyncResolution, onlySeparatedIntents)
 				if err != nil {
 					return err
 				}
