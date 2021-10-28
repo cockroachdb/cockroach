@@ -158,7 +158,7 @@ func (tc *Collection) getByName(
 	db catalog.DatabaseDescriptor,
 	sc catalog.SchemaDescriptor,
 	name string,
-	avoidCached, mutable bool,
+	avoidCached, mutable, avoidSynthetic bool,
 ) (found bool, desc catalog.Descriptor, err error) {
 
 	var parentID, parentSchemaID descpb.ID
@@ -166,12 +166,12 @@ func (tc *Collection) getByName(
 		if sc == nil {
 			// Schema descriptors are handled in a special way, see getSchemaByName
 			// function declaration for details.
-			return getSchemaByName(ctx, tc, txn, db, name, avoidCached, mutable)
+			return getSchemaByName(ctx, tc, txn, db, name, avoidCached, mutable, avoidSynthetic)
 		}
 		parentID, parentSchemaID = db.GetID(), sc.GetID()
 	}
 
-	if found, sd := tc.synthetic.getByName(parentID, parentSchemaID, name); found {
+	if found, sd := tc.synthetic.getByName(parentID, parentSchemaID, name); found && !avoidSynthetic {
 		if mutable {
 			return false, nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
 		}
@@ -255,8 +255,7 @@ func getSchemaByName(
 	txn *kv.Txn,
 	db catalog.DatabaseDescriptor,
 	name string,
-	avoidCached bool,
-	mutable bool,
+	avoidCached, mutable, avoidSynthetic bool,
 ) (bool, catalog.Descriptor, error) {
 	if name == tree.PublicSchema {
 		return true, schemadesc.GetPublicSchema(), nil
@@ -277,6 +276,7 @@ func getSchemaByName(
 		sc, err := tc.getSchemaByID(ctx, txn, id, tree.SchemaLookupFlags{
 			RequireMutable: mutable,
 			AvoidCached:    avoidCached,
+			AvoidSynthetic: avoidSynthetic,
 		})
 		// Deal with the fact that ByID retrieval always uses required and the
 		// logic here never returns an error if the descriptor does not exist.

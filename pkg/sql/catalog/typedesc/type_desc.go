@@ -177,6 +177,11 @@ func (desc *immutable) DescriptorProto() *descpb.Descriptor {
 	}
 }
 
+// NewBuilder implements the catalog.Descriptor interface.
+func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
+	return NewBuilder(desc.TypeDesc())
+}
+
 // PrimaryRegionName implements the TypeDescriptor interface.
 func (desc *immutable) PrimaryRegionName() (descpb.RegionName, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {

@@ -22,36 +22,23 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-func (b *buildContext) removeTypeBackRefDeps(
-	ctx context.Context, tableDesc catalog.TableDescriptor,
-) {
-	// TODO(fqazi):  Consider cleaning up all references by getting them using tableDesc.GetReferencedDescIDs(),
+func (b *buildContext) removeTypeBackRefDeps(ctx context.Context, table catalog.TableDescriptor) {
+	// TODO(fqazi):  Consider cleaning up all references by getting them using table.GetReferencedDescIDs(),
 	// which would include all types of references inside a table descriptor. However, this would also need us
 	// to look up the type of descriptor.
-	_, dbDesc, err := b.Descs.GetImmutableDatabaseByID(ctx, b.EvalCtx.Txn,
-		tableDesc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
-	if err != nil {
-		panic(err)
-	}
-	typeIDs, _, err := tableDesc.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
-		mutDesc, err := b.Descs.GetMutableTypeByID(ctx, b.EvalCtx.Txn, id, tree.ObjectLookupFlagsWithRequired())
-		if err != nil {
-			return nil, err
-		}
-		return mutDesc, nil
+	db := mustReadDatabase(ctx, b, table.GetParentID())
+	typeIDs, _, err := table.GetAllReferencedTypeIDs(db, func(id descpb.ID) (catalog.TypeDescriptor, error) {
+		return mustReadType(ctx, b, id), nil
 	})
-	if err != nil {
-		panic(err)
-	}
+	onErrPanic(err)
 	// Drop all references to this table/view/sequence
 	for _, typeID := range typeIDs {
 		typeRef := &scpb.TypeReference{
 			TypeID: typeID,
-			DescID: tableDesc.GetID(),
+			DescID: table.GetID(),
 		}
 		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, typeRef); !exists {
-			b.addNode(scpb.Target_DROP,
-				typeRef)
+			b.addNode(scpb.Target_DROP, typeRef)
 		}
 	}
 }
@@ -75,9 +62,7 @@ func (b *buildContext) removeColumnTypeBackRefs(table catalog.TableDescriptor, i
 			continue
 		}
 		expr, err := parser.ParseExpr(col.GetDefaultExpr())
-		if err != nil {
-			panic(err)
-		}
+		onErrPanic(err)
 		if col.GetID() == id {
 			tree.WalkExpr(visitorDeleted, expr)
 		} else {
@@ -85,9 +70,7 @@ func (b *buildContext) removeColumnTypeBackRefs(table catalog.TableDescriptor, i
 		}
 		if col.IsComputed() {
 			expr, err := parser.ParseExpr(col.GetComputeExpr())
-			if err != nil {
-				panic(err)
-			}
+			onErrPanic(err)
 			if col.GetID() == id {
 				tree.WalkExpr(visitorDeleted, expr)
 			} else {
@@ -99,9 +82,7 @@ func (b *buildContext) removeColumnTypeBackRefs(table catalog.TableDescriptor, i
 	for oid := range visitorDeleted.OIDs {
 		if _, ok := visitor.OIDs[oid]; !ok {
 			typeID, err := typedesc.UserDefinedTypeOIDToID(oid)
-			if err != nil {
-				panic(err)
-			}
+			onErrPanic(err)
 			typeRef := &scpb.TypeReference{
 				TypeID: typeID,
 				DescID: table.GetID(),

@@ -959,7 +959,7 @@ func maybeUpgradeDescriptors(
 		if tableDesc, isTable := desc.(catalog.TableDescriptor); isTable {
 			b = tabledesc.NewBuilderForFKUpgrade(tableDesc.TableDesc(), skipFKsWithNoMatchingTable)
 		} else {
-			b = catalogkv.NewBuilder(desc.DescriptorProto())
+			b = desc.NewBuilder()
 		}
 		err := b.RunPostDeserializationChanges(ctx, descGetter)
 		if err != nil {

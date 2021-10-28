@@ -12,7 +12,6 @@ package descs
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -63,7 +62,7 @@ func (u *uncommittedDescriptor) getMutable() catalog.MutableDescriptor {
 	if u.mutable != nil {
 		return u.mutable
 	}
-	return catalogkv.NewBuilder(u.immutable.DescriptorProto()).BuildExistingMutable()
+	return u.immutable.NewBuilder().BuildExistingMutable()
 }
 
 var _ catalog.NameEntry = (*uncommittedDescriptor)(nil)

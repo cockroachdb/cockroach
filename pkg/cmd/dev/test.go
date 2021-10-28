@@ -54,7 +54,7 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	addCommonTestFlags(testCmd)
 	testCmd.Flags().BoolP(vFlag, "v", false, "enable logging during test runs")
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
-	testCmd.Flags().String(stressArgsFlag, "", "Additional arguments to pass to stress")
+	testCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
 	testCmd.Flags().String(rewriteFlag, "", "argument to pass to underlying (only applicable for certain tests, e.g. logic and datadriven tests). If unspecified, -rewrite will be passed to the test binary.")
@@ -82,9 +82,6 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if rewriteArg != "" && rewrite == "" {
 		rewrite = "-rewrite"
 	}
-
-	d.log.Printf("unit test args: stress=%t  race=%t  filter=%s  timeout=%s  ignore-cache=%t  pkgs=%s",
-		stress, race, filter, timeout, ignoreCache, pkgs)
 
 	var args []string
 	args = append(args, "test")
@@ -178,17 +175,29 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
 		}
 	}
-	if stress && timeout > 0 {
-		args = append(args, "--run_under", fmt.Sprintf("%s -maxtime=%s %s", stressTarget, timeout, stressArgs))
-		// The timeout should be a bit higher than the stress duration.
-		// Bazel will probably think the timeout for this test isn't so
-		// long.
-		args = append(args, fmt.Sprintf("--test_timeout=%d", int((timeout+1*time.Second).Seconds())))
-	} else if stress {
-		args = append(args, "--run_under", fmt.Sprintf("%s %s", stressTarget, stressArgs))
+	if stress {
+		if timeout > 0 {
+			args = append(args, "--run_under",
+				fmt.Sprintf("%s -maxtime=%s %s", stressTarget, timeout, stressArgs))
+
+			// The bazel timeout needs to be higher than the stress duration to
+			// pass reliably.
+			args = append(args, fmt.Sprintf("--test_timeout=%.0f", (timeout+time.Second).Seconds()))
+		} else {
+			// We're running under stress and no timeout is specified. We want
+			// to respect the timeout passed down to stress[1]. Similar to above
+			// we want the bazel timeout to be longer, so lets just set it to
+			// 24h.
+			//
+			// [1]: Through --stress-arg=-maxtime or if nothing is specified, a
+			//      -maxtime of 0 that's taken as "run forever")
+			args = append(args, "--run_under", fmt.Sprintf("%s %s", stressTarget, stressArgs))
+			args = append(args, fmt.Sprintf("--test_timeout=%.0f", 24*time.Hour.Seconds()))
+		}
 	} else if timeout > 0 {
 		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
 	}
+
 	if filter != "" {
 		args = append(args, fmt.Sprintf("--test_filter=%s", filter))
 	}

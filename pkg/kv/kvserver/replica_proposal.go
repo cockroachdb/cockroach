@@ -913,9 +913,6 @@ func (r *Replica) getTraceData(ctx context.Context) map[string]string {
 	traceCarrier := tracing.MapCarrier{
 		Map: make(map[string]string),
 	}
-	if err := r.AmbientContext.Tracer.InjectMetaInto(sp.Meta(), traceCarrier); err != nil {
-		log.Errorf(ctx, "failed to inject sp context (%+v) as trace data: %s", sp.Meta(), err)
-		return nil
-	}
+	r.AmbientContext.Tracer.InjectMetaInto(sp.Meta(), traceCarrier)
 	return traceCarrier.Map
 }
