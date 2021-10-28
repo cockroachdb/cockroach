@@ -94,7 +94,7 @@ func (r *sstIterator) SeekGE(key MVCCKey) {
 		r.iterValid = false
 		r.err = r.iter.Error()
 	}
-	if r.iterValid && r.err == nil && r.verify {
+	if r.iterValid && r.err == nil && r.verify && r.mvccKey.IsValue() {
 		r.err = roachpb.Value{RawBytes: r.value}.Verify(r.mvccKey.Key)
 	}
 }
@@ -117,7 +117,7 @@ func (r *sstIterator) Next() {
 		r.iterValid = false
 		r.err = r.iter.Error()
 	}
-	if r.iterValid && r.err == nil && r.verify {
+	if r.iterValid && r.err == nil && r.verify && r.mvccKey.IsValue() {
 		r.err = roachpb.Value{RawBytes: r.value}.Verify(r.mvccKey.Key)
 	}
 }

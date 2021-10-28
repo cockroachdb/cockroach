@@ -385,10 +385,13 @@ type SSTSender interface {
 		ctx context.Context,
 		begin, end interface{},
 		data []byte,
+		disallowConflicts bool,
 		disallowShadowing bool,
+		disallowShadowingBelow hlc.Timestamp,
 		stats *enginepb.MVCCStats,
 		ingestAsWrites bool,
 		batchTs hlc.Timestamp,
+		writeAtBatchTs bool,
 	) error
 	SplitAndScatter(ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp) error
 }
@@ -457,7 +460,9 @@ func AddSSTable(
 					ingestAsWriteBatch = true
 				}
 				// This will fail if the range has split but we'll check for that below.
-				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, item.disallowShadowing, &item.stats, ingestAsWriteBatch, batchTs)
+				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, false, /* disallowConflicts */
+					item.disallowShadowing, hlc.Timestamp{} /* disallowShadowingBelow */, &item.stats,
+					ingestAsWriteBatch, batchTs, false /* writeAtBatchTs */)
 				if err == nil {
 					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, timeutil.Since(before))
 					return nil
