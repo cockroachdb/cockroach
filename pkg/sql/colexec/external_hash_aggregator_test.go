@@ -204,7 +204,7 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 			for _, groupSize := range groupSizes {
 				benchmarkAggregateFunction(
 					b, aggType{
-						new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
+						func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
 							op, accs, mons, _, err := createExternalHashAggregator(
 								ctx, flowCtx, args, queueCfg,
 								&colexecop.TestingSemaphore{}, 0, /* numForcedRepartitions */
@@ -218,7 +218,8 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 							// purposes of this benchmark.
 							return colexecop.NewNoop(op), err
 						},
-						name: fmt.Sprintf("spilled=%t", spillForced),
+						fmt.Sprintf("spilled=%t", spillForced),
+						unordered,
 					},
 					aggFn, []*types.T{types.Int}, 1 /* numGroupCol */, groupSize,
 					0 /* distinctProb */, numInputRows, 0 /* chunkSize */, 0 /* limit */)
