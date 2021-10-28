@@ -69,7 +69,6 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:resolve proto go roachpb/io-formats.proto //pkg/roachpb:with-mocks
 # gazelle:resolve proto go roachpb/metadata.proto //pkg/roachpb:with-mocks
 # gazelle:resolve proto go roachpb/span_config.proto //pkg/roachpb:with-mocks
-# gazelle:exclude pkg/roachpb/batch_generated.go
 # gazelle:exclude pkg/roachpb/batch_generated-gen.go
 
 # See pkg/sql/opt/optgen/cmd/langgen/BUILD.bazel for more details.
@@ -107,7 +106,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude **/*.pb.gw.go
 # gazelle:exclude **/*_interval_btree.go
 # gazelle:exclude **/*_interval_btree_test.go
-# gazelle:exclude **/mocks_generated.go
+# gazelle:exclude **/*_generated.go
 # gazelle:exclude pkg/sql/parser/sql.go
 # gazelle:exclude pkg/sql/parser/helpmap_test.go
 # gazelle:exclude pkg/sql/parser/help_messages.go
@@ -118,25 +117,9 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/testutils/**/testdata/**
 # gazelle:exclude pkg/security/securitytest/embedded.go
 # gazelle:exclude pkg/cmd/roachprod/vm/aws/embedded.go
-# gazelle:exclude pkg/cmd/roachtest/prometheus/mock_generated.go
-# gazelle:exclude pkg/cmd/roachtest/tests/drt_generated.go
 # gazelle:exclude pkg/**/*_string.go
-# gazelle:exclude pkg/geo/wkt/wkt_generated.go
-# gazelle:exclude pkg/sql/schemachanger/scop/backfill_visitor_generated.go
-# gazelle:exclude pkg/sql/schemachanger/scop/mutation_visitor_generated.go
-# gazelle:exclude pkg/sql/schemachanger/scop/validation_visitor_generated.go
-# gazelle:exclude pkg/sql/schemachanger/scpb/elements_generated.go
 # gazelle:exclude pkg/ui/distccl/distccl_no_bazel.go
 # gazelle:exclude pkg/ui/distoss/distoss_no_bazel.go
-# gazelle:exclude pkg/util/log/channel/channel_generated.go
-# gazelle:exclude pkg/util/log/eventpb/eventlog_channels_generated.go
-# gazelle:exclude pkg/util/log/eventpb/json_encode_generated.go
-# gazelle:exclude pkg/util/log/log_channels_generated.go
-# gazelle:exclude pkg/util/log/severity/severity_generated.go
-# gazelle:exclude pkg/util/timeutil/lowercase_timezones_generated.go
-#
-# TODO(irfansharif): Hand excluding these _generated.go/_stringer.go files is
-# silly, we should glob exclude everything once we have full coverage.
 #
 # Generally useful references:
 #
