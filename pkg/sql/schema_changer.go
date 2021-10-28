@@ -492,7 +492,7 @@ func startGCJob(
 		return err
 	}
 	log.Infof(ctx, "starting GC job %d", jobID)
-	jobRegistry.NotifyToAdoptJobs(ctx)
+	jobRegistry.NotifyToAdoptJobs()
 	return nil
 }
 
@@ -886,7 +886,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 		return err
 	}
 	log.Infof(ctx, "starting GC job %d", gcJobID)
-	sc.jobRegistry.NotifyToAdoptJobs(ctx)
+	sc.jobRegistry.NotifyToAdoptJobs()
 	return nil
 }
 
@@ -1333,7 +1333,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		return err
 	}
 	// Notify the job registry to start jobs, in case we started any.
-	sc.jobRegistry.NotifyToAdoptJobs(ctx)
+	sc.jobRegistry.NotifyToAdoptJobs()
 
 	// If any operations was skipped because a mutation was made
 	// redundant due to a column getting dropped later on then we should
