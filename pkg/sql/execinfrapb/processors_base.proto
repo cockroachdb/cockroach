@@ -20,7 +20,6 @@ package cockroach.sql.distsqlrun;
 option go_package = "execinfrapb";
 
 import "sql/execinfrapb/data.proto";
-import "roachpb/data.proto";
 import "gogoproto/gogo.proto";
 
 // PostProcessSpec describes the processing required to obtain the output (e.g.
@@ -69,11 +68,3 @@ message PostProcessSpec {
 message Columns {
   repeated uint32 columns = 1 [packed = true];
 }
-
-message TableReaderSpan {
-  // TODO(radu): the dist_sql APIs should be agnostic to how we map tables to
-  // KVs. The span should be described as starting and ending lists of values
-  // for a prefix of the index columns, along with inclusive/exclusive flags.
-  optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
-}
-
