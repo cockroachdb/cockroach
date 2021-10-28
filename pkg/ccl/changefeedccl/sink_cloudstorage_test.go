@@ -176,7 +176,7 @@ func TestCloudStorageSink(t *testing.T) {
 		sinkDir := `golden`
 		s, err := makeCloudStorageSink(
 			ctx, sinkURI(sinkDir, unlimitedFileSize), 1, settings,
-			opts, timestampOracle, externalStorageFromURI, user,
+			opts, timestampOracle, externalStorageFromURI, user, nil,
 		)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, s.Close()) }()
@@ -222,7 +222,7 @@ func TestCloudStorageSink(t *testing.T) {
 				dir := `single-node` + compression
 				s, err := makeCloudStorageSink(
 					ctx, sinkURI(dir, unlimitedFileSize), 1, settings,
-					opts, timestampOracle, externalStorageFromURI, user,
+					opts, timestampOracle, externalStorageFromURI, user, nil,
 				)
 				require.NoError(t, err)
 				defer func() { require.NoError(t, s.Close()) }()
@@ -301,13 +301,13 @@ func TestCloudStorageSink(t *testing.T) {
 		dir := `multi-node`
 		s1, err := makeCloudStorageSink(
 			ctx, sinkURI(dir, unlimitedFileSize), 1,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, nil,
 		)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, s1.Close()) }()
 		s2, err := makeCloudStorageSink(
 			ctx, sinkURI(dir, unlimitedFileSize), 2,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, nil,
 		)
 		defer func() { require.NoError(t, s2.Close()) }()
 		require.NoError(t, err)
@@ -337,13 +337,13 @@ func TestCloudStorageSink(t *testing.T) {
 		// this is unavoidable.
 		s1R, err := makeCloudStorageSink(
 			ctx, sinkURI(dir, unbuffered), 1,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, nil,
 		)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, s1R.Close()) }()
 		s2R, err := makeCloudStorageSink(
 			ctx, sinkURI(dir, unbuffered), 2,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, nil,
 		)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, s2R.Close()) }()
@@ -386,7 +386,7 @@ func TestCloudStorageSink(t *testing.T) {
 		dir := `zombie`
 		s1, err := makeCloudStorageSink(
 			ctx, sinkURI(dir, unlimitedFileSize), 1,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, nil,
 		)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, s1.Close()) }()
@@ -394,7 +394,7 @@ func TestCloudStorageSink(t *testing.T) {
 		s1.(*cloudStorageSink).jobSessionID = "a" // Force deterministic job session ID.
 		s2, err := makeCloudStorageSink(
 			ctx, sinkURI(dir, unlimitedFileSize), 1,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, nil,
 		)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, s2.Close()) }()
@@ -431,7 +431,7 @@ func TestCloudStorageSink(t *testing.T) {
 		const targetMaxFileSize = 6
 		s, err := makeCloudStorageSink(
 			ctx, sinkURI(dir, targetMaxFileSize), 1,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, nil,
 		)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, s.Close()) }()
@@ -570,7 +570,7 @@ func TestCloudStorageSink(t *testing.T) {
 				sinkURIWithParam.addParam(changefeedbase.SinkParamPartitionFormat, tc.format)
 				s, err := makeCloudStorageSink(
 					ctx, sinkURIWithParam, 1,
-					settings, opts, timestampOracle, externalStorageFromURI, user,
+					settings, opts, timestampOracle, externalStorageFromURI, user, nil,
 				)
 
 				require.NoError(t, err)
@@ -604,7 +604,7 @@ func TestCloudStorageSink(t *testing.T) {
 		dir := `file-ordering`
 		s, err := makeCloudStorageSink(
 			ctx, sinkURI(dir, unlimitedFileSize), 1,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, nil,
 		)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, s.Close()) }()
@@ -665,7 +665,7 @@ func TestCloudStorageSink(t *testing.T) {
 		var targetMaxFileSize int64 = 10
 		s, err := makeCloudStorageSink(
 			ctx, sinkURI(dir, targetMaxFileSize), 1, settings,
-			opts, timestampOracle, externalStorageFromURI, user)
+			opts, timestampOracle, externalStorageFromURI, user, nil)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, s.Close()) }()
 
