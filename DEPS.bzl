@@ -1526,8 +1526,8 @@ def go_deps():
         name = "com_github_elastic_gosigar",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/elastic/gosigar",
-        sum = "h1:bPIzW1Qkut7n9uwvPAXbnLDVEd45TV5ZwxYZAVX/zEQ=",
-        version = "v0.10.0",
+        sum = "h1:T0aQ7n/n2ZA9W7DmAnj60v+qzqKERdBgJBO1CG2W6rc=",
+        version = "v0.14.1",
     )
 
     go_repository(
@@ -6239,8 +6239,8 @@ def go_deps():
         name = "org_golang_x_sys",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/sys",
-        sum = "h1:KzbpndAYEM+4oHRp9JmB2ewj0NHHxO3Z0g7Gus2O1kk=",
-        version = "v0.0.0-20211015200801-69063c4bb744",
+        sum = "h1:2B5p2L5IfGiD7+b9BOoRMC6DgObAVZV+Fsp050NqXik=",
+        version = "v0.0.0-20211025201205-69cdffdb9359",
     )
     go_repository(
         name = "org_golang_x_term",

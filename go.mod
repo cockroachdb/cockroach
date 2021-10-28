@@ -60,7 +60,7 @@ require (
 	github.com/docker/go-connections v0.4.0
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edsrzf/mmap-go v1.0.0
-	github.com/elastic/gosigar v0.10.0
+	github.com/elastic/gosigar v0.14.1
 	github.com/emicklei/dot v0.15.0
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
@@ -157,7 +157,7 @@ require (
 	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20211015200801-69063c4bb744
+	golang.org/x/sys v0.0.0-20211025201205-69cdffdb9359
 	golang.org/x/term v0.0.0-20210220032956-6a3ed077a48d
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
