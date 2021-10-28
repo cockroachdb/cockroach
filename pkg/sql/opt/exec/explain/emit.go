@@ -376,6 +376,12 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if s.KVBytesRead.HasValue() {
 			e.ob.AddField("KV bytes read", humanize.IBytes(s.KVBytesRead.Value()))
 		}
+		if s.MaxAllocatedMem.HasValue() {
+			e.ob.AddField("max memory allocated", humanize.IBytes(s.MaxAllocatedMem.Value()))
+		}
+		if s.MaxAllocatedDisk.HasValue() {
+			e.ob.AddField("max sql temp disk usage", humanize.IBytes(s.MaxAllocatedDisk.Value()))
+		}
 		if e.ob.flags.Verbose {
 			if s.StepCount.HasValue() {
 				e.ob.AddField("MVCC step count (ext/int)", fmt.Sprintf("%s/%s",
