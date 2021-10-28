@@ -2531,12 +2531,6 @@ func (s *Store) RangeFeed(
 // scanning ranges. An ideal solution would be to create incremental events
 // whenever availability changes.
 func (s *Store) updateReplicationGauges(ctx context.Context) error {
-	// Load the system config.
-	cfg := s.Gossip().GetSystemConfig()
-	if cfg == nil {
-		return errors.Errorf("%s: system config not yet available", s)
-	}
-
 	var (
 		raftLeaderCount               int64
 		leaseHolderCount              int64
