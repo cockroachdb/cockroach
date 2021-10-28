@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -90,6 +91,7 @@ func (b *Bytes) AssertOffsetsAreNonDecreasing(n int) {
 // set on it. UpdateOffsetsToBeNonDecreasing assumes that all offsets up to
 // b.maxSetLength are non-decreasing. Note that this method is a noop when
 // n <= b.maxSetLength.
+//gcassert:inline
 func (b *Bytes) UpdateOffsetsToBeNonDecreasing(n int) {
 	// Note that we're not checking whether this Bytes is a window because
 	// although this function might modify the "window" Bytes, it maintains the
@@ -108,9 +110,15 @@ func (b *Bytes) UpdateOffsetsToBeNonDecreasing(n int) {
 	// This means that maxSetLength is also the index into offsets at which the
 	// end index for the max set element is stored. Therefore, the value at
 	// offsets[maxSetLength] should be used to back-fill offsets.
-	prev := b.offsets[b.maxSetLength]
-	for i := b.maxSetLength + 1; i <= n; i++ {
-		b.offsets[i] = prev
+	if n > b.maxSetLength {
+		offsets := b.offsets
+		prev := offsets[b.maxSetLength]
+		_ = offsets[b.maxSetLength+1]
+		_ = offsets[n]
+		for i := b.maxSetLength + 1; i <= n; i++ {
+			//gcassert:bce
+			offsets[i] = prev
+		}
 	}
 }
 
@@ -125,18 +133,21 @@ func (b *Bytes) Get(i int) []byte {
 
 // getAppendTo returns a byte slice that ith []byte value should be appended to.
 // This method will panic if i is less than maximum previously Set index.
+//gcassert:inline
 func (b *Bytes) getAppendTo(i int) []byte {
-	if b.isWindow {
-		panic("getAppendTo is called on a window into Bytes")
-	}
-	if i < b.maxSetLength-1 {
-		panic(
-			fmt.Sprintf(
-				"cannot overwrite value on flat Bytes: maxSetLength=%d, setIndex=%d, consider using Reset",
-				b.maxSetLength,
-				i,
-			),
-		)
+	if util.CrdbTestBuild {
+		if b.isWindow {
+			panic("getAppendTo is called on a window into Bytes")
+		}
+		if i < b.maxSetLength-1 {
+			panic(
+				fmt.Sprintf(
+					"cannot overwrite value on flat Bytes: maxSetLength=%d, setIndex=%d, consider using Reset",
+					b.maxSetLength,
+					i,
+				),
+			)
+		}
 	}
 	// We're maybe setting an element not right after the last already present
 	// element (i.e. there might be gaps in b.offsets). This is probably due to
@@ -405,11 +416,8 @@ func (b *Bytes) ProportionalSize(n int64) int64 {
 
 // ElemSize returns the size in bytes of the []byte elem at the given index.
 // Panics if passed an invalid element.
+//gcassert:inline
 func (b *Bytes) ElemSize(idx int) int64 {
-	if idx < 0 || idx >= b.Len() {
-		colexecerror.InternalError(
-			errors.AssertionFailedf("called ElemSize with invalid index: %d", idx))
-	}
 	return int64(b.offsets[idx+1] - b.offsets[idx])
 }
 
