@@ -277,6 +277,10 @@ const (
 	// limits when splitting requests.
 	TargetBytesAvoidExcess
 
+	// MVCCAddSSTable supports MVCC-compliant AddSSTable requests via the new
+	// WriteAtRequestTimestamp parameter.
+	MVCCAddSSTable
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -472,6 +476,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TargetBytesAvoidExcess,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 4},
+	},
+	{
+		Key:     MVCCAddSSTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 6},
 	},
 
 	// *************************************************

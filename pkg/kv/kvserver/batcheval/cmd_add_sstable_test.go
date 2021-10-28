@@ -571,7 +571,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"a\"") {
+				if !testutils.IsError(err, "SST key \"a\"/0.000000007,0 shadows existing key \"a\"/0.000000002,0") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -598,7 +598,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"g\"") {
+				if !testutils.IsError(err, "WriteTooOldError: write at timestamp 0.000000004,0 too old; wrote at 0.000000005,1") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -627,7 +627,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"z\"") {
+				if !testutils.IsError(err, "SST key \"z\"/0.000000003,0 shadows existing key \"z\"/0.000000002,0") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -689,7 +689,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
+				if !testutils.IsError(err, "WriteTooOldError: write at timestamp 0.000000003,0 too old; wrote at 0.000000005,1") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -718,7 +718,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"b\"") {
+				if !testutils.IsError(err, "WriteTooOldError: write at timestamp 0.000000004,0 too old; wrote at 0.000000006,1") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -748,7 +748,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
+				if !testutils.IsError(err, "WriteTooOldError: write at timestamp 0.000000004,0 too old; wrote at 0.000000005,1") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -840,7 +840,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "inline values are unsupported when checking for key collisions") {
+				if !testutils.IsError(err, "inline values are unsupported") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -900,7 +900,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
+				if !testutils.IsError(err, "SST key \"y\"/0.000000006,0 shadows existing key \"y\"/0.000000005,0") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -929,7 +929,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
+				if !testutils.IsError(err, "WriteTooOldError: write at timestamp 0.000000005,0 too old; wrote at 0.000000005,1") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -958,7 +958,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "ingested key collides with an existing one: \"z\"") {
+				if !testutils.IsError(err, "SST key \"z\"/0.000000003,0 shadows existing key \"z\"/0.000000002,0") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -1096,7 +1096,7 @@ func TestAddSSTableDisallowShadowingIntentResolution(t *testing.T) {
 	// Generate an SSTable that covers keys a, b, and c, and submit it with high
 	// priority. This is going to abort the transaction above, encounter its
 	// intent, and resolve it.
-	sst := makeSST(t, s.Clock().Now(), map[string]string{
+	sst, start, end := makeSST(t, s.Clock().Now(), map[string]string{
 		"a": "1",
 		"b": "2",
 		"c": "3",
@@ -1106,7 +1106,7 @@ func TestAddSSTableDisallowShadowingIntentResolution(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Header.UserPriority = roachpb.MaxUserPriority
 	ba.Add(&roachpb.AddSSTableRequest{
-		RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")},
+		RequestHeader:     roachpb.RequestHeader{Key: start, EndKey: end},
 		Data:              sst,
 		MVCCStats:         stats,
 		DisallowShadowing: true,
@@ -1120,7 +1120,7 @@ func TestAddSSTableDisallowShadowingIntentResolution(t *testing.T) {
 	require.Contains(t, err.Error(), "TransactionRetryWithProtoRefreshError: TransactionAbortedError")
 }
 
-func makeSST(t *testing.T, ts hlc.Timestamp, kvs map[string]string) []byte {
+func makeSST(t *testing.T, ts hlc.Timestamp, kvs map[string]string) ([]byte, roachpb.Key, roachpb.Key) {
 	t.Helper()
 
 	sstFile := &storage.MemFile{}
@@ -1142,7 +1142,11 @@ func makeSST(t *testing.T, ts hlc.Timestamp, kvs map[string]string) []byte {
 	}
 	require.NoError(t, writer.Finish())
 	writer.Close()
-	return sstFile.Data()
+
+	start := roachpb.Key(keys[0])
+	end := roachpb.Key(keys[len(keys)-1]).Next()
+
+	return sstFile.Data(), start, end
 }
 
 func sstStats(t *testing.T, sst []byte) *enginepb.MVCCStats {
@@ -1155,4 +1159,326 @@ func sstStats(t *testing.T, sst []byte) *enginepb.MVCCStats {
 	stats, err := storage.ComputeStatsForRange(iter, keys.MinKey, keys.MaxKey, 0)
 	require.NoError(t, err)
 	return &stats
+}
+
+func TestAddSSTableBlindIsolation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	setup := func(t *testing.T) *kv.DB {
+		t.Helper()
+		s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{},
+		})
+		t.Cleanup(func() {
+			s.Stopper().Stop(ctx)
+		})
+		return db
+	}
+
+	put := func(t *testing.T, txn *kv.Txn, key, value string) {
+		t.Helper()
+		require.NoError(t, txn.Put(ctx, key, value))
+	}
+
+	putFails := func(t *testing.T, txn *kv.Txn, key, value, msg string) {
+		t.Helper()
+		err := txn.Put(ctx, key, value)
+		require.Error(t, err)
+		retryErr := &roachpb.TransactionRetryWithProtoRefreshError{}
+		require.ErrorAs(t, err, &retryErr)
+		if msg != "" {
+			require.Contains(t, retryErr.String(), msg)
+		}
+		require.NoError(t, txn.Rollback(ctx))
+	}
+
+	get := func(t *testing.T, txn *kv.Txn, key, expectValue string) {
+		t.Helper()
+		kv, err := txn.Get(ctx, key)
+		require.NoError(t, err)
+		require.Equal(t, expectValue, string(kv.ValueBytes()))
+	}
+
+	scan := func(t *testing.T, db *kv.DB, expectKVs map[string]string) {
+		t.Helper()
+		kvs, err := db.Scan(ctx, "a", "z", 0)
+		require.NoError(t, err)
+		actualKVs := map[string]string{}
+		for _, kv := range kvs {
+			actualKVs[string(kv.Key)] = string(kv.ValueBytes())
+		}
+		require.Equal(t, expectKVs, actualKVs)
+	}
+
+	commit := func(t *testing.T, txn *kv.Txn) {
+		require.NoError(t, txn.Commit(ctx))
+	}
+
+	addSST := func(t *testing.T, db *kv.DB, kvs map[string]string) {
+		t.Helper()
+		sst, start, end := makeSST(t, hlc.Timestamp{Logical: 1}, kvs)
+		stats := sstStats(t, sst)
+
+		ba := roachpb.BatchRequest{}
+		ba.Add(&roachpb.AddSSTableRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    start,
+				EndKey: end,
+			},
+			Data:                    sst,
+			MVCCStats:               stats,
+			WriteAtRequestTimestamp: true,
+			Blind:                   true,
+		})
+		_, pErr := db.NonTransactionalSender().Send(ctx, ba)
+		require.Nil(t, pErr)
+	}
+
+	t.Run("interleaved reads", func(t *testing.T) {
+		db := setup(t)
+		txn := db.NewTxn(ctx, "txn")
+		get(t, txn, "a", "")
+
+		addSST(t, db, map[string]string{
+			"a": "sst1",
+			"b": "sst2",
+		})
+
+		get(t, txn, "b", "")
+		commit(t, txn)
+	})
+
+	t.Run("interleaved writes", func(t *testing.T) {
+		db := setup(t)
+		txn := db.NewTxn(ctx, "txn")
+		put(t, txn, "a", "1")
+
+		addSST(t, db, map[string]string{
+			"a": "sst1",
+			"b": "sst2",
+		})
+
+		put(t, txn, "b", "2")
+		commit(t, txn)
+		scan(t, db, map[string]string{
+			"a": "1",
+			"b": "2",
+		})
+	})
+
+	t.Run("interleaved read/writes", func(t *testing.T) {
+		db := setup(t)
+		txn := db.NewTxn(ctx, "txn")
+		get(t, txn, "a", "")
+		put(t, txn, "a", "1")
+
+		addSST(t, db, map[string]string{
+			"a": "sst1",
+			"b": "sst2",
+		})
+
+		get(t, txn, "b", "")
+		putFails(t, txn, "b", "2", "RETRY_WRITE_TOO_OLD")
+	})
+
+	t.Run("interleaved reads then writes", func(t *testing.T) {
+		db := setup(t)
+		txn := db.NewTxn(ctx, "txn")
+		get(t, txn, "a", "")
+		get(t, txn, "b", "")
+
+		addSST(t, db, map[string]string{
+			"a": "sst1",
+			"b": "sst2",
+		})
+
+		putFails(t, txn, "a", "1", "RETRY_WRITE_TOO_OLD")
+	})
+
+	t.Run("interleaved writes then reads", func(t *testing.T) {
+		db := setup(t)
+		txn := db.NewTxn(ctx, "txn")
+		put(t, txn, "a", "1")
+		put(t, txn, "b", "2")
+
+		addSST(t, db, map[string]string{
+			"a": "sst1",
+			"b": "sst2",
+		})
+
+		get(t, txn, "a", "1")
+		get(t, txn, "b", "2")
+		commit(t, txn)
+		scan(t, db, map[string]string{
+			"a": "sst1",
+			"b": "sst2",
+		})
+	})
+
+	t.Run("interleaved updates", func(t *testing.T) {
+		db := setup(t)
+		txn := db.NewTxn(ctx, "txn")
+		put(t, txn, "a", "1")
+		put(t, txn, "b", "2")
+
+		addSST(t, db, map[string]string{
+			"a": "sst1",
+			"b": "sst2",
+		})
+
+		put(t, txn, "a", "1after")
+		get(t, txn, "a", "1after")
+		get(t, txn, "b", "2")
+		commit(t, txn)
+		scan(t, db, map[string]string{
+			"a": "sst1",
+			"b": "sst2",
+		})
+	})
+
+	t.Run("preceding writes", func(t *testing.T) {
+		db := setup(t)
+		txn := db.NewTxn(ctx, "txn")
+		put(t, txn, "a", "1")
+		put(t, txn, "b", "2")
+
+		addSST(t, db, map[string]string{
+			"a": "sst1",
+			"b": "sst2",
+		})
+
+		commit(t, txn)
+		scan(t, db, map[string]string{
+			"a": "sst1",
+			"b": "sst2",
+		})
+	})
+
+	t.Run("succeeding reads", func(t *testing.T) {
+		db := setup(t)
+		txn := db.NewTxn(ctx, "txn")
+
+		addSST(t, db, map[string]string{
+			"a": "sst1",
+			"b": "sst2",
+		})
+
+		get(t, txn, "a", "")
+		get(t, txn, "b", "")
+		commit(t, txn)
+	})
+
+	t.Run("succeeding writes", func(t *testing.T) {
+		db := setup(t)
+		txn := db.NewTxn(ctx, "txn")
+
+		addSST(t, db, map[string]string{
+			"a": "sst1",
+			"b": "sst2",
+		})
+
+		put(t, txn, "a", "1")
+		put(t, txn, "b", "2")
+		commit(t, txn)
+		scan(t, db, map[string]string{
+			"a": "1",
+			"b": "2",
+		})
+	})
+
+	t.Run("repeatable reads", func(t *testing.T) {
+		db := setup(t)
+		txn := db.NewTxn(ctx, "txn")
+
+		get(t, txn, "a", "")
+		get(t, txn, "b", "")
+
+		addSST(t, db, map[string]string{
+			"a": "sst1",
+			"b": "sst2",
+		})
+
+		get(t, txn, "a", "")
+		get(t, txn, "b", "")
+		commit(t, txn)
+	})
+
+	t.Run("read our own writes", func(t *testing.T) {
+		db := setup(t)
+		txn := db.NewTxn(ctx, "txn")
+
+		put(t, txn, "a", "1")
+		put(t, txn, "b", "2")
+
+		addSST(t, db, map[string]string{
+			"a": "sst1",
+			"b": "sst2",
+		})
+
+		get(t, txn, "a", "1")
+		get(t, txn, "b", "2")
+		commit(t, txn)
+		scan(t, db, map[string]string{
+			"a": "sst1",
+			"b": "sst2",
+		})
+	})
+}
+
+func TestAddSSTableBlindReplacesExisting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	txn := db.NewTxn(ctx, "txn")
+	require.NoError(t, txn.Put(ctx, "foo", "1"))
+	require.NoError(t, txn.Commit(ctx))
+	txnTS := txn.CommitTimestamp()
+	t.Logf("txnTS=%s", txnTS)
+
+	sst, start, end := makeSST(t, txnTS, map[string]string{"foo": "2"})
+	stats := sstStats(t, sst)
+	ba := roachpb.BatchRequest{
+		Header: roachpb.Header{
+			Timestamp: txnTS,
+		},
+	}
+	ba.Add(&roachpb.AddSSTableRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    start,
+			EndKey: end,
+		},
+		Data:                    sst,
+		MVCCStats:               stats,
+		WriteAtRequestTimestamp: true,
+		Blind:                   true,
+	})
+	_, pErr := db.NonTransactionalSender().Send(ctx, ba)
+	require.Nil(t, pErr)
+
+	ba = roachpb.BatchRequest{
+		Header: roachpb.Header{
+			Timestamp: txnTS,
+		},
+	}
+	ba.Add(&roachpb.GetRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: roachpb.Key("foo"),
+		},
+	})
+	br, pErr := db.NonTransactionalSender().Send(ctx, ba)
+	require.Nil(t, pErr)
+	resp := br.Responses[0].GetGet()
+	value, err := resp.Value.GetBytes()
+	require.NoError(t, err)
+
+	t.Logf("value=%s", string(value))
 }

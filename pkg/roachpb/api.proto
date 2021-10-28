@@ -1591,6 +1591,33 @@ message AddSSTableRequest {
   // the usual write pipeline (on-disk raft log, WAL, etc).
   // TODO(dt): https://github.com/cockroachdb/cockroach/issues/34579#issuecomment-544627193
   bool ingest_as_writes = 5;
+
+  // WriteAtRequestTimestamp will update all MVCC timestamps in the SST to be at
+  // the request timestamp, even if the request gets pushed. The writes will
+  // comply with MVCC, in that they cannot write below the timestamp of an
+  // existing key or below an intent, and they respect the closed timestamp. All
+  // SST entries must have a non-zero MVCC timestamp, and cannot be tombstones.
+  //
+  // Use of this parameter requires the MVCCAddSSTable version gate.
+  bool write_at_request_timestamp = 6;
+
+  // Blind will write the SST blindly when WriteAtRequestTimestamp is set,
+  // without checking for conflicting keys and intents, and without 
+  // synchronizing with transactions by taking out locks. This is still
+  // serializable because:
+  //
+  // * AddSSTable cannot be in a transaction nor write intents.
+  // * AddSSTable cannot be split across ranges, and is always alone in a batch.
+  // * Write latches provide isolation from concurrent requests.
+  // * The timestamp cache ensures noone has read above the write timestamp.
+  // * The write timestamp is globally unique. (FIXME: verify this)
+  //
+  // It also complies with MVCC, because the timestamp cache ensures noone
+  // has observed the absence of the value, and with the closed timestamp.
+  //
+  // However, it will not update the MVCC statistics accurately, overcounting
+  // any keys that already exist and setting ContainsEstimates.
+  bool blind = 7;
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.
