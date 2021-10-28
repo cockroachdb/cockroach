@@ -135,6 +135,11 @@ func (desc *immutable) DescriptorProto() *descpb.Descriptor {
 	}
 }
 
+// NewBuilder implements the catalog.Descriptor interface.
+func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
+	return NewBuilder(desc.DatabaseDesc())
+}
+
 // IsMultiRegion implements the DatabaseDescriptor interface.
 func (desc *immutable) IsMultiRegion() bool {
 	return desc.RegionConfig != nil
