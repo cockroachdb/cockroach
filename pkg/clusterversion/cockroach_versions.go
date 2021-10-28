@@ -278,13 +278,15 @@ const (
 	// DrainingNamesMigration adds the migration which guarantees that no
 	// descriptors have draining names.
 	DrainingNamesMigration
-
 	// TraceIDDoesntImplyStructuredRecording changes the contract about the kind
 	// of span that RPCs get on the server depending on the tracing context.
 	TraceIDDoesntImplyStructuredRecording
 	// AlterSystemTableStatisticsAddAvgSizeCol adds the column avgSize to the
 	// table system.table_statistics that contains a new statistic.
 	AlterSystemTableStatisticsAddAvgSizeCol
+	// MVCCAddSSTable supports MVCC-compliant AddSSTable requests via the new
+	// WriteAtRequestTimestamp and DisallowConflicts parameters.
+	MVCCAddSSTable
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -489,6 +491,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemTableStatisticsAddAvgSizeCol,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 12},
+	},
+	{
+		Key:     MVCCAddSSTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 14},
 	},
 
 	// *************************************************
