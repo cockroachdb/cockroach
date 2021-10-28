@@ -2245,7 +2245,14 @@ var (
 					ColumnIDs:   []descpb.ColumnID{1, 2, 3},
 				},
 			},
-			pk("start_key"),
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  keys.SpanConfigurationsTablePrimaryKeyIndexID,
+				Unique:              true,
+				KeyColumnNames:      []string{"start_key"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        singleID1,
+			},
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
