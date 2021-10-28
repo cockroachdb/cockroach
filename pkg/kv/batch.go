@@ -764,9 +764,12 @@ func (b *Batch) adminRelocateRange(
 func (b *Batch) addSSTable(
 	s, e interface{},
 	data []byte,
+	disallowConflicts bool,
 	disallowShadowing bool,
+	disallowShadowingBelow hlc.Timestamp,
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
+	writeAtRequestTimestamp bool,
 ) {
 	begin, err := marshalKey(s)
 	if err != nil {
@@ -783,10 +786,13 @@ func (b *Batch) addSSTable(
 			Key:    begin,
 			EndKey: end,
 		},
-		Data:              data,
-		DisallowShadowing: disallowShadowing,
-		MVCCStats:         stats,
-		IngestAsWrites:    ingestAsWrites,
+		Data:                    data,
+		DisallowConflicts:       disallowConflicts,
+		DisallowShadowing:       disallowShadowing,
+		DisallowShadowingBelow:  disallowShadowingBelow,
+		MVCCStats:               stats,
+		IngestAsWrites:          ingestAsWrites,
+		WriteAtRequestTimestamp: writeAtRequestTimestamp,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
