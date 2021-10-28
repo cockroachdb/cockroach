@@ -260,10 +260,12 @@ func (m mockSender) AddSSTable(
 	ctx context.Context,
 	begin, end interface{},
 	data []byte,
+	disallowConflicts bool,
 	disallowShadowing bool,
 	_ *enginepb.MVCCStats,
 	ingestAsWrites bool,
 	batchTS hlc.Timestamp,
+	writeAtBatchTS bool,
 ) error {
 	return m(roachpb.Span{Key: begin.(roachpb.Key), EndKey: end.(roachpb.Key)})
 }
