@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -368,45 +369,72 @@ func (tr *explodyNetTr) Finish() {
 //
 // https://github.com/cockroachdb/cockroach/issues/58489#issuecomment-781263005
 func TestSpan_UseAfterFinish(t *testing.T) {
-	tr := NewTracer()
-	tr._useNetTrace = 1
-	sp := tr.StartSpan("foo", WithForceRealSpan())
-	require.NotNil(t, sp.i.netTr)
-	// Set up netTr to reliably explode if Finish'ed twice. We
-	// expect `sp.Finish` to not let it come to that.
-	sp.i.netTr = &explodyNetTr{Trace: sp.i.netTr}
-	sp.Finish()
-	require.True(t, sp.done())
-	sp.Finish()
-	require.EqualValues(t, 2, sp.numFinishCalled)
+	// First, test with a Tracer configured to NOT panic on use-after-Finish.
+	t.Run("production settings", func(t *testing.T) {
+		tr := NewTracerWithOpt(context.Background(),
+			WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}),
+			// Mimic production settings, otherwise we crash on span-use-after-Finish in
+			// tests.
+			WithUseAfterFinishOpt(false /* panicOnUseAfterFinish */, false /* debugUseAfterFinish */))
+		require.False(t, tr.PanicOnUseAfterFinish())
+		tr._useNetTrace = 1
+		sp := tr.StartSpan("foo")
+		require.NotNil(t, sp.i.netTr)
+		// Set up netTr to reliably explode if Finish'ed twice. We
+		// expect `sp.Finish` to not let it come to that.
+		sp.i.netTr = &explodyNetTr{Trace: sp.i.netTr}
+		sp.Finish()
+		require.True(t, sp.done())
+		sp.Finish()
+		require.EqualValues(t, 1, atomic.LoadInt32(&sp.finished))
 
-	netTrT := reflect.TypeOf(sp)
-	for i := 0; i < netTrT.NumMethod(); i++ {
-		f := netTrT.Method(i)
-		t.Run(f.Name, func(t *testing.T) {
-			// The receiver is the first argument.
-			args := []reflect.Value{reflect.ValueOf(sp)}
-			for i := 1; i < f.Type.NumIn(); i++ {
-				// Zeroes for the rest. It would be nice to do something
-				// like `quick.Check` here (or even just call quick.Check!)
-				// but that's for another day. It should be doable!
-				args = append(args, reflect.Zero(f.Type.In(i)))
-			}
-			// NB: on an impl of Span that calls through to `trace.Trace.Finish`, and
-			// on my machine, and at the time of writing, `tr.Finish` would reliably
-			// deadlock on exactly the 10th call. This motivates the choice of 20
-			// below.
-			for i := 0; i < 20; i++ {
-				t.Run("invoke", func(t *testing.T) {
-					if i == 9 {
-						f.Func.Call(args)
-					} else {
-						f.Func.Call(args)
-					}
-				})
-			}
+		netTrT := reflect.TypeOf(sp)
+		for i := 0; i < netTrT.NumMethod(); i++ {
+			f := netTrT.Method(i)
+			t.Run(f.Name, func(t *testing.T) {
+				// The receiver is the first argument.
+				args := []reflect.Value{reflect.ValueOf(sp)}
+				for i := 1; i < f.Type.NumIn(); i++ {
+					// Zeroes for the rest. It would be nice to do something
+					// like `quick.Check` here (or even just call quick.Check!)
+					// but that's for another day. It should be doable!
+					args = append(args, reflect.Zero(f.Type.In(i)))
+				}
+				// NB: on an impl of Span that calls through to `trace.Trace.Finish`, and
+				// on my machine, and at the time of writing, `tr.Finish` would reliably
+				// deadlock on exactly the 10th call. This motivates the choice of 20
+				// below.
+				for i := 0; i < 20; i++ {
+					t.Run("invoke", func(t *testing.T) {
+						if i == 9 {
+							f.Func.Call(args)
+						} else {
+							f.Func.Call(args)
+						}
+					})
+				}
+			})
+		}
+	})
+
+	// Second, test with a Tracer configured to panic on use-after-Finish.
+	t.Run("crash settings", func(t *testing.T) {
+		tr := NewTracerWithOpt(context.Background(),
+			WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}),
+			WithUseAfterFinishOpt(true /* panicOnUseAfterFinish */, true /* debugUseAfterFinish */))
+		require.True(t, tr.PanicOnUseAfterFinish())
+		sp := tr.StartSpan("foo")
+		sp.Finish()
+		require.Panics(t, func() {
+			sp.Record("boom")
 		})
-	}
+		require.Panics(t, func() {
+			sp.GetRecording(RecordingStructured)
+		})
+		require.Panics(t, func() {
+			sp.Finish()
+		})
+	})
 }
 
 type countingStringer int32

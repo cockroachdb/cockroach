@@ -179,7 +179,18 @@ type Tracer struct {
 	testingMu               syncutil.Mutex // protects testingRecordAsyncSpans
 	testingRecordAsyncSpans bool           // see TestingRecordAsyncSpans
 
-	testing TracerTestingKnobs
+	// panicOnUseAfterFinish configures the Tracer to crash when a Span is used
+	// after it was previously Finish()ed. Crashing is supposed to be best-effort
+	// as, in the future, reliably detecting use-after-Finish might not be
+	// possible (i.e. it's not possible if the Span is reused for a different
+	// operation before the use-after-Finish occurs).
+	panicOnUseAfterFinish bool
+
+	// debugUseAfterFinish configures the Tracer to collect expensive extra info
+	// to help debug use-after-Finish() bugs - stack traces will be collected and
+	// stored on every Span.Finish().
+	debugUseAfterFinish bool
+	testing             TracerTestingKnobs
 }
 
 // spanRegistry is a map that references all non-Finish'ed local root spans,
@@ -308,10 +319,11 @@ type TracerTestingKnobs struct {
 func NewTracer() *Tracer {
 	t := &Tracer{
 		activeSpansRegistry: makeSpanRegistry(),
+		// These might be overridden in NewTracerWithOpt.
+		panicOnUseAfterFinish: panicOnUseAfterFinish,
+		debugUseAfterFinish:   DebugUseAfterFinish,
 	}
-	// The noop span is marked as finished so that even in the case of a bug,
-	// it won't soak up data.
-	t.noopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t, sterile: true}}
+	t.noopSpan = &Span{noop: true, i: spanInner{tracer: t, sterile: true}}
 	return t
 }
 
@@ -327,14 +339,19 @@ func NewTracerWithOpt(ctx context.Context, opts ...TracerOption) *Tracer {
 	if o.sv != nil {
 		t.Configure(ctx, o.sv)
 	}
+	if o.useAfterFinishOpt != nil {
+		t.panicOnUseAfterFinish = o.useAfterFinishOpt.panicOnUseAfterFinish
+		t.debugUseAfterFinish = o.useAfterFinishOpt.debugUseAfterFinish
+	}
 	t.testing = o.knobs
 	return t
 }
 
 // tracerOptions groups configuration for Tracer construction.
 type tracerOptions struct {
-	sv    *settings.Values
-	knobs TracerTestingKnobs
+	sv                *settings.Values
+	knobs             TracerTestingKnobs
+	useAfterFinishOpt *useAfterFinishOpt
 }
 
 // TracerOption is implemented by the arguments to the Tracer constructor.
@@ -371,6 +388,39 @@ var _ TracerOption = knobsOpt{}
 // WithTestingKnobs configures the Tracer with the specified knobs.
 func WithTestingKnobs(knobs TracerTestingKnobs) TracerOption {
 	return knobsOpt{knobs: knobs}
+}
+
+type useAfterFinishOpt struct {
+	panicOnUseAfterFinish bool
+	debugUseAfterFinish   bool
+}
+
+var _ TracerOption = useAfterFinishOpt{}
+
+func (o useAfterFinishOpt) apply(opt *tracerOptions) {
+	opt.useAfterFinishOpt = &o
+}
+
+// WithUseAfterFinishOpt allows control over the Tracer's behavior when a Span
+// is used after it had been Finish()ed.
+//
+// panicOnUseAfterFinish configures the Tracer to panic when it detects that any
+// method on a Span is called after that Span was Finish()ed. If not set, such
+// uses are tolerated as silent no-ops.
+//
+// debugUseAfterFinish configures the Tracer to collect stack traces on every
+// Span.Finish() call. These are presented when the finished span is reused.
+// This option is expensive.
+// It's invalid to set this is panicOnUseAfterFinish is not set.
+func WithUseAfterFinishOpt(panicOnUseAfterFinish, debugUseAfterFinish bool) TracerOption {
+	if debugUseAfterFinish && !panicOnUseAfterFinish {
+		panic("it is nonsensical to set debugUseAfterFinish when panicOnUseAfterFinish is not set, " +
+			"as the collected stacks will never be used")
+	}
+	return useAfterFinishOpt{
+		panicOnUseAfterFinish: panicOnUseAfterFinish,
+		debugUseAfterFinish:   debugUseAfterFinish,
+	}
 }
 
 // Configure sets up the Tracer according to the cluster settings (and keeps
@@ -585,6 +635,9 @@ func (t *Tracer) StartSpanCtx(
 // context.
 func (t *Tracer) AlwaysTrace() bool {
 	if t.testing.ForceRealSpans {
+		return true
+	}
+	if ForceRealSpans {
 		return true
 	}
 	otelTracer := t.getOtelTracer()
@@ -966,6 +1019,21 @@ func (t *Tracer) SetBackwardsCompatibilityWith211(to bool) {
 	} else {
 		atomic.StoreInt64(&t.backwardsCompatibilityWith211, 0)
 	}
+}
+
+// PanicOnUseAfterFinish returns true if the Tracer is configured to crash when
+// a Span is used after it was previously Finish()ed. Crashing is supposed to be
+// best-effort as, in the future, reliably detecting use-after-Finish might not
+// be possible (i.e. it's not possible if the Span is reused for a different
+// operation before the use-after-Finish occurs).
+func (t *Tracer) PanicOnUseAfterFinish() bool {
+	return t.panicOnUseAfterFinish
+}
+
+// DebugUseAfterFinish returns true if the Tracer is configured for collecting
+// expensive extra info to help debug use-after-Finish() bugs.
+func (t *Tracer) DebugUseAfterFinish() bool {
+	return t.debugUseAfterFinish
 }
 
 // ForkSpan forks the current span, if any[1]. Forked spans "follow from" the

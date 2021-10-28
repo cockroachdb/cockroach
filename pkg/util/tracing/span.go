@@ -12,9 +12,12 @@ package tracing
 
 import (
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"go.opentelemetry.io/otel/attribute"
@@ -25,6 +28,18 @@ const (
 	// TagPrefix is prefixed to all tags that should be output in SHOW TRACE.
 	TagPrefix = "cockroach."
 )
+
+// !!! the default of true
+var ForceRealSpans = envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", true)
+
+// !!! the default of true
+var panicOnUseAfterFinish = buildutil.CrdbTestBuild || envutil.EnvOrDefaultBool("COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH", true)
+
+// DebugUseAfterFinish controls whether to debug uses of Span values after finishing.
+// FOR DEBUGGING ONLY. This will slow down the program.
+//
+// In particular, roachtests set this.
+var DebugUseAfterFinish = envutil.EnvOrDefaultBool("COCKROACH_DEBUG_SPAN_USE_AFTER_FINISH", false)
 
 // Span is the tracing Span that we use in CockroachDB. Depending on the tracing
 // configuration, it can hold anywhere between zero and three destinations for
@@ -51,8 +66,17 @@ const (
 type Span struct {
 	// Span itself is a very thin wrapper around spanInner whose only job is
 	// to guard spanInner against use-after-Finish.
-	i               spanInner
-	numFinishCalled int32 // atomic
+	i spanInner
+	// noop, if set, allows this Span to be used even after finish. This allows a
+	// single Span instance to be shared for many operations. When set, i is set
+	// such that i.isNoop() also returns true - so all operations are
+	// short-circuited.
+	noop bool
+	// finished is set on Finish(). Used to detect use-after-Finish.
+	finished int32 // atomic
+	// finishStack is set if DebugUseAfterFinish is set. It represents the stack
+	// that called Finish(), in order to report it on further use.
+	finishStack string
 }
 
 // IsNoop returns true if this span is a black hole - it doesn't correspond to a
@@ -66,7 +90,24 @@ func (sp *Span) done() bool {
 	if sp == nil {
 		return true
 	}
-	return atomic.LoadInt32(&sp.numFinishCalled) != 0
+	if sp.noop {
+		return true
+	}
+	alreadyFinished := atomic.LoadInt32(&sp.finished) != 0
+	// In test builds, we panic on span use after Finish. This is in preparation
+	// of span pooling, at which point use-after-Finish would become corruption.
+	if alreadyFinished && sp.Tracer().PanicOnUseAfterFinish() {
+		var finishStack string
+		if sp.finishStack == "" {
+			finishStack = "<stack not captured. Set DebugUseAfterFinish>"
+		} else {
+			finishStack = sp.finishStack
+		}
+		panic(fmt.Sprintf("use of Span after Finish. Span: %s. Finish previously called at: %s",
+			sp.i.OperationName(), finishStack))
+	}
+
+	return alreadyFinished
 }
 
 // Tracer exports the tracer this span was created using.
@@ -82,13 +123,17 @@ func (sp *Span) SetOperationName(operationName string) {
 	sp.i.SetOperationName(operationName)
 }
 
-// Finish idempotently marks the Span as completed (at which point it will
-// silently drop any new data added to it). Finishing a nil *Span is a noop.
+// Finish marks the Span as completed. The Span should not be used any more.
+// Finishing a nil *Span is a noop.
 func (sp *Span) Finish() {
-	if sp == nil || sp.IsNoop() || atomic.AddInt32(&sp.numFinishCalled, 1) != 1 {
+	if sp == nil || sp.IsNoop() || sp.done() {
 		return
 	}
+	atomic.StoreInt32(&sp.finished, 1)
 	sp.i.Finish()
+	if sp.Tracer().DebugUseAfterFinish() {
+		sp.finishStack = string(debug.Stack())
+	}
 }
 
 // FinishAndGetRecording finishes the span and gets a recording at the same
@@ -125,6 +170,9 @@ func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
 // If recType is RecordingStructured, the return value will be nil if the span
 // doesn't have any structured events.
 func (sp *Span) GetRecording(recType RecordingType) Recording {
+	if sp.done() {
+		return nil
+	}
 	return sp.i.GetRecording(recType)
 }
 
