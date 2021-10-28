@@ -34,7 +34,7 @@ var (
 	_ tree.AggType
 )
 
-func isSorterSupported(t *types.T, dir execinfrapb.Ordering_Column_Direction) bool {
+func newSingleSorterWithNulls(t *types.T, dir execinfrapb.Ordering_Column_Direction) colSorter {
 	switch dir {
 	case execinfrapb.Ordering_Column_ASC:
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
@@ -42,59 +42,59 @@ func isSorterSupported(t *types.T, dir execinfrapb.Ordering_Column_Direction) bo
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortBoolAscWithNullsOp{}
 			}
 		case types.BytesFamily:
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortBytesAscWithNullsOp{}
 			}
 		case types.DecimalFamily:
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortDecimalAscWithNullsOp{}
 			}
 		case types.IntFamily:
 			switch t.Width() {
 			case 16:
-				return true
+				return &sortInt16AscWithNullsOp{}
 			case 32:
-				return true
+				return &sortInt32AscWithNullsOp{}
 			case -1:
 			default:
-				return true
+				return &sortInt64AscWithNullsOp{}
 			}
 		case types.FloatFamily:
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortFloat64AscWithNullsOp{}
 			}
 		case types.TimestampTZFamily:
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortTimestampAscWithNullsOp{}
 			}
 		case types.IntervalFamily:
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortIntervalAscWithNullsOp{}
 			}
 		case types.JsonFamily:
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortJSONAscWithNullsOp{}
 			}
 		case typeconv.DatumVecCanonicalTypeFamily:
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortDatumAscWithNullsOp{}
 			}
 		}
 	case execinfrapb.Ordering_Column_DESC:
@@ -103,321 +103,193 @@ func isSorterSupported(t *types.T, dir execinfrapb.Ordering_Column_Direction) bo
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortBoolDescWithNullsOp{}
 			}
 		case types.BytesFamily:
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortBytesDescWithNullsOp{}
 			}
 		case types.DecimalFamily:
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortDecimalDescWithNullsOp{}
 			}
 		case types.IntFamily:
 			switch t.Width() {
 			case 16:
-				return true
+				return &sortInt16DescWithNullsOp{}
 			case 32:
-				return true
+				return &sortInt32DescWithNullsOp{}
 			case -1:
 			default:
-				return true
+				return &sortInt64DescWithNullsOp{}
 			}
 		case types.FloatFamily:
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortFloat64DescWithNullsOp{}
 			}
 		case types.TimestampTZFamily:
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortTimestampDescWithNullsOp{}
 			}
 		case types.IntervalFamily:
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortIntervalDescWithNullsOp{}
 			}
 		case types.JsonFamily:
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortJSONDescWithNullsOp{}
 			}
 		case typeconv.DatumVecCanonicalTypeFamily:
 			switch t.Width() {
 			case -1:
 			default:
-				return true
+				return &sortDatumDescWithNullsOp{}
 			}
 		}
 	}
-	return false
+	colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", t))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
-func newSingleSorter(
-	t *types.T, dir execinfrapb.Ordering_Column_Direction, hasNulls bool,
-) colSorter {
-	switch hasNulls {
-	case true:
-		switch dir {
-		case execinfrapb.Ordering_Column_ASC:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-			case types.BoolFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortBoolAscWithNullsOp{}
-				}
-			case types.BytesFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortBytesAscWithNullsOp{}
-				}
-			case types.DecimalFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortDecimalAscWithNullsOp{}
-				}
-			case types.IntFamily:
-				switch t.Width() {
-				case 16:
-					return &sortInt16AscWithNullsOp{}
-				case 32:
-					return &sortInt32AscWithNullsOp{}
-				case -1:
-				default:
-					return &sortInt64AscWithNullsOp{}
-				}
-			case types.FloatFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortFloat64AscWithNullsOp{}
-				}
-			case types.TimestampTZFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortTimestampAscWithNullsOp{}
-				}
-			case types.IntervalFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortIntervalAscWithNullsOp{}
-				}
-			case types.JsonFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortJSONAscWithNullsOp{}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortDatumAscWithNullsOp{}
-				}
+func newSingleSorterWithoutNulls(t *types.T, dir execinfrapb.Ordering_Column_Direction) colSorter {
+	switch dir {
+	case execinfrapb.Ordering_Column_ASC:
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+		case types.BoolFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortBoolAscOp{}
 			}
-		case execinfrapb.Ordering_Column_DESC:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-			case types.BoolFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortBoolDescWithNullsOp{}
-				}
-			case types.BytesFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortBytesDescWithNullsOp{}
-				}
-			case types.DecimalFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortDecimalDescWithNullsOp{}
-				}
-			case types.IntFamily:
-				switch t.Width() {
-				case 16:
-					return &sortInt16DescWithNullsOp{}
-				case 32:
-					return &sortInt32DescWithNullsOp{}
-				case -1:
-				default:
-					return &sortInt64DescWithNullsOp{}
-				}
-			case types.FloatFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortFloat64DescWithNullsOp{}
-				}
-			case types.TimestampTZFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortTimestampDescWithNullsOp{}
-				}
-			case types.IntervalFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortIntervalDescWithNullsOp{}
-				}
-			case types.JsonFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortJSONDescWithNullsOp{}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortDatumDescWithNullsOp{}
-				}
+		case types.BytesFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortBytesAscOp{}
+			}
+		case types.DecimalFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortDecimalAscOp{}
+			}
+		case types.IntFamily:
+			switch t.Width() {
+			case 16:
+				return &sortInt16AscOp{}
+			case 32:
+				return &sortInt32AscOp{}
+			case -1:
+			default:
+				return &sortInt64AscOp{}
+			}
+		case types.FloatFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortFloat64AscOp{}
+			}
+		case types.TimestampTZFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortTimestampAscOp{}
+			}
+		case types.IntervalFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortIntervalAscOp{}
+			}
+		case types.JsonFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortJSONAscOp{}
+			}
+		case typeconv.DatumVecCanonicalTypeFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortDatumAscOp{}
 			}
 		}
-	case false:
-		switch dir {
-		case execinfrapb.Ordering_Column_ASC:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-			case types.BoolFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortBoolAscOp{}
-				}
-			case types.BytesFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortBytesAscOp{}
-				}
-			case types.DecimalFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortDecimalAscOp{}
-				}
-			case types.IntFamily:
-				switch t.Width() {
-				case 16:
-					return &sortInt16AscOp{}
-				case 32:
-					return &sortInt32AscOp{}
-				case -1:
-				default:
-					return &sortInt64AscOp{}
-				}
-			case types.FloatFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortFloat64AscOp{}
-				}
-			case types.TimestampTZFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortTimestampAscOp{}
-				}
-			case types.IntervalFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortIntervalAscOp{}
-				}
-			case types.JsonFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortJSONAscOp{}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortDatumAscOp{}
-				}
+	case execinfrapb.Ordering_Column_DESC:
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+		case types.BoolFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortBoolDescOp{}
 			}
-		case execinfrapb.Ordering_Column_DESC:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-			case types.BoolFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortBoolDescOp{}
-				}
-			case types.BytesFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortBytesDescOp{}
-				}
-			case types.DecimalFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortDecimalDescOp{}
-				}
-			case types.IntFamily:
-				switch t.Width() {
-				case 16:
-					return &sortInt16DescOp{}
-				case 32:
-					return &sortInt32DescOp{}
-				case -1:
-				default:
-					return &sortInt64DescOp{}
-				}
-			case types.FloatFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortFloat64DescOp{}
-				}
-			case types.TimestampTZFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortTimestampDescOp{}
-				}
-			case types.IntervalFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortIntervalDescOp{}
-				}
-			case types.JsonFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortJSONDescOp{}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					return &sortDatumDescOp{}
-				}
+		case types.BytesFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortBytesDescOp{}
+			}
+		case types.DecimalFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortDecimalDescOp{}
+			}
+		case types.IntFamily:
+			switch t.Width() {
+			case 16:
+				return &sortInt16DescOp{}
+			case 32:
+				return &sortInt32DescOp{}
+			case -1:
+			default:
+				return &sortInt64DescOp{}
+			}
+		case types.FloatFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortFloat64DescOp{}
+			}
+		case types.TimestampTZFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortTimestampDescOp{}
+			}
+		case types.IntervalFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortIntervalDescOp{}
+			}
+		case types.JsonFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortJSONDescOp{}
+			}
+		case typeconv.DatumVecCanonicalTypeFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortDatumDescOp{}
 			}
 		}
 	}
-	colexecerror.InternalError(errors.AssertionFailedf("isSorterSupported should have caught this"))
+	colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", t))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

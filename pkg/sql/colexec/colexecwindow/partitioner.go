@@ -32,23 +32,17 @@ func NewWindowSortingPartitioner(
 	partitionIdxs []uint32,
 	ordCols []execinfrapb.Ordering_Column,
 	partitionColIdx int,
-	createDiskBackedSorter func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) (colexecop.Operator, error),
-) (op colexecop.Operator, err error) {
+	createDiskBackedSorter func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) colexecop.Operator,
+) colexecop.Operator {
 	partitionAndOrderingCols := make([]execinfrapb.Ordering_Column, len(partitionIdxs)+len(ordCols))
 	for i, idx := range partitionIdxs {
 		partitionAndOrderingCols[i] = execinfrapb.Ordering_Column{ColIdx: idx}
 	}
 	copy(partitionAndOrderingCols[len(partitionIdxs):], ordCols)
-	input, err = createDiskBackedSorter(input, inputTyps, partitionAndOrderingCols)
-	if err != nil {
-		return nil, err
-	}
+	input = createDiskBackedSorter(input, inputTyps, partitionAndOrderingCols)
 
 	var distinctCol []bool
-	input, distinctCol, err = colexecbase.OrderedDistinctColsToOperators(input, partitionIdxs, inputTyps, false /* nullsAreDistinct */)
-	if err != nil {
-		return nil, err
-	}
+	input, distinctCol = colexecbase.OrderedDistinctColsToOperators(input, partitionIdxs, inputTyps, false /* nullsAreDistinct */)
 
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, partitionColIdx)
 	return &windowSortingPartitioner{
@@ -56,7 +50,7 @@ func NewWindowSortingPartitioner(
 		allocator:       allocator,
 		distinctCol:     distinctCol,
 		partitionColIdx: partitionColIdx,
-	}, nil
+	}
 }
 
 type windowSortingPartitioner struct {

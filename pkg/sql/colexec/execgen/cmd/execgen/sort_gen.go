@@ -44,7 +44,7 @@ func genSortOps(inputFileContents string, wr io.Writer) error {
 
 		"_DIR_ENUM", "{{.Dir}}",
 		"_DIR", "{{$dir}}",
-		"_ISNULL", "{{$nulls}}",
+		"_WITH_NULLS", "{{if $nulls}}WithNulls{{else}}WithoutNulls{{end}}",
 		"_HANDLES_NULLS", "{{if $nulls}}WithNulls{{else}}{{end}}",
 	)
 	s := r.Replace(inputFileContents)
