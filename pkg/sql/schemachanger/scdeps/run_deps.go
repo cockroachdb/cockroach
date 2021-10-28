@@ -118,6 +118,6 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 	if err != nil {
 		return err
 	}
-	d.jobRegistry.NotifyToAdoptJobs(ctx)
+	d.jobRegistry.NotifyToAdoptJobs()
 	return nil
 }
