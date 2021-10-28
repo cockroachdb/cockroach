@@ -15,10 +15,10 @@ import { BadgeStatus } from "src/components";
 export enum JobStatusVisual {
   BadgeOnly,
   BadgeWithDuration,
-  BadgeWithNextExecutionTime,
   ProgressBarWithDuration,
   BadgeWithMessage,
   BadgeWithErrorMessage,
+  BadgeWithRetrying,
 }
 
 export function jobToVisual(job: Job): JobStatusVisual {
@@ -27,6 +27,7 @@ export function jobToVisual(job: Job): JobStatusVisual {
   }
   switch (job.status) {
     case JOB_STATUS_SUCCEEDED:
+      return JobStatusVisual.BadgeWithDuration;
     case JOB_STATUS_FAILED:
       return JobStatusVisual.BadgeWithErrorMessage;
     case JOB_STATUS_CANCELED:
@@ -35,8 +36,12 @@ export function jobToVisual(job: Job): JobStatusVisual {
       return JobStatusVisual.BadgeOnly;
     case JOB_STATUS_RUNNING:
       return JobStatusVisual.ProgressBarWithDuration;
+    case JOB_STATUS_RETRY_RUNNING:
+      return JobStatusVisual.ProgressBarWithDuration;
     case JOB_STATUS_PENDING:
       return JobStatusVisual.BadgeWithMessage;
+    case JOB_STATUS_RETRY_REVERTING:
+      return JobStatusVisual.BadgeWithRetrying;
     default:
       return JobStatusVisual.BadgeOnly;
   }
@@ -51,6 +56,15 @@ export const JOB_STATUS_RETRY_RUNNING = "retry-running";
 export const JOB_STATUS_PENDING = "pending";
 export const JOB_STATUS_REVERTING = "reverting";
 export const JOB_STATUS_RETRY_REVERTING = "retry-reverting";
+
+export function isRetrying(status: string): boolean {
+  return [JOB_STATUS_RETRY_RUNNING, JOB_STATUS_RETRY_REVERTING].includes(
+    status,
+  );
+}
+export function isRunning(status: string): boolean {
+  return [JOB_STATUS_RUNNING, JOB_STATUS_RETRY_RUNNING].includes(status);
+}
 
 export const statusOptions = [
   { value: "", label: "All" },
@@ -80,11 +94,23 @@ export const jobStatusToBadgeStatus = (status: string): BadgeStatus => {
       return "default";
     case JOB_STATUS_REVERTING:
       return "default";
+    case JOB_STATUS_RETRY_REVERTING:
+      return "default";
     case JOB_STATUS_RUNNING:
       return "info";
     case JOB_STATUS_PENDING:
       return "warning";
     default:
       return "info";
+  }
+};
+export const jobStatusToBadgeText = (status: string): string => {
+  switch (status) {
+    case JOB_STATUS_RETRY_REVERTING:
+      return JOB_STATUS_REVERTING;
+    case JOB_STATUS_RETRY_RUNNING:
+      return JOB_STATUS_RUNNING;
+    default:
+      return status;
   }
 };

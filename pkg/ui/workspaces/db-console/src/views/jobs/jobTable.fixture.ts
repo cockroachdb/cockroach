@@ -89,6 +89,7 @@ export const jobTablePropsFixture: JobTableProps = {
             seconds: new Long(1634648118),
             nanos: 310899000,
           }),
+          error: "mock failure message",
           fraction_completed: 1,
           last_run: new protos.google.protobuf.Timestamp({
             seconds: new Long(1634648118),
@@ -200,6 +201,113 @@ export const jobTablePropsFixture: JobTableProps = {
           num_runs: new Long(1),
         },
         {
+          id: new Long(3390625793, 70312826),
+          type: "AUTO SPAN CONFIG RECONCILIATION",
+          description: "automatic Span Config reconciliation",
+          username: "root",
+          descriptor_ids: [53],
+          status: "running",
+          created: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          started: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          finished: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121906000,
+          }),
+          modified: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121173000,
+          }),
+          fraction_completed: 0.66,
+          running_status: "performing garbage collection on index 2",
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912100,
+          }),
+          num_runs: new Long(1),
+        },
+        {
+          id: new Long(3390625793, 70312826),
+          type: "STREAM INGESTION",
+          description:
+            "RESTORE DATABASE backup_database_name FROM 'your_backup_location';",
+          username: "root",
+          descriptor_ids: [53],
+          status: "retry-running",
+          created: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          started: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          finished: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121906000,
+          }),
+          modified: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121173000,
+          }),
+          fraction_completed: 0.11,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(3034648417), // some long time in the future, because it needs to be in the future to show as retrying
+            nanos: 116912000,
+          }),
+          num_runs: new Long(3),
+        },
+
+        {
+          id: new Long(3390625793, 70312826),
+          type: "MIGRATION",
+          description:
+            "IMPORT MYSQLDUMP 'https://s3-us-west-1.amazonaws.com/cockroachdb-movr/datasets/employees-db/mysqldump/employees-full.sql.gz';",
+          username: "root",
+          descriptor_ids: [53],
+          status: "retry-running",
+          created: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          started: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          finished: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121906000,
+          }),
+          modified: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121173000,
+          }),
+          fraction_completed: 0.82,
+          running_status: "performing garbage collection on table crl.roachers",
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912100,
+          }),
+          num_runs: new Long(1),
+        },
+        {
           id: new Long(5247850497, 70312826),
           type: "IMPORT",
           description:
@@ -224,6 +332,7 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 882945000,
           }),
           fraction_completed: 1,
+          running_status: "synthetic retryable error",
           last_run: new protos.google.protobuf.Timestamp({
             seconds: new Long(1634648117),
             nanos: 679202000,
@@ -270,12 +379,11 @@ export const jobTablePropsFixture: JobTableProps = {
         },
         {
           id: new Long(3390625793, 70312826),
-          type: "STREAM INGESTION",
-          description:
-            "RESTORE DATABASE backup_database_name FROM 'your_backup_location';",
+          type: "NEW SCHEMA CHANGE",
+          description: "ALTER TABLE db.t ADD COLUMN b INT DEFAULT 1",
           username: "root",
           descriptor_ids: [53],
-          status: "retrying",
+          status: "retry-reverting",
           created: new protos.google.protobuf.Timestamp({
             seconds: new Long(1634648117),
             nanos: 98294000,
@@ -298,10 +406,49 @@ export const jobTablePropsFixture: JobTableProps = {
             nanos: 116912000,
           }),
           next_run: new protos.google.protobuf.Timestamp({
-            seconds: new Long(3034648417), // some long time in the future, because it needs to be in the future to show as retrying
+            seconds: new Long(1634648117),
+            nanos: 116912100,
+          }),
+          num_runs: new Long(1),
+        },
+        {
+          id: new Long(3390625793, 70312826),
+          type: "TYPEDESC SCHEMA CHANGE",
+          description: "ALTER TYPE status ADD VALUE 'pending';",
+          username: "root",
+          descriptor_ids: [53],
+          status: "running",
+          highwater_timestamp: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          highwater_decimal: "test highwater decimal",
+          created: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          started: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
             nanos: 116912000,
           }),
-          num_runs: new Long(3),
+          finished: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121906000,
+          }),
+          modified: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121173000,
+          }),
+          fraction_completed: 1,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912100,
+          }),
+          num_runs: new Long(1),
         },
         {
           id: new Long(4337653761, 70312826),
@@ -393,148 +540,6 @@ export const jobTablePropsFixture: JobTableProps = {
           modified: new protos.google.protobuf.Timestamp({
             seconds: new Long(1634648117),
             nanos: 310671000,
-          }),
-          fraction_completed: 1,
-          last_run: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 116912000,
-          }),
-          next_run: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 116912100,
-          }),
-          num_runs: new Long(1),
-        },
-        {
-          id: new Long(3390625793, 70312826),
-          type: "TYPEDESC SCHEMA CHANGE",
-          description: "ALTER TYPE status ADD VALUE 'pending';",
-          username: "root",
-          descriptor_ids: [53],
-          status: "succeeded",
-          highwater_timestamp: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 98294000,
-          }),
-          highwater_decimal: "test highwater decimal",
-          created: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 98294000,
-          }),
-          started: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 116912000,
-          }),
-          finished: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 121906000,
-          }),
-          modified: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 121173000,
-          }),
-          fraction_completed: 1,
-          last_run: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 116912000,
-          }),
-          next_run: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 116912100,
-          }),
-          num_runs: new Long(1),
-        },
-        {
-          id: new Long(3390625793, 70312826),
-          type: "NEW SCHEMA CHANGE",
-          description: "ALTER TABLE db.t ADD COLUMN b INT DEFAULT 1",
-          username: "root",
-          descriptor_ids: [53],
-          status: "succeeded",
-          created: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 98294000,
-          }),
-          started: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 116912000,
-          }),
-          finished: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 121906000,
-          }),
-          modified: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 121173000,
-          }),
-          fraction_completed: 1,
-          last_run: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 116912000,
-          }),
-          next_run: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 116912100,
-          }),
-          num_runs: new Long(1),
-        },
-        {
-          id: new Long(3390625793, 70312826),
-          type: "MIGRATION",
-          description:
-            "IMPORT MYSQLDUMP 'https://s3-us-west-1.amazonaws.com/cockroachdb-movr/datasets/employees-db/mysqldump/employees-full.sql.gz';",
-          username: "root",
-          descriptor_ids: [53],
-          status: "succeeded",
-          created: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 98294000,
-          }),
-          started: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 116912000,
-          }),
-          finished: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 121906000,
-          }),
-          modified: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 121173000,
-          }),
-          fraction_completed: 1,
-          last_run: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 116912000,
-          }),
-          next_run: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 116912100,
-          }),
-          num_runs: new Long(1),
-        },
-        {
-          id: new Long(3390625793, 70312826),
-          type: "AUTO SPAN CONFIG RECONCILIATION",
-          description: "automatic Span Config reconciliation",
-          username: "root",
-          descriptor_ids: [53],
-          status: "succeeded",
-          created: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 98294000,
-          }),
-          started: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 116912000,
-          }),
-          finished: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 121906000,
-          }),
-          modified: new protos.google.protobuf.Timestamp({
-            seconds: new Long(1634648117),
-            nanos: 121173000,
           }),
           fraction_completed: 1,
           last_run: new protos.google.protobuf.Timestamp({

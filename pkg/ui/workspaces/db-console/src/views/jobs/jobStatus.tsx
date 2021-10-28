@@ -10,18 +10,21 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import { JobStatusBadge, ProgressBar } from "src/views/jobs/progressBar";
+import {
+  JobStatusBadge,
+  RetryingStatusBadge,
+  ProgressBar,
+} from "src/views/jobs/progressBar";
 import { Duration } from "src/views/jobs/duration";
 import Job = cockroach.server.serverpb.IJobResponse;
 import { cockroach } from "src/js/protos";
-import { JobStatusVisual, jobToVisual } from "src/views/jobs/jobStatusOptions";
+import {
+  JobStatusVisual,
+  jobToVisual,
+  isRetrying,
+} from "src/views/jobs/jobStatusOptions";
 import { InlineAlert } from "src/components";
 import styles from "./jobStatus.module.styl";
-// import { Tooltip } from "antd";
-import { Tooltip } from "@cockroachlabs/ui-components";
-
-import { TimestampToMoment } from "src/util/convert";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
 
 export interface JobStatusProps {
   job: Job;
@@ -51,6 +54,7 @@ export const JobStatus: React.FC<JobStatusProps> = ({
         </div>
       );
     case JobStatusVisual.ProgressBarWithDuration:
+      const jobIsRetrying = isRetrying(job.status);
       return (
         <div>
           <ProgressBar
@@ -58,16 +62,31 @@ export const JobStatus: React.FC<JobStatusProps> = ({
             lineWidth={lineWidth || 11}
             showPercentage={true}
           />
-          <span className="jobs-table__duration">
+          <span
+            className={cn(
+              "jobs-table__duration",
+              "jobs-table__align-progress-bar",
+            )}
+          >
             <Duration job={job} />
           </span>
+          <div className="jobs-table__align-progress-bar">
+            {jobIsRetrying && <RetryingStatusBadge />}
+          </div>
+          {job.running_status && (
+            <div className="jobs-table__running-status">
+              {job.running_status}
+            </div>
+          )}
         </div>
       );
     case JobStatusVisual.BadgeWithMessage:
       return (
         <div>
           <JobStatusBadge jobStatus={job.status} />
-          <span className="jobs-table__duration">{job.running_status}</span>
+          <span className="jobs-table__running-status">
+            {job.running_status}
+          </span>
         </div>
       );
     case JobStatusVisual.BadgeWithErrorMessage:
@@ -83,23 +102,12 @@ export const JobStatus: React.FC<JobStatusProps> = ({
           )}
         </div>
       );
-    case JobStatusVisual.BadgeWithNextExecutionTime:
+    case JobStatusVisual.BadgeWithRetrying:
       return (
-        <Tooltip
-          placement="bottom"
-          style="tableTitle"
-          content={
-            <>
-              Next Execution Time:
-              <br />
-              {TimestampToMoment(job.next_run).format(DATE_FORMAT_24_UTC)}
-            </>
-          }
-        >
-          {/*<span>*/}
+        <div className="jobs-table__two-statuses">
           <JobStatusBadge jobStatus={job.status} />
-          {/*</span>*/}
-        </Tooltip>
+          <RetryingStatusBadge />
+        </div>
       );
     default:
       return <JobStatusBadge jobStatus={job.status} />;
