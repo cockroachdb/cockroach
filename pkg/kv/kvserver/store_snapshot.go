@@ -396,6 +396,11 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// SSTables directly to the snapshot. Probably the better long-term
 	// solution, but let's see if it ever becomes relevant. Snapshots with
 	// inlined proposals are hopefully the exception.
+	//
+	// TODO(tbg): this code is obsolete because as of the PR linked below,
+	// our snapshots will never contain log entries. Trim down this code.
+	//
+	// https://github.com/cockroachdb/cockroach/pull/70464
 	{
 		for i, ent := range logEntries {
 			if !sniffSideloadedRaftCommand(ent.Data) {
