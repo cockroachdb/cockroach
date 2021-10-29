@@ -2451,6 +2451,10 @@ func (r *Replica) sendSnapshot(
 		Term:  snap.RaftSnap.Metadata.Term,
 	}
 
+	// See comment on DeprecatedUsingAppliedStateKey for why we need to set this
+	// explicitly for snapshots going out to followers.
+	snap.State.DeprecatedUsingAppliedStateKey = true
+
 	req := SnapshotRequest_Header{
 		State:                                snap.State,
 		DeprecatedUnreplicatedTruncatedState: true,
