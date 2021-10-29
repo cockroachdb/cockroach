@@ -512,19 +512,25 @@ var _ catalog.DescGetter = (*TestState)(nil)
 // GetDesc implements the catalog.DescGetter interface.
 func (s *TestState) GetDesc(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
 	// Read mutable descriptor to bypass synthetic descriptors.
-	return s.mustReadMutableDescriptor(id)
+	desc, err := s.mustReadMutableDescriptor(id)
+	if errors.Is(err, catalog.ErrDescriptorNotFound) {
+		// GetDesc is best-effort.
+		return nil, nil
+	}
+	return desc, err
 }
 
 // GetNamespaceEntry implements the catalog.DescGetter interface.
 func (s *TestState) GetNamespaceEntry(
 	ctx context.Context, parentID, parentSchemaID descpb.ID, name string,
-) (id descpb.ID, _ error) {
-	id = s.namespace[descpb.NameInfo{
+) (descpb.ID, error) {
+	nameInfo := descpb.NameInfo{
 		ParentID:       parentID,
 		ParentSchemaID: parentSchemaID,
 		Name:           name,
-	}]
-	return id, nil
+	}
+	// GetNamespaceEntry is best-effort.
+	return s.namespace[nameInfo], nil
 }
 
 // IndexBackfiller implements the scexec.Dependencies interface.
@@ -626,7 +632,7 @@ func (s *TestState) WithTxnInJob(
 	ctx context.Context,
 	fn func(ctx context.Context, txndeps scrun.SchemaChangeJobTxnDependencies) error,
 ) (err error) {
-	s.WithTxn(func(s *TestState) {
+	s.WithTxn(scop.PostCommitPhase, func(s *TestState) {
 		err = fn(ctx, s)
 	})
 	return err
@@ -684,7 +690,7 @@ func (s *TestState) UpdateSchemaChangeJob(
 	if err != nil {
 		return err
 	}
-	scjob.Progress = ju.md.Progress.GetNewSchemaChange()
+	scjob.Progress = *ju.md.Progress.GetNewSchemaChange()
 	return nil
 }
 

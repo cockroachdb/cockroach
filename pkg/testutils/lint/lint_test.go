@@ -1033,6 +1033,7 @@ func TestLint(t *testing.T) {
 			":!settings/settings_test.go",
 			":!sql/types/types_jsonpb.go",
 			":!sql/schemachanger/scbuild/builder_test.go",
+			":!sql/schemachanger/end_to_end_test.go",
 			":!sql/schemachanger/scgraphviz/graphviz.go",
 		)
 		if err != nil {

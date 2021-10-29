@@ -17,7 +17,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
@@ -27,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -55,11 +58,10 @@ func NewTestDependencies(
 ) *TestState {
 
 	s := &TestState{
-		currentDatabase: "defaultdb",
-		namespace:       make(map[descpb.NameInfo]descpb.ID),
-		phase:           scop.StatementPhase,
-		statements:      statements,
-		testingKnobs:    testingKnobs,
+		namespace:    make(map[descpb.NameInfo]descpb.ID),
+		phase:        scop.StatementPhase,
+		statements:   statements,
+		testingKnobs: testingKnobs,
 	}
 	// Wait for schema changes to complete.
 	tdb.CheckQueryResultsRetry(t, `
@@ -170,7 +172,30 @@ ORDER BY id`)
 }
 
 // WithTxn simulates the execution of a transaction.
-func (s *TestState) WithTxn(fn func(s *TestState)) {
+func (s *TestState) WithTxn(phase scop.Phase, fn func(s *TestState)) {
+	s.phase = phase
 	defer s.syntheticDescriptors.Clear()
 	fn(s)
+}
+
+// ForEachDescriptor iterates over each descriptor in increasing order of IDs.
+// iterutil.Done is supported.
+func (s *TestState) ForEachDescriptor(fn func(desc catalog.Descriptor) error) error {
+	err := s.descriptors.IterateByID(func(entry catalog.NameEntry) error {
+		return fn(entry.(catalog.Descriptor))
+	})
+	if err == nil || iterutil.Done(err) {
+		return nil
+	}
+	return err
+}
+
+// JobRecord returns the job record in the fake job registry for the given job
+// ID, if it exists, nil otherwise.
+func (s *TestState) JobRecord(jobID jobspb.JobID) *jobs.Record {
+	idx := int(jobID) - 1
+	if idx < 0 || idx >= len(s.jobs) {
+		return nil
+	}
+	return &s.jobs[idx]
 }
