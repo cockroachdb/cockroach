@@ -556,10 +556,6 @@ func (s *Store) reserveSnapshot(
 func (s *Store) canAcceptSnapshotLocked(
 	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) (*ReplicaPlaceholder, error) {
-	if snapHeader.IsPreemptive() {
-		return nil, errors.AssertionFailedf(`expected a raft or learner snapshot`)
-	}
-
 	// TODO(tbg): see the comment on desc.Generation for what seems to be a much
 	// saner way to handle overlap via generational semantics.
 	desc := *snapHeader.State.Desc
@@ -684,10 +680,6 @@ func (s *Store) receiveSnapshot(
 		if err := fn(header); err != nil {
 			return sendSnapshotError(stream, err)
 		}
-	}
-
-	if header.IsPreemptive() {
-		return errors.AssertionFailedf(`expected a raft or learner snapshot`)
 	}
 
 	// Defensive check that any snapshot contains this store in the	descriptor.
