@@ -69,16 +69,18 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
-	stress := mustGetFlagBool(cmd, stressFlag)
-	stressArgs := mustGetFlagString(cmd, stressArgsFlag)
-	race := mustGetFlagBool(cmd, raceFlag)
-	filter := mustGetFlagString(cmd, filterFlag)
-	timeout := mustGetFlagDuration(cmd, timeoutFlag)
-	short := mustGetFlagBool(cmd, shortFlag)
-	ignoreCache := mustGetFlagBool(cmd, ignoreCacheFlag)
-	verbose := mustGetFlagBool(cmd, vFlag)
-	rewriteArg := mustGetFlagString(cmd, rewriteArgFlag)
-	rewrite := mustGetFlagString(cmd, rewriteFlag)
+	var (
+		filter      = mustGetFlagString(cmd, filterFlag)
+		ignoreCache = mustGetFlagBool(cmd, ignoreCacheFlag)
+		race        = mustGetFlagBool(cmd, raceFlag)
+		rewrite     = mustGetFlagString(cmd, rewriteFlag)
+		rewriteArg  = mustGetFlagString(cmd, rewriteArgFlag)
+		short       = mustGetFlagBool(cmd, shortFlag)
+		stress      = mustGetFlagBool(cmd, stressFlag)
+		stressArgs  = mustGetFlagString(cmd, stressArgsFlag)
+		timeout     = mustGetFlagDuration(cmd, timeoutFlag)
+		verbose     = mustGetFlagBool(cmd, vFlag)
+	)
 	if rewriteArg != "" && rewrite == "" {
 		rewrite = "-rewrite"
 	}
@@ -175,12 +177,17 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
 		}
 	}
-	if stress {
-		if timeout > 0 {
-			args = append(args, "--run_under",
-				fmt.Sprintf("%s -maxtime=%s %s", stressTarget, timeout, stressArgs))
+	if timeout > 0 && !stress {
+		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
 
-			// The timeout should be higher than the stress duration, lets
+		// If stress is specified, we'll pad the timeout below.
+	}
+
+	if stress {
+		var stressCmdArgs []string
+		if timeout > 0 {
+			stressCmdArgs = append(stressCmdArgs, fmt.Sprintf("-maxtime=%s", timeout))
+			// The bazel timeout should be higher than the stress duration, lets
 			// generously give it an extra minute.
 			args = append(args, fmt.Sprintf("--test_timeout=%d", int((timeout+time.Minute).Seconds())))
 		} else {
@@ -189,13 +196,16 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			// we want the bazel timeout to be longer, so lets just set it to
 			// 24h.
 			//
-			// [1]: Through --stress-arg=-maxtime or if nothing is specified, a
-			//      -maxtime of 0 that's taken as "run forever")
-			args = append(args, "--run_under", fmt.Sprintf("%s %s", stressTarget, stressArgs))
+			// [1]: Through --stress-arg=-maxtime or if nothing is specified,
+			//      -maxtime=0 is taken as "run forever".
 			args = append(args, fmt.Sprintf("--test_timeout=%.0f", 24*time.Hour.Seconds()))
 		}
-	} else if timeout > 0 {
-		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
+		if numCPUs > 0 {
+			stressCmdArgs = append(stressCmdArgs, fmt.Sprintf("-p=%d", numCPUs))
+		}
+		stressCmdArgs = append(stressCmdArgs, stressArgs)
+		args = append(args, "--run_under",
+			fmt.Sprintf("%s %s", stressTarget, strings.Join(stressCmdArgs, " ")))
 	}
 
 	if filter != "" {
