@@ -2856,16 +2856,15 @@ func (c fakeSnapshotStream) Send(request *SnapshotRequest) error {
 }
 
 type fakeStorePool struct {
-	declinedThrottles int
-	failedThrottles   int
+	failedThrottles int
 }
 
 func (sp *fakeStorePool) throttle(reason throttleReason, why string, toStoreID roachpb.StoreID) {
 	switch reason {
-	case throttleDeclined:
-		sp.declinedThrottles++
 	case throttleFailed:
 		sp.failedThrottles++
+	default:
+		panic("unknown reason")
 	}
 }
 
@@ -2882,7 +2881,6 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 
 	header := SnapshotRequest_Header{
-		CanDecline: true,
 		State: kvserverpb.ReplicaState{
 			Desc: &roachpb.RangeDescriptor{RangeID: 1},
 		},
@@ -2900,39 +2898,6 @@ func TestSendSnapshotThrottling(t *testing.T) {
 		}
 		if !errors.Is(err, expectedErr) {
 			t.Fatalf("expected error %s, but found %s", err, expectedErr)
-		}
-	}
-
-	// Test that a declined snapshot causes a decline throttle.
-	{
-		sp := &fakeStorePool{}
-		resp := &SnapshotResponse{
-			Status: SnapshotResponse_DECLINED,
-		}
-		c := fakeSnapshotStream{resp, nil}
-		err := sendSnapshot(ctx, st, c, sp, header, nil, newBatch, nil)
-		if sp.declinedThrottles != 1 {
-			t.Fatalf("expected 1 declined throttle, but found %d", sp.declinedThrottles)
-		}
-		if err == nil {
-			t.Fatalf("expected error, found nil")
-		}
-	}
-
-	// Test that a declined but required snapshot causes a fail throttle.
-	{
-		sp := &fakeStorePool{}
-		header.CanDecline = false
-		resp := &SnapshotResponse{
-			Status: SnapshotResponse_DECLINED,
-		}
-		c := fakeSnapshotStream{resp, nil}
-		err := sendSnapshot(ctx, st, c, sp, header, nil, newBatch, nil)
-		if sp.failedThrottles != 1 {
-			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
-		}
-		if err == nil {
-			t.Fatalf("expected error, found nil")
 		}
 	}
 
@@ -2965,26 +2930,20 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 
 	ctx := context.Background()
 
-	cleanupNonEmpty1, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
+	cleanupNonEmpty1, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
 		RangeSize: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
-	}
-	if rejectionMsg != "" {
-		t.Fatalf("expected no rejection message, got %q", rejectionMsg)
 	}
 	if n := s.ReservationCount(); n != 1 {
 		t.Fatalf("expected 1 reservation, but found %d", n)
 	}
 
 	// Ensure we allow a concurrent empty snapshot.
-	cleanupEmpty, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{})
+	cleanupEmpty, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{})
 	if err != nil {
 		t.Fatal(err)
-	}
-	if rejectionMsg != "" {
-		t.Fatalf("expected no rejection message, got %q", rejectionMsg)
 	}
 	// Empty snapshots are not throttled and so do not increase the reservation
 	// count.
@@ -2993,21 +2952,6 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	}
 	cleanupEmpty()
 
-	// Verify that a declinable snapshot will be declined if another is in
-	// progress.
-	cleanupNonEmpty2, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
-		RangeSize:  1,
-		CanDecline: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rejectionMsg != snapshotApplySemBusyMsg {
-		t.Fatalf("expected rejection message %q, got %q", snapshotApplySemBusyMsg, rejectionMsg)
-	}
-	if cleanupNonEmpty2 != nil {
-		t.Fatalf("got unexpected non-nil cleanup method")
-	}
 	if n := s.ReservationCount(); n != 1 {
 		t.Fatalf("expected 1 reservation, but found %d", n)
 	}
@@ -3023,14 +2967,11 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 		}
 	}()
 
-	cleanupNonEmpty3, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
+	cleanupNonEmpty3, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
 		RangeSize: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
-	}
-	if rejectionMsg != "" {
-		t.Fatalf("expected no rejection message, got %q", rejectionMsg)
 	}
 	atomic.StoreInt32(&boom, 1)
 	cleanupNonEmpty3()
@@ -3040,8 +2981,8 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	}
 }
 
-// TestReserveSnapshotFullnessLimit verifies that snapshots are rejected when
-// the recipient store's disk is near full.
+// TestReserveSnapshotFullnessLimit documents that we have no mechanism to
+// decline snapshots based on the remaining capacity of the target store.
 func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3065,34 +3006,16 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	s.cfg.StorePool.getStoreDetailLocked(desc.StoreID).desc = desc
 	s.cfg.StorePool.detailsMu.Unlock()
 
-	// A declinable snapshot to a nearly full store should be rejected.
-	cleanupRejected, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
-		RangeSize:  1,
-		CanDecline: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rejectionMsg != snapshotStoreTooFullMsg {
-		t.Fatalf("expected rejection message %q, got %q", snapshotStoreTooFullMsg, rejectionMsg)
-	}
-	if cleanupRejected != nil {
-		t.Fatalf("got unexpected non-nil cleanup method")
-	}
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
 	}
 
-	// But a non-declinable snapshot should be allowed.
-	cleanupAccepted, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
-		RangeSize:  1,
-		CanDecline: false,
+	// A snapshot should be allowed.
+	cleanupAccepted, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
+		RangeSize: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
-	}
-	if rejectionMsg != "" {
-		t.Fatalf("expected no rejection message, got %q", rejectionMsg)
 	}
 	if n := s.ReservationCount(); n != 1 {
 		t.Fatalf("expected 1 reservation, but found %d", n)
@@ -3107,20 +3030,6 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	s.cfg.StorePool.getStoreDetailLocked(desc.StoreID).desc = desc
 	s.cfg.StorePool.detailsMu.Unlock()
 
-	// A declinable snapshot to a nearly full store should be rejected.
-	cleanupRejected2, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
-		RangeSize:  desc.Capacity.Available + 1,
-		CanDecline: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rejectionMsg != snapshotStoreTooFullMsg {
-		t.Fatalf("expected rejection message %q, got %q", snapshotStoreTooFullMsg, rejectionMsg)
-	}
-	if cleanupRejected2 != nil {
-		t.Fatalf("got unexpected non-nil cleanup method")
-	}
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
 	}

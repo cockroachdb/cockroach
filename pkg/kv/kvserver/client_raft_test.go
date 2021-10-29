@@ -1327,9 +1327,8 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 	rep2Desc, found := desc.GetReplicaDescriptor(2)
 	require.True(t, found)
 	header := kvserver.SnapshotRequest_Header{
-		CanDecline: true,
-		RangeSize:  100,
-		State:      kvserverpb.ReplicaState{Desc: desc},
+		RangeSize: 100,
+		State:     kvserverpb.ReplicaState{Desc: desc},
 		RaftMessageRequest: kvserver.RaftMessageRequest{
 			RangeID:     rep.RangeID,
 			FromReplica: repDesc,
