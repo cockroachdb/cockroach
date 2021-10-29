@@ -265,6 +265,7 @@ define Zip {
 define ZipItem {
     Fn ScalarExpr
     Cols ColList
+    sourceCols ColumnDefList
 }
 
 # And is the boolean conjunction operator that evaluates to true only if both of

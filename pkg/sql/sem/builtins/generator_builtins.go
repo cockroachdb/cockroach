@@ -93,11 +93,15 @@ var aclexplodeGeneratorType = types.MakeLabeledTuple(
 // aclExplodeGenerator supports the execution of aclexplode.
 type aclexplodeGenerator struct{}
 
-func (aclexplodeGenerator) ResolvedType() *types.T                   { return aclexplodeGeneratorType }
-func (aclexplodeGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
-func (aclexplodeGenerator) Close(_ context.Context)                  {}
-func (aclexplodeGenerator) Next(_ context.Context) (bool, error)     { return false, nil }
-func (aclexplodeGenerator) Values() (tree.Datums, error)             { return nil, nil }
+func (aclexplodeGenerator) ResolvedType() *types.T { return aclexplodeGeneratorType }
+func (aclexplodeGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
+	return nil
+}
+func (aclexplodeGenerator) Close(_ context.Context)              {}
+func (aclexplodeGenerator) Next(_ context.Context) (bool, error) { return false, nil }
+func (aclexplodeGenerator) Values() (tree.Datums, error)         { return nil, nil }
 
 // generators is a map from name to slice of Builtins for all built-in
 // generators.
@@ -495,7 +499,9 @@ func (*regexpSplitToTableGenerator) ResolvedType() *types.T { return types.Strin
 func (*regexpSplitToTableGenerator) Close(_ context.Context) {}
 
 // Start implements the tree.ValueGenerator interface.
-func (g *regexpSplitToTableGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (g *regexpSplitToTableGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	g.curr = -1
 	return nil
 }
@@ -532,7 +538,9 @@ func (*keywordsValueGenerator) ResolvedType() *types.T { return keywordsValueGen
 func (*keywordsValueGenerator) Close(_ context.Context) {}
 
 // Start implements the tree.ValueGenerator interface.
-func (k *keywordsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (k *keywordsValueGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	k.curKeyword = -1
 	return nil
 }
@@ -702,7 +710,9 @@ func (s *seriesValueGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *seriesValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (s *seriesValueGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	s.nextOK = true
 	s.start = s.origStart
 	s.value = s.origStart
@@ -754,7 +764,9 @@ func (s *multipleArrayValueGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *multipleArrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (s *multipleArrayValueGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	s.datums = make(tree.Datums, len(s.arrays))
 	s.nextIndex = -1
 	return nil
@@ -804,7 +816,9 @@ func (s *arrayValueGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *arrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (s *arrayValueGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	s.nextIndex = -1
 	return nil
 }
@@ -853,7 +867,9 @@ func (s *expandArrayValueGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *expandArrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (s *expandArrayValueGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	s.avg.nextIndex = -1
 	return nil
 }
@@ -920,7 +936,9 @@ func (s *subscriptsValueGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *subscriptsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (s *subscriptsValueGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	if s.reverse {
 		s.avg.nextIndex = s.avg.array.Len()
 	} else {
@@ -971,7 +989,9 @@ func makeUnaryGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenera
 func (*unaryValueGenerator) ResolvedType() *types.T { return unaryValueGeneratorType }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *unaryValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (s *unaryValueGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	s.done = false
 	return nil
 }
@@ -1074,7 +1094,9 @@ func (g *jsonArrayGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (g *jsonArrayGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (g *jsonArrayGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	g.nextIndex = -1
 	g.json.JSON = g.json.JSON.MaybeDecode()
 	g.buf[0] = nil
@@ -1148,7 +1170,11 @@ func (g *jsonObjectKeysGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (g *jsonObjectKeysGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
+func (g *jsonObjectKeysGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
+	return nil
+}
 
 // Close implements the tree.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Close(_ context.Context) {}
@@ -1182,11 +1208,10 @@ var jsonEachTextImpl = makeGeneratorOverload(
 
 var jsonToRecordImpl = makeGeneratorOverload(
 	tree.ArgTypes{{"input", types.Jsonb}},
-	jsonEachTextGeneratorType,
+	types.AnyTuple,
 	makeJSONRecordGenerator,
-	"Expands the outermost JSON or JSONB object into a set of key/value pairs. "+
-		"The returned values will be of type text.",
-	tree.VolatilityImmutable,
+	"Expands the outermost JSON or JSONB object into a record.",
+	tree.VolatilityStable,
 )
 
 var jsonEachGeneratorLabels = []string{"key", "value"}
@@ -1238,7 +1263,9 @@ func (g *jsonEachGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (g *jsonEachGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (g *jsonEachGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	iter, err := g.target.ObjectIter()
 	if err != nil {
 		return err
@@ -1386,7 +1413,11 @@ func (j jsonPopulateRecordGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the tree.ValueGenerator interface.
-func (j *jsonPopulateRecordGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
+func (j *jsonPopulateRecordGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
+	return nil
+}
 
 // Close is part of the tree.ValueGenerator interface.
 func (j *jsonPopulateRecordGenerator) Close(_ context.Context) {}
@@ -1443,7 +1474,11 @@ type jsonPopulateRecordSetGenerator struct {
 func (j jsonPopulateRecordSetGenerator) ResolvedType() *types.T { return j.input.ResolvedType() }
 
 // Start is part of the tree.ValueGenerator interface.
-func (j jsonPopulateRecordSetGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
+func (j jsonPopulateRecordSetGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
+	return nil
+}
 
 // Close is part of the tree.ValueGenerator interface.
 func (j jsonPopulateRecordSetGenerator) Close(_ context.Context) {}
@@ -1487,42 +1522,59 @@ type jsonRecordGenerator struct {
 	target tree.DJSON
 	iter   *json.ObjectIterator
 
-	wasCalled bool
-	values    tree.Datums
+	wasCalled          bool
+	values             tree.Datums
+	sourceColIdxByName map[string]int
+	sourceCols         tree.ColumnDefList
 }
 
 func (j jsonRecordGenerator) ResolvedType() *types.T {
 	return types.AnyTuple
 }
 
-func (j *jsonRecordGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (j *jsonRecordGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	iter, err := j.target.ObjectIter()
 	if err != nil {
 		return err
+	}
+	j.sourceColIdxByName = make(map[string]int, len(sourceCols))
+	for i, col := range sourceCols {
+		j.sourceColIdxByName[string(col.Name)] = i
 	}
 	j.iter = iter
 	return nil
 }
 
 func (j *jsonRecordGenerator) Next(ctx context.Context) (bool, error) {
-	j.values = nil
 	if j.wasCalled {
 		return false, nil
 	}
+	j.values = make(tree.Datums, len(j.sourceCols))
+	for i := range j.values {
+		j.values[i] = tree.DNull
+	}
 	for j.iter.Next() {
+		k := j.iter.Key()
+		colIdx, ok := j.sourceColIdxByName[k]
+		if !ok {
+			continue
+		}
+
 		switch j.iter.Value().Type() {
 		case json.StringJSONType:
 			t, err := j.iter.Value().AsText()
 			if err != nil {
 				return false, err
 			}
-			j.values = append(j.values, tree.NewDString(*t))
+			j.values[colIdx] = tree.NewDString(*t)
 		case json.NumberJSONType:
 			t, ok := j.iter.Value().AsDecimal()
 			if !ok {
 				return false, errors.Newf("not a number")
 			}
-			j.values = append(j.values, &tree.DDecimal{Decimal: *t})
+			j.values[colIdx] = &tree.DDecimal{Decimal: *t}
 		}
 	}
 
@@ -1601,7 +1653,9 @@ func (*checkConsistencyGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the tree.ValueGenerator interface.
-func (c *checkConsistencyGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (c *checkConsistencyGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	var b kv.Batch
 	b.AddRawRequest(&roachpb.CheckConsistencyRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -1707,7 +1761,9 @@ func (rk *rangeKeyIterator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (rk *rangeKeyIterator) Start(ctx context.Context, txn *kv.Txn) error {
+func (rk *rangeKeyIterator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	rk.txn = txn
 	// Scan the range meta K/V's to find the target range. We do this in a
 	// chunk-wise fashion to avoid loading all ranges into memory.
@@ -1825,7 +1881,9 @@ func (p *payloadsForSpanGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (p *payloadsForSpanGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (p *payloadsForSpanGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	// The user of the generator first calls Next(), then Values(), so the index
 	// managing the iterator's position needs to start at -1 instead of 0.
 	p.recordingIndex = -1
@@ -1961,7 +2019,9 @@ func (p *payloadsForTraceGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (p *payloadsForTraceGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (p *payloadsForTraceGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	return nil
 }
 
@@ -2019,7 +2079,9 @@ func (s *showCreateAllSchemasGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *showCreateAllSchemasGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+func (s *showCreateAllSchemasGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	ids, err := getSchemaIDs(
 		ctx, s.ie, txn, s.dbName, &s.acc,
 	)
@@ -2103,7 +2165,9 @@ func (s *showCreateAllTablesGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+func (s *showCreateAllTablesGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	// Note: All the table ids are accumulated in ram before the generator
 	// starts generating values.
 	// This is reasonable under the assumption that:

@@ -5603,7 +5603,9 @@ func (c *CallbackValueGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the ValueGenerator interface.
-func (c *CallbackValueGenerator) Start(_ context.Context, txn *kv.Txn) error {
+func (c *CallbackValueGenerator) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols ColumnDefList,
+) error {
 	c.txn = txn
 	return nil
 }

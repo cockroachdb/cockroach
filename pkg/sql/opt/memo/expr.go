@@ -300,6 +300,11 @@ func (n ZipExpr) OutputCols() opt.ColSet {
 	return colSet
 }
 
+// SourceCols returns the AS alias(x TYPE, y TYPE, ...) portion of a zip item.
+func (n ZipItem) SourceCols() tree.ColumnDefList {
+	return n.sourceCols
+}
+
 // TupleOrdinal is an ordinal index into an expression of type Tuple. It is
 // used by the ColumnAccess scalar expression.
 type TupleOrdinal uint32

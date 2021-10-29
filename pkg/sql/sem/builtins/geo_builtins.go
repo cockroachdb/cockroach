@@ -401,7 +401,9 @@ func (m *minimumBoundRadiusGen) ResolvedType() *types.T {
 	return minimumBoundingRadiusReturnType
 }
 
-func (m *minimumBoundRadiusGen) Start(ctx context.Context, txn *kv.Txn) error {
+func (m *minimumBoundRadiusGen) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	return nil
 }
 
@@ -452,7 +454,9 @@ func (s *subdividedGeometriesGen) ResolvedType() *types.T { return types.Geometr
 
 func (s *subdividedGeometriesGen) Close(_ context.Context) {}
 
-func (s *subdividedGeometriesGen) Start(_ context.Context, _ *kv.Txn) error {
+func (s *subdividedGeometriesGen) Start(
+	ctx context.Context, txn *kv.Txn, sourceCols tree.ColumnDefList,
+) error {
 	s.curr = -1
 	return nil
 }

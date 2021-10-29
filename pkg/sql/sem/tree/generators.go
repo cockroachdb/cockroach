@@ -48,7 +48,7 @@ type ValueGenerator interface {
 	//
 	// txn represents the txn that the generator will run inside of. The generator
 	// is expected to hold on to this txn and use it in Next() calls.
-	Start(ctx context.Context, txn *kv.Txn) error
+	Start(ctx context.Context, txn *kv.Txn, sourceCols ColumnDefList) error
 
 	// Next determines whether there is a row of data available.
 	Next(context.Context) (bool, error)
