@@ -133,6 +133,19 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 	return NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
 }
 
+// NewTxnRootKV is like NewTxn but suitable for use by root kv systems. Note
+// that this initializes Txn.admissionHeader to specify that the source is
+// ROOT_KV.
+func NewTxnRootKV(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
+	txn := NewTxn(ctx, db, gatewayNodeID)
+	txn.admissionHeader = roachpb.AdmissionHeader{
+		Priority:   int32(admission.NormalPri),
+		CreateTime: timeutil.Now().UnixNano(),
+		Source:     roachpb.AdmissionHeader_ROOT_KV,
+	}
+	return txn
+}
+
 // NewTxnWithSteppingEnabled is like NewTxn but suitable for use by SQL. Note
 // that this initializes Txn.admissionHeader to specify that the source is
 // FROM_SQL.

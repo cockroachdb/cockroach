@@ -3168,7 +3168,12 @@ func (n KVAdmissionControllerImpl) AdmitKVWork(
 			bypassAdmission = false
 			source = roachpb.AdmissionHeader_FROM_SQL
 		}
-		if source == roachpb.AdmissionHeader_OTHER {
+		// If roachpb.AdmissionHeader_ROOT_KV is subjected to admission control
+		// then internal KV requests like those from kvprober will not bypass
+		// the admission queue. This can result in alarms when the cluster is
+		// alive, but under high CPU load as probe requests may fail to be
+		// processed in time.
+		if source == roachpb.AdmissionHeader_OTHER || source == roachpb.AdmissionHeader_ROOT_KV {
 			bypassAdmission = true
 		}
 		createTime := ba.AdmissionHeader.CreateTime

@@ -820,6 +820,19 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
 	txn := NewTxn(ctx, db, nodeID)
 	txn.SetDebugName("unnamed")
+	return runTxn(ctx, txn, retryable)
+}
+
+// TxnRootKV is the same as Txn but for use by root kv systems.
+func (db *DB) TxnRootKV(ctx context.Context, retryable func(context.Context, *Txn) error) error {
+	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
+	txn := NewTxnRootKV(ctx, db, nodeID)
+	txn.SetDebugName("unnamed")
+	return runTxn(ctx, txn, retryable)
+}
+
+// runTxn runs the given retryable transaction function using the given *Txn.
+func runTxn(ctx context.Context, txn *Txn, retryable func(context.Context, *Txn) error) error {
 	err := txn.exec(ctx, func(ctx context.Context, txn *Txn) error {
 		return retryable(ctx, txn)
 	})

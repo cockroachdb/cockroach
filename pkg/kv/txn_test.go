@@ -181,6 +181,35 @@ func TestTransactionConfig(t *testing.T) {
 	}
 }
 
+// TestTransactionConfigRootKV is the same as TestTransactionConfig but also
+// verifies that the the admission header source is set to root kv when a
+// transaction is created with db.TxnRootKV.
+func TestTransactionConfigRootKV(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	dbCtx := DefaultDBContext(stopper)
+	dbCtx.UserPriority = 101
+	db := NewDBWithContext(
+		testutils.MakeAmbientCtx(),
+		newTestTxnFactory(nil), clock, dbCtx)
+	if err := db.TxnRootKV(context.Background(), func(ctx context.Context, txn *Txn) error {
+		if txn.db.ctx.UserPriority != db.ctx.UserPriority {
+			t.Errorf("expected txn user priority %f; got %f",
+				db.ctx.UserPriority, txn.db.ctx.UserPriority)
+		}
+		if txn.admissionHeader.Source != roachpb.AdmissionHeader_ROOT_KV {
+			t.Errorf("expected txn source %d; got %d", roachpb.AdmissionHeader_ROOT_KV, txn.admissionHeader.Source)
+		}
+		return nil
+	}); err != nil {
+		t.Errorf("unexpected error on commit: %s", err)
+	}
+}
+
 // TestCommitTransactionOnce verifies that if the transaction is
 // ended explicitly in the retryable func, it is not automatically
 // ended a second time at completion of retryable func.

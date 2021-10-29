@@ -54,6 +54,20 @@ func TestReadProbe(t *testing.T) {
 		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
 	})
 
+	t.Run("happy path with bypass", func(t *testing.T) {
+		m := &mock{t: t, bypass: true}
+		p := initTestProber(m)
+		readEnabled.Override(ctx, &p.settings.SV, true)
+		bypassAdmissionControl.Override(ctx, &p.settings.SV, true)
+
+		p.readProbeImpl(ctx, m, m)
+
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
+	})
+
 	t.Run("planning fails", func(t *testing.T) {
 		m := &mock{
 			t:       t,
@@ -120,6 +134,20 @@ func TestWriteProbe(t *testing.T) {
 		require.Zero(t, p.Metrics().WriteProbeFailures.Count())
 	})
 
+	t.Run("happy path with bypass", func(t *testing.T) {
+		m := &mock{t: t, bypass: true}
+		p := initTestProber(m)
+		writeEnabled.Override(ctx, &p.settings.SV, true)
+		bypassAdmissionControl.Override(ctx, &p.settings.SV, true)
+
+		p.writeProbeImpl(ctx, m, m)
+
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().WriteProbeFailures.Count())
+	})
+
 	t.Run("planning fails", func(t *testing.T) {
 		m := &mock{
 			t:       t,
@@ -168,6 +196,8 @@ func initTestProber(m *mock) *Prober {
 type mock struct {
 	t *testing.T
 
+	bypass bool
+
 	noPlan  bool
 	planErr error
 
@@ -178,18 +208,38 @@ type mock struct {
 
 func (m *mock) next(ctx context.Context) (Step, error) {
 	if m.noPlan {
-		m.t.Errorf("plan call made but not expected")
+		m.t.Error("plan call made but not expected")
 	}
 	return Step{}, m.planErr
 }
 
-func (m *mock) Get(ctx context.Context, key interface{}) (kv.KeyValue, error) {
+func (m *mock) Get(ctx context.Context, key interface{}, bypassQueue bool) error {
 	if m.noGet {
-		m.t.Errorf("get call made but not expected")
+		m.t.Error("get call made but not expected")
 	}
-	return kv.KeyValue{}, m.getErr
+	if m.bypass != bypassQueue {
+		m.t.Error("get call made but not with queue bypass")
+	}
+	return m.getErr
+}
+
+func (m *mock) PutDel(ctx context.Context, key interface{}, bypassQueue bool) error {
+	if m.bypass != bypassQueue {
+		m.t.Error("putdel call made but not with admission queue bypass")
+	}
+	return m.txnErr
 }
 
 func (m *mock) Txn(ctx context.Context, f func(ctx context.Context, txn *kv.Txn) error) error {
+	if m.bypass {
+		m.t.Error("normal txn used made but bypass is set")
+	}
+	return m.txnErr
+}
+
+func (m *mock) TxnRootKV(ctx context.Context, f func(ctx context.Context, txn *kv.Txn) error) error {
+	if !m.bypass {
+		m.t.Error("root kv txn used but bypass is not set")
+	}
 	return m.txnErr
 }

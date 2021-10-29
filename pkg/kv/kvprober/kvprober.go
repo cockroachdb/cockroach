@@ -137,6 +137,42 @@ type Metrics struct {
 	ProbePlanFailures  *metric.Counter
 }
 
+// proberOps is an interface that the prober will use to run ops against some
+// system. This interface exists so that ops can be mocked for tests.
+type proberOps interface {
+	Get(ctx context.Context, key interface{}, bypassQueue bool) error
+	PutDel(ctx context.Context, key interface{}, bypassQueue bool) error
+}
+
+// proberOpsImpl is used to probe the kv layer.
+type proberOpsImpl struct {
+	db *kv.DB
+}
+
+func (p *proberOpsImpl) Get(ctx context.Context, key interface{}, bypassQueue bool) error {
+	f := func(ctx context.Context, txn *kv.Txn) error {
+		_, err := txn.Get(ctx, key)
+		return err
+	}
+	if bypassQueue {
+		return p.db.TxnRootKV(ctx, f)
+	}
+	return p.db.Txn(ctx, f)
+}
+
+func (p *proberOpsImpl) PutDel(ctx context.Context, key interface{}, bypassQueue bool) error {
+	f := func(ctx context.Context, txn *kv.Txn) error {
+		if err := txn.Put(ctx, key, putValue); err != nil {
+			return err
+		}
+		return txn.Del(ctx, key)
+	}
+	if bypassQueue {
+		return p.db.TxnRootKV(ctx, f)
+	}
+	return p.db.Txn(ctx, f)
+}
+
 // NewProber creates a Prober from Opts.
 func NewProber(opts Opts) *Prober {
 	return &Prober{
@@ -209,14 +245,10 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 // Doesn't return an error. Instead increments error type specific metrics.
 func (p *Prober) readProbe(ctx context.Context, db *kv.DB, pl planner) {
-	p.readProbeImpl(ctx, db, pl)
+	p.readProbeImpl(ctx, &proberOpsImpl{db: p.db}, pl)
 }
 
-type dbGetter interface {
-	Get(ctx context.Context, key interface{}) (kv.KeyValue, error)
-}
-
-func (p *Prober) readProbeImpl(ctx context.Context, db dbGetter, pl planner) {
+func (p *Prober) readProbeImpl(ctx context.Context, ops proberOps, pl planner) {
 	if !readEnabled.Get(&p.settings.SV) {
 		return
 	}
@@ -249,8 +281,7 @@ func (p *Prober) readProbeImpl(ctx context.Context, db dbGetter, pl planner) {
 		// There is no data at the key, but that is okay. Even tho there is no data
 		// at the key, the prober still executes a read operation on the range.
 		// TODO(josh): Trace the probes.
-		_, err = db.Get(ctx, step.Key)
-		return err
+		return ops.Get(ctx, step.Key, bypassAdmissionControl.Get(&p.settings.SV))
 	})
 	if err != nil {
 		// TODO(josh): Write structured events with log.Structured.
@@ -268,14 +299,10 @@ func (p *Prober) readProbeImpl(ctx context.Context, db dbGetter, pl planner) {
 
 // Doesn't return an error. Instead increments error type specific metrics.
 func (p *Prober) writeProbe(ctx context.Context, db *kv.DB, pl planner) {
-	p.writeProbeImpl(ctx, db, pl)
+	p.writeProbeImpl(ctx, &proberOpsImpl{db: p.db}, pl)
 }
 
-type dbTxner interface {
-	Txn(ctx context.Context, f func(ctx context.Context, txn *kv.Txn) error) error
-}
-
-func (p *Prober) writeProbeImpl(ctx context.Context, db dbTxner, pl planner) {
+func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOps, pl planner) {
 	if !writeEnabled.Get(&p.settings.SV) {
 		return
 	}
@@ -305,12 +332,7 @@ func (p *Prober) writeProbeImpl(ctx context.Context, db dbTxner, pl planner) {
 		// up data at the key post range split / merge. Note that MVCC
 		// tombstones may be left by the probe, but this is okay, as GC will
 		// clean it up.
-		return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if err := txn.Put(ctx, step.Key, putValue); err != nil {
-				return err
-			}
-			return txn.Del(ctx, step.Key)
-		})
+		return ops.PutDel(ctx, step.Key, bypassAdmissionControl.Get(&p.settings.SV))
 	})
 	if err != nil {
 		log.Health.Errorf(ctx, "kv.Txn(Put(%s); Del(-)), r=%v failed with: %v", step.Key, step.RangeID, err)
