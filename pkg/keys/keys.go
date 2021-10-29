@@ -912,6 +912,11 @@ func (b RangeIDPrefixBuf) RangeAppliedStateKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangeAppliedStateSuffix...)
 }
 
+// RangeDescriptorKey returns a system-local key for the range descriptor.
+func (b RangeIDPrefixBuf) RangeDescriptorKey() roachpb.Key {
+	return append(b.replicatedPrefix(), LocalRangeDescriptorSuffix...)
+}
+
 // RangeLeaseKey returns a system-local key for a range lease.
 func (b RangeIDPrefixBuf) RangeLeaseKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangeLeaseSuffix...)

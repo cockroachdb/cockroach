@@ -5,15 +5,16 @@ package kvserverpb
 
 import (
 	fmt "fmt"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+
 	github_com_cockroachdb_cockroach_pkg_kv_kvserver_closedts_ctpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
-	io "io"
-	math "math"
-	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -28,13 +29,15 @@ var _ = math.Inf
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // ReplicaState is the part of the Range Raft state machine which is cached in
-// memory and which is manipulated exclusively through consensus.
+// memory and which is manipulated exclusively through consensus. In other
+// words, at the same applied index, the ReplicaState is identical.
 //
-// The struct is also used to transfer state to Replicas in the context of
-// proposer-evaluated Raft, in which case it does not represent a complete
-// state but instead an update to be applied to an existing state, with each
-// field specified in the update overwriting its counterpart on the receiving
-// ReplicaState.
+// This struct is also used to replicate changes to the state itself. In this
+// case it does not represent a complete state but instead an update to be
+// applied to an existing state, with each field specified in the update
+// overwriting its counterpart on the receiving ReplicaState. For example, a
+// split trigger will carry a ReplicaState with an updated Desc field that
+// reflects the post-split left-hand descriptor.
 //
 // For the ReplicaState persisted on the Replica, all optional fields are
 // populated (i.e. no nil pointers or enums with the default value).
