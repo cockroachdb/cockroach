@@ -19,9 +19,12 @@ import moment from "moment";
 import Job = cockroach.server.serverpb.IJobResponse;
 import { cockroach } from "src/js/protos";
 
-export class Duration extends React.PureComponent<{ job: Job }> {
+export class Duration extends React.PureComponent<{
+  job: Job;
+  className?: string;
+}> {
   render() {
-    const { job } = this.props;
+    const { job, className } = this.props;
     // Parse timestamp to default value NULL instead of Date.now.
     // Conversion dates to Date.now causes traling dates and constant
     // duration increase even when job is finished.
@@ -35,7 +38,7 @@ export class Duration extends React.PureComponent<{ job: Job }> {
         const duration = modifiedAt.diff(startedAt);
         const remaining = duration / fractionCompleted - duration;
         return (
-          <span>
+          <span className={className}>
             {formatDuration(moment.duration(remaining)) + " remaining"}
           </span>
         );
@@ -43,8 +46,11 @@ export class Duration extends React.PureComponent<{ job: Job }> {
       return null;
     } else if (job.status == JOB_STATUS_SUCCEEDED) {
       return (
-        "Duration: " +
-        formatDuration(moment.duration(finishedAt.diff(startedAt)))
+        <span className={className}>
+          {"Duration: " +
+            formatDuration(moment.duration(finishedAt.diff(startedAt)))}
+          )
+        </span>
       );
     }
     return null;

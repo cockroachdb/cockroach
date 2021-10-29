@@ -48,9 +48,7 @@ export const JobStatus: React.FC<JobStatusProps> = ({
       return (
         <div>
           <JobStatusBadge jobStatus={job.status} />
-          <span className="jobs-table__duration">
-            <Duration job={job} />
-          </span>
+          <Duration job={job} className="jobs-table__duration" />
         </div>
       );
     case JobStatusVisual.ProgressBarWithDuration:
@@ -62,14 +60,13 @@ export const JobStatus: React.FC<JobStatusProps> = ({
             lineWidth={lineWidth || 11}
             showPercentage={true}
           />
-          <span
+          <Duration
+            job={job}
             className={cn(
               "jobs-table__duration",
               "jobs-table__align-progress-bar",
             )}
-          >
-            <Duration job={job} />
-          </span>
+          />
           <div className="jobs-table__align-progress-bar">
             {jobIsRetrying && <RetryingStatusBadge />}
           </div>

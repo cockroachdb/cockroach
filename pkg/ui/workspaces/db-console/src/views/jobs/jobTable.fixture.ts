@@ -171,6 +171,75 @@ export const jobTablePropsFixture: JobTableProps = {
           num_runs: new Long(1),
         },
         {
+          id: new Long(3390625793, 70312826),
+          type: "AUTO SPAN CONFIG RECONCILIATION",
+          description: "GC for DROP TABLE havent_started_running",
+          username: "root",
+          descriptor_ids: [53],
+          status: "running",
+          created: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          started: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          finished: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121906000,
+          }),
+          modified: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121173000,
+          }),
+          fraction_completed: 0,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912100,
+          }),
+          num_runs: new Long(1),
+        },
+        {
+          id: new Long(3390625793, 70312826),
+          type: "AUTO SPAN CONFIG RECONCILIATION",
+          description: "GC for DROP TABLE no_duration_has_running_status",
+          username: "root",
+          descriptor_ids: [53],
+          status: "running",
+          created: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          started: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          finished: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121906000,
+          }),
+          modified: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121173000,
+          }),
+          fraction_completed: 0,
+          running_status: "Waiting For GC TTL",
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912100,
+          }),
+          num_runs: new Long(1),
+        },
+        {
           id: new Long(6093756417, 70312826),
           type: "RESTORE",
           description: "RESTORE data.* FROM $1 WITH OPTIONS (into_db='data2')",
@@ -200,6 +269,7 @@ export const jobTablePropsFixture: JobTableProps = {
           }),
           num_runs: new Long(1),
         },
+
         {
           id: new Long(3390625793, 70312826),
           type: "AUTO SPAN CONFIG RECONCILIATION",
@@ -225,6 +295,75 @@ export const jobTablePropsFixture: JobTableProps = {
           }),
           fraction_completed: 0.66,
           running_status: "performing garbage collection on index 2",
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912100,
+          }),
+          num_runs: new Long(1),
+        },
+        {
+          id: new Long(3390625793, 70312826),
+          type: "STREAM INGESTION",
+          description: "GC for DROP TABLE havent_started_running_2",
+          username: "root",
+          descriptor_ids: [53],
+          status: "retry-running",
+          created: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          started: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          finished: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121906000,
+          }),
+          modified: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121173000,
+          }),
+          fraction_completed: 0,
+          last_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          next_run: new protos.google.protobuf.Timestamp({
+            seconds: new Long(3034648417), // some long time in the future, because it needs to be in the future to show as retrying
+            nanos: 116912000,
+          }),
+          num_runs: new Long(3),
+        },
+        {
+          id: new Long(3390625793, 70312826),
+          type: "AUTO SPAN CONFIG RECONCILIATION",
+          description: "GC for DROP TABLE no_duration_has_running_status",
+          username: "root",
+          descriptor_ids: [53],
+          status: "retry-running",
+          created: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 98294000,
+          }),
+          started: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 116912000,
+          }),
+          finished: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121906000,
+          }),
+          modified: new protos.google.protobuf.Timestamp({
+            seconds: new Long(1634648117),
+            nanos: 121173000,
+          }),
+          fraction_completed: 0,
+          running_status: "Waiting For GC TTL",
           last_run: new protos.google.protobuf.Timestamp({
             seconds: new Long(1634648117),
             nanos: 116912000,
@@ -270,7 +409,6 @@ export const jobTablePropsFixture: JobTableProps = {
           }),
           num_runs: new Long(3),
         },
-
         {
           id: new Long(3390625793, 70312826),
           type: "MIGRATION",
