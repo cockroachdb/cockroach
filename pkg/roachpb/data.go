@@ -1558,18 +1558,12 @@ func writeTooOldRetryTimestamp(err *WriteTooOldError) hlc.Timestamp {
 // Replicas returns all of the replicas present in the descriptor after this
 // trigger applies.
 func (crt ChangeReplicasTrigger) Replicas() []ReplicaDescriptor {
-	if crt.Desc != nil {
-		return crt.Desc.Replicas().Descriptors()
-	}
-	return crt.DeprecatedUpdatedReplicas
+	return crt.Desc.Replicas().Descriptors()
 }
 
 // NextReplicaID returns the next replica id to use after this trigger applies.
 func (crt ChangeReplicasTrigger) NextReplicaID() ReplicaID {
-	if crt.Desc != nil {
-		return crt.Desc.NextReplicaID
-	}
-	return crt.DeprecatedNextReplicaID
+	return crt.Desc.NextReplicaID
 }
 
 // ConfChange returns the configuration change described by the trigger.
@@ -1772,17 +1766,12 @@ func (crt ChangeReplicasTrigger) SafeFormat(w redact.SafePrinter, _ rune) {
 	var nextReplicaID ReplicaID
 	var afterReplicas []ReplicaDescriptor
 	added, removed := crt.Added(), crt.Removed()
-	if crt.Desc != nil {
-		nextReplicaID = crt.Desc.NextReplicaID
-		// NB: we don't want to mutate InternalReplicas, so we don't call
-		// .Replicas()
-		//
-		// TODO(tbg): revisit after #39489 is merged.
-		afterReplicas = crt.Desc.InternalReplicas
-	} else {
-		nextReplicaID = crt.DeprecatedNextReplicaID
-		afterReplicas = crt.DeprecatedUpdatedReplicas
-	}
+	nextReplicaID = crt.Desc.NextReplicaID
+	// NB: we don't want to mutate InternalReplicas, so we don't call
+	// .Replicas()
+	//
+	// TODO(tbg): revisit after #39489 is merged.
+	afterReplicas = crt.Desc.InternalReplicas
 	cc, err := crt.ConfChange(nil)
 	if err != nil {
 		w.Printf("<malformed ChangeReplicasTrigger: %s>", err)
@@ -1837,18 +1826,8 @@ func confChangesToRedactableString(ccs []raftpb.ConfChangeSingle) redact.Redacta
 	})
 }
 
-func (crt ChangeReplicasTrigger) legacy() (ReplicaDescriptor, bool) {
-	if len(crt.InternalAddedReplicas)+len(crt.InternalRemovedReplicas) == 0 && crt.DeprecatedReplica.ReplicaID != 0 {
-		return crt.DeprecatedReplica, true
-	}
-	return ReplicaDescriptor{}, false
-}
-
 // Added returns the replicas added by this change (if there are any).
 func (crt ChangeReplicasTrigger) Added() []ReplicaDescriptor {
-	if rDesc, ok := crt.legacy(); ok && crt.DeprecatedChangeType == ADD_VOTER {
-		return []ReplicaDescriptor{rDesc}
-	}
 	return crt.InternalAddedReplicas
 }
 
@@ -1857,9 +1836,6 @@ func (crt ChangeReplicasTrigger) Added() []ReplicaDescriptor {
 // transitioning to VOTER_{OUTGOING,DEMOTING} (from VOTER_FULL). The subsequent trigger
 // leaving the joint configuration has an empty Removed().
 func (crt ChangeReplicasTrigger) Removed() []ReplicaDescriptor {
-	if rDesc, ok := crt.legacy(); ok && crt.DeprecatedChangeType == REMOVE_VOTER {
-		return []ReplicaDescriptor{rDesc}
-	}
 	return crt.InternalRemovedReplicas
 }
 
