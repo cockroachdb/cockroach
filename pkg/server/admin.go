@@ -1844,9 +1844,15 @@ func (s *adminServer) Jobs(
 		return nil, err
 	}
 
+	retryRunningCondition := "status='running' AND next_run > now() AND num_runs > 1"
+	retryRevertingCondition := "status='reverting' AND next_run > now() AND num_runs > 1"
+
 	q := makeSQLQuery()
 	q.Append(`
-      SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
+      SELECT job_id, job_type, description, statement, user_name, descriptor_ids,
+             case when ` + retryRunningCondition + `then 'retry-running' 
+             when ` + retryRevertingCondition + ` then 'retry-reverting' 
+             else status end as status,
 						 running_status, created, started, finished, modified,
 						 fraction_completed, high_water_timestamp, error, last_run,
 						 next_run, num_runs
@@ -1854,7 +1860,7 @@ func (s *adminServer) Jobs(
        WHERE true
 	`)
 	if req.Status == "retrying" {
-		q.Append(" AND status IN ('running', 'reverting') AND next_run > now() AND num_runs > 1")
+		q.Append(" AND ( ( " + retryRunningCondition + " ) OR ( " + retryRevertingCondition + " ) )")
 	} else if req.Status != "" {
 		q.Append(" AND status = $", req.Status)
 	}
