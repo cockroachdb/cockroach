@@ -19,6 +19,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -29,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -295,16 +299,86 @@ func benchmarkWriteType(b *testing.B, d tree.Datum, format pgwirebase.FormatCode
 	}
 }
 
+func benchmarkWriteColumnar(b *testing.B, batch coldata.Batch, format pgwirebase.FormatCode) {
+	ctx := context.Background()
+
+	buf := newWriteBuffer(nil /* bytecount */)
+	buf.bytecount = metric.NewCounter(metric.Metadata{Name: ""})
+	var vecs coldata.TypedVecs
+
+	writeMethod := func(ctx context.Context, batch coldata.Batch, loc *time.Location) {
+		defaultConv, _ := makeTestingConvCfg()
+		vecs.SetBatch(batch)
+		defer vecs.Reset()
+		for rowIdx := 0; rowIdx < batch.Length(); rowIdx++ {
+			buf.writeTextColumnarElement(ctx, &vecs, 0 /* vecIdx */, rowIdx, defaultConv, loc)
+		}
+	}
+	if format == pgwirebase.FormatBinary {
+		writeMethod = func(ctx context.Context, batch coldata.Batch, loc *time.Location) {
+			vecs.SetBatch(batch)
+			defer vecs.Reset()
+			for rowIdx := 0; rowIdx < batch.Length(); rowIdx++ {
+				buf.writeBinaryColumnarElement(ctx, &vecs, 0 /* vecIdx */, rowIdx, loc)
+			}
+		}
+	}
+
+	// Warm up the buffer.
+	writeMethod(ctx, batch, nil)
+	buf.wrapped.Reset()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Starting and stopping the timer in each loop iteration causes this
+		// to take much longer. See http://stackoverflow.com/a/37624250/3435257.
+		// buf.wrapped.Reset() should be fast enough to be negligible.
+		writeMethod(ctx, batch, nil)
+		if buf.err != nil {
+			b.Fatal(buf.err)
+		}
+		buf.wrapped.Reset()
+	}
+}
+
+// getBatch returns a batch with a single vector of the provided type,
+// coldata.BatchSize() in length.
+func getBatch(t *types.T) coldata.Batch {
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	batch := coldata.NewMemBatch([]*types.T{t}, coldataext.NewExtendedColumnFactory(&evalCtx))
+	rng, _ := randutil.NewTestRand()
+	coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
+		Rand:             rng,
+		Vec:              batch.ColVec(0),
+		N:                coldata.BatchSize(),
+		BytesFixedLength: 8,
+	})
+	batch.SetLength(coldata.BatchSize())
+	return batch
+}
+
 func benchmarkWriteBool(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, tree.DBoolTrue, format)
+}
+
+func benchmarkWriteColumnarBool(b *testing.B, format pgwirebase.FormatCode) {
+	benchmarkWriteColumnar(b, getBatch(types.Bool), format)
 }
 
 func benchmarkWriteInt(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, tree.NewDInt(1234), format)
 }
 
+func benchmarkWriteColumnarInt(b *testing.B, format pgwirebase.FormatCode) {
+	benchmarkWriteColumnar(b, getBatch(types.Int), format)
+}
+
 func benchmarkWriteFloat(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, tree.NewDFloat(12.34), format)
+}
+
+func benchmarkWriteColumnarFloat(b *testing.B, format pgwirebase.FormatCode) {
+	benchmarkWriteColumnar(b, getBatch(types.Float), format)
 }
 
 func benchmarkWriteDecimal(b *testing.B, format pgwirebase.FormatCode) {
@@ -316,8 +390,16 @@ func benchmarkWriteDecimal(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, dec, pgwirebase.FormatText)
 }
 
+func benchmarkWriteColumnarDecimal(b *testing.B, format pgwirebase.FormatCode) {
+	benchmarkWriteColumnar(b, getBatch(types.Decimal), format)
+}
+
 func benchmarkWriteBytes(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, tree.NewDBytes("testing"), format)
+}
+
+func benchmarkWriteColumnarBytes(b *testing.B, format pgwirebase.FormatCode) {
+	benchmarkWriteColumnar(b, getBatch(types.Bytes), format)
 }
 
 func benchmarkWriteUUID(b *testing.B, format pgwirebase.FormatCode) {
@@ -325,8 +407,16 @@ func benchmarkWriteUUID(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, tree.NewDUuid(tree.DUuid{UUID: u}), format)
 }
 
+func benchmarkWriteColumnarUUID(b *testing.B, format pgwirebase.FormatCode) {
+	benchmarkWriteColumnar(b, getBatch(types.Uuid), format)
+}
+
 func benchmarkWriteString(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, tree.NewDString("testing"), format)
+}
+
+func benchmarkWriteColumnarString(b *testing.B, format pgwirebase.FormatCode) {
+	benchmarkWriteColumnar(b, getBatch(types.String), format)
 }
 
 func benchmarkWriteDate(b *testing.B, format pgwirebase.FormatCode) {
@@ -337,12 +427,20 @@ func benchmarkWriteDate(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, d, format)
 }
 
+func benchmarkWriteColumnarDate(b *testing.B, format pgwirebase.FormatCode) {
+	benchmarkWriteColumnar(b, getBatch(types.Date), format)
+}
+
 func benchmarkWriteTimestamp(b *testing.B, format pgwirebase.FormatCode) {
 	ts, _, err := tree.ParseDTimestamp(nil, "2010-09-28 12:00:00.1", time.Microsecond)
 	if err != nil {
 		b.Fatal(err)
 	}
 	benchmarkWriteType(b, ts, format)
+}
+
+func benchmarkWriteColumnarTimestamp(b *testing.B, format pgwirebase.FormatCode) {
+	benchmarkWriteColumnar(b, getBatch(types.Timestamp), format)
 }
 
 func benchmarkWriteTimestampTZ(b *testing.B, format pgwirebase.FormatCode) {
@@ -353,12 +451,20 @@ func benchmarkWriteTimestampTZ(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, tstz, format)
 }
 
+func benchmarkWriteColumnarTimestampTZ(b *testing.B, format pgwirebase.FormatCode) {
+	benchmarkWriteColumnar(b, getBatch(types.TimestampTZ), format)
+}
+
 func benchmarkWriteInterval(b *testing.B, format pgwirebase.FormatCode) {
 	i, err := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, "PT12H2M")
 	if err != nil {
 		b.Fatal(err)
 	}
 	benchmarkWriteType(b, i, format)
+}
+
+func benchmarkWriteColumnarInterval(b *testing.B, format pgwirebase.FormatCode) {
+	benchmarkWriteColumnar(b, getBatch(types.Interval), format)
 }
 
 func benchmarkWriteTuple(b *testing.B, format pgwirebase.FormatCode) {
@@ -368,6 +474,11 @@ func benchmarkWriteTuple(b *testing.B, format pgwirebase.FormatCode) {
 	typ := types.MakeTuple([]*types.T{types.Int, types.Float, types.String})
 	t := tree.NewDTuple(typ, i, f, s)
 	benchmarkWriteType(b, t, format)
+}
+
+func benchmarkWriteColumnarTuple(b *testing.B, format pgwirebase.FormatCode) {
+	typ := types.MakeTuple([]*types.T{types.Int, types.Float, types.String})
+	benchmarkWriteColumnar(b, getBatch(typ), format)
 }
 
 func benchmarkWriteArray(b *testing.B, format pgwirebase.FormatCode) {
@@ -380,11 +491,21 @@ func benchmarkWriteArray(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, a, format)
 }
 
+func benchmarkWriteColumnarArray(b *testing.B, format pgwirebase.FormatCode) {
+	benchmarkWriteColumnar(b, getBatch(types.MakeArray(types.Int)), format)
+}
+
 func BenchmarkWriteTextBool(b *testing.B) {
 	benchmarkWriteBool(b, pgwirebase.FormatText)
 }
 func BenchmarkWriteBinaryBool(b *testing.B) {
 	benchmarkWriteBool(b, pgwirebase.FormatBinary)
+}
+func BenchmarkWriteTextColumnarBool(b *testing.B) {
+	benchmarkWriteColumnarBool(b, pgwirebase.FormatText)
+}
+func BenchmarkWriteBinaryColumnarBool(b *testing.B) {
+	benchmarkWriteColumnarBool(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextInt(b *testing.B) {
@@ -393,12 +514,24 @@ func BenchmarkWriteTextInt(b *testing.B) {
 func BenchmarkWriteBinaryInt(b *testing.B) {
 	benchmarkWriteInt(b, pgwirebase.FormatBinary)
 }
+func BenchmarkWriteTextColumnarInt(b *testing.B) {
+	benchmarkWriteColumnarInt(b, pgwirebase.FormatText)
+}
+func BenchmarkWriteBinaryColumnarInt(b *testing.B) {
+	benchmarkWriteColumnarInt(b, pgwirebase.FormatBinary)
+}
 
 func BenchmarkWriteTextFloat(b *testing.B) {
 	benchmarkWriteFloat(b, pgwirebase.FormatText)
 }
 func BenchmarkWriteBinaryFloat(b *testing.B) {
 	benchmarkWriteFloat(b, pgwirebase.FormatBinary)
+}
+func BenchmarkWriteTextColumnarFloat(b *testing.B) {
+	benchmarkWriteColumnarFloat(b, pgwirebase.FormatText)
+}
+func BenchmarkWriteBinaryColumnarFloat(b *testing.B) {
+	benchmarkWriteColumnarFloat(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextDecimal(b *testing.B) {
@@ -407,12 +540,24 @@ func BenchmarkWriteTextDecimal(b *testing.B) {
 func BenchmarkWriteBinaryDecimal(b *testing.B) {
 	benchmarkWriteDecimal(b, pgwirebase.FormatBinary)
 }
+func BenchmarkWriteTextColumnarDecimal(b *testing.B) {
+	benchmarkWriteColumnarDecimal(b, pgwirebase.FormatText)
+}
+func BenchmarkWriteBinaryColumnarDecimal(b *testing.B) {
+	benchmarkWriteColumnarDecimal(b, pgwirebase.FormatBinary)
+}
 
 func BenchmarkWriteTextBytes(b *testing.B) {
 	benchmarkWriteBytes(b, pgwirebase.FormatText)
 }
 func BenchmarkWriteBinaryBytes(b *testing.B) {
 	benchmarkWriteBytes(b, pgwirebase.FormatBinary)
+}
+func BenchmarkWriteTextColumnarBytes(b *testing.B) {
+	benchmarkWriteColumnarBytes(b, pgwirebase.FormatText)
+}
+func BenchmarkWriteBinaryColumnarBytes(b *testing.B) {
+	benchmarkWriteColumnarBytes(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextUUID(b *testing.B) {
@@ -421,12 +566,24 @@ func BenchmarkWriteTextUUID(b *testing.B) {
 func BenchmarkWriteBinaryUUID(b *testing.B) {
 	benchmarkWriteUUID(b, pgwirebase.FormatBinary)
 }
+func BenchmarkWriteTextColumnarUUID(b *testing.B) {
+	benchmarkWriteColumnarUUID(b, pgwirebase.FormatText)
+}
+func BenchmarkWriteBinaryColumnarUUID(b *testing.B) {
+	benchmarkWriteColumnarUUID(b, pgwirebase.FormatBinary)
+}
 
 func BenchmarkWriteTextString(b *testing.B) {
 	benchmarkWriteString(b, pgwirebase.FormatText)
 }
 func BenchmarkWriteBinaryString(b *testing.B) {
 	benchmarkWriteString(b, pgwirebase.FormatBinary)
+}
+func BenchmarkWriteTextColumnarString(b *testing.B) {
+	benchmarkWriteColumnarString(b, pgwirebase.FormatText)
+}
+func BenchmarkWriteBinaryColumnarString(b *testing.B) {
+	benchmarkWriteColumnarString(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextDate(b *testing.B) {
@@ -435,12 +592,24 @@ func BenchmarkWriteTextDate(b *testing.B) {
 func BenchmarkWriteBinaryDate(b *testing.B) {
 	benchmarkWriteDate(b, pgwirebase.FormatBinary)
 }
+func BenchmarkWriteTextColumnarDate(b *testing.B) {
+	benchmarkWriteColumnarDate(b, pgwirebase.FormatText)
+}
+func BenchmarkWriteBinaryColumnarDate(b *testing.B) {
+	benchmarkWriteColumnarDate(b, pgwirebase.FormatBinary)
+}
 
 func BenchmarkWriteTextTimestamp(b *testing.B) {
 	benchmarkWriteTimestamp(b, pgwirebase.FormatText)
 }
 func BenchmarkWriteBinaryTimestamp(b *testing.B) {
 	benchmarkWriteTimestamp(b, pgwirebase.FormatBinary)
+}
+func BenchmarkWriteTextColumnarTimestamp(b *testing.B) {
+	benchmarkWriteColumnarTimestamp(b, pgwirebase.FormatText)
+}
+func BenchmarkWriteBinaryColumnarTimestamp(b *testing.B) {
+	benchmarkWriteColumnarTimestamp(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextTimestampTZ(b *testing.B) {
@@ -449,17 +618,32 @@ func BenchmarkWriteTextTimestampTZ(b *testing.B) {
 func BenchmarkWriteBinaryTimestampTZ(b *testing.B) {
 	benchmarkWriteTimestampTZ(b, pgwirebase.FormatBinary)
 }
+func BenchmarkWriteTextColumnarTimestampTZ(b *testing.B) {
+	benchmarkWriteColumnarTimestampTZ(b, pgwirebase.FormatText)
+}
+func BenchmarkWriteBinaryColumnarTimestampTZ(b *testing.B) {
+	benchmarkWriteColumnarTimestampTZ(b, pgwirebase.FormatBinary)
+}
 
 func BenchmarkWriteTextInterval(b *testing.B) {
 	benchmarkWriteInterval(b, pgwirebase.FormatText)
+}
+func BenchmarkWriteTextColumnarInterval(b *testing.B) {
+	benchmarkWriteColumnarInterval(b, pgwirebase.FormatText)
 }
 
 func BenchmarkWriteTextTuple(b *testing.B) {
 	benchmarkWriteTuple(b, pgwirebase.FormatText)
 }
+func BenchmarkWriteTextColumnarTuple(b *testing.B) {
+	benchmarkWriteColumnarTuple(b, pgwirebase.FormatText)
+}
 
 func BenchmarkWriteTextArray(b *testing.B) {
 	benchmarkWriteArray(b, pgwirebase.FormatText)
+}
+func BenchmarkWriteTextColumnarArray(b *testing.B) {
+	benchmarkWriteColumnarArray(b, pgwirebase.FormatText)
 }
 
 func BenchmarkDecodeBinaryDecimal(b *testing.B) {

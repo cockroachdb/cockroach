@@ -449,6 +449,13 @@ func (b *argWidthOverloadBase) GoTypeSliceName() string {
 	return goTypeSliceName(b.CanonicalTypeFamily, b.Width)
 }
 
+// GoTypeSliceNameInColdata is the same as GoTypeSliceName, but it removes the
+// "coldata." substring (and, thus, can be used by a template in coldata
+// package).
+func (b *argWidthOverloadBase) GoTypeSliceNameInColdata() string {
+	return strings.Replace(b.GoTypeSliceName(), "coldata.", "", -1)
+}
+
 func copyVal(canonicalTypeFamily types.Family, dest, src string) string {
 	switch canonicalTypeFamily {
 	case types.BytesFamily:
@@ -595,6 +602,7 @@ var (
 
 	awob = &argWidthOverloadBase{}
 	_    = awob.GoTypeSliceName
+	_    = awob.GoTypeSliceNameInColdata
 	_    = awob.CopyVal
 	_    = awob.Sliceable
 	_    = awob.AppendSlice
