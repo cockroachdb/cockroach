@@ -17,6 +17,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// kv.prober.bypass_admission_control controls whether kvprober's requests
+// should bypass kv layer's admission control queues. This ensures that kvprober
+// can continue to perform checks even if the cluster's CPU is overloaded.
+var bypassAdmissionControl = settings.RegisterBoolSetting(
+	"kv.prober.bypass_admission_control.enabled",
+	"set to bypass admission control queue for kvprober requests",
+	false,
+)
+
 var readEnabled = settings.RegisterBoolSetting(
 	"kv.prober.read.enabled",
 	"whether the KV read prober is enabled",

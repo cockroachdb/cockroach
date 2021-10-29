@@ -100,6 +100,7 @@ type Txn struct {
 
 // NewTxn returns a new RootTxn.
 // Note: for SQL usage, prefer NewTxnWithSteppingEnabled() below.
+// Note: for root kv usage, prefer NewTxnRootKV() below
 //
 // If the transaction is used to send any operations, CommitOrCleanup() or
 // CleanupOnError() should eventually be called to commit/rollback the
@@ -144,6 +145,19 @@ func NewTxnWithSteppingEnabled(ctx context.Context, db *DB, gatewayNodeID roachp
 		Source:     roachpb.AdmissionHeader_FROM_SQL,
 	}
 	_ = txn.ConfigureStepping(ctx, SteppingEnabled)
+	return txn
+}
+
+// NewTxnRootKV is like NewTxn but suitable for use by root kv systems. Note
+// that this initializes Txn.admissionHeader to specify that the source is
+// ROOT_KV.
+func NewTxnRootKV(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
+	txn := NewTxn(ctx, db, gatewayNodeID)
+	txn.admissionHeader = roachpb.AdmissionHeader{
+		Priority:   int32(admission.NormalPri),
+		CreateTime: timeutil.Now().UnixNano(),
+		Source:     roachpb.AdmissionHeader_ROOT_KV,
+	}
 	return txn
 }
 
