@@ -34,11 +34,9 @@ func TestReadProbe(t *testing.T) {
 		m := &mock{
 			t:      t,
 			noPlan: true,
-			noGet:  true,
 		}
-		p := initTestProber(m)
-
-		p.readProbeImpl(ctx, m, m)
+		p := initTestProber(ctx, m)
+		p.readProbeImpl(ctx, m, m, m)
 
 		require.Zero(t, p.Metrics().ProbePlanAttempts.Count())
 		require.Zero(t, p.Metrics().ReadProbeAttempts.Count())
@@ -47,11 +45,20 @@ func TestReadProbe(t *testing.T) {
 	})
 
 	t.Run("happy path", func(t *testing.T) {
-		m := &mock{t: t}
-		p := initTestProber(m)
-		readEnabled.Override(ctx, &p.settings.SV, true)
+		m := &mock{t: t, read: true}
+		p := initTestProber(ctx, m)
+		p.readProbeImpl(ctx, m, m, m)
 
-		p.readProbeImpl(ctx, m, m)
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
+	})
+
+	t.Run("happy path with bypass cluster setting overridden", func(t *testing.T) {
+		m := &mock{t: t, bypass: true, read: true}
+		p := initTestProber(ctx, m)
+		p.readProbeImpl(ctx, m, m, m)
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
@@ -62,13 +69,11 @@ func TestReadProbe(t *testing.T) {
 	t.Run("planning fails", func(t *testing.T) {
 		m := &mock{
 			t:       t,
+			read:    true,
 			planErr: fmt.Errorf("inject plan failure"),
-			noGet:   true,
 		}
-		p := initTestProber(m)
-		readEnabled.Override(ctx, &p.settings.SV, true)
-
-		p.readProbeImpl(ctx, m, m)
+		p := initTestProber(ctx, m)
+		p.readProbeImpl(ctx, m, m, m)
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Zero(t, p.Metrics().ReadProbeAttempts.Count())
@@ -76,15 +81,29 @@ func TestReadProbe(t *testing.T) {
 		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
 	})
 
-	t.Run("get fails", func(t *testing.T) {
+	t.Run("txn fails", func(t *testing.T) {
 		m := &mock{
 			t:      t,
-			getErr: fmt.Errorf("inject get failure"),
+			read:   true,
+			txnErr: fmt.Errorf("inject txn failure"),
 		}
-		p := initTestProber(m)
-		readEnabled.Override(ctx, &p.settings.SV, true)
+		p := initTestProber(ctx, m)
+		p.readProbeImpl(ctx, m, m, m)
 
-		p.readProbeImpl(ctx, m, m)
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Equal(t, int64(1), p.Metrics().ReadProbeFailures.Count())
+	})
+
+	t.Run("read fails", func(t *testing.T) {
+		m := &mock{
+			t:       t,
+			read:    true,
+			readErr: fmt.Errorf("inject read failure"),
+		}
+		p := initTestProber(ctx, m)
+		p.readProbeImpl(ctx, m, m, m)
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
@@ -100,11 +119,9 @@ func TestWriteProbe(t *testing.T) {
 		m := &mock{
 			t:      t,
 			noPlan: true,
-			noGet:  true,
 		}
-		p := initTestProber(m)
-
-		p.writeProbeImpl(ctx, m, m)
+		p := initTestProber(ctx, m)
+		p.writeProbeImpl(ctx, m, m, m)
 
 		require.Zero(t, p.Metrics().ProbePlanAttempts.Count())
 		require.Zero(t, p.Metrics().WriteProbeAttempts.Count())
@@ -113,11 +130,20 @@ func TestWriteProbe(t *testing.T) {
 	})
 
 	t.Run("happy path", func(t *testing.T) {
-		m := &mock{t: t}
-		p := initTestProber(m)
-		writeEnabled.Override(ctx, &p.settings.SV, true)
+		m := &mock{t: t, write: true}
+		p := initTestProber(ctx, m)
+		p.writeProbeImpl(ctx, m, m, m)
 
-		p.writeProbeImpl(ctx, m, m)
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().WriteProbeFailures.Count())
+	})
+
+	t.Run("happy path with bypass cluster setting overridden", func(t *testing.T) {
+		m := &mock{t: t, bypass: true, write: true}
+		p := initTestProber(ctx, m)
+		p.writeProbeImpl(ctx, m, m, m)
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
@@ -128,13 +154,11 @@ func TestWriteProbe(t *testing.T) {
 	t.Run("planning fails", func(t *testing.T) {
 		m := &mock{
 			t:       t,
+			write:   true,
 			planErr: fmt.Errorf("inject plan failure"),
-			noGet:   true,
 		}
-		p := initTestProber(m)
-		writeEnabled.Override(ctx, &p.settings.SV, true)
-
-		p.writeProbeImpl(ctx, m, m)
+		p := initTestProber(ctx, m)
+		p.writeProbeImpl(ctx, m, m, m)
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Zero(t, p.Metrics().WriteProbeAttempts.Count())
@@ -145,22 +169,35 @@ func TestWriteProbe(t *testing.T) {
 	t.Run("open txn fails", func(t *testing.T) {
 		m := &mock{
 			t:      t,
+			write:  true,
 			txnErr: fmt.Errorf("inject txn failure"),
 		}
-		p := initTestProber(m)
-		writeEnabled.Override(ctx, &p.settings.SV, true)
-
-		p.writeProbeImpl(ctx, m, m)
+		p := initTestProber(ctx, m)
+		p.writeProbeImpl(ctx, m, m, m)
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
 		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
 		require.Equal(t, int64(1), p.Metrics().WriteProbeFailures.Count())
 	})
-	// TODO(josh): Add cases for put & del failures.
+
+	t.Run("write fails", func(t *testing.T) {
+		m := &mock{
+			t:        t,
+			write:    true,
+			writeErr: fmt.Errorf("inject write failure"),
+		}
+		p := initTestProber(ctx, m)
+		p.writeProbeImpl(ctx, m, m, m)
+
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Equal(t, int64(1), p.Metrics().WriteProbeFailures.Count())
+	})
 }
 
-func initTestProber(m *mock) *Prober {
+func initTestProber(ctx context.Context, m *mock) *Prober {
 	p := NewProber(Opts{
 		AmbientCtx: log.AmbientContext{
 			Tracer: tracing.NewTracer(),
@@ -168,6 +205,9 @@ func initTestProber(m *mock) *Prober {
 		HistogramWindowInterval: time.Minute, // actual value not important to test
 		Settings:                cluster.MakeTestingClusterSettings(),
 	})
+	readEnabled.Override(ctx, &p.settings.SV, m.read)
+	writeEnabled.Override(ctx, &p.settings.SV, m.write)
+	bypassAdmissionControl.Override(ctx, &p.settings.SV, m.bypass)
 	p.readPlanner = m
 	return p
 }
@@ -175,30 +215,63 @@ func initTestProber(m *mock) *Prober {
 type mock struct {
 	t *testing.T
 
+	bypass bool
+
 	noPlan  bool
 	planErr error
 
-	noGet  bool
-	getErr error
-	txnErr error
+	read     bool
+	write    bool
+	readErr  error
+	writeErr error
+	txnErr   error
 }
 
 func (m *mock) next(ctx context.Context) (Step, error) {
 	if m.noPlan {
-		m.t.Errorf("plan call made but not expected")
+		m.t.Error("plan call made but not expected")
 	}
 	return Step{}, m.planErr
 }
 
-func (m *mock) Get(ctx context.Context, key interface{}) (kv.KeyValue, error) {
-	if m.noGet {
-		m.t.Errorf("get call made but not expected")
+func (m *mock) Read(key interface{}) func(context.Context, *kv.Txn) error {
+	return func(context.Context, *kv.Txn) error {
+		if !m.read {
+			m.t.Error("read call made but not expected")
+		}
+		return m.readErr
 	}
-	return kv.KeyValue{}, m.getErr
+}
+
+func (m *mock) Write(key interface{}) func(context.Context, *kv.Txn) error {
+	return func(context.Context, *kv.Txn) error {
+		if !m.write {
+			m.t.Error("write call made but not expected")
+		}
+		return m.writeErr
+	}
 }
 
 func (m *mock) Txn(ctx context.Context, f func(ctx context.Context, txn *kv.Txn) error) error {
-	return m.txnErr
+	if !m.bypass {
+		m.t.Error("normal txn used but bypass is not set")
+	}
+	if m.txnErr != nil {
+		return m.txnErr
+	}
+	return f(ctx, &kv.Txn{})
+}
+
+func (m *mock) TxnRootKV(
+	ctx context.Context, f func(ctx context.Context, txn *kv.Txn) error,
+) error {
+	if m.bypass {
+		m.t.Error("root kv txn used but bypass is set")
+	}
+	if m.txnErr != nil {
+		return m.txnErr
+	}
+	return f(ctx, &kv.Txn{})
 }
 
 func TestWithJitter(t *testing.T) {

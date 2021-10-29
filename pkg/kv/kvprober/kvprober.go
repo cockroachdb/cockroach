@@ -134,6 +134,69 @@ type Metrics struct {
 	ProbePlanFailures  *metric.Counter
 }
 
+// proberOps is an interface that the prober will use to run ops against some
+// system. This interface exists so that ops can be mocked for tests.
+type proberOps interface {
+	Read(key interface{}) func(context.Context, *kv.Txn) error
+	Write(key interface{}) func(context.Context, *kv.Txn) error
+}
+
+// proberTxn is an interface that the prober will use to run txns. This
+// interface exists so that txn can be mocked for tests.
+type proberTxn interface {
+	// Txn runs the given function with a transaction having the admission
+	// source in the header set to OTHER. Transaction work submitted from this
+	// source currently bypassess admission control.
+	Txn(context.Context, func(context.Context, *kv.Txn) error) error
+	// TxnRootKV runs the given function with a transaction having the admission
+	// source in the header set to ROOT KV. Transaction work submitted from this
+	// source should not bypass admission control.
+	TxnRootKV(context.Context, func(context.Context, *kv.Txn) error) error
+}
+
+// proberOpsImpl is used to probe the kv layer.
+type proberOpsImpl struct {
+}
+
+// We attempt to commit a txn that reads some data at the key.
+func (p *proberOpsImpl) Read(key interface{}) func(context.Context, *kv.Txn) error {
+	return func(ctx context.Context, txn *kv.Txn) error {
+		_, err := txn.Get(ctx, key)
+		return err
+	}
+}
+
+// We attempt to commit a txn that puts some data at the key then deletes
+// it. The test of the write code paths is good: We get a raft command that
+// goes thru consensus and is written to the pebble log. Importantly, no
+// *live* data is left at the key, which simplifies the kvprober, as then
+// there is no need to clean up data at the key post range split / merge.
+// Note that MVCC tombstones may be left by the probe, but this is okay, as
+// GC will clean it up.
+func (p *proberOpsImpl) Write(key interface{}) func(context.Context, *kv.Txn) error {
+	return func(ctx context.Context, txn *kv.Txn) error {
+		if err := txn.Put(ctx, key, putValue); err != nil {
+			return err
+		}
+		return txn.Del(ctx, key)
+	}
+}
+
+// proberTxnImpl is used to run transactions.
+type proberTxnImpl struct {
+	db *kv.DB
+}
+
+func (p *proberTxnImpl) Txn(ctx context.Context, f func(context.Context, *kv.Txn) error) error {
+	return p.db.Txn(ctx, f)
+}
+
+func (p *proberTxnImpl) TxnRootKV(
+	ctx context.Context, f func(context.Context, *kv.Txn) error,
+) error {
+	return p.db.TxnRootKV(ctx, f)
+}
+
 // NewProber creates a Prober from Opts.
 func NewProber(opts Opts) *Prober {
 	return &Prober{
@@ -208,14 +271,10 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 // Doesn't return an error. Instead increments error type specific metrics.
 func (p *Prober) readProbe(ctx context.Context, db *kv.DB, pl planner) {
-	p.readProbeImpl(ctx, db, pl)
+	p.readProbeImpl(ctx, &proberOpsImpl{}, &proberTxnImpl{db: p.db}, pl)
 }
 
-type dbGetter interface {
-	Get(ctx context.Context, key interface{}) (kv.KeyValue, error)
-}
-
-func (p *Prober) readProbeImpl(ctx context.Context, db dbGetter, pl planner) {
+func (p *Prober) readProbeImpl(ctx context.Context, ops proberOps, txns proberTxn, pl planner) {
 	if !readEnabled.Get(&p.settings.SV) {
 		return
 	}
@@ -248,8 +307,11 @@ func (p *Prober) readProbeImpl(ctx context.Context, db dbGetter, pl planner) {
 		// There is no data at the key, but that is okay. Even tho there is no data
 		// at the key, the prober still executes a read operation on the range.
 		// TODO(josh): Trace the probes.
-		_, err = db.Get(ctx, step.Key)
-		return err
+		f := ops.Read(step.Key)
+		if bypassAdmissionControl.Get(&p.settings.SV) {
+			return txns.Txn(ctx, f)
+		}
+		return txns.TxnRootKV(ctx, f)
 	})
 	if err != nil {
 		// TODO(josh): Write structured events with log.Structured.
@@ -267,14 +329,10 @@ func (p *Prober) readProbeImpl(ctx context.Context, db dbGetter, pl planner) {
 
 // Doesn't return an error. Instead increments error type specific metrics.
 func (p *Prober) writeProbe(ctx context.Context, db *kv.DB, pl planner) {
-	p.writeProbeImpl(ctx, db, pl)
+	p.writeProbeImpl(ctx, &proberOpsImpl{}, &proberTxnImpl{db: p.db}, pl)
 }
 
-type dbTxner interface {
-	Txn(ctx context.Context, f func(ctx context.Context, txn *kv.Txn) error) error
-}
-
-func (p *Prober) writeProbeImpl(ctx context.Context, db dbTxner, pl planner) {
+func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOps, txns proberTxn, pl planner) {
 	if !writeEnabled.Get(&p.settings.SV) {
 		return
 	}
@@ -296,20 +354,11 @@ func (p *Prober) writeProbeImpl(ctx context.Context, db dbTxner, pl planner) {
 	// perspective of the user.
 	timeout := writeTimeout.Get(&p.settings.SV)
 	err = contextutil.RunWithTimeout(ctx, "write probe", timeout, func(ctx context.Context) error {
-		// We attempt to commit a txn that puts some data at the key then
-		// deletes it. The test of the write code paths is good: We get
-		// a raft command that goes thru consensus and is written to the
-		// pebble log. Importantly, no *live* data is left at the key,
-		// which simplifies the kvprober, as then there is no need to clean
-		// up data at the key post range split / merge. Note that MVCC
-		// tombstones may be left by the probe, but this is okay, as GC will
-		// clean it up.
-		return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if err := txn.Put(ctx, step.Key, putValue); err != nil {
-				return err
-			}
-			return txn.Del(ctx, step.Key)
-		})
+		f := ops.Write(step.Key)
+		if bypassAdmissionControl.Get(&p.settings.SV) {
+			return txns.Txn(ctx, f)
+		}
+		return txns.TxnRootKV(ctx, f)
 	})
 	if err != nil {
 		log.Health.Errorf(ctx, "kv.Txn(Put(%s); Del(-)), r=%v failed with: %v", step.Key, step.RangeID, err)
