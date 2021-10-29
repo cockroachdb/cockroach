@@ -3230,6 +3230,14 @@ type EvalPlanner interface {
 	DecodeGist(gist string) ([]string, error)
 }
 
+// ExecConfigAccessor is a limited interface to access ExecutorConfig's states.
+// It is defined independently to prevent a circular dependency on sql, tree and sqlbase.
+type ExecConfigAccessor interface {
+
+	// JobRegistry returns jobs.Registry from ExecutorConfig
+	JobRegistry() interface{}
+}
+
 // CompactEngineSpanFunc is used to compact an engine key span at the given
 // (nodeID, storeID). If we add more overloads to the compact_span builtin,
 // this parameter list should be changed to a struct union to accommodate
@@ -3307,7 +3315,7 @@ type PrivilegedAccessor interface {
 		ctx context.Context, parentID int64, name string,
 	) (DInt, bool, error)
 
-	// LookupZoneConfig returns the zone config given a namespace id.
+	// LookupZoneConfigByNamespaceID returns the zone config given a namespace id.
 	// It is meant as a replacement for looking up system.zones directly.
 	// Returns the config byte array, a bool representing whether the namespace exists,
 	// and an error if there is one.
@@ -3484,6 +3492,7 @@ type EvalContext struct {
 	ClusterName string
 	NodeID      *base.SQLIDContainer
 	Codec       keys.SQLCodec
+	Username    security.SQLUsername
 
 	// Locality contains the location of the current node as a set of user-defined
 	// key/value pairs, ordered from most inclusive to least inclusive. If there
@@ -3542,6 +3551,8 @@ type EvalContext struct {
 	InternalExecutor InternalExecutor
 
 	Planner EvalPlanner
+
+	ExecConfigAccessor ExecConfigAccessor
 
 	PrivilegedAccessor PrivilegedAccessor
 
