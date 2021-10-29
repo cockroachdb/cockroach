@@ -941,6 +941,10 @@ func SendEmptySnapshot(
 	if err != nil {
 		return err
 	}
+	// See comment on DeprecatedUsingAppliedStateKey for why we need to set this
+	// explicitly for snapshots going out to followers.
+	state.DeprecatedUsingAppliedStateKey = true
+
 	hs, err := sl.LoadHardState(ctx, eng)
 	if err != nil {
 		return err
