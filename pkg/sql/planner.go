@@ -417,10 +417,12 @@ func internalExtendedEvalCtx(
 
 	var indexUsageStats *idxusage.LocalIndexUsageStats
 	var sqlStatsController tree.SQLStatsController
+	var indexUsageStatsController tree.IndexUsageStatsController
 	if execCfg.InternalExecutor != nil {
 		if execCfg.InternalExecutor.s != nil {
 			indexUsageStats = execCfg.InternalExecutor.s.indexUsageStats
 			sqlStatsController = execCfg.InternalExecutor.s.sqlStatsController
+			indexUsageStatsController = execCfg.InternalExecutor.s.indexUsageStatsController
 		} else {
 			// If the indexUsageStats is nil from the sql.Server, we create a dummy
 			// index usage stats collector. The sql.Server in the ExecutorConfig
@@ -429,24 +431,26 @@ func internalExtendedEvalCtx(
 				Setting: execCfg.Settings,
 			})
 			sqlStatsController = &persistedsqlstats.Controller{}
+			indexUsageStatsController = &idxusage.Controller{}
 		}
 	}
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Txn:                txn,
-			SessionDataStack:   sds,
-			TxnReadOnly:        false,
-			TxnImplicit:        true,
-			Settings:           execCfg.Settings,
-			Codec:              execCfg.Codec,
-			Tracer:             execCfg.AmbientCtx.Tracer,
-			Context:            ctx,
-			Mon:                plannerMon,
-			TestingKnobs:       evalContextTestingKnobs,
-			StmtTimestamp:      stmtTimestamp,
-			TxnTimestamp:       txnTimestamp,
-			InternalExecutor:   execCfg.InternalExecutor,
-			SQLStatsController: sqlStatsController,
+			Txn:                       txn,
+			SessionDataStack:          sds,
+			TxnReadOnly:               false,
+			TxnImplicit:               true,
+			Settings:                  execCfg.Settings,
+			Codec:                     execCfg.Codec,
+			Tracer:                    execCfg.AmbientCtx.Tracer,
+			Context:                   ctx,
+			Mon:                       plannerMon,
+			TestingKnobs:              evalContextTestingKnobs,
+			StmtTimestamp:             stmtTimestamp,
+			TxnTimestamp:              txnTimestamp,
+			InternalExecutor:          execCfg.InternalExecutor,
+			SQLStatsController:        sqlStatsController,
+			IndexUsageStatsController: indexUsageStatsController,
 		},
 		VirtualSchemas:    execCfg.VirtualSchemas,
 		Tracing:           &SessionTracing{},

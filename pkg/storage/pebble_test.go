@@ -653,6 +653,7 @@ func TestSstExportFailureIntentBatching(t *testing.T) {
 				ExportAllRevisions: true,
 				TargetSize:         0,
 				MaxSize:            0,
+				MaxIntents:         uint64(MaxIntentsPerWriteIntentError.Default()),
 				StopMidKey:         false,
 				UseTBI:             true,
 			}, destination)

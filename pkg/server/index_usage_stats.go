@@ -93,6 +93,9 @@ func (s *statusServer) IndexUsageStatistics(
 		return nil, err
 	}
 
+	// Append last reset time.
+	resp.LastReset = s.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().GetLastReset()
+
 	return resp, nil
 }
 
@@ -108,5 +111,68 @@ func indexUsageStatsLocal(
 	}); err != nil {
 		return nil, err
 	}
+	// Append last reset time.
+	resp.LastReset = idxUsageStats.GetLastReset()
+	return resp, nil
+}
+
+func (s *statusServer) ResetIndexUsageStats(
+	ctx context.Context, req *serverpb.ResetIndexUsageStatsRequest,
+) (*serverpb.ResetIndexUsageStatsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	localReq := &serverpb.ResetIndexUsageStatsRequest{
+		NodeID: "local",
+	}
+	resp := &serverpb.ResetIndexUsageStatsResponse{}
+
+	if len(req.NodeID) > 0 {
+		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		if local {
+			s.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().Reset()
+			return resp, nil
+		}
+
+		statusClient, err := s.dialNode(ctx, requestedNodeID)
+		if err != nil {
+			return nil, err
+		}
+
+		return statusClient.ResetIndexUsageStats(ctx, localReq)
+	}
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+
+	resetIndexUsageStats := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		return statusClient.ResetIndexUsageStats(ctx, localReq)
+	}
+
+	aggFn := func(_ roachpb.NodeID, nodeResp interface{}) {
+		// Nothing to do here.
+	}
+
+	var combinedError error
+	errFn := func(_ roachpb.NodeID, nodeFnError error) {
+		combinedError = errors.CombineErrors(combinedError, nodeFnError)
+	}
+
+	if err := s.iterateNodes(ctx,
+		fmt.Sprintf("Resetting index usage stats for node %s", req.NodeID),
+		dialFn, resetIndexUsageStats, aggFn, errFn); err != nil {
+		return nil, err
+	}
+
 	return resp, nil
 }

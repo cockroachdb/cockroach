@@ -942,9 +942,9 @@ func (i *intentInterleavingIter) FindSplitKey(
 }
 
 func (i *intentInterleavingIter) CheckForKeyCollisions(
-	sstData []byte, start, end roachpb.Key,
+	sstData []byte, start, end roachpb.Key, maxIntents int64,
 ) (enginepb.MVCCStats, error) {
-	return checkForKeyCollisionsGo(i, sstData, start, end)
+	return checkForKeyCollisionsGo(i, sstData, start, end, maxIntents)
 }
 
 func (i *intentInterleavingIter) SetUpperBound(key roachpb.Key) {
