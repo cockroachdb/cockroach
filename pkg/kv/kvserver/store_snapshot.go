@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -802,20 +801,23 @@ func validatePositive(v int64) error {
 var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_rebalance.max_rate",
 	"the rate limit (bytes/sec) to use for rebalance and upreplication snapshots",
-	envutil.EnvOrDefaultBytes("COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 32<<20),
+	32<<20, // 32mb/s
 	validatePositive,
 ).WithPublic().WithSystemOnly()
 
 // recoverySnapshotRate is the rate at which Raft-initiated spanshots can be
 // sent. Ideally, one would never see a Raft-initiated snapshot; we'd like all
-// the snapshots to be preemptive. However, it has proved unfeasible to
-// completely get rid of them.
+// replicas to start out as learners or via splits, and to never be cut off from
+// the log. However, it has proved unfeasible to completely get rid of them.
+//
 // TODO(tbg): The existence of this rate, separate from rebalanceSnapshotRate,
-// does not make a whole lot of sense.
+// does not make a whole lot of sense. Both sources of snapshots compete thanks
+// to a semaphore at the receiver, and so the slower one ultimately determines
+// the pace at which things can move along.
 var recoverySnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_recovery.max_rate",
 	"the rate limit (bytes/sec) to use for recovery snapshots",
-	envutil.EnvOrDefaultBytes("COCKROACH_RAFT_SNAPSHOT_RATE", 32<<20),
+	32<<20, // 32mb/s
 	validatePositive,
 ).WithPublic().WithSystemOnly()
 
