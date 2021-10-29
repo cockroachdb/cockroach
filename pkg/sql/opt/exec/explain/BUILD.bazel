@@ -46,7 +46,9 @@ go_test(
         "output_test.go",
         "plan_gist_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "//pkg/sql/opt/testutils/opttester:testfixtures",
+    ],
     embed = [":explain"],
     deps = [
         "//pkg/base",
