@@ -1507,14 +1507,7 @@ func (r *Replica) shouldWaitForPendingMergeRLocked(
 // older replica ID including its hard state which may have been synthesized
 // with votes as the newer replica ID. This case tends to be handled safely
 // in practice because the replica should only be receiving messages as the
-// newer replica ID after it has been added to the range. Prior to learner
-// replicas we would only add a store to a range after we've successfully
-// applied a pre-emptive snapshot. If the store were to split between the
-// preemptive snapshot and the addition then the addition would fail due to
-// the conditional put logic. If the store were to then enable learners then
-// we're still okay because we won't promote a learner unless we succeed in
-// sending a learner snapshot. If we fail to send the replica never becomes
-// a voter then its votes don't matter and are safe to discard.
+// newer replica ID after it has been added to the range as a learner.
 //
 // Despite the safety due to the change replicas protocol explained above
 // it'd be good to know for sure that a replica ID for a range on a store
