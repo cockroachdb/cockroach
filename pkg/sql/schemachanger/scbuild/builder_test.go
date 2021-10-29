@@ -12,9 +12,7 @@ package scbuild_test
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	gojson "encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -35,9 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
-	"github.com/gogo/protobuf/jsonpb"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
 )
 
 func TestBuilderAlterTable(t *testing.T) {
@@ -169,10 +165,8 @@ func indentText(input string, tab string) string {
 func marshalNodes(t *testing.T, nodes scpb.State) string {
 	var sortedEntries []string
 	for _, node := range nodes {
-		var buf bytes.Buffer
-		require.NoError(t, (&jsonpb.Marshaler{}).Marshal(&buf, node.Target.Element()))
-		target := make(map[string]interface{})
-		require.NoError(t, gojson.Unmarshal(buf.Bytes(), &target))
+		yaml, err := sctestutils.ProtoToYAML(node.Target.Element())
+		require.NoError(t, err)
 		entry := strings.Builder{}
 		entry.WriteString("- ")
 		entry.WriteString(node.Target.Direction.String())
@@ -181,9 +175,7 @@ func marshalNodes(t *testing.T, nodes scpb.State) string {
 		entry.WriteString("\n")
 		entry.WriteString(indentText(fmt.Sprintf("state: %s\n", node.Status.String()), "  "))
 		entry.WriteString(indentText("details:\n", "  "))
-		out, err := yaml.Marshal(target)
-		require.NoError(t, err)
-		entry.WriteString(indentText(string(out), "    "))
+		entry.WriteString(indentText(yaml, "    "))
 		sortedEntries = append(sortedEntries, entry.String())
 	}
 	// Sort the output buffer of nodes for determinism.
