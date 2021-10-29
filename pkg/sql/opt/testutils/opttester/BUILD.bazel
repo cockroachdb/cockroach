@@ -57,7 +57,7 @@ go_test(
     name = "opttester_test",
     size = "small",
     srcs = ["opt_tester_test.go"],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**", "testfixtures/**"]),
     deps = [
         ":opttester",
         "//pkg/sql/opt/memo",
