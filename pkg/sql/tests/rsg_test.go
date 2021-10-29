@@ -556,7 +556,7 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 
 	tableStmts := make([]string, 0)
 	testRandomSyntax(t, true, "defaultdb", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
-		setups := []string{"rand-tables", "seed"}
+		setups := []string{sqlsmith.RandTableSetupName, "seed"}
 		for _, s := range setups {
 			randTables := sqlsmith.Setups[s](r.Rnd)
 			if err := db.exec(t, ctx, randTables); err != nil {
