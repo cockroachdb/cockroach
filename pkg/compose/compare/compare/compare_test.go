@@ -69,7 +69,7 @@ func TestCompare(t *testing.T) {
 	}
 	configs := map[string]testConfig{
 		"postgres": {
-			setup:           sqlsmith.Setups["rand-tables"],
+			setup:           sqlsmith.Setups[sqlsmith.RandTableSetupName],
 			setupMutators:   []randgen.Mutator{randgen.PostgresCreateTableMutator},
 			opts:            []sqlsmith.SmitherOption{sqlsmith.PostgresMode()},
 			ignoreSQLErrors: true,
@@ -85,7 +85,7 @@ func TestCompare(t *testing.T) {
 			},
 		},
 		"mutators": {
-			setup:           sqlsmith.Setups["rand-tables"],
+			setup:           sqlsmith.Setups[sqlsmith.RandTableSetupName],
 			opts:            []sqlsmith.SmitherOption{sqlsmith.CompareMode()},
 			ignoreSQLErrors: true,
 			conns: []testConn{
