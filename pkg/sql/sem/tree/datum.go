@@ -5041,6 +5041,7 @@ type DOidWrapper struct {
 	Oid     oid.Oid
 }
 
+// ZeroDOidValue postgres represents 0 oid value as '-'
 const ZeroDOidValue = "-"
 
 // wrapWithOid wraps a Datum with a custom Oid.
