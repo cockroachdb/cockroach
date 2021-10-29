@@ -3,24 +3,20 @@
 set -euo pipefail
 
 EXISTING_GO_GENERATE_COMMENTS="
-pkg/ccl/sqlproxyccl/throttler/service.go://go:generate mockgen -package=throttler -destination=mocks_generated.go -source=service.go . Service
-pkg/ccl/sqlproxyccl/denylist/service.go://go:generate mockgen -package=denylist -destination=mocks_generated.go -source=service.go . Service
-pkg/ccl/sqlproxyccl/tenant/directory.go://go:generate mockgen -package=tenant -destination=mocks_generated.go . DirectoryClient,Directory_WatchEndpointsClient
 pkg/cmd/roachprod/vm/aws/config.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg aws -o embedded.go config.json old.json
 pkg/cmd/roachprod/vm/aws/config.go://go:generate gofmt -s -w embedded.go
 pkg/cmd/roachprod/vm/aws/config.go://go:generate goimports -w embedded.go
 pkg/cmd/roachprod/vm/aws/config.go://go:generate terraformgen -o terraform/main.tf
-pkg/geo/wkt/wkt.go://go:generate sh generate.sh
-pkg/kv/kvserver/concurrency/lock_table.go://go:generate ../../../util/interval/generic/gen.sh *lockState concurrency
-pkg/kv/kvserver/spanlatch/manager.go://go:generate ../../../util/interval/generic/gen.sh *latch spanlatch
-pkg/roachpb/batch.go://go:generate go run -tags gen-batch gen/main.go
-pkg/security/certmgr/cert.go://go:generate mockgen -package=certmgr -destination=mocks_generated.go -source=cert.go . Cert
-pkg/cmd/roachtest/prometheus/prometheus.go://go:generate mockgen -package=prometheus -destination=mock_generated.go -source=prometheus.go . cluster
+pkg/cmd/roachtest/prometheus/prometheus.go://go:generate mockgen -package=prometheus -destination=mock_generated.go -source=prometheus.go . Cluster
+pkg/cmd/roachtest/tests/drt.go://go:generate mockgen -source drt.go -package tests -destination drt_generated.go
+pkg/kv/kvclient/kvcoord/transport.go://go:generate mockgen -package=kvcoord -destination=mocks_generated.go . Transport
 pkg/kv/kvclient/rangecache/range_cache.go://go:generate mockgen -package=rangecache -destination=mocks_generated.go . RangeDescriptorDB
 pkg/kv/kvclient/rangefeed/rangefeed.go://go:generate mockgen -package=rangefeed -source rangefeed.go -destination=mocks_generated.go .
-pkg/kv/kvclient/kvcoord/transport.go://go:generate mockgen -package=kvcoord -destination=mocks_generated.go . Transport
+pkg/kv/kvserver/concurrency/lock_table.go://go:generate ../../../util/interval/generic/gen.sh *lockState concurrency
+pkg/kv/kvserver/spanlatch/manager.go://go:generate ../../../util/interval/generic/gen.sh *latch spanlatch
 pkg/roachpb/api.go://go:generate mockgen -package=roachpb -destination=mocks_generated.go . InternalClient,Internal_RangeFeedClient
-pkg/cmd/roachtest/tests/drt.go://go:generate mockgen -source drt.go -package tests -destination drt_generated.go
+pkg/roachpb/batch.go://go:generate go run -tags gen-batch gen/main.go
+pkg/security/certmgr/cert.go://go:generate mockgen -package=certmgr -destination=mocks_generated.go -source=cert.go . Cert
 pkg/security/securitytest/securitytest.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg securitytest -o embedded.go -ignore README.md -ignore regenerate.sh test_certs
 pkg/security/securitytest/securitytest.go://go:generate gofmt -s -w embedded.go
 pkg/security/securitytest/securitytest.go://go:generate goimports -w embedded.go
@@ -75,7 +71,7 @@ git grep '//go:generate' -- './*.go' | grep -v stringer | grep -v 'add-leaktest\
     echo "$LINE"
     echo 'Please ensure that the equivalent logic to generate these files is'
     echo 'present in the Bazel build as well, then add the line to the'
-    echo 'EXISTING_GO_GENERATE_COMMENTS in build/bazelutil/check-genfiles.sh.'
+    echo 'EXISTING_GO_GENERATE_COMMENTS in build/bazelutil/check.sh.'
     echo 'Also see https://cockroachlabs.atlassian.net/wiki/spaces/CRDB/pages/1380090083/How+to+ensure+your+code+builds+with+Bazel'
     exit 1
 done

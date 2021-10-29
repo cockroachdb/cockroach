@@ -96,13 +96,8 @@ func maybeDropMsgApp(
 	// away and is going to be GC'ed soon; queue a check to make sure this would
 	// happen ASAP. (The leader will probe this replica only once per heartbeat
 	// interval, so we're not going to queue these checks at some high rate).
-	//
-	// New replicas only get created through splits or rebalances, so if we
-	// don't find a left hand side, it was either garbage collected after having
-	// been removed from the store (see the above comment), or there wasn't a
-	// split in the first case and this replica was instead created through an
-	// up-replication for which the preemptive snapshot had been lost (i.e.
-	// accidentally GC'ed before the replication change succeeded).
+	// If we don't find a left hand side, it was garbage collected and won't
+	// be initializing the right-hand side, so we give up.
 	//
 	// Note that there's a subtle case in which the left hand side is caught up
 	// across the split trigger via a snapshot. In that case, since we're looking

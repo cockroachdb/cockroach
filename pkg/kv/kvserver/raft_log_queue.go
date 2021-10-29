@@ -103,22 +103,20 @@ func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 // there is at least a little bit of log to truncate (think a hundred records or
 // ~100kb of data). If followers fall behind, are offline, or are waiting for a
 // snapshot, a second strategy is needed to make sure that the Raft log is
-// eventually truncated: when the raft log size exceeds a limit (4mb at time of
-// writing), truncations become willing and able to cut off followers as long as
-// a quorum has acked the truncation index. The quota pool ensures that the delta
-// between "acked by quorum" and "acked by all" is bounded, while Raft limits the
-// size of the uncommitted, i.e. not "acked by quorum", part of the log; thus
-// the "quorum" truncation strategy bounds the absolute size of the log on all
-// followers.
+// eventually truncated: when the raft log size exceeds a limit, truncations
+// become willing and able to cut off followers as long as a quorum has acked
+// the truncation index. The quota pool ensures that the delta between "acked by
+// quorum" and "acked by all" is bounded, while Raft limits the size of the
+// uncommitted, i.e. not "acked by quorum", part of the log; thus the "quorum"
+// truncation strategy bounds the absolute size of the log on all followers.
 //
 // Exceptions are made for replicas for which information is missing ("probing
 // state") as long as they are known to have been online recently, and for
-// in-flight snapshots (in particular preemptive snapshots) which are not
-// adequately reflected in the Raft status and would otherwise be cut off with
-// regularity. Probing live followers should only remain in this state for a
-// short moment and so we deny a log truncation outright (as there's no safe
-// index to truncate to); for snapshots, we can still truncate, but not past
-// the snapshot's index.
+// in-flight snapshots which are not adequately reflected in the Raft status and
+// would otherwise be cut off with regularity. Probing live followers should
+// only remain in this state for a short moment and so we deny a log truncation
+// outright (as there's no safe index to truncate to); for snapshots, we can
+// still truncate, but not past the snapshot's index.
 //
 // A challenge for log truncation is to deal with sideloaded log entries, that
 // is, entries which contain SSTables for direct ingestion into the storage
@@ -247,8 +245,7 @@ func updateRaftProgressFromActivity(
 		}
 		pr.RecentActive = replicaActive(replicaID)
 		// Override this field for safety since we don't use it. Instead, we use
-		// pendingSnapshotIndex from above which is also populated for preemptive
-		// snapshots.
+		// pendingSnapshotIndex from above.
 		//
 		// NOTE: We don't rely on PendingSnapshot because PendingSnapshot is
 		// initialized by the leader when it realizes the follower needs a snapshot,
