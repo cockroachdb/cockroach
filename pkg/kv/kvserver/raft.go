@@ -235,14 +235,6 @@ func (m *RaftMessageRequest) release() {
 	raftMessageRequestPool.Put(m)
 }
 
-// IsPreemptive returns whether this is a preemptive snapshot or a Raft
-// snapshot.
-func (h *SnapshotRequest_Header) IsPreemptive() bool {
-	// Preemptive snapshots are addressed to replica ID 0. No other requests to
-	// replica ID 0 are allowed.
-	return h.RaftMessageRequest.ToReplica.ReplicaID == 0
-}
-
 // traceEntries records the provided event for all proposals corresponding
 // to the entries contained in ents. The vmodule level for raft must be at
 // least 1.
