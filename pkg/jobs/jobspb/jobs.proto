@@ -22,6 +22,7 @@ import "sql/catalog/descpb/tenant.proto";
 import "util/hlc/timestamp.proto";
 import "sql/schemachanger/scpb/scpb.proto";
 import "clusterversion/cluster_version.proto";
+import "google/protobuf/timestamp.proto";
 
 enum EncryptionMode {
   Passphrase = 0;
@@ -104,6 +105,16 @@ message StreamIngestionProgress {
   map<string, PartitionProgress> partition_progress = 2 [(gogoproto.nullable) = false];
 }
 
+
+message StreamReplicationDetails {
+  // Key spans we are replicating
+  repeated roachpb.Span spans = 1;
+}
+
+message StreamReplicationProgress {
+  // Expiration timestamp of consumer heartbeat
+  google.protobuf.Timestamp expiration = 1 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+}
 
 message SchedulePTSChainingRecord {
   enum PTSAction {
@@ -785,6 +796,7 @@ message Payload {
     MigrationDetails migration = 25;
     AutoSpanConfigReconciliationDetails autoSpanConfigReconciliation = 27;
     AutoSQLStatsCompactionDetails autoSQLStatsCompaction = 30;
+    StreamReplicationDetails streamReplication = 33;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -796,7 +808,7 @@ message Payload {
   // the jobs.execution_errors.max_entries cluster setting.
   repeated RetriableExecutionFailure retriable_execution_failure_log = 32;
 
-  // NEXT ID: 33.
+  // NEXT ID: 34.
 }
 
 message Progress {
@@ -821,6 +833,7 @@ message Progress {
     MigrationProgress migration = 20;
     AutoSpanConfigReconciliationProgress AutoSpanConfigReconciliation = 22;
     AutoSQLStatsCompactionProgress autoSQLStatsCompaction = 23;
+    StreamReplicationProgress streamReplication = 24;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -847,6 +860,7 @@ enum Type {
   MIGRATION = 12 [(gogoproto.enumvalue_customname) = "TypeMigration"];
   AUTO_SPAN_CONFIG_RECONCILIATION = 13 [(gogoproto.enumvalue_customname) = "TypeAutoSpanConfigReconciliation"];
   AUTO_SQL_STATS_COMPACTION = 14 [(gogoproto.enumvalue_customname) = "TypeAutoSQLStatsCompaction"];
+  STREAM_REPLICATION = 15 [(gogoproto.enumvalue_customname) = "TypeStreamReplication"];
 }
 
 message Job {
