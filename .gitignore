@@ -42,3 +42,13 @@ build/Railroad.jar
 
 # Local disk buffers for "roachprod logs" command
 /*.logs
+
+# Generated code.
+*.pb.go
+*.pb.gw.go
+pkg/cmd/roachtest/prometheus/mock_generated.go
+pkg/cmd/roachtest/tests/drt_generated.go
+pkg/kv/kvclient/rangefeed/mocks_generated.go
+pkg/roachprod/vm/aws/embedded.go
+pkg/security/certmgr/mocks_generated.go
+pkg/security/securitytest/embedded.go
