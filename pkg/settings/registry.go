@@ -110,6 +110,7 @@ var retiredSettings = map[string]struct{}{
 	"trace.datadog.agent":                     {},
 	"trace.datadog.project":                   {},
 	"sql.defaults.interleaved_tables.enabled": {},
+	"server.declined_reservation_timeout":     {},
 }
 
 // register adds a setting to the registry.

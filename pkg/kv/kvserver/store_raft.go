@@ -74,7 +74,7 @@ func (s *Store) HandleSnapshot(
 
 		if s.IsDraining() {
 			return stream.Send(&SnapshotResponse{
-				Status:  SnapshotResponse_DECLINED,
+				Status:  SnapshotResponse_ERROR,
 				Message: storeDrainingMsg,
 			})
 		}
