@@ -193,6 +193,7 @@ func assertExportedErrs(
 		ExportAllRevisions: revisions,
 		TargetSize:         big,
 		MaxSize:            big,
+		MaxIntents:         uint64(MaxIntentsPerWriteIntentError.Default()),
 		StopMidKey:         false,
 		UseTBI:             useTBI,
 	}, sstFile)

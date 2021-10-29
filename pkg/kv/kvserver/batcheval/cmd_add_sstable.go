@@ -121,7 +121,10 @@ func EvalAddSSTable(
 	var skippedKVStats enginepb.MVCCStats
 	var err error
 	if args.DisallowShadowing {
-		if skippedKVStats, err = checkForKeyCollisions(ctx, readWriter, mvccStartKey, mvccEndKey, args.Data); err != nil {
+		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+		skippedKVStats, err = checkForKeyCollisions(
+			ctx, readWriter, mvccStartKey, mvccEndKey, args.Data, maxIntents)
+		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
 		}
 	}
@@ -294,6 +297,7 @@ func checkForKeyCollisions(
 	mvccStartKey storage.MVCCKey,
 	mvccEndKey storage.MVCCKey,
 	data []byte,
+	maxIntents int64,
 ) (enginepb.MVCCStats, error) {
 	// Create iterator over the existing data.
 	existingDataIter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: mvccEndKey.Key})
@@ -306,5 +310,5 @@ func checkForKeyCollisions(
 		return enginepb.MVCCStats{}, nil
 	}
 
-	return existingDataIter.CheckForKeyCollisions(data, mvccStartKey.Key, mvccEndKey.Key)
+	return existingDataIter.CheckForKeyCollisions(data, mvccStartKey.Key, mvccEndKey.Key, maxIntents)
 }
