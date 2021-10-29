@@ -7518,6 +7518,7 @@ func TestRestoreTypeDescriptorsRollBack(t *testing.T) {
 
 	sqlDB.Exec(t, `
 CREATE DATABASE db;
+CREATE SCHEMA db.s;
 CREATE TYPE db.typ AS ENUM();
 CREATE TABLE db.table (k INT PRIMARY KEY, v db.typ);
 `)

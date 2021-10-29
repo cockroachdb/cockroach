@@ -2264,7 +2264,6 @@ func (r *restoreResumer) dropDescriptors(
 
 	// Delete any schema descriptors that this restore created. Also collect the
 	// descriptors so we can update their parent databases later.
-	dbsWithDeletedSchemas := make(map[descpb.ID][]catalog.Descriptor)
 	for _, schemaDesc := range details.SchemaDescs {
 		// We need to ignore descriptors we just added since we haven't committed the txn that deletes these.
 		isSchemaEmpty, err := isSchemaEmpty(ctx, txn, schemaDesc.GetID(), allDescs, ignoredChildDescIDs)
@@ -2293,7 +2292,6 @@ func (r *restoreResumer) dropDescriptors(
 		b.Del(catalogkeys.EncodeNameKey(codec, mutSchema))
 		b.Del(catalogkeys.MakeDescMetadataKey(codec, mutSchema.GetID()))
 		descsCol.AddDeletedDescriptor(mutSchema)
-		dbsWithDeletedSchemas[mutSchema.GetParentID()] = append(dbsWithDeletedSchemas[mutSchema.GetParentID()], mutSchema)
 	}
 
 	// Delete the database descriptors.
@@ -2329,34 +2327,6 @@ func (r *restoreResumer) dropDescriptors(
 		b.Del(nameKey)
 		descsCol.AddDeletedDescriptor(db)
 		deletedDBs[db.GetID()] = struct{}{}
-	}
-
-	// For each database that had a child schema deleted (regardless of whether
-	// the db was created in the restore job), if it wasn't deleted just now,
-	// delete the now-deleted child schema from its schema map.
-	for dbID, schemas := range dbsWithDeletedSchemas {
-		log.Infof(ctx, "deleting %d schema entries from database %d", len(schemas), dbID)
-		desc, err := descsCol.GetMutableDescriptorByID(ctx, dbID, txn)
-		if err != nil {
-			return err
-		}
-		db := desc.(*dbdesc.Mutable)
-		for _, sc := range schemas {
-			if schemaInfo, ok := db.Schemas[sc.GetName()]; !ok {
-				log.Warningf(ctx, "unexpected missing schema entry for %s from db %d; skipping deletion",
-					sc.GetName(), dbID)
-			} else if schemaInfo.ID != sc.GetID() {
-				log.Warningf(ctx, "unexpected schema entry %d for %s from db %d, expecting %d; skipping deletion",
-					schemaInfo.ID, sc.GetName(), dbID, sc.GetID())
-			} else {
-				delete(db.Schemas, sc.GetName())
-			}
-		}
-		if err := descsCol.WriteDescToBatch(
-			ctx, false /* kvTrace */, db, b,
-		); err != nil {
-			return err
-		}
 	}
 
 	if err := txn.Run(ctx, b); err != nil {
