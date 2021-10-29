@@ -653,13 +653,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		// Merges require the subsumed range to be atomically deleted when the
 		// merge transaction commits.
 
-		// If our range currently has a non-zero replica ID then we know we're
-		// safe to commit this merge because of the invariants provided to us
-		// by the merge protocol. Namely if this committed we know that if the
-		// command committed then all of the replicas in the range descriptor
-		// are collocated when this command commits. If we do not have a non-zero
-		// replica ID then the logic in Stage should detect that and destroy our
-		// preemptive snapshot so we shouldn't ever get here.
+		// An initialized replica is always contained in its descriptor.
 		rhsRepl, err := b.r.store.GetReplica(merge.RightDesc.RangeID)
 		if err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to get replica for merge")

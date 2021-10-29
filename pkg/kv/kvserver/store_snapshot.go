@@ -592,8 +592,7 @@ func (s *Store) canAcceptSnapshotLocked(
 		//
 		// NB: The snapshot must be intended for this replica as
 		// withReplicaForRequest ensures that requests with a non-zero replica
-		// id are passed to a replica with a matching id. Given this is not a
-		// preemptive snapshot we know that its id must be non-zero.
+		// id are passed to a replica with a matching id.
 		return nil, nil
 	}
 
@@ -802,8 +801,9 @@ func validatePositive(v int64) error {
 	return nil
 }
 
-// rebalanceSnapshotRate is the rate at which preemptive snapshots can be sent.
-// This includes snapshots generated for upreplication or for rebalancing.
+// rebalanceSnapshotRate is the rate at which snapshots can be sent in the
+// context of up-replication or rebalancing (i.e. any snapshot that was not
+// requested by raft itself, to which `kv.snapshot_recovery.max_rate` applies).
 var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_rebalance.max_rate",
 	"the rate limit (bytes/sec) to use for rebalance and upreplication snapshots",
