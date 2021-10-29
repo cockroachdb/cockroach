@@ -386,6 +386,12 @@ type ExportOptions struct {
 	// to an SST that exceeds maxSize, an error will be returned. This parameter
 	// exists to prevent creating SSTs which are too large to be used.
 	MaxSize uint64
+	// MaxIntents specifies the number of intents to collect and return in a
+	// WriteIntentError. The caller will likely resolve the returned intents and
+	// retry the call, which would be quadratic, so this significantly reduces the
+	// overall number of scans. 0 disables batching and returns the first intent,
+	// pass math.MaxUint64 to collect all.
+	MaxIntents uint64
 	// If StopMidKey is false, once function reaches targetSize it would continue
 	// adding all versions until it reaches next key or end of range. If true, it
 	// would stop immediately when targetSize is reached and return the next versions
