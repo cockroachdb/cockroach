@@ -5041,6 +5041,8 @@ type DOidWrapper struct {
 	Oid     oid.Oid
 }
 
+const ZeroDOidValue = "-"
+
 // wrapWithOid wraps a Datum with a custom Oid.
 func wrapWithOid(d Datum, oid oid.Oid) Datum {
 	switch v := d.(type) {
@@ -5062,6 +5064,11 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 		Wrapped: d,
 		Oid:     oid,
 	}
+}
+
+// wrapAsZeroOid wraps and oid as zero oid value
+func wrapAsZeroOid(oid oid.Oid) Datum {
+	return wrapWithOid(NewDString(ZeroDOidValue), oid)
 }
 
 // UnwrapDatum returns the base Datum type for a provided datum, stripping

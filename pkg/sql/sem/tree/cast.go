@@ -2345,6 +2345,10 @@ func performCastWithoutPrecisionTruncation(
 			i := DInt(uint32(*v))
 			return performIntToOidCast(ctx, t, i)
 		case *DString:
+			if string(*v) == ZeroDOidValue {
+				// zero oid value is represented by '-' in postgres.
+				return ParseDOid(ctx, "0", t)
+			}
 			return ParseDOid(ctx, string(*v), t)
 		}
 	case types.TupleFamily:
@@ -2391,7 +2395,7 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 			}
 			ret.name = typ.PGName()
 		} else if v == 0 {
-			return wrapWithOid(NewDString("-"), t.Oid()), nil
+			return wrapAsZeroOid(t.Oid()), nil
 		}
 		return ret, nil
 
@@ -2401,7 +2405,7 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 		ret := &DOid{semanticType: t, DInt: v}
 		if !ok {
 			if v == 0 {
-				return wrapWithOid(NewDString("-"), t.Oid()), nil
+				return wrapAsZeroOid(t.Oid()), nil
 			}
 			return ret, nil
 		}
@@ -2410,7 +2414,7 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 
 	default:
 		if v == 0 {
-			return wrapWithOid(NewDString("-"), t.Oid()), nil
+			return wrapAsZeroOid(t.Oid()), nil
 		}
 
 		var err error = nil
