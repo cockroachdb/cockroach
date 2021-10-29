@@ -1,0 +1,28 @@
+setup
+CREATE DATABASE db1;
+CREATE SCHEMA db1.sc1;
+CREATE SEQUENCE db1.public.sq1;
+CREATE SEQUENCE db1.sc1.sq1;
+CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'));
+CREATE TABLE db1.public.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.public.sq1'));
+CREATE VIEW db1.sc1.v1 AS (SELECT name FROM db1.sc1.t1);
+CREATE VIEW db1.sc1.v2 AS (SELECT name AS n1, name AS n2 FROM db1.sc1.v1);
+CREATE VIEW db1.sc1.v3 AS (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2);
+CREATE VIEW db1.sc1.v4 AS (SELECT n2, n1 FROM db1.sc1.v2);
+CREATE TYPE db1.sc1.typ AS ENUM('a');
+CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4);
+----
+
+test
+DROP DATABASE db1 CASCADE
+----
+database:
+  id: 50
+  modificationTime: {}
+  name: defaultdb
+  version: "1"
+database:
+  id: 51
+  modificationTime: {}
+  name: postgres
+  version: "1"

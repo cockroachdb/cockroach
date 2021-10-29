@@ -11,18 +11,24 @@
 package sctestutils
 
 import (
+	"bytes"
 	"context"
+	gojson "encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	jsonb "github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"gopkg.in/yaml.v2"
 )
 
 // WithBuilderDependenciesFromTestServer sets up and tears down an
@@ -60,4 +66,28 @@ func WithBuilderDependenciesFromTestServer(
 		execCfg.Settings,
 		nil, /* statements */
 	))
+}
+
+// ProtoToYAML marshals a protobuf to YAML in a roundabout way.
+func ProtoToYAML(m protoutil.Message) (string, error) {
+	js, err := protoreflect.MessageToJSON(m, protoreflect.FmtFlags{})
+	if err != nil {
+		return "", err
+	}
+	str, err := jsonb.Pretty(js)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	buf.WriteString(str)
+	target := make(map[string]interface{})
+	err = gojson.Unmarshal(buf.Bytes(), &target)
+	if err != nil {
+		return "", err
+	}
+	out, err := yaml.Marshal(target)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }

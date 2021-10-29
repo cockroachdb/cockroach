@@ -13,6 +13,7 @@ package sctestdeps
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -23,9 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
@@ -34,7 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
+	"github.com/kylelemons/godebug/diff"
 	"github.com/lib/pq/oid"
 )
 
@@ -278,11 +283,11 @@ func (s *TestState) mayGetByName(
 	if id == keys.PublicSchemaID {
 		return schemadesc.GetPublicSchema()
 	}
-	descriptorEntry := s.descriptors.GetByID(id)
-	if descriptorEntry == nil {
+	b := descBuilder(s.descriptors, id)
+	if b == nil {
 		return nil
 	}
-	return descriptorEntry.(catalog.Descriptor)
+	return b.BuildImmutable()
 }
 
 // ReadObjectNamesAndIDs implements the scbuild.CatalogReader interface.
@@ -375,13 +380,13 @@ func (s *TestState) getQualifiedObjectNameByID(id descpb.ID) (*tree.TableName, e
 	if err != nil {
 		return nil, err
 	}
-	db := s.descriptors.GetByID(obj.GetParentID())
-	if db == nil {
-		return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "parent database descriptor #%d", obj.GetParentID())
+	db, err := s.mustReadImmutableDescriptor(obj.GetParentID())
+	if err != nil {
+		return nil, errors.Wrapf(err, "parent database for object #%d", id)
 	}
-	sc := s.descriptors.GetByID(obj.GetParentSchemaID())
-	if sc == nil {
-		return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "parent schema descriptor #%d", obj.GetParentSchemaID())
+	sc, err := s.mustReadImmutableDescriptor(obj.GetParentSchemaID())
+	if err != nil {
+		return nil, errors.Wrapf(err, "parent schema for object #%d", id)
 	}
 	return tree.NewTableNameWithSchema(tree.Name(db.GetName()), tree.Name(sc.GetName()), tree.Name(obj.GetName())), nil
 }
@@ -401,23 +406,31 @@ func (s *TestState) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 }
 
 func (s *TestState) mustReadMutableDescriptor(id descpb.ID) (catalog.MutableDescriptor, error) {
-	entry := s.descriptors.GetByID(id)
-	if entry == nil {
+	b := descBuilder(s.descriptors, id)
+	if b == nil {
 		return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "reading mutable descriptor #%d", id)
 	}
-	return entry.(catalog.MutableDescriptor), nil
+	return b.BuildExistingMutable(), nil
 }
 
 func (s *TestState) mustReadImmutableDescriptor(id descpb.ID) (catalog.Descriptor, error) {
-	syntheticEntry := s.syntheticDescriptors.GetByID(id)
-	if syntheticEntry != nil {
-		return syntheticEntry.(catalog.Descriptor), nil
+	b := descBuilder(s.syntheticDescriptors, id)
+	if b == nil {
+		b = descBuilder(s.descriptors, id)
 	}
-	entry := s.descriptors.GetByID(id)
-	if entry != nil {
-		return entry.(catalog.Descriptor), nil
+	if b == nil {
+		return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "reading immutable descriptor #%d", id)
 	}
-	return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "reading immutable descriptor #%d", id)
+	return b.BuildImmutable(), nil
+}
+
+// descBuilder is used to ensure that the contents of descs are copied on read.
+func descBuilder(descs nstree.Map, id descpb.ID) catalog.DescriptorBuilder {
+	entry := descs.GetByID(id)
+	if entry == nil {
+		return nil
+	}
+	return entry.(catalog.Descriptor).NewBuilder()
 }
 
 var _ scexec.Dependencies = (*TestState)(nil)
@@ -433,7 +446,7 @@ var _ scmutationexec.CatalogReader = (*TestState)(nil)
 func (s *TestState) MustReadImmutableDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.Descriptor, error) {
-	return s.mustReadMutableDescriptor(id)
+	return s.mustReadImmutableDescriptor(id)
 }
 
 // AddSyntheticDescriptor implements the scmutationexec.CatalogReader interface.
@@ -489,42 +502,109 @@ func (b *testCatalogChangeBatcher) DeleteName(
 
 // ValidateAndRun implements the scexec.CatalogChangeBatcher interface.
 func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
-	for nameInfo, id := range b.namesToDelete {
+	names := make([]descpb.NameInfo, 0, len(b.namesToDelete))
+	for nameInfo := range b.namesToDelete {
+		names = append(names, nameInfo)
+	}
+	sort.Slice(names, func(i, j int) bool {
+		return b.namesToDelete[names[i]] < b.namesToDelete[names[j]]
+	})
+	for _, nameInfo := range names {
+		expectedID := b.namesToDelete[nameInfo]
 		actualID, hasEntry := b.s.namespace[nameInfo]
 		if !hasEntry {
 			return errors.AssertionFailedf(
 				"cannot delete missing namespace entry %v", nameInfo)
 		}
-		if actualID != id {
+		if actualID != expectedID {
 			return errors.AssertionFailedf(
-				"expected deleted namespace entry %v to have ID %d, instead is %d", nameInfo, id, actualID)
+				"expected deleted namespace entry %v to have ID %d, instead is %d", nameInfo, expectedID, actualID)
 		}
+		b.s.logSideEffectf("delete namespace entry %v -> %d", nameInfo, expectedID)
 		delete(b.s.namespace, nameInfo)
 	}
 	for _, desc := range b.descs {
+		var old catalog.Descriptor
+		if b := descBuilder(b.s.descriptors, desc.GetID()); b != nil {
+			old = b.BuildImmutable()
+		}
+		b.s.logSideEffectf("upsert descriptor #%d%s", desc.GetID(), prettyDescDiff(old, desc, "\n  "))
 		b.s.descriptors.Upsert(desc)
 	}
 	return catalog.Validate(ctx, b.s, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, b.descs...).CombinedError()
+}
+
+// prettyDescDiff generates an indented summary of the diff between two
+// descriptors' JSON representations.
+func prettyDescDiff(a, b catalog.Descriptor, indent string) string {
+	toJSON := func(d catalog.Descriptor) string {
+		if d == nil {
+			return ""
+		}
+		js, err := protoreflect.MessageToJSON(d.DescriptorProto(), protoreflect.FmtFlags{})
+		if err != nil {
+			panic(err)
+		}
+		str, err := json.Pretty(js)
+		if err != nil {
+			panic(err)
+		}
+		return str
+	}
+
+	d := diff.Diff(toJSON(a), toJSON(b))
+	if d == "" {
+		d = toJSON(a)
+	}
+
+	lines := strings.Split(d, "\n")
+	visible := make(map[int]struct{})
+	for lineno, line := range lines {
+		if strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
+			for i := lineno - 3; i < lineno+4; i++ {
+				visible[i] = struct{}{}
+			}
+		}
+	}
+
+	result := strings.Builder{}
+	skipping := false
+	for lineno, line := range lines {
+		if _, found := visible[lineno]; found {
+			skipping = false
+			result.WriteString(indent)
+			result.WriteString(line)
+		} else if !skipping {
+			skipping = true
+			result.WriteString(indent)
+			result.WriteString("...")
+		}
+	}
+	return result.String()
 }
 
 var _ catalog.DescGetter = (*TestState)(nil)
 
 // GetDesc implements the catalog.DescGetter interface.
 func (s *TestState) GetDesc(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
-	// Read mutable descriptor to bypass synthetic descriptors.
-	return s.mustReadMutableDescriptor(id)
+	b := descBuilder(s.descriptors, id)
+	if b == nil {
+		return nil, nil
+	}
+	return b.BuildImmutable(), nil
 }
 
 // GetNamespaceEntry implements the catalog.DescGetter interface.
 func (s *TestState) GetNamespaceEntry(
 	ctx context.Context, parentID, parentSchemaID descpb.ID, name string,
-) (id descpb.ID, _ error) {
-	id = s.namespace[descpb.NameInfo{
+) (descpb.ID, error) {
+	nameInfo := descpb.NameInfo{
 		ParentID:       parentID,
 		ParentSchemaID: parentSchemaID,
 		Name:           name,
-	}]
-	return id, nil
+	}
+	// GetNamespaceEntry is best-effort.
+	return s.namespace[nameInfo], nil
 }
 
 // IndexBackfiller implements the scexec.Dependencies interface.
@@ -599,6 +679,11 @@ var _ scexec.TransactionalJobCreator = (*TestState)(nil)
 func (s *TestState) CreateJob(ctx context.Context, record jobs.Record) (jobspb.JobID, error) {
 	record.JobID = jobspb.JobID(1 + len(s.jobs))
 	s.jobs = append(s.jobs, record)
+	s.logSideEffectf("create job #%d: %q\n  descriptor IDs: %v",
+		record.JobID,
+		record.Description,
+		record.DescriptorIDs,
+	)
 	return record.JobID, nil
 }
 
@@ -626,7 +711,7 @@ func (s *TestState) WithTxnInJob(
 	ctx context.Context,
 	fn func(ctx context.Context, txndeps scrun.SchemaChangeJobTxnDependencies) error,
 ) (err error) {
-	s.WithTxn(func(s *TestState) {
+	s.WithTxn(scop.PostCommitPhase, func(s *TestState) {
 		err = fn(ctx, s)
 	})
 	return err
@@ -684,7 +769,8 @@ func (s *TestState) UpdateSchemaChangeJob(
 	if err != nil {
 		return err
 	}
-	scjob.Progress = ju.md.Progress.GetNewSchemaChange()
+	scjob.Progress = *ju.md.Progress.GetNewSchemaChange()
+	s.logSideEffectf("update progress of schema change job #%d\n", scjob.JobID)
 	return nil
 }
 

@@ -1,0 +1,529 @@
+setup
+CREATE DATABASE db1;
+CREATE SCHEMA db1.sc1;
+CREATE SEQUENCE db1.public.sq1;
+CREATE SEQUENCE db1.sc1.sq1;
+CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'));
+CREATE TABLE db1.public.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.public.sq1'));
+CREATE VIEW db1.sc1.v1 AS (SELECT name FROM db1.sc1.t1);
+CREATE VIEW db1.sc1.v2 AS (SELECT name AS n1, name AS n2 FROM db1.sc1.v1);
+CREATE VIEW db1.sc1.v3 AS (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2);
+CREATE VIEW db1.sc1.v4 AS (SELECT n2, n1 FROM db1.sc1.v2);
+CREATE TYPE db1.sc1.typ AS ENUM('a');
+CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4);
+----
+
+test
+DROP DATABASE db1 CASCADE
+----
+begin transaction #1
+commit transaction #1
+begin transaction #2
+upsert descriptor #52
+  ...
+                   "id": 53
+               }
+           },
+  -        "version": "2"
+  +        "state": "DROP",
+  +        "version": "3"
+       }
+   }
+upsert descriptor #53
+  ...
+               ],
+               "version": 2
+           },
+  -        "version": "1"
+  +        "state": "DROP",
+  +        "version": "2"
+       }
+   }
+upsert descriptor #54
+  ...
+           "createAsOfTime": {
+               "wallTime": "1"
+           },
+  -        "dependedOnBy": [
+  -            {
+  -                "byId": true,
+  -                "columnIds": [
+  -                    3
+  -                ],
+  -                "id": 57
+  -            }
+  -        ],
+  +        "dependedOnBy": [],
+           "families": [
+               {
+                   "columnIds": [
+  ...
+               "sequenceOwner": {},
+               "start": "1"
+           },
+  +        "state": "DROP",
+           "unexposedParentSchemaId": 29,
+  -        "version": "2"
+  +        "version": "3"
+       }
+   }
+upsert descriptor #55
+  ...
+           "createAsOfTime": {
+               "wallTime": "1"
+           },
+  -        "dependedOnBy": [
+  -            {
+  -                "byId": true,
+  -                "columnIds": [
+  -                    3
+  -                ],
+  -                "id": 56
+  -            }
+  -        ],
+  +        "dependedOnBy": [],
+           "families": [
+               {
+                   "columnIds": [
+  ...
+               "sequenceOwner": {},
+               "start": "1"
+           },
+  +        "state": "DROP",
+           "unexposedParentSchemaId": 53,
+  -        "version": "2"
+  +        "version": "3"
+       }
+   }
+upsert descriptor #56
+  ...
+                   }
+               },
+               {
+  -                "defaultExpr": "nextval(55:::REGCLASS)",
+                   "id": 3,
+                   "name": "val",
+                   "nullable": true,
+  ...
+                       "family": "IntFamily",
+                       "oid": 20,
+                       "width": 64
+  -                },
+  -                "usesSequenceIds": [
+  -                    55
+  -                ]
+  +                }
+               }
+           ],
+           "createAsOfTime": {
+               "wallTime": "1"
+           },
+           "dependedOnBy": [
+  -            {
+  -                "columnIds": [
+  -                    2
+  -                ],
+  -                "id": 58
+  -            }
+  +            {}
+           ],
+           "families": [
+               {
+  ...
+           "replacementOf": {
+               "time": {}
+           },
+  +        "state": "DROP",
+           "unexposedParentSchemaId": 53,
+  -        "version": "2"
+  +        "version": "3"
+       }
+   }
+upsert descriptor #57
+  ...
+                   }
+               },
+               {
+  -                "defaultExpr": "nextval(54:::REGCLASS)",
+                   "id": 3,
+                   "name": "val",
+                   "nullable": true,
+  ...
+                       "family": "IntFamily",
+                       "oid": 20,
+                       "width": 64
+  -                },
+  -                "usesSequenceIds": [
+  -                    54
+  -                ]
+  +                }
+               }
+           ],
+           "createAsOfTime": {
+               "wallTime": "1"
+           },
+  +        "dependedOnBy": [],
+           "families": [
+               {
+                   "columnIds": [
+  ...
+           "replacementOf": {
+               "time": {}
+           },
+  +        "state": "DROP",
+           "unexposedParentSchemaId": 29,
+  -        "version": "1"
+  +        "version": "2"
+       }
+   }
+upsert descriptor #58
+  ...
+           "createAsOfTime": {
+               "wallTime": "1"
+           },
+  -        "dependedOnBy": [
+  -            {
+  -                "columnIds": [
+  -                    1
+  -                ],
+  -                "id": 59
+  -            },
+  -            {
+  -                "columnIds": [
+  -                    1
+  -                ],
+  -                "id": 60
+  -            }
+  -        ],
+  +        "dependedOnBy": [],
+           "dependsOn": [
+               56
+           ],
+  ...
+           "replacementOf": {
+               "time": {}
+           },
+  +        "state": "DROP",
+           "unexposedParentSchemaId": 53,
+  -        "version": "3",
+  +        "version": "4",
+           "viewQuery": "(SELECT name FROM db1.sc1.t1)"
+       }
+   }
+upsert descriptor #59
+  ...
+           "createAsOfTime": {
+               "wallTime": "1"
+           },
+  -        "dependedOnBy": [
+  -            {
+  -                "columnIds": [
+  -                    1,
+  -                    2
+  -                ],
+  -                "id": 60
+  -            },
+  -            {
+  -                "columnIds": [
+  -                    1,
+  -                    2
+  -                ],
+  -                "id": 61
+  -            }
+  -        ],
+  +        "dependedOnBy": [],
+           "dependsOn": [
+               58
+           ],
+  ...
+           "replacementOf": {
+               "time": {}
+           },
+  +        "state": "DROP",
+           "unexposedParentSchemaId": 53,
+  -        "version": "3",
+  +        "version": "4",
+           "viewQuery": "(SELECT name AS n1, name AS n2 FROM db1.sc1.v1)"
+       }
+   }
+upsert descriptor #60
+  ...
+           "replacementOf": {
+               "time": {}
+           },
+  +        "state": "DROP",
+           "unexposedParentSchemaId": 53,
+  -        "version": "1",
+  +        "version": "2",
+           "viewQuery": "(SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2)"
+       }
+   }
+upsert descriptor #61
+  ...
+           "createAsOfTime": {
+               "wallTime": "1"
+           },
+  -        "dependedOnBy": [
+  -            {
+  -                "columnIds": [
+  -                    1,
+  -                    2
+  -                ],
+  -                "id": 64
+  -            }
+  -        ],
+  +        "dependedOnBy": [],
+           "dependsOn": [
+               59
+           ],
+  ...
+           "replacementOf": {
+               "time": {}
+           },
+  +        "state": "DROP",
+           "unexposedParentSchemaId": 53,
+  -        "version": "2",
+  +        "version": "3",
+           "viewQuery": "(SELECT n2, n1 FROM db1.sc1.v2)"
+       }
+   }
+upsert descriptor #62
+  ...
+               ],
+               "version": 2
+           },
+  -        "referencingDescriptorIds": [
+  -            64
+  -        ],
+  -        "version": "2"
+  +        "referencingDescriptorIds": [],
+  +        "state": "DROP",
+  +        "version": "3"
+       }
+   }
+upsert descriptor #63
+  ...
+               ],
+               "version": 2
+           },
+  -        "referencingDescriptorIds": [
+  -            64
+  -        ],
+  -        "version": "2"
+  +        "referencingDescriptorIds": [],
+  +        "state": "DROP",
+  +        "version": "3"
+       }
+   }
+upsert descriptor #64
+  ...
+           "replacementOf": {
+               "time": {}
+           },
+  +        "state": "DROP",
+           "unexposedParentSchemaId": 53,
+  -        "version": "1",
+  +        "version": "2",
+           "viewQuery": "(SELECT 'a':::sc1.typ::STRING AS k, n2, n1 FROM db1.sc1.v4)"
+       }
+   }
+create job #1: "GC for Dropping descriptors 54 57 55 60 59 58 64 61 56 "
+  descriptor IDs: [54 57 55 60 59 58 64 61 56]
+delete namespace entry {0 0 db1} -> 52
+delete namespace entry {52 0 sc1} -> 53
+delete namespace entry {52 29 sq1} -> 54
+delete namespace entry {52 53 sq1} -> 55
+delete namespace entry {52 53 t1} -> 56
+delete namespace entry {52 29 t1} -> 57
+delete namespace entry {52 53 v1} -> 58
+delete namespace entry {52 53 v2} -> 59
+delete namespace entry {52 53 v3} -> 60
+delete namespace entry {52 53 v4} -> 61
+delete namespace entry {52 53 typ} -> 62
+delete namespace entry {52 53 _typ} -> 63
+delete namespace entry {52 53 v5} -> 64
+create job #2: "Schema change job"
+  descriptor IDs: [52 53 54 55 56 57 58 59 60 61 62 63 64]
+upsert descriptor #54
+  ...
+           "id": 54,
+           "modificationTime": {},
+           "name": "sq1",
+  +        "newSchemaChangeJobId": "2",
+           "parentId": 52,
+           "primaryIndex": {
+               "encodingType": 1,
+  ...
+upsert descriptor #55
+  ...
+           "id": 55,
+           "modificationTime": {},
+           "name": "sq1",
+  +        "newSchemaChangeJobId": "2",
+           "parentId": 52,
+           "primaryIndex": {
+               "encodingType": 1,
+  ...
+upsert descriptor #56
+  ...
+           "id": 56,
+           "modificationTime": {},
+           "name": "t1",
+  +        "newSchemaChangeJobId": "2",
+           "nextColumnId": 4,
+           "nextFamilyId": 1,
+           "nextIndexId": 2,
+  ...
+upsert descriptor #57
+  ...
+           "id": 57,
+           "modificationTime": {},
+           "name": "t1",
+  +        "newSchemaChangeJobId": "2",
+           "nextColumnId": 4,
+           "nextFamilyId": 1,
+           "nextIndexId": 2,
+  ...
+upsert descriptor #58
+  ...
+           "id": 58,
+           "modificationTime": {},
+           "name": "v1",
+  +        "newSchemaChangeJobId": "2",
+           "nextColumnId": 2,
+           "nextMutationId": 1,
+           "parentId": 52,
+  ...
+upsert descriptor #59
+  ...
+           "id": 59,
+           "modificationTime": {},
+           "name": "v2",
+  +        "newSchemaChangeJobId": "2",
+           "nextColumnId": 3,
+           "nextMutationId": 1,
+           "parentId": 52,
+  ...
+upsert descriptor #60
+  ...
+           "id": 60,
+           "modificationTime": {},
+           "name": "v3",
+  +        "newSchemaChangeJobId": "2",
+           "nextColumnId": 3,
+           "nextMutationId": 1,
+           "parentId": 52,
+  ...
+upsert descriptor #61
+  ...
+           "id": 61,
+           "modificationTime": {},
+           "name": "v4",
+  +        "newSchemaChangeJobId": "2",
+           "nextColumnId": 3,
+           "nextMutationId": 1,
+           "parentId": 52,
+  ...
+upsert descriptor #64
+  ...
+           "id": 64,
+           "modificationTime": {},
+           "name": "v5",
+  +        "newSchemaChangeJobId": "2",
+           "nextColumnId": 4,
+           "nextMutationId": 1,
+           "parentId": 52,
+  ...
+commit transaction #2
+begin transaction #3
+upsert descriptor #54
+  ...
+           "id": 54,
+           "modificationTime": {},
+           "name": "sq1",
+  -        "newSchemaChangeJobId": "2",
+           "parentId": 52,
+           "primaryIndex": {
+               "encodingType": 1,
+  ...
+upsert descriptor #55
+  ...
+           "id": 55,
+           "modificationTime": {},
+           "name": "sq1",
+  -        "newSchemaChangeJobId": "2",
+           "parentId": 52,
+           "primaryIndex": {
+               "encodingType": 1,
+  ...
+upsert descriptor #56
+  ...
+           "id": 56,
+           "modificationTime": {},
+           "name": "t1",
+  -        "newSchemaChangeJobId": "2",
+           "nextColumnId": 4,
+           "nextFamilyId": 1,
+           "nextIndexId": 2,
+  ...
+upsert descriptor #57
+  ...
+           "id": 57,
+           "modificationTime": {},
+           "name": "t1",
+  -        "newSchemaChangeJobId": "2",
+           "nextColumnId": 4,
+           "nextFamilyId": 1,
+           "nextIndexId": 2,
+  ...
+upsert descriptor #58
+  ...
+           "id": 58,
+           "modificationTime": {},
+           "name": "v1",
+  -        "newSchemaChangeJobId": "2",
+           "nextColumnId": 2,
+           "nextMutationId": 1,
+           "parentId": 52,
+  ...
+upsert descriptor #59
+  ...
+           "id": 59,
+           "modificationTime": {},
+           "name": "v2",
+  -        "newSchemaChangeJobId": "2",
+           "nextColumnId": 3,
+           "nextMutationId": 1,
+           "parentId": 52,
+  ...
+upsert descriptor #60
+  ...
+           "id": 60,
+           "modificationTime": {},
+           "name": "v3",
+  -        "newSchemaChangeJobId": "2",
+           "nextColumnId": 3,
+           "nextMutationId": 1,
+           "parentId": 52,
+  ...
+upsert descriptor #61
+  ...
+           "id": 61,
+           "modificationTime": {},
+           "name": "v4",
+  -        "newSchemaChangeJobId": "2",
+           "nextColumnId": 3,
+           "nextMutationId": 1,
+           "parentId": 52,
+  ...
+upsert descriptor #64
+  ...
+           "id": 64,
+           "modificationTime": {},
+           "name": "v5",
+  -        "newSchemaChangeJobId": "2",
+           "nextColumnId": 4,
+           "nextMutationId": 1,
+           "parentId": 52,
+  ...
+commit transaction #3
