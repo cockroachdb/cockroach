@@ -560,23 +560,9 @@ func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCm
 func changeRemovesStore(
 	desc *roachpb.RangeDescriptor, change *kvserverpb.ChangeReplicas, storeID roachpb.StoreID,
 ) (removesStore bool) {
-	curReplica, existsInDesc := desc.GetReplicaDescriptor(storeID)
-	// NB: if we're catching up from a preemptive snapshot then we won't
-	// exist in the current descriptor and we can't be removed.
-	if !existsInDesc {
-		return false
-	}
-
 	// NB: We don't use change.Removed() because it will include replicas being
 	// transitioned to VOTER_OUTGOING.
 
-	// In 19.1 and before we used DeprecatedUpdatedReplicas instead of providing
-	// a new range descriptor. Check first if this is 19.1 or earlier command which
-	// uses DeprecatedChangeType and DeprecatedReplica
-	if change.Desc == nil {
-		return change.DeprecatedChangeType == roachpb.REMOVE_VOTER && change.DeprecatedReplica.ReplicaID == curReplica.ReplicaID
-	}
-	// In 19.2 and beyond we supply the new range descriptor in the change.
 	// We know we're removed if we do not appear in the new descriptor.
 	_, existsInChange := change.Desc.GetReplicaDescriptor(storeID)
 	return !existsInChange
@@ -660,13 +646,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		// Merges require the subsumed range to be atomically deleted when the
 		// merge transaction commits.
 
-		// If our range currently has a non-zero replica ID then we know we're
-		// safe to commit this merge because of the invariants provided to us
-		// by the merge protocol. Namely if this committed we know that if the
-		// command committed then all of the replicas in the range descriptor
-		// are collocated when this command commits. If we do not have a non-zero
-		// replica ID then the logic in Stage should detect that and destroy our
-		// preemptive snapshot so we shouldn't ever get here.
+		// An initialized replica is always contained in its descriptor.
 		rhsRepl, err := b.r.store.GetReplica(merge.RightDesc.RangeID)
 		if err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to get replica for merge")

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-//go:generate mockgen -package=prometheus -destination=mock_generated.go -source=prometheus.go . cluster
+//go:generate mockgen -package=prometheus -destination=mock_generated.go -source=prometheus.go . Cluster
 
 package prometheus
 
@@ -42,10 +42,10 @@ type Config struct {
 	ScrapeConfigs  []ScrapeConfig
 }
 
-// cluster is a subset of roachtest.Cluster.
+// Cluster is a subset of roachtest.Cluster.
 // It is abstracted to prevent a circular dependency on roachtest, as Cluster
 // requires the test interface.
-type cluster interface {
+type Cluster interface {
 	ExternalIP(context.Context, option.NodeListOption) ([]string, error)
 	Get(ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option) error
 	RunE(ctx context.Context, node option.NodeListOption, args ...string) error
@@ -63,7 +63,7 @@ type Prometheus struct {
 func Init(
 	ctx context.Context,
 	cfg Config,
-	c cluster,
+	c Cluster,
 	repeatFunc func(context.Context, option.NodeListOption, string, ...string) error,
 ) (*Prometheus, error) {
 	if err := c.RunE(
@@ -118,7 +118,7 @@ sudo systemd-run --unit prometheus --same-dir \
 
 // Snapshot takes a snapshot of prometheus and stores the snapshot in the given localPath
 func (pm *Prometheus) Snapshot(
-	ctx context.Context, c cluster, l *logger.Logger, localPath string,
+	ctx context.Context, c Cluster, l *logger.Logger, localPath string,
 ) error {
 	if err := c.RunE(
 		ctx,
@@ -148,7 +148,7 @@ const (
 )
 
 // makeYAMLConfig creates a prometheus YAML config for the server to use.
-func makeYAMLConfig(ctx context.Context, c cluster, scrapeConfigs []ScrapeConfig) (string, error) {
+func makeYAMLConfig(ctx context.Context, c Cluster, scrapeConfigs []ScrapeConfig) (string, error) {
 	type yamlStaticConfig struct {
 		Targets []string
 	}

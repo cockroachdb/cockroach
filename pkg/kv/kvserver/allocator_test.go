@@ -7219,7 +7219,9 @@ func (ts *testStore) rebalance(ots *testStore, bytes int64) {
 	if ts.Capacity.RangeCount == 0 || (ts.Capacity.Capacity-ts.Capacity.Available) < bytes {
 		return
 	}
-	// Mimic a real Store's behavior of rejecting preemptive snapshots when full.
+	// Mimic a real Store's behavior of not considering target stores that are
+	// almost out of disk. (In a real allocator this is, for example, in
+	// rankedCandidateListFor{Allocation,Rebalancing}).
 	if !maxCapacityCheck(ots.StoreDescriptor) {
 		log.Infof(context.Background(),
 			"s%d too full to accept snapshot from s%d: %v", ots.StoreID, ts.StoreID, ots.Capacity)

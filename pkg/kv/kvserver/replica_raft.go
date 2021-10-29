@@ -1615,8 +1615,12 @@ func shouldCampaignOnWake(
 // being quiescent) and campaigns for raft leadership if appropriate.
 func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 	// Raft panics if a node that is not currently a member of the
-	// group tries to campaign. That happens primarily when we apply
-	// preemptive snapshots.
+	// group tries to campaign. This method should never be called
+	// otherwise and in fact the Replica should never be in such a
+	// state but better not take any chances. For example, if this
+	// method were to be called on an uninitialized replica (which
+	// has no state and thus an empty raft config), this might cause
+	// problems.
 	if _, currentMember := r.mu.state.Desc.GetReplicaDescriptorByID(r.mu.replicaID); !currentMember {
 		return
 	}

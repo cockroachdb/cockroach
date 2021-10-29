@@ -24,15 +24,15 @@ func TestMakeYAMLConfig(t *testing.T) {
 	testCases := []struct {
 		desc string
 
-		mockCluster   func(ctrl *gomock.Controller) cluster
+		mockCluster   func(ctrl *gomock.Controller) Cluster
 		scrapeConfigs []ScrapeConfig
 
 		expected string
 	}{
 		{
 			desc: "multiple scrape nodes",
-			mockCluster: func(ctrl *gomock.Controller) cluster {
-				c := NewMockcluster(ctrl)
+			mockCluster: func(ctrl *gomock.Controller) Cluster {
+				c := NewMockCluster(ctrl)
 				c.EXPECT().
 					ExternalIP(ctx, []int{1}).
 					Return([]string{"127.0.0.1"}, nil)
@@ -91,8 +91,8 @@ scrape_configs:
 		},
 		{
 			desc: "using make commands",
-			mockCluster: func(ctrl *gomock.Controller) cluster {
-				c := NewMockcluster(ctrl)
+			mockCluster: func(ctrl *gomock.Controller) Cluster {
+				c := NewMockCluster(ctrl)
 				c.EXPECT().
 					ExternalIP(ctx, []int{3, 4, 5}).
 					Return([]string{"127.0.0.3", "127.0.0.4", "127.0.0.5"}, nil)
