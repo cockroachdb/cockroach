@@ -65,8 +65,12 @@ func (rsl StateLoader) Load(
 		if err != nil {
 			return kvserverpb.ReplicaState{}, err
 		}
+		if loadDesc == nil {
+			panic("no descriptor")
+		}
 		s.Desc = loadDesc
 	} else {
+		panic("should not load state for uninitialized replica")
 		// This is awkward - for an uninitialized replica, the start key is not
 		// known and so we cannot load a descriptor (and even if we could it would
 		// not be there). The incoming descriptor in this case is a complete stub

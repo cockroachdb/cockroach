@@ -161,18 +161,25 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 		// NB: This is just a defensive check as r.mu.replicaID should never be 0.
 		log.Fatalf(ctx, "r%d: cannot initialize replica without a replicaID", desc.RangeID)
 	}
-	if desc.IsInitialized() {
+	isInitialized := desc.IsInitialized()
+	if isInitialized {
 		r.setStartKeyLocked(desc.StartKey)
 	}
 
 	// Clear the internal raft group in case we're being reset. Since we're
 	// reloading the raft state below, it isn't safe to use the existing raft
 	// group.
+	//
+	// TODO(tbg): this dates back to when replicas could be used across multiple
+	// replicaIDs. I believe this is no longer happening (except perhaps under
+	// the DisableEagerReplicaRemoval testing knob).
 	r.mu.internalRaftGroup = nil
 
 	var err error
-	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.Engine(), desc); err != nil {
-		return err
+	if isInitialized {
+		if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.Engine(), desc); err != nil {
+			return err
+		}
 	}
 	r.mu.lastIndex, err = r.mu.stateLoader.LoadLastIndex(ctx, r.Engine())
 	if err != nil {
@@ -203,7 +210,7 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	// this problem would multiply to a number of replicas at cluster bootstrap.
 	// Instead, we make the first lease special (which is OK) and the problem
 	// disappears.
-	if r.mu.state.Lease.Sequence > 0 {
+	if isInitialized && r.mu.state.Lease.Sequence > 0 {
 		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
 	}
 
@@ -218,7 +225,9 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	); err != nil {
 		return errors.Wrap(err, "while initializing sideloaded storage")
 	}
-	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
+	if isInitialized {
+		r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
+	}
 
 	r.sideTransportClosedTimestamp.init(r.store.cfg.ClosedTimestampReceiver, desc.RangeID)
 

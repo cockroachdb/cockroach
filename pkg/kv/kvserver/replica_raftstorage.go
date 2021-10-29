@@ -992,9 +992,14 @@ func (r *Replica) applySnapshot(
 	r.mu.lastTerm = lastTerm
 	r.mu.raftLogSize = raftLogSize
 	// Update the store stats for the data in the snapshot.
-	r.store.metrics.subtractMVCCStats(ctx, r.mu.tenantID, *r.mu.state.Stats)
+	if r.mu.state.Stats != nil { // if r was initialized prior to snapshot
+		r.store.metrics.subtractMVCCStats(ctx, r.mu.tenantID, *r.mu.state.Stats)
+	}
 	r.store.metrics.addMVCCStats(ctx, r.mu.tenantID, *s.Stats)
 	lastKnownLease := r.mu.state.Lease
+	if lastKnownLease == nil {
+		lastKnownLease = &roachpb.Lease{}
+	}
 	// Update the rest of the Raft state. Changes to r.mu.state.Desc must be
 	// managed by r.setDescRaftMuLocked and changes to r.mu.state.Lease must be handled
 	// by r.leasePostApply, but we called those above, so now it's safe to

@@ -992,7 +992,9 @@ func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (boo
 		return false, nil
 	}
 
-	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx)
+	if r.descRLocked().IsInitialized() {
+		r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx)
+	}
 
 	// For followers, we update lastUpdateTimes when we step a message from them
 	// into the local Raft group. The leader won't hit that path, so we update
