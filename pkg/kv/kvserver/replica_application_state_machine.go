@@ -560,13 +560,6 @@ func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCm
 func changeRemovesStore(
 	desc *roachpb.RangeDescriptor, change *kvserverpb.ChangeReplicas, storeID roachpb.StoreID,
 ) (removesStore bool) {
-	_, existsInDesc := desc.GetReplicaDescriptor(storeID)
-	// NB: if we're catching up from a preemptive snapshot then we won't
-	// exist in the current descriptor and we can't be removed.
-	if !existsInDesc {
-		return false
-	}
-
 	// NB: We don't use change.Removed() because it will include replicas being
 	// transitioned to VOTER_OUTGOING.
 
