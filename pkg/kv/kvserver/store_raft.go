@@ -275,10 +275,6 @@ func (s *Store) processRaftRequestWithReplica(
 func (s *Store) processRaftSnapshotRequest(
 	ctx context.Context, snapHeader *SnapshotRequest_Header, inSnap IncomingSnapshot,
 ) *roachpb.Error {
-	if snapHeader.IsPreemptive() {
-		return roachpb.NewError(errors.AssertionFailedf(`expected a raft or learner snapshot`))
-	}
-
 	return s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest, func(
 		ctx context.Context, r *Replica,
 	) (pErr *roachpb.Error) {
