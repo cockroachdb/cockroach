@@ -518,12 +518,10 @@ func (s *Store) reserveSnapshot(
 		}
 	}
 
-	// The choice here is essentially arbitrary, but with a default range size of 64mb and the
-	// Raft snapshot rate limiting of 8mb/s, we expect to spend less than 8s per snapshot.
-	// Preemptive snapshots are limited to 2mb/s (by default), so they can take up to 4x longer,
-	// but an average range is closer to 32mb, so we expect ~16s for larger preemptive snapshots,
+	// The choice here is essentially arbitrary, but with a default range size of 128mb-512mb and the
+	// Raft snapshot rate limiting of 32mb/s, we expect to spend less than 16s per snapshot.
 	// which is what we want to log.
-	const snapshotReservationWaitWarnThreshold = 13 * time.Second
+	const snapshotReservationWaitWarnThreshold = 32 * time.Second
 	if elapsed := timeutil.Since(tBegin); elapsed > snapshotReservationWaitWarnThreshold {
 		replDesc, _ := header.State.Desc.GetReplicaDescriptor(s.StoreID())
 		log.Infof(
