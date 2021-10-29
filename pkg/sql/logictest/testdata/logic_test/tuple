@@ -979,3 +979,108 @@ UNION
 SELECT (1::INT, NULL)
 ----
 (1,)
+
+# Regression test for #70767. Make sure we avoid encoding arrays where the
+# array content type is AnyTuple.
+subtest regression_70767
+
+query T
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[()])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+{}
+{()}
+
+query T
+SELECT
+  col
+FROM
+  (VALUES (NULL), ((ARRAY[]::RECORD[])), ((ARRAY[()])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+NULL
+{}
+{()}
+
+# ARRAY[(1)] is type-checked as an int[] -- this also matches Postgres.
+statement error VALUES types int\[\] and tuple\[\] cannot be matched
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1)])))
+    AS t(col)
+ORDER BY
+  col ASC
+
+statement error VALUES types tuple{int, string}\[\] and tuple{int, int}\[\] cannot be matched
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1,2)])), ((ARRAY[(1,'cat')])))
+    AS t(col)
+ORDER BY
+  col ASC
+
+query T
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1,2)])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+{}
+{"(1,2)"}
+
+query T
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[(1,2)])), ((ARRAY[]::RECORD[])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+{}
+{"(1,2)"}
+
+query T
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])),  ((ARRAY[(1,2), (3,4)])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+{}
+{"(1,2)","(3,4)"}
+
+statement error expected tuple \(3, 4, 5\) to have a length of 2
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])),  ((ARRAY[(1,2), (3,4), (3,4,5)])))
+    AS t(col)
+ORDER BY
+  col ASC
+
+query T
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1,'cat')])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+{}
+{"(1,cat)"}
