@@ -25,11 +25,16 @@ kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start-s
 ### Kubernetes version
 
 The minimum Kubernetes version to successfully run the examples in this
-directory without modification is `1.8`. If you want to run them on an older
-version of Kubernetes, use the files from the appropriate subdirectory (e.g. the
-`v1.7` directory for Kubernetes 1.7 or the `v1.6` directory for Kubernetes 1.6).
-Older Kubernetes versions that don't have their own directory are no longer
-supported.
+directory without modification is `1.18`.
+
+
+### Secure Mode
+
+The use of Kubernetes certificate authority to sign CockroachDBs certificates has been deprecated by Kubernetes. Due to 
+the deprecation to enable secure mode we currently only support the `bring-your-own-certs` configuration. 
+The deprecated method for using the Kubernetes signing authority is in the `v1.17` directory.
+
+**Deprecated Kubernetes Signing Authority**
 
 For secure mode, the controller must enable `certificatesigningrequests`.
 You can check if this is enabled by looking at the controller logs:
@@ -69,7 +74,9 @@ deployment until node-local storage has been more rigorously hardened.
 
 ### Secure mode
 
-Secure mode currently works by requesting node/client certificates from the kubernetes controller at pod initialization time.
+Secure mode mounts the provided secrets into the container at pod startup. To renew or change the certificates you will
+first need to generate the new certificates and update the secrets to use them before performing a rolling restart of 
+your cluster.
 
 ### Geographically distributed clusters
 
@@ -141,88 +148,15 @@ kubectl create -f cluster-init.yaml
 
 ### Secure mode
 
-#### Prerequisites
-
-**REQUIRED**: the kubernetes cluster must run with the certificate controller enabled.
-This is done by passing the `--cluster-signing-cert-file` and `--cluster-signing-key-file` flags.
-If you are using minikube v0.23.0 or newer (run `minikube version` if you aren't sure), you can
-tell it to use the minikube-generated CA by specifying:
-```shell
-minikube start --extra-config=controller-manager.ClusterSigningCertFile="/var/lib/localkube/certs/ca.crt" --extra-config=controller-manager.ClusterSigningKeyFile="/var/lib/localkube/certs/ca.key"
-```
-
-If you're running on an older version of minikube, you can similarly run:
-```shell
-minikube start --extra-config=controller-manager.ClusterSigningCertFile="/var/lib/localkube/ca.crt" --extra-config=controller-manager.ClusterSigningKeyFile="/var/lib/localkube/ca.key"
-```
-
 #### Creating the cluster
-
-Run: `kubectl create -f cockroachdb-statefulset-secure.yaml`
-
-If you get an error saying "attempt to grant extra privileges", you don't have
-sufficient permissions in the cluster to manage certificates. If this happens
-and you're running on Google Kubernetes Engine, see [the note above](#on-gce).
-If not, talk to your cluster administrator.
-
-Each new node will request a certificate from the kubernetes CA during its initialization phase.
-We have configured the StatefulSet to bring up all its pods at once, so you can approve all of
-the pods' certificates in quick succession.
-
-If a pod is rescheduled, it will reuse the previously-generated certificate.
-
-You can view pending certificates and approve them using:
-```
-# List CSRs:
-$ kubectl get csr
-NAME                         AGE       REQUESTOR                               CONDITION
-default.node.cockroachdb-0   4s        system:serviceaccount:default:default   Pending
-default.node.cockroachdb-1   4s        system:serviceaccount:default:default   Pending
-default.node.cockroachdb-2   4s        system:serviceaccount:default:default   Pending
-
-# Examine the CSR:
-$ kubectl describe csr default.node.cockroachdb-0
-Name:                   default.node.cockroachdb-0
-Labels:                 <none>
-Annotations:            <none>
-CreationTimestamp:      Thu, 22 Jun 2017 09:56:49 -0400
-Requesting User:        system:serviceaccount:default:default
-Status:                 Pending
-Subject:
-        Common Name:    node
-        Serial Number:
-        Organization:   Cockroach
-Subject Alternative Names:
-        DNS Names:      localhost
-                        cockroachdb-0.cockroachdb.default.svc.cluster.local
-                        cockroachdb-public
-        IP Addresses:   127.0.0.1
-                        172.17.0.5
-Events: <none>
-
-# If everything checks out, approve the CSR:
-$ kubectl certificate approve default.node.cockroachdb-0
-certificatesigningrequest "default.node.cockroachdb-0" approved
-
-# Otherwise, deny the CSR:
-$ kubectl certificate deny default.node.cockroachdb-0
-certificatesigningrequest "default.node.cockroachdb-0" denied
+Run: 
+```shell
+kubectl create -f bring-your-own-certs/cockroachdb-statefulset.yaml`
 ```
 
 Once all the pods have started, to initialize the cluster run:
 ```shell
-kubectl create -f cluster-init-secure.yaml
-```
-
-This will create a CSR called "default.client.root", which you can approve by
-running:
-```shell
-kubectl certificate approve default.client.root
-```
-
-To confirm that it's done, run:
-```shell
-kubectl get job cluster-init-secure
+kubectl create -f bring-your-own-certs/cluster-init.yaml
 ```
 
 The output should look like:
@@ -230,6 +164,7 @@ The output should look like:
 NAME                  DESIRED   SUCCESSFUL   AGE
 cluster-init-secure   1         1            5m
 ```
+
 
 ## Accessing the database
 

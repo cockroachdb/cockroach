@@ -16,4 +16,13 @@ spec:
           - "init"
           - "--insecure"
           - "--host=cockroachdb-0.cockroachdb"
+        volumeMounts:
+          - name: client-certs
+            mountPath: /cockroach-certs
       restartPolicy: OnFailure
+      volumes:
+        - name: client-certs
+          secret:
+            secretName: cockroachdb.client.root
+            defaultMode: 256
+
