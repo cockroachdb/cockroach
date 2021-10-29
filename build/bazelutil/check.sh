@@ -75,7 +75,7 @@ git grep '//go:generate' -- './*.go' | grep -v stringer | grep -v 'add-leaktest\
     echo "$LINE"
     echo 'Please ensure that the equivalent logic to generate these files is'
     echo 'present in the Bazel build as well, then add the line to the'
-    echo 'EXISTING_GO_GENERATE_COMMENTS in build/bazelutil/check-genfiles.sh.'
+    echo 'EXISTING_GO_GENERATE_COMMENTS in build/bazelutil/check.sh.'
     echo 'Also see https://cockroachlabs.atlassian.net/wiki/spaces/CRDB/pages/1380090083/How+to+ensure+your+code+builds+with+Bazel'
     exit 1
 done
