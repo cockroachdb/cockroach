@@ -42,9 +42,6 @@ func splitPreApply(
 	//
 	// The exception to that is if the DisableEagerReplicaRemoval testing flag is
 	// enabled.
-	//
-	// TODO(ajwerner): rethink DisableEagerReplicaRemoval and remove this in
-	// 20.1 after there are no more preemptive snapshots.
 	_, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 	_, hasLeftDesc := split.LeftDesc.GetReplicaDescriptor(r.StoreID())
 	if !hasRightDesc || !hasLeftDesc {
