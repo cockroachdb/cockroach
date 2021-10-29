@@ -84,6 +84,7 @@ require (
 	github.com/google/go-cmp v0.5.6
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
+	github.com/google/skylark v0.0.0-20181101142754-a5f7082aabed
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/gorilla/mux v1.8.0
 	github.com/goware/modvendor v0.5.0
@@ -101,12 +102,12 @@ require (
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
 	github.com/kr/pretty v0.2.1
 	github.com/kr/text v0.2.0
+	github.com/kylelemons/godebug v1.1.0
 	github.com/leanovate/gopter v0.2.5-0.20190402064358-634a59d12406
 	github.com/lib/pq v1.10.2
 	github.com/lib/pq/auth/kerberos v0.0.0-20200720160335-984a6aa1ca46
 	github.com/linkedin/goavro/v2 v2.10.0
 	github.com/lufia/iostat v1.0.0
-	github.com/lusis/slack-test v0.0.0-20190426140909-c40012f20018 // indirect
 	github.com/maruel/panicparse/v2 v2.2.0
 	github.com/marusama/semaphore v0.0.0-20190110074507-6952cef993b2
 	github.com/mattn/go-isatty v0.0.14
@@ -116,7 +117,6 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.0
 	github.com/mmatczuk/go_generics v0.0.0-20181212143635-0aaa050f9bab
 	github.com/montanaflynn/stats v0.6.3
-	github.com/nlopes/slack v0.4.0
 	github.com/olekukonko/tablewriter v0.0.5-0.20200416053754-163badb3bac6
 	github.com/opencontainers/image-spec v1.0.1
 	github.com/opennota/wd v0.0.0-20180911144301-b446539ab1e7 // indirect
@@ -134,6 +134,7 @@ require (
 	github.com/russross/blackfriday v1.6.0 // indirect
 	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/shirou/gopsutil v2.20.9+incompatible
+	github.com/slack-go/slack v0.9.5
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0
@@ -198,3 +199,5 @@ replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.
 replace go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560
 
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
+
+replace github.com/maruel/panicparse/v2 => github.com/cockroachdb/panicparse/v2 v2.0.0-20211103220158-604c82a44f1e
