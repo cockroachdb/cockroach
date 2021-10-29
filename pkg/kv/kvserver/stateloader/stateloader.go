@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
@@ -61,7 +60,21 @@ func (rsl StateLoader) Load(
 	var s kvserverpb.ReplicaState
 	// TODO(tschottdorf): figure out whether this is always synchronous with
 	// on-disk state (likely iffy during Split/ChangeReplica triggers).
-	s.Desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
+	if desc.IsInitialized() {
+		loadDesc, err := rsl.LoadRangeDescriptor(ctx, reader, desc.StartKey)
+		if err != nil {
+			return kvserverpb.ReplicaState{}, err
+		}
+		s.Desc = loadDesc
+	} else {
+		// This is awkward - for an uninitialized replica, the start key is not
+		// known and so we cannot load a descriptor (and even if we could it would
+		// not be there). The incoming descriptor in this case is a complete stub
+		// anyway; see tryGetOrCreateReplica. Uninitialized replicas require a
+		// delicate dance that nobody quite understands yet. There is room for
+		// improvement.
+		s.Desc = desc
+	}
 	// Read the range lease.
 	lease, err := rsl.LoadLease(ctx, reader)
 	if err != nil {
@@ -148,6 +161,22 @@ func (rsl StateLoader) LoadLease(
 	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeLeaseKey(),
 		hlc.Timestamp{}, &lease, storage.MVCCGetOptions{})
 	return lease, err
+}
+
+// LoadRangeDescriptor loads the RangeDescriptor. The result may be nil if
+// the replica is uninitialized (i.e. its applied index is zero).
+func (rsl StateLoader) LoadRangeDescriptor(
+	ctx context.Context, reader storage.Reader, startKey roachpb.RKey,
+) (*roachpb.RangeDescriptor, error) {
+	var desc roachpb.RangeDescriptor
+	ok, err := storage.MVCCGetProto(ctx, reader, keys.RangeDescriptorKey(startKey),
+		hlc.Timestamp{WallTime: math.MaxInt64}, &desc, storage.MVCCGetOptions{
+			Inconsistent: true, // ignore intent
+		})
+	if err != nil || !ok {
+		return nil, err
+	}
+	return &desc, nil
 }
 
 // SetLease persists a lease.
