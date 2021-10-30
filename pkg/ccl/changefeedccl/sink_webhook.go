@@ -80,7 +80,7 @@ type webhookSink struct {
 	workerGroup ctxgroup.Group
 	exitWorkers func() // Signaled to shut down all workers.
 	eventsChans []chan []messagePayload
-	metrics     *SinkMetrics
+	metrics     *sinkMetrics
 }
 
 type webhookSinkPayload struct {
@@ -89,22 +89,26 @@ type webhookSinkPayload struct {
 }
 
 type encodedPayload struct {
-	data  []byte
-	alloc kvevent.Alloc
-	age   time.Time
+	data     []byte
+	alloc    kvevent.Alloc
+	emitTime time.Time
+	mvcc     hlc.Timestamp
 }
 
 func encodePayloadWebhook(messages []messagePayload) (encodedPayload, error) {
 	result := encodedPayload{
-		age: timeutil.Now(),
+		emitTime: timeutil.Now(),
 	}
 
 	payload := make([]json.RawMessage, len(messages))
 	for i, m := range messages {
 		result.alloc.Merge(&m.alloc)
 		payload[i] = m.val
-		if m.emitTS.Before(result.age) {
-			result.age = m.emitTS
+		if m.emitTime.Before(result.emitTime) {
+			result.emitTime = m.emitTime
+		}
+		if result.mvcc.IsEmpty() || m.mvcc.Less(result.mvcc) {
+			result.mvcc = m.mvcc
 		}
 	}
 
@@ -122,10 +126,11 @@ func encodePayloadWebhook(messages []messagePayload) (encodedPayload, error) {
 
 type messagePayload struct {
 	// Payload message fields.
-	key    []byte
-	val    []byte
-	alloc  kvevent.Alloc
-	emitTS time.Time
+	key      []byte
+	val      []byte
+	alloc    kvevent.Alloc
+	emitTime time.Time
+	mvcc     hlc.Timestamp
 }
 
 // webhookMessage contains either messagePayload or a flush request.
@@ -244,7 +249,7 @@ func makeWebhookSink(
 	opts map[string]string,
 	parallelism int,
 	source timeutil.TimeSource,
-	m *SinkMetrics,
+	m *sinkMetrics,
 ) (Sink, error) {
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
 		return nil, errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeHTTPS)
@@ -554,7 +559,8 @@ func (s *webhookSink) workerLoop(workerIndex int) {
 				return
 			}
 			encoded.alloc.Release(s.workerCtx)
-			s.metrics.recordEmittedBatch(encoded.age, len(msgs), len(encoded.data), sinkDoesNotCompress)
+			s.metrics.recordEmittedBatch(
+				encoded.emitTime, len(msgs), encoded.mvcc, len(encoded.data), sinkDoesNotCompress)
 		}
 	}
 }
@@ -641,7 +647,14 @@ func (s *webhookSink) EmitRow(
 		return ctx.Err()
 	case err := <-s.errChan:
 		return err
-	case s.batchChan <- webhookMessage{payload: messagePayload{key: key, val: value, alloc: alloc, emitTS: timeutil.Now()}}:
+	case s.batchChan <- webhookMessage{
+		payload: messagePayload{
+			key:      key,
+			val:      value,
+			alloc:    alloc,
+			emitTime: timeutil.Now(),
+			mvcc:     mvcc,
+		}}:
 	}
 	return nil
 }
