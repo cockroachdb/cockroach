@@ -73,7 +73,7 @@ func getSink(
 	timestampOracle timestampLowerBoundOracle,
 	user security.SQLUsername,
 	jobID jobspb.JobID,
-	m *SinkMetrics,
+	m *sinkMetrics,
 ) (Sink, error) {
 	u, err := url.Parse(feedCfg.SinkURI)
 	if err != nil {
@@ -298,7 +298,7 @@ type bufferSink struct {
 	alloc   rowenc.DatumAlloc
 	scratch bufalloc.ByteAllocator
 	closed  bool
-	metrics *SinkMetrics
+	metrics *sinkMetrics
 }
 
 // EmitRow implements the Sink interface.
@@ -310,7 +310,7 @@ func (s *bufferSink) EmitRow(
 	r kvevent.Alloc,
 ) error {
 	defer r.Release(ctx)
-	defer s.metrics.recordEmittedMessages()(1, len(key)+len(value), sinkDoesNotCompress)
+	defer s.metrics.recordEmittedMessages()(1, mvcc, len(key)+len(value), sinkDoesNotCompress)
 
 	if s.closed {
 		return errors.New(`cannot EmitRow on a closed sink`)
