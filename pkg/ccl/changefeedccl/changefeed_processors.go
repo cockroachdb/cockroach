@@ -704,7 +704,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	}
 	if err := c.sink.EmitRow(
 		ctx, tableDescriptorTopic{r.tableDesc},
-		keyCopy, valueCopy, r.updated, ev.DetachAlloc(),
+		keyCopy, valueCopy, r.updated, r.mvccTimestamp, ev.DetachAlloc(),
 	); err != nil {
 		return err
 	}
@@ -867,7 +867,8 @@ func (c *nativeKVConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) e
 		return err
 	}
 
-	return c.sink.EmitRow(ctx, &noTopic{}, keyBytes, valBytes, val.Timestamp, ev.DetachAlloc())
+	return c.sink.EmitRow(
+		ctx, &noTopic{}, keyBytes, valBytes, val.Timestamp, val.Timestamp, ev.DetachAlloc())
 }
 
 const (

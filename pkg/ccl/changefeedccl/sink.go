@@ -50,7 +50,7 @@ type Sink interface {
 		ctx context.Context,
 		topic TopicDescriptor,
 		key, value []byte,
-		updated hlc.Timestamp,
+		updated, mvcc hlc.Timestamp,
 		alloc kvevent.Alloc,
 	) error
 	// EmitResolvedTimestamp enqueues a resolved timestamp message for
@@ -224,12 +224,12 @@ type errorWrapperSink struct {
 // EmitRow implements Sink interface.
 func (s errorWrapperSink) EmitRow(
 	ctx context.Context,
-	topicDescr TopicDescriptor,
+	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
-	r kvevent.Alloc,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
 ) error {
-	if err := s.wrapped.EmitRow(ctx, topicDescr, key, value, updated, r); err != nil {
+	if err := s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
@@ -296,7 +296,7 @@ func (s *bufferSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
+	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
 ) error {
 	defer r.Release(ctx)
@@ -386,7 +386,7 @@ func (n *nullSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
+	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
 ) error {
 	defer r.Release(ctx)

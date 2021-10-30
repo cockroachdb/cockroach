@@ -607,7 +607,11 @@ func (s *webhookSink) sinkError() error {
 }
 
 func (s *webhookSink) EmitRow(
-	ctx context.Context, _ TopicDescriptor, key, value []byte, _ hlc.Timestamp, alloc kvevent.Alloc,
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
 ) error {
 	select {
 	// check the webhook sink context in case workers have been terminated
