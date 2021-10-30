@@ -141,7 +141,7 @@ func registerSequelize(r registry.Registry) {
 		// Version telemetry is already disabled in the sequelize-cockroachdb test suite.
 		t.Status("running Sequelize test suite")
 		rawResults, err := c.RunWithBuffer(ctx, t.L(), node,
-			fmt.Sprintf(`cd /mnt/data1/sequelize/ && CRDB_VERSION=%s npm test`, version),
+			fmt.Sprintf(`cd /mnt/data1/sequelize/ && npm test --crdb_version=%s`, version),
 		)
 		rawResultsStr := string(rawResults)
 		t.L().Printf("Test Results: %s", rawResultsStr)
