@@ -965,12 +965,11 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 
 		case stateFinalizeRow:
-			// Populate any system columns in the output.
+			// Populate the timestamp system column if needed. We have to do it
+			// on a per row basis since each row can be modified at a different
+			// time.
 			if rf.table.timestampOutputIdx != noOutputColumn {
 				rf.machine.timestampCol[rf.machine.rowIdx] = tree.TimestampToDecimal(rf.table.rowLastModified)
-			}
-			if rf.table.oidOutputIdx != noOutputColumn {
-				rf.machine.tableoidCol.Set(rf.machine.rowIdx, tree.NewDOid(tree.DInt(rf.table.desc.GetID())))
 			}
 
 			// We're finished with a row. Fill the row in with nulls if
@@ -980,6 +979,10 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			if err := rf.fillNulls(); err != nil {
 				return nil, err
 			}
+			// Note that we haven't set the tableoid value (if that system
+			// column is requested) yet, but it is ok for the purposes of the
+			// memory accounting - oids are fixed length values and, thus, have
+			// already been accounted for when the batch was allocated.
 			rf.accountingHelper.AccountForSet(rf.machine.rowIdx)
 			rf.machine.rowIdx++
 			rf.shiftState()
@@ -1351,6 +1354,16 @@ func (rf *cFetcher) fillNulls() error {
 }
 
 func (rf *cFetcher) finalizeBatch() {
+	// Populate the tableoid system column for the whole batch if necessary.
+	if rf.table.oidOutputIdx != noOutputColumn {
+		id := rf.table.desc.GetID()
+		for i := 0; i < rf.machine.rowIdx; i++ {
+			// Note that we don't need to update the memory accounting because
+			// oids are fixed length values and have already been accounted for
+			// when finalizing each row.
+			rf.machine.tableoidCol.Set(i, rf.table.da.NewDOid(tree.MakeDOid(tree.DInt(id))))
+		}
+	}
 	rf.machine.batch.SetLength(rf.machine.rowIdx)
 	rf.machine.rowIdx = 0
 }
