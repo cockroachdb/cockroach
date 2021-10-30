@@ -175,15 +175,17 @@ type providerOpts struct {
 	// projects represent the GCE projects to operate on. Accessed through
 	// GetProject() or GetProjects() depending on whether the command accepts
 	// multiple projects or a single one.
-	projects       []string
-	ServiceAccount string
-	MachineType    string
-	MinCPUPlatform string
-	Zones          []string
-	Image          string
-	SSDCount       int
-	PDVolumeType   string
-	PDVolumeSize   int
+	projects                  []string
+	ServiceAccount            string
+	MachineType               string
+	MinCPUPlatform            string
+	Zones                     []string
+	Image                     string
+	SSDCount                  int
+	PDVolumeType              string
+	PDVolumeSize              int
+	NetworkInterfaceConfigs   string
+	NetworkPerformanceConfigs string
 
 	// useSharedUser indicates that the shared user rather than the personal
 	// user should be used to ssh into the remote machines.
@@ -292,6 +294,20 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"regardless of geo (default [%s])",
 			strings.Join(defaultZones, ",")))
 	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false, "use preemptible GCE instances")
+
+	flags.StringVar(&o.NetworkInterfaceConfigs,
+		ProviderName+"-network-interface",
+		"",
+		"Adds a network interface to the instance. Only certain keys are allowed.\n "+
+			"(see https://cloud.google.com/vpc/docs/create-use-multiple-interfaces#creating_virtual_machine_instances_with_multiple_network_interfaces)")
+
+	flags.StringVar(&o.NetworkPerformanceConfigs,
+		ProviderName+"-network-performance-configs",
+		"",
+		"To configure a network performance setting for the instance.\n"+
+			"If this flag is not specified, the instance is created with the default\n"+
+			"network performance configuration.\n"+
+			"(see https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration)")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.MultipleProjectsOption) {
@@ -383,12 +399,16 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	// Fixed args.
 	args := []string{
 		"compute", "instances", "create",
-		"--subnet", "default",
 		"--maintenance-policy", "MIGRATE",
 		"--scopes", "default,storage-rw",
 		"--image", p.opts.Image,
 		"--image-project", "ubuntu-os-cloud",
 		"--boot-disk-type", "pd-ssd",
+	}
+
+	if p.opts.NetworkInterfaceConfigs == "" {
+		// Flags --network-interface and --subnet are exclusive.
+		args = append(args, "--subnet", "default")
 	}
 
 	if project == defaultProject && p.opts.ServiceAccount == "" {
@@ -458,6 +478,16 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	args = append(args, "--metadata-from-file", fmt.Sprintf("startup-script=%s", filename))
 	args = append(args, "--project", project)
 	args = append(args, fmt.Sprintf("--boot-disk-size=%dGB", opts.OsVolumeSize))
+
+	if p.opts.NetworkInterfaceConfigs != "" {
+		args = append(args, "--network-interface", p.opts.NetworkInterfaceConfigs)
+
+		if p.opts.NetworkPerformanceConfigs != "" {
+			// Network configuration is only allowed under the beta mode.
+			args = append([]string{"beta"}, args...)
+			args = append(args, "--network-performance-configs", p.opts.NetworkPerformanceConfigs)
+		}
+	}
 	var g errgroup.Group
 
 	nodeZones := vm.ZonePlacement(len(zones), len(names))
