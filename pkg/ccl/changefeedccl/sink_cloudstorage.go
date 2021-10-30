@@ -402,7 +402,7 @@ func (s *cloudStorageSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
+	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	if s.files == nil {

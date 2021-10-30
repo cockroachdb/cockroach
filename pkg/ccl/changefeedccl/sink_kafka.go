@@ -200,7 +200,7 @@ func (s *kafkaSink) EmitRow(
 	ctx context.Context,
 	topicDescr TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
+	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	topic, isKnownTopic := s.topics[topicDescr.GetID()]
