@@ -85,7 +85,7 @@ type kafkaSink struct {
 	stopWorkerCh chan struct{}
 	worker       sync.WaitGroup
 	scratch      bufalloc.ByteAllocator
-	metrics      *SinkMetrics
+	metrics      *sinkMetrics
 
 	// Only synchronized between the client goroutine and the worker goroutine.
 	mu struct {
@@ -199,6 +199,7 @@ func (s *kafkaSink) Close() error {
 type messageMetadata struct {
 	alloc         kvevent.Alloc
 	updateMetrics recordEmittedMessagesCallback
+	mvcc          hlc.Timestamp
 }
 
 // EmitRow implements the Sink interface.
@@ -218,7 +219,7 @@ func (s *kafkaSink) EmitRow(
 		Topic:    topic,
 		Key:      sarama.ByteEncoder(key),
 		Value:    sarama.ByteEncoder(value),
-		Metadata: messageMetadata{alloc: alloc, updateMetrics: s.metrics.recordEmittedMessages()},
+		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: s.metrics.recordEmittedMessages()},
 	}
 	return s.emitMessage(ctx, msg)
 }
@@ -357,7 +358,7 @@ func (s *kafkaSink) workerLoop() {
 		if m, ok := ackMsg.Metadata.(messageMetadata); ok {
 			m.alloc.Release(s.ctx)
 			if ackError == nil {
-				m.updateMetrics(1, ackMsg.Key.Length()+ackMsg.Value.Length(), sinkDoesNotCompress)
+				m.updateMetrics(1, m.mvcc, ackMsg.Key.Length()+ackMsg.Value.Length(), sinkDoesNotCompress)
 			}
 		}
 
@@ -629,7 +630,7 @@ func makeKafkaSink(
 	u sinkURL,
 	targets jobspb.ChangefeedTargets,
 	opts map[string]string,
-	m *SinkMetrics,
+	m *sinkMetrics,
 ) (Sink, error) {
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
 	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)

@@ -356,9 +356,12 @@ func changefeedPlanHook(
 		// which will be immediately closed, only to check for errors.
 		{
 			var nilOracle timestampLowerBoundOracle
+			sm := &sinkMetrics{
+				SinkMetrics: p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).SinkMetrics,
+			}
 			canarySink, err := getSink(
-				ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details, nilOracle, p.User(), jobspb.InvalidJobID,
-				p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).SinkMetrics,
+				ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details, nilOracle,
+				p.User(), jobspb.InvalidJobID, sm,
 			)
 			if err != nil {
 				return changefeedbase.MaybeStripRetryableErrorMarker(err)

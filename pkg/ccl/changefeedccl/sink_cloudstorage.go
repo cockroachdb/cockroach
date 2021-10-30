@@ -62,6 +62,7 @@ type cloudStorageSinkFile struct {
 	numMessages   int
 	buf           bytes.Buffer
 	alloc         kvevent.Alloc
+	oldestMVCC    hlc.Timestamp
 	recordMetrics recordEmittedMessagesCallback
 }
 
@@ -299,7 +300,7 @@ type cloudStorageSink struct {
 	dataFileTs        string
 	dataFilePartition string
 	prevFilename      string
-	metrics           *SinkMetrics
+	metrics           *sinkMetrics
 }
 
 const sinkCompressionGzip = "gzip"
@@ -315,7 +316,7 @@ func makeCloudStorageSink(
 	timestampOracle timestampLowerBoundOracle,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	user security.SQLUsername,
-	m *SinkMetrics,
+	m *sinkMetrics,
 ) (Sink, error) {
 	var targetMaxFileSize int64 = 16 << 20 // 16MB
 	if fileSizeParam := u.consumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
@@ -387,14 +388,21 @@ func makeCloudStorageSink(
 	return s, nil
 }
 
-func (s *cloudStorageSink) getOrCreateFile(topic TopicDescriptor) *cloudStorageSinkFile {
+func (s *cloudStorageSink) getOrCreateFile(
+	topic TopicDescriptor, eventMVCC hlc.Timestamp,
+) *cloudStorageSinkFile {
 	key := cloudStorageSinkKey{topic.GetName(), int64(topic.GetVersion())}
 	if item := s.files.Get(key); item != nil {
-		return item.(*cloudStorageSinkFile)
+		f := item.(*cloudStorageSinkFile)
+		if eventMVCC.Less(f.oldestMVCC) {
+			f.oldestMVCC = eventMVCC
+		}
+		return f
 	}
 	f := &cloudStorageSinkFile{
 		cloudStorageSinkKey: key,
 		recordMetrics:       s.metrics.recordEmittedMessages(),
+		oldestMVCC:          eventMVCC,
 	}
 	switch s.compression {
 	case sinkCompressionGzip:
@@ -416,7 +424,7 @@ func (s *cloudStorageSink) EmitRow(
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
 
-	file := s.getOrCreateFile(topic)
+	file := s.getOrCreateFile(topic, mvcc)
 	file.alloc.Merge(&alloc)
 
 	if _, err := file.Write(value); err != nil {
@@ -556,7 +564,7 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	if err := cloud.WriteFile(ctx, s.es, filepath.Join(s.dataFilePartition, filename), bytes.NewReader(file.buf.Bytes())); err != nil {
 		return err
 	}
-	file.recordMetrics(file.numMessages, file.rawSize, compressedBytes)
+	file.recordMetrics(file.numMessages, file.oldestMVCC, file.rawSize, compressedBytes)
 
 	return nil
 }
