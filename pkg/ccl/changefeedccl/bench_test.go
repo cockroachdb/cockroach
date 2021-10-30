@@ -133,9 +133,9 @@ func makeBenchSink() *benchSink {
 
 func (s *benchSink) EmitRow(
 	ctx context.Context,
-	topicDescr TopicDescriptor,
+	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
+	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	defer alloc.Release(ctx)
