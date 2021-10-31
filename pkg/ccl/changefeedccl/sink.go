@@ -73,7 +73,7 @@ func getSink(
 	timestampOracle timestampLowerBoundOracle,
 	user security.SQLUsername,
 	jobID jobspb.JobID,
-	m *sinkMetrics,
+	m *sliMetrics,
 ) (Sink, error) {
 	u, err := url.Parse(feedCfg.SinkURI)
 	if err != nil {
@@ -291,7 +291,7 @@ type bufferSink struct {
 	alloc   rowenc.DatumAlloc
 	scratch bufalloc.ByteAllocator
 	closed  bool
-	metrics *sinkMetrics
+	metrics *sliMetrics
 }
 
 // EmitRow implements the Sink interface.
