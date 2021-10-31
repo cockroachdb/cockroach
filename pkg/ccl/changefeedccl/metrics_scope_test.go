@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -22,11 +23,20 @@ func TestMetricScope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	scope := CreateSLIScopes()
+	scope := CreateSLIScopes(base.DefaultHistogramWindowInterval())
 	require.NotNil(t, scope)
 
 	sliMetricNames := []string{
 		"error_retries",
+		"admit_latency",
+		"commit_latency",
+		"backfill_count",
+		"emitted_messages",
+		"emitted_bytes",
+		"flushed_bytes",
+		"flushes",
+		"sink_batch_hist_nanos",
+		"flush_hist_nanos",
 	}
 
 	expectedMetrics := make(map[string]struct{})
@@ -49,7 +59,7 @@ func TestMetricScope(t *testing.T) {
 	registry.AddMetricStruct(scope)
 	registry.Each(func(name string, _ interface{}) {
 		_, exists := expectedMetrics[name]
-		require.True(t, exists)
+		require.True(t, exists, name)
 		delete(expectedMetrics, name)
 	})
 	require.Equal(t, 0, len(expectedMetrics),

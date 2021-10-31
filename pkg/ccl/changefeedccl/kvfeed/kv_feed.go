@@ -46,7 +46,7 @@ type Config struct {
 	Targets            jobspb.ChangefeedTargets
 	Writer             kvevent.Writer
 	Metrics            *kvevent.Metrics
-	OnBackfillCallback func(timestamp hlc.Timestamp)
+	OnBackfillCallback func() func()
 	MM                 *mon.BytesMonitor
 	WithDiff           bool
 	SchemaChangeEvents changefeedbase.SchemaChangeEventClass
@@ -157,7 +157,7 @@ type kvFeed struct {
 	writer              kvevent.Writer
 	codec               keys.SQLCodec
 
-	onBackfillCallback func(timestamp hlc.Timestamp)
+	onBackfillCallback func() func()
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass
 	schemaChangePolicy changefeedbase.SchemaChangePolicy
 
@@ -330,8 +330,7 @@ func (f *kvFeed) scanIfShould(
 	}
 
 	if f.onBackfillCallback != nil {
-		f.onBackfillCallback(scanTime)
-		defer f.onBackfillCallback(hlc.Timestamp{})
+		defer f.onBackfillCallback()()
 	}
 
 	if err := f.scanner.Scan(ctx, f.writer, physicalConfig{

@@ -90,8 +90,9 @@ type changeAggregator struct {
 	// boundary information.
 	frontier *schemaChangeFrontier
 
-	metrics *Metrics
-	knobs   TestingKnobs
+	metrics    *Metrics
+	sliMetrics *SLIMetrics
+	knobs      TestingKnobs
 }
 
 type timestampLowerBoundOracle interface {
@@ -236,9 +237,10 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	// runs. They're all stored as the `metric.Struct` interface because of
 	// dependency cycles.
 	ca.metrics = ca.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
-	sm := &sinkMetrics{SinkMetrics: ca.metrics.SinkMetrics}
+	ca.sliMetrics = ca.metrics.getSLIMetrics(ca.spec.Feed.Opts[changefeedbase.OptSLIScope])
+	sm := ca.metrics.sinkMetricsWithSLI(ca.sliMetrics)
 	ca.sink, err = getSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
-		ca.spec.User(), ca.spec.JobID, sm)
+		ca.spec.User(), ca.spec.JobID, ca.metrics.sinkMetricsWithSLI(ca.sliMetrics))
 
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
@@ -336,13 +338,18 @@ func (ca *changeAggregator) makeKVFeedCfg(
 			initialHighWater, &ca.metrics.SchemaFeedMetrics)
 	}
 
-	onBackfillCb := func(backfillTS hlc.Timestamp) {
-		if backfillTS.IsEmpty() {
+	onBackfillCb := func() func() {
+		sm.backfilling.Set(true)
+		ca.metrics.BackfillCount.Inc(1)
+		if sm.sli != nil {
+			sm.sli.BackfillCount.Inc(1)
+		}
+		return func() {
 			sm.backfilling.Set(false)
 			ca.metrics.BackfillCount.Dec(1)
-		} else {
-			sm.backfilling.Set(true)
-			ca.metrics.BackfillCount.Inc(1)
+			if sm.sli != nil {
+				sm.sli.BackfillCount.Dec(1)
+			}
 		}
 	}
 
@@ -496,6 +503,9 @@ func (ca *changeAggregator) tick() error {
 	// Keep track of SLI latency for non-backfill/rangefeed KV events.
 	if event.Type() == kvevent.TypeKV && event.BackfillTimestamp().IsEmpty() {
 		ca.metrics.AdmitLatency.RecordValue(timeutil.Since(event.Timestamp().GoTime()).Nanoseconds())
+		if ca.sliMetrics != nil {
+			ca.sliMetrics.AdmitLatency.RecordValue(timeutil.Since(event.Timestamp().GoTime()).Nanoseconds())
+		}
 	}
 
 	switch event.Type() {
@@ -1082,9 +1092,9 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	// but the oracle is only used when emitting row updates.
 	var nilOracle timestampLowerBoundOracle
 	var err error
-	sm := &sinkMetrics{SinkMetrics: cf.metrics.SinkMetrics}
+	sli := cf.metrics.getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptSLIScope])
 	cf.sink, err = getSink(ctx, cf.flowCtx.Cfg, cf.spec.Feed, nilOracle,
-		cf.spec.User(), cf.spec.JobID, sm)
+		cf.spec.User(), cf.spec.JobID, cf.metrics.sinkMetricsWithSLI(sli))
 
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
