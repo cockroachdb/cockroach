@@ -46,7 +46,7 @@ type Config struct {
 	Targets            jobspb.ChangefeedTargets
 	Writer             kvevent.Writer
 	Metrics            *kvevent.Metrics
-	OnBackfillCallback func(timestamp hlc.Timestamp)
+	OnBackfillCallback func() func(t hlc.Timestamp)
 	MM                 *mon.BytesMonitor
 	WithDiff           bool
 	SchemaChangeEvents changefeedbase.SchemaChangeEventClass
@@ -157,7 +157,7 @@ type kvFeed struct {
 	writer              kvevent.Writer
 	codec               keys.SQLCodec
 
-	onBackfillCallback func(timestamp hlc.Timestamp)
+	onBackfillCallback func() func(t hlc.Timestamp)
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass
 	schemaChangePolicy changefeedbase.SchemaChangePolicy
 
@@ -269,6 +269,17 @@ func (f *kvFeed) scanIfShould(
 	ctx context.Context, initialScan bool, highWater hlc.Timestamp,
 ) error {
 	scanTime := highWater.Next()
+
+	if f.onBackfillCallback != nil {
+		// Regardless of whether we will actually execute backfill or not,
+		// we will set backfill timestamp to the value of scanTime when this
+		// function returns.
+		setBackfillTS := f.onBackfillCallback()
+		defer func() {
+			setBackfillTS(scanTime)
+		}()
+	}
+
 	events, err := f.tableFeed.Peek(ctx, scanTime)
 	if err != nil {
 		return err
@@ -325,11 +336,6 @@ func (f *kvFeed) scanIfShould(
 	if (!isInitialScan && f.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyNoBackfill) ||
 		len(spansToBackfill) == 0 {
 		return nil
-	}
-
-	if f.onBackfillCallback != nil {
-		f.onBackfillCallback(scanTime)
-		defer f.onBackfillCallback(hlc.Timestamp{})
 	}
 
 	if err := f.scanner.Scan(ctx, f.writer, physicalConfig{
