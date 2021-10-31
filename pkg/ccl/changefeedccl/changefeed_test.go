@@ -2164,10 +2164,13 @@ func TestChangefeedMonitoring(t *testing.T) {
 			t.Errorf(`expected 0 got %d`, c)
 		}
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH sli_scope='tier0'`)
 		_, _ = foo.Next()
 		testutils.SucceedsSoon(t, func() error {
 			if c := s.MustGetSQLCounter(`changefeed.emitted_messages`); c != 1 {
+				return errors.Errorf(`expected 1 got %d`, c)
+			}
+			if c := s.MustGetSQLCounter(`changefeed.tier0.emitted_messages`); c != 1 {
 				return errors.Errorf(`expected 1 got %d`, c)
 			}
 			if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 22 {
@@ -3038,6 +3041,11 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `unknown on_error: not_valid, valid values are 'pause' and 'fail'`,
 		`CREATE CHANGEFEED FOR foo into $1 WITH on_error='not_valid'`,
 		`kafka://nope`)
+
+	// SLI scope must exist
+	sqlDB.ExpectErr(
+		t, `invalid "sli_scope" value "no_such_scope"`,
+		`CREATE CHANGEFEED FOR foo into 'null://' WITH sli_scope='no_such_scope'`)
 }
 
 func TestChangefeedDescription(t *testing.T) {

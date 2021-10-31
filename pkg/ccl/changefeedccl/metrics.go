@@ -9,6 +9,7 @@
 package changefeedccl
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
@@ -21,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// SinkMetrics are sink specific metrics.
+// SinkMetrics are sink specific metrics across all changefeeds.
 type SinkMetrics struct {
 	EmittedMessages *metric.Counter
 	EmittedBytes    *metric.Counter
@@ -36,13 +37,14 @@ type SinkMetrics struct {
 func (m *SinkMetrics) MetricStruct() {}
 
 // sinkMetrics annotates global SinkMetrics with per-changefeed information,
-// such as the state of backfill.
+// such as the state of backfill and sli metrics.
 type sinkMetrics struct {
 	*SinkMetrics
 	backfilling syncutil.AtomicBool
+	sli         *SLIMetrics
 }
 
-// sinkDoesNotCompress is a sentinel value indicating the the sink
+// sinkDoesNotCompress is a sentinel value indicating the sink
 // does not compress the data it emits.
 const sinkDoesNotCompress = -1
 
@@ -76,6 +78,15 @@ func (m *sinkMetrics) recordEmittedBatch(
 	if !m.backfilling.Get() {
 		m.CommitLatency.RecordValue(timeutil.Since(mvcc.GoTime()).Nanoseconds())
 	}
+	if m.sli != nil {
+		m.sli.EmittedMessages.Inc(int64(numMessages))
+		m.sli.EmittedBytes.Inc(int64(bytes))
+		m.sli.FlushedBytes.Inc(int64(compressedBytes))
+		m.BatchHistNanos.RecordValue(emitNanos)
+		if !m.backfilling.Get() {
+			m.sli.CommitLatency.RecordValue(timeutil.Since(mvcc.GoTime()).Nanoseconds())
+		}
+	}
 }
 
 func (m *sinkMetrics) recordResolvedCallback() func() {
@@ -91,10 +102,15 @@ func (m *sinkMetrics) recordResolvedCallback() func() {
 		// any number of times.
 		// s.metrics.EmittedBytes.Inc(int64(len(payload)))
 		m.BatchHistNanos.RecordValue(emitNanos)
+
+		if m.sli != nil {
+			m.sli.EmittedMessages.Inc(1)
+			m.sli.BatchHistNanos.RecordValue(emitNanos)
+		}
 	}
 }
 
-func (m *SinkMetrics) recordFlushRequestCallback() func() {
+func (m *sinkMetrics) recordFlushRequestCallback() func() {
 	if m == nil {
 		return func() {}
 	}
@@ -104,6 +120,10 @@ func (m *SinkMetrics) recordFlushRequestCallback() func() {
 		flushNanos := timeutil.Since(start).Nanoseconds()
 		m.Flushes.Inc(1)
 		m.FlushHistNanos.RecordValue(flushNanos)
+		if m.sli != nil {
+			m.sli.Flushes.Inc(1)
+			m.sli.FlushHistNanos.RecordValue(flushNanos)
+		}
 	}
 }
 
@@ -116,33 +136,16 @@ const (
 )
 
 var (
-	metaChangefeedEmittedMessages = metric.Metadata{
-		Name:        "changefeed.emitted_messages",
-		Help:        "Messages emitted by all feeds",
-		Measurement: "Messages",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaChangefeedForwardedResolvedMessages = metric.Metadata{
 		Name:        "changefeed.forwarded_resolved_messages",
 		Help:        "Resolved timestamps forwarded from the change aggregator to the change frontier",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaChangefeedEmittedBytes = metric.Metadata{
-		Name:        "changefeed.emitted_bytes",
-		Help:        "Bytes emitted by all feeds",
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
-	metaChangefeedFlushedBytes = metric.Metadata{
-		Name:        "changefeed.flushed_bytes",
-		Help:        "Bytes emitted by all feeds; maybe different from changefeed.emitted_bytes when compression enabled",
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
-	metaChangefeedFlushes = metric.Metadata{
-		Name:        "changefeed.flushes",
-		Help:        "Total flushes across all feeds",
+
+	metaChangefeedFlushBytes = metric.Metadata{
+		Name:        "changefeed.flush_bytes",
+		Help:        "Total size of flushes across all feeds",
 		Measurement: "Flushes",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -172,15 +175,7 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	metaCommitLatency = metric.Metadata{
-		Name: "changefeed.commit_latency",
-		Help: "Event commit latency: a difference between event MVCC timestamp " +
-			"and the time it was acknowledged by the downstream sink.  If the sink batches events, " +
-			" then the difference between the oldest event in the back and acknowledgement is recorded; " +
-			"Excludes latency during backfill",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
+
 	metaChangefeedRunning = metric.Metadata{
 		Name:        "changefeed.running",
 		Help:        "Number of currently running changefeeds, including sinkless",
@@ -191,20 +186,6 @@ var (
 	metaChangefeedCheckpointHistNanos = metric.Metadata{
 		Name:        "changefeed.checkpoint_hist_nanos",
 		Help:        "Time spent checkpointing changefeed progress",
-		Measurement: "Changefeeds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-
-	metaChangefeedBatchHistNanos = metric.Metadata{
-		Name:        "changefeed.sink_batch_hist_nanos",
-		Help:        "Time spent batched in the sink buffer before being being flushed and acknowledged",
-		Measurement: "Changefeeds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-
-	metaChangefeedFlushHistNanos = metric.Metadata{
-		Name:        "changefeed.flush_hist_nanos",
-		Help:        "Time spent flushing messages across all changefeeds",
 		Measurement: "Changefeeds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -226,17 +207,88 @@ var (
 		Measurement: "Updates",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	// Following metadata should not use "changefeed." prefix.
+	// These are shared between aggregate metrics, and SLI scoped ones.
 	metaChangefeedBackfillCount = metric.Metadata{
-		Name:        "changefeed.backfill_count",
+		Name:        "backfill_count",
 		Help:        "Number of changefeeds currently executing backfill",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 	}
 )
 
+func metaWithPrefix(prefix string, meta metric.Metadata) metric.Metadata {
+	meta.Name = fmt.Sprintf("%s.%s", prefix, meta.Name)
+	return meta
+}
+
+func newSinkMetricsWithPrefix(prefix string, histogramWindow time.Duration) *SinkMetrics {
+	// Note: metric.Metadata name for all sink metrics will be prefixed with prefix.
+	metaChangefeedEmittedMessages := metric.Metadata{
+		Name:        "emitted_messages",
+		Help:        "Messages emitted by all feeds",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedEmittedBytes := metric.Metadata{
+		Name:        "emitted_bytes",
+		Help:        "Bytes emitted by all feeds",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaChangefeedFlushedBytes := metric.Metadata{
+		Name:        "flushed_bytes",
+		Help:        "Bytes emitted by all feeds; maybe different from changefeed.emitted_bytes when compression enabled",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaChangefeedFlushes := metric.Metadata{
+		Name:        "flushes",
+		Help:        "Total flushes across all feeds",
+		Measurement: "Flushes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedBatchHistNanos := metric.Metadata{
+		Name:        "sink_batch_hist_nanos",
+		Help:        "Time spent batched in the sink buffer before being flushed and acknowledged",
+		Measurement: "Changefeeds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaChangefeedFlushHistNanos := metric.Metadata{
+		Name:        "flush_hist_nanos",
+		Help:        "Time spent flushing messages across all changefeeds",
+		Measurement: "Changefeeds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaCommitLatency := metric.Metadata{
+		Name: "commit_latency",
+		Help: "Event commit latency: a difference between event MVCC timestamp " +
+			"and the time it was acknowledged by the downstream sink.  If the sink batches events, " +
+			" then the difference between the oldest event in the back and acknowledgement is recorded; " +
+			"Excludes latency during backfill",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	return &SinkMetrics{
+		EmittedMessages: metric.NewCounter(metaWithPrefix(prefix, metaChangefeedEmittedMessages)),
+		EmittedBytes:    metric.NewCounter(metaWithPrefix(prefix, metaChangefeedEmittedBytes)),
+		FlushedBytes:    metric.NewCounter(metaWithPrefix(prefix, metaChangefeedFlushedBytes)),
+		Flushes:         metric.NewCounter(metaWithPrefix(prefix, metaChangefeedFlushes)),
+
+		BatchHistNanos: metric.NewHistogram(metaWithPrefix(prefix, metaChangefeedBatchHistNanos),
+			histogramWindow, changefeedEmitHistMaxLatency.Nanoseconds(), 1),
+		FlushHistNanos: metric.NewHistogram(metaWithPrefix(prefix, metaChangefeedFlushHistNanos),
+			histogramWindow, changefeedFlushHistMaxLatency.Nanoseconds(), 1),
+		CommitLatency: metric.NewHistogram(metaWithPrefix(prefix, metaCommitLatency),
+			histogramWindow, commitLatencyMaxValue.Nanoseconds(), 1),
+	}
+}
+
 // Metrics are for production monitoring of changefeeds.
 type Metrics struct {
-	*SinkMetrics
+	SinkMetrics       *SinkMetrics
 	KVFeedMetrics     kvevent.Metrics
 	SchemaFeedMetrics schemafeed.Metrics
 
@@ -253,6 +305,8 @@ type Metrics struct {
 	FrontierUpdates *metric.Counter
 	ThrottleMetrics cdcutils.Metrics
 
+	SLIScopes *SLIScopes
+
 	mu struct {
 		syncutil.Mutex
 		id       int
@@ -264,24 +318,23 @@ type Metrics struct {
 // MetricStruct implements the metric.Struct interface.
 func (*Metrics) MetricStruct() {}
 
+// getSLIMetrics retursn SLIMeterics associated with the specified scope.
+func (m *Metrics) getSLIMetrics(scope string) *SLIMetrics {
+	return m.SLIScopes.GetSLIMetrics(scope)
+}
+
+func (m *Metrics) sinkMetricsWithSLI(sli *SLIMetrics) *sinkMetrics {
+	return &sinkMetrics{
+		SinkMetrics: m.SinkMetrics,
+		sli:         sli,
+	}
+}
+
 // MakeMetrics makes the metrics for changefeed monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
+	const prefix = "changefeed"
 	m := &Metrics{
-		SinkMetrics: &SinkMetrics{
-			EmittedMessages: metric.NewCounter(metaChangefeedEmittedMessages),
-			EmittedBytes:    metric.NewCounter(metaChangefeedEmittedBytes),
-			FlushedBytes:    metric.NewCounter(metaChangefeedFlushedBytes),
-			Flushes:         metric.NewCounter(metaChangefeedFlushes),
-
-			BatchHistNanos: metric.NewHistogram(metaChangefeedBatchHistNanos, histogramWindow,
-				changefeedEmitHistMaxLatency.Nanoseconds(), 1),
-			FlushHistNanos: metric.NewHistogram(metaChangefeedFlushHistNanos, histogramWindow,
-				changefeedFlushHistMaxLatency.Nanoseconds(), 1),
-
-			CommitLatency: metric.NewHistogram(metaCommitLatency, histogramWindow,
-				commitLatencyMaxValue.Nanoseconds(), 1),
-		},
-
+		SinkMetrics:       newSinkMetricsWithPrefix(prefix, histogramWindow),
 		KVFeedMetrics:     kvevent.MakeMetrics(histogramWindow),
 		SchemaFeedMetrics: schemafeed.MakeMetrics(histogramWindow),
 		ErrorRetries:      metric.NewCounter(metaChangefeedErrorRetries),
@@ -294,10 +347,11 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		CheckpointHistNanos: metric.NewHistogram(metaChangefeedCheckpointHistNanos, histogramWindow,
 			changefeedCheckpointHistMaxLatency.Nanoseconds(), 2),
 
-		BackfillCount:   metric.NewGauge(metaChangefeedBackfillCount),
+		BackfillCount:   metric.NewGauge(metaWithPrefix(prefix, metaChangefeedBackfillCount)),
 		Running:         metric.NewGauge(metaChangefeedRunning),
 		FrontierUpdates: metric.NewCounter(metaChangefeedFrontierUpdates),
 		ThrottleMetrics: cdcutils.MakeMetrics(histogramWindow),
+		SLIScopes:       CreateSLIScopes(histogramWindow),
 	}
 
 	m.mu.resolved = make(map[int]hlc.Timestamp)
