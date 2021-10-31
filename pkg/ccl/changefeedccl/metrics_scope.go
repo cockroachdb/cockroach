@@ -10,7 +10,9 @@ package changefeedccl
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
@@ -21,25 +23,37 @@ const maxSLIScopes = 8
 
 // SLIMetrics is the list of SLI related metrics for changefeeds.
 type SLIMetrics struct {
-	ErrorRetries *metric.Counter
-	// TODO(yevgeniy): Add more SLI related metrics.
+	*SinkMetrics
+	ErrorRetries      *metric.Counter
+	AdmitLatency      *metric.Histogram
+	BackfillTimestamp *metric.Gauge
 }
 
 // MetricStruct implements metric.Struct interface
 func (*SLIMetrics) MetricStruct() {}
 
-func makeSLIMetrics(prefix string) *SLIMetrics {
-	withPrefix := func(meta metric.Metadata) metric.Metadata {
-		meta.Name = fmt.Sprintf("%s.%s", prefix, meta.Name)
-		return meta
-	}
-
+func makeSLIMetrics(prefix string, histogramWindow time.Duration) *SLIMetrics {
 	return &SLIMetrics{
-		ErrorRetries: metric.NewCounter(withPrefix(metric.Metadata{
+		SinkMetrics: newSinkMetricsWithPrefix(prefix, histogramWindow),
+		ErrorRetries: metric.NewCounter(metaWithPrefix(prefix, metric.Metadata{
 			Name:        "error_retries",
 			Help:        "Total retryable errors encountered this SLI",
 			Measurement: "Errors",
 			Unit:        metric.Unit_COUNT,
+		})),
+		AdmitLatency: metric.NewHistogram(metaWithPrefix(prefix, metric.Metadata{
+			Name: "admit_latency",
+			Help: "Event admission latency: a difference between event MVCC timestamp " +
+				"and the time it was admitted into changefeed pipeline; Excludes latency during backfill",
+			Measurement: "Nanoseconds",
+			Unit:        metric.Unit_NANOSECONDS,
+		}), base.DefaultHistogramWindowInterval(), admitLatencyMaxValue.Nanoseconds(), 1),
+
+		BackfillTimestamp: metric.NewGauge(metaWithPrefix(prefix, metric.Metadata{
+			Name:        "backfill_timestamp",
+			Help:        "Backfill timestamp in seconds; Set when backfill is running, 0 otherwise.",
+			Measurement: "Time (s)",
+			Unit:        metric.Unit_NANOSECONDS,
 		})),
 	}
 }
@@ -57,14 +71,14 @@ func (*SLIScopes) MetricStruct() {}
 // SLI specific metrics for each scope.
 // The scopes are statically named "tier<number>", and each metric name
 // contained in SLIMetrics will be prefixed by "changefeed.tier<number" prefix.
-func CreateSLIScopes() *SLIScopes {
+func CreateSLIScopes(histogramWindow time.Duration) *SLIScopes {
 	scope := &SLIScopes{
 		names: make(map[string]*SLIMetrics, maxSLIScopes),
 	}
 
 	for i := 0; i < maxSLIScopes; i++ {
 		scopeName := fmt.Sprintf("tier%d", i)
-		scope.Scopes[i] = makeSLIMetrics(fmt.Sprintf("changefeed.%s", scopeName))
+		scope.Scopes[i] = makeSLIMetrics(fmt.Sprintf("changefeed.%s", scopeName), histogramWindow)
 		scope.names[scopeName] = scope.Scopes[i]
 	}
 	return scope

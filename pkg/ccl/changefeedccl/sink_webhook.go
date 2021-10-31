@@ -142,6 +142,7 @@ type webhookMessage struct {
 type batch struct {
 	buffer      []messagePayload
 	bufferBytes int
+	messages    int
 }
 
 func (b *batch) addToBuffer(m messagePayload) {
@@ -152,6 +153,7 @@ func (b *batch) addToBuffer(m messagePayload) {
 func (b *batch) reset() {
 	b.buffer = b.buffer[:0]
 	b.bufferBytes = 0
+	b.messages = 0
 }
 
 type batchConfig struct {
