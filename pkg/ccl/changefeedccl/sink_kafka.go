@@ -85,7 +85,7 @@ type kafkaSink struct {
 	stopWorkerCh chan struct{}
 	worker       sync.WaitGroup
 	scratch      bufalloc.ByteAllocator
-	metrics      *sinkMetrics
+	metrics      *sliMetrics
 
 	// Only synchronized between the client goroutine and the worker goroutine.
 	mu struct {
@@ -356,10 +356,10 @@ func (s *kafkaSink) workerLoop() {
 		}
 
 		if m, ok := ackMsg.Metadata.(messageMetadata); ok {
-			m.alloc.Release(s.ctx)
 			if ackError == nil {
 				m.updateMetrics(1, m.mvcc, ackMsg.Key.Length()+ackMsg.Value.Length(), sinkDoesNotCompress)
 			}
+			m.alloc.Release(s.ctx)
 		}
 
 		s.mu.Lock()
@@ -630,7 +630,7 @@ func makeKafkaSink(
 	u sinkURL,
 	targets jobspb.ChangefeedTargets,
 	opts map[string]string,
-	m *sinkMetrics,
+	m *sliMetrics,
 ) (Sink, error) {
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
 	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)

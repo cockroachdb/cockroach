@@ -90,8 +90,9 @@ type changeAggregator struct {
 	// boundary information.
 	frontier *schemaChangeFrontier
 
-	metrics *Metrics
-	knobs   TestingKnobs
+	metrics    *Metrics
+	sliMetrics *sliMetrics
+	knobs      TestingKnobs
 }
 
 type timestampLowerBoundOracle interface {
@@ -245,9 +246,15 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	// runs. They're all stored as the `metric.Struct` interface because of
 	// dependency cycles.
 	ca.metrics = ca.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
-	sm := &sinkMetrics{SinkMetrics: ca.metrics.SinkMetrics}
+	ca.sliMetrics, err = ca.metrics.getSLIMetrics(ca.spec.Feed.Opts[changefeedbase.OptMetricsScope])
+	if err != nil {
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return
+	}
+
 	ca.sink, err = getSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
-		ca.spec.User(), ca.spec.JobID, sm)
+		ca.spec.User(), ca.spec.JobID, ca.sliMetrics)
 
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
@@ -265,8 +272,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
-	initialHighWater, needsInitialScan := getKVFeedInitialParameters(ca.spec)
-	ca.eventProducer, err = ca.startKVFeed(ctx, spans, initialHighWater, needsInitialScan, sm)
+	ca.eventProducer, err = ca.startKVFeed(ctx, spans, initialHighWater, needsInitialScan, ca.sliMetrics)
 	if err != nil {
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
@@ -288,7 +294,7 @@ func (ca *changeAggregator) startKVFeed(
 	spans []roachpb.Span,
 	initialHighWater hlc.Timestamp,
 	needsInitialScan bool,
-	sm *sinkMetrics,
+	sm *sliMetrics,
 ) (kvevent.Reader, error) {
 	cfg := ca.flowCtx.Cfg
 	buf := kvevent.NewThrottlingBuffer(
@@ -328,7 +334,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	buf kvevent.Writer,
 	initialHighWater hlc.Timestamp,
 	needsInitialScan bool,
-	sm *sinkMetrics,
+	sm *sliMetrics,
 ) kvfeed.Config {
 	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
 		ca.spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
@@ -345,16 +351,6 @@ func (ca *changeAggregator) makeKVFeedCfg(
 			initialHighWater, &ca.metrics.SchemaFeedMetrics)
 	}
 
-	onBackfillCb := func(backfillTS hlc.Timestamp) {
-		if backfillTS.IsEmpty() {
-			sm.backfilling.Set(false)
-			ca.metrics.BackfillCount.Dec(1)
-		} else {
-			sm.backfilling.Set(true)
-			ca.metrics.BackfillCount.Inc(1)
-		}
-	}
-
 	return kvfeed.Config{
 		Writer:             buf,
 		Settings:           cfg.Settings,
@@ -366,7 +362,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		BackfillCheckpoint: ca.spec.Checkpoint.Spans,
 		Targets:            ca.spec.Feed.Targets,
 		Metrics:            &ca.metrics.KVFeedMetrics,
-		OnBackfillCallback: onBackfillCb,
+		OnBackfillCallback: ca.sliMetrics.getBackfillCallback(),
 		MM:                 ca.kvFeedMemMon,
 		InitialHighWater:   initialHighWater,
 		WithDiff:           withDiff,
@@ -516,13 +512,12 @@ func (ca *changeAggregator) tick() error {
 	queuedNanos := timeutil.Since(event.BufferAddTimestamp()).Nanoseconds()
 	ca.metrics.QueueTimeNanos.Inc(queuedNanos)
 
-	// Keep track of SLI latency for non-backfill/rangefeed KV events.
-	if event.Type() == kvevent.TypeKV && event.BackfillTimestamp().IsEmpty() {
-		ca.metrics.AdmitLatency.RecordValue(timeutil.Since(event.Timestamp().GoTime()).Nanoseconds())
-	}
-
 	switch event.Type() {
 	case kvevent.TypeKV:
+		// Keep track of SLI latency for non-backfill/rangefeed KV events.
+		if event.BackfillTimestamp().IsEmpty() {
+			ca.sliMetrics.AdmitLatency.RecordValue(timeutil.Since(event.Timestamp().GoTime()).Nanoseconds())
+		}
 		return ca.eventConsumer.ConsumeEvent(ca.Ctx, event)
 	case kvevent.TypeResolved:
 		a := event.DetachAlloc()
@@ -1114,9 +1109,13 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	// but the oracle is only used when emitting row updates.
 	var nilOracle timestampLowerBoundOracle
 	var err error
-	sm := &sinkMetrics{SinkMetrics: cf.metrics.SinkMetrics}
+	sli, err := cf.metrics.getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptMetricsScope])
+	if err != nil {
+		cf.MoveToDraining(err)
+		return
+	}
 	cf.sink, err = getSink(ctx, cf.flowCtx.Cfg, cf.spec.Feed, nilOracle,
-		cf.spec.User(), cf.spec.JobID, sm)
+		cf.spec.User(), cf.spec.JobID, sli)
 
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)

@@ -2379,8 +2379,17 @@ func TestChangefeedMonitoring(t *testing.T) {
 			t.Errorf(`expected 0 got %d`, c)
 		}
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
-		_, _ = foo.Next()
+		enableSLIMetrics = false
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH metrics_label='tier0'`)
+		_, err := foo.Next()
+		require.Regexp(t, "cannot create metrics scope", err)
+		require.NoError(t, foo.Close())
+
+		enableSLIMetrics = true
+		foo = feed(t, f, `CREATE CHANGEFEED FOR foo WITH metrics_label='tier0'`)
+		_, err = foo.Next()
+		require.NoError(t, err)
+
 		testutils.SucceedsSoon(t, func() error {
 			if c := s.MustGetSQLCounter(`changefeed.emitted_messages`); c != 1 {
 				return errors.Errorf(`expected 1 got %d`, c)
@@ -2484,9 +2493,11 @@ func TestChangefeedRetryableError(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
 		registry := f.Server().JobRegistry().(*jobs.Registry)
 
-		retryCounter := registry.MetricsStruct().Changefeed.(*Metrics).ErrorRetries
+		sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope)
+		require.NoError(t, err)
+		retryCounter := sli.ErrorRetries
 		testutils.SucceedsSoon(t, func() error {
-			if retryCounter.Counter.Count() < 3 {
+			if retryCounter.Value() < 3 {
 				return fmt.Errorf("insufficient error retries detected")
 			}
 			return nil

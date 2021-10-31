@@ -851,6 +851,11 @@ func (ts *TestServer) MustGetSQLCounter(name string) int64 {
 	var c int64
 	var found bool
 
+	type (
+		int64Valuer  interface{ Value() int64 }
+		int64Counter interface{ Count() int64 }
+	)
+
 	ts.registry.Each(func(n string, v interface{}) {
 		if name == n {
 			switch t := v.(type) {
@@ -859,6 +864,12 @@ func (ts *TestServer) MustGetSQLCounter(name string) int64 {
 				found = true
 			case *metric.Gauge:
 				c = t.Value()
+				found = true
+			case int64Valuer:
+				c = t.Value()
+				found = true
+			case int64Counter:
+				c = t.Count()
 				found = true
 			}
 		}

@@ -300,7 +300,7 @@ type cloudStorageSink struct {
 	dataFileTs        string
 	dataFilePartition string
 	prevFilename      string
-	metrics           *sinkMetrics
+	metrics           *sliMetrics
 }
 
 const sinkCompressionGzip = "gzip"
@@ -316,7 +316,7 @@ func makeCloudStorageSink(
 	timestampOracle timestampLowerBoundOracle,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	user security.SQLUsername,
-	m *sinkMetrics,
+	m *sliMetrics,
 ) (Sink, error) {
 	var targetMaxFileSize int64 = 16 << 20 // 16MB
 	if fileSizeParam := u.consumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
