@@ -339,6 +339,14 @@ func changefeedPlanHook(
 		telemetry.Count(`changefeed.create.format.` + details.Opts[changefeedbase.OptFormat])
 		telemetry.CountBucketed(`changefeed.create.num_tables`, int64(len(targets)))
 
+		if _, ok := opts[changefeedbase.OptSLIScope]; ok {
+			if err := utilccl.CheckEnterpriseEnabled(
+				p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
+			); err != nil {
+				return errors.Wrapf(err, "use of 'sli_scope' option requires enterprise license.")
+			}
+		}
+
 		if details.SinkURI == `` {
 			telemetry.Count(`changefeed.create.core`)
 			err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh)
@@ -356,6 +364,18 @@ func changefeedPlanHook(
 
 		telemetry.Count(`changefeed.create.enterprise`)
 
+		var sli *SLIMetrics
+		if scope, ok := opts[changefeedbase.OptSLIScope]; ok {
+			if metrics, ok := p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
+				if sli = metrics.getSLIMetrics(scope); sli == nil {
+					return errors.WithHint(
+						pgerror.Newf(pgcode.InvalidParameterValue,
+							"invalid %q value %q", changefeedbase.OptSLIScope, scope),
+						"valid scope names are tier0..tier8")
+				}
+			}
+		}
+
 		// In the case where a user is executing a CREATE CHANGEFEED and is still
 		// waiting for the statement to return, we take the opportunity to ensure
 		// that the user has not made any obvious errors when specifying the sink in
@@ -363,12 +383,9 @@ func changefeedPlanHook(
 		// which will be immediately closed, only to check for errors.
 		{
 			var nilOracle timestampLowerBoundOracle
-			sm := &sinkMetrics{
-				SinkMetrics: p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).SinkMetrics,
-			}
 			canarySink, err := getSink(
-				ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details, nilOracle,
-				p.User(), jobspb.InvalidJobID, sm,
+				ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details, nilOracle, p.User(), jobspb.InvalidJobID,
+				p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).sinkMetricsWithSLI(sli),
 			)
 			if err != nil {
 				return changefeedbase.MaybeStripRetryableErrorMarker(err)
@@ -750,6 +767,9 @@ func (b *changefeedResumer) resumeWithRetries(
 		b.setJobRunningStatus(ctx, "retryable error: %s", err)
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
 			metrics.ErrorRetries.Inc(1)
+			if sli := metrics.getSLIMetrics(details.Opts[changefeedbase.OptSLIScope]); sli != nil {
+				sli.ErrorRetries.Inc(1)
+			}
 		}
 		// Re-load the job in order to update our progress object, which may have
 		// been updated by the changeFrontier processor since the flow started.
