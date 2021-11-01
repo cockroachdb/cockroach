@@ -589,11 +589,15 @@ func clusterNameAndTenantFromParams(
 	}
 
 	if clusterNameFromDB == "" && clusterNameFromOpt == "" {
-		return msg, "", roachpb.MaxTenantID, errors.New("missing cluster name in connection string")
+		err := errors.New("missing cluster identifier in connection string")
+		err = errors.WithHint(err, strings.TrimLeft(clusterIdentifierHint, "\n"))
+		return msg, "", roachpb.MaxTenantID, err
 	}
 
 	if clusterNameFromDB != "" && clusterNameFromOpt != "" {
-		return msg, "", roachpb.MaxTenantID, errors.New("multiple cluster names provided")
+		err := errors.New("multiple cluster identifiers provided")
+		err = errors.WithHint(err, strings.TrimLeft(clusterIdentifierHint, "\n"))
+		return msg, "", roachpb.MaxTenantID, err
 	}
 
 	if clusterNameFromDB == "" {
@@ -602,27 +606,42 @@ func clusterNameAndTenantFromParams(
 
 	sepIdx := strings.LastIndex(clusterNameFromDB, clusterTenantSep)
 
-	// Cluster name provided without a tenant ID in the end.
+	// Cluster identifier provided without a tenant ID in the end.
 	if sepIdx == -1 || sepIdx == len(clusterNameFromDB)-1 {
-		return msg, "", roachpb.MaxTenantID, errors.Errorf("invalid cluster name '%s'", clusterNameFromDB)
+		err := errors.Errorf("invalid cluster identifier '%s'", clusterNameFromDB)
+		err = errors.WithHint(err, missingTenantIDHint)
+		err = errors.WithHint(err, clusterNameFormHint)
+		return msg, "", roachpb.MaxTenantID, err
 	}
 
 	clusterNameSansTenant, tenantIDStr := clusterNameFromDB[:sepIdx], clusterNameFromDB[sepIdx+1:]
+
+	// Cluster name does not conform to the specified format.
 	if !clusterNameRegex.MatchString(clusterNameSansTenant) {
-		return msg, "", roachpb.MaxTenantID, errors.Errorf("invalid cluster name '%s'", clusterNameFromDB)
+		err := errors.Errorf("invalid cluster identifier '%s'", clusterNameFromDB)
+		err = errors.WithHintf(err, "is '%s' a valid cluster name?", clusterNameSansTenant)
+		err = errors.WithHint(err, clusterNameFormHint)
+		return msg, "", roachpb.MaxTenantID, err
 	}
 
+	// Tenant ID cannot be parsed.
 	tenID, err := strconv.ParseUint(tenantIDStr, 10, 64)
 	if err != nil {
 		// Log these non user-facing errors.
 		log.Errorf(ctx, "cannot parse tenant ID in %s: %v", clusterNameFromDB, err)
-		return msg, "", roachpb.MaxTenantID, errors.Errorf("invalid cluster name '%s'", clusterNameFromDB)
+		err := errors.Errorf("invalid cluster identifier '%s'", clusterNameFromDB)
+		err = errors.WithHintf(err, "is '%s' a valid tenant ID?", tenantIDStr)
+		err = errors.WithHint(err, clusterNameFormHint)
+		return msg, "", roachpb.MaxTenantID, err
 	}
 
+	// This case only happens if tenID is 0 or 1 (system tenant).
 	if tenID < roachpb.MinTenantID.ToUint64() {
 		// Log these non user-facing errors.
 		log.Errorf(ctx, "%s contains an invalid tenant ID", clusterNameFromDB)
-		return msg, "", roachpb.MaxTenantID, errors.Errorf("invalid cluster name '%s'", clusterNameFromDB)
+		err := errors.Errorf("invalid cluster identifier '%s'", clusterNameFromDB)
+		err = errors.WithHintf(err, "tenant ID %d is invalid", tenID)
+		return msg, "", roachpb.MaxTenantID, err
 	}
 
 	// Make and return a copy of the startup msg so the original is not modified.
@@ -717,3 +736,22 @@ func parseOptionsParam(optionsParam string) (clusterName, newOptionsParam string
 	newOptionsParam = strings.TrimSpace(newOptionsParam)
 	return matches[0][1], newOptionsParam, nil
 }
+
+const clusterIdentifierHint = `
+ensure that your cluster identifier is specified through only one of the following methods:
+
+1) Database parameter:
+   Use "<cluster identifier>.<database name>" as your database parameter.
+   (e.g. "postgres://.../active-roach-42.defaultdb?sslmode=...")
+
+2) Options parameter:
+   Use "--cluster=<cluster identifier>" as the options parameter.
+   (e.g. "postgres://...&options=--cluster=active-roach-42")
+
+For more details, please visit our docs site at:
+	https://www.cockroachlabs.com/docs/cockroachcloud/connect-to-a-serverless-cluster
+`
+
+const clusterNameFormHint = "Cluster identifiers come in the form of <name>-<tenant ID> (e.g. lazy-roach-3)"
+
+const missingTenantIDHint = "did you forget to include your tenant ID in the cluster identifier?"
