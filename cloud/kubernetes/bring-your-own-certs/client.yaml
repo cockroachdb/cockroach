@@ -31,5 +31,7 @@ spec:
   volumes:
   - name: client-certs
     secret:
+      # This secret name is the one created while generating client certs during cluster configuration
+      # here https://www.cockroachlabs.com/docs/v21.2/deploy-cockroachdb-with-kubernetes?filters=manual#configure-the-cluster
       secretName: cockroachdb.client.root
       defaultMode: 256
