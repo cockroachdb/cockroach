@@ -30,7 +30,7 @@ import (
 )
 
 func init() {
-	if numOperators != 57 {
+	if numOperators != 58 {
 		// If this error occurs please make sure the new op is the last one in order
 		// to not invalidate existing plan gists/hashes. If we are just adding an
 		// operator at the end there's no need to update version below and we can
