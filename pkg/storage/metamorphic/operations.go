@@ -930,6 +930,11 @@ var opGenerators = []opGenerator{
 			if endTime.Less(startTime) {
 				startTime, endTime = endTime, startTime
 			}
+			// This is to avoid a panic where startTime == endTime == hlc.Timestamp{}
+			// and where startTime gets next()'d in the time-bound iterator creation
+			// but endTime doesn't, making it seem like a start timestamp is set
+			// but an end timestamp is not.
+			endTime = endTime.Next()
 			return &mvccClearTimeRangeOp{
 				m:         m,
 				writer:    writer,
