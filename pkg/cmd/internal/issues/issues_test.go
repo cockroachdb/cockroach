@@ -287,6 +287,7 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 						TestName:    c.testName,
 						Message:     c.message,
 						Artifacts:   c.artifacts,
+						Mention:     []string{"@nights-watch"},
 						AuthorEmail: c.author,
 						HelpCommand: repro,
 						ExtraLabels: []string{"release-blocker"},
@@ -347,32 +348,10 @@ func TestPostEndToEnd(t *testing.T) {
 		PackageName: "github.com/cockroachdb/cockroach/pkg/foo/bar",
 		TestName:    "TestFooBarBaz",
 		Message:     "I'm a message",
-		AuthorEmail: "tobias.schottdorf@gmail.com",
 		ExtraLabels: []string{"release-blocker"},
 	}
 
 	require.NoError(t, Post(context.Background(), UnitTestFormatter, req))
-}
-
-func TestGetAssignee(t *testing.T) {
-	p := &poster{
-		Options: &Options{
-			Org:  "myorg",
-			Repo: "myrepo",
-		},
-	}
-	listCommits := func(_ context.Context, owner string, repo string,
-		opts *github.CommitsListOptions) ([]*github.RepositoryCommit, *github.Response, error) {
-		require.Equal(t, owner, p.Options.Org)
-		require.Equal(t, repo, p.Options.Repo)
-		return []*github.RepositoryCommit{
-			{},
-		}, nil, nil
-	}
-	p.listCommits = listCommits
-	ctx := &postCtx{Context: context.Background()}
-	require.Zero(t, p.getAuthorGithubHandle(ctx, "foo@bar.xy"))
-	require.Equal(t, "no Author found for user email foo@bar.xy\n", ctx.Builder.String())
 }
 
 // setEnv overrides the env variables corresponding to the input map. The
