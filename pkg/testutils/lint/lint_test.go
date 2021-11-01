@@ -633,6 +633,54 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestDisallowedCharacterSequences", func(t *testing.T) {
+		t.Parallel()
+		disallowedCharacterSequences := []string{
+			"\u202A", // LEFT-TO-RIGHT-EMBEDDING
+			"\u202B", // RIGHT-TO-LEFT-EMBEDDING
+			"\u202C", // POP-DIRECTIONAL-FORMATTING
+			"\u202D", // LEFT-TO-RIGHT-OVERRIDE
+			"\u202E", // RIGHT-TO-LEFT-OVERRIDE
+			"\u2066", // LEFT-TO-RIGHT-ISOLATE
+			"\u2067", // RIGHT-TO-LEFT-ISOLATE
+			"\u2068", // FIRST-STRONG-ISOLATE
+			"\u2069", // POP-DIRECTIONAL-ISOLATE
+		}
+		pattern := strings.Join(disallowedCharacterSequences, "|")
+		cmd, stderr, filter, err := dirCmd(
+			crdb.Dir,
+			"git",
+			"grep",
+			"-nE",
+			pattern,
+			"--",
+			":!*.woff2",
+			":!*.png",
+			":!*.tgz",
+			":!pkg/ccl/importccl/testdata/avro/stock-10000.bjson",
+			":!pkg/ccl/importccl/testdata/avro/stock-10000.ocf",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden use of disallowed character sequence.", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestInternalErrorCodes", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
