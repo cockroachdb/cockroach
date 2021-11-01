@@ -22,6 +22,7 @@ go_library(
         "//pkg/geo/geoindex",
         "//pkg/keys",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catconstants",

@@ -193,6 +193,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	// mutations. Collect the elements that are part of the mutation.
 	var addedIndexSpans []roachpb.Span
 	var addedIndexes []descpb.IndexID
+	var temporaryIndexes []descpb.IndexID
 
 	var constraintsToDrop []catalog.ConstraintToUpdate
 	var constraintsToAddBeforeValidation []catalog.ConstraintToUpdate
@@ -247,8 +248,12 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 				// that don't, so preserve the flag if its already been flipped.
 				needColumnBackfill = needColumnBackfill || catalog.ColumnNeedsBackfill(col)
 			} else if idx := m.AsIndex(); idx != nil {
-				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, idx.GetID()))
-				addedIndexes = append(addedIndexes, idx.GetID())
+				if idx.IsTemporaryIndexForBackfill() {
+					temporaryIndexes = append(temporaryIndexes, idx.GetID())
+				} else {
+					addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, idx.GetID()))
+					addedIndexes = append(addedIndexes, idx.GetID())
+				}
 			} else if c := m.AsConstraint(); c != nil {
 				isValidating := c.IsCheck() && c.Check().Validity == descpb.ConstraintValidity_Validating ||
 					c.IsForeignKey() && c.ForeignKey().Validity == descpb.ConstraintValidity_Validating ||
@@ -317,7 +322,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	// Add new indexes.
 	if len(addedIndexSpans) > 0 {
 		// Check if bulk-adding is enabled and supported by indexes (ie non-unique).
-		if err := sc.backfillIndexes(ctx, version, addedIndexSpans, addedIndexes); err != nil {
+		if err := sc.backfillIndexes(ctx, version, addedIndexSpans, addedIndexes, temporaryIndexes); err != nil {
 			return err
 		}
 	}
@@ -869,6 +874,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 	version descpb.DescriptorVersion,
 	targetSpans []roachpb.Span,
 	addedIndexes []descpb.IndexID,
+	writeAtRequestTimestamp bool,
 	filter backfill.MutationFilter,
 ) error {
 
@@ -880,6 +886,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 	// Gather the initial resume spans for the table.
 	var todoSpans []roachpb.Span
 	var mutationIdx int
+
 	if err := DescsTxn(ctx, sc.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
 		todoSpans, _, mutationIdx, err = rowexec.GetResumeSpans(
 			ctx, sc.jobRegistry, txn, sc.execCfg.Codec, col, sc.descID, sc.mutationID, filter)
@@ -975,7 +982,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 			true /* distribute */)
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
 		chunkSize := sc.getChunkSize(indexBatchSize)
-		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, readAsOf, chunkSize, addedIndexes)
+		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, readAsOf, writeAtRequestTimestamp, chunkSize, addedIndexes)
 		if err != nil {
 			return err
 		}
@@ -1381,7 +1388,8 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 			break
 		}
 		idx := m.AsIndex()
-		if idx == nil || idx.Dropped() {
+		// NB: temporary indexes should be Dropped by the point.
+		if idx == nil || idx.Dropped() || idx.IsTemporaryIndexForBackfill() {
 			continue
 		}
 		switch idx.GetType() {
@@ -1842,6 +1850,79 @@ func ValidateForwardIndexes(
 // backfillIndexes fills the missing columns in the indexes of the
 // leased tables.
 //
+//
+// If temporaryIndexes is non-empty, we assume that we are using the
+// MVCC-compatible backfilling process. This mutation has already been
+// checked to ensure all newly added indexes are using one type of
+// index backfill.
+//
+// The MVCC-copatible index backfilling process has a goal of not
+// having to issue AddSStable requests with backdated timestamps.
+//
+// To do this, we backfill new indexes while they are in a BACKFILLING
+// state in which they do not see writes or deletes. While the
+// backfill is running a temporary index captures all inflight rights.
+//
+// When the backfill is completed, the backfilling index is stepped up
+// to MERGING and then writes and deletes missed during
+// the backfill are merged from the temporary index.
+//
+// Finally, the new index is brought into the DELETE_AND_WRITE_ONLY
+// state for validation.
+//
+//           ┌─────────────────┐         ┌─────────────────┐             ┌─────────────────┐
+//           │                 │         │                 │             │                 │
+//           │   PrimaryIndex  │         │     NewIndex    │             │    TempIndex    │
+// t0        │     (PUBLIC)    │         │  (BACKFILLING)  │             │  (DELETE_ONLY)  │
+//           │                 │         │                 │             │                 │
+//           └─────────────────┘         └─────────────────┘             └────────┬────────┘
+//                                                                                │
+//                                                                       ┌────────▼────────┐
+//                                                                       │                 │
+//                                                                       │    TempIndex    │
+// t1                                                                    │(DELETE_AND_WRITE)   │
+//                                                                       │                 │   │
+//                                                                       └────────┬────────┘   │
+//                                                                                │            │
+//           ┌─────────────────┐         ┌─────────────────┐             ┌────────▼────────┐   │ TempIndex receiving writes
+//           │                 │         │                 │             │                 │   │
+//           │  PrimaryIndex   ├────────►│     NewIndex    │             │    TempIndex    │   │
+// t2        │   (PUBLIC)      │ Backfill│  (BACKFILLING)  │             │(DELETE_AND_WRITE│   │
+//           │                 │         │                 │             │                 │   │
+//           └─────────────────┘         └────────┬────────┘             └─────────────────┘   │
+//                                                │                                            │
+//                                       ┌────────▼────────┐                                   │
+//                                       │                 │                                   │
+//                                       │     NewIndex    │                                   │
+// t3                                    │  (DELETE_ONLY)  │                                   │
+//                                       │                 │                                   │
+//                                       └────────┬────────┘                                   │
+//                                                │                                            │
+//                                       ┌────────▼────────┐                                   │
+//                                       │                 │                                   │
+//                                       │     NewIndex    │                                   │   │
+//                                       │    (MERGING)    │                                   │   │
+// t4                                    │                 │                                   │   │ NewIndex receiving writes
+//                                       └─────────────────┘                                   │   │
+//                                                                                             │   │
+//                                       ┌─────────────────┐             ┌─────────────────┐   │   │
+//                                       │                 │             │                 │   │   │
+//                                       │     NewIndex    │◄────────────┤    TempIndex    │   │   │
+// t5                                    │    (MERGING)    │  BatchMerge │(DELETE_AND_WRITE│   │   │
+//                                       │                 │             │                 │   │   │
+//                                       └────────┬────────┘             └───────┬─────────┘   │   │
+//                                                │                              │             │   │
+//                                       ┌────────▼────────┐             ┌───────▼─────────┐   │   │
+//                                       │                 │             │                 │   │   │
+//                                       │     NewIndex    │             │    TempIndex    │       │
+// t6                                    │(DELETE_AND_WRITE)             │  (DELETE_ONLY)  │       │
+//                                       │                 │             │                 │       │
+//                                       └───────┬─────────┘             └───────┬─────────┘       │
+//                                               │                               │
+//                                               │                               │
+//                                               ▼                               ▼
+//                                    [validate and make public]             [ dropped ]
+//
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely.
 func (sc *SchemaChanger) backfillIndexes(
@@ -1849,12 +1930,13 @@ func (sc *SchemaChanger) backfillIndexes(
 	version descpb.DescriptorVersion,
 	addingSpans []roachpb.Span,
 	addedIndexes []descpb.IndexID,
+	temporaryIndexes []descpb.IndexID,
 ) error {
-	log.Infof(ctx, "backfilling %d indexes", len(addingSpans))
-
-	if fn := sc.testingKnobs.RunBeforeIndexBackfill; fn != nil {
-		fn()
-	}
+	// If temporary indexes is non-empty, we want a MVCC-compliant
+	// backfill. If it is empty, we assume this is an older schema
+	// change using the non-MVCC-compliant flow.
+	writeAtRequestTimestamp := len(temporaryIndexes) != 0
+	log.Infof(ctx, "backfilling %d indexes: %v (writeAtRequestTimestamp: %v)", len(addingSpans), addingSpans, writeAtRequestTimestamp)
 
 	// Split off a new range for each new index span. But only do so for the
 	// system tenant. Secondary tenants do not have mandatory split points
@@ -1868,14 +1950,135 @@ func (sc *SchemaChanger) backfillIndexes(
 		}
 	}
 
+	if fn := sc.testingKnobs.RunBeforeIndexBackfill; fn != nil {
+		fn()
+	}
+
+	// NB: The index backfilling process and index merging process
+	// use different ResumeSpans to track their progress, so it is
+	// safe to pass addedIndexes here even if the merging has
+	// already started.
 	if err := sc.distIndexBackfill(
-		ctx, version, addingSpans, addedIndexes, backfill.IndexMutationFilter,
+		ctx, version, addingSpans, addedIndexes, writeAtRequestTimestamp, backfill.IndexMutationFilter,
 	); err != nil {
 		return err
 	}
 
+	if writeAtRequestTimestamp {
+		if fn := sc.testingKnobs.RunBeforeTempIndexMerge; fn != nil {
+			fn()
+		}
+
+		// Steps backfilled adding indexes from BACKFILLING to
+		// MERGING.
+		if err := sc.RunStateMachineAfterIndexBackfill(ctx); err != nil {
+			return err
+		}
+
+		if err := sc.mergeFromTemporaryIndex(ctx, version, addedIndexes, temporaryIndexes); err != nil {
+			return err
+		}
+
+		if fn := sc.testingKnobs.RunAfterTempIndexMerge; fn != nil {
+			fn()
+		}
+
+		if err := sc.runStateMachineAfterTempIndexMerge(ctx); err != nil {
+			return err
+		}
+	}
+
+	if fn := sc.testingKnobs.RunAfterIndexBackfill; fn != nil {
+		fn()
+	}
+
 	log.Info(ctx, "finished backfilling indexes")
 	return sc.validateIndexes(ctx)
+}
+
+func (sc *SchemaChanger) mergeFromTemporaryIndex(
+	ctx context.Context,
+	version descpb.DescriptorVersion,
+	addingIndexes []descpb.IndexID,
+	temporaryIndexes []descpb.IndexID,
+) error {
+	var tbl *tabledesc.Mutable
+	if err := sc.txn(ctx, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
+		var err error
+		tbl, err = descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		return err
+	}); err != nil {
+		return err
+	}
+	table := tabledesc.NewBuilder(&tbl.ClusterVersion).BuildImmutableTable()
+	for i, addIdx := range addingIndexes {
+		tempIdx := temporaryIndexes[i]
+		log.Infof(ctx, "merging from %d -> %d on %v", tempIdx, addIdx, table)
+		sourceSpan := table.IndexSpan(sc.execCfg.Codec, tempIdx)
+		err := sc.Merge(ctx, sc.execCfg.Codec, table, tempIdx, addIdx, sourceSpan)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// runStateMachineAfterTempIndexMerge steps any DELETE_AND_WRITE_ONLY
+// temporary indexes to DELETE_ONLY and changes their direction to
+// DROP and steps any MERGING indexes to DELETE_AND_WRITE_ONLY
+func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context) error {
+	var runStatus jobs.RunningStatus
+	return sc.txn(ctx, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
+		tbl, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		if err != nil {
+			return err
+		}
+		runStatus = ""
+		// Apply mutations belonging to the same version.
+		for _, m := range tbl.AllMutations() {
+			if m.MutationID() != sc.mutationID {
+				// Mutations are applied in a FIFO order. Only apply the first set of
+				// mutations if they have the mutation ID we're looking for.
+				break
+			}
+			idx := m.AsIndex()
+			if idx == nil {
+				// Don't touch anything but indexes.
+				continue
+			}
+
+			if idx.IsTemporaryIndexForBackfill() && m.Adding() && m.WriteAndDeleteOnly() {
+				log.Infof(ctx, "dropping temporary index: %d", idx.IndexDesc().ID)
+				tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_DELETE_ONLY
+				tbl.Mutations[m.MutationOrdinal()].Direction = descpb.DescriptorMutation_DROP
+				runStatus = RunningStatusDeleteOnly
+			} else if m.Merging() {
+				tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+			}
+		}
+		if runStatus == "" || tbl.Dropped() {
+			return nil
+		}
+		if err := descsCol.WriteDesc(
+			ctx, true /* kvTrace */, tbl, txn,
+		); err != nil {
+			return err
+		}
+		if sc.job != nil {
+			if err := sc.job.RunningStatus(ctx, txn, func(
+				ctx context.Context, details jobspb.Details,
+			) (jobs.RunningStatus, error) {
+				return runStatus, nil
+			}); err != nil {
+				return errors.Wrap(err, "failed to update job status")
+			}
+		}
+		return nil
+	})
 }
 
 // truncateAndBackfillColumns performs the backfill operation on the given leased
@@ -1956,6 +2159,13 @@ func runSchemaChangesInTxn(
 	for _, m := range tableDesc.AllMutations() {
 		// Skip mutations that get canceled by later operations
 		if discarded, _ := isCurrentMutationDiscarded(tableDesc, m, m.MutationOrdinal()+1); discarded {
+			continue
+		}
+
+		// Skip mutations related to temporary mutations since
+		// an index creation inside a transaction doesn't use
+		// the AddSSTable based backfiller.
+		if idx := m.AsIndex(); idx != nil && idx.IsTemporaryIndexForBackfill() {
 			continue
 		}
 

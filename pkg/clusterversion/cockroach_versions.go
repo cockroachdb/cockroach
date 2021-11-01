@@ -267,6 +267,12 @@ const (
 	// on lease transfer Raft proposals. New leaseholders now forward their clock
 	// directly to the new lease start time.
 	DontProposeWriteTimestampForLeaseTransfers
+	// MVCCIndexBackfiller supports MVCC-compliant index
+	// backfillers via a new BACKFILLING index state, delete
+	// preserving temporary indexes, and a post-backfill merging
+	// processing.
+	MVCCIndexBackfiller
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -422,7 +428,10 @@ var versionsSingleton = keyedVersions{
 		Key:     DontProposeWriteTimestampForLeaseTransfers,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 60},
 	},
-
+	{
+		Key:     MVCCIndexBackfiller,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 62},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
