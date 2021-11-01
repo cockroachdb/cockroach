@@ -41,6 +41,10 @@ type TableElementMaybeMutation interface {
 	// delete-only state.
 	DeleteOnly() bool
 
+	// Backfilling returns true iff the table element is in a
+	// mutation in the backfilling state.
+	Backfilling() bool
+
 	// Adding returns true iff the table element is in an add mutation.
 	Adding() bool
 
@@ -529,6 +533,12 @@ func ForEachPartialIndex(desc TableDescriptor, f func(idx Index) error) error {
 	return forEachIndex(desc.PartialIndexes(), f)
 }
 
+// ForEachNonPrimaryIndex is like ForEachIndex over
+// NonPrimaryIndexes().
+func ForEachNonPrimaryIndex(desc TableDescriptor, f func(idx Index) error) error {
+	return forEachIndex(desc.NonPrimaryIndexes(), f)
+}
+
 // ForEachPublicNonPrimaryIndex is like ForEachIndex over
 // PublicNonPrimaryIndexes().
 func ForEachPublicNonPrimaryIndex(desc TableDescriptor, f func(idx Index) error) error {
@@ -611,6 +621,12 @@ func FindWritableNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bool
 // DeletableNonPrimaryIndex() for which test returns true.
 func FindDeletableNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bool) Index {
 	return findIndex(desc.DeletableNonPrimaryIndexes(), test)
+}
+
+// FindNonPrimaryIndex returns the first index in
+// NonPrimaryIndex() for which test returns true.
+func FindNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bool) Index {
+	return findIndex(desc.NonPrimaryIndexes(), test)
 }
 
 // FindDeleteOnlyNonPrimaryIndex returns the first index in
