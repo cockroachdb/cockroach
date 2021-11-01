@@ -1902,7 +1902,7 @@ func (r *restoreResumer) publishDescriptors(
 			}
 			newIdx := found.IndexDescDeepCopy()
 			mutTable.RemovePublicNonPrimaryIndex(found.Ordinal())
-			if err := mutTable.AddIndexMutation(&newIdx, descpb.DescriptorMutation_ADD); err != nil {
+			if err := mutTable.AddIndexMutation(ctx, &newIdx, descpb.DescriptorMutation_ADD, r.settings); err != nil {
 				return err
 			}
 		}
