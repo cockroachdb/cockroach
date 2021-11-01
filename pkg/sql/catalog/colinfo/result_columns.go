@@ -222,6 +222,13 @@ var AlterTableScatterColumns = ResultColumns{
 	{Name: "pretty", Typ: types.String},
 }
 
+// AlterRangeRelocateColumns are the result columns of an
+// ALTER RANGE .. RELOCATE statement.
+var AlterRangeRelocateColumns = ResultColumns{
+	{Name: "key", Typ: types.Bytes},
+	{Name: "pretty", Typ: types.String},
+}
+
 // ScrubColumns are the result columns of a SCRUB statement.
 var ScrubColumns = ResultColumns{
 	{Name: "job_uuid", Typ: types.Uuid},

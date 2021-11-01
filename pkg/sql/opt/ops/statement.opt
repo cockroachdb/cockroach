@@ -292,3 +292,24 @@ define CreateStatisticsPrivate {
     # Syntax is the tree.CreateStats AST node.
     Syntax CreateStats
 }
+
+# AlterTableRelocateRange represents an `ALTER RANGE .. RELOCATE ..` statement.
+[Relational, Mutation]
+define AlterRangeRelocate {
+    _ AlterRangeRelocatePrivate
+}
+
+[Private]
+define AlterRangeRelocatePrivate {
+    RelocateLease bool
+    RelocateNonVoters bool
+    RangeID int64
+    ToStoreID int64
+    FromStoreID int64
+
+    # Columns stores the column IDs for the statement result columns.
+    Columns ColList
+
+    # Props stores the required physical properties for the input expression.
+    Props PhysProps
+}

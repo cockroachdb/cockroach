@@ -1091,6 +1091,7 @@ unreserved_keyword ::=
 	| 'REGIONS'
 	| 'REINDEX'
 	| 'RELEASE'
+	| 'RELOCATE'
 	| 'RENAME'
 	| 'REPEATABLE'
 	| 'REPLACE'
@@ -1320,6 +1321,7 @@ alter_table_stmt ::=
 
 alter_index_stmt ::=
 	alter_oneindex_stmt
+	| alter_relocate_index_stmt
 	| alter_split_index_stmt
 	| alter_unsplit_index_stmt
 	| alter_scatter_index_stmt
@@ -1349,6 +1351,7 @@ alter_database_stmt ::=
 
 alter_range_stmt ::=
 	alter_zone_range_stmt
+	| alter_range_relocate_lease_stmt
 
 alter_partition_stmt ::=
 	alter_zone_partition_stmt
@@ -1760,6 +1763,10 @@ alter_oneindex_stmt ::=
 	'ALTER' 'INDEX' table_index_name alter_index_cmds
 	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_index_name alter_index_cmds
 
+alter_relocate_index_stmt ::=
+	'ALTER' 'RANGE' iconst64 relocate_kw voters_kw 'FROM' iconst64 'TO' iconst64
+	| 'ALTER' 'RANGE' iconst64 relocate_kw voters_kw 'NON_VOTERS' iconst64 'TO' iconst64
+
 alter_split_index_stmt ::=
 	'ALTER' 'INDEX' table_index_name 'SPLIT' 'AT' select_stmt
 	| 'ALTER' 'INDEX' table_index_name 'SPLIT' 'AT' select_stmt 'WITH' 'EXPIRATION' a_expr
@@ -1842,6 +1849,9 @@ alter_database_primary_region_stmt ::=
 
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' zone_name set_zone_config
+
+alter_range_relocate_lease_stmt ::=
+	'ALTER' 'RANGE' iconst64 relocate_kw 'LEASE' 'TO' iconst64
 
 alter_zone_partition_stmt ::=
 	'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name set_zone_config
@@ -2327,6 +2337,15 @@ locality ::=
 
 alter_index_cmds ::=
 	( alter_index_cmd ) ( ( ',' alter_index_cmd ) )*
+
+relocate_kw ::=
+	'TESTING_RELOCATE'
+	| 'EXPERIMENTAL_RELOCATE'
+	| 'RELOCATE'
+
+voters_kw ::=
+	'VOTERS'
+	| 
 
 sequence_option_list ::=
 	( sequence_option_elem ) ( ( sequence_option_elem ) )*

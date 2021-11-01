@@ -1005,6 +1005,12 @@ func (e *distSQLSpecExecFactory) ConstructAlterTableRelocate(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: alter table relocate")
 }
 
+func (e *distSQLSpecExecFactory) ConstructAlterRangeRelocate(
+	relocateLease bool, relocateNonVoters bool, rangeID int64, toStoreID int64, fromStoreID int64,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: alter range relocate")
+}
+
 func (e *distSQLSpecExecFactory) ConstructBuffer(input exec.Node, label string) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: buffer")
 }

@@ -666,6 +666,15 @@ define AlterTableRelocate {
     relocateNonVoters bool
 }
 
+# AlterTableRelocate implements ALTER RANGE RELOCATE.
+define AlterRangeRelocate {
+    relocateLease bool
+    relocateNonVoters bool
+    rangeId int64
+    toStoreId int64
+    fromStoreId int64
+}
+
 # Buffer passes through the input rows but also saves them in a buffer, which
 # can be referenced from elsewhere in the query (using ScanBuffer).
 define Buffer {

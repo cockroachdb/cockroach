@@ -1,0 +1,3 @@
+alter_relocate_index_stmt ::=
+	'ALTER' 'RANGE' iconst64 relocate_kw voters_kw 'FROM' iconst64 'TO' iconst64
+	| 'ALTER' 'RANGE' iconst64 relocate_kw voters_kw 'NON_VOTERS' iconst64 'TO' iconst64

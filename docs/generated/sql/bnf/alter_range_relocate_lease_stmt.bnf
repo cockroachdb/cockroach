@@ -1,0 +1,2 @@
+alter_range_relocate_lease_stmt ::=
+	'ALTER' 'RANGE' iconst64 relocate_kw 'LEASE' 'TO' iconst64
