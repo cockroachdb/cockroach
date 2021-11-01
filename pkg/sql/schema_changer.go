@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -73,6 +74,10 @@ const (
 	// the cluster to converge to seeing the schema element in the
 	// DELETE_AND_WRITE_ONLY state.
 	RunningStatusDeleteAndWriteOnly jobs.RunningStatus = "waiting in DELETE-AND-WRITE_ONLY"
+	// RunningStatusMerging is for jobs that are currently waiting on
+	// the cluster to converge to seeing the schema element in the
+	// MERGING state.
+	RunningStatusMerging jobs.RunningStatus = "waiting in MERGING"
 	// RunningStatusBackfill is for jobs that are currently running a backfill
 	// for a schema element.
 	RunningStatusBackfill jobs.RunningStatus = "populating schema"
@@ -105,6 +110,11 @@ type SchemaChanger struct {
 	settings             *cluster.Settings
 	execCfg              *ExecutorConfig
 	ieFactory            sqlutil.SessionBoundInternalExecutorFactory
+
+	// mvccCompliantAddIndex is set to true early in exec if we
+	// find that the schema change was created under the
+	// mvcc-compliant regime.
+	mvccCompliantAddIndex bool
 }
 
 // NewSchemaChangerForTesting only for tests.
@@ -611,6 +621,52 @@ func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descr
 	return desc, nil
 }
 
+func (sc *SchemaChanger) checkForMVCCCompliantAddIndexMutations(
+	ctx context.Context, desc catalog.Descriptor,
+) error {
+	tableDesc, ok := desc.(catalog.TableDescriptor)
+	if !ok {
+		return nil
+	}
+
+	nonTempAddingIndexes := 0
+	tempIndexes := 0
+
+	for _, m := range tableDesc.AllMutations() {
+		if m.MutationID() != sc.mutationID {
+			break
+		}
+
+		idx := m.AsIndex()
+		if idx == nil {
+			continue
+		}
+
+		if idx.IsTemporaryIndexForBackfill() {
+			tempIndexes++
+		} else if m.Adding() {
+			nonTempAddingIndexes++
+		}
+	}
+
+	if tempIndexes > 0 {
+		sc.mvccCompliantAddIndex = true
+
+		if tempIndexes != nonTempAddingIndexes {
+			return errors.Newf("expected %d temporary indexes, but found %d; schema change may have been constructed during cluster version upgrade",
+				tempIndexes,
+				nonTempAddingIndexes)
+		}
+
+		settings := sc.execCfg.Settings
+		mvccCompliantBackfillSupported := settings.Version.IsActive(ctx, clusterversion.MVCCIndexBackfiller) && tabledesc.UseMVCCCompliantIndexCreation.Get(&settings.SV)
+		if !mvccCompliantBackfillSupported {
+			return errors.Newf("schema change requires MVCC-compliant backfiller, but MVCC-compliant backfiller is not supported")
+		}
+	}
+	return nil
+}
+
 // Execute the entire schema change in steps.
 // inSession is set to false when this is called from the asynchronous
 // schema change execution path.
@@ -631,6 +687,10 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 
 	// Check that we aren't queued behind another schema changer.
 	if err := sc.notFirstInLine(ctx, desc); err != nil {
+		return err
+	}
+
+	if err := sc.checkForMVCCCompliantAddIndexMutations(ctx, desc); err != nil {
 		return err
 	}
 
@@ -995,7 +1055,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 				}
 				// else if DELETE_AND_WRITE_ONLY, then the state change has already moved forward.
 			} else if m.Dropped() {
-				if m.WriteAndDeleteOnly() {
+				if m.WriteAndDeleteOnly() || m.Merging() {
 					tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_DELETE_ONLY
 					runStatus = RunningStatusDeleteOnly
 				}
@@ -1044,10 +1104,102 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 	return nil
 }
 
+// RunStateMachineAfterIndexBackfill moves the state machine forward and
+// wait to ensure that all nodes are seeing the latest version of the
+// table.
+//
+// Adding Mutations in BACKFILLING state move through DELETE ->
+// MERGING.
+func (sc *SchemaChanger) RunStateMachineAfterIndexBackfill(ctx context.Context) error {
+	// Step through the state machine twice:
+	//  - BACKFILLING -> DELETE
+	//  - DELETE -> MERGING
+	log.Info(ctx, "stepping through state machine after index backfill")
+	if err := sc.stepStateMachineAfterIndexBackfill(ctx); err != nil {
+		return err
+	}
+	if err := sc.stepStateMachineAfterIndexBackfill(ctx); err != nil {
+		return err
+	}
+	log.Info(ctx, "finished stepping through state machine")
+	return nil
+}
+
+func (sc *SchemaChanger) stepStateMachineAfterIndexBackfill(ctx context.Context) error {
+	log.Info(ctx, "stepping through state machine")
+
+	var runStatus jobs.RunningStatus
+	if err := sc.txn(ctx, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
+		tbl, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		if err != nil {
+			return err
+		}
+		runStatus = ""
+		for _, m := range tbl.AllMutations() {
+			if m.MutationID() != sc.mutationID {
+				// Mutations are applied in a FIFO order. Only apply the first set of
+				// mutations if they have the mutation ID we're looking for.
+				break
+			}
+			idx := m.AsIndex()
+			if idx == nil {
+				// Don't touch anything but indexes
+				continue
+			}
+
+			if m.Adding() {
+				if m.Backfilling() {
+					tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_DELETE_ONLY
+					runStatus = RunningStatusDeleteOnly
+				} else if m.DeleteOnly() {
+					tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_MERGING
+					runStatus = RunningStatusMerging
+				}
+			}
+		}
+		if runStatus == "" || tbl.Dropped() {
+			return nil
+		}
+		if err := descsCol.WriteDesc(
+			ctx, true /* kvTrace */, tbl, txn,
+		); err != nil {
+			return err
+		}
+		if sc.job != nil {
+			if err := sc.job.RunningStatus(ctx, txn, func(
+				ctx context.Context, details jobspb.Details,
+			) (jobs.RunningStatus, error) {
+				return runStatus, nil
+			}); err != nil {
+				return errors.Wrap(err, "failed to update job status")
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (sc *SchemaChanger) createTemporaryIndexGCJob(
+	ctx context.Context, indexID descpb.IndexID, txn *kv.Txn, jobDesc string,
+) error {
+	minimumDropTime := int64(1)
+	return sc.createIndexGCJobWithDropTime(ctx, indexID, txn, jobDesc, minimumDropTime)
+}
+
 func (sc *SchemaChanger) createIndexGCJob(
 	ctx context.Context, indexID descpb.IndexID, txn *kv.Txn, jobDesc string,
 ) error {
 	dropTime := timeutil.Now().UnixNano()
+	return sc.createIndexGCJobWithDropTime(ctx, indexID, txn, jobDesc, dropTime)
+}
+
+func (sc *SchemaChanger) createIndexGCJobWithDropTime(
+	ctx context.Context, indexID descpb.IndexID, txn *kv.Txn, jobDesc string, dropTime int64,
+) error {
 	indexGCDetails := jobspb.SchemaChangeGCDetails{
 		Indexes: []jobspb.SchemaChangeGCDetails_DroppedIndex{
 			{
@@ -1183,9 +1335,14 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				if isRollback {
 					description = "ROLLBACK of " + description
 				}
-
-				if err := sc.createIndexGCJob(ctx, idx.GetID(), txn, description); err != nil {
-					return err
+				if idx.IsTemporaryIndexForBackfill() {
+					if err := sc.createTemporaryIndexGCJob(ctx, idx.GetID(), txn, "temporary index used during index backfill"); err != nil {
+						return err
+					}
+				} else {
+					if err := sc.createIndexGCJob(ctx, idx.GetID(), txn, description); err != nil {
+						return err
+					}
 				}
 			}
 			if constraint := m.AsConstraint(); constraint != nil && constraint.Adding() {
@@ -1696,8 +1853,14 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 				continue
 			}
 
-			log.Warningf(ctx, "reverse schema change mutation: %+v", scTable.Mutations[m.MutationOrdinal()])
-			scTable.Mutations[m.MutationOrdinal()], columns = sc.reverseMutation(scTable.Mutations[m.MutationOrdinal()], false /*notStarted*/, columns)
+			// Always move temporary indexes to dropping
+			if idx := m.AsIndex(); idx != nil && idx.IsTemporaryIndexForBackfill() {
+				scTable.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_DELETE_ONLY
+				scTable.Mutations[m.MutationOrdinal()].Direction = descpb.DescriptorMutation_DROP
+			} else {
+				log.Warningf(ctx, "reverse schema change mutation: %+v", scTable.Mutations[m.MutationOrdinal()])
+				scTable.Mutations[m.MutationOrdinal()], columns = sc.reverseMutation(scTable.Mutations[m.MutationOrdinal()], false /*notStarted*/, columns)
+			}
 
 			// If the mutation is for validating a constraint that is being added,
 			// drop the constraint because validation has failed.
@@ -1871,6 +2034,16 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 	return nil
 }
 
+// validStateForStartingIndex returns the correct starting state for
+// add index mutations based on the whether this schema change is
+// using temporary indexes or not.
+func (sc *SchemaChanger) startingStateForAddIndexMutations() descpb.DescriptorMutation_State {
+	if sc.mvccCompliantAddIndex {
+		return descpb.DescriptorMutation_BACKFILLING
+	}
+	return descpb.DescriptorMutation_DELETE_ONLY
+}
+
 // deleteIndexMutationsWithReversedColumns deletes mutations with a
 // different mutationID than the schema changer and with an index that
 // references one of the reversed columns. Execute this as a breadth
@@ -1893,7 +2066,7 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 							// DROP. All mutations with the ADD direction start off in
 							// the DELETE_ONLY state.
 							if mutation.Direction != descpb.DescriptorMutation_ADD ||
-								mutation.State != descpb.DescriptorMutation_DELETE_ONLY {
+								mutation.State != sc.startingStateForAddIndexMutations() {
 								panic(errors.AssertionFailedf("mutation in bad state: %+v", mutation))
 							}
 							log.Warningf(ctx, "drop schema change mutation: %+v", mutation)
@@ -1954,8 +2127,14 @@ func (sc *SchemaChanger) reverseMutation(
 			return mutation, columns
 		}
 
-		if notStarted && mutation.State != descpb.DescriptorMutation_DELETE_ONLY {
-			panic(errors.AssertionFailedf("mutation in bad state: %+v", mutation))
+		if notStarted {
+			startingState := descpb.DescriptorMutation_DELETE_ONLY
+			if idx := mutation.GetIndex(); idx != nil {
+				startingState = sc.startingStateForAddIndexMutations()
+			}
+			if mutation.State != startingState {
+				panic(errors.AssertionFailedf("mutation in bad state: %+v", mutation))
+			}
 		}
 
 	case descpb.DescriptorMutation_DROP:
@@ -2031,6 +2210,20 @@ type SchemaChangerTestingKnobs struct {
 	// RunBeforeIndexBackfill is called just before starting the index backfill, after
 	// fixing the index backfill scan timestamp.
 	RunBeforeIndexBackfill func()
+
+	// RunBeforeIndexBackfill is called after the index backfill
+	// process is complete (including the temporary index merge)
+	// but before the final validation of the indexes.
+	RunAfterIndexBackfill func()
+
+	// RunBeforeTempIndexMerge is called just before starting the
+	// the merge from the temporary index into the new index,
+	// after the backfill scan timestamp has been fixed.
+	RunBeforeTempIndexMerge func()
+
+	// RunAfterTempIndexMerge is called, before validating and
+	// making the next index public.
+	RunAfterTempIndexMerge func()
 
 	// RunBeforeMaterializedViewRefreshCommit is called before committing a
 	// materialized view refresh.
@@ -2685,6 +2878,23 @@ func (sc *SchemaChanger) getDependentMutationsJobs(
 	return dependentJobs, nil
 }
 
+func (sc *SchemaChanger) shouldSplitAndScatter(
+	tableDesc *tabledesc.Mutable, m catalog.Mutation, idx catalog.Index,
+) bool {
+	if idx == nil {
+		return false
+	}
+
+	if m.Adding() && idx.IsSharded() && !idx.IsTemporaryIndexForBackfill() {
+		if sc.mvccCompliantAddIndex {
+			return m.Backfilling()
+		}
+		return m.DeleteOnly()
+	}
+	return false
+
+}
+
 func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) error {
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
@@ -2716,7 +2926,7 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 				break
 			}
 
-			if idx := m.AsIndex(); m.Adding() && m.DeleteOnly() && idx != nil {
+			if idx := m.AsIndex(); sc.shouldSplitAndScatter(tableDesc, m, idx) {
 				if idx.IsSharded() {
 					splitAtShards := calculateSplitAtShards(maxHashShardedIndexRangePreSplit.Get(&sc.settings.SV), idx.GetSharded().ShardBuckets)
 					for _, shard := range splitAtShards {

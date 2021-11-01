@@ -216,6 +216,11 @@ type Index interface {
 	// It is derived from the statement time at which the relevant statement
 	// was issued.
 	CreatedAt() time.Time
+
+	// IsTemporaryIndexForBackfill() returns true iff the index is
+	// an index being used as the temporary index being used by an
+	// in-progress index backfill.
+	IsTemporaryIndexForBackfill() bool
 }
 
 // Column is an interface around the column descriptor types.
@@ -666,6 +671,43 @@ func FindNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bool) Index 
 // DeleteOnlyNonPrimaryIndex() for which test returns true.
 func FindDeleteOnlyNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bool) Index {
 	return findIndex(desc.DeleteOnlyNonPrimaryIndexes(), test)
+}
+
+// FindCorrespondingTemporaryIndexByID finds the temporary index that
+// corresponds to the currently mutated index identified by ID. It
+// assumes that the temporary index for a given index ID exists
+// directly after it in the mutations array.
+//
+// Callers should take care that AllocateIDs() has been called before
+// using this function.
+func FindCorrespondingTemporaryIndexByID(desc TableDescriptor, id descpb.IndexID) Index {
+	mutations := desc.AllMutations()
+	var ord int
+	for _, m := range mutations {
+		idx := m.AsIndex()
+		if idx != nil && idx.IndexDesc().ID == id {
+			// We want the mutation after this mutation
+			// since the temporary index is added directly
+			// after.
+			ord = m.MutationOrdinal() + 1
+		}
+	}
+
+	// A temporary index will never be found at index 0 since we
+	// always add them _after_ the index they correspond to.
+	if ord == 0 {
+		return nil
+	}
+
+	if len(mutations) >= ord+1 {
+		candidateMutation := mutations[ord]
+		if idx := candidateMutation.AsIndex(); idx != nil {
+			if idx.IsTemporaryIndexForBackfill() {
+				return idx
+			}
+		}
+	}
+	return nil
 }
 
 // UserDefinedTypeColsHaveSameVersion returns whether one table descriptor's
