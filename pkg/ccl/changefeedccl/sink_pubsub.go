@@ -2,7 +2,6 @@ package changefeedccl
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -46,56 +45,38 @@ func isPubsubSink(u *url.URL) bool {
 
 //payload struct is sent to the sink
 type payload struct {
-	Key json.RawMessage `json:"key"`
+	Key   json.RawMessage `json:"key"`
 	Value json.RawMessage `json:"value"`
 }
 
 //pubsubMessage is sent to worker channels for workers to consume
 type pubsubMessage struct {
-	alloc kvevent.Alloc
+	alloc   kvevent.Alloc
 	message payload
 	isFlush bool
 }
 
-type GcpPubsubSink struct {
-	client *gcpClient.PublisherClient
-	cleanup func()
-	pubsubDesc PubsubDesc
-	creds *google.Credentials
-	conn *grpc.ClientConn
+type gcpPubsubSink struct {
+	client     *gcpClient.PublisherClient
+	cleanup    func()
+	pubsubSink *pubsubSink
+	creds      *google.Credentials
+	conn       *grpc.ClientConn
 }
 
-type MemPubsubSink struct {
-	pubsubDesc PubsubDesc
-}
-
-type PubsubDesc interface {
-	Close() error
-	EmitRow(
-		ctx context.Context,
-		topic TopicDescriptor,
-		key, value []byte,
-		updated hlc.Timestamp,
-		alloc kvevent.Alloc,
-	) error
-	EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error
-	Flush(ctx context.Context) error
-	getWorkerCtx() context.Context
-	getUrl() *url.URL
-	setTopic(*pubsub.Topic)
-	setupWorkers()
+type memPubsubSink struct {
+	pubsubSink *pubsubSink
 }
 
 type pubsubSink struct {
-	topic  *pubsub.Topic
-	url *url.URL
-
+	topic      *pubsub.Topic
+	url        sinkURL
 	numWorkers int
 
 	workerCtx   context.Context
 	workerGroup ctxgroup.Group
 
-	exitWorkers func() // Signaled to shut down all workers.
+	exitWorkers func()               // Signaled to shut down all workers.
 	eventsChans []chan pubsubMessage //channel where messages are consumed and sent out
 
 	// flushDone channel signaled when flushing completes.
@@ -103,20 +84,18 @@ type pubsubSink struct {
 
 	// errChan is written to indicate an error while sending message.
 	errChan chan error
-
 }
 
 //getGCPCredentials returns gcp credentials parsed out from url
-func getGCPCredentials(q *url.Values, ctx context.Context) (*google.Credentials, error){
+func getGCPCredentials(u sinkURL, ctx context.Context) (*google.Credentials, error) {
 	var credsBase64 string
+	var credsJSON []byte
+	var q = u.q
 	if credsBase64 = q.Get(credentialsParam); credsBase64 == "" {
 		return nil, errors.Errorf("%s missing credentials param", q)
 	}
 	q.Del(credentialsParam)
-	credsJSON, err := base64.StdEncoding.DecodeString(credsBase64)
-	if err != nil {
-		return nil, errors.Wrapf(err, "decoding value of %s", credentialsParam)
-	}
+	err := u.decodeBase64(credsBase64, &credsJSON)
 	creds, err := google.CredentialsFromJSON(ctx, credsJSON, gcpScope)
 	if err != nil {
 		return nil, errors.Wrapf(err, "decoding credentials json")
@@ -124,9 +103,8 @@ func getGCPCredentials(q *url.Values, ctx context.Context) (*google.Credentials,
 	return creds, nil
 }
 
-
 //parseGCPURL returns fullpath of url if properly formatted
-func parseGCPURL(u *url.URL) (string, error) {
+func parseGCPURL(u sinkURL) (string, error) {
 	fullPath := path.Join(u.Host, u.Path)
 	if fullTopicPathRE.MatchString(fullPath) {
 		parts := strings.SplitN(fullPath, "/", 4)
@@ -140,10 +118,8 @@ func parseGCPURL(u *url.URL) (string, error) {
 	return "", errors.Errorf("could not parse project and topic from %s", fullPath)
 }
 
-
 //MakePubsubSink returns the corresponding pubsub sink based on the url given
 func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string) (Sink, error) {
-
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
 	case changefeedbase.OptFormatJSON:
 	default:
@@ -162,47 +138,46 @@ func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string) (Si
 		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
 	}
 
-	q := u.Query()
 	ctx, cancel := context.WithCancel(ctx)
-	p := &pubsubSink{workerCtx: ctx, url: u, numWorkers: 10, exitWorkers: cancel}
+	p := &pubsubSink{workerCtx: ctx, url: sinkURL{u, u.Query()}, numWorkers: 10, exitWorkers: cancel}
 	p.setupWorkers()
 
 	//creates custom pubsub object based on scheme
 	switch u.Scheme {
 	case gcpScheme:
-		creds, err := getGCPCredentials(&q, ctx)
+		creds, err := getGCPCredentials(p.url, ctx)
 		if err != nil {
-			_ = p.Close()
+			_ = p.close()
 			return nil, err
 		}
-		g := &GcpPubsubSink{pubsubDesc: p, creds: creds}
+		g := &gcpPubsubSink{creds: creds, pubsubSink: p}
 		return g, nil
 	case memScheme:
-		m := &MemPubsubSink{pubsubDesc: p}
+		m := &memPubsubSink{pubsubSink: p}
 		return m, nil
 	default:
-		_ = p.Close()
+		_ = p.close()
 		return nil, errors.Errorf("unknown scheme: %s", u.Scheme)
 	}
 }
 
 //getWorkerCtx returns workerCtx
-func (p *pubsubSink)getWorkerCtx() context.Context{
+func (p *pubsubSink) getWorkerCtx() context.Context {
 	return p.workerCtx
 }
 
 //getUrl returns url
-func (p *pubsubSink)getUrl() *url.URL{
+func (p *pubsubSink) getUrl() sinkURL {
 	return p.url
 }
 
 //setTopic sets the topic with the argument passed in
-func (p *pubsubSink)setTopic(topic *pubsub.Topic){
+func (p *pubsubSink) setTopic(topic *pubsub.Topic) {
 	p.topic = topic
 }
 
 //EmitRow pushes a message to event channel where it is consumed by workers
-func (p *pubsubSink) 	EmitRow(
+func (p *pubsubSink) emitRow(
 	ctx context.Context,
 	_ TopicDescriptor,
 	key, value []byte,
@@ -210,7 +185,7 @@ func (p *pubsubSink) 	EmitRow(
 	alloc kvevent.Alloc,
 ) error {
 	m := pubsubMessage{alloc: alloc, isFlush: false, message: payload{
-		Key: key,
+		Key:   key,
 		Value: value,
 	}}
 	// calculate index by hashing key
@@ -233,7 +208,7 @@ func (p *pubsubSink) 	EmitRow(
 }
 
 //EmitResolvedTimestamp sends resolved timestamp message
-func (p *pubsubSink) EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error {
+func (p *pubsubSink) emitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error {
 	payload, err := encoder.EncodeResolvedTimestamp(ctx, "", resolved)
 	if err != nil {
 		return errors.Wrapf(err, "encoding resolved timestamp")
@@ -246,7 +221,7 @@ func (p *pubsubSink) EmitResolvedTimestamp(ctx context.Context, encoder Encoder,
 }
 
 //Flush blocks until all messages in the event channels are sent
-func (p *pubsubSink) Flush(ctx context.Context) error {
+func (p *pubsubSink) flush(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -271,7 +246,7 @@ func (p *pubsubSink) Flush(ctx context.Context) error {
 }
 
 //Close closes all the channels and shutdowns the topic
-func (p *pubsubSink) Close() error {
+func (p *pubsubSink) close() error {
 	_ = p.workerGroup.Wait()
 	close(p.errChan)
 	close(p.flushDone)
@@ -291,7 +266,7 @@ func (p *pubsubSink) sendMessage(m []byte) error {
 		Body: m,
 	})
 	if err != nil {
-		return errors.Wrapf(err, "sending message")
+		return err
 	}
 	return nil
 }
@@ -331,19 +306,16 @@ func (p *pubsubSink) workerLoop(workerIndex int) {
 				continue
 			}
 
-			//inline func to trigger the defer alloc release when it loops
-			func(){
-				defer msg.alloc.Release(p.workerCtx)
-				m := payload{Key: msg.message.Key, Value: msg.message.Value}
-				b, err := json.Marshal(m)
-				if err != nil {
-					p.exitWorkersWithError(err)
-				}
-				err = p.sendMessage(b)
-				if err != nil {
-					p.exitWorkersWithError(err)
-				}
-			}()
+			m := payload{Key: msg.message.Key, Value: msg.message.Value}
+			b, err := json.Marshal(m)
+			if err != nil {
+				p.exitWorkersWithError(err)
+			}
+			err = p.sendMessage(b)
+			if err != nil {
+				p.exitWorkersWithError(err)
+			}
+			msg.alloc.Release(p.workerCtx)
 		}
 	}
 }
@@ -375,8 +347,8 @@ func (p *pubsubSink) workerIndex(key []byte) uint32 {
 }
 
 //flushWorkers sends a flush message to every worker channel and then signals sink that flush is done
-func (p *pubsubSink) flushWorkers() error{
-	for i := 0; i < p.numWorkers; i++{
+func (p *pubsubSink) flushWorkers() error {
+	for i := 0; i < p.numWorkers; i++ {
 		//flush message will be blocked until all the messages in the channel are processed
 		select {
 		case <-p.workerCtx.Done():
@@ -394,9 +366,9 @@ func (p *pubsubSink) flushWorkers() error{
 }
 
 //Dial connects to gcp client and opens a topic
-func (p *GcpPubsubSink)Dial() error{
+func (p *gcpPubsubSink) Dial() error {
 	// Open a gRPC connection to the GCP Pub/Sub API.
-	conn, cleanup, err := gcppubsub.Dial(p.pubsubDesc.getWorkerCtx(), p.creds.TokenSource)
+	conn, cleanup, err := gcppubsub.Dial(p.pubsubSink.getWorkerCtx(), p.creds.TokenSource)
 	if err != nil {
 		return errors.Wrapf(err, "establishing gcp connection")
 	}
@@ -405,57 +377,58 @@ func (p *GcpPubsubSink)Dial() error{
 	p.cleanup = cleanup
 
 	// Construct a PublisherClient using the connection.
-	pubClient, err := gcppubsub.PublisherClient(p.pubsubDesc.getWorkerCtx(), conn)
+	pubClient, err := gcppubsub.PublisherClient(p.pubsubSink.getWorkerCtx(), conn)
 	if err != nil {
 		return errors.Wrapf(err, "creating publisher client")
 	}
 	p.client = pubClient
 
 	// Construct a *pubsub.Topic.
-	fullPath, err := parseGCPURL(p.pubsubDesc.getUrl())
+	fullPath, err := parseGCPURL(p.pubsubSink.getUrl())
 	if err != nil {
 		return errors.Wrapf(err, "parsing url")
 	}
 
-	//TODO: implement options
+	//TODO: implement topic config https://pkg.go.dev/cloud.google.com/go/pubsub#TopicConfig
+	// implement odering key option for gcp https://cloud.google.com/pubsub/docs/publisher#using_ordering_keys
 	topic, err := gcppubsub.OpenTopicByPath(pubClient, fullPath, nil)
 	if err != nil {
 		return errors.Wrapf(err, "opening topic")
 	}
 
-	p.pubsubDesc.setTopic(topic)
+	p.pubsubSink.setTopic(topic)
 	return nil
 }
 
 //EmitRow calls the pubsubDesc EmitRow
-func (p *GcpPubsubSink) 	EmitRow(
+func (p *gcpPubsubSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
 	updated hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	err := p.pubsubDesc.EmitRow(ctx, topic, key, value, updated, alloc)
+	err := p.pubsubSink.emitRow(ctx, topic, key, value, updated, alloc)
 	if err != nil {
-		return errors.Wrapf(err, "emitting row")
+		return err
 	}
 	return nil
 }
 
 //EmitResolvedTimestamp calls the pubsubDesc EmitResolvedTimestamp
-func (p *GcpPubsubSink) EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error {
-	return p.pubsubDesc.EmitResolvedTimestamp(ctx, encoder, resolved)
+func (p *gcpPubsubSink) EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error {
+	return p.pubsubSink.emitResolvedTimestamp(ctx, encoder, resolved)
 }
 
 //Flush calls the pubsubDesc Flush
-func (p *GcpPubsubSink) Flush(ctx context.Context) error {
-	return p.pubsubDesc.Flush(ctx)
+func (p *gcpPubsubSink) Flush(ctx context.Context) error {
+	return p.pubsubSink.flush(ctx)
 }
 
 //Close calls the pubsubDesc Close and closes the client and connection
-func (p *GcpPubsubSink) Close() error {
-	if p.pubsubDesc != nil {
-		err := p.pubsubDesc.Close()
+func (p *gcpPubsubSink) Close() error {
+	if p.pubsubSink != nil {
+		err := p.pubsubSink.close()
 		if err != nil {
 			return err
 		}
@@ -473,52 +446,48 @@ func (p *GcpPubsubSink) Close() error {
 }
 
 //Dial opens topic using url
-func (p *MemPubsubSink)Dial() error{
-	topic, err := pubsub.OpenTopic(p.pubsubDesc.getWorkerCtx(), p.pubsubDesc.getUrl().String())
+func (p *memPubsubSink) Dial() error {
+	topic, err := pubsub.OpenTopic(p.pubsubSink.getWorkerCtx(), p.pubsubSink.getUrl().String())
 	if err != nil {
 		return err
 	}
 
-	p.pubsubDesc.setTopic(topic)
+	p.pubsubSink.setTopic(topic)
 	return nil
 }
 
 //EmitRow calls the pubsubDesc EmitRow
-func (p *MemPubsubSink) 	EmitRow(
+func (p *memPubsubSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
 	updated hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	err := p.pubsubDesc.EmitRow(ctx, topic, key, value, updated, alloc)
+	err := p.pubsubSink.emitRow(ctx, topic, key, value, updated, alloc)
 	if err != nil {
-		return errors.Wrapf(err, "emitting row")
+		return err
 	}
 	return nil
 }
 
 //EmitResolvedTimestamp calls the pubsubDesc EmitResolvedTimestamp
-func (p *MemPubsubSink) EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error {
+func (p *memPubsubSink) EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error {
 	return p.EmitResolvedTimestamp(ctx, encoder, resolved)
 }
 
 //Flush calls the pubsubDesc Flush
-func (p *MemPubsubSink) Flush(ctx context.Context) error {
-	return p.pubsubDesc.Flush(ctx)
+func (p *memPubsubSink) Flush(ctx context.Context) error {
+	return p.pubsubSink.flush(ctx)
 }
 
 //Close calls the pubsubDesc Close
-func (p *MemPubsubSink) Close() error {
-	if p.pubsubDesc != nil {
-		err := p.pubsubDesc.Close()
+func (p *memPubsubSink) Close() error {
+	if p.pubsubSink != nil {
+		err := p.pubsubSink.close()
 		if err != nil {
 			return err
 		}
 	}
 	return nil
 }
-
-
-
-

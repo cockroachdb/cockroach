@@ -208,9 +208,3 @@ func TestReceiveRowsAndFlush(t *testing.T) {
 	err = p.Flush(sinkCtx)
 	require.NoError(t, err)
 }
-
-func TestEmitResolvedTimestamp(t *testing.T) {
-
-}
-
-
