@@ -517,7 +517,7 @@ func (p *planner) dropIndexByName(
 	// contain the same field any more due to other schema changes
 	// intervening since the initial lookup. So we send the recent
 	// copy idxEntry for drop instead.
-	if err := tableDesc.AddIndexMutation(&idxEntry, descpb.DescriptorMutation_DROP); err != nil {
+	if err := tableDesc.AddDropIndexMutation(&idxEntry); err != nil {
 		return err
 	}
 	tableDesc.RemovePublicNonPrimaryIndex(idxOrdinal)

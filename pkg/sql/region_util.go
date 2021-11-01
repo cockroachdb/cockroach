@@ -1712,8 +1712,12 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 			if pkSwap.HasLocalityConfig() {
 				_ = pkSwap.ForEachNewIndexIDs(func(id descpb.IndexID) error {
 					regionalByRowNewIndexes[uint32(id)] = struct{}{}
+					if idx := catalog.FindCorrespondingTemporaryIndexByID(desc, id); idx != nil {
+						regionalByRowNewIndexes[uint32(idx.GetID())] = struct{}{}
+					}
 					return nil
 				})
+
 			}
 			// There can only be one pkSwap at a time, so break now.
 			break

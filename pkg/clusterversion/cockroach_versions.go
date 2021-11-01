@@ -269,6 +269,11 @@ const (
 	DontProposeWriteTimestampForLeaseTransfers
 	// TenantSettingsTable adds the system table for tracking tenant usage.
 	TenantSettingsTable
+	// MVCCIndexBackfiller supports MVCC-compliant index
+	// backfillers via a new BACKFILLING index state, delete
+	// preserving temporary indexes, and a post-backfill merging
+	// processing.
+	MVCCIndexBackfiller
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -429,7 +434,10 @@ var versionsSingleton = keyedVersions{
 		Key:     TenantSettingsTable,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 62},
 	},
-
+	{
+		Key:     MVCCIndexBackfiller,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
