@@ -2141,52 +2141,18 @@ func runSchemaChangesInTxn(
 		// extra work that needs to be done. Note that we don't need to create
 		// a job to clean up the dropped indexes because those mutations can
 		// get processed in this txn on the new table.
-		if pkSwap := m.GetPrimaryKeySwap(); pkSwap != nil {
-			// If any old index had an interleaved parent, remove the
-			// backreference from the parent.
-			// N.B. This logic needs to be kept up to date with the
-			// corresponding piece in (*SchemaChanger).done. It is slightly
-			// different because of how it access tables and how it needs to
-			// write the modified table descriptors explicitly.
-			for _, idxID := range append(
-				[]descpb.IndexID{pkSwap.OldPrimaryIndexId}, pkSwap.OldIndexes...) {
-				oldIndex, err := tableDesc.FindIndexWithID(idxID)
-				if err != nil {
-					return err
-				}
-				if oldIndex.NumInterleaveAncestors() != 0 {
-					ancestorInfo := oldIndex.GetInterleaveAncestor(oldIndex.NumInterleaveAncestors() - 1)
-					ancestor, err := planner.Descriptors().GetMutableTableVersionByID(ctx, ancestorInfo.TableID, planner.txn)
-					if err != nil {
-						return err
-					}
-					ancestorIdxI, err := ancestor.FindIndexWithID(ancestorInfo.IndexID)
-					if err != nil {
-						return err
-					}
-					ancestorIdx := ancestorIdxI.IndexDesc()
-					foundAncestor := false
-					for k, ref := range ancestorIdx.InterleavedBy {
-						if ref.Table == tableDesc.ID && ref.Index == oldIndex.GetID() {
-							if foundAncestor {
-								return errors.AssertionFailedf(
-									"ancestor entry in %s for %s@%s found more than once",
-									ancestor.Name, tableDesc.Name, oldIndex.GetName())
-							}
-							ancestorIdx.InterleavedBy = append(
-								ancestorIdx.InterleavedBy[:k], ancestorIdx.InterleavedBy[k+1:]...)
-							foundAncestor = true
-							if err := planner.writeSchemaChange(ctx, ancestor, descpb.InvalidMutationID,
-								fmt.Sprintf("remove interleaved backreference from table %s(%d) "+
-									"for primary key swap of table %s(%d)",
-									ancestor.Name, ancestor.ID, tableDesc.Name, tableDesc.ID,
-								)); err != nil {
-								return err
-							}
-						}
-					}
-				}
-			}
+		if err := maybeRemoveInterleaveBackreference(
+			ctx, planner.txn, planner.Descriptors(), &m, tableDesc, func(
+				ctx context.Context, ancestor *tabledesc.Mutable,
+			) error {
+				return planner.writeSchemaChange(ctx, ancestor, descpb.InvalidMutationID,
+					fmt.Sprintf("remove interleaved backreference from table %s(%d) "+
+						"for primary key swap of table %s(%d)",
+						ancestor.Name, ancestor.ID, tableDesc.Name, tableDesc.GetID(),
+					))
+			},
+		); err != nil {
+			return err
 		}
 	}
 	// Clear all the mutations except for adding constraints.
