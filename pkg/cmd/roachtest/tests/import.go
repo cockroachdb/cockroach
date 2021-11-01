@@ -217,6 +217,9 @@ func registerImportTPCH(r registry.Registry) {
 				if _, err := conn.Exec(`CREATE DATABASE csv;`); err != nil {
 					t.Fatal(err)
 				}
+				if _, err := conn.Exec(`USE csv;`); err != nil {
+					t.Fatal(err)
+				}
 				if _, err := conn.Exec(
 					`SET CLUSTER SETTING kv.bulk_ingest.max_index_buffer_size = '2gb'`,
 				); err != nil && !strings.Contains(err.Error(), "unknown cluster setting") {
