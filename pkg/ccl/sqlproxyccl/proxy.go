@@ -54,11 +54,17 @@ func toPgError(err error) *pgproto3.ErrorResponse {
 		} else {
 			pgCode = "08004" // rejected connection
 		}
-		return &pgproto3.ErrorResponse{
+
+		resp := &pgproto3.ErrorResponse{
 			Severity: "FATAL",
 			Code:     pgCode,
 			Message:  msg,
 		}
+		hint := errors.FlattenHints(codeErr.err)
+		if hint != "" {
+			resp.Hint = hint
+		}
+		return resp
 	}
 	// Return a generic "internal server error" message.
 	return &pgproto3.ErrorResponse{
