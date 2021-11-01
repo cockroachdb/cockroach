@@ -1,5 +1,9 @@
 # LogicTest: local !metamorphic
 
+# TODO(ssd): index id test dependency cleanup
+statement ok
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = false
+
 statement ok
 CREATE TABLE t1 (
   x INT PRIMARY KEY, y INT, z INT, a INT, b INT,
