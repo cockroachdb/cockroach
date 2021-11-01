@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,6 +32,7 @@ func (sc *SchemaChanger) Merge(
 	sourceID descpb.IndexID,
 	destinationID descpb.IndexID,
 	sourceSpan roachpb.Span,
+	readAsOf hlc.Timestamp,
 ) error {
 	sourcePrefix := rowenc.MakeIndexKeyPrefix(codec, table.GetID(), sourceID)
 	prefixLen := len(sourcePrefix)
@@ -70,6 +72,10 @@ func (sc *SchemaChanger) Merge(
 
 			wb := txn.NewBatch()
 			for i := range kvs {
+				if kvs[i].Value.Timestamp.Less(readAsOf) {
+					continue
+				}
+
 				mergedEntry, deleted, err := mergeEntry(&kvs[i], destKeys[i])
 				if err != nil {
 					return err

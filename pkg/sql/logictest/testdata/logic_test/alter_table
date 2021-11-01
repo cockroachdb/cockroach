@@ -79,15 +79,20 @@ statement error pgcode 42703 column "dne" does not exist
 ALTER TABLE t ADD CONSTRAINT dne_unique UNIQUE (dne)
 
 # Test that rollback was successful
-query TTTTTR
-SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name, status, running_status, fraction_completed::decimal(10,2)
+#
+# We ignore the running_status column because the GC for temporary
+# indexes used during backfills may already running rather than
+# waiting for the GC TTL depending on the timing
+query TTTTR
+SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name, status, fraction_completed::decimal(10,2)
 FROM crdb_internal.jobs
 WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
-LIMIT 2
+LIMIT 3
 ----
-SCHEMA CHANGE GC  GC for ROLLBACK of ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  running  waiting for GC TTL  0.00
-SCHEMA CHANGE     ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root  failed   NULL                0.00
+SCHEMA CHANGE GC  GC for TEMPORARY INDEXES USED DURING INDEX BACKFILL                         root  running  0.00
+SCHEMA CHANGE GC  GC for ROLLBACK of ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  running  0.00
+SCHEMA CHANGE     ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root  failed   0.00
 
 query IIII colnames,rowsort
 SELECT * FROM t

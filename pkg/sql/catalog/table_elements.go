@@ -186,6 +186,7 @@ type Index interface {
 	NumCompositeColumns() int
 	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
 	UseDeletePreservingEncoding() bool
+	ForcePut() bool
 }
 
 // Column is an interface around the column descriptor types.

@@ -168,6 +168,7 @@ var validationMap = []struct {
 			"GeoConfig":                   {status: thisFieldReferencesNoObjects},
 			"Predicate":                   {status: iSolemnlySwearThisFieldIsValidated},
 			"UseDeletePreservingEncoding": {status: thisFieldReferencesNoObjects},
+			"ForcePut":                    {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{

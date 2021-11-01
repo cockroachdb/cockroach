@@ -637,12 +637,13 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
-	if err := n.tableDesc.AddIndexMutation(indexDesc, descpb.DescriptorMutation_ADD); err != nil {
+	if err := n.tableDesc.AddIndexMutation(params.ctx, indexDesc, descpb.DescriptorMutation_ADD, params.p.ExecCfg().Settings); err != nil {
 		return err
 	}
 	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
 		return err
 	}
+
 	if err := params.p.configureZoneConfigForNewIndexPartitioning(
 		params.ctx,
 		n.tableDesc,
@@ -747,13 +748,19 @@ func (p *planner) configureZoneConfigForNewIndexPartitioning(
 		if err != nil {
 			return err
 		}
+
+		indexIDs := []descpb.IndexID{indexDesc.ID}
+		if idx := findTempIndexForIndex(tableDesc, &indexDesc); idx != nil {
+			indexIDs = append(indexIDs, idx.ID)
+		}
+
 		if err := ApplyZoneConfigForMultiRegionTable(
 			ctx,
 			p.txn,
 			p.ExecCfg(),
 			regionConfig,
 			tableDesc,
-			applyZoneConfigForMultiRegionTableOptionNewIndexes(indexDesc.ID),
+			applyZoneConfigForMultiRegionTableOptionNewIndexes(indexIDs...),
 		); err != nil {
 			return err
 		}

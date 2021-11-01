@@ -76,9 +76,9 @@ message StreamIngestionDetails {
   // StreamAddress locates the stream. It enables the client to find the
   // addresses of the stream's partitions.
   string stream_address = 1;
-  
+
   uint64 stream_id = 4 [(gogoproto.customname) = "StreamID"];
-  
+
   // Span is the keyspan into which this job will ingest KVs.
   //
   // The stream should emit all changes for a given span, and no changes outside
@@ -87,7 +87,7 @@ message StreamIngestionDetails {
   roachpb.Span span = 2 [(gogoproto.nullable) = false];
   // The job will ingest events from StartTime onwards.
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
-  
+
   reserved 5;
   roachpb.TenantID tenant_id = 6 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
 
@@ -647,7 +647,12 @@ message SchemaChangeDetails {
   // a time that has been identified via a scan as safe for writing.
   util.hlc.Timestamp write_timestamp = 10 [(gogoproto.nullable) = false];
 
-  // NEXT ID: 11.
+  // InitialReadTimestamp is the first read timestamp of the bulk
+  // index backfill. Writes in the temporary index below this
+  // timestamp are ignored by the index merging process.
+  util.hlc.Timestamp initial_read_timestamp = 11 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 12.
 }
 
 message SchemaChangeProgress {

@@ -63,7 +63,8 @@ func ColumnMutationFilter(m catalog.Mutation) bool {
 
 // IndexMutationFilter is a filter that allows mutations that add indexes.
 func IndexMutationFilter(m catalog.Mutation) bool {
-	return m.AsIndex() != nil && m.Adding()
+	idx := m.AsIndex()
+	return idx != nil && !idx.UseDeletePreservingEncoding() && m.Adding()
 }
 
 // ColumnBackfiller is capable of running a column backfill for all

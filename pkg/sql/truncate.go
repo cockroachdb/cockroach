@@ -323,7 +323,10 @@ func checkTableForDisallowedMutationsWithTruncate(desc *tabledesc.Mutable) error
 	for i, m := range desc.AllMutations() {
 		if idx := m.AsIndex(); idx != nil {
 			// Do not allow dropping indexes.
-			if !m.Adding() {
+			//
+			// TODO(ssd): Are we definitely OK to allow
+			// truncate with these temporary drops?
+			if !m.Adding() && !idx.UseDeletePreservingEncoding() {
 				return unimplemented.Newf(
 					"TRUNCATE concurrent with ongoing schema change",
 					"cannot perform TRUNCATE on %q which has indexes being dropped", desc.GetName())

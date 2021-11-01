@@ -421,10 +421,19 @@ func (ru *Updater) UpdateRow(
 						continue
 					}
 
-					if index.UseDeletePreservingEncoding() {
+					if index.ForcePut() {
+						// ForcePut currently (2022-01-19) has two users: delete preserving
+						// indexes and backfilling indexes.
+						//
 						// Delete preserving encoding indexes are used only as a log of
 						// index writes during backfill, thus we can blindly put values into
 						// them.
+						//
+						// Indexes in a the backfilling state will be checked for uniqueness
+						// at the end of the backfilling process and may miss updates during
+						// the backfilling process that would lead to CPut failures until
+						// the missed updates are merged into the index. Uniqueness for such indexes
+						// is checked by the schema changer before they are brought back online.
 						insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
 					} else {
 						if traceKV {
@@ -459,7 +468,7 @@ func (ru *Updater) UpdateRow(
 						)
 					}
 
-					if index.UseDeletePreservingEncoding() {
+					if index.ForcePut() {
 						// Delete preserving encoding indexes are used only as a log of
 						// index writes during backfill, thus we can blindly put values into
 						// them.
@@ -497,7 +506,7 @@ func (ru *Updater) UpdateRow(
 				// and the old row values do not match the partial index
 				// predicate.
 				newEntry := &newEntries[newIdx]
-				if index.UseDeletePreservingEncoding() {
+				if index.ForcePut() {
 					insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
 				} else {
 					if traceKV {
@@ -518,7 +527,7 @@ func (ru *Updater) UpdateRow(
 			}
 			// We're adding all of the inverted index entries from the row being updated.
 			for j := range ru.newIndexEntries[i] {
-				if index.UseDeletePreservingEncoding() {
+				if index.ForcePut() {
 					// Delete preserving encoding indexes are used only as a log of index
 					// writes during backfill, thus we can blindly put values into them.
 					insertPutFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
