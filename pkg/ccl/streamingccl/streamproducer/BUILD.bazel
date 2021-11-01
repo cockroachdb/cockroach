@@ -16,7 +16,6 @@ go_library(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
-        "//pkg/kv",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/server/telemetry",
