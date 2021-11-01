@@ -217,6 +217,24 @@ func (b *Builder) buildAlterTableRelocate(relocate *memo.AlterTableRelocateExpr)
 	return planWithColumns(node, relocate.Columns), nil
 }
 
+func (b *Builder) buildAlterRangeRelocate(relocate *memo.AlterRangeRelocateExpr) (execPlan, error) {
+	input, err := b.buildRelational(relocate.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	node, err := b.factory.ConstructAlterRangeRelocate(
+		input.root,
+		relocate.RelocateLease,
+		relocate.RelocateNonVoters,
+		relocate.ToStoreID,
+		relocate.FromStoreID,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return planWithColumns(node, relocate.Columns), nil
+}
+
 func (b *Builder) buildControlJobs(ctl *memo.ControlJobsExpr) (execPlan, error) {
 	input, err := b.buildRelational(ctl.Input)
 	if err != nil {

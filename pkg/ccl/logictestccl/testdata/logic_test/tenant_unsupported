@@ -65,3 +65,20 @@ ALTER TABLE kv EXPERIMENTAL_RELOCATE LEASE VALUES (1, 'k')
 
 statement error operation is unsupported in multi-tenancy mode
 SELECT crdb_internal.check_consistency(true, '', '')
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER RANGE 1 RELOCATE LEASE TO 2
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id from crdb_internal.ranges where table_name = 'kv'
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER RANGE 1 RELOCATE FROM 1 TO 2
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER RANGE RELOCATE FROM 1 TO 2 FOR SELECT range_id from crdb_internal.ranges where table_name = 'kv'
+
+# Can not query inflight traces on sql pods
+
+statement error table crdb_internal.cluster_inflight_traces is not implemented on tenants
+SELECT * from crdb_internal.cluster_inflight_traces WHERE trace_id = 42

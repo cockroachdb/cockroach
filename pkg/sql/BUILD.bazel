@@ -150,6 +150,7 @@ go_library(
         "refresh_materialized_view.go",
         "region_util.go",
         "relocate.go",
+        "relocate_range.go",
         "rename_column.go",
         "rename_database.go",
         "rename_index.go",

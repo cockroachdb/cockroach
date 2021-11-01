@@ -1,0 +1,77 @@
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX b (b), UNIQUE INDEX bc (b,c))
+----
+
+# Tests for ALTER RANGE RELOCATE.
+build
+ALTER RANGE 1 RELOCATE FROM 1 TO 2
+----
+alter-range-relocate &{false false 2 1 [3 4 5] []}
+ ├── columns: range_id:3 pretty:4 result:5
+ └── values
+      ├── columns: column1:6!null
+      └── (1,)
+
+build
+ALTER RANGE RELOCATE FROM 1 TO 2 FOR SELECT a from abc
+----
+alter-range-relocate &{false false 2 1 [3 4 5] []}
+ ├── columns: range_id:3 pretty:4 result:5
+ └── project
+      ├── columns: a:6!null
+      └── scan abc
+           └── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+
+build
+ALTER RANGE a RELOCATE FROM 1 TO 2
+----
+error (42601): at or near "relocate": syntax error
+
+build
+ALTER RANGE RELOCATE FROM 1 TO 2 FOR SELECT c from abc
+----
+error (42601): RELOCATE data column 1 (range ids) must be of type int, not type string
+
+build
+ALTER RANGE 1 RELOCATE NON_VOTERS FROM 1 TO 2
+----
+alter-range-relocate &{false true 2 1 [3 4 5] []}
+ ├── columns: range_id:3 pretty:4 result:5
+ └── values
+      ├── columns: column1:6!null
+      └── (1,)
+
+build
+ALTER RANGE RELOCATE NON_VOTERS FROM 1 TO 2 FOR SELECT a from abc
+----
+alter-range-relocate &{false true 2 1 [3 4 5] []}
+ ├── columns: range_id:3 pretty:4 result:5
+ └── project
+      ├── columns: a:6!null
+      └── scan abc
+           └── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+
+# Tests for ALTER RANGE RELOCATE LEASE.
+build
+ALTER RANGE 1 RELOCATE LEASE TO 2
+----
+alter-range-relocate &{true false 2 0 [3 4 5] []}
+ ├── columns: range_id:3 pretty:4 result:5
+ └── values
+      ├── columns: column1:6!null
+      └── (1,)
+
+build
+ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT a from abc
+----
+alter-range-relocate &{true false 2 0 [3 4 5] []}
+ ├── columns: range_id:3 pretty:4 result:5
+ └── project
+      ├── columns: a:6!null
+      └── scan abc
+           └── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+
+build
+ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT c from abc
+----
+error (42601): RELOCATE LEASE data column 1 (range ids) must be of type int, not type string

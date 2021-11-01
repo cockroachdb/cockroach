@@ -251,6 +251,11 @@ func init() {
 		buildChildReqOrdering: alterTableRelocateBuildChildReqOrdering,
 		buildProvidedOrdering: noProvidedOrdering,
 	}
+	funcMap[opt.AlterRangeRelocateOp] = funcs{
+		canProvideOrdering:    canNeverProvideOrdering,
+		buildChildReqOrdering: alterRangeRelocateBuildChildReqOrdering,
+		buildProvidedOrdering: noProvidedOrdering,
+	}
 	funcMap[opt.ControlJobsOp] = funcs{
 		canProvideOrdering:    canNeverProvideOrdering,
 		buildChildReqOrdering: controlJobsBuildChildReqOrdering,

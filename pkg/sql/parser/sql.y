@@ -775,7 +775,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> ELSE ENCODING ENCRYPTED ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
 %token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
-%token <str> EXPERIMENTAL_AUDIT
+%token <str> EXPERIMENTAL_AUDIT EXPERIMENTAL_RELOCATE
 %token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTRACT EXTRACT_DURATION
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
@@ -826,7 +826,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
-%token <str> REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
+%token <str> RELOCATE REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
 %token <str> RELEASE RESET RESTORE RESTRICT RESTRICTED RESUME RETURNING RETRY REVISION_HISTORY
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
 
@@ -839,7 +839,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> START STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING
 %token <str> SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
-%token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
+%token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
 %token <str> TRANSACTION TRANSACTIONS TREAT TRIGGER TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE TYPES
@@ -900,6 +900,8 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
+%type <tree.Statement> alter_range_relocate_lease_stmt
+%type <tree.Statement> alter_range_relocate_stmt
 
 // ALTER TABLE
 %type <tree.Statement> alter_onetable_stmt
@@ -1778,6 +1780,10 @@ alter_database_primary_region_stmt:
 //
 // Commands:
 //   ALTER RANGE ... CONFIGURE ZONE <zoneconfig>
+//   ALTER RANGE RELOCATE from <store_id> to <store_id> FOR <selectclause>
+//   ALTER RANGE r RELOCATE from <store_id> to <store_id>
+//   ALTER RANGE RELOCATE LEASE to <store_id> FOR <selectclause>
+//   ALTER RANGE r RELOCATE LEASE to <store_id>
 //
 // Zone configurations:
 //   DISCARD
@@ -1788,6 +1794,8 @@ alter_database_primary_region_stmt:
 // %SeeAlso: ALTER TABLE
 alter_range_stmt:
   alter_zone_range_stmt
+| alter_range_relocate_lease_stmt
+| alter_range_relocate_stmt
 | ALTER RANGE error // SHOW HELP: ALTER RANGE
 
 // %Help: ALTER INDEX - change the definition of an index
@@ -1903,6 +1911,7 @@ alter_unsplit_index_stmt:
 relocate_kw:
   TESTING_RELOCATE
 | EXPERIMENTAL_RELOCATE
+| RELOCATE
 
 voters_kw:
   VOTERS {}
@@ -1967,6 +1976,74 @@ alter_zone_range_stmt:
      s.ZoneSpecifier = tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName($3)}
      $$.val = s
   }
+
+alter_range_relocate_lease_stmt:
+  ALTER RANGE relocate_kw LEASE TO iconst64 FOR select_stmt
+  {
+    $$.val = &tree.RelocateRange{
+      Rows: $8.slct(),
+      ToStoreID: $6.int64(),
+      RelocateLease: true,
+      RelocateNonVoters: false,
+    }
+  }
+| ALTER RANGE iconst64 relocate_kw LEASE TO iconst64
+    {
+      $$.val = &tree.RelocateRange{
+        Rows: &tree.Select{
+          Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{tree.NewDInt(tree.DInt($3.int64()))}}},
+        },
+        ToStoreID: $7.int64(),
+        RelocateLease: true,
+        RelocateNonVoters: false,
+      }
+    }
+
+alter_range_relocate_stmt:
+ALTER RANGE relocate_kw voters_kw FROM iconst64 TO iconst64 FOR select_stmt
+  {
+    $$.val = &tree.RelocateRange{
+      Rows: $10.slct(),
+      FromStoreID: $6.int64(),
+      ToStoreID: $8.int64(),
+      RelocateLease: false,
+      RelocateNonVoters: false,
+    }
+  }
+| ALTER RANGE iconst64 relocate_kw voters_kw FROM iconst64 TO iconst64
+  {
+    $$.val = &tree.RelocateRange{
+      Rows: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{tree.NewDInt(tree.DInt($3.int64()))}}},
+      },
+      FromStoreID: $7.int64(),
+      ToStoreID: $9.int64(),
+      RelocateLease: false,
+      RelocateNonVoters: false,
+    }
+  }
+| ALTER RANGE relocate_kw NON_VOTERS FROM iconst64 TO iconst64 FOR select_stmt
+    {
+      $$.val = &tree.RelocateRange{
+        Rows: $10.slct(),
+        FromStoreID: $6.int64(),
+        ToStoreID: $8.int64(),
+        RelocateLease: false,
+        RelocateNonVoters: true,
+      }
+    }
+| ALTER RANGE iconst64 relocate_kw NON_VOTERS FROM iconst64 TO iconst64
+  {
+    $$.val = &tree.RelocateRange{
+      Rows: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{tree.NewDInt(tree.DInt($3.int64()))}}},
+      },
+      FromStoreID: $7.int64(),
+      ToStoreID: $9.int64(),
+      RelocateLease: false,
+      RelocateNonVoters: true,
+  }
+}
 
 set_zone_config:
   CONFIGURE ZONE to_or_eq a_expr
@@ -13398,6 +13475,7 @@ unreserved_keyword:
 | REGIONS
 | REINDEX
 | RELEASE
+| RELOCATE
 | RENAME
 | REPEATABLE
 | REPLACE

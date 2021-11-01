@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "optbuilder",
     srcs = [
+        "alter_range.go",
         "alter_table.go",
         "arbiter_set.go",
         "builder.go",

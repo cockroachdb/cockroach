@@ -1033,6 +1033,12 @@ func (b *logicalPropsBuilder) buildAlterTableRelocateProps(
 	b.buildBasicProps(relocate, relocate.Columns, rel)
 }
 
+func (b *logicalPropsBuilder) buildAlterRangeRelocateProps(
+	relocate *AlterRangeRelocateExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(relocate, relocate.Columns, rel)
+}
+
 func (b *logicalPropsBuilder) buildControlJobsProps(ctl *ControlJobsExpr, rel *props.Relational) {
 	b.buildBasicProps(ctl, opt.ColList{}, rel)
 }

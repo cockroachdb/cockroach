@@ -127,7 +127,7 @@ func CanWriteData(stmt Statement) bool {
 	case *CopyFrom, *Import, *Restore:
 		return true
 	// CockroachDB extensions.
-	case *Split, *Unsplit, *Relocate, *Scatter:
+	case *Split, *Unsplit, *Relocate, *RelocateRange, *Scatter:
 		return true
 	}
 	return false
@@ -955,6 +955,22 @@ func (n *Relocate) StatementTag() string {
 }
 
 // StatementReturnType implements the Statement interface.
+func (*RelocateRange) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*RelocateRange) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (n *RelocateRange) StatementTag() string {
+	if n.RelocateLease {
+		return "RELOCATE LEASE"
+	} else if n.RelocateNonVoters {
+		return "RELOCATE NON_VOTERS"
+	}
+	return "RELOCATE VOTERS"
+}
+
+// StatementReturnType implements the Statement interface.
 func (*ReplicationStream) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -1675,6 +1691,7 @@ func (n *Prepare) String() string                        { return AsString(n) }
 func (n *ReassignOwnedBy) String() string                { return AsString(n) }
 func (n *ReleaseSavepoint) String() string               { return AsString(n) }
 func (n *Relocate) String() string                       { return AsString(n) }
+func (n *RelocateRange) String() string                  { return AsString(n) }
 func (n *RefreshMaterializedView) String() string        { return AsString(n) }
 func (n *RenameColumn) String() string                   { return AsString(n) }
 func (n *RenameDatabase) String() string                 { return AsString(n) }

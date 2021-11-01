@@ -268,7 +268,7 @@ func (b *Builder) buildStmt(
 		// A blocklist of statements that can't be used from inside a view.
 		switch stmt := stmt.(type) {
 		case *tree.Delete, *tree.Insert, *tree.Update, *tree.CreateTable, *tree.CreateView,
-			*tree.Split, *tree.Unsplit, *tree.Relocate,
+			*tree.Split, *tree.Unsplit, *tree.Relocate, *tree.RelocateRange,
 			*tree.ControlJobs, *tree.ControlSchedules, *tree.CancelQueries, *tree.CancelSessions:
 			panic(pgerror.Newf(
 				pgcode.Syntax, "%s cannot be used inside a view definition", stmt.StatementTag(),
@@ -322,6 +322,9 @@ func (b *Builder) buildStmt(
 
 	case *tree.Relocate:
 		return b.buildAlterTableRelocate(stmt, inScope)
+
+	case *tree.RelocateRange:
+		return b.buildAlterRangeRelocate(stmt, inScope)
 
 	case *tree.ControlJobs:
 		return b.buildControlJobs(stmt, inScope)

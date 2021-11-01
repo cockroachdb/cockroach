@@ -252,6 +252,7 @@ func (e *emitter) nodeName(n *Node) (string, error) {
 }
 
 var nodeNames = [...]string{
+	alterRangeRelocateOp:   "relocate",
 	alterTableRelocateOp:   "relocate",
 	alterTableSplitOp:      "split",
 	alterTableUnsplitAllOp: "unsplit all",
@@ -783,6 +784,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		alterTableUnsplitAllOp,
 		alterTableRelocateOp,
 		recursiveCTEOp,
+		alterRangeRelocateOp,
 		controlJobsOp,
 		controlSchedulesOp,
 		cancelQueriesOp,

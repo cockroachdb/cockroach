@@ -1065,6 +1065,7 @@ unreserved_keyword ::=
 	| 'REGIONS'
 	| 'REINDEX'
 	| 'RELEASE'
+	| 'RELOCATE'
 	| 'RENAME'
 	| 'REPEATABLE'
 	| 'REPLACE'
@@ -1330,6 +1331,8 @@ alter_database_stmt ::=
 
 alter_range_stmt ::=
 	alter_zone_range_stmt
+	| alter_range_relocate_lease_stmt
+	| alter_range_relocate_stmt
 
 alter_partition_stmt ::=
 	alter_zone_partition_stmt
@@ -1832,6 +1835,16 @@ alter_database_primary_region_stmt ::=
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' zone_name set_zone_config
 
+alter_range_relocate_lease_stmt ::=
+	'ALTER' 'RANGE' relocate_kw 'LEASE' 'TO' iconst64 'FOR' select_stmt
+	| 'ALTER' 'RANGE' iconst64 relocate_kw 'LEASE' 'TO' iconst64
+
+alter_range_relocate_stmt ::=
+	'ALTER' 'RANGE' relocate_kw voters_kw 'FROM' iconst64 'TO' iconst64 'FOR' select_stmt
+	| 'ALTER' 'RANGE' iconst64 relocate_kw voters_kw 'FROM' iconst64 'TO' iconst64
+	| 'ALTER' 'RANGE' relocate_kw 'NON_VOTERS' 'FROM' iconst64 'TO' iconst64 'FOR' select_stmt
+	| 'ALTER' 'RANGE' iconst64 relocate_kw 'NON_VOTERS' 'FROM' iconst64 'TO' iconst64
+
 alter_zone_partition_stmt ::=
 	'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
@@ -2322,6 +2335,15 @@ survival_goal_clause ::=
 
 primary_region_clause ::=
 	'PRIMARY' 'REGION' opt_equal region_name
+
+relocate_kw ::=
+	'TESTING_RELOCATE'
+	| 'EXPERIMENTAL_RELOCATE'
+	| 'RELOCATE'
+
+voters_kw ::=
+	'VOTERS'
+	| 
 
 alter_default_privileges_target_object ::=
 	'TABLES'

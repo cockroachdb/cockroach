@@ -952,3 +952,47 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 		return errors.Errorf("Expected server 1 to have at lease 1 lease.")
 	})
 }
+
+// TestAlterRangeRelocate verifies that the ALTER_RANGE commands work as expected.
+func TestAlterRangeRelocate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	const numStores = 6
+	tc := testcluster.StartTestCluster(t, numStores,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	_, rhsDesc := tc.SplitRangeOrFatal(t, keys.UserTableDataMin)
+	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+
+	// We start with having the range under test on (1,2,3).
+	db := tc.ServerConn(0)
+	// Move 2 -> 4.
+	_, err := db.Exec("ALTER RANGE " + rhsDesc.RangeID.String() + " RELOCATE FROM 2 TO 4")
+	require.NoError(t, err)
+	require.NoError(t, tc.WaitForVoters(rhsDesc.StartKey.AsRawKey(), tc.Targets(0, 2, 3)...))
+	// Move lease 1 -> 4.
+	_, err = db.Exec("ALTER RANGE " + rhsDesc.RangeID.String() + " RELOCATE LEASE TO 4")
+	require.NoError(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		repl := tc.GetFirstStoreFromServer(t, 3).LookupReplica(rhsDesc.StartKey)
+		if !repl.OwnsValidLease(ctx, tc.Servers[0].Clock().NowAsClockTimestamp()) {
+			return errors.Errorf("Expected lease to transfer to node 4")
+		}
+		// Do this to avoid snapshot problems below when we do another replica move.
+		if repl != tc.GetRaftLeader(t, rhsDesc.StartKey) {
+			return errors.Errorf("Expected node 4 to be the raft leader")
+		}
+		return nil
+	})
+
+	// Move lease 3 -> 5.
+	_, err = db.Exec("ALTER RANGE RELOCATE FROM 3 TO 5 FOR (SELECT range_id from crdb_internal.ranges where range_id = " + rhsDesc.RangeID.String() + ")")
+	require.NoError(t, err)
+	require.NoError(t, tc.WaitForVoters(rhsDesc.StartKey.AsRawKey(), tc.Targets(0, 3, 4)...))
+}
