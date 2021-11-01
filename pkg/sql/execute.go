@@ -29,7 +29,7 @@ func (p *planner) fillInPlaceholders(
 ) (*tree.PlaceholderInfo, error) {
 	if len(ps.Types) != len(params) {
 		return nil, pgerror.Newf(pgcode.Syntax,
-			"wrong number of parameters for prepared statement %q: expected %d, got %d",
+			"wrong number of parameters for‭ prepared statement %q: expected %d, got %d",
 			name, len(ps.Types), len(params))
 	}
 
