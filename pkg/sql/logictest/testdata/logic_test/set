@@ -664,3 +664,6 @@ query T
 SHOW tracing.custom
 ----
 ijk
+
+statement error unrecognized configuration parameter "custom_option.does_not_yet_exist"
+SHOW custom_option.does_not_yet_exist
