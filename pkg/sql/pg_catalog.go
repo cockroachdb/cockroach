@@ -1696,6 +1696,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					indoption := tree.NewDArray(types.Int)
 
 					colIDs := make([]descpb.ColumnID, 0, index.NumKeyColumns())
+					exprs := make([]string, 0, index.NumKeyColumns())
 					for i := index.IndexDesc().ExplicitColumnStartIdx(); i < index.NumKeyColumns(); i++ {
 						columnID := index.GetKeyColumnID(i)
 						col, err := table.FindColumnWithID(columnID)
@@ -1706,6 +1707,17 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						// should be 0.
 						if col.IsExpressionIndexColumn() {
 							colIDs = append(colIDs, 0)
+							formattedExpr, err := schemaexpr.FormatExprForDisplay(
+								ctx,
+								table,
+								col.GetComputeExpr(),
+								p.SemaCtx(),
+								tree.FmtPGCatalog,
+							)
+							if err != nil {
+								return err
+							}
+							exprs = append(exprs, fmt.Sprintf("(%s)", formattedExpr))
 						} else {
 							colIDs = append(colIDs, columnID)
 						}
@@ -1745,7 +1757,21 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					}
 					indpred := tree.DNull
 					if index.IsPartial() {
-						indpred = tree.NewDString(index.GetPredicate())
+						formattedPred, err := schemaexpr.FormatExprForDisplay(
+							ctx,
+							table,
+							index.GetPredicate(),
+							p.SemaCtx(),
+							tree.FmtPGCatalog,
+						)
+						if err != nil {
+							return err
+						}
+						indpred = tree.NewDString(formattedPred)
+					}
+					indexprs := tree.DNull
+					if len(exprs) > 0 {
+						indexprs = tree.NewDString(strings.Join(exprs, " "))
 					}
 					return addRow(
 						h.IndexOid(table.GetID(), index.GetID()),     // indexrelid
@@ -1765,7 +1791,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						collationOidVector,                           // indcollation
 						indclass,                                     // indclass
 						indoptionIntVector,                           // indoption
-						tree.DNull,                                   // indexprs
+						indexprs,                                     // indexprs
 						indpred,                                      // indpred
 						tree.NewDInt(tree.DInt(indnkeyatts)),         // indnkeyatts
 					)
@@ -1833,7 +1859,17 @@ func indexDefFromDescriptor(
 			return "", err
 		}
 		if col.IsExpressionIndexColumn() {
-			expr, err := parser.ParseExpr(col.GetComputeExpr())
+			formattedExpr, err := schemaexpr.FormatExprForDisplay(
+				ctx,
+				table,
+				col.GetComputeExpr(),
+				p.SemaCtx(),
+				tree.FmtPGCatalog,
+			)
+			if err != nil {
+				return "", err
+			}
+			expr, err := parser.ParseExpr(formattedExpr)
 			if err != nil {
 				return "", err
 			}

@@ -404,14 +404,19 @@ CREATE TABLE constraint_db.t5 (
 )
 
 statement ok
+CREATE TYPE constraint_db.mytype AS ENUM ('foo', 'bar', 'baz')
+
+statement ok
 CREATE TABLE constraint_db.t6 (
   a INT,
   b INT,
   c STRING,
+  m constraint_db.mytype,
   INDEX ((a + b))
 );
 CREATE INDEX ON constraint_db.t6 (lower(c), (a + b));
 CREATE UNIQUE INDEX ON constraint_db.t6 (lower(c));
+CREATE INDEX ON constraint_db.t6 ((m = 'foo')) WHERE m = 'foo'
 
 ## pg_catalog.pg_namespace
 
@@ -550,13 +555,14 @@ oid         relname            relnamespace  reltype  reloftype  relowner    rel
 4179599057  t4_pkey            2332901747    0        0          1546506610  2631952481  0            0
 62          t5                 2332901747    100062   0          1546506610  2631952481  0            0
 3919862786  t5_pkey            2332901747    0        0          1546506610  2631952481  0            0
-63          t6                 2332901747    100063   0          1546506610  2631952481  0            0
-2574785779  t6_pkey            2332901747    0        0          1546506610  2631952481  0            0
-2574785776  t6_expr_idx        2332901747    0        0          1546506610  2631952481  0            0
-2574785777  t6_expr_expr1_idx  2332901747    0        0          1546506610  2631952481  0            0
-2574785782  t6_expr_key        2332901747    0        0          1546506610  2631952481  0            0
-64          mv1                2332901747    100064   0          1546506610  0           0            0
-51576700    mv1_pkey           2332901747    0        0          1546506610  2631952481  0            0
+65          t6                 2332901747    100065   0          1546506610  2631952481  0            0
+3001466989  t6_pkey            2332901747    0        0          1546506610  2631952481  0            0
+3001466990  t6_expr_idx        2332901747    0        0          1546506610  2631952481  0            0
+3001466991  t6_expr_expr1_idx  2332901747    0        0          1546506610  2631952481  0            0
+3001466984  t6_expr_key        2332901747    0        0          1546506610  2631952481  0            0
+3001466985  t6_expr_idx1       2332901747    0        0          1546506610  2631952481  0            0
+66          mv1                2332901747    100066   0          1546506610  0           0            0
+2741730718  mv1_pkey           2332901747    0        0          1546506610  2631952481  0            0
 
 query TIRIOBBT colnames
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence
@@ -587,6 +593,7 @@ t6_pkey            NULL      NULL       0              0              false     
 t6_expr_idx        NULL      NULL       0              0              false        false        p
 t6_expr_expr1_idx  NULL      NULL       0              0              false        false        p
 t6_expr_key        NULL      NULL       0              0              false        false        p
+t6_expr_idx1       NULL      NULL       0              0              false        false        p
 mv1                NULL      NULL       0              0              true         false        p
 mv1_pkey           NULL      NULL       0              0              false        false        p
 
@@ -614,11 +621,12 @@ t4                 false      r        4         0          false       true
 t4_pkey            false      i        1         0          false       false
 t5                 false      r        4         0          false       true
 t5_pkey            false      i        1         0          false       false
-t6                 false      r        4         0          false       true
+t6                 false      r        5         0          false       true
 t6_pkey            false      i        1         0          false       false
 t6_expr_idx        false      i        1         0          false       false
 t6_expr_expr1_idx  false      i        2         0          false       false
 t6_expr_key        false      i        1         0          false       false
+t6_expr_idx1       false      i        1         0          false       false
 mv1                false      m        2         0          false       true
 mv1_pkey           false      i        1         0          false       false
 
@@ -651,6 +659,7 @@ t6_pkey            false        false           false           0             NU
 t6_expr_idx        false        false           false           0             NULL    NULL
 t6_expr_expr1_idx  false        false           false           0             NULL    NULL
 t6_expr_key        false        false           false           0             NULL    NULL
+t6_expr_idx1       false        false           false           0             NULL    NULL
 mv1                false        false           false           0             NULL    NULL
 mv1_pkey           false        false           false           0             NULL    NULL
 
@@ -710,18 +719,20 @@ attrelid    relname            attname                   atttypid  attstattarget
 62          t5                 c                         25        0              -1      3       0         -1
 62          t5                 rowid                     20        0              8       4       0         -1
 3919862786  t5_pkey            rowid                     20        0              8       4       0         -1
-63          t6                 a                         20        0              8       1       0         -1
-63          t6                 b                         20        0              8       2       0         -1
-63          t6                 c                         25        0              -1      3       0         -1
-63          t6                 rowid                     20        0              8       5       0         -1
-2574785779  t6_pkey            rowid                     20        0              8       5       0         -1
-2574785776  t6_expr_idx        crdb_internal_idx_expr    20        0              8       4       0         -1
-2574785777  t6_expr_expr1_idx  crdb_internal_idx_expr_1  25        0              -1      6       0         -1
-2574785777  t6_expr_expr1_idx  crdb_internal_idx_expr_2  20        0              8       7       0         -1
-2574785782  t6_expr_key        crdb_internal_idx_expr_3  25        0              -1      8       0         -1
-64          mv1                ?column?                  20        0              8       1       0         -1
-64          mv1                rowid                     20        0              8       2       0         -1
-51576700    mv1_pkey           rowid                     20        0              8       2       0         -1
+65          t6                 a                         20        0              8       1       0         -1
+65          t6                 b                         20        0              8       2       0         -1
+65          t6                 c                         25        0              -1      3       0         -1
+65          t6                 m                         100063    0              -1      4       0         -1
+65          t6                 rowid                     20        0              8       6       0         -1
+3001466989  t6_pkey            rowid                     20        0              8       6       0         -1
+3001466990  t6_expr_idx        crdb_internal_idx_expr    20        0              8       5       0         -1
+3001466991  t6_expr_expr1_idx  crdb_internal_idx_expr_1  25        0              -1      7       0         -1
+3001466991  t6_expr_expr1_idx  crdb_internal_idx_expr_2  20        0              8       8       0         -1
+3001466984  t6_expr_key        crdb_internal_idx_expr_3  25        0              -1      9       0         -1
+3001466985  t6_expr_idx1       crdb_internal_idx_expr_4  16        0              1       10      0         -1
+66          mv1                ?column?                  20        0              8       1       0         -1
+66          mv1                rowid                     20        0              8       2       0         -1
+2741730718  mv1_pkey           rowid                     20        0              8       2       0         -1
 
 query TTIBTTBBTT colnames
 SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated
@@ -780,12 +791,14 @@ t5_pkey            rowid                     -1         NULL      NULL        NU
 t6                 a                         -1         NULL      NULL        NULL      false       false      ·            ·
 t6                 b                         -1         NULL      NULL        NULL      false       false      ·            ·
 t6                 c                         -1         NULL      NULL        NULL      false       false      ·            ·
+t6                 m                         -1         NULL      NULL        NULL      false       false      ·            ·
 t6                 rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 t6_pkey            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 t6_expr_idx        crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       false      ·            v
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  -1         NULL      NULL        NULL      false       false      ·            v
 t6_expr_expr1_idx  crdb_internal_idx_expr_2  -1         NULL      NULL        NULL      false       false      ·            v
 t6_expr_key        crdb_internal_idx_expr_3  -1         NULL      NULL        NULL      false       false      ·            v
+t6_expr_idx1       crdb_internal_idx_expr_4  -1         NULL      NULL        NULL      false       false      ·            v
 mv1                ?column?                  -1         NULL      NULL        NULL      false       false      ·            ·
 mv1                rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 mv1_pkey           rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
@@ -847,12 +860,14 @@ t5_pkey            rowid                     false         true        0        
 t6                 a                         false         true        0            NULL    NULL        NULL
 t6                 b                         false         true        0            NULL    NULL        NULL
 t6                 c                         false         true        0            NULL    NULL        NULL
+t6                 m                         false         true        0            NULL    NULL        NULL
 t6                 rowid                     false         true        0            NULL    NULL        NULL
 t6_pkey            rowid                     false         true        0            NULL    NULL        NULL
 t6_expr_idx        crdb_internal_idx_expr    false         true        0            NULL    NULL        NULL
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  false         true        0            NULL    NULL        NULL
 t6_expr_expr1_idx  crdb_internal_idx_expr_2  false         true        0            NULL    NULL        NULL
 t6_expr_key        crdb_internal_idx_expr_3  false         true        0            NULL    NULL        NULL
+t6_expr_idx1       crdb_internal_idx_expr_4  false         true        0            NULL    NULL        NULL
 mv1                ?column?                  false         true        0            NULL    NULL        NULL
 mv1                rowid                     false         true        0            NULL    NULL        NULL
 mv1_pkey           rowid                     false         true        0            NULL    NULL        NULL
@@ -952,8 +967,8 @@ oid         relname  adrelid  adnum  adbin                                 adsrc
 581442131   t3       59       4      unique_rowid()                        unique_rowid()                        unique_rowid()
 1100914677  t4       61       4      unique_rowid()                        unique_rowid()                        unique_rowid()
 2445991686  t5       62       4      unique_rowid()                        unique_rowid()                        unique_rowid()
-3791068694  t6       63       5      unique_rowid()                        unique_rowid()                        unique_rowid()
-2779881566  mv1      64       2      unique_rowid()                        unique_rowid()                        unique_rowid()
+4124958571  t6       65       6      unique_rowid()                        unique_rowid()                        unique_rowid()
+1175068284  mv1      66       2      unique_rowid()                        unique_rowid()                        unique_rowid()
 
 ## pg_catalog.pg_indexes
 
@@ -974,11 +989,12 @@ crdb_oid    schemaname  tablename  indexname          tablespace
 3660126516  public      t3         t3_a_b_idx         NULL
 4179599057  public      t4         t4_pkey            NULL
 3919862786  public      t5         t5_pkey            NULL
-2574785779  public      t6         t6_pkey            NULL
-2574785776  public      t6         t6_expr_idx        NULL
-2574785777  public      t6         t6_expr_expr1_idx  NULL
-2574785782  public      t6         t6_expr_key        NULL
-51576700    public      mv1        mv1_pkey           NULL
+3001466989  public      t6         t6_pkey            NULL
+3001466990  public      t6         t6_expr_idx        NULL
+3001466991  public      t6         t6_expr_expr1_idx  NULL
+3001466984  public      t6         t6_expr_key        NULL
+3001466985  public      t6         t6_expr_idx1       NULL
+2741730718  public      mv1        mv1_pkey           NULL
 
 query OTTT colnames
 SELECT crdb_oid, tablename, indexname, indexdef
@@ -997,11 +1013,12 @@ crdb_oid    tablename  indexname          indexdef
 3660126516  t3         t3_a_b_idx         CREATE INDEX t3_a_b_idx ON constraint_db.public.t3 USING btree (a ASC, b DESC) STORING (c)
 4179599057  t4         t4_pkey            CREATE UNIQUE INDEX t4_pkey ON constraint_db.public.t4 USING btree (rowid ASC)
 3919862786  t5         t5_pkey            CREATE UNIQUE INDEX t5_pkey ON constraint_db.public.t5 USING btree (rowid ASC)
-2574785779  t6         t6_pkey            CREATE UNIQUE INDEX t6_pkey ON constraint_db.public.t6 USING btree (rowid ASC)
-2574785776  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree ((a + b) ASC)
-2574785777  t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON constraint_db.public.t6 USING btree (lower(c) ASC, (a + b) ASC)
-2574785782  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
-51576700    mv1        mv1_pkey           CREATE UNIQUE INDEX mv1_pkey ON constraint_db.public.mv1 USING btree (rowid ASC)
+3001466989  t6         t6_pkey            CREATE UNIQUE INDEX t6_pkey ON constraint_db.public.t6 USING btree (rowid ASC)
+3001466990  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree ((a + b) ASC)
+3001466991  t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON constraint_db.public.t6 USING btree (lower(c) ASC, (a + b) ASC)
+3001466984  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
+3001466985  t6         t6_expr_idx1       CREATE INDEX t6_expr_idx1 ON constraint_db.public.t6 USING btree ((m = 'foo'::public.mytype) ASC) WHERE (m = 'foo'::public.mytype)
+2741730718  mv1        mv1_pkey           CREATE UNIQUE INDEX mv1_pkey ON constraint_db.public.mv1 USING btree (rowid ASC)
 
 ## pg_catalog.pg_index
 
@@ -1013,7 +1030,7 @@ WHERE indnkeyatts = 2
 indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion
 450499961   55        2         true         false         false
 3660126516  59        3         false        false         false
-2574785777  63        2         false        false         false
+3001466991  65        2         false        false         false
 
 query OBBBBB colnames
 SELECT indexrelid, indimmediate, indisclustered, indisvalid, indcheckxmin, indisready
@@ -1023,30 +1040,34 @@ WHERE indnkeyatts = 2
 indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
 450499961   true          false           true        false         false
 3660126516  false         false           true        false         false
-2574785777  false         false           true        false         false
+3001466991  false         false           true        false         false
 
 query OOBBTTTTTT colnames
 SELECT indexrelid, indrelid, indislive, indisreplident, indkey, indcollation, indclass, indoption, indexprs, indpred
 FROM pg_catalog.pg_index
 WHERE indnkeyatts = 2
 ----
-indexrelid  indrelid  indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs  indpred
-450499961   55        true       false           3 4     0 0           0 0       2 2        NULL      NULL
-3660126516  59        true       false           1 2 3   0 0           0 0       2 1        NULL      NULL
-2574785777  63        true       false           0 0     3403232968 0  0 0       2 2        NULL      NULL
+indexrelid  indrelid  indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs            indpred
+450499961   55        true       false           3 4     0 0           0 0       2 2        NULL                NULL
+3660126516  59        true       false           1 2 3   0 0           0 0       2 1        NULL                NULL
+3001466991  65        true       false           0 0     3403232968 0  0 0       2 2        (lower(c)) (a + b)  NULL
 
-# indkey should be 0 for expression elements an index.
-# TODO: In Postgres indexprs are values that represent the expression. Matching
-# this representation may be difficult and unnecessary.
-query TTT colnames
-SELECT c.relname, i.indkey, i.indexprs
+# Index expression elements should have an indkey of 0 and be included in
+# indexprs.
+# TODO(#72241): The types for the 'foo' casts should be constraint_db.mytype,
+# not public.mytype.
+query TTTT colnames
+SELECT c.relname, i.indkey, i.indexprs, i.indpred
 FROM pg_catalog.pg_index i
 JOIN pg_catalog.pg_class c ON i.indexrelid = c.oid
-WHERE c.relname IN ('t6_expr_idx', 't6_expr_expr1_idx')
+WHERE c.relname LIKE 't6_%'
 ----
-relname            indkey  indexprs
-t6_expr_idx        0       NULL
-t6_expr_expr1_idx  0 0     NULL
+relname            indkey  indexprs                    indpred
+t6_pkey            6       NULL                        NULL
+t6_expr_idx        0       (a + b)                     NULL
+t6_expr_expr1_idx  0 0     (lower(c)) (a + b)          NULL
+t6_expr_key        0       (lower(c))                  NULL
+t6_expr_idx1       0       (m = 'foo'::public.mytype)  m = 'foo'::public.mytype
 
 statement ok
 SET DATABASE = system
@@ -1056,56 +1077,56 @@ SELECT *
 FROM pg_catalog.pg_index
 ORDER BY indexrelid
 ----
-indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey         indcollation               indclass     indoption    indexprs  indpred                                                                                                                            indnkeyatts
-144368028   32        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-404104299   39        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-543291288   23        1         false        false         false           false         false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                               1
-543291289   23        1         false        false         false           false         false           true        false         false       true       false           2              3403232968                 0            2            NULL      NULL                                                                                                                               1
-543291291   23        2         true         true          false           true          false           true        false         false       true       false           1 2            3403232968 3403232968      0 0          2 2          NULL      NULL                                                                                                                               2
-663840565   42        2         false        false         false           false         false           true        false         false       true       false           2 3            0 0                        0 0          2 2          NULL      NULL                                                                                                                               2
-663840566   42        6         true         true          false           true          false           true        false         false       true       false           1 2 3 4 5 6    0 0 0 0 3403232968 0       0 0 0 0 0 0  2 2 2 2 2 2  NULL      NULL                                                                                                                               6
-803027558   26        3         true         true          false           true          false           true        false         false       true       false           1 2 3          0 0 3403232968             0 0 0        2 2 2        NULL      NULL                                                                                                                               3
-923576837   41        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-1062763829  25        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4        0 0 3403232968 3403232968  0 0 0 0      2 2 2 2      NULL      NULL                                                                                                                               4
-1183313104  44        2         true         true          false           true          false           true        false         false       true       false           1 2            0 3403232968               0 0          2 2          NULL      NULL                                                                                                                               2
-1276104432  12        2         true         true          false           true          false           true        false         false       true       false           1 6            0 0                        0 0          2 2          NULL      NULL                                                                                                                               2
-1322500096  28        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-1489445036  35        3         false        false         false           false         false           true        false         false       true       false           2 1 3          0 0                        0 0          2 2          NULL      NULL                                                                                                                               2
-1489445039  35        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-1582236367  3         1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-1628632026  19        1         false        false         false           false         false           true        false         false       true       false           6              0                          0            2            NULL      NULL                                                                                                                               1
-1628632027  19        1         false        false         false           false         false           true        false         false       true       false           7              0                          0            2            NULL      NULL                                                                                                                               1
-1628632028  19        1         false        false         false           false         false           true        false         false       true       false           5              0                          0            2            NULL      NULL                                                                                                                               1
-1628632029  19        1         false        false         false           false         false           true        false         false       true       false           4              0                          0            2            NULL      NULL                                                                                                                               1
-1628632031  19        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-1841972634  6         1         true         true          false           true          false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                               1
-2008917577  37        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-2008917578  37        1         false        false         false           false         false           true        false         false       true       false           5              0                          0            2            NULL      NULL                                                                                                                               1
-2101708905  5         1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-2148104569  21        2         true         true          false           true          false           true        false         false       true       false           1 2            3403232968 3403232968      0 0          2 2          NULL      NULL                                                                                                                               2
-2268653844  40        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4        0 0 0 0                    0 0 0 0      2 2 2 2      NULL      NULL                                                                                                                               4
-2361445172  8         1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-2407840836  24        3         true         true          false           true          false           true        false         false       true       false           1 2 3          0 0 0                      0 0 0        2 2 2        NULL      NULL                                                                                                                               3
-2528390115  47        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-2621181440  15        2         false        false         false           false         false           true        false         false       true       false           2 3            3403232968 0               0 0          2 2          NULL      NULL                                                                                                                               2
-2621181441  15        3         false        false         false           false         false           true        false         false       true       false           6 7 2          3403232968 0               0 0          2 2          NULL      NULL                                                                                                                               2
-2621181443  15        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-2621181446  15        6         false        false         false           false         false           true        false         false       true       false           8 2 3 11 10 9  0 3403232968 0             0 0 0        2 2 2        NULL      status IN ('running':::STRING, 'reverting':::STRING, 'pending':::STRING, 'pause-requested':::STRING, 'cancel-requested':::STRING)  3
-2667577107  31        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-2834522046  34        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-3094258317  33        2         true         true          false           true          false           true        false         false       true       false           1 2            3403232968 3403232968      0 0          2 2          NULL      NULL                                                                                                                               2
-3353994584  36        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-3446785912  4         1         true         true          false           true          false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                               1
-3493181576  20        2         true         true          false           true          false           true        false         false       true       false           1 2            0 0                        0 0          2 2          NULL      NULL                                                                                                                               2
-3613730852  43        1         false        false         false           false         false           true        false         false       true       false           2              0                          0            2            NULL      NULL                                                                                                                               1
-3613730855  43        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4        0 0 3403232968 0           0 0 0 0      2 2 2 2      NULL      NULL                                                                                                                               4
-3706522183  11        4         true         true          false           true          false           true        false         false       true       false           1 2 4 3        0 0 0 0                    0 0 0 0      2 2 2 2      NULL      NULL                                                                                                                               4
-3752917847  27        2         true         true          false           true          false           true        false         false       true       false           1 2            0 0                        0 0          2 2          NULL      NULL                                                                                                                               2
-3873467122  46        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                               1
-3966258450  14        1         true         true          false           true          false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                               1
-4012654114  30        3         true         true          false           true          false           true        false         false       true       false           1 2 3          0 0 3403232968             0 0 0        2 2 2        NULL      NULL                                                                                                                               3
-4133203393  45        2         true         true          false           true          false           true        false         false       true       false           1 2            0 0                        0 0          2 2          NULL      NULL                                                                                                                               2
-4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7            0 0                        0 0          2 2          NULL      NULL                                                                                                                               2
+indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey         indcollation               indclass     indoption    indexprs  indpred                                                                                                                       indnkeyatts
+144368028   32        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+404104299   39        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+543291288   23        1         false        false         false           false         false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                          1
+543291289   23        1         false        false         false           false         false           true        false         false       true       false           2              3403232968                 0            2            NULL      NULL                                                                                                                          1
+543291291   23        2         true         true          false           true          false           true        false         false       true       false           1 2            3403232968 3403232968      0 0          2 2          NULL      NULL                                                                                                                          2
+663840565   42        2         false        false         false           false         false           true        false         false       true       false           2 3            0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
+663840566   42        6         true         true          false           true          false           true        false         false       true       false           1 2 3 4 5 6    0 0 0 0 3403232968 0       0 0 0 0 0 0  2 2 2 2 2 2  NULL      NULL                                                                                                                          6
+803027558   26        3         true         true          false           true          false           true        false         false       true       false           1 2 3          0 0 3403232968             0 0 0        2 2 2        NULL      NULL                                                                                                                          3
+923576837   41        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+1062763829  25        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4        0 0 3403232968 3403232968  0 0 0 0      2 2 2 2      NULL      NULL                                                                                                                          4
+1183313104  44        2         true         true          false           true          false           true        false         false       true       false           1 2            0 3403232968               0 0          2 2          NULL      NULL                                                                                                                          2
+1276104432  12        2         true         true          false           true          false           true        false         false       true       false           1 6            0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
+1322500096  28        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+1489445036  35        3         false        false         false           false         false           true        false         false       true       false           2 1 3          0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
+1489445039  35        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+1582236367  3         1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+1628632026  19        1         false        false         false           false         false           true        false         false       true       false           6              0                          0            2            NULL      NULL                                                                                                                          1
+1628632027  19        1         false        false         false           false         false           true        false         false       true       false           7              0                          0            2            NULL      NULL                                                                                                                          1
+1628632028  19        1         false        false         false           false         false           true        false         false       true       false           5              0                          0            2            NULL      NULL                                                                                                                          1
+1628632029  19        1         false        false         false           false         false           true        false         false       true       false           4              0                          0            2            NULL      NULL                                                                                                                          1
+1628632031  19        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+1841972634  6         1         true         true          false           true          false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                          1
+2008917577  37        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+2008917578  37        1         false        false         false           false         false           true        false         false       true       false           5              0                          0            2            NULL      NULL                                                                                                                          1
+2101708905  5         1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+2148104569  21        2         true         true          false           true          false           true        false         false       true       false           1 2            3403232968 3403232968      0 0          2 2          NULL      NULL                                                                                                                          2
+2268653844  40        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4        0 0 0 0                    0 0 0 0      2 2 2 2      NULL      NULL                                                                                                                          4
+2361445172  8         1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+2407840836  24        3         true         true          false           true          false           true        false         false       true       false           1 2 3          0 0 0                      0 0 0        2 2 2        NULL      NULL                                                                                                                          3
+2528390115  47        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+2621181440  15        2         false        false         false           false         false           true        false         false       true       false           2 3            3403232968 0               0 0          2 2          NULL      NULL                                                                                                                          2
+2621181441  15        3         false        false         false           false         false           true        false         false       true       false           6 7 2          3403232968 0               0 0          2 2          NULL      NULL                                                                                                                          2
+2621181443  15        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+2621181446  15        6         false        false         false           false         false           true        false         false       true       false           8 2 3 11 10 9  0 3403232968 0             0 0 0        2 2 2        NULL      status IN ('running'::STRING, 'reverting'::STRING, 'pending'::STRING, 'pause-requested'::STRING, 'cancel-requested'::STRING)  3
+2667577107  31        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+2834522046  34        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+3094258317  33        2         true         true          false           true          false           true        false         false       true       false           1 2            3403232968 3403232968      0 0          2 2          NULL      NULL                                                                                                                          2
+3353994584  36        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+3446785912  4         1         true         true          false           true          false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                          1
+3493181576  20        2         true         true          false           true          false           true        false         false       true       false           1 2            0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
+3613730852  43        1         false        false         false           false         false           true        false         false       true       false           2              0                          0            2            NULL      NULL                                                                                                                          1
+3613730855  43        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4        0 0 3403232968 0           0 0 0 0      2 2 2 2      NULL      NULL                                                                                                                          4
+3706522183  11        4         true         true          false           true          false           true        false         false       true       false           1 2 4 3        0 0 0 0                    0 0 0 0      2 2 2 2      NULL      NULL                                                                                                                          4
+3752917847  27        2         true         true          false           true          false           true        false         false       true       false           1 2            0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
+3873467122  46        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+3966258450  14        1         true         true          false           true          false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                          1
+4012654114  30        3         true         true          false           true          false           true        false         false       true       false           1 2 3          0 0 3403232968             0 0 0        2 2 2        NULL      NULL                                                                                                                          3
+4133203393  45        2         true         true          false           true          false           true        false         false       true       false           1 2            0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
+4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7            0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
 
 # From #26504
 query OOI colnames
@@ -1243,13 +1264,13 @@ ORDER BY con.oid
 oid         conname        connamespace  contype  condef
 109163875   fk             2332901747    f        FOREIGN KEY (t1_id) REFERENCES t1(a)
 576034241   primary        2332901747    p        PRIMARY KEY (value ASC)
+699838052   t6_expr_key    2332901747    u        UNIQUE (lower(c) ASC)
 1329876328  fk_b_c         2332901747    f        FOREIGN KEY (b, c) REFERENCES t4(b, c) MATCH FULL ON UPDATE RESTRICT
 1488778805  check_c        2332901747    c        CHECK ((c != ''::STRING))
 1652586190  fk             2332901747    f        FOREIGN KEY (a, b) REFERENCES t1(b, c)
 1729749923  uwi_b_c        2332901747    u        UNIQUE WITHOUT INDEX (b, c)
 1921111248  primary        2332901747    p        PRIMARY KEY (value ASC)
 2093076183  t5_a_fkey      2332901747    f        FOREIGN KEY (a) REFERENCES t4(a) ON DELETE CASCADE
-2119068666  t6_expr_key    2332901747    u        UNIQUE (lower(c) ASC)
 2897367075  uwi_b_partial  2332901747    u        UNIQUE WITHOUT INDEX (b) WHERE (c = 'foo'::STRING)
 3572320190  t1_pkey        2332901747    p        PRIMARY KEY (p ASC)
 3989820597  check_b        2332901747    c        CHECK ((b > 11))
@@ -1267,13 +1288,13 @@ ORDER BY con.oid
 conname        contype  condeferrable  condeferred  convalidated  conrelid  contypid  conindid
 fk             f        false          false        true          58        0         450499960
 primary        p        false          false        true          56        0         2315049508
+t6_expr_key    u        false          false        true          65        0         3001466984
 fk_b_c         f        false          false        true          62        0         0
 check_c        c        false          false        true          59        0         0
 fk             f        false          false        true          59        0         450499961
 uwi_b_c        u        false          false        true          61        0         0
 primary        p        false          false        true          57        0         969972501
 t5_a_fkey      f        false          false        true          62        0         0
-t6_expr_key    u        false          false        true          63        0         2574785782
 uwi_b_partial  u        false          false        true          61        0         0
 t1_pkey        p        false          false        true          55        0         450499963
 check_b        c        false          false        true          59        0         0
@@ -1298,10 +1319,10 @@ ORDER BY con.oid
 ----
 conname        confrelid  confupdtype  confdeltype  confmatchtype
 primary        0          NULL         NULL         NULL
+t6_expr_key    0          NULL         NULL         NULL
 check_c        0          NULL         NULL         NULL
 uwi_b_c        0          NULL         NULL         NULL
 primary        0          NULL         NULL         NULL
-t6_expr_key    0          NULL         NULL         NULL
 uwi_b_partial  0          NULL         NULL         NULL
 t1_pkey        0          NULL         NULL         NULL
 check_b        0          NULL         NULL         NULL
@@ -1332,13 +1353,13 @@ ORDER BY con.oid
 conname        conislocal  coninhcount  connoinherit  conkey
 fk             true        0            true          {1}
 primary        true        0            true          {1}
+t6_expr_key    true        0            true          {9}
 fk_b_c         true        0            true          {2,3}
 check_c        true        0            true          {3}
 fk             true        0            true          {1,2}
 uwi_b_c        true        0            true          NULL
 primary        true        0            true          {1}
 t5_a_fkey      true        0            true          {1}
-t6_expr_key    true        0            true          {8}
 uwi_b_partial  true        0            true          NULL
 t1_pkey        true        0            true          {1}
 check_b        true        0            true          {2}
@@ -1355,10 +1376,10 @@ ORDER BY con.oid
 ----
 conname        confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin             consrc             condef
 primary        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (value ASC)
+t6_expr_key    NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (lower(c) ASC)
 check_c        NULL     NULL       NULL       NULL       NULL       (c != ''::STRING)  (c != ''::STRING)  CHECK ((c != ''::STRING))
 uwi_b_c        NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (b, c)
 primary        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (value ASC)
-t6_expr_key    NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (lower(c) ASC)
 uwi_b_partial  NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (b) WHERE (c = 'foo'::STRING)
 t1_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (p ASC)
 check_b        NULL     NULL       NULL       NULL       NULL       (b > 11)           (b > 11)           CHECK ((b > 11))
@@ -1476,8 +1497,8 @@ SELECT * FROM pg_rewrite WHERE ev_class IN (
 ) ORDER BY oid
 ----
 oid         rulename  ev_class  ev_type  ev_enabled  is_instead  ev_qual  ev_action
-109588109   _RETURN   72        1        NULL        true        NULL     NULL
-3059478515  _RETURN   71        1        NULL        true        NULL     NULL
+2540005971  _RETURN   73        1        NULL        true        NULL     NULL
+3885082977  _RETURN   74        1        NULL        true        NULL     NULL
 
 ## pg_catalog.pg_enum
 statement ok
@@ -1488,10 +1509,13 @@ query OORT colnames
 SELECT * FROM pg_enum
 ----
 oid         enumtypid  enumsortorder  enumlabel
-1747685667  100073     0              v1
-1747685859  100073     1              v2
-1781241033  100075     0              v3
-1781240841  100075     1              v4
+1043025669  100063     0              foo
+1043025861  100063     1              bar
+1043025797  100063     2              baz
+1781241033  100075     0              v1
+1781240841  100075     1              v2
+1814796271  100077     0              v3
+1814796079  100077     1              v4
 
 ## pg_catalog.pg_type
 
@@ -1586,15 +1610,17 @@ oid         typname                                typnamespace  typowner    typ
 100060      v1                                     2332901747    1546506610  -1      false     c
 100061      t4                                     2332901747    1546506610  -1      false     c
 100062      t5                                     2332901747    1546506610  -1      false     c
-100063      t6                                     2332901747    1546506610  -1      false     c
-100064      mv1                                    2332901747    1546506610  -1      false     c
-100070      source_table                           2332901747    1546506610  -1      false     c
-100071      depend_view                            2332901747    1546506610  -1      false     c
-100072      view_dependingon_view                  2332901747    1546506610  -1      false     c
-100073      newtype1                               2332901747    1546506610  -1      false     e
-100074      _newtype1                              2332901747    1546506610  -1      false     b
-100075      newtype2                               2332901747    1546506610  -1      false     e
-100076      _newtype2                              2332901747    1546506610  -1      false     b
+100063      mytype                                 2332901747    1546506610  -1      false     e
+100064      _mytype                                2332901747    1546506610  -1      false     b
+100065      t6                                     2332901747    1546506610  -1      false     c
+100066      mv1                                    2332901747    1546506610  -1      false     c
+100072      source_table                           2332901747    1546506610  -1      false     c
+100073      depend_view                            2332901747    1546506610  -1      false     c
+100074      view_dependingon_view                  2332901747    1546506610  -1      false     c
+100075      newtype1                               2332901747    1546506610  -1      false     e
+100076      _newtype1                              2332901747    1546506610  -1      false     b
+100077      newtype2                               2332901747    1546506610  -1      false     e
+100078      _newtype2                              2332901747    1546506610  -1      false     b
 4294967010  spatial_ref_sys                        3553698885    3233629770  -1      false     c
 4294967011  geometry_columns                       3553698885    3233629770  -1      false     c
 4294967012  geography_columns                      3553698885    3233629770  -1      false     c
@@ -1969,15 +1995,17 @@ oid         typname                                typcategory  typispreferred  
 100060      v1                                     C            false           true          ,         60          0        0
 100061      t4                                     C            false           true          ,         61          0        0
 100062      t5                                     C            false           true          ,         62          0        0
-100063      t6                                     C            false           true          ,         63          0        0
-100064      mv1                                    C            false           true          ,         64          0        0
-100070      source_table                           C            false           true          ,         70          0        0
-100071      depend_view                            C            false           true          ,         71          0        0
-100072      view_dependingon_view                  C            false           true          ,         72          0        0
-100073      newtype1                               E            false           true          ,         0           0        100074
-100074      _newtype1                              A            false           true          ,         0           100073   0
-100075      newtype2                               E            false           true          ,         0           0        100076
-100076      _newtype2                              A            false           true          ,         0           100075   0
+100063      mytype                                 E            false           true          ,         0           0        100064
+100064      _mytype                                A            false           true          ,         0           100063   0
+100065      t6                                     C            false           true          ,         65          0        0
+100066      mv1                                    C            false           true          ,         66          0        0
+100072      source_table                           C            false           true          ,         72          0        0
+100073      depend_view                            C            false           true          ,         73          0        0
+100074      view_dependingon_view                  C            false           true          ,         74          0        0
+100075      newtype1                               E            false           true          ,         0           0        100076
+100076      _newtype1                              A            false           true          ,         0           100075   0
+100077      newtype2                               E            false           true          ,         0           0        100078
+100078      _newtype2                              A            false           true          ,         0           100077   0
 4294967010  spatial_ref_sys                        C            false           true          ,         4294967010  0        0
 4294967011  geometry_columns                       C            false           true          ,         4294967011  0        0
 4294967012  geography_columns                      C            false           true          ,         4294967012  0        0
@@ -2352,15 +2380,17 @@ oid         typname                                typinput        typoutput    
 100060      v1                                     record_in       record_out       record_recv       record_send       0         0          0
 100061      t4                                     record_in       record_out       record_recv       record_send       0         0          0
 100062      t5                                     record_in       record_out       record_recv       record_send       0         0          0
-100063      t6                                     record_in       record_out       record_recv       record_send       0         0          0
-100064      mv1                                    record_in       record_out       record_recv       record_send       0         0          0
-100070      source_table                           record_in       record_out       record_recv       record_send       0         0          0
-100071      depend_view                            record_in       record_out       record_recv       record_send       0         0          0
-100072      view_dependingon_view                  record_in       record_out       record_recv       record_send       0         0          0
-100073      newtype1                               enum_in         enum_out         enum_recv         enum_send         0         0          0
-100074      _newtype1                              array_in        array_out        array_recv        array_send        0         0          0
-100075      newtype2                               enum_in         enum_out         enum_recv         enum_send         0         0          0
-100076      _newtype2                              array_in        array_out        array_recv        array_send        0         0          0
+100063      mytype                                 enum_in         enum_out         enum_recv         enum_send         0         0          0
+100064      _mytype                                array_in        array_out        array_recv        array_send        0         0          0
+100065      t6                                     record_in       record_out       record_recv       record_send       0         0          0
+100066      mv1                                    record_in       record_out       record_recv       record_send       0         0          0
+100072      source_table                           record_in       record_out       record_recv       record_send       0         0          0
+100073      depend_view                            record_in       record_out       record_recv       record_send       0         0          0
+100074      view_dependingon_view                  record_in       record_out       record_recv       record_send       0         0          0
+100075      newtype1                               enum_in         enum_out         enum_recv         enum_send         0         0          0
+100076      _newtype1                              array_in        array_out        array_recv        array_send        0         0          0
+100077      newtype2                               enum_in         enum_out         enum_recv         enum_send         0         0          0
+100078      _newtype2                              array_in        array_out        array_recv        array_send        0         0          0
 4294967010  spatial_ref_sys                        record_in       record_out       record_recv       record_send       0         0          0
 4294967011  geometry_columns                       record_in       record_out       record_recv       record_send       0         0          0
 4294967012  geography_columns                      record_in       record_out       record_recv       record_send       0         0          0
@@ -2735,15 +2765,17 @@ oid         typname                                typalign  typstorage  typnotn
 100060      v1                                     NULL      NULL        false       0            -1
 100061      t4                                     NULL      NULL        false       0            -1
 100062      t5                                     NULL      NULL        false       0            -1
-100063      t6                                     NULL      NULL        false       0            -1
-100064      mv1                                    NULL      NULL        false       0            -1
-100070      source_table                           NULL      NULL        false       0            -1
-100071      depend_view                            NULL      NULL        false       0            -1
-100072      view_dependingon_view                  NULL      NULL        false       0            -1
-100073      newtype1                               NULL      NULL        false       0            -1
-100074      _newtype1                              NULL      NULL        false       0            -1
-100075      newtype2                               NULL      NULL        false       0            -1
-100076      _newtype2                              NULL      NULL        false       0            -1
+100063      mytype                                 NULL      NULL        false       0            -1
+100064      _mytype                                NULL      NULL        false       0            -1
+100065      t6                                     NULL      NULL        false       0            -1
+100066      mv1                                    NULL      NULL        false       0            -1
+100072      source_table                           NULL      NULL        false       0            -1
+100073      depend_view                            NULL      NULL        false       0            -1
+100074      view_dependingon_view                  NULL      NULL        false       0            -1
+100075      newtype1                               NULL      NULL        false       0            -1
+100076      _newtype1                              NULL      NULL        false       0            -1
+100077      newtype2                               NULL      NULL        false       0            -1
+100078      _newtype2                              NULL      NULL        false       0            -1
 4294967010  spatial_ref_sys                        NULL      NULL        false       0            -1
 4294967011  geometry_columns                       NULL      NULL        false       0            -1
 4294967012  geography_columns                      NULL      NULL        false       0            -1
@@ -3118,15 +3150,17 @@ oid         typname                                typndims  typcollation  typde
 100060      v1                                     0         0             NULL           NULL        NULL
 100061      t4                                     0         0             NULL           NULL        NULL
 100062      t5                                     0         0             NULL           NULL        NULL
-100063      t6                                     0         0             NULL           NULL        NULL
-100064      mv1                                    0         0             NULL           NULL        NULL
-100070      source_table                           0         0             NULL           NULL        NULL
-100071      depend_view                            0         0             NULL           NULL        NULL
-100072      view_dependingon_view                  0         0             NULL           NULL        NULL
-100073      newtype1                               0         0             NULL           NULL        NULL
-100074      _newtype1                              0         0             NULL           NULL        NULL
-100075      newtype2                               0         0             NULL           NULL        NULL
-100076      _newtype2                              0         0             NULL           NULL        NULL
+100063      mytype                                 0         0             NULL           NULL        NULL
+100064      _mytype                                0         0             NULL           NULL        NULL
+100065      t6                                     0         0             NULL           NULL        NULL
+100066      mv1                                    0         0             NULL           NULL        NULL
+100072      source_table                           0         0             NULL           NULL        NULL
+100073      depend_view                            0         0             NULL           NULL        NULL
+100074      view_dependingon_view                  0         0             NULL           NULL        NULL
+100075      newtype1                               0         0             NULL           NULL        NULL
+100076      _newtype1                              0         0             NULL           NULL        NULL
+100077      newtype2                               0         0             NULL           NULL        NULL
+100078      _newtype2                              0         0             NULL           NULL        NULL
 4294967010  spatial_ref_sys                        0         0             NULL           NULL        NULL
 4294967011  geometry_columns                       0         0             NULL           NULL        NULL
 4294967012  geography_columns                      0         0             NULL           NULL        NULL
@@ -3437,7 +3471,7 @@ FROM pg_catalog.pg_type
 WHERE typname = 'newtype1'
 ----
 oid     typname   typnamespace  typowner    typlen  typbyval  typtype
-100073  newtype1  2332901747    1546506610  -1      false     e
+100075  newtype1  2332901747    1546506610  -1      false     e
 
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
@@ -3459,7 +3493,7 @@ FROM pg_catalog.pg_type
 WHERE typname = 'source_table'
 ----
 oid     typname       typnamespace  typowner    typlen  typbyval  typtype
-100070  source_table  2332901747    1546506610  -1      false     c
+100072  source_table  2332901747    1546506610  -1      false     c
 
 let $sourceid
 SELECT oid
@@ -3473,7 +3507,7 @@ FROM pg_catalog.pg_type
 WHERE oid = $sourceid
 ----
 oid     typname       typnamespace  typowner    typlen  typbyval  typtype
-100070  source_table  2332901747    1546506610  -1      false     c
+100072  source_table  2332901747    1546506610  -1      false     c
 
 ## pg_catalog.pg_proc
 
@@ -4312,8 +4346,8 @@ query OOIIIIIB colnames
 SELECT * FROM pg_catalog.pg_sequence
 ----
 seqrelid  seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
-78        20        1         1             9223372036854775807  1       1         false
-79        20        6         2             10                   5       1         false
+80        20        1         1             9223372036854775807  1       1         false
+81        20        6         2             10                   5       1         false
 
 statement ok
 DROP DATABASE seq
@@ -4366,8 +4400,8 @@ WHERE n.nspname = 'public'
 581442131   t3   unique_rowid()
 1100914677  t4   unique_rowid()
 2445991686  t5   unique_rowid()
-3791068694  t6   unique_rowid()
-2779881566  mv1  unique_rowid()
+4124958571  t6   unique_rowid()
+1175068284  mv1  unique_rowid()
 
 # Verify that a set database shows tables from that database for a non-root
 # user, when that user has permissions.
@@ -4854,13 +4888,13 @@ CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VA
 query ITT
 SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-105  105  jt
+107  107  jt
 
 query ITT
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1    NULL  NULL
-105  105   jt
+107  107   jt
 
 subtest regression_49207
 statement ok
