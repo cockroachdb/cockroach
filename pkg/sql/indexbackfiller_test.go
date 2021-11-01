@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -61,6 +62,9 @@ func TestIndexBackfiller(t *testing.T) {
 	moveToTScan := make(chan bool)
 	moveToBackfill := make(chan bool)
 
+	moveToTMerge := make(chan bool)
+	backfillDone := make(chan bool)
+
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforePublishWriteAndDelete: func() {
@@ -73,6 +77,10 @@ func TestIndexBackfiller(t *testing.T) {
 				// Wait until we get a signal to pick our scan timestamp.
 				<-moveToTScan
 				return nil
+			},
+			RunBeforeTempIndexMerge: func() {
+				backfillDone <- true
+				<-moveToTMerge
 			},
 			RunBeforeIndexBackfill: func() {
 				// Wait until we get a signal to begin backfill.
@@ -104,7 +112,6 @@ func TestIndexBackfiller(t *testing.T) {
 	// The sequence of events here exactly matches the test cases in
 	// docs/tech-notes/index-backfill.md. If you update this, please remember to
 	// update the tech note as well.
-
 	execOrFail("CREATE DATABASE t")
 	execOrFail("CREATE TABLE t.kv (k int PRIMARY KEY, v char)")
 	execOrFail("INSERT INTO t.kv VALUES (1, 'a'), (3, 'c'), (4, 'e'), (6, 'f'), (7, 'g'), (9, 'h')")
@@ -117,16 +124,21 @@ func TestIndexBackfiller(t *testing.T) {
 		finishedSchemaChange.Done()
 	}()
 
-	// Wait until the schema change has moved the cluster into DELETE_ONLY mode.
+	// tempIndex: DELETE_ONLY
+	// newIndex   BACKFILLING
 	<-moveToTDelete
-	execOrFail("DELETE FROM t.kv WHERE k=9")
-	execOrFail("INSERT INTO t.kv VALUES (9, 'h')")
+	execOrFail("DELETE FROM t.kv WHERE k=9")       // new_index: nothing, temp_index: sees delete
+	execOrFail("INSERT INTO t.kv VALUES (9, 'h')") // new_index: nothing, temp_index: nothing
 
 	// Move to WRITE_ONLY mode.
+	// tempIndex: DELETE_AND_WRITE_ONLY
+	// newIndex   BACKFILLING
 	moveToTWrite <- true
-	execOrFail("INSERT INTO t.kv VALUES (2, 'b')")
+	execOrFail("INSERT INTO t.kv VALUES (2, 'b')") // new_index: nothing, temp_index: sees insert
 
 	// Pick our scan timestamp.
+	// tempIndex: DELETE_AND_WRITE_ONLY
+	// newIndex   BACKFILLING
 	moveToTScan <- true
 	execOrFail("UPDATE t.kv SET v = 'd' WHERE k = 3")
 	execOrFail("UPDATE t.kv SET k = 5 WHERE v = 'e'")
@@ -134,6 +146,10 @@ func TestIndexBackfiller(t *testing.T) {
 
 	// Begin the backfill.
 	moveToBackfill <- true
+
+	<-backfillDone
+	execOrFail("INSERT INTO t.kv VALUES (10, 'z')") // new_index: nothing, temp_index: sees insert
+	moveToTMerge <- true
 
 	finishedSchemaChange.Wait()
 
@@ -206,7 +222,7 @@ func TestIndexBackfillerComputedAndGeneratedColumns(t *testing.T) {
 
 		// setupDesc should mutate the descriptor such that the mutation with
 		// id 1 contains an index backfill.
-		setupDesc        func(t *testing.T, mut *tabledesc.Mutable)
+		setupDesc        func(t *testing.T, ctx context.Context, mut *tabledesc.Mutable, settings *cluster.Settings)
 		indexToBackfill  descpb.IndexID
 		expectedContents [][]string
 	}
@@ -228,7 +244,7 @@ INSERT INTO foo VALUES (1, 2), (2, 3), (3, 4);
 				{"2", "7"},
 				{"3", "13"},
 			},
-			setupDesc: func(t *testing.T, mut *tabledesc.Mutable) {
+			setupDesc: func(t *testing.T, ctx context.Context, mut *tabledesc.Mutable, settings *cluster.Settings) {
 				indexToBackfill := descpb.IndexDescriptor{
 					Name:         "virtual_column_backed_index",
 					ID:           mut.NextIndexID,
@@ -252,9 +268,10 @@ INSERT INTO foo VALUES (1, 2), (2, 3), (3, 4);
 				}
 				mut.NextIndexID++
 				mut.NextConstraintID++
-				require.NoError(t, mut.AddIndexMutation(
-					&indexToBackfill, descpb.DescriptorMutation_ADD,
+				require.NoError(t, mut.AddIndexMutation(ctx,
+					&indexToBackfill, descpb.DescriptorMutation_ADD, settings,
 				))
+				require.NoError(t, mut.AllocateIDs(context.Background(), settings.Version.ActiveVersion(ctx)))
 			},
 		},
 		// This test will inject a new primary index and perform a primary key swap
@@ -273,7 +290,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 				{"10", "42", "52"},
 				{"100", "42", "142"},
 			},
-			setupDesc: func(t *testing.T, mut *tabledesc.Mutable) {
+			setupDesc: func(t *testing.T, ctx context.Context, mut *tabledesc.Mutable, settings *cluster.Settings) {
 				columnWithDefault := descpb.ColumnDescriptor{
 					Name:           "def",
 					ID:             mut.NextColumnID,
@@ -337,9 +354,10 @@ INSERT INTO foo VALUES (1), (10), (100);
 				}
 				mut.NextIndexID++
 				mut.NextConstraintID++
-				require.NoError(t, mut.AddIndexMutation(
-					&indexToBackfill, descpb.DescriptorMutation_ADD,
+				require.NoError(t, mut.AddIndexMutation(ctx,
+					&indexToBackfill, descpb.DescriptorMutation_ADD, settings,
 				))
+				require.NoError(t, mut.AllocateIDs(context.Background(), settings.Version.ActiveVersion(ctx)))
 				mut.AddPrimaryKeySwapMutation(&descpb.PrimaryKeySwap{
 					OldPrimaryIndexId: 1,
 					NewPrimaryIndexId: 2,
@@ -480,7 +498,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 			if err != nil {
 				return err
 			}
-			test.setupDesc(t, mut)
+			test.setupDesc(t, ctx, mut, settings)
 			span := mut.PrimaryIndexSpan(execCfg.Codec)
 			resumeSpanList := make([]jobspb.ResumeSpanList, len(mut.Mutations))
 			for i := range mut.Mutations {

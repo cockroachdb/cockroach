@@ -77,7 +77,7 @@ func TestExecBackfill(t *testing.T) {
 				keySuffixColumnIDs = append(keySuffixColumnIDs, id)
 			}
 		}
-		require.NoError(t, mut.AddIndexMutation(&descpb.IndexDescriptor{
+		require.NoError(t, mut.DeprecatedAddIndexMutation(&descpb.IndexDescriptor{
 			Name:                name,
 			ID:                  id,
 			Version:             descpb.PrimaryIndexWithStoredColumnsVersion,

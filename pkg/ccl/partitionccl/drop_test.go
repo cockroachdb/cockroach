@@ -104,8 +104,8 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 		partition string
 	}{
 		{1, ""},
-		{3, ""},
-		{3, "p2"},
+		{4, ""},
+		{4, "p2"},
 	}
 	for _, target := range subzones {
 		if exists := subzoneExists(cfg, target.index, target.partition); !exists {
@@ -157,7 +157,7 @@ func TestDropIndexPartitionedByUserDefinedTypeCCL(t *testing.T) {
 		t.Helper()
 		var id int
 		tdb.QueryRow(t, `
-SELECT job_id 
+SELECT job_id
   FROM crdb_internal.jobs
  WHERE description LIKE $1
 `, description).Scan(&id)

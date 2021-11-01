@@ -460,7 +460,7 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 
 		switch desc.GetName() {
 		case "t":
-			require.Equal(t, 6, len(nonPrimaries))
+			require.Equal(t, 10, len(nonPrimaries))
 			for _, np := range nonPrimaries {
 				switch np.GetName() {
 				case "tsec":
@@ -491,6 +491,31 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 					require.True(t, np.IsMutation())
 					require.True(t, np.IsUnique())
 					require.Equal(t, descpb.SecondaryIndexEncoding, np.GetEncodingType())
+					require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
+
+				case "t_a_crdb_internal_dpe_key":
+					// Temporary index for new index based on old primary index (t_a_key)
+					require.True(t, np.IsMutation())
+					require.Equal(t, descpb.SecondaryIndexEncoding, np.GetEncodingType())
+					require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
+
+				case "t_b_crdb_internal_dpe_idx":
+					// Temporary index for tsec_rewrite_for_primary_key_change
+					require.True(t, np.IsMutation())
+					require.Equal(t, descpb.SecondaryIndexEncoding, np.GetEncodingType())
+					require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
+
+				case "t_c_crdb_internal_dpe_key":
+					// Temporary index for t_c_key_rewrite_for_primary_key_change
+					require.True(t, np.IsMutation())
+					require.True(t, np.IsUnique())
+					require.Equal(t, descpb.SecondaryIndexEncoding, np.GetEncodingType())
+					require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
+
+				case "t_d_crdb_internal_dpe_key":
+					// Temporary index for new_primary_key
+					require.True(t, np.IsMutation())
+					require.Equal(t, descpb.PrimaryIndexEncoding, np.GetEncodingType())
 					require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
 
 				default:
