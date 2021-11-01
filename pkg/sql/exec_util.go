@@ -1314,6 +1314,10 @@ type PGWireTestingKnobs struct {
 	// AuthHook is used to override the normal authentication handling on new
 	// connections.
 	AuthHook func(context.Context) error
+
+	// AfterReadMsgTestingKnob is called after reading a message from the
+	// pgwire read buffer.
+	AfterReadMsgTestingKnob func(context.Context) error
 }
 
 var _ base.ModuleTestingKnobs = &PGWireTestingKnobs{}

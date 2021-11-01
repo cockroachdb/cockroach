@@ -104,6 +104,9 @@ type conn struct {
 
 	// alwaysLogAuthActivity is used force-enables logging of authn events.
 	alwaysLogAuthActivity bool
+
+	// afterReadMsgTestingKnob is called after reading every message.
+	afterReadMsgTestingKnob func(context.Context) error
 }
 
 // serveConn creates a conn that will serve the netConn. It returns once the
@@ -158,6 +161,9 @@ func (s *Server) serveConn(
 
 	c := newConn(netConn, sArgs, &s.metrics, connStart, &s.execCfg.Settings.SV)
 	c.alwaysLogAuthActivity = alwaysLogAuthActivity || atomic.LoadInt32(&s.testingAuthLogEnabled) > 0
+	if s.execCfg.PGWireTestingKnobs != nil {
+		c.afterReadMsgTestingKnob = s.execCfg.PGWireTestingKnobs.AfterReadMsgTestingKnob
+	}
 
 	// Do the reading of commands from the network.
 	c.serveImpl(ctx, s.IsDraining, s.SQLServer, reserved, authOpt)
@@ -210,6 +216,11 @@ func (c *conn) GetErr() error {
 func (c *conn) authLogEnabled() bool {
 	return c.alwaysLogAuthActivity || logSessionAuth.Get(c.sv)
 }
+
+// maxRepeatedErrorCount is the number of times an error can be received
+// while reading from the network connection before the server decides to give
+// up and abort the connection.
+const maxRepeatedErrorCount = 1 << 15
 
 // serveImpl continuously reads from the network connection and pushes execution
 // instructions into a sql.StmtBuf, from where they'll be processed by a command
@@ -347,9 +358,13 @@ func (c *conn) serveImpl(
 	var authDone, ignoreUntilSync bool
 	var repeatedErrorCount int
 	for {
-		breakLoop, err := func() (bool, error) {
+		breakLoop, isSimpleQuery, err := func() (bool, bool, error) {
 			typ, n, err := c.readBuf.ReadTypedMsg(&c.rd)
 			c.metrics.BytesInCount.Inc(int64(n))
+			if err == nil && c.afterReadMsgTestingKnob != nil {
+				err = c.afterReadMsgTestingKnob(ctx)
+			}
+			isSimpleQuery := typ == pgwirebase.ClientMsgSimpleQuery
 			if err != nil {
 				if pgwirebase.IsMessageTooBigError(err) {
 					log.VInfof(ctx, 1, "pgwire: found big error message; attempting to slurp bytes and return error: %s", err)
@@ -358,33 +373,30 @@ func (c *conn) serveImpl(
 					slurpN, slurpErr := c.readBuf.SlurpBytes(&c.rd, pgwirebase.GetMessageTooBigSize(err))
 					c.metrics.BytesInCount.Inc(int64(slurpN))
 					if slurpErr != nil {
-						return false, errors.Wrap(slurpErr, "pgwire: error slurping remaining bytes")
+						return false, isSimpleQuery, errors.Wrap(slurpErr, "pgwire: error slurping remaining bytes")
 					}
-
-					// Write out the error over pgwire.
-					if err := c.stmtBuf.Push(ctx, sql.SendError{Err: err}); err != nil {
-						return false, errors.New("pgwire: error writing too big error message to the client")
-					}
-
-					// If this is a simple query, we have to send the sync message back as
-					// well. Otherwise, we ignore all messages until receiving a sync.
-					if typ == pgwirebase.ClientMsgSimpleQuery {
-						if err = c.stmtBuf.Push(ctx, sql.Sync{}); err != nil {
-							return false, errors.New("pgwire: error writing sync to the client whilst message is too big")
-						}
-					} else {
-						ignoreUntilSync = true
-					}
-
-					// We need to continue processing here for pgwire clients to be able to
-					// successfully read the error message off pgwire.
-					//
-					// If break here, we terminate the connection. The client will instead see that
-					// we terminated the connection prematurely (as opposed to seeing a ClientMsgTerminate
-					// packet) and instead return a broken pipe or io.EOF error message.
-					return false, nil
 				}
-				return false, errors.Wrap(err, "pgwire: error reading input")
+
+				// Write out the error over pgwire.
+				if err := c.stmtBuf.Push(ctx, sql.SendError{Err: err}); err != nil {
+					return false, isSimpleQuery, errors.New("pgwire: error writing too big error message to the client")
+				}
+
+				// If this is a simple query, we have to send the sync message back as
+				// well.
+				if isSimpleQuery {
+					if err := c.stmtBuf.Push(ctx, sql.Sync{}); err != nil {
+						return false, isSimpleQuery, errors.New("pgwire: error writing sync to the client whilst message is too big")
+					}
+				}
+
+				// We need to continue processing here for pgwire clients to be able to
+				// successfully read the error message off pgwire.
+				//
+				// If break here, we terminate the connection. The client will instead see that
+				// we terminated the connection prematurely (as opposed to seeing a ClientMsgTerminate
+				// packet) and instead return a broken pipe or io.EOF error message.
+				return false, isSimpleQuery, errors.Wrap(err, "pgwire: error reading input")
 			}
 			timeReceived := timeutil.Now()
 			log.VEventf(ctx, 2, "pgwire: processing %s", typ)
@@ -392,7 +404,7 @@ func (c *conn) serveImpl(
 			if ignoreUntilSync {
 				if typ != pgwirebase.ClientMsgSync {
 					log.VInfof(ctx, 1, "pgwire: skipping non-sync message after encountering error")
-					return false, nil
+					return false, isSimpleQuery, nil
 				}
 				ignoreUntilSync = false
 			}
@@ -401,20 +413,20 @@ func (c *conn) serveImpl(
 				if typ == pgwirebase.ClientMsgPassword {
 					var pwd []byte
 					if pwd, err = c.readBuf.GetBytes(n - 4); err != nil {
-						return false, err
+						return false, isSimpleQuery, err
 					}
 					// Pass the data to the authenticator. This hopefully causes it to finish
 					// authentication in the background and give us an intSizer when we loop
 					// around.
 					if err = authenticator.sendPwdData(pwd); err != nil {
-						return false, err
+						return false, isSimpleQuery, err
 					}
-					return false, nil
+					return false, isSimpleQuery, nil
 				}
 				// Wait for the auth result.
 				if err = authenticator.authResult(); err != nil {
 					// The error has already been sent to the client.
-					return true, nil //nolint:returnerrcheck
+					return true, isSimpleQuery, nil //nolint:returnerrcheck
 				}
 				authDone = true
 
@@ -428,35 +440,35 @@ func (c *conn) serveImpl(
 			case pgwirebase.ClientMsgPassword:
 				// This messages are only acceptable during the auth phase, handled above.
 				err = pgwirebase.NewProtocolViolationErrorf("unexpected authentication data")
-				return true, writeErr(
+				return true, isSimpleQuery, writeErr(
 					ctx, &sqlServer.GetExecutorConfig().Settings.SV, err,
 					&c.msgBuilder, &c.writerState.buf)
 			case pgwirebase.ClientMsgSimpleQuery:
 				if err = c.handleSimpleQuery(
 					ctx, &c.readBuf, timeReceived, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)),
 				); err != nil {
-					return false, err
+					return false, isSimpleQuery, err
 				}
-				return false, c.stmtBuf.Push(ctx, sql.Sync{})
+				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{})
 
 			case pgwirebase.ClientMsgExecute:
-				return false, c.handleExecute(ctx, &c.readBuf, timeReceived)
+				return false, isSimpleQuery, c.handleExecute(ctx, &c.readBuf, timeReceived)
 
 			case pgwirebase.ClientMsgParse:
-				return false, c.handleParse(ctx, &c.readBuf, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
+				return false, isSimpleQuery, c.handleParse(ctx, &c.readBuf, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
 
 			case pgwirebase.ClientMsgDescribe:
-				return false, c.handleDescribe(ctx, &c.readBuf)
+				return false, isSimpleQuery, c.handleDescribe(ctx, &c.readBuf)
 
 			case pgwirebase.ClientMsgBind:
-				return false, c.handleBind(ctx, &c.readBuf)
+				return false, isSimpleQuery, c.handleBind(ctx, &c.readBuf)
 
 			case pgwirebase.ClientMsgClose:
-				return false, c.handleClose(ctx, &c.readBuf)
+				return false, isSimpleQuery, c.handleClose(ctx, &c.readBuf)
 
 			case pgwirebase.ClientMsgTerminate:
 				terminateSeen = true
-				return true, nil
+				return true, isSimpleQuery, nil
 
 			case pgwirebase.ClientMsgSync:
 				// We're starting a batch here. If the client continues using the extended
@@ -464,10 +476,10 @@ func (c *conn) serveImpl(
 				// message has to be skipped. See:
 				// https://www.postgresql.org/docs/current/10/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 
-				return false, c.stmtBuf.Push(ctx, sql.Sync{})
+				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{})
 
 			case pgwirebase.ClientMsgFlush:
-				return false, c.handleFlush(ctx)
+				return false, isSimpleQuery, c.handleFlush(ctx)
 
 			case pgwirebase.ClientMsgCopyData, pgwirebase.ClientMsgCopyDone, pgwirebase.ClientMsgCopyFail:
 				// We're supposed to ignore these messages, per the protocol spec. This
@@ -475,18 +487,21 @@ func (c *conn) serveImpl(
 				// operation: the server will send an error and a ready message back to
 				// the client, and must then ignore further copy messages. See:
 				// https://github.com/postgres/postgres/blob/6e1dd2773eb60a6ab87b27b8d9391b756e904ac3/src/backend/tcop/postgres.c#L4295
-				return false, nil
+				return false, isSimpleQuery, nil
 			default:
-				return false, c.stmtBuf.Push(
+				return false, isSimpleQuery, c.stmtBuf.Push(
 					ctx,
 					sql.SendError{Err: pgwirebase.NewUnrecognizedMsgTypeErr(typ)})
 			}
 		}()
 		if err != nil {
 			log.VEventf(ctx, 1, "pgwire: error processing message: %s", err)
-			ignoreUntilSync = true
+			if !isSimpleQuery {
+				// In the extended protocol, after seeing an error, we ignore all
+				// messages until receiving a sync.
+				ignoreUntilSync = true
+			}
 			repeatedErrorCount++
-			const maxRepeatedErrorCount = 1 << 15
 			// If we can't read data because of any one of the following conditions,
 			// then we should break:
 			// 1. the connection was closed.
