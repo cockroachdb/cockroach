@@ -497,7 +497,12 @@ func newIndexCache(desc *descpb.TableDescriptor, mutations *mutationCache) *inde
 	c.primary = c.all[0]
 	c.active = c.all[:numPublic]
 	c.publicNonPrimary = c.active[1:]
-	c.deletableNonPrimary = c.all[1:]
+	for _, idx := range c.all[1:] {
+		if !idx.Backfilling() {
+			lazyAllocAppendIndex(&c.deletableNonPrimary, idx, len(c.all[1:]))
+		}
+	}
+
 	if numMutations == 0 {
 		c.writableNonPrimary = c.publicNonPrimary
 	} else {

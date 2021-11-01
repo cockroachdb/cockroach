@@ -40,6 +40,10 @@ type TableElementMaybeMutation interface {
 	// delete-only state.
 	DeleteOnly() bool
 
+	// Backfilling returns true iff the table element is in a
+	// mutation in the backfilling state.
+	Backfilling() bool
+
 	// Adding returns true iff the table element is in an add mutation.
 	Adding() bool
 

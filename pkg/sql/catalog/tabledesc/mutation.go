@@ -62,6 +62,12 @@ func (mm maybeMutation) DeleteOnly() bool {
 	return mm.mutationState == descpb.DescriptorMutation_DELETE_ONLY
 }
 
+// Backfilling returns true iff the table element is a mutation in the
+// backfilling state.
+func (mm maybeMutation) Backfilling() bool {
+	return mm.mutationState == descpb.DescriptorMutation_BACKFILLING
+}
+
 // Adding returns true iff the table element is in an add mutation.
 func (mm maybeMutation) Adding() bool {
 	return mm.mutationDirection == descpb.DescriptorMutation_ADD
