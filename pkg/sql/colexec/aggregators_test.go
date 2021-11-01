@@ -957,7 +957,13 @@ func benchmarkAggregateFunction(
 		cols[i] = testAllocator.NewMemColumn(typs[i], numInputRows)
 	}
 	groups := cols[0].Int64()
-	if agg.name == "hash" {
+	unorderedInput := agg.name == "hash"
+	// We have two additional benchmarks of the hash aggregator for which we
+	// don't want to change the name, so we have to treat those separately.
+	for _, specialHashAggName := range []string{"tracking", "spilled"} {
+		unorderedInput = unorderedInput || strings.Contains(agg.name, specialHashAggName)
+	}
+	if unorderedInput {
 		numGroups := numInputRows / groupSize
 		for i := 0; i < numInputRows; i++ {
 			groups[i] = int64(rng.Intn(numGroups))
@@ -996,10 +1002,11 @@ func benchmarkAggregateFunction(
 		aggCols[i] = uint32(i + 1)
 	}
 	tc := aggregatorTestCase{
-		typs:      typs,
-		groupCols: []uint32{0},
-		aggCols:   [][]uint32{aggCols},
-		aggFns:    []execinfrapb.AggregatorSpec_Func{aggFn},
+		typs:           typs,
+		groupCols:      []uint32{0},
+		aggCols:        [][]uint32{aggCols},
+		aggFns:         []execinfrapb.AggregatorSpec_Func{aggFn},
+		unorderedInput: unorderedInput,
 	}
 	if distinctProb > 0 {
 		if !typs[0].Identical(types.Int) {
