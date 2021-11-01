@@ -68,6 +68,7 @@ go_test(
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/pgwire",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
