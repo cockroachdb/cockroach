@@ -8,10 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package hlc implements the Hybrid Logical Clock outlined in
-// "Logical Physical Clocks and Consistent Snapshots in Globally
-// Distributed Databases", available online at
-// http://www.cse.buffalo.edu/tech-reports/2014-04.pdf.
 package hlc
 
 import (
