@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"database/sql/driver"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -22,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1272,6 +1274,56 @@ func TestConnCloseCancelsAuth(t *testing.T) {
 	}
 	// Check that the auth process indeed noticed the cancelation.
 	<-authBlocked
+}
+
+// TestConnServerAbortsOnRepeatedErrors checks that if the server keeps seeing
+// a non-connection-closed error repeatedly, then it eventually the server
+// aborts the connection.
+func TestConnServerAbortsOnRepeatedErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	var shouldError uint32 = 0
+	testingKnobError := fmt.Errorf("a random error")
+	s, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Insecure: true,
+			Knobs: base.TestingKnobs{
+				PGWireTestingKnobs: &sql.PGWireTestingKnobs{
+					AfterReadMsgTestingKnob: func(ctx context.Context) error {
+						if atomic.LoadUint32(&shouldError) == 0 {
+							return nil
+						}
+						return testingKnobError
+					},
+				},
+			},
+		})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	defer db.Close()
+
+	conn, err := db.Conn(ctx)
+	require.NoError(t, err)
+
+	atomic.StoreUint32(&shouldError, 1)
+	for i := 0; i < maxRepeatedErrorCount+100; i++ {
+		var s int
+		err := conn.QueryRowContext(ctx, "SELECT 1").Scan(&s)
+		if err != nil {
+			if strings.Contains(err.Error(), testingKnobError.Error()) {
+				continue
+			}
+			if errors.Is(err, driver.ErrBadConn) {
+				// The server closed the connection, which is what we want!
+				require.GreaterOrEqualf(t, i, maxRepeatedErrorCount,
+					"the server should have aborted after seeing %d errors",
+					maxRepeatedErrorCount,
+				)
+				return
+			}
+		}
+	}
+	require.FailNow(t, "should have seen ErrBadConn before getting here")
 }
 
 func TestParseClientProvidedSessionParameters(t *testing.T) {
