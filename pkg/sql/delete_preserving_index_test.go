@@ -57,16 +57,15 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
-	startBackfill := make(chan bool)
-	atBackfillStage := make(chan bool)
+	mergeFinished := make(chan struct{})
+	completeSchemaChange := make(chan struct{})
 	errorChan := make(chan error, 1)
 
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeIndexBackfill: func() {
-				// Wait until we get a signal to begin backfill.
-				atBackfillStage <- true
-				<-startBackfill
+			RunAfterTempIndexMerge: func() {
+				mergeFinished <- struct{}{}
+				<-completeSchemaChange
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
@@ -93,36 +92,20 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 
 			finishedSchemaChange.Done()
 		}()
+		<-mergeFinished
 
-		<-atBackfillStage
-		// Find the descriptors for the indices.
+		// Find the descriptor for the temporary index mutation.
 		codec := keys.SystemSQLCodec
 		tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
 		var index *descpb.IndexDescriptor
-		var ord int
-		for idx, i := range tableDesc.Mutations {
-			if i.GetIndex() != nil {
+		for _, i := range tableDesc.Mutations {
+			if i.GetIndex() != nil && i.GetIndex().UseDeletePreservingEncoding == deletePreservingEncoding {
 				index = i.GetIndex()
-				ord = idx
+				break
 			}
 		}
-
 		if index == nil {
 			return nil, nil, errors.Newf("Could not find index mutation")
-		}
-
-		if deletePreservingEncoding {
-			// Mutate index descriptor to use the delete-preserving encoding.
-			index.UseDeletePreservingEncoding = true
-			tableDesc.Mutations[ord].Descriptor_ = &descpb.DescriptorMutation_Index{Index: index}
-
-			if err := kvDB.Put(
-				context.Background(),
-				catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.GetID()),
-				tableDesc.DescriptorProto(),
-			); err != nil {
-				return nil, nil, err
-			}
 		}
 
 		// Make some transactions.
@@ -132,7 +115,7 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 		}
 		end := kvDB.Clock().Now()
 
-		// Grab the revision histories for both indices.
+		// Grab the revision histories for the index.
 		prefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc.GetID(), index.ID)
 		prefixEnd := append(prefix, []byte("\xff")...)
 
@@ -141,7 +124,7 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 			return nil, nil, err
 		}
 
-		startBackfill <- true
+		completeSchemaChange <- struct{}{}
 		finishedSchemaChange.Wait()
 		if err := <-errorChan; err != nil {
 			t.Logf("Schema change with delete_preserving=%v encountered an error: %s, continuing...", deletePreservingEncoding, err)
@@ -219,16 +202,13 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 			if err := resetTestData(); err != nil {
 				t.Fatalf("error while resetting test data %s", err)
 			}
-
 			delEncRevisions, delEncPrefix, err := getRevisionsForTest(test.setupSQL, test.schemaChangeSQL, test.dataSQL, true)
 			if err != nil {
 				t.Fatalf("error while getting delete encoding revisions %s", err)
 			}
-
 			if err := resetTestData(); err != nil {
 				t.Fatalf("error while resetting test data %s", err)
 			}
-
 			defaultRevisions, defaultPrefix, err := getRevisionsForTest(test.setupSQL, test.schemaChangeSQL, test.dataSQL, false)
 			if err != nil {
 				t.Fatalf("error while getting default revisions %s", err)
@@ -674,7 +654,8 @@ func TestMergeProcess(t *testing.T) {
 			tableDesc,
 			srcIndex.GetID(),
 			dstIndex.GetID(),
-			tableDesc.IndexSpan(codec, srcIndex.GetID())); err != nil {
+			tableDesc.IndexSpan(codec, srcIndex.GetID()),
+		); err != nil {
 			t.Fatal(err)
 		}
 

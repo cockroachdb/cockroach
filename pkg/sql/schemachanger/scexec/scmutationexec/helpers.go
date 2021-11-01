@@ -118,7 +118,7 @@ func enqueueDropColumnMutation(tbl *tabledesc.Mutable, col *descpb.ColumnDescrip
 }
 
 func enqueueAddIndexMutation(tbl *tabledesc.Mutable, idx *descpb.IndexDescriptor) error {
-	if err := tbl.AddIndexMutation(idx, descpb.DescriptorMutation_ADD); err != nil {
+	if err := tbl.DeprecatedAddIndexMutation(idx, descpb.DescriptorMutation_ADD); err != nil {
 		return err
 	}
 	tbl.NextMutationID--
@@ -126,7 +126,7 @@ func enqueueAddIndexMutation(tbl *tabledesc.Mutable, idx *descpb.IndexDescriptor
 }
 
 func enqueueDropIndexMutation(tbl *tabledesc.Mutable, idx *descpb.IndexDescriptor) error {
-	if err := tbl.AddIndexMutation(idx, descpb.DescriptorMutation_DROP); err != nil {
+	if err := tbl.DeprecatedAddIndexMutation(idx, descpb.DescriptorMutation_DROP); err != nil {
 		return err
 	}
 	tbl.NextMutationID--

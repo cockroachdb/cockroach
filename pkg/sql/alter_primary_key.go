@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
@@ -222,7 +223,7 @@ func (p *planner) AlterPrimaryKey(
 		}
 	}
 
-	if err := tableDesc.AddIndexMutation(newPrimaryIndexDesc, descpb.DescriptorMutation_ADD); err != nil {
+	if err := tableDesc.AddIndexMutation(ctx, newPrimaryIndexDesc, descpb.DescriptorMutation_ADD, p.ExecCfg().Settings); err != nil {
 		return err
 	}
 	if err := tableDesc.AllocateIDs(ctx); err != nil {
@@ -340,7 +341,7 @@ func (p *planner) AlterPrimaryKey(
 		// Set correct version and encoding type.
 		newUniqueIdx.Version = descpb.LatestNonPrimaryIndexDescriptorVersion
 		newUniqueIdx.EncodingType = descpb.SecondaryIndexEncoding
-		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newUniqueIdx, newPrimaryIndexDesc); err != nil {
+		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newUniqueIdx, newPrimaryIndexDesc, p.ExecCfg().Settings); err != nil {
 			return err
 		}
 		// Copy the old zone configuration into the newly created unique index for PARTITION ALL BY.
@@ -467,7 +468,7 @@ func (p *planner) AlterPrimaryKey(
 		newIndex.Name = tabledesc.GenerateUniqueName(basename, nameExists)
 		newIndex.Version = descpb.LatestNonPrimaryIndexDescriptorVersion
 		newIndex.EncodingType = descpb.SecondaryIndexEncoding
-		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newIndex, newPrimaryIndexDesc); err != nil {
+		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newIndex, newPrimaryIndexDesc, p.ExecCfg().Settings); err != nil {
 			return err
 		}
 
@@ -644,17 +645,30 @@ func addIndexMutationWithSpecificPrimaryKey(
 	table *tabledesc.Mutable,
 	toAdd *descpb.IndexDescriptor,
 	primary *descpb.IndexDescriptor,
+	settings *cluster.Settings,
 ) error {
 	// Reset the ID so that a call to AllocateIDs will set up the index.
 	toAdd.ID = 0
-	if err := table.AddIndexMutation(toAdd, descpb.DescriptorMutation_ADD); err != nil {
+	if err := table.AddIndexMutation(ctx, toAdd, descpb.DescriptorMutation_ADD, settings); err != nil {
 		return err
 	}
 	if err := table.AllocateIDsWithoutValidation(ctx); err != nil {
 		return err
 	}
-	// Use the columns in the given primary index to construct this indexes
-	// KeySuffixColumnIDs list.
+
+	setKeySuffixColumnIDsFromPrimary(toAdd, primary)
+	if tempIdx := catalog.FindCorrespondingTemporaryIndexByID(table, toAdd.ID); tempIdx != nil {
+		setKeySuffixColumnIDsFromPrimary(tempIdx.IndexDesc(), primary)
+	}
+
+	return nil
+}
+
+// setKeySuffixColumnIDsFromPrimary uses the columns in the given
+// primary index to construct this toAdd's KeySuffixColumnIDs list.
+func setKeySuffixColumnIDsFromPrimary(
+	toAdd *descpb.IndexDescriptor, primary *descpb.IndexDescriptor,
+) {
 	presentColIDs := catalog.MakeTableColSet(toAdd.KeyColumnIDs...)
 	presentColIDs.UnionWith(catalog.MakeTableColSet(toAdd.StoreColumnIDs...))
 	toAdd.KeySuffixColumnIDs = nil
@@ -663,5 +677,4 @@ func addIndexMutationWithSpecificPrimaryKey(
 			toAdd.KeySuffixColumnIDs = append(toAdd.KeySuffixColumnIDs, colID)
 		}
 	}
-	return nil
 }
