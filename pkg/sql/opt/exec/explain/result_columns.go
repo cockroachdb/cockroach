@@ -162,6 +162,9 @@ func getResultColumns(
 	case alterTableRelocateOp:
 		return colinfo.AlterTableRelocateColumns, nil
 
+	case alterRangeRelocateOp:
+		return colinfo.AlterRangeRelocateColumns, nil
+
 	case exportOp:
 		return colinfo.ExportColumns, nil
 
