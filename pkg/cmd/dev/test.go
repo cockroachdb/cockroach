@@ -180,9 +180,9 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			args = append(args, "--run_under",
 				fmt.Sprintf("%s -maxtime=%s %s", stressTarget, timeout, stressArgs))
 
-			// The bazel timeout needs to be higher than the stress duration to
-			// pass reliably.
-			args = append(args, fmt.Sprintf("--test_timeout=%.0f", (timeout+time.Second).Seconds()))
+			// The timeout should be higher than the stress duration, lets
+			// generously give it an extra minute.
+			args = append(args, fmt.Sprintf("--test_timeout=%d", int((timeout+time.Minute).Seconds())))
 		} else {
 			// We're running under stress and no timeout is specified. We want
 			// to respect the timeout passed down to stress[1]. Similar to above

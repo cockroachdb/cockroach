@@ -36,7 +36,7 @@ bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --r
 dev test --stress pkg/util/tracing --filter TestStartChild* --timeout=10s -v
 ----
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
-bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under '@com_github_cockroachdb_stress//:stress -maxtime=10s ' --test_timeout=11 '--test_filter=TestStartChild*' --test_output streamed
+bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under '@com_github_cockroachdb_stress//:stress -maxtime=10s ' --test_timeout=70 '--test_filter=TestStartChild*' --test_output streamed
 
 dev test //pkg/testutils --timeout=10s
 ----
