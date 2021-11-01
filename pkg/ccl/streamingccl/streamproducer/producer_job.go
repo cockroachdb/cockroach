@@ -17,12 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -43,20 +41,6 @@ func makeProducerJobRecord(
 		},
 	}
 	return registry.MakeJobID(), jr
-}
-
-// Initialize a replication stream producer job on the source cluster that
-// 1. Tracks the liveness of the replication stream consumption
-// 2. TODO(casper): Updates the protected timestamp for spans being replicated
-func doInitStream(evalCtx *tree.EvalContext, txn *kv.Txn, tenantID uint64) (jobspb.JobID, error) {
-	registry := evalCtx.ExecConfigAccessor.JobRegistry().(*jobs.Registry)
-	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
-
-	jobID, jr := makeProducerJobRecord(registry, tenantID, timeout, evalCtx.Username)
-	if _, err := registry.CreateAdoptableJobWithTxn(evalCtx.Ctx(), jr, jobID, txn); err != nil {
-		return 0, err
-	}
-	return jobID, nil
 }
 
 type producerJobResumer struct {

@@ -2436,13 +2436,6 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 	)
 	ie.SetSessionDataStack(ex.sessionDataStack)
 
-	sqlUsername := func() security.SQLUsername {
-		if p.SessionData() != nil {
-			return p.User()
-		}
-		return security.SQLUsername{}
-	}
-
 	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Planner:                   p,
@@ -2465,8 +2458,6 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			Tracer:                    ex.server.cfg.AmbientCtx.Tracer,
 			ReCache:                   ex.server.reCache,
 			InternalExecutor:          &ie,
-			ExecConfigAccessor:        p,
-			Username:                  sqlUsername(),
 			DB:                        ex.server.cfg.DB,
 			SQLLivenessReader:         ex.server.cfg.SQLLiveness,
 			SQLStatsController:        ex.server.sqlStatsController,

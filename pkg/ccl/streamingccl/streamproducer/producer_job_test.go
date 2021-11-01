@@ -108,13 +108,10 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 	}
 
 	startJob := func(jobID jobspb.JobID, jr jobs.Record) error {
-		var sj *jobs.StartableJob
-		if err := source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return registry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr)
-		}); err != nil {
+		return source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			_, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jobID, txn)
 			return err
-		}
-		return sj.Start(ctx)
+		})
 	}
 
 	timeout, username := 1*time.Second, security.MakeSQLUsernameFromPreNormalizedString("user")
