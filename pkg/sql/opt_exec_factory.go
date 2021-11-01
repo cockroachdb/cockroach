@@ -1970,6 +1970,23 @@ func (ef *execFactory) ConstructAlterTableRelocate(
 	}, nil
 }
 
+// ConstructAlterRangeRelocate is part of the exec.Factory interface.
+func (ef *execFactory) ConstructAlterRangeRelocate(
+	input exec.Node, relocateLease bool, relocateNonVoters bool, toStoreID int64, fromStoreID int64,
+) (exec.Node, error) {
+	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
+		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
+	}
+
+	return &relocateRange{
+		rows:              input.(planNode),
+		relocateLease:     relocateLease,
+		relocateNonVoters: relocateNonVoters,
+		toStoreID:         roachpb.StoreID(toStoreID),
+		fromStoreID:       roachpb.StoreID(fromStoreID),
+	}, nil
+}
+
 // ConstructControlJobs is part of the exec.Factory interface.
 func (ef *execFactory) ConstructControlJobs(
 	command tree.JobCommand, input exec.Node, reason tree.TypedExpr,
