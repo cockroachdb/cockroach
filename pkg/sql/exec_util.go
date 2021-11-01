@@ -2809,6 +2809,9 @@ func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 }
 
 func (m *sessionDataMutator) SetCustomOption(name, val string) {
+	if m.data.CustomOptions == nil {
+		m.data.CustomOptions = make(map[string]string)
+	}
 	m.data.CustomOptions[name] = val
 }
 
