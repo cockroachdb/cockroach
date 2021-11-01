@@ -12,15 +12,10 @@ package sql
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 type valuesNode struct {
@@ -35,82 +30,6 @@ type valuesNode struct {
 	specifiedInQuery bool
 
 	valuesRun
-}
-
-// Values implements the VALUES clause.
-func (p *planner) Values(
-	ctx context.Context, origN tree.Statement, desiredTypes []*types.T,
-) (planNode, error) {
-	v := &valuesNode{
-		specifiedInQuery: true,
-	}
-
-	// If we have names, extract them.
-	var n *tree.ValuesClause
-	switch t := origN.(type) {
-	case *tree.ValuesClauseWithNames:
-		n = &t.ValuesClause
-	case *tree.ValuesClause:
-		n = t
-	default:
-		return nil, errors.AssertionFailedf("unhandled case in values: %T %v", origN, origN)
-	}
-
-	if len(n.Rows) == 0 {
-		return v, nil
-	}
-
-	numCols := len(n.Rows[0])
-
-	v.tuples = make([][]tree.TypedExpr, 0, len(n.Rows))
-	tupleBuf := make([]tree.TypedExpr, len(n.Rows)*numCols)
-
-	v.columns = make(colinfo.ResultColumns, 0, numCols)
-
-	// We need to save and restore the previous value of the field in
-	// semaCtx in case we are recursively called within a subquery
-	// context.
-	defer p.semaCtx.Properties.Restore(p.semaCtx.Properties)
-
-	// Ensure there are no special functions in the clause.
-	p.semaCtx.Properties.Require("VALUES", tree.RejectSpecial)
-
-	for num, tuple := range n.Rows {
-		if a, e := len(tuple), numCols; a != e {
-			return nil, newValuesListLenErr(e, a)
-		}
-
-		// Chop off prefix of tupleBuf and limit its capacity.
-		tupleRow := tupleBuf[:numCols:numCols]
-		tupleBuf = tupleBuf[numCols:]
-
-		for i, expr := range tuple {
-			desired := types.Any
-			if len(desiredTypes) > i {
-				desired = desiredTypes[i]
-			}
-
-			// Clear the properties so we can check them below.
-			typedExpr, err := p.analyzeExpr(ctx, expr, nil, tree.IndexedVarHelper{}, desired, false, "")
-			if err != nil {
-				return nil, err
-			}
-
-			typ := typedExpr.ResolvedType()
-			if num == 0 {
-				v.columns = append(v.columns, colinfo.ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
-			} else if v.columns[i].Typ.Family() == types.UnknownFamily {
-				v.columns[i].Typ = typ
-			} else if typ.Family() != types.UnknownFamily && !typ.Equivalent(v.columns[i].Typ) {
-				return nil, pgerror.Newf(pgcode.DatatypeMismatch,
-					"VALUES types %s and %s cannot be matched", typ, v.columns[i].Typ)
-			}
-
-			tupleRow[i] = typedExpr
-		}
-		v.tuples = append(v.tuples, tupleRow)
-	}
-	return v, nil
 }
 
 func (p *planner) newContainerValuesNode(columns colinfo.ResultColumns, capacity int) *valuesNode {
@@ -183,11 +102,4 @@ func (n *valuesNode) Close(ctx context.Context) {
 		n.rows.Close(ctx)
 		n.rows = nil
 	}
-}
-
-func newValuesListLenErr(exp, got int) error {
-	return pgerror.Newf(
-		pgcode.Syntax,
-		"VALUES lists must all be the same length, expected %d columns, found %d",
-		exp, got)
 }
