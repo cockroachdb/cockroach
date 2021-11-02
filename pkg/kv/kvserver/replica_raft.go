@@ -507,7 +507,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	ctx context.Context, inSnap IncomingSnapshot,
 ) (_ handleRaftReadyStats, _ string, foo error) {
 	var stats handleRaftReadyStats
-	if inSnap.State != nil {
+	if inSnap.Desc != nil {
 		stats.snap.offered = true
 	}
 
@@ -584,7 +584,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		leaderID = roachpb.ReplicaID(rd.SoftState.Lead)
 	}
 
-	if inSnap.State != nil {
+	if inSnap.Desc != nil {
 		if !raft.IsEmptySnap(rd.Snapshot) {
 			snapUUID, err := uuid.FromBytes(rd.Snapshot.Data)
 			if err != nil {
@@ -1719,7 +1719,7 @@ func (r *Replica) maybeAcquireSnapshotMergeLock(
 		// installed a placeholder for snapshot's keyspace. No merge lock needed.
 		return nil, func() {}
 	}
-	for endKey.Less(inSnap.State.Desc.EndKey) {
+	for endKey.Less(inSnap.Desc.EndKey) {
 		sRepl := r.store.LookupReplica(endKey)
 		if sRepl == nil || !endKey.Equal(sRepl.Desc().StartKey) {
 			log.Fatalf(ctx, "snapshot widens existing replica, but no replica exists for subsumed key %s", endKey)

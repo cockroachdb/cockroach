@@ -2817,7 +2817,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	if err := s.processRaftSnapshotRequest(ctx, req,
 		IncomingSnapshot{
 			SnapUUID:    uuid.MakeV4(),
-			State:       &kvserverpb.ReplicaState{Desc: repl1.Desc()},
+			Desc:        repl1.Desc(),
 			placeholder: placeholder,
 		},
 	); err != nil {

@@ -290,8 +290,9 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			inSnap := IncomingSnapshot{
 				SnapUUID:          snapUUID,
 				SSTStorageScratch: kvSS.scratch,
-				State:             &header.State,
+				Desc:              header.State.Desc,
 				snapType:          header.Type,
+				raftAppliedIndex:  header.State.RaftAppliedIndex,
 			}
 
 			kvSS.status = fmt.Sprintf("ssts: %d", len(kvSS.scratch.SSTs()))
