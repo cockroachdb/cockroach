@@ -279,6 +279,39 @@ pk1  3
 pk2  4
 pk3  2
 
+
+# Regression test for issue #72116.
+statement ok
+CREATE SEQUENCE seq_72116;
+CREATE TABLE table_72116 (a INT);
+ALTER TABLE table_72116 ADD COLUMN b INT DEFAULT nextval('seq_72116') ON UPDATE NULL
+
+# Make sure that our DEFAULT has a dependency on seq_72116
+statement error pq: cannot drop sequence seq_72116 because other objects depend on it
+DROP SEQUENCE seq_72116
+
+statement ok
+DROP TABLE table_72116;
+CREATE TABLE table_72116 (a INT DEFAULT nextval('seq_72116') ON UPDATE NULL)
+
+statement error pq: cannot drop sequence seq_72116 because other objects depend on it
+DROP SEQUENCE seq_72116
+
+statement ok
+DROP TABLE table_72116;
+CREATE TABLE table_72116 (a INT);
+ALTER TABLE table_72116 ADD COLUMN b INT DEFAULT (1) ON UPDATE nextval('seq_72116')
+
+statement error pq: cannot drop sequence seq_72116 because other objects depend on it
+DROP SEQUENCE seq_72116
+
+statement ok
+DROP TABLE table_72116;
+CREATE TABLE table_72116 (a INT DEFAULT (1) ON UPDATE nextval('seq_72116'))
+
+statement error pq: cannot drop sequence seq_72116 because other objects depend on it
+DROP SEQUENCE seq_72116
+
 subtest EnumDependencies
 
 statement ok

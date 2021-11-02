@@ -31,6 +31,41 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// ColumnDefDescs contains the non-error return values for MakeColumnDefDescs.
+type ColumnDefDescs struct {
+	// tree.ColumnTableDef is the column definition from which this struct is
+	// derived.
+	*tree.ColumnTableDef
+
+	// descpb.ColumnDescriptor is the column descriptor built from the column
+	// definition.
+	*descpb.ColumnDescriptor
+
+	// PrimaryKeyOrUniqueIndexDescriptor is the index descriptor for the index implied by a
+	// PRIMARY KEY or UNIQUE column.
+	PrimaryKeyOrUniqueIndexDescriptor *descpb.IndexDescriptor
+
+	// DefaultExpr and OnUpdateExpr are the DEFAULT and ON UPDATE expressions,
+	// returned in tree.TypedExpr form for analysis, e.g. recording sequence
+	// dependencies.
+	DefaultExpr, OnUpdateExpr tree.TypedExpr
+}
+
+// ForEachTypedExpr iterates over each typed expression in this struct.
+func (cdd *ColumnDefDescs) ForEachTypedExpr(fn func(tree.TypedExpr) error) error {
+	if cdd.ColumnTableDef.HasDefaultExpr() {
+		if err := fn(cdd.DefaultExpr); err != nil {
+			return err
+		}
+	}
+	if cdd.ColumnTableDef.HasOnUpdateExpr() {
+		if err := fn(cdd.OnUpdateExpr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // MakeColumnDefDescs creates the column descriptor for a column, as well as the
 // index descriptor if the column is a primary key or unique.
 //
@@ -43,28 +78,27 @@ import (
 // semaCtx can be nil if no default expression is used for the
 // column or during cluster bootstrapping.
 //
-// The DEFAULT expression is returned in TypedExpr form for analysis (e.g. recording
-// sequence dependencies).
+// See the ColumnDefDescs definition for a description of the return values.
 func MakeColumnDefDescs(
 	ctx context.Context, d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
-) (*descpb.ColumnDescriptor, *descpb.IndexDescriptor, tree.TypedExpr, error) {
+) (*ColumnDefDescs, error) {
 	if d.IsSerial {
 		// To the reader of this code: if control arrives here, this means
 		// the caller has not suitably called processSerialInColumnDef()
 		// prior to calling MakeColumnDefDescs. The dependent sequences
 		// must be created, and the SERIAL type eliminated, prior to this
 		// point.
-		return nil, nil, nil, pgerror.New(pgcode.FeatureNotSupported,
+		return nil, pgerror.New(pgcode.FeatureNotSupported,
 			"SERIAL cannot be used in this context")
 	}
 
 	if len(d.CheckExprs) > 0 {
 		// Should never happen since `HoistConstraints` moves these to table level
-		return nil, nil, nil, errors.New("unexpected column CHECK constraint")
+		return nil, errors.New("unexpected column CHECK constraint")
 	}
 	if d.HasFKConstraint() {
 		// Should never happen since `HoistConstraints` moves these to table level
-		return nil, nil, nil, errors.New("unexpected column REFERENCED constraint")
+		return nil, errors.New("unexpected column REFERENCED constraint")
 	}
 
 	col := &descpb.ColumnDescriptor{
@@ -72,6 +106,10 @@ func MakeColumnDefDescs(
 		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey.IsPrimaryKey,
 		Virtual:  d.IsVirtual(),
 		Hidden:   d.Hidden,
+	}
+	ret := &ColumnDefDescs{
+		ColumnTableDef:   d,
+		ColumnDescriptor: col,
 	}
 
 	if d.GeneratedIdentity.IsGeneratedAsIdentity {
@@ -81,7 +119,7 @@ func MakeColumnDefDescs(
 		case tree.GeneratedByDefault:
 			col.GeneratedAsIdentityType = descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
 		default:
-			return nil, nil, nil, errors.AssertionFailedf(
+			return nil, errors.AssertionFailedf(
 				"column %s is of invalid generated as identity type (neither ALWAYS nor BY DEFAULT)", string(d.Name))
 		}
 		if genSeqOpt := d.GeneratedIdentity.SeqOptions; genSeqOpt != nil {
@@ -93,29 +131,28 @@ func MakeColumnDefDescs(
 	// Validate and assign column type.
 	resType, err := tree.ResolveType(ctx, d.Type, semaCtx.GetTypeResolver())
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
-	if err := colinfo.ValidateColumnDefType(resType); err != nil {
-		return nil, nil, nil, err
+	if err = colinfo.ValidateColumnDefType(resType); err != nil {
+		return nil, err
 	}
 	col.Type = resType
 
-	var typedExpr tree.TypedExpr
 	if d.HasDefaultExpr() {
 		// Verify the default expression type is compatible with the column type
 		// and does not contain invalid functions.
-		var err error
-		if typedExpr, err = schemaexpr.SanitizeVarFreeExpr(
+		ret.DefaultExpr, err = schemaexpr.SanitizeVarFreeExpr(
 			ctx, d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, tree.VolatilityVolatile,
-		); err != nil {
-			return nil, nil, nil, err
+		)
+		if err != nil {
+			return nil, err
 		}
 
 		// Keep the type checked expression so that the type annotation gets
 		// properly stored, only if the default expression is not NULL.
 		// Otherwise we want to keep the default expression nil.
-		if typedExpr != tree.DNull {
-			d.DefaultExpr.Expr = typedExpr
+		if ret.DefaultExpr != tree.DNull {
+			d.DefaultExpr.Expr = ret.DefaultExpr
 			s := tree.Serialize(d.DefaultExpr.Expr)
 			col.DefaultExpr = &s
 		}
@@ -127,21 +164,21 @@ func MakeColumnDefDescs(
 			ctx,
 			clusterversion.OnUpdateExpressions,
 		) {
-			return nil, nil, nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 				"version %v must be finalized to use ON UPDATE",
 				clusterversion.ByKey(clusterversion.OnUpdateExpressions))
 		}
 
 		// Verify the on update expression type is compatible with the column type
 		// and does not contain invalid functions.
-		var err error
-		if typedExpr, err = schemaexpr.SanitizeVarFreeExpr(
+		ret.OnUpdateExpr, err = schemaexpr.SanitizeVarFreeExpr(
 			ctx, d.OnUpdateExpr.Expr, resType, "ON UPDATE", semaCtx, tree.VolatilityVolatile,
-		); err != nil {
-			return nil, nil, nil, err
+		)
+		if err != nil {
+			return nil, err
 		}
 
-		d.OnUpdateExpr.Expr = typedExpr
+		d.OnUpdateExpr.Expr = ret.OnUpdateExpr
 		s := tree.Serialize(d.OnUpdateExpr.Expr)
 		col.OnUpdateExpr = &s
 	}
@@ -156,10 +193,9 @@ func MakeColumnDefDescs(
 		col.ComputeExpr = &s
 	}
 
-	var idx *descpb.IndexDescriptor
 	if d.PrimaryKey.IsPrimaryKey || (d.Unique.IsUnique && !d.Unique.WithoutIndex) {
 		if !d.PrimaryKey.Sharded {
-			idx = &descpb.IndexDescriptor{
+			ret.PrimaryKeyOrUniqueIndexDescriptor = &descpb.IndexDescriptor{
 				Unique:              true,
 				KeyColumnNames:      []string{string(d.Name)},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
@@ -167,10 +203,10 @@ func MakeColumnDefDescs(
 		} else {
 			buckets, err := EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, err
 			}
 			shardColName := GetShardColumnName([]string{string(d.Name)}, buckets)
-			idx = &descpb.IndexDescriptor{
+			ret.PrimaryKeyOrUniqueIndexDescriptor = &descpb.IndexDescriptor{
 				Unique:              true,
 				KeyColumnNames:      []string{shardColName, string(d.Name)},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
@@ -183,11 +219,11 @@ func MakeColumnDefDescs(
 			}
 		}
 		if d.Unique.ConstraintName != "" {
-			idx.Name = string(d.Unique.ConstraintName)
+			ret.PrimaryKeyOrUniqueIndexDescriptor.Name = string(d.Unique.ConstraintName)
 		}
 	}
 
-	return col, idx, typedExpr, nil
+	return ret, nil
 }
 
 // EvalShardBucketCount evaluates and checks the integer argument to a `USING HASH WITH
