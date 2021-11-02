@@ -2452,6 +2452,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Planner:                   p,
+			ExecConfigAccessor:        p,
 			PrivilegedAccessor:        p,
 			SessionAccessor:           p,
 			ClientNoticeSender:        p,

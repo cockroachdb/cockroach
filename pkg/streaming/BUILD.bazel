@@ -9,5 +9,6 @@ go_library(
         "//pkg/kv",
         "//pkg/sql/sem/tree",
         "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
