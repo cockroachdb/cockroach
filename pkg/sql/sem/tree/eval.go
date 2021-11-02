@@ -3307,7 +3307,7 @@ type PrivilegedAccessor interface {
 		ctx context.Context, parentID int64, name string,
 	) (DInt, bool, error)
 
-	// LookupZoneConfig returns the zone config given a namespace id.
+	// LookupZoneConfigByNamespaceID returns the zone config given a namespace id.
 	// It is meant as a replacement for looking up system.zones directly.
 	// Returns the config byte array, a bool representing whether the namespace exists,
 	// and an error if there is one.
