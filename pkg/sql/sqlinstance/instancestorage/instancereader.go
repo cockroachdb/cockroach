@@ -156,7 +156,7 @@ func (r *Reader) maybeStartRangeFeed(ctx context.Context) *rangefeed.RangeFeed {
 	}
 	rf, err := r.f.RangeFeed(ctx,
 		"sql_instances",
-		instancesTableSpan,
+		[]roachpb.Span{instancesTableSpan},
 		r.clock.Now(),
 		updateCacheFn,
 		rangefeed.WithInitialScan(initialScanDoneFn),
