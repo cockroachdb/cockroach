@@ -87,11 +87,10 @@ var _ scmutationexec.MutationVisitorStateUpdater = (*mutationVisitorState)(nil)
 func (mvs *mutationVisitorState) CheckOutDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.MutableDescriptor, error) {
-	desc, err := mvs.c.MustReadMutableDescriptor(ctx, id)
+	mut, err := mvs.c.MustReadMutableDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	mut := desc.(catalog.MutableDescriptor)
 	mut.MaybeIncrementVersion()
 	mvs.checkedOutDescriptors.Add(id)
 	return mut, nil
