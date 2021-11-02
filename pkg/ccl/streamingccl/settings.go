@@ -22,6 +22,10 @@ var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSet
 	time.Minute,
 )
 
+// MinProtectedTimestampUpdateAdvance specifies the minimum amount of time a
+// stream replication's protected timestamp must advance for it to be updated.
+var MinProtectedTimestampUpdateAdvance = 10 * time.Minute
+
 // StreamReplicationJobLivenessTimeout controls how long we wait for to kill
 // an inactive producer job.
 var StreamReplicationJobLivenessTimeout = settings.RegisterDurationSetting(

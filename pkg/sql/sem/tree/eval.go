@@ -3159,6 +3159,9 @@ type EvalPlanner interface {
 	EvalDatabase
 	TypeResolver
 
+	// ExecutorConfig returns *ExecutorConfig
+	ExecutorConfig() interface{}
+
 	// GetImmutableTableInterfaceByID returns an interface{} with
 	// catalog.TableDescriptor to avoid a circular dependency.
 	GetImmutableTableInterfaceByID(ctx context.Context, id int) (interface{}, error)
@@ -3293,14 +3296,6 @@ type InternalExecutor interface {
 	QueryRow(
 		ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 	) (Datums, error)
-}
-
-// ExecConfigAccessor is a limited interface to access ExecutorConfig's states.
-// It is defined independently to prevent a circular dependency on sql, tree and sqlbase.
-type ExecConfigAccessor interface {
-
-	// JobRegistry returns jobs.Registry from ExecutorConfig
-	JobRegistry() interface{}
 }
 
 // PrivilegedAccessor gives access to certain queries that would otherwise
@@ -3548,8 +3543,6 @@ type EvalContext struct {
 	// Note that the executor will be "session-bound" - it will inherit session
 	// variables from a parent session.
 	InternalExecutor InternalExecutor
-
-	ExecConfigAccessor ExecConfigAccessor
 
 	Planner EvalPlanner
 

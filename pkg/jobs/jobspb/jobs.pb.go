@@ -524,6 +524,8 @@ var xxx_messageInfo_StreamIngestionProgress_PartitionProgress proto.InternalMess
 type StreamReplicationDetails struct {
 	// Key spans we are replicating
 	Spans []*roachpb.Span `protobuf:"bytes,1,rep,name=spans,proto3" json:"spans,omitempty"`
+	// ID of the protected timestamp record that protects the above spans
+	ProtectedTimestampRecord *github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,2,opt,name=protected_timestamp_record,json=protectedTimestampRecord,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"protected_timestamp_record,omitempty"`
 }
 
 func (m *StreamReplicationDetails) Reset()         { *m = StreamReplicationDetails{} }
@@ -3973,6 +3975,18 @@ func (m *StreamReplicationDetails) MarshalToSizedBuffer(dAtA []byte) (int, error
 	_ = i
 	var l int
 	_ = l
+	if m.ProtectedTimestampRecord != nil {
+		{
+			size := m.ProtectedTimestampRecord.Size()
+			i -= size
+			if _, err := m.ProtectedTimestampRecord.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+			i = encodeVarintJobs(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
 	if len(m.Spans) > 0 {
 		for iNdEx := len(m.Spans) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -7787,6 +7801,10 @@ func (m *StreamReplicationDetails) Size() (n int) {
 			n += 1 + l + sovJobs(uint64(l))
 		}
 	}
+	if m.ProtectedTimestampRecord != nil {
+		l = m.ProtectedTimestampRecord.Size()
+		n += 1 + l + sovJobs(uint64(l))
+	}
 	return n
 }
 
@@ -10384,6 +10402,41 @@ func (m *StreamReplicationDetails) Unmarshal(dAtA []byte) error {
 			}
 			m.Spans = append(m.Spans, &roachpb.Span{})
 			if err := m.Spans[len(m.Spans)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ProtectedTimestampRecord", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowJobs
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthJobs
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthJobs
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			var v github_com_cockroachdb_cockroach_pkg_util_uuid.UUID
+			m.ProtectedTimestampRecord = &v
+			if err := m.ProtectedTimestampRecord.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
