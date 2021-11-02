@@ -47,7 +47,12 @@ import (
 // sequence dependencies).
 func MakeColumnDefDescs(
 	ctx context.Context, d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
-) (*descpb.ColumnDescriptor, *descpb.IndexDescriptor, tree.TypedExpr, error) {
+) (
+	col *descpb.ColumnDescriptor,
+	idx *descpb.IndexDescriptor,
+	defaultExpr tree.TypedExpr,
+	err error,
+) {
 	if d.IsSerial {
 		// To the reader of this code: if control arrives here, this means
 		// the caller has not suitably called processSerialInColumnDef()
@@ -67,7 +72,7 @@ func MakeColumnDefDescs(
 		return nil, nil, nil, errors.New("unexpected column REFERENCED constraint")
 	}
 
-	col := &descpb.ColumnDescriptor{
+	col = &descpb.ColumnDescriptor{
 		Name:     string(d.Name),
 		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey.IsPrimaryKey,
 		Virtual:  d.IsVirtual(),
@@ -95,27 +100,26 @@ func MakeColumnDefDescs(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if err := colinfo.ValidateColumnDefType(resType); err != nil {
+	if err = colinfo.ValidateColumnDefType(resType); err != nil {
 		return nil, nil, nil, err
 	}
 	col.Type = resType
 
-	var typedExpr tree.TypedExpr
 	if d.HasDefaultExpr() {
 		// Verify the default expression type is compatible with the column type
 		// and does not contain invalid functions.
-		var err error
-		if typedExpr, err = schemaexpr.SanitizeVarFreeExpr(
+		defaultExpr, err = schemaexpr.SanitizeVarFreeExpr(
 			ctx, d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, tree.VolatilityVolatile,
-		); err != nil {
+		)
+		if err != nil {
 			return nil, nil, nil, err
 		}
 
 		// Keep the type checked expression so that the type annotation gets
 		// properly stored, only if the default expression is not NULL.
 		// Otherwise we want to keep the default expression nil.
-		if typedExpr != tree.DNull {
-			d.DefaultExpr.Expr = typedExpr
+		if defaultExpr != tree.DNull {
+			d.DefaultExpr.Expr = defaultExpr
 			s := tree.Serialize(d.DefaultExpr.Expr)
 			col.DefaultExpr = &s
 		}
@@ -134,14 +138,15 @@ func MakeColumnDefDescs(
 
 		// Verify the on update expression type is compatible with the column type
 		// and does not contain invalid functions.
-		var err error
-		if typedExpr, err = schemaexpr.SanitizeVarFreeExpr(
+
+		onUpdateExpr, err := schemaexpr.SanitizeVarFreeExpr(
 			ctx, d.OnUpdateExpr.Expr, resType, "ON UPDATE", semaCtx, tree.VolatilityVolatile,
-		); err != nil {
+		)
+		if err != nil {
 			return nil, nil, nil, err
 		}
 
-		d.OnUpdateExpr.Expr = typedExpr
+		d.OnUpdateExpr.Expr = onUpdateExpr
 		s := tree.Serialize(d.OnUpdateExpr.Expr)
 		col.OnUpdateExpr = &s
 	}
@@ -156,7 +161,6 @@ func MakeColumnDefDescs(
 		col.ComputeExpr = &s
 	}
 
-	var idx *descpb.IndexDescriptor
 	if d.PrimaryKey.IsPrimaryKey || (d.Unique.IsUnique && !d.Unique.WithoutIndex) {
 		if !d.PrimaryKey.Sharded {
 			idx = &descpb.IndexDescriptor{
@@ -187,7 +191,7 @@ func MakeColumnDefDescs(
 		}
 	}
 
-	return col, idx, typedExpr, nil
+	return col, idx, defaultExpr, nil
 }
 
 // EvalShardBucketCount evaluates and checks the integer argument to a `USING HASH WITH
