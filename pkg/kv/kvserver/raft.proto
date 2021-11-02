@@ -195,12 +195,9 @@ message SnapshotRequest {
   // A RocksDB BatchRepr. Multiple kv_batches may be sent across multiple request messages.
   bytes kv_batch = 2 [(gogoproto.customname) = "KVBatch"];
 
-  // These are really raftpb.Entry, but we model them as raw bytes to avoid
-  // roundtripping through memory. They are separate from the kv_batch to
-  // allow flexibility in log implementations.
-  repeated bytes log_entries = 3;
-
   bool final = 4;
+
+  reserved 3;
 }
 
 message SnapshotResponse {
