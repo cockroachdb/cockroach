@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -241,7 +240,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		return noSnap, err
 	}
 	defer msstw.Close()
-	var logEntries [][]byte
 
 	for {
 		req, err := stream.Recv()
@@ -272,9 +270,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				}
 			}
 		}
-		if req.LogEntries != nil {
-			logEntries = append(logEntries, req.LogEntries...)
-		}
 		if req.Final {
 			// We finished receiving all batches and log entries. It's possible that
 			// we did not receive any key-value pairs for some of the key ranges, but
@@ -295,22 +290,11 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			inSnap := IncomingSnapshot{
 				SnapUUID:          snapUUID,
 				SSTStorageScratch: kvSS.scratch,
-				LogEntries:        logEntries,
 				State:             &header.State,
 				snapType:          header.Type,
 			}
 
-			expLen := inSnap.State.RaftAppliedIndex - inSnap.State.TruncatedState.Index
-			if expLen != uint64(len(logEntries)) {
-				// We've received a botched snapshot. We could fatal right here but opt
-				// to warn loudly instead, and fatal when applying the snapshot
-				// (in Replica.applySnapshot) in order to capture replica hard state.
-				log.Warningf(ctx,
-					"missing log entries in snapshot (%s): got %d entries, expected %d",
-					inSnap.String(), len(logEntries), expLen)
-			}
-
-			kvSS.status = fmt.Sprintf("log entries: %d, ssts: %d", len(logEntries), len(kvSS.scratch.SSTs()))
+			kvSS.status = fmt.Sprintf("ssts: %d", len(kvSS.scratch.SSTs()))
 			return inSnap, nil
 		}
 	}
@@ -375,105 +359,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		bytesSent += int64(b.Len())
 	}
 
-	// Iterate over the specified range of Raft entries and send them all out
-	// together.
-	rangeID := header.State.Desc.RangeID
-	firstIndex := header.State.TruncatedState.Index + 1
-	endIndex := snap.RaftSnap.Metadata.Index + 1
-	logEntries := make([]raftpb.Entry, 0, endIndex-firstIndex)
-	scanFunc := func(ent raftpb.Entry) error {
-		logEntries = append(logEntries, ent)
-		return nil
-	}
-	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
-		return 0, err
-	}
-
-	// Inline the payloads for all sideloaded proposals.
-	//
-	// TODO(tschottdorf): could also send slim proposals and attach sideloaded
-	// SSTables directly to the snapshot. Probably the better long-term
-	// solution, but let's see if it ever becomes relevant. Snapshots with
-	// inlined proposals are hopefully the exception.
-	//
-	// TODO(tbg): this code is obsolete because as of the PR linked below,
-	// our snapshots will never contain log entries. Trim down this code.
-	//
-	// https://github.com/cockroachdb/cockroach/pull/70464
-	{
-		for i, ent := range logEntries {
-			if !sniffSideloadedRaftCommand(ent.Data) {
-				continue
-			}
-			if err := snap.WithSideloaded(func(ss SideloadStorage) error {
-				newEnt, err := maybeInlineSideloadedRaftCommand(
-					ctx, rangeID, ent, ss, snap.RaftEntryCache,
-				)
-				if err != nil {
-					return err
-				}
-				if newEnt != nil {
-					logEntries[i] = *newEnt
-				}
-				return nil
-			}); err != nil {
-				if errors.Is(err, errSideloadedFileNotFound) {
-					// We're creating the Raft snapshot based on a snapshot of
-					// the engine, but the Raft log may since have been
-					// truncated and corresponding on-disk sideloaded payloads
-					// unlinked. Luckily, we can just abort this snapshot; the
-					// caller can retry.
-					//
-					// TODO(tschottdorf): check how callers handle this. They
-					// should simply retry. In some scenarios, perhaps this can
-					// happen repeatedly and prevent a snapshot; not sending the
-					// log entries wouldn't help, though, and so we'd really
-					// need to make sure the entries are always here, for
-					// instance by pre-loading them into memory. Or we can make
-					// log truncation less aggressive about removing sideloaded
-					// files, by delaying trailing file deletion for a bit.
-					return 0, &errMustRetrySnapshotDueToTruncation{
-						index: ent.Index,
-						term:  ent.Term,
-					}
-				}
-				return 0, err
-			}
-		}
-	}
-
-	// Marshal each of the log entries.
-	logEntriesRaw := make([][]byte, len(logEntries))
-	for i := range logEntries {
-		entRaw, err := protoutil.Marshal(&logEntries[i])
-		if err != nil {
-			return 0, err
-		}
-		logEntriesRaw[i] = entRaw
-	}
-
-	// The difference between the snapshot index (applied index at the time of
-	// snapshot) and the truncated index should equal the number of log entries
-	// shipped over.
-	expLen := endIndex - firstIndex
-	if expLen != uint64(len(logEntries)) {
-		// We've generated a botched snapshot. We could fatal right here but opt
-		// to warn loudly instead, and fatal at the caller to capture a checkpoint
-		// of the underlying storage engine.
-		entriesRange, err := extractRangeFromEntries(logEntriesRaw)
-		if err != nil {
-			return 0, err
-		}
-		log.Warningf(ctx, "missing log entries in snapshot (%s): "+
-			"got %d entries, expected %d (TruncatedState.Index=%d, LogEntries=%s)",
-			snap.String(), len(logEntries), expLen, snap.State.TruncatedState.Index, entriesRange)
-		return 0, errMalformedSnapshot
-	}
-
-	kvSS.status = fmt.Sprintf("kv pairs: %d, log entries: %d", kvs, len(logEntries))
-	if err := stream.Send(&SnapshotRequest{LogEntries: logEntriesRaw}); err != nil {
-		return 0, err
-	}
+	kvSS.status = fmt.Sprintf("kv pairs: %d", kvs)
 	return bytesSent, nil
 }
 
@@ -853,17 +739,6 @@ func snapshotRateLimit(
 	default:
 		return 0, errors.Errorf("unknown snapshot priority: %s", priority)
 	}
-}
-
-type errMustRetrySnapshotDueToTruncation struct {
-	index, term uint64
-}
-
-func (e *errMustRetrySnapshotDueToTruncation) Error() string {
-	return fmt.Sprintf(
-		"log truncation during snapshot removed sideloaded SSTable at index %d, term %d",
-		e.index, e.term,
-	)
 }
 
 // SendEmptySnapshot creates an OutgoingSnapshot for the input range
