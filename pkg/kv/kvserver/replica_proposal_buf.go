@@ -654,7 +654,7 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	// evaluating (instead, assignedClosedTimestamp was supposed to have bumped
 	// the write timestamp of any request the began evaluating after it was
 	// set).
-	if p.Request.WriteTimestamp().Less(b.assignedClosedTimestamp) && p.Request.IsIntentWrite() {
+	if p.Request.WriteTimestamp().Less(b.assignedClosedTimestamp) && p.Request.ChecksTimestampCache() {
 		return 0, hlc.Timestamp{}, errors.AssertionFailedf("attempting to propose command writing below closed timestamp. "+
 			"wts: %s < assigned closed: %s; ba: %s",
 			p.Request.WriteTimestamp(), b.assignedClosedTimestamp, p.Request)
