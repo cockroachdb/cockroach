@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package physicalplan
+package physicalplan_test
 
 import (
 	"context"
@@ -20,11 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -119,23 +121,23 @@ func checkDistAggregationInfo(
 	colIdx int,
 	numRows int,
 	fn execinfrapb.AggregatorSpec_Func,
-	info DistAggregationInfo,
+	info physicalplan.DistAggregationInfo,
 ) {
 	colType := tableDesc.PublicColumns()[colIdx].GetType()
 
 	makeTableReader := func(startPK, endPK int, streamID int) execinfrapb.ProcessorSpec {
 		tr := execinfrapb.TableReaderSpec{
 			Table:         *tableDesc.TableDesc(),
-			Spans:         make([]execinfrapb.TableReaderSpan, 1),
+			Spans:         make([]roachpb.Span, 1),
 			NeededColumns: []uint32{uint32(colIdx)},
 		}
 
 		var err error
-		tr.Spans[0].Span.Key, err = randgen.TestingMakePrimaryIndexKey(tableDesc, startPK)
+		tr.Spans[0].Key, err = randgen.TestingMakePrimaryIndexKey(tableDesc, startPK)
 		if err != nil {
 			t.Fatal(err)
 		}
-		tr.Spans[0].Span.EndKey, err = randgen.TestingMakePrimaryIndexKey(tableDesc, endPK)
+		tr.Spans[0].EndKey, err = randgen.TestingMakePrimaryIndexKey(tableDesc, endPK)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -211,7 +213,7 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 		var expr execinfrapb.Expression
-		expr, err = MakeExpression(renderExpr, nil, nil)
+		expr, err = physicalplan.MakeExpression(renderExpr, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -314,7 +316,7 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 		var expr execinfrapb.Expression
-		expr, err = MakeExpression(renderExpr, nil, nil)
+		expr, err = physicalplan.MakeExpression(renderExpr, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -434,7 +436,7 @@ func TestDistAggregationTable(t *testing.T) {
 	//  - random bool value (mostly true)
 	//  - random decimals
 	//  - random decimals (with some NULLs)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	sqlutils.CreateTable(
 		t, tc.ServerConn(0), "t",
 		"k INT PRIMARY KEY, int1 INT, int2 INT, int3 INT, bool1 BOOL, bool2 BOOL, dec1 DECIMAL, dec2 DECIMAL, float1 FLOAT, float2 FLOAT, b BYTES",
@@ -462,7 +464,7 @@ func TestDistAggregationTable(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
-	for fn, info := range DistAggregationTable {
+	for fn, info := range physicalplan.DistAggregationTable {
 		if fn == execinfrapb.AnyNotNull {
 			// ANY_NOT_NULL only has a definite result if all rows have the same value
 			// on the relevant column; skip testing this trivial case.

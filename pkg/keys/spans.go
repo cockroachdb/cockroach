@@ -31,6 +31,9 @@ var (
 	// NodeLivenessSpan holds the liveness records for nodes in the cluster.
 	NodeLivenessSpan = roachpb.Span{Key: NodeLivenessPrefix, EndKey: NodeLivenessKeyMax}
 
+	// TimeseriesSpan holds all the timeseries data in the cluster.
+	TimeseriesSpan = roachpb.Span{Key: TimeseriesPrefix, EndKey: TimeseriesKeyMax}
+
 	// SystemConfigSpan is the range of system objects which will be gossiped.
 	SystemConfigSpan = roachpb.Span{Key: SystemConfigSplitKey, EndKey: SystemConfigTableDataMax}
 

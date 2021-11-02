@@ -29,6 +29,7 @@ interface LoadingProps {
   render: () => any;
   errorClassName?: string;
   loadingClassName?: string;
+  renderError?: () => React.ReactElement;
 }
 
 const cx = classNames.bind(styles);
@@ -81,7 +82,11 @@ export const Loading: React.FC<LoadingProps> = props => {
         } else {
           return {
             intent: "danger",
-            description: <span>{error.message}</span>,
+            description: props.renderError ? (
+              props.renderError()
+            ) : (
+              <span>{error.message}</span>
+            ),
           };
         }
       })

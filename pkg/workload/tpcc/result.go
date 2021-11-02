@@ -192,7 +192,7 @@ func (r *Result) FailureError() error {
 		if !exists {
 			return errors.Errorf("no %v data exists", query)
 		}
-		if v := time.Duration(h.ValueAtQuantile(.9)); v > max90th {
+		if v := time.Duration(h.ValueAtQuantile(90)); v > max90th {
 			err = errors.CombineErrors(err,
 				errors.Errorf("90th percentile latency for %v at %v exceeds passing threshold of %v",
 					query, v, max90th))

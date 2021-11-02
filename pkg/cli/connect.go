@@ -36,7 +36,7 @@ var connectCmd = &cobra.Command{
 	Short: "Create certificates for securely connecting with clusters\n",
 	Long: `
 Bootstrap security certificates for connecting to new or existing clusters.`,
-	RunE: usageAndErr,
+	RunE: UsageAndErr,
 }
 
 func init() {

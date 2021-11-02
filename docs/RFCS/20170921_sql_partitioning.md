@@ -408,7 +408,7 @@ are pinned to an Australian datacenter, than reads and writes will be fast (as
 long as the cross-ocean link has enough bandwidth that the third replica doesn’t
 fall behind and hit the quota pool). If those two replicas are in the same
 datacenter, then loss of one datacenter can lead to data unavailability, so some
-deployments may want two separate Austrialian datacenters. If all three replicas
+deployments may want two separate Australian datacenters. If all three replicas
 are in Australian datacenters, then three Australian datacenters are needed to
 be resilient to a datacenter loss.
 
@@ -521,7 +521,7 @@ SELECT *
   ON a.id = b.article_id
 ```
 
-The implementation is purely syntatic sugar and simply transforms each
+The implementation is purely syntactic sugar and simply transforms each
 `PARTITION` clause into an additional constraint. The join query above, for
 example, would be rewritten to include `WHERE user_views.country IN ('CA', 'MX',
 'US') AND articles.published >= 'recent cutoff'`.

@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -155,7 +156,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 
 	// Start a worker that continuously performs splits in the background.
 	_ = tc.Stopper().RunAsyncTask(context.Background(), "splitter", func(ctx context.Context) {
-		rng, _ := randutil.NewPseudoRand()
+		rng, _ := randutil.NewTestRand()
 		cdb := tc.Server(0).DB()
 		for {
 			select {
@@ -264,9 +265,10 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 
 	size := func() int64 { return 2 << 10 }
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	rangeCache := rangecache.NewRangeCache(st, nil /* db */, size, stopper, st.Tracer)
+	rangeCache := rangecache.NewRangeCache(st, nil /* db */, size, stopper, tr)
 	r := MakeDistSQLReceiver(
 		ctx,
 		&errOnlyResultWriter{}, /* resultWriter */
@@ -1314,19 +1316,10 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 
 	ctx := context.Background()
 
-	makeTableDesc := func(interleaved bool) catalog.TableDescriptor {
-		var interleave descpb.InterleaveDescriptor
-		if interleaved {
-			interleave = descpb.InterleaveDescriptor{
-				Ancestors: []descpb.InterleaveDescriptor_Ancestor{{}},
-			}
-		}
+	makeTableDesc := func() catalog.TableDescriptor {
 		tableDesc := descpb.TableDescriptor{
-			PrimaryIndex: descpb.IndexDescriptor{
-				Interleave: interleave,
-			},
+			PrimaryIndex: descpb.IndexDescriptor{},
 		}
-
 		b := tabledesc.NewBuilder(&tableDesc)
 		err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
 		if err != nil {
@@ -1384,18 +1377,9 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &indexJoinNode{
 				input: scanToParallelize,
-				table: &scanNode{desc: makeTableDesc(false /* interleaved */)},
+				table: &scanNode{desc: makeTableDesc()},
 			}}},
 			hasScanNodeToParallelize: true,
-		},
-		{
-			plan: planComponents{main: planMaybePhysical{planNode: &indexJoinNode{
-				input: scanToParallelize,
-				table: &scanNode{desc: makeTableDesc(true /* interleaved */)},
-			}}},
-			// Vectorized index join is only supported for non-interleaved
-			// tables.
-			prohibitParallelization: true,
 		},
 		{
 			plan:                     planComponents{main: planMaybePhysical{planNode: &limitNode{plan: scanToParallelize}}},

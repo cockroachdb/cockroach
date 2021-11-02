@@ -663,7 +663,7 @@ func TestKafkaSinkTracksMemory(t *testing.T) {
 	require.NoError(t, sink.Flush(ctx))
 
 	// Emit few messages
-	rnd, _ := randutil.NewTestPseudoRand()
+	rnd, _ := randutil.NewTestRand()
 	key := randutil.RandBytes(rnd, 1+rnd.Intn(64))
 	val := randutil.RandBytes(rnd, 1+rnd.Intn(512))
 

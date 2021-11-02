@@ -600,14 +600,14 @@ var debugDecodeProtoCmd = &cobra.Command{
 Read from stdin and attempt to decode any hex or base64 encoded proto fields and
 output them as JSON. All other fields will be outputted unchanged. Output fields
 will be separated by tabs.
-	
+
 The default value for --schema is 'cockroach.sql.sqlbase.Descriptor'.
 For example:
 
 $ decode-proto < cat debug/system.decsriptor.txt
 id	descriptor	hex_descriptor
 1	\022!\012\006system\020\001\032\025\012\011\012\005admin\0200\012\010\012\004root\0200	{"database": {"id": 1, "modificationTime": {}, "name": "system", "privileges": {"users": [{"privileges": 48, "user": "admin"}, {"privileges": 48, "user": "root"}]}}}
-...	
+...
 `,
 	Args: cobra.ArbitraryArgs,
 	RunE: runDebugDecodeProto,
@@ -955,9 +955,6 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %+v", key, drainingInfo))
-		} else if strings.HasPrefix(key, gossip.KeyTableStatAddedPrefix) {
-			gossipedTime := timeutil.Unix(0, info.OrigStamp)
-			output = append(output, fmt.Sprintf("%q: %v", key, gossipedTime))
 		} else if strings.HasPrefix(key, gossip.KeyGossipClientsPrefix) {
 			output = append(output, fmt.Sprintf("%q: %v", key, string(bytes)))
 		}
@@ -1123,7 +1120,7 @@ func removeDeadReplicas(
 
 	var newDescs []roachpb.RangeDescriptor
 
-	err = kvserver.IterateRangeDescriptors(ctx, db, func(desc roachpb.RangeDescriptor) error {
+	err = kvserver.IterateRangeDescriptorsFromDisk(ctx, db, func(desc roachpb.RangeDescriptor) error {
 		numDeadPeers := 0
 		allReplicas := desc.Replicas().Descriptors()
 		maxLiveVoter := roachpb.StoreID(-1)
@@ -1339,6 +1336,10 @@ matching via flags. If the filter regexp contains captures, such as
 	RunE: runDebugMergeLogs,
 }
 
+// filePattern matches log file paths. Redeclared here from the log package
+// due to significant test breakage when adding the fpath named capture group.
+const logFilePattern = "^(?:(?P<fpath>.*)/)?" + log.FileNamePattern + "$"
+
 // TODO(knz): this struct belongs elsewhere.
 // See: https://github.com/cockroachdb/cockroach/issues/49509
 var debugMergeLogsOpts = struct {
@@ -1347,25 +1348,26 @@ var debugMergeLogsOpts = struct {
 	filter         *regexp.Regexp
 	program        *regexp.Regexp
 	file           *regexp.Regexp
-	prefix         string
 	keepRedactable bool
+	prefix         string
 	redactInput    bool
 	format         string
 	useColor       forceColor
 }{
 	program:        nil, // match everything
-	file:           regexp.MustCompile(log.FilePattern),
+	file:           regexp.MustCompile(logFilePattern),
 	keepRedactable: true,
 	redactInput:    false,
 }
 
 func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
 	o := debugMergeLogsOpts
+	p := newFilePrefixer(withTemplate(o.prefix))
 
 	inputEditMode := log.SelectEditMode(o.redactInput, o.keepRedactable)
 
 	s, err := newMergedStreamFromPatterns(context.Background(),
-		args, o.file, o.program, o.from, o.to, inputEditMode, o.format)
+		args, o.file, o.program, o.from, o.to, inputEditMode, o.format, p)
 	if err != nil {
 		return err
 	}
@@ -1403,7 +1405,7 @@ func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return writeLogStream(s, outStream, o.filter, o.prefix, o.keepRedactable, cp)
+	return writeLogStream(s, outStream, o.filter, o.keepRedactable, cp)
 }
 
 var debugIntentCount = &cobra.Command{
@@ -1541,7 +1543,7 @@ var DebugCmd = &cobra.Command{
 These commands are useful for extracting data from the data files of a
 process that has failed and cannot restart.
 `,
-	RunE: usageAndErr,
+	RunE: UsageAndErr,
 }
 
 // mvccValueFormatter is a fmt.Formatter for MVCC values.

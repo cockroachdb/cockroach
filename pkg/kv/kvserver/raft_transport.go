@@ -23,12 +23,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/grpc"
@@ -37,11 +39,13 @@ import (
 const (
 	// Outgoing messages are queued per-node on a channel of this size.
 	//
-	// TODO(peter): The normal send buffer size is larger than we would like. It
-	// is a temporary patch for the issue discussed in #8630 where
-	// Store.HandleRaftRequest can block applying a preemptive snapshot for a
-	// long enough period of time that grpc flow control kicks in and messages
-	// are dropped on the sending side.
+	// This buffer was sized many moons ago and is very large. If the
+	// buffer fills up, we drop raft messages, so we'd be in trouble.
+	// But as is, the buffer can hold to a lot of memory, especially
+	// during RESTORE/IMPORT where we're routinely sending out SSTs,
+	// which weigh in at a few mbs each; an individual raft instance
+	// will limit how many it has in-flight per-follower, but groups
+	// don't compete among each other for budget.
 	raftSendBufferSize = 10000
 
 	// When no message has been queued for this duration, the corresponding
@@ -50,6 +54,19 @@ const (
 	// TODO(tamird): make culling of outbound streams more evented, so that we
 	// need not rely on this timeout to shut things down.
 	raftIdleTimeout = time.Minute
+)
+
+// targetRaftOutgoingBatchSize wraps "kv.raft.command.target_batch_size".
+var targetRaftOutgoingBatchSize = settings.RegisterByteSizeSetting(
+	"kv.raft.command.target_batch_size",
+	"size of a batch of raft commands after which it will be sent without further batching",
+	64<<20, // 64 MB
+	func(size int64) error {
+		if size < 1 {
+			return errors.New("must be positive")
+		}
+		return nil
+	},
 )
 
 // RaftMessageResponseStream is the subset of the
@@ -154,11 +171,11 @@ type RaftTransport struct {
 
 // NewDummyRaftTransport returns a dummy raft transport for use in tests which
 // need a non-nil raft transport that need not function.
-func NewDummyRaftTransport(st *cluster.Settings) *RaftTransport {
+func NewDummyRaftTransport(st *cluster.Settings, tracer *tracing.Tracer) *RaftTransport {
 	resolver := func(roachpb.NodeID) (net.Addr, error) {
 		return nil, errors.New("dummy resolver")
 	}
-	return NewRaftTransport(log.AmbientContext{Tracer: st.Tracer}, st,
+	return NewRaftTransport(log.AmbientContext{Tracer: tracer}, st,
 		nodedialer.New(nil, resolver), nil, nil)
 }
 
@@ -487,28 +504,34 @@ func (t *RaftTransport) processQueue(
 		case err := <-errCh:
 			return err
 		case req := <-ch:
+			budget := targetRaftOutgoingBatchSize.Get(&t.st.SV) - int64(req.Size())
 			batch.Requests = append(batch.Requests, *req)
 			req.release()
-			// Pull off as many queued requests as possible.
-			//
-			// TODO(peter): Think about limiting the size of the batch we send.
-			for done := false; !done; {
+			// Pull off as many queued requests as possible, within reason.
+			for budget > 0 {
 				select {
 				case req = <-ch:
+					budget -= int64(req.Size())
 					batch.Requests = append(batch.Requests, *req)
 					req.release()
 				default:
-					done = true
+					budget = -1
 				}
 			}
 
 			err := stream.Send(batch)
-			batch.Requests = batch.Requests[:0]
-
-			atomic.AddInt64(&stats.clientSent, 1)
 			if err != nil {
 				return err
 			}
+
+			// Reuse the Requests slice, but zero out the contents to avoid delaying
+			// GC of memory referenced from within.
+			for i := range batch.Requests {
+				batch.Requests[i] = RaftMessageRequest{}
+			}
+			batch.Requests = batch.Requests[:0]
+
+			atomic.AddInt64(&stats.clientSent, 1)
 		}
 	}
 }

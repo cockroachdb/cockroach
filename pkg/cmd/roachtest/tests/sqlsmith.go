@@ -31,9 +31,9 @@ import (
 func registerSQLSmith(r registry.Registry) {
 	const numNodes = 4
 	setups := map[string]sqlsmith.Setup{
-		"empty":       sqlsmith.Setups["empty"],
-		"seed":        sqlsmith.Setups["seed"],
-		"rand-tables": sqlsmith.Setups["rand-tables"],
+		"empty":                     sqlsmith.Setups["empty"],
+		"seed":                      sqlsmith.Setups["seed"],
+		sqlsmith.RandTableSetupName: sqlsmith.Setups[sqlsmith.RandTableSetupName],
 		"tpch-sf1": func(r *rand.Rand) string {
 			return `RESTORE TABLE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup?AUTH=implicit' WITH into_db = 'defaultdb';`
 		},
@@ -83,7 +83,7 @@ func registerSQLSmith(r registry.Registry) {
 			fmt.Fprint(smithLog, "\n\n")
 		}
 
-		rng, seed := randutil.NewPseudoRand()
+		rng, seed := randutil.NewTestRand()
 		t.L().Printf("seed: %d", seed)
 
 		c.Put(ctx, t.Cockroach(), "./cockroach")

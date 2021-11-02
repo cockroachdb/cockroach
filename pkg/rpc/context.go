@@ -71,6 +71,10 @@ const (
 	initialConnWindowSize = initialWindowSize * 16 // for a connection
 )
 
+// GRPC Dialer connection timeout. 20s matches default value that is
+// suppressed when backoff config is provided.
+const minConnectionTimeout = 20 * time.Second
+
 // sourceAddr is the environment-provided local address for outgoing
 // connections.
 var sourceAddr = func() net.Addr {
@@ -729,7 +733,7 @@ func (ctx *Context) grpcDialOptions(
 		if ctx.tenID == roachpb.SystemTenantID {
 			tlsConfig, err = ctx.GetClientTLSConfig()
 		} else {
-			tlsConfig, err = ctx.GetTenantClientTLSConfig()
+			tlsConfig, err = ctx.GetTenantTLSConfig()
 		}
 		if err != nil {
 			return nil, err
@@ -1009,7 +1013,9 @@ func (ctx *Context) grpcDialRaw(
 	// ~second range.
 	backoffConfig := backoff.DefaultConfig
 	backoffConfig.MaxDelay = maxBackoff
-	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoffConfig}))
+	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{
+		Backoff:           backoffConfig,
+		MinConnectTimeout: minConnectionTimeout}))
 	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
 	dialOpts = append(dialOpts,
 		grpc.WithInitialWindowSize(initialWindowSize),

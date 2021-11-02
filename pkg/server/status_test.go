@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -373,7 +374,7 @@ func startServer(t *testing.T) *TestServer {
 func newRPCTestContext(ts *TestServer, cfg *base.Config) *rpc.Context {
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: ts.ClusterSettings().Tracer},
+		AmbientCtx: log.AmbientContext{Tracer: ts.Tracer()},
 		Config:     cfg,
 		Clock:      ts.Clock(),
 		Stopper:    ts.Stopper(),
@@ -1864,7 +1865,7 @@ func TestStatusAPIStatements(t *testing.T) {
 	}
 
 	// Grant VIEWACTIVITY.
-	thirdServerSQL.Exec(t, "ALTER USER $1 VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized())
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
 
 	testPath := func(path string, expectedStmts []string) {
 		// Hit query endpoint.
@@ -1967,7 +1968,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	}
 
 	// Grant VIEWACTIVITY.
-	thirdServerSQL.Exec(t, "ALTER USER $1 VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized())
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
 
 	testPath := func(path string, expectedStmts []string) {
 		// Hit query endpoint.
@@ -2159,7 +2160,7 @@ func TestListActivitySecurity(t *testing.T) {
 			// Note that for this query to work, it is crucial that
 			// getStatusJSONProtoWithAdminOption below is called at least once,
 			// on the previous test case, so that the user exists.
-			_, err := db.Exec("ALTER USER $1 VIEWACTIVITY", myUser)
+			_, err := db.Exec(fmt.Sprintf("ALTER USER %s VIEWACTIVITY", myUser))
 			require.NoError(t, err)
 		}
 		err := getStatusJSONProtoWithAdminOption(s, tc.endpoint, tc.response, tc.requestWithAdmin)
@@ -2181,7 +2182,7 @@ func TestListActivitySecurity(t *testing.T) {
 			}
 		}
 		if tc.requestWithViewActivityGranted {
-			_, err := db.Exec("ALTER USER $1 NOVIEWACTIVITY", myUser)
+			_, err := db.Exec(fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", myUser))
 			require.NoError(t, err)
 		}
 	}
@@ -2661,6 +2662,49 @@ func TestLicenseExpiryMetricNoLicense(t *testing.T) {
 			require.Equal(t, tc.expected, buf.String())
 		})
 	}
+}
+
+func TestStatusServer_nodeStatusToResp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var nodeStatus = &statuspb.NodeStatus{
+		Desc: roachpb.NodeDescriptor{
+			Address: util.UnresolvedAddr{
+				NetworkField: "network",
+				AddressField: "address",
+			},
+			Attrs: roachpb.Attributes{
+				Attrs: []string{"attr"},
+			},
+			LocalityAddress: []roachpb.LocalityAddress{{Address: util.UnresolvedAddr{
+				NetworkField: "network",
+				AddressField: "address",
+			}, LocalityTier: roachpb.Tier{Value: "v", Key: "k"}}},
+			SQLAddress: util.UnresolvedAddr{
+				NetworkField: "network",
+				AddressField: "address",
+			},
+		},
+		Args: []string{"args"},
+		Env:  []string{"env"},
+	}
+	resp := nodeStatusToResp(nodeStatus, false)
+	require.Empty(t, resp.Args)
+	require.Empty(t, resp.Env)
+	require.Empty(t, resp.Desc.Address)
+	require.Empty(t, resp.Desc.Attrs.Attrs)
+	require.Empty(t, resp.Desc.LocalityAddress)
+	require.Empty(t, resp.Desc.SQLAddress)
+
+	// Now fetch all the node statuses as admin.
+	resp = nodeStatusToResp(nodeStatus, true)
+	require.NotEmpty(t, resp.Args)
+	require.NotEmpty(t, resp.Env)
+	require.NotEmpty(t, resp.Desc.Address)
+	require.NotEmpty(t, resp.Desc.Attrs.Attrs)
+	require.NotEmpty(t, resp.Desc.LocalityAddress)
+	require.NotEmpty(t, resp.Desc.SQLAddress)
 }
 
 func TestStatusAPIContentionEvents(t *testing.T) {

@@ -71,10 +71,14 @@ type Overload struct {
 	// Only one of the following three attributes can be set.
 
 	// Fn is the normal builtin implementation function. It's for functions that
-	// take in datums and return a datum.
+	// take in Datums and return a Datum.
 	Fn func(*EvalContext, Datums) (Datum, error)
 
-	// Generator is for SRFs. SRFs take datums and return multiple rows of datums.
+	// FnWithExprs is for builtins that need access to their arguments as Exprs
+	// and not pre-evaluated Datums, but is otherwise identical to Fn.
+	FnWithExprs func(*EvalContext, Exprs) (Datum, error)
+
+	// Generator is for SRFs. SRFs take Datums and return multiple rows of Datums.
 	Generator GeneratorFactory
 
 	// GeneratorWithExprs is for SRFs that need access to their arguments as Exprs
@@ -794,6 +798,67 @@ func typeCheckOverloadedExprs(
 		}
 		if ok, typedExprs, fns, err := checkReturn(ctx, semaCtx, &s); ok {
 			return typedExprs, fns, err
+		}
+	}
+
+	// This is a total hack for AnyEnum whilst we don't have postgres type resolution.
+	// This enables AnyEnum array ops to not need a cast, e.g. array['a']::enum[] = '{a}'.
+	// If we have one remaining candidate containing AnyEnum, cast all remaining
+	// arguments to a known enum and check that the rest match. This is a poor man's
+	// implicit cast / postgres "same argument" resolution clone.
+	if len(s.overloadIdxs) == 1 {
+		params := s.overloads[s.overloadIdxs[0]].params()
+		var knownEnum *types.T
+
+		// Check we have all "AnyEnum" (or "AnyEnum" array) arguments and that
+		// one argument is typed with an enum.
+		attemptAnyEnumCast := func() bool {
+			for i := 0; i < params.Length(); i++ {
+				typ := params.GetAt(i)
+				// Note we are deliberately looking at whether the built-in takes in
+				// AnyEnum as an argument, not the exprs given to the overload itself.
+				if !(typ.Identical(types.AnyEnum) || typ.Identical(types.MakeArray(types.AnyEnum))) {
+					return false
+				}
+				if s.typedExprs[i] != nil {
+					// Assign the known enum if it was previously unassigned.
+					// Otherwise, double check it matches a previously defined enum.
+					posEnum := s.typedExprs[i].ResolvedType()
+					if !posEnum.UserDefined() {
+						return false
+					}
+					if posEnum.Family() == types.ArrayFamily {
+						posEnum = posEnum.ArrayContents()
+					}
+					if knownEnum == nil {
+						knownEnum = posEnum
+					} else if !posEnum.Identical(knownEnum) {
+						return false
+					}
+				}
+			}
+			return knownEnum != nil
+		}()
+
+		// If we have all arguments as AnyEnum, and we know at least one of the
+		// enum's actual type, try type cast the rest.
+		if attemptAnyEnumCast {
+			// Copy exprs to prevent any overwrites of underlying s.exprs array later.
+			sCopy := s
+			sCopy.exprs = make([]Expr, len(s.exprs))
+			copy(sCopy.exprs, s.exprs)
+			if ok, typedExprs, fns, err := filterAttempt(ctx, semaCtx, &sCopy, func() {
+				for _, idx := range append(s.constIdxs, s.placeholderIdxs...) {
+					p := params.GetAt(idx)
+					typCast := knownEnum
+					if p.Family() == types.ArrayFamily {
+						typCast = types.MakeArray(knownEnum)
+					}
+					sCopy.exprs[idx] = &CastExpr{Expr: sCopy.exprs[idx], Type: typCast, SyntaxMode: CastShort}
+				}
+			}); ok {
+				return typedExprs, fns, err
+			}
 		}
 	}
 

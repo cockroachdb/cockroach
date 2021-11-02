@@ -251,7 +251,7 @@ func TestRecordBatchSerializer(t *testing.T) {
 func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	const (
 		maxTypes   = 16
@@ -317,7 +317,7 @@ func TestRecordBatchSerializerDeserializeMemoryEstimate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var err error
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	typs := []*types.T{types.Bytes}
 	src := testAllocator.NewMemBatchWithMaxCapacity(typs)
@@ -354,7 +354,7 @@ func TestRecordBatchSerializerDeserializeMemoryEstimate(t *testing.T) {
 }
 
 func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	var (
 		typs             = []*types.T{types.Int}
@@ -369,11 +369,15 @@ func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 		// Only calculate useful bytes.
 		numBytes := int64(dataLen * 8)
 		data := []*array.Data{randomDataFromType(rng, typs[0], dataLen, 0 /* nullProbability */)}
+		dataCopy := make([]*array.Data, len(data))
 		b.Run(fmt.Sprintf("Serialize/dataLen=%d", dataLen), func(b *testing.B) {
 			b.SetBytes(numBytes)
 			for i := 0; i < b.N; i++ {
 				buf.Reset()
-				if _, _, err := s.Serialize(&buf, data, dataLen); err != nil {
+				// Since Serialize eagerly nils things out, we have to make a shallow
+				// copy each time.
+				copy(dataCopy, data)
+				if _, _, err := s.Serialize(&buf, dataCopy, dataLen); err != nil {
 					b.Fatal(err)
 				}
 			}

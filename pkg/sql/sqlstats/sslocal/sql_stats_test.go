@@ -12,12 +12,15 @@ package sslocal_test
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
@@ -25,8 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,7 +74,6 @@ func TestStmtStatsBulkIngestWithRandomMetadata(t *testing.T) {
 				require.True(t, found, "expected metadata %+v, but not found", statistics.Key)
 				return nil
 			}))
-
 }
 
 func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
@@ -291,10 +295,8 @@ func TestNodeLocalInMemoryViewDoesNotReturnPersistedStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
 	ctx := context.Background()
+
 	params, _ := tests.CreateTestServerParams()
 	cluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: params,
@@ -305,7 +307,6 @@ func TestNodeLocalInMemoryViewDoesNotReturnPersistedStats(t *testing.T) {
 	// Open two connections so that we can run statements without messing up
 	// the SQL stats.
 	testConn := cluster.ServerConn(0 /* idx */)
-
 	sqlDB := sqlutils.MakeSQLRunner(testConn)
 	defer cluster.Stopper().Stop(ctx)
 
@@ -345,4 +346,142 @@ WHERE
   key LIKE 'SELECT _ WHERE%'
 `, [][]string{{"SELECT _ WHERE _ = _", "1"}})
 
+}
+
+func TestExplicitTxnFingerprintAccounting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	type tc struct {
+		statements          []string
+		fingerprints        []string
+		curFingerprintCount int64
+		implicit            bool
+	}
+
+	testCases := []tc{
+		{
+			statements: []string{
+				"SELECT 1",
+			},
+			fingerprints: []string{
+				"SELECT _",
+			},
+			curFingerprintCount: 2, /* 1 stmt + 1 txn */
+			implicit:            true,
+		},
+		{
+			statements: []string{
+				"BEGIN",
+				"SELECT 1",
+				"SELECT 1, 1",
+				"COMMIT",
+			},
+			fingerprints: []string{
+				"BEGIN",
+				"SELECT _",
+				"SELECT _, _",
+				"COMMIT",
+			},
+			curFingerprintCount: 7, /* 4 stmt + 1 txn + prev count */
+			implicit:            false,
+		},
+		{
+			statements: []string{
+				"BEGIN",
+				"SELECT 1",
+				"SELECT 1, 1",
+				"COMMIT",
+			},
+			fingerprints: []string{
+				"BEGIN",
+				"SELECT _",
+				"SELECT _, _",
+				"COMMIT",
+			},
+			curFingerprintCount: 7, /* prev count */
+			implicit:            false,
+		},
+		{
+			statements: []string{
+				"BEGIN",
+				"SELECT 1",
+				"SELECT 1, 1",
+				"SELECT 1, 1, 1",
+				"COMMIT",
+			},
+			fingerprints: []string{
+				"BEGIN",
+				"SELECT _",
+				"SELECT _, _",
+				"SELECT _, _, _",
+				"COMMIT",
+			},
+			curFingerprintCount: 13, /* 5 stmt + 1 txn + prev count */
+			implicit:            false,
+		},
+	}
+
+	st := cluster.MakeTestingClusterSettings()
+	monitor := mon.NewUnlimitedMonitor(
+		context.Background(), "test", mon.MemoryResource,
+		nil /* curCount */, nil /* maxHist */, math.MaxInt64, st,
+	)
+
+	sqlStats := sslocal.New(
+		st,
+		sqlstats.MaxMemSQLStatsStmtFingerprints,
+		sqlstats.MaxMemSQLStatsTxnFingerprints,
+		nil, /* curMemoryBytesCount */
+		nil, /* maxMemoryBytesHist */
+		monitor,
+		nil, /* resetInterval */
+		nil, /* reportingSink */
+		nil, /* knobs */
+	)
+
+	appStats := sqlStats.GetApplicationStats("" /* appName */)
+	statsCollector := sslocal.NewStatsCollector(
+		st,
+		appStats,
+		sessionphase.NewTimes(),
+		nil, /* knobs */
+	)
+
+	recordStats := func(testCase *tc) {
+		var txnFingerprintID roachpb.TransactionFingerprintID
+		txnFingerprintIDHash := util.MakeFNV64()
+		if !testCase.implicit {
+			statsCollector.StartExplicitTransaction()
+		}
+		defer func() {
+			if !testCase.implicit {
+				statsCollector.EndExplicitTransaction(ctx, txnFingerprintID)
+			}
+			require.NoError(t,
+				statsCollector.
+					RecordTransaction(ctx, txnFingerprintID, sqlstats.RecordedTxnStats{}))
+		}()
+		for _, fingerprint := range testCase.fingerprints {
+			stmtFingerprintID, err := statsCollector.RecordStatement(
+				ctx,
+				roachpb.StatementStatisticsKey{
+					Query:       fingerprint,
+					ImplicitTxn: testCase.implicit,
+				},
+				sqlstats.RecordedStmtStats{},
+			)
+			require.NoError(t, err)
+			txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
+		}
+		txnFingerprintID = roachpb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
+	}
+
+	for _, tc := range testCases {
+		recordStats(&tc)
+		require.Equal(t, tc.curFingerprintCount, sqlStats.GetTotalFingerprintCount(),
+			"testCase: %+v", tc)
+	}
 }

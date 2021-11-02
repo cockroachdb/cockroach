@@ -44,7 +44,12 @@ type KVFetcher struct {
 }
 
 // NewKVFetcher creates a new KVFetcher.
-// If mon is non-nil, this fetcher will track its fetches and must be Closed.
+// If acc is non-nil, this fetcher will track its fetches and must be Closed.
+//
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly (if acc is non-nil). The
+// caller can only reuse the spans slice after the fetcher has been closed, and
+// if the caller does, it becomes responsible for the memory accounting.
 func NewKVFetcher(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -56,7 +61,7 @@ func NewKVFetcher(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockTimeout time.Duration,
-	mon *mon.BytesMonitor,
+	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 ) (*KVFetcher, error) {
 	var sendFn sendFunc
@@ -95,7 +100,7 @@ func NewKVFetcher(
 		lockStrength,
 		lockWaitPolicy,
 		lockTimeout,
-		mon,
+		acc,
 		forceProductionKVBatchSize,
 		txn.AdmissionHeader(),
 		txn.DB().SQLKVResponseAdmissionQ,

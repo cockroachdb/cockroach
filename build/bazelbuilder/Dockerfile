@@ -19,6 +19,7 @@ RUN apt-get update \
     make \
     netbase \
     openjdk-8-jre \
+    patchelf \
     unzip \
  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10 \
@@ -63,8 +64,6 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.10.1/
  && mv /tmp/bazelisk /usr/bin/bazel
 
 RUN rm -rf /tmp/* /var/lib/apt/lists/*
-
-COPY autom4te /usr/local/sbin
 
 RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.2.0/autouseradd-1.2.0-amd64.tar.gz -o autouseradd.tar.gz \
   && echo 'f7b0cf67564044c31ffc5e84c961726098b88b0296a57c84421659d56434a365 autouseradd.tar.gz' | sha256sum -c - \

@@ -1013,6 +1013,84 @@ func TestEngineDeleteIterRange(t *testing.T) {
 	})
 }
 
+func TestMVCCIteratorCheckForKeyCollisionsMaxIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	keys := []string{"aa", "bb", "cc", "dd"}
+	intents := []string{"a", "b", "c"}
+
+	testcases := []struct {
+		maxIntents    int64
+		expectIntents []string
+	}{
+		{maxIntents: -1, expectIntents: []string{"a"}},
+		{maxIntents: 0, expectIntents: []string{"a"}},
+		{maxIntents: 1, expectIntents: []string{"a"}},
+		{maxIntents: 2, expectIntents: []string{"a", "b"}},
+		{maxIntents: 3, expectIntents: []string{"a", "b", "c"}},
+		{maxIntents: 4, expectIntents: []string{"a", "b", "c"}},
+	}
+
+	// Create SST with keys equal to intents at txn2TS.
+	sstFile := &MemFile{}
+	sstWriter := MakeBackupSSTWriter(sstFile)
+	defer sstWriter.Close()
+	for _, k := range intents {
+		key := MVCCKey{Key: roachpb.Key(k), Timestamp: txn2TS}
+		value := roachpb.Value{}
+		value.SetString("sst")
+		value.InitChecksum(key.Key)
+		require.NoError(t, sstWriter.Put(key, value.RawBytes))
+	}
+	require.NoError(t, sstWriter.Finish())
+	sstWriter.Close()
+
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			ctx := context.Background()
+			engine := engineImpl.create()
+			defer engine.Close()
+
+			// Write some committed keys and intents at txn1TS.
+			batch := engine.NewBatch()
+			for _, key := range keys {
+				require.NoError(t, batch.PutMVCC(
+					MVCCKey{Key: roachpb.Key(key), Timestamp: txn1TS}, []byte("value")))
+			}
+			for _, key := range intents {
+				require.NoError(t, MVCCPut(
+					ctx, batch, nil, roachpb.Key(key), txn1TS, roachpb.MakeValueFromString("intent"), txn1))
+			}
+			require.NoError(t, batch.Commit(true))
+			batch.Close()
+			require.NoError(t, engine.Flush())
+
+			for _, tc := range testcases {
+				t.Run(fmt.Sprintf("maxIntents=%d", tc.maxIntents), func(t *testing.T) {
+					// Provoke and check WriteIntentErrors.
+					iter := engine.NewMVCCIterator(
+						MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.Key("z")})
+					defer iter.Close()
+					iter.SeekGE(MVCCKey{Key: roachpb.Key("a")})
+
+					_, err := iter.CheckForKeyCollisions(
+						sstFile.Bytes(), roachpb.Key("a"), roachpb.Key("z"), tc.maxIntents)
+					require.Error(t, err)
+					writeIntentErr := &roachpb.WriteIntentError{}
+					require.ErrorAs(t, err, &writeIntentErr)
+
+					actual := []string{}
+					for _, i := range writeIntentErr.Intents {
+						actual = append(actual, string(i.Key))
+					}
+					require.Equal(t, tc.expectIntents, actual)
+				})
+			}
+		})
+	}
+}
+
 func TestSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

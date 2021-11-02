@@ -696,8 +696,7 @@ func checkPrivilegesForBackup(
 			}
 		}
 	}
-	knobs := p.ExecCfg().BackupRestoreTestingKnobs
-	if knobs != nil && knobs.AllowImplicitAccess {
+	if p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
 		return nil
 	}
 	// Check that none of the destinations require an admin role.
@@ -989,7 +988,7 @@ func backupPlanHook(
 		var revs []BackupManifest_DescriptorRevision
 		if mvccFilter == MVCCFilter_All {
 			priorIDs = make(map[descpb.ID]descpb.ID)
-			revs, err = getRelevantDescChanges(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, startTime, endTime, targetDescs, completeDBs, priorIDs, backupStmt.Coverage())
+			revs, err = getRelevantDescChanges(ctx, p.ExecCfg(), startTime, endTime, targetDescs, completeDBs, priorIDs, backupStmt.Coverage())
 			if err != nil {
 				return err
 			}
@@ -1161,12 +1160,6 @@ func backupPlanHook(
 		if err := checkForPreviousBackup(ctx, defaultStore, defaultURI); err != nil {
 			return err
 		}
-		// TODO (pbardea): For partitioned backups, also add verification for other
-		// stores we are writing to in addition to the default.
-		baseURI := collectionURI
-		if baseURI == "" {
-			baseURI = defaultURI
-		}
 
 		// Write backup manifest into a temporary checkpoint file.
 		// This accomplishes 2 purposes:
@@ -1174,6 +1167,9 @@ func backupPlanHook(
 		//  2. Verifies we can write to destination location.
 		// This temporary checkpoint file gets renamed to real checkpoint
 		// file when the backup jobs starts execution.
+		//
+		// TODO (pbardea): For partitioned backups, also add verification for other
+		// stores we are writing to in addition to the default.
 		doWriteBackupManifestCheckpoint := func(ctx context.Context, jobID jobspb.JobID) error {
 			if err := writeBackupManifest(
 				ctx, p.ExecCfg().Settings, defaultStore, tempCheckpointFileNameForJob(jobID),

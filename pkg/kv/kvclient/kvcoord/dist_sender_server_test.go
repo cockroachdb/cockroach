@@ -48,7 +48,7 @@ import (
 // starting a TestServer, which creates a "real" node and employs a
 // distributed sender server-side.
 
-func startNoSplitMergeServer(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
+func startNoSplitMergeServer(t *testing.T) (*server.TestServer, *kv.DB) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
@@ -57,7 +57,7 @@ func startNoSplitMergeServer(t *testing.T) (serverutils.TestServerInterface, *kv
 			},
 		},
 	})
-	return s, db
+	return s.(*server.TestServer), db
 }
 
 // TestRangeLookupWithOpenTransaction verifies that range lookups are
@@ -76,22 +76,22 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	now := s.Clock().Now()
 	txn := roachpb.MakeTransaction("txn", roachpb.Key("foobar"), 0, now, 0)
 	if err := storage.MVCCPutProto(
-		context.Background(), s.(*server.TestServer).Engines()[0],
+		context.Background(), s.Engines()[0],
 		nil, key, now, &txn, &roachpb.RangeDescriptor{}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Create a new DistSender and client.DB so that the Get below is guaranteed
 	// to not hit in the range descriptor cache forcing a RangeLookup operation.
-	ambient := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
+	ambient := log.AmbientContext{Tracer: s.TracerI().(*tracing.Tracer)}
 	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 		AmbientCtx:         ambient,
 		Settings:           cluster.MakeTestingClusterSettings(),
 		Clock:              s.Clock(),
-		NodeDescs:          s.(*server.TestServer).Gossip(),
+		NodeDescs:          s.Gossip(),
 		RPCContext:         s.RPCContext(),
-		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
-		FirstRangeProvider: s.(*server.TestServer).Gossip(),
+		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.Gossip())),
+		FirstRangeProvider: s.Gossip(),
 	})
 	tsf := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
@@ -206,6 +206,10 @@ func checkResumeSpanScanResults(
 				t.Fatalf("satisfied scan %d (%s) has ResumeSpan: %v",
 					i, spans[i], res.ResumeSpan)
 			}
+			if res.ResumeReason != 0 {
+				t.Fatalf("satisfied scan %d (%s) has ResumeReason: %v",
+					i, spans[i], res.ResumeReason)
+			}
 			continue
 		}
 
@@ -224,9 +228,13 @@ func checkResumeSpanScanResults(
 				i, spans[i], res.ResumeReason)
 		}
 		if rowLen == 0 {
-			if resumeKey != spans[i][0] {
-				t.Fatalf("scan %d: expected resume %s, got: %s",
-					i, spans[i][0], resumeKey)
+			if resumeKey < spans[i][0] {
+				t.Fatalf("scan %d: expected resume %s to be at or above scan start %s",
+					i, resumeKey, spans[i][0])
+			}
+			if resumeKey >= spans[i][1] {
+				t.Fatalf("scan %d: expected resume %s to be below scan end %s",
+					i, resumeKey, spans[i][1])
 			}
 		} else {
 			lastRes := expResults[i][rowLen-1]
@@ -273,9 +281,13 @@ func checkResumeSpanReverseScanResults(
 				i, spans[i], res.ResumeReason)
 		}
 		if rowLen == 0 {
-			if resumeKey != spans[i][1] {
-				t.Fatalf("scan %d (%s) expected resume %s, got: %s",
-					i, spans[i], spans[i][1], resumeKey)
+			if resumeKey <= spans[i][0] {
+				t.Fatalf("scan %d: expected resume %s to be at or above scan start %s",
+					i, resumeKey, spans[i][0])
+			}
+			if resumeKey > spans[i][1] {
+				t.Fatalf("scan %d: expected resume %s to be at or below scan end %s",
+					i, resumeKey, spans[i][1])
 			}
 		} else {
 			lastRes := expResults[i][rowLen-1]
@@ -301,6 +313,7 @@ func checkScanResults(
 	expSatisfied map[int]struct{},
 	opt checkOptions,
 ) {
+	t.Helper()
 	checkSpanResults(t, spans, results, expResults, expSatisfied, opt)
 	checkResumeSpanScanResults(t, spans, results, expResults, expSatisfied, opt)
 }
@@ -314,6 +327,7 @@ func checkReverseScanResults(
 	expSatisfied map[int]struct{},
 	opt checkOptions,
 ) {
+	t.Helper()
 	checkSpanResults(t, spans, results, expResults, expSatisfied, opt)
 	checkResumeSpanReverseScanResults(t, spans, results, expResults, expSatisfied, opt)
 }
@@ -547,6 +561,7 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 						if res.ResumeSpan != nil {
 							b.Results[i].Rows = append(b.Results[i].Rows, newB.Results[j].Rows...)
 							b.Results[i].ResumeSpan = newB.Results[j].ResumeSpan
+							b.Results[i].ResumeReason = newB.Results[j].ResumeReason
 							j++
 						}
 					}
@@ -965,13 +980,13 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 				manual := hlc.NewManualClock(ts[0].WallTime + 1)
 				clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 				ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
-					AmbientCtx:         log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
+					AmbientCtx:         log.AmbientContext{Tracer: s.TracerI().(*tracing.Tracer)},
 					Settings:           cluster.MakeTestingClusterSettings(),
 					Clock:              clock,
-					NodeDescs:          s.(*server.TestServer).Gossip(),
+					NodeDescs:          s.Gossip(),
 					RPCContext:         s.RPCContext(),
-					NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
-					FirstRangeProvider: s.(*server.TestServer).Gossip(),
+					NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.Gossip())),
+					FirstRangeProvider: s.Gossip(),
 				})
 
 				reply, err := kv.SendWrappedWith(context.Background(), ds, roachpb.Header{
@@ -1174,13 +1189,13 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	// Now, split further at the given keys, but use a new dist sender so
 	// we don't update the caches on the default dist sender-backed client.
 	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
-		AmbientCtx:         log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
+		AmbientCtx:         log.AmbientContext{Tracer: s.TracerI().(*tracing.Tracer)},
 		Clock:              s.Clock(),
-		NodeDescs:          s.(*server.TestServer).Gossip(),
+		NodeDescs:          s.Gossip(),
 		RPCContext:         s.RPCContext(),
-		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
+		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.Gossip())),
 		Settings:           cluster.MakeTestingClusterSettings(),
-		FirstRangeProvider: s.(*server.TestServer).Gossip(),
+		FirstRangeProvider: s.Gossip(),
 	})
 	for _, key := range []string{"c"} {
 		req := &roachpb.AdminSplitRequest{
@@ -1262,7 +1277,7 @@ func TestBadRequest(t *testing.T) {
 		t.Fatalf("unexpected error on reverse scan with startkey == endkey: %v", err)
 	}
 
-	if err := db.DelRange(ctx, "x", "a"); !testutils.IsError(err, "must be greater than start") {
+	if _, err := db.DelRange(ctx, "x", "a", false); !testutils.IsError(err, "must be greater than start") {
 		t.Fatalf("unexpected error on deletion on [x, a): %v", err)
 	}
 
@@ -1271,7 +1286,7 @@ func TestBadRequest(t *testing.T) {
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	repl := store.LookupReplica(roachpb.RKeyMin)
-	if err := db.DelRange(ctx, "", repl.Desc().EndKey); !testutils.IsError(err, "must be greater than LocalMax") {
+	if _, err := db.DelRange(ctx, "", repl.Desc().EndKey, false); !testutils.IsError(err, "must be greater than LocalMax") {
 		t.Fatalf("unexpected error on deletion on [KeyMin, %s): %v", repl.Desc().EndKey, err)
 	}
 }
@@ -1658,7 +1673,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.DelRange(ctx, "a", "b")
+				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
+				return err
 			},
 			// No retry, preemptive refresh before commit.
 		},
@@ -1867,7 +1883,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				// Advance timestamp. This also creates a refresh span which
 				// will prevent the txn from committing without a refresh.
-				if err := txn.DelRange(ctx, "a", "b"); err != nil {
+				if _, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */); err != nil {
 					return err
 				}
 				// Make the final batch large enough such that if we accounted
@@ -2236,13 +2252,15 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "put")
 			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.DelRange(ctx, "a", "b")
+				_, err := db.DelRange(ctx, "a", "b", false /* returnKeys */)
+				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				if _, err := txn.Get(ctx, "c"); err != nil {
 					return err
 				}
-				return txn.DelRange(ctx, "a", "b")
+				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
+				return err
 			},
 			txnCoordRetry: true, // can refresh
 		},
@@ -2252,13 +2270,15 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "put")
 			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.DelRange(ctx, "a", "b")
+				_, err := db.DelRange(ctx, "a", "b", false /* returnKeys */)
+				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				if _, err := txn.Get(ctx, "a"); err != nil {
 					return err
 				}
-				return txn.DelRange(ctx, "a", "b")
+				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
+				return err
 			},
 			clientRetry: true, // can't refresh
 		},
@@ -2622,7 +2642,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		{
 			name: "multi-range delete range with uncertainty interval error",
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.DelRange(ctx, "a", "d")
+				_, err := txn.DelRange(ctx, "a", "d", false /* returnKeys */)
+				return err
 			},
 			filter: newUncertaintyFilter(roachpb.Key([]byte("c"))),
 			// Expect a transaction coord retry, which should succeed.
@@ -2865,10 +2886,11 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			s, _, db := serverutils.StartServer(t,
+			si, _, db := serverutils.StartServer(t,
 				base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
 			ctx := context.Background()
-			defer s.Stopper().Stop(ctx)
+			defer si.Stopper().Stop(ctx)
+			s := si.(*server.TestServer)
 
 			keyA, keyA1, keyB, keyB1 := roachpb.Key("a"), roachpb.Key("a1"), roachpb.Key("b"), roachpb.Key("b1")
 			require.NoError(t, setupMultipleRanges(ctx, db, string(keyB)))
@@ -2940,7 +2962,7 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 			})
 
 			require.Regexp(t, "injected", txn.CommitInBatch(ctx, b))
-			tr := s.Tracer().(*tracing.Tracer)
+			tr := s.Tracer()
 			err = kvclientutils.CheckPushResult(
 				ctx, db, tr, *origTxn, kvclientutils.ExpectAborted, tc.txnRecExpectation)
 			require.NoError(t, err)

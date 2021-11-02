@@ -239,18 +239,21 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 	case *tree.CastExpr:
 		// TODO (rohany): I'm not sure why this CastExpr doesn't have a type
 		//  annotation at this stage of processing...
-		if typ, ok := tree.GetStaticallyKnownType(t.Type); ok && typ.Family() == types.OidFamily {
-			v.err = newQueryNotSupportedErrorf("cast to %s is not supported by distsql", t.Type)
-			return false, expr
+		if typ, ok := tree.GetStaticallyKnownType(t.Type); ok {
+			switch typ.Family() {
+			case types.OidFamily:
+				v.err = newQueryNotSupportedErrorf("cast to %s is not supported by distsql", t.Type)
+				return false, expr
+			}
 		}
 	case *tree.DArray:
 		// We need to check for arrays of untyped tuples here since constant-folding
-		// on builtin functions sometimes produces this.
+		// on builtin functions sometimes produces this. DecodeUntaggedDatum
+		// requires that all the types of the tuple contents are known.
 		if t.ResolvedType().ArrayContents() == types.AnyTuple {
 			v.err = newQueryNotSupportedErrorf("array %s cannot be executed with distsql", t)
 			return false, expr
 		}
-
 	}
 	return true, expr
 }
@@ -1102,10 +1105,8 @@ func initTableReaderSpec(
 		Visibility:        n.colCfg.visibility,
 		LockingStrength:   n.lockingStrength,
 		LockingWaitPolicy: n.lockingWaitPolicy,
-		// Retain the capacity of the spans slice.
-		Spans:            s.Spans[:0],
-		HasSystemColumns: n.containsSystemColumns,
-		NeededColumns:    n.colCfg.wantedColumnsOrdinals,
+		HasSystemColumns:  n.containsSystemColumns,
+		NeededColumns:     n.colCfg.wantedColumnsOrdinals,
 	}
 	if vc := getInvertedColumn(n.colCfg.invertedColumn, n.cols); vc != nil {
 		s.InvertedColumn = vc.ColumnDesc()
@@ -1500,15 +1501,12 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		} else {
 			// For the rest, we have to copy the spec into a fresh spec.
 			tr = physicalplan.NewTableReaderSpec()
-			// Grab the Spans field of the new spec, and reuse it in case the pooled
-			// TableReaderSpec we got has pre-allocated Spans memory.
-			newSpansSlice := tr.Spans
 			*tr = *info.spec
-			tr.Spans = newSpansSlice
 		}
-		for j := range sp.Spans {
-			tr.Spans = append(tr.Spans, execinfrapb.TableReaderSpan{Span: sp.Spans[j]})
-		}
+		// TODO(yuzefovich): figure out how we could reuse the Spans slice if we
+		// kept the reference to it in TableReaderSpec (rather than allocating
+		// new slices in generateScanSpans and PartitionSpans).
+		tr.Spans = sp.Spans
 
 		tr.Parallelize = info.parallelize
 		if !tr.Parallelize {
@@ -3883,7 +3881,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 }
 
 // createPlanForExport creates a physical plan for EXPORT.
-// We add a new stage of CSVWriter processors to the input plan.
+// We add a new stage of CSV/Parquet Writer processors to the input plan.
 func (dsp *DistSQLPlanner) createPlanForExport(
 	planCtx *PlanningCtx, n *exportNode,
 ) (*PhysicalPlan, error) {
@@ -3891,15 +3889,32 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 	if err != nil {
 		return nil, err
 	}
-	core := execinfrapb.ProcessorCoreUnion{CSVWriter: &execinfrapb.CSVWriterSpec{
-		Destination:      n.destination,
-		NamePattern:      n.fileNamePattern,
-		Options:          n.csvOpts,
-		ChunkRows:        int64(n.chunkRows),
-		ChunkSize:        n.chunkSize,
-		CompressionCodec: n.fileCompression,
-		UserProto:        planCtx.planner.User().EncodeProto(),
-	}}
+
+	var core execinfrapb.ProcessorCoreUnion
+
+	if n.csvOpts != nil {
+		core.CSVWriter = &execinfrapb.CSVWriterSpec{
+			Destination:      n.destination,
+			NamePattern:      n.fileNamePattern,
+			Options:          *n.csvOpts,
+			ChunkRows:        int64(n.chunkRows),
+			ChunkSize:        n.chunkSize,
+			CompressionCodec: n.fileCompression,
+			UserProto:        planCtx.planner.User().EncodeProto(),
+		}
+	} else if n.parquetOpts != nil {
+		core.ParquetWriter = &execinfrapb.ParquetWriterSpec{
+			Destination: n.destination,
+			NamePattern: n.fileNamePattern,
+			Options:     *n.parquetOpts,
+			ChunkRows:   int64(n.chunkRows),
+			ChunkSize:   n.chunkSize,
+			UserProto:   planCtx.planner.User().EncodeProto(),
+		}
+	} else {
+		return nil, errors.AssertionFailedf("parquetOpts and csvOpts are both empty. " +
+			"One must be not nil")
+	}
 
 	resTypes := make([]*types.T, len(colinfo.ExportColumns))
 	for i := range colinfo.ExportColumns {
@@ -3963,9 +3978,6 @@ func checkScanParallelizationIfLocal(
 				}
 				return true, nil
 			case *indexJoinNode:
-				// Vectorized index join is only supported for non-interleaved
-				// tables.
-				prohibitParallelization = n.table.desc.TableDesc().PrimaryIndex.IsInterleaved()
 				return true, nil
 			case *joinNode:
 				prohibitParallelization = n.pred.onCond != nil
@@ -4082,8 +4094,15 @@ func maybeMoveSingleFlowToGateway(planCtx *PlanningCtx, plan *PhysicalPlan, rowC
 		nodeID := plan.Processors[0].Node
 		for _, p := range plan.Processors[1:] {
 			if p.Node != nodeID {
-				singleFlow = false
-				break
+				if p.Node != plan.GatewayNodeID || p.Spec.Core.Noop == nil {
+					// We want to ignore the noop processors planned on the
+					// gateway because their job is to simply communicate the
+					// results back to the client. If, however, there is another
+					// non-noop processor on the gateway, then we'll correctly
+					// treat the plan as having multiple flows.
+					singleFlow = false
+					break
+				}
 			}
 			core := p.Spec.Core
 			if core.JoinReader != nil || core.MergeJoiner != nil || core.HashJoiner != nil ||

@@ -13,13 +13,16 @@ package flowinfra
 import (
 	"container/list"
 	"context"
+	"runtime"
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -29,11 +32,34 @@ import (
 
 const flowDoneChanSize = 8
 
+// We think that it makes sense to scale the default value for
+// max_running_flows based on how beefy the machines are, so we make it a
+// multiple of the number of available CPU cores.
+//
+// The choice of 128 as the default multiple is driven by the old default value
+// of 500 and is such that if we have 4 CPUs, then we'll get the value of 512,
+// pretty close to the old default.
+// TODO(yuzefovich): we probably want to remove / disable this limit completely
+// when we enable the admission control.
 var settingMaxRunningFlows = settings.RegisterIntSetting(
 	"sql.distsql.max_running_flows",
-	"maximum number of concurrent flows that can be run on a node",
-	500,
+	"the value - when positive - used as is, or the value - when negative - "+
+		"multiplied by the number of CPUs on a node, to determine the "+
+		"maximum number of concurrent remote flows that can be run on the node",
+	-128,
 ).WithPublic()
+
+// getMaxRunningFlows returns an absolute value that determines the maximum
+// number of concurrent remote flows on this node.
+func getMaxRunningFlows(settings *cluster.Settings) int64 {
+	maxRunningFlows := settingMaxRunningFlows.Get(&settings.SV)
+	if maxRunningFlows < 0 {
+		// We use GOMAXPROCS instead of NumCPU because the former could be
+		// adjusted based on cgroup limits (see cgroups.AdjustMaxProcs).
+		return -maxRunningFlows * int64(runtime.GOMAXPROCS(0))
+	}
+	return maxRunningFlows
+}
 
 // FlowScheduler manages running flows and decides when to queue and when to
 // start flows. The main interface it presents is ScheduleFlows, which passes a
@@ -81,6 +107,14 @@ type flowWithCtx struct {
 	enqueueTime time.Time
 }
 
+// cleanupBeforeRun cleans up the flow's resources in case this flow will never
+// run.
+func (f *flowWithCtx) cleanupBeforeRun() {
+	// Note: passing f.ctx is important; that's the context that has the flow's
+	// span in it, and that span needs Finish()ing.
+	f.flow.Cleanup(f.ctx)
+}
+
 // NewFlowScheduler creates a new FlowScheduler which must be initialized before
 // use.
 func NewFlowScheduler(
@@ -92,11 +126,11 @@ func NewFlowScheduler(
 		flowDoneCh:     make(chan Flow, flowDoneChanSize),
 	}
 	fs.mu.queue = list.New()
-	maxRunningFlows := settingMaxRunningFlows.Get(&settings.SV)
+	maxRunningFlows := getMaxRunningFlows(settings)
 	fs.mu.runningFlows = make(map[execinfrapb.FlowID]time.Time, maxRunningFlows)
 	fs.atomics.maxRunningFlows = int32(maxRunningFlows)
 	settingMaxRunningFlows.SetOnChange(&settings.SV, func(ctx context.Context) {
-		atomic.StoreInt32(&fs.atomics.maxRunningFlows, int32(settingMaxRunningFlows.Get(&settings.SV)))
+		atomic.StoreInt32(&fs.atomics.maxRunningFlows, int32(getMaxRunningFlows(settings)))
 	})
 	return fs
 }
@@ -160,6 +194,8 @@ func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow, locked bool) er
 func (fs *FlowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
 	return fs.stopper.RunTaskWithErr(
 		ctx, "flowinfra.FlowScheduler: scheduling flow", func(ctx context.Context) error {
+			fs.metrics.FlowsScheduled.Inc(1)
+			telemetry.Inc(sqltelemetry.DistSQLFlowsScheduled)
 			if fs.canRunFlow(f) {
 				return fs.runFlowNow(ctx, f, false /* locked */)
 			}
@@ -167,6 +203,7 @@ func (fs *FlowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
 			defer fs.mu.Unlock()
 			log.VEventf(ctx, 1, "flow scheduler enqueuing flow %s to be run later", f.GetID())
 			fs.metrics.FlowsQueued.Inc(1)
+			telemetry.Inc(sqltelemetry.DistSQLFlowsQueued)
 			fs.mu.queue.PushBack(&flowWithCtx{
 				ctx:         ctx,
 				flow:        f,
@@ -240,6 +277,7 @@ func (fs *FlowScheduler) CancelDeadFlows(req *execinfrapb.CancelDeadFlowsRequest
 			fs.mu.queue.Remove(e)
 			fs.metrics.FlowsQueued.Dec(1)
 			numCanceled++
+			f.cleanupBeforeRun()
 		}
 	}
 }
@@ -247,19 +285,36 @@ func (fs *FlowScheduler) CancelDeadFlows(req *execinfrapb.CancelDeadFlowsRequest
 // Start launches the main loop of the scheduler.
 func (fs *FlowScheduler) Start() {
 	ctx := fs.AnnotateCtx(context.Background())
-	// TODO(radu): we may end up with a few flows in the queue that will
-	// never be processed. Is that an issue?
 	_ = fs.stopper.RunAsyncTask(ctx, "flow-scheduler", func(context.Context) {
 		stopped := false
 		fs.mu.Lock()
 		defer fs.mu.Unlock()
 
+		quiesceCh := fs.stopper.ShouldQuiesce()
+
 		for {
-			if stopped && atomic.LoadInt32(&fs.atomics.numRunning) == 0 {
-				// TODO(radu): somehow error out the flows that are still in the queue.
-				return
+			if stopped {
+				// Drain the queue.
+				if l := fs.mu.queue.Len(); l > 0 {
+					log.Infof(ctx, "abandoning %d flows that will never run", l)
+				}
+				for {
+					e := fs.mu.queue.Front()
+					if e == nil {
+						break
+					}
+					fs.mu.queue.Remove(e)
+					n := e.Value.(*flowWithCtx)
+					// TODO(radu): somehow send an error to whoever is waiting on this flow.
+					n.cleanupBeforeRun()
+				}
+
+				if atomic.LoadInt32(&fs.atomics.numRunning) == 0 {
+					return
+				}
 			}
 			fs.mu.Unlock()
+
 			select {
 			case <-fs.flowDoneCh:
 				fs.mu.Lock()
@@ -291,9 +346,14 @@ func (fs *FlowScheduler) Start() {
 					atomic.AddInt32(&fs.atomics.numRunning, -1)
 				}
 
-			case <-fs.stopper.ShouldQuiesce():
+			case <-quiesceCh:
 				fs.mu.Lock()
 				stopped = true
+				if l := atomic.LoadInt32(&fs.atomics.numRunning); l != 0 {
+					log.Infof(ctx, "waiting for %d running flows", l)
+				}
+				// Inhibit this arm of the select so that we don't spin on it.
+				quiesceCh = nil
 			}
 		}
 	})

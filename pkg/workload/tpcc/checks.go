@@ -271,12 +271,12 @@ func check3325(db *gosql.DB, asOfSystemTime string) (retErr error) {
 	firstQuery := txn.QueryRow(`
 (SELECT no_w_id, no_d_id, no_o_id FROM new_order)
 EXCEPT ALL
-(SELECT o_w_id, o_d_id, o_id FROM "order"@primary WHERE o_carrier_id IS NULL)`)
+(SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)`)
 	if err := firstQuery.Scan(); !errors.Is(err, gosql.ErrNoRows) {
 		return errors.Errorf("left EXCEPT right returned nonzero results.")
 	}
 	secondQuery := txn.QueryRow(`
-(SELECT o_w_id, o_d_id, o_id FROM "order"@primary WHERE o_carrier_id IS NULL)
+(SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
 EXCEPT ALL
 (SELECT no_w_id, no_d_id, no_o_id FROM new_order)`)
 	if err := secondQuery.Scan(); !errors.Is(err, gosql.ErrNoRows) {
@@ -427,7 +427,7 @@ func beginAsOfSystemTime(db *gosql.DB, asOfSystemTime string) (txn *gosql.Tx, er
 	return txn, nil
 }
 
-// selectTimestamp retreives an unqouted string literal of a decimal value
+// selectTimestamp retrieves an unquoted string literal of a decimal value
 // representing the hlc timestamp of the provided txn.
 func selectTimestamp(txn *gosql.Tx) (ts string, err error) {
 	err = txn.QueryRow("SELECT cluster_logical_timestamp()::string").Scan(&ts)

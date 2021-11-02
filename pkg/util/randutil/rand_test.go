@@ -32,15 +32,6 @@ func TestPseudoRand(t *testing.T) {
 	}
 }
 
-func TestNewTestRandFromGlobalSeed(t *testing.T) {
-	numbers := make(map[int]bool)
-	rand1, _ := randutil.NewTestRandFromGlobalSeed()
-	rand2, _ := randutil.NewTestRandFromGlobalSeed()
-	if numbers[rand1.Int()] != numbers[rand2.Int()] {
-		t.Errorf("expected numbers to be equal; got different")
-	}
-}
-
 func TestRandIntInRange(t *testing.T) {
 	rand, _ := randutil.NewPseudoRand()
 	for i := 0; i < 100; i++ {
@@ -57,6 +48,37 @@ func TestRandBytes(t *testing.T) {
 		x := randutil.RandBytes(rand, i)
 		if len(x) != i {
 			t.Errorf("got array with unexpected length: %d (expected %d)", len(x), i)
+		}
+	}
+}
+
+func TestTestRand(t *testing.T) {
+	n1 := func() map[int]bool {
+		numbers := make(map[int]bool)
+		rand1, _ := randutil.NewTestRand()
+		rand2, _ := randutil.NewTestRand()
+		numbers[rand1.Int()] = true
+		numbers[rand1.Int()] = true
+		numbers[rand2.Int()] = true
+		numbers[rand2.Int()] = true
+		return numbers
+	}()
+	n2 := func() map[int]bool {
+		numbers := make(map[int]bool)
+		rand1, _ := randutil.NewTestRand()
+		rand2, _ := randutil.NewTestRand()
+		numbers[rand1.Int()] = true
+		numbers[rand1.Int()] = true
+		numbers[rand2.Int()] = true
+		numbers[rand2.Int()] = true
+		return numbers
+	}()
+	if len(n1) != len(n2) {
+		t.Errorf("expected the same random numbers; got lengths %d and %d", len(n1), len(n2))
+	}
+	for k := range n1 {
+		if !n2[k] {
+			t.Errorf("expected the same random numbers; got unique number %d", k)
 		}
 	}
 }

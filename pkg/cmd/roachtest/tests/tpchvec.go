@@ -444,7 +444,7 @@ func (d tpchVecDiskTest) preTestRunHook(
 	// order of 800MiB) in partitions of roughly workmem/4 in size. Such
 	// behavior is determined by the fact that we allocate some RAM for caches
 	// of disk queues (limiting us to use at most 2 input partitions).
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	workmemInKiB := 650 + rng.Intn(1350)
 	workmem := fmt.Sprintf("%dKiB", workmemInKiB)
 	t.Status(fmt.Sprintf("setting workmem='%s'", workmem))

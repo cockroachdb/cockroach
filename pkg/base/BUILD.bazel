@@ -32,6 +32,7 @@ go_library(
         "//pkg/util/netutil/addr",
         "//pkg/util/retry",
         "//pkg/util/stop",
+        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",

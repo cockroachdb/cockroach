@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
+	"net/url"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
@@ -23,35 +24,50 @@ import (
 )
 
 // sinklessReplicationClient creates and reads a stream from the source cluster.
-type sinklessReplicationClient struct{}
+type sinklessReplicationClient struct {
+	remote *url.URL
+}
 
 var _ Client = &sinklessReplicationClient{}
 
-// GetTopology implements the Client interface.
-func (m *sinklessReplicationClient) GetTopology(
-	sa streamingccl.StreamAddress,
-) (streamingccl.Topology, error) {
+// newPGWireReplicationClient returns a stream client that interacts with a
+// remote cluster over a pgwire connection.
+func newPGWireReplicationClient(remote *url.URL) (Client, error) {
+	return &sinklessReplicationClient{remote: remote}, nil
+}
+
+// Plan implements the Client interface.
+func (m *sinklessReplicationClient) Create(
+	ctx context.Context, tenantID roachpb.TenantID,
+) (StreamID, error) {
+	return StreamID(tenantID.ToUint64()), nil
+}
+
+// Heartbeat implements the Client interface.
+func (m *sinklessReplicationClient) Heartbeat(
+	ctx context.Context, streamID StreamID, complete hlc.Timestamp,
+) error {
+	return nil
+}
+
+// Plan implements the Client interface.
+func (m *sinklessReplicationClient) Plan(ctx context.Context, ID StreamID) (Topology, error) {
 	// The core changefeed clients only have 1 partition, and it's located at the
 	// stream address.
-	return streamingccl.Topology{
-		Partitions: []streamingccl.PartitionAddress{streamingccl.PartitionAddress(sa)},
-	}, nil
+	return Topology([]PartitionInfo{
+		{
+			ID:                "1",
+			SrcAddr:           streamingccl.PartitionAddress(m.remote.String()),
+			SubscriptionToken: []byte(strconv.Itoa(int(ID))),
+		},
+	}), nil
 }
 
 // ConsumePartition implements the Client interface.
-func (m *sinklessReplicationClient) ConsumePartition(
-	ctx context.Context, pa streamingccl.PartitionAddress, startTime hlc.Timestamp,
+func (m *sinklessReplicationClient) Subscribe(
+	ctx context.Context, stream StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
 ) (chan streamingccl.Event, chan error, error) {
-	pgURL, err := pa.URL()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	q := pgURL.Query()
-	tenantToReplicate := q.Get(TenantID)
-	if len(tenantToReplicate) == 0 {
-		return nil, nil, errors.New("no tenant specified")
-	}
+	tenantToReplicate := string(spec)
 	tenantID, err := strconv.Atoi(tenantToReplicate)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "parsing tenant")
@@ -59,12 +75,12 @@ func (m *sinklessReplicationClient) ConsumePartition(
 
 	streamTenantQuery := fmt.Sprintf(
 		`CREATE REPLICATION STREAM FOR TENANT %d`, tenantID)
-	if startTime.WallTime != 0 {
+	if checkpoint.WallTime != 0 {
 		streamTenantQuery = fmt.Sprintf(
-			`CREATE REPLICATION STREAM FOR TENANT %d WITH cursor='%s'`, tenantID, startTime.AsOfSystemTime())
+			`CREATE REPLICATION STREAM FOR TENANT %d WITH cursor='%s'`, tenantID, checkpoint.AsOfSystemTime())
 	}
 
-	db, err := gosql.Open("postgres", pgURL.String())
+	db, err := gosql.Open("postgres", m.remote.String())
 	if err != nil {
 		return nil, nil, err
 	}

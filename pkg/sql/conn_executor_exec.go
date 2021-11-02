@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -375,9 +374,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	if e, ok := ast.(*tree.ExplainAnalyze); ok {
 		switch e.Mode {
 		case tree.ExplainDebug:
-			if !p.ExecCfg().Codec.ForSystemTenant() {
-				return makeErrEvent(errorutil.UnsupportedWithMultiTenancy(70931))
-			}
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
 			ih.SetOutputMode(explainAnalyzeDebugOutput, explain.Flags{})
 
@@ -428,7 +424,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		var err error
-		pinfo, err = fillInPlaceholders(ctx, ps, name, e.Params, ex.sessionData().SearchPath)
+		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -1075,6 +1071,20 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	stats, err := ex.execWithDistSQLEngine(
 		ctx, planner, stmt.AST.StatementReturnType(), res, distributePlan.WillDistribute(), progAtomic,
 	)
+	if res.Err() == nil {
+		// numTxnRetryErrors is the number of times an error will be injected if
+		// the transaction is retried using SAVEPOINTs.
+		const numTxnRetryErrors = 3
+		if ex.sessionData().InjectRetryErrorsEnabled && stmt.AST.StatementTag() != "SET" {
+			if planner.Txn().Epoch() < ex.state.lastEpoch+numTxnRetryErrors {
+				retryErr := planner.Txn().GenerateForcedRetryableError(
+					ctx, "injected by `inject_retry_errors_enabled` session variable")
+				res.SetError(retryErr)
+			} else {
+				ex.state.lastEpoch = planner.Txn().Epoch()
+			}
+		}
+	}
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndExecStmt, timeutil.Now())
 
@@ -1906,7 +1916,15 @@ func (ex *connExecutor) recordTransactionStart() (
 
 	onTxnFinish = func(ctx context.Context, ev txnEvent) {
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndExecTransaction, timeutil.Now())
-		err := ex.recordTransaction(ctx, ev, implicit, txnStart)
+		transactionFingerprintID :=
+			roachpb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum())
+		if !implicit {
+			ex.statsCollector.EndExplicitTransaction(
+				ctx,
+				transactionFingerprintID,
+			)
+		}
+		err := ex.recordTransaction(ctx, transactionFingerprintID, ev, implicit, txnStart)
 		if err != nil {
 			if log.V(1) {
 				log.Warningf(ctx, "failed to record transaction stats: %s", err)
@@ -1930,11 +1948,20 @@ func (ex *connExecutor) recordTransactionStart() (
 			ex.server.cfg.TestingKnobs.BeforeRestart(ex.Ctx(), ex.extraTxnState.autoRetryReason)
 		}
 	}
+
+	if !implicit {
+		ex.statsCollector.StartExplicitTransaction()
+	}
+
 	return onTxnFinish, onTxnRestart
 }
 
 func (ex *connExecutor) recordTransaction(
-	ctx context.Context, ev txnEvent, implicit bool, txnStart time.Time,
+	ctx context.Context,
+	transactionFingerprintID roachpb.TransactionFingerprintID,
+	ev txnEvent,
+	implicit bool,
+	txnStart time.Time,
 ) error {
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
@@ -1964,7 +1991,7 @@ func (ex *connExecutor) recordTransaction(
 
 	return ex.statsCollector.RecordTransaction(
 		ctx,
-		roachpb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum()),
+		transactionFingerprintID,
 		recordedTxnStats,
 	)
 }

@@ -28,10 +28,10 @@ func TestShowCreateTable(t *testing.T) {
 			CreateStatement: `CREATE TABLE %s (
 				a INT
 			) LOCALITY GLOBAL`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	a INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (a, rowid)
 ) LOCALITY GLOBAL`,
 			Database: "mrdb",
@@ -41,10 +41,10 @@ func TestShowCreateTable(t *testing.T) {
 			CreateStatement: `CREATE TABLE %s (
 				a INT
 			) LOCALITY REGIONAL BY TABLE`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	a INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (a, rowid)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION`,
 			Database: "mrdb",
@@ -53,10 +53,10 @@ func TestShowCreateTable(t *testing.T) {
 			CreateStatement: `CREATE TABLE %s (
 				a INT
 			) LOCALITY REGIONAL BY TABLE IN "us-west1"`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	a INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (a, rowid)
 ) LOCALITY REGIONAL BY TABLE IN "us-west1"`,
 			Database: "mrdb",
@@ -71,7 +71,7 @@ func TestShowCreateTable(t *testing.T) {
 	a INT8 NULL,
 	crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	INDEX a_idx (a ASC),
 	FAMILY "primary" (a, crdb_region, rowid)
 ) LOCALITY REGIONAL BY ROW`,
@@ -87,7 +87,7 @@ func TestShowCreateTable(t *testing.T) {
 	a INT8 NULL,
 	crdb_region_col public.crdb_internal_region NOT NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	INDEX a_idx (a ASC),
 	FAMILY "primary" (a, crdb_region_col, rowid)
 ) LOCALITY REGIONAL BY ROW AS crdb_region_col`,
@@ -103,7 +103,7 @@ func TestShowCreateTable(t *testing.T) {
 	a INT8 NULL,
 	crdb_region_col public.crdb_internal_region NOT NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	INDEX a_idx (a ASC) WHERE a > 0:::INT8,
 	FAMILY "primary" (a, crdb_region_col, rowid)
 ) LOCALITY REGIONAL BY ROW AS crdb_region_col`,

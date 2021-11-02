@@ -40,7 +40,7 @@ func TestRandomizedCast(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	evalCtx.Planner = &faketreeeval.DummyEvalPlanner{}
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	getValidSupportedCast := func() (from, to *types.T) {
 		for {
@@ -91,17 +91,15 @@ func TestRandomizedCast(t *testing.T) {
 			input = append(input, colexectestutils.Tuple{fromConverter(fromDatum)})
 			output = append(output, colexectestutils.Tuple{fromConverter(fromDatum), toPhys})
 		}
-		colexectestutils.RunTestsWithoutAllNullsInjectionWithErrorHandler(
-			t, testAllocator, []colexectestutils.Tuples{input}, [][]*types.T{{from}}, output, colexectestutils.OrderedVerifier,
+		colexectestutils.RunTestsWithoutAllNullsInjectionWithErrorHandler(t, testAllocator,
+			[]colexectestutils.Tuples{input}, [][]*types.T{{from}}, output, colexectestutils.OrderedVerifier,
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexecbase.GetCastOperator(testAllocator, input[0], 0, 1, from, to, &evalCtx)
-			},
-			func(err error) {
+			}, func(err error) {
 				if !errorExpected {
 					t.Fatal(err)
 				}
-			},
-		)
+			}, nil /* orderedCols */)
 	}
 }
 
@@ -111,7 +109,7 @@ func BenchmarkCastOp(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for _, typePair := range [][]*types.T{
 		{types.Int, types.Float},
 		{types.Int, types.Decimal},

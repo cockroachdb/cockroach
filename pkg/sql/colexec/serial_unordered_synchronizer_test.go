@@ -33,7 +33,7 @@ func TestSerialUnorderedSynchronizer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	const numInputs = 3
 	const numBatches = 4
 

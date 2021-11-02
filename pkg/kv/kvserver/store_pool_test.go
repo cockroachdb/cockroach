@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -101,9 +102,10 @@ func createTestStorePool(
 	mc := hlc.NewManualClock(123)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
+		AmbientCtx: log.AmbientContext{Tracer: tr},
 		Config:     &base.Config{Insecure: true},
 		Clock:      clock,
 		Stopper:    stopper,
@@ -115,7 +117,7 @@ func createTestStorePool(
 
 	TimeUntilStoreDead.Override(context.Background(), &st.SV, timeUntilStoreDeadValue)
 	storePool := NewStorePool(
-		log.AmbientContext{Tracer: st.Tracer},
+		log.AmbientContext{Tracer: tr},
 		st,
 		g,
 		clock,
@@ -630,7 +632,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 	cfg := TestStoreConfig(clock)
-	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
+	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
 	store := NewStore(ctx, cfg, eng, &node)
 	// Fake an ident because this test doesn't want to start the store
 	// but without an Ident there will be NPEs.
@@ -833,30 +835,15 @@ func TestStorePoolThrottle(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
 
-	{
-		expected := sp.clock.Now().GoTime().Add(DeclinedReservationsTimeout.Get(&sp.st.SV))
-		sp.throttle(throttleDeclined, "", 1)
+	expected := sp.clock.Now().GoTime().Add(FailedReservationsTimeout.Get(&sp.st.SV))
+	sp.throttle(throttleFailed, "", 1)
 
-		sp.detailsMu.Lock()
-		detail := sp.getStoreDetailLocked(1)
-		sp.detailsMu.Unlock()
-		if !detail.throttledUntil.Equal(expected) {
-			t.Errorf("expected store to have been throttled to %v, found %v",
-				expected, detail.throttledUntil)
-		}
-	}
-
-	{
-		expected := sp.clock.Now().GoTime().Add(FailedReservationsTimeout.Get(&sp.st.SV))
-		sp.throttle(throttleFailed, "", 1)
-
-		sp.detailsMu.Lock()
-		detail := sp.getStoreDetailLocked(1)
-		sp.detailsMu.Unlock()
-		if !detail.throttledUntil.Equal(expected) {
-			t.Errorf("expected store to have been throttled to %v, found %v",
-				expected, detail.throttledUntil)
-		}
+	sp.detailsMu.Lock()
+	detail := sp.getStoreDetailLocked(1)
+	sp.detailsMu.Unlock()
+	if !detail.throttledUntil.Equal(expected) {
+		t.Errorf("expected store to have been throttled to %v, found %v",
+			expected, detail.throttledUntil)
 	}
 }
 

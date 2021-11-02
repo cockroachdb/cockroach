@@ -338,7 +338,7 @@ func (tc *distinctTestCase) runTests(
 		}
 		colexectestutils.RunTestsWithoutAllNullsInjectionWithErrorHandler(
 			t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs},
-			tc.expected, verifier, instrumentedConstructor, errorHandler,
+			tc.expected, verifier, instrumentedConstructor, errorHandler, nil, /* orderedCols */
 		)
 		if tc.noError {
 			require.Zero(t, numErrorRuns)
@@ -366,7 +366,7 @@ func (tc *distinctTestCase) runTests(
 func TestDistinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for _, tc := range distinctTestCases {
 		log.Infof(context.Background(), "unordered")
 		tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
@@ -389,7 +389,7 @@ func TestDistinct(t *testing.T) {
 			}
 			log.Info(context.Background(), "ordered")
 			tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-				return colexecbase.NewOrderedDistinct(input[0], tc.distinctCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup)
+				return colexecbase.NewOrderedDistinct(input[0], tc.distinctCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup), nil
 			})
 		}
 	}
@@ -398,7 +398,7 @@ func TestDistinct(t *testing.T) {
 func TestUnorderedDistinctRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	nCols := 1 + rng.Intn(3)
 	typs := make([]*types.T, nCols)
 	distinctCols := make([]uint32, nCols)
@@ -446,7 +446,7 @@ func runDistinctBenchmarks(
 	namePrefix string,
 	isExternal bool,
 ) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	const nCols = 2
 	const bytesValueLength = 8
 	distinctCols := []uint32{0, 1}
@@ -563,7 +563,7 @@ func BenchmarkDistinct(b *testing.B) {
 			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs, false /* nullsAreDistinct */, "" /* errorOnDup */)
 		},
 		func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error) {
-			return colexecbase.NewOrderedDistinct(input, distinctCols, typs, false /* nullsAreDistinct */, "" /* errorOnDup */)
+			return colexecbase.NewOrderedDistinct(input, distinctCols, typs, false /* nullsAreDistinct */, "" /* errorOnDup */), nil
 		},
 	}
 	distinctNames := []string{"Unordered", "PartiallyOrdered", "Ordered"}

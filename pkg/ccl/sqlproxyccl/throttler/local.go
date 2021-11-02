@@ -9,16 +9,13 @@
 package throttler
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-)
-
-const (
-	// The maximum size of localService's address map.
-	maxMapSize = 1e6 // 1 million
 )
 
 var errRequestDenied = errors.New("request denied")
@@ -26,38 +23,33 @@ var errRequestDenied = errors.New("request denied")
 type timeNow func() time.Time
 
 // localService is an throttler service that manages state purely in local
-// memory. Internally, it maintains two datastructures:
+// memory.
 //
-// successCache: Tracks (IP, TenantID) pairs that have successfully connected. If
-// a connection request matches an entry in the successCache it is allowed through
-// without deducting a token.
-//
-// ipCache: An IP -> TokenBucket map. Each connection request for unknown (IP, TenantID)
-// pairs deducts a token from that IP's token bucket. After a successful connection the
-// token is returned and the (IP, TenantID) pair is added tot he success cache.
+// localService tracks throttling state for (ip, tenant) pairs. Exponential backoff
+// is used to limit authentication attempts for a given (ip, tenant). The connection
+// limit for an (ip, tenant) is removed once there is a successful connection between
+// the ip address and the tenant. The primary intent of this mechanism is to limit
+// the number of credential guesses an ip address can make.
 type localService struct {
 	clock        timeNow
 	maxCacheSize int
-
-	policy BucketPolicy
+	baseDelay    time.Duration
+	maxDelay     time.Duration
 
 	mu struct {
 		syncutil.Mutex
-		// ipCache is approximately a map[string]*tokenBucket
-		ipCache *cache.UnorderedCache
-		// successCache is approximately a map[ConnectionTags]nil
-		successCache *cache.UnorderedCache
+		// throttleCache is effectively a map[ConnectionTags]*throttle
+		throttleCache *cache.UnorderedCache
 	}
 }
 
 // LocalOption allows configuration of a local admission service.
 type LocalOption func(s *localService)
 
-// WithPolicy configures the token bucket used by clients with no history of
-// successful connection.
-func WithPolicy(policy BucketPolicy) LocalOption {
+// WithBaseDelay specifies the base delay for rate limiting repeated accesses.
+func WithBaseDelay(d time.Duration) LocalOption {
 	return func(s *localService) {
-		s.policy = policy
+		s.baseDelay = d
 	}
 }
 
@@ -66,14 +58,15 @@ func WithPolicy(policy BucketPolicy) LocalOption {
 func NewLocalService(opts ...LocalOption) Service {
 	s := &localService{
 		clock:        time.Now,
-		maxCacheSize: maxMapSize,
+		maxCacheSize: 1e6, /* 1 million */
+		baseDelay:    time.Second,
+		maxDelay:     time.Hour,
 	}
 	cacheConfig := cache.Config{
 		Policy:      cache.CacheLRU,
 		ShouldEvict: func(size int, key, value interface{}) bool { return s.maxCacheSize < size },
 	}
-	s.mu.ipCache = cache.NewUnorderedCache(cacheConfig)
-	s.mu.successCache = cache.NewUnorderedCache(cacheConfig)
+	s.mu.throttleCache = cache.NewUnorderedCache(cacheConfig)
 
 	for _, opt := range opts {
 		opt(s)
@@ -82,39 +75,56 @@ func NewLocalService(opts ...LocalOption) Service {
 	return s
 }
 
-func (s *localService) LoginCheck(connection ConnectionTags) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, ok := s.mu.successCache.Get(connection); ok {
-		return nil
+func (s *localService) lockedGetThrottle(connection ConnectionTags) *throttle {
+	l, ok := s.mu.throttleCache.Get(connection)
+	if ok && l != nil {
+		return l.(*throttle)
 	}
-
-	bucket, ok := s.mu.ipCache.Get(connection.IP)
-	if !ok {
-		bucket = newBucket(s.clock(), s.policy)
-		s.mu.ipCache.Add(connection.IP, bucket)
-	}
-
-	b := bucket.(*tokenBucket)
-	b.fill(s.clock())
-	if !b.tryConsume() {
-		return errRequestDenied
-	}
-
 	return nil
 }
 
-func (s *localService) ReportSuccess(connection ConnectionTags) {
+func (s *localService) lockedInsertThrottle(connection ConnectionTags) *throttle {
+	l := newThrottle(s.baseDelay)
+	s.mu.throttleCache.Add(connection, l)
+	return l
+}
+
+func (s *localService) LoginCheck(connection ConnectionTags) (time.Time, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if bucket, ok := s.mu.ipCache.Get(connection.IP); ok {
-		b := bucket.(*tokenBucket)
-		b.returnToken()
+	now := s.clock()
+	throttle := s.lockedGetThrottle(connection)
+	if throttle != nil && throttle.isThrottled(now) {
+		return now, errRequestDenied
+	}
+	return now, nil
+}
+
+func (s *localService) ReportAttempt(
+	ctx context.Context, connection ConnectionTags, throttleTime time.Time, status AttemptStatus,
+) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	throttle := s.lockedGetThrottle(connection)
+	if throttle == nil {
+		throttle = s.lockedInsertThrottle(connection)
 	}
 
-	if _, ok := s.mu.successCache.Get(connection); !ok {
-		s.mu.successCache.Add(connection, nil)
+	if throttle.isThrottled(throttleTime) {
+		return errRequestDenied
 	}
+
+	switch {
+	case status == AttemptInvalidCredentials:
+		throttle.triggerThrottle(s.clock(), s.maxDelay)
+		if throttle.nextBackoff == s.maxDelay {
+			log.Warningf(ctx, "connection %v at max throttle delay %s", connection, s.maxDelay)
+		}
+	case status == AttemptOK:
+		throttle.disable()
+	}
+
+	return nil
 }

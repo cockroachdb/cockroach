@@ -32,7 +32,7 @@ vectorized: true
     │ filter: st_intersects('01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840', geom)
     │
     └── • index join
-        │ table: geo_table@primary
+        │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
             │ inverted column: geom_inverted_key
@@ -83,7 +83,7 @@ vectorized: true
     │ filter: st_intersects('01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840', geom)
     │
     └── • index join
-        │ table: geo_table@primary
+        │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
             │ inverted column: geom_inverted_key
@@ -121,7 +121,7 @@ vectorized: true
     │ filter: st_intersects('01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840', geom)
     │
     └── • index join
-        │ table: geo_table@primary
+        │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
             │ inverted column: geom_inverted_key
@@ -149,7 +149,7 @@ vectorized: true
     │ filter: st_coveredby('01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840', geom)
     │
     └── • index join
-        │ table: geo_table@primary
+        │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
             │ inverted column: geom_inverted_key
@@ -190,7 +190,7 @@ vectorized: true
     │ filter: st_intersects('01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840', geom)
     │
     └── • index join
-        │ table: geo_table@primary
+        │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
             │ inverted column: geom_inverted_key
@@ -218,7 +218,7 @@ vectorized: true
     │ filter: st_coveredby('01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840', geom)
     │
     └── • index join
-        │ table: geo_table@primary
+        │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
             │ inverted column: geom_inverted_key
@@ -246,7 +246,7 @@ vectorized: true
 │ filter: geom && '010100000000000000000008400000000000000840'
 │
 └── • index join
-    │ table: geo_table@primary
+    │ table: geo_table@geo_table_pkey
     │
     └── • inverted filter
         │ inverted column: geom_inverted_key
@@ -270,7 +270,7 @@ vectorized: true
 │ filter: 'BOX(3 3,3 3)' && geom
 │
 └── • index join
-    │ table: geo_table@primary
+    │ table: geo_table@geo_table_pkey
     │
     └── • inverted filter
         │ inverted column: geom_inverted_key
@@ -294,7 +294,7 @@ vectorized: true
 │ filter: '010200000002000000000000000000F03F000000000000F03F00000000000014400000000000001440' ~ geom
 │
 └── • index join
-    │ table: geo_table@primary
+    │ table: geo_table@geo_table_pkey
     │
     └── • inverted filter
         │ inverted column: geom_inverted_key
@@ -318,7 +318,7 @@ vectorized: true
 │ filter: geom ~ 'BOX(1 1,5 5)'
 │
 └── • index join
-    │ table: geo_table@primary
+    │ table: geo_table@geo_table_pkey
     │
     └── • inverted filter
         │ inverted column: geom_inverted_key

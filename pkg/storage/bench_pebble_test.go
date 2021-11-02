@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/pebble"
+	"github.com/stretchr/testify/require"
 )
 
 const testCacheSize = 1 << 30 // 1 GB
@@ -343,7 +345,7 @@ func BenchmarkBatchBuilderPut(b *testing.B) {
 	b.ResetTimer()
 
 	const batchSize = 1000
-	batch := &RocksDBBatchBuilder{}
+	var batch pebble.Batch
 	for i := 0; i < b.N; i += batchSize {
 		end := i + batchSize
 		if end > b.N {
@@ -353,9 +355,9 @@ func BenchmarkBatchBuilderPut(b *testing.B) {
 		for j := i; j < end; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
 			ts := hlc.Timestamp{WallTime: int64(j)}
-			batch.Put(MVCCKey{key, ts}, value)
+			require.NoError(b, batch.Set(EncodeKey(MVCCKey{key, ts}), value, nil /* WriteOptions */))
 		}
-		batch.Finish()
+		batch.Reset()
 	}
 
 	b.StopTimer()

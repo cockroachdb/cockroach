@@ -12,7 +12,6 @@ package tracing
 
 import (
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -35,17 +34,27 @@ type spanInner struct {
 	// otelSpan is the "shadow span" created for reporting to the OpenTelemetry
 	// tracer (if an otel tracer was configured).
 	otelSpan oteltrace.Span
+
+	// sterile is set if this span does not want to have children spans. In that
+	// case, trying to create a child span will result in the would-be child being
+	// a root span. This is useful for span corresponding to long-running
+	// operations that don't want to be associated with derived operations.
+	sterile bool
 }
 
-func (s *spanInner) TraceID() uint64 {
+func (s *spanInner) TraceID() tracingpb.TraceID {
 	if s.isNoop() {
 		return 0
 	}
-	return s.crdb.traceID
+	return s.crdb.TraceID()
 }
 
 func (s *spanInner) isNoop() bool {
 	return s.crdb == nil && s.netTr == nil && s.otelSpan == nil
+}
+
+func (s *spanInner) isSterile() bool {
+	return s.sterile
 }
 
 func (s *spanInner) IsVerbose() bool {
@@ -67,8 +76,10 @@ func (s *spanInner) SetVerbose(to bool) {
 }
 
 func (s *spanInner) SetVerboseRecursively(to bool) {
-	s.SetVerbose(to)
-	s.crdb.setVerboseRecursively(to)
+	if s.isNoop() {
+		panic(errors.AssertionFailedf("SetVerboseRecursively called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
+	}
+	s.crdb.SetVerboseRecursively(to)
 }
 
 func (s *spanInner) ResetRecording() {
@@ -79,19 +90,11 @@ func (s *spanInner) GetRecording() Recording {
 	if s.isNoop() {
 		return nil
 	}
-	// If the span is not verbose, optimize by avoiding the tags.
-	// This span is likely only used to carry payloads around.
-	//
-	// TODO(andrei): The optimization for avoiding the tags was done back when
-	// stringifying a {NodeID,StoreID}Container (a very common tag) was expensive.
-	// That has become cheap since, so this optimization might not be worth it any
-	// more.
-	wantTags := s.crdb.recordingType() == RecordingVerbose
-	return s.crdb.getRecording(wantTags)
+	return s.crdb.GetRecording()
 }
 
 func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
-	s.crdb.importRemoteSpans(remoteSpans)
+	s.crdb.recordFinishedChildren(remoteSpans)
 }
 
 func (s *spanInner) Finish() {
@@ -101,22 +104,13 @@ func (s *spanInner) Finish() {
 	if s.isNoop() {
 		return
 	}
-	finishTime := timeutil.Now()
-	duration := finishTime.Sub(s.crdb.startTime)
-	if duration == 0 {
-		duration = time.Nanosecond
-	}
 
-	s.crdb.mu.Lock()
-	if alreadyFinished := s.crdb.mu.duration >= 0; alreadyFinished {
-		s.crdb.mu.Unlock()
-
-		// External spans and net/trace are not always forgiving about spans getting
-		// finished twice, but it may happen so let's be resilient to it.
+	if !s.crdb.finish() {
+		// The span was already finished. External spans and net/trace are not
+		// always forgiving about spans getting finished twice, but it may happen so
+		// let's be resilient to it.
 		return
 	}
-	s.crdb.mu.duration = duration
-	s.crdb.mu.Unlock()
 
 	if s.otelSpan != nil {
 		s.otelSpan.End()
@@ -124,32 +118,18 @@ func (s *spanInner) Finish() {
 	if s.netTr != nil {
 		s.netTr.Finish()
 	}
-	if s.crdb.rootSpan.spanID == s.crdb.spanID {
-		s.tracer.activeSpans.Lock()
-		delete(s.tracer.activeSpans.m, s.crdb.spanID)
-		s.tracer.activeSpans.Unlock()
-	}
 }
 
 func (s *spanInner) Meta() SpanMeta {
-	var traceID uint64
-	var spanID uint64
+	var traceID tracingpb.TraceID
+	var spanID tracingpb.SpanID
 	var recordingType RecordingType
-	var baggage map[string]string
+	var sterile bool
 
 	if s.crdb != nil {
 		traceID, spanID = s.crdb.traceID, s.crdb.spanID
-		s.crdb.mu.Lock()
-		defer s.crdb.mu.Unlock()
-		n := len(s.crdb.mu.baggage)
-		// In the common case, we have no baggage, so avoid making an empty map.
-		if n > 0 {
-			baggage = make(map[string]string, n)
-		}
-		for k, v := range s.crdb.mu.baggage {
-			baggage[k] = v
-		}
 		recordingType = s.crdb.mu.recording.recordingType.load()
+		sterile = s.isSterile()
 	}
 
 	var otelCtx oteltrace.SpanContext
@@ -161,7 +141,7 @@ func (s *spanInner) Meta() SpanMeta {
 		spanID == 0 &&
 		!otelCtx.TraceID().IsValid() &&
 		recordingType == 0 &&
-		baggage == nil {
+		!sterile {
 		return SpanMeta{}
 	}
 	return SpanMeta{
@@ -169,7 +149,7 @@ func (s *spanInner) Meta() SpanMeta {
 		spanID:        spanID,
 		otelCtx:       otelCtx,
 		recordingType: recordingType,
-		Baggage:       baggage,
+		sterile:       sterile,
 	}
 }
 
@@ -253,22 +233,6 @@ func (s *spanInner) hasVerboseSink() bool {
 		return false
 	}
 	return true
-}
-
-func (s *spanInner) SetBaggageItem(restrictedKey, value string) *spanInner {
-	if s.isNoop() {
-		return s
-	}
-	s.crdb.setBaggageItemAndTag(restrictedKey, value)
-	if s.otelSpan != nil {
-		// In OpenTelemetry, baggage is stored directly in the context, separately
-		// from the span. We don't go through the trouble. We'll set a tag on the
-		// current span, however.
-		s.otelSpan.SetAttributes(attribute.String(restrictedKey, value))
-	}
-	// NB: nothing to do for net/trace.
-
-	return s
 }
 
 // Tracer exports the tracer this span was created using.

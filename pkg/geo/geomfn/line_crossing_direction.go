@@ -69,7 +69,7 @@ func getSegCrossDirection(fromSeg1, toSeg1, fromSeg2, toSeg2 geom.Coord) lineCro
 	posT2FromSeg1 := getPosition(fromSeg1, toSeg1, toSeg2)
 
 	// If both point of any segment is on same side of other segment
-	// or second point of any segment is colliniear with other segment
+	// or second point of any segment is collinear with other segment
 	// then return the value as noCrossOrCollinear else return the direction of segment2 over segment1.
 	// To avoid double counting, collinearity condition is used with second points only.
 	if posF1FromSeg2 == posT1FromSeg2 || posF2FromSeg1 == posT2FromSeg1 ||
@@ -79,7 +79,7 @@ func getSegCrossDirection(fromSeg1, toSeg1, fromSeg2, toSeg2 geom.Coord) lineCro
 	return posT2FromSeg1
 }
 
-// LineCrossingDirection takes two lines and returns an interger value defining behavior of crossing of lines:
+// LineCrossingDirection takes two lines and returns an integer value defining behavior of crossing of lines:
 // 0: lines do not cross,
 // -1: line2 crosses line1 from right to left,
 // 1: line2 crosses line1 from left to right,

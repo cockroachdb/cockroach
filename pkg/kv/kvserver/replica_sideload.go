@@ -178,9 +178,13 @@ func maybeInlineSideloadedRaftCommand(
 	}
 
 	if len(command.ReplicatedEvalResult.AddSSTable.Data) > 0 {
-		// The entry we started out with was already "fat". This happens when
-		// the entry reached us through a preemptive snapshot (when we didn't
-		// have a ReplicaID yet).
+		// The entry we started out with was already "fat". This should never
+		// occur since it would imply that a) the entry was not properly
+		// sideloaded during append or b) the entry reached us through a
+		// snapshot, but as of #70464, snapshots are guaranteed to not
+		// contain any log entries. (So if we hit this, it is going to
+		// be as a result of log entries that are very old, written
+		// when sending the log with snapshots was still possible).
 		log.Event(ctx, "entry already inlined")
 		return &ent, nil
 	}

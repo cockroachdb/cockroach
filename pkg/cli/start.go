@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -221,7 +222,7 @@ func initTempStorageConfig(
 			continue
 		}
 		recordPath := filepath.Join(spec.Path, server.TempDirsRecordFilename)
-		if err := storage.CleanupTempDirs(recordPath); err != nil {
+		if err := fs.CleanupTempDirs(recordPath); err != nil {
 			return base.TempStorageConfig{}, errors.Wrap(err,
 				"could not cleanup temporary directories from record file")
 		}
@@ -288,7 +289,7 @@ func initTempStorageConfig(
 	// Create the temporary subdirectory for the temp engine.
 	{
 		var err error
-		if tempStorageConfig.Path, err = storage.CreateTempDir(tempDir, server.TempDirPrefix, stopper); err != nil {
+		if tempStorageConfig.Path, err = fs.CreateTempDir(tempDir, server.TempDirPrefix, stopper); err != nil {
 			return base.TempStorageConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
 		}
 	}
@@ -296,7 +297,7 @@ func initTempStorageConfig(
 	// We record the new temporary directory in the record file (if it
 	// exists) for cleanup in case the node crashes.
 	if recordPath != "" {
-		if err := storage.RecordTempDir(recordPath, tempStorageConfig.Path); err != nil {
+		if err := fs.RecordTempDir(recordPath, tempStorageConfig.Path); err != nil {
 			return base.TempStorageConfig{}, errors.Wrapf(
 				err,
 				"could not record temporary directory path to record file: %s",
@@ -413,7 +414,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// This span concludes when the startup goroutine started below
 	// has completed.
 	// TODO(andrei): we don't close the span on the early returns below.
-	tracer := serverCfg.Settings.Tracer
+	tracer := serverCfg.Tracer
 	startupSpan := tracer.StartSpan("server start")
 	ctx = tracing.ContextWithSpan(ctx, startupSpan)
 
@@ -446,7 +447,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 
 	// Tweak GOMAXPROCS if we're in a cgroup / container that has cpu limits set.
 	// The GO default for GOMAXPROCS is NumCPU(), however this is less
-	// than ideal if the cgruop is limited to a number lower than that.
+	// than ideal if the cgroup is limited to a number lower than that.
 	//
 	// TODO(bilal): various global settings have already been initialized based on
 	// GOMAXPROCS(0) by now.
@@ -555,7 +556,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 		}
 	}
 
-	// DelayedBoostrapFn will be called if the boostrap process is
+	// DelayedBootstrapFn will be called if the bootstrap process is
 	// taking a bit long.
 	serverCfg.DelayedBootstrapFn = func() {
 		const msg = `The server appears to be unable to contact the other nodes in the cluster. Please try:
@@ -1183,7 +1184,7 @@ func getClientGRPCConn(
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: cfg.Settings.Tracer},
+		AmbientCtx: log.AmbientContext{Tracer: cfg.Tracer},
 		Config:     cfg.Config,
 		Clock:      clock,
 		Stopper:    stopper,

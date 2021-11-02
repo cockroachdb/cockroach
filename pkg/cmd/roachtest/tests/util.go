@@ -94,16 +94,20 @@ func WaitForUpdatedReplicationReport(ctx context.Context, t test.Test, db *gosql
 	}
 }
 
-// EnableAdmissionControl enables the admission control cluster settings on
-// the given cluster.
-func EnableAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster) {
+// SetAdmissionControl sets the admission control cluster settings on the
+// given cluster.
+func SetAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, enabled bool) {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
+	val := "true"
+	if !enabled {
+		val = "false"
+	}
 	for _, setting := range []string{"admission.kv.enabled", "admission.sql_kv_response.enabled",
 		"admission.sql_sql_response.enabled"} {
 		if _, err := db.ExecContext(
-			ctx, "SET CLUSTER SETTING "+setting+" = 'true'"); err != nil {
-			t.Fatalf("failed to enable admission control: %v", err)
+			ctx, "SET CLUSTER SETTING "+setting+" = '"+val+"'"); err != nil {
+			t.Fatalf("failed to set admission control to %t: %v", enabled, err)
 		}
 	}
 }

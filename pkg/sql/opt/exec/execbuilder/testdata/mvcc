@@ -14,7 +14,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@primary
+  table: t@t_pkey
   spans: [/1 - /1]
 
 query T
@@ -25,7 +25,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@primary
+  table: t@t_pkey
   spans: [/1 - /1]
 
 # Ensure that the presence of mutation columns doesn't affect accessing system
@@ -42,7 +42,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
 
 statement ok
@@ -60,7 +60,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@primary
+  table: t@t_pkey
   spans: FULL SCAN
 
 # Regression test for #62798. Using crdb_internal_mvcc_timestamp shouldn't cause

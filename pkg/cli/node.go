@@ -346,7 +346,7 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	if err := runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, nodeIDs); err != nil {
 		cause := errors.UnwrapAll(err)
 		if s, ok := status.FromError(cause); ok && s.Code() == codes.NotFound {
-			// Are we trying to decommision a node that does not
+			// Are we trying to decommission a node that does not
 			// exist? See Server.Decommission for where this specific grpc error
 			// code is generated.
 			return errors.New("node does not exist")
@@ -648,7 +648,7 @@ var nodeCmd = &cobra.Command{
 	Use:   "node [command]",
 	Short: "list, inspect, drain or remove nodes\n",
 	Long:  "List, inspect, drain or remove nodes.",
-	RunE:  usageAndErr,
+	RunE:  UsageAndErr,
 }
 
 func init() {

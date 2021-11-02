@@ -74,32 +74,32 @@ discard_stmt ::=
 	'DISCARD' 'ALL'
 
 grant_stmt ::=
-	'GRANT' privileges 'ON' targets 'TO' name_list
-	| 'GRANT' privilege_list 'TO' name_list
-	| 'GRANT' privilege_list 'TO' name_list 'WITH' 'ADMIN' 'OPTION'
-	| 'GRANT' privileges 'ON' 'TYPE' target_types 'TO' name_list
-	| 'GRANT' privileges 'ON' 'SCHEMA' schema_name_list 'TO' name_list
-	| 'GRANT' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'TO' name_list
+	'GRANT' privileges 'ON' targets 'TO' role_spec_list
+	| 'GRANT' privilege_list 'TO' role_spec_list
+	| 'GRANT' privilege_list 'TO' role_spec_list 'WITH' 'ADMIN' 'OPTION'
+	| 'GRANT' privileges 'ON' 'TYPE' target_types 'TO' role_spec_list
+	| 'GRANT' privileges 'ON' 'SCHEMA' schema_name_list 'TO' role_spec_list
+	| 'GRANT' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list
 
 prepare_stmt ::=
 	'PREPARE' table_alias_name prep_type_clause 'AS' preparable_stmt
 
 revoke_stmt ::=
-	'REVOKE' privileges 'ON' targets 'FROM' name_list
-	| 'REVOKE' privilege_list 'FROM' name_list
-	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' name_list
-	| 'REVOKE' privileges 'ON' 'TYPE' target_types 'FROM' name_list
-	| 'REVOKE' privileges 'ON' 'SCHEMA' schema_name_list 'FROM' name_list
-	| 'REVOKE' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' name_list
+	'REVOKE' privileges 'ON' targets 'FROM' role_spec_list
+	| 'REVOKE' privilege_list 'FROM' role_spec_list
+	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' role_spec_list
+	| 'REVOKE' privileges 'ON' 'TYPE' target_types 'FROM' role_spec_list
+	| 'REVOKE' privileges 'ON' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 
 savepoint_stmt ::=
 	'SAVEPOINT' name
 
 reassign_owned_by_stmt ::=
-	'REASSIGN' 'OWNED' 'BY' name_list 'TO' role_spec
+	'REASSIGN' 'OWNED' 'BY' role_spec_list 'TO' role_spec
 
 drop_owned_by_stmt ::=
-	'DROP' 'OWNED' 'BY' name_list opt_drop_behavior
+	'DROP' 'OWNED' 'BY' role_spec_list opt_drop_behavior
 
 release_stmt ::=
 	'RELEASE' savepoint_name
@@ -215,6 +215,7 @@ show_stmt ::=
 	| show_columns_stmt
 	| show_constraints_stmt
 	| show_create_stmt
+	| show_create_schedules_stmt
 	| show_csettings_stmt
 	| show_databases_stmt
 	| show_enums_stmt
@@ -319,8 +320,8 @@ targets ::=
 	| 'TENANT' iconst64
 	| 'DATABASE' name_list
 
-name_list ::=
-	( name ) ( ( ',' name ) )*
+role_spec_list ::=
+	( role_spec ) ( ( ',' role_spec ) )*
 
 privilege_list ::=
 	( privilege ) ( ( ',' privilege ) )*
@@ -336,7 +337,8 @@ prep_type_clause ::=
 	| 
 
 role_spec ::=
-	username_or_sconst
+	'identifier'
+	| unreserved_keyword
 	| 'CURRENT_USER'
 	| 'SESSION_USER'
 
@@ -393,10 +395,10 @@ alter_ddl_stmt ::=
 	| alter_default_privileges_stmt
 
 alter_role_stmt ::=
-	'ALTER' role_or_group_or_user string_or_placeholder opt_role_options
-	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' string_or_placeholder opt_role_options
-	| 'ALTER' role_or_group_or_user string_or_placeholder opt_in_database set_or_reset_clause
-	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' string_or_placeholder opt_in_database set_or_reset_clause
+	'ALTER' role_or_group_or_user role_spec opt_role_options
+	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' role_spec opt_role_options
+	| 'ALTER' role_or_group_or_user role_spec opt_in_database set_or_reset_clause
+	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' role_spec opt_in_database set_or_reset_clause
 	| 'ALTER' 'ROLE_ALL' 'ALL' opt_in_database set_or_reset_clause
 	| 'ALTER' 'USER_ALL' 'ALL' opt_in_database set_or_reset_clause
 
@@ -445,8 +447,8 @@ cancel_all_jobs_stmt ::=
 	'CANCEL' 'ALL' name 'JOBS'
 
 create_role_stmt ::=
-	'CREATE' role_or_group_or_user string_or_placeholder opt_role_options
-	| 'CREATE' role_or_group_or_user 'IF' 'NOT' 'EXISTS' string_or_placeholder opt_role_options
+	'CREATE' role_or_group_or_user role_spec opt_role_options
+	| 'CREATE' role_or_group_or_user 'IF' 'NOT' 'EXISTS' role_spec opt_role_options
 
 create_ddl_stmt ::=
 	create_database_stmt
@@ -506,8 +508,8 @@ drop_ddl_stmt ::=
 	| drop_type_stmt
 
 drop_role_stmt ::=
-	'DROP' role_or_group_or_user string_or_placeholder_list
-	| 'DROP' role_or_group_or_user 'IF' 'EXISTS' string_or_placeholder_list
+	'DROP' role_or_group_or_user role_spec_list
+	| 'DROP' role_or_group_or_user 'IF' 'EXISTS' role_spec_list
 
 drop_schedule_stmt ::=
 	'DROP' 'SCHEDULE' a_expr
@@ -646,6 +648,11 @@ show_constraints_stmt ::=
 show_create_stmt ::=
 	'SHOW' 'CREATE' table_name
 	| 'SHOW' 'CREATE' 'ALL' 'TABLES'
+	| 'SHOW' 'CREATE' 'ALL' 'SCHEMAS'
+
+show_create_schedules_stmt ::=
+	'SHOW' 'CREATE' 'ALL' 'SCHEDULES'
+	| 'SHOW' 'CREATE' 'SCHEDULE' a_expr
 
 show_csettings_stmt ::=
 	'SHOW' 'CLUSTER' 'SETTING' var_name
@@ -801,6 +808,9 @@ opt_from_list ::=
 db_object_name ::=
 	simple_db_object_name
 	| complex_db_object_name
+
+name_list ::=
+	( name ) ( ( ',' name ) )*
 
 opt_with ::=
 	'WITH'
@@ -1015,6 +1025,7 @@ unreserved_keyword ::=
 	| 'NORMAL'
 	| 'NO_INDEX_JOIN'
 	| 'NO_ZIGZAG_JOIN'
+	| 'NO_FULL_SCAN'
 	| 'NOCREATEDB'
 	| 'NOCREATELOGIN'
 	| 'NOCANCELQUERY'
@@ -1279,10 +1290,6 @@ qualifiable_schema_name ::=
 
 type_list ::=
 	( typename ) ( ( ',' typename ) )*
-
-username_or_sconst ::=
-	non_reserved_word
-	| 'SCONST'
 
 transaction_mode_list ::=
 	( transaction_mode ) ( ( opt_comma transaction_mode ) )*
@@ -1549,11 +1556,14 @@ insert_column_item ::=
 
 session_var ::=
 	'identifier'
+	| 'identifier' session_var_parts
 	| 'ALL'
 	| 'DATABASE'
 	| 'NAMES'
 	| 'ROLE'
 	| 'SESSION_USER'
+	| 'LC_COLLATE'
+	| 'LC_CTYPE'
 	| 'TIME' 'ZONE'
 
 var_name ::=
@@ -1618,7 +1628,7 @@ opt_on_targets_roles ::=
 	| 
 
 for_grantee_clause ::=
-	'FOR' name_list
+	'FOR' role_spec_list
 	| 
 
 opt_schedule_executor_type ::=
@@ -1655,7 +1665,7 @@ partition_name ::=
 	unrestricted_name
 
 opt_for_roles ::=
-	'FOR' role_or_group_or_user name_list
+	'FOR' role_or_group_or_user role_spec_list
 	| 
 
 relation_expr ::=
@@ -1703,12 +1713,6 @@ type_name ::=
 typename ::=
 	simple_typename opt_array_bounds
 	| simple_typename 'ARRAY'
-
-non_reserved_word ::=
-	'identifier'
-	| unreserved_keyword
-	| col_name_keyword
-	| type_func_name_keyword
 
 transaction_mode ::=
 	transaction_user_priority
@@ -1857,11 +1861,11 @@ opt_in_schemas ::=
 	| 
 
 abbreviated_grant_stmt ::=
-	'GRANT' privileges 'ON' alter_default_privileges_target_object 'TO' name_list opt_with_grant_option
+	'GRANT' privileges 'ON' alter_default_privileges_target_object 'TO' role_spec_list opt_with_grant_option
 
 abbreviated_revoke_stmt ::=
-	'REVOKE' privileges 'ON' alter_default_privileges_target_object 'FROM' name_list opt_drop_behavior
-	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' alter_default_privileges_target_object 'FROM' name_list opt_drop_behavior
+	'REVOKE' privileges 'ON' alter_default_privileges_target_object 'FROM' role_spec_list opt_drop_behavior
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' alter_default_privileges_target_object 'FROM' role_spec_list opt_drop_behavior
 
 role_options ::=
 	( role_option ) ( ( role_option ) )*
@@ -2078,6 +2082,12 @@ table_index_name_list ::=
 table_name_list ::=
 	( table_name ) ( ( ',' table_name ) )*
 
+non_reserved_word ::=
+	'identifier'
+	| unreserved_keyword
+	| col_name_keyword
+	| type_func_name_keyword
+
 kv_option ::=
 	name '=' string_or_placeholder
 	| name
@@ -2108,6 +2118,9 @@ like_table_option_list ::=
 
 column_name ::=
 	name
+
+session_var_parts ::=
+	( '.' 'identifier' ) ( ( '.' 'identifier' ) )*
 
 attrs ::=
 	( '.' unrestricted_name ) ( ( '.' unrestricted_name ) )*
@@ -2159,7 +2172,7 @@ extra_var_value ::=
 	| cockroachdb_extra_reserved_keyword
 
 targets_roles ::=
-	'ROLE' name_list
+	'ROLE' role_spec_list
 	| 'SCHEMA' schema_name_list
 	| 'TYPE' type_name_list
 	| targets
@@ -2795,6 +2808,7 @@ index_flags_param ::=
 	'FORCE_INDEX' '=' index_name
 	| 'NO_INDEX_JOIN'
 	| 'NO_ZIGZAG_JOIN'
+	| 'NO_FULL_SCAN'
 	| 'FORCE_ZIGZAG'
 	| 'FORCE_ZIGZAG' '=' index_name
 

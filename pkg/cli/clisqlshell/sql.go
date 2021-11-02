@@ -88,6 +88,10 @@ Configuration
   \set [NAME]       set a client-side flag or (without argument) print the current settings.
   \unset NAME       unset a flag.
 
+Statement diagnostics
+  \statement-diag list                               list available bundles.
+  \statement-diag download <bundle-id> [<filename>]  download bundle.
+
 %s
 More documentation about our SQL dialect and the CLI shell is available online:
 %s
@@ -274,7 +278,11 @@ func (c *cliState) addHistory(line string) {
 	}
 }
 
-func (c *cliState) invalidSyntax(
+func (c *cliState) invalidSyntax(nextState cliStateEnum) cliStateEnum {
+	return c.invalidSyntaxf(nextState, `%s. Try \? for help.`, c.lastInputLine)
+}
+
+func (c *cliState) invalidSyntaxf(
 	nextState cliStateEnum, format string, args ...interface{},
 ) cliStateEnum {
 	fmt.Fprint(c.iCtx.stderr, "invalid syntax: ")
@@ -282,10 +290,6 @@ func (c *cliState) invalidSyntax(
 	fmt.Fprintln(c.iCtx.stderr)
 	c.exitErr = errInvalidSyntax
 	return nextState
-}
-
-func (c *cliState) invalidOptSet(nextState cliStateEnum, args []string) cliStateEnum {
-	return c.invalidSyntax(nextState, `\set %s. Try \? for help.`, strings.Join(args, " "))
 }
 
 func (c *cliState) invalidOptionChange(nextState cliStateEnum, opt string) cliStateEnum {
@@ -481,7 +485,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 
 	opt, ok := options[args[0]]
 	if !ok {
-		return c.invalidOptSet(errState, args)
+		return c.invalidSyntax(errState)
 	}
 	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
 		return c.invalidOptionChange(errState, args[0])
@@ -495,7 +499,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 	case 2:
 		val = args[1]
 	default:
-		return c.invalidOptSet(errState, args)
+		return c.invalidSyntax(errState)
 	}
 
 	// Run the command.
@@ -503,7 +507,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 	if !opt.isBoolean {
 		err = opt.set(c, val)
 	} else if b, e := clisqlclient.ParseBool(val); e != nil {
-		return c.invalidOptSet(errState, args)
+		return c.invalidSyntax(errState)
 	} else if b {
 		err = opt.set(c, "true")
 	} else {
@@ -522,11 +526,11 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 // handleUnset supports the \unset client-side command.
 func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) cliStateEnum {
 	if len(args) != 1 {
-		return c.invalidSyntax(errState, `\unset %s. Try \? for help.`, strings.Join(args, " "))
+		return c.invalidSyntax(errState)
 	}
 	opt, ok := options[args[0]]
 	if !ok {
-		return c.invalidSyntax(errState, `\unset %s. Try \? for help.`, strings.Join(args, " "))
+		return c.invalidSyntax(errState)
 	}
 	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
 		return c.invalidOptionChange(errState, args[0])
@@ -548,7 +552,7 @@ func isEndOfStatement(lastTok int) bool {
 func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
 	// A demo cluster signifies the presence of `cockroach demo`.
 	if c.sqlCtx.DemoCluster == nil {
-		return c.invalidSyntax(errState, `\demo can only be run with cockroach demo`)
+		return c.invalidSyntaxf(errState, `\demo can only be run with cockroach demo`)
 	}
 
 	// The \demo command has one of three patterns:
@@ -564,7 +568,7 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 	}
 
 	if len(cmd) != 2 {
-		return c.invalidSyntax(errState, `\demo expects 2 parameters, but passed %v`, len(cmd))
+		return c.invalidSyntax(errState)
 	}
 
 	// Special case the add command it takes a string instead of a node number.
@@ -598,10 +602,10 @@ func (c *cliState) handleDemoNodeCommands(
 ) cliStateEnum {
 	nodeID, err := strconv.ParseInt(cmd[1], 10, 32)
 	if err != nil {
-		return c.invalidSyntax(
+		return c.invalidSyntaxf(
 			errState,
 			"%s",
-			errors.Wrapf(err, "cannot convert %s to string", cmd[1]),
+			errors.Wrapf(err, "%q is not a valid node ID", cmd[1]),
 		)
 	}
 
@@ -633,7 +637,7 @@ func (c *cliState) handleDemoNodeCommands(
 		fmt.Fprintf(c.iCtx.stdout, "node %d has been decommissioned\n", nodeID)
 		return nextState
 	}
-	return c.invalidSyntax(errState, `command not recognized: %s`, cmd[0])
+	return c.invalidSyntax(errState)
 }
 
 // handleHelp prints SQL help.
@@ -1163,7 +1167,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 			c.concatLines = fmt.Sprintf(`SELECT * FROM [SHOW USERS] WHERE username = %s`, lexbase.EscapeSQLString(cmd[1]))
 			return cliRunStatement
 		}
-		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+		return c.invalidSyntax(errState)
 
 	case `\d`:
 		if len(cmd) == 1 {
@@ -1173,7 +1177,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 			c.concatLines = `SHOW COLUMNS FROM ` + cmd[1]
 			return cliRunStatement
 		}
-		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+		return c.invalidSyntax(errState)
 	case `\dd`:
 		c.concatLines = `SHOW CONSTRAINTS FROM ` + cmd[1] + ` WITH COMMENT`
 		return cliRunStatement
@@ -1190,14 +1194,14 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		case 2:
 			b, err := clisqlclient.ParseBool(cmd[1])
 			if err != nil {
-				return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+				return c.invalidSyntax(errState)
 			} else if b {
 				format = clisqlexec.TableDisplayRecords
 			} else {
 				format = clisqlexec.TableDisplayTable
 			}
 		default:
-			return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+			return c.invalidSyntax(errState)
 		}
 		c.sqlExecCtx.TableDisplayFormat = format
 		return loopState
@@ -1205,12 +1209,15 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	case `\demo`:
 		return c.handleDemo(cmd[1:], loopState, errState)
 
+	case `\statement-diag`:
+		return c.handleStatementDiag(cmd[1:], loopState, errState)
+
 	default:
 		if strings.HasPrefix(cmd[0], `\d`) {
 			// Unrecognized command for now, but we want to be helpful.
 			fmt.Fprint(c.iCtx.stderr, "Suggestion: use the SQL SHOW statement to inspect your schema.\n")
 		}
-		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+		return c.invalidSyntax(errState)
 	}
 
 	return loopState
@@ -1375,7 +1382,7 @@ func (c *cliState) runInclude(
 	cmd []string, contState, errState cliStateEnum, relative bool,
 ) (resState cliStateEnum) {
 	if len(cmd) != 1 {
-		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+		return c.invalidSyntax(errState)
 	}
 
 	if c.levels >= maxRecursionLevels {
@@ -1385,7 +1392,7 @@ func (c *cliState) runInclude(
 	}
 
 	if len(c.partialLines) > 0 {
-		return c.invalidSyntax(errState, `cannot use \i during multi-line entry.`)
+		return c.invalidSyntax(errState)
 	}
 
 	filename := cmd[0]
@@ -1532,8 +1539,10 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 			fmt.Fprintln(c.iCtx.stdout, helpText)
 		}
 
-		_ = c.invalidSyntax(cliStart, "statement ignored: %v",
-			clierror.NewFormattedError(err, false /*showSeverity*/, false /*verbose*/))
+		_ = c.invalidSyntaxf(
+			cliStart, "statement ignored: %v",
+			clierror.NewFormattedError(err, false /*showSeverity*/, false /*verbose*/),
+		)
 
 		// Stop here if exiterr is set.
 		if c.iCtx.errExit {
@@ -1937,7 +1946,7 @@ func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 		// the constant string parser.helpHintPrefix.
 		//
 		// However, we cannot include the 'parser' package here because it
-		// would incur a hughe dependency overhead.
+		// would incur a huge dependency overhead.
 		if strings.HasPrefix(message, "help token in input") && strings.HasPrefix(hint, "help:") {
 			// Yes: return it.
 			helpText = hint[6:]

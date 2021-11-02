@@ -71,6 +71,17 @@ func checkRows(t *testing.T, expected map[string][]byte, rows []kv.KeyValue) {
 	}
 }
 
+func checkKeys(t *testing.T, expected []string, keys []roachpb.Key) {
+	for i, key := range keys {
+		if !bytes.Equal([]byte(expected[i]), key) {
+			t.Errorf("expected %d: %s, got %s",
+				i,
+				key,
+				expected[i])
+		}
+	}
+}
+
 func checkLen(t *testing.T, expected, count int) {
 	if expected != count {
 		t.Errorf("expected length to be %d, got %d", expected, count)
@@ -481,6 +492,59 @@ func TestDB_Del(t *testing.T) {
 	checkLen(t, len(expected), len(rows))
 }
 
+func TestDB_DelRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+
+	b := &kv.Batch{}
+	b.Put("aa", "1")
+	b.Put("ab", "2")
+	b.Put("ac", "3")
+	b.Put("ad", "4")
+	if err := db.Run(context.Background(), b); err != nil {
+		t.Fatal(err)
+	}
+	deletedKeys, err := db.DelRange(context.Background(), "aa", "ac", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedKeys := []string{"aa", "ab"}
+	checkKeys(t, expectedKeys, deletedKeys)
+	checkLen(t, len(expectedKeys), len(deletedKeys))
+
+	rows, err := db.Scan(context.Background(), "a", "b", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string][]byte{
+		"ac": []byte("3"),
+		"ad": []byte("4"),
+	}
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
+
+	deletedKeys, err = db.DelRange(context.Background(), "aa", "ad", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deletedKeys != nil {
+		t.Errorf("expected deletedKeys to be nil when returnKeys set to false, got %v", deletedKeys)
+	}
+
+	rows, err = db.Scan(context.Background(), "a", "b", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected = map[string][]byte{
+		"ad": []byte("4"),
+	}
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
+}
+
 func TestTxn_Commit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -589,7 +653,8 @@ func TestDBDecommissionedOperations(t *testing.T) {
 			return db.Del(ctx, key)
 		}},
 		{"DelRange", func() error {
-			return db.DelRange(ctx, key, keyEnd)
+			_, err := db.DelRange(ctx, key, keyEnd, false)
+			return err
 		}},
 		{"Get", func() error {
 			_, err := db.Get(ctx, key)

@@ -141,6 +141,11 @@ func (desc *immutable) DescriptorProto() *descpb.Descriptor {
 	}
 }
 
+// NewBuilder implements the catalog.Descriptor interface.
+func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
+	return NewBuilder(desc.SchemaDesc())
+}
+
 // ValidateSelf implements the catalog.Descriptor interface.
 func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate local properties of the descriptor.

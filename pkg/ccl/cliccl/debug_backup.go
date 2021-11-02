@@ -181,9 +181,8 @@ func init() {
 		Use:   "backup [command]",
 		Short: "debug backups",
 		Long:  "Shows information about a SQL backup.",
-		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return cmd.Usage()
+			return cli.UsageAndErr(cmd, args)
 		},
 	}
 
@@ -587,7 +586,6 @@ func makeRowFetcher(
 	}
 
 	table := row.FetcherTableArgs{
-		Spans:            []roachpb.Span{entry.Span},
 		Desc:             entry.Desc,
 		Index:            entry.Desc.GetPrimaryIndex(),
 		ColIdxMap:        colIdxMap,

@@ -40,6 +40,7 @@ test           crdb_internal       cluster_queries                        public
 test           crdb_internal       cluster_sessions                       public   SELECT
 test           crdb_internal       cluster_settings                       public   SELECT
 test           crdb_internal       cluster_transactions                   public   SELECT
+test           crdb_internal       create_schema_statements               public   SELECT
 test           crdb_internal       create_statements                      public   SELECT
 test           crdb_internal       create_type_statements                 public   SELECT
 test           crdb_internal       cross_db_references                    public   SELECT

@@ -29,6 +29,8 @@
 </span></td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: <a href="uuid.html">uuid</a>[], elem: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a>[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
+<tr><td><a name="array_append"></a><code>array_append(array: anyenum[], elem: anyenum) &rarr; anyenum[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: box2d[], elem: box2d) &rarr; box2d[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: geography[], elem: geography) &rarr; geography[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
@@ -70,6 +72,8 @@
 <tr><td><a name="array_cat"></a><code>array_cat(left: <a href="timestamp.html">timestamptz</a>[], right: <a href="timestamp.html">timestamptz</a>[]) &rarr; <a href="timestamp.html">timestamptz</a>[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td></tr>
 <tr><td><a name="array_cat"></a><code>array_cat(left: <a href="uuid.html">uuid</a>[], right: <a href="uuid.html">uuid</a>[]) &rarr; <a href="uuid.html">uuid</a>[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
+</span></td></tr>
+<tr><td><a name="array_cat"></a><code>array_cat(left: anyenum[], right: anyenum[]) &rarr; anyenum[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td></tr>
 <tr><td><a name="array_cat"></a><code>array_cat(left: box2d[], right: box2d[]) &rarr; box2d[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td></tr>
@@ -117,6 +121,8 @@
 </span></td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: <a href="uuid.html">uuid</a>[], elem: <a href="uuid.html">uuid</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: anyenum[], elem: anyenum) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: box2d[], elem: box2d) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: geography[], elem: geography) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
@@ -158,6 +164,8 @@
 <tr><td><a name="array_positions"></a><code>array_positions(array: <a href="timestamp.html">timestamptz</a>[], elem: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: <a href="uuid.html">uuid</a>[], elem: <a href="uuid.html">uuid</a>) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
+</span></td></tr>
+<tr><td><a name="array_positions"></a><code>array_positions(array: anyenum[], elem: anyenum) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: box2d[], elem: box2d) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
@@ -201,6 +209,8 @@
 </span></td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: <a href="uuid.html">uuid</a>, array: <a href="uuid.html">uuid</a>[]) &rarr; <a href="uuid.html">uuid</a>[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
+<tr><td><a name="array_prepend"></a><code>array_prepend(elem: anyenum, array: anyenum[]) &rarr; anyenum[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: box2d, array: box2d[]) &rarr; box2d[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: geography, array: geography[]) &rarr; geography[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
@@ -243,6 +253,8 @@
 </span></td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: <a href="uuid.html">uuid</a>[], elem: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a>[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td></tr>
+<tr><td><a name="array_remove"></a><code>array_remove(array: anyenum[], elem: anyenum) &rarr; anyenum[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
+</span></td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: box2d[], elem: box2d) &rarr; box2d[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: geography[], elem: geography) &rarr; geography[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
@@ -284,6 +296,8 @@
 <tr><td><a name="array_replace"></a><code>array_replace(array: <a href="timestamp.html">timestamptz</a>[], toreplace: <a href="timestamp.html">timestamptz</a>, replacewith: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="timestamp.html">timestamptz</a>[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: <a href="uuid.html">uuid</a>[], toreplace: <a href="uuid.html">uuid</a>, replacewith: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a>[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
+</span></td></tr>
+<tr><td><a name="array_replace"></a><code>array_replace(array: anyenum[], toreplace: anyenum, replacewith: anyenum) &rarr; anyenum[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: box2d[], toreplace: box2d, replacewith: box2d) &rarr; box2d[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td></tr>
@@ -882,6 +896,8 @@ available replica will error.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.pb_to_json"></a><code>crdb_internal.pb_to_json(pbname: <a href="string.html">string</a>, data: <a href="bytes.html">bytes</a>, emit_defaults: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Converts protocol message to its JSONB representation.</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.pb_to_json"></a><code>crdb_internal.pb_to_json(pbname: <a href="string.html">string</a>, data: <a href="bytes.html">bytes</a>, emit_defaults: <a href="bool.html">bool</a>, emit_redacted: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Converts protocol message to its JSONB representation.</p>
+</span></td></tr>
 <tr><td><a name="crdb_internal.read_file"></a><code>crdb_internal.read_file(uri: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Read the content of the file at the supplied external storage URI</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.write_file"></a><code>crdb_internal.write_file(data: <a href="bytes.html">bytes</a>, uri: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Write the content passed to a file at the supplied external storage URI</p>
@@ -909,6 +925,8 @@ available replica will error.</p>
 <tr><td><a name="json_strip_nulls"></a><code>json_strip_nulls(from_json: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns from_json with all object fields that have null values omitted. Other null values are untouched.</p>
 </span></td></tr>
 <tr><td><a name="json_typeof"></a><code>json_typeof(val: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the type of the outermost JSON value as a text string.</p>
+</span></td></tr>
+<tr><td><a name="json_valid"></a><code>json_valid(string: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the given string is a valid JSON or not</p>
 </span></td></tr>
 <tr><td><a name="jsonb_array_length"></a><code>jsonb_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td></tr>
@@ -2515,6 +2533,11 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td></tr>
 <tr><td><a name="convert_to"></a><code>convert_to(str: <a href="string.html">string</a>, enc: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Encode the string <code>str</code> as a byte array using encoding <code>enc</code>. Supports encodings ‘UTF8’ and ‘LATIN1’.</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.decode_plan_gist"></a><code>crdb_internal.decode_plan_gist(gist: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of output similar to EXPLAIN from a gist created by EXPLAIN (GIST)</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.show_create_all_schemas"></a><code>crdb_internal.show_create_all_schemas(database_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of CREATE schema statements.
+The output can be used to recreate a database.’</p>
+</span></td></tr>
 <tr><td><a name="crdb_internal.show_create_all_tables"></a><code>crdb_internal.show_create_all_tables(database_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of CREATE table statements followed by
 ALTER table statements that add table constraints. The rows are ordered
 by dependencies. All foreign keys are added after the creation of the table
@@ -2826,6 +2849,8 @@ may increase either contention or retry errors, or both.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.approximate_timestamp"></a><code>crdb_internal.approximate_timestamp(timestamp: <a href="decimal.html">decimal</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Converts the crdb_internal_mvcc_timestamp column into an approximate timestamp.</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.assignment_cast"></a><code>crdb_internal.assignment_cast(val: anyelement, type: anyelement) &rarr; anyelement</code></td><td><span class="funcdesc"><p>This function is used internally to perform assignment casts during mutations.</p>
+</span></td></tr>
 <tr><td><a name="crdb_internal.check_consistency"></a><code>crdb_internal.check_consistency(stats_only: <a href="bool.html">bool</a>, start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{int AS range_id, bytes AS start_key, string AS start_key_pretty, string AS status, string AS detail}</code></td><td><span class="funcdesc"><p>Runs a consistency check on ranges touching the specified key range. an empty start or end key is treated as the minimum and maximum possible, respectively. stats_only should only be set to false when targeting a small number of ranges to avoid overloading the cluster. Each returned row contains the range ID, the status (a roachpb.CheckConsistencyResponse_Status), and verbose detail.</p>
 <p>Example usage:
 SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
@@ -2898,6 +2923,8 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <tr><td><a name="crdb_internal.pretty_span"></a><code>crdb_internal.pretty_span(raw_key_start: <a href="bytes.html">bytes</a>, raw_key_end: <a href="bytes.html">bytes</a>, skip_fields: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.range_stats"></a><code>crdb_internal.range_stats(key: <a href="bytes.html">bytes</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This function is used to retrieve range statistics information as a JSON object.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.reset_index_usage_stats"></a><code>crdb_internal.reset_index_usage_stats() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to clear the collected index usage statistics.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.reset_sql_stats"></a><code>crdb_internal.reset_sql_stats() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to clear the collected SQL statistics.</p>
 </span></td></tr>

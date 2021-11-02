@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
@@ -84,15 +85,15 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	tr := execinfrapb.TableReaderSpec{
 		Table:         *desc.TableDesc(),
-		Spans:         make([]execinfrapb.TableReaderSpan, 1),
+		Spans:         make([]roachpb.Span, 1),
 		NeededColumns: []uint32{0},
 	}
 	var err error
-	tr.Spans[0].Span.Key, err = randgen.TestingMakePrimaryIndexKey(desc, 0)
+	tr.Spans[0].Key, err = randgen.TestingMakePrimaryIndexKey(desc, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tr.Spans[0].Span.EndKey, err = randgen.TestingMakePrimaryIndexKey(desc, numRows+1)
+	tr.Spans[0].EndKey, err = randgen.TestingMakePrimaryIndexKey(desc, numRows+1)
 	if err != nil {
 		t.Fatal(err)
 	}

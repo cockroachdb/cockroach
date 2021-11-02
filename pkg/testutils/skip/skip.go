@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // SkippableTest is a testing.TB with Skip methods.
@@ -46,6 +47,26 @@ func IgnoreLint(t SkippableTest, args ...interface{}) {
 func IgnoreLintf(t SkippableTest, format string, args ...interface{}) {
 	t.Helper()
 	t.Skipf(format, args...)
+}
+
+// UnderDeadlock skips this test if the deadlock detector is enabled.
+func UnderDeadlock(t SkippableTest, args ...interface{}) {
+	t.Helper()
+	if syncutil.DeadlockEnabled {
+		t.Skip(append([]interface{}{"disabled under deadlock detector"}, args...))
+	}
+}
+
+// UnderDeadlockWithIssue skips this test if the deadlock detector is enabled,
+// logging the given issue ID as the reason.
+func UnderDeadlockWithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
+	t.Helper()
+	if syncutil.DeadlockEnabled {
+		t.Skip(append([]interface{}{fmt.Sprintf(
+			"disabled under deadlock detector. issue: https://github.com/cockroachdb/cockroach/issue/%d",
+			githubIssueID,
+		)}, args...))
+	}
 }
 
 // UnderRace skips this test if the race detector is enabled.

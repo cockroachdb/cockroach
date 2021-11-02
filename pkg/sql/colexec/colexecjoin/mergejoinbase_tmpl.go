@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for mergejoinbase.eg.go. It's formatted
 // in a special way, so it's both valid Go and a valid text/template input.
@@ -55,16 +57,12 @@ func _ASSIGN_EQ(_, _, _, _, _, _ interface{}) int {
 // */}}
 
 // isBufferedGroupFinished checks to see whether or not the buffered group
-// corresponding to input continues in batch.
+// corresponding to the first tuple continues in batch.
 func (o *mergeJoinBase) isBufferedGroupFinished(
-	input *mergeJoinInput, batch coldata.Batch, rowIdx int,
+	input *mergeJoinInput, firstTuple []coldata.Vec, batch coldata.Batch, rowIdx int,
 ) bool {
 	if batch.Length() == 0 {
 		return true
-	}
-	bufferedGroup := o.bufferedGroup.left
-	if input == &o.right {
-		bufferedGroup = o.bufferedGroup.right
 	}
 	tupleToLookAtIdx := rowIdx
 	sel := batch.Selection()
@@ -87,7 +85,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 				// right side being an input) this check will always return false since
 				// nulls couldn't be buffered up though.
 				// TODO(yuzefovich): consider templating this.
-				bufferedNull := bufferedGroup.firstTuple[colIdx].MaybeHasNulls() && bufferedGroup.firstTuple[colIdx].Nulls().NullAt(0)
+				bufferedNull := firstTuple[colIdx].MaybeHasNulls() && firstTuple[colIdx].Nulls().NullAt(0)
 				incomingNull := batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt(tupleToLookAtIdx)
 				if o.joinType.IsSetOpJoin() {
 					if bufferedNull && incomingNull {
@@ -98,7 +96,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 				if bufferedNull || incomingNull {
 					return true
 				}
-				bufferedCol := bufferedGroup.firstTuple[colIdx].TemplateType()
+				bufferedCol := firstTuple[colIdx].TemplateType()
 				prevVal := bufferedCol.Get(0)
 				col := batch.ColVec(int(colIdx)).TemplateType()
 				curVal := col.Get(tupleToLookAtIdx)

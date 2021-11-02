@@ -39,9 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -260,6 +260,10 @@ type Server struct {
 	// sqlStatsController is the control-plane interface for sqlStats.
 	sqlStatsController *persistedsqlstats.Controller
 
+	// indexUsageStatsController is the control-plane interface for
+	// indexUsageStats.
+	indexUsageStatsController *idxusage.Controller
+
 	// reportedStats is a pool of stats that is held for reporting, and is
 	// cleared on a lower interval than sqlStats. Stats from sqlStats flow
 	// into reported stats when sqlStats is cleared.
@@ -325,6 +329,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		pool,
 		nil, /* resetInterval */
 		nil, /* reportedProvider */
+		cfg.SQLStatsTestingKnobs,
 	)
 	reportedSQLStatsController :=
 		reportedSQLStats.GetController(cfg.SQLStatusServer, cfg.DB, cfg.InternalExecutor)
@@ -337,6 +342,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		pool,
 		sqlstats.SQLStatReset,
 		reportedSQLStats,
+		cfg.SQLStatsTestingKnobs,
 	)
 	s := &Server{
 		cfg:                     cfg,
@@ -373,6 +379,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 
 	s.sqlStats = persistedSQLStats
 	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
+	s.indexUsageStatsController = idxusage.NewController(cfg.SQLStatusServer)
 	return s
 }
 
@@ -677,7 +684,11 @@ func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 			ResultsBufferSize: args.ConnResultsBufferSize,
 			IsSuperuser:       args.IsSuperuser,
+			CustomOptions:     make(map[string]string),
 		},
+	}
+	for k, v := range args.CustomOptionSessionDefaults {
+		sd.CustomOptions[k] = v
 	}
 	s.populateMinimalSessionData(sd)
 	return sd
@@ -802,7 +813,12 @@ func (s *Server) newConnExecutor(
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
 	ex.applicationStats = applicationStats
-	ex.statsCollector = sslocal.NewStatsCollector(applicationStats, ex.phaseTimes)
+	ex.statsCollector = sslocal.NewStatsCollector(
+		s.cfg.Settings,
+		applicationStats,
+		ex.phaseTimes,
+		s.cfg.SQLStatsTestingKnobs,
+	)
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
 		ex.applicationStats = ex.server.sqlStats.GetApplicationStats(newName)
@@ -870,7 +886,7 @@ func (s *Server) newConnExecutorWithTxn(
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
 		// sanity, set read only on the session.
-		ex.dataMutatorIterator.applyForEachMutator(func(m sessionDataMutator) {
+		ex.dataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
 			m.SetReadOnly(true)
 		})
 	}
@@ -2295,8 +2311,11 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 
 	retriable := errIsRetriable(err)
 	if retriable {
-		rc, canAutoRetry := ex.getRewindTxnCapability()
-
+		var rc rewindCapability
+		var canAutoRetry bool
+		if ex.implicitTxn() || !ex.sessionData().InjectRetryErrorsEnabled {
+			rc, canAutoRetry = ex.getRewindTxnCapability()
+		}
 		if canAutoRetry {
 			ex.extraTxnState.autoRetryReason = err
 		}
@@ -2423,31 +2442,32 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 
 	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Planner:                p,
-			PrivilegedAccessor:     p,
-			SessionAccessor:        p,
-			ClientNoticeSender:     p,
-			Sequence:               p,
-			Tenant:                 p,
-			Regions:                p,
-			JoinTokenCreator:       p,
-			PreparedStatementState: &ex.extraTxnState.prepStmtsNamespace,
-			SessionDataStack:       ex.sessionDataStack,
-			Settings:               ex.server.cfg.Settings,
-			TestingKnobs:           ex.server.cfg.EvalContextTestingKnobs,
-			ClusterID:              ex.server.cfg.ClusterID(),
-			ClusterName:            ex.server.cfg.RPCContext.ClusterName(),
-			NodeID:                 ex.server.cfg.NodeID,
-			Codec:                  ex.server.cfg.Codec,
-			Locality:               ex.server.cfg.Locality,
-			ReCache:                ex.server.reCache,
-			InternalExecutor:       &ie,
-			DB:                     ex.server.cfg.DB,
-			SQLLivenessReader:      ex.server.cfg.SQLLiveness,
-			SQLStatsController:     ex.server.sqlStatsController,
-			CompactEngineSpan:      ex.server.cfg.CompactEngineSpanFunc,
+			Planner:                   p,
+			PrivilegedAccessor:        p,
+			SessionAccessor:           p,
+			ClientNoticeSender:        p,
+			Sequence:                  p,
+			Tenant:                    p,
+			Regions:                   p,
+			JoinTokenCreator:          p,
+			PreparedStatementState:    &ex.extraTxnState.prepStmtsNamespace,
+			SessionDataStack:          ex.sessionDataStack,
+			Settings:                  ex.server.cfg.Settings,
+			TestingKnobs:              ex.server.cfg.EvalContextTestingKnobs,
+			ClusterID:                 ex.server.cfg.ClusterID(),
+			ClusterName:               ex.server.cfg.RPCContext.ClusterName(),
+			NodeID:                    ex.server.cfg.NodeID,
+			Codec:                     ex.server.cfg.Codec,
+			Locality:                  ex.server.cfg.Locality,
+			Tracer:                    ex.server.cfg.AmbientCtx.Tracer,
+			ReCache:                   ex.server.reCache,
+			InternalExecutor:          &ie,
+			DB:                        ex.server.cfg.DB,
+			SQLLivenessReader:         ex.server.cfg.SQLLiveness,
+			SQLStatsController:        ex.server.sqlStatsController,
+			IndexUsageStatsController: ex.server.indexUsageStatsController,
+			CompactEngineSpan:         ex.server.cfg.CompactEngineSpanFunc,
 		},
-		SessionMutatorIterator: ex.dataMutatorIterator,
 		VirtualSchemas:         ex.server.cfg.VirtualSchemas,
 		Tracing:                &ex.sessionTracing,
 		NodesStatusServer:      ex.server.cfg.NodesStatusServer,
@@ -2830,6 +2850,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			Start:          query.start.UTC(),
 			Sql:            sql,
 			SqlNoConstants: sqlNoConstants,
+			SqlSummary:     formatStatementSummary(ast),
 			IsDistributed:  query.isDistributed,
 			Phase:          (serverpb.ActiveQuery_Phase)(query.phase),
 			Progress:       float32(progress),
@@ -2902,95 +2923,35 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 // mutate descriptors prior to committing a SQL transaction.
 func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	scs := &ex.extraTxnState.schemaChangerState
-	if len(scs.state) == 0 {
-		return nil
-	}
-	executor := scexec.NewExecutor(
-		ex.planner.txn, &ex.extraTxnState.descCollection, ex.server.cfg.Codec,
-		nil /* backfiller */, nil /* jobTracker */, ex.server.cfg.NewSchemaChangerTestingKnobs,
-		ex.server.cfg.JobRegistry, ex.planner.execCfg.InternalExecutor,
-	)
-	after, err := runNewSchemaChanger(
-		ctx,
-		scplan.PreCommitPhase,
-		ex.extraTxnState.schemaChangerState.state,
-		executor,
+	execDeps := scdeps.NewExecutorDependencies(
+		ex.server.cfg.Codec,
+		ex.planner.txn,
+		&ex.extraTxnState.descCollection,
+		ex.server.cfg.JobRegistry,
+		ex.server.cfg.IndexBackfiller,
+		ex.server.cfg.NewSchemaChangerTestingKnobs,
 		scs.stmts,
+		scop.PreCommitPhase,
 	)
-	if err != nil {
-		return err
+	{
+		after, err := scrun.RunSchemaChangesInTxn(ctx, execDeps, scs.state)
+		if err != nil {
+			return err
+		}
+		scs.state = after
 	}
-	scs.state = after
-	targetSlice := make([]*scpb.Target, len(scs.state))
-	states := make([]scpb.Status, len(scs.state))
-	// TODO(ajwerner): It may be better in the future to have the builder be
-	// responsible for determining this set of descriptors. As of the time of
-	// writing, the descriptors to be "locked," descriptors that need schema
-	// change jobs, and descriptors with schema change mutations all coincide. But
-	// there are future schema changes to be implemented in the new schema changer
-	// (e.g., RENAME TABLE) for which this may no longer be true.
-	descIDSet := catalog.MakeDescriptorIDSet()
-	for i := range scs.state {
-		targetSlice[i] = scs.state[i].Target
-		states[i] = scs.state[i].Status
-		// Depending on the element type either a single descriptor ID
-		// will exist or multiple (i.e. foreign keys).
-		if id := scpb.GetDescID(scs.state[i].Element()); id != descpb.InvalidID {
-			descIDSet.Add(id)
+	{
+		jobDeps := scdeps.NewJobCreationDependencies(execDeps, ex.planner.User())
+		jobID, err := scrun.CreateSchemaChangeJob(ctx, jobDeps, scs.state)
+		if jobID != jobspb.InvalidJobID {
+			ex.extraTxnState.jobs = append(ex.extraTxnState.jobs, jobID)
+			log.Infof(ctx, "queued new schema change job %d using the new schema changer", jobID)
+		}
+		if err != nil {
+			return err
 		}
 	}
-	descIDs := descIDSet.Ordered()
-	job, err := ex.planner.extendedEvalCtx.QueueJob(ctx, jobs.Record{
-		Description:   "Schema change job", // TODO(ajwerner): use const
-		Statements:    scs.stmts,
-		Username:      ex.planner.User(),
-		DescriptorIDs: descIDs,
-		Details: jobspb.NewSchemaChangeDetails{
-			Targets: targetSlice,
-		},
-		Progress:      jobspb.NewSchemaChangeProgress{States: states},
-		RunningStatus: "",
-		NonCancelable: false,
-	})
-	if err != nil {
-		return err
-	}
-	// Write the job ID to the affected descriptors.
-	if err := scexec.UpdateDescriptorJobIDs(
-		ctx, ex.planner.Txn(), &ex.extraTxnState.descCollection, descIDs, jobspb.InvalidJobID, job.ID(),
-	); err != nil {
-		return err
-	}
-	log.Infof(ctx, "queued new schema change job %d using the new schema changer", job.ID())
 	return nil
-}
-
-func runNewSchemaChanger(
-	ctx context.Context,
-	phase scplan.Phase,
-	state scpb.State,
-	executor *scexec.Executor,
-	stmts []string,
-) (after scpb.State, _ error) {
-	sc, err := scplan.MakePlan(state, scplan.Params{
-		ExecutionPhase: phase,
-		// TODO(ajwerner): Populate the set of new descriptors
-	})
-	if err != nil {
-		return nil, err
-	}
-	after = state
-	for _, s := range sc.Stages {
-		if err := executor.ExecuteOps(ctx, s.Ops,
-			scexec.TestingKnobMetadata{
-				Statements: stmts,
-				Phase:      phase,
-			}); err != nil {
-			return nil, err
-		}
-		after = s.After
-	}
-	return after, nil
 }
 
 // StatementCounters groups metrics for counting different types of

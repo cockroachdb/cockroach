@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -67,6 +68,7 @@ func TestDirectoryErrors(t *testing.T) {
 func TestWatchPods(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
+	skip.UnderDeadlockWithIssue(t, 71365)
 
 	// Make pod watcher channel.
 	podWatcher := make(chan *tenant.Pod, 1)
@@ -220,6 +222,7 @@ func TestCancelLookups(t *testing.T) {
 func TestResume(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
+	skip.UnderDeadlockWithIssue(t, 71365)
 
 	tenantID := roachpb.MakeTenantID(40)
 	const lookupCount = 5
@@ -319,6 +322,7 @@ func TestDeleteTenant(t *testing.T) {
 func TestRefreshThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
+	skip.UnderDeadlockWithIssue(t, 71365)
 
 	// Create the directory, but with extreme rate limiting so that directory
 	// will never refresh.

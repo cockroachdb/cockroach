@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -182,13 +183,13 @@ func IsPermanentSchemaChangeError(err error) bool {
 	if errors.IsAny(err,
 		context.Canceled,
 		context.DeadlineExceeded,
-		errExistingSchemaChangeLease,
-		errExpiredSchemaChangeLease,
-		errNotHitGCTTLDeadline,
-		errSchemaChangeDuringDrain,
 		errSchemaChangeNotFirstInLine,
 		errTableVersionMismatchSentinel,
 	) {
+		return false
+	}
+
+	if flowinfra.IsFlowRetryableError(err) {
 		return false
 	}
 
@@ -205,13 +206,7 @@ func IsPermanentSchemaChangeError(err error) bool {
 	return true
 }
 
-var (
-	errExistingSchemaChangeLease  = errors.Newf("an outstanding schema change lease exists")
-	errExpiredSchemaChangeLease   = errors.Newf("the schema change lease has expired")
-	errSchemaChangeNotFirstInLine = errors.Newf("schema change not first in line")
-	errNotHitGCTTLDeadline        = errors.Newf("not hit gc ttl deadline")
-	errSchemaChangeDuringDrain    = errors.Newf("a schema change ran during the drain phase, re-increment")
-)
+var errSchemaChangeNotFirstInLine = errors.Newf("schema change not first in line")
 
 type errTableVersionMismatch struct {
 	version  descpb.DescriptorVersion
@@ -296,7 +291,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		defer localPlanner.curPlan.close(ctx)
 
 		res := roachpb.BulkOpSummary{}
-		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			// TODO(adityamaru): Use the BulkOpSummary for either telemetry or to
 			// return to user.
 			var counts roachpb.BulkOpSummary
@@ -497,7 +492,8 @@ func startGCJob(
 		return err
 	}
 	log.Infof(ctx, "starting GC job %d", jobID)
-	return jobRegistry.NotifyToAdoptJobs(ctx)
+	jobRegistry.NotifyToAdoptJobs(ctx)
+	return nil
 }
 
 func (sc *SchemaChanger) execLogTags() *logtags.Buffer {
@@ -890,7 +886,8 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 		return err
 	}
 	log.Infof(ctx, "starting GC job %d", gcJobID)
-	return sc.jobRegistry.NotifyToAdoptJobs(ctx)
+	sc.jobRegistry.NotifyToAdoptJobs(ctx)
+	return nil
 }
 
 // RunStateMachineBeforeBackfill moves the state machine forward
@@ -1200,10 +1197,12 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 							}
 							col.ColumnDesc().DefaultExpr = lcSwap.NewRegionalByRowColumnDefaultExpr
 						}
+
 					} else {
 						// DROP is hit on cancellation, in which case we must roll back.
 						localityConfigToSwapTo = lcSwap.OldLocalityConfig
 					}
+
 					if err := setNewLocalityConfig(
 						ctx, scTable, txn, b, localityConfigToSwapTo, kvTrace, descsCol); err != nil {
 						return err
@@ -1222,48 +1221,14 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 				}
 
-				// If any old index had an interleaved parent, remove the
-				// backreference from the parent.
-				// N.B. This logic needs to be kept up to date with the
-				// corresponding piece in runSchemaChangesInTxn.
-				err := pkSwap.ForEachOldIndexIDs(func(idxID descpb.IndexID) error {
-					oldIndex, err := scTable.FindIndexWithID(idxID)
-					if err != nil {
-						return err
-					}
-					if oldIndex.NumInterleaveAncestors() != 0 {
-						ancestorInfo := oldIndex.GetInterleaveAncestor(oldIndex.NumInterleaveAncestors() - 1)
-						ancestor, err := descsCol.GetMutableTableVersionByID(ctx, ancestorInfo.TableID, txn)
-						if err != nil {
-							return err
-						}
-						ancestorIdxI, err := ancestor.FindIndexWithID(ancestorInfo.IndexID)
-						if err != nil {
-							return err
-						}
-						ancestorIdx := ancestorIdxI.IndexDesc()
-						foundAncestor := false
-						for k, ref := range ancestorIdx.InterleavedBy {
-							if ref.Table == scTable.ID && ref.Index == oldIndex.GetID() {
-								if foundAncestor {
-									return errors.AssertionFailedf(
-										"ancestor entry in %s for %s@%s found more than once",
-										ancestor.Name, scTable.Name, oldIndex.GetName())
-								}
-								ancestorIdx.InterleavedBy = append(
-									ancestorIdx.InterleavedBy[:k], ancestorIdx.InterleavedBy[k+1:]...)
-								foundAncestor = true
-								if err := descsCol.WriteDescToBatch(ctx, kvTrace, ancestor, b); err != nil {
-									return err
-								}
-							}
-						}
-					}
-					return nil
-				})
-				if err != nil {
+				if err := maybeRemoveInterleaveBackreference(ctx, txn, descsCol, m, scTable, func(
+					ctx context.Context, ancestor *tabledesc.Mutable,
+				) error {
+					return descsCol.WriteDescToBatch(ctx, kvTrace, ancestor, b)
+				}); err != nil {
 					return err
 				}
+
 				// If we performed MakeMutationComplete on a PrimaryKeySwap mutation, then we need to start
 				// a job for the index deletion mutations that the primary key swap mutation added, if any.
 				if err := sc.queueCleanupJobs(ctx, scTable, txn); err != nil {
@@ -1377,9 +1342,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		return err
 	}
 	// Notify the job registry to start jobs, in case we started any.
-	if err := sc.jobRegistry.NotifyToAdoptJobs(ctx); err != nil {
-		return err
-	}
+	sc.jobRegistry.NotifyToAdoptJobs(ctx)
 
 	// If any operations was skipped because a mutation was made
 	// redundant due to a column getting dropped later on then we should
@@ -1389,6 +1352,61 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// If this mutation is a primary key swap that is not being rolled back,
+// and the old index had an interleaved parent, remove the backreference
+// from the parent.
+func maybeRemoveInterleaveBackreference(
+	ctx context.Context,
+	txn *kv.Txn,
+	descsCol *descs.Collection,
+	mutation catalog.Mutation,
+	scTable *tabledesc.Mutable,
+	writeFunc func(ctx context.Context, ancestor *tabledesc.Mutable) error,
+) error {
+	if !mutation.Adding() {
+		return nil
+	}
+	pkSwap := mutation.AsPrimaryKeySwap()
+	if pkSwap == nil {
+		return nil
+	}
+	return pkSwap.ForEachOldIndexIDs(func(id descpb.IndexID) error {
+		oldIndex, err := scTable.FindIndexWithID(id)
+		if err != nil {
+			return err
+		}
+		if oldIndex.NumInterleaveAncestors() != 0 {
+			ancestorInfo := oldIndex.GetInterleaveAncestor(oldIndex.NumInterleaveAncestors() - 1)
+			ancestor, err := descsCol.GetMutableTableVersionByID(ctx, ancestorInfo.TableID, txn)
+			if err != nil {
+				return err
+			}
+			ancestorIdxI, err := ancestor.FindIndexWithID(ancestorInfo.IndexID)
+			if err != nil {
+				return err
+			}
+			ancestorIdx := ancestorIdxI.IndexDesc()
+			foundAncestor := false
+			for k, ref := range ancestorIdx.InterleavedBy {
+				if ref.Table == scTable.ID && ref.Index == oldIndex.GetID() {
+					if foundAncestor {
+						return errors.AssertionFailedf(
+							"ancestor entry in %s for %s@%s found more than once",
+							ancestor.Name, scTable.Name, oldIndex.GetName())
+					}
+					ancestorIdx.InterleavedBy = append(
+						ancestorIdx.InterleavedBy[:k], ancestorIdx.InterleavedBy[k+1:]...)
+					foundAncestor = true
+					if err := writeFunc(ctx, ancestor); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		return nil
+	})
 }
 
 // maybeUpdateZoneConfigsForPKChange moves zone configs for any rewritten
@@ -2023,6 +2041,7 @@ func createSchemaChangeEvalCtx(
 			NodeID:             execCfg.NodeID,
 			Codec:              execCfg.Codec,
 			Locality:           execCfg.Locality,
+			Tracer:             execCfg.AmbientCtx.Tracer,
 		},
 	}
 	// The backfill is going to use the current timestamp for the various
@@ -2214,7 +2233,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 					log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
 				}
 				// Delete the zone config entry for this database.
-				if err := p.ExecCfg().DB.DelRange(ctx, zoneKeyPrefix, zoneKeyPrefix.PrefixEnd()); err != nil {
+				if _, err := p.ExecCfg().DB.DelRange(ctx, zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */); err != nil {
 					return err
 				}
 			}

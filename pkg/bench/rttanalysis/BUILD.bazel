@@ -28,6 +28,7 @@ go_library(
 
 go_test(
     name = "rttanalysis_test",
+    size = "large",
     srcs = [
         "alter_table_bench_test.go",
         "bench_test.go",

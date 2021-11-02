@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -84,6 +85,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -351,7 +353,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	blobspb.RegisterBlobServer(cfg.grpcServer, blobService)
 
 	// Create trace service for inter-node sharing of inflight trace spans.
-	tracingService := service.New(cfg.Settings.Tracer)
+	tracingService := service.New(cfg.Tracer)
 	tracingservicepb.RegisterTracingServer(cfg.grpcServer, tracingService)
 
 	sqllivenessKnobs, _ := cfg.TestingKnobs.SQLLivenessKnobs.(*sqlliveness.TestingKnobs)
@@ -359,7 +361,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings, sqllivenessKnobs,
 	)
 	cfg.sqlInstanceProvider = instanceprovider.New(
-		cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr,
+		cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr, cfg.rangeFeedFactory, cfg.clock,
 	)
 
 	jobRegistry := cfg.circularJobRegistry
@@ -461,7 +463,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			// also remove the record after the temp directory is
 			// removed.
 			recordPath := filepath.Join(useStore.Path, TempDirsRecordFilename)
-			err = storage.CleanupTempDirs(recordPath)
+			err = fs.CleanupTempDirs(recordPath)
 		}
 		if err != nil {
 			log.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
@@ -611,7 +613,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// cluster.
 	var traceCollector *collector.TraceCollector
 	if hasNodeLiveness {
-		traceCollector = collector.New(cfg.nodeDialer, nodeLiveness, cfg.Settings.Tracer)
+		traceCollector = collector.New(cfg.nodeDialer, nodeLiveness, cfg.Tracer)
 	}
 
 	*execCfg = sql.ExecutorConfig{
@@ -839,6 +841,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// Instantiate a span config manager. If we're the host tenant we'll
 		// only do it if COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is set.
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
+		sqlTranslator := spanconfigsqltranslator.New(execCfg, codec)
 		spanConfigMgr = spanconfigmanager.New(
 			cfg.db,
 			jobRegistry,
@@ -846,6 +849,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.stopper,
 			cfg.Settings,
 			cfg.spanConfigAccessor,
+			sqlTranslator,
 			spanConfigKnobs,
 		)
 		execCfg.SpanConfigReconciliationJobDeps = spanConfigMgr
@@ -949,6 +953,12 @@ func (s *SQLServer) startSQLLivenessAndInstanceProviders(ctx context.Context) er
 		}
 	}
 	s.sqlLivenessProvider.Start(ctx)
+	// sqlInstanceProvider must always be started after sqlLivenessProvider
+	// as sqlInstanceProvider relies on the session initialized and maintained by
+	// sqlLivenessProvider.
+	if err := s.sqlInstanceProvider.Start(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 

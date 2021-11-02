@@ -22,10 +22,8 @@ const ordSyncTmpl = "pkg/sql/colexec/ordered_synchronizer_tmpl.go"
 
 func genOrderedSynchronizer(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
-
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
-		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
 		"_TYPE", "{{.VecMethod}}",
 	)
 	s := r.Replace(inputFileContents)

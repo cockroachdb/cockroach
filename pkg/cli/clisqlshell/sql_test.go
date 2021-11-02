@@ -223,7 +223,7 @@ func Example_misc_table() {
 	//   │
 	//   └── • scan
 	//         missing stats
-	//         table: t@primary
+	//         table: t@t_pkey
 	//         spans: FULL SCAN
 	// (9 rows)
 }

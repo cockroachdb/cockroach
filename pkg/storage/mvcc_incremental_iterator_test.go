@@ -193,6 +193,7 @@ func assertExportedErrs(
 		ExportAllRevisions: revisions,
 		TargetSize:         big,
 		MaxSize:            big,
+		MaxIntents:         uint64(MaxIntentsPerWriteIntentError.Default()),
 		StopMidKey:         false,
 		UseTBI:             useTBI,
 	}, sstFile)
@@ -595,6 +596,7 @@ func TestMVCCIncrementalIteratorInlinePolicy(t *testing.T) {
 					EndTime:      tsMax,
 					InlinePolicy: MVCCIncrementalIterInlinePolicyError,
 				})
+				defer iter.Close()
 				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
 				_, err := iter.Valid()
 				assert.EqualError(t, err, "unexpected inline value found: \"/db1\"")
@@ -606,6 +608,7 @@ func TestMVCCIncrementalIteratorInlinePolicy(t *testing.T) {
 					EndTime:      tsMax,
 					InlinePolicy: MVCCIncrementalIterInlinePolicyEmit,
 				})
+				defer iter.Close()
 				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
 				expectInlineKeyValue(t, iter, inline1_1_1)
 				iter.Next()
@@ -686,6 +689,7 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 					EndTime:      tsMax,
 					IntentPolicy: MVCCIncrementalIterIntentPolicyError,
 				})
+				defer iter.Close()
 				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
 				for ; ; iter.Next() {
 					if ok, _ := iter.Valid(); !ok || iter.UnsafeKey().Key.Compare(keyMax) >= 0 {
@@ -702,6 +706,7 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 					EndTime:      tsMax,
 					IntentPolicy: MVCCIncrementalIterIntentPolicyError,
 				})
+				defer iter.Close()
 				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
 				expectKeyValue(t, iter, kv1_3_3)
 				iter.Next()
@@ -716,6 +721,7 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 					EndTime:      tsMax,
 					IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
 				})
+				defer iter.Close()
 				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
 				for _, kv := range []MVCCKeyValue{kv1_3_3, kv1_2_2, kv1_1_1} {
 					expectKeyValue(t, iter, kv)
@@ -735,6 +741,7 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 					EndTime:      tsMax,
 					IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
 				})
+				defer iter.Close()
 				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
 				expectKeyValue(t, iter, kv1_3_3)
 				iter.Next()
@@ -1039,6 +1046,7 @@ func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 				// goroutine. A non-atomic Put can cause the strict invariant checking
 				// in intentInterleavingIter to be violated.
 				b := e.NewBatch()
+				defer b.Close()
 				if err := MVCCPut(ctx, b, nil, kA, ts1, vA2, txn); err != nil {
 					return err
 				}
@@ -1386,7 +1394,7 @@ func runIncrementalBenchmark(
 	eng, _ := setupMVCCData(context.Background(), b, emk, opts)
 	{
 		// Pull all of the sstables into the cache.  This
-		// probably defeates a lot of the benefits of the
+		// probably defeats a lot of the benefits of the
 		// time-based optimization.
 		iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 		_, _ = iter.ComputeStats(keys.LocalMax, roachpb.KeyMax, 0)
@@ -1404,6 +1412,7 @@ func runIncrementalBenchmark(
 			StartTime:                           ts,
 			EndTime:                             hlc.MaxTimestamp,
 		})
+		defer it.Close()
 		it.SeekGE(MVCCKey{Key: startKey})
 		for {
 			if ok, err := it.Valid(); err != nil {

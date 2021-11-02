@@ -10,7 +10,8 @@ statement ok
 ALTER ROLE test_set_role SET application_name = 'a';
 ALTER ROLE test_set_role IN DATABASE test_set_db SET application_name = 'b';
 ALTER ROLE ALL IN DATABASE test_set_db SET application_name = 'c';
-ALTER ROLE ALL SET application_name = 'd'
+ALTER ROLE ALL SET application_name = 'd';
+ALTER ROLE test_set_role SET custom_option.setting = 'e'
 
 # Verify that the defaults were stored.
 query OTT colnames
@@ -18,7 +19,7 @@ SELECT database_id, role_name, settings FROM system.database_role_settings ORDER
 ----
 database_id  role_name      settings
 0            ·              {application_name=d}
-0            test_set_role  {application_name=a}
+0            test_set_role  {application_name=a,custom_option.setting=e}
 53           ·              {application_name=c}
 53           test_set_role  {application_name=b}
 
@@ -32,7 +33,7 @@ ORDER BY 1, 2
 ----
 setdatabase  setrole    datname      rolname        setconfig
 0            0          NULL         NULL           {application_name=d}
-0            265380634  NULL         test_set_role  {application_name=a}
+0            265380634  NULL         test_set_role  {application_name=a,custom_option.setting=e}
 53           0          test_set_db  NULL           {application_name=c}
 53           265380634  test_set_db  test_set_role  {application_name=b}
 
@@ -44,7 +45,7 @@ query T
 SELECT settings FROM system.database_role_settings
 WHERE database_id = 0 AND role_name = 'test_set_role'
 ----
-{application_name=a,backslash_quote=safe_encoding}
+{application_name=a,custom_option.setting=e,backslash_quote=safe_encoding}
 
 statement ok
 ALTER ROLE test_set_role SET application_name = 'f'
@@ -54,7 +55,7 @@ query T
 SELECT settings FROM system.database_role_settings
 WHERE database_id = 0 AND role_name = 'test_set_role'
 ----
-{backslash_quote=safe_encoding,application_name=f}
+{custom_option.setting=e,backslash_quote=safe_encoding,application_name=f}
 
 statement ok
 ALTER ROLE test_set_role SET serial_normalization = 'sql_sequence';
@@ -65,7 +66,7 @@ query T
 SELECT settings FROM system.database_role_settings
 WHERE database_id = 0 AND role_name = 'test_set_role'
 ----
-{backslash_quote=safe_encoding,serial_normalization=sql_sequence}
+{custom_option.setting=e,backslash_quote=safe_encoding,serial_normalization=sql_sequence}
 
 # Resetting something that isn't there anymore is fine.
 statement ok
@@ -187,7 +188,7 @@ query OTT colnames
 SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
 ----
 database_id  role_name      settings
-0            test_set_role  {backslash_quote=safe_encoding,serial_normalization=sql_sequence}
+0            test_set_role  {custom_option.setting=e,backslash_quote=safe_encoding,serial_normalization=sql_sequence}
 53           ·              {application_name=c}
 53           test_set_role  {application_name=b}
 
@@ -199,7 +200,7 @@ query OTT colnames
 SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
 ----
 database_id  role_name      settings
-0            test_set_role  {backslash_quote=safe_encoding,serial_normalization=sql_sequence}
+0            test_set_role  {custom_option.setting=e,backslash_quote=safe_encoding,serial_normalization=sql_sequence}
 
 statement ok
 DROP ROLE test_set_role

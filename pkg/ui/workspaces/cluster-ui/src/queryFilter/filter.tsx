@@ -29,7 +29,7 @@ import { MultiSelectCheckbox } from "../multiSelectCheckbox/multiSelectCheckbox"
 interface QueryFilter {
   onSubmitFilters: (filters: Filters) => void;
   smth?: string;
-  appNames: SelectOptions[];
+  appNames: string[];
   activeFilters: number;
   filters: Filters;
   dbNames?: string[];
@@ -69,7 +69,7 @@ const timeUnit = [
 ];
 
 export const defaultFilters: Filters = {
-  app: "All",
+  app: "",
   timeNumber: "0",
   timeUnit: "seconds",
   fullScan: false,
@@ -89,7 +89,9 @@ export const defaultFilters: Filters = {
  * @return Filters: the default filters with updated keys existing on
  * queryString
  */
-export const getFiltersFromQueryString = (queryString: string) => {
+export const getFiltersFromQueryString = (
+  queryString: string,
+): Record<string, string> => {
   const searchParams = new URLSearchParams(queryString);
 
   return Object.keys(defaultFilters).reduce(
@@ -97,7 +99,7 @@ export const getFiltersFromQueryString = (queryString: string) => {
       const defaultValue = defaultFilters[filter];
       const queryStringFilter = searchParams.get(filter);
       const filterValue =
-        queryStringFilter === null
+        queryStringFilter == null
           ? defaultValue
           : defaultValue.constructor(searchParams.get(filter));
       return { [filter]: filterValue, ...filters };
@@ -114,7 +116,7 @@ export const getFiltersFromQueryString = (queryString: string) => {
  * we want to consider 0 active Filters
  */
 export const inactiveFiltersState: Filters = {
-  app: "All",
+  app: "",
   timeNumber: "0",
   fullScan: false,
   sqlType: "",
@@ -123,7 +125,7 @@ export const inactiveFiltersState: Filters = {
   nodes: "",
 };
 
-export const calculateActiveFilters = (filters: Filters) => {
+export const calculateActiveFilters = (filters: Filters): number => {
   return Object.keys(inactiveFiltersState).reduce(
     (active, filter: keyof Filters) => {
       return inactiveFiltersState[filter] !== filters[filter]
@@ -151,13 +153,13 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
 
   dropdownRef: React.RefObject<HTMLDivElement> = React.createRef();
 
-  componentDidMount() {
+  componentDidMount(): void {
     window.addEventListener("click", this.outsideClick, false);
   }
-  componentWillUnmount() {
+  componentWillUnmount(): void {
     window.removeEventListener("click", this.outsideClick, false);
   }
-  componentDidUpdate(prevProps: QueryFilter) {
+  componentDidUpdate(prevProps: QueryFilter): void {
     if (prevProps.filters !== this.props.filters) {
       this.setState({
         filters: {
@@ -166,26 +168,38 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       });
     }
   }
-  outsideClick = (event: any) => {
+  outsideClick = (event: any): void => {
     this.setState({ hide: true });
   };
 
-  insideClick = (event: any) => {
+  insideClick = (event: any): void => {
     event.stopPropagation();
   };
 
-  toggleFilters = () => {
+  toggleFilters = (): void => {
     this.setState({
       hide: !this.state.hide,
     });
   };
 
-  handleSubmit = () => {
+  handleSubmit = (): void => {
     this.props.onSubmitFilters(this.state.filters);
     this.setState({ hide: true });
   };
 
-  handleChange = (event: any, field: string) => {
+  handleSelectChange = (
+    event: { label: string; value: string },
+    field: string,
+  ): void => {
+    this.setState({
+      filters: {
+        ...this.state.filters,
+        [field]: event.value,
+      },
+    });
+  };
+
+  handleChange = (event: any, field: string): void => {
     this.setState({
       filters: {
         ...this.state.filters,
@@ -206,14 +220,14 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
   };
 
-  validateInput = (value: string) => {
+  validateInput = (value: string): string => {
     const isInteger = /^[0-9]+$/;
     return (value === "" || isInteger.test(value)) && value.length <= 3
       ? value
       : this.state.filters.timeNumber;
   };
 
-  clearInput = () => {
+  clearInput = (): void => {
     this.setState({
       filters: {
         ...this.state.filters,
@@ -222,13 +236,12 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
   };
 
-  isOptionSelected = (option: string, field: string) => {
+  isOptionSelected = (option: string, field: string): boolean => {
     const selection = field.split(",");
-    if (selection.length > 0 && selection.includes(option)) return true;
-    return false;
+    return selection.length > 0 && selection.includes(option);
   };
 
-  render() {
+  render(): React.ReactElement {
     const { hide, filters } = this.state;
     const {
       appNames,
@@ -275,6 +288,27 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       width: "141px",
       border: "none",
     });
+
+    const appsOptions = appNames.map(app => ({
+      label: app,
+      value: app,
+      isSelected: this.isOptionSelected(app, filters.app),
+    }));
+    const appValue = appsOptions.filter(option => {
+      return filters.app.split(",").includes(option.label);
+    });
+    const appFilter = (
+      <div>
+        <div className={filterLabel.margin}>App</div>
+        <MultiSelectCheckbox
+          options={appsOptions}
+          placeholder="All"
+          field="app"
+          parent={this}
+          value={appValue}
+        />
+      </div>
+    );
 
     const databasesOptions = showDB
       ? dbNames.map(db => ({
@@ -400,14 +434,6 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     );
     // TODO replace all onChange actions in Selects and Checkboxes with one onSubmit in <form />
 
-    // Some app names could be empty strings, so we're adding " " to those names,
-    // this way it's easier for the user to recognize the blank name.
-    const apps = appNames.map(app => {
-      const label =
-        app.label.trim().length === 0 ? '"' + app.label + '"' : app.label;
-      return { label: label, value: app.value };
-    });
-
     return (
       <div onClick={this.insideClick} ref={this.dropdownRef}>
         <div className={dropdownButton} onClick={this.toggleFilters}>
@@ -416,14 +442,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
         </div>
         <div className={dropdownArea}>
           <div className={dropdownContentWrapper}>
-            <div className={filterLabel.top}>App</div>
-            <Select
-              options={apps}
-              onChange={e => this.handleChange(e, "app")}
-              value={apps.filter(app => app.value === filters.app)}
-              placeholder="All"
-              styles={customStyles}
-            />
+            {appFilter}
             {showDB ? dbFilter : ""}
             {showSqlType ? sqlTypeFilter : ""}
             {showRegions ? regionsFilter : ""}
@@ -441,7 +460,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
               <Select
                 options={timeUnit}
                 value={timeUnit.filter(unit => unit.label == filters.timeUnit)}
-                onChange={e => this.handleChange(e, "timeUnit")}
+                onChange={e => this.handleSelectChange(e, "timeUnit")}
                 className={timePair.timeUnit}
                 styles={customStylesSmall}
               />

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
@@ -486,7 +487,7 @@ func (tc *TxnCoordSender) Send(
 		log.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
 	}
 	if sp.IsVerbose() {
-		sp.SetBaggageItem("txnID", tc.mu.txn.ID.String())
+		sp.SetTag("txnID", attribute.StringValue(tc.mu.txn.ID.String()))
 		ctx = logtags.AddTag(ctx, "txn", uuid.ShortStringer(tc.mu.txn.ID))
 		if log.V(2) {
 			ctx = logtags.AddTag(ctx, "ts", tc.mu.txn.WriteTimestamp)

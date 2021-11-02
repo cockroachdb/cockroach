@@ -304,6 +304,9 @@ type EstimatedStats struct {
 	// Cost is the estimated cost of the operator. This cost includes the costs of
 	// the child operators.
 	Cost float64
+	// LimitHint is the "soft limit" of the number of result rows that may be
+	// required. See physical.Required for details.
+	LimitHint float64
 }
 
 // ExecutionStats contain statistics about a given operator gathered from the
@@ -337,5 +340,5 @@ type ExecutionStats struct {
 }
 
 // BuildPlanForExplainFn builds an execution plan against the given
-// ExplainFactory.
-type BuildPlanForExplainFn func(ef ExplainFactory) (Plan, error)
+// base factory.
+type BuildPlanForExplainFn func(f Factory) (Plan, error)

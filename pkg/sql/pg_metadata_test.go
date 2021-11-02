@@ -9,22 +9,90 @@
 // licenses/APL.txt.
 
 // This test compares a dump generated from PostgreSQL with the pg_catalog
-// and compares it with the current pg_catalog at cockroach db skipping
-// all the known diffs:
+// or information_schema database and compares the differences at cockroach
+// db skipping all the known diffs. To Run:
 //
+// SCENARIO 1. Using defaults, will test using defaults:
+//    rdbms=postgres, catalog=pg_catalog, no rewrite diffs, no adding missing tables.
 // cd pkg/sql
-// go test -run TestPGCatalog
+// go test -run TestDiffTool
 //
 // If you want to re-create the known (expected) diffs with the current differences
 // add -rewrite-diffs flag when running this test:
 //
+// SCENARIO 2: Updating known diffs, will use same defaults as SCENARIO 1,
+//    Except that it will rewrite known diffs
+//
 // cd pkg/sql
-// go test -run TestPGCatalog -rewrite-diffs
+// go test -run TestDiffTool --rewrite-diffs
 //
-// To create the postgres dump file see pkg/cmd/generate-pg-catalog/main.go:
+// SCENARIO 3: Need to add missing tables/columns, this also have same defaults as
+//    SCENARIO 1, except for adding missing tables/columns.
+//    NOTE: This options only works for pg_catalog and information_schema from postgres
+//          information_schema can't add missing columns, only missing tables.
 //
-// cd pkg/cmd/generate-pg-catalog/
-// go run main.go > ../../sql/testdata/pg_catalog_tables.json.
+// cd pkg/sql
+// go test -run TestDiffTool --add-missing-tables
+//
+// SCENARIO 4: Want to check differences on information_schema from postgres.
+//    NOTE: This can be combined with --add-missing-tables or --rewrite-diffs
+//
+// cd pkg/sql
+// go test -run TestDiffTool --catalog information_schema
+//
+// or
+//
+// cd pkg/sql
+// go test -run TestInformationSchemaPostgres
+//
+// SCENARIO 5: Want to check differences on information_schema from mysql.
+//    NOTE: --add-missing-tables is not allowed when using rdbms != postgres.
+//          --rewrite-diffs is allowed.
+//
+// cd pkg/sql
+// go test -run TestDiffTool --catalog information_schema --rdbms mysql
+//
+// or
+//
+// cd pkg/sql
+// got test -run TestInformationSchemaMySQL
+//
+// To create/update dump files from postgres/mysql see:
+//    pkg/cmd/generate-metadata-tables/main.go
+//
+// Most common use case is Updating/Adding missing columns:
+//
+//    1. Run pkg/cmd/generate-metadata-tables/main.go with flags to connect
+//       postgres.
+//    2. Run SCENARIO 3 to add missing tables/columns.
+//    3. Run SCENARIO 2 to update expected diffs.
+//    4. Validate SCENARIO 1 passes.
+//    5. Rewrite logic tests, the most probable logic tests that might fail
+//       after adding missing tables are:
+//       - pg_catalog
+//       - information_schema
+//       - create_statements
+//       - create_statements
+//       - grant_table
+//       - table
+//
+//       NOTE: Even if you updated pg_catalog, It is recommended that you rewrite
+//             information_schema logic tests.
+//
+// How to debug using Goland:
+//    1. Go to Run/Debug configurations
+//    2. Select "Go Test"
+//    3. Click Add configuration or edit an existing configuration
+//    4. Give it a Name, set directory to pkg/sql and set the program arguments with the
+//       scenario that you want to test: example of program arguments:
+//       -run TestDiffTool --add-missing-tables
+//       NOTE: In the program arguments you can use another flag called test-data-filename
+//             If you want to use a different JSON source (Like a testing JSON just for
+//             debugging purposes).
+//
+// Where to start when debugging?
+// -> func TestDiffTool
+//
 package sql
 
 import (
@@ -37,7 +105,6 @@ import (
 	goParser "go/parser"
 	"go/token"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -97,7 +164,7 @@ const (
 )
 
 // This message will appear when there is an expected diff but the diff haven't found.
-const updateExpectedDiffsJSON = `Diff EXPECTED. To fix this, please run: cd pkg/sql; go test -run TestPGCatalog --rewrite-diffs`
+const updateExpectedDiffsJSON = `Diff EXPECTED. To fix this, please run: cd pkg/sql; go test -run TestDiffTool --rewrite-diffs`
 
 // virtualTableTemplate is used to create new virtualSchemaTable objects when
 // adding new tables.
@@ -197,64 +264,85 @@ var codeFixers = map[string]schemaCodeFixer{
 	},
 }
 
+type VirtualSchemaDiffTool struct {
+	rewrite          bool
+	catalogName      string
+	rdbmsName        string
+	addMissingTables bool
+	t                *testing.T
+}
+
+func NewDiffTool(t *testing.T) *VirtualSchemaDiffTool {
+	flag.Parse()
+	return &VirtualSchemaDiffTool{
+		rewrite:          *rewriteFlag,
+		catalogName:      *catalogName,
+		rdbmsName:        *rdbmsName,
+		addMissingTables: *addMissingTables,
+		t:                t,
+	}
+}
+
+func (d *VirtualSchemaDiffTool) Catalog(catalogName string) *VirtualSchemaDiffTool {
+	d.catalogName = catalogName
+	return d
+}
+
+func (d *VirtualSchemaDiffTool) RDBMS(rdbms string) *VirtualSchemaDiffTool {
+	d.rdbmsName = rdbms
+	return d
+}
+
 // expectedDiffsFilename returns where to find the diffs that will not cause
 // diff tool tests to fail
-func expectedDiffsFilename() string {
+func (d *VirtualSchemaDiffTool) expectedDiffsFilename() string {
 	return filepath.Join(
 		testdata,
-		fmt.Sprintf("%s_test_expected_diffs_on_%s.json", *rdbmsName, *catalogName),
+		fmt.Sprintf("%s_test_expected_diffs_on_%s.json", d.rdbmsName, d.catalogName),
 	)
 }
 
 // loadTestData retrieves the pg_catalog from the dumpfile generated from Postgres.
-func loadTestData(t testing.TB, testdataFile string, isDiffFile bool) PGMetadataFile {
-	var pgCatalogFile PGMetadataFile
+func (d *VirtualSchemaDiffTool) loadTestData(testdataFile string, file interface{}) {
+	_, isDiffFile := file.(*PGMetadataDiffFile)
 
 	// Expected diffs will not be loaded if rewriteFlag is enabled.
-	if isDiffFile && *rewriteFlag {
-		return pgCatalogFile
+	if isDiffFile && d.rewrite {
+		return
 	}
 
 	f, err := os.Open(testdataFile)
 	if err != nil {
 		if isDiffFile && oserror.IsNotExist(err) {
 			// File does not exists it means diffs are not expected.
-			return pgCatalogFile
+			return
 		}
 
-		t.Fatal(err)
+		d.t.Fatal(err)
 	}
 
-	defer f.Close()
-	bytes, err := ioutil.ReadAll(f)
-	if err != nil {
-		t.Fatal(err)
+	defer dClose(f)
+	decoder := json.NewDecoder(f)
+	if err = decoder.Decode(file); err != nil && !isDiffFile {
+		d.t.Fatal(err)
 	}
-
-	if err = json.Unmarshal(bytes, &pgCatalogFile); err != nil {
-		if !isDiffFile {
-			t.Fatal(err)
-		}
-	}
-
-	return pgCatalogFile
 }
 
 // loadCockroachPgCatalog retrieves pg_catalog schema from cockroach db.
-func loadCockroachPgCatalog(t testing.TB) PGMetadataTables {
+func (d *VirtualSchemaDiffTool) loadCockroachPgCatalog() PGMetadataTables {
 	crdbTables := make(PGMetadataTables)
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(d.t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	sqlRunner := sqlutils.MakeSQLRunner(db)
-	rows := sqlRunner.Query(t, GetPGMetadataSQL, *catalogName)
-	defer rows.Close()
+	rows := sqlRunner.Query(d.t, GetPGMetadataSQL, d.catalogName)
+	defer dClose(rows)
 
 	for rows.Next() {
 		var tableName, columnName, dataType string
 		var dataTypeOid uint32
 		if err := rows.Scan(&tableName, &columnName, &dataType, &dataTypeOid); err != nil {
-			t.Fatal(err)
+			d.t.Fatal(err)
 		}
 		crdbTables.AddColumnMetadata(tableName, columnName, dataType, dataTypeOid)
 	}
@@ -262,28 +350,30 @@ func loadCockroachPgCatalog(t testing.TB) PGMetadataTables {
 }
 
 // errorf wraps *testing.T Errorf to report fails only when the test doesn't run in rewrite mode.
-func errorf(t *testing.T, format string, args ...interface{}) {
-	if !*rewriteFlag {
-		t.Errorf(format, args...)
+func (d *VirtualSchemaDiffTool) errorf(format string, args ...interface{}) {
+	if !d.rewrite {
+		d.t.Errorf(format, args...)
 	}
 }
 
-func rewriteDiffs(t *testing.T, diffs PGMetadataTables, source PGMetadataFile, sum Summary) {
-	if !*rewriteFlag {
+func (d *VirtualSchemaDiffTool) rewriteDiffs(
+	diffs PGMetadataTableDiffs, source PGMetadataFile, sum Summary,
+) {
+	if !d.rewrite {
 		return
 	}
 
-	if err := diffs.rewriteDiffs(source, sum, expectedDiffsFilename()); err != nil {
-		t.Fatal(err)
+	if err := diffs.rewriteDiffs(source, sum, d.expectedDiffsFilename()); err != nil {
+		d.t.Fatal(err)
 	}
 }
 
 // fixConstants updates catconstants that are needed for pgCatalog.
-func (scf schemaCodeFixer) fixConstants(t *testing.T, notImplemented PGMetadataTables) {
+func (scf schemaCodeFixer) fixConstants(t *testing.T, unimplementedTables PGMetadataTables) {
 	constantsFileName := filepath.Join(".", catalogPkg, catconstantsPkg, constantsGo)
 	// pgConstants will contains all the pgCatalog tableID constant adding the
 	// new tables and preventing duplicates.
-	pgConstants := scf.getCatalogConstants(t, constantsFileName, notImplemented)
+	pgConstants := scf.getCatalogConstants(t, constantsFileName, unimplementedTables)
 	sort.Strings(pgConstants)
 
 	// Rewrite will place all the pgConstants in alphabetical order after
@@ -317,7 +407,7 @@ func (scf schemaCodeFixer) fixConstants(t *testing.T, notImplemented PGMetadataT
 // fixVtable adds missing table's create table constants.
 func (scf schemaCodeFixer) fixVtable(
 	t *testing.T,
-	unimplemented PGMetadataTables,
+	unimplementedTables PGMetadataTables,
 	unimplementedColumns PGMetadataTables,
 	pgCode *pgCatalogCode,
 ) {
@@ -372,7 +462,7 @@ func (scf schemaCodeFixer) fixVtable(
 		}
 
 		first := true
-		for tableName, columns := range unimplemented {
+		for tableName, columns := range unimplementedTables {
 			if _, ok := existingTables[tableName]; ok {
 				// Table already implemented.
 				continue
@@ -436,12 +526,12 @@ func getMissingColumnsText(
 
 // fixCatalogGo will update pgCatalog.undefinedTables, pgCatalog.tableDefs and
 // will add needed virtualSchemas.
-func (scf schemaCodeFixer) fixCatalogGo(t *testing.T, notImplemented PGMetadataTables) {
-	undefinedTablesText, err := getUndefinedTablesText(notImplemented, scf.schema)
+func (scf schemaCodeFixer) fixCatalogGo(t *testing.T, unimplementedTables PGMetadataTables) {
+	undefinedTablesText, err := getUndefinedTablesText(unimplementedTables, scf.schema)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tableDefinitionText := scf.getTableDefinitionsText(scf.catalogGoFilename, notImplemented)
+	tableDefinitionText := scf.getTableDefinitionsText(unimplementedTables)
 
 	rewriteFile(scf.catalogGoFilename, func(input *os.File, output outputFile) {
 		reader := bufio.NewScanner(input)
@@ -451,7 +541,7 @@ func (scf schemaCodeFixer) fixCatalogGo(t *testing.T, notImplemented PGMetadataT
 			if trimText == scf.textForNewTableInsertion {
 				//VirtualSchemas doesn't have a particular place to start we just print
 				// it before virtualTablePosition.
-				output.appendString(scf.printVirtualSchemas(notImplemented))
+				output.appendString(scf.printVirtualSchemas(unimplementedTables))
 			}
 			output.appendString(text)
 			output.appendString("\n")
@@ -550,7 +640,7 @@ func printBeforeTerminalString(
 // getCatalogConstants reads catconstant and retrieves all the constant with
 // `PgCatalog` prefix.
 func (scf schemaCodeFixer) getCatalogConstants(
-	t *testing.T, inputFileName string, notImplemented PGMetadataTables,
+	t *testing.T, inputFileName string, unimplementedTables PGMetadataTables,
 ) []string {
 	pgConstantSet := make(map[string]struct{})
 	f, err := os.Open(inputFileName)
@@ -569,7 +659,7 @@ func (scf schemaCodeFixer) getCatalogConstants(
 			pgConstantSet[text] = none
 		}
 	}
-	for tableName := range notImplemented {
+	for tableName := range unimplementedTables {
 		pgConstantSet[scf.constantName(tableName, tableIDSuffix)] = none
 	}
 	pgConstants := make([]string, 0, len(pgConstantSet))
@@ -799,9 +889,8 @@ func formatUndefinedTablesText(newTableNameList []string) string {
 // getTableDefinitionsText creates the text that will replace current
 // definition of pgCatalog.tableDefs (at pg_catalog.go), by adding the new
 // table definitions.
-func (scf schemaCodeFixer) getTableDefinitionsText(
-	fileName string, notImplemented PGMetadataTables,
-) string {
+func (scf schemaCodeFixer) getTableDefinitionsText(unimplementedTables PGMetadataTables) string {
+	fileName := scf.catalogGoFilename
 	tableDefs := make(map[string]string)
 	maxLength := 0
 	f, err := os.Open(fileName)
@@ -831,11 +920,11 @@ func (scf schemaCodeFixer) getTableDefinitionsText(
 		}
 	}
 
-	for tableName := range notImplemented {
+	for tableName := range unimplementedTables {
 		defName := "catconstants." + scf.constantName(tableName, tableIDSuffix)
 		if _, ok := tableDefs[defName]; ok {
 			// Not overriding existing tableDefinitions
-			delete(notImplemented, tableName)
+			delete(unimplementedTables, tableName)
 			continue
 		}
 		defValue := scf.constantName(tableName, "Table")
@@ -1318,40 +1407,47 @@ func readSourcePortion(srcFile *os.File, start, end token.Pos) (string, error) {
 	return string(bytes), nil
 }
 
-// TestPGCatalog is the pg_catalog diff tool test which compares pg_catalog
-// with postgres and cockroach.
-func TestPGCatalog(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+func (d *VirtualSchemaDiffTool) TestTable(tableName string, fn func(t *testing.T)) {
+	d.t.Run(fmt.Sprintf("Table=%s", tableName), func(t *testing.T) {
+		oldT := d.t
+		defer func() { d.t = oldT }()
+		d.t = t
+		fn(t)
+	})
+}
 
-	if _, codeFixerExists := codeFixers[*catalogName]; *addMissingTables && (*rdbmsName != Postgres || !codeFixerExists) {
-		t.Fatal("--add-missing-tables only work for pg_catalog on postgres rdbms")
+// Run will execute the diff tool with all the configurations that are in VirtualSchemaDiffTool structure.
+func (d *VirtualSchemaDiffTool) Run() {
+	if _, codeFixerExists := codeFixers[d.catalogName]; d.addMissingTables && (d.rdbmsName != Postgres || !codeFixerExists) {
+		d.t.Fatal("--add-missing-tables only work for pg_catalog on postgres rdbms")
 	}
 
 	var sum Summary
-	source := loadTestData(t, getTestDataFileName(), false)
-	diffFile := loadTestData(t, expectedDiffsFilename(), true)
+	source := PGMetadataFile{}
+	diffFile := PGMetadataDiffFile{}
+	d.loadTestData(d.getTestDataFileName(), &source)
+	d.loadTestData(d.expectedDiffsFilename(), &diffFile)
 	pgTables := source.PGMetadata
-	diffs := diffFile.PGMetadata
-	crdbTables := loadCockroachPgCatalog(t)
+	diffs := diffFile.Diffs
+	crdbTables := d.loadCockroachPgCatalog()
 	if diffs == nil {
-		diffs = make(PGMetadataTables)
+		diffs = make(PGMetadataTableDiffs)
 	}
 
 	for pgTable, pgColumns := range pgTables {
 		sum.TotalTables++
-		t.Run(fmt.Sprintf("Table=%s", pgTable), func(t *testing.T) {
+		d.TestTable(pgTable, func(t *testing.T) {
 			crdbColumns, ok := crdbTables[pgTable]
 			expectedMissingTable := diffs.isExpectedMissingTable(pgTable)
 			if !ok {
 				if !expectedMissingTable {
-					errorf(t, "Missing table `%s`", pgTable)
+					d.errorf("Missing table `%s`", pgTable)
 					diffs.addMissingTable(pgTable)
 					sum.MissingTables++
 				}
 				return
 			} else if expectedMissingTable {
-				errorf(t, updateExpectedDiffsJSON)
+				d.errorf(updateExpectedDiffsJSON)
 				return
 			}
 
@@ -1361,23 +1457,23 @@ func TestPGCatalog(t *testing.T) {
 				expectedMissingColumn := diffs.isExpectedMissingColumn(pgTable, expColumnName)
 				if !ok {
 					if !expectedMissingColumn {
-						errorf(t, "Missing column `%s`", expColumnName)
+						d.errorf("Missing column `%s`", expColumnName)
 						diffs.addMissingColumn(pgTable, expColumnName)
 						sum.MissingColumns++
 					}
 					continue
 				} else if expectedMissingColumn {
-					errorf(t, updateExpectedDiffsJSON)
+					d.errorf(updateExpectedDiffsJSON)
 					continue
 				}
 
 				result := diffs.compareColumns(pgTable, expColumnName, expColumn, gotColumn)
 				switch result {
 				case expectedDiffError:
-					errorf(t, updateExpectedDiffsJSON)
+					d.errorf(updateExpectedDiffsJSON)
 				case diffError:
 					sum.DatatypeMismatches++
-					errorf(t, "Column `%s` expected data type oid `%d` (%s) but found `%d` (%s)",
+					d.errorf("Column `%s` expected data type oid `%d` (%s) but found `%d` (%s)",
 						expColumnName,
 						expColumn.Oid,
 						expColumn.DataType,
@@ -1391,24 +1487,54 @@ func TestPGCatalog(t *testing.T) {
 	}
 
 	diffs.removeImplementedColumns(crdbTables)
-	rewriteDiffs(t, diffs, source, sum)
+	d.rewriteDiffs(diffs, source, sum)
 
-	if *addMissingTables {
-		scf := codeFixers[*catalogName]
-		validateUndefinedTablesField(t)
-		unimplemented := diffs.getUnimplementedTables(pgTables)
+	if d.addMissingTables {
+		scf := codeFixers[d.catalogName]
+		validateUndefinedTablesField(d.t)
+		unimplementedTables := diffs.getUnimplementedTables(pgTables)
 		unimplementedColumns := diffs.getUnimplementedColumns(pgTables)
-		pgCode := scf.goParsePgCatalogGo(t)
-		scf.fixConstants(t, unimplemented)
-		scf.fixVtable(t, unimplemented, unimplementedColumns, pgCode)
+		pgCode := scf.goParsePgCatalogGo(d.t)
+		scf.fixConstants(d.t, unimplementedTables)
+		scf.fixVtable(d.t, unimplementedTables, unimplementedColumns, pgCode)
 		fixPgCatalogGoColumns(pgCode)
-		scf.fixCatalogGo(t, unimplemented)
+		scf.fixCatalogGo(d.t, unimplementedTables)
 	}
 }
 
-func getTestDataFileName() string {
+// TestDiffTool will the diff tool, by default it will use pg_catalog on postgres and
+// will not modify any missing table or expected diffs file. But if wanted, you may change
+// the flags. See the flags at the beginning of the file
+func TestDiffTool(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	NewDiffTool(t).Run()
+}
+
+// TestInformationSchemaPostgres will change the defaults from TestDiffTool to check
+// information_schema on postgres.
+// NOTE: --catalog or --rdbms flags won't take effect on this test.
+func TestInformationSchemaPostgres(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	NewDiffTool(t).Catalog("information_schema").RDBMS(Postgres).Run()
+}
+
+// TestInformationSchemaPostgres will change the defaults from TestDiffTool to check
+// information_schema on mysql.
+// NOTE: --catalog or --rdbms flags won't take effect on this test.
+func TestInformationSchemaMySQL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	NewDiffTool(t).Catalog("information_schema").RDBMS(MySQL).Run()
+}
+
+func (d *VirtualSchemaDiffTool) getTestDataFileName() string {
 	if testDataFileName == nil || *testDataFileName == "" {
-		return TablesMetadataFilename(testdata, *rdbmsName, *catalogName)
+		return TablesMetadataFilename(testdata, d.rdbmsName, d.catalogName)
 	}
 	return *testDataFileName
 }

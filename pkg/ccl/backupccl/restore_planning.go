@@ -658,13 +658,11 @@ func allocateDescriptorRewrites(
 					return err
 				}
 
-				if parentDB.IsMultiRegion() && table.GetLocalityConfig() != nil {
-					// We're restoring a table and not its parent database. We may block
-					// restoring multi-region tables to multi-region databases since regions
-					// may mismatch.
-					if err := checkMultiRegionCompatible(ctx, txn, p.ExecCfg().Codec, table, parentDB); err != nil {
-						return pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
-					}
+				// We're restoring a table and not its parent database. We may block
+				// restoring multi-region tables to multi-region databases since
+				// regions may mismatch.
+				if err := checkMultiRegionCompatible(ctx, txn, p.ExecCfg().Codec, table, parentDB); err != nil {
+					return pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
 				}
 
 				// Create the table rewrite with the new parent ID. We've done all the
@@ -961,7 +959,7 @@ func maybeUpgradeDescriptors(
 		if tableDesc, isTable := desc.(catalog.TableDescriptor); isTable {
 			b = tabledesc.NewBuilderForFKUpgrade(tableDesc.TableDesc(), skipFKsWithNoMatchingTable)
 		} else {
-			b = catalogkv.NewBuilder(desc.DescriptorProto())
+			b = desc.NewBuilder()
 		}
 		err := b.RunPostDeserializationChanges(ctx, descGetter)
 		if err != nil {
@@ -1681,8 +1679,7 @@ func checkPrivilegesForRestore(
 				"only users with the CREATEDB privilege can restore databases")
 		}
 	}
-	knobs := p.ExecCfg().BackupRestoreTestingKnobs
-	if knobs != nil && knobs.AllowImplicitAccess {
+	if p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
 		return nil
 	}
 	// Check that none of the sources rely on implicit access.

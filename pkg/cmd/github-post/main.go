@@ -47,7 +47,7 @@ const (
 type formatter func(context.Context, failure) (issues.IssueFormatter, issues.PostRequest)
 
 func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, issues.PostRequest) {
-	teams, authorEmail := getOwner(ctx, f.packageName, f.testName)
+	teams := getOwner(ctx, f.packageName, f.testName)
 	repro := fmt.Sprintf("make stressrace TESTS=%s PKG=./pkg/%s TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1",
 		f.testName, trimPkg(f.packageName))
 
@@ -60,14 +60,17 @@ func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, is
 		}
 	}
 	return issues.UnitTestFormatter, issues.PostRequest{
-		TestName:            f.testName,
-		PackageName:         f.packageName,
-		Message:             f.testMessage,
-		Artifacts:           "/", // best we can do for unit tests
-		AuthorEmail:         authorEmail,
-		ReproductionCommand: issues.ReproductionCommandFromString(repro),
-		Mention:             mentions,
-		ProjectColumnID:     projColID,
+		TestName:    f.testName,
+		PackageName: f.packageName,
+		Message:     f.testMessage,
+		Artifacts:   "/", // best we can do for unit tests
+		HelpCommand: func(r *issues.Renderer) {
+			issues.ReproductionCommandFromString(repro)
+			r.Escaped("See also: ")
+			r.A("How To Investigate a Go Test Failure (internal)", "https://cockroachlabs.atlassian.net/l/c/HgfXfJgM")
+		},
+		Mention:         mentions,
+		ProjectColumnID: projColID,
 	}
 }
 
@@ -154,7 +157,7 @@ func listFailures(
 ) error {
 	// Tests that took less than this are not even considered for slow test
 	// reporting. This is so that we protect against large number of
-	// programatically-generated subtests.
+	// programmatically-generated subtests.
 	const shortTestFilterSecs float64 = 0.5
 	var timeoutMsg = "panic: test timed out after"
 
@@ -514,44 +517,20 @@ func getFileLine(
 }
 
 // getOwner looks up the file containing the given test and returns
-// the owning teams as well as the author email. It does not return
+// the owning teams. It does not return
 // errors, but instead simply returns what it can.
-func getOwner(
-	ctx context.Context, packageName, testName string,
-) (_teams []team.Team, _authorEmail string) {
-	filename, linenum, err := getFileLine(ctx, packageName, testName)
+func getOwner(ctx context.Context, packageName, testName string) (_teams []team.Team) {
+	filename, _, err := getFileLine(ctx, packageName, testName)
 	if err != nil {
 		log.Printf("getting file:line for %s.%s: %s", packageName, testName, err)
-		return nil, ""
+		return nil
 	}
-	authorEmail, _ := getAuthorEmail(ctx, filename, linenum)
 	co, err := codeowners.DefaultLoadCodeOwners()
 	if err != nil {
 		log.Printf("loading codeowners: %s", err)
-		return nil, authorEmail
+		return nil
 	}
-	return co.Match(filename), authorEmail
-}
-
-func getAuthorEmail(ctx context.Context, filename, linenum string) (string, error) {
-	// Run git blame.
-	cmd := exec.Command(`/bin/bash`, `-c`,
-		fmt.Sprintf(`cd "$(git rev-parse --show-toplevel)" && git blame --porcelain -L%s,+1 '%s' | grep author-mail`,
-			linenum, filename))
-	// This command returns output such as:
-	// author-mail <jordan@cockroachlabs.com>
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", errors.Errorf("couldn't find author of %s:%s: %s\n%s",
-			filename, linenum, err, string(out))
-	}
-	re := regexp.MustCompile("author-mail <(.*)>")
-	matches := re.FindSubmatch(out)
-	if matches == nil {
-		return "", errors.Errorf("couldn't find author email of %s:%s: %s",
-			filename, linenum, string(out))
-	}
-	return string(matches[1]), nil
+	return co.Match(filename)
 }
 
 func formatPebbleMetamorphicIssue(
@@ -571,11 +550,11 @@ func formatPebbleMetamorphicIssue(
 		}
 	}
 	return issues.UnitTestFormatter, issues.PostRequest{
-		TestName:            f.testName,
-		PackageName:         f.packageName,
-		Message:             f.testMessage,
-		Artifacts:           "meta",
-		ReproductionCommand: issues.ReproductionCommandFromString(repro),
-		ExtraLabels:         []string{"metamorphic-failure"},
+		TestName:    f.testName,
+		PackageName: f.packageName,
+		Message:     f.testMessage,
+		Artifacts:   "meta",
+		HelpCommand: issues.ReproductionCommandFromString(repro),
+		ExtraLabels: []string{"metamorphic-failure"},
 	}
 }

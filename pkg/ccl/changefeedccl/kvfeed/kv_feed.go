@@ -461,6 +461,12 @@ func copyFromSourceToDestUntilTableEvent(
 					return false, false, err
 				}
 				return true, frontier.Frontier().EqOrdering(boundaryResolvedTimestamp), nil
+			case kvevent.TypeFlush:
+				// TypeFlush events have a timestamp of zero and should have already
+				// been processed by the timestamp check above. We include this here
+				// for completeness.
+				return false, false, nil
+
 			default:
 				return false, false, &errUnknownEvent{e}
 			}

@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "opgen",
+    srcs = [
+        "op_funcs.go",
+        "op_gen.go",
+        "opgen_column.go",
+        "opgen_database.go",
+        "opgen_default_expression.go",
+        "opgen_inbound_foreign_key.go",
+        "opgen_outbound_foreign_key.go",
+        "opgen_primary_index.go",
+        "opgen_relation_depended_on_by.go",
+        "opgen_schema.go",
+        "opgen_secondary_index.go",
+        "opgen_sequence.go",
+        "opgen_sequence_owned_by.go",
+        "opgen_table.go",
+        "opgen_type.go",
+        "opgen_type_reference.go",
+        "opgen_view.go",
+        "target.go",
+        "transition_spec.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/opgen",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/schemachanger/rel",
+        "//pkg/sql/schemachanger/scgraph",
+        "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/screl",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

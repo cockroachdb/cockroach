@@ -77,6 +77,11 @@ func (tc *TestCluster) Server(idx int) serverutils.TestServerInterface {
 	return tc.Servers[idx]
 }
 
+// ServerTyped is like Server, but returns the right type.
+func (tc *TestCluster) ServerTyped(idx int) *server.TestServer {
+	return tc.Servers[idx]
+}
+
 // ServerConn is part of TestClusterInterface.
 func (tc *TestCluster) ServerConn(idx int) *gosql.DB {
 	return tc.Conns[idx]
@@ -116,12 +121,12 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 		tc.stopServerLocked(i)
 	}
 
-	// TODO(irfansharif): Instead of checking for empty tracing registries after
-	// shutting down each node, we're doing it after shutting down all nodes.
-	// This is because TestCluster share the same Tracer object. Perhaps a saner
-	// thing to do is to separate out individual TestServers entirely. The
-	// component sharing within TestCluster has bitten in the past as well, and
-	// it's not clear why it has to be this way.
+	// TODO(andrei): Instead of checking for empty tracing registries after
+	// shutting down each node, we're doing it after shutting down all nodes. This
+	// is because all the nodes might share the same cluster (in case the Tracer
+	// was passed in at cluster creation time). We should not allow the Tracer to
+	// be passed in like this, and we should then also added this registry
+	// draining check to individual TestServers.
 	for i := 0; i < tc.NumServers(); i++ {
 		// Wait until a server's span registry is emptied out. This helps us check
 		// to see that there are no un-Finish()ed spans. We need to wrap this in a
@@ -131,10 +136,10 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 		// example of this.
 		//
 		// [1]: cleanupSessionTempObjects
-		tracer := tc.Server(i).Tracer().(*tracing.Tracer)
+		tracer := tc.Servers[i].Tracer()
 		testutils.SucceedsSoon(tc.t, func() error {
-			var sps []*tracing.Span
-			_ = tracer.VisitSpans(func(span *tracing.Span) error {
+			var sps []tracing.RegistrySpan
+			_ = tracer.VisitSpans(func(span tracing.RegistrySpan) error {
 				sps = append(sps, span)
 				return nil
 			})

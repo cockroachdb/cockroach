@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -106,6 +107,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterTransactionsTableID:       crdbInternalClusterTxnsTable,
 		catconstants.CrdbInternalClusterSessionsTableID:           crdbInternalClusterSessionsTable,
 		catconstants.CrdbInternalClusterSettingsTableID:           crdbInternalClusterSettingsTable,
+		catconstants.CrdbInternalCreateSchemaStmtsTableID:         crdbInternalCreateSchemaStmtsTable,
 		catconstants.CrdbInternalCreateStmtsTableID:               crdbInternalCreateStmtsTable,
 		catconstants.CrdbInternalCreateTypeStmtsTableID:           crdbInternalCreateTypeStmtsTable,
 		catconstants.CrdbInternalDatabasesTableID:                 crdbInternalDatabasesTable,
@@ -1274,14 +1276,14 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
 )`,
 	indexes: []virtualIndex{{populate: func(ctx context.Context, constraint tree.Datum, p *planner,
 		db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-		var traceID uint64
+		var traceID tracingpb.TraceID
 		d := tree.UnwrapDatum(p.EvalContext(), constraint)
 		if d == tree.DNull {
 			return false, nil
 		}
 		switch t := d.(type) {
 		case *tree.DInt:
-			traceID = uint64(*t)
+			traceID = tracingpb.TraceID(*t)
 		default:
 			return false, errors.AssertionFailedf(
 				"unexpected type %T for trace_id column in virtual table crdb_internal.cluster_inflight_traces", d)
@@ -1347,7 +1349,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
 				"only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans")
 		}
-		return p.ExecCfg().Settings.Tracer.VisitSpans(func(span *tracing.Span) error {
+		return p.ExecCfg().AmbientCtx.Tracer.VisitSpans(func(span tracing.RegistrySpan) error {
 			for _, rec := range span.GetRecording() {
 				traceID := rec.TraceID
 				parentSpanID := rec.ParentSpanID
@@ -1450,7 +1452,10 @@ CREATE TABLE crdb_internal.session_variables (
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for _, vName := range varNames {
 			gen := varGen[vName]
-			value := gen.Get(&p.extendedEvalCtx)
+			value, err := gen.Get(&p.extendedEvalCtx)
+			if err != nil {
+				return err
+			}
 			if err := addRow(
 				tree.NewDString(vName),
 				tree.NewDString(value),
@@ -2273,6 +2278,43 @@ CREATE TABLE crdb_internal.create_type_statements (
 			// statements for them.
 			default:
 				return errors.AssertionFailedf("unknown type descriptor kind %s", typeDesc.GetKind().String())
+			}
+			return nil
+		})
+	},
+}
+
+var crdbInternalCreateSchemaStmtsTable = virtualSchemaTable{
+	comment: "CREATE statements for all user defined schemas accessible by the current user in current database (KV scan)",
+	schema: `
+CREATE TABLE crdb_internal.create_schema_statements (
+	database_id        INT,
+  database_name      STRING,
+  schema_name        STRING,
+  descriptor_id      INT,
+  create_statement   STRING
+)
+`,
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachSchema(ctx, p, db, func(schemaDesc catalog.SchemaDescriptor) error {
+			switch schemaDesc.SchemaKind() {
+			case catalog.SchemaUserDefined:
+				node := &tree.CreateSchema{
+					Schema: tree.ObjectNamePrefix{
+						SchemaName:     tree.Name(schemaDesc.GetName()),
+						ExplicitSchema: true,
+					},
+				}
+				if err := addRow(
+					tree.NewDInt(tree.DInt(db.GetID())),         // database_id
+					tree.NewDString(db.GetName()),               // database_name
+					tree.NewDString(schemaDesc.GetName()),       // schema_name
+					tree.NewDInt(tree.DInt(schemaDesc.GetID())), // descriptor_id (schema_id)
+					tree.NewDString(tree.AsString(node)),        // create_statement
+				); err != nil {
+					return err
+				}
+
 			}
 			return nil
 		})
@@ -5079,13 +5121,15 @@ var crdbInternalStmtStatsTable = virtualSchemaTable{
 		`cluster-wide RPC-fanout.`,
 	schema: `
 CREATE TABLE crdb_internal.statement_statistics (
-    aggregated_ts  TIMESTAMPTZ NOT NULL,
-    fingerprint_id BYTES NOT NULL,
-    plan_hash      BYTES NOT NULL,
-    app_name       STRING NOT NULL,
-    metadata       JSONB NOT NULL,
-    statistics     JSONB NOT NULL,
-    sampled_plan   JSONB NOT NULL
+    aggregated_ts              TIMESTAMPTZ NOT NULL,
+    fingerprint_id             BYTES NOT NULL,
+    transaction_fingerprint_id BYTES NOT NULL,
+    plan_hash                  BYTES NOT NULL,
+    app_name                   STRING NOT NULL,
+    metadata                   JSONB NOT NULL,
+    statistics                 JSONB NOT NULL,
+    sampled_plan               JSONB NOT NULL,
+    aggregation_interval       INTERVAL NOT NULL
 );`,
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// TODO(azhng): we want to eventually implement memory accounting within the
@@ -5119,7 +5163,7 @@ CREATE TABLE crdb_internal.statement_statistics (
 			Knobs:            execCfg.SQLStatsTestingKnobs,
 		}, memSQLStats)
 
-		row := make(tree.Datums, 7 /* number of columns for this virtual table */)
+		row := make(tree.Datums, 8 /* number of columns for this virtual table */)
 		worker := func(pusher rowPusher) error {
 			return sqlStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{
 				SortedAppNames: true,
@@ -5133,6 +5177,9 @@ CREATE TABLE crdb_internal.statement_statistics (
 
 				fingerprintID := tree.NewDBytes(
 					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(statistics.ID))))
+
+				transactionFingerprintID := tree.NewDBytes(
+					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(statistics.Key.TransactionFingerprintID))))
 
 				// TODO(azhng): properly update plan_hash value once we can expose it
 				//  from the optimizer.
@@ -5149,15 +5196,21 @@ CREATE TABLE crdb_internal.statement_statistics (
 				}
 				plan := sqlstatsutil.ExplainTreePlanNodeToJSON(&statistics.Stats.SensitiveInfo.MostRecentPlanDescription)
 
+				aggInterval := tree.NewDInterval(
+					duration.MakeDuration(statistics.AggregationInterval.Nanoseconds(), 0, 0),
+					types.DefaultIntervalTypeMetadata)
+
 				row = row[:0]
 				row = append(row,
 					aggregatedTs,                        // aggregated_ts
 					fingerprintID,                       // fingerprint_id
+					transactionFingerprintID,            // transaction_fingerprint_id
 					planHash,                            // plan_hash
 					tree.NewDString(statistics.Key.App), // app_name
 					tree.NewDJSON(metadataJSON),         // metadata
 					tree.NewDJSON(statisticsJSON),       // statistics
 					tree.NewDJSON(plan),                 // plan
+					aggInterval,                         // aggregation_interval
 				)
 
 				return pusher.pushRow(row...)
@@ -5219,11 +5272,12 @@ var crdbInternalTxnStatsTable = virtualSchemaTable{
 		`cluster-wide RPC-fanout.`,
 	schema: `
 CREATE TABLE crdb_internal.transaction_statistics (
-    aggregated_ts  TIMESTAMPTZ NOT NULL,
-    fingerprint_id BYTES NOT NULL,
-    app_name       STRING NOT NULL,
-    metadata       JSONB NOT NULL,
-    statistics     JSONB NOT NULL
+    aggregated_ts         TIMESTAMPTZ NOT NULL,
+    fingerprint_id        BYTES NOT NULL,
+    app_name              STRING NOT NULL,
+    metadata              JSONB NOT NULL,
+    statistics            JSONB NOT NULL,
+    aggregation_interval  INTERVAL NOT NULL
 );`,
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// TODO(azhng): we want to eventually implement memory accounting within the
@@ -5287,6 +5341,10 @@ CREATE TABLE crdb_internal.transaction_statistics (
 					return err
 				}
 
+				aggInterval := tree.NewDInterval(
+					duration.MakeDuration(statistics.AggregationInterval.Nanoseconds(), 0, 0),
+					types.DefaultIntervalTypeMetadata)
+
 				row = row[:0]
 				row = append(row,
 					aggregatedTs,                    // aggregated_ts
@@ -5294,6 +5352,7 @@ CREATE TABLE crdb_internal.transaction_statistics (
 					tree.NewDString(statistics.App), // app_name
 					tree.NewDJSON(metadataJSON),     // metadata
 					tree.NewDJSON(statisticsJSON),   // statistics
+					aggInterval,                     // aggregation_interval
 				)
 
 				return pusher.pushRow(row...)

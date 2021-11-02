@@ -308,7 +308,7 @@ func TestGCIntentBatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	rand, _ := randutil.NewTestPseudoRand()
+	rand, _ := randutil.NewTestRand()
 
 	for _, s := range []struct {
 		name    string

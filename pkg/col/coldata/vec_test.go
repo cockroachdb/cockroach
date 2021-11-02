@@ -25,7 +25,7 @@ import (
 func TestMemColumnWindow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	c := coldata.NewMemColumn(types.Int, coldata.BatchSize(), coldata.StandardColumnFactory)
 
@@ -359,7 +359,7 @@ func TestCopyNulls(t *testing.T) {
 }
 
 func TestCopyWithReorderedSource(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	var typ = types.Int
 
 	for _, hasNulls := range []bool{false, true} {
@@ -397,7 +397,7 @@ func TestCopyWithReorderedSource(t *testing.T) {
 }
 
 func BenchmarkAppend(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	sel := rng.Perm(coldata.BatchSize())
 
 	benchCases := []struct {
@@ -429,10 +429,10 @@ func BenchmarkAppend(b *testing.B) {
 			for _, bc := range benchCases {
 				bc.args.Src = src
 				bc.args.SrcEndIdx = coldata.BatchSize()
-				dest := coldata.NewMemColumn(typ, coldata.BatchSize(), coldata.StandardColumnFactory)
 				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", typ, bc.name, nullProbability), func(b *testing.B) {
 					b.SetBytes(8 * int64(coldata.BatchSize()))
 					bc.args.DestIdx = 0
+					dest := coldata.NewMemColumn(typ, coldata.BatchSize(), coldata.StandardColumnFactory)
 					for i := 0; i < b.N; i++ {
 						dest.Append(bc.args)
 						bc.args.DestIdx += coldata.BatchSize()
@@ -444,7 +444,7 @@ func BenchmarkAppend(b *testing.B) {
 }
 
 func BenchmarkCopy(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	sel := rng.Perm(coldata.BatchSize())
 
 	benchCases := []struct {

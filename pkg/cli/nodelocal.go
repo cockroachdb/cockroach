@@ -146,7 +146,7 @@ var nodeLocalCmd = &cobra.Command{
 	Use:   "nodelocal [command]",
 	Short: "upload and delete nodelocal files",
 	Long:  "Upload and delete files on the gateway node's local file system.",
-	RunE:  usageAndErr,
+	RunE:  UsageAndErr,
 }
 
 func init() {

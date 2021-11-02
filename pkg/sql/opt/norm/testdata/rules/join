@@ -908,7 +908,7 @@ project
       ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8!null y:9 "?column?":16
       ├── immutable
       ├── key: (8)
-      ├── fd: (1)-->(2-5), (1,8)-->(9,16), (1)==(8), (8)==(1)
+      ├── fd: (1)-->(2-5), (1,8)-->(9,16), (1)==(8), (8)==(1), (8)-->(16)
       ├── scan a
       │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
       │    ├── key: (1)
@@ -946,7 +946,7 @@ project
       │              └── "?column?":16
       └── filters
            ├── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-           └── "?column?":16 = (x:8 * i:2) [outer=(2,8,16), immutable, constraints=(/16: (/NULL - ])]
+           └── "?column?":16 = (x:8 * i:2) [outer=(2,8,16), immutable, constraints=(/16: (/NULL - ]), fd=(2,8)-->(16)]
 
 # Ensure that we do not map filters for types with composite key encoding.
 norm expect-not=(PushFilterIntoJoinLeftAndRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
@@ -3196,7 +3196,7 @@ project
       │    ├── key: (5)
       │    └── fd: (5)-->(6)
       └── filters
-           ├── v:6 = (x:1 + u:5) [outer=(1,5,6), immutable, constraints=(/6: (/NULL - ])]
+           ├── v:6 = (x:1 + u:5) [outer=(1,5,6), immutable, constraints=(/6: (/NULL - ]), fd=(1,5)-->(6)]
            └── column9:9 = u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
 
 # Cases with non-extractable equality.

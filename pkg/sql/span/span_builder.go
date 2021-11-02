@@ -451,8 +451,11 @@ var _ InvertedSpans = inverted.SpanExpressionProtoSpans{}
 // non-inverted prefix columns of the index. Each span in c must have a single
 // key. The resulting roachpb.Spans are created by performing a cross product of
 // keys in c and the invertedSpan keys.
+//
+// scratch can be an optional roachpb.Spans slice that will be reused to
+// populate the result.
 func (s *Builder) SpansFromInvertedSpans(
-	invertedSpans InvertedSpans, c *constraint.Constraint,
+	invertedSpans InvertedSpans, c *constraint.Constraint, scratch roachpb.Spans,
 ) (roachpb.Spans, error) {
 	if invertedSpans == nil {
 		return nil, errors.AssertionFailedf("invertedSpans cannot be nil")
@@ -487,7 +490,7 @@ func (s *Builder) SpansFromInvertedSpans(
 		scratchRows[0] = make(rowenc.EncDatumRow, 1)
 	}
 
-	var spans roachpb.Spans
+	scratch = scratch[:0]
 	for i := range scratchRows {
 		for j, n := 0, invertedSpans.Len(); j < n; j++ {
 			var indexSpan roachpb.Span
@@ -498,11 +501,11 @@ func (s *Builder) SpansFromInvertedSpans(
 			if indexSpan.EndKey, err = s.generateInvertedSpanKey(invertedSpans.End(j), scratchRows[i]); err != nil {
 				return nil, err
 			}
-			spans = append(spans, indexSpan)
+			scratch = append(scratch, indexSpan)
 		}
 	}
-	sort.Sort(spans)
-	return spans, nil
+	sort.Sort(scratch)
+	return scratch, nil
 }
 
 // generateInvertedSpanKey returns a key that encodes enc and scratchRow. The

@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
@@ -111,6 +113,7 @@ type BaseConfig struct {
 	Settings *cluster.Settings
 	*base.Config
 
+	Tracer *tracing.Tracer
 	// AmbientCtx is used to annotate contexts used inside the server.
 	AmbientCtx log.AmbientContext
 
@@ -159,9 +162,13 @@ type BaseConfig struct {
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
-func MakeBaseConfig(st *cluster.Settings) BaseConfig {
+func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
+	if tr == nil {
+		panic("nil Tracer")
+	}
 	baseCfg := BaseConfig{
-		AmbientCtx:        log.AmbientContext{Tracer: st.Tracer},
+		Tracer:            tr,
+		AmbientCtx:        log.AmbientContext{Tracer: tr},
 		Config:            new(base.Config),
 		Settings:          st,
 		MaxOffset:         MaxOffsetType(base.DefaultMaxClockOffset),
@@ -276,7 +283,7 @@ type KVConfig struct {
 	// do nontrivial work.
 	ReadyFn func(waitForInit bool)
 
-	// DelayedBootstrapFn is called if the boostrap process does not complete
+	// DelayedBootstrapFn is called if the bootstrap process does not complete
 	// in a timely fashion, typically 30s after the server starts listening.
 	DelayedBootstrapFn func()
 
@@ -395,7 +402,8 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes)
 
 	sqlCfg := MakeSQLConfig(roachpb.SystemTenantID, tempStorageCfg)
-	baseCfg := MakeBaseConfig(st)
+	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
+	baseCfg := MakeBaseConfig(st, tr)
 	kvCfg := MakeKVConfig(storeSpec)
 
 	cfg := Config{
@@ -486,6 +494,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 	log.Event(ctx, "initializing engines")
 
+	var tableCache *pebble.TableCache
+	if physicalStores > 0 {
+		perStoreLimit := pebble.TableCacheSize(int(openFileLimitPerStore))
+		totalFileLimit := perStoreLimit * physicalStores
+		tableCache = pebble.NewTableCache(pebbleCache, runtime.GOMAXPROCS(0), totalFileLimit)
+	}
+
 	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
 		cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs).SkipMinSizeCheck
 	disableSeparatedIntents := cfg.TestingKnobs.Store != nil &&
@@ -572,6 +587,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				Opts:          storage.DefaultPebbleOptions(),
 			}
 			pebbleConfig.Opts.Cache = pebbleCache
+			pebbleConfig.Opts.TableCache = tableCache
 			pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
 			// If the spec contains Pebble options, set those too.
 			if len(spec.PebbleOptions) > 0 {
@@ -588,6 +604,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				return Engines{}, err
 			}
 			engines = append(engines, eng)
+		}
+	}
+
+	if tableCache != nil {
+		// Unref the table cache now that the engines hold references to it.
+		if err := tableCache.Unref(); err != nil {
+			return nil, err
 		}
 	}
 

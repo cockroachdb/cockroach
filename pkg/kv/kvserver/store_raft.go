@@ -74,7 +74,7 @@ func (s *Store) HandleSnapshot(
 
 		if s.IsDraining() {
 			return stream.Send(&SnapshotResponse{
-				Status:  SnapshotResponse_DECLINED,
+				Status:  SnapshotResponse_ERROR,
 				Message: storeDrainingMsg,
 			})
 		}
@@ -264,21 +264,17 @@ func (s *Store) processRaftRequestWithReplica(
 	return nil
 }
 
-// processRaftSnapshotRequest processes the incoming non-preemptive snapshot
-// Raft request on the request's specified replica. The function makes sure to
-// handle any updated Raft Ready state. It also adds and later removes the
-// (potentially) necessary placeholder to protect against concurrent access to
-// the keyspace encompassed by the snapshot but not yet guarded by the replica.
+// processRaftSnapshotRequest processes the incoming snapshot Raft request on
+// the request's specified replica. The function makes sure to handle any
+// updated Raft Ready state. It also adds and later removes the (potentially)
+// necessary placeholder to protect against concurrent access to the keyspace
+// encompassed by the snapshot but not yet guarded by the replica.
 //
 // If (and only if) no error is returned, the placeholder (if any) in inSnap
 // will have been removed.
 func (s *Store) processRaftSnapshotRequest(
 	ctx context.Context, snapHeader *SnapshotRequest_Header, inSnap IncomingSnapshot,
 ) *roachpb.Error {
-	if snapHeader.IsPreemptive() {
-		return roachpb.NewError(errors.AssertionFailedf(`expected a raft or learner snapshot`))
-	}
-
 	return s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest, func(
 		ctx context.Context, r *Replica,
 	) (pErr *roachpb.Error) {

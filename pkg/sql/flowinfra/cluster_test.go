@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -52,7 +53,8 @@ func TestClusterFlow(t *testing.T) {
 	const numRows = 100
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
-	tc := serverutils.StartNewTestCluster(t, 3, args)
+	tci := serverutils.StartNewTestCluster(t, 3, args)
+	tc := tci.(*testcluster.TestCluster)
 	defer tc.Stopper().Stop(context.Background())
 
 	sumDigitsFn := func(row int) tree.Datum {
@@ -71,13 +73,13 @@ func TestClusterFlow(t *testing.T) {
 
 	kvDB := tc.Server(0).DB()
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
-	makeIndexSpan := func(start, end int) execinfrapb.TableReaderSpan {
+	makeIndexSpan := func(start, end int) roachpb.Span {
 		var span roachpb.Span
 		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PublicNonPrimaryIndexes()[0].GetID()))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
 		span.EndKey = append(span.EndKey, prefix...)
 		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
-		return execinfrapb.TableReaderSpan{Span: span}
+		return span
 	}
 
 	// successful indicates whether the flow execution is successful.
@@ -90,7 +92,7 @@ func TestClusterFlow(t *testing.T) {
 		// that doesn't matter for the purposes of this test.
 
 		// Start a span (useful to look at spans using Lightstep).
-		sp := tc.Server(0).ClusterSettings().Tracer.StartSpan("cluster test")
+		sp := tc.ServerTyped(0).Tracer().StartSpan("cluster test")
 		ctx := tracing.ContextWithSpan(context.Background(), sp)
 		defer sp.Finish()
 
@@ -108,21 +110,21 @@ func TestClusterFlow(t *testing.T) {
 		tr1 := execinfrapb.TableReaderSpec{
 			Table:         *desc.TableDesc(),
 			IndexIdx:      1,
-			Spans:         []execinfrapb.TableReaderSpan{makeIndexSpan(0, 8)},
+			Spans:         []roachpb.Span{makeIndexSpan(0, 8)},
 			NeededColumns: []uint32{0, 1},
 		}
 
 		tr2 := execinfrapb.TableReaderSpec{
 			Table:         *desc.TableDesc(),
 			IndexIdx:      1,
-			Spans:         []execinfrapb.TableReaderSpan{makeIndexSpan(8, 12)},
+			Spans:         []roachpb.Span{makeIndexSpan(8, 12)},
 			NeededColumns: []uint32{0, 1},
 		}
 
 		tr3 := execinfrapb.TableReaderSpec{
 			Table:         *desc.TableDesc(),
 			IndexIdx:      1,
-			Spans:         []execinfrapb.TableReaderSpan{makeIndexSpan(12, 100)},
+			Spans:         []roachpb.Span{makeIndexSpan(12, 100)},
 			NeededColumns: []uint32{0, 1},
 		}
 
@@ -652,7 +654,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 				b.Run(fmt.Sprintf("r%d", numRows), func(b *testing.B) {
 					// Generate some data sets, consisting of rows with three values; the
 					// first value is increasing.
-					rng, _ := randutil.NewPseudoRand()
+					rng, _ := randutil.NewTestRand()
 					lastVal := 1
 					valSpecs := make([]execinfrapb.ValuesCoreSpec, numNodes)
 					for i := range valSpecs {

@@ -156,36 +156,10 @@ const (
 
 	// v21.1 versions.
 	//
-	// replacedTruncatedAndRangeAppliedStateMigration stands in for
-	// TruncatedAndRangeAppliedStateMigration which was	re-introduced after the
-	// migration job was introduced. This is necessary because the jobs
-	// infrastructure used to run this migration in v21.1 and its later alphas
-	// was introduced after this version was first introduced. Later code in the
-	// release relies on the job to run the migration but the job relies on
-	// its startup migrations having been run. Versions associated with long
-	// running migrations must follow deletedLongRunningMigrations.
-	replacedTruncatedAndRangeAppliedStateMigration
-	// replacedPostTruncatedAndRangeAppliedStateMigration is like the above
-	// version. See its comment.
-	replacedPostTruncatedAndRangeAppliedStateMigration
-	// TruncatedAndRangeAppliedStateMigration is part of the migration to stop
-	// using the legacy truncated state within KV. After the migration, we'll be
-	// using the unreplicated truncated state and the RangeAppliedState on all
-	// ranges. Callers that wish to assert on there no longer being any legacy
-	// will be able to do so after PostTruncatedAndRangeAppliedStateMigration is
-	// active. This lets remove any holdover code handling the possibility of
-	// replicated truncated state in 21.2.
-	//
-	// TODO(irfansharif): Do the above in 21.2.
-	TruncatedAndRangeAppliedStateMigration
-	// PostTruncatedAndRangeAppliedStateMigration is used to purge all replicas
-	// using the replicated legacy TruncatedState. It's also used in asserting
-	// that no replicated truncated state representation is found.
-	PostTruncatedAndRangeAppliedStateMigration
 	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
 	//
-	// TODO(irfansharif): This can be removed as part of #69828 (bumping the min
-	// cluster version).
+	// TODO(irfansharif): This can be removed as part of #71708 (bump
+	// min-supported version to 21.2).
 	V21_1
 
 	// v21.1PLUS release. This is a special v21.1.x release with extra changes,
@@ -212,9 +186,6 @@ const (
 	DeleteDeprecatedNamespaceTableDescriptorMigration
 	// FixDescriptors is for the migration to fix all descriptors.
 	FixDescriptors
-	// SQLStatsTable adds the system tables for storing persisted SQL statistics
-	// for statements and transactions.
-	SQLStatsTable
 	// DatabaseRoleSettings adds the system table for storing per-user and
 	// per-role default session settings.
 	DatabaseRoleSettings
@@ -269,10 +240,6 @@ const (
 	SpanConfigurationsTable
 	// BoundedStaleness adds capabilities to perform bounded staleness reads.
 	BoundedStaleness
-	// SQLStatsCompactionScheduledJob creates a ScheduledJob for SQL Stats
-	// compaction on cluster startup and ensures that there is only one entry for
-	// the schedule.
-	SQLStatsCompactionScheduledJob
 	// DateAndIntervalStyle enables DateStyle and IntervalStyle to be changed.
 	DateAndIntervalStyle
 	// PebbleFormatVersioned ratchets Pebble's format major version to
@@ -289,8 +256,26 @@ const (
 	// TenantUsageSingleConsumptionColumn changes the tenant_usage system table to
 	// use a single consumption column (encoding a proto).
 	TenantUsageSingleConsumptionColumn
+	// SQLStatsTables adds the system table for storing persisted SQL statistics
+	// for statements.
+	SQLStatsTables
+	// SQLStatsCompactionScheduledJob creates a ScheduledJob for SQL Stats
+	// compaction on cluster startup and ensures that there is only one entry for
+	// the schedule.
+	SQLStatsCompactionScheduledJob
 	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 	V21_2
+
+	// v22.1 versions.
+	//
+	// Start22_1 demarcates work towards CockroachDB v22.1.
+	Start22_1
+
+	// TargetBytesAvoidExcess prevents exceeding BatchRequest.Header.TargetBytes
+	// except when there is a single value in the response. 21.2 DistSender logic
+	// requires the limit to always be overshot in order to properly enforce
+	// limits when splitting requests.
+	TargetBytesAvoidExcess
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -317,22 +302,6 @@ const (
 // to be added (i.e., when cutting the final release candidate).
 var versionsSingleton = keyedVersions{
 	// v21.1 versions.
-	{
-		Key:     replacedTruncatedAndRangeAppliedStateMigration,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 14},
-	},
-	{
-		Key:     replacedPostTruncatedAndRangeAppliedStateMigration,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 16},
-	},
-	{
-		Key:     TruncatedAndRangeAppliedStateMigration,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 22},
-	},
-	{
-		Key:     PostTruncatedAndRangeAppliedStateMigration,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 24},
-	},
 	{
 		// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
 		Key:     V21_1,
@@ -381,10 +350,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     FixDescriptors,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1114},
-	},
-	{
-		Key:     SQLStatsTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1116},
 	},
 	{
 		Key:     DatabaseRoleSettings,
@@ -466,10 +431,6 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1156},
 	},
 	{
-		Key:     SQLStatsCompactionScheduledJob,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1158},
-	},
-	{
 		Key:     DateAndIntervalStyle,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1160},
 	},
@@ -490,10 +451,29 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1168},
 	},
 	{
+		Key:     SQLStatsTables,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1170},
+	},
+	{
+		Key:     SQLStatsCompactionScheduledJob,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1172},
+	},
+	{
 		// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 		Key:     V21_2,
 		Version: roachpb.Version{Major: 21, Minor: 2},
 	},
+
+	// v22.1 versions. Internal versions must be even.
+	{
+		Key:     Start22_1,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 2},
+	},
+	{
+		Key:     TargetBytesAvoidExcess,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 4},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -516,6 +496,15 @@ var (
 	// This is the version that a new cluster will use when created.
 	binaryVersion = versionsSingleton[len(versionsSingleton)-1].Version
 )
+
+func init() {
+	const isReleaseBranch = false
+	if isReleaseBranch {
+		if binaryVersion != ByKey(V21_2) {
+			panic("unexpected cluster version greater than release's binary version")
+		}
+	}
+}
 
 // ByKey returns the roachpb.Version for a given key.
 // It is a fatal error to use an invalid key.

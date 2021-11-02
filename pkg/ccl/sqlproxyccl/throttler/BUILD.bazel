@@ -5,12 +5,13 @@ go_library(
     srcs = [
         "local.go",
         "service.go",
-        "token_bucket.go",
+        "throttle.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/cache",
+        "//pkg/util/log",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -20,7 +21,7 @@ go_test(
     name = "throttler_test",
     srcs = [
         "local_test.go",
-        "token_bucket_test.go",
+        "throttle_test.go",
     ],
     embed = [":throttler"],
     deps = [

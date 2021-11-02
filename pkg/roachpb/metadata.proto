@@ -281,7 +281,7 @@ message RangeDescriptor {
   // merged by the merge queue. Previous, we threw an error when a user
   // attempted to execute ALTER TABLE/INDEX ... SPLIT AT ... when the merge
   // queue is enabled. With sticky_bit, users can manually split ranges without
-  // diabling the merge queue.
+  // disabling the merge queue.
   optional util.hlc.Timestamp sticky_bit = 7;
 }
 

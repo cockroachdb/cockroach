@@ -11,6 +11,7 @@
 // "make test" would normally test this file, but it should only be tested
 // within docker compose.
 
+//go:build compose
 // +build compose
 
 package compare
@@ -68,7 +69,7 @@ func TestCompare(t *testing.T) {
 	}
 	configs := map[string]testConfig{
 		"postgres": {
-			setup:           sqlsmith.Setups["rand-tables"],
+			setup:           sqlsmith.Setups[sqlsmith.RandTableSetupName],
 			setupMutators:   []randgen.Mutator{randgen.PostgresCreateTableMutator},
 			opts:            []sqlsmith.SmitherOption{sqlsmith.PostgresMode()},
 			ignoreSQLErrors: true,
@@ -84,7 +85,7 @@ func TestCompare(t *testing.T) {
 			},
 		},
 		"mutators": {
-			setup:           sqlsmith.Setups["rand-tables"],
+			setup:           sqlsmith.Setups[sqlsmith.RandTableSetupName],
 			opts:            []sqlsmith.SmitherOption{sqlsmith.CompareMode()},
 			ignoreSQLErrors: true,
 			conns: []testConn{
@@ -123,7 +124,7 @@ func TestCompare(t *testing.T) {
 	for confName, config := range configs {
 		t.Run(confName, func(t *testing.T) {
 			t.Logf("starting test: %s", confName)
-			rng, _ := randutil.NewPseudoRand()
+			rng, _ := randutil.NewTestRand()
 			setup := config.setup(rng)
 			setup, _ = randgen.ApplyString(rng, setup, config.setupMutators...)
 

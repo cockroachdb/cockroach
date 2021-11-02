@@ -64,7 +64,7 @@ include build/defs.mk
 #
 # Note how the actions for this rule are *not* using $(GIT_DIR) which
 # is otherwise defined in defs.mk above. This is because submodules
-# are used in the process of definining the .mk files included by the
+# are used in the process of defining the .mk files included by the
 # Makefile, so it is not yet defined by the time
 # `.submodules-initialized` is needed during a fresh build after a
 # checkout.
@@ -366,7 +366,7 @@ $(CLUSTER_UI_JS): $(shell find pkg/ui/workspaces/cluster-ui/src -type f | sed 's
 pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock | bin/.submodules-initialized
 	@# Do not install optional dependencies as far as they are required for UI development only
 	@# and should not be installed for production builds.
-	@# Also some of linux distributives (that are used as development env) don't support some of
+	@# Also some linux distributions (that are used as development env) don't support some of
 	@# optional dependencies (i.e. cypress) so it is important to make these deps optional.
 	$(NODE_RUN) -C pkg/ui yarn install --ignore-optional --offline
 	@# We remove this broken dependency again in pkg/ui/webpack.config.js.
@@ -566,6 +566,7 @@ $(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialize
 	@echo "regenerating $@"
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
 	@echo >> $@
+	@echo '//go:build $(if $(findstring $(native-tag),$@),$(native-tag),!make)' >> $@
 	@echo '// +build $(if $(findstring $(native-tag),$@),$(native-tag),!make)' >> $@
 	@echo >> $@
 	@echo 'package $(if $($(@D)-package),$($(@D)-package),$(notdir $(@D)))' >> $@
@@ -890,7 +891,8 @@ OPTGEN_TARGETS = \
 	pkg/sql/opt/rule_name.og.go \
 	pkg/sql/opt/rule_name_string.go \
 	pkg/sql/opt/exec/factory.og.go \
-	pkg/sql/opt/exec/explain/explain_factory.og.go
+	pkg/sql/opt/exec/explain/explain_factory.og.go \
+	pkg/sql/opt/exec/explain/plan_gist_factory.og.go \
 
 # removed-files is a list of files that used to exist in the
 # repository that need to be explicitly cleaned up to prevent build
@@ -911,7 +913,7 @@ ifneq ($(removed-files-to-remove),)
 endif
 
 test-targets := \
-	check test testshort testslow testrace testraceslow testbuild \
+	check test testshort testslow testrace testraceslow testdeadlock testbuild \
 	stress stressrace \
 	roachprod-stress roachprod-stressrace \
 	testlogic testbaselogic testccllogic testoptlogic
@@ -921,7 +923,7 @@ go-targets-ccl := \
 	bin/workload \
 	go-install \
 	bench benchshort \
-	check test testshort testslow testrace testraceslow testbuild \
+	check test testshort testslow testrace testraceslow testdeadlock testbuild \
 	stress stressrace \
 	roachprod-stress roachprod-stressrace \
 	generate \
@@ -1044,6 +1046,8 @@ testbuild:
 
 testshort: override TESTFLAGS += -short
 
+testdeadlock: TAGS += deadlock
+
 testrace: ## Run tests with the Go race detector enabled.
 testrace stressrace roachprod-stressrace: override GOFLAGS += -race
 testrace stressrace roachprod-stressrace: export GORACE := halt_on_error=1
@@ -1063,9 +1067,9 @@ bench benchshort: TESTTIMEOUT := $(BENCHTIMEOUT)
 # that longer running benchmarks can skip themselves.
 benchshort: override TESTFLAGS += -benchtime=1ns -short
 
-.PHONY: check test testshort testrace testlogic testbaselogic testccllogic testoptlogic bench benchshort
+.PHONY: check test testshort testrace testdeadlock testlogic testbaselogic testccllogic testoptlogic bench benchshort
 test: ## Run tests.
-check test testshort testrace bench benchshort:
+check test testshort testrace testdeadlock bench benchshort:
 	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: stress stressrace
@@ -1651,6 +1655,9 @@ pkg/sql/opt/exec/factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
 pkg/sql/opt/exec/explain/explain_factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
 	optgen -out $@ execexplain $(optgen-exec-defs)
 
+pkg/sql/opt/exec/explain/plan_gist_factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
+	optgen -out $@ execplangist $(optgen-exec-defs)
+
 .PHONY: clean-c-deps
 clean-c-deps:
 	rm -rf $(JEMALLOC_DIR)
@@ -1827,7 +1834,7 @@ endif
 #
 # The additional complexity below handles whitespace and comments.
 #
-# The special comments at the beginning are for Github/Go/Reviewable:
+# The special comments at the beginning are for GitHub/Go/Reviewable:
 # https://github.com/golang/go/issues/13560#issuecomment-277804473
 # https://github.com/Reviewable/Reviewable/wiki/FAQ#how-do-i-tell-reviewable-that-a-file-is-generated-and-should-not-be-reviewed
 # Note how the 'prefix' variable is manually appended. This is required by Homebrew.

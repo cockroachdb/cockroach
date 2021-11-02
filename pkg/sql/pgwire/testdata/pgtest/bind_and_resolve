@@ -38,15 +38,14 @@ ReadyForQuery
 # planner transaction but never set it. This was pretty much the only
 # way you could do such a thing.
 
-send
+# This is crdb_only because Postgres does not support AS OF SYSTEM TIME.
+send crdb_only
 Query {"String": "BEGIN AS OF SYSTEM TIME '1s'"}
 Sync
 ----
 
-
-# TODO(ajwerner): Why are there two ReadyForQuery?
-
-until
+# There are two ReadyForQuerys because a simple query was followed by Sync.
+until crdb_only
 ErrorResponse
 ReadyForQuery
 ReadyForQuery
@@ -55,16 +54,93 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-send
+send crdb_only
 Bind {"DestinationPortal": "p7", "PreparedStatement": "s7", "ParameterFormatCodes": [0], "Parameters": [{"text":"T"}]}
 Execute {"Portal": "p7"}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"52"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DROP TABLE IF EXISTS tab"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Name": "s8", "Query": "SELECT relname FROM pg_class WHERE oid = $1::regclass"}
+Bind {"DestinationPortal": "p8", "PreparedStatement": "s8", "ResultFormatCodes": [0], "Parameters": [{"text":"t"}]}
 Sync
 ----
 
 until
 ReadyForQuery
 ----
+{"Type":"ParseComplete"}
 {"Type":"BindComplete"}
-{"Type":"DataRow","Values":[{"text":"52"}]}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "ALTER TABLE t RENAME TO tab"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ALTER TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"Portal": "p8"}
+Sync
+----
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"t"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Currently, CRDB differs in that it returns the new table name here, but the
+# important part of this test is that it asserts that binding the placeholder
+# parameter occurred before the table rename, which matches the Postgres
+# behavior.
+# TODO(rafi): To be fully correct, we still should return table name 't' here.
+until crdb_only
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"tab"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

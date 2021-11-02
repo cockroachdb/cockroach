@@ -84,7 +84,7 @@ bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
 
-bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under '@com_github_cockroachdb_stress//:stress ' '--test_filter=TestStartChild*' --test_output errors
+bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress ' '--test_filter=TestStartChild*' --test_output streamed
 ----
 ----
 //pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 12.3s
@@ -97,7 +97,20 @@ bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
 
-bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under '@com_github_cockroachdb_stress//:stress -maxtime=10s ' --test_timeout=11 '--test_filter=TestStartChild*' --test_output all --test_arg -test.v
+bazel test --local_cpu_resources=12 --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress -p=12 ' '--test_filter=TestStartChild*' --test_output streamed
+----
+----
+//pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 12.3s
+
+Executed 1 out of 1 test: 1 test passes.
+----
+----
+
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
+----
+//pkg/util/tracing:tracing_test
+
+bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_timeout=70 --run_under '@com_github_cockroachdb_stress//:stress -maxtime=10s ' '--test_filter=TestStartChild*' --test_output streamed
 ----
 ----
 ==================== Test output for //pkg/util/tracing:tracing_test:
@@ -166,4 +179,30 @@ bazel test //pkg/roachpb:roachpb_test //pkg/roachpb:string_test --test_output er
 ----
 
 bazel test pkg/roachpb:string_test --test_output errors
+----
+
+bazel query 'kind(go_test, //pkg/testutils:all)'
+----
+//pkg/testutils:testutils_test
+
+bazel info workspace --color=no
+----
+go/src/github.com/cockroachdb/cockroach
+
+bazel test //pkg/testutils:testutils_test --test_env=COCKROACH_WORKSPACE=go/src/github.com/cockroachdb/cockroach --test_arg -rewrite --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/testutils --test_output errors
+----
+
+bazel query 'kind(go_test, //pkg/testutils:all)'
+----
+//pkg/testutils:testutils_test
+
+bazel query 'kind(go_test, //pkg/other/test:all)'
+----
+//pkg/other/test:test_test
+
+bazel info workspace --color=no
+----
+go/src/github.com/cockroachdb/cockroach
+
+bazel test //pkg/testutils:testutils_test //pkg/other/test:test_test --test_env=COCKROACH_WORKSPACE=go/src/github.com/cockroachdb/cockroach --test_arg -rewrite --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/testutils --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/other/test --test_output errors
 ----

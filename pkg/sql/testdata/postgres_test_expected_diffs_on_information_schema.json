@@ -1,5 +1,5 @@
 {
-  "pgVersion": "13.3",
+  "version": "13.3",
   "diffSummary": {
     "TotalTables": 60,
     "TotalColumns": 628,
@@ -7,7 +7,7 @@
     "MissingColumns": 12,
     "DatatypeMismatches": 0
   },
-  "pgMetadata": {
+  "diffs": {
     "routines": {
       "scope_schema": null
     },
@@ -29,5 +29,5 @@
       "user_defined_type_schema": null
     }
   },
-  "unimplementedTypes": null
+  "unimplementedTypes": {}
 }

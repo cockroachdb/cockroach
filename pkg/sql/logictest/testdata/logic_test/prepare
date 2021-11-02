@@ -1019,7 +1019,7 @@ ap35145
 statement ok
 DROP DATABASE d35145
 
-query error relation "pg_settings" does not exist
+query error pgcode 3D000 database "d35145" does not exist
 EXECUTE display_appname
 
 statement ok
@@ -1035,7 +1035,7 @@ ap35145
 statement ok
 CREATE DATABASE d35145_2; SET database = d35145_2; DROP DATABASE d35145_2
 
-query error relation "pg_settings" does not exist
+query error pgcode 3D000 database "d35145_2" does not exist
 EXECUTE display_appname
 
 # Check what happens when the stmt is executed over no db whatsoever.
@@ -1181,8 +1181,7 @@ select
  │    ├── cost: 1064.42
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
- │    ├── prune: (1,2)
- │    └── interesting orderings: (+1)
+ │    └── prune: (1,2)
  └── filters
       └── (k:1 % 2) = 1 [outer=(1), immutable]
 

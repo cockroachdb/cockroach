@@ -31,12 +31,17 @@ bazel test //pkg/util/tracing:tracing_test --nocache_test_results '--test_filter
 dev test --stress pkg/util/tracing --filter TestStartChild*
 ----
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
-bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under '@com_github_cockroachdb_stress//:stress ' '--test_filter=TestStartChild*' --test_output errors
+bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress ' '--test_filter=TestStartChild*' --test_output streamed
+
+dev test --stress pkg/util/tracing --filter TestStartChild* --cpus=12
+----
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
+bazel test --local_cpu_resources=12 --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress -p=12 ' '--test_filter=TestStartChild*' --test_output streamed
 
 dev test --stress pkg/util/tracing --filter TestStartChild* --timeout=10s -v
 ----
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
-bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under '@com_github_cockroachdb_stress//:stress -maxtime=10s ' --test_timeout=11 '--test_filter=TestStartChild*' --test_output all --test_arg -test.v
+bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_timeout=70 --run_under '@com_github_cockroachdb_stress//:stress -maxtime=10s ' '--test_filter=TestStartChild*' --test_output streamed
 
 dev test //pkg/testutils --timeout=10s
 ----
@@ -56,3 +61,16 @@ bazel test //pkg/roachpb:roachpb_test //pkg/roachpb:string_test --test_output er
 dev test pkg/roachpb:string_test
 ----
 bazel test pkg/roachpb:string_test --test_output errors
+
+dev test //pkg/testutils --rewrite
+----
+bazel query 'kind(go_test, //pkg/testutils:all)'
+bazel info workspace --color=no
+bazel test //pkg/testutils:testutils_test --test_env=COCKROACH_WORKSPACE=go/src/github.com/cockroachdb/cockroach --test_arg -rewrite --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/testutils --test_output errors
+
+dev test //pkg/testutils pkg/other/test --rewrite
+----
+bazel query 'kind(go_test, //pkg/testutils:all)'
+bazel query 'kind(go_test, //pkg/other/test:all)'
+bazel info workspace --color=no
+bazel test //pkg/testutils:testutils_test //pkg/other/test:test_test --test_env=COCKROACH_WORKSPACE=go/src/github.com/cockroachdb/cockroach --test_arg -rewrite --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/testutils --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/other/test --test_output errors

@@ -44,8 +44,16 @@ type AddressResolver interface {
 // Provider is a wrapper around sqlinstance subsystem for external consumption.
 type Provider interface {
 	AddressResolver
+	// Instance returns the instance ID and sqlliveness.SessionID for the
+	// current SQL instance.
 	Instance(context.Context) (base.SQLInstanceID, sqlliveness.SessionID, error)
+	// Start starts the instanceprovider. This will block until
+	// the underlying instance data reader has been started.
+	Start(context.Context) error
 }
 
 // NonExistentInstanceError can be returned if a SQL instance does not exist.
 var NonExistentInstanceError = errors.Errorf("non existent SQL instance")
+
+// NotStartedError can be returned if the sqlinstance subsystem has not been started yet.
+var NotStartedError = errors.Errorf("sqlinstance subsystem not started")

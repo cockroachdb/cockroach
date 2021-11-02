@@ -248,6 +248,30 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().PreferLookupJoinsForFKs = false
 	notStale()
 
+	// Stale PropagateInputOrdering.
+	evalCtx.SessionData().PropagateInputOrdering = true
+	stale()
+	evalCtx.SessionData().PropagateInputOrdering = false
+	notStale()
+
+	// Stale disallow full table scan.
+	evalCtx.SessionData().DisallowFullTableScans = true
+	stale()
+	evalCtx.SessionData().DisallowFullTableScans = false
+	notStale()
+
+	// Stale large full scan rows.
+	evalCtx.SessionData().LargeFullScanRows = 1000
+	stale()
+	evalCtx.SessionData().LargeFullScanRows = 0
+	notStale()
+
+	// Stale null ordered last.
+	evalCtx.SessionData().NullOrderedLast = true
+	stale()
+	evalCtx.SessionData().NullOrderedLast = false
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()

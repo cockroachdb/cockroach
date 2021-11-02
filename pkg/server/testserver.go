@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -66,16 +67,22 @@ import (
 // makeTestConfig returns a config for testing. It overrides the
 // Certs with the test certs directory.
 // We need to override the certs loader.
-func makeTestConfig(st *cluster.Settings) Config {
+func makeTestConfig(st *cluster.Settings, tr *tracing.Tracer) Config {
+	if tr == nil {
+		panic("nil Tracer")
+	}
 	return Config{
-		BaseConfig: makeTestBaseConfig(st),
+		BaseConfig: makeTestBaseConfig(st, tr),
 		KVConfig:   makeTestKVConfig(),
 		SQLConfig:  makeTestSQLConfig(st, roachpb.SystemTenantID),
 	}
 }
 
-func makeTestBaseConfig(st *cluster.Settings) BaseConfig {
-	baseCfg := MakeBaseConfig(st)
+func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
+	if tr == nil {
+		panic("nil Tracer")
+	}
+	baseCfg := MakeBaseConfig(st, tr)
 	// Test servers start in secure mode by default.
 	baseCfg.Insecure = false
 	// Configure test storage engine.
@@ -129,7 +136,11 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		st = cluster.MakeClusterSettings()
 	}
 	st.ExternalIODir = params.ExternalIODir
-	cfg := makeTestConfig(st)
+	tr := params.Tracer
+	if params.Tracer == nil {
+		tr = tracing.NewTracerWithOpt(context.TODO(), tracing.WithClusterSettings(&st.SV))
+	}
+	cfg := makeTestConfig(st, tr)
 	cfg.TestingKnobs = params.Knobs
 	cfg.RaftConfig = params.RaftConfig
 	cfg.RaftConfig.SetDefaults()
@@ -269,10 +280,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.Knobs.SQLExecutor == nil {
 		cfg.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{}
 	}
-
-	// For test servers, leave interleaved tables enabled by default. We'll remove
-	// this when we remove interleaved tables altogether.
-	sql.InterleavedTablesEnabled.Override(context.Background(), &cfg.Settings.SV, true)
 
 	return cfg
 }
@@ -575,10 +582,17 @@ func (ts *TestServer) StartTenant(
 	if params.TempStorageConfig != nil {
 		sqlCfg.TempStorageConfig = *params.TempStorageConfig
 	}
-	baseCfg := makeTestBaseConfig(st)
+	tr := params.Tracer
+	if params.Tracer == nil {
+		tr = tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
+	}
+	baseCfg := makeTestBaseConfig(st, tr)
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.Insecure = params.ForceInsecure
 	baseCfg.Locality = params.Locality
+	if params.SSLCertsDir != "" {
+		baseCfg.SSLCertsDir = params.SSLCertsDir
+	}
 	if params.AllowSettingClusterSettings {
 		tenantKnobs, ok := baseCfg.TestingKnobs.TenantTestingKnobs.(*sql.TenantTestingKnobs)
 		if !ok {
@@ -828,7 +842,7 @@ func (ts *TestServer) createAuthUser(userName security.SQLUsername, isAdmin bool
 	if _, err := ts.Server.sqlServer.internalExecutor.ExecEx(context.TODO(),
 		"create-auth-user", nil,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		"CREATE USER $1", userName.Normalized(),
+		fmt.Sprintf("CREATE USER %s", userName.Normalized()),
 	); err != nil {
 		return err
 	}
@@ -916,7 +930,7 @@ func (ts *TestServer) GetNode() *Node {
 	return ts.node
 }
 
-// DistSenderI is part of DistSendeInterface.
+// DistSenderI is part of DistSenderInterface.
 func (ts *TestServer) DistSenderI() interface{} {
 	return ts.distSender
 }
@@ -935,6 +949,16 @@ func (ts *TestServer) MigrationServer() interface{} {
 // SpanConfigAccessor is part of TestServerInterface.
 func (ts *TestServer) SpanConfigAccessor() interface{} {
 	return ts.Server.node.spanConfigAccessor
+}
+
+// SpanConfigSQLTranslator is part of TestServerInterface.
+func (ts *TestServer) SpanConfigSQLTranslator() interface{} {
+	if ts.sqlServer.spanconfigMgr == nil {
+		panic(
+			"span config manager uninitialized; see EnableSpanConfigs testing knob to use span configs",
+		)
+	}
+	return ts.sqlServer.spanconfigMgr.SQLTranslator
 }
 
 // SQLServer is part of TestServerInterface.
@@ -1167,8 +1191,13 @@ func (ts *TestServer) ExecutorConfig() interface{} {
 	return *ts.sqlServer.execCfg
 }
 
-// Tracer is part of the TestServerInterface.
-func (ts *TestServer) Tracer() interface{} {
+// TracerI is part of the TestServerInterface.
+func (ts *TestServer) TracerI() interface{} {
+	return ts.Tracer()
+}
+
+// Tracer is like TracerI(), but returns the actual type.
+func (ts *TestServer) Tracer() *tracing.Tracer {
 	return ts.node.storeCfg.AmbientCtx.Tracer
 }
 

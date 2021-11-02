@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -134,10 +133,8 @@ func newScrubTableReader(
 	}
 	tr.fetcher = &fetcher
 
-	tr.spans = make(roachpb.Spans, len(spec.Spans))
-	for i, s := range spec.Spans {
-		tr.spans[i] = s.Span
-	}
+	tr.Spans = spec.Spans
+	tr.MakeSpansCopy()
 
 	return tr, nil
 }
@@ -219,7 +216,7 @@ func (tr *scrubTableReader) Start(ctx context.Context) {
 	log.VEventf(ctx, 1, "starting")
 
 	if err := tr.fetcher.StartScan(
-		ctx, tr.FlowCtx.Txn, tr.spans, rowinfra.DefaultBatchBytesLimit, tr.limitHint,
+		ctx, tr.FlowCtx.Txn, tr.Spans, rowinfra.DefaultBatchBytesLimit, tr.limitHint,
 		tr.FlowCtx.TraceKV, tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		tr.MoveToDraining(err)

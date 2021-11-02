@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -396,10 +395,6 @@ type replicaAppBatch struct {
 	// closed timestamp carried by this command. Synthetic timestamps are not
 	// registered here.
 	maxTS hlc.ClockTimestamp
-	// migrateToAppliedStateKey tracks whether any command in the batch
-	// triggered a migration to the replica applied state key. If so, this
-	// migration will be performed when the application batch is committed.
-	migrateToAppliedStateKey bool
 	// changeRemovesReplica tracks whether the command in the batch (there must
 	// be only one) removes this replica from the range.
 	changeRemovesReplica bool
@@ -565,23 +560,9 @@ func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCm
 func changeRemovesStore(
 	desc *roachpb.RangeDescriptor, change *kvserverpb.ChangeReplicas, storeID roachpb.StoreID,
 ) (removesStore bool) {
-	curReplica, existsInDesc := desc.GetReplicaDescriptor(storeID)
-	// NB: if we're catching up from a preemptive snapshot then we won't
-	// exist in the current descriptor and we can't be removed.
-	if !existsInDesc {
-		return false
-	}
-
 	// NB: We don't use change.Removed() because it will include replicas being
 	// transitioned to VOTER_OUTGOING.
 
-	// In 19.1 and before we used DeprecatedUpdatedReplicas instead of providing
-	// a new range descriptor. Check first if this is 19.1 or earlier command which
-	// uses DeprecatedChangeType and DeprecatedReplica
-	if change.Desc == nil {
-		return change.DeprecatedChangeType == roachpb.REMOVE_VOTER && change.DeprecatedReplica.ReplicaID == curReplica.ReplicaID
-	}
-	// In 19.2 and beyond we supply the new range descriptor in the change.
 	// We know we're removed if we do not appear in the new descriptor.
 	_, existsInChange := change.Desc.GetReplicaDescriptor(storeID)
 	return !existsInChange
@@ -665,13 +646,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		// Merges require the subsumed range to be atomically deleted when the
 		// merge transaction commits.
 
-		// If our range currently has a non-zero replica ID then we know we're
-		// safe to commit this merge because of the invariants provided to us
-		// by the merge protocol. Namely if this committed we know that if the
-		// command committed then all of the replicas in the range descriptor
-		// are collocated when this command commits. If we do not have a non-zero
-		// replica ID then the logic in Stage should detect that and destroy our
-		// preemptive snapshot so we shouldn't ever get here.
+		// An initialized replica is always contained in its descriptor.
 		rhsRepl, err := b.r.store.GetReplica(merge.RightDesc.RangeID)
 		if err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to get replica for merge")
@@ -729,19 +704,8 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 	}
 
 	if res.State != nil && res.State.TruncatedState != nil {
-		activeVersion := b.r.ClusterSettings().Version.ActiveVersion(ctx).Version
-		migrationVersion := clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration)
-		// NB: We're being deliberate here in using the less-than operator (as
-		// opposed to LessEq). TruncatedAndRangeAppliedStateMigration indicates
-		// that the migration to move to the unreplicated truncated
-		// state is currently underway. It's only when the active cluster
-		// version has moved past it that we can assume that the migration has
-		// completed.
-		assertNoLegacy := migrationVersion.Less(activeVersion)
-
-		if apply, err := handleTruncatedStateBelowRaft(
+		if apply, err := handleTruncatedStateBelowRaftPreApply(
 			ctx, b.state.TruncatedState, res.State.TruncatedState, b.r.raftMu.stateLoader, b.batch,
-			assertNoLegacy,
 		); err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to handle truncated state")
 		} else if !apply {
@@ -851,10 +815,6 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	// serialize on the stats key.
 	deltaStats := res.Delta.ToStats()
 	b.state.Stats.Add(deltaStats)
-
-	if res.State != nil && res.State.UsingAppliedStateKey && !b.state.UsingAppliedStateKey {
-		b.migrateToAppliedStateKey = true
-	}
 }
 
 // ApplyToStateMachine implements the apply.Batch interface. The method handles
@@ -960,48 +920,13 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 // batch's RocksDB batch. This records the highest raft and lease index that
 // have been applied as of this batch. It also records the Range's mvcc stats.
 func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
+	// Set the range applied state, which includes the last applied raft and
+	// lease index along with the mvcc stats, all in one key.
 	loader := &b.r.raftMu.stateLoader
-	if b.migrateToAppliedStateKey {
-		// A Raft command wants us to begin using the RangeAppliedState key
-		// and we haven't performed the migration yet. Delete the old keys
-		// that this new key is replacing.
-		//
-		// NB: entering this branch indicates that the batch contains only a
-		// single non-trivial command.
-		err := loader.MigrateToRangeAppliedStateKey(ctx, b.batch, b.state.Stats)
-		if err != nil {
-			return wrapWithNonDeterministicFailure(err, "unable to migrate to range applied state")
-		}
-		b.state.UsingAppliedStateKey = true
-	}
-	if b.state.UsingAppliedStateKey {
-		// Set the range applied state, which includes the last applied raft and
-		// lease index along with the mvcc stats, all in one key.
-		if err := loader.SetRangeAppliedState(
-			ctx, b.batch, b.state.RaftAppliedIndex, b.state.LeaseAppliedIndex,
-			b.state.Stats, &b.state.RaftClosedTimestamp,
-		); err != nil {
-			return wrapWithNonDeterministicFailure(err, "unable to set range applied state")
-		}
-	} else {
-		// Advance the last applied index. We use a blind write in order to avoid
-		// reading the previous applied index keys on every write operation. This
-		// requires a little additional work in order maintain the MVCC stats.
-		var appliedIndexNewMS enginepb.MVCCStats
-		if err := loader.SetLegacyAppliedIndexBlind(
-			ctx, b.batch, &appliedIndexNewMS, b.state.RaftAppliedIndex, b.state.LeaseAppliedIndex,
-		); err != nil {
-			return wrapWithNonDeterministicFailure(err, "unable to set applied index")
-		}
-		b.state.Stats.SysBytes += appliedIndexNewMS.SysBytes -
-			loader.CalcAppliedIndexSysBytes(b.state.RaftAppliedIndex, b.state.LeaseAppliedIndex)
-
-		// Set the legacy MVCC stats key.
-		if err := loader.SetMVCCStats(ctx, b.batch, b.state.Stats); err != nil {
-			return wrapWithNonDeterministicFailure(err, "unable to update MVCCStats")
-		}
-	}
-	return nil
+	return loader.SetRangeAppliedState(
+		ctx, b.batch, b.state.RaftAppliedIndex, b.state.LeaseAppliedIndex,
+		b.state.Stats, &b.state.RaftClosedTimestamp,
+	)
 }
 
 func (b *replicaAppBatch) recordStatsOnCommit() {
@@ -1202,7 +1127,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 	if cmd.IsLocal() {
 		// Handle the LocalResult.
 		if cmd.localResult != nil {
-			sm.r.handleReadWriteLocalEvalResult(ctx, *cmd.localResult, true /* raftMuHeld */)
+			sm.r.handleReadWriteLocalEvalResult(ctx, *cmd.localResult)
 		}
 
 		rejected := cmd.Rejected()
@@ -1299,11 +1224,6 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		if newDesc := rResult.State.Desc; newDesc != nil {
 			sm.r.handleDescResult(ctx, newDesc)
 			rResult.State.Desc = nil
-		}
-
-		if rResult.State.UsingAppliedStateKey {
-			sm.r.handleUsingAppliedStateKeyResult(ctx)
-			rResult.State.UsingAppliedStateKey = false
 		}
 
 		if (*rResult.State == kvserverpb.ReplicaState{}) {

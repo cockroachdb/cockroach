@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -28,127 +27,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// DecodeIndexKeyToCols decodes an index key into the idx'th position of the
-// provided slices of colexec.Vecs. The input index key must already have its
-// tenant id and first table id / index id prefix removed. If matches is false,
-// the key is from a different table, and the returned remainingKey indicates a
-// "seek prefix": the next key that might be part of the table being searched
-// for. See the analog in sqlbase/index_encoding.go.
-//
-// Sometimes it is necessary to determine if the value of a column is NULL even
-// though the value itself is not needed. If checkAllColsForNull is true, then
-// foundNull=true will be returned if any columns in the key are NULL,
-// regardless of whether or not indexColIdx indicates that the column should be
-// decoded.
-func DecodeIndexKeyToCols(
-	da *rowenc.DatumAlloc,
-	vecs []coldata.Vec,
-	idx int,
-	desc catalog.TableDescriptor,
-	index catalog.Index,
-	indexColIdx []int,
-	checkAllColsForNull bool,
-	types []*types.T,
-	colDirs []descpb.IndexDescriptor_Direction,
-	key roachpb.Key,
-	invertedColIdx int,
-	scratch []byte,
-) (remainingKey roachpb.Key, matches bool, foundNull bool, retScratch []byte, _ error) {
-	var decodedTableID descpb.ID
-	var decodedIndexID descpb.IndexID
-	var err error
-
-	origKey := key
-
-	if index.NumInterleaveAncestors() > 0 {
-		for i := 0; i < index.NumInterleaveAncestors(); i++ {
-			ancestor := index.GetInterleaveAncestor(i)
-			// Our input key had its first table id / index id chopped off, so
-			// don't try to decode those for the first ancestor.
-			if i != 0 {
-				lastKeyComponentLength := len(key)
-				key, decodedTableID, decodedIndexID, err = rowenc.DecodePartialTableIDIndexID(key)
-				if err != nil {
-					return nil, false, false, scratch, err
-				}
-				if decodedTableID != ancestor.TableID || decodedIndexID != ancestor.IndexID {
-					// We don't match. Return a key with the table ID / index ID we're
-					// searching for, so the caller knows what to seek to.
-					curPos := len(origKey) - lastKeyComponentLength
-					// Prevent unwanted aliasing on the origKey by setting the capacity.
-					key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos:curPos], ancestor.TableID, ancestor.IndexID)
-					return key, false, false, scratch, nil
-				}
-			}
-
-			length := int(ancestor.SharedPrefixLen)
-			// We don't care about whether this call to DecodeKeyVals found a null or not, because
-			// it is a interleaving ancestor.
-			var isNull bool
-			key, isNull, scratch, err = DecodeKeyValsToCols(
-				da, vecs, idx, indexColIdx[:length], checkAllColsForNull, types[:length],
-				colDirs[:length], nil /* unseen */, key, invertedColIdx, scratch,
-			)
-			if err != nil {
-				return nil, false, false, scratch, err
-			}
-			indexColIdx, types, colDirs = indexColIdx[length:], types[length:], colDirs[length:]
-			foundNull = foundNull || isNull
-
-			// Consume the interleaved sentinel.
-			var ok bool
-			key, ok = encoding.DecodeIfInterleavedSentinel(key)
-			if !ok {
-				// We're expecting an interleaved sentinel but didn't find one. Append
-				// one so the caller can seek to it.
-				curPos := len(origKey) - len(key)
-				// Prevent unwanted aliasing on the origKey by setting the capacity.
-				key = encoding.EncodeInterleavedSentinel(origKey[:curPos:curPos])
-				return key, false, false, scratch, nil
-			}
-		}
-
-		lastKeyComponentLength := len(key)
-		key, decodedTableID, decodedIndexID, err = rowenc.DecodePartialTableIDIndexID(key)
-		if err != nil {
-			return nil, false, false, scratch, err
-		}
-		if decodedTableID != desc.GetID() || decodedIndexID != index.GetID() {
-			// We don't match. Return a key with the table ID / index ID we're
-			// searching for, so the caller knows what to seek to.
-			curPos := len(origKey) - lastKeyComponentLength
-			// Prevent unwanted aliasing on the origKey by setting the capacity.
-			key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos:curPos], desc.GetID(), index.GetID())
-			return key, false, false, scratch, nil
-		}
-	}
-
-	var isNull bool
-	key, isNull, scratch, err = DecodeKeyValsToCols(
-		da, vecs, idx, indexColIdx, checkAllColsForNull, types, colDirs,
-		nil /* unseen */, key, invertedColIdx, scratch,
-	)
-	if err != nil {
-		return nil, false, false, scratch, err
-	}
-	foundNull = foundNull || isNull
-
-	// We're expecting a column family id next (a varint). If
-	// interleavedSentinel is actually next, then this key is for a child
-	// table.
-	lastKeyComponentLength := len(key)
-	if _, ok := encoding.DecodeIfInterleavedSentinel(key); ok {
-		curPos := len(origKey) - lastKeyComponentLength
-		// Prevent unwanted aliasing on the origKey by setting the capacity.
-		key = encoding.EncodeNullDescending(origKey[:curPos:curPos])
-		return key, false, false, scratch, nil
-	}
-
-	return key, true, foundNull, scratch, nil
-}
-
 // DecodeKeyValsToCols decodes the values that are part of the key, writing the
-// result to the idx'th slot of the input slice of coldata.Vecs.
+// result to the rowIdx'th row in coldata.TypedVecs.
 //
 // If the unseen int set is non-nil, upon decoding the column with ordinal i,
 // i will be removed from the set to facilitate tracking whether or not columns
@@ -164,8 +44,8 @@ func DecodeIndexKeyToCols(
 // should be decoded.
 func DecodeKeyValsToCols(
 	da *rowenc.DatumAlloc,
-	vecs []coldata.Vec,
-	idx int,
+	vecs *coldata.TypedVecs,
+	rowIdx int,
 	indexColIdx []int,
 	checkAllColsForNull bool,
 	types []*types.T,
@@ -177,8 +57,8 @@ func DecodeKeyValsToCols(
 ) (remainingKey []byte, foundNull bool, retScratch []byte, _ error) {
 	for j := range types {
 		var err error
-		i := indexColIdx[j]
-		if i == -1 {
+		vecIdx := indexColIdx[j]
+		if vecIdx == -1 {
 			if checkAllColsForNull {
 				isNull := encoding.PeekType(key) == encoding.Null
 				foundNull = foundNull || isNull
@@ -187,11 +67,11 @@ func DecodeKeyValsToCols(
 			key, err = rowenc.SkipTableKey(key)
 		} else {
 			if unseen != nil {
-				unseen.Remove(i)
+				unseen.Remove(vecIdx)
 			}
 			var isNull bool
-			isInverted := invertedColIdx == i
-			key, isNull, scratch, err = decodeTableKeyToCol(da, vecs[i], idx, types[j], key, directions[j], isInverted, scratch)
+			isInverted := invertedColIdx == vecIdx
+			key, isNull, scratch, err = decodeTableKeyToCol(da, vecs, vecIdx, rowIdx, types[j], key, directions[j], isInverted, scratch)
 			foundNull = isNull || foundNull
 		}
 		if err != nil {
@@ -201,14 +81,15 @@ func DecodeKeyValsToCols(
 	return key, foundNull, scratch, nil
 }
 
-// decodeTableKeyToCol decodes a value encoded by EncodeTableKey, writing the result
-// to the idx'th slot of the input colexec.Vec.
-// See the analog, DecodeTableKey, in sqlbase/column_type_encoding.go.
+// decodeTableKeyToCol decodes a value encoded by EncodeTableKey, writing the
+// result to the rowIdx'th slot of the vecIdx'th vector in coldata.TypedVecs.
+// See the analog, rowenc.DecodeTableKey, in rowenc/column_type_encoding.go.
 // decodeTableKeyToCol also returns whether or not the decoded value was NULL.
 func decodeTableKeyToCol(
 	da *rowenc.DatumAlloc,
-	vec coldata.Vec,
-	idx int,
+	vecs *coldata.TypedVecs,
+	vecIdx int,
+	rowIdx int,
 	valType *types.T,
 	key []byte,
 	dir descpb.IndexDescriptor_Direction,
@@ -220,13 +101,13 @@ func decodeTableKeyToCol(
 	}
 	var isNull bool
 	if key, isNull = encoding.DecodeIfNull(key); isNull {
-		vec.Nulls().SetNull(idx)
+		vecs.Nulls[vecIdx].SetNull(rowIdx)
 		return key, true, scratch, nil
 	}
-	// We might have read a NULL value in the interleaved child table which
-	// would update the nulls vector, so we need to explicitly unset the null
-	// value here.
-	vec.Nulls().UnsetNull(idx)
+
+	// Find the position of the target vector among the typed columns of its
+	// type.
+	colIdx := vecs.ColsMap[vecIdx]
 
 	// Inverted columns should not be decoded, but should instead be
 	// passed on as a DBytes datum.
@@ -235,7 +116,7 @@ func decodeTableKeyToCol(
 		if err != nil {
 			return nil, false, scratch, err
 		}
-		vec.Bytes().Set(idx, key[:keyLen])
+		vecs.BytesCols[colIdx].Set(rowIdx, key[:keyLen])
 		return key[keyLen:], false, scratch, nil
 	}
 
@@ -249,7 +130,7 @@ func decodeTableKeyToCol(
 		} else {
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
-		vec.Bool()[idx] = i != 0
+		vecs.BoolCols[colIdx][rowIdx] = i != 0
 	case types.IntFamily, types.DateFamily:
 		var i int64
 		if dir == descpb.IndexDescriptor_ASC {
@@ -259,11 +140,11 @@ func decodeTableKeyToCol(
 		}
 		switch valType.Width() {
 		case 16:
-			vec.Int16()[idx] = int16(i)
+			vecs.Int16Cols[colIdx][rowIdx] = int16(i)
 		case 32:
-			vec.Int32()[idx] = int32(i)
+			vecs.Int32Cols[colIdx][rowIdx] = int32(i)
 		case 0, 64:
-			vec.Int64()[idx] = i
+			vecs.Int64Cols[colIdx][rowIdx] = i
 		}
 	case types.FloatFamily:
 		var f float64
@@ -272,7 +153,7 @@ func decodeTableKeyToCol(
 		} else {
 			rkey, f, err = encoding.DecodeFloatDescending(key)
 		}
-		vec.Float64()[idx] = f
+		vecs.Float64Cols[colIdx][rowIdx] = f
 	case types.DecimalFamily:
 		var d apd.Decimal
 		if dir == descpb.IndexDescriptor_ASC {
@@ -280,7 +161,7 @@ func decodeTableKeyToCol(
 		} else {
 			rkey, d, err = encoding.DecodeDecimalDescending(key, scratch[:0])
 		}
-		vec.Decimal()[idx] = d
+		vecs.DecimalCols[colIdx][rowIdx] = d
 	case types.BytesFamily, types.StringFamily, types.UuidFamily:
 		if dir == descpb.IndexDescriptor_ASC {
 			// We ask for the deep copy to be made so that scratch doesn't
@@ -295,7 +176,7 @@ func decodeTableKeyToCol(
 		// Set() performs a deep copy, so it is safe to return the scratch slice
 		// to the caller. Any modifications to the scratch slice made by the
 		// caller will not affect the value in the vector.
-		vec.Bytes().Set(idx, scratch)
+		vecs.BytesCols[colIdx].Set(rowIdx, scratch)
 	case types.TimestampFamily, types.TimestampTZFamily:
 		var t time.Time
 		if dir == descpb.IndexDescriptor_ASC {
@@ -303,7 +184,7 @@ func decodeTableKeyToCol(
 		} else {
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
-		vec.Timestamp()[idx] = t
+		vecs.TimestampCols[colIdx][rowIdx] = t
 	case types.IntervalFamily:
 		var d duration.Duration
 		if dir == descpb.IndexDescriptor_ASC {
@@ -311,13 +192,13 @@ func decodeTableKeyToCol(
 		} else {
 			rkey, d, err = encoding.DecodeDurationDescending(key)
 		}
-		vec.Interval()[idx] = d
+		vecs.IntervalCols[colIdx][rowIdx] = d
 	case types.JsonFamily:
 		// Don't attempt to decode the JSON value. Instead, just return the
 		// remaining bytes of the key.
 		var jsonLen int
 		jsonLen, err = encoding.PeekLength(key)
-		vec.JSON().Bytes.Set(idx, key[:jsonLen])
+		vecs.JSONCols[colIdx].Bytes.Set(rowIdx, key[:jsonLen])
 		rkey = key[jsonLen:]
 	default:
 		var d tree.Datum
@@ -326,68 +207,77 @@ func decodeTableKeyToCol(
 			encDir = encoding.Descending
 		}
 		d, rkey, err = rowenc.DecodeTableKey(da, valType, key, encDir)
-		vec.Datum().Set(idx, d)
+		vecs.DatumCols[colIdx].Set(rowIdx, d)
 	}
 	return rkey, false, scratch, err
 }
 
 // UnmarshalColumnValueToCol decodes the value from a roachpb.Value using the
-// type expected by the column, writing into the input Vec at the given row
-// idx. An error is returned if the value's type does not match the column's
-// type.
-// See the analog, UnmarshalColumnValue, in sqlbase/column_type_encoding.go
+// type expected by the column, writing into the vecIdx'th vector of
+// coldata.TypedVecs at the given rowIdx. An error is returned if the value's
+// type does not match the column's type.
+// See the analog, rowenc.UnmarshalColumnValue, in
+// rowenc/column_type_encoding.go.
 func UnmarshalColumnValueToCol(
-	da *rowenc.DatumAlloc, vec coldata.Vec, idx int, typ *types.T, value roachpb.Value,
+	da *rowenc.DatumAlloc,
+	vecs *coldata.TypedVecs,
+	vecIdx, rowIdx int,
+	typ *types.T,
+	value roachpb.Value,
 ) error {
 	if value.RawBytes == nil {
-		vec.Nulls().SetNull(idx)
+		vecs.Nulls[vecIdx].SetNull(rowIdx)
 	}
+
+	// Find the position of the target vector among the typed columns of its
+	// type.
+	colIdx := vecs.ColsMap[vecIdx]
 
 	var err error
 	switch typ.Family() {
 	case types.BoolFamily:
 		var v bool
 		v, err = value.GetBool()
-		vec.Bool()[idx] = v
+		vecs.BoolCols[colIdx][rowIdx] = v
 	case types.IntFamily:
 		var v int64
 		v, err = value.GetInt()
 		switch typ.Width() {
 		case 16:
-			vec.Int16()[idx] = int16(v)
+			vecs.Int16Cols[colIdx][rowIdx] = int16(v)
 		case 32:
-			vec.Int32()[idx] = int32(v)
+			vecs.Int32Cols[colIdx][rowIdx] = int32(v)
 		default:
 			// Pre-2.1 BIT was using INT encoding with arbitrary sizes.
 			// We map these to 64-bit INT now. See #34161.
-			vec.Int64()[idx] = v
+			vecs.Int64Cols[colIdx][rowIdx] = v
 		}
 	case types.FloatFamily:
 		var v float64
 		v, err = value.GetFloat()
-		vec.Float64()[idx] = v
+		vecs.Float64Cols[colIdx][rowIdx] = v
 	case types.DecimalFamily:
-		err = value.GetDecimalInto(&vec.Decimal()[idx])
+		err = value.GetDecimalInto(&vecs.DecimalCols[colIdx][rowIdx])
 	case types.BytesFamily, types.StringFamily, types.UuidFamily:
 		var v []byte
 		v, err = value.GetBytes()
-		vec.Bytes().Set(idx, v)
+		vecs.BytesCols[colIdx].Set(rowIdx, v)
 	case types.DateFamily:
 		var v int64
 		v, err = value.GetInt()
-		vec.Int64()[idx] = v
+		vecs.Int64Cols[colIdx][rowIdx] = v
 	case types.TimestampFamily, types.TimestampTZFamily:
 		var v time.Time
 		v, err = value.GetTime()
-		vec.Timestamp()[idx] = v
+		vecs.TimestampCols[colIdx][rowIdx] = v
 	case types.IntervalFamily:
 		var v duration.Duration
 		v, err = value.GetDuration()
-		vec.Interval()[idx] = v
+		vecs.IntervalCols[colIdx][rowIdx] = v
 	case types.JsonFamily:
 		var v []byte
 		v, err = value.GetBytes()
-		vec.JSON().Bytes.Set(idx, v)
+		vecs.JSONCols[colIdx].Bytes.Set(rowIdx, v)
 	// Types backed by tree.Datums.
 	default:
 		var d tree.Datum
@@ -395,7 +285,7 @@ func UnmarshalColumnValueToCol(
 		if err != nil {
 			return err
 		}
-		vec.Datum().Set(idx, d)
+		vecs.DatumCols[colIdx].Set(rowIdx, d)
 	}
 	return err
 }

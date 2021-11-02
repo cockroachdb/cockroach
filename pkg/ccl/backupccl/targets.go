@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -47,8 +46,7 @@ import (
 // a descriptor the ID by which it was previously known (e.g pre-TRUNCATE).
 func getRelevantDescChanges(
 	ctx context.Context,
-	codec keys.SQLCodec,
-	db *kv.DB,
+	execCfg *sql.ExecutorConfig,
 	startTime, endTime hlc.Timestamp,
 	descs []catalog.Descriptor,
 	expanded []descpb.ID,
@@ -56,7 +54,7 @@ func getRelevantDescChanges(
 	descriptorCoverage tree.DescriptorCoverage,
 ) ([]BackupManifest_DescriptorRevision, error) {
 
-	allChanges, err := getAllDescChanges(ctx, codec, db, startTime, endTime, priorIDs)
+	allChanges, err := getAllDescChanges(ctx, execCfg.Codec, execCfg.DB, startTime, endTime, priorIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -76,10 +74,22 @@ func getRelevantDescChanges(
 	// point in the interval.
 	interestingIDs := make(map[descpb.ID]struct{}, len(descs))
 
+	systemTableIDsToExcludeFromBackup, err := GetSystemTableIDsToExcludeFromClusterBackup(ctx, execCfg)
+	if err != nil {
+		return nil, err
+	}
+	isExcludedDescriptor := func(id descpb.ID) bool {
+		if _, isOptOutSystemTable := systemTableIDsToExcludeFromBackup[id]; id == keys.SystemDatabaseID || isOptOutSystemTable {
+			return true
+		}
+		return false
+	}
+
 	isInterestingID := func(id descpb.ID) bool {
 		// We're interested in changes to all descriptors if we're targeting all
-		// descriptors except for the system database itself.
-		if descriptorCoverage == tree.AllDescriptors && id != keys.SystemDatabaseID {
+		// descriptors except for the descriptors that we do not include in a
+		// cluster backup.
+		if descriptorCoverage == tree.AllDescriptors && !isExcludedDescriptor(id) {
 			return true
 		}
 		// A change to an ID that we're interested in is obviously interesting.
@@ -111,7 +121,7 @@ func getRelevantDescChanges(
 	}
 
 	if !startTime.IsEmpty() {
-		starting, err := backupresolver.LoadAllDescs(ctx, codec, db, startTime)
+		starting, err := backupresolver.LoadAllDescs(ctx, execCfg.Codec, execCfg.DB, startTime)
 		if err != nil {
 			return nil, err
 		}
@@ -593,9 +603,26 @@ func checkMultiRegionCompatible(
 	table *tabledesc.Mutable,
 	database catalog.DatabaseDescriptor,
 ) error {
-	// If either the database or table are non-MR then allow it.
-	if !database.IsMultiRegion() || table.GetLocalityConfig() == nil {
+	// If we are not dealing with an MR database and table there are no
+	// compatibility checks that need to be performed.
+	if !database.IsMultiRegion() && table.GetLocalityConfig() == nil {
 		return nil
+	}
+
+	// If we are restoring a non-MR table into a MR database, allow it. We will
+	// set the table to a REGIONAL BY TABLE IN PRIMARY REGION before writing the
+	// table descriptor to disk.
+	if database.IsMultiRegion() && table.GetLocalityConfig() == nil {
+		return nil
+	}
+
+	// If we are restoring a MR table into a non-MR database, disallow it.
+	if !database.IsMultiRegion() && table.GetLocalityConfig() != nil {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"cannot restore descriptor for multi-region table %s into non-multi-region database %s",
+			table.GetName(),
+			database.GetName(),
+		)
 	}
 
 	if table.IsLocalityGlobal() {
@@ -639,10 +666,13 @@ func checkMultiRegionCompatible(
 	}
 
 	if table.IsLocalityRegionalByRow() {
-		return unimplemented.NewWithIssuef(67269,
-			"cannot restore REGIONAL BY ROW table %s (ID: %d) individually into a multi-region database %s",
-			table.GetName(), table.GetID(), database.GetName(),
-		)
+		// Unlike the check for RegionalByTable above, we do not want to run a
+		// verification on every row in a RegionalByRow table. If the table has a
+		// row with a `crdb_region` that is not in the parent databases' regions,
+		// this will be caught later in the restore when we attempt to remap the
+		// backed up MR enum to point to the existing MR enum in the restoring
+		// cluster.
+		return nil
 	}
 
 	return errors.AssertionFailedf(

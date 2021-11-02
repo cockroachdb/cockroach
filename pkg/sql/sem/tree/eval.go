@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -2066,7 +2067,7 @@ func cmpOpFixups(
 	}
 
 	// Array equality comparisons.
-	for _, t := range types.Scalar {
+	for _, t := range append(types.Scalar, types.AnyEnum) {
 		cmpOps[EQ] = append(cmpOps[EQ], &CmpOp{
 			LeftType:   types.MakeArray(t),
 			RightType:  types.MakeArray(t),
@@ -3224,6 +3225,9 @@ type EvalPlanner interface {
 
 	// ExternalWriteFile writes the content to an external file URI.
 	ExternalWriteFile(ctx context.Context, uri string, content []byte) error
+
+	// DecodeGist exposes gist functionality to the builtin functions.
+	DecodeGist(gist string) ([]string, error)
 }
 
 // CompactEngineSpanFunc is used to compact an engine key span at the given
@@ -3303,7 +3307,7 @@ type PrivilegedAccessor interface {
 		ctx context.Context, parentID int64, name string,
 	) (DInt, bool, error)
 
-	// LookupZoneConfig returns the zone config given a namespace id.
+	// LookupZoneConfigByNamespaceID returns the zone config given a namespace id.
 	// It is meant as a replacement for looking up system.zones directly.
 	// Returns the config byte array, a bool representing whether the namespace exists,
 	// and an error if there is one.
@@ -3357,7 +3361,7 @@ type SequenceOperators interface {
 	// `newVal` is returned. Otherwise, the next call to nextval will return
 	// `newVal + seqOpts.Increment`.
 	// Takes in a sequence ID rather than a name, unlike SetSequenceValue.
-	SetSequenceValueByID(ctx context.Context, seqID int64, newVal int64, isCalled bool) error
+	SetSequenceValueByID(ctx context.Context, seqID uint32, newVal int64, isCalled bool) error
 }
 
 // TenantOperator is capable of interacting with tenant state, allowing SQL
@@ -3442,6 +3446,13 @@ type SQLStatsController interface {
 	CreateSQLStatsCompactionSchedule(ctx context.Context) error
 }
 
+// IndexUsageStatsController is an interface embedded in EvalCtx which can be
+// used by the builtins to reset index usage stats in the cluster. This interface
+// is introduced to avoid circular dependency.
+type IndexUsageStatsController interface {
+	ResetIndexUsageStats(ctx context.Context) error
+}
+
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 //
@@ -3481,6 +3492,8 @@ type EvalContext struct {
 	//   [region=us,dc=east]
 	//
 	Locality roachpb.Locality
+
+	Tracer *tracing.Tracer
 
 	// The statement timestamp. May be different for every statement.
 	// Used for statement_timestamp().
@@ -3583,6 +3596,8 @@ type EvalContext struct {
 	SQLLivenessReader sqlliveness.Reader
 
 	SQLStatsController SQLStatsController
+
+	IndexUsageStatsController IndexUsageStatsController
 
 	// CompactEngineSpan is used to force compaction of a span in a store.
 	CompactEngineSpan CompactEngineSpanFunc
@@ -4191,6 +4206,10 @@ func (expr *FuncExpr) MaybeWrapError(err error) error {
 
 // Eval implements the TypedExpr interface.
 func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
+	if expr.fn.FnWithExprs != nil {
+		return expr.fn.FnWithExprs(ctx, expr.Exprs)
+	}
+
 	nullResult, args, err := expr.evalArgs(ctx)
 	if err != nil {
 		return nil, err
@@ -4676,7 +4695,8 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 		// checking, since the placeholder's type hint didn't match the desired
 		// type for the placeholder. In this case, we cast the expression to
 		// the desired type.
-		// TODO(jordan): introduce a restriction on what casts are allowed here.
+		// TODO(jordan,mgartner): Introduce a restriction on what casts are
+		// allowed here. Most likely, only implicit casts should be allowed.
 		cast := NewTypedCastExpr(e, typ)
 		return cast.Eval(ctx)
 	}

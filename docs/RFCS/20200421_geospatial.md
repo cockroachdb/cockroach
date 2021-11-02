@@ -153,10 +153,10 @@ supporting.
 
 For each data type, we will be able to support the "geometry types" as
 defined in Section 6.2.6 of the OGC spec. We will internally call
-these geometry types "shapes". The full hierachy is from the OGC
+these geometry types "shapes". The full hierarchy is from the OGC
 spec is as follows.
 
-![OGC Shape Hierachy](20200421_geospatial/shape_hierachy.png?raw=true "OGC Spec Hierachy")
+![OGC Shape Hierarchy](20200421_geospatial/shape_hierarchy.png?raw=true "OGC Spec Hierarchy")
 
 We are planning to support the following:
 

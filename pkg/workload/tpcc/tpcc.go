@@ -177,7 +177,7 @@ var tpccMeta = workload.Meta{
 			`conns`:              {RuntimeOnly: true},
 			`idle-conns`:         {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
-			`region-local`:       {RuntimeOnly: true},
+			`local-warehouses`:   {RuntimeOnly: true},
 		}
 
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -798,7 +798,7 @@ func (w *tpcc) Ops(
 	}
 	var partitionDBs [][]*workload.MultiConnPool
 	if w.clientPartitions > 0 {
-		// Client partitons simply emulates the behavior of data partitions
+		// Client partitions simply emulates the behavior of data partitions
 		// w/r/t database connections, though all of the connections will
 		// be for the same partition.
 		partitionDBs = make([][]*workload.MultiConnPool, w.clientPartitions)

@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -2154,7 +2155,7 @@ var builtins = map[string]builtinDefinition{
 
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), int64(dOid.DInt), int64(newVal), true); err != nil {
+					evalCtx.Ctx(), uint32(dOid.DInt), int64(newVal), false /* isCalled */); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -2170,7 +2171,7 @@ var builtins = map[string]builtinDefinition{
 				oid := tree.MustBeDOid(args[0])
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), int64(oid.DInt), int64(newVal), true); err != nil {
+					evalCtx.Ctx(), uint32(oid.DInt), int64(newVal), false /* isCalled */); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -2194,7 +2195,7 @@ var builtins = map[string]builtinDefinition{
 
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), int64(dOid.DInt), int64(newVal), isCalled); err != nil {
+					evalCtx.Ctx(), uint32(dOid.DInt), int64(newVal), isCalled); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -2214,7 +2215,7 @@ var builtins = map[string]builtinDefinition{
 
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), int64(oid.DInt), int64(newVal), isCalled); err != nil {
+					evalCtx.Ctx(), uint32(oid.DInt), int64(newVal), isCalled); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -3490,8 +3491,20 @@ value if you rely on the HLC for accuracy.`,
 
 	"array_cat": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
-			Types:      tree.ArgTypes{{"left", types.MakeArray(typ)}, {"right", types.MakeArray(typ)}},
-			ReturnType: tree.FixedReturnType(types.MakeArray(typ)),
+			Types: tree.ArgTypes{{"left", types.MakeArray(typ)}, {"right", types.MakeArray(typ)}},
+			ReturnType: func(args []tree.TypedExpr) *types.T {
+				if len(args) > 1 {
+					if argTyp := args[1].ResolvedType(); argTyp.Family() != types.UnknownFamily {
+						return argTyp
+					}
+				}
+				if len(args) > 2 {
+					if argTyp := args[2].ResolvedType(); argTyp.Family() != types.UnknownFamily {
+						return argTyp
+					}
+				}
+				return types.MakeArray(typ)
+			},
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.ConcatArrays(typ, args[0], args[1])
 			},
@@ -3832,23 +3845,39 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"json_valid": makeBuiltin(
+		jsonProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"string", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(e *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return jsonValidate(e, tree.MustBeDString(args[0])), nil
+			},
+			Info:       "Returns whether the given string is a valid JSON or not",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"crdb_internal.pb_to_json": makeBuiltin(
 		jsonProps(),
 		func() []tree.Overload {
-			pbToJSON := func(typ string, data []byte, emitDefaults bool) (tree.Datum, error) {
+			returnType := tree.FixedReturnType(types.Jsonb)
+			const info = "Converts protocol message to its JSONB representation."
+			volatility := tree.VolatilityImmutable
+			pbToJSON := func(typ string, data []byte, flags protoreflect.FmtFlags) (tree.Datum, error) {
 				msg, err := protoreflect.DecodeMessage(typ, data)
 				if err != nil {
 					return nil, err
 				}
-				j, err := protoreflect.MessageToJSON(msg, emitDefaults)
+				j, err := protoreflect.MessageToJSON(msg, flags)
 				if err != nil {
 					return nil, err
 				}
 				return tree.NewDJSON(j), nil
 			}
-			returnType := tree.FixedReturnType(types.Jsonb)
-			const info = "Converts protocol message to its JSONB representation."
-			volatility := tree.VolatilityImmutable
+
 			return []tree.Overload{
 				{
 					Info:       info,
@@ -3859,11 +3888,10 @@ value if you rely on the HLC for accuracy.`,
 					},
 					ReturnType: returnType,
 					Fn: func(context *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-						const emitDefaults = false
 						return pbToJSON(
 							string(tree.MustBeDString(args[0])),
 							[]byte(tree.MustBeDBytes(args[1])),
-							emitDefaults,
+							protoreflect.FmtFlags{EmitDefaults: false, EmitRedacted: false},
 						)
 					},
 				},
@@ -3880,7 +3908,31 @@ value if you rely on the HLC for accuracy.`,
 						return pbToJSON(
 							string(tree.MustBeDString(args[0])),
 							[]byte(tree.MustBeDBytes(args[1])),
-							bool(tree.MustBeDBool(args[2])),
+							protoreflect.FmtFlags{
+								EmitDefaults: bool(tree.MustBeDBool(args[2])),
+								EmitRedacted: false,
+							},
+						)
+					},
+				},
+				{
+					Info:       info,
+					Volatility: volatility,
+					Types: tree.ArgTypes{
+						{"pbname", types.String},
+						{"data", types.Bytes},
+						{"emit_defaults", types.Bool},
+						{"emit_redacted", types.Bool},
+					},
+					ReturnType: returnType,
+					Fn: func(context *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+						return pbToJSON(
+							string(tree.MustBeDString(args[0])),
+							[]byte(tree.MustBeDBytes(args[1])),
+							protoreflect.FmtFlags{
+								EmitDefaults: bool(tree.MustBeDBool(args[2])),
+								EmitRedacted: bool(tree.MustBeDBool(args[3])),
+							},
 						)
 					},
 				},
@@ -4326,11 +4378,14 @@ value if you rely on the HLC for accuracy.`,
 					}
 				}
 
-				traceID := uint64(*(args[0].(*tree.DInt)))
+				traceID := tracingpb.TraceID(*(args[0].(*tree.DInt)))
 				verbosity := bool(*(args[1].(*tree.DBool)))
 
-				var rootSpan *tracing.Span
-				if err := ctx.Settings.Tracer.VisitSpans(func(span *tracing.Span) error {
+				var rootSpan tracing.RegistrySpan
+				if ctx.Tracer == nil {
+					return nil, errors.AssertionFailedf("Tracer not configured")
+				}
+				if err := ctx.Tracer.VisitSpans(func(span tracing.RegistrySpan) error {
 					if span.TraceID() == traceID && rootSpan == nil {
 						rootSpan = span
 					}
@@ -5273,6 +5328,34 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"crdb_internal.assignment_cast": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+			// The idiomatic usage of this function is to "pass" a target type T
+			// by passing NULL::T, so we must allow NULL arguments.
+			NullableArgs: true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"val", types.Any},
+				{"type", types.Any},
+			},
+			ReturnType: tree.IdentityReturnType(1),
+			FnWithExprs: func(evalCtx *tree.EvalContext, args tree.Exprs) (tree.Datum, error) {
+				targetType := args[1].(tree.TypedExpr).ResolvedType()
+				val, err := args[0].(tree.TypedExpr).Eval(evalCtx)
+				if err != nil {
+					return nil, err
+				}
+				return tree.PerformAssignmentCast(evalCtx, val, targetType)
+			},
+			Info: "This function is used internally to perform assignment casts during mutations.",
+			// The volatility of an assignment cast depends on the argument
+			// types, so we set it to the maximum volatility of all casts.
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
 	"crdb_internal.round_decimal_values": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
@@ -5975,7 +6058,27 @@ table's zone configuration this will return NULL.`,
 			tree.VolatilityStable,
 		),
 	),
-
+	"crdb_internal.reset_index_usage_stats": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if evalCtx.IndexUsageStatsController == nil {
+					return nil, errors.AssertionFailedf("index usage stats controller not set")
+				}
+				ctx := evalCtx.Ctx()
+				if err := evalCtx.IndexUsageStatsController.ResetIndexUsageStats(ctx); err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(true), nil
+			},
+			Info:       `This function is used to clear the collected index usage statistics.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
 	"crdb_internal.reset_sql_stats": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
@@ -7098,8 +7201,8 @@ var similarOverloads = []tree.Overload{
 }
 
 func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
-	overloads := make([]tree.Overload, 0, len(types.Scalar)+1)
-	for _, typ := range types.Scalar {
+	overloads := make([]tree.Overload, 0, len(types.Scalar)+2)
+	for _, typ := range append(types.Scalar, types.AnyEnum) {
 		if ok, _ := types.IsValidArrayElementType(typ); ok {
 			overloads = append(overloads, impl(typ))
 		}
@@ -8267,6 +8370,11 @@ func toJSONObject(ctx *tree.EvalContext, d tree.Datum) (tree.Datum, error) {
 		return nil, err
 	}
 	return tree.NewDJSON(j), nil
+}
+
+func jsonValidate(_ *tree.EvalContext, string tree.DString) *tree.DBool {
+	var js interface{}
+	return tree.MakeDBool(gojson.Unmarshal([]byte(string), &js) == nil)
 }
 
 // padMaybeTruncate truncates the input string to length if the string is

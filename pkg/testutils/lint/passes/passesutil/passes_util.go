@@ -72,7 +72,7 @@ func HasNolintComment(pass *analysis.Pass, n ast.Node, nolintName string) bool {
 // which occur in in the block or decl which includes the ast node n for
 // filtering. We want to filter the comments down to all comments
 // which are associated with n or any expression up to a statement in the
-// closest encloding block or decl. This is to deal with multi-line
+// closest enclosing block or decl. This is to deal with multi-line
 // expressions or with cases where the relevant expression occurs in an
 // init clause of an if or for and the comment is on the preceding line.
 //

@@ -37,27 +37,6 @@
   }
 }
 
-h1.base-heading {
-  font-size: 24px;
-  font-family: $font-family--base;
-}
-
-h2.base-heading {
-  padding: 12px 0;
-  font-size: 24px;
-  font-family: $font-family--base;
-}
-
-h3.base-heading {
-  color: $colors--neutral-7;
-  font-family: $font-family--sans-serif;
-  font-weight: 600;
-  font-style: normal;
-  font-stretch: normal;
-  font-size: 20px;
-  padding-bottom: 12px;
-}
-
 .no-margin-bottom {
   margin-bottom: 0px;
 }
@@ -82,7 +61,7 @@ h3.base-heading {
 
 .app-filter-dropdown-item {
   /*
-    Truncating and constrainging the width of the 
+    Truncating and constraining the width of the 
     items in the app filter dropdown
   */
   max-width: 80ch;

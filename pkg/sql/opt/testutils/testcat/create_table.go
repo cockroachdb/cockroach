@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -422,8 +424,9 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 
 	constraintName := string(d.Name)
 	if constraintName == "" {
-		constraintName = fmt.Sprintf(
-			"fk_%s_ref_%s", string(d.FromCols[0]), targetTable.TabName.Table(),
+		constraintName = tabledesc.ForeignKeyConstraintName(
+			tab.TabName.Table(),
+			d.FromCols.ToStrings(),
 		)
 	}
 
@@ -700,7 +703,7 @@ func (tt *Table) addIndexWithVersion(
 	}
 
 	idx := &Index{
-		IdxName:  tt.makeIndexName(def.Name, typ),
+		IdxName:  tt.makeIndexName(def.Name, def.Columns, typ),
 		Unique:   typ != nonUniqueIndex,
 		Inverted: def.Inverted,
 		IdxZone:  &zonepb.ZoneConfig{},
@@ -910,15 +913,56 @@ func (tt *Table) addIndexWithVersion(
 	return idx
 }
 
-func (tt *Table) makeIndexName(defName tree.Name, typ indexType) string {
+func (tt *Table) makeIndexName(defName tree.Name, cols tree.IndexElemList, typ indexType) string {
 	name := string(defName)
-	if name == "" {
-		if typ == primaryIndex {
-			name = "primary"
+	if name != "" {
+		return name
+	}
+
+	if typ == primaryIndex {
+		return fmt.Sprintf("%s_pkey", tt.TabName.Table())
+	}
+
+	var sb strings.Builder
+	sb.WriteString(tt.TabName.Table())
+	exprCount := 0
+	for _, col := range cols {
+		sb.WriteRune('_')
+		if col.Expr != nil {
+			sb.WriteString("expr")
+			if exprCount > 0 {
+				sb.WriteString(strconv.Itoa(exprCount))
+			}
+			exprCount++
 		} else {
-			name = "secondary"
+			sb.WriteString(col.Column.String())
 		}
 	}
+
+	if typ == uniqueIndex {
+		sb.WriteString("_key")
+	} else {
+		sb.WriteString("_idx")
+	}
+
+	idxNameExists := func(idxName string) bool {
+		for _, idx := range tt.Indexes {
+			if idx.IdxName == idxName {
+				return true
+			}
+		}
+		return false
+	}
+
+	baseName := sb.String()
+	name = baseName
+	for i := 1; ; i++ {
+		if !idxNameExists(name) {
+			break
+		}
+		name = fmt.Sprintf("%s%d", baseName, i)
+	}
+
 	return name
 }
 

@@ -206,7 +206,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 
 	var spans roachpb.Spans
 	if params.InvertedConstraint != nil {
-		spans, err = sb.SpansFromInvertedSpans(params.InvertedConstraint, params.IndexConstraint)
+		spans, err = sb.SpansFromInvertedSpans(params.InvertedConstraint, params.IndexConstraint, nil /* scratch */)
 	} else {
 		spans, err = sb.SpansFromConstraint(params.IndexConstraint, params.NeededCols, false /* forDelete */)
 	}
@@ -231,12 +231,10 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	colsToTableOrdinalMap := toTableOrdinals(cols, tabDesc, colCfg.visibility)
 	trSpec := physicalplan.NewTableReaderSpec()
 	*trSpec = execinfrapb.TableReaderSpec{
-		Table:      *tabDesc.TableDesc(),
-		Reverse:    params.Reverse,
-		IsCheck:    false,
-		Visibility: colCfg.visibility,
-		// Retain the capacity of the spans slice.
-		Spans:            trSpec.Spans[:0],
+		Table:            *tabDesc.TableDesc(),
+		Reverse:          params.Reverse,
+		IsCheck:          false,
+		Visibility:       colCfg.visibility,
 		HasSystemColumns: scanContainsSystemColumns(&colCfg),
 		NeededColumns:    colCfg.wantedColumnsOrdinals,
 	}
@@ -806,8 +804,7 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 	// We cannot create the explained plan in the same PlanInfrastructure with the
 	// "outer" plan. Create a separate factory.
 	newFactory := newDistSQLSpecExecFactory(e.planner, e.planningMode)
-	explainFactory := explain.NewFactory(newFactory)
-	plan, err := buildFn(explainFactory)
+	plan, err := buildFn(newFactory)
 	// Release the resources acquired during the physical planning right away.
 	newFactory.(*distSQLSpecExecFactory).planCtx.getCleanupFunc()()
 	if err != nil {
@@ -921,7 +918,6 @@ func (e *distSQLSpecExecFactory) ConstructDeleteRange(
 	table cat.Table,
 	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
-	interleavedTables []cat.Table,
 	autoCommit bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: delete range")
@@ -1016,7 +1012,7 @@ func (e *distSQLSpecExecFactory) ConstructScanBuffer(
 }
 
 func (e *distSQLSpecExecFactory) ConstructRecursiveCTE(
-	initial exec.Node, fn exec.RecursiveCTEIterationFn, label string,
+	initial exec.Node, fn exec.RecursiveCTEIterationFn, label string, deduplicate bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: recursive CTE")
 }

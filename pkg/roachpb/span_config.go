@@ -16,11 +16,6 @@ import (
 	"time"
 )
 
-// Equal compares two span config entries.
-func (e SpanConfigEntry) Equal(other SpanConfigEntry) bool {
-	return e.Span.Equal(other.Span) && e.Config.Equal(other.Config)
-}
-
 // StoreMatchesConstraint returns whether a store's attributes or node's
 // locality match the constraint's spec. It notably ignores whether the
 // constraint is required, prohibited, positive, or otherwise.
@@ -57,6 +52,8 @@ func (s *SpanConfig) TTL() time.Duration {
 
 // GetNumVoters returns the number of voting replicas as defined in the
 // span config.
+// TODO(arul): We can get rid of this now that we're correctly populating
+//  numVoters when going from ZoneConfigs -> SpanConfigs.
 func (s *SpanConfig) GetNumVoters() int32 {
 	if s.NumVoters != 0 {
 		return s.NumVoters

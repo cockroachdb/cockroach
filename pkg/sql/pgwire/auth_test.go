@@ -203,7 +203,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		}
 		httpHBAUrl := httpScheme + s.HTTPAddr() + "/debug/hba_conf"
 
-		if _, err := conn.ExecContext(context.Background(), `CREATE USER $1`, security.TestUser); err != nil {
+		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf(`CREATE USER %s`, security.TestUser)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -275,7 +275,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					return "ok", err
 
 				case "authlog":
-					if len(td.CmdArgs) < 0 {
+					if len(td.CmdArgs) < 1 {
 						t.Fatal("not enough arguments")
 					}
 					numEntries, err := strconv.Atoi(td.CmdArgs[0].Key)
@@ -497,7 +497,7 @@ func TestClientAddrOverride(t *testing.T) {
 	defer cleanupFunc()
 
 	// Ensure the test user exists.
-	if _, err := db.Exec(`CREATE USER $1`, security.TestUser); err != nil {
+	if _, err := db.Exec(fmt.Sprintf(`CREATE USER %s`, security.TestUser)); err != nil {
 		t.Fatal(err)
 	}
 

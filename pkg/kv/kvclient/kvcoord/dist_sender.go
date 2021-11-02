@@ -1345,20 +1345,26 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			mightStopEarly := ba.MaxSpanRequestKeys > 0 || ba.TargetBytes > 0
 			// Check whether we've received enough responses to exit query loop.
 			if mightStopEarly {
-				var replyResults int64
+				var replyKeys int64
 				var replyBytes int64
 				for _, r := range resp.reply.Responses {
-					replyResults += r.GetInner().Header().NumKeys
-					replyBytes += r.GetInner().Header().NumBytes
-				}
-				// Update MaxSpanRequestKeys, if applicable. Note that ba might be
-				// passed recursively to further divideAndSendBatchToRanges() calls.
-				if ba.MaxSpanRequestKeys > 0 {
-					if replyResults > ba.MaxSpanRequestKeys {
-						log.Fatalf(ctx, "received %d results, limit was %d",
-							replyResults, ba.MaxSpanRequestKeys)
+					h := r.GetInner().Header()
+					replyKeys += h.NumKeys
+					replyBytes += h.NumBytes
+					if h.ResumeSpan != nil {
+						couldHaveSkippedResponses = true
+						resumeReason = h.ResumeReason
+						return
 					}
-					ba.MaxSpanRequestKeys -= replyResults
+				}
+				// Update MaxSpanRequestKeys and TargetBytes, if applicable, since ba
+				// might be passed recursively to further divideAndSendBatchToRanges()
+				// calls.
+				if ba.MaxSpanRequestKeys > 0 {
+					if replyKeys > ba.MaxSpanRequestKeys {
+						log.Fatalf(ctx, "received %d results, limit was %d", replyKeys, ba.MaxSpanRequestKeys)
+					}
+					ba.MaxSpanRequestKeys -= replyKeys
 					// Exiting; any missing responses will be filled in via defer().
 					if ba.MaxSpanRequestKeys == 0 {
 						couldHaveSkippedResponses = true
@@ -1415,7 +1421,7 @@ func (ds *DistSender) sendPartialBatchAsync(
 		ctx,
 		stop.TaskOpts{
 			TaskName:   "kv.DistSender: sending partial batch",
-			ChildSpan:  true,
+			SpanOpt:    stop.ChildSpan,
 			Sem:        ds.asyncSenderSem,
 			WaitForSem: false,
 		},
@@ -1727,7 +1733,6 @@ func fillSkippedResponses(
 			continue
 		}
 		hdr := resp.GetInner().Header()
-		hdr.ResumeReason = resumeReason
 		origSpan := req.Header().Span()
 		if isReverse {
 			if hdr.ResumeSpan != nil {
@@ -1765,6 +1770,9 @@ func fillSkippedResponses(
 					}
 				}
 			}
+		}
+		if hdr.ResumeSpan != nil {
+			hdr.ResumeReason = resumeReason
 		}
 		br.Responses[i].GetInner().SetHeader(hdr)
 	}

@@ -93,8 +93,8 @@ type TestServerInterface interface {
 	// The real return type is sql.ExecutorConfig.
 	ExecutorConfig() interface{}
 
-	// Tracer returns a *tracing.Tracer as an interface{}.
-	Tracer() interface{}
+	// TracerI returns a *tracing.Tracer as an interface{}.
+	TracerI() interface{}
 
 	// GossipI returns the gossip used by the TestServer.
 	// The real return type is *gossip.Gossip.
@@ -117,6 +117,10 @@ type TestServerInterface interface {
 	// SpanConfigAccessor returns the underlying spanconfig.KVAccessor as an
 	// interface{}.
 	SpanConfigAccessor() interface{}
+
+	// SpanConfigSQLTranslator returns the underlying spanconfig.SQLTranslator as
+	// an interface{}.
+	SpanConfigSQLTranslator() interface{}
 
 	// SQLServer returns the *sql.Server as an interface{}.
 	SQLServer() interface{}

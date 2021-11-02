@@ -218,7 +218,7 @@ var authCmds = []*cobra.Command{
 var authCmd = &cobra.Command{
 	Use:   "auth-session",
 	Short: "log in and out of HTTP sessions",
-	RunE:  usageAndErr,
+	RunE:  UsageAndErr,
 }
 
 func init() {

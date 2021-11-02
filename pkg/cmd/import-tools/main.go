@@ -11,6 +11,7 @@
 // import-tools adds a blank import to tools we use such that `go mod tidy`
 // doesn't clean up needed dependencies when running `go install`.
 
+//go:build tools
 // +build tools
 
 package main
@@ -35,7 +36,6 @@ import (
 	_ "github.com/mattn/goveralls"
 	_ "github.com/mibk/dupl"
 	_ "github.com/mmatczuk/go_generics/cmd/go_generics"
-	_ "github.com/prometheus/prometheus/promql"
 	_ "github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc"
 	_ "github.com/wadey/gocovmerge"
 	_ "golang.org/x/lint/golint"

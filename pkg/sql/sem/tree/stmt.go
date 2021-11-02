@@ -916,7 +916,7 @@ func (*RenameColumn) StatementReturnType() StatementReturnType { return DDL }
 func (*RenameColumn) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*RenameColumn) StatementTag() string { return "RENAME COLUMN" }
+func (*RenameColumn) StatementTag() string { return "ALTER TABLE" }
 
 // StatementReturnType implements the Statement interface.
 func (*RenameDatabase) StatementReturnType() StatementReturnType { return DDL }
@@ -925,7 +925,7 @@ func (*RenameDatabase) StatementReturnType() StatementReturnType { return DDL }
 func (*RenameDatabase) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*RenameDatabase) StatementTag() string { return "RENAME DATABASE" }
+func (*RenameDatabase) StatementTag() string { return "ALTER DATABASE" }
 
 // StatementReturnType implements the Statement interface.
 func (*ReparentDatabase) StatementReturnType() StatementReturnType { return DDL }
@@ -943,7 +943,7 @@ func (*RenameIndex) StatementReturnType() StatementReturnType { return DDL }
 func (*RenameIndex) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*RenameIndex) StatementTag() string { return "RENAME INDEX" }
+func (*RenameIndex) StatementTag() string { return "ALTER INDEX" }
 
 // StatementReturnType implements the Statement interface.
 func (*RenameTable) StatementReturnType() StatementReturnType { return DDL }
@@ -954,11 +954,11 @@ func (*RenameTable) StatementType() StatementType { return TypeDDL }
 // StatementTag returns a short string identifying the type of statement.
 func (n *RenameTable) StatementTag() string {
 	if n.IsView {
-		return "RENAME VIEW"
+		return "ALTER VIEW"
 	} else if n.IsSequence {
-		return "RENAME SEQUENCE"
+		return "ALTER SEQUENCE"
 	}
-	return "RENAME TABLE"
+	return "ALTER TABLE"
 }
 
 // StatementReturnType implements the Statement interface.
@@ -1199,6 +1199,15 @@ func (*ShowCreate) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowCreate) StatementTag() string { return "SHOW CREATE" }
+
+// StatementReturnType implements the Statement interface.
+func (*ShowCreateAllSchemas) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowCreateAllSchemas) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowCreateAllSchemas) StatementTag() string { return "SHOW CREATE ALL SCHEMAS" }
 
 // StatementReturnType implements the Statement interface.
 func (*ShowCreateAllTables) StatementReturnType() StatementReturnType { return Rows }
@@ -1731,7 +1740,8 @@ func (n *ShowClusterSettingList) String() string         { return AsString(n) }
 func (n *ShowColumns) String() string                    { return AsString(n) }
 func (n *ShowConstraints) String() string                { return AsString(n) }
 func (n *ShowCreate) String() string                     { return AsString(n) }
-func (n *ShowCreateAllTables) String() string            { return AsString(n) }
+func (node *ShowCreateAllSchemas) String() string        { return AsString(node) }
+func (node *ShowCreateAllTables) String() string         { return AsString(node) }
 func (n *ShowCreateSchedules) String() string            { return AsString(n) }
 func (n *ShowDatabases) String() string                  { return AsString(n) }
 func (n *ShowDatabaseIndexes) String() string            { return AsString(n) }

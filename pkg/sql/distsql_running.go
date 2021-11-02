@@ -417,6 +417,9 @@ func (dsp *DistSQLPlanner) Run(
 	localState.EvalContext = &evalCtx.EvalContext
 	localState.Txn = txn
 	localState.LocalProcs = plan.LocalProcessors
+	// If we need to perform some operation on the flow specs, we want to
+	// preserve the specs during the flow setup.
+	localState.PreserveFlowSpecs = planCtx.saveFlows != nil
 	// If we have access to a planner and are currently being used to plan
 	// statements in a user transaction, then take the descs.Collection to resolve
 	// types with during flow execution. This is necessary to do in the case of
@@ -708,6 +711,80 @@ func (w *errOnlyResultWriter) AddBatch(ctx context.Context, batch coldata.Batch)
 
 func (w *errOnlyResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
 	panic("IncrementRowsAffected not supported by errOnlyResultWriter")
+}
+
+// RowResultWriter is a thin wrapper around a RowContainer.
+type RowResultWriter struct {
+	rowContainer *rowContainerHelper
+	rowsAffected int
+	err          error
+}
+
+var _ rowResultWriter = &RowResultWriter{}
+
+// NewRowResultWriter creates a new RowResultWriter.
+func NewRowResultWriter(rowContainer *rowContainerHelper) *RowResultWriter {
+	return &RowResultWriter{rowContainer: rowContainer}
+}
+
+// IncrementRowsAffected implements the rowResultWriter interface.
+func (b *RowResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
+	b.rowsAffected += n
+}
+
+// AddRow implements the rowResultWriter interface.
+func (b *RowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	if b.rowContainer != nil {
+		return b.rowContainer.AddRow(ctx, row)
+	}
+	return nil
+}
+
+// SetError is part of the rowResultWriter interface.
+func (b *RowResultWriter) SetError(err error) {
+	b.err = err
+}
+
+// Err is part of the rowResultWriter interface.
+func (b *RowResultWriter) Err() error {
+	return b.err
+}
+
+// CallbackResultWriter is a rowResultWriter that runs a callback function
+// on AddRow.
+type CallbackResultWriter struct {
+	fn           func(ctx context.Context, row tree.Datums) error
+	rowsAffected int
+	err          error
+}
+
+var _ rowResultWriter = &CallbackResultWriter{}
+
+// NewCallbackResultWriter creates a new CallbackResultWriter.
+func NewCallbackResultWriter(
+	fn func(ctx context.Context, row tree.Datums) error,
+) *CallbackResultWriter {
+	return &CallbackResultWriter{fn: fn}
+}
+
+// IncrementRowsAffected is part of the rowResultWriter interface.
+func (c *CallbackResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
+	c.rowsAffected += n
+}
+
+// AddRow is part of the rowResultWriter interface.
+func (c *CallbackResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	return c.fn(ctx, row)
+}
+
+// SetError is part of the rowResultWriter interface.
+func (c *CallbackResultWriter) SetError(err error) {
+	c.err = err
+}
+
+// Err is part of the rowResultWriter interface.
+func (c *CallbackResultWriter) Err() error {
+	return c.err
 }
 
 var _ execinfra.RowReceiver = &DistSQLReceiver{}
@@ -1157,8 +1234,8 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		typs = subqueryPhysPlan.GetResultTypes()
 	}
 	var rows rowContainerHelper
-	rows.init(typs, evalCtx, "subquery" /* opName */)
-	defer rows.close(ctx)
+	rows.Init(typs, evalCtx, "subquery" /* opName */)
+	defer rows.Close(ctx)
 
 	// TODO(yuzefovich): consider implementing batch receiving result writer.
 	subqueryRowReceiver := NewRowResultWriter(&rows)
@@ -1171,7 +1248,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	switch subqueryPlan.execMode {
 	case rowexec.SubqueryExecModeExists:
 		// For EXISTS expressions, all we want to know if there is at least one row.
-		hasRows := rows.len() != 0
+		hasRows := rows.Len() != 0
 		subqueryPlans[planIdx].result = tree.MakeDBool(tree.DBool(hasRows))
 	case rowexec.SubqueryExecModeAllRows, rowexec.SubqueryExecModeAllRowsNormalized:
 		// TODO(yuzefovich): this is unfortunate - we're materializing all
@@ -1179,9 +1256,9 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		// accounting. Refactor it.
 		var result tree.DTuple
 		iterator := newRowContainerIterator(ctx, rows, typs)
-		defer iterator.close()
+		defer iterator.Close()
 		for {
-			row, err := iterator.next()
+			row, err := iterator.Next()
 			if err != nil {
 				return err
 			}
@@ -1204,13 +1281,13 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		}
 		subqueryPlans[planIdx].result = &result
 	case rowexec.SubqueryExecModeOneRow:
-		switch rows.len() {
+		switch rows.Len() {
 		case 0:
 			subqueryPlans[planIdx].result = tree.DNull
 		case 1:
 			iterator := newRowContainerIterator(ctx, rows, typs)
-			defer iterator.close()
-			row, err := iterator.next()
+			defer iterator.Close()
+			row, err := iterator.Next()
 			if err != nil {
 				return err
 			}

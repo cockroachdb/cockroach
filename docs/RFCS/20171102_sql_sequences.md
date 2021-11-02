@@ -28,7 +28,7 @@ existing `unique_rowid()` function.
 A *sequence* is a named database object which exists in a schema alongside
 tables, views and other sequences, and is used to hold a `BIGINT` value which
 can be read and incremented atomically, usually for the purpose of giving out
-unique ids as rows are inserted into a table. In additon to their values,
+unique ids as rows are inserted into a table. In addition to their values,
 sequences have settings such as start value, amount to increment by, and max
 value. (See "Sequence settings details" below)
 
@@ -188,7 +188,7 @@ Additionally, `ALTER SEQUENCE` will use machinery designed for table schema
 changes: all nodes will be notified of the change and read the new version of
 the descriptor using the lease-based descriptor caching system.
 
-See the "Sequence metadata" section under "Rationale and Alterantives" for a
+See the "Sequence metadata" section under "Rationale and Alternatives" for a
 discussion of alternate approaches.
 
 #### Sequence values
@@ -354,7 +354,7 @@ Options are:
   - Advantages: Would keep the KV operations for a sequence-using `INSERT`
     local to one range (until the table splits)
   - Sequences can be used by multiple tables; in this situation we wouldn't know
-    where to put it. We could allow users to tell us using a syntax extention
+    where to put it. We could allow users to tell us using a syntax extension
     to `CREATE|ALTER SEQUENCE`, but we should really be directing them toward
     `unique_rowid`.
 - All sequences in one range

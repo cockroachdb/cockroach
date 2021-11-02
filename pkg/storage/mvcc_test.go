@@ -2355,7 +2355,7 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	ctx := context.Background()
 
@@ -2757,7 +2757,7 @@ func TestMVCCReverseScanFirstKeyInFuture(t *testing.T) {
 			defer engine.Close()
 
 			// The value at key2 will be at a lower timestamp than the ReverseScan, but
-			// the value at key3 will be at a larger timetamp. The ReverseScan should
+			// the value at key3 will be at a larger timestamp. The ReverseScan should
 			// see key3 and ignore it because none of it versions are at a low enough
 			// timestamp to read. It should then continue scanning backwards and find a
 			// value at key2.
@@ -2952,7 +2952,7 @@ func TestMVCCResolveNewerIntent(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Now, put down an intent which should return a write too old error
-			// (but will still write the intent at tx1Commit.Timestmap+1.
+			// (but will still write the intent at tx1Commit.Timestamp+1.
 			err := MVCCPut(ctx, engine, nil, testKey1, txn1.ReadTimestamp, value2, txn1)
 			if !errors.HasType(err, (*roachpb.WriteTooOldError)(nil)) {
 				t.Fatalf("expected write too old error; got %s", err)
@@ -3972,6 +3972,7 @@ func TestMVCCResolveTxnRangeResume(t *testing.T) {
 			}
 
 			rw := engine.NewBatch()
+			defer rw.Close()
 
 			// Resolve up to 6 intents: the keys are 000, 033, 066, 099, 1212, 1515.
 			num, resumeSpan, err := MVCCResolveWriteIntentRange(ctx, rw, nil,
@@ -4103,6 +4104,8 @@ func checkEngineEquality(
 		return iter
 	}
 	iter1, iter2 := makeIter(eng1), makeIter(eng2)
+	defer iter1.Close()
+	defer iter2.Close()
 	count := 0
 	for {
 		valid1, err1 := iter1.Valid()
@@ -4241,11 +4244,13 @@ func TestRandomizedMVCCResolveWriteIntentRange(t *testing.T) {
 		log.Infof(ctx, "LockUpdate: %s, %s", status.String(), lu.String())
 	}
 	for i := range engs {
-		batch := engs[i].eng.NewBatch()
-		_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0, i == 0)
-		require.NoError(t, err)
-		require.NoError(t, batch.Commit(false))
-		batch.Close()
+		func() {
+			batch := engs[i].eng.NewBatch()
+			defer batch.Close()
+			_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0, i == 0)
+			require.NoError(t, err)
+			require.NoError(t, batch.Commit(false))
+		}()
 	}
 	require.Equal(t, engs[0].stats, engs[1].stats)
 	// TODO(sumeer): mvccResolveWriteIntent has a bug when the txn is being
@@ -4257,11 +4262,13 @@ func TestRandomizedMVCCResolveWriteIntentRange(t *testing.T) {
 	checkEngineEquality(t, lu.Span, engs[0].eng, engs[1].eng, false, debug)
 	if status == roachpb.ABORTED {
 		for i := range engs {
-			batch := engs[i].eng.NewBatch()
-			_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0, i == 0)
-			require.NoError(t, err)
-			require.NoError(t, batch.Commit(false))
-			batch.Close()
+			func() {
+				batch := engs[i].eng.NewBatch()
+				defer batch.Close()
+				_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0, i == 0)
+				require.NoError(t, err)
+				require.NoError(t, batch.Commit(false))
+			}()
 		}
 		checkEngineEquality(t, lu.Span, engs[0].eng, engs[1].eng, true, debug)
 	}

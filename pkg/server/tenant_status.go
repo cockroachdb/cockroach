@@ -17,8 +17,10 @@ package server
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -167,6 +169,53 @@ func (t *tenantStatusServer) ListLocalSessions(
 func (t *tenantStatusServer) CancelQuery(
 	ctx context.Context, request *serverpb.CancelQueryRequest,
 ) (*serverpb.CancelQueryResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	// Check permissions early to avoid fan-out to all nodes.
+	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
+	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(request.QueryID)); err != nil {
+		return nil, err
+	}
+
+	response := serverpb.CancelQueryResponse{}
+	distinctErrorMessages := map[string]struct{}{}
+
+	if err := t.iteratePods(
+		ctx,
+		fmt.Sprintf("cancel query ID %s", request.QueryID),
+		t.dialCallback,
+		func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
+			return client.(serverpb.StatusClient).CancelLocalQuery(ctx, request)
+		},
+		func(_ base.SQLInstanceID, nodeResp interface{}) {
+			nodeCancelQueryResponse := nodeResp.(*serverpb.CancelQueryResponse)
+			if nodeCancelQueryResponse.Canceled {
+				response.Canceled = true
+			}
+			distinctErrorMessages[nodeCancelQueryResponse.Error] = struct{}{}
+		},
+		func(_ base.SQLInstanceID, err error) {
+			distinctErrorMessages[err.Error()] = struct{}{}
+		},
+	); err != nil {
+		return nil, err
+	}
+
+	if !response.Canceled {
+		var errorMessages []string
+		for errorMessage := range distinctErrorMessages {
+			errorMessages = append(errorMessages, errorMessage)
+		}
+		response.Error = strings.Join(errorMessages, ", ")
+	}
+
+	return &response, nil
+}
+
+func (t *tenantStatusServer) CancelLocalQuery(
+	ctx context.Context, request *serverpb.CancelQueryRequest,
+) (*serverpb.CancelQueryResponse, error) {
 	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
 	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(request.QueryID)); err != nil {
 		return nil, err
@@ -183,6 +232,53 @@ func (t *tenantStatusServer) CancelQuery(
 }
 
 func (t *tenantStatusServer) CancelSession(
+	ctx context.Context, request *serverpb.CancelSessionRequest,
+) (*serverpb.CancelSessionResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	// Check permissions early to avoid fan-out to all nodes.
+	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
+	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(request.SessionID)); err != nil {
+		return nil, err
+	}
+
+	response := serverpb.CancelSessionResponse{}
+	distinctErrorMessages := map[string]struct{}{}
+
+	if err := t.iteratePods(
+		ctx,
+		fmt.Sprintf("cancel session ID %s", hex.EncodeToString(request.SessionID)),
+		t.dialCallback,
+		func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
+			return client.(serverpb.StatusClient).CancelLocalSession(ctx, request)
+		},
+		func(_ base.SQLInstanceID, nodeResp interface{}) {
+			nodeCancelSessionResp := nodeResp.(*serverpb.CancelSessionResponse)
+			if nodeCancelSessionResp.Canceled {
+				response.Canceled = true
+			}
+			distinctErrorMessages[nodeCancelSessionResp.Error] = struct{}{}
+		},
+		func(_ base.SQLInstanceID, err error) {
+			distinctErrorMessages[err.Error()] = struct{}{}
+		},
+	); err != nil {
+		return nil, err
+	}
+
+	if !response.Canceled {
+		var errorMessages []string
+		for errorMessage := range distinctErrorMessages {
+			errorMessages = append(errorMessages, errorMessage)
+		}
+		response.Error = strings.Join(errorMessages, ", ")
+	}
+
+	return &response, nil
+}
+
+func (t *tenantStatusServer) CancelLocalSession(
 	ctx context.Context, request *serverpb.CancelSessionRequest,
 ) (*serverpb.CancelSessionResponse, error) {
 	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
@@ -250,7 +346,7 @@ func (t *tenantStatusServer) ResetSQLStats(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = t.AnnotateCtx(ctx)
 
-	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -641,6 +737,66 @@ func (t *tenantStatusServer) IndexUsageStatistics(
 		fetchIndexUsageStats,
 		aggFn,
 		errFn,
+	); err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+func (t *tenantStatusServer) ResetIndexUsageStats(
+	ctx context.Context, req *serverpb.ResetIndexUsageStatsRequest,
+) (*serverpb.ResetIndexUsageStatsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	localReq := &serverpb.ResetIndexUsageStatsRequest{
+		NodeID: "local",
+	}
+	resp := &serverpb.ResetIndexUsageStatsResponse{}
+
+	if len(req.NodeID) > 0 {
+		parsedInstanceID, local, err := t.parseInstanceID(req.NodeID)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		if local {
+			t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().Reset()
+			return resp, nil
+		}
+
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, parsedInstanceID)
+		if err != nil {
+			return nil, err
+		}
+		statusClient, err := t.dialPod(ctx, parsedInstanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+
+		return statusClient.ResetIndexUsageStats(ctx, localReq)
+	}
+
+	resetIndexUsageStats := func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		return statusClient.ResetIndexUsageStats(ctx, localReq)
+	}
+
+	var combinedError error
+
+	if err := t.iteratePods(ctx, fmt.Sprintf("Resetting index usage stats for instance %s", req.NodeID),
+		t.dialCallback,
+		resetIndexUsageStats,
+		func(instanceID base.SQLInstanceID, resp interface{}) {
+			// Nothing to do here.
+		},
+		func(_ base.SQLInstanceID, err error) {
+			combinedError = errors.CombineErrors(combinedError, err)
+		},
 	); err != nil {
 		return nil, err
 	}
