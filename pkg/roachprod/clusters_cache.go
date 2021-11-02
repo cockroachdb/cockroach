@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -96,6 +97,19 @@ func loadCluster(name string) (*cloud.Cluster, error) {
 	return c, nil
 }
 
+// shouldIgnoreCluster returns true if the cluster references a project that is
+// not active. This is relevant if we have a cluster that was cached when
+// another project was in use.
+func shouldIgnoreCluster(c *cloud.Cluster) bool {
+	for i := range c.VMs {
+		provider, ok := vm.Providers[c.VMs[i].Provider]
+		if !ok || !provider.ProjectActive(c.VMs[i].Project) {
+			return true
+		}
+	}
+	return false
+}
+
 // LoadClusters reads the cached cluster metadata from config.ClustersDir and
 // populates install.Clusters.
 func LoadClusters() error {
@@ -114,6 +128,9 @@ func LoadClusters() error {
 
 		if len(c.VMs) == 0 {
 			return errors.Errorf("found no VMs in %s", clusterFilename(name))
+		}
+		if shouldIgnoreCluster(c) {
+			continue
 		}
 
 		sc := &install.SyncedCluster{
@@ -155,9 +172,17 @@ func syncClustersCache(cloud *cloud.Cloud) error {
 	}
 	for _, name := range clusterNames {
 		if _, ok := cloud.Clusters[name]; !ok {
-			filename := clusterFilename(name)
-			if err := os.Remove(filename); err != nil {
-				log.Infof(context.Background(), "failed to remove file %s", filename)
+			// This cluster may no longer exist, or it may involve projects that are
+			// not active in the current invocation.
+			c, err := loadCluster(name)
+			if err != nil {
+				return err
+			}
+			if !shouldIgnoreCluster(c) {
+				filename := clusterFilename(name)
+				if err := os.Remove(filename); err != nil {
+					log.Infof(context.Background(), "failed to remove file %s", filename)
+				}
 			}
 		}
 	}

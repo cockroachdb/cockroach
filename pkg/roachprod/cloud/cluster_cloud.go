@@ -95,7 +95,11 @@ type Cluster struct {
 func (c *Cluster) Clouds() []string {
 	present := make(map[string]bool)
 	for _, m := range c.VMs {
-		present[m.Provider] = true
+		p := m.Provider
+		if m.Project != "" {
+			p = fmt.Sprintf("%s:%s", m.Provider, m.Project)
+		}
+		present[p] = true
 	}
 
 	var ret []string

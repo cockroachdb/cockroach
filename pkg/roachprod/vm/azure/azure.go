@@ -95,6 +95,11 @@ func (p *Provider) Active() bool {
 	return true
 }
 
+// ProjectActive is part of the vm.Provider interface.
+func (p *Provider) ProjectActive(project string) bool {
+	return project == ""
+}
+
 // CleanSSH implements vm.Provider, is a no-op, and returns nil.
 func (p *Provider) CleanSSH() error {
 	return nil

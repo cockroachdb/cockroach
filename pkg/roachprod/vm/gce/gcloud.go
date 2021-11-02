@@ -676,3 +676,13 @@ func (p *Provider) Name() string {
 func (p *Provider) Active() bool {
 	return true
 }
+
+// ProjectActive is part of the vm.Provider interface.
+func (p *Provider) ProjectActive(project string) bool {
+	for _, p := range p.GetProjects() {
+		if p == project {
+			return true
+		}
+	}
+	return false
+}
