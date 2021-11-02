@@ -955,8 +955,8 @@ func (b *replicaAppBatch) Close() {
 var raftClosedTimestampAssertionsEnabled = envutil.EnvOrDefaultBool("COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED", true)
 
 // Assert that the current command is not writing under the closed timestamp.
-// This check only applies to IntentWrite commands, since others (for example,
-// EndTxn) can operate below the closed timestamp.
+// This check only applies to certain write commands, mainly IsIntentWrite,
+// since others (for example, EndTxn) can operate below the closed timestamp.
 //
 // Note that we check that we're we're writing under b.state.RaftClosedTimestamp
 // (i.e. below the timestamp closed by previous commands), not below
@@ -964,7 +964,7 @@ var raftClosedTimestampAssertionsEnabled = envutil.EnvOrDefaultBool("COCKROACH_R
 // timestamp carried by itself; in other words cmd.raftCmd.ClosedTimestamp is a
 // promise about future commands, not the command carrying it.
 func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) error {
-	if !cmd.IsLocal() || !cmd.proposal.Request.IsIntentWrite() {
+	if !cmd.IsLocal() || !cmd.proposal.Request.AppliesTimestampCache() {
 		return nil
 	}
 	if !raftClosedTimestampAssertionsEnabled {
