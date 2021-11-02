@@ -2494,6 +2494,15 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td></tr></tbody>
 </table>
 
+### Stream Replication functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="crdb_internal.init_stream"></a><code>crdb_internal.init_stream(tenant_id: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function can be used to start a stream replication job for the specified tenant on the producer side. The job will periotically check liveness of the stream replication and will kill the job if it has been inactive for a duration of time specified by the cluster setting ‘stream_replication.job_liveness_timeout’.</p>
+</span></td></tr></tbody>
+</table>
+
 ### String and byte functions
 
 <table>

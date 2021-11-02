@@ -9,11 +9,11 @@
 package streamingutils
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -21,7 +21,7 @@ import (
 )
 
 func init() {
-	streaming.CompleteIngestionHook = doCompleteIngestion
+	streamingccl.CompleteStreamIngestionHook = doCompleteIngestion
 }
 
 func doCompleteIngestion(
