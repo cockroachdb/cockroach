@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2021 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -10,25 +10,23 @@
 
 import React from "react";
 import { mount } from "enzyme";
-import _ from "lodash";
 import {
-  TimeScaleDropdown,
-  TimeScaleDropdownProps,
   getTimeRangeTitle,
   generateDisabledArrows,
   timeFormat,
   dateFormat,
-} from "./index";
-import * as timewindow from "src/redux/timewindow";
+  TimeScaleDropdownProps,
+  TimeScaleDropdown,
+} from "./timeScaleDropdown";
+import { availableTimeScales } from "./utils";
+import * as timewindow from "./timeScaleTypes";
 import moment from "moment";
-import { refreshNodes } from "src/redux/apiReducers";
-import "src/enzymeInit";
 import { MemoryRouter } from "react-router";
-import TimeFrameControls from "../../components/controls";
-import RangeSelect from "../../components/range";
+import TimeFrameControls from "./timeFrameControls";
+import RangeSelect from "./rangeSelect";
 import { assert } from "chai";
 import sinon from "sinon";
-import { ArrowDirection } from "oss/src/views/shared/components/dropdown";
+import { ArrowDirection } from "./timeScaleTypes";
 
 const initialEntries = [
   "#/metrics/overview/cluster", // Past 10 minutes
@@ -49,7 +47,6 @@ const initialEntries = [
 
 describe("<TimeScaleDropdown>", function() {
   let state: TimeScaleDropdownProps;
-  let spy: sinon.SinonSpy;
   let clock: sinon.SinonFakeTimers;
 
   const makeTimeScaleDropdown = (props: TimeScaleDropdownProps) =>
@@ -59,28 +56,19 @@ describe("<TimeScaleDropdown>", function() {
       </MemoryRouter>,
     );
 
-  beforeEach(function() {
+  beforeEach(() => {
     clock = sinon.useFakeTimers(new Date(2020, 5, 1, 9, 28, 30));
     const timewindowState = new timewindow.TimeWindowState();
     state = {
       currentScale: timewindowState.scale,
       currentWindow: { start: moment().subtract(10, "minutes"), end: moment() },
-      nodeStatusesValid: false,
-      useTimeRange: timewindowState.useTimeRange,
-      dispatchRefreshNodes: refreshNodes,
-      setTimeScale: timewindow.setTimeScale,
-      setTimeRange: timewindow.setTimeRange,
+      setTimeScale: () => {},
+      setTimeRange: () => {},
     };
-    spy = sinon.spy();
   });
 
   afterEach(() => {
     clock.restore();
-  });
-
-  it("refreshes nodes when mounted.", () => {
-    makeTimeScaleDropdown({ ...state, dispatchRefreshNodes: spy });
-    assert.isTrue(spy.called);
   });
 
   it("valid path should not redirect to 404", () => {
@@ -94,21 +82,22 @@ describe("<TimeScaleDropdown>", function() {
     wrapper.setProps({ currentScale: state.currentScale });
     assert.equal(
       wrapper.props().currentScale,
-      timewindow.availableTimeScales["Past 10 Minutes"],
+      availableTimeScales["Past 10 Minutes"],
     );
   });
 
   it("getTimeRangeTitle must return title Past 10 Minutes", () => {
-    const title = getTimeRangeTitle(state.currentWindow, state.currentScale);
     const wrapper = makeTimeScaleDropdown(state);
     assert.equal(
       wrapper
         .find(".trigger .Select-value-label")
         .first()
         .text(),
-      `Past 10 Minutes`,
+      "Past 10 Minutes",
     );
-    assert.deepEqual(title, { title: "Past 10 Minutes" });
+
+    const title = getTimeRangeTitle(state.currentWindow, state.currentScale);
+    assert.deepEqual(title, { title: "Past 10 Minutes", timeLabel: "10m" });
   });
 
   describe("getTimeRangeTitle", () => {
@@ -133,6 +122,7 @@ describe("<TimeScaleDropdown>", function() {
         timeStart,
         timeEnd,
         title: "Custom",
+        timeLabel: "10m",
       });
     });
 
@@ -165,6 +155,7 @@ describe("<TimeScaleDropdown>", function() {
         timeStart,
         timeEnd,
         title: "Custom",
+        timeLabel: "10m",
       });
     });
   });
