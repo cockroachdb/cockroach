@@ -2347,7 +2347,9 @@ func performCastWithoutPrecisionTruncation(
 		case *DString:
 			if string(*v) == ZeroDOidValue {
 				// zero oid value is represented by '-' in postgres.
-				return ParseDOid(ctx, "0", t)
+				tmpOid := NewDOid(0)
+				tmpOid.semanticType = t
+				return tmpOid, nil
 			}
 			return ParseDOid(ctx, string(*v), t)
 		}
@@ -2417,18 +2419,10 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 			return wrapAsZeroOid(t.Oid()), nil
 		}
 
-		var err error = nil
-		dOid := NewDOid(v)
-		dOid.semanticType = t
-
-		// ctx.Planner will be nil only for 'make test PKG=./pkg/sql/sem/tree TESTS=TestEval'
-		// we just perform a nil check and keep backward compatibility
-		if ctx.Planner != nil {
-			dOid, err = ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, NewDOid(v))
-			if err != nil {
-				dOid = NewDOid(v)
-				dOid.semanticType = t
-			}
+		dOid, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, NewDOid(v))
+		if err != nil {
+			dOid = NewDOid(v)
+			dOid.semanticType = t
 		}
 		return dOid, nil
 	}
