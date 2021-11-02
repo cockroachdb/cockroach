@@ -110,7 +110,8 @@ func TestExportImportBank(t *testing.T) {
 
 			schema := bank.FromRows(1).Tables()[0].Schema
 			exportedFiles := filepath.Join(exportDir, "*")
-			db.Exec(t, fmt.Sprintf(`IMPORT TABLE bank2 %s CSV DATA ($1) WITH delimiter = '|'%s`, schema, nullIf), exportedFiles)
+			db.Exec(t, fmt.Sprintf("CREATE TABLE bank2 %s", schema))
+			db.Exec(t, fmt.Sprintf(`IMPORT INTO bank2 CSV DATA ($1) WITH delimiter = '|'%s`, nullIf), exportedFiles)
 
 			db.CheckQueryResults(t,
 				fmt.Sprintf(`SELECT * FROM bank AS OF SYSTEM TIME %s ORDER BY id`, asOf), db.QueryStr(t, `SELECT * FROM bank2 ORDER BY id`),
@@ -158,7 +159,8 @@ func TestExportNullWithEmptyNullAs(t *testing.T) {
 	require.Equal(t, "1,None\n2,8\n", string(contents))
 
 	// Verify successful IMPORT statement `WITH nullif="None"` to complete round trip
-	const importStmt = `IMPORT TABLE accounts2(id INT PRIMARY KEY, balance INT) CSV DATA ('nodelocal://0/t/export*-n*.0.csv') WITH nullif="None"`
+	const importStmt = `IMPORT INTO accounts2 CSV DATA ('nodelocal://0/t/export*-n*.0.csv') WITH nullif="None"`
+	db.Exec(t, `CREATE TABLE accounts2(id INT PRIMARY KEY, balance INT)`)
 	db.Exec(t, importStmt)
 	db.CheckQueryResults(t,
 		"SELECT * FROM accounts2", db.QueryStr(t, "SELECT * FROM accounts"),
