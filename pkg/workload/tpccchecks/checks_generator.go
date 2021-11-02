@@ -98,7 +98,7 @@ func (w *tpccChecks) Ops(
 ) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, w.flags.Lookup("db").Value.String(), urls)
 	if err != nil {
-		return workload.QueryLoad{}, fmt.Errorf("%v", err)
+		return workload.QueryLoad{}, errors.Wrapf(err, "could not sanitize urls %v", urls)
 	}
 	dbs := make([]*gosql.DB, len(urls))
 	for i, url := range urls {
