@@ -91,11 +91,10 @@ func (mvs *mutationVisitorState) CheckOutDescriptor(
 	if entry != nil {
 		return entry.(catalog.MutableDescriptor), nil
 	}
-	desc, err := mvs.c.MustReadMutableDescriptor(ctx, id)
+	mut, err := mvs.c.MustReadMutableDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	mut := desc.(catalog.MutableDescriptor)
 	mut.MaybeIncrementVersion()
 	mvs.checkedOutDescriptors.Upsert(mut)
 	return mut, nil
