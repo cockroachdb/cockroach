@@ -942,3 +942,8 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 func (p *Provider) Active() bool {
 	return true
 }
+
+// ProjectActive is part of the vm.Provider interface.
+func (p *Provider) ProjectActive(project string) bool {
+	return project == ""
+}
