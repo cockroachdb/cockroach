@@ -1430,7 +1430,7 @@ func NewTableDesc(
 ) (*tabledesc.Mutable, error) {
 	// Used to delay establishing Column/Sequence dependency until ColumnIDs have
 	// been populated.
-	columnDefaultExprs := make([]tree.TypedExpr, len(n.Defs))
+	cdd := make([]*tabledesc.ColumnDefDescs, len(n.Defs))
 
 	var opts newTableDescOptions
 	for _, o := range inOpts {
@@ -1575,7 +1575,7 @@ func NewTableDesc(
 					maybeRegionalByRowOnUpdateExpr(evalCtx, oid),
 				),
 			)
-			columnDefaultExprs = append(columnDefaultExprs, nil)
+			cdd = append(cdd, nil)
 		}
 
 		// Construct the partitioning for the PARTITION ALL BY.
@@ -1689,16 +1689,18 @@ func NewTableDesc(
 				// It'll then be added to this table's resulting table descriptor below in
 				// the constraint pass.
 				n.Defs = append(n.Defs, checkConstraint)
-				columnDefaultExprs = append(columnDefaultExprs, nil)
+				cdd = append(cdd, nil)
 			}
 			if d.IsVirtual() && d.HasColumnFamily() {
 				return nil, pgerror.Newf(pgcode.Syntax, "virtual columns cannot have family specifications")
 			}
 
-			col, idx, expr, err := tabledesc.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx)
+			cdd[i], err = tabledesc.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx)
 			if err != nil {
 				return nil, err
 			}
+			col := cdd[i].ColumnDescriptor
+			idx := cdd[i].PrimaryKeyOrUniqueIndexDescriptor
 
 			// Do not include virtual tables in these statistics.
 			if !descpb.IsVirtualTable(id) {
@@ -1706,12 +1708,6 @@ func NewTableDesc(
 			}
 
 			desc.AddColumn(col)
-			if d.HasDefaultExpr() {
-				// This resolution must be delayed until ColumnIDs have been populated.
-				columnDefaultExprs[i] = expr
-			} else {
-				columnDefaultExprs[i] = nil
-			}
 
 			if idx != nil {
 				idx.Version = indexEncodingVersion
@@ -1813,7 +1809,7 @@ func NewTableDesc(
 				return nil, err
 			}
 			n.Defs = append(n.Defs, checkConstraint)
-			columnDefaultExprs = append(columnDefaultExprs, nil)
+			cdd = append(cdd, nil)
 		}
 		return newColumns, nil
 	}
@@ -2221,14 +2217,19 @@ func NewTableDesc(
 	colIdx := 0
 	for i := range n.Defs {
 		if _, ok := n.Defs[i].(*tree.ColumnTableDef); ok {
-			if expr := columnDefaultExprs[i]; expr != nil {
-				changedSeqDescs, err := maybeAddSequenceDependencies(
-					ctx, st, vt, &desc, &desc.Columns[colIdx], expr, affected)
-				if err != nil {
+			if cdd[i] != nil {
+				if err := cdd[i].ForEachTypedExpr(func(expr tree.TypedExpr) error {
+					changedSeqDescs, err := maybeAddSequenceDependencies(
+						ctx, st, vt, &desc, &desc.Columns[colIdx], expr, affected)
+					if err != nil {
+						return err
+					}
+					for _, changedSeqDesc := range changedSeqDescs {
+						affected[changedSeqDesc.ID] = changedSeqDesc
+					}
+					return nil
+				}); err != nil {
 					return nil, err
-				}
-				for _, changedSeqDesc := range changedSeqDescs {
-					affected[changedSeqDesc.ID] = changedSeqDesc
 				}
 			}
 			colIdx++
