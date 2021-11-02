@@ -759,22 +759,14 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedHint:  strings.TrimLeft(clusterIdentifierHint, "\n"),
 		},
 		{
-			name: "multiple similar cluster identifiers",
-			params: map[string]string{
-				"database": "happy-koala-7.defaultdb",
-				"options":  "--cluster=happy-koala",
-			},
-			expectedError: "multiple cluster identifiers provided",
-			expectedHint:  strings.TrimLeft(clusterIdentifierHint, "\n"),
-		},
-		{
 			name: "multiple different cluster identifiers",
 			params: map[string]string{
 				"database": "happy-koala-7.defaultdb",
 				"options":  "--cluster=happy-tiger",
 			},
-			expectedError: "multiple cluster identifiers provided",
-			expectedHint:  strings.TrimLeft(clusterIdentifierHint, "\n"),
+			expectedError: "multiple different cluster identifiers provided",
+			expectedHint: "is 'happy-koala-7' or 'happy-tiger' the identifier for the cluster that you're connecting to?\n--\n" +
+				strings.TrimLeft(clusterIdentifierHint, "\n"),
 		},
 		{
 			name: "invalid cluster identifier in database param",
@@ -859,6 +851,16 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			params:        map[string]string{"database": "happy-koala-0.defaultdb"},
 			expectedError: "invalid cluster identifier 'happy-koala-0'",
 			expectedHint:  "tenant ID 0 is invalid",
+		},
+		{
+			name: "multiple similar cluster identifiers",
+			params: map[string]string{
+				"database": "happy-koala-7.defaultdb",
+				"options":  "--cluster=happy-koala-7",
+			},
+			expectedClusterName: "happy-koala",
+			expectedTenantID:    7,
+			expectedParams:      map[string]string{"database": "defaultdb"},
 		},
 		{
 			name: "cluster identifier in database param",
