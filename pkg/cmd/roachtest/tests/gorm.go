@@ -22,7 +22,7 @@ import (
 )
 
 var gormReleaseTag = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var gormSupportedTag = "v1.21.12"
+var gormSupportedTag = "v1.22.2"
 
 func registerGORM(r registry.Registry) {
 	runGORM := func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -111,7 +111,7 @@ func registerGORM(r registry.Registry) {
 		err = c.RunE(
 			ctx,
 			node,
-			fmt.Sprintf(`cd %s && go get -t -u ./... && go mod download && go mod tidy`, gormTestPath),
+			fmt.Sprintf(`cd %s && go get -u -t ./... && go mod download && go mod tidy `, gormTestPath),
 		)
 		require.NoError(t, err)
 
@@ -121,8 +121,8 @@ func registerGORM(r registry.Registry) {
 		err = c.RunE(
 			ctx,
 			node,
-			fmt.Sprintf(`cd %s && GORM_DIALECT="postgres" 
-PGUSER=root PGPORT=26257 PGSSLMODE=disable go test -v ./... 2>&1 | %s/bin/go-junit-report > %s`,
+			fmt.Sprintf(`cd %s && GORM_DIALECT="postgres"
+		PGUSER=root PGPORT=26257 PGSSLMODE=disable go test -v ./... 2>&1 | %s/bin/go-junit-report > %s`,
 				gormTestPath, goPath, resultsPath),
 		)
 		if err != nil {
