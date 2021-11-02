@@ -9,7 +9,7 @@ require (
 	github.com/Azure/go-autorest/autorest v0.11.20
 	github.com/Azure/go-autorest/autorest/azure/auth v0.4.2
 	github.com/Azure/go-autorest/autorest/to v0.4.0
-	github.com/BurntSushi/toml v0.3.1
+	github.com/BurntSushi/toml v0.4.1
 	github.com/DataDog/zstd v1.4.8 // indirect
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
 	github.com/PuerkitoBio/goquery v1.5.1
@@ -157,15 +157,16 @@ require (
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97
 	golang.org/x/exp v0.0.0-20210514180818-737f94c0881e
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
+	golang.org/x/mod v0.5.1 // indirect
 	golang.org/x/net v0.0.0-20210913180222-943fd674d43e
 	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20211025201205-69cdffdb9359
+	golang.org/x/sys v0.0.0-20211102061401-a2f17f7b995c
 	golang.org/x/term v0.0.0-20210220032956-6a3ed077a48d
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
-	golang.org/x/tools v0.1.5
+	golang.org/x/tools v0.1.7
 	google.golang.org/api v0.56.0
 	google.golang.org/genproto v0.0.0-20210909211513-a8c4777a87af
 	google.golang.org/grpc v1.40.0
@@ -173,7 +174,7 @@ require (
 	google.golang.org/protobuf v1.27.1
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
-	honnef.co/go/tools v0.2.0
+	honnef.co/go/tools v0.2.1
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
@@ -310,7 +311,6 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.16.0 // indirect
-	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	gopkg.in/ini.v1 v1.62.0 // indirect
@@ -324,8 +324,6 @@ replace github.com/abourget/teamcity => github.com/cockroachdb/teamcity v0.0.0-2
 // Temporary replacement until https://github.com/cockroachdb/cockroach/pull/67221#issuecomment-874236134
 // has been addressed.
 replace github.com/bufbuild/buf => github.com/cockroachdb/buf v0.42.2-0.20210706083726-883d34031660
-
-replace honnef.co/go/tools => honnef.co/go/tools v0.0.1-2020.1.6
 
 replace vitess.io/vitess => github.com/cockroachdb/vitess v0.0.0-20210218160543-54524729cc82
 
