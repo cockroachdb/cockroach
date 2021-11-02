@@ -110,7 +110,8 @@ func angleFromCoords(c1, c2, c3, c4 geom.Coord) *float64 {
 	// zero. However, since IEEE 754 requires that -0.0 == 0.0,
 	// this code is still correct and we use -0.0 here for
 	// semantic clarity.
-	if angle == -0.0 { //lint:ignore SA4026
+	//lint:ignore SA4026 -0.0 used here for clarity
+	if angle == -0.0 {
 		angle = 0.0
 	} else if angle < 0 {
 		angle += 2 * math.Pi
