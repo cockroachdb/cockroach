@@ -127,6 +127,12 @@ type Builder struct {
 	// isCorrelated is set to true if we already reported to telemetry that the
 	// query contains a correlated subquery.
 	isCorrelated bool
+
+	// areAllTableMutationsSimpleInserts maps from each table mutated by the
+	// statement to true if all mutations of that table are simple inserts
+	// (without ON CONFLICT) or false otherwise. All mutated tables will have an
+	// entry in the map.
+	areAllTableMutationsSimpleInserts map[cat.StableID]bool
 }
 
 // New creates a new Builder structure initialized with the given

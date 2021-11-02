@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -25,6 +26,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
+
+var multipleModificationsOfTableEnabled = settings.RegisterBoolSetting(
+	"sql.multiple_modifications_of_table.enabled",
+	"if true, allow statements containing multiple INSERT ON CONFLICT, UPSERT, UPDATE, or DELETE "+
+		"subqueries modifying the same table, at the risk of data corruption if the same row is "+
+		"modified multiple times by a single statement (multiple INSERT subqueries without ON "+
+		"CONFLICT cannot cause corruption and are always allowed)",
+	false,
+).WithPublic()
 
 // windowAggregateFrame() returns a frame that any aggregate built as a window
 // can use.
@@ -469,6 +479,27 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 	}
 
 	return sch, resName
+}
+
+func (b *Builder) checkMultipleMutations(tab cat.Table, simpleInsert bool) {
+	if b.areAllTableMutationsSimpleInserts == nil {
+		b.areAllTableMutationsSimpleInserts = make(map[cat.StableID]bool)
+	}
+	allSimpleInserts, prevMutations := b.areAllTableMutationsSimpleInserts[tab.ID()]
+	if !prevMutations {
+		b.areAllTableMutationsSimpleInserts[tab.ID()] = simpleInsert
+		return
+	}
+	allSimpleInserts = allSimpleInserts && simpleInsert
+	b.areAllTableMutationsSimpleInserts[tab.ID()] = allSimpleInserts
+	if !allSimpleInserts && !multipleModificationsOfTableEnabled.Get(&b.evalCtx.Settings.SV) {
+		panic(pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"multiple modification subqueries of the same table %q are not supported unless "+
+				"they all use INSERT without ON CONFLICT; this is to prevent data corruption, see "+
+				"documentation of sql.multiple_modifications_of_table.enabled", tab.Name(),
+		))
+	}
 }
 
 // resolveTableForMutation is a helper method for building mutations. It returns
