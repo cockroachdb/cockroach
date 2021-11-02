@@ -475,7 +475,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		b.p.registerProposalLocked(p)
 
 		// Exit the tracker.
-		if !reproposal && p.Request.IsIntentWrite() {
+		if !reproposal && p.Request.AppliesTimestampCache() {
 			// Sanity check that the request is tracked by the evaluation tracker at
 			// this point. It's supposed to be tracked until the
 			// doneIfNotMovedLocked() call below.

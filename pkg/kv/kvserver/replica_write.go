@@ -115,7 +115,7 @@ func (r *Replica) executeWriteBatch(
 	// starts being tracked after we apply the timestamp cache.
 	var minTS hlc.Timestamp
 	var tok TrackedRequestToken
-	if ba.IsIntentWrite() {
+	if ba.AppliesTimestampCache() {
 		minTS, tok = r.mu.proposalBuf.TrackEvaluatingRequest(ctx, ba.WriteTimestamp())
 	}
 	defer tok.DoneIfNotMoved(ctx)
