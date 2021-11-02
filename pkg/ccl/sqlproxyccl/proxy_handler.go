@@ -594,8 +594,12 @@ func clusterNameAndTenantFromParams(
 		return msg, "", roachpb.MaxTenantID, err
 	}
 
-	if clusterNameFromDB != "" && clusterNameFromOpt != "" {
-		err := errors.New("multiple cluster identifiers provided")
+	if clusterNameFromDB != "" && clusterNameFromOpt != "" &&
+		clusterNameFromDB != clusterNameFromOpt {
+		err := errors.New("multiple different cluster identifiers provided")
+		err = errors.WithHintf(err,
+			"is '%s' or '%s' the identifier for the cluster that you're connecting to?",
+			clusterNameFromDB, clusterNameFromOpt)
 		err = errors.WithHint(err, strings.TrimLeft(clusterIdentifierHint, "\n"))
 		return msg, "", roachpb.MaxTenantID, err
 	}
@@ -738,7 +742,8 @@ func parseOptionsParam(optionsParam string) (clusterName, newOptionsParam string
 }
 
 const clusterIdentifierHint = `
-ensure that your cluster identifier is specified through only one of the following methods:
+Ensure that your cluster identifier is uniquely specified using any of the
+following methods:
 
 1) Database parameter:
    Use "<cluster identifier>.<database name>" as the database parameter.
