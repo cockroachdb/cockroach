@@ -55,18 +55,18 @@ func TestDBClientScan(t *testing.T) {
 	// values at the timestamp preceding writes.
 	{
 		var responses []roachpb.KeyValue
-		require.NoError(t, dba.Scan(ctx, sp, beforeAny, func(value roachpb.KeyValue) {
+		require.NoError(t, dba.Scan(ctx, []roachpb.Span{sp}, beforeAny, func(value roachpb.KeyValue) {
 			responses = append(responses, value)
-		}))
+		}, rangefeed.DefaultInitialScanParallelismFn))
 		require.Len(t, responses, 0)
 	}
 
 	// Ensure that expected values are seen at the intermediate timestamp.
 	{
 		var responses []roachpb.KeyValue
-		require.NoError(t, dba.Scan(ctx, sp, afterB, func(value roachpb.KeyValue) {
+		require.NoError(t, dba.Scan(ctx, []roachpb.Span{sp}, afterB, func(value roachpb.KeyValue) {
 			responses = append(responses, value)
-		}))
+		}, rangefeed.DefaultInitialScanParallelismFn))
 		require.Len(t, responses, 2)
 		require.Equal(t, mkKey("a"), responses[0].Key)
 		va, err := responses[0].Value.GetInt()
@@ -78,9 +78,9 @@ func TestDBClientScan(t *testing.T) {
 	dba.SetTargetScanBytes(1)
 	{
 		var responses []roachpb.KeyValue
-		require.NoError(t, dba.Scan(ctx, sp, db.Clock().Now(), func(value roachpb.KeyValue) {
+		require.NoError(t, dba.Scan(ctx, []roachpb.Span{sp}, db.Clock().Now(), func(value roachpb.KeyValue) {
 			responses = append(responses, value)
-		}))
+		}, rangefeed.DefaultInitialScanParallelismFn))
 		require.Len(t, responses, 3)
 	}
 

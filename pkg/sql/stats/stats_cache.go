@@ -167,7 +167,7 @@ func NewTableStatisticsCache(
 	_, _ = rangeFeedFactory.RangeFeed(
 		ctx,
 		"table-stats-cache",
-		statsTableSpan,
+		[]roachpb.Span{statsTableSpan},
 		db.Clock().Now(),
 		handleEvent,
 	)

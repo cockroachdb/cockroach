@@ -276,7 +276,7 @@ func (s *KVSubscriber) run(ctx context.Context) error {
 		log.Fatalf(ctx, "initial scan timestamp (%s) regressed from last recorded frontier (%s)", initialScanTS, s.lastFrontierTS)
 	}
 
-	rangeFeed := s.rangefeedFactory.New("spanconfig-rangefeed", s.spanConfigTableSpan, initialScanTS,
+	rangeFeed := s.rangefeedFactory.New("spanconfig-rangefeed", initialScanTS,
 		onValue,
 		rangefeed.WithInitialScan(func(ctx context.Context) {
 			select {
@@ -309,7 +309,7 @@ func (s *KVSubscriber) run(ctx context.Context) error {
 			return false
 		}),
 	)
-	if err := rangeFeed.Start(ctx); err != nil {
+	if err := rangeFeed.Start(ctx, []roachpb.Span{s.spanConfigTableSpan}); err != nil {
 		return err
 	}
 	defer rangeFeed.Close()
