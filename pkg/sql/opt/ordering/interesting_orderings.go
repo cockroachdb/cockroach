@@ -108,7 +108,8 @@ func interestingOrderingsForScan(scan *memo.ScanExpr) props.OrderingSet {
 		// the table's indexes. Add orderings for all of them.
 		ord = make(props.OrderingSet, 0, tab.IndexCount())
 		for i := 0; i < tab.IndexCount(); i++ {
-			addIndexOrdering(i, &scan.Relational().FuncDeps, scan.ExactPrefix)
+			// IsCanonical implies no constraints so exactPrefix is 0.
+			addIndexOrdering(i, &scan.Relational().FuncDeps, 0)
 		}
 	} else {
 		// This scan is not canonical, so we can only use the ordering implied by
