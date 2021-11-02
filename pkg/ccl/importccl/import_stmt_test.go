@@ -1433,7 +1433,7 @@ END
 			intoCols:  "a",
 			typ:       "PGCOPY",
 			contents:  "randomvalue\n",
-			errString: "encountered error invalid input value for enum greeting",
+			errString: "invalid input value for enum greeting",
 		},
 	}
 
@@ -3011,7 +3011,7 @@ func TestImportIntoCSV(t *testing.T) {
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH disable_glob_matching`,
 			testFiles.filesUsingWildcard,
 			` WITH disable_glob_matching`,
-			"pq: (.+) no such file or directory",
+			"pq: nodelocal storage file does not exist:(.+)\nDETAIL:(.+)no such file or directory",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
