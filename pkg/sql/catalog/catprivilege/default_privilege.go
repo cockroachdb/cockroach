@@ -145,12 +145,21 @@ func (d *immutable) CreatePrivilegesFromDefaultPrivileges(
 	}
 
 	newPrivs := descpb.NewDefaultPrivilegeDescriptor(user)
-	// If default privileges are not defined for the creator role, we handle
-	// it as the default case where the user has all privileges.
 	role := descpb.DefaultPrivilegesRole{Role: user}
-	if _, found := d.GetDefaultPrivilegesForRole(role); !found {
+	if defaultPrivilegesForRole, found := d.GetDefaultPrivilegesForRole(role); !found {
+		// If default privileges are not defined for the creator role, we handle
+		// it as the case where the user has all privileges.
 		defaultPrivilegesForCreatorRole := descpb.InitDefaultPrivilegesForRole(role)
 		for _, user := range GetUserPrivilegesForObject(defaultPrivilegesForCreatorRole, targetObject) {
+			newPrivs.Grant(
+				user.UserProto.Decode(),
+				privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
+			)
+		}
+	} else {
+		// If default privileges were defined for the role, we create privileges
+		// using the default privileges.
+		for _, user := range GetUserPrivilegesForObject(*defaultPrivilegesForRole, targetObject) {
 			newPrivs.Grant(
 				user.UserProto.Decode(),
 				privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
@@ -161,15 +170,15 @@ func (d *immutable) CreatePrivilegesFromDefaultPrivileges(
 	// The privileges for the object are the union of the default privileges
 	// defined for the object for the object creator and the default privileges
 	// defined for all roles.
-	_ = d.ForEachDefaultPrivilegeForRole(func(defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error {
-		for _, user := range GetUserPrivilegesForObject(defaultPrivilegesForRole, targetObject) {
+	defaultPrivilegesForAllRoles, found := d.GetDefaultPrivilegesForRole(descpb.DefaultPrivilegesRole{ForAllRoles: true})
+	if found {
+		for _, user := range GetUserPrivilegesForObject(*defaultPrivilegesForAllRoles, targetObject) {
 			newPrivs.Grant(
 				user.UserProto.Decode(),
 				privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
 			)
 		}
-		return nil
-	})
+	}
 	newPrivs.SetOwner(user)
 	newPrivs.Version = descpb.Version21_2
 
