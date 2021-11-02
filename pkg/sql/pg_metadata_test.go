@@ -123,6 +123,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/lib/pq/oid"
 )
@@ -678,7 +679,7 @@ type outputFile struct {
 // appendString calls WriteString and panics on error.
 func (o outputFile) appendString(s string) {
 	if _, err := o.f.WriteString(s); err != nil {
-		panic(fmt.Errorf("error while writing string: %s: %v", s, err))
+		panic(errors.Wrapf(err, "error while writing string: %s", s))
 	}
 }
 
@@ -703,7 +704,7 @@ func rewriteFile(fileName string, f func(*os.File, outputFile)) {
 
 	updateFile(tmpName, fileName, func(input *os.File, output outputFile) {
 		if _, err := io.Copy(output.f, input); err != nil {
-			panic(fmt.Errorf("problem at rewriting file %s into %s: %v", tmpName, fileName, err))
+			panic(errors.Wrapf(err, "problem at rewriting file %s into %s", tmpName, fileName))
 		}
 	})
 }
@@ -711,13 +712,13 @@ func rewriteFile(fileName string, f func(*os.File, outputFile)) {
 func updateFile(inputFileName, outputFileName string, f func(input *os.File, output outputFile)) {
 	input, err := os.Open(inputFileName)
 	if err != nil {
-		panic(fmt.Errorf("error opening file %s: %v", inputFileName, err))
+		panic(errors.Wrapf(err, "error opening file %s", inputFileName))
 	}
 	defer dClose(input)
 
 	output, err := os.OpenFile(outputFileName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
-		panic(fmt.Errorf("error opening file %s: %v", outputFileName, err))
+		panic(errors.Wrapf(err, "error opening file %s", outputFileName))
 	}
 	defer dClose(output)
 
@@ -895,7 +896,7 @@ func (scf schemaCodeFixer) getTableDefinitionsText(unimplementedTables PGMetadat
 	maxLength := 0
 	f, err := os.Open(fileName)
 	if err != nil {
-		panic(fmt.Errorf("could not open file %s: %v", fileName, err))
+		panic(errors.Wrapf(err, "could not open file %s", fileName))
 	}
 	defer dClose(f)
 	reader := bufio.NewScanner(f)

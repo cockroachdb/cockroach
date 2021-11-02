@@ -432,7 +432,7 @@ func (tc *testConfig) checkAPIs(fd *FuncDepSet, tr testRelation) error {
 			to:     closure,
 			strict: true,
 		}); err != nil {
-			return fmt.Errorf("ComputeClosure%s incorrectly returns %s: %s", cols, closure, err)
+			return errors.Wrapf(err, "ComputeClosure%s incorrectly returns %s", cols, closure)
 		}
 
 		reduced := fd.ReduceCols(cols)
@@ -441,7 +441,7 @@ func (tc *testConfig) checkAPIs(fd *FuncDepSet, tr testRelation) error {
 			to:     cols,
 			strict: true,
 		}); err != nil {
-			return fmt.Errorf("ReduceCols%s incorrectly returns %s: %s", cols, reduced, err)
+			return errors.Wrapf(err, "ReduceCols%s incorrectly returns %s", cols, reduced)
 		}
 
 		var proj FuncDepSet
@@ -449,7 +449,7 @@ func (tc *testConfig) checkAPIs(fd *FuncDepSet, tr testRelation) error {
 		proj.ProjectCols(cols)
 		// The FDs after projection should still hold on the table.
 		if err := tr.checkFDs(&proj); err != nil {
-			return fmt.Errorf("ProjectCols%s incorrectly returns %s: %s", cols, proj.String(), err)
+			return errors.Wrapf(err, "ProjectCols%s incorrectly returns %s", cols, proj.String())
 		}
 	}
 
