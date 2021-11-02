@@ -115,8 +115,8 @@ func NewUniquenessConstraintViolationError(
 ) error {
 	index, names, values, err := DecodeRowInfo(ctx, tableDesc, key, value, false)
 	if err != nil {
-		return pgerror.Newf(pgcode.UniqueViolation,
-			"duplicate key value: decoding err=%s", err)
+		return pgerror.Wrap(err, pgcode.UniqueViolation,
+			"duplicate key value got decoding error")
 	}
 
 	// Exclude implicit partitioning columns and hash sharded index columns from
@@ -156,8 +156,8 @@ func NewLockNotAvailableError(
 
 	index, colNames, values, err := DecodeRowInfo(ctx, tableDesc, key, nil, false)
 	if err != nil {
-		return pgerror.Newf(pgcode.LockNotAvailable,
-			"%s: decoding err=%s", baseMsg, err)
+		return pgerror.Wrapf(err, pgcode.LockNotAvailable,
+			"%s: got decoding error", baseMsg)
 	}
 
 	return pgerror.Newf(pgcode.LockNotAvailable,

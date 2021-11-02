@@ -200,7 +200,7 @@ func (c *Compiler) compileRules(rules RuleSetExpr) bool {
 
 func (c *Compiler) addErr(src *SourceLoc, err error) {
 	if src != nil {
-		err = fmt.Errorf("%s: %s", src, err.Error())
+		err = errors.Wrapf(err, "%s", src)
 	}
 	c.errors = append(c.errors, err)
 }

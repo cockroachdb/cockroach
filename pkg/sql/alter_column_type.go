@@ -365,7 +365,7 @@ func alterColumnTypeGeneral(
 		Name:            shadowColName,
 		Type:            toType,
 		Nullable:        col.IsNullable(),
-		DefaultExpr:     newColDefaultExpr,
+		DefaultExpr:     col.ColumnDesc().DefaultExpr,
 		UsesSequenceIds: col.ColumnDesc().UsesSequenceIds,
 		OwnsSequenceIds: col.ColumnDesc().OwnsSequenceIds,
 		ComputeExpr:     newColComputeExpr,
@@ -406,3 +406,6 @@ func alterColumnTypeGeneral(
 
 	return nil
 }
+
+var x = `se
+`

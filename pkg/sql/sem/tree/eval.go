@@ -2983,8 +2983,8 @@ func MatchLikeEscape(
 
 	like, err := optimizedLikeFunc(pattern, caseInsensitive, escapeRune)
 	if err != nil {
-		return DBoolFalse, pgerror.Newf(
-			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
+		return DBoolFalse, pgerror.Wrap(
+			err, pgcode.InvalidRegularExpression, "LIKE regexp compilation failed")
 	}
 
 	if like == nil {
@@ -3008,8 +3008,8 @@ func ConvertLikeToRegexp(
 	key := likeKey{s: pattern, caseInsensitive: caseInsensitive, escape: escape}
 	re, err := ctx.ReCache.GetRegexp(key)
 	if err != nil {
-		return nil, pgerror.Newf(
-			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
+		return nil, pgerror.Wrap(
+			err, pgcode.InvalidRegularExpression, "LIKE regexp compilation failed")
 	}
 	return re, nil
 }
@@ -3033,8 +3033,8 @@ func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum
 
 	like, err := optimizedLikeFunc(pattern, caseInsensitive, '\\')
 	if err != nil {
-		return DBoolFalse, pgerror.Newf(
-			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
+		return DBoolFalse, pgerror.Wrap(
+			err, pgcode.InvalidRegularExpression, "LIKE regexp compilation failed")
 	}
 
 	if like == nil {
