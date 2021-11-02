@@ -563,7 +563,7 @@ func renameUserFile(
 			_, _ = ex.ExecContext(ctx, `ROLLBACK`, nil)
 		}
 	}()
-
+	//lint:ignore SA1019 DriverConn doesn't support go 1.8 API
 	_, err = stmt.Exec([]driver.Value{newFilename, oldFilename})
 	if err != nil {
 		return err
@@ -652,6 +652,7 @@ func uploadUserFile(
 		if n > 0 {
 			// TODO(adityamaru): Switch to StmtExecContext once the copyin driver
 			// supports it.
+			//lint:ignore SA1019 DriverConn doesn't support go 1.8 API
 			_, err = stmt.Exec([]driver.Value{string(send[:n])})
 			if err != nil {
 				return "", err
