@@ -3295,6 +3295,14 @@ type InternalExecutor interface {
 	) (Datums, error)
 }
 
+// ExecConfigAccessor is a limited interface to access ExecutorConfig's states.
+// It is defined independently to prevent a circular dependency on sql, tree and sqlbase.
+type ExecConfigAccessor interface {
+
+	// JobRegistry returns jobs.Registry from ExecutorConfig
+	JobRegistry() interface{}
+}
+
 // PrivilegedAccessor gives access to certain queries that would otherwise
 // require someone with RootUser access to query a given data source.
 // It is defined independently to prevent a circular dependency on sql, tree and sqlbase.
@@ -3484,6 +3492,7 @@ type EvalContext struct {
 	ClusterName string
 	NodeID      *base.SQLIDContainer
 	Codec       keys.SQLCodec
+	Username    func() security.SQLUsername
 
 	// Locality contains the location of the current node as a set of user-defined
 	// key/value pairs, ordered from most inclusive to least inclusive. If there
@@ -3540,6 +3549,8 @@ type EvalContext struct {
 	// Note that the executor will be "session-bound" - it will inherit session
 	// variables from a parent session.
 	InternalExecutor InternalExecutor
+
+	ExecConfigAccessor ExecConfigAccessor
 
 	Planner EvalPlanner
 

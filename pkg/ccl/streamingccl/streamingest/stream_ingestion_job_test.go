@@ -73,7 +73,7 @@ SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'
 	log.TestingClearServerIdentifiers()
 
 	// Start the destination server.
-	hDest, cleanupDest := streamingtest.NewReplicationHelper(t)
+	hDest, cleanupDest := streamingtest.NewReplicationHelper(t, base.TestServerArgs{})
 	defer cleanupDest()
 	// destSQL refers to the system tenant as that's the one that's running the
 	// job.
