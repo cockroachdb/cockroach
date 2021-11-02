@@ -351,7 +351,7 @@ hosts file.
 				if listDetails {
 					c.PrintDetails()
 				} else {
-					fmt.Fprintf(tw, "%s:\t%s\t%d", c.Name, c.Clouds(), len(c.VMs))
+					fmt.Fprintf(tw, "%s\t%s\t%d", c.Name, c.Clouds(), len(c.VMs))
 					if !c.IsLocal() {
 						fmt.Fprintf(tw, "\t(%s)", c.LifetimeRemaining().Round(time.Second))
 					} else {
