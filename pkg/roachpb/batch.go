@@ -133,6 +133,13 @@ func (ba *BatchRequest) IsLeaseRequest() bool {
 	return ok
 }
 
+// AppliesTimestampCache returns whether the command is a write that applies the
+// timestamp cache (and closed timestamp), possibly pushing its write timestamp
+// into the future to avoid re-writing history.
+func (ba *BatchRequest) AppliesTimestampCache() bool {
+	return ba.hasFlag(appliesTSCache)
+}
+
 // IsAdmin returns true iff the BatchRequest contains an admin request.
 func (ba *BatchRequest) IsAdmin() bool {
 	return ba.hasFlag(isAdmin)

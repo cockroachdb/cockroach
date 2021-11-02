@@ -475,7 +475,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		b.p.registerProposalLocked(p)
 
 		// Exit the tracker.
-		if !reproposal && p.Request.IsIntentWrite() {
+		if !reproposal && p.Request.AppliesTimestampCache() {
 			// Sanity check that the request is tracked by the evaluation tracker at
 			// this point. It's supposed to be tracked until the
 			// doneIfNotMovedLocked() call below.
@@ -671,7 +671,8 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	// evaluating (instead, assignedClosedTimestamp was supposed to have bumped
 	// the write timestamp of any request the began evaluating after it was
 	// set).
-	if p.Request.WriteTimestamp().Less(b.assignedClosedTimestamp) && p.Request.IsIntentWrite() {
+	if p.Request.WriteTimestamp().Less(b.assignedClosedTimestamp) &&
+		p.Request.AppliesTimestampCache() {
 		log.Fatalf(ctx, "%v", errorutil.UnexpectedWithIssueErrorf(72428,
 			"attempting to propose command writing below closed timestamp. "+
 				"wts: %s < assigned closed: %s; ba: %s; lease: %s.",
