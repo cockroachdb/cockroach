@@ -462,6 +462,7 @@ func TestLint(t *testing.T) {
 					":!util/log/tracebacks.go",
 					":!util/sdnotify/sdnotify_unix.go",
 					":!util/grpcutil", // GRPC_GO_* variables
+					":!roachprod",     // roachprod requires AWS environment variables
 				},
 			},
 		} {
@@ -803,6 +804,7 @@ func TestLint(t *testing.T) {
 			":!*_test.go",
 			":!cli/debug_synctest.go",
 			":!cmd/**",
+			":!roachprod", // TODO: switch to contextutil
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1516,6 +1518,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroach/pkg/cmd/`),
 			stream.GrepNot(`cockroach/pkg/testutils/lint: log$`),
 			stream.GrepNot(`cockroach/pkg/util/sysutil: syscall$`),
+			stream.GrepNot(`cockroach/pkg/roachprod/install: syscall$`), // TODO: switch to sysutil
 			stream.GrepNot(`cockroach/pkg/util/log: github\.com/pkg/errors$`),
 			stream.GrepNot(`cockroach/pkg/(base|release|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),

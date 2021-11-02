@@ -3,10 +3,10 @@
 set -euo pipefail
 
 EXISTING_GO_GENERATE_COMMENTS="
-pkg/cmd/roachprod/vm/aws/config.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg aws -o embedded.go config.json old.json
-pkg/cmd/roachprod/vm/aws/config.go://go:generate gofmt -s -w embedded.go
-pkg/cmd/roachprod/vm/aws/config.go://go:generate goimports -w embedded.go
-pkg/cmd/roachprod/vm/aws/config.go://go:generate terraformgen -o terraform/main.tf
+pkg/roachprod/vm/aws/config.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg aws -o embedded.go config.json old.json
+pkg/roachprod/vm/aws/config.go://go:generate gofmt -s -w embedded.go
+pkg/roachprod/vm/aws/config.go://go:generate goimports -w embedded.go
+pkg/roachprod/vm/aws/config.go://go:generate terraformgen -o terraform/main.tf
 pkg/cmd/roachtest/prometheus/prometheus.go://go:generate mockgen -package=prometheus -destination=mock_generated.go -source=prometheus.go . Cluster
 pkg/cmd/roachtest/tests/drt.go://go:generate mockgen -source drt.go -package tests -destination drt_generated.go
 pkg/kv/kvclient/kvcoord/transport.go://go:generate mockgen -package=kvcoord -destination=mocks_generated.go . Transport
