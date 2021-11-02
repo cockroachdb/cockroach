@@ -73,6 +73,11 @@ func (m *CSVWriterSpec) User() security.SQLUsername {
 }
 
 // User accesses the user field.
+func (m *ParquetWriterSpec) User() security.SQLUsername {
+	return m.UserProto.Decode()
+}
+
+// User accesses the user field.
 func (m *ReadImportDataSpec) User() security.SQLUsername {
 	return m.UserProto.Decode()
 }

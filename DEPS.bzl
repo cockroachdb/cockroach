@@ -1687,6 +1687,14 @@ def go_deps():
         version = "v1.11.3",
     )
     go_repository(
+        name = "com_github_fraugster_parquet_go",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/fraugster/parquet-go",
+        sum = "h1:1VjhmRJTlHR2vM3qXiPjsYbTYEtwIxmQZZ7AvVKAcQQ=",
+        version = "v0.4.0",
+    )
+
+    go_repository(
         name = "com_github_fsnotify_fsnotify",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/fsnotify/fsnotify",
