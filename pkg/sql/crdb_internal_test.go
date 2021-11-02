@@ -219,10 +219,11 @@ CREATE TABLE t.test (k INT);
 		t.Fatal(err)
 	}
 	colDef := alterCmd.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
-	col, _, _, err := tabledesc.MakeColumnDefDescs(ctx, colDef, nil, nil)
+	cdd, err := tabledesc.MakeColumnDefDescs(ctx, colDef, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	col := cdd.ColumnDescriptor
 	col.ID = tableDesc.NextColumnID
 	tableDesc.NextColumnID++
 	tableDesc.Families[0].ColumnNames = append(tableDesc.Families[0].ColumnNames, col.Name)
