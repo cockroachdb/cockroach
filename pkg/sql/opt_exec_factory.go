@@ -250,7 +250,7 @@ func constructSimpleProjectForPlanNode(
 	var inputCols colinfo.ResultColumns
 	if colNames == nil {
 		// We will need the names of the input columns.
-		inputCols = planColumns(n.(planNode))
+		inputCols = planColumns(n)
 	}
 
 	var rb renderBuilder
