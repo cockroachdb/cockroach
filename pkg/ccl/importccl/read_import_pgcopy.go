@@ -333,9 +333,11 @@ func (p *pgCopyConsumer) FillDatums(
 			conv.Datums[i], err = rowenc.ParseDatumStringAs(conv.VisibleColTypes[i], *s, conv.EvalCtx)
 			if err != nil {
 				col := conv.VisibleCols[i]
-				return newImportRowError(fmt.Errorf(
-					"encountered error %s when attempting to parse %q as %s",
-					err.Error(), col.GetName(), col.GetType().SQLString()), data.String(), rowNum)
+				return newImportRowError(errors.Wrapf(
+					err,
+					"encountered error when attempting to parse %q as %s",
+					col.GetName(), col.GetType().SQLString(),
+				), data.String(), rowNum)
 			}
 		}
 	}
