@@ -79,21 +79,8 @@ func ClearRange(
 	// txns. Otherwise, txn recovery would fail to find these intents and
 	// consider the txn incomplete, uncommitting it and its writes (even those
 	// outside of the cleared range).
-	//
-	// We return 1000 at a time, or 1 MB. The intent resolver currently
-	// processes intents in batches of 100, so this gives it a few to chew on.
-	//
-	// NOTE: This only takes into account separated intents, which are currently
-	// not enabled by default. For interleaved intents we would have to do full
-	// range scans, which would be too expensive. We could mitigate this by
-	// relying on statistics to skip scans when no intents are known, but due
-	// to #60585 we are often likely to encounter intents. See discussion in:
-	// https://github.com/cockroachdb/cockroach/pull/61850
-	var (
-		maxIntents  int64 = 1000
-		intentBytes int64 = 1e6
-	)
-	intents, err := storage.ScanSeparatedIntents(readWriter, from, to, maxIntents, intentBytes)
+	maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+	intents, err := storage.ScanIntents(ctx, readWriter, from, to, maxIntents, 0)
 	if err != nil {
 		return result.Result{}, err
 	} else if len(intents) > 0 {
