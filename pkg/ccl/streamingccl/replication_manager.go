@@ -40,7 +40,7 @@ func (r replicationStreamManagerImpl) StartReplicationStream(
 	evalCtx *tree.EvalContext, txn *kv.Txn, tenantID uint64,
 ) (streaming.StreamID, error) {
 	if StartReplicationStreamHook == nil {
-		return streaming.InvalidStreamID, errors.New("InitStreamHook is not registered")
+		return streaming.InvalidStreamID, errors.New("StartReplicationStreamHook is not registered")
 	}
 	return StartReplicationStreamHook(evalCtx, txn, tenantID)
 }

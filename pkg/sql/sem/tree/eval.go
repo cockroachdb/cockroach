@@ -3159,6 +3159,9 @@ type EvalPlanner interface {
 	EvalDatabase
 	TypeResolver
 
+	// ExecutorConfig returns *ExecutorConfig
+	ExecutorConfig() interface{}
+
 	// GetImmutableTableInterfaceByID returns an interface{} with
 	// catalog.TableDescriptor to avoid a circular dependency.
 	GetImmutableTableInterfaceByID(ctx context.Context, id int) (interface{}, error)
@@ -3330,14 +3333,6 @@ type ClientNoticeSender interface {
 	// BufferClientNotice buffers the notice to send to the client.
 	// This is flushed before the connection is closed.
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
-}
-
-// ExecConfigAccessor is a limited interface to access ExecutorConfig's states.
-// It is defined independently to prevent a circular dependency on sql, tree and sqlbase.
-type ExecConfigAccessor interface {
-
-	// JobRegistry returns jobs.Registry from ExecutorConfig
-	JobRegistry() interface{}
 }
 
 // PrivilegedAccessor gives access to certain queries that would otherwise
@@ -3578,8 +3573,6 @@ type EvalContext struct {
 
 	// Context holds the context in which the expression is evaluated.
 	Context context.Context
-
-	ExecConfigAccessor ExecConfigAccessor
 
 	Planner EvalPlanner
 
