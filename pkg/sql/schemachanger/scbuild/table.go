@@ -108,17 +108,19 @@ func (b *buildContext) alterTableAddColumn(
 	if d.Unique.IsUnique {
 		panic(&notImplementedError{n: t.ColumnDef, detail: "contains unique constraint"})
 	}
-	col, idx, defaultExpr, err := tabledesc.MakeColumnDefDescs(ctx, d, semaCtx(b), evalCtx(ctx, b))
+	cdd, err := tabledesc.MakeColumnDefDescs(ctx, d, semaCtx(b), evalCtx(ctx, b))
 	onErrPanic(err)
 
+	col := cdd.ColumnDescriptor
 	colID := b.nextColumnID(table)
 	col.ID = colID
 
-	// If the new column has a DEFAULT expression that uses a sequence, add
-	// references between its descriptor and this column descriptor.
-	if d.HasDefaultExpr() {
-		b.maybeAddSequenceReferenceDependencies(ctx, table.GetID(), col, defaultExpr)
-	}
+	// If the new column has a DEFAULT or ON UPDATE expression that uses a
+	// sequence, add references between its descriptor and this column descriptor.
+	_ = cdd.ForEachTypedExpr(func(expr tree.TypedExpr) error {
+		b.maybeAddSequenceReferenceDependencies(ctx, table.GetID(), col, expr)
+		return nil
+	})
 
 	b.validateColumnName(table, d, col, t.IfNotExists)
 
@@ -179,7 +181,7 @@ func (b *buildContext) alterTableAddColumn(
 	})
 	newPrimaryIdxID := b.addOrUpdatePrimaryIndexTargetsForAddColumn(table, colID, col.Name)
 
-	if idx != nil {
+	if idx := cdd.PrimaryKeyOrUniqueIndexDescriptor; idx != nil {
 		idxID := b.nextIndexID(table)
 		idx.ID = idxID
 		b.addNode(scpb.Target_ADD, &scpb.SecondaryIndex{
