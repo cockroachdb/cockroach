@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
@@ -24,6 +25,7 @@ type Option interface {
 }
 
 type config struct {
+	scanConfig
 	retryOptions         retry.Options
 	onInitialScanDone    OnInitialScanDone
 	withInitialScan      bool
@@ -32,6 +34,23 @@ type config struct {
 	onUnrecoverableError OnUnrecoverableError
 	onCheckpoint         OnCheckpoint
 	onFrontierAdvance    OnFrontierAdvance
+}
+
+type scanConfig struct {
+	// scanParallelism controls the number of concurrent scan requests
+	// that can be issued.  If unspecified, only 1 scan request at a time is issued.
+	scanParallelism func() int
+
+	// targetScanBytes requests that many bytes to be returned per scan request.
+	// adjusting this setting should almost always be used together with the setting
+	// to configure memory monitor.
+	targetScanBytes int64
+
+	// mon is the memory monitor to while scanning.
+	mon *mon.BytesMonitor
+
+	// callback to invoke when initial scan of a span completed.
+	onSpanDone OnSpanScanCompleted
 }
 
 type optionFunc func(*config)
@@ -128,4 +147,43 @@ func initConfig(c *config, options []Option) {
 	for _, o := range options {
 		o.set(c)
 	}
+
+	if c.targetScanBytes == 0 {
+		c.targetScanBytes = 1 << 19 // 512 KiB
+	}
+}
+
+// WithInitialScanParallelismFn configures rangefeed to issue up to specified number
+// of concurrent initial scan requests.
+func WithInitialScanParallelismFn(parallelismFn func() int) Option {
+	return optionFunc(func(c *config) {
+		c.scanParallelism = parallelismFn
+	})
+}
+
+// WithTargetScanBytes configures rangefeed to request specified number of bytes per scan request.
+// This option should be used together with the option to configure memory monitor.
+func WithTargetScanBytes(target int64) Option {
+	return optionFunc(func(c *config) {
+		c.targetScanBytes = target
+	})
+}
+
+// WithMemoryMonitor configures rangefeed to use memory monitor when issuing scan requests.
+func WithMemoryMonitor(mon *mon.BytesMonitor) Option {
+	return optionFunc(func(c *config) {
+		c.mon = mon
+	})
+}
+
+// OnSpanScanCompleted is called when the rangefeed initial scan completes scanning
+// the span.
+type OnSpanScanCompleted func(sp roachpb.Span)
+
+// WithOnSpanScanCompleted sets up a callback which is invoked when a span (or part of the span)
+// have been completed when performing an initial scan.
+func WithOnSpanScanCompleted(fn OnSpanScanCompleted) Option {
+	return optionFunc(func(c *config) {
+		c.onSpanDone = fn
+	})
 }

@@ -249,7 +249,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 	rf, err := s.rangeFeedFactory.RangeFeed(
 		ctx,
 		"sql-watcher-descriptor-rangefeed",
-		descriptorTableSpan,
+		[]roachpb.Span{descriptorTableSpan},
 		startTS,
 		handleEvent,
 		rangefeed.WithDiff(),
@@ -306,7 +306,7 @@ func (s *SQLWatcher) watchForZoneConfigUpdates(
 	rf, err := s.rangeFeedFactory.RangeFeed(
 		ctx,
 		"sql-watcher-zones-rangefeed",
-		zoneTableSpan,
+		[]roachpb.Span{zoneTableSpan},
 		startTS,
 		handleEvent,
 		rangefeed.WithOnFrontierAdvance(func(ctx context.Context, resolvedTS hlc.Timestamp) {

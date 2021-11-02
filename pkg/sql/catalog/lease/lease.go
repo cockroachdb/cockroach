@@ -1128,7 +1128,7 @@ func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- *desc
 	// Also note that the range feed automatically shuts down when the server
 	// shuts down, so we don't need to call Close() ourselves.
 	_, _ = m.rangeFeedFactory.RangeFeed(
-		ctx, "lease", descriptorTableSpan, hlc.Timestamp{}, handleEvent,
+		ctx, "lease", []roachpb.Span{descriptorTableSpan}, hlc.Timestamp{}, handleEvent,
 	)
 }
 

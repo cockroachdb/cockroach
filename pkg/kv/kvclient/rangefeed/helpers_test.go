@@ -19,7 +19,12 @@ var NewFactoryWithDB = newFactory
 // KVDB forwards the definition of kvDB to tests.
 type KVDB = kvDB
 
-// SetTargetScanBytes is exposed for testing.
-func (dbc *dbAdapter) SetTargetScanBytes(limit int64) {
-	dbc.targetScanBytes = limit
+// ScanConfig forwards the definition of scanConfig to tests
+type ScanConfig = scanConfig
+
+// ScanConfigFromOptions returns scan configuration given the list of options.
+func ScanConfigFromOptions(opts ...Option) ScanConfig {
+	var c config
+	initConfig(&c, opts)
+	return c.scanConfig
 }
