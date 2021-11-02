@@ -741,6 +741,9 @@ func (t *tenantStatusServer) IndexUsageStatistics(
 		return nil, err
 	}
 
+	// Append last reset time.
+	resp.LastReset = t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().GetLastReset()
+
 	return resp, nil
 }
 
