@@ -37,17 +37,17 @@ func (m *MockkvDB) EXPECT() *MockkvDBMockRecorder {
 }
 
 // RangeFeed mocks base method.
-func (m *MockkvDB) RangeFeed(ctx context.Context, span roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- *roachpb.RangeFeedEvent) error {
+func (m *MockkvDB) RangeFeed(ctx context.Context, spans []roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- *roachpb.RangeFeedEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RangeFeed", ctx, span, startFrom, withDiff, eventC)
+	ret := m.ctrl.Call(m, "RangeFeed", ctx, spans, startFrom, withDiff, eventC)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RangeFeed indicates an expected call of RangeFeed.
-func (mr *MockkvDBMockRecorder) RangeFeed(ctx, span, startFrom, withDiff, eventC interface{}) *gomock.Call {
+func (mr *MockkvDBMockRecorder) RangeFeed(ctx, spans, startFrom, withDiff, eventC interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeFeed", reflect.TypeOf((*MockkvDB)(nil).RangeFeed), ctx, span, startFrom, withDiff, eventC)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeFeed", reflect.TypeOf((*MockkvDB)(nil).RangeFeed), ctx, spans, startFrom, withDiff, eventC)
 }
 
 // Scan mocks base method.

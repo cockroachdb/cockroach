@@ -61,12 +61,12 @@ func newDBAdapter(db *kv.DB) (*dbAdapter, error) {
 // RangeFeed is part of the kvDB interface.
 func (dbc *dbAdapter) RangeFeed(
 	ctx context.Context,
-	span roachpb.Span,
+	spans []roachpb.Span,
 	startFrom hlc.Timestamp,
 	withDiff bool,
 	eventC chan<- *roachpb.RangeFeedEvent,
 ) error {
-	return dbc.distSender.RangeFeed(ctx, []roachpb.Span{span}, startFrom, withDiff, eventC)
+	return dbc.distSender.RangeFeed(ctx, spans, startFrom, withDiff, eventC)
 }
 
 // Scan is part of the kvDB interface.

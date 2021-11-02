@@ -32,7 +32,7 @@ import (
 type mockClient struct {
 	rangefeed func(
 		ctx context.Context,
-		span roachpb.Span,
+		spans []roachpb.Span,
 		startFrom hlc.Timestamp,
 		withDiff bool,
 		eventC chan<- *roachpb.RangeFeedEvent,
@@ -48,12 +48,12 @@ type mockClient struct {
 
 func (m *mockClient) RangeFeed(
 	ctx context.Context,
-	span roachpb.Span,
+	spans []roachpb.Span,
 	startFrom hlc.Timestamp,
 	withDiff bool,
 	eventC chan<- *roachpb.RangeFeedEvent,
 ) error {
-	return m.rangefeed(ctx, span, startFrom, withDiff, eventC)
+	return m.rangefeed(ctx, spans, startFrom, withDiff, eventC)
 }
 
 func (m *mockClient) Scan(
@@ -106,7 +106,7 @@ func TestRangeFeedMock(t *testing.T) {
 		require.NotNil(t, f)
 		rows := make(chan *roachpb.RangeFeedValue)
 
-		r, err := f.RangeFeed(ctx, "foo", sp, ts, func(ctx context.Context, value *roachpb.RangeFeedValue) {
+		r, err := f.RangeFeed(ctx, "foo", []roachpb.Span{sp}, ts, func(ctx context.Context, value *roachpb.RangeFeedValue) {
 			rows <- value
 		}, rangefeed.WithInitialScan(func(ctx context.Context) {
 			close(rows)
@@ -155,7 +155,7 @@ func TestRangeFeedMock(t *testing.T) {
 				return nil
 			},
 			rangefeed: func(
-				ctx context.Context, span roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- *roachpb.RangeFeedEvent,
+				ctx context.Context, spans []roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- *roachpb.RangeFeedEvent,
 			) error {
 				assert.False(t, withDiff) // it was not set
 				sendEvent := func(ts hlc.Timestamp) {
@@ -222,7 +222,7 @@ func TestRangeFeedMock(t *testing.T) {
 		}
 		f := rangefeed.NewFactoryWithDB(stopper, &mc, nil /* knobs */)
 		rows := make(chan *roachpb.RangeFeedValue)
-		r, err := f.RangeFeed(ctx, "foo", sp, initialTS, func(
+		r, err := f.RangeFeed(ctx, "foo", []roachpb.Span{sp}, initialTS, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
 		) {
 			rows <- value
@@ -256,7 +256,7 @@ func TestRangeFeedMock(t *testing.T) {
 				return nil
 			},
 			rangefeed: func(
-				ctx context.Context, span roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- *roachpb.RangeFeedEvent,
+				ctx context.Context, spans []roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- *roachpb.RangeFeedEvent,
 			) error {
 				assert.True(t, withDiff)
 				eventC <- &roachpb.RangeFeedEvent{
@@ -270,7 +270,7 @@ func TestRangeFeedMock(t *testing.T) {
 		}
 		f := rangefeed.NewFactoryWithDB(stopper, &mc, nil /* knobs */)
 		rows := make(chan *roachpb.RangeFeedValue)
-		r, err := f.RangeFeed(ctx, "foo", sp, hlc.Timestamp{}, func(
+		r, err := f.RangeFeed(ctx, "foo", []roachpb.Span{sp}, hlc.Timestamp{}, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
 		) {
 			rows <- value
@@ -288,7 +288,7 @@ func TestRangeFeedMock(t *testing.T) {
 		}
 		stopper.Stop(ctx)
 		f := rangefeed.NewFactoryWithDB(stopper, &mockClient{}, nil /* knobs */)
-		r, err := f.RangeFeed(ctx, "foo", sp, hlc.Timestamp{}, func(
+		r, err := f.RangeFeed(ctx, "foo", []roachpb.Span{sp}, hlc.Timestamp{}, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
 		) {
 		})
@@ -310,7 +310,7 @@ func TestRangeFeedMock(t *testing.T) {
 			},
 		}, nil /* knobs */)
 		done := make(chan struct{})
-		r, err := f.RangeFeed(ctx, "foo", sp, hlc.Timestamp{}, func(
+		r, err := f.RangeFeed(ctx, "foo", []roachpb.Span{sp}, hlc.Timestamp{}, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
 		) {
 		},
@@ -351,14 +351,14 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 		Times(3).
 		Return(errors.New("rangefeed failed"))
 	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(context.Context, roachpb.Span, hlc.Timestamp, bool, chan<- *roachpb.RangeFeedEvent) {
+		Do(func(context.Context, []roachpb.Span, hlc.Timestamp, bool, chan<- *roachpb.RangeFeedEvent) {
 			cancel()
 		}).
 		Return(nil)
 
 	f := rangefeed.NewFactoryWithDB(stopper, db, nil /* knobs */)
 	r, err := f.RangeFeed(ctx, "foo",
-		roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
+		[]roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}},
 		hlc.Timestamp{},
 		func(ctx context.Context, value *roachpb.RangeFeedValue) {},
 		rangefeed.WithInitialScan(func(ctx context.Context) {}),

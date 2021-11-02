@@ -12,6 +12,7 @@ package rangefeed
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -43,7 +44,7 @@ type kvDB interface {
 	// It encapsulates the RangeFeed method on roachpb.Internal.
 	RangeFeed(
 		ctx context.Context,
-		span roachpb.Span,
+		spans []roachpb.Span,
 		startFrom hlc.Timestamp,
 		withDiff bool,
 		eventC chan<- *roachpb.RangeFeedEvent,
@@ -107,13 +108,13 @@ func newFactory(stopper *stop.Stopper, client kvDB, knobs *TestingKnobs) *Factor
 func (f *Factory) RangeFeed(
 	ctx context.Context,
 	name string,
-	sp roachpb.Span,
+	spans []roachpb.Span,
 	initialTimestamp hlc.Timestamp,
 	onValue OnValue,
 	options ...Option,
 ) (_ *RangeFeed, err error) {
-	r := f.New(name, sp, initialTimestamp, onValue, options...)
-	if err := r.Start(ctx); err != nil {
+	r := f.New(name, initialTimestamp, onValue, options...)
+	if err := r.Start(ctx, spans); err != nil {
 		return nil, err
 	}
 	return r, nil
@@ -121,7 +122,7 @@ func (f *Factory) RangeFeed(
 
 // New constructs a new RangeFeed (without running it).
 func (f *Factory) New(
-	name string, sp roachpb.Span, initialTimestamp hlc.Timestamp, onValue OnValue, options ...Option,
+	name string, initialTimestamp hlc.Timestamp, onValue OnValue, options ...Option,
 ) *RangeFeed {
 	r := RangeFeed{
 		client:  f.client,
@@ -130,7 +131,6 @@ func (f *Factory) New(
 
 		initialTimestamp: initialTimestamp,
 		name:             name,
-		span:             sp,
 		onValue:          onValue,
 
 		stopped: make(chan struct{}),
@@ -151,8 +151,9 @@ type RangeFeed struct {
 	knobs   *TestingKnobs
 
 	initialTimestamp hlc.Timestamp
+	spans            []roachpb.Span
+	spansDebugStr    string // Debug string describing spans
 
-	span    roachpb.Span
 	onValue OnValue
 
 	closeOnce sync.Once
@@ -165,7 +166,12 @@ type RangeFeed struct {
 // Start kicks off the rangefeed in an async task, it can only be invoked once.
 // All the installed callbacks (OnValue, OnCheckpoint, OnFrontierAdvance,
 // OnInitialScanDone) are called in said async task in a single thread.
-func (f *RangeFeed) Start(ctx context.Context) error {
+func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
+	if len(spans) == 0 {
+		return errors.AssertionFailedf("expected at least 1 span, got none")
+	}
+	f.spans = spans
+
 	if !atomic.CompareAndSwapInt32(&f.started, 0, 1) {
 		return errors.AssertionFailedf("rangefeed already started")
 	}
@@ -173,16 +179,27 @@ func (f *RangeFeed) Start(ctx context.Context) error {
 	// Maintain a frontier in order to resume at a reasonable timestamp.
 	// TODO(ajwerner): Consider exposing the frontier through a RangeFeed method.
 	// Doing so would require some synchronization.
-	frontier, err := span.MakeFrontier(f.span)
+	frontier, err := span.MakeFrontier(spans...)
 	if err != nil {
 		return err
 	}
-	if _, err := frontier.Forward(f.span, f.initialTimestamp); err != nil {
-		return err
+	for _, sp := range spans {
+		if _, err := frontier.Forward(sp, f.initialTimestamp); err != nil {
+			return err
+		}
 	}
+
 	runWithFrontier := func(ctx context.Context) {
 		f.run(ctx, frontier)
 	}
+
+	f.spansDebugStr = func() string {
+		n := len(spans)
+		if n == 1 {
+			return spans[0].String()
+		}
+		return fmt.Sprintf("[%d spans  %s ... %s", n, spans[0], spans[n-1])
+	}()
 
 	ctx = logtags.AddTag(ctx, "rangefeed", f.name)
 	ctx, f.cancel = f.stopper.WithCancelOnQuiesce(ctx)
@@ -239,7 +256,10 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 		// should be called in order to allow the client to kill the process or
 		// something like that.
 		ts := frontier.Frontier()
-		log.VEventf(ctx, 1, "starting rangefeed from %v on %v", ts, f.span)
+		if log.V(1) {
+			log.Eventf(ctx, "starting rangefeed from %v on %v", ts, f.spansDebugStr)
+		}
+
 		start := timeutil.Now()
 
 		// Note that the below channel send will not block forever because
@@ -247,7 +267,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 		// because processEvents is guaranteed to consume the error before
 		// returning.
 		if err := f.stopper.RunAsyncTask(ctx, "rangefeed", func(ctx context.Context) {
-			errCh <- f.client.RangeFeed(ctx, f.span, ts, f.withDiff, eventCh)
+			errCh <- f.client.RangeFeed(ctx, f.spans, ts, f.withDiff, eventCh)
 		}); err != nil {
 			log.VEventf(ctx, 1, "exiting rangefeed due to stopper")
 			return
@@ -265,7 +285,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 
 		ranFor := timeutil.Since(start)
 		log.VEventf(ctx, 1, "restarting rangefeed for %v after %v",
-			log.Safe(f.span), ranFor)
+			f.spansDebugStr, ranFor)
 		if f.knobs != nil && f.knobs.OnRangefeedRestart != nil {
 			f.knobs.OnRangefeedRestart()
 		}
@@ -313,24 +333,29 @@ func (f *RangeFeed) maybeRunInitialScan(
 		// retained so we have to assume that the callback may retain the value.
 		f.onValue(ctx, &v)
 	}
-	for r.Next() {
-		if err := f.client.Scan(ctx, f.span, f.initialTimestamp, scan); err != nil {
-			if f.onInitialScanError != nil {
-				if shouldStop := f.onInitialScanError(ctx, err); shouldStop {
-					log.VEventf(ctx, 1, "stopping due to error: %v", err)
-					return true
+	for _, span := range f.spans {
+		// TODO(yevgeniy): Support parallel scans.
+		r.Reset()
+		for r.Next() {
+			if err := f.client.Scan(ctx, span, f.initialTimestamp, scan); err != nil {
+				if f.onInitialScanError != nil {
+					if shouldStop := f.onInitialScanError(ctx, err); shouldStop {
+						log.VEventf(ctx, 1, "stopping due to error: %v", err)
+						return true
+					}
 				}
+				if n.ShouldLog() {
+					log.Warningf(ctx, "failed to perform initial scan: %v", err)
+				}
+			} else /* err == nil */ {
+				if f.onInitialScanDone != nil {
+					f.onInitialScanDone(ctx)
+				}
+				break
 			}
-			if n.ShouldLog() {
-				log.Warningf(ctx, "failed to perform initial scan: %v", err)
-			}
-		} else /* err == nil */ {
-			if f.onInitialScanDone != nil {
-				f.onInitialScanDone(ctx)
-			}
-			break
 		}
 	}
+
 	return ctx.Err() != nil // canceled
 }
 
