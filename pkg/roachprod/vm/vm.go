@@ -234,6 +234,10 @@ type Provider interface {
 	// Providers[gce.ProviderName] != nil doesn't work because
 	// Providers[gce.ProviderName] can be a stub.
 	Active() bool
+
+	// ProjectActive returns true if the given project is currently active in the
+	// provider.
+	ProjectActive(project string) bool
 }
 
 // DeleteCluster is an optional capability for a Provider which can
