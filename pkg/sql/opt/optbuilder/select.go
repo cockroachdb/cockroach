@@ -814,7 +814,7 @@ func (b *Builder) buildWithOrdinality(inScope *scope) (outScope *scope) {
 	// See https://www.cockroachlabs.com/docs/stable/query-order.html#order-preservation
 	// for the semantics around WITH ORDINALITY and ordering.
 
-	input := inScope.expr.(memo.RelExpr)
+	input := inScope.expr
 	inScope.expr = b.factory.ConstructOrdinality(input, &memo.OrdinalityPrivate{
 		Ordering: inScope.makeOrderingChoice(),
 		ColID:    col.id,
@@ -1110,7 +1110,7 @@ func (b *Builder) buildWhere(where *tree.Where, inScope *scope) {
 
 	// Wrap the filter in a FiltersOp.
 	inScope.expr = b.factory.ConstructSelect(
-		inScope.expr.(memo.RelExpr),
+		inScope.expr,
 		memo.FiltersExpr{b.factory.ConstructFiltersItem(filter)},
 	)
 }
@@ -1168,8 +1168,8 @@ func (b *Builder) buildFromTablesRightDeep(
 
 	outScope.appendColumnsFromScope(tableScope)
 
-	left := outScope.expr.(memo.RelExpr)
-	right := tableScope.expr.(memo.RelExpr)
+	left := outScope.expr
+	right := tableScope.expr
 	outScope.expr = b.factory.ConstructInnerJoin(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
 	return outScope
 }
@@ -1220,8 +1220,8 @@ func (b *Builder) buildFromWithLateral(
 
 		outScope.appendColumnsFromScope(tableScope)
 
-		left := outScope.expr.(memo.RelExpr)
-		right := tableScope.expr.(memo.RelExpr)
+		left := outScope.expr
+		right := tableScope.expr
 		outScope.expr = b.factory.ConstructInnerJoinApply(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
 	}
 

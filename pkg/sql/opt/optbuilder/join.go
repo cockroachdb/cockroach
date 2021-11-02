@@ -126,8 +126,8 @@ func (b *Builder) buildJoin(
 			filters = memo.TrueFilter
 		}
 
-		left := leftScope.expr.(memo.RelExpr)
-		right := rightScope.expr.(memo.RelExpr)
+		left := leftScope.expr
+		right := rightScope.expr
 		outScope.expr = b.constructJoin(
 			joinType, left, right, filters, &memo.JoinPrivate{Flags: flags}, isLateral,
 		)
@@ -403,8 +403,8 @@ func (jb *usingJoinBuilder) finishBuild() {
 
 	jb.outScope.expr = jb.b.constructJoin(
 		jb.joinType,
-		jb.leftScope.expr.(memo.RelExpr),
-		jb.rightScope.expr.(memo.RelExpr),
+		jb.leftScope.expr,
+		jb.rightScope.expr,
 		jb.filters,
 		&memo.JoinPrivate{Flags: jb.joinFlags},
 		jb.isLateral,
@@ -421,7 +421,7 @@ func (jb *usingJoinBuilder) finishBuild() {
 			}
 		}
 
-		jb.outScope.expr = jb.b.constructProject(jb.outScope.expr.(memo.RelExpr), jb.outScope.cols)
+		jb.outScope.expr = jb.b.constructProject(jb.outScope.expr, jb.outScope.cols)
 	}
 }
 
