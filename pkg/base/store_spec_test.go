@@ -123,7 +123,7 @@ target_file_size=2097152`
 		{"path=/mnt/hda1,size=.009999", "store size (.009999) must be between 1.000000% and 100.000000%", StoreSpec{}},
 		// errors
 		{"path=/mnt/hda1,size=0", "store size (0) must be larger than 640 MiB", StoreSpec{}},
-		{"path=/mnt/hda1,size=abc", "could not parse store size (abc) strconv.ParseFloat: parsing \"\": invalid syntax", StoreSpec{}},
+		{"path=/mnt/hda1,size=abc", "could not parse store size (abc): strconv.ParseFloat: parsing \"\": invalid syntax", StoreSpec{}},
 		{"path=/mnt/hda1,size=", "no value specified for size", StoreSpec{}},
 		{"size=20GiB,path=/mnt/hda1,size=20GiB", "size field was used twice in store definition", StoreSpec{}},
 		{"size=123TB", "no path specified", StoreSpec{}},

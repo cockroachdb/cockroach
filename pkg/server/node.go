@@ -449,7 +449,7 @@ func (n *Node) start(
 	// gossip can bootstrap using the most recently persisted set of
 	// node addresses.
 	if err := n.storeCfg.Gossip.SetStorage(n.stores); err != nil {
-		return fmt.Errorf("failed to initialize the gossip interface: %s", err)
+		return errors.Wrap(err, "failed to initialize the gossip interface")
 	}
 
 	// Initialize remaining stores/engines, if any.
