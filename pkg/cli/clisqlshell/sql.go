@@ -682,7 +682,7 @@ func (c *cliState) execSyscmd(command string) (string, error) {
 	cmd.Stderr = c.iCtx.stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("error in external command: %s", err)
+		return "", errors.Wrap(err, "error in external command")
 	}
 
 	return out.String(), nil
