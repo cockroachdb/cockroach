@@ -212,9 +212,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 	defer tok.DoneIfNotMoved(ctx)
 
 	// NB: p.Request.Timestamp reflects the action of ba.SetActiveTimestamp.
-	// The IsIntentWrite condition matches the similar logic for caring
-	// about the closed timestamp cache in applyTimestampCache().
-	if p.Request.IsIntentWrite() && p.Request.WriteTimestamp().LessEq(minTS) {
+	if p.Request.AppliesTimestampCache() && p.Request.WriteTimestamp().LessEq(minTS) {
 		// The tracker wants us to forward the request timestamp, but we can't
 		// do that without re-evaluating, so give up. The error returned here
 		// will go to back to DistSender, so send something it can digest.

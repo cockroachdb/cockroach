@@ -841,7 +841,7 @@ func (r *Replica) evaluateProposal(
 		// Set the proposal's replicated result, which contains metadata and
 		// side-effects that are to be replicated to all replicas.
 		res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
-		if ba.IsIntentWrite() {
+		if ba.AppliesTimestampCache() {
 			res.Replicated.WriteTimestamp = ba.WriteTimestamp()
 		} else {
 			// For misc requests, use WriteTimestamp to propagate a clock signal. This
