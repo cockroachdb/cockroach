@@ -23,6 +23,7 @@ go_library(
         "//pkg/ccl/sqlproxyccl/throttler",
         "//pkg/roachpb:with-mocks",
         "//pkg/security/certmgr",
+        "//pkg/sql/pgwire/pgcode",
         "//pkg/util/contextutil",
         "//pkg/util/grpcutil",
         "//pkg/util/httputil",
