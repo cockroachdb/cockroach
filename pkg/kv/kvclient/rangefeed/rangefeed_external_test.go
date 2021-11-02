@@ -67,11 +67,11 @@ func TestRangeFeedIntegration(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db, nil)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
 	require.NoError(t, err)
 	rows := make(chan *roachpb.RangeFeedValue)
 	initialScanDone := make(chan struct{})
-	r, err := f.RangeFeed(ctx, "test", sp, afterB,
+	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, afterB,
 		func(ctx context.Context, value *roachpb.RangeFeedValue) {
 			select {
 			case rows <- value:
@@ -157,7 +157,7 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 	_, _, err := tc.SplitRange(mkKey("b"))
 	require.NoError(t, err)
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db, nil)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	// mu protects secondWriteTS.
@@ -179,7 +179,7 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 		spanCheckpointTimestamps[key] = ts
 	}
 	rows := make(chan *roachpb.RangeFeedValue)
-	r, err := f.RangeFeed(ctx, "test", sp, db.Clock().Now(),
+	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, db.Clock().Now(),
 		func(ctx context.Context, value *roachpb.RangeFeedValue) {
 			select {
 			case rows <- value:
@@ -272,7 +272,7 @@ func TestWithOnCheckpoint(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db, nil)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	var mu syncutil.RWMutex
@@ -309,7 +309,7 @@ func TestWithOnCheckpoint(t *testing.T) {
 	}()
 
 	rows := make(chan *roachpb.RangeFeedValue)
-	r, err := f.RangeFeed(ctx, "test", sp, db.Clock().Now(),
+	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, db.Clock().Now(),
 		func(ctx context.Context, value *roachpb.RangeFeedValue) {
 			select {
 			case rows <- value:
@@ -371,11 +371,11 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db, nil)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	rows := make(chan *roachpb.RangeFeedValue)
-	r, err := f.RangeFeed(ctx, "test", sp, db.Clock().Now(),
+	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, db.Clock().Now(),
 		func(ctx context.Context, value *roachpb.RangeFeedValue) {
 			select {
 			case rows <- value:
@@ -480,7 +480,7 @@ func TestUnrecoverableErrors(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db0, nil)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), db0, srv0.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	preGCThresholdTS := hlc.Timestamp{WallTime: 1}
@@ -488,7 +488,7 @@ func TestUnrecoverableErrors(t *testing.T) {
 		syncutil.Mutex
 		internalErr error
 	}{}
-	r, err := f.RangeFeed(ctx, "test", sp, preGCThresholdTS,
+	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, preGCThresholdTS,
 		func(context.Context, *roachpb.RangeFeedValue) {},
 		rangefeed.WithDiff(),
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {

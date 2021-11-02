@@ -447,7 +447,7 @@ func makeTenantSQLServerArgs(
 	)
 	db := kv.NewDB(baseCfg.AmbientCtx, tcsFactory, clock, stopper)
 	rangeFeedKnobs, _ := baseCfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs)
-	rangeFeedFactory, err := rangefeed.NewFactory(stopper, db, rangeFeedKnobs)
+	rangeFeedFactory, err := rangefeed.NewFactory(stopper, db, st, rangeFeedKnobs)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
