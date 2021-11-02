@@ -117,7 +117,7 @@ func (sr *SQLRunner) ExpectErrSucceedsSoon(
 	sr.succeedsWithin(t, func() error {
 		_, err := sr.DB.ExecContext(context.Background(), query, args...)
 		if !testutils.IsError(err, errRE) {
-			return errors.Newf("expected error '%s', got: %v", errRE, err)
+			return errors.AssertionFailedf("expected error '%s', got: %v", errRE, err)
 		}
 		return nil
 	})

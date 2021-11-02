@@ -58,7 +58,7 @@ func GenerateRRJar(jar string, bnf []byte) ([]byte, error) {
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("%s: %s", err, out)
+		return nil, fmt.Errorf("%w: %s", err, out)
 	}
 	return out, nil
 }
