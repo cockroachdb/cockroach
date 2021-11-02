@@ -41,7 +41,8 @@ type exportNode struct {
 	// fileNamePattern represents the file naming pattern for the
 	// export, typically to be appended to the destination URI
 	fileNamePattern string
-	csvOpts         roachpb.CSVOptions
+	csvOpts         *roachpb.CSVOptions
+	parquetOpts     *roachpb.ParquetOptions
 	chunkRows       int
 	chunkSize       int64
 	fileCompression execinfrapb.FileCompression
@@ -84,8 +85,9 @@ var exportOptionExpectValues = map[string]KVStringOptValidate{
 const exportChunkSizeDefault = int64(32 << 20) // 32 MB
 const exportChunkRowsDefault = 100000
 const exportFilePatternPart = "%part%"
-const exportFilePatternDefault = exportFilePatternPart + ".csv"
 const exportCompressionCodec = "gzip"
+const csvSuffix = "csv"
+const parquetSuffix = "parquet"
 
 // featureExportEnabled is used to enable and disable the EXPORT feature.
 var featureExportEnabled = settings.RegisterBoolSetting(
@@ -98,6 +100,8 @@ var featureExportEnabled = settings.RegisterBoolSetting(
 func (ef *execFactory) ConstructExport(
 	input exec.Node, fileName tree.TypedExpr, fileFormat string, options []exec.KVOption,
 ) (exec.Node, error) {
+	fileFormat = strings.ToLower(fileFormat)
+
 	if !featureExportEnabled.Get(&ef.planner.ExecCfg().Settings.SV) {
 		return nil, pgerror.Newf(
 			pgcode.OperatorIntervention,
@@ -118,7 +122,7 @@ func (ef *execFactory) ConstructExport(
 		return nil, errors.Errorf("EXPORT cannot be used inside a transaction")
 	}
 
-	if fileFormat != "CSV" {
+	if fileFormat != csvSuffix && fileFormat != parquetSuffix {
 		return nil, errors.Errorf("unsupported export format: %q", fileFormat)
 	}
 
@@ -152,17 +156,28 @@ func (ef *execFactory) ConstructExport(
 		return nil, err
 	}
 
-	csvOpts := roachpb.CSVOptions{}
-
-	if override, ok := optVals[exportOptionDelimiter]; ok {
-		csvOpts.Comma, err = util.GetSingleRune(override)
-		if err != nil {
-			return nil, pgerror.New(pgcode.InvalidParameterValue, "invalid delimiter")
+	var (
+		exportFilePattern string
+		csvOpts           *roachpb.CSVOptions
+		parquetOpts       *roachpb.ParquetOptions
+	)
+	switch fileFormat {
+	case csvSuffix:
+		csvOpts = &roachpb.CSVOptions{}
+		if override, ok := optVals[exportOptionDelimiter]; ok {
+			csvOpts.Comma, err = util.GetSingleRune(override)
+			if err != nil {
+				return nil, pgerror.New(pgcode.InvalidParameterValue, "invalid delimiter")
+			}
 		}
-	}
+		if override, ok := optVals[exportOptionNullAs]; ok {
+			csvOpts.NullEncoding = &override
+		}
+		exportFilePattern = exportFilePatternPart + "." + csvSuffix
 
-	if override, ok := optVals[exportOptionNullAs]; ok {
-		csvOpts.NullEncoding = &override
+	case parquetSuffix:
+		parquetOpts = &roachpb.ParquetOptions{}
+		exportFilePattern = exportFilePatternPart + "." + parquetSuffix
 	}
 
 	chunkRows := exportChunkRowsDefault
@@ -200,13 +215,13 @@ func (ef *execFactory) ConstructExport(
 	}
 
 	exportID := ef.planner.stmt.QueryID.String()
-	namePattern := fmt.Sprintf("export%s-%s", exportID, exportFilePatternDefault)
-
+	namePattern := fmt.Sprintf("export%s-%s", exportID, exportFilePattern)
 	return &exportNode{
 		source:          input.(planNode),
 		destination:     string(*destination),
 		fileNamePattern: namePattern,
 		csvOpts:         csvOpts,
+		parquetOpts:     parquetOpts,
 		chunkRows:       chunkRows,
 		chunkSize:       chunkSize,
 		fileCompression: codec,

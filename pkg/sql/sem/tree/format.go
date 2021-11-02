@@ -231,9 +231,6 @@ const (
 	// because the behavior of array_to_string() is fixed for compatibility
 	// with PostgreSQL, whereas EXPORT may evolve over time to support
 	// other things (eg. fixing #33429).
-	//
-	// TODO(mjibson): Note that this is currently not suitable for
-	// emitting arrays or tuples. See: #33429
 	FmtExport FmtFlags = FmtBareStrings | fmtRawStrings
 )
 
