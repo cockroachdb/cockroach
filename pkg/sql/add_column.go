@@ -72,10 +72,12 @@ func (p *planner) addColumnImpl(
 	}
 	d = newDef
 
-	col, idx, expr, err := tabledesc.MakeColumnDefDescs(params.ctx, d, &params.p.semaCtx, params.EvalContext())
+	cdd, err := tabledesc.MakeColumnDefDescs(params.ctx, d, &params.p.semaCtx, params.EvalContext())
 	if err != nil {
 		return err
 	}
+	col := cdd.ColumnDescriptor
+	idx := cdd.PrimaryKeyOrUniqueIndexDescriptor
 	incTelemetryForNewColumn(d, col)
 
 	// Ensure all new indexes are partitioned appropriately.
@@ -101,9 +103,9 @@ func (p *planner) addColumnImpl(
 		}
 	}
 
-	// If the new column has a DEFAULT expression that uses a sequence, add references between
-	// its descriptor and this column descriptor.
-	if d.HasDefaultExpr() {
+	// If the new column has a DEFAULT or an ON UPDATE expression that uses a
+	// sequence, add references between its descriptor and this column descriptor.
+	if err := cdd.ForEachTypedExpr(func(expr tree.TypedExpr) error {
 		changedSeqDescs, err := maybeAddSequenceDependencies(
 			params.ctx, params.ExecCfg().Settings, params.p, n.tableDesc, col, expr, nil,
 		)
@@ -117,6 +119,9 @@ func (p *planner) addColumnImpl(
 				return err
 			}
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	// We're checking to see if a user is trying add a non-nullable column without a default to a
