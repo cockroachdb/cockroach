@@ -12,7 +12,6 @@ package jobsprotectedts_test
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"testing"
 
@@ -100,7 +99,7 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 		if errors.Is(err, protectedts.ErrNotExists) {
 			return nil
 		}
-		return fmt.Errorf("waiting for %v, got %v", protectedts.ErrNotExists, err)
+		return errors.NewAssertionErrorWithWrappedErrf(err, "waiting for ErrNotExists")
 	}
 	testutils.SucceedsSoon(t, func() (err error) {
 		return s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -177,7 +176,7 @@ func TestSchedulesProtectedTimestamp(t *testing.T) {
 		if errors.Is(err, protectedts.ErrNotExists) {
 			return nil
 		}
-		return fmt.Errorf("waiting for %v, got %v", protectedts.ErrNotExists, err)
+		return errors.NewAssertionErrorWithWrappedErrf(err, "waiting for ErrNotExists")
 	}
 	testutils.SucceedsSoon(t, func() (err error) {
 		return s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
