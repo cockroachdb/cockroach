@@ -163,8 +163,6 @@ explain_stmt ::=
 import_stmt ::=
 	'IMPORT' import_format string_or_placeholder opt_with_options
 	| 'IMPORT' 'TABLE' table_name 'FROM' import_format string_or_placeholder opt_with_options
-	| 'IMPORT' 'TABLE' table_name 'CREATE' 'USING' string_or_placeholder import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
-	| 'IMPORT' 'TABLE' table_name '(' table_elem_list ')' import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
 	| 'IMPORT' 'INTO' table_name '(' insert_column_list ')' import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
 	| 'IMPORT' 'INTO' table_name import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
 
@@ -534,14 +532,11 @@ opt_with_options ::=
 	| 'WITH' 'OPTIONS' '(' kv_option_list ')'
 	| 
 
-string_or_placeholder_list ::=
-	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*
-
-table_elem_list ::=
-	( table_elem ) ( ( ',' table_elem ) )*
-
 insert_column_list ::=
 	( insert_column_item ) ( ( ',' insert_column_item ) )*
+
+string_or_placeholder_list ::=
+	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*
 
 insert_target ::=
 	table_name
@@ -1544,13 +1539,6 @@ non_reserved_word_or_sconst ::=
 kv_option_list ::=
 	( kv_option ) ( ( ',' kv_option ) )*
 
-table_elem ::=
-	column_def
-	| index_def
-	| family_def
-	| table_constraint opt_validate_behavior
-	| 'LIKE' table_name like_table_option_list
-
 insert_column_item ::=
 	column_name
 
@@ -2094,28 +2082,6 @@ kv_option ::=
 	| 'SCONST' '=' string_or_placeholder
 	| 'SCONST'
 
-column_def ::=
-	column_name typename col_qual_list
-
-index_def ::=
-	'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
-	| 'UNIQUE' 'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
-	| 'INVERTED' 'INDEX' opt_name '(' index_params ')' opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
-
-family_def ::=
-	'FAMILY' opt_family_name '(' name_list ')'
-
-table_constraint ::=
-	'CONSTRAINT' constraint_name constraint_elem
-	| constraint_elem
-
-opt_validate_behavior ::=
-	'NOT' 'VALID'
-	| 
-
-like_table_option_list ::=
-	(  ) ( ( 'INCLUDING' like_table_option | 'EXCLUDING' like_table_option ) )*
-
 column_name ::=
 	name
 
@@ -2488,6 +2454,9 @@ partition_by ::=
 storage_parameter_list ::=
 	( storage_parameter ) ( ( ',' storage_parameter ) )*
 
+table_elem_list ::=
+	( table_elem ) ( ( ',' table_elem ) )*
+
 partition_by_table ::=
 	partition_by
 	| 'PARTITION' 'ALL' 'BY' partition_by_inner
@@ -2524,25 +2493,6 @@ only_signed_fconst ::=
 
 target_name ::=
 	unrestricted_name
-
-col_qual_list ::=
-	(  ) ( ( col_qualification ) )*
-
-opt_family_name ::=
-	opt_name
-
-constraint_elem ::=
-	'CHECK' '(' a_expr ')'
-	| 'UNIQUE' '(' index_params ')' opt_storing opt_interleave opt_partition_by_index opt_where_clause
-	| 'PRIMARY' 'KEY' '(' index_params ')' opt_hash_sharded opt_interleave
-	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
-
-like_table_option ::=
-	'CONSTRAINTS'
-	| 'DEFAULTS'
-	| 'GENERATED'
-	| 'INDEXES'
-	| 'ALL'
 
 scrub_option ::=
 	'INDEX' 'ALL'
@@ -2794,8 +2744,18 @@ storage_parameter ::=
 	name '=' var_value
 	| 'SCONST' '=' var_value
 
+table_elem ::=
+	column_def
+	| index_def
+	| family_def
+	| table_constraint opt_validate_behavior
+	| 'LIKE' table_name like_table_option_list
+
 create_as_col_qual_list ::=
 	(  ) ( ( create_as_col_qualification ) )*
+
+family_def ::=
+	'FAMILY' opt_family_name '(' name_list ')'
 
 create_as_constraint_def ::=
 	create_as_constraint_elem
@@ -2820,27 +2780,6 @@ opt_asc_desc ::=
 opt_nulls_order ::=
 	'NULLS' 'FIRST'
 	| 'NULLS' 'LAST'
-	| 
-
-col_qualification ::=
-	'CONSTRAINT' constraint_name col_qualification_elem
-	| col_qualification_elem
-	| 'COLLATE' collation_name
-	| 'FAMILY' family_name
-	| 'CREATE' 'FAMILY' family_name
-	| 'CREATE' 'FAMILY'
-	| 'CREATE' 'IF' 'NOT' 'EXISTS' 'FAMILY' family_name
-
-key_match ::=
-	'MATCH' 'SIMPLE'
-	| 'MATCH' 'FULL'
-	| 
-
-reference_actions ::=
-	reference_on_update
-	| reference_on_delete
-	| reference_on_update reference_on_delete
-	| reference_on_delete reference_on_update
 	| 
 
 group_by_list ::=
@@ -2957,6 +2896,9 @@ opt_column ::=
 	'COLUMN'
 	| 
 
+column_def ::=
+	column_name typename col_qual_list
+
 alter_column_default ::=
 	'SET' 'DEFAULT' a_expr
 	| 'DROP' 'DEFAULT'
@@ -2979,6 +2921,14 @@ opt_collate ::=
 
 opt_alter_column_using ::=
 	'USING' a_expr
+	| 
+
+table_constraint ::=
+	'CONSTRAINT' constraint_name constraint_elem
+	| constraint_elem
+
+opt_validate_behavior ::=
+	'NOT' 'VALID'
 	| 
 
 audit_mode ::=
@@ -3072,39 +3022,23 @@ list_partitions ::=
 range_partitions ::=
 	( range_partition ) ( ( ',' range_partition ) )*
 
+index_def ::=
+	'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
+	| 'UNIQUE' 'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
+	| 'INVERTED' 'INDEX' opt_name '(' index_params ')' opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
+
+like_table_option_list ::=
+	(  ) ( ( 'INCLUDING' like_table_option | 'EXCLUDING' like_table_option ) )*
+
 create_as_col_qualification ::=
 	create_as_col_qualification_elem
 	| 'FAMILY' family_name
 
+opt_family_name ::=
+	opt_name
+
 create_as_constraint_elem ::=
 	'PRIMARY' 'KEY' '(' create_as_params ')'
-
-col_qualification_elem ::=
-	'NOT' 'NULL'
-	| 'NULL'
-	| 'NOT' 'VISIBLE'
-	| 'UNIQUE'
-	| 'PRIMARY' 'KEY'
-	| 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' a_expr
-	| 'CHECK' '(' a_expr ')'
-	| 'DEFAULT' b_expr
-	| 'ON' 'UPDATE' b_expr
-	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
-	| generated_as '(' a_expr ')' 'STORED'
-	| generated_as '(' a_expr ')' 'VIRTUAL'
-	| generated_always_as 'IDENTITY' '(' opt_sequence_option_list ')'
-	| generated_by_default_as 'IDENTITY' '(' opt_sequence_option_list ')'
-	| generated_always_as 'IDENTITY'
-	| generated_by_default_as 'IDENTITY'
-
-family_name ::=
-	name
-
-reference_on_update ::=
-	'ON' 'UPDATE' reference_action
-
-reference_on_delete ::=
-	'ON' 'DELETE' reference_action
 
 group_by_item ::=
 	a_expr
@@ -3175,6 +3109,15 @@ interval_second ::=
 	'SECOND'
 	| 'SECOND' '(' iconst32 ')'
 
+col_qual_list ::=
+	(  ) ( ( col_qualification ) )*
+
+constraint_elem ::=
+	'CHECK' '(' a_expr ')'
+	| 'UNIQUE' '(' index_params ')' opt_storing opt_interleave opt_partition_by_index opt_where_clause
+	| 'PRIMARY' 'KEY' '(' index_params ')' opt_hash_sharded opt_interleave
+	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
+
 func_name ::=
 	type_function_name
 	| prefixed_column_path
@@ -3224,32 +3167,42 @@ list_partition ::=
 range_partition ::=
 	partition 'VALUES' 'FROM' '(' expr_list ')' 'TO' '(' expr_list ')' opt_partition_by
 
+like_table_option ::=
+	'CONSTRAINTS'
+	| 'DEFAULTS'
+	| 'GENERATED'
+	| 'INDEXES'
+	| 'ALL'
+
 create_as_col_qualification_elem ::=
 	'PRIMARY' 'KEY'
+
+family_name ::=
+	name
 
 create_as_params ::=
 	( create_as_param ) ( ( ',' create_as_param ) )*
 
-opt_name_parens ::=
-	'(' name ')'
+col_qualification ::=
+	'CONSTRAINT' constraint_name col_qualification_elem
+	| col_qualification_elem
+	| 'COLLATE' collation_name
+	| 'FAMILY' family_name
+	| 'CREATE' 'FAMILY' family_name
+	| 'CREATE' 'FAMILY'
+	| 'CREATE' 'IF' 'NOT' 'EXISTS' 'FAMILY' family_name
+
+key_match ::=
+	'MATCH' 'SIMPLE'
+	| 'MATCH' 'FULL'
 	| 
 
-generated_as ::=
-	'AS'
-	| generated_always_as
-
-generated_always_as ::=
-	'GENERATED_ALWAYS' 'ALWAYS' 'AS'
-
-generated_by_default_as ::=
-	'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS'
-
-reference_action ::=
-	'NO' 'ACTION'
-	| 'RESTRICT'
-	| 'CASCADE'
-	| 'SET' 'NULL'
-	| 'SET' 'DEFAULT'
+reference_actions ::=
+	reference_on_update
+	| reference_on_delete
+	| reference_on_update reference_on_delete
+	| reference_on_delete reference_on_update
+	| 
 
 type_function_name ::=
 	'identifier'
@@ -3302,6 +3255,30 @@ opt_partition_by ::=
 create_as_param ::=
 	column_name
 
+col_qualification_elem ::=
+	'NOT' 'NULL'
+	| 'NULL'
+	| 'NOT' 'VISIBLE'
+	| 'UNIQUE'
+	| 'PRIMARY' 'KEY'
+	| 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' a_expr
+	| 'CHECK' '(' a_expr ')'
+	| 'DEFAULT' b_expr
+	| 'ON' 'UPDATE' b_expr
+	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
+	| generated_as '(' a_expr ')' 'STORED'
+	| generated_as '(' a_expr ')' 'VIRTUAL'
+	| generated_always_as 'IDENTITY' '(' opt_sequence_option_list ')'
+	| generated_by_default_as 'IDENTITY' '(' opt_sequence_option_list ')'
+	| generated_always_as 'IDENTITY'
+	| generated_by_default_as 'IDENTITY'
+
+reference_on_update ::=
+	'ON' 'UPDATE' reference_action
+
+reference_on_delete ::=
+	'ON' 'DELETE' reference_action
+
 frame_extent ::=
 	frame_bound
 	| 'BETWEEN' frame_bound 'AND' frame_bound
@@ -3331,6 +3308,27 @@ substr_from ::=
 
 substr_for ::=
 	'FOR' a_expr
+
+opt_name_parens ::=
+	'(' name ')'
+	| 
+
+generated_as ::=
+	'AS'
+	| generated_always_as
+
+generated_always_as ::=
+	'GENERATED_ALWAYS' 'ALWAYS' 'AS'
+
+generated_by_default_as ::=
+	'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS'
+
+reference_action ::=
+	'NO' 'ACTION'
+	| 'RESTRICT'
+	| 'CASCADE'
+	| 'SET' 'NULL'
+	| 'SET' 'DEFAULT'
 
 frame_bound ::=
 	'UNBOUNDED' 'PRECEDING'
