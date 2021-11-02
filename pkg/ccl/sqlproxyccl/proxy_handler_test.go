@@ -747,7 +747,7 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			name:          "empty params",
 			params:        map[string]string{},
 			expectedError: "missing cluster identifier",
-			expectedHint:  strings.TrimLeft(clusterIdentifierHint, "\n"),
+			expectedHint:  clusterIdentifierHint,
 		},
 		{
 			name: "cluster identifier is not provided",
@@ -756,7 +756,7 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				"options":  "--foo=bar",
 			},
 			expectedError: "missing cluster identifier",
-			expectedHint:  strings.TrimLeft(clusterIdentifierHint, "\n"),
+			expectedHint:  clusterIdentifierHint,
 		},
 		{
 			name: "multiple different cluster identifiers",
@@ -765,8 +765,8 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				"options":  "--cluster=happy-tiger",
 			},
 			expectedError: "multiple different cluster identifiers provided",
-			expectedHint: "is 'happy-koala-7' or 'happy-tiger' the identifier for the cluster that you're connecting to?\n--\n" +
-				strings.TrimLeft(clusterIdentifierHint, "\n"),
+			expectedHint: "Is 'happy-koala-7' or 'happy-tiger' the identifier for the cluster that you're connecting to?\n--\n" +
+				clusterIdentifierHint,
 		},
 		{
 			name: "invalid cluster identifier in database param",
@@ -775,7 +775,7 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				"database": "short-0.defaultdb",
 			},
 			expectedError: "invalid cluster identifier 'short-0'",
-			expectedHint:  "is 'short' a valid cluster name?\n--\n" + clusterNameFormHint,
+			expectedHint:  "Is 'short' a valid cluster name?\n--\n" + clusterNameFormHint,
 		},
 		{
 			name: "invalid cluster identifier in options param",
@@ -784,7 +784,7 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				"options": "--cluster=cockroachlabsdotcomfoobarbaz-0",
 			},
 			expectedError: "invalid cluster identifier 'cockroachlabsdotcomfoobarbaz-0'",
-			expectedHint:  "is 'cockroachlabsdotcomfoobarbaz' a valid cluster name?\n--\n" + clusterNameFormHint,
+			expectedHint:  "Is 'cockroachlabsdotcomfoobarbaz' a valid cluster name?\n--\n" + clusterNameFormHint,
 		},
 		{
 			name:          "invalid database param (1)",
@@ -838,19 +838,19 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			name:          "missing cluster name",
 			params:        map[string]string{"database": "-7.defaultdb"},
 			expectedError: "invalid cluster identifier '-7'",
-			expectedHint:  "is '' a valid cluster name?\n--\n" + clusterNameFormHint,
+			expectedHint:  "Is '' a valid cluster name?\n--\n" + clusterNameFormHint,
 		},
 		{
 			name:          "bad tenant id",
 			params:        map[string]string{"database": "happy-koala-0-7a.defaultdb"},
 			expectedError: "invalid cluster identifier 'happy-koala-0-7a'",
-			expectedHint:  "is '7a' a valid tenant ID?\n--\n" + clusterNameFormHint,
+			expectedHint:  "Is '7a' a valid tenant ID?\n--\n" + clusterNameFormHint,
 		},
 		{
 			name:          "zero tenant id",
 			params:        map[string]string{"database": "happy-koala-0.defaultdb"},
 			expectedError: "invalid cluster identifier 'happy-koala-0'",
-			expectedHint:  "tenant ID 0 is invalid",
+			expectedHint:  "Tenant ID 0 is invalid.",
 		},
 		{
 			name: "multiple similar cluster identifiers",

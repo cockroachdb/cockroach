@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 )
@@ -50,9 +51,9 @@ func toPgError(err error) *pgproto3.ErrorResponse {
 
 		var pgCode string
 		if codeErr.code == codeIdleDisconnect {
-			pgCode = "57P01" // admin shutdown
+			pgCode = pgcode.AdminShutdown.String()
 		} else {
-			pgCode = "08004" // rejected connection
+			pgCode = pgcode.SQLserverRejectedEstablishmentOfSQLconnection.String()
 		}
 
 		return &pgproto3.ErrorResponse{
@@ -65,7 +66,7 @@ func toPgError(err error) *pgproto3.ErrorResponse {
 	// Return a generic "internal server error" message.
 	return &pgproto3.ErrorResponse{
 		Severity: "FATAL",
-		Code:     "08004", // rejected connection
+		Code:     pgcode.SQLserverRejectedEstablishmentOfSQLconnection.String(),
 		Message:  "internal server error",
 	}
 }
