@@ -151,7 +151,7 @@ func MakeRelease(b SupportedTarget, pkgDir string, opts ...MakeReleaseOption) er
 		}
 		log.Printf("%s %s", cmd.Env, cmd.Args)
 		if out, err := params.execFn(cmd); err != nil {
-			return errors.Newf("%s %s: %s\n\n%s", cmd.Env, cmd.Args, err, out)
+			return errors.Wrapf(err, "%s %s:\n\n%s", cmd.Env, cmd.Args, out)
 		}
 	}
 	if strings.Contains(b.BuildType, "linux") {
@@ -163,7 +163,7 @@ func MakeRelease(b SupportedTarget, pkgDir string, opts ...MakeReleaseOption) er
 		cmd.Stderr = os.Stderr
 		log.Printf("%s %s", cmd.Env, cmd.Args)
 		if out, err := params.execFn(cmd); err != nil {
-			return errors.Newf("%s %s: %s\n\n%s", cmd.Env, cmd.Args, err, out)
+			return errors.Wrapf(err, "%s %s:\n\n%s", cmd.Env, cmd.Args, out)
 		}
 
 		cmd = exec.Command("ldd", binaryName)
