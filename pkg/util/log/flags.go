@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io/fs"
 	"math"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
@@ -278,14 +277,14 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 	}
 
 	// Create the file sinks.
-	for prefix, fc := range config.Sinks.FileGroups {
+	for fileGroupName, fc := range config.Sinks.FileGroups {
 		if fc.Filter == severity.NONE || fc.Dir == nil {
 			continue
 		}
-		if prefix == "default" {
-			prefix = ""
+		if fileGroupName == "default" {
+			fileGroupName = ""
 		}
-		fileSinkInfo, fileSink, err := newFileSinkInfo(prefix, *fc)
+		fileSinkInfo, fileSink, err := newFileSinkInfo(fileGroupName, *fc)
 		if err != nil {
 			return nil, err
 		}
@@ -337,7 +336,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 // newFileSinkInfo creates a new fileSink and its accompanying sinkInfo
 // from the provided configuration.
 func newFileSinkInfo(
-	fileNamePrefix string, c logconfig.FileSinkConfig,
+	fileGroupName string, c logconfig.FileSinkConfig,
 ) (*sinkInfo, *fileSink, error) {
 	info := &sinkInfo{}
 	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
@@ -346,7 +345,7 @@ func newFileSinkInfo(
 	info.applyFilters(c.Channels)
 	fileSink := newFileSink(
 		*c.Dir,
-		fileNamePrefix,
+		fileGroupName,
 		*c.BufferedWrites,
 		int64(*c.MaxFileSize),
 		int64(*c.MaxGroupSize),
@@ -514,11 +513,9 @@ func DescribeAppliedConfig() string {
 			describeConnections(logger, ch, l, &fc.Channels)
 		}
 
-		prefix := strings.TrimPrefix(fileSink.prefix, program)
+		prefix := fileSink.groupName
 		if prefix == "" {
 			prefix = "default"
-		} else {
-			prefix = strings.TrimPrefix(prefix, "-")
 		}
 		if prev, ok := config.Sinks.FileGroups[prefix]; ok {
 			fmt.Fprintf(OrigStderr,
