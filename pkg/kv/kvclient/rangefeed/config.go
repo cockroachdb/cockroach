@@ -24,14 +24,15 @@ type Option interface {
 }
 
 type config struct {
-	retryOptions         retry.Options
-	onInitialScanDone    OnInitialScanDone
-	withInitialScan      bool
-	withDiff             bool
-	onInitialScanError   OnInitialScanError
-	onUnrecoverableError OnUnrecoverableError
-	onCheckpoint         OnCheckpoint
-	onFrontierAdvance    OnFrontierAdvance
+	retryOptions           retry.Options
+	onInitialScanDone      OnInitialScanDone
+	withInitialScan        bool
+	initialScanParallelism func() int
+	withDiff               bool
+	onInitialScanError     OnInitialScanError
+	onUnrecoverableError   OnUnrecoverableError
+	onCheckpoint           OnCheckpoint
+	onFrontierAdvance      OnFrontierAdvance
 }
 
 type optionFunc func(*config)
@@ -129,3 +130,15 @@ func initConfig(c *config, options []Option) {
 		o.set(c)
 	}
 }
+
+// WithInitialScanParallelismFn configures rangefeed to issue up to specified number
+// of concurrent initial scan requests.
+func WithInitialScanParallelismFn(parallelismFn func() int) Option {
+	return optionFunc(func(c *config) {
+		c.initialScanParallelism = parallelismFn
+	})
+}
+
+// DefaultInitialScanParallelismFn configures rangefeed to issue 1 scan request
+// at a time.
+var DefaultInitialScanParallelismFn func() int
