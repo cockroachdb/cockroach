@@ -463,7 +463,7 @@ func (c *copyMachine) readCSVTuple(ctx context.Context, record []string) error {
 			exprs[i] = tree.DNull
 			continue
 		}
-		d, err := rowenc.ParseDatumStringAs(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
+		d, _, err := tree.ParseAndRequireString(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
 		if err != nil {
 			return err
 		}
@@ -719,7 +719,16 @@ func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 			types.UuidFamily:
 			s = decodeCopy(s)
 		}
-		d, err := rowenc.ParseDatumStringAsWithRawBytes(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
+
+		var d tree.Datum
+		var err error
+		switch c.resultColumns[i].Typ.Family() {
+		case types.BytesFamily:
+			d = tree.NewDBytes(tree.DBytes(s))
+		default:
+			d, _, err = tree.ParseAndRequireString(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
+		}
+
 		if err != nil {
 			return err
 		}
