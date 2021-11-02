@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -582,7 +583,7 @@ WHERE
 						return errors.New("expected error, found none")
 					}
 					if !testutils.IsError(err, "invalid input value for enum") {
-						return errors.NewAssertionErrorWithWrappedErrf(err, "expected invalid input for enum error")
+						return errors.Newf("expected invalid input for enum error, found %s", pgerror.FullError(err))
 					}
 					return nil
 				})
