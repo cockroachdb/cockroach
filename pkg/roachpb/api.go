@@ -86,6 +86,7 @@ const (
 	isPrefix                             // requests which, in a batch, must not be split from the following request
 	isUnsplittable                       // range command that must not be split during sending
 	skipsLeaseCheck                      // commands which skip the check that the evaluating replica has a valid lease
+	appliesTSCache                       // commands which apply the timestamp cache and closed timestamp
 	updatesTSCache                       // commands which update the timestamp cache
 	updatesTSCacheOnErr                  // commands which make read data available on errors
 	needsRefresh                         // commands which require refreshes to avoid serializable retries
@@ -97,6 +98,7 @@ var flagDependencies = map[flag][]flag{
 	isAdmin:         {isAlone},
 	isLocking:       {isTxn},
 	isIntentWrite:   {isWrite, isLocking},
+	appliesTSCache:  {isWrite},
 	skipsLeaseCheck: {isAlone},
 }
 
@@ -162,6 +164,13 @@ func IsIntentWrite(args Request) bool {
 // a start and an end key.
 func IsRange(args Request) bool {
 	return (args.flags() & isRange) != 0
+}
+
+// AppliesTimestampCache returns whether the command is a write that applies the
+// timestamp cache (and closed timestamp), possibly pushing its write timestamp
+// into the future to avoid re-writing history.
+func AppliesTimestampCache(args Request) bool {
+	return (args.flags() & appliesTSCache) != 0
 }
 
 // UpdatesTimestampCache returns whether the command must update
@@ -1188,7 +1197,7 @@ func (gr *GetRequest) flags() flag {
 }
 
 func (*PutRequest) flags() flag {
-	return isWrite | isTxn | isLocking | isIntentWrite | canBackpressure
+	return isWrite | isTxn | isLocking | isIntentWrite | appliesTSCache | canBackpressure
 }
 
 // ConditionalPut effectively reads without writing if it hits a
@@ -1197,7 +1206,8 @@ func (*PutRequest) flags() flag {
 // they return an error immediately instead of continuing a serializable
 // transaction to be retried at end transaction.
 func (*ConditionalPutRequest) flags() flag {
-	return isRead | isWrite | isTxn | isLocking | isIntentWrite | updatesTSCache | updatesTSCacheOnErr | canBackpressure
+	return isRead | isWrite | isTxn | isLocking | isIntentWrite |
+		appliesTSCache | updatesTSCache | updatesTSCacheOnErr | canBackpressure
 }
 
 // InitPut, like ConditionalPut, effectively reads without writing if it hits a
@@ -1206,7 +1216,8 @@ func (*ConditionalPutRequest) flags() flag {
 // return an error immediately instead of continuing a serializable transaction
 // to be retried at end transaction.
 func (*InitPutRequest) flags() flag {
-	return isRead | isWrite | isTxn | isLocking | isIntentWrite | updatesTSCache | updatesTSCacheOnErr | canBackpressure
+	return isRead | isWrite | isTxn | isLocking | isIntentWrite |
+		appliesTSCache | updatesTSCache | updatesTSCacheOnErr | canBackpressure
 }
 
 // Increment reads the existing value, but always leaves an intent so
@@ -1215,11 +1226,11 @@ func (*InitPutRequest) flags() flag {
 // error immediately instead of continuing a serializable transaction
 // to be retried at end transaction.
 func (*IncrementRequest) flags() flag {
-	return isRead | isWrite | isTxn | isLocking | isIntentWrite | canBackpressure
+	return isRead | isWrite | isTxn | isLocking | isIntentWrite | appliesTSCache | canBackpressure
 }
 
 func (*DeleteRequest) flags() flag {
-	return isWrite | isTxn | isLocking | isIntentWrite | canBackpressure
+	return isWrite | isTxn | isLocking | isIntentWrite | appliesTSCache | canBackpressure
 }
 
 func (drr *DeleteRangeRequest) flags() flag {
@@ -1246,7 +1257,8 @@ func (drr *DeleteRangeRequest) flags() flag {
 	// it. Note that, even if we didn't update the ts cache, deletes of keys
 	// that exist would not be lost (since the DeleteRange leaves intents on
 	// those keys), but deletes of "empty space" would.
-	return isRead | isWrite | isTxn | isLocking | isIntentWrite | isRange | updatesTSCache | needsRefresh | canBackpressure
+	return isRead | isWrite | isTxn | isLocking | isIntentWrite | isRange |
+		appliesTSCache | updatesTSCache | needsRefresh | canBackpressure
 }
 
 // Note that ClearRange commands cannot be part of a transaction as
