@@ -1356,8 +1356,7 @@ func (c *SyncedCluster) Logs(
 		var errBuf bytes.Buffer
 		cmd.Stderr = &errBuf
 		if err := cmd.Run(); err != nil && ctx.Err() == nil {
-			return fmt.Errorf("failed to run cockroach debug merge-logs:%v\n%v",
-				err, errBuf.String())
+			return errors.Wrapf(err, "failed to run cockroach debug merge-logs:\n%v", errBuf.String())
 		}
 		return nil
 	}

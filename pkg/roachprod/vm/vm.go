@@ -391,7 +391,7 @@ func ExpandZonesFlag(zoneFlag []string) (zones []string, err error) {
 		}
 		n, err := strconv.Atoi(zone[colonIdx+1:])
 		if err != nil {
-			return zones, fmt.Errorf("failed to parse %q: %v", zone, err)
+			return zones, errors.Wrapf(err, "failed to parse %q", zone)
 		}
 		for i := 0; i < n; i++ {
 			zones = append(zones, zone[:colonIdx])
