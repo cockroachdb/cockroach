@@ -213,6 +213,9 @@ message LocalOnlySessionData {
   bool null_ordered_last = 55;
   // DisablePlanGists indicates whether we should disable automatic gists.
   bool disable_plan_gists = 56;
+  // CustomOptions contains a map of all custom session settings.
+  // These session variables have at least one period in their name.
+  map<string, string> custom_options = 57;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -414,15 +414,6 @@ SHOW idle_in_transaction_session_timeout
 statement ok
 SET idle_in_transaction_session_timeout = 0
 
-# Test that composite variable names get rejected properly, especially
-# when "tracing" is used as prefix.
-
-statement error unrecognized configuration parameter "blah.blah"
-SET blah.blah = 123
-
-statement error unrecognized configuration parameter "tracing.blah"
-SET tracing.blah = 123
-
 statement error invalid value for parameter "ssl_renegotiation_limit"
 SET ssl_renegotiation_limit = 123
 
@@ -626,3 +617,53 @@ SET LC_NUMERIC = 'en_US.UTF-8'
 
 statement error invalid value for parameter "lc_time": "en_US.UTF-8"
 SET LC_TIME = 'en_US.UTF-8'
+
+# Test custom session variables
+
+statement ok
+SET custom_option.set_SQL = 'abc';
+SELECT set_config('custom_option.set_config', 'def', false);
+RESET custom_option.use_default;
+SET tracing.custom = 'ijk'
+
+# Custom options are case insensitive.
+query T colnames
+SHOW Custom_option.set_sql
+----
+custom_option.set_sql
+abc
+
+query T
+SHOW custom_option.set_config
+----
+def
+
+query T
+SELECT current_setting('custom_option.use_default')
+----
+·
+
+statement ok
+RESET custom_option.set_config
+
+query T
+SHOW custom_option.set_config
+----
+·
+
+# Ensure it does not show up on SHOW ALL or pg_settings.
+query T
+SELECT variable FROM [SHOW ALL] WHERE variable LIKE 'custom_option.%'
+----
+
+query T
+SELECT name FROM pg_catalog.pg_settings WHERE name LIKE 'custom_option.%'
+----
+
+query T
+SHOW tracing.custom
+----
+ijk
+
+statement error unrecognized configuration parameter "custom_option.does_not_yet_exist"
+SHOW custom_option.does_not_yet_exist
