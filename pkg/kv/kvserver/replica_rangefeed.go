@@ -62,6 +62,14 @@ var RangefeedTBIEnabled = settings.RegisterBoolSetting(
 	util.ConstantWithMetamorphicTestBool("kv.rangefeed.catchup_scan_iterator_optimization.enabled", false),
 )
 
+// RangefeedSeparatedIntentScanEnabled controls whether to use the
+// separated lock table when scanning a range for intents.
+var RangefeedSeparatedIntentScanEnabled = settings.RegisterBoolSetting(
+	"kv.rangefeed.separated_intent_scan.enabled",
+	"if true, rangefeeds will use the separated lock table to scan for intents when possible",
+	util.ConstantWithMetamorphicTestBool("kv.rangefeed.separated_intent_scan.enabled", false),
+)
+
 // lockedRangefeedStream is an implementation of rangefeed.Stream which provides
 // support for concurrent calls to Send. Note that the default implementation of
 // grpc.Stream is not safe for concurrent calls to Send.
@@ -386,8 +394,8 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		r.raftMu.AssertHeld()
 
 		onlySeparatedIntents := r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.PostSeparatedIntentsMigration)
-
-		if onlySeparatedIntents {
+		useSeparatedIntents := RangefeedSeparatedIntentScanEnabled.Get(&r.store.cfg.Settings.SV)
+		if onlySeparatedIntents && useSeparatedIntents {
 			lowerBound, _ := keys.LockTableSingleKey(desc.StartKey.AsRawKey(), nil)
 			upperBound, _ := keys.LockTableSingleKey(desc.EndKey.AsRawKey(), nil)
 			iter := r.Engine().NewEngineIterator(storage.IterOptions{
