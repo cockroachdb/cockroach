@@ -35,7 +35,7 @@ export interface DropdownProps<T> {
   items: Array<DropdownOption<T>>;
   onChange: (item: DropdownOption<T>["value"]) => void;
   children?: React.ReactNode;
-  customToggleButton?: React.ReactNode;
+  customToggleButton?: React.ReactChild;
   customToggleButtonOptions?: Partial<ButtonProps>;
   menuPosition?: "left" | "right";
   className?: string;
@@ -96,24 +96,24 @@ export class Dropdown<T = string> extends React.Component<
     isOpen: false,
   };
 
-  handleMenuOpen = () => {
+  handleMenuOpen = (): void => {
     this.setState({
       isOpen: !this.state.isOpen,
     });
   };
 
-  changeMenuState = (nextState: boolean) => {
+  changeMenuState = (nextState: boolean): void => {
     this.setState({
       isOpen: nextState,
     });
   };
 
-  handleItemSelection = (value: T) => {
+  handleItemSelection = (value: T): void => {
     this.props.onChange(value);
     this.handleMenuOpen();
   };
 
-  renderDropdownToggleButton = () => {
+  renderDropdownToggleButton = (): React.ReactChild => {
     const {
       children,
       customToggleButton,
@@ -132,7 +132,7 @@ export class Dropdown<T = string> extends React.Component<
     }
   };
 
-  render() {
+  render(): React.ReactElement {
     const {
       items,
       menuPosition = "left",

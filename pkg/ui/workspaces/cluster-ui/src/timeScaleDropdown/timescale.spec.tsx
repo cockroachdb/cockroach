@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2021 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -11,23 +11,22 @@
 import React from "react";
 import { mount } from "enzyme";
 import {
-  TimeScaleDropdown,
-  TimeScaleDropdownProps,
   getTimeRangeTitle,
   generateDisabledArrows,
   timeFormat,
   dateFormat,
-} from "./index";
-import * as timewindow from "src/redux/timewindow";
+  TimeScaleDropdownProps,
+  TimeScaleDropdown,
+} from "./timeScaleDropdown";
+import { defaultTimeScaleOptions, findClosestTimeScale } from "./utils";
+import * as timewindow from "./timeScaleTypes";
 import moment from "moment";
-import { refreshNodes } from "src/redux/apiReducers";
-import "src/enzymeInit";
 import { MemoryRouter } from "react-router";
-import TimeFrameControls from "../../components/controls";
-import RangeSelect from "../../components/range";
+import TimeFrameControls from "./timeFrameControls";
+import RangeSelect from "./rangeSelect";
 import { assert } from "chai";
 import sinon from "sinon";
-import { ArrowDirection } from "oss/src/views/shared/components/dropdown";
+import { TimeWindow, ArrowDirection, TimeScale } from "./timeScaleTypes";
 
 const initialEntries = [
   "#/metrics/overview/cluster", // Past 10 minutes
@@ -48,38 +47,39 @@ const initialEntries = [
 
 describe("<TimeScaleDropdown>", function() {
   let state: TimeScaleDropdownProps;
-  let spy: sinon.SinonSpy;
   let clock: sinon.SinonFakeTimers;
+  let currentWindow: TimeWindow;
 
-  const makeTimeScaleDropdown = (props: TimeScaleDropdownProps) =>
-    mount(
+  const setCurrentWindowFromTimeScale = (timeScale: TimeScale): void => {
+    const end = timeScale.windowEnd || moment.utc();
+    currentWindow = {
+      start: moment(end).subtract(timeScale.windowSize),
+      end,
+    };
+  };
+
+  const makeTimeScaleDropdown = (props: TimeScaleDropdownProps) => {
+    setCurrentWindowFromTimeScale(props.currentScale);
+    return mount(
       <MemoryRouter initialEntries={initialEntries}>
         <TimeScaleDropdown {...props} />
       </MemoryRouter>,
     );
+  };
 
-  beforeEach(function() {
+  beforeEach(() => {
     clock = sinon.useFakeTimers(new Date(2020, 5, 1, 9, 28, 30));
     const timewindowState = new timewindow.TimeWindowState();
+    currentWindow = timewindowState.currentWindow;
+    setCurrentWindowFromTimeScale(timewindowState.scale);
     state = {
       currentScale: timewindowState.scale,
-      currentWindow: { start: moment().subtract(10, "minutes"), end: moment() },
-      nodeStatusesValid: false,
-      useTimeRange: timewindowState.useTimeRange,
-      dispatchRefreshNodes: refreshNodes,
-      setTimeScale: timewindow.setTimeScale,
-      setTimeRange: timewindow.setTimeRange,
+      setTimeScale: () => {},
     };
-    spy = sinon.spy();
   });
 
   afterEach(() => {
     clock.restore();
-  });
-
-  it("refreshes nodes when mounted.", () => {
-    makeTimeScaleDropdown({ ...state, dispatchRefreshNodes: spy });
-    assert.isTrue(spy.called);
   });
 
   it("valid path should not redirect to 404", () => {
@@ -93,31 +93,30 @@ describe("<TimeScaleDropdown>", function() {
     wrapper.setProps({ currentScale: state.currentScale });
     assert.equal(
       wrapper.props().currentScale,
-      timewindow.availableTimeScales["Past 10 Minutes"],
+      defaultTimeScaleOptions["Past 10 Minutes"],
     );
   });
 
   it("getTimeRangeTitle must return title Past 10 Minutes", () => {
-    const title = getTimeRangeTitle(state.currentWindow, state.currentScale);
     const wrapper = makeTimeScaleDropdown(state);
     assert.equal(
       wrapper
         .find(".trigger .Select-value-label")
         .first()
         .text(),
-      `Past 10 Minutes`,
+      "Past 10 Minutes",
     );
-    assert.deepEqual(title, { title: "Past 10 Minutes" });
+
+    const title = getTimeRangeTitle(currentWindow, state.currentScale);
+    assert.deepEqual(title, { title: "Past 10 Minutes", timeLabel: "10m" });
   });
 
   describe("getTimeRangeTitle", () => {
     it("returns custom Title with Time part only for current day", () => {
       const currentScale = { ...state.currentScale, key: "Custom" };
-      const title = getTimeRangeTitle(state.currentWindow, currentScale);
-      const timeStart = moment
-        .utc(state.currentWindow.start)
-        .format(timeFormat);
-      const timeEnd = moment.utc(state.currentWindow.end).format(timeFormat);
+      const title = getTimeRangeTitle(currentWindow, currentScale);
+      const timeStart = moment.utc(currentWindow.start).format(timeFormat);
+      const timeEnd = moment.utc(currentWindow.end).format(timeFormat);
       const wrapper = makeTimeScaleDropdown({ ...state, currentScale });
       assert.equal(
         wrapper
@@ -132,23 +131,31 @@ describe("<TimeScaleDropdown>", function() {
         timeStart,
         timeEnd,
         title: "Custom",
+        timeLabel: "10m",
       });
     });
 
     it("returns custom Title with Date and Time part for the range with past days", () => {
-      const currentWindow = {
-        start: moment(state.currentWindow.start).subtract(1, "day"),
-        end: moment(state.currentWindow.end).subtract(1, "day"),
+      const window: TimeWindow = {
+        start: moment(currentWindow.start).subtract(2, "day"),
+        end: moment(currentWindow.end).subtract(1, "day"),
       };
-      const currentScale = { ...state.currentScale, key: "Custom" };
-      const title = getTimeRangeTitle(currentWindow, currentScale);
-      const timeStart = moment.utc(currentWindow.start).format(timeFormat);
-      const timeEnd = moment.utc(currentWindow.end).format(timeFormat);
-      const dateStart = moment.utc(currentWindow.start).format(dateFormat);
-      const dateEnd = moment.utc(currentWindow.end).format(dateFormat);
+      const currentScale = {
+        ...state.currentScale,
+        windowEnd: window.end,
+        windowSize: moment.duration(
+          window.end.diff(window.start, "seconds"),
+          "seconds",
+        ),
+        key: "Custom",
+      };
+      const title = getTimeRangeTitle(window, currentScale);
+      const timeStart = moment.utc(window.start).format(timeFormat);
+      const timeEnd = moment.utc(window.end).format(timeFormat);
+      const dateStart = moment.utc(window.start).format(dateFormat);
+      const dateEnd = moment.utc(window.end).format(dateFormat);
       const wrapper = makeTimeScaleDropdown({
         ...state,
-        currentWindow,
         currentScale,
       });
       assert.equal(
@@ -164,25 +171,71 @@ describe("<TimeScaleDropdown>", function() {
         timeStart,
         timeEnd,
         title: "Custom",
+        timeLabel: "1d",
       });
     });
   });
 
   it("generateDisabledArrows must return array with disabled buttons", () => {
-    const arrows = generateDisabledArrows(state.currentWindow);
+    const arrows = generateDisabledArrows(currentWindow);
     const wrapper = makeTimeScaleDropdown(state);
     assert.equal(wrapper.find(".controls-content ._action.disabled").length, 2);
     assert.deepEqual(arrows, [ArrowDirection.CENTER, ArrowDirection.RIGHT]);
   });
 
   it("generateDisabledArrows must render 3 active buttons and return empty array", () => {
-    const currentWindow = {
-      start: moment(state.currentWindow.start).subtract(1, "day"),
-      end: moment(state.currentWindow.end).subtract(1, "day"),
+    const window: TimeWindow = {
+      start: moment(currentWindow.start).subtract(1, "day"),
+      end: moment(currentWindow.end).subtract(1, "day"),
     };
-    const arrows = generateDisabledArrows(currentWindow);
-    const wrapper = makeTimeScaleDropdown({ ...state, currentWindow });
+    const currentTimeScale = {
+      ...state.currentScale,
+      windowEnd: window.end,
+    };
+    const arrows = generateDisabledArrows(window);
+    const wrapper = makeTimeScaleDropdown({
+      ...state,
+      currentScale: currentTimeScale,
+    });
     assert.equal(wrapper.find(".controls-content ._action.disabled").length, 0);
     assert.deepEqual(arrows, []);
+  });
+});
+
+describe("timescale utils", (): void => {
+  describe("findClosestTimeScale", () => {
+    it("should found correctly time scale", () => {
+      assert.deepEqual(findClosestTimeScale(defaultTimeScaleOptions, 15), {
+        ...defaultTimeScaleOptions["Past 10 Minutes"],
+        key: "Custom",
+      });
+      assert.deepEqual(
+        findClosestTimeScale(
+          defaultTimeScaleOptions,
+          moment.duration(10, "minutes").asSeconds(),
+        ),
+        {
+          ...defaultTimeScaleOptions["Past 10 Minutes"],
+          key: "Past 10 Minutes",
+        },
+      );
+      assert.deepEqual(
+        findClosestTimeScale(
+          defaultTimeScaleOptions,
+          moment.duration(14, "days").asSeconds(),
+        ),
+        {
+          ...defaultTimeScaleOptions["Past 2 Weeks"],
+          key: "Past 2 Weeks",
+        },
+      );
+      assert.deepEqual(
+        findClosestTimeScale(
+          defaultTimeScaleOptions,
+          moment.duration(moment().daysInMonth() * 5, "days").asSeconds(),
+        ),
+        { ...defaultTimeScaleOptions["Past 2 Months"], key: "Custom" },
+      );
+    });
   });
 });
