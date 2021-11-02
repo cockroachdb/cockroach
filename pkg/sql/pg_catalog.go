@@ -2494,7 +2494,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
 			if gen.Hidden {
 				continue
 			}
-			value := gen.Get(&p.extendedEvalCtx)
+			value, err := gen.Get(&p.extendedEvalCtx)
+			if err != nil {
+				return err
+			}
 			valueDatum := tree.NewDString(value)
 			var bootDatum tree.Datum = tree.DNull
 			var resetDatum tree.Datum = tree.DNull

@@ -1750,9 +1750,10 @@ type SessionDefaults map[string]string
 
 // SessionArgs contains arguments for serving a client connection.
 type SessionArgs struct {
-	User            security.SQLUsername
-	IsSuperuser     bool
-	SessionDefaults SessionDefaults
+	User                        security.SQLUsername
+	IsSuperuser                 bool
+	SessionDefaults             SessionDefaults
+	CustomOptionSessionDefaults SessionDefaults
 	// RemoteAddr is the client's address. This is nil iff this is an internal
 	// client.
 	RemoteAddr            net.Addr
@@ -2805,6 +2806,13 @@ func (m *sessionDataMutator) UpdateSearchPath(paths []string) {
 func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 	m.data.Location = loc
 	m.bufferParamStatusUpdate("TimeZone", sessionDataTimeZoneFormat(loc))
+}
+
+func (m *sessionDataMutator) SetCustomOption(name, val string) {
+	if m.data.CustomOptions == nil {
+		m.data.CustomOptions = make(map[string]string)
+	}
+	m.data.CustomOptions[name] = val
 }
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {

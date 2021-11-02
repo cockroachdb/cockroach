@@ -1216,6 +1216,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Exprs> expr_list opt_expr_list tuple1_ambiguous_values tuple1_unambiguous_values
 %type <*tree.Tuple> expr_tuple1_ambiguous expr_tuple_unambiguous
 %type <tree.NameList> attrs
+%type <[]string> session_var_parts
 %type <tree.SelectExprs> target_list
 %type <tree.UpdateExprs> set_clause_list
 %type <*tree.UpdateExpr> set_clause multiple_set_clause
@@ -4978,6 +4979,10 @@ show_session_stmt:
 
 session_var:
   IDENT
+| IDENT session_var_parts
+  {
+    $$ = $1 + "." + strings.Join($2.strs(), ".")
+  }
 // Although ALL, SESSION_USER, DATABASE, LC_COLLATE, and LC_CTYPE are
 // identifiers for the purpose of SHOW, they lex as separate token types, so
 // they need separate rules.
@@ -4993,6 +4998,16 @@ session_var:
 // TIME ZONE is special: it is two tokens, but is really the identifier "TIME ZONE".
 | TIME ZONE { $$ = "timezone" }
 | TIME error // SHOW HELP: SHOW SESSION
+
+session_var_parts:
+  '.' IDENT
+  {
+    $$.val = []string{$2}
+  }
+| session_var_parts '.' IDENT
+  {
+    $$.val = append($1.strs(), $3)
+  }
 
 // %Help: SHOW STATISTICS - display table statistics (experimental)
 // %Category: Experimental

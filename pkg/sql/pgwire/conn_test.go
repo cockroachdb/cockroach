@@ -1561,7 +1561,8 @@ func TestSetSessionArguments(t *testing.T) {
 		"--default-transaction-isolation=read\\ uncommitted   "+
 		"-capplication_name=test  "+
 		"--DateStyle=ymd\\ ,\\ iso\\  "+
-		"-c intervalstyle%3DISO_8601")
+		"-c intervalstyle%3DISO_8601 "+
+		"-ccustom_option.custom_option=test2")
 	pgURL.RawQuery = q.Encode()
 	noBufferDB, err := gosql.Open("postgres", pgURL.String())
 
@@ -1611,6 +1612,11 @@ func TestSetSessionArguments(t *testing.T) {
 		}
 	}
 	require.Equal(t, expectedFoundOptions, foundOptions)
+
+	// Custom session options don't show up on SHOW ALL
+	var customOption string
+	require.NoError(t, conn.QueryRow(ctx, "SHOW custom_option.custom_option").Scan(&customOption))
+	require.Equal(t, "test2", customOption)
 
 	if err := conn.Close(ctx); err != nil {
 		t.Fatal(err)
