@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -107,7 +108,12 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			h.RangeID = desc.RangeID
 
 			cArgs := CommandArgs{Header: h}
-			cArgs.EvalCtx = (&MockEvalCtx{Desc: &desc, Clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond), Stats: stats}).EvalContext()
+			cArgs.EvalCtx = (&MockEvalCtx{
+				ClusterSettings: cluster.MakeTestingClusterSettings(),
+				Desc:            &desc,
+				Clock:           hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+				Stats:           stats,
+			}).EvalContext()
 			cArgs.Args = &roachpb.ClearRangeRequest{
 				RequestHeader: roachpb.RequestHeader{
 					Key:    startKey,
@@ -172,10 +178,15 @@ func TestCmdClearRangeDeadline(t *testing.T) {
 	}
 
 	cArgs := CommandArgs{
-		Header:  roachpb.Header{RangeID: desc.RangeID},
-		EvalCtx: (&MockEvalCtx{Desc: &desc, Clock: clock, Stats: stats}).EvalContext(),
-		Stats:   &enginepb.MVCCStats{},
-		Args:    &args,
+		Header: roachpb.Header{RangeID: desc.RangeID},
+		EvalCtx: (&MockEvalCtx{
+			ClusterSettings: cluster.MakeTestingClusterSettings(),
+			Desc:            &desc,
+			Clock:           clock,
+			Stats:           stats,
+		}).EvalContext(),
+		Stats: &enginepb.MVCCStats{},
+		Args:  &args,
 	}
 
 	batch := eng.NewBatch()
