@@ -107,12 +107,12 @@ func registerLibPQ(r registry.Registry) {
 		// Convert the output of go test -list into an list.
 		tests := strings.Fields(string(buf))
 		var allowedTests []string
+		testListR, err := regexp.Compile(testListRegex)
+		require.NoError(t, err)
 
 		for _, testName := range tests {
 			// Ignore tests that do not match the test regex pattern.
-			matched, err := regexp.MatchString(testListRegex, testName)
-			require.NoError(t, err)
-			if !matched {
+			if !testListR.MatchString(testName) {
 				continue
 			}
 			// If the test is part of ignoreList, do not run the test.
