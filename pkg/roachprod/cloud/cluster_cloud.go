@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // Cloud contains information about all known clusters (across multiple cloud
@@ -177,12 +178,25 @@ func ListCloud() (*Cloud, error) {
 		Clusters: make(Clusters),
 	}
 
-	for _, p := range vm.Providers {
-		vms, err := p.List()
-		if err != nil {
-			return nil, err
-		}
+	providerNames := vm.AllProviderNames()
+	providerVMs := make([]vm.List, len(providerNames))
+	var g errgroup.Group
+	for i, providerName := range providerNames {
+		// Capture loop variable.
+		index := i
+		provider := vm.Providers[providerName]
+		g.Go(func() error {
+			var err error
+			providerVMs[index], err = provider.List()
+			return err
+		})
+	}
 
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	for _, vms := range providerVMs {
 		for _, v := range vms {
 			// Parse cluster/user from VM name, but only for non-local VMs
 			userName, clusterName, err := namesFromVM(v)
