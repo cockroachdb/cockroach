@@ -137,3 +137,20 @@ database_name  schema_name  grantee   privilege_type
 d              s5           admin     ALL
 d              s5           root      ALL
 d              s5           testuser  CREATE
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO testuser, testuser2
+
+user root
+
+statement ok
+CREATE SCHEMA s_72322
+
+# When root creates the table, testuser and testuser2 should not get privileges.
+query TTTT colnames
+SHOW GRANTS ON SCHEMA s_72322
+----
+database_name  schema_name  grantee   privilege_type
+d              s_72322      admin     ALL
+d              s_72322      root      ALL
+d              s_72322      testuser  CREATE
