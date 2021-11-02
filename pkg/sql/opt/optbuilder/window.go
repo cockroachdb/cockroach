@@ -305,7 +305,7 @@ func (b *Builder) buildAggregationAsWindow(
 
 	// Wrap with having filter if it exists.
 	if having != nil {
-		input := g.aggOutScope.expr.(memo.RelExpr)
+		input := g.aggOutScope.expr
 		filters := memo.FiltersExpr{b.factory.ConstructFiltersItem(having)}
 		g.aggOutScope.expr = b.factory.ConstructSelect(input, filters)
 	}

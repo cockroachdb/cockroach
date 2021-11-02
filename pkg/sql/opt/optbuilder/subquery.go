@@ -241,12 +241,12 @@ func (s *subquery) buildSubquery(desiredTypes []*types.T) {
 		// We need to add a projection to remove the extra columns.
 		projScope := outScope.push()
 		projScope.appendColumnsFromScope(outScope)
-		projScope.expr = s.scope.builder.constructProject(outScope.expr.(memo.RelExpr), projScope.cols)
+		projScope.expr = s.scope.builder.constructProject(outScope.expr, projScope.cols)
 		outScope = projScope
 	}
 
 	s.cols = outScope.cols
-	s.node = outScope.expr.(memo.RelExpr)
+	s.node = outScope.expr
 	s.ordering = ord
 }
 

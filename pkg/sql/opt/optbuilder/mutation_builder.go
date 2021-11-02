@@ -321,8 +321,8 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		mb.outScope.appendColumnsFromScope(mb.fetchScope)
 		mb.outScope.appendColumnsFromScope(fromScope)
 
-		left := mb.fetchScope.expr.(memo.RelExpr)
-		right := fromScope.expr.(memo.RelExpr)
+		left := mb.fetchScope.expr
+		right := fromScope.expr
 		mb.outScope.expr = mb.b.factory.ConstructInnerJoin(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
 	} else {
 		mb.outScope = mb.fetchScope
@@ -1391,7 +1391,7 @@ func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
 // cast from a column type in inScope to the corresponding target column type,
 // then this function will error.
 func (mb *mutationBuilder) addAssignmentCasts(inScope *scope, outTypes []*types.T) *scope {
-	expr := inScope.expr.(memo.RelExpr)
+	expr := inScope.expr
 
 	// Do a quick check to see if any casts are needed.
 	castRequired := false

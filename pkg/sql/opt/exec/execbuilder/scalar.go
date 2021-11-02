@@ -505,7 +505,7 @@ func (b *Builder) buildArrayFlatten(
 
 func (b *Builder) buildIfErr(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
 	ifErr := scalar.(*memo.IfErrExpr)
-	cond, err := b.buildScalar(ctx, ifErr.Cond.(opt.ScalarExpr))
+	cond, err := b.buildScalar(ctx, ifErr.Cond)
 	if err != nil {
 		return nil, err
 	}

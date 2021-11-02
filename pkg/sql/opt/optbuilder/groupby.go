@@ -431,7 +431,7 @@ func (b *Builder) buildAggregation(having opt.ScalarExpr, fromScope *scope) (out
 	b.constructProjectForScope(fromScope, g.aggInScope)
 
 	g.aggOutScope.expr = b.constructGroupBy(
-		g.aggInScope.expr.(memo.RelExpr),
+		g.aggInScope.expr,
 		groupingColSet,
 		aggCols,
 		g.aggInScope.ordering,
@@ -439,7 +439,7 @@ func (b *Builder) buildAggregation(having opt.ScalarExpr, fromScope *scope) (out
 
 	// Wrap with having filter if it exists.
 	if having != nil {
-		input := g.aggOutScope.expr.(memo.RelExpr)
+		input := g.aggOutScope.expr
 		filters := memo.FiltersExpr{b.factory.ConstructFiltersItem(having)}
 		g.aggOutScope.expr = b.factory.ConstructSelect(input, filters)
 	}
