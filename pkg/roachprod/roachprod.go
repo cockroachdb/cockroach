@@ -124,7 +124,6 @@ func verifyClusterName(clusterName, username string) (string, error) {
 }
 
 // DefaultSyncedCluster returns install.SyncedCluster with default values.
-//lint:ignore U1001 unused
 func DefaultSyncedCluster() install.SyncedCluster {
 	return install.SyncedCluster{
 		Name:        "",
@@ -142,6 +141,8 @@ func DefaultSyncedCluster() install.SyncedCluster {
 		MaxConcurrency: 32,
 	}
 }
+
+var _ = DefaultSyncedCluster()
 
 func sortedClusters() []string {
 	var r []string
