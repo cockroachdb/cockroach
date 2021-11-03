@@ -45,7 +45,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				mgr, err := streaming.GetReplicationStreamManager()
 				if err != nil {
-					return tree.NewDInt(tree.DInt(0)), err
+					return nil, err
 				}
 
 				jobID := int(*args[0].(*tree.DInt))
@@ -66,9 +66,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"crdb_internal.init_stream": makeBuiltin(
+	"crdb_internal.start_replication_stream": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categoryStreamReplication,
+			Category:         categoryStreamIngestion,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
@@ -79,17 +79,17 @@ var replicationBuiltins = map[string]builtinDefinition{
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				mgr, err := streaming.GetReplicationStreamManager()
 				if err != nil {
-					return tree.NewDInt(tree.DInt(0)), err
+					return nil, err
 				}
 
-				tenantID := int(*args[0].(*tree.DInt))
-				jobID, err := mgr.InitStream(evalCtx, evalCtx.Txn, uint64(tenantID))
+				tenantID := int(tree.MustBeDInt(args[0]))
+				jobID, err := mgr.StartReplicationStream(evalCtx, evalCtx.Txn, uint64(tenantID))
 				return tree.NewDInt(tree.DInt(jobID)), err
 			},
-			Info: "This function can be used to start a stream replication job for the specified tenant " +
-				"on the producer side. The job will periodically check liveness of the stream replication " +
-				"and will kill the job if it has been inactive for a duration of time specified by the " +
-				"cluster setting 'stream_replication.job_liveness_timeout'.",
+			Info: "This function can be used on the producer side to start a replication stream for " +
+				"the specified tenant. The returned stream ID uniquely identifies created stream. " +
+				"The caller must periodically invoke crdb_internal.heartbeat_stream() function to " +
+				"notify that the replication is still ongoing.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),

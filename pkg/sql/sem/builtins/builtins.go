@@ -125,7 +125,6 @@ const (
 	categorySystemInfo          = "System info"
 	categorySystemRepair        = "System repair"
 	categoryStreamIngestion     = "Stream Ingestion"
-	categoryStreamReplication   = "Stream Replication"
 )
 
 func categorizeType(t *types.T) string {
