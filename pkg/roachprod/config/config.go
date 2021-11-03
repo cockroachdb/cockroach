@@ -34,14 +34,18 @@ func init() {
 	}
 }
 
-// A sentinel value used to indicate that an installation should
-// take place on the local machine.  Later in the refactoring,
-// this ought to be replaced by a LocalCloudProvider or somesuch.
 const (
+	// DefaultDebugDir is used to stash debug information.
 	DefaultDebugDir = "${HOME}/.roachprod/debug"
-	DefaultHostDir  = "${HOME}/.roachprod/hosts"
-	EmailDomain     = "@cockroachlabs.com"
-	Local           = "local"
+
+	// EmailDomain is used to form the full account name for GCE and Slack.
+	EmailDomain = "@cockroachlabs.com"
+
+	// Local is the name of the local cluster.
+	Local = "local"
+
+	// ClustersDir is the directory where we cache information about clusters.
+	ClustersDir = "${HOME}/.roachprod/clusters"
 
 	// SharedUser is the linux username for shared use on all vms.
 	SharedUser = "ubuntu"
