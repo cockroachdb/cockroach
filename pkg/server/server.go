@@ -86,6 +86,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -2525,9 +2526,6 @@ func (s *Server) Stop() {
 
 // ServeHTTP is necessary to implement the http.Handler interface.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// This is our base handler, so catch all panics and make sure they stick.
-	defer log.FatalOnPanic()
-
 	// Disable caching of responses.
 	w.Header().Set("Cache-control", "no-cache")
 
@@ -2553,6 +2551,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}()
 		w = gzw
 	}
+
+	// This is our base handler.
+	// Intercept all panics, log them, and return an internal server error as a response.
+	defer func() {
+		if p := recover(); p != nil {
+			// Note: use of a background context here so we can log even with the absence of a client.
+			// Assumes appropriate timeouts are used.
+			logcrash.ReportPanic(context.Background(), &s.st.SV, p, 1 /* depth */)
+			http.Error(w, errAPIInternalErrorString, http.StatusInternalServerError)
+		}
+	}()
+
 	s.mux.ServeHTTP(w, r)
 }
 
