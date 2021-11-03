@@ -75,6 +75,7 @@ var OidToType = map[oid.Oid]*T{
 	oid.T_inet:         INet,
 	oid.T_interval:     Interval,
 	oid.T_jsonb:        Jsonb,
+	oid.T_json:         Jsonb,
 	oid.T_name:         Name,
 	oid.T_numeric:      Decimal,
 	oid.T_oid:          Oid,

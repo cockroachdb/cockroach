@@ -477,7 +477,7 @@ func DecodeDatum(
 				}
 			}
 			return out, nil
-		case oid.T_jsonb:
+		case oid.T_jsonb, oid.T_json:
 			if err := validateStringBytes(b); err != nil {
 				return nil, err
 			}
@@ -716,12 +716,21 @@ func DecodeDatum(
 				return nil, err
 			}
 			return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
+		case oid.T_json:
+			if err := validateStringBytes(b); err != nil {
+				return nil, err
+			}
+			return tree.ParseDJSON(string(b))
 		case oid.T_jsonb:
 			if len(b) < 1 {
 				return nil, NewProtocolViolationErrorf("no data to decode")
 			}
 			if b[0] != 1 {
-				return nil, NewProtocolViolationErrorf("expected JSONB version 1")
+				// ....
+				if err := validateStringBytes(b); err != nil {
+					return nil, err
+				}
+				return tree.ParseDJSON(string(b))
 			}
 			// Skip over the version number.
 			b = b[1:]
