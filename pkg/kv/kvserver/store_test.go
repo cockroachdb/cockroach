@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -50,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -196,6 +199,24 @@ type testStoreOpts struct {
 	createSystemRanges bool
 }
 
+type mockNodeStore struct {
+	desc *roachpb.NodeDescriptor
+}
+
+func (m mockNodeStore) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	return m.desc, nil
+}
+
+type dummyFirstRangeProvider struct {
+	store *Store
+}
+
+func (d dummyFirstRangeProvider) GetFirstRangeDescriptor() (*roachpb.RangeDescriptor, error) {
+	return d.store.GetReplicaIfExists(1).Desc(), nil
+}
+
+func (d dummyFirstRangeProvider) OnFirstRangeChanged(f func(*roachpb.RangeDescriptor)) {}
+
 // createTestStoreWithoutStart creates a test store using an in-memory
 // engine without starting the store. It returns the store, the store
 // clock's manual unix nanos time and a stopper. The caller is
@@ -232,17 +253,47 @@ func createTestStoreWithoutStart(
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
-	factory := &testSenderFactory{}
-	cfg.DB = kv.NewDB(cfg.AmbientCtx, factory, cfg.Clock, stopper)
-	store := NewStore(context.Background(), *cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
-	factory.setStore(store)
+	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
+	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 
+	rangeProv := &dummyFirstRangeProvider{}
+	var storeSender struct{ kv.Sender }
+	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
+		AmbientCtx:         cfg.AmbientCtx,
+		Settings:           cfg.Settings,
+		Clock:              cfg.Clock,
+		NodeDescs:          mockNodeStore{desc: nodeDesc},
+		RPCContext:         rpcContext,
+		RPCRetryOptions:    &retry.Options{},
+		NodeDialer:         nodedialer.New(rpcContext, gossip.AddressResolver(cfg.Gossip)), // TODO
+		FirstRangeProvider: rangeProv,
+		TestingKnobs: kvcoord.ClientTestingKnobs{
+			TransportFactory: kvcoord.SenderTransportFactory(cfg.AmbientCtx.Tracer, &storeSender),
+		},
+	})
+
+	txnCoordSenderFactory := kvcoord.NewTxnCoordSenderFactory(kvcoord.TxnCoordSenderFactoryConfig{
+		AmbientCtx:        cfg.AmbientCtx,
+		Settings:          cfg.Settings,
+		Clock:             cfg.Clock,
+		Stopper:           stopper,
+		HeartbeatInterval: -1,
+	}, ds)
+	cfg.DB = kv.NewDB(cfg.AmbientCtx, txnCoordSenderFactory, cfg.Clock, stopper)
+	store := NewStore(context.Background(), *cfg, eng, nodeDesc)
+	storeSender.Sender = store
+
+	storeIdent := roachpb.StoreIdent{NodeID: 1, StoreID: 1}
 	require.NoError(t, WriteClusterVersion(context.Background(), eng, clusterversion.TestingClusterVersion))
 	if err := InitEngine(
-		context.Background(), eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1},
+		context.Background(), eng, storeIdent,
 	); err != nil {
 		t.Fatal(err)
 	}
+	rangeProv.store = store
+	store.Ident = &storeIdent // would usually be set during Store.Start, but can't call that yet
+	stores.AddStore(store)
+
 	var splits []roachpb.RKey
 	kvs, tableSplits := bootstrap.MakeMetadataSchema(
 		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
@@ -1203,25 +1254,13 @@ func TestStoreSendBadRange(t *testing.T) {
 func splitTestRange(store *Store, splitKey roachpb.RKey, t *testing.T) *Replica {
 	ctx := context.Background()
 	repl := store.LookupReplica(splitKey)
-	require.NotNil(t, repl)
-	rangeID, err := store.AllocateRangeID(ctx)
-	require.NoError(t, err)
-	rhsDesc := roachpb.NewRangeDescriptor(
-		rangeID, splitKey, repl.Desc().EndKey, repl.Desc().Replicas())
-	// Minimal amount of work to keep this deprecated machinery working: Write
-	// some required Raft keys.
-	err = stateloader.WriteInitialRangeState(ctx, store.engine, *rhsDesc, roachpb.Version{})
-	require.NoError(t, err)
-	newRng, err := newReplica(ctx, rhsDesc, store, repl.ReplicaID())
-	require.NoError(t, err)
-	newLeftDesc := *repl.Desc()
-	newLeftDesc.EndKey = splitKey
-	err = store.SplitRange(repl.AnnotateCtx(context.Background()), repl, newRng, &roachpb.SplitTrigger{
-		RightDesc: *rhsDesc,
-		LeftDesc:  newLeftDesc,
-	})
-	require.NoError(t, err)
-	return newRng
+	_, err := repl.AdminSplit(ctx, roachpb.AdminSplitRequest{
+		RequestHeader:  roachpb.RequestHeader{Key: splitKey.AsRawKey()},
+		SplitKey:       splitKey.AsRawKey(),
+		ExpirationTime: store.Clock().Now().Add(24*time.Hour.Nanoseconds(), 0),
+	}, "splitTestRange")
+	require.NoError(t, err.GoError())
+	return store.LookupReplica(splitKey)
 }
 
 // TestStoreSendOutOfRange passes a key not contained
