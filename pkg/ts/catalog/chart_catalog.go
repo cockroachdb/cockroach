@@ -119,6 +119,7 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"sys.cpu.sys.ns",
 					"sys.cpu.user.ns",
+					"sys.cpu.now.ns",
 				},
 			},
 		},
