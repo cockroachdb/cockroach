@@ -386,9 +386,9 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 	ctx := context.Background()
 	startKey := []byte("a")
 
-	setup := func(subT *testing.T) (
+	setup := func(t *testing.T) (
 		*testcluster.TestCluster, roachpb.RangeID) {
-		subT.Helper()
+		t.Helper()
 
 		tc := testcluster.StartTestCluster(t, 3,
 			base.TestClusterArgs{
@@ -416,9 +416,9 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 	}
 
 	waitForInitialCheckpointAcrossSpan := func(
-		subT *testing.T, stream *testStream, streamErrC <-chan *roachpb.Error, span roachpb.Span,
+		t *testing.T, stream *testStream, streamErrC <-chan *roachpb.Error, span roachpb.Span,
 	) {
-		subT.Helper()
+		t.Helper()
 		noResolveTimestampEvent := roachpb.RangeFeedEvent{
 			Checkpoint: &roachpb.RangeFeedCheckpoint{
 				Span:       span,
@@ -443,7 +443,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 			return nil
 		})
 		if len(streamErrC) > 0 {
-			subT.Fatalf("unexpected error from stream: %v", <-streamErrC)
+			t.Fatalf("unexpected error from stream: %v", <-streamErrC)
 		}
 		expEvents := []*roachpb.RangeFeedEvent{&noResolveTimestampEvent}
 		if len(events) > 1 {
@@ -457,25 +457,25 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 			}
 		}
 		if !reflect.DeepEqual(events, expEvents) {
-			subT.Fatalf("incorrect events on stream, found %v, want %v", events, expEvents)
+			t.Fatalf("incorrect events on stream, found %v, want %v", events, expEvents)
 		}
 
 	}
 
 	assertRangefeedRetryErr := func(
-		subT *testing.T, pErr *roachpb.Error, expReason roachpb.RangeFeedRetryError_Reason,
+		t *testing.T, pErr *roachpb.Error, expReason roachpb.RangeFeedRetryError_Reason,
 	) {
-		subT.Helper()
+		t.Helper()
 		expErr := roachpb.NewRangeFeedRetryError(expReason)
 		if pErr == nil {
-			subT.Fatalf("got nil error for RangeFeed: expecting %v", expErr)
+			t.Fatalf("got nil error for RangeFeed: expecting %v", expErr)
 		}
 		rfErr, ok := pErr.GetDetail().(*roachpb.RangeFeedRetryError)
 		if !ok {
-			subT.Fatalf("got incorrect error for RangeFeed: %v; expecting %v", pErr, expErr)
+			t.Fatalf("got incorrect error for RangeFeed: %v; expecting %v", pErr, expErr)
 		}
 		if rfErr.Reason != expReason {
-			subT.Fatalf("got incorrect RangeFeedRetryError reason for RangeFeed: %v; expecting %v",
+			t.Fatalf("got incorrect RangeFeedRetryError reason for RangeFeed: %v; expecting %v",
 				rfErr.Reason, expReason)
 		}
 	}
