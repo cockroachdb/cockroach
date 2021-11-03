@@ -3301,6 +3301,9 @@ type ExecConfigAccessor interface {
 
 	// JobRegistry returns jobs.Registry from ExecutorConfig
 	JobRegistry() interface{}
+
+	// ProtectedTimestampProvider returns protectedts.Provider from ExecutorConfig
+	ProtectedTimestampProvider() interface{}
 }
 
 // PrivilegedAccessor gives access to certain queries that would otherwise

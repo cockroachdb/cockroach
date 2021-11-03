@@ -14,31 +14,42 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-	//"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
-func makeProducerJobRecord(
-	registry *jobs.Registry, tenantID uint64, timeout time.Duration, username security.SQLUsername,
-) (jobspb.JobID, jobs.Record) {
+func makeTenantSpan(tenantID uint64) *roachpb.Span {
 	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenantID))
-	spans := []*roachpb.Span{{Key: prefix, EndKey: prefix.PrefixEnd()}}
+	return &roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+}
+
+func makeProducerJobRecord(
+	registry *jobs.Registry,
+	tenantID uint64,
+	timeout time.Duration,
+	username security.SQLUsername,
+	ptsID uuid.UUID,
+) (jobspb.JobID, jobs.Record) {
 	jr := jobs.Record{
 		Description: fmt.Sprintf("stream replication for tenant %d", tenantID),
 		Username:    username,
 		Details: jobspb.StreamReplicationDetails{
-			Spans: spans,
+			ProtectedTimestampRecord: &ptsID,
+			Spans:                    []*roachpb.Span{makeTenantSpan(tenantID)},
 		},
 		Progress: jobspb.StreamReplicationProgress{
 			Expiration: timeutil.Now().Add(timeout),
@@ -108,11 +119,69 @@ func doStartReplicationStream(
 
 	registry := evalCtx.ExecConfigAccessor.JobRegistry().(*jobs.Registry)
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
-	jobID, jr := makeProducerJobRecord(registry, tenantID, timeout, evalCtx.SessionData().User())
+	ptsID := uuid.MakeV4()
+	jobID, jr := makeProducerJobRecord(registry, tenantID, timeout, evalCtx.SessionData().User(), ptsID)
 	if _, err := registry.CreateAdoptableJobWithTxn(evalCtx.Ctx(), jr, jobID, txn); err != nil {
 		return streaming.InvalidStreamID, err
 	}
+
+	ptp := evalCtx.ExecConfigAccessor.ProtectedTimestampProvider().(protectedts.Provider)
+	statementTime := hlc.Timestamp{
+		WallTime: evalCtx.GetStmtTimestamp().UnixNano(),
+	}
+	pts := jobsprotectedts.MakeRecord(ptsID, int64(jobID), statementTime,
+		[]roachpb.Span{*makeTenantSpan(tenantID)}, jobsprotectedts.Jobs)
+
+	if err := ptp.Protect(evalCtx.Ctx(), txn, pts); err != nil {
+		return streaming.InvalidStreamID, err
+	}
 	return streaming.StreamID(jobID), nil
+}
+
+// updateReplicationStreamProgress updates the job progress for an active replication
+// stream specified by 'streamID' and returns error if the stream is no longer active.
+func updateReplicationStreamProgress(
+	ctx context.Context,
+	expiration time.Time,
+	ptsProvider protectedts.Provider,
+	registry *jobs.Registry,
+	txn *kv.Txn,
+	streamID streaming.StreamID,
+	ts hlc.Timestamp,
+) error {
+	jr, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(streamID), txn)
+	if err != nil {
+		return err
+	}
+
+	status, err := jr.CurrentStatus(ctx, txn)
+	if err != nil {
+		return err
+	}
+	if status != jobs.StatusRunning {
+		return errors.Errorf("job %d not running", streamID)
+	}
+
+	d := jr.Details().(jobspb.StreamReplicationDetails)
+	ptsRecord, err := ptsProvider.GetRecord(ctx, txn, *d.ProtectedTimestampRecord)
+	if err != nil {
+		return err
+	}
+
+	if ptsRecord.Timestamp.Add(streamingccl.MinProtectedTimestampUpdateAdvance.Nanoseconds(), 0).Less(ts) {
+		if err = ptsProvider.UpdateTimestamp(ctx, txn, *d.ProtectedTimestampRecord, ts); err != nil {
+			return err
+		}
+	}
+
+	return registry.UpdateJobWithTxn(ctx, jobspb.JobID(streamID), txn, false,
+		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			if p := jr.Progress(); expiration.After(p.GetStreamReplication().Expiration) {
+				p.GetStreamReplication().Expiration = expiration
+				ju.UpdateProgress(&p)
+			}
+			return nil
+		})
 }
 
 func init() {

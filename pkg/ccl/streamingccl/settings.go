@@ -26,6 +26,18 @@ func TestingSetDefaultJobLivenessTrackingFrequency(f time.Duration) func() {
 	return func() { DefaultJobLivenessTrackingFrequency = old }
 }
 
+// MinProtectedTimestampUpdateAdvance specifies the minimum amount of time a
+// stream replication's protected timestamp must advance for it to be updated.
+var MinProtectedTimestampUpdateAdvance = 10 * time.Minute
+
+// TestingMinProtectedTimestampUpdateAdvance changes MinProtectedTimestampUpdateAdvance for tests.
+// Returns function to restore it to its original value.
+func TestingMinProtectedTimestampUpdateAdvance(f time.Duration) func() {
+	old := MinProtectedTimestampUpdateAdvance
+	MinProtectedTimestampUpdateAdvance = f
+	return func() { MinProtectedTimestampUpdateAdvance = old }
+}
+
 // StreamReplicationJobLivenessTimeout controls how long we wait for to kill
 // an inactive producer job.
 var StreamReplicationJobLivenessTimeout = settings.RegisterDurationSetting(

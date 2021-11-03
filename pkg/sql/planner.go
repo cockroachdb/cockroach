@@ -598,6 +598,10 @@ func (p *planner) JobRegistry() interface{} {
 	return p.ExecCfg().JobRegistry
 }
 
+func (p *planner) ProtectedTimestampProvider() interface{} {
+	return p.ExecCfg().ProtectedTimestampProvider
+}
+
 // TypeAsString enforces (not hints) that the given expression typechecks as a
 // string and returns a function that can be called to get the string value
 // during (planNode).Start.

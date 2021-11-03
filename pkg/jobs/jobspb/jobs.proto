@@ -109,6 +109,12 @@ message StreamIngestionProgress {
 message StreamReplicationDetails {
   // Key spans we are replicating
   repeated roachpb.Span spans = 1;
+
+  // ID of the protected timestamp record that protects the above spans
+  bytes protected_timestamp_record = 2 [
+    (gogoproto.customname) = "ProtectedTimestampRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
 }
 
 message StreamReplicationProgress {
