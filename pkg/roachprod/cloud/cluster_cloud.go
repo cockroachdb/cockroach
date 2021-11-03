@@ -13,6 +13,7 @@ package cloud
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -22,27 +23,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const vmNameFormat = "user-<clusterid>-<nodeid>"
-
-// Cloud TODO(peter): document
+// Cloud contains information about all known clusters (across multiple cloud
+// providers).
 type Cloud struct {
-	Clusters map[string]*Cluster `json:"clusters"`
-	// Any VM in this list can be expected to have at least one element
-	// in its Errors field.
+	Clusters Clusters `json:"clusters"`
+	// BadInstances contains the VMs that have the Errors field populated. They
+	// are not part of any Cluster.
 	BadInstances vm.List `json:"bad_instances"`
 }
 
-// Clone creates a deep copy of the receiver.
-func (c *Cloud) Clone() *Cloud {
-	cc := *c
-	cc.Clusters = make(map[string]*Cluster, len(c.Clusters))
-	for k, v := range c.Clusters {
-		cc.Clusters[k] = v
-	}
-	return &cc
-}
-
-// BadInstanceErrors TODO(peter): document
+// BadInstanceErrors returns all bad VM instances, grouped by error.
 func (c *Cloud) BadInstanceErrors() map[error]vm.List {
 	ret := map[error]vm.List{}
 
@@ -61,10 +51,30 @@ func (c *Cloud) BadInstanceErrors() map[error]vm.List {
 	return ret
 }
 
-func newCloud() *Cloud {
-	return &Cloud{
-		Clusters: make(map[string]*Cluster),
+// Clusters contains a set of clusters (potentially across multiple providers),
+// keyed by the cluster name.
+type Clusters map[string]*Cluster
+
+// Names returns all cluster names, in alphabetical order.
+func (c Clusters) Names() []string {
+	result := make([]string, 0, len(c))
+	for n := range c {
+		result = append(result, n)
 	}
+	sort.Strings(result)
+	return result
+}
+
+// FilterByName creates a new Clusters map that only contains the clusters with
+// name matching the given regexp.
+func (c Clusters) FilterByName(pattern *regexp.Regexp) Clusters {
+	result := make(Clusters)
+	for name, cluster := range c {
+		if pattern.MatchString(name) {
+			result[name] = cluster
+		}
+	}
+	return result
 }
 
 // A Cluster is created by querying various vm.Provider instances.
@@ -145,6 +155,8 @@ func (c *Cluster) IsLocal() bool {
 	return c.Name == config.Local
 }
 
+const vmNameFormat = "user-<clusterid>-<nodeid>"
+
 func namesFromVM(v vm.VM) (string, string, error) {
 	if v.IsLocal() {
 		return config.Local, config.Local, nil
@@ -157,9 +169,12 @@ func namesFromVM(v vm.VM) (string, string, error) {
 	return parts[0], strings.Join(parts[:len(parts)-1], "-"), nil
 }
 
-// ListCloud TODO(peter): document
+// ListCloud returns information about all instances (across all available
+// providers).
 func ListCloud() (*Cloud, error) {
-	cloud := newCloud()
+	cloud := &Cloud{
+		Clusters: make(Clusters),
+	}
 
 	for _, p := range vm.Providers {
 		vms, err := p.List()
