@@ -359,6 +359,203 @@ func TestDefaultDefaultPrivileges(t *testing.T) {
 	}
 }
 
+func TestDefaultPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// The ID chosen doesn't matter as long as it's not the system db ID.
+	defaultDatabaseID := descpb.ID(50)
+
+	type userAndGrants struct {
+		user   security.SQLUsername
+		grants privilege.List
+	}
+	testCases := []struct {
+		objectCreator          security.SQLUsername
+		defaultPrivilegesRole  security.SQLUsername
+		dbID                   descpb.ID
+		targetObject           tree.AlterDefaultPrivilegesTargetObject
+		userAndGrants          []userAndGrants
+		expectedGrantsOnObject []userAndGrants
+	}{
+		{
+			// Altering default privileges on the system database normally wouldn't
+			// be possible but we do it here via directly altering the default
+			// privilege descriptor here.
+			// The purpose of this test however is to show that even after altering
+			// the default privileges, if we create an object in the system database,
+			// the only privileges on the object are ALL privileges for root and
+			// admin.
+			objectCreator:         security.MakeSQLUsernameFromPreNormalizedString("creator"),
+			defaultPrivilegesRole: security.MakeSQLUsernameFromPreNormalizedString("creator"),
+			targetObject:          tree.Tables,
+			dbID:                  keys.SystemDatabaseID,
+			userAndGrants: []userAndGrants{
+				{
+					user:   security.MakeSQLUsernameFromPreNormalizedString("foo"),
+					grants: privilege.List{privilege.SELECT},
+				},
+			},
+			expectedGrantsOnObject: []userAndGrants{
+				{
+					user:   security.RootUserName(),
+					grants: privilege.List{privilege.ALL},
+				},
+				{
+					user:   security.AdminRoleName(),
+					grants: privilege.List{privilege.ALL},
+				},
+			},
+		},
+		{
+			objectCreator:         security.MakeSQLUsernameFromPreNormalizedString("creator"),
+			defaultPrivilegesRole: security.MakeSQLUsernameFromPreNormalizedString("creator"),
+			targetObject:          tree.Tables,
+			dbID:                  defaultDatabaseID,
+			userAndGrants: []userAndGrants{
+				{
+					user:   security.MakeSQLUsernameFromPreNormalizedString("foo"),
+					grants: privilege.List{privilege.SELECT},
+				},
+			},
+			expectedGrantsOnObject: []userAndGrants{
+				{
+					user:   security.MakeSQLUsernameFromPreNormalizedString("foo"),
+					grants: privilege.List{privilege.SELECT},
+				},
+			},
+		},
+		{
+			objectCreator:         security.MakeSQLUsernameFromPreNormalizedString("creator"),
+			defaultPrivilegesRole: security.MakeSQLUsernameFromPreNormalizedString("creator"),
+			targetObject:          tree.Tables,
+			dbID:                  defaultDatabaseID,
+			userAndGrants: []userAndGrants{
+				{
+					user:   security.MakeSQLUsernameFromPreNormalizedString("foo"),
+					grants: privilege.List{privilege.ALL},
+				},
+			},
+			expectedGrantsOnObject: []userAndGrants{
+				{
+					user:   security.MakeSQLUsernameFromPreNormalizedString("foo"),
+					grants: privilege.List{privilege.ALL},
+				},
+			},
+		},
+		{
+			objectCreator:         security.MakeSQLUsernameFromPreNormalizedString("creator"),
+			defaultPrivilegesRole: security.MakeSQLUsernameFromPreNormalizedString("creator"),
+			targetObject:          tree.Tables,
+			dbID:                  defaultDatabaseID,
+			userAndGrants: []userAndGrants{
+				{
+					user:   security.MakeSQLUsernameFromPreNormalizedString("foo"),
+					grants: privilege.List{privilege.SELECT},
+				},
+			},
+			expectedGrantsOnObject: []userAndGrants{
+				{
+					user:   security.MakeSQLUsernameFromPreNormalizedString("foo"),
+					grants: privilege.List{privilege.SELECT},
+				},
+			},
+		},
+		{
+			objectCreator:         security.MakeSQLUsernameFromPreNormalizedString("creator"),
+			defaultPrivilegesRole: security.MakeSQLUsernameFromPreNormalizedString("creator"),
+			targetObject:          tree.Tables,
+			dbID:                  defaultDatabaseID,
+			userAndGrants: []userAndGrants{
+				{
+					user:   security.MakeSQLUsernameFromPreNormalizedString("foo"),
+					grants: privilege.List{privilege.ALL},
+				},
+			},
+			expectedGrantsOnObject: []userAndGrants{
+				{
+					user:   security.MakeSQLUsernameFromPreNormalizedString("foo"),
+					grants: privilege.List{privilege.ALL},
+				},
+			},
+		},
+		{
+			objectCreator:         security.MakeSQLUsernameFromPreNormalizedString("creator"),
+			defaultPrivilegesRole: security.MakeSQLUsernameFromPreNormalizedString("creator"),
+			targetObject:          tree.Tables,
+			dbID:                  defaultDatabaseID,
+			userAndGrants: []userAndGrants{
+				{
+					user:   security.MakeSQLUsernameFromPreNormalizedString("foo"),
+					grants: privilege.List{privilege.SELECT},
+				},
+				{
+					user:   security.MakeSQLUsernameFromPreNormalizedString("bar"),
+					grants: privilege.List{privilege.ALL},
+				},
+			},
+			expectedGrantsOnObject: []userAndGrants{
+				{
+					user:   security.MakeSQLUsernameFromPreNormalizedString("foo"),
+					grants: privilege.List{privilege.SELECT},
+				},
+				{
+					user:   security.MakeSQLUsernameFromPreNormalizedString("bar"),
+					grants: privilege.List{privilege.ALL},
+				},
+			},
+		},
+		{
+			// In this case, we ALTER DEFAULT PRIVILEGES for the role foo.
+			// However the default privileges are retrieved for bar, thus
+			// we don't expect any privileges on the object.
+			objectCreator:         security.MakeSQLUsernameFromPreNormalizedString("foo"),
+			defaultPrivilegesRole: security.MakeSQLUsernameFromPreNormalizedString("bar"),
+			targetObject:          tree.Tables,
+			dbID:                  defaultDatabaseID,
+			userAndGrants: []userAndGrants{
+				{
+					user:   security.MakeSQLUsernameFromPreNormalizedString("foo"),
+					grants: privilege.List{privilege.SELECT},
+				},
+				{
+					user:   security.MakeSQLUsernameFromPreNormalizedString("bar"),
+					grants: privilege.List{privilege.ALL},
+				},
+			},
+			expectedGrantsOnObject: []userAndGrants{},
+		},
+	}
+	for _, tc := range testCases {
+		defaultPrivilegeDescriptor := MakeNewDefaultPrivilegeDescriptor()
+		defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
+
+		for _, userAndGrant := range tc.userAndGrants {
+			defaultPrivileges.GrantDefaultPrivileges(
+				descpb.DefaultPrivilegesRole{Role: tc.defaultPrivilegesRole},
+				userAndGrant.grants,
+				[]security.SQLUsername{userAndGrant.user},
+				tc.targetObject,
+			)
+		}
+
+		createdPrivileges := defaultPrivileges.CreatePrivilegesFromDefaultPrivileges(
+			tc.dbID,
+			tc.objectCreator,
+			tc.targetObject,
+			&descpb.PrivilegeDescriptor{},
+		)
+
+		for _, userAndGrant := range tc.expectedGrantsOnObject {
+			for _, grant := range userAndGrant.grants {
+				if !createdPrivileges.CheckPrivilege(userAndGrant.user, grant) {
+					t.Errorf("expected to find %s privilege for %s", grant.String(), userAndGrant.user)
+				}
+			}
+		}
+
+	}
+}
+
 func TestModifyDefaultDefaultPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
