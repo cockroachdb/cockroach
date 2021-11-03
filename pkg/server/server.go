@@ -1987,16 +1987,16 @@ func ConfigureGRPCGateway(
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
+		defer log.ErrorOnPanic()
 		telemetry.Inc(getServerEndpointCounter(method))
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
-	conn, err := grpc.DialContext(ctx, GRPCAddr, append(append(
+	conn, err := grpc.DialContext(ctx, GRPCAddr, append(
 		dialOpts,
-		grpc.WithUnaryInterceptor(callCountInterceptor)),
+		grpc.WithUnaryInterceptor(callCountInterceptor),
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return loopback.Connect(ctx)
-		}),
-	)...)
+		}))...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -2723,7 +2723,7 @@ func (s *Server) Stop() {
 // ServeHTTP is necessary to implement the http.Handler interface.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// This is our base handler, so catch all panics and make sure they stick.
-	defer log.FatalOnPanic()
+	defer log.ErrorOnPanic()
 
 	// Disable caching of responses.
 	w.Header().Set("Cache-control", "no-cache")
