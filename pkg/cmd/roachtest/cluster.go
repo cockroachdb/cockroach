@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -41,6 +40,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -48,7 +50,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
+	"github.com/spf13/pflag"
 )
+
+func init() {
+	roachprod.InitProviders()
+}
 
 var (
 	// TODO(tbg): this is redundant with --cloud==local. Make the --local flag an
@@ -62,8 +69,16 @@ var (
 	instanceType     string
 	localSSDArg      bool
 	workload         string
-	roachprod        string
-	createArgs       []string
+	roachprodBinary  string
+	// overrideOpts contains vm.CreateOpts override values passed from the cli.
+	overrideOpts vm.CreateOpts
+	// overrideFlagset represents the flags passed from the cli for
+	// `run` command (used to know if the value of a flag changed,
+	// for example: overrideFlagset("lifetime").Changed().
+	// TODO(ahmad/healthy-pod): extract runCmd (and other commands) from main
+	// to make it global and operate on runCmd.Flags() directly.
+	overrideFlagset  *pflag.FlagSet
+	overrideNumNodes = -1
 	buildTag         string
 	clusterName      string
 	clusterWipe      bool
@@ -221,7 +236,7 @@ func initBinariesAndLibraries() {
 		os.Exit(1)
 	}
 
-	roachprod, err = findBinary(roachprod, "roachprod")
+	roachprodBinary, err = findBinary(roachprodBinary, "roachprod")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
@@ -799,6 +814,30 @@ func (f *clusterFactory) genName(cfg clusterConfig) string {
 		fmt.Sprintf("%s-%02d-%s", f.namePrefix, count, cfg.spec.String()))
 }
 
+// createFlagsOverride updates opts with the override values passed from the cli.
+func createFlagsOverride(flags *pflag.FlagSet, opts *vm.CreateOpts) {
+	if flags != nil {
+		if flags.Changed("lifetime") {
+			opts.Lifetime = overrideOpts.Lifetime
+		}
+		if flags.Changed("roachprod-local-ssd") {
+			opts.SSDOpts.UseLocalSSD = overrideOpts.SSDOpts.UseLocalSSD
+		}
+		if flags.Changed("filesystem") {
+			opts.SSDOpts.FileSystem = overrideOpts.SSDOpts.FileSystem
+		}
+		if flags.Changed("local-ssd-no-ext4-barrier") {
+			opts.SSDOpts.NoExt4Barrier = overrideOpts.SSDOpts.NoExt4Barrier
+		}
+		if flags.Changed("os-volume-size") {
+			opts.OsVolumeSize = overrideOpts.OsVolumeSize
+		}
+		if flags.Changed("geo") {
+			opts.GeoDistributed = overrideOpts.GeoDistributed
+		}
+	}
+}
+
 // newCluster creates a new roachprod cluster.
 //
 // setStatus is called with status messages indicating the stage of cluster
@@ -810,6 +849,10 @@ func (f *clusterFactory) newCluster(
 ) (*clusterImpl, error) {
 	if ctx.Err() != nil {
 		return nil, errors.Wrap(ctx.Err(), "newCluster")
+	}
+
+	if overrideFlagset != nil && overrideFlagset.Changed("nodes") {
+		cfg.spec.NodeCount = overrideNumNodes
 	}
 
 	if cfg.spec.NodeCount == 0 {
@@ -825,11 +868,11 @@ func (f *clusterFactory) newCluster(
 		return c, nil
 	}
 
-	exp := cfg.spec.Expiration()
 	if cfg.localCluster {
 		// Local clusters never expire.
-		exp = timeutil.Now().Add(100000 * time.Hour)
+		cfg.spec.Lifetime = 100000 * time.Hour
 	}
+	exp := cfg.spec.Expiration()
 
 	setStatus("acquiring cluster creation semaphore")
 	release := f.acquireSem()
@@ -860,16 +903,22 @@ func (f *clusterFactory) newCluster(
 		}
 		c.status("creating cluster")
 
-		sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.spec.NodeCount)}
+		var createVMOpts vm.CreateOpts
+		var providerOpts interface{}
 		{
-			args, err := cfg.spec.Args(createArgs...)
+			var err error
+			createVMOpts, providerOpts, err = cfg.spec.RoachprodOpts(c.name, cfg.useIOBarrier)
 			if err != nil {
 				return nil, err
 			}
-			sargs = append(sargs, args...)
+			createFlagsOverride(overrideFlagset, &createVMOpts)
+			// Make sure c.expiration is changed if --lifetime override flag is passed.
+			cfg.spec.Lifetime = createVMOpts.Lifetime
+			c.expiration = cfg.spec.Expiration()
 		}
-		if !cfg.useIOBarrier && localSSDArg {
-			sargs = append(sargs, "--local-ssd-no-ext4-barrier")
+
+		if cfg.spec.Cloud != spec.Local {
+			vm.Providers[cfg.spec.Cloud].Flags().ConfigureProviderOpts(providerOpts)
 		}
 
 		// Logs for creating a new cluster go to a dedicated log file.
@@ -884,7 +933,8 @@ func (f *clusterFactory) newCluster(
 		}
 
 		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
-		err = execCmd(ctx, l, sargs...)
+		createVMOpts.ClusterName = c.name
+		err = roachprod.Create("" /* username */, cfg.spec.NodeCount, createVMOpts)
 		if err == nil {
 			if err := f.r.registerCluster(c); err != nil {
 				return nil, err
@@ -893,12 +943,14 @@ func (f *clusterFactory) newCluster(
 			l.Close()
 			return c, nil
 		}
-		if strings.Contains(cluster.GetStderr(err), "already exists") {
+
+		if errors.HasType(err, (*roachprod.ClusterAlreadyExistsError)(nil)) {
 			// If the cluster couldn't be created because it existed already, bail.
 			// In reality when this is hit is when running with the `local` flag
 			// or a destroy from the previous iteration failed.
 			return nil, err
 		}
+
 		l.PrintfCtx(ctx, "cluster creation failed, cleaning up in case it was partially created: %s", err)
 		// Set the alloc to nil so that Destroy won't release it.
 		// This is ugly, but given that the alloc is created very far away from this code
@@ -1035,27 +1087,11 @@ func (c *clusterImpl) validate(
 	// Perform validation on the existing cluster.
 	c.status("checking that existing cluster matches spec")
 	pattern := "^" + regexp.QuoteMeta(c.name) + "$"
-	sargs := []string{roachprod, "list", "--pattern", pattern, "--json", "--quiet"}
-	out, err := execCmdWithBuffer(ctx, l, sargs...)
+	cloudClusters, err := roachprod.List(false /* listMine */, pattern)
 	if err != nil {
 		return err
 	}
-
-	// jsonOutput matches the structure of the output from `roachprod list`
-	// when in json mode.
-	type jsonOutput struct {
-		Clusters map[string]struct {
-			VMs []struct {
-				MachineType string `json:"machine_type"`
-			} `json:"vms"`
-		} `json:"clusters"`
-	}
-	var details jsonOutput
-	if err := json.Unmarshal(out, &details); err != nil {
-		return err
-	}
-
-	cDetails, ok := details.Clusters[c.name]
+	cDetails, ok := cloudClusters.Clusters[c.name]
 	if !ok {
 		return fmt.Errorf("cluster %q not found", c.name)
 	}
@@ -1117,10 +1153,10 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, t test.Test) error {
 			return err
 		}
 
-		if err := execCmd(ctx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */); err != nil {
+		if err := c.Get(ctx, c.l, "logs" /* src */, path /* dest */); err != nil {
 			t.L().Printf("failed to fetch logs: %v", err)
 			if ctx.Err() != nil {
-				return err
+				return errors.Wrap(err, "cluster.FetchLogs")
 			}
 		}
 
@@ -1130,10 +1166,8 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, t test.Test) error {
 				return err
 			}
 		}
-
-		return execCmd(
-			ctx, c.l, roachprod, "get", c.name, "logs/redacted/combined.log" /* src */, filepath.Join(c.t.ArtifactsDir(), "logs/cockroach.log"),
-		)
+		dest := filepath.Join(c.t.ArtifactsDir(), "logs/cockroach.log")
+		return errors.Wrap(c.Get(ctx, c.l, "logs/redacted/combined.log" /* src */, dest), "cluster.FetchLogs")
 	})
 }
 
@@ -1206,7 +1240,7 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, t test.Test) erro
 		if err := c.Get(
 			ctx, c.l, "tsdump.gob", tsDumpGob, c.Node(node),
 		); err != nil {
-			return err
+			return errors.Wrap(err, "cluster.FetchTimeseriesData")
 		}
 		db, err := c.ConnE(ctx, node)
 		if err != nil {
@@ -1269,7 +1303,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, t test.Test) error {
 			// Ignore the files in the the log directory; we pull the logs separately anyway
 			// so this would only cause duplication.
 			si := strconv.Itoa(i)
-			output, err := execCmdWithBuffer(ctx, c.l, roachprod, "ssh", c.name+":"+si, "--",
+			output, err := execCmdWithBuffer(ctx, c.l, roachprodBinary, "ssh", c.name+":"+si, "--",
 				"./cockroach", "debug", "zip", "--exclude-files='*.log,*.txt,*.pprof'", "--url", "{pgurl:"+si+"}", zipName)
 			if err != nil {
 				t.L().Printf("./cockroach debug zip failed: %s", output)
@@ -1278,7 +1312,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, t test.Test) error {
 				}
 				return err
 			}
-			return execCmd(ctx, c.l, roachprod, "get", c.name+":"+si, zipName /* src */, path /* dest */)
+			return errors.Wrap(c.Get(ctx, c.l, zipName /* src */, path /* dest */, c.Node(i)), "cluster.FetchDebugZip")
 		}
 		return nil
 	})
@@ -1294,9 +1328,7 @@ func (c *clusterImpl) FailOnDeadNodes(ctx context.Context, t test.Test) {
 
 	// Don't hang forever.
 	_ = contextutil.RunWithTimeout(ctx, "detect dead nodes", time.Minute, func(ctx context.Context) error {
-		output, err := execCmdWithBuffer(
-			ctx, t.L(), roachprod, "monitor", c.name, "--oneshot", "--ignore-empty-nodes",
-		)
+		err := roachprod.Monitor(c.name, install.MonitorOpts{OneShot: true, IgnoreEmptyNodes: true})
 		// If there's an error, it means either that the monitor command failed
 		// completely, or that it found a dead node worth complaining about.
 		if err != nil {
@@ -1305,7 +1337,7 @@ func (c *clusterImpl) FailOnDeadNodes(ctx context.Context, t test.Test) {
 				return nil
 			}
 			// TODO(tbg): remove this type assertion.
-			t.(*testImpl).printfAndFail(0 /* skip */, "dead node detection: %s %s", err, output)
+			t.(*testImpl).printfAndFail(0 /* skip */, "dead node detection: %s", err)
 		}
 		return nil
 	})
@@ -1425,14 +1457,14 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, t test.Test) error {
 			return err
 		}
 		if err := execCmd(
-			ctx, c.l, roachprod, "ssh", c.name, "--",
+			ctx, c.l, roachprodBinary, "ssh", c.name, "--",
 			"/bin/bash", "-c", "'sudo dmesg > "+name+"'", /* src */
 		); err != nil {
 			// Don't error out because it might've worked on some nodes. Fetching will
 			// error out below but will get everything it can first.
 			t.L().Printf("during dmesg fetching: %s", err)
 		}
-		return execCmd(ctx, c.l, roachprod, "get", c.name, name /* src */, path /* dest */)
+		return errors.Wrap(c.Get(ctx, c.l, name /* src */, path /* dest */), "cluster.FetchDmesg")
 	})
 }
 
@@ -1456,14 +1488,14 @@ func (c *clusterImpl) FetchJournalctl(ctx context.Context, t test.Test) error {
 			return err
 		}
 		if err := execCmd(
-			ctx, c.l, roachprod, "ssh", c.name, "--",
+			ctx, c.l, roachprodBinary, "ssh", c.name, "--",
 			"/bin/bash", "-c", "'sudo journalctl > "+name+"'", /* src */
 		); err != nil {
 			// Don't error out because it might've worked on some nodes. Fetching will
 			// error out below but will get everything it can first.
 			t.L().Printf("during journalctl fetching: %s", err)
 		}
-		return execCmd(ctx, c.l, roachprod, "get", c.name, name /* src */, path /* dest */)
+		return errors.Wrap(c.Get(ctx, c.l, name /* src */, path /* dest */), "cluster.FetchJournalctl")
 	})
 }
 
@@ -1491,7 +1523,7 @@ func (c *clusterImpl) FetchCores(ctx context.Context, t test.Test) error {
 	// timeout.
 	return contextutil.RunWithTimeout(ctx, "cores", 60*time.Second, func(ctx context.Context) error {
 		path := filepath.Join(c.t.ArtifactsDir(), "cores")
-		return execCmd(ctx, c.l, roachprod, "get", c.name, "/mnt/data1/cores" /* src */, path /* dest */)
+		return errors.Wrap(c.Get(ctx, c.l, "/mnt/data1/cores" /* src */, path /* dest */), "cluster.FetchCores")
 	})
 }
 
@@ -1564,7 +1596,7 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 			// We use a non-cancelable context for running this command. Once we got
 			// here, the cluster cannot be destroyed again, so we really want this
 			// command to succeed.
-			if err := execCmd(context.Background(), l, roachprod, "destroy", c.name); err != nil {
+			if err := roachprod.Destroy(false /* destroyAllMine */, false /* destroyAllLocal */, c.name); err != nil {
 				l.ErrorfCtx(ctx, "error destroying cluster %s: %s", c, err)
 			} else {
 				l.PrintfCtx(ctx, "destroying cluster %s... done", c)
@@ -1579,7 +1611,7 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 		} else {
 			l.PrintfCtx(ctx, "wiping cluster %s", c)
 			c.status("wiping cluster")
-			if err := execCmd(ctx, l, roachprod, "wipe", c.name); err != nil {
+			if err := roachprod.Wipe(c.name, false /* preserveCerts */); err != nil {
 				l.Errorf("%s", err)
 			}
 			if c.localCertsDir != "" {
@@ -1602,15 +1634,15 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 
 // Put a local file to all of the machines in a cluster.
 // Put is DEPRECATED. Use PutE instead.
-func (c *clusterImpl) Put(ctx context.Context, src, dest string, opts ...option.Option) {
-	if err := c.PutE(ctx, c.l, src, dest, opts...); err != nil {
+func (c *clusterImpl) Put(ctx context.Context, src, dest string, nodes ...option.Option) {
+	if err := c.PutE(ctx, c.l, src, dest, nodes...); err != nil {
 		c.t.Fatal(err)
 	}
 }
 
 // PutE puts a local file to all of the machines in a cluster.
 func (c *clusterImpl) PutE(
-	ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option,
+	ctx context.Context, l *logger.Logger, src, dest string, nodes ...option.Option,
 ) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Put")
@@ -1618,12 +1650,7 @@ func (c *clusterImpl) PutE(
 
 	c.status("uploading file")
 	defer c.status("")
-
-	err := execCmd(ctx, c.l, roachprod, "put", c.MakeNodes(opts...), src, dest)
-	if err != nil {
-		return errors.Wrap(err, "cluster.Put")
-	}
-	return nil
+	return errors.Wrap(roachprod.Put(c.MakeNodes(nodes...), src, dest, false /* useTreeDist */), "cluster.PutE")
 }
 
 // PutLibraries inserts all available library files into all nodes on the cluster
@@ -1647,7 +1674,7 @@ func (c *clusterImpl) PutLibraries(ctx context.Context, libraryDir string) error
 			libraryFilePath,
 			putPath,
 		); err != nil {
-			return err
+			return errors.Wrap(err, "cluster.PutLibraries")
 		}
 	}
 	return nil
@@ -1663,19 +1690,9 @@ func (c *clusterImpl) Stage(
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Stage")
 	}
-
 	c.status("staging binary")
 	defer c.status("")
-
-	args := []string{roachprod, "stage", c.MakeNodes(opts...), application, versionOrSHA}
-	if dir != "" {
-		args = append(args, fmt.Sprintf("--dir='%s'", dir))
-	}
-	err := execCmd(ctx, c.l, args...)
-	if err != nil {
-		return errors.Wrap(err, "cluster.Stage")
-	}
-	return nil
+	return errors.Wrap(roachprod.Stage(c.MakeNodes(opts...), "" /* stageOS */, dir, application, versionOrSHA), "cluster.Stage")
 }
 
 // Get gets files from remote hosts.
@@ -1683,46 +1700,40 @@ func (c *clusterImpl) Get(
 	ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option,
 ) error {
 	if ctx.Err() != nil {
-		return errors.Wrap(ctx.Err(), "cluster.Get error")
+		return errors.Wrap(ctx.Err(), "cluster.Get")
 	}
 	c.status(fmt.Sprintf("getting %v", src))
 	defer c.status("")
-	return errors.Wrap(
-		execCmd(ctx, l, roachprod, "get", c.MakeNodes(opts...), src, dest),
-		"cluster.Get error")
-
+	return errors.Wrap(roachprod.Get(c.MakeNodes(opts...), src, dest), "cluster.Get")
 }
 
 // Put a string into the specified file on the remote(s).
 func (c *clusterImpl) PutString(
-	ctx context.Context, content, dest string, mode os.FileMode, opts ...option.Option,
+	ctx context.Context, content, dest string, mode os.FileMode, nodes ...option.Option,
 ) error {
 	if ctx.Err() != nil {
-		return errors.Wrap(ctx.Err(), "cluster.PutString error")
+		return errors.Wrap(ctx.Err(), "cluster.PutString")
 	}
 	c.status("uploading string")
 	defer c.status("")
 
 	temp, err := ioutil.TempFile("", filepath.Base(dest))
 	if err != nil {
-		return errors.Wrap(err, "PutString")
+		return errors.Wrap(err, "cluster.PutString")
 	}
 	if _, err := temp.WriteString(content); err != nil {
-		return errors.Wrap(err, "PutString")
+		return errors.Wrap(err, "cluster.PutString")
 	}
 	temp.Close()
 	src := temp.Name()
 
 	if err := os.Chmod(src, mode); err != nil {
-		return errors.Wrap(err, "PutString")
+		return errors.Wrap(err, "cluster.PutString")
 	}
 	// NB: we intentionally don't remove the temp files. This is because roachprod
 	// will symlink them when running locally.
 
-	if err := execCmd(ctx, c.l, roachprod, "put", c.MakeNodes(opts...), src, dest); err != nil {
-		return errors.Wrap(err, "PutString")
-	}
-	return nil
+	return errors.Wrap(c.PutE(ctx, c.l, src, dest, nodes...), "cluster.PutString")
 }
 
 // GitClone clones a git repo from src into dest and checks out origin's
@@ -1808,7 +1819,7 @@ func (c *clusterImpl) StartE(ctx context.Context, opts ...option.Option) error {
 	c.setStatusForClusterOpt("starting", opts...)
 	defer c.clearStatusForClusterOpt(opts...)
 	args := []string{
-		roachprod,
+		roachprodBinary,
 		"start",
 	}
 	args = append(args, roachprodArgs(opts)...)
@@ -1842,7 +1853,7 @@ func (c *clusterImpl) StartE(ctx context.Context, opts ...option.Option) error {
 		c.localCertsDir = filepath.Join(c.localCertsDir, "certs")
 		// Get the certs from the first node.
 		if err := c.Get(ctx, c.l, "./certs", c.localCertsDir, c.Node(1)); err != nil {
-			return err
+			return errors.Wrap(err, "cluster.StartE")
 		}
 		// Need to prevent world readable files or lib/pq will complain.
 		if err := filepath.Walk(c.localCertsDir, func(path string, info fs.FileInfo, err error) error {
@@ -1880,7 +1891,7 @@ func (c *clusterImpl) StopE(ctx context.Context, opts ...option.Option) error {
 		return errors.Wrap(ctx.Err(), "cluster.StopE")
 	}
 	args := []string{
-		roachprod,
+		roachprodBinary,
 		"stop",
 	}
 	args = append(args, roachprodArgs(opts)...)
@@ -1910,7 +1921,7 @@ func (c *clusterImpl) Reset(ctx context.Context) error {
 		return errors.Wrap(ctx.Err(), "cluster.Reset")
 	}
 	args := []string{
-		roachprod,
+		roachprodBinary,
 		"reset",
 		c.name,
 	}
@@ -1921,7 +1932,7 @@ func (c *clusterImpl) Reset(ctx context.Context) error {
 
 // WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
-func (c *clusterImpl) WipeE(ctx context.Context, l *logger.Logger, opts ...option.Option) error {
+func (c *clusterImpl) WipeE(ctx context.Context, l *logger.Logger, nodes ...option.Option) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.WipeE")
 	}
@@ -1929,18 +1940,18 @@ func (c *clusterImpl) WipeE(ctx context.Context, l *logger.Logger, opts ...optio
 		// For tests.
 		return nil
 	}
-	c.setStatusForClusterOpt("wiping", opts...)
-	defer c.clearStatusForClusterOpt(opts...)
-	return execCmd(ctx, l, roachprod, "wipe", c.MakeNodes(opts...))
+	c.setStatusForClusterOpt("wiping", nodes...)
+	defer c.clearStatusForClusterOpt(nodes...)
+	return roachprod.Wipe(c.MakeNodes(nodes...), false /* preserveCerts */)
 }
 
 // Wipe is like WipeE, except instead of returning an error, it does
 // c.t.Fatal(). c.t needs to be set.
-func (c *clusterImpl) Wipe(ctx context.Context, opts ...option.Option) {
+func (c *clusterImpl) Wipe(ctx context.Context, nodes ...option.Option) {
 	if ctx.Err() != nil {
 		return
 	}
-	if err := c.WipeE(ctx, c.l, opts...); err != nil {
+	if err := c.WipeE(ctx, c.l, nodes...); err != nil {
 		c.t.Fatal(err)
 	}
 }
@@ -1954,12 +1965,10 @@ func (c *clusterImpl) Run(ctx context.Context, node option.NodeListOption, args 
 }
 
 // Reformat the disk on the specified node.
-func (c *clusterImpl) Reformat(ctx context.Context, node option.NodeListOption, args ...string) {
-	err := execCmd(ctx, c.l,
-		append([]string{roachprod, "reformat", c.MakeNodes(node), "--"}, args...)...)
-	if err != nil {
-		c.t.Fatal(err)
-	}
+func (c *clusterImpl) Reformat(
+	ctx context.Context, node option.NodeListOption, filesystem string,
+) error {
+	return roachprod.Reformat(c.name, filesystem)
 }
 
 // Silence unused warning.
@@ -2057,7 +2066,7 @@ func (c *clusterImpl) execRoachprodL(
 	ctx context.Context, l *logger.Logger, verb string, node option.NodeListOption, args ...string,
 ) error {
 	return execCmd(ctx, l,
-		append([]string{roachprod, verb, c.MakeNodes(node), "--"}, args...)...)
+		append([]string{roachprodBinary, verb, c.MakeNodes(node), "--"}, args...)...)
 }
 
 // RunWithBuffer runs a command on the specified node, returning the resulting combined stderr
@@ -2069,7 +2078,7 @@ func (c *clusterImpl) RunWithBuffer(
 		return nil, err
 	}
 	return execCmdWithBuffer(ctx, l,
-		append([]string{roachprod, "run", c.MakeNodes(node), "--"}, args...)...)
+		append([]string{roachprodBinary, "run", c.MakeNodes(node), "--"}, args...)...)
 }
 
 // pgURLErr returns the Postgres endpoint for the specified node. It accepts a
@@ -2080,33 +2089,9 @@ func (c *clusterImpl) RunWithBuffer(
 func (c *clusterImpl) pgURLErr(
 	ctx context.Context, node option.NodeListOption, external bool,
 ) ([]string, error) {
-	args := []string{roachprod, "pgurl"}
-	if external {
-		args = append(args, `--external`)
-	}
-	if c.localCertsDir != "" {
-		args = append(args, "--secure", "--certs-dir", c.localCertsDir)
-	}
-	nodes := c.MakeNodes(node)
-	args = append(args, nodes)
-	cmd := execCmdEx(ctx, c.l, args...)
-	if cmd.err != nil {
-		return nil, errors.Wrapf(cmd.err, "failed to get pgurl for nodes: %s", nodes)
-	}
-	urls := strings.Split(strings.TrimSpace(cmd.stdout), " ")
-	if len(urls) != len(node) {
-		return nil, errors.Errorf(
-			"pgurl for nodes %v got urls %v from stdout:\n%s\nstderr:\n%s",
-			node, urls, cmd.stdout, cmd.stderr)
-	}
-	for i := range urls {
-		urls[i] = strings.Trim(urls[i], "'")
-		if urls[i] == "" {
-			return nil, errors.Errorf(
-				"pgurl for nodes %s empty: %v from\nstdout:\n%s\nstderr:\n%s",
-				urls, node, cmd.stdout, cmd.stderr,
-			)
-		}
+	urls, err := roachprod.PgURL(c.MakeNodes(node), c.localCertsDir, external, c.localCertsDir != "" /* secure */)
+	if err != nil {
+		return nil, err
 	}
 	return urls, nil
 }
@@ -2338,10 +2323,8 @@ func (c *clusterImpl) Extend(ctx context.Context, d time.Duration, l *logger.Log
 	}
 	minutes := int(d.Minutes())
 	l.PrintfCtx(ctx, "extending cluster by %d minutes", minutes)
-	if out, err := execCmdWithBuffer(ctx, l, roachprod, "extend", c.name,
-		fmt.Sprintf("--lifetime=%dm", minutes),
-	); err != nil {
-		l.PrintfCtx(ctx, "roachprod extend failed: %s", out)
+	if err := roachprod.Extend(c.name, d); err != nil {
+		l.PrintfCtx(ctx, "roachprod extend failed: %v", err)
 		return errors.Wrap(err, "roachprod extend failed")
 	}
 	// Update c.expiration. Keep it under the real expiration.
