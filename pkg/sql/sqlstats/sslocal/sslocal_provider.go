@@ -12,7 +12,6 @@ package sslocal
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"time"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // New returns an instance of SQLStats.
@@ -185,7 +185,7 @@ func (s *SQLStats) IterateAggregatedTransactionStats(
 
 		err := statsContainer.IterateAggregatedTransactionStats(ctx, options, visitor)
 		if err != nil {
-			return fmt.Errorf("sql stats iteration abort: %s", err)
+			return errors.Wrap(err, "sql stats iteration abort")
 		}
 	}
 

@@ -137,7 +137,7 @@ func processInboundStreamHelper(
 			if err != nil {
 				if err != io.EOF {
 					// Communication error.
-					err = pgerror.Newf(pgcode.InternalConnectionFailure, "inbox communication error: %s", err)
+					err = pgerror.Wrap(err, pgcode.InternalConnectionFailure, "inbox communication error")
 					sendErrToConsumer(err)
 					errChan <- err
 					return
