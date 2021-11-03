@@ -25,6 +25,7 @@ go_library(
         "//pkg/util/encoding/csv",
         "//pkg/util/log",
         "//pkg/util/log/channel",
+        "//pkg/util/log/logcrash",
         "//pkg/util/log/logpb",
         "//pkg/util/log/severity",
         "//pkg/util/stop",
