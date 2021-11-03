@@ -6373,24 +6373,16 @@ func TestRangeStatsComputation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tc := testContext{
-		bootstrapMode: bootstrapRangeOnly,
+		bootstrapMode: bootstrapRangeWithMetadata,
 	}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 	ctx := context.Background()
 
-	baseStats := initialStats()
-	// The initial stats contain an empty lease and no prior read summary, but
-	// there will be an initial nontrivial lease requested with the first write
-	// below. This lease acquisition will, in turn, create a prior read summary.
-	baseStats.Add(enginepb.MVCCStats{
-		SysBytes: 66,
-		SysCount: 1,
-	})
+	baseStats := tc.repl.GetMVCCStats()
 
-	// Our clock might not be set to zero.
-	baseStats.LastUpdateNanos = tc.manualClock.UnixNano()
+	require.NoError(t, verifyRangeStats(tc.engine, tc.repl.RangeID, baseStats))
 
 	// Put a value.
 	pArgs := putArgs([]byte("a"), []byte("value1"))
