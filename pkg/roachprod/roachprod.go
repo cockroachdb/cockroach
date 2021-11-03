@@ -124,24 +124,23 @@ func verifyClusterName(clusterName, username string) (string, error) {
 }
 
 // DefaultSyncedCluster returns install.SyncedCluster with default values.
-//lint:ignore U1001 unused
-func DefaultSyncedCluster() install.SyncedCluster {
-	return install.SyncedCluster{
-		Name:        "",
-		Tag:         "",
-		CertsDir:    "./certs",
-		Secure:      false,
-		Quiet:       false,
-		UseTreeDist: true,
-		Args:        nil,
-		Env: []string{
-			"COCKROACH_ENABLE_RPC_COMPRESSION=false",
-			"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
-		},
-		NumRacks:       0,
-		MaxConcurrency: 32,
-	}
-}
+// func DefaultSyncedCluster() install.SyncedCluster {
+// 	return install.SyncedCluster{
+// 		Name:        "",
+// 		Tag:         "",
+// 		CertsDir:    "./certs",
+// 		Secure:      false,
+// 		Quiet:       false,
+// 		UseTreeDist: true,
+// 		Args:        nil,
+// 		Env: []string{
+// 			"COCKROACH_ENABLE_RPC_COMPRESSION=false",
+// 			"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
+// 		},
+// 		NumRacks:       0,
+// 		MaxConcurrency: 32,
+// 	}
+// }
 
 func sortedClusters() []string {
 	var r []string
