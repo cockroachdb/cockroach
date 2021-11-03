@@ -27,7 +27,8 @@ import (
 // or size threshold is met, at which point they are put in a queue to be flushed
 // by the child sink.  If the queue is full, current bundle is compacted rather
 // sent, which currently drops the messages but retains their count for later
-// reporting (TODO).
+// reporting.
+// TODO(knz): Actually report the count of dropped messages.
 //
 // Should an error occur in the child sink, it's forwarded to the provided
 // errCallback (unless forceSync is requested, in which case the error is returned
@@ -36,9 +37,14 @@ type bufferSink struct {
 	// child is the wrapped logSink.
 	child logSink
 
-	// messageCh sends messages from output() to accumulate().
+	// messageCh sends messages from output(), which is called when a
+	// log entry is initially created, to accumulator(), which is running
+	// asynchronously to populate the buffer.
 	messageCh chan bufferSinkMessage
-	// flushCh sends bundles of messages from accumulate() to flusher().
+	// flushCh sends bundles of messages from accumulator(), which is
+	// running asynchronously and collects incoming log entries, to
+	// flusher(), which is running asynchronously and pushes entries to
+	// the child sink.
 	flushCh chan bufferSinkBundle
 	// nInFlight internally tracks the population of flushCh to detect when it's full.
 	nInFlight int32
@@ -86,7 +92,7 @@ func newBufferSink(
 	return sink
 }
 
-// accumulator accumulates messages and sends bundles of them to the accumulator.
+// accumulator accumulates messages and sends bundles of them to the flusher.
 func (bs *bufferSink) accumulator(ctx context.Context) {
 	var (
 		b bufferSinkBundle
@@ -109,9 +115,13 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 
 		appendMessage := func(m bufferSinkMessage) {
 			b.messages = append(b.messages, m)
-			b.byteLen += len(m.b.Bytes()) + 1
+			b.byteLen += len(m.b.Bytes()) + 1 // account for the final newline.
 			if m.flush || m.errorCh != nil || (bs.triggerSize > 0 && b.byteLen > bs.triggerSize) {
 				flush = true
+				// TODO(knz): This seems incorrect. If there is a non-empty
+				// bufferSinkBundle already; with errorCh already set
+				// (ie. synchronous previous log entry) and then an entry
+				// is emitted with *another* errorCh, the first one gets lost.
 				b.errorCh = m.errorCh
 			} else if timer == nil && bs.maxStaleness != 0 {
 				timer = time.After(bs.maxStaleness)
@@ -122,6 +132,10 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 			flush = true
 		case <-ctx.Done():
 			// Do one last non-blocking read on messageCh, so messages don't get dropped.
+			//
+			// TODO(knz): this seems incomplete: there may be multiple
+			// goroutines writing to messageCh concurrently, and so multiple
+			// messages might be queued when Done() signals termination.
 			select {
 			case m := <-bs.messageCh:
 				appendMessage(m)
@@ -135,6 +149,10 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 
 		done := b.done
 		if flush {
+			// TODO(knz): This logic seems to contain a race condition (with
+			// the flusher). Also it's not clear why this is using a custom
+			// atomic counter? Why not using a buffered channel and check
+			// via `select` that the write is possible?
 			if atomic.LoadInt32(&bs.nInFlight) < bs.maxInFlight {
 				bs.flushCh <- b
 				atomic.AddInt32(&bs.nInFlight, 1)
@@ -150,6 +168,12 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 }
 
 // flusher concatenates bundled messages and sends them to the child sink.
+//
+// TODO(knz): this code should be extended to detect server shutdowns:
+// as currently implemented the flusher will only terminate after all
+// the writes in the channel are completed. If the writes are slow,
+// the goroutine may not terminate properly when server shutdown is
+// requested.
 func (bs *bufferSink) flusher(ctx context.Context) {
 	for b := range bs.flushCh {
 		if len(b.messages) > 0 {
@@ -169,7 +193,8 @@ func (bs *bufferSink) flusher(ctx context.Context) {
 			}
 			forceSync := b.errorCh != nil
 			// Send the accumulated messages to the child sink.
-			err := bs.child.output(buf.Bytes(), sinkOutputOptions{extraFlush: true, forceSync: forceSync})
+			err := bs.child.output(buf.Bytes(),
+				sinkOutputOptions{extraFlush: true, forceSync: forceSync})
 			if forceSync {
 				b.errorCh <- err
 			} else if err != nil && bs.errCallback != nil {
@@ -182,7 +207,7 @@ func (bs *bufferSink) flusher(ctx context.Context) {
 			}
 		}
 		// Decrease visible queue size at the end,
-		// so a long-running flush triggers a compact
+		// so a long-running flush triggers a compaction
 		// instead of a blocked channel.
 		atomic.AddInt32(&bs.nInFlight, -1)
 		if b.done {
@@ -194,9 +219,11 @@ func (bs *bufferSink) flusher(ctx context.Context) {
 // bufferSinkMessage holds an individual log message sent from output to accumulate.
 type bufferSinkMessage struct {
 	b *buffer
-	// flush is set if the call explicitly requests to trigger an flush.
+	// flush is set if the call explicitly requests to trigger a flush.
 	flush bool
-	// errorCh is set iff the message is forceSync.
+	// errorCh is set iff the message was emitted with the forceSync flag.
+	// This indicates that the caller is interested in knowing the error status
+	// of child sink writes.
 	// The caller will block expecting a (possibly nil) error to return synchronously.
 	errorCh chan<- error
 }
@@ -204,13 +231,16 @@ type bufferSinkMessage struct {
 // bufferSinkBundle is the accumulated state; the unit sent from the accumulator to the flusher.
 type bufferSinkBundle struct {
 	messages []bufferSinkMessage
-	// byteLen is the total length in bytes of the accumulated messages, plus enough for separators.
+	// byteLen is the total length in bytes of the accumulated messages,
+	// plus enough for separators.
 	byteLen int
 	// droppedCount is the number of dropped messages due to buffer fullness.
 	droppedCount int
-	// errorCh, if non-nil, expects to receive the (possibly nil) error after the flush completes.
+	// errorCh, if non-nil, expects to receive the (possibly nil) error
+	// after the flush completes.
 	errorCh chan<- error
-	// done indicates that this is the last bundle and the flusher should shutdown after sending.
+	// done indicates that this is the last bundle and the flusher
+	// should shutdown after sending.
 	done bool
 }
 
