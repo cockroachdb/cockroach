@@ -154,7 +154,6 @@ type CreateOpts struct {
 }
 
 // DefaultCreateOpts returns a new vm.CreateOpts with default values set.
-//lint:ignore U1001 unused
 func DefaultCreateOpts() CreateOpts {
 	defaultCreateOpts := CreateOpts{
 		ClusterName:    "",

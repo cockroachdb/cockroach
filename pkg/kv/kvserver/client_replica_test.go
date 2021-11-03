@@ -3648,7 +3648,7 @@ func TestTenantID(t *testing.T) {
 						request_type kvserver.SnapshotRequest_Type,
 						strings []string,
 					) error {
-						if snapshot.State.Desc.RangeID == repl.RangeID {
+						if snapshot.Desc.RangeID == repl.RangeID {
 							select {
 							case sawSnapshot <- struct{}{}:
 							default:

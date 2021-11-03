@@ -181,6 +181,7 @@ ALL_TESTS = [
     "//pkg/server:server_test",
     "//pkg/settings:settings_test",
     "//pkg/spanconfig/spanconfigkvaccessor:spanconfigkvaccessor_test",
+    "//pkg/spanconfig/spanconfigkvsubscriber:spanconfigkvsubscriber_test",
     "//pkg/spanconfig/spanconfigmanager:spanconfigmanager_test",
     "//pkg/spanconfig/spanconfigsqltranslator:spanconfigsqltranslator_test",
     "//pkg/spanconfig/spanconfigstore:spanconfigstore_test",
