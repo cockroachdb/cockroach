@@ -63,11 +63,7 @@ func Download(c *SyncedCluster, sourceURLStr string, sha string, dest string) er
 		sha,
 		dest,
 	)
-	if err := c.Run(os.Stdout, os.Stderr,
-		downloadNodes,
-		fmt.Sprintf("downloading %s", basename),
-		downloadCmd,
-	); err != nil {
+	if err = c.Run(os.Stdout, os.Stderr, downloadNodes, fmt.Sprintf("downloading %s", basename), downloadCmd); err != nil {
 		return err
 	}
 
@@ -76,8 +72,11 @@ func Download(c *SyncedCluster, sourceURLStr string, sha string, dest string) er
 	if c.IsLocal() && !filepath.IsAbs(dest) {
 		src := filepath.Join(c.localVMDir(downloadNodes[0]), dest)
 		cpCmd := fmt.Sprintf(`cp "%s" "%s"`, src, dest)
-		return c.Run(os.Stdout, os.Stderr, c.Nodes[1:], "copying to remaining nodes", cpCmd)
+		// var results []RunResultDetails
+		err := c.Run(os.Stdout, os.Stderr, c.Nodes[1:], "copying to remaining nodes", cpCmd)
+		if err != nil {
+			return err
+		}
 	}
-
 	return nil
 }

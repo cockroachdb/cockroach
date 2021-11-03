@@ -27,12 +27,8 @@ import (
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
-	_ "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
-	_ "github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
-	_ "github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 var rootCmd = &cobra.Command{
@@ -81,20 +77,6 @@ func wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Comma
 	}
 }
 
-// clusterOpts returns the ClusterSettings according to the command-line flags.
-func clusterOpts() install.ClusterSettings {
-	return install.ClusterSettings{
-		Tag:            tag,
-		PGUrlCertsDir:  pgurlCertsDir,
-		Secure:         secure,
-		Quiet:          quiet || !term.IsTerminal(int(os.Stdout.Fd())),
-		UseTreeDist:    useTreeDist,
-		Env:            nodeEnv,
-		NumRacks:       numRacks,
-		MaxConcurrency: maxConcurrency,
-	}
-}
-
 var createCmd = &cobra.Command{
 	Use:   "create <cluster>",
 	Short: "create a cluster",
@@ -140,7 +122,8 @@ Local Clusters
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
-		return roachprod.Create(numNodes, username, createVMOpts, args[0], clusterOpts())
+		createVMOpts.ClusterName = args[0]
+		return roachprod.Create(username, numNodes, createVMOpts)
 	}),
 }
 
@@ -159,7 +142,7 @@ if the user would like to update the keys on the remote hosts.
 
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
-		return roachprod.SetupSSH(args[0], clusterOpts(), username)
+		return roachprod.SetupSSH(args[0])
 	}),
 }
 
@@ -180,7 +163,7 @@ directories inside ${HOME}/local directory are removed.
 `,
 	Args: cobra.ArbitraryArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Destroy(args, clusterOpts(), destroyAllMine, destroyAllLocal, username)
+		return roachprod.Destroy(destroyAllMine, destroyAllLocal, args...)
 	}),
 }
 
@@ -257,7 +240,7 @@ hosts file.
 		if listJSON && listDetails {
 			return errors.New("'json' option cannot be combined with 'details' option")
 		}
-		filteredCloud, err := roachprod.List(quiet, listMine, listPattern)
+		filteredCloud, err := roachprod.List(listMine, listPattern)
 		if err != nil {
 			return err
 		}
@@ -329,7 +312,7 @@ var syncCmd = &cobra.Command{
 	Long:  ``,
 	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		_, err := roachprod.Sync(quiet)
+		_, err := roachprod.Sync()
 		_ = rootCmd.GenBashCompletionFile(bashCompletion)
 		return err
 	}),
@@ -345,7 +328,7 @@ hourly by a cronjob so it is not necessary to run manually.
 `,
 	Args: cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.GC(dryrun, config.SlackToken)
+		return roachprod.GC(dryrun)
 	}),
 }
 
@@ -359,7 +342,7 @@ destroyed:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Extend(args[0], clusterOpts(), extendLifetime)
+		return roachprod.Extend(args[0], extendLifetime)
 	}),
 }
 
@@ -403,7 +386,15 @@ cluster setting will be set to its value.
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Start(args[0], clusterOpts(), startOpts)
+		clusterSettingsOpts := []install.ClusterSettingOption{
+			install.TagOption(tag),
+			install.PGUrlCertsDirOption(pgurlCertsDir),
+			install.SecureOption(secure),
+			install.UseTreeDistOption(useTreeDist),
+			install.EnvOption(nodeEnv),
+			install.NumRacksOption(numRacks),
+		}
+		return roachprod.Start(args[0], startOpts, clusterSettingsOpts...)
 	}),
 }
 
@@ -432,7 +423,7 @@ signals.
 		if sig == 9 /* SIGKILL */ && !cmd.Flags().Changed("wait") {
 			wait = true
 		}
-		return roachprod.Stop(args[0], clusterOpts(), sig, wait)
+		return roachprod.Stop(args[0], tag, sig, wait)
 	}),
 }
 
@@ -447,7 +438,7 @@ default cluster settings. It's intended to be used in conjunction with
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Init(args[0], clusterOpts(), username)
+		return roachprod.Init(args[0])
 	}),
 }
 
@@ -467,7 +458,7 @@ The "status" command outputs the binary and PID for the specified nodes:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Status(args[0], clusterOpts())
+		return roachprod.Status(args[0], tag)
 	}),
 }
 
@@ -492,7 +483,7 @@ into a single stream.
 		} else {
 			dest = args[0] + ".logs"
 		}
-		return roachprod.Logs(logsOpts, args[0], clusterOpts(), dest, username)
+		return roachprod.Logs(args[0], dest, username, logsOpts)
 	}),
 }
 
@@ -515,7 +506,7 @@ of nodes, outputting a line whenever a change is detected:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Monitor(args[0], clusterOpts(), monitorIgnoreEmptyNodes, monitorOneShot)
+		return roachprod.Monitor(args[0], monitorOpts)
 	}),
 }
 
@@ -530,7 +521,7 @@ nodes.
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Wipe(args[0], clusterOpts(), wipePreserveCerts)
+		return roachprod.Wipe(args[0], wipePreserveCerts)
 	}),
 }
 
@@ -560,7 +551,7 @@ the 'zfs rollback' command:
 
 	Args: cobra.ExactArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Reformat(args[0], clusterOpts(), args[1])
+		return roachprod.Reformat(args[0], args[1])
 	}),
 }
 
@@ -572,7 +563,7 @@ var runCmd = &cobra.Command{
 `,
 	Args: cobra.MinimumNArgs(1),
 	Run: wrap(func(_ *cobra.Command, args []string) error {
-		return roachprod.Run(args[0], clusterOpts(), extraSSHOptions, args[1:])
+		return roachprod.Run(args[0], extraSSHOptions, tag, secure, args[1:])
 	}),
 }
 
@@ -583,7 +574,7 @@ var resetCmd = &cobra.Command{
 environments and will fall back to a no-op.`,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
-		return roachprod.Reset(args[0], clusterOpts(), numNodes, username)
+		return roachprod.Reset(args[0])
 	}),
 }
 
@@ -596,7 +587,7 @@ var installCmd = &cobra.Command{
 `,
 	Args: cobra.MinimumNArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Install(args[0], clusterOpts(), args[1:])
+		return roachprod.Install(args[0], args[1:])
 	}),
 }
 
@@ -611,7 +602,7 @@ var downloadCmd = &cobra.Command{
 		if len(args) == 4 {
 			dest = args[3]
 		}
-		return roachprod.Download(args[0], clusterOpts(), src, sha, dest)
+		return roachprod.Download(args[0], src, sha, dest)
 	}),
 }
 
@@ -672,7 +663,7 @@ Some examples of usage:
 		if len(args) == 3 {
 			versionArg = args[2]
 		}
-		return roachprod.Stage(args[0], clusterOpts(), stageOS, stageDir, args[1], versionArg)
+		return roachprod.Stage(args[0], stageOS, stageDir, args[1], versionArg)
 	}),
 }
 
@@ -686,7 +677,7 @@ start."
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.DistributeCerts(args[0], clusterOpts())
+		return roachprod.DistributeCerts(args[0])
 	}),
 }
 
@@ -702,7 +693,7 @@ var putCmd = &cobra.Command{
 		if len(args) == 3 {
 			dest = args[2]
 		}
-		return roachprod.Put(args[0], clusterOpts(), src, dest)
+		return roachprod.Put(args[0], src, dest, useTreeDist)
 	}),
 }
 
@@ -719,7 +710,7 @@ multiple nodes the destination file name will be prefixed with the node number.
 		if len(args) == 3 {
 			dest = args[2]
 		}
-		return roachprod.Get(args[0], clusterOpts(), src, dest)
+		return roachprod.Get(args[0], src, dest)
 	}),
 }
 
@@ -729,7 +720,7 @@ var sqlCmd = &cobra.Command{
 	Long:  "Run `cockroach sql` on a remote cluster.\n",
 	Args:  cobra.MinimumNArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.SQL(args[0], clusterOpts(), args[1:])
+		return roachprod.SQL(args[0], secure, args[1:])
 	}),
 }
 
@@ -740,16 +731,14 @@ var pgurlCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.PgURL(args[0], clusterOpts(), external)
+		urls, err := roachprod.PgURL(args[0], pgurlCertsDir, external, secure)
+		if err != nil {
+			return err
+		}
+		fmt.Println(strings.Join(urls, " "))
+		return nil
 	}),
 }
-
-var pprofOptions = struct {
-	heap         bool
-	open         bool
-	startingPort int
-	duration     time.Duration
-}{}
 
 var pprofCmd = &cobra.Command{
 	Use:     "pprof <cluster>",
@@ -771,9 +760,9 @@ Examples:
 `,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		if cmd.CalledAs() == "pprof-heap" {
-			pprofOptions.heap = true
+			pprofOpts.Heap = true
 		}
-		return roachprod.Pprof(args[0], clusterOpts(), pprofOptions.duration, pprofOptions.heap, pprofOptions.open, pprofOptions.startingPort)
+		return roachprod.Pprof(args[0], pprofOpts)
 	}),
 }
 
@@ -785,7 +774,14 @@ var adminurlCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.AdminURL(args[0], clusterOpts(), adminurlIPs, adminurlOpen, adminurlPath)
+		urls, err := roachprod.AdminURL(args[0], adminurlPath, adminurlIPs, adminurlOpen, secure)
+		if err != nil {
+			return err
+		}
+		for _, url := range urls {
+			fmt.Println(url)
+		}
+		return nil
 	}),
 }
 
@@ -796,7 +792,7 @@ var ipCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		ips, err := roachprod.IP(args[0], clusterOpts(), external)
+		ips, err := roachprod.IP(args[0], external)
 		if err != nil {
 			return err
 		}

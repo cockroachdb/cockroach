@@ -25,6 +25,11 @@ var (
 	SlackToken string
 	// OSUser TODO(peter): document
 	OSUser *user.User
+	// Quiet is used to disable fancy progress output.
+	Quiet = true
+	// MaxConcurrency specifies the maximum number of operations
+	// to execute on nodes concurrently, set to zero for infinite.
+	MaxConcurrency = 32
 )
 
 func init() {

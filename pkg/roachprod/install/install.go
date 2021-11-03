@@ -11,8 +11,8 @@
 package install
 
 import (
-	"bytes"
 	"fmt"
+	"os"
 	"sort"
 )
 
@@ -160,12 +160,12 @@ func SortedCmds() []string {
 // Install TODO(peter): document
 func Install(c *SyncedCluster, args []string) error {
 	do := func(title, cmd string) error {
-		var buf bytes.Buffer
-		err := c.Run(&buf, &buf, c.Nodes, "installing "+title, cmd)
+		// var buf bytes.Buffer
+		err := c.Run(os.Stdin, os.Stdout, c.Nodes, "installing "+title, cmd)
 		if err != nil {
-			fmt.Print(buf.String())
+			return err
 		}
-		return err
+		return nil
 	}
 
 	for _, arg := range args {
