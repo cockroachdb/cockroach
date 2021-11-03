@@ -9,9 +9,10 @@
 // licenses/APL.txt.
 //
 // The structure definitions in this file have been cross-checked against
-// go1.15.5 and go1.16. Before allowing newer versions, please check that the
+// go1.15-go1.17. Before allowing newer versions, please check that the
 // structures still match with those in go/src/runtime.
-// +build gc,go1.15,!go1.17
+//go:build gc && go1.15 && !go1.18
+// +build gc,go1.15,!go1.18
 
 package goschedstats
 
