@@ -42,6 +42,11 @@ func NewMockTransactionalSender(
 func (m *MockTransactionalSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	// TODO(tbg): this should handle more of the standard chores, such as
+	// populating ba.Txn as well as updating the txn from the result.
+	// See (kvserver.testSenderFactory).RootTransactionalSender.
+	// The best solution would be using the "actual" transactional sender,
+	// TxnCoordSender.
 	return m.senderFunc(ctx, &m.txn, ba)
 }
 
