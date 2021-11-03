@@ -30,12 +30,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -158,13 +160,31 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	require.NoError(t, err)
 
 	request := &serverpb.StatementsRequest{}
-
-	tenantStats, err := tenantStatusServer.Statements(ctx, request)
-	require.NoError(t, err)
-
 	combinedStatsRequest := &serverpb.CombinedStatementsStatsRequest{}
-	tenantCombinedStats, err := tenantStatusServer.CombinedStatementStats(ctx, combinedStatsRequest)
-	require.NoError(t, err)
+	var tenantStats *serverpb.StatementsResponse
+	var tenantCombinedStats *serverpb.StatementsResponse
+
+	// Populate `tenantStats` and `tenantCombinedStats`. The tenant server
+	// `Statements` and `CombinedStatements` methods are backed by the
+	// sqlinstance system which uses a cache populated through rangefeed
+	// for keeping track of SQL pod data. We use `SucceedsSoon` to eliminate
+	// race condition with the sqlinstance cache population such as during
+	// a stress test.
+	testutils.SucceedsSoon(t, func() error {
+		tenantStats, err = tenantStatusServer.Statements(ctx, request)
+		if err != nil {
+			return err
+		}
+		if tenantStats == nil || len(tenantStats.Statements) == 0 {
+			return errors.New("tenant statements are unexpectedly empty")
+		}
+
+		tenantCombinedStats, err = tenantStatusServer.CombinedStatementStats(ctx, combinedStatsRequest)
+		if tenantCombinedStats == nil || len(tenantCombinedStats.Statements) == 0 {
+			return errors.New("tenant combined statements are unexpectedly empty")
+		}
+		return nil
+	})
 
 	path := "/_status/statements"
 	var nonTenantStats serverpb.StatementsResponse
