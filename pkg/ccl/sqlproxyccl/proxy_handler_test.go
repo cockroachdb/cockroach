@@ -163,6 +163,18 @@ func TestFailedConnection(t *testing.T) {
 	}
 }
 
+func TestThrottledError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	require.Equal(t,
+		toPgError(throttledError),
+		&pgproto3.ErrorResponse{
+			Severity: "FATAL",
+			Code:     "08004",
+			Message:  "codeProxyRefusedConnection: connection attempt throttled",
+			Hint:     throttledErrorHint,
+		})
+}
+
 func TestUnexpectedError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

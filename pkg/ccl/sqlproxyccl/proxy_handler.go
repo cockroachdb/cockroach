@@ -133,7 +133,13 @@ type proxyHandler struct {
 	certManager *certmgr.CertManager
 }
 
-var throttledError = newErrorf(codeProxyRefusedConnection, "connection attempt throttled")
+const throttledErrorHint string = `Connection throttling is triggered by repeated authentication failure.  Make
+sure the username and password are correct.
+`
+
+var throttledError = errors.WithHint(
+	newErrorf(codeProxyRefusedConnection, "connection attempt throttled"),
+	throttledErrorHint)
 
 // newProxyHandler will create a new proxy handler with configuration based on
 // the provided options.
