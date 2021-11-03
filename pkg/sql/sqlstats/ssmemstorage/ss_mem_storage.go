@@ -167,7 +167,7 @@ func (s *Container) IterateAggregatedTransactionStats(
 
 	err := visitor(s.appName, &txnStat)
 	if err != nil {
-		return fmt.Errorf("sql stats iteration abort: %s", err)
+		return errors.Wrap(err, "sql stats iteration abort")
 	}
 
 	return nil

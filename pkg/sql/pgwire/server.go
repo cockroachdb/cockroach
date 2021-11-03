@@ -740,8 +740,10 @@ func parseClientProvidedSessionParameters(
 		// Read a key-value pair from the client.
 		key, err := buf.GetString()
 		if err != nil {
-			return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
-				"error reading option key: %s", err)
+			return sql.SessionArgs{}, pgerror.Wrap(
+				err, pgcode.ProtocolViolation,
+				"error reading option key",
+			)
 		}
 		if len(key) == 0 {
 			// End of parameter list.
@@ -749,8 +751,10 @@ func parseClientProvidedSessionParameters(
 		}
 		value, err := buf.GetString()
 		if err != nil {
-			return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
-				"error reading option value: %s", err)
+			return sql.SessionArgs{}, pgerror.Wrapf(
+				err, pgcode.ProtocolViolation,
+				"error reading option value for key %q", key,
+			)
 		}
 
 		// Case-fold for the key for easier comparison.
@@ -789,13 +793,17 @@ func parseClientProvidedSessionParameters(
 
 			hostS, portS, err := net.SplitHostPort(value)
 			if err != nil {
-				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
-					"invalid address format: %v", err)
+				return sql.SessionArgs{}, pgerror.Wrap(
+					err, pgcode.ProtocolViolation,
+					"invalid address format",
+				)
 			}
 			port, err := strconv.Atoi(portS)
 			if err != nil {
-				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
-					"remote port is not numeric: %v", err)
+				return sql.SessionArgs{}, pgerror.Wrap(
+					err, pgcode.ProtocolViolation,
+					"remote port is not numeric",
+				)
 			}
 			ip := net.ParseIP(hostS)
 			if ip == nil {

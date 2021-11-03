@@ -194,10 +194,10 @@ func initGEOS(dirs []string) (*C.CR_GEOS, string, error) {
 		}
 		err = errors.CombineErrors(
 			err,
-			errors.Newf(
-				"geos: cannot load GEOS from dir %q: %s",
-				dir,
+			errors.Wrapf(
 				newErr,
+				"geos: cannot load GEOS from dir %q",
+				dir,
 			),
 		)
 	}

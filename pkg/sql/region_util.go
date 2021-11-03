@@ -663,17 +663,17 @@ func prepareZoneConfigForMultiRegionTable(
 		return nil, nil
 	}
 	if err := newZoneConfig.Validate(); err != nil {
-		return nil, pgerror.Newf(
-			pgcode.CheckViolation,
-			"could not validate zone config: %v",
+		return nil, pgerror.Wrap(
 			err,
+			pgcode.CheckViolation,
+			"could not validate zone config",
 		)
 	}
 	if err := newZoneConfig.ValidateTandemFields(); err != nil {
-		return nil, pgerror.Newf(
-			pgcode.CheckViolation,
-			"could not validate zone config: %v",
+		return nil, pgerror.Wrap(
 			err,
+			pgcode.CheckViolation,
+			"could not validate zone config",
 		)
 	}
 	return prepareZoneConfigWrites(

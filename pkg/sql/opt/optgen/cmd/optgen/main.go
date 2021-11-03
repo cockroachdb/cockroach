@@ -218,7 +218,7 @@ func (g *optgen) generate(compiled *lang.CompiledExpr, genFunc genFunc) error {
 			// Write out incorrect source for easier debugging.
 			b = buf.Bytes()
 			out := g.cmdLine.Lookup("out").Value.String()
-			err = fmt.Errorf("code formatting failed with Go parse error\n%s:%s", out, err)
+			err = errors.Wrapf(err, "code formatting failed with Go parse error\n%s", out)
 		}
 	} else {
 		b = buf.Bytes()

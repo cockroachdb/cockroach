@@ -1799,7 +1799,7 @@ type registrySession interface {
 func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
 	queryID, err := StringToClusterWideID(queryIDStr)
 	if err != nil {
-		return false, fmt.Errorf("query ID %s malformed: %s", queryID, err)
+		return false, errors.Wrapf(err, "query ID %s malformed", queryID)
 	}
 
 	r.Lock()
