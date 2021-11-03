@@ -159,7 +159,7 @@ func (a *apiV2Server) registerRoutes(innerMux *mux.Router, authMux http.Handler)
 		var handler http.Handler
 		handler = &callCountDecorator{
 			counter: telemetry.GetCounter(fmt.Sprintf("api.v2.%s", route.url)),
-			inner:   http.Handler(route.handler),
+			inner:   route.handler,
 		}
 		if route.requiresAuth {
 			a.mux.Handle(apiV2Path+route.url, authMux)
