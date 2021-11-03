@@ -2723,7 +2723,7 @@ func (s *Server) Stop() {
 // ServeHTTP is necessary to implement the http.Handler interface.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// This is our base handler, so catch all panics and make sure they stick.
-	defer log.FatalOnPanic()
+	defer log.ErrorOnPanic()
 
 	// Disable caching of responses.
 	w.Header().Set("Cache-control", "no-cache")

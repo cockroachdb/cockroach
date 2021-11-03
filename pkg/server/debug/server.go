@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	pebbletool "github.com/cockroachdb/pebble/tool"
@@ -39,6 +40,8 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/net/trace"
 )
+
+const errAPIInternalErrorString = "An internal server error has occurred. Please check your CockroachDB logs for more details."
 
 func init() {
 	// Disable the net/trace auth handler.
@@ -234,6 +237,13 @@ func (ds *Server) RegisterClosedTimestampSideTransport(
 // ServeHTTP serves various tools under the /debug endpoint.
 func (ds *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handler, _ := ds.mux.Handler(r)
+
+	defer func() {
+		if p := recover(); p != nil {
+			logcrash.ReportPanic(context.Background(), &ds.st.SV, p, 1 /* depth */)
+			http.Error(w, errAPIInternalErrorString, http.StatusInternalServerError)
+		}
+	}()
 	handler.ServeHTTP(w, r)
 }
 
