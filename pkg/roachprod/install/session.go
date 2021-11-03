@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -25,6 +26,7 @@ import (
 type session interface {
 	CombinedOutput(cmd string) ([]byte, error)
 	Run(cmd string) error
+	SetWithExitStatus(value bool)
 	SetStdin(r io.Reader)
 	SetStdout(w io.Writer)
 	SetStderr(w io.Writer)
@@ -39,8 +41,9 @@ type session interface {
 
 type remoteSession struct {
 	*exec.Cmd
-	cancel  func()
-	logfile string // captures ssh -vvv
+	cancel         func()
+	logfile        string // captures ssh -vvv
+	withExitStatus bool
 }
 
 func newRemoteSession(user, host string, logdir string) (*remoteSession, error) {
@@ -53,6 +56,7 @@ func newRemoteSession(user, host string, logdir string) (*remoteSession, error) 
 	// 	fmt.Sprintf("ssh_%s_%s", host, timeutil.Now().Format(time.RFC3339)),
 	// )
 	const logfile = ""
+	withExitStatus := false
 	args := []string{
 		user + "@" + host,
 
@@ -77,7 +81,7 @@ func newRemoteSession(user, host string, logdir string) (*remoteSession, error) 
 	args = append(args, sshAuthArgs()...)
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, "ssh", args...)
-	return &remoteSession{cmd, cancel, logfile}, nil
+	return &remoteSession{cmd, cancel, logfile, withExitStatus}, nil
 }
 
 func (s *remoteSession) errWithDebug(err error) error {
@@ -89,19 +93,44 @@ func (s *remoteSession) errWithDebug(err error) error {
 }
 
 func (s *remoteSession) CombinedOutput(cmd string) ([]byte, error) {
+	if s.withExitStatus {
+		cmd = strings.TrimSpace(cmd)
+		if !strings.HasSuffix(cmd, ";") {
+			cmd += ";"
+		}
+		cmd += "echo -n 'LAST EXIT STATUS: '$?;"
+	}
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
 	b, err := s.Cmd.CombinedOutput()
 	return b, s.errWithDebug(err)
 }
 
 func (s *remoteSession) Run(cmd string) error {
+	if s.withExitStatus {
+		cmd = strings.TrimSpace(cmd)
+		if !strings.HasSuffix(cmd, ";") {
+			cmd += ";"
+		}
+		cmd += "echo -n 'LAST EXIT STATUS: '$?;"
+	}
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
 	return s.errWithDebug(s.Cmd.Run())
 }
 
 func (s *remoteSession) Start(cmd string) error {
+	if s.withExitStatus {
+		cmd = strings.TrimSpace(cmd)
+		if !strings.HasSuffix(cmd, ";") {
+			cmd += ";"
+		}
+		cmd += "echo -n 'LAST EXIT STATUS: '$?;"
+	}
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
 	return s.Cmd.Start()
+}
+
+func (s *remoteSession) SetWithExitStatus(value bool) {
+	s.withExitStatus = value
 }
 
 func (s *remoteSession) SetStdin(r io.Reader) {
@@ -148,28 +177,55 @@ func (s *remoteSession) Close() {
 
 type localSession struct {
 	*exec.Cmd
-	cancel func()
+	cancel         func()
+	withExitStatus bool
 }
 
 func newLocalSession() *localSession {
 	ctx, cancel := context.WithCancel(context.Background())
+	withExitStatus := false
 	cmd := exec.CommandContext(ctx, "/bin/bash", "-c")
-	return &localSession{cmd, cancel}
+	return &localSession{cmd, cancel, withExitStatus}
 }
 
 func (s *localSession) CombinedOutput(cmd string) ([]byte, error) {
+	if s.withExitStatus {
+		cmd = strings.TrimSpace(cmd)
+		if !strings.HasSuffix(cmd, ";") {
+			cmd += ";"
+		}
+		cmd += "echo -n 'LAST EXIT STATUS: '$?;"
+	}
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
 	return s.Cmd.CombinedOutput()
 }
 
 func (s *localSession) Run(cmd string) error {
+	if s.withExitStatus {
+		cmd = strings.TrimSpace(cmd)
+		if !strings.HasSuffix(cmd, ";") {
+			cmd += ";"
+		}
+		cmd += "echo -n 'LAST EXIT STATUS: '$?;"
+	}
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
 	return s.Cmd.Run()
 }
 
 func (s *localSession) Start(cmd string) error {
+	if s.withExitStatus {
+		cmd = strings.TrimSpace(cmd)
+		if !strings.HasSuffix(cmd, ";") {
+			cmd += ";"
+		}
+		cmd += "echo -n 'LAST EXIT STATUS: '$?;"
+	}
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
 	return s.Cmd.Start()
+}
+
+func (s *localSession) SetWithExitStatus(value bool) {
+	s.withExitStatus = value
 }
 
 func (s *localSession) SetStdin(r io.Reader) {

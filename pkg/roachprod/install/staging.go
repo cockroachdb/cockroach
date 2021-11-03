@@ -230,9 +230,15 @@ func StageRemoteBinary(
 	cmdStr := fmt.Sprintf(
 		`curl -sfSL -o "%s" "%s" && chmod 755 %s`, target, binURL, target,
 	)
-	return shaFromEdgeURL(binURL), c.Run(
+	resolvedBinarySha := shaFromEdgeURL(binURL)
+
+	err = c.Run(
 		os.Stdout, os.Stderr, c.Nodes, fmt.Sprintf("staging binary (%s)", applicationName), cmdStr,
 	)
+	if err != nil {
+		return resolvedBinarySha, err
+	}
+	return resolvedBinarySha, nil
 }
 
 // StageOptionalRemoteLibrary downloads a library from the cockroach edge with
@@ -257,9 +263,13 @@ curl -sfSL -o "%s" "%s" 2>/dev/null || echo 'optional library %s not found; cont
 		url,
 		libraryName+ext,
 	)
-	return c.Run(
+	err = c.Run(
 		os.Stdout, os.Stderr, c.Nodes, fmt.Sprintf("staging library (%s)", libraryName), cmdStr,
 	)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // StageCockroachRelease downloads an official CockroachDB release binary with
@@ -290,7 +300,12 @@ mkdir -p ${dir}/lib && \
 if [ -d ${tmpdir}/lib ]; then mv ${tmpdir}/lib/* ${dir}/lib; fi && \
 chmod 755 ${dir}/cockroach
 `, dir, binURL)
-	return c.Run(
+
+	err = c.Run(
 		os.Stdout, os.Stderr, c.Nodes, "staging cockroach release binary", cmdStr,
 	)
+	if err != nil {
+		return err
+	}
+	return nil
 }

@@ -15,6 +15,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
@@ -25,6 +26,7 @@ import (
 )
 
 var (
+	pprofOpts         roachprod.PprofOpts
 	numNodes          int
 	numRacks          int
 	username          string
@@ -50,7 +52,6 @@ var (
 	adminurlPath  = ""
 	adminurlIPs   = false
 	useTreeDist   = true
-	quiet         = false
 	sig           = 9
 	waitFlag      = false
 	createVMOpts  = vm.DefaultCreateOpts()
@@ -68,17 +69,14 @@ var (
 	logsFrom          time.Time
 	logsTo            time.Time
 	logsInterval      time.Duration
-	maxConcurrency    int
 
-	monitorIgnoreEmptyNodes bool
-	monitorOneShot          bool
-
+	monitorOpts        install.MonitorOpts
 	cachedHostsCluster string
 )
 
 func initFlags() {
-	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "disable fancy progress output")
-	rootCmd.PersistentFlags().IntVarP(&maxConcurrency, "max-concurrency", "", 32,
+	rootCmd.PersistentFlags().BoolVarP(&config.Quiet, "quiet", "q", false, "disable fancy progress output")
+	rootCmd.PersistentFlags().IntVarP(&config.MaxConcurrency, "max-concurrency", "", 32,
 		"maximum number of operations to execute on nodes concurrently, set to zero for infinite",
 	)
 
@@ -155,13 +153,13 @@ func initFlags() {
 	pgurlCmd.Flags().StringVar(&pgurlCertsDir,
 		"certs-dir", "./certs", "cert dir to use for secure connections")
 
-	pprofCmd.Flags().DurationVar(&pprofOptions.duration,
+	pprofCmd.Flags().DurationVar(&pprofOpts.Duration,
 		"duration", 30*time.Second, "Duration of profile to capture")
-	pprofCmd.Flags().BoolVar(&pprofOptions.heap,
+	pprofCmd.Flags().BoolVar(&pprofOpts.Heap,
 		"heap", false, "Capture a heap profile instead of a CPU profile")
-	pprofCmd.Flags().BoolVar(&pprofOptions.open,
+	pprofCmd.Flags().BoolVar(&pprofOpts.Open,
 		"open", false, "Open the profile using `go tool pprof -http`")
-	pprofCmd.Flags().IntVar(&pprofOptions.startingPort,
+	pprofCmd.Flags().IntVar(&pprofOpts.StartingPort,
 		"starting-port", 9000, "Initial port to use when opening pprof's HTTP interface")
 
 	ipCmd.Flags().BoolVar(&external,
@@ -210,12 +208,12 @@ func initFlags() {
 	logsCmd.Flags().StringVar(&logsProgramFilter,
 		"logs-program", "^cockroach$", "regular expression of the name of program in log files to search")
 
-	monitorCmd.Flags().BoolVar(&monitorIgnoreEmptyNodes,
+	monitorCmd.Flags().BoolVar(&monitorOpts.IgnoreEmptyNodes,
 		"ignore-empty-nodes", false,
 		"Automatically detect the (subset of the given) nodes which to monitor "+
 			"based on the presence of a nontrivial data directory.")
 
-	monitorCmd.Flags().BoolVar(&monitorOneShot,
+	monitorCmd.Flags().BoolVar(&monitorOpts.OneShot,
 		"oneshot", false,
 		"Report the status of all targeted nodes once, then exit. The exit "+
 			"status is nonzero if (and only if) any node was found not running.")
