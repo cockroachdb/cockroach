@@ -191,13 +191,12 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 		Settings:   cfg.Settings,
 	})
 	grpcServer := rpc.NewServer(rpcContext) // never started
-	if tc.gossip == nil {
-		tc.gossip = gossip.NewTest(1, rpcContext, grpcServer, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
-	}
-	if tc.transport == nil {
-		dialer := nodedialer.New(rpcContext, gossip.AddressResolver(tc.gossip))
-		tc.transport = NewRaftTransport(cfg.AmbientCtx, cfg.Settings, dialer, grpcServer, stopper)
-	}
+	require.Nil(t, tc.gossip)
+	tc.gossip = gossip.NewTest(1, rpcContext, grpcServer, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	require.Nil(t, tc.transport)
+	dialer := nodedialer.New(rpcContext, gossip.AddressResolver(tc.gossip))
+	tc.transport = NewRaftTransport(cfg.AmbientCtx, cfg.Settings, dialer, grpcServer, stopper)
+
 	if tc.engine == nil {
 		disableSeparatedIntents :=
 			!cfg.Settings.Version.ActiveVersionOrEmpty(context.Background()).IsActive(
