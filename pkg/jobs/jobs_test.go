@@ -587,7 +587,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.sqlDB.Exec(t, "PAUSE JOB $1", j.ID())
 		rts.check(t, jobs.StatusPaused)
 
-		rts.sqlDB.ExpectErr(t, "paused and has non-nil FinalResumeError resume", "CANCEL JOB $1", j.ID())
+		rts.sqlDB.ExpectErr(t, "paused and has non-nil FinalResumeError .* resume failed", "CANCEL JOB $1", j.ID())
 		rts.check(t, jobs.StatusPaused)
 
 		rts.sqlDB.Exec(t, "RESUME JOB $1", j.ID())

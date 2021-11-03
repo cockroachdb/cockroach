@@ -481,7 +481,7 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 					}
 					return nil
 				}); err != nil {
-					return errors.Wrapf(err, "job %d: tried to cancel but could not mark as reverting: %s", id, err)
+					return errors.Wrapf(err, "job %d: tried to cancel but could not mark as reverting", id)
 				}
 				log.Infof(ctx, "job %d, session id: %s canceled: the job is now reverting",
 					id, s.ID())
