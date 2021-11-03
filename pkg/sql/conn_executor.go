@@ -2472,7 +2472,6 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			Tracer:                    ex.server.cfg.AmbientCtx.Tracer,
 			ReCache:                   ex.server.reCache,
 			InternalExecutor:          &ie,
-			Username:                  p.User,
 			DB:                        ex.server.cfg.DB,
 			SQLLivenessReader:         ex.server.cfg.SQLLiveness,
 			SQLStatsController:        ex.server.sqlStatsController,

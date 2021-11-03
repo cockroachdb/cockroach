@@ -3492,7 +3492,6 @@ type EvalContext struct {
 	ClusterName string
 	NodeID      *base.SQLIDContainer
 	Codec       keys.SQLCodec
-	Username    func() security.SQLUsername
 
 	// Locality contains the location of the current node as a set of user-defined
 	// key/value pairs, ordered from most inclusive to least inclusive. If there

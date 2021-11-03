@@ -21,10 +21,10 @@ import (
 )
 
 func init() {
-	streamingccl.CompleteStreamIngestionHook = doCompleteIngestion
+	streamingccl.CompleteStreamIngestionHook = doCompleteStreamIngestion
 }
 
-func doCompleteIngestion(
+func doCompleteStreamIngestion(
 	evalCtx *tree.EvalContext, txn *kv.Txn, jobID int, cutoverTimestamp hlc.Timestamp,
 ) error {
 	// Get the job payload for job_id.
