@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/gorilla/mux"
 )
 
@@ -152,6 +153,18 @@ func (a *apiV2Server) registerRoutes(innerMux *mux.Router, authMux http.Handler)
 		{"databases/{database_name:[\\w.]+}/tables/{table_name:[\\w.]+}/", a.tableDetails, true, regularRole, noOption},
 	}
 
+	panicHandler := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if p := recover(); p != nil {
+					logcrash.ReportPanic(context.Background(), &a.status.st.SV, p, 1 /* depth */)
+					http.Error(w, errAPIInternalErrorString, http.StatusInternalServerError)
+				}
+			}()
+			next.ServeHTTP(w, r)
+		})
+	}
+
 	// For all routes requiring authentication, have the outer mux (a.mux)
 	// send requests through to the authMux, and also register the relevant route
 	// in innerMux. Routes not requiring login can directly be handled in a.mux.
@@ -159,10 +172,10 @@ func (a *apiV2Server) registerRoutes(innerMux *mux.Router, authMux http.Handler)
 		var handler http.Handler
 		handler = &callCountDecorator{
 			counter: telemetry.GetCounter(fmt.Sprintf("api.v2.%s", route.url)),
-			inner:   http.Handler(route.handler),
+			inner:   panicHandler(route.handler),
 		}
 		if route.requiresAuth {
-			a.mux.Handle(apiV2Path+route.url, authMux)
+			a.mux.Handle(apiV2Path+route.url, panicHandler(authMux))
 			if route.role != regularRole {
 				handler = &roleAuthorizationMux{
 					ie:     a.admin.ie,

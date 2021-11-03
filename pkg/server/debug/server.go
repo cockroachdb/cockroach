@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	pebbletool "github.com/cockroachdb/pebble/tool"
@@ -60,6 +61,7 @@ var _ = func() *settings.StringSetting {
 
 // Server serves the /debug/* family of tools.
 type Server struct {
+	http.Handler
 	st  *cluster.Settings
 	mux *http.ServeMux
 	spy logSpy
@@ -135,10 +137,21 @@ func NewServer(
 		_ = dump.HTML(w)
 	})
 
+	handler := func(w http.ResponseWriter, req *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				w.WriteHeader(500)
+				logcrash.ReportPanic(context.Background(), &st.SV, r, 1 /* depth */)
+			}
+		}()
+		mux.ServeHTTP(w, req)
+	}
+
 	return &Server{
-		st:  st,
-		mux: mux,
-		spy: spy,
+		Handler: http.HandlerFunc(handler),
+		st:      st,
+		mux:     mux,
+		spy:     spy,
 	}
 }
 
@@ -229,12 +242,6 @@ func (ds *Server) RegisterClosedTimestampSideTransport(
 			w.Header().Add("Content-type", "text/html")
 			fmt.Fprint(w, sender.HTML())
 		})
-}
-
-// ServeHTTP serves various tools under the /debug endpoint.
-func (ds *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	handler, _ := ds.mux.Handler(r)
-	handler.ServeHTTP(w, r)
 }
 
 func handleLanding(w http.ResponseWriter, r *http.Request) {
