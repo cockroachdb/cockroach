@@ -105,7 +105,7 @@ type Cluster interface {
 	// Internal niche tools.
 
 	Reset(ctx context.Context) error
-	Reformat(ctx context.Context, node option.NodeListOption, args ...string)
+	Reformat(ctx context.Context, node option.NodeListOption, filesystem string) error
 	Install(
 		ctx context.Context, node option.NodeListOption, args ...string,
 	) error

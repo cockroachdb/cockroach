@@ -113,7 +113,7 @@ func (m *monitorImpl) WaitE() error {
 		return errors.New("already failed")
 	}
 
-	return errors.Wrap(m.wait(roachprod, "monitor", m.nodes), "monitor failure")
+	return errors.Wrap(m.wait(roachprodBinary, "monitor", m.nodes), "monitor failure")
 }
 
 func (m *monitorImpl) Wait() {

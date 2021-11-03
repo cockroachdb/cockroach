@@ -12,10 +12,13 @@ package spec
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -84,29 +87,96 @@ func (s ClusterSpec) String() string {
 	return str
 }
 
-func firstZone(zones string) string {
-	return strings.SplitN(zones, ",", 2)[0]
+// checks if an AWS machine supports SSD volumes
+func awsMachineSupportsSSD(machineType string) bool {
+	typeAndSize := strings.Split(machineType, ".")
+	if len(typeAndSize) == 2 {
+		// All SSD machine types that we use end in 'd or begins with i3 (e.g. i3, i3en).
+		return strings.HasPrefix(typeAndSize[0], "i3") || strings.HasSuffix(typeAndSize[0], "d")
+	}
+	return false
 }
 
-// Args are the arguments to pass to `roachprod create` in order
-// to create the cluster described in the spec.
-func (s *ClusterSpec) Args(extra ...string) ([]string, error) {
-	var args []string
+func getAWSOpts(machineType string, zones []string, localSSD bool) aws.ProviderOpts {
+	opts := aws.DefaultProviderOpts()
+	if localSSD {
+		opts.SSDMachineType = machineType
+	} else {
+		opts.MachineType = machineType
+	}
+	if len(zones) != 0 {
+		opts.CreateZones = zones
+	}
+	return opts
+}
 
+func getGCEOpts(
+	machineType string, zones []string, volumeSize, localSSDCount int, localSSD bool, RAID0 bool,
+) gce.ProviderOpts {
+	opts := gce.DefaultProviderOpts()
+	opts.MachineType = machineType
+	if volumeSize != 0 {
+		opts.PDVolumeSize = volumeSize
+	}
+	if len(zones) != 0 {
+		opts.Zones = zones
+	}
+	opts.SSDCount = localSSDCount
+	if localSSD && localSSDCount > 0 {
+		// NB: As the default behavior for _roachprod_ (at least in AWS/GCP) is
+		// to mount multiple disks as a single store using a RAID 0 array, we
+		// must explicitly ask for multiple stores to be enabled, _unless_ the
+		// test has explicitly asked for RAID0.
+		opts.UseMultipleDisks = !RAID0
+	}
+	return opts
+}
+
+func getAzureOpts(machineType string, zones []string) azure.ProviderOpts {
+	opts := azure.DefaultProviderOpts()
+	opts.MachineType = machineType
+	if len(zones) != 0 {
+		opts.Locations = zones
+	}
+	return opts
+}
+
+// RoachprodOpts returns the opts to use when calling `roachprod.Create()`
+// in order to create the cluster described in the spec.
+func (s *ClusterSpec) RoachprodOpts(
+	clusterName string, useIOBarrier bool,
+) (vm.CreateOpts, interface{}, error) {
+
+	createVMOpts := vm.DefaultCreateOpts()
+	createVMOpts.ClusterName = clusterName
+	if s.Lifetime != 0 {
+		createVMOpts.Lifetime = s.Lifetime
+	}
 	switch s.Cloud {
-	case AWS:
-		args = append(args, "--clouds=aws")
-	case GCE:
-		args = append(args, "--clouds=gce")
-	case Azure:
-		args = append(args, "--clouds=azure")
+	case Local:
+		createVMOpts.VMProviders = []string{s.Cloud}
+		// remaining opts are not applicable to local clusters
+		return createVMOpts, nil, nil
+	case AWS, GCE, Azure:
+		createVMOpts.VMProviders = []string{s.Cloud}
+	default:
+		return vm.CreateOpts{}, nil, errors.Errorf("unsupported cloud %v", s.Cloud)
 	}
 
-	var localSSD bool
+	if s.Cloud != GCE {
+		if s.VolumeSize != 0 {
+			return vm.CreateOpts{}, nil, errors.Errorf("specifying volume size is not yet supported on %s", s.Cloud)
+		}
+		if s.SSDs != 0 {
+			return vm.CreateOpts{}, nil, errors.Errorf("specifying SSD count is not yet supported on %s", s.Cloud)
+		}
+	}
+
+	createVMOpts.GeoDistributed = s.Geo
+	machineType := s.InstanceType
 	if s.CPUs != 0 {
 		// Default to the user-supplied machine type, if any.
 		// Otherwise, pick based on requested CPU count.
-		machineType := s.InstanceType
 		if len(machineType) == 0 {
 			// If no machine type was specified, choose one
 			// based on the cloud and CPU count.
@@ -117,117 +187,53 @@ func (s *ClusterSpec) Args(extra ...string) ([]string, error) {
 				machineType = GCEMachineType(s.CPUs)
 			case Azure:
 				machineType = AzureMachineType(s.CPUs)
-			case Local:
-			// Don't need to set machineType.
-			default:
-				return nil, errors.Errorf("unsupported cloud %v", s.Cloud)
 			}
 		}
 
 		// Local SSD can only be requested
 		// - if configured to prefer doing so,
-		// - if not running locally,
 		// - if no particular volume size is requested, and,
 		// - on AWS, if the machine type supports it.
-		localSSD = s.PreferLocalSSD && s.Cloud != Local && s.VolumeSize == 0
-		if s.Cloud == AWS {
-			typeAndSize := strings.Split(machineType, ".")
-			localSSD = localSSD && len(typeAndSize) == 2 &&
-				// All SSD machine types that we use end in 'd or begins with i3 (e.g. i3, i3en).
-				(strings.HasPrefix(typeAndSize[0], "i3") || strings.HasSuffix(typeAndSize[0], "d"))
-		}
-		// NB: emit the arg either way; changes to roachprod's default for the flag have
-		// caused problems in the past (at time of writing, the default is 'true').
-		args = append(args, "--local-ssd="+strconv.FormatBool(localSSD))
-
-		switch s.Cloud {
-		case AWS:
-			if localSSD {
-				args = append(args, "--aws-machine-type-ssd="+machineType)
-			} else {
-				args = append(args, "--aws-machine-type="+machineType)
-			}
-		case GCE:
-			args = append(args, "--gce-machine-type="+machineType)
-		case Azure:
-			args = append(args, "--azure-machine-type="+machineType)
-		case Local:
-			// No flag needed.
-		default:
-			return nil, errors.Errorf("unsupported cloud: %s\n", s.Cloud)
-		}
-	}
-
-	if s.VolumeSize != 0 {
-		switch s.Cloud {
-		case GCE:
-			args = append(args, fmt.Sprintf("--gce-pd-volume-size=%d", s.VolumeSize))
-		case Local:
-			// Ignore the volume size.
-		default:
-			return nil, errors.Errorf("specifying volume size is not yet supported on %s", s.Cloud)
-		}
-	}
-
-	// Note that localSSD implies that Cloud != Local.
-	if localSSD && s.SSDs != 0 {
-		switch s.Cloud {
-		case GCE:
-			args = append(args, fmt.Sprintf("--gce-local-ssd-count=%d", s.SSDs))
-
-			// NB: As the default behavior for _roachprod_ (at least in AWS/GCP) is
-			// to mount multiple disks as a single store using a RAID 0 array, we
-			// must explicitly ask for multiple stores to be enabled, _unless_ the
-			// test has explicitly asked for RAID0.
-			args = append(args, fmt.Sprintf("--gce-enable-multiple-stores=%s", strconv.FormatBool(!s.RAID0)))
-		default:
-			return nil, errors.Errorf("specifying SSD count is not yet supported on %s", s.Cloud)
-		}
-	}
-
-	zones := s.Zones
-	if zones != "" {
-		if !s.Geo {
-			zones = firstZone(zones)
-		}
-		switch s.Cloud {
-		case AWS:
-			args = append(args, "--aws-zones="+zones)
-		case GCE:
-			args = append(args, "--gce-zones="+zones)
-		case Azure:
-			args = append(args, "--azure-locations="+zones)
-		case Local:
-			// Do nothing.
-		default:
-			return nil, errors.Errorf("specifying Zones is not yet supported on %s", s.Cloud)
+		if s.PreferLocalSSD && s.VolumeSize == 0 && (s.Cloud != AWS || awsMachineSupportsSSD(machineType)) {
+			createVMOpts.SSDOpts.UseLocalSSD = true
+			createVMOpts.SSDOpts.NoExt4Barrier = !useIOBarrier
+		} else {
+			createVMOpts.SSDOpts.UseLocalSSD = false
 		}
 	}
 
 	if s.FileSystem == Zfs {
 		if s.Cloud != GCE {
-			return nil, errors.Errorf(
+			return vm.CreateOpts{}, nil, errors.Errorf(
 				"node creation with zfs file system not yet supported on %s", s.Cloud,
 			)
 		}
-		args = append(args, "--filesystem=zfs")
+		createVMOpts.SSDOpts.FileSystem = vm.Zfs
 	} else if s.RandomlyUseZfs && s.Cloud == GCE {
 		rng, _ := randutil.NewPseudoRand()
 		if rng.Float64() <= 0.2 {
-			args = append(args, "--filesystem=zfs")
+			createVMOpts.SSDOpts.FileSystem = vm.Zfs
+		}
+	}
+	var zones []string
+	if s.Zones != "" {
+		zones = strings.Split(s.Zones, ",")
+		if !s.Geo {
+			zones = zones[:1]
 		}
 	}
 
-	if s.Geo {
-		args = append(args, "--geo")
+	var providerOpts interface{}
+	switch s.Cloud {
+	case AWS:
+		providerOpts = getAWSOpts(machineType, zones, createVMOpts.SSDOpts.UseLocalSSD)
+	case GCE:
+		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, s.SSDs, createVMOpts.SSDOpts.UseLocalSSD, s.RAID0)
+	case Azure:
+		providerOpts = getAzureOpts(machineType, zones)
 	}
-	if s.Lifetime != 0 {
-		args = append(args, "--lifetime="+s.Lifetime.String())
-	}
-	if len(extra) > 0 {
-		args = append(args, extra...)
-	}
-	return args, nil
+
+	return createVMOpts, providerOpts, nil
 }
 
 // Expiration is the lifetime of the cluster. It may be destroyed after
