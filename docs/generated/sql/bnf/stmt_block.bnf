@@ -472,6 +472,7 @@ create_replication_stream_stmt ::=
 
 create_extension_stmt ::=
 	'CREATE' 'EXTENSION' 'IF' 'NOT' 'EXISTS' name
+	| 'CREATE' 'EXTENSION' 'IF' 'NOT' 'EXISTS' name 'SCHEMA' name
 	| 'CREATE' 'EXTENSION' name
 
 opt_with_clause ::=

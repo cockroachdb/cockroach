@@ -569,7 +569,30 @@ var pgCatalogAvailableExtensionsTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.6/view-pg-available-extensions.html`,
 	schema: vtable.PGCatalogAvailableExtensions,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		// We support no extensions.
+		// We support few extensions.
+		for _, ext := range []struct {
+			name             string
+			defaultVersion   string
+			installedVersion string
+			comment          string
+		}{
+			{name: "postgis", defaultVersion: "3.0.1", installedVersion: "3.0.1", comment: "PostGIS geometry and geography spatial types and functions"},
+			{name: "uuid-ossp", defaultVersion: "1.1", comment: "generate universally unique identifiers (UUIDs)"},
+			{name: "pgcrypto", defaultVersion: "1.3", comment: "cryptographic functions"},
+		} {
+			var installedVersion tree.Datum = tree.DNull
+			if ext.installedVersion != "" {
+				installedVersion = tree.NewDString(ext.installedVersion)
+			}
+			if err := addRow(
+				tree.NewDString(ext.name),
+				tree.NewDString(ext.defaultVersion),
+				installedVersion,
+				tree.NewDString(ext.comment),
+			); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
 	unimplemented: true,

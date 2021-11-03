@@ -3478,6 +3478,10 @@ create_extension_stmt:
   {
     $$.val = &tree.CreateExtension{IfNotExists: true, Name: $6}
   }
+| CREATE EXTENSION IF NOT EXISTS name SCHEMA name
+    {
+      $$.val = &tree.CreateExtension{IfNotExists: true, Name: $6}
+    }
 | CREATE EXTENSION name {
     $$.val = &tree.CreateExtension{Name: $3}
   }

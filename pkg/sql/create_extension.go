@@ -43,7 +43,7 @@ func (n *createExtensionNode) unimplementedExtensionError(issue int) error {
 
 func (n *createExtensionNode) startExec(params runParams) error {
 	switch n.CreateExtension.Name {
-	case "postgis":
+	case "postgis", "pgcrypto":
 		telemetry.Inc(sqltelemetry.CreateExtensionCounter(n.CreateExtension.Name))
 		return nil
 	case "postgis_raster",
@@ -85,7 +85,6 @@ func (n *createExtensionNode) startExec(params runParams) error {
 		"pageinspect",
 		"passwordcheck",
 		"pg_buffercache",
-		"pgcrypto",
 		"pg_freespacemap",
 		"pg_prewarm",
 		"pgrowlocks",
