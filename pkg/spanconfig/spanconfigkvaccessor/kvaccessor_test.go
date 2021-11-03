@@ -17,10 +17,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -51,7 +51,7 @@ import (
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
@@ -74,21 +74,7 @@ func TestDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "kvaccessor-get":
-				var spans []roachpb.Span
-				for _, line := range strings.Split(d.Input, "\n") {
-					line = strings.TrimSpace(line)
-					if line == "" {
-						continue
-					}
-
-					const spanPrefix = "span "
-					if !strings.HasPrefix(line, spanPrefix) {
-						t.Fatalf("malformed line %q, expected to find spanPrefix %q", line, spanPrefix)
-					}
-					line = strings.TrimPrefix(line, spanPrefix)
-					spans = append(spans, spanconfigtestutils.ParseSpan(t, line))
-				}
-
+				spans := spanconfigtestutils.ParseKVAccessorGetArguments(t, d.Input)
 				entries, err := accessor.GetSpanConfigEntriesFor(ctx, spans)
 				if err != nil {
 					return fmt.Sprintf("err: %s", err.Error())
@@ -100,28 +86,7 @@ func TestDataDriven(t *testing.T) {
 				}
 				return output.String()
 			case "kvaccessor-update":
-				var toDelete []roachpb.Span
-				var toUpsert []roachpb.SpanConfigEntry
-				for _, line := range strings.Split(d.Input, "\n") {
-					line = strings.TrimSpace(line)
-					if line == "" {
-						continue
-					}
-
-					const upsertPrefix, deletePrefix = "upsert ", "delete "
-					if !strings.HasPrefix(line, upsertPrefix) && !strings.HasPrefix(line, deletePrefix) {
-						t.Fatalf("malformed line %q, expected to find prefix %q or %q",
-							line, upsertPrefix, deletePrefix)
-					}
-
-					if strings.HasPrefix(line, deletePrefix) {
-						line = strings.TrimPrefix(line, line[:len(deletePrefix)])
-						toDelete = append(toDelete, spanconfigtestutils.ParseSpan(t, line))
-					} else {
-						line = strings.TrimPrefix(line, line[:len(upsertPrefix)])
-						toUpsert = append(toUpsert, spanconfigtestutils.ParseSpanConfigEntry(t, line))
-					}
-				}
+				toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, d.Input)
 				if err := accessor.UpdateSpanConfigEntries(ctx, toDelete, toUpsert); err != nil {
 					return fmt.Sprintf("err: %s", err.Error())
 				}

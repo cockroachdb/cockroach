@@ -94,7 +94,7 @@ func NewSizeSpec(
 		size.Percent, err = strconv.ParseFloat(factorValue, 64)
 		size.Percent *= percentFactor
 		if err != nil {
-			return SizeSpec{}, errors.Newf("could not parse %s size (%s) %s", field, value, err)
+			return SizeSpec{}, errors.Wrapf(err, "could not parse %s size (%s)", field, value)
 		}
 		if percentRange != nil {
 			if (percentRange.min != nil && size.Percent < *percentRange.min) ||
@@ -112,7 +112,7 @@ func NewSizeSpec(
 		var err error
 		size.InBytes, err = humanizeutil.ParseBytes(value)
 		if err != nil {
-			return SizeSpec{}, errors.Newf("could not parse %s size (%s) %s", field, value, err)
+			return SizeSpec{}, errors.Wrapf(err, "could not parse %s size (%s)", field, value)
 		}
 		if bytesRange != nil {
 			if bytesRange.min != nil && size.InBytes < *bytesRange.min {
