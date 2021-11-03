@@ -1216,6 +1216,7 @@ var validCasts = []castInfo{
 	// Casts to TupleFamily.
 	{from: types.UnknownFamily, to: types.TupleFamily, volatility: VolatilityImmutable},
 	{from: types.TupleFamily, to: types.TupleFamily, volatility: VolatilityStable},
+	{from: types.StringFamily, to: types.TupleFamily, volatility: VolatilityStable},
 }
 
 type castsMapKey struct {
@@ -2366,6 +2367,9 @@ func performCastWithoutPrecisionTruncation(
 				}
 			}
 			return ret, nil
+		case *DString:
+			res, _, err := ParseDTupleFromString(ctx, string(*v), t)
+			return res, err
 		}
 	}
 
