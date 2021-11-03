@@ -197,24 +197,23 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	dialer := nodedialer.New(rpcContext, gossip.AddressResolver(tc.gossip))
 	tc.transport = NewRaftTransport(cfg.AmbientCtx, cfg.Settings, dialer, grpcServer, stopper)
 
-	if tc.engine == nil {
-		disableSeparatedIntents :=
-			!cfg.Settings.Version.ActiveVersionOrEmpty(context.Background()).IsActive(
-				clusterversion.PostSeparatedIntentsMigration)
-		log.Infof(context.Background(), "engine creation is randomly setting disableSeparatedIntents: %t",
-			disableSeparatedIntents)
-		var err error
-		tc.engine, err = storage.Open(context.Background(),
-			storage.InMemory(),
-			storage.Attributes(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}),
-			storage.MaxSize(1<<20),
-			storage.SetSeparatedIntents(disableSeparatedIntents),
-			storage.Settings(cfg.Settings))
-		if err != nil {
-			t.Fatal(err)
-		}
-		stopper.AddCloser(tc.engine)
-	}
+	require.Nil(t, tc.engine)
+	disableSeparatedIntents :=
+		!cfg.Settings.Version.ActiveVersionOrEmpty(context.Background()).IsActive(
+			clusterversion.PostSeparatedIntentsMigration)
+	log.Infof(context.Background(), "engine creation is randomly setting disableSeparatedIntents: %t",
+		disableSeparatedIntents)
+
+	var err error
+	tc.engine, err = storage.Open(context.Background(),
+		storage.InMemory(),
+		storage.Attributes(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}),
+		storage.MaxSize(1<<20),
+		storage.SetSeparatedIntents(disableSeparatedIntents),
+		storage.Settings(cfg.Settings))
+	require.NoError(t, err)
+	stopper.AddCloser(tc.engine)
+
 	require.Nil(t, tc.store)
 	cv := clusterversion.ClusterVersion{Version: bootstrapVersion}
 	cfg.Gossip = tc.gossip
@@ -259,7 +258,6 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 		t.Fatal(err)
 	}
 	tc.store.WaitForInit()
-	var err error
 	tc.repl, err = tc.store.GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
