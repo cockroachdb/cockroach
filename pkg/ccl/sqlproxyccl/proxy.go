@@ -60,7 +60,7 @@ func toPgError(err error) *pgproto3.ErrorResponse {
 			Severity: "FATAL",
 			Code:     pgCode,
 			Message:  msg,
-			Hint:     errors.FlattenHints(codeErr.err),
+			Hint:     errors.FlattenHints(err),
 		}
 	}
 	// Return a generic "internal server error" message.
