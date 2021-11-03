@@ -522,9 +522,9 @@ func writeBinaryInterval(b *writeBuffer, v duration.Duration) {
 
 func writeBinaryJSON(b *writeBuffer, v json.JSON) {
 	s := v.String()
-	b.putInt32(int32(len(s) + 1))
+	b.putInt32(int32(len(s))) // + 1))
 	// Postgres version number, as of writing, `1` is the only valid value.
-	b.writeByte(1)
+	//b.writeByte(1)
 	b.writeString(s)
 }
 
