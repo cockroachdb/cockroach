@@ -473,7 +473,7 @@ func (p *memPubsubSink) EmitRow(
 
 //EmitResolvedTimestamp calls the pubsubDesc EmitResolvedTimestamp
 func (p *memPubsubSink) EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error {
-	return p.EmitResolvedTimestamp(ctx, encoder, resolved)
+	return p.pubsubSink.emitResolvedTimestamp(ctx, encoder, resolved)
 }
 
 //Flush calls the pubsubDesc Flush

@@ -125,6 +125,7 @@ func TestChangefeedBasics(t *testing.T) {
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
+	t.Run(`pubsub`, pubsubTest(testFn))
 
 	// NB running TestChangefeedBasics, which includes a DELETE, with
 	// cloudStorageTest is a regression test for #36994.

@@ -1440,3 +1440,131 @@ func (f *webhookFeed) Close() error {
 	f.mockSink.Close()
 	return nil
 }
+
+type pubsubFeedFactory struct {
+	enterpriseFeedFactory
+}
+
+var _ cdctest.TestFeedFactory = (*pubsubFeedFactory)(nil)
+
+func makePubsubFeedFactory(
+	srv serverutils.TestServerInterface, db *gosql.DB,
+) cdctest.TestFeedFactory {
+	return &pubsubFeedFactory{
+		enterpriseFeedFactory: enterpriseFeedFactory{
+			s:  srv,
+			db: db,
+			di: newDepInjector(srv),
+		},
+	}
+}
+
+func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.TestFeed, error) {
+	parsed, err := parser.ParseOne(create)
+	if err != nil {
+		return nil, err
+	}
+	createStmt := parsed.AST.(*tree.CreateChangefeed)
+
+	if createStmt.SinkURI == nil {
+		createStmt.SinkURI = tree.NewStrVal(
+			fmt.Sprintf("%s://testfeedURL", memScheme))
+	}
+
+	ctx := context.Background()
+	sinkDest, err := cdctest.MakeMockPubsubSink(fmt.Sprintf("%s://testfeedURL", memScheme), ctx)
+
+	ss := &sinkSynchronizer{}
+	wrapSink := func(s Sink) Sink {
+		return &notifyFlushSink{Sink: s, sync: ss}
+	}
+
+	c := &pubsubFeed{
+		jobFeed:        newJobFeed(p.db, wrapSink),
+		seenTrackerMap: make(map[string]struct{}),
+		ss:             ss,
+		mockSink:       sinkDest,
+	}
+	if err := p.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+		sinkDest.Close()
+		return nil, err
+	}
+	c.mockSink.Dial()
+	return c, nil
+}
+
+func (p *pubsubFeedFactory) Server() serverutils.TestServerInterface {
+	return p.s
+}
+
+type pubsubFeed struct {
+	*jobFeed
+	seenTrackerMap
+	ss       *sinkSynchronizer
+	mockSink *cdctest.MockPubsubSink
+}
+
+var _ cdctest.TestFeed = (*pubsubFeed)(nil)
+
+// Partitions implements TestFeed
+func (p *pubsubFeed) Partitions() []string {
+	return []string{``}
+}
+
+// Next implements TestFeed
+func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
+	for {
+		err := p.mockSink.CheckSinkError()
+		if err != nil {
+			return nil, err
+		}
+		msg := p.mockSink.Pop()
+		if msg != "" {
+			m := &cdctest.TestFeedMessage{}
+			if msg != "" {
+				var err error
+				var resolved bool
+				resolved, err = isResolvedTimestamp([]byte(msg))
+				if err != nil {
+					return nil, err
+				}
+				if resolved {
+					m.Resolved = []byte(msg)
+				} else {
+					wrappedValue, err := extractValueFromJSONMessage([]byte(msg))
+					if err != nil {
+						return nil, err
+					}
+					if m.Key, m.Value, err = extractKeyFromJSONValue(wrappedValue); err != nil {
+						return nil, err
+					}
+					if m.Topic, m.Value, err = extractTopicFromJSONValue(m.Value); err != nil {
+						return nil, err
+					}
+					if isNew := p.markSeen(m); !isNew {
+						continue
+					}
+				}
+				return m, nil
+			}
+			m.Key, m.Value = nil, nil
+			return m, nil
+		}
+
+		select {
+		case <-p.ss.eventReady():
+		case <-p.shutdown:
+			return nil, p.terminalJobError()
+		}
+	}
+}
+
+// Close implements TestFeed
+func (p *pubsubFeed) Close() error {
+	err := p.jobFeed.Close()
+	if err != nil {
+		return err
+	}
+	p.mockSink.Close()
+	return nil
+}
