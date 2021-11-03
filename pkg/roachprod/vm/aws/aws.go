@@ -35,9 +35,10 @@ import (
 // ProviderName is aws.
 const ProviderName = "aws"
 
-// init will inject the AWS provider into vm.Providers, but only
-// if the aws tool is available on the local path.
-func init() {
+// Init initializes the AWS provider and registers it into vm.Providers.
+//
+// If the aws tool is not available on the local path, the provider is a stub.
+func Init() {
 	// aws-cli version 1 automatically base64 encodes the string passed as --public-key-material.
 	// Version 2 supports file:// and fileb:// prefixes for text and binary files.
 	// The latter prefix will base64-encode the file contents. See
