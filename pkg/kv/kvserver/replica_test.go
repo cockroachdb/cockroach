@@ -4788,50 +4788,6 @@ func TestErrorsDontCarryWriteTooOldFlag(t *testing.T) {
 	require.False(t, pErr.GetTxn().WriteTooOld)
 }
 
-// TestReplicaLaziness verifies that Raft Groups are brought up lazily.
-func TestReplicaLaziness(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	// testWithAction is a function that creates an uninitialized Raft group,
-	// calls the supplied function, and then tests that the Raft group is
-	// initialized.
-	testWithAction := func(action func() roachpb.Request) {
-		tc := testContext{bootstrapMode: bootstrapRangeOnly}
-		stopper := stop.NewStopper()
-		defer stopper.Stop(context.Background())
-		tc.Start(t, stopper)
-
-		if status := tc.repl.RaftStatus(); status != nil {
-			t.Fatalf("expected raft group to not be initialized, got RaftStatus() of %v", status)
-		}
-		var ba roachpb.BatchRequest
-		request := action()
-		ba.Add(request)
-		if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
-			t.Fatalf("unexpected error: %s", pErr)
-		}
-
-		if tc.repl.RaftStatus() == nil {
-			t.Fatalf("expected raft group to be initialized")
-		}
-	}
-
-	testWithAction(func() roachpb.Request {
-		put := putArgs(roachpb.Key("a"), []byte("value"))
-		return &put
-	})
-
-	testWithAction(func() roachpb.Request {
-		get := getArgs(roachpb.Key("a"))
-		return &get
-	})
-
-	testWithAction(func() roachpb.Request {
-		scan := scanArgs(roachpb.Key("a"), roachpb.Key("b"))
-		return scan
-	})
-}
-
 // TestBatchRetryCantCommitIntents tests that transactional retries cannot
 // commit intents.
 // It also tests current behavior - that a retried transactional batch can lay
