@@ -441,69 +441,90 @@ capture-stray-errors:
 
 # Check that each component of buffering struct propagates.
 yaml
-file-defaults:
+fluent-defaults:
   buffering:
     max-staleness: 15s
     flush-trigger-size: 10KiB
     max-in-flight: 4
 sinks:
-  file-groups:
+  fluent-servers:
     a:
+      address: a
       channels: STORAGE
       buffering:
         max-staleness: 10s
     b:
+      address: b
       channels: OPS
       buffering:
         flush-trigger-size: 5.0KiB
     c:
+      address: c
       channels: HEALTH
       buffering:
         max-in-flight: 16
     d:
+      address: d
       channels: SESSIONS
       buffering: NONE
 ----
 sinks:
   file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  fluent-servers:
     a:
       channels: {INFO: [STORAGE]}
+      net: tcp
+      address: a
       filter: INFO
+      format: json-fluent-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
       buffering: |
         max-staleness: 10s
         flush-trigger-size: 10KiB
         max-in-flight: 4
     b:
       channels: {INFO: [OPS]}
+      net: tcp
+      address: b
       filter: INFO
+      format: json-fluent-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
       buffering: |
         max-staleness: 15s
         flush-trigger-size: 5.0KiB
         max-in-flight: 4
     c:
       channels: {INFO: [HEALTH]}
+      net: tcp
+      address: c
       filter: INFO
+      format: json-fluent-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
       buffering: |
         max-staleness: 15s
         flush-trigger-size: 10KiB
         max-in-flight: 16
     d:
       channels: {INFO: [SESSIONS]}
+      net: tcp
+      address: d
       filter: INFO
-    default:
-      channels: {INFO: [DEV, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS,
-          SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY]}
-      filter: INFO
-      buffering: |
-        max-staleness: 15s
-        flush-trigger-size: 10KiB
-        max-in-flight: 4
+      format: json-fluent-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
+      buffering: NONE
   stderr:
     filter: NONE
-    buffering: |
-      max-staleness: 15s
-      flush-trigger-size: 10KiB
-      max-in-flight: 4
 capture-stray-errors:
   enable: true
   dir: /default-dir

@@ -323,6 +323,9 @@ func (c *Config) newFileSinkConfig(groupName string) *FileSinkConfig {
 
 func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *string) error {
 	propagateFileDefaults(&fc.FileDefaults, c.FileDefaults)
+	if !fc.Buffering.IsNone() {
+		return errors.New(`"buffering" not yet supported for file-groups.  Use "buffered-writes".`)
+	}
 	if fc.Dir != c.FileDefaults.Dir {
 		// A directory was specified explicitly. Normalize it.
 		if err := normalizeDir(&fc.Dir); err != nil {
