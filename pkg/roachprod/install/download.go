@@ -14,7 +14,6 @@ import (
 	_ "embed" // required for go:embed
 	"fmt"
 	"net/url"
-	"os"
 	"path"
 	"path/filepath"
 
@@ -65,21 +64,33 @@ func Download(c *SyncedCluster, sourceURLStr string, sha string, dest string) er
 		sha,
 		dest,
 	)
-	if err := c.Run(os.Stdout, os.Stderr,
-		downloadNodes,
-		fmt.Sprintf("downloading %s", basename),
-		downloadCmd,
-	); err != nil {
+	var results []RunResultDetails
+	if results, err = c.Run(downloadNodes, fmt.Sprintf("downloading %s", basename), downloadCmd); err != nil {
 		return err
 	}
+	for _, node := range results {
+		if node.Err != nil {
+			return node.Err
+		}
+	}
+	OutputRunResults(results)
 
 	// If we are local and the destination is relative, then copy the file from
 	// the download node to the other nodes.
 	if c.IsLocal() && !filepath.IsAbs(dest) {
 		src := filepath.Join(local.VMDir(c.Name, downloadNodes[0]), dest)
 		cpCmd := fmt.Sprintf(`cp "%s" "%s"`, src, dest)
-		return c.Run(os.Stdout, os.Stderr, c.Nodes[1:], "copying to remaining nodes", cpCmd)
+		var results []RunResultDetails
+		results, err := c.Run(c.Nodes[1:], "copying to remaining nodes", cpCmd)
+		if err != nil {
+			return err
+		}
+		for _, node := range results {
+			if node.Err != nil {
+				return node.Err
+			}
+		}
+		OutputRunResults(results)
 	}
-
 	return nil
 }

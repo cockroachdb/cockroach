@@ -563,11 +563,12 @@ elif [[ -e "${PERF_ARTIFACTS}" ]]; then
 else
     echo false
 fi'`
-			out, err := c.RunWithBuffer(ctx, l, c.Node(node), "bash", "-c", testCmd)
+			result, err := c.RunCommand(ctx, l, c.Node(node), "bash", "-c", testCmd)
 			if err != nil {
-				return errors.Wrapf(err, "failed to check for perf artifacts: %v", string(out))
+				return errors.Wrapf(err, "failed to check for perf artifacts: %v", err)
 			}
-			switch out := strings.TrimSpace(string(out)); out {
+			out := strings.TrimSpace(result.Stdout)
+			switch out {
 			case "true":
 				dst := fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), node, perfArtifactsDir)
 				return c.Get(ctx, l, perfArtifactsDir, dst, c.Node(node))
@@ -575,7 +576,7 @@ fi'`
 				l.PrintfCtx(ctx, "no perf artifacts exist on node %v", c.Node(node))
 				return nil
 			default:
-				return errors.Errorf("unexpected output when checking for perf artifacts: %s", out)
+				return errors.Errorf("unexpected output when checking for perf artifacts: %v", err)
 			}
 		}
 	}

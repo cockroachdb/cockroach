@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 // Cluster is the interface through which a given roachtest interacts with the
@@ -85,6 +86,10 @@ type Cluster interface {
 	RunWithBuffer(
 		ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
 	) ([]byte, error)
+	// RunCommand should be the only Run command but multiple ones exist now because we are still migrating.
+	RunCommand(
+		ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
+	) (install.RunResultDetails, error)
 
 	// Metadata about the provisioned nodes.
 

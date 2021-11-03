@@ -160,32 +160,24 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 
 		t.L().Printf("sending init command to node %d", initNode)
-		c.Run(ctx, c.Node(initNode),
-			fmt.Sprintf(`./cockroach init --insecure --port={pgport:%d}`, initNode))
+		cmd := fmt.Sprintf(`./cockroach init --insecure --port={pgport:%d}`, initNode)
+		if _, err := c.RunCommand(ctx, t.L(), c.Node(initNode), cmd); err != nil {
+			t.Fatalf("failed on initializing cluster: %v\n", err)
+		}
 
 		// This will only succeed if 3 nodes joined the cluster.
 		WaitFor3XReplication(t, dbs[0])
-
-		execCLI := func(runNode int, extraArgs ...string) (string, error) {
-			args := []string{"./cockroach"}
-			args = append(args, extraArgs...)
-			args = append(args, "--insecure")
-			args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
-			buf, err := c.RunWithBuffer(ctx, t.L(), c.Node(runNode), args...)
-			t.L().Printf("%s\n", buf)
-			return string(buf), err
-		}
 
 		{
 			t.L().Printf("checking that double init fails")
 			// Make sure that running init again returns the expected error message and
 			// does not break the cluster. We have to use ExecCLI rather than OneShot in
 			// order to actually get the output from the command.
-			if output, err := execCLI(initNode, "init"); err == nil {
-				t.Fatalf("expected error running init command on initialized cluster\n%s", output)
-			} else if !strings.Contains(output, "cluster has already been initialized") {
-				t.Fatalf("unexpected output when running init command on initialized cluster: %v\n%s",
-					err, output)
+			args := []string{"./cockroach", "init", "--insecure", fmt.Sprintf("--port={pgport:%d}", initNode)}
+			if result, err := c.RunCommand(ctx, t.L(), c.Node(initNode), args...); err == nil {
+				t.Fatalf("expected error running init command on initialized cluster\n%s", result.Stdout)
+			} else if !strings.Contains(err.Error(), "cluster has already been initialized") {
+				t.Fatalf("unexpected output when running init command on initialized cluster: %v\n", err)
 			}
 		}
 
