@@ -1543,19 +1543,6 @@ func restorePlanHook(
 				return err
 			}
 		}
-		if subdir != "" {
-			if len(from) != 1 {
-				return errors.Errorf("RESTORE FROM ... IN can only by used against a single collection path (per-locality)")
-			}
-			for i := range from[0] {
-				parsed, err := url.Parse(from[0][i])
-				if err != nil {
-					return err
-				}
-				parsed.Path = path.Join(parsed.Path, subdir)
-				from[0][i] = parsed.String()
-			}
-		}
 
 		if err := checkPrivilegesForRestore(ctx, restoreStmt, p, from); err != nil {
 			return err
@@ -1591,6 +1578,28 @@ func restorePlanHook(
 			intoDB, err = intoDBFn()
 			if err != nil {
 				return err
+			}
+		}
+
+		if subdir != "" {
+			if strings.EqualFold(subdir, "LATEST") {
+				// set subdir to content of latest file
+				latest, err := readLatestFile(ctx, from[0][0], p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
+				if err != nil {
+					return err
+				}
+				subdir = latest
+			}
+			if len(from) != 1 {
+				return errors.Errorf("RESTORE FROM ... IN can only by used against a single collection path (per-locality)")
+			}
+			for i := range from[0] {
+				parsed, err := url.Parse(from[0][i])
+				if err != nil {
+					return err
+				}
+				parsed.Path = path.Join(parsed.Path, subdir)
+				from[0][i] = parsed.String()
 			}
 		}
 
