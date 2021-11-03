@@ -982,6 +982,8 @@ var versionCmd = &cobra.Command{
 }
 
 func main() {
+	roachprod.InitProviders()
+
 	// The commands are displayed in the order they are added to rootCmd. Note
 	// that gcCmd and adminurlCmd contain a trailing \n in their Short help in
 	// order to separate the commands into logical groups.
