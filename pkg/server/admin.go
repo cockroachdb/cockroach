@@ -1219,7 +1219,7 @@ func (s *adminServer) Events(
 	// to not use serverError* methods in the body of the function, so we can
 	// just do it here.
 	defer func() {
-		if retErr != nil {
+		if retErr != nil && error.Is(retErh, errRequiresAdmin) {
 			retErr = s.serverError(retErr)
 		}
 	}()
