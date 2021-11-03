@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
-	// cld "github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -94,6 +93,7 @@ var (
 	quiet             = false
 	sig               = 9
 	waitFlag          = false
+	createVMOpts      = vm.DefaultCreateOpts()
 	startOpts         = install.StartOptsType{}
 	stageOS           string
 	stageDir          string
@@ -133,8 +133,6 @@ func wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Comma
 		}
 	}
 }
-
-var createVMOpts vm.CreateOpts
 
 var createCmd = &cobra.Command{
 	Use:   "create <cluster>",
