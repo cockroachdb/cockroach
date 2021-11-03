@@ -25,13 +25,12 @@ func init() {
 // Severity aliases a type.
 type Severity = logpb.Severity
 
-// FatalOnPanic recovers from a panic and exits the process with a
-// Fatal log. This is useful for avoiding a panic being caught through
-// a CGo exported function or preventing HTTP handlers from recovering
+// ErrorOnPanic recovers from a panic, logging at Error severity.
+// This is useful for preventing HTTP handlers from recovering
 // panics and ignoring them.
-func FatalOnPanic() {
+func ErrorOnPanic() {
 	if r := recover(); r != nil {
-		Fatalf(context.Background(), "unexpected panic: %s", r)
+		Errorf(context.Background(), "unexpected panic: %s", r)
 	}
 }
 
