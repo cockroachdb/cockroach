@@ -50,7 +50,6 @@ var (
 	adminurlPath = ""
 	adminurlIPs  = false
 	useTreeDist  = true
-	quiet        = false
 	sig          = 9
 	waitFlag     = false
 	createVMOpts = vm.DefaultCreateOpts()
@@ -68,7 +67,6 @@ var (
 	logsFrom          time.Time
 	logsTo            time.Time
 	logsInterval      time.Duration
-	maxConcurrency    int
 
 	monitorIgnoreEmptyNodes bool
 	monitorOneShot          bool
@@ -77,8 +75,8 @@ var (
 )
 
 func initFlags() {
-	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "disable fancy progress output")
-	rootCmd.PersistentFlags().IntVarP(&maxConcurrency, "max-concurrency", "", 32,
+	rootCmd.PersistentFlags().BoolVarP(&config.Quiet, "quiet", "q", false, "disable fancy progress output")
+	rootCmd.PersistentFlags().IntVarP(&config.MaxConcurrency, "max-concurrency", "", 32,
 		"maximum number of operations to execute on nodes concurrently, set to zero for infinite",
 	)
 
