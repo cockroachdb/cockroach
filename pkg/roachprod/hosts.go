@@ -19,11 +19,15 @@ import (
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -134,8 +138,9 @@ func LoadClusters() error {
 		}
 		lines := strings.Split(string(contents), "\n")
 
+		clusterName := file.Name()
 		c := &install.SyncedCluster{
-			Name:     file.Name(),
+			Name:     clusterName,
 			DebugDir: debugDir,
 		}
 
@@ -195,8 +200,65 @@ func LoadClusters() error {
 		if len(c.VMs) == 0 {
 			return errors.Errorf("found no VMs in %s", contents)
 		}
-		install.Clusters[file.Name()] = c
+		install.Clusters[clusterName] = c
+
+		if local.IsLocal(clusterName) {
+			// Add the local cluster to the local provider.
+			now := timeutil.Now()
+			cluster := &cloud.Cluster{
+				Name:      clusterName,
+				CreatedAt: now,
+				Lifetime:  time.Hour,
+			}
+			for i := range c.VMs {
+				cluster.VMs = append(cluster.VMs, vm.VM{
+					Name:        "localhost",
+					CreatedAt:   now,
+					Lifetime:    time.Hour,
+					PrivateIP:   "127.0.0.1",
+					Provider:    local.ProviderName,
+					ProviderID:  local.ProviderName,
+					PublicIP:    "127.0.0.1",
+					RemoteUser:  c.Users[i],
+					VPC:         local.ProviderName,
+					MachineType: local.ProviderName,
+					Zone:        local.ProviderName,
+				})
+			}
+			local.AddCluster(cluster)
+		}
 	}
 
+	return nil
+}
+
+// localVMStorage implements the local.VMStorage interface.
+type localVMStorage struct{}
+
+var _ local.VMStorage = localVMStorage{}
+
+// SaveCluster is part of the local.VMStorage interface.
+func (localVMStorage) SaveCluster(cluster *cloud.Cluster) error {
+	path := filepath.Join(os.ExpandEnv(config.DefaultHostDir), cluster.Name)
+	file, err := os.Create(path)
+	if err != nil {
+		return errors.Wrapf(err, "problem creating file %s", path)
+	}
+	defer file.Close()
+
+	// Align columns left and separate with at least two spaces.
+	tw := tabwriter.NewWriter(file, 0, 8, 2, ' ', 0)
+	if _, err := tw.Write([]byte("# user@host\tlocality\n")); err != nil {
+		return err
+	}
+	for i := range cluster.VMs {
+		if _, err := tw.Write([]byte(fmt.Sprintf(
+			"%s@%s\t%s\n", cluster.VMs[i].RemoteUser, "127.0.0.1", "region=local,zone=local"))); err != nil {
+			return err
+		}
+	}
+	if err := tw.Flush(); err != nil {
+		return errors.Wrapf(err, "problem writing file %s", path)
+	}
 	return nil
 }

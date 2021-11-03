@@ -34,8 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
-	// azure registers its provider with the top-level vm package.
-	_ "github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -1205,4 +1204,13 @@ func StageURL(applicationName, version, stageOS string) ([]*url.URL, error) {
 		return nil, err
 	}
 	return urls, nil
+}
+
+// InitProviders initializes the vm.Providers.
+func InitProviders() {
+	// Initialize providers.
+	aws.Init()
+	gce.Init()
+	azure.Init()
+	local.Init(localVMStorage{})
 }
