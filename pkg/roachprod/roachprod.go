@@ -359,11 +359,6 @@ func Sync(quiet bool) (*cloud.Cloud, error) {
 		return nil, err
 	}
 
-	err = os.Remove(lockFile)
-	if err != nil {
-		return nil, err
-	}
-
 	return cld, nil
 }
 
