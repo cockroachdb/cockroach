@@ -40,6 +40,8 @@ import (
 	"golang.org/x/net/trace"
 )
 
+const errAPIInternalErrorString = "An internal server error has occurred. Please check your CockroachDB logs for more details."
+
 func init() {
 	// Disable the net/trace auth handler.
 	trace.AuthRequest = func(r *http.Request) (allowed, sensitive bool) {
