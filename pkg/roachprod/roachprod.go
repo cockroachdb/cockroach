@@ -1008,7 +1008,7 @@ func Destroy(clusters []install.SyncedCluster, destroyAllMine bool, username str
 				return err
 			}
 
-			if clusterName != config.Local {
+			if !local.IsLocal(clusterName) {
 				if cld == nil {
 					var err error
 					cld, err = cloud.ListCloud()
@@ -1045,22 +1045,15 @@ func destroyCluster(cld *cloud.Cloud, clusterName string) error {
 }
 
 func destroyLocalCluster(clusterOpts install.SyncedCluster) error {
-	if _, ok := install.Clusters[config.Local]; !ok {
-		return fmt.Errorf("cluster %s does not exist", config.Local)
+	if _, ok := install.Clusters[clusterOpts.Name]; !ok {
+		return fmt.Errorf("cluster %s does not exist", clusterOpts.Name)
 	}
-	clusterOpts.Name = config.Local
 	c, err := newCluster(clusterOpts)
 	if err != nil {
 		return err
 	}
 	c.Wipe(false)
-	for _, i := range c.Nodes {
-		err := os.RemoveAll(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), i))
-		if err != nil {
-			return err
-		}
-	}
-	return os.Remove(filepath.Join(os.ExpandEnv(config.DefaultHostDir), c.Name))
+	return local.DeleteCluster(clusterOpts.Name)
 }
 
 type clusterAlreadyExistsError struct {
