@@ -742,12 +742,12 @@ func DistributeCerts(clusterOpts install.SyncedCluster) error {
 }
 
 // Put copies a local file to the nodes in a cluster.
-func Put(clusterOpts install.SyncedCluster, src, dest string) error {
+func Put(clusterOpts install.SyncedCluster, src, dest, mode string) error {
 	c, err := newCluster(clusterOpts)
 	if err != nil {
 		return err
 	}
-	c.Put(src, dest)
+	c.Put(src, dest, mode)
 	return nil
 }
 

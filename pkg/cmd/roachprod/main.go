@@ -77,6 +77,7 @@ var (
 	listPattern       string
 	secure            = false
 	extraSSHOptions   = ""
+	putFileMode       = "755"
 	nodeEnv           = []string{
 		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
 		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
@@ -767,7 +768,7 @@ var putCmd = &cobra.Command{
 		if len(args) == 3 {
 			dest = args[2]
 		}
-		return roachprod.Put(clusterOpts(args[0]), src, dest)
+		return roachprod.Put(clusterOpts(args[0]), src, dest, putFileMode)
 	}),
 }
 
@@ -1076,6 +1077,7 @@ func main() {
 	}
 
 	putCmd.Flags().BoolVar(&useTreeDist, "treedist", useTreeDist, "use treedist copy algorithm")
+	putCmd.Flags().StringVar(&putFileMode, "mode", "755", "file mode on remote node (example 755)")
 
 	stageCmd.Flags().StringVar(&stageOS, "os", "", "operating system override for staged binaries")
 	stageCmd.Flags().StringVar(&stageDir, "dir", "", "destination for staged binaries")

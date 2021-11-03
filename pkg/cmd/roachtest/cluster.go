@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -41,6 +40,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	roachprodlibrary "github.com/cockroachdb/cockroach/pkg/roachprod"
+	_ "github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	_ "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
+	_ "github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
+	_ "github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -1027,27 +1031,13 @@ func (c *clusterImpl) validate(
 ) error {
 	// Perform validation on the existing cluster.
 	c.status("checking that existing cluster matches spec")
-	sargs := []string{roachprod, "list", c.name, "--json", "--quiet"}
-	out, err := execCmdWithBuffer(ctx, l, sargs...)
+
+	cloudClusters, err := roachprodlibrary.List(true /*quiet*/, false /*listMine*/, c.name /*clusterNamePattern*/)
 	if err != nil {
 		return err
 	}
 
-	// jsonOutput matches the structure of the output from `roachprod list`
-	// when in json mode.
-	type jsonOutput struct {
-		Clusters map[string]struct {
-			VMs []struct {
-				MachineType string `json:"machine_type"`
-			} `json:"vms"`
-		} `json:"clusters"`
-	}
-	var details jsonOutput
-	if err := json.Unmarshal(out, &details); err != nil {
-		return err
-	}
-
-	cDetails, ok := details.Clusters[c.name]
+	cDetails, ok := cloudClusters.Clusters[c.name]
 	if !ok {
 		return fmt.Errorf("cluster %q not found", c.name)
 	}
@@ -2330,12 +2320,15 @@ func (c *clusterImpl) Extend(ctx context.Context, d time.Duration, l *logger.Log
 	}
 	minutes := int(d.Minutes())
 	l.PrintfCtx(ctx, "extending cluster by %d minutes", minutes)
-	if out, err := execCmdWithBuffer(ctx, l, roachprod, "extend", c.name,
-		fmt.Sprintf("--lifetime=%dm", minutes),
-	); err != nil {
-		l.PrintfCtx(ctx, "roachprod extend failed: %s", out)
+
+	clusterOpts := roachprodlibrary.DefaultSyncedCluster()
+	clusterOpts.Name = c.name
+	err := roachprodlibrary.Extend(clusterOpts, d)
+	if err != nil {
+		l.PrintfCtx(ctx, "roachprod extend failed")
 		return errors.Wrap(err, "roachprod extend failed")
 	}
+
 	// Update c.expiration. Keep it under the real expiration.
 	c.expiration = c.expiration.Add(time.Duration((minutes - 1)) * time.Minute)
 	return nil

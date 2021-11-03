@@ -1037,7 +1037,7 @@ func formatProgress(p float64) string {
 }
 
 // Put TODO(peter): document
-func (c *SyncedCluster) Put(src, dest string) {
+func (c *SyncedCluster) Put(src, dest, mode string) {
 	// NB: This value was determined with a few experiments. Higher values were
 	// not tested.
 	const treeDistFanout = 10
@@ -1250,6 +1250,12 @@ func (c *SyncedCluster) Put(src, dest string) {
 
 	if haveErr {
 		log.Fatalf(context.Background(), "put %s failed", src)
+	}
+
+	cmd := fmt.Sprintf("chmod %s %s", mode, dest)
+	err := c.Run(os.Stdout, os.Stderr, c.Nodes, cmd, cmd)
+	if err != nil {
+		log.Fatalf(context.Background(), "chmod failed", err)
 	}
 }
 
