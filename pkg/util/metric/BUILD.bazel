@@ -9,6 +9,7 @@ go_library(
         "graphite_exporter.go",
         "metric.go",
         "prometheus_exporter.go",
+        "prometheus_rule_exporter.go",
         "registry.go",
         "rule.go",
         "rule_registry.go",
@@ -31,6 +32,7 @@ go_library(
         "@com_github_prometheus_prometheus//promql/parser",
         "@com_github_rcrowley_go_metrics//:go-metrics",
         "@com_github_vividcortex_ewma//:ewma",
+        "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )
 
@@ -40,6 +42,7 @@ go_test(
     srcs = [
         "metric_test.go",
         "prometheus_exporter_test.go",
+        "prometheus_rule_exporter_test.go",
         "registry_test.go",
         "rule_test.go",
     ],

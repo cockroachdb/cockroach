@@ -88,6 +88,8 @@ func isErrRetryLiveness(ctx context.Context, err error) bool {
 		// returned an AmbiguousResultError.
 		// TODO(andrei): Remove this in 22.2.
 		return true
+	} else if errors.Is(err, kv.OnePCNotAllowedError{}) {
+		return true
 	}
 	return false
 }

@@ -794,8 +794,7 @@ func (p *Pebble) ExportMVCCToSst(
 ) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.settings.SV)
-	summary, k, err := pebbleExportToSst(ctx, r, exportOptions, dest, maxIntentCount)
+	summary, k, err := pebbleExportToSst(ctx, r, exportOptions, dest)
 	r.Free()
 	return summary, k.Key, k.Timestamp, err
 }
@@ -1600,8 +1599,7 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 ) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.parent.settings.SV)
-	summary, k, err := pebbleExportToSst(ctx, r, exportOptions, dest, maxIntentCount)
+	summary, k, err := pebbleExportToSst(ctx, r, exportOptions, dest)
 	r.Free()
 	return summary, k.Key, k.Timestamp, err
 }
@@ -1867,8 +1865,7 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 ) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.settings.SV)
-	summary, k, err := pebbleExportToSst(ctx, r, exportOptions, dest, maxIntentCount)
+	summary, k, err := pebbleExportToSst(ctx, r, exportOptions, dest)
 	r.Free()
 	return summary, k.Key, k.Timestamp, err
 }
@@ -1989,7 +1986,7 @@ func (e *ExceedMaxSizeError) Error() string {
 }
 
 func pebbleExportToSst(
-	ctx context.Context, reader Reader, options ExportOptions, dest io.Writer, maxIntentCount int64,
+	ctx context.Context, reader Reader, options ExportOptions, dest io.Writer,
 ) (roachpb.BulkOpSummary, MVCCKey, error) {
 	var span *tracing.Span
 	ctx, span = tracing.ChildSpan(ctx, "pebbleExportToSst")
@@ -2115,7 +2112,7 @@ func pebbleExportToSst(
 	// If we do it means this export can't complete and is aborted. We need to loop over remaining data
 	// to collect all matching intents before returning them in an error to the caller.
 	if iter.NumCollectedIntents() > 0 {
-		for int64(iter.NumCollectedIntents()) < maxIntentCount {
+		for uint64(iter.NumCollectedIntents()) < options.MaxIntents {
 			iter.NextKey()
 			// If we encounter other errors during intent collection, we return our original write intent failure.
 			// We would find this new error again upon retry.

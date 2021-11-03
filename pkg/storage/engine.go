@@ -177,9 +177,13 @@ type MVCCIterator interface {
 	// must set the upper bound on the iterator before calling this method.
 	FindSplitKey(start, end, minSplitKey roachpb.Key, targetSize int64) (MVCCKey, error)
 	// CheckForKeyCollisions checks whether any keys collide between the iterator
-	// and the encoded SST data specified, within the provided key range. Returns
-	// stats on skipped KVs, or an error if a collision is found.
-	CheckForKeyCollisions(sstData []byte, start, end roachpb.Key) (enginepb.MVCCStats, error)
+	// and the encoded SST data specified, within the provided key range.
+	// maxIntents specifies the number of intents to collect and return in a
+	// WriteIntentError (0 disables batching, pass math.MaxInt64 to collect all).
+	// Returns stats on skipped KVs, or an error if a collision is found.
+	CheckForKeyCollisions(
+		sstData []byte, start, end roachpb.Key, maxIntents int64,
+	) (enginepb.MVCCStats, error)
 	// SetUpperBound installs a new upper bound for this iterator. The caller
 	// can modify the parameter after this function returns. This must not be a
 	// nil key. When Reader.ConsistentIterators is true, prefer creating a new
@@ -382,6 +386,12 @@ type ExportOptions struct {
 	// to an SST that exceeds maxSize, an error will be returned. This parameter
 	// exists to prevent creating SSTs which are too large to be used.
 	MaxSize uint64
+	// MaxIntents specifies the number of intents to collect and return in a
+	// WriteIntentError. The caller will likely resolve the returned intents and
+	// retry the call, which would be quadratic, so this significantly reduces the
+	// overall number of scans. 0 disables batching and returns the first intent,
+	// pass math.MaxUint64 to collect all.
+	MaxIntents uint64
 	// If StopMidKey is false, once function reaches targetSize it would continue
 	// adding all versions until it reaches next key or end of range. If true, it
 	// would stop immediately when targetSize is reached and return the next versions

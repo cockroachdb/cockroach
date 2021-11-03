@@ -15,9 +15,11 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/errors"
 )
 
 // Workaround for bazel auto-generated code. goimports does not automatically
@@ -27,7 +29,186 @@ var (
 	_ apd.Context
 	_ duration.Duration
 	_ json.JSON
+	_ = colexecerror.InternalError
+	_ = errors.AssertionFailedf
 )
+
+// TypedVecs represents a slice of Vecs that have been converted into the typed
+// columns. The idea is that every Vec is stored both in Vecs slice as well as
+// in the typed slice, in order. Components that know the type of the vector
+// they are working with can then access the typed column directly, avoiding
+// expensive type casts.
+type TypedVecs struct {
+	Vecs  []Vec
+	Nulls []*Nulls
+
+	// Fields below need to be accessed by an index mapped via ColsMap.
+	BoolCols      []Bools
+	BytesCols     []*Bytes
+	DecimalCols   []Decimals
+	Int16Cols     []Int16s
+	Int32Cols     []Int32s
+	Int64Cols     []Int64s
+	Float64Cols   []Float64s
+	TimestampCols []Times
+	IntervalCols  []Durations
+	JSONCols      []*JSONs
+	DatumCols     []DatumVec
+	// ColsMap contains the positions of the corresponding vectors in the slice
+	// for the same types. For example, if we have a batch with
+	//   types = [Int64, Int64, Bool, Bytes, Bool, Int64],
+	// then ColsMap will be
+	//                      [0, 1, 0, 0, 1, 2]
+	//                       ^  ^  ^  ^  ^  ^
+	//                       |  |  |  |  |  |
+	//                       |  |  |  |  |  3rd among all Int64's
+	//                       |  |  |  |  2nd among all Bool's
+	//                       |  |  |  1st among all Bytes's
+	//                       |  |  1st among all Bool's
+	//                       |  2nd among all Int64's
+	//                       1st among all Int64's
+	ColsMap []int
+}
+
+// SetBatch updates TypedVecs to represent all vectors from batch.
+func (v *TypedVecs) SetBatch(batch Batch) {
+	v.Vecs = batch.ColVecs()
+	if cap(v.Nulls) < len(v.Vecs) {
+		v.Nulls = make([]*Nulls, len(v.Vecs))
+		v.ColsMap = make([]int, len(v.Vecs))
+	} else {
+		v.Nulls = v.Nulls[:len(v.Vecs)]
+		v.ColsMap = v.ColsMap[:len(v.Vecs)]
+	}
+	v.BoolCols = v.BoolCols[:0]
+	v.BytesCols = v.BytesCols[:0]
+	v.DecimalCols = v.DecimalCols[:0]
+	v.Int16Cols = v.Int16Cols[:0]
+	v.Int32Cols = v.Int32Cols[:0]
+	v.Int64Cols = v.Int64Cols[:0]
+	v.Float64Cols = v.Float64Cols[:0]
+	v.TimestampCols = v.TimestampCols[:0]
+	v.IntervalCols = v.IntervalCols[:0]
+	v.JSONCols = v.JSONCols[:0]
+	v.DatumCols = v.DatumCols[:0]
+	for i, vec := range v.Vecs {
+		v.Nulls[i] = vec.Nulls()
+		switch vec.CanonicalTypeFamily() {
+		case types.BoolFamily:
+			switch vec.Type().Width() {
+			case -1:
+			default:
+				v.ColsMap[i] = len(v.BoolCols)
+				v.BoolCols = append(v.BoolCols, vec.Bool())
+			}
+		case types.BytesFamily:
+			switch vec.Type().Width() {
+			case -1:
+			default:
+				v.ColsMap[i] = len(v.BytesCols)
+				v.BytesCols = append(v.BytesCols, vec.Bytes())
+			}
+		case types.DecimalFamily:
+			switch vec.Type().Width() {
+			case -1:
+			default:
+				v.ColsMap[i] = len(v.DecimalCols)
+				v.DecimalCols = append(v.DecimalCols, vec.Decimal())
+			}
+		case types.IntFamily:
+			switch vec.Type().Width() {
+			case 16:
+				v.ColsMap[i] = len(v.Int16Cols)
+				v.Int16Cols = append(v.Int16Cols, vec.Int16())
+			case 32:
+				v.ColsMap[i] = len(v.Int32Cols)
+				v.Int32Cols = append(v.Int32Cols, vec.Int32())
+			case -1:
+			default:
+				v.ColsMap[i] = len(v.Int64Cols)
+				v.Int64Cols = append(v.Int64Cols, vec.Int64())
+			}
+		case types.FloatFamily:
+			switch vec.Type().Width() {
+			case -1:
+			default:
+				v.ColsMap[i] = len(v.Float64Cols)
+				v.Float64Cols = append(v.Float64Cols, vec.Float64())
+			}
+		case types.TimestampTZFamily:
+			switch vec.Type().Width() {
+			case -1:
+			default:
+				v.ColsMap[i] = len(v.TimestampCols)
+				v.TimestampCols = append(v.TimestampCols, vec.Timestamp())
+			}
+		case types.IntervalFamily:
+			switch vec.Type().Width() {
+			case -1:
+			default:
+				v.ColsMap[i] = len(v.IntervalCols)
+				v.IntervalCols = append(v.IntervalCols, vec.Interval())
+			}
+		case types.JsonFamily:
+			switch vec.Type().Width() {
+			case -1:
+			default:
+				v.ColsMap[i] = len(v.JSONCols)
+				v.JSONCols = append(v.JSONCols, vec.JSON())
+			}
+		case typeconv.DatumVecCanonicalTypeFamily:
+			switch vec.Type().Width() {
+			case -1:
+			default:
+				v.ColsMap[i] = len(v.DatumCols)
+				v.DatumCols = append(v.DatumCols, vec.Datum())
+			}
+		default:
+			colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", vec.Type()))
+		}
+	}
+}
+
+// Reset performs a deep reset of v while keeping the references to the slices.
+func (v *TypedVecs) Reset() {
+	v.Vecs = nil
+	for i := range v.Nulls {
+		v.Nulls[i] = nil
+	}
+	for i := range v.BoolCols {
+		v.BoolCols[i] = nil
+	}
+	for i := range v.BytesCols {
+		v.BytesCols[i] = nil
+	}
+	for i := range v.DecimalCols {
+		v.DecimalCols[i] = nil
+	}
+	for i := range v.Int16Cols {
+		v.Int16Cols[i] = nil
+	}
+	for i := range v.Int32Cols {
+		v.Int32Cols[i] = nil
+	}
+	for i := range v.Int64Cols {
+		v.Int64Cols[i] = nil
+	}
+	for i := range v.Float64Cols {
+		v.Float64Cols[i] = nil
+	}
+	for i := range v.TimestampCols {
+		v.TimestampCols[i] = nil
+	}
+	for i := range v.IntervalCols {
+		v.IntervalCols[i] = nil
+	}
+	for i := range v.JSONCols {
+		v.JSONCols[i] = nil
+	}
+	for i := range v.DatumCols {
+		v.DatumCols[i] = nil
+	}
+}
 
 func (m *memColumn) Append(args SliceArgs) {
 	switch m.CanonicalTypeFamily() {

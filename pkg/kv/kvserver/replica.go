@@ -420,6 +420,9 @@ type Replica struct {
 		// The replica's Raft group "node".
 		internalRaftGroup *raft.RawNode
 		// The ID of the replica within the Raft group. This value may never be 0.
+		// It will not change over the lifetime of this replica. If addressed under
+		// a newer replicaID, the replica immediately replicaGCs itself to make
+		// way for the newer incarnation.
 		replicaID roachpb.ReplicaID
 		// The minimum allowed ID for this replica. Initialized from
 		// RangeTombstone.NextReplicaID.
@@ -1202,6 +1205,11 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
+
+	// We don't care about this field; see comment on
+	// DeprecatedUsingAppliedStateKey for more details. This can be removed once
+	// we stop loading the replica state from snapshot protos.
+	diskState.DeprecatedUsingAppliedStateKey = r.mu.state.DeprecatedUsingAppliedStateKey
 	if !diskState.Equal(r.mu.state) {
 		// The roundabout way of printing here is to expose this information in sentry.io.
 		//
@@ -1215,6 +1223,38 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 	if r.isInitializedRLocked() {
 		if !r.startKey.Equal(r.mu.state.Desc.StartKey) {
 			log.Fatalf(ctx, "denormalized start key %s diverged from %s", r.startKey, r.mu.state.Desc.StartKey)
+		}
+	}
+	// A replica is always contained in its descriptor. This is an invariant. When
+	// the replica applies a ChangeReplicasTrigger that removes it, it will
+	// eagerly replicaGC itself. Similarly, snapshots that don't contain the
+	// recipient are refused. In fact, a stronger invariant holds - replicas
+	// will never change replicaID in-place. When a replica receives a raft
+	// message addressing it through a higher replicaID, the replica is
+	// immediately garbage collected as well.
+	//
+	// Unfortunately, the invariant does not hold when the descriptor is
+	// uninitialized, as we are hitting this code during instantiation phase of
+	// replicas where they can briefly be in an inconsistent state. These calls
+	// generally go through tryGetOrCreateReplica and first create a replica from
+	// an uninitialized descriptor that they then populate if on-disk state is
+	// present. This is all complex and we would be better off if we made sure
+	// that a Replica is always initialized (i.e. replace uninitialized replicas
+	// with a different type, similar to ReplicaPlaceholder).
+	//
+	// The invariant is also violated in some tests that set the
+	// DisableEagerReplicaRemoval testing knob, for example in
+	// TestStoreReplicaGCAfterMerge.
+	//
+	// See:
+	// https://github.com/cockroachdb/cockroach/pull/40892
+	if !r.store.TestingKnobs().DisableEagerReplicaRemoval && r.mu.state.Desc.IsInitialized() {
+		replDesc, ok := r.mu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
+		if !ok {
+			log.Fatalf(ctx, "%+v does not contain local store s%d", r.mu.state.Desc, r.store.StoreID())
+		}
+		if replDesc.ReplicaID != r.mu.replicaID {
+			log.Fatalf(ctx, "replica's replicaID %d diverges from descriptor %+v", r.mu.replicaID, r.mu.state.Desc)
 		}
 	}
 }
@@ -1507,14 +1547,7 @@ func (r *Replica) shouldWaitForPendingMergeRLocked(
 // older replica ID including its hard state which may have been synthesized
 // with votes as the newer replica ID. This case tends to be handled safely
 // in practice because the replica should only be receiving messages as the
-// newer replica ID after it has been added to the range. Prior to learner
-// replicas we would only add a store to a range after we've successfully
-// applied a pre-emptive snapshot. If the store were to split between the
-// preemptive snapshot and the addition then the addition would fail due to
-// the conditional put logic. If the store were to then enable learners then
-// we're still okay because we won't promote a learner unless we succeed in
-// sending a learner snapshot. If we fail to send the replica never becomes
-// a voter then its votes don't matter and are safe to discard.
+// newer replica ID after it has been added to the range as a learner.
 //
 // Despite the safety due to the change replicas protocol explained above
 // it'd be good to know for sure that a replica ID for a range on a store

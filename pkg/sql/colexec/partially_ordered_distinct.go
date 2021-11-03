@@ -39,10 +39,7 @@ func newPartiallyOrderedDistinct(
 			"partially ordered distinct wrongfully planned: numDistinctCols=%d "+
 				"numOrderedCols=%d", len(distinctCols), len(orderedCols))
 	}
-	chunker, err := newChunker(allocator, input, typs, orderedCols, nullsAreDistinct)
-	if err != nil {
-		return nil, err
-	}
+	chunker := newChunker(allocator, input, typs, orderedCols, nullsAreDistinct)
 	chunkerOperator := newChunkerOperator(allocator, chunker, typs)
 	// distinctUnorderedCols will contain distinct columns that are not present
 	// among orderedCols. The unordered distinct operator will use these columns

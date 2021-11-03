@@ -211,15 +211,9 @@ func validateFormatOptions(
 }
 
 func importJobDescription(
-	p sql.PlanHookState,
-	orig *tree.Import,
-	defs tree.TableDefs,
-	files []string,
-	opts map[string]string,
+	p sql.PlanHookState, orig *tree.Import, files []string, opts map[string]string,
 ) (string, error) {
 	stmt := *orig
-	stmt.CreateFile = nil
-	stmt.CreateDefs = defs
 	stmt.Files = nil
 	for _, file := range files {
 		clean, err := cloud.SanitizeExternalStorageURI(file, nil /* extraParams */)
@@ -353,14 +347,6 @@ func importPlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	var createFileFn func() (string, error)
-	if !importStmt.Bundle && !importStmt.Into && importStmt.CreateDefs == nil {
-		createFileFn, err = p.TypeAsString(ctx, importStmt.CreateFile, "IMPORT")
-		if err != nil {
-			return nil, nil, nil, false, err
-		}
-	}
-
 	optsFn, err := p.TypeAsStringOpts(ctx, importStmt.Options, importOptionExpectValues)
 	if err != nil {
 		return nil, nil, nil, false, err
@@ -377,8 +363,6 @@ func importPlanHook(
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, importStmt.StatementTag())
 		defer span.Finish()
-
-		walltime := p.ExecCfg().Clock.Now().WallTime
 
 		if !(p.ExtendedEvalContext().TxnImplicit || isDetached) {
 			return errors.Errorf("IMPORT cannot be used inside a transaction without DETACHED option")
@@ -782,9 +766,8 @@ func importPlanHook(
 		}
 
 		var tableDetails []jobspb.ImportDetails_Table
-		var tableDescs []*tabledesc.Mutable // parallel with tableDetails
 		var typeDetails []jobspb.ImportDetails_Type
-		jobDesc, err := importJobDescription(p, importStmt, nil, filenamePatterns, opts)
+		jobDesc, err := importJobDescription(p, importStmt, filenamePatterns, opts)
 		if err != nil {
 			return err
 		}
@@ -857,98 +840,24 @@ func importPlanHook(
 			}
 
 			tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, IsNew: false, TargetCols: intoCols}}
-		} else {
-			seqVals := make(map[descpb.ID]int64)
-
-			if importStmt.Bundle {
-				// If we target a single table, populate details with one entry of tableName.
-				if table != nil {
-					tableDetails = make([]jobspb.ImportDetails_Table, 1)
-					tableName := table.ObjectName.String()
-					// PGDUMP supports importing tables from non-public schemas, thus we
-					// must prepend the target table name with the target schema name.
-					if format.Format == roachpb.IOFileFormat_PgDump {
-						if table.Schema() == "" {
-							return errors.Newf("expected schema for target table %s to be resolved",
-								tableName)
-						}
-						tableName = fmt.Sprintf("%s.%s", table.SchemaName.String(),
-							table.ObjectName.String())
+		} else if importStmt.Bundle {
+			// If we target a single table, populate details with one entry of tableName.
+			if table != nil {
+				tableDetails = make([]jobspb.ImportDetails_Table, 1)
+				tableName := table.ObjectName.String()
+				// PGDUMP supports importing tables from non-public schemas, thus we
+				// must prepend the target table name with the target schema name.
+				if format.Format == roachpb.IOFileFormat_PgDump {
+					if table.Schema() == "" {
+						return errors.Newf("expected schema for target table %s to be resolved",
+							tableName)
 					}
-					tableDetails[0] = jobspb.ImportDetails_Table{
-						Name:  tableName,
-						IsNew: true,
-					}
+					tableName = fmt.Sprintf("%s.%s", table.SchemaName.String(),
+						table.ObjectName.String())
 				}
-			} else {
-				if table == nil {
-					return errors.Errorf("non-bundle format %q should always have a table name", importStmt.FileFormat)
-				}
-				var create *tree.CreateTable
-				if importStmt.CreateDefs != nil {
-					create = &tree.CreateTable{
-						Table: *importStmt.Table,
-						Defs:  importStmt.CreateDefs,
-					}
-				} else {
-					filename, err := createFileFn()
-					if err != nil {
-						return err
-					}
-					create, err = readCreateTableFromStore(ctx, filename,
-						p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
-					if err != nil {
-						return err
-					}
-
-					if table.ObjectName != create.Table.ObjectName {
-						return errors.Errorf(
-							"importing table %s, but file specifies a schema for table %s",
-							table.ObjectName, create.Table.ObjectName,
-						)
-					}
-				}
-				if create.Locality != nil &&
-					create.Locality.LocalityLevel == tree.LocalityLevelRow {
-					return unimplemented.NewWithIssueDetailf(
-						61133,
-						"import.regional-by-row",
-						"IMPORT to REGIONAL BY ROW table not supported",
-					)
-				}
-				// IMPORT TABLE do not support user defined types, and so we nil out the
-				// type resolver to protect against unexpected behavior on UDT
-				// resolution.
-				semaCtxPtr := makeSemaCtxWithoutTypeResolver(p.SemaCtx())
-				tbl, err := MakeSimpleTableDescriptor(
-					ctx, semaCtxPtr, p.ExecCfg().Settings, create, db, sc, defaultCSVTableID, NoFKs, walltime)
-				if err != nil {
-					return err
-				}
-				descStr, err := importJobDescription(p, importStmt, create.Defs, filenamePatterns, opts)
-				if err != nil {
-					return err
-				}
-				jobDesc = descStr
-
-				tableDescs = []*tabledesc.Mutable{tbl}
-				for _, tbl := range tableDescs {
-					// For reasons relating to #37691, we disallow user defined types in
-					// the standard IMPORT case.
-					for _, col := range tbl.Columns {
-						if col.Type.UserDefined() {
-							return errors.Newf("IMPORT cannot be used with user defined types; use IMPORT INTO instead")
-						}
-					}
-				}
-
-				tableDetails = make([]jobspb.ImportDetails_Table, len(tableDescs))
-				for i := range tableDescs {
-					tableDetails[i] = jobspb.ImportDetails_Table{
-						Desc:   tableDescs[i].TableDesc(),
-						SeqVal: seqVals[tableDescs[i].ID],
-						IsNew:  true,
-					}
+				tableDetails[0] = jobspb.ImportDetails_Table{
+					Name:  tableName,
+					IsNew: true,
 				}
 			}
 

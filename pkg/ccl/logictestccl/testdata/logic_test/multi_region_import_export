@@ -75,13 +75,14 @@ EXPORT INTO CSV 'nodelocal://1/team_export/' WITH DELIMITER = '|' FROM TABLE tea
 
 statement ok
 use multi_region_test_db;
-IMPORT TABLE team (
+CREATE TABLE team (
   id int PRIMARY KEY,
   name string,
   likes string[],
-  dislikes string[]
-)
-CSV DATA ('nodelocal://1/team_export/export*.csv') WITH DELIMITER = '|'
+  dislikes string[],
+  FAMILY "primary" (id, name, likes, dislikes)
+);
+IMPORT INTO team CSV DATA ('nodelocal://1/team_export/export*.csv') WITH DELIMITER = '|'
 
 query ITTT colnames
 SELECT * FROM team

@@ -182,6 +182,9 @@ type Descriptor interface {
 	// DescriptorProto prepares this descriptor for serialization.
 	DescriptorProto() *descpb.Descriptor
 
+	// NewBuilder initializes a DescriptorBuilder with this descriptor.
+	NewBuilder() DescriptorBuilder
+
 	// GetReferencedDescIDs returns the IDs of all descriptors directly referenced
 	// by this descriptor, including itself.
 	GetReferencedDescIDs() (DescriptorIDSet, error)

@@ -3307,7 +3307,7 @@ type PrivilegedAccessor interface {
 		ctx context.Context, parentID int64, name string,
 	) (DInt, bool, error)
 
-	// LookupZoneConfig returns the zone config given a namespace id.
+	// LookupZoneConfigByNamespaceID returns the zone config given a namespace id.
 	// It is meant as a replacement for looking up system.zones directly.
 	// Returns the config byte array, a bool representing whether the namespace exists,
 	// and an error if there is one.
@@ -3444,6 +3444,13 @@ func (*EvalContextTestingKnobs) ModuleTestingKnobs() {}
 type SQLStatsController interface {
 	ResetClusterSQLStats(ctx context.Context) error
 	CreateSQLStatsCompactionSchedule(ctx context.Context) error
+}
+
+// IndexUsageStatsController is an interface embedded in EvalCtx which can be
+// used by the builtins to reset index usage stats in the cluster. This interface
+// is introduced to avoid circular dependency.
+type IndexUsageStatsController interface {
+	ResetIndexUsageStats(ctx context.Context) error
 }
 
 // EvalContext defines the context in which to evaluate an expression, allowing
@@ -3589,6 +3596,8 @@ type EvalContext struct {
 	SQLLivenessReader sqlliveness.Reader
 
 	SQLStatsController SQLStatsController
+
+	IndexUsageStatsController IndexUsageStatsController
 
 	// CompactEngineSpan is used to force compaction of a span in a store.
 	CompactEngineSpan CompactEngineSpanFunc

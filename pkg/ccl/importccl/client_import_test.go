@@ -72,10 +72,10 @@ func TestDropDatabaseCascadeDuringImportsFails(t *testing.T) {
 	})
 	defer srv.Close()
 
+	runner.Exec(t, `CREATE TABLE `+dbName+"."+tableName+` (k INT, v STRING)`)
 	importErrCh := make(chan error, 1)
 	go func() {
-		_, err := db.Exec(`IMPORT TABLE `+dbName+"."+tableName+
-			` (k INT, v STRING) CSV DATA ($1)`, srv.URL)
+		_, err := db.Exec(`IMPORT INTO `+dbName+"."+tableName+` CSV DATA ($1)`, srv.URL)
 		importErrCh <- err
 	}()
 	select {

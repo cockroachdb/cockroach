@@ -3201,6 +3201,7 @@ func mvccResolveWriteIntent(
 	// remains, the rolledBackVal is set to a non-nil value.
 	var rolledBackVal []byte
 	if len(intent.IgnoredSeqNums) > 0 {
+		// NOTE: mvccMaybeRewriteIntentHistory mutates its meta argument.
 		var removeIntent bool
 		removeIntent, rolledBackVal, err = mvccMaybeRewriteIntentHistory(ctx, rw, intent.IgnoredSeqNums, meta, latestKey)
 		if err != nil {
@@ -3210,10 +3211,19 @@ func mvccResolveWriteIntent(
 		if removeIntent {
 			// This intent should be cleared. Set commit, pushed, and inProgress to
 			// false so that this intent isn't updated, gets cleared, and committed
-			// values are left untouched.
+			// values are left untouched. Also ensure that rolledBackVal is set to nil
+			// or we could end up trying to update the intent instead of removing it.
 			commit = false
 			pushed = false
 			inProgress = false
+			rolledBackVal = nil
+		}
+
+		if rolledBackVal != nil {
+			// If we need to update the intent to roll back part of its intent
+			// history, make sure that we don't regress its timestamp, even if the
+			// caller provided an outdated timestamp.
+			intent.Txn.WriteTimestamp.Forward(metaTimestamp)
 		}
 	}
 
@@ -3239,6 +3249,14 @@ func mvccResolveWriteIntent(
 		// The intent might be committing at a higher timestamp, or it might be
 		// getting pushed.
 		newTimestamp := intent.Txn.WriteTimestamp
+
+		// Assert that the intent timestamp never regresses. The logic above should
+		// not allow this, regardless of the input to this function.
+		if newTimestamp.Less(metaTimestamp) {
+			return false, errors.AssertionFailedf("timestamp regression (%s -> %s) "+
+				"during intent resolution, commit=%t pushed=%t rolledBackVal=%t",
+				metaTimestamp, newTimestamp, commit, pushed, rolledBackVal != nil)
+		}
 
 		buf.newMeta = *meta
 		// Set the timestamp for upcoming write (or at least the stats update).
@@ -4175,9 +4193,10 @@ func ComputeStatsForRange(
 // is not considered a collision and we continue iteration from the next key in
 // the existing data.
 func checkForKeyCollisionsGo(
-	existingIter MVCCIterator, sstData []byte, start, end roachpb.Key,
+	existingIter MVCCIterator, sstData []byte, start, end roachpb.Key, maxIntents int64,
 ) (enginepb.MVCCStats, error) {
 	var skippedKVStats enginepb.MVCCStats
+	var intents []roachpb.Intent
 	sstIter, err := NewMemSSTIterator(sstData, false)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
@@ -4211,20 +4230,17 @@ func checkForKeyCollisionsGo(
 			if len(mvccMeta.RawBytes) > 0 {
 				return enginepb.MVCCStats{}, errors.Errorf("inline values are unsupported when checking for key collisions")
 			} else if mvccMeta.Txn != nil {
-				// Check for a write intent.
-				//
-				// TODO(adityamaru): Currently, we raise a WriteIntentError on
-				// encountering all intents. This is because, we do not expect to
-				// encounter many intents during IMPORT INTO as we lock the key space we
-				// are importing into. Older write intents could however be found in the
-				// target key space, which will require appropriate resolution logic.
-				writeIntentErr := roachpb.WriteIntentError{
-					Intents: []roachpb.Intent{
-						roachpb.MakeIntent(mvccMeta.Txn, existingIter.Key().Key),
-					},
+				// Check for a write intent. We keep looking for additional intents to
+				// return a large batch for intent resolution. The caller will likely
+				// resolve the returned intents and retry the call, which would be
+				// quadratic, so this significantly reduces the overall number of scans.
+				intents = append(intents, roachpb.MakeIntent(mvccMeta.Txn, existingIter.Key().Key))
+				if int64(len(intents)) >= maxIntents {
+					return enginepb.MVCCStats{}, &roachpb.WriteIntentError{Intents: intents}
 				}
-
-				return enginepb.MVCCStats{}, &writeIntentErr
+				existingIter.NextKey()
+				ok, extErr = existingIter.Valid()
+				continue
 			} else {
 				return enginepb.MVCCStats{}, errors.Errorf("intent without transaction")
 			}
@@ -4300,6 +4316,9 @@ func checkForKeyCollisionsGo(
 	}
 	if sstErr != nil {
 		return enginepb.MVCCStats{}, sstErr
+	}
+	if len(intents) > 0 {
+		return enginepb.MVCCStats{}, &roachpb.WriteIntentError{Intents: intents}
 	}
 
 	return skippedKVStats, nil

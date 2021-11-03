@@ -106,8 +106,9 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 	// we can't perform splits.
 	_, err := db.Exec("SHOW RANGES FROM TABLE system.descriptor")
 	if err != nil {
-		if strings.Contains(err.Error(), "not fully contained in tenant") {
-			log.Infof(ctx, `not perform workload splits; can't split on tenants'`)
+		if strings.Contains(err.Error(), "not fully contained in tenant") ||
+			strings.Contains(err.Error(), "operation is unsupported in multi-tenancy mode") {
+			log.Infof(ctx, `skipping workload splits; can't split on tenants'`)
 			//nolint:returnerrcheck
 			return nil
 		}

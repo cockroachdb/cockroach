@@ -1241,7 +1241,10 @@ func (r *Registry) stepThroughStateMachine(
 		if err := job.canceled(ctx, nil /* txn */, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as canceled then it will be
 			// restarted during the next adopt loop and reverting will be retried.
-			return errors.Wrapf(err, "job %d: could not mark as canceled: %v", job.ID(), jobErr)
+			return errors.WithSecondaryError(
+				errors.Wrapf(err, "job %d: could not mark as canceled", job.ID()),
+				jobErr,
+			)
 		}
 		telemetry.Inc(TelemetryMetrics[jobType].Canceled)
 		return errors.WithSecondaryError(errors.Errorf("job %s", status), jobErr)
@@ -1264,7 +1267,10 @@ func (r *Registry) stepThroughStateMachine(
 		if err := job.reverted(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as reverting then it will be
 			// restarted during the next adopt loop and it will be retried.
-			return errors.Wrapf(err, "job %d: could not mark as reverting: %s", job.ID(), jobErr)
+			return errors.WithSecondaryError(
+				errors.Wrapf(err, "job %d: could not mark as reverting", job.ID()),
+				jobErr,
+			)
 		}
 		onFailOrCancelCtx := logtags.AddTag(ctx, "job", job.ID())
 		var err error
@@ -1301,7 +1307,10 @@ func (r *Registry) stepThroughStateMachine(
 		if err := job.failed(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
 			// restarted during the next adopt loop and reverting will be retried.
-			return errors.Wrapf(err, "job %d: could not mark as failed: %s", job.ID(), jobErr)
+			return errors.WithSecondaryError(
+				errors.Wrapf(err, "job %d: could not mark as failed", job.ID()),
+				jobErr,
+			)
 		}
 		telemetry.Inc(TelemetryMetrics[jobType].Failed)
 		return jobErr
@@ -1316,7 +1325,10 @@ func (r *Registry) stepThroughStateMachine(
 		if err := job.revertFailed(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
 			// restarted during the next adopt loop and reverting will be retried.
-			return errors.Wrapf(err, "job %d: could not mark as revert field: %s", job.ID(), jobErr)
+			return errors.WithSecondaryError(
+				errors.Wrapf(err, "job %d: could not mark as revert field", job.ID()),
+				jobErr,
+			)
 		}
 		return jobErr
 	default:

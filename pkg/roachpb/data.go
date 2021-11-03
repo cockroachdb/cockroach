@@ -1457,9 +1457,28 @@ func PrepareTransactionForRetry(
 		txn.WriteTimestamp.Forward(tErr.PusheeTxn.WriteTimestamp)
 		txn.UpgradePriority(tErr.PusheeTxn.Priority - 1)
 	case *TransactionRetryError:
-		// Nothing to do. Transaction.Timestamp has already been forwarded to be
-		// ahead of any timestamp cache entries or newer versions which caused
-		// the restart.
+		// Transaction.Timestamp has already been forwarded to be ahead of any
+		// timestamp cache entries or newer versions which caused the restart.
+		if tErr.Reason == RETRY_SERIALIZABLE {
+			// For RETRY_SERIALIZABLE case, we want to bump timestamp further than
+			// timestamp cache.
+			// This helps transactions that had their commit timestamp fixed (See
+			// roachpb.Transaction.CommitTimestampFixed for details on when it happens)
+			// or transactions that hit read-write contention and can't bump
+			// read timestamp because of later writes.
+			// Upon retry, we want those transactions to restart on now() instead of
+			// closed ts to give them some time to complete without a need to refresh
+			// read spans yet again and possibly fail.
+			// The tradeoff here is that transactions that failed because they were
+			// waiting on locks or were slowed down in their first epoch for any other
+			// reason (e.g. lease transfers, network congestion, node failure, etc.)
+			// would have a chance to retry and succeed, but transactions that are
+			// just slow would still retry indefinitely and delay transactions that
+			// try to write to the keys this transaction reads because reads are not
+			// in the past anymore.
+			now := clock.Now()
+			txn.WriteTimestamp.Forward(now)
+		}
 	case *WriteTooOldError:
 		// Increase the timestamp to the ts at which we've actually written.
 		txn.WriteTimestamp.Forward(writeTooOldRetryTimestamp(tErr))
@@ -1558,18 +1577,12 @@ func writeTooOldRetryTimestamp(err *WriteTooOldError) hlc.Timestamp {
 // Replicas returns all of the replicas present in the descriptor after this
 // trigger applies.
 func (crt ChangeReplicasTrigger) Replicas() []ReplicaDescriptor {
-	if crt.Desc != nil {
-		return crt.Desc.Replicas().Descriptors()
-	}
-	return crt.DeprecatedUpdatedReplicas
+	return crt.Desc.Replicas().Descriptors()
 }
 
 // NextReplicaID returns the next replica id to use after this trigger applies.
 func (crt ChangeReplicasTrigger) NextReplicaID() ReplicaID {
-	if crt.Desc != nil {
-		return crt.Desc.NextReplicaID
-	}
-	return crt.DeprecatedNextReplicaID
+	return crt.Desc.NextReplicaID
 }
 
 // ConfChange returns the configuration change described by the trigger.
@@ -1772,17 +1785,12 @@ func (crt ChangeReplicasTrigger) SafeFormat(w redact.SafePrinter, _ rune) {
 	var nextReplicaID ReplicaID
 	var afterReplicas []ReplicaDescriptor
 	added, removed := crt.Added(), crt.Removed()
-	if crt.Desc != nil {
-		nextReplicaID = crt.Desc.NextReplicaID
-		// NB: we don't want to mutate InternalReplicas, so we don't call
-		// .Replicas()
-		//
-		// TODO(tbg): revisit after #39489 is merged.
-		afterReplicas = crt.Desc.InternalReplicas
-	} else {
-		nextReplicaID = crt.DeprecatedNextReplicaID
-		afterReplicas = crt.DeprecatedUpdatedReplicas
-	}
+	nextReplicaID = crt.Desc.NextReplicaID
+	// NB: we don't want to mutate InternalReplicas, so we don't call
+	// .Replicas()
+	//
+	// TODO(tbg): revisit after #39489 is merged.
+	afterReplicas = crt.Desc.InternalReplicas
 	cc, err := crt.ConfChange(nil)
 	if err != nil {
 		w.Printf("<malformed ChangeReplicasTrigger: %s>", err)
@@ -1837,18 +1845,8 @@ func confChangesToRedactableString(ccs []raftpb.ConfChangeSingle) redact.Redacta
 	})
 }
 
-func (crt ChangeReplicasTrigger) legacy() (ReplicaDescriptor, bool) {
-	if len(crt.InternalAddedReplicas)+len(crt.InternalRemovedReplicas) == 0 && crt.DeprecatedReplica.ReplicaID != 0 {
-		return crt.DeprecatedReplica, true
-	}
-	return ReplicaDescriptor{}, false
-}
-
 // Added returns the replicas added by this change (if there are any).
 func (crt ChangeReplicasTrigger) Added() []ReplicaDescriptor {
-	if rDesc, ok := crt.legacy(); ok && crt.DeprecatedChangeType == ADD_VOTER {
-		return []ReplicaDescriptor{rDesc}
-	}
 	return crt.InternalAddedReplicas
 }
 
@@ -1857,9 +1855,6 @@ func (crt ChangeReplicasTrigger) Added() []ReplicaDescriptor {
 // transitioning to VOTER_{OUTGOING,DEMOTING} (from VOTER_FULL). The subsequent trigger
 // leaving the joint configuration has an empty Removed().
 func (crt ChangeReplicasTrigger) Removed() []ReplicaDescriptor {
-	if rDesc, ok := crt.legacy(); ok && crt.DeprecatedChangeType == REMOVE_VOTER {
-		return []ReplicaDescriptor{rDesc}
-	}
 	return crt.InternalRemovedReplicas
 }
 

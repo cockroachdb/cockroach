@@ -39,17 +39,21 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 50
+const Version execinfrapb.DistSQLVersion = 51
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 48
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 51
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 51 (MinAcceptedVersion: 51)
+  - Redundant TableReaderSpan message has been removed in favor of using
+    roachpb.Spans directly.
 
 - Version: 50 (MinAcceptedVersion: 48)
   - A new field, MinSampleSize, was added to both SamplerSpec and

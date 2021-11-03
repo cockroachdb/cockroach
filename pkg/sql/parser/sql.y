@@ -1216,6 +1216,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Exprs> expr_list opt_expr_list tuple1_ambiguous_values tuple1_unambiguous_values
 %type <*tree.Tuple> expr_tuple1_ambiguous expr_tuple_unambiguous
 %type <tree.NameList> attrs
+%type <[]string> session_var_parts
 %type <tree.SelectExprs> target_list
 %type <tree.UpdateExprs> set_clause_list
 %type <*tree.UpdateExpr> set_clause multiple_set_clause
@@ -3107,16 +3108,6 @@ import_stmt:
     name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Import{Bundle: true, Table: &name, FileFormat: $5, Files: tree.Exprs{$6.expr()}, Options: $7.kvOptions()}
   }
-| IMPORT TABLE table_name CREATE USING string_or_placeholder import_format DATA '(' string_or_placeholder_list ')' opt_with_options
-  {
-    name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Table: &name, CreateFile: $6.expr(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
-  }
-| IMPORT TABLE table_name '(' table_elem_list ')' import_format DATA '(' string_or_placeholder_list ')' opt_with_options
-  {
-    name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Table: &name, CreateDefs: $5.tblDefs(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
-  }
 | IMPORT INTO table_name '(' insert_column_list ')' import_format DATA '(' string_or_placeholder_list ')' opt_with_options
   {
     name := $3.unresolvedObjectName().ToTableName()
@@ -3136,6 +3127,7 @@ import_stmt:
 //
 // Formats:
 //    CSV
+//    Parquet
 //
 // Options:
 //    delimiter = '...'   [CSV-specific]
@@ -4978,9 +4970,13 @@ show_session_stmt:
 
 session_var:
   IDENT
-// Although ALL, SESSION_USER and DATABASE are identifiers for the
-// purpose of SHOW, they lex as separate token types, so they need
-// separate rules.
+| IDENT session_var_parts
+  {
+    $$ = $1 + "." + strings.Join($2.strs(), ".")
+  }
+// Although ALL, SESSION_USER, DATABASE, LC_COLLATE, and LC_CTYPE are
+// identifiers for the purpose of SHOW, they lex as separate token types, so
+// they need separate rules.
 | ALL
 | DATABASE
 // SET NAMES is standard SQL for SET client_encoding.
@@ -4988,9 +4984,21 @@ session_var:
 | NAMES { $$ = "client_encoding" }
 | ROLE
 | SESSION_USER
+| LC_COLLATE
+| LC_CTYPE
 // TIME ZONE is special: it is two tokens, but is really the identifier "TIME ZONE".
 | TIME ZONE { $$ = "timezone" }
 | TIME error // SHOW HELP: SHOW SESSION
+
+session_var_parts:
+  '.' IDENT
+  {
+    $$.val = []string{$2}
+  }
+| session_var_parts '.' IDENT
+  {
+    $$.val = append($1.strs(), $3)
+  }
 
 // %Help: SHOW STATISTICS - display table statistics (experimental)
 // %Category: Experimental

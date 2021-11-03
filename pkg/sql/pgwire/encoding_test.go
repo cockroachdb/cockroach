@@ -165,17 +165,19 @@ func TestEncodings(t *testing.T) {
 	writeBinaryDatum := func(d tree.Datum, t *types.T) {
 		buf.writeBinaryDatum(ctx, d, time.UTC, t)
 	}
-	convertToVec := func(d tree.Datum, t *types.T) coldata.Vec {
-		vec := coldata.NewMemColumn(t, 1 /* length */, coldataext.NewExtendedColumnFactory(&evalCtx))
+	convertToVec := func(d tree.Datum, t *types.T) *coldata.TypedVecs {
+		batch := coldata.NewMemBatchWithCapacity([]*types.T{t}, 1 /* capacity */, coldataext.NewExtendedColumnFactory(&evalCtx))
 		converter := colconv.GetDatumToPhysicalFn(t)
-		coldata.SetValueAt(vec, converter(d), 0 /* rowIdx */)
-		return vec
+		coldata.SetValueAt(batch.ColVec(0), converter(d), 0 /* rowIdx */)
+		var vecs coldata.TypedVecs
+		vecs.SetBatch(batch)
+		return &vecs
 	}
 	writeTextColumnarElement := func(d tree.Datum, t *types.T) {
-		buf.writeTextColumnarElement(ctx, convertToVec(d, t), 0 /* idx */, conv, loc)
+		buf.writeTextColumnarElement(ctx, convertToVec(d, t), 0 /* vecIdx */, 0 /* rowIdx */, conv, loc)
 	}
 	writeBinaryColumnarElement := func(d tree.Datum, t *types.T) {
-		buf.writeBinaryColumnarElement(ctx, convertToVec(d, t), 0 /* idx */, loc)
+		buf.writeBinaryColumnarElement(ctx, convertToVec(d, t), 0 /* vecIdx */, 0 /* rowIdx */, loc)
 	}
 	t.Run("encode", func(t *testing.T) {
 		for _, test := range tests {

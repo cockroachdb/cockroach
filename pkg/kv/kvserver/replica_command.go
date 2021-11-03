@@ -2451,6 +2451,10 @@ func (r *Replica) sendSnapshot(
 		Term:  snap.RaftSnap.Metadata.Term,
 	}
 
+	// See comment on DeprecatedUsingAppliedStateKey for why we need to set this
+	// explicitly for snapshots going out to followers.
+	snap.State.DeprecatedUsingAppliedStateKey = true
+
 	req := SnapshotRequest_Header{
 		State:                                snap.State,
 		DeprecatedUnreplicatedTruncatedState: true,
@@ -2467,14 +2471,9 @@ func (r *Replica) sendSnapshot(
 			},
 		},
 		RangeSize: r.GetMVCCStats().Total(),
-		// Recipients currently cannot choose to decline any snapshots.
-		// In 19.2 and earlier versions pre-emptive snapshots could be declined.
-		//
-		// TODO(ajwerner): Consider removing the CanDecline flag.
-		CanDecline: false,
-		Priority:   priority,
-		Strategy:   SnapshotRequest_KV_BATCH,
-		Type:       snapType,
+		Priority:  priority,
+		Strategy:  SnapshotRequest_KV_BATCH,
+		Type:      snapType,
 	}
 	newBatchFn := func() storage.Batch {
 		return r.store.Engine().NewUnindexedBatch(true /* writeOnly */)

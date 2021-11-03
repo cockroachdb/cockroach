@@ -493,6 +493,7 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			"crdb_internal.unsafe_",
 			"crdb_internal.create_join_token",
 			"crdb_internal.reset_multi_region_zone_configs_for_database",
+			"crdb_internal.reset_index_usage_stats",
 		} {
 			skip = skip || strings.Contains(def.Name, substr)
 		}

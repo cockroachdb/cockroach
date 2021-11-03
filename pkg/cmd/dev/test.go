@@ -54,7 +54,7 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	addCommonTestFlags(testCmd)
 	testCmd.Flags().BoolP(vFlag, "v", false, "enable logging during test runs")
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
-	testCmd.Flags().String(stressArgsFlag, "", "Additional arguments to pass to stress")
+	testCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
 	testCmd.Flags().String(rewriteFlag, "", "argument to pass to underlying (only applicable for certain tests, e.g. logic and datadriven tests). If unspecified, -rewrite will be passed to the test binary.")
@@ -69,22 +69,21 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
-	stress := mustGetFlagBool(cmd, stressFlag)
-	stressArgs := mustGetFlagString(cmd, stressArgsFlag)
-	race := mustGetFlagBool(cmd, raceFlag)
-	filter := mustGetFlagString(cmd, filterFlag)
-	timeout := mustGetFlagDuration(cmd, timeoutFlag)
-	short := mustGetFlagBool(cmd, shortFlag)
-	ignoreCache := mustGetFlagBool(cmd, ignoreCacheFlag)
-	verbose := mustGetFlagBool(cmd, vFlag)
-	rewriteArg := mustGetFlagString(cmd, rewriteArgFlag)
-	rewrite := mustGetFlagString(cmd, rewriteFlag)
+	var (
+		filter      = mustGetFlagString(cmd, filterFlag)
+		ignoreCache = mustGetFlagBool(cmd, ignoreCacheFlag)
+		race        = mustGetFlagBool(cmd, raceFlag)
+		rewrite     = mustGetFlagString(cmd, rewriteFlag)
+		rewriteArg  = mustGetFlagString(cmd, rewriteArgFlag)
+		short       = mustGetFlagBool(cmd, shortFlag)
+		stress      = mustGetFlagBool(cmd, stressFlag)
+		stressArgs  = mustGetFlagString(cmd, stressArgsFlag)
+		timeout     = mustGetFlagDuration(cmd, timeoutFlag)
+		verbose     = mustGetFlagBool(cmd, vFlag)
+	)
 	if rewriteArg != "" && rewrite == "" {
 		rewrite = "-rewrite"
 	}
-
-	d.log.Printf("unit test args: stress=%t  race=%t  filter=%s  timeout=%s  ignore-cache=%t  pkgs=%s",
-		stress, race, filter, timeout, ignoreCache, pkgs)
 
 	var args []string
 	args = append(args, "test")
@@ -178,17 +177,37 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
 		}
 	}
-	if stress && timeout > 0 {
-		args = append(args, "--run_under", fmt.Sprintf("%s -maxtime=%s %s", stressTarget, timeout, stressArgs))
-		// The timeout should be a bit higher than the stress duration.
-		// Bazel will probably think the timeout for this test isn't so
-		// long.
-		args = append(args, fmt.Sprintf("--test_timeout=%d", int((timeout+1*time.Second).Seconds())))
-	} else if stress {
-		args = append(args, "--run_under", fmt.Sprintf("%s %s", stressTarget, stressArgs))
-	} else if timeout > 0 {
+	if timeout > 0 && !stress {
 		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
+
+		// If stress is specified, we'll pad the timeout below.
 	}
+
+	if stress {
+		var stressCmdArgs []string
+		if timeout > 0 {
+			stressCmdArgs = append(stressCmdArgs, fmt.Sprintf("-maxtime=%s", timeout))
+			// The bazel timeout should be higher than the stress duration, lets
+			// generously give it an extra minute.
+			args = append(args, fmt.Sprintf("--test_timeout=%d", int((timeout+time.Minute).Seconds())))
+		} else {
+			// We're running under stress and no timeout is specified. We want
+			// to respect the timeout passed down to stress[1]. Similar to above
+			// we want the bazel timeout to be longer, so lets just set it to
+			// 24h.
+			//
+			// [1]: Through --stress-arg=-maxtime or if nothing is specified,
+			//      -maxtime=0 is taken as "run forever".
+			args = append(args, fmt.Sprintf("--test_timeout=%.0f", 24*time.Hour.Seconds()))
+		}
+		if numCPUs > 0 {
+			stressCmdArgs = append(stressCmdArgs, fmt.Sprintf("-p=%d", numCPUs))
+		}
+		stressCmdArgs = append(stressCmdArgs, stressArgs)
+		args = append(args, "--run_under",
+			fmt.Sprintf("%s %s", stressTarget, strings.Join(stressCmdArgs, " ")))
+	}
+
 	if filter != "" {
 		args = append(args, fmt.Sprintf("--test_filter=%s", filter))
 	}

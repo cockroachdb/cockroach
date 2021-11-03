@@ -11,10 +11,8 @@ package importccl
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -45,40 +43,6 @@ const (
 	defaultCSVParentID descpb.ID = keys.MinNonPredefinedUserDescID
 	defaultCSVTableID  descpb.ID = defaultCSVParentID + 1
 )
-
-func readCreateTableFromStore(
-	ctx context.Context,
-	filename string,
-	externalStorageFromURI cloud.ExternalStorageFromURIFactory,
-	user security.SQLUsername,
-) (*tree.CreateTable, error) {
-	store, err := externalStorageFromURI(ctx, filename, user)
-	if err != nil {
-		return nil, err
-	}
-	defer store.Close()
-	reader, err := store.ReadFile(ctx, "")
-	if err != nil {
-		return nil, err
-	}
-	defer reader.Close()
-	tableDefStr, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, err
-	}
-	stmts, err := parser.Parse(string(tableDefStr))
-	if err != nil {
-		return nil, err
-	}
-	if len(stmts) != 1 {
-		return nil, errors.Errorf("expected 1 create table statement, found %d", len(stmts))
-	}
-	create, ok := stmts[0].AST.(*tree.CreateTable)
-	if !ok {
-		return nil, errors.New("expected CREATE TABLE statement in table file")
-	}
-	return create, nil
-}
 
 type fkHandler struct {
 	allowed  bool
