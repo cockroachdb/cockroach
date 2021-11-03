@@ -128,19 +128,39 @@ func (dt DistSQLTypeResolver) GetTypeDescriptor(
 	return name, typeDesc, nil
 }
 
+// maybeHydrateType checks if t is a user-defined type and installs the metadata
+// if so.
+func (dt DistSQLTypeResolver) maybeHydrateType(ctx context.Context, t *types.T) error {
+	if !t.UserDefined() {
+		return nil
+	}
+	id, err := typedesc.GetUserDefinedTypeDescID(t)
+	if err != nil {
+		return err
+	}
+	name, desc, err := dt.GetTypeDescriptor(ctx, id)
+	if err != nil {
+		return err
+	}
+	return desc.HydrateTypeInfoWithName(ctx, t, &name, dt)
+}
+
 // HydrateTypeSlice installs metadata into a slice of types.T's.
 func (dt DistSQLTypeResolver) HydrateTypeSlice(ctx context.Context, typs []*types.T) error {
-	for _, t := range typs {
-		if t.UserDefined() {
-			id, err := typedesc.GetUserDefinedTypeDescID(t)
-			if err != nil {
+	for _, typ := range typs {
+		switch typ.Family() {
+		case types.ArrayFamily:
+			if err := dt.maybeHydrateType(ctx, typ.ArrayContents()); err != nil {
 				return err
 			}
-			name, desc, err := dt.GetTypeDescriptor(ctx, id)
-			if err != nil {
-				return err
+		case types.TupleFamily:
+			for _, t := range typ.TupleContents() {
+				if err := dt.maybeHydrateType(ctx, t); err != nil {
+					return err
+				}
 			}
-			if err := desc.HydrateTypeInfoWithName(ctx, t, &name, dt); err != nil {
+		default:
+			if err := dt.maybeHydrateType(ctx, typ); err != nil {
 				return err
 			}
 		}
