@@ -81,6 +81,25 @@ func TestSelfBootstrap(t *testing.T) {
 	}
 }
 
+func TestPanicRecovery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
+	require.NoError(t, err)
+
+	defer s.Stopper().Stop(context.Background())
+	ts := s.(*TestServer)
+
+	r, err := http.NewRequest(http.MethodGet, "http://"+ts.HTTPAddr()+"/health", nil /* body */)
+	require.NoError(t, err)
+
+	require.NotPanics(t, func() {
+		// Pass a nil ResponseWriter to induce panic to recover from.
+		ts.ServeHTTP(nil /* w */, r)
+	})
+}
+
 // TestHealthCheck runs a basic sanity check on the health checker.
 func TestHealthCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
