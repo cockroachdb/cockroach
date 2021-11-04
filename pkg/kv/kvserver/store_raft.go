@@ -484,7 +484,7 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		// forgiving.
 		//
 		// See https://github.com/cockroachdb/cockroach/issues/30951#issuecomment-428010411.
-		if _, exists := s.mu.replicas.Load(rangeID); !exists {
+		if _, exists := s.mu.replicasByRangeID.Load(rangeID); !exists {
 			q.Lock()
 			if len(q.infos) == 0 {
 				s.replicaQueues.Delete(int64(rangeID))
@@ -500,7 +500,7 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 }
 
 func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
-	r, ok := s.mu.replicas.Load(rangeID)
+	r, ok := s.mu.replicasByRangeID.Load(rangeID)
 	if !ok {
 		return
 	}
@@ -523,7 +523,7 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 }
 
 func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
-	r, ok := s.mu.replicas.Load(rangeID)
+	r, ok := s.mu.replicasByRangeID.Load(rangeID)
 	if !ok {
 		return false
 	}
@@ -558,7 +558,7 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 	s.updateLivenessMap()
 
-	_ = s.mu.replicas.Range(func(r *Replica) error {
+	_ = s.mu.replicasByRangeID.Range(func(r *Replica) error {
 		r.mu.RLock()
 		quiescent := r.mu.quiescent
 		lagging := r.mu.laggingFollowersOnQuiesce
@@ -727,12 +727,12 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 
 	if !s.cfg.Transport.SendAsync(chReq, rpc.SystemClass) {
 		for _, beat := range beats {
-			if repl, ok := s.mu.replicas.Load(beat.RangeID); ok {
+			if repl, ok := s.mu.replicasByRangeID.Load(beat.RangeID); ok {
 				repl.addUnreachableRemoteReplica(beat.ToReplicaID)
 			}
 		}
 		for _, resp := range resps {
-			if repl, ok := s.mu.replicas.Load(resp.RangeID); ok {
+			if repl, ok := s.mu.replicasByRangeID.Load(resp.RangeID); ok {
 				repl.addUnreachableRemoteReplica(resp.ToReplicaID)
 			}
 		}
