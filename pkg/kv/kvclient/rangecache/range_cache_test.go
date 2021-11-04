@@ -892,9 +892,8 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 					var desc *roachpb.RangeDescriptor
 					// Each request goes to a different key.
 					var err error
-					ctx, getRecording, cancel := tracing.ContextWithRecordingSpan(
-						ctx, tracing.NewTracer(), "test")
-					defer cancel()
+					ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tracing.NewTracer(), "test")
+					defer getRecAndFinish()
 					tok, err := db.cache.lookupInternal(
 						ctx, key, oldToken,
 						tc.reverseScan)
@@ -910,7 +909,7 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 						}
 					}
 					if expLog != "" {
-						rec := getRecording()
+						rec := getRecAndFinish()
 						_, ok := rec.FindLogMessage(expLog)
 						if !ok {
 							t.Errorf("didn't find expected message in trace for %s: %s. Recording:\n%s",

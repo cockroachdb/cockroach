@@ -123,8 +123,8 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	iter := 0
 	// We'll trace to make sure the test isn't fooling itself.
 	tr := s.TracerI().(*tracing.Tracer)
-	runningCtx, getRec, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test")
-	defer cancel()
+	runningCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test")
+	defer getRecAndFinish()
 	err = shortDB.Txn(runningCtx, func(ctx context.Context, txn *kv.Txn) error {
 		iter++
 		if iter == 1 {
@@ -189,7 +189,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	if iter != 2 {
 		t.Fatalf("expected two iterations, but txn took %d to succeed", iter)
 	}
-	if tracing.FindMsgInRecording(getRec(), clientRejectedMsg) == -1 {
+	if tracing.FindMsgInRecording(getRecAndFinish(), clientRejectedMsg) == -1 {
 		t.Fatalf("didn't find expected message in trace: %s", clientRejectedMsg)
 	}
 }

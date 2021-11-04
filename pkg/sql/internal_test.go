@@ -546,12 +546,12 @@ func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 	require.True(t, txn.IsSerializablePushAndRefreshNotPossible())
 
 	tr := s.Tracer()
-	execCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
-	defer cancel()
+	execCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
+	defer getRecAndFinish()
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	_, err = ie.Exec(execCtx, "test", txn, "select 42")
 	require.NoError(t, err)
-	require.NoError(t, testutils.MatchInOrder(collect().String(),
+	require.NoError(t, testutils.MatchInOrder(getRecAndFinish().String(),
 		"push detected for non-refreshable txn but auto-retry not possible"))
 	require.NotEqual(t, txn.ReadTimestamp(), txn.ProvisionalCommitTimestamp(), "expect txn wts to be pushed")
 
