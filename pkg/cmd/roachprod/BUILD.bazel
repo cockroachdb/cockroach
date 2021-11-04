@@ -8,7 +8,6 @@ go_library(
     deps = [
         "//pkg/build",
         "//pkg/roachprod",
-        "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
         "//pkg/roachprod/errors",
         "//pkg/roachprod/install",
@@ -22,6 +21,7 @@ go_library(
         "//pkg/util/flagutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_cobra//:cobra",
+        "@org_golang_x_term//:term",
     ],
 )
 
