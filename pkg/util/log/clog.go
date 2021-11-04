@@ -295,8 +295,9 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 	setActive()
 	var fatalTrigger chan struct{}
 	extraFlush := false
+	isFatal := entry.sev == severity.FATAL
 
-	if entry.sev == severity.FATAL {
+	if isFatal {
 		extraFlush = true
 		logging.signalFatalCh()
 
@@ -401,7 +402,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 				// The sink was not accepting entries at this level. Nothing to do.
 				continue
 			}
-			if err := s.sink.output(extraFlush, bufs.b[i].Bytes()); err != nil {
+			if err := s.sink.output(bufs.b[i].Bytes(), sinkOutputOptions{extraFlush: extraFlush, forceSync: isFatal}); err != nil {
 				if !s.criticality {
 					// An error on this sink is not critical. Just report
 					// the error and move on.
@@ -431,7 +432,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 	}
 
 	// Flush and exit on fatal logging.
-	if entry.sev == severity.FATAL {
+	if isFatal {
 		close(fatalTrigger)
 		// Note: although it seems like the function is allowed to return
 		// below when s == severity.FATAL, this is not so, because the

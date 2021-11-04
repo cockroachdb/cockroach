@@ -484,7 +484,7 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		// forgiving.
 		//
 		// See https://github.com/cockroachdb/cockroach/issues/30951#issuecomment-428010411.
-		if _, exists := s.mu.replicas.Load(int64(rangeID)); !exists {
+		if _, exists := s.mu.replicasByRangeID.Load(rangeID); !exists {
 			q.Lock()
 			if len(q.infos) == 0 {
 				s.replicaQueues.Delete(int64(rangeID))
@@ -500,12 +500,11 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 }
 
 func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
-	value, ok := s.mu.replicas.Load(int64(rangeID))
+	r, ok := s.mu.replicasByRangeID.Load(rangeID)
 	if !ok {
 		return
 	}
 
-	r := (*Replica)(value)
 	ctx = r.raftSchedulerCtx(ctx)
 	start := timeutil.Now()
 	stats, expl, err := r.handleRaftReady(ctx, noSnap)
@@ -524,14 +523,13 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 }
 
 func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
-	value, ok := s.mu.replicas.Load(int64(rangeID))
+	r, ok := s.mu.replicasByRangeID.Load(rangeID)
 	if !ok {
 		return false
 	}
 	livenessMap, _ := s.livenessMap.Load().(liveness.IsLiveMap)
 
 	start := timeutil.Now()
-	r := (*Replica)(value)
 	ctx = r.raftSchedulerCtx(ctx)
 	exists, err := r.tick(ctx, livenessMap)
 	if err != nil {
@@ -560,8 +558,7 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 	s.updateLivenessMap()
 
-	s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
-		r := (*Replica)(v)
+	s.mu.replicasByRangeID.Range(func(r *Replica) {
 		r.mu.RLock()
 		quiescent := r.mu.quiescent
 		lagging := r.mu.laggingFollowersOnQuiesce
@@ -570,7 +567,6 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 		if quiescent && (lagging.MemberStale(l) || !laggingAccurate) {
 			r.unquiesce()
 		}
-		return true
 	})
 }
 
@@ -730,13 +726,13 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 
 	if !s.cfg.Transport.SendAsync(chReq, rpc.SystemClass) {
 		for _, beat := range beats {
-			if value, ok := s.mu.replicas.Load(int64(beat.RangeID)); ok {
-				(*Replica)(value).addUnreachableRemoteReplica(beat.ToReplicaID)
+			if repl, ok := s.mu.replicasByRangeID.Load(beat.RangeID); ok {
+				repl.addUnreachableRemoteReplica(beat.ToReplicaID)
 			}
 		}
 		for _, resp := range resps {
-			if value, ok := s.mu.replicas.Load(int64(resp.RangeID)); ok {
-				(*Replica)(value).addUnreachableRemoteReplica(resp.ToReplicaID)
+			if repl, ok := s.mu.replicasByRangeID.Load(resp.RangeID); ok {
+				repl.addUnreachableRemoteReplica(resp.ToReplicaID)
 			}
 		}
 		return 0

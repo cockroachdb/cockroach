@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -105,7 +106,7 @@ func (sr *SQLRunner) ExpectErr(t testutils.TB, errRE string, query string, args 
 	t.Helper()
 	_, err := sr.DB.ExecContext(context.Background(), query, args...)
 	if !testutils.IsError(err, errRE) {
-		t.Fatalf("expected error '%s', got: %v", errRE, err)
+		t.Fatalf("expected error '%s', got: %s", errRE, pgerror.FullError(err))
 	}
 }
 
@@ -117,7 +118,7 @@ func (sr *SQLRunner) ExpectErrSucceedsSoon(
 	sr.succeedsWithin(t, func() error {
 		_, err := sr.DB.ExecContext(context.Background(), query, args...)
 		if !testutils.IsError(err, errRE) {
-			return errors.Newf("expected error '%s', got: %v", errRE, err)
+			return errors.Newf("expected error '%s', got: %s", errRE, pgerror.FullError(err))
 		}
 		return nil
 	})

@@ -450,13 +450,10 @@ func (s *Store) canAcceptSnapshotLocked(
 	desc := *snapHeader.State.Desc
 
 	// First, check for an existing Replica.
-	v, ok := s.mu.replicas.Load(
-		int64(desc.RangeID),
-	)
+	existingRepl, ok := s.mu.replicasByRangeID.Load(desc.RangeID)
 	if !ok {
 		return nil, errors.Errorf("canAcceptSnapshotLocked requires a replica present")
 	}
-	existingRepl := (*Replica)(v)
 	// The raftMu is held which allows us to use the existing replica as a
 	// placeholder when we decide that the snapshot can be applied. As long
 	// as the caller releases the raftMu only after feeding the snapshot

@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -288,6 +289,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
+		attachBufferWrapper(secLoggersCtx, fileSinkInfo, fc.CommonSinkConfig)
 		attachSinkInfo(fileSinkInfo, &fc.Channels)
 
 		// Start the GC process. This ensures that old capture files get
@@ -304,6 +306,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
+		attachBufferWrapper(secLoggersCtx, fluentSinkInfo, fc.CommonSinkConfig)
 		attachSinkInfo(fluentSinkInfo, &fc.Channels)
 	}
 
@@ -316,6 +319,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
+		attachBufferWrapper(secLoggersCtx, httpSinkInfo, fc.CommonSinkConfig)
 		attachSinkInfo(httpSinkInfo, &fc.Channels)
 	}
 
@@ -393,6 +397,40 @@ func (l *sinkInfo) applyFilters(chs logconfig.ChannelFilters) {
 	for ch, threshold := range chs.ChannelFilters {
 		l.threshold.set(ch, threshold)
 	}
+}
+
+func attachBufferWrapper(ctx context.Context, s *sinkInfo, c logconfig.CommonSinkConfig) {
+	b := c.Buffering
+	if b.IsNone() {
+		return
+	}
+
+	errCallback := func(err error) {
+		// TODO(knz): explain which sink is encountering the error in the
+		// error message.
+		// See: https://github.com/cockroachdb/cockroach/issues/72461
+		Ops.Errorf(context.Background(), "logging error: %v", err)
+	}
+	if s.criticality {
+		// TODO(knz): explain which sink is encountering the error in the
+		// error message.
+		// See: https://github.com/cockroachdb/cockroach/issues/72461
+		errCallback = func(err error) {
+			Ops.Errorf(context.Background(), "logging error: %v", err)
+
+			logging.mu.Lock()
+			f := logging.mu.exitOverride.f
+			logging.mu.Unlock()
+
+			code := s.sink.exitCode()
+			if f != nil {
+				f(code, err)
+			} else {
+				exit.WithCode(code)
+			}
+		}
+	}
+	s.sink = newBufferSink(ctx, s.sink, *b.MaxStaleness, int(*b.FlushTriggerSize), int32(*b.MaxInFlight), errCallback)
 }
 
 // applyConfig applies a common sink configuration to a sinkInfo.

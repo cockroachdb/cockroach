@@ -138,6 +138,50 @@ type CaptureFd2Config struct {
 	MaxGroupSize *ByteSize `yaml:"max-group-size,omitempty"`
 }
 
+// CommonBufferSinkConfig represents the common buffering configuration for sinks.
+//
+// User-facing documentation follows.
+// TITLE: Common buffering configuration
+// Buffering may be configured with the following fields. It may also be explicitly
+// set to "NONE" to disable buffering. Example configuration:
+//
+//     file-defaults:
+//        dir: logs
+//        buffering:
+//           max-staleness: 20s
+//           flush-trigger-size: 25KB
+//     sinks:
+//        file-groups:
+//           health:
+//              channels: HEALTH
+//              buffering:
+//                 max-staleness: 5s  # Override max-staleness for this sink.
+//           ops:
+//              channels: OPS
+//              buffering: NONE  # Disable buffering for this sink.
+type CommonBufferSinkConfig struct {
+	// MaxStaleness is the maximum time a log message will sit in the buffer
+	// before a flush is triggered.
+	MaxStaleness *time.Duration `yaml:"max-staleness,omitempty"`
+
+	// FlushTriggerSize is the number of bytes that will trigger the buffer
+	// to flush.
+	FlushTriggerSize *ByteSize `yaml:"flush-trigger-size,omitempty"`
+
+	// MaxInFlight is the maximum number of buffered flushes before messages
+	// start being dropped.
+	MaxInFlight *int `yaml:"max-in-flight,omitempty"`
+}
+
+// CommonBufferSinkConfigWrapper is a BufferSinkConfig with a special value represented in YAML by
+// the string "NONE", which actively disables buffering (in the sense that it overrides
+// buffering that is enabled by default).
+// This is a separate type so that marshaling and unmarshaling of the inner BufferSinkConfig
+// can be handled by the library without causing infinite recursion.
+type CommonBufferSinkConfigWrapper struct {
+	CommonBufferSinkConfig
+}
+
 // CommonSinkConfig represents the common configuration shared across all sinks.
 type CommonSinkConfig struct {
 	// Filter specifies the default minimum severity for log events to
@@ -167,6 +211,9 @@ type CommonSinkConfig struct {
 	// it enables `exit-on-error` and changes the format of files
 	// from `crdb-v1` to `crdb-v1-count`.
 	Auditable *bool `yaml:",omitempty"`
+
+	// Buffering configures buffering for this log sink, or NONE to explicitly disable.
+	Buffering CommonBufferSinkConfigWrapper `yaml:",omitempty"`
 }
 
 // SinkConfig represents the sink configurations.
@@ -992,6 +1039,39 @@ func (*Holder) Type() string { return "yaml" }
 // Set implements the pflag.Value interface.
 func (h *Holder) Set(value string) error {
 	return yaml.UnmarshalStrict([]byte(value), &h.Config)
+}
+
+// MarshalYAML implements yaml.Marshaler interface.
+func (w CommonBufferSinkConfigWrapper) MarshalYAML() (interface{}, error) {
+	if w.IsNone() {
+		return "NONE", nil
+	}
+	return w.CommonBufferSinkConfig, nil
+}
+
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (w *CommonBufferSinkConfigWrapper) UnmarshalYAML(fn func(interface{}) error) error {
+	var v string
+	if err := fn(&v); err == nil {
+		if strings.ToUpper(v) == "NONE" {
+			d := time.Duration(0)
+			s := ByteSize(0)
+			w.CommonBufferSinkConfig = CommonBufferSinkConfig{
+				MaxStaleness:     &d,
+				FlushTriggerSize: &s,
+			}
+			return nil
+		}
+	}
+	return fn(&w.CommonBufferSinkConfig)
+}
+
+// IsNone before default propagation indicates that the config explicitly disables
+// buffering, such that no propagated defaults can actiate them.
+// After default propagation, buffering is disabled iff IsNone().
+func (w CommonBufferSinkConfigWrapper) IsNone() bool {
+	return (w.MaxStaleness != nil && *w.MaxStaleness == 0) &&
+		(w.FlushTriggerSize != nil && *w.FlushTriggerSize == 0)
 }
 
 // HTTPSinkMethod is a string restricted to "POST" and "GET"

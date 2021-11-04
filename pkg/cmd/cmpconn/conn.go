@@ -249,7 +249,7 @@ ReadRows:
 				first = vals
 			} else {
 				if err := CompareVals(first, vals); err != nil {
-					return false, fmt.Errorf("compare %s to %s:\n%v", firstName, name, err)
+					return false, errors.Wrapf(err, "compare %s to %s", firstName, name)
 				}
 			}
 		}

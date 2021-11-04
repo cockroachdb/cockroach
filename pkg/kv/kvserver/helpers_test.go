@@ -21,7 +21,6 @@ import (
 	"math/rand"
 	"testing"
 	"time"
-	"unsafe"
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -515,7 +514,7 @@ func WriteRandomDataToRange(
 }
 
 func WatchForDisappearingReplicas(t testing.TB, store *Store) {
-	m := make(map[int64]struct{})
+	m := make(map[roachpb.RangeID]struct{})
 	for {
 		select {
 		case <-store.Stopper().ShouldQuiesce():
@@ -523,13 +522,12 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 		default:
 		}
 
-		store.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
-			m[k] = struct{}{}
-			return true
+		store.mu.replicasByRangeID.Range(func(repl *Replica) {
+			m[repl.RangeID] = struct{}{}
 		})
 
 		for k := range m {
-			if _, ok := store.mu.replicas.Load(k); !ok {
+			if _, ok := store.mu.replicasByRangeID.Load(k); !ok {
 				t.Fatalf("r%d disappeared from Store.mu.replicas map", k)
 			}
 		}
