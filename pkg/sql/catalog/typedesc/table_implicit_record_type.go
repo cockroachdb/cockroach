@@ -231,14 +231,7 @@ func (v TableImplicitRecordType) HydrateTypeInfoWithName(
 		Name:           name.Object(),
 	}
 	typ.TypeMeta.Version = uint32(v.desc.GetVersion())
-	for _, t := range typ.TupleContents() {
-		if t.UserDefined() {
-			if err := hydrateElementType(ctx, t, res); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return EnsureTypeIsHydrated(ctx, typ, res)
 }
 
 // MakeTypesT implements the TypeDescriptor interface.
