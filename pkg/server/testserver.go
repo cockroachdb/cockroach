@@ -281,10 +281,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{}
 	}
 
-	// For test servers, leave interleaved tables enabled by default. We'll remove
-	// this when we remove interleaved tables altogether.
-	sql.InterleavedTablesEnabled.Override(context.Background(), &cfg.Settings.SV, true)
-
 	return cfg
 }
 
@@ -934,7 +930,7 @@ func (ts *TestServer) GetNode() *Node {
 	return ts.node
 }
 
-// DistSenderI is part of DistSendeInterface.
+// DistSenderI is part of DistSenderInterface.
 func (ts *TestServer) DistSenderI() interface{} {
 	return ts.distSender
 }

@@ -303,7 +303,7 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 func TestAntagonisticS3Read(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Check if we can create aws session with implicit crendentials.
+	// Check if we can create aws session with implicit credentials.
 	_, err := session.NewSession()
 	if err != nil {
 		skip.IgnoreLint(t, "No AWS credentials")

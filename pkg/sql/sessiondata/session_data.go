@@ -52,11 +52,19 @@ type SessionData struct {
 
 // Clone returns a clone of SessionData.
 func (s *SessionData) Clone() *SessionData {
-	// Currently clone does a shallow copy of everything - we can get away with it
+	var newCustomOptions map[string]string
+	if s.CustomOptions != nil {
+		newCustomOptions = make(map[string]string, len(s.CustomOptions))
+		for k, v := range s.CustomOptions {
+			newCustomOptions[k] = v
+		}
+	}
+	// Other options in SessionData are shallow cloned - we can get away with it
 	// as all the slices/maps does a copy if it mutates OR are operations that
 	// affect the whole SessionDataStack (e.g. setting SequenceState should be the
 	// setting the same value across all copied SessionData).
 	ret := *s
+	ret.CustomOptions = newCustomOptions
 	return &ret
 }
 

@@ -157,7 +157,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 						Constructors:   constructors,
 						ConstArguments: constArguments,
 						OutputTypes:    outputTypes,
-					})
+					}), nil
 				})
 			})
 		}

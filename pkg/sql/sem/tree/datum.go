@@ -4459,6 +4459,8 @@ func (d *DEnum) Format(ctx *FmtCtx) {
 		ctx.WithFlags(ctx.flags|fmtFormatByteLiterals, func() {
 			s.Format(ctx)
 		})
+	} else if ctx.HasFlags(FmtPgwireText) {
+		ctx.WriteString(d.LogicalRep)
 	} else {
 		s := DString(d.LogicalRep)
 		s.Format(ctx)

@@ -9,7 +9,6 @@ package execinfrapb
 
 import (
 	fmt "fmt"
-	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	io "io"
@@ -43,11 +42,21 @@ type PostProcessSpec struct {
 	// Can only be set if projection is true. Cannot be set at the same time with
 	// render expressions.
 	OutputColumns []uint32 `protobuf:"varint,3,rep,packed,name=output_columns,json=outputColumns" json:"output_columns,omitempty"`
+	// OriginalOutputColumns will be set if OutputColumns are destructively
+	// modified during the vectorized flow setup. This field is only used for
+	// population of the DistSQL diagrams, and if set, it takes precedence over
+	// OutputColumns.
+	OriginalOutputColumns []uint32 `protobuf:"varint,7,rep,packed,name=original_output_columns,json=originalOutputColumns" json:"original_output_columns,omitempty"`
 	// If set, the output is the result of rendering these expressions. The
 	// expressions reference the internal columns of the processor.
 	//
 	// Cannot be set at the same time with output columns.
 	RenderExprs []Expression `protobuf:"bytes,4,rep,name=render_exprs,json=renderExprs" json:"render_exprs"`
+	// OriginalRenderExprs will be set if RenderExprs are destructively
+	// modified during the vectorized flow setup. This field is only used for
+	// population of the DistSQL diagrams, and if set, it takes precedence over
+	// RenderExprs.
+	OriginalRenderExprs []Expression `protobuf:"bytes,8,rep,name=original_render_exprs,json=originalRenderExprs" json:"original_render_exprs"`
 	// If nonzero, the first <offset> rows will be suppressed.
 	Offset uint64 `protobuf:"varint,5,opt,name=offset" json:"offset"`
 	// If nonzero, the processor will stop after emitting this many rows. The rows
@@ -117,46 +126,9 @@ func (m *Columns) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Columns proto.InternalMessageInfo
 
-type TableReaderSpan struct {
-	// TODO(radu): the dist_sql APIs should be agnostic to how we map tables to
-	// KVs. The span should be described as starting and ending lists of values
-	// for a prefix of the index columns, along with inclusive/exclusive flags.
-	Span roachpb.Span `protobuf:"bytes,1,opt,name=span" json:"span"`
-}
-
-func (m *TableReaderSpan) Reset()         { *m = TableReaderSpan{} }
-func (m *TableReaderSpan) String() string { return proto.CompactTextString(m) }
-func (*TableReaderSpan) ProtoMessage()    {}
-func (*TableReaderSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_de929fd066e9cd6d, []int{2}
-}
-func (m *TableReaderSpan) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *TableReaderSpan) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	b = b[:cap(b)]
-	n, err := m.MarshalToSizedBuffer(b)
-	if err != nil {
-		return nil, err
-	}
-	return b[:n], nil
-}
-func (m *TableReaderSpan) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TableReaderSpan.Merge(m, src)
-}
-func (m *TableReaderSpan) XXX_Size() int {
-	return m.Size()
-}
-func (m *TableReaderSpan) XXX_DiscardUnknown() {
-	xxx_messageInfo_TableReaderSpan.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_TableReaderSpan proto.InternalMessageInfo
-
 func init() {
 	proto.RegisterType((*PostProcessSpec)(nil), "cockroach.sql.distsqlrun.PostProcessSpec")
 	proto.RegisterType((*Columns)(nil), "cockroach.sql.distsqlrun.Columns")
-	proto.RegisterType((*TableReaderSpan)(nil), "cockroach.sql.distsqlrun.TableReaderSpan")
 }
 
 func init() {
@@ -164,31 +136,30 @@ func init() {
 }
 
 var fileDescriptor_de929fd066e9cd6d = []byte{
-	// 370 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x91, 0xcf, 0xce, 0xd2, 0x40,
-	0x14, 0xc5, 0x3b, 0x50, 0xfe, 0x64, 0x2a, 0x42, 0x26, 0x26, 0x36, 0x0d, 0x19, 0x1b, 0x82, 0xb1,
-	0x2e, 0x2c, 0x91, 0x47, 0x40, 0xdd, 0x98, 0x98, 0x10, 0x70, 0xe5, 0x86, 0x0c, 0xd3, 0x01, 0xab,
-	0x65, 0x66, 0x98, 0x3b, 0x4d, 0x78, 0x0c, 0x1f, 0x8b, 0x25, 0x4b, 0x56, 0x46, 0xcb, 0x13, 0xf8,
-	0x06, 0x06, 0x5a, 0x4c, 0xfd, 0x92, 0x6f, 0x77, 0xf3, 0xbb, 0xe7, 0xf4, 0x9c, 0xdb, 0xc1, 0x2f,
-	0x61, 0x9f, 0x4d, 0xc4, 0x41, 0xf0, 0x54, 0x6e, 0x0c, 0xd3, 0xeb, 0x89, 0x36, 0x8a, 0x0b, 0x00,
-	0x65, 0x60, 0xb5, 0x66, 0x20, 0x62, 0x6d, 0x94, 0x55, 0xc4, 0xe7, 0x8a, 0x7f, 0x37, 0x8a, 0xf1,
-	0xaf, 0x31, 0xec, 0xb3, 0x38, 0x49, 0xc1, 0xc2, 0x3e, 0x33, 0xb9, 0x0c, 0x82, 0x87, 0x1f, 0x48,
-	0x98, 0x65, 0xa5, 0x2b, 0x20, 0x37, 0xc7, 0xff, 0xec, 0xd9, 0x56, 0x6d, 0xd5, 0x6d, 0x9c, 0x5c,
-	0xa7, 0x92, 0x8e, 0xfe, 0x20, 0xdc, 0x9f, 0x2b, 0xb0, 0xf3, 0x32, 0x7d, 0xa9, 0x05, 0x27, 0x63,
-	0x8c, 0xb5, 0x51, 0xdf, 0x04, 0xb7, 0xa9, 0x92, 0x7e, 0x23, 0x44, 0x51, 0x77, 0xe6, 0x1e, 0x7f,
-	0xbe, 0x70, 0x16, 0x35, 0x4e, 0x5e, 0xe3, 0xa7, 0x2a, 0xb7, 0x3a, 0xb7, 0x2b, 0xae, 0xb2, 0x7c,
-	0x27, 0xc1, 0x6f, 0x86, 0xcd, 0xa8, 0x37, 0x6b, 0x0c, 0xd0, 0xa2, 0x57, 0x6e, 0xde, 0x95, 0x0b,
-	0xf2, 0x09, 0x3f, 0x31, 0x42, 0x26, 0xc2, 0xac, 0xc4, 0x41, 0x1b, 0xf0, 0xdd, 0xb0, 0x19, 0x79,
-	0xd3, 0x71, 0xfc, 0xd8, 0x6d, 0xf1, 0x87, 0x83, 0x36, 0x02, 0x20, 0x55, 0xb2, 0x0a, 0xf6, 0x4a,
-	0xff, 0x95, 0x03, 0x19, 0xe2, 0xb6, 0xda, 0x6c, 0x40, 0x58, 0xbf, 0x15, 0xa2, 0xc8, 0xad, 0x24,
-	0x15, 0x23, 0x01, 0x6e, 0x65, 0xe9, 0x2e, 0xb5, 0x7e, 0xbb, 0xb6, 0x2c, 0xd1, 0x47, 0xb7, 0x8b,
-	0x06, 0x8d, 0xd1, 0x2b, 0xdc, 0xb9, 0x37, 0x1b, 0xe2, 0xce, 0xbd, 0x3d, 0xfa, 0xd7, 0xfe, 0x8e,
-	0x46, 0xef, 0x71, 0xff, 0x33, 0x5b, 0x67, 0x62, 0x21, 0x58, 0x22, 0xcc, 0x52, 0x33, 0x49, 0xde,
-	0x62, 0x17, 0x34, 0x93, 0x3e, 0x0a, 0x51, 0xe4, 0x4d, 0x9f, 0xd7, 0x4e, 0xa8, 0x7e, 0x79, 0x7c,
-	0x95, 0x55, 0xa9, 0x37, 0xe9, 0xec, 0xcd, 0xf1, 0x37, 0x75, 0x8e, 0x05, 0x45, 0xa7, 0x82, 0xa2,
-	0x73, 0x41, 0xd1, 0xaf, 0x82, 0xa2, 0x1f, 0x17, 0xea, 0x9c, 0x2e, 0xd4, 0x39, 0x5f, 0xa8, 0xf3,
-	0xc5, 0xab, 0x3d, 0xe3, 0xdf, 0x00, 0x00, 0x00, 0xff, 0xff, 0x51, 0xd4, 0xc6, 0xca, 0x19, 0x02,
-	0x00, 0x00,
+	// 368 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x92, 0xcd, 0x6e, 0xda, 0x40,
+	0x14, 0x85, 0x3d, 0xd8, 0xfc, 0x68, 0x28, 0x2d, 0x72, 0x5b, 0xd5, 0xb2, 0xd0, 0xd4, 0x42, 0x54,
+	0x75, 0x17, 0x35, 0x52, 0x97, 0x5d, 0x52, 0x75, 0x13, 0x29, 0x0a, 0x22, 0xbb, 0x2c, 0x62, 0x99,
+	0x61, 0x20, 0x93, 0x18, 0xdf, 0x61, 0x66, 0x2c, 0xf1, 0x12, 0x91, 0xf2, 0x58, 0x2c, 0x59, 0xb2,
+	0x8a, 0x12, 0xf3, 0x22, 0x11, 0x31, 0x46, 0x06, 0x29, 0x8b, 0xec, 0xae, 0xbe, 0x73, 0xcf, 0xb9,
+	0xf6, 0xd1, 0xe0, 0x1f, 0x6a, 0x11, 0xf7, 0xd9, 0x92, 0x51, 0x9e, 0x4c, 0x65, 0x24, 0xc6, 0x7d,
+	0x21, 0x81, 0x32, 0xa5, 0x40, 0xaa, 0x70, 0x1c, 0x29, 0x16, 0x08, 0x09, 0x1a, 0x6c, 0x87, 0x02,
+	0xbd, 0x93, 0x10, 0xd1, 0x9b, 0x40, 0x2d, 0xe2, 0x60, 0xc2, 0x95, 0x56, 0x8b, 0x58, 0xa6, 0x89,
+	0xeb, 0x9e, 0x06, 0x4c, 0x22, 0x1d, 0xe5, 0x2e, 0xf7, 0xcb, 0x0c, 0x66, 0xf0, 0x3a, 0xf6, 0x77,
+	0x53, 0x4e, 0xbb, 0xf7, 0x26, 0xfe, 0x34, 0x04, 0xa5, 0x87, 0xf9, 0xa5, 0x4b, 0xc1, 0xa8, 0xdd,
+	0xc3, 0x58, 0x48, 0xb8, 0x65, 0x54, 0x73, 0x48, 0x9c, 0x8a, 0x87, 0xfc, 0xc6, 0xc0, 0x5a, 0x3d,
+	0x7e, 0x37, 0x46, 0x25, 0x6e, 0xff, 0xc2, 0x1f, 0x21, 0xd5, 0x22, 0xd5, 0x21, 0x85, 0x38, 0x9d,
+	0x27, 0xca, 0x31, 0x3d, 0xd3, 0x6f, 0x0d, 0x2a, 0x6d, 0x34, 0x6a, 0xe5, 0xca, 0xbf, 0x5c, 0xb0,
+	0xff, 0xe2, 0x6f, 0x20, 0xf9, 0x8c, 0x27, 0x51, 0x1c, 0x9e, 0x78, 0xea, 0x07, 0xcf, 0xd7, 0x62,
+	0xe5, 0xe2, 0xc8, 0x7b, 0x8e, 0x3f, 0x48, 0x96, 0x4c, 0x98, 0x0c, 0xd9, 0x52, 0x48, 0xe5, 0x58,
+	0x9e, 0xe9, 0x37, 0xff, 0xf4, 0x82, 0xb7, 0x3a, 0x08, 0xfe, 0x2f, 0x85, 0x64, 0x4a, 0x71, 0x48,
+	0xf6, 0x1f, 0xdd, 0xcc, 0xfd, 0x3b, 0xae, 0xec, 0x6b, 0x7c, 0xb8, 0x13, 0x1e, 0xe5, 0x36, 0xde,
+	0x9d, 0xfb, 0xb9, 0x08, 0x1a, 0x95, 0xf2, 0x3b, 0xb8, 0x06, 0xd3, 0xa9, 0x62, 0xda, 0xa9, 0x7a,
+	0xc8, 0xb7, 0xf6, 0xab, 0x7b, 0x66, 0xbb, 0xb8, 0x1a, 0xf3, 0x39, 0xd7, 0x4e, 0xad, 0x24, 0xe6,
+	0xe8, 0xcc, 0x6a, 0xa0, 0x76, 0xa5, 0xfb, 0x13, 0xd7, 0x8b, 0x3f, 0xef, 0xe0, 0x7a, 0xd1, 0x12,
+	0x3a, 0xb4, 0x54, 0xa0, 0xc1, 0xef, 0xd5, 0x33, 0x31, 0x56, 0x19, 0x41, 0xeb, 0x8c, 0xa0, 0x4d,
+	0x46, 0xd0, 0x53, 0x46, 0xd0, 0xc3, 0x96, 0x18, 0xeb, 0x2d, 0x31, 0x36, 0x5b, 0x62, 0x5c, 0x35,
+	0x4b, 0x0f, 0xe1, 0x25, 0x00, 0x00, 0xff, 0xff, 0x53, 0x49, 0x15, 0xda, 0x5b, 0x02, 0x00, 0x00,
 }
 
 func (m *PostProcessSpec) Marshal() (dAtA []byte, err error) {
@@ -211,6 +182,38 @@ func (m *PostProcessSpec) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.OriginalRenderExprs) > 0 {
+		for iNdEx := len(m.OriginalRenderExprs) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.OriginalRenderExprs[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintProcessorsBase(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x42
+		}
+	}
+	if len(m.OriginalOutputColumns) > 0 {
+		dAtA2 := make([]byte, len(m.OriginalOutputColumns)*10)
+		var j1 int
+		for _, num := range m.OriginalOutputColumns {
+			for num >= 1<<7 {
+				dAtA2[j1] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j1++
+			}
+			dAtA2[j1] = uint8(num)
+			j1++
+		}
+		i -= j1
+		copy(dAtA[i:], dAtA2[:j1])
+		i = encodeVarintProcessorsBase(dAtA, i, uint64(j1))
+		i--
+		dAtA[i] = 0x3a
+	}
 	i = encodeVarintProcessorsBase(dAtA, i, uint64(m.Limit))
 	i--
 	dAtA[i] = 0x30
@@ -232,20 +235,20 @@ func (m *PostProcessSpec) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		}
 	}
 	if len(m.OutputColumns) > 0 {
-		dAtA2 := make([]byte, len(m.OutputColumns)*10)
-		var j1 int
+		dAtA4 := make([]byte, len(m.OutputColumns)*10)
+		var j3 int
 		for _, num := range m.OutputColumns {
 			for num >= 1<<7 {
-				dAtA2[j1] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA4[j3] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j1++
+				j3++
 			}
-			dAtA2[j1] = uint8(num)
-			j1++
+			dAtA4[j3] = uint8(num)
+			j3++
 		}
-		i -= j1
-		copy(dAtA[i:], dAtA2[:j1])
-		i = encodeVarintProcessorsBase(dAtA, i, uint64(j1))
+		i -= j3
+		copy(dAtA[i:], dAtA4[:j3])
+		i = encodeVarintProcessorsBase(dAtA, i, uint64(j3))
 		i--
 		dAtA[i] = 0x1a
 	}
@@ -281,56 +284,23 @@ func (m *Columns) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if len(m.Columns) > 0 {
-		dAtA4 := make([]byte, len(m.Columns)*10)
-		var j3 int
+		dAtA6 := make([]byte, len(m.Columns)*10)
+		var j5 int
 		for _, num := range m.Columns {
 			for num >= 1<<7 {
-				dAtA4[j3] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA6[j5] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j3++
+				j5++
 			}
-			dAtA4[j3] = uint8(num)
-			j3++
+			dAtA6[j5] = uint8(num)
+			j5++
 		}
-		i -= j3
-		copy(dAtA[i:], dAtA4[:j3])
-		i = encodeVarintProcessorsBase(dAtA, i, uint64(j3))
+		i -= j5
+		copy(dAtA[i:], dAtA6[:j5])
+		i = encodeVarintProcessorsBase(dAtA, i, uint64(j5))
 		i--
 		dAtA[i] = 0xa
 	}
-	return len(dAtA) - i, nil
-}
-
-func (m *TableReaderSpan) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *TableReaderSpan) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *TableReaderSpan) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	{
-		size, err := m.Span.MarshalToSizedBuffer(dAtA[:i])
-		if err != nil {
-			return 0, err
-		}
-		i -= size
-		i = encodeVarintProcessorsBase(dAtA, i, uint64(size))
-	}
-	i--
-	dAtA[i] = 0xa
 	return len(dAtA) - i, nil
 }
 
@@ -367,6 +337,19 @@ func (m *PostProcessSpec) Size() (n int) {
 	}
 	n += 1 + sovProcessorsBase(uint64(m.Offset))
 	n += 1 + sovProcessorsBase(uint64(m.Limit))
+	if len(m.OriginalOutputColumns) > 0 {
+		l = 0
+		for _, e := range m.OriginalOutputColumns {
+			l += sovProcessorsBase(uint64(e))
+		}
+		n += 1 + sovProcessorsBase(uint64(l)) + l
+	}
+	if len(m.OriginalRenderExprs) > 0 {
+		for _, e := range m.OriginalRenderExprs {
+			l = e.Size()
+			n += 1 + l + sovProcessorsBase(uint64(l))
+		}
+	}
 	return n
 }
 
@@ -383,17 +366,6 @@ func (m *Columns) Size() (n int) {
 		}
 		n += 1 + sovProcessorsBase(uint64(l)) + l
 	}
-	return n
-}
-
-func (m *TableReaderSpan) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = m.Span.Size()
-	n += 1 + l + sovProcessorsBase(uint64(l))
 	return n
 }
 
@@ -600,6 +572,116 @@ func (m *PostProcessSpec) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		case 7:
+			if wireType == 0 {
+				var v uint32
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowProcessorsBase
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= uint32(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.OriginalOutputColumns = append(m.OriginalOutputColumns, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowProcessorsBase
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= int(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthProcessorsBase
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthProcessorsBase
+				}
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA[iNdEx:postIndex] {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.OriginalOutputColumns) == 0 {
+					m.OriginalOutputColumns = make([]uint32, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v uint32
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowProcessorsBase
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= uint32(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.OriginalOutputColumns = append(m.OriginalOutputColumns, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field OriginalOutputColumns", wireType)
+			}
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OriginalRenderExprs", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessorsBase
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProcessorsBase
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthProcessorsBase
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.OriginalRenderExprs = append(m.OriginalRenderExprs, Expression{})
+			if err := m.OriginalRenderExprs[len(m.OriginalRenderExprs)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipProcessorsBase(dAtA[iNdEx:])
@@ -726,89 +808,6 @@ func (m *Columns) Unmarshal(dAtA []byte) error {
 			} else {
 				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
 			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipProcessorsBase(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthProcessorsBase
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *TableReaderSpan) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowProcessorsBase
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: TableReaderSpan: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: TableReaderSpan: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowProcessorsBase
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthProcessorsBase
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthProcessorsBase
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Span.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipProcessorsBase(dAtA[iNdEx:])

@@ -102,7 +102,7 @@ const (
 	// Maximum allowable permissions if file is owned by root.
 	maxGroupKeyPermissions os.FileMode = 0740
 
-	// Filename extenstions.
+	// Filename extensions.
 	certExtension = `.crt`
 	keyExtension  = `.key`
 	// Certificate directory permissions.

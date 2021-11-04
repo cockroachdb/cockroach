@@ -168,7 +168,7 @@ func Filesystem(dir string) Location {
 		// fs is left nil intentionally, so that it will be left as the
 		// default of vfs.Default wrapped in vfs.WithDiskHealthChecks
 		// (initialized by DefaultPebbleOptions).
-		// TODO(jackson): Refactor to make it harder to accidentially remove
+		// TODO(jackson): Refactor to make it harder to accidentally remove
 		// disk health checks by setting your own VFS in a call to NewPebble.
 	}
 }

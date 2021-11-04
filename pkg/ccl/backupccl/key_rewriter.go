@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -157,22 +156,8 @@ func MakeKeyRewriterPrefixIgnoringInterleaved(tableID descpb.ID, indexID descpb.
 }
 
 // RewriteKey modifies key (possibly in place), changing all table IDs to their
-// new value, including any interleaved table children and prefix ends. This
-// function works by inspecting the key for table and index IDs, then uses the
-// corresponding table and index descriptors to determine if interleaved data is
-// present and if it is, to find the next prefix of an interleaved child, then
-// calls itself recursively until all interleaved children have been rekeyed. If
-// it encounters a table ID for which it does not have a configured rewrite, it
-// returns the prefix of the key that was rewritten key. The returned boolean
-// is true if and only if all of the table IDs found in the key were rewritten.
-// If isFromSpan is true, failures in value decoding are assumed to be due to
-// valid span manipulations, like PrefixEnd or Next having altered the trailing
-// byte(s) to corrupt the value encoding -- in such a case we will not be able
-// to decode the value (to determine how much further to scan for table IDs) but
-// we can assume that since these manipulations are only done to the trailing
-// byte that we're likely at the end anyway and do not need to search for any
-// further table IDs to replace.
-func (kr *KeyRewriter) RewriteKey(key []byte, isFromSpan bool) ([]byte, bool, error) {
+// new value.
+func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 	if kr.codec.ForSystemTenant() && bytes.HasPrefix(key, keys.TenantPrefix) {
 		// If we're rewriting from the system tenant, we don't rewrite tenant keys
 		// at all since we assume that we're restoring an entire tenant.
@@ -184,7 +169,7 @@ func (kr *KeyRewriter) RewriteKey(key []byte, isFromSpan bool) ([]byte, bool, er
 		return nil, false, err
 	}
 
-	rekeyed, ok, err := kr.rewriteTableKey(noTenantPrefix, isFromSpan)
+	rekeyed, ok, err := kr.rewriteTableKey(noTenantPrefix)
 	if err != nil {
 		return nil, false, err
 	}
@@ -203,11 +188,11 @@ func (kr *KeyRewriter) RewriteKey(key []byte, isFromSpan bool) ([]byte, bool, er
 	return rekeyed, ok, err
 }
 
-// rewriteTableKey recursively (in the case of interleaved tables) rewrites the
-// table IDs in the key. It assumes that any tenant ID has been stripped from
-// the key so it operates with the system codec. It is the responsibility of the
-// caller to either remap, or re-prepend any required tenant prefix.
-func (kr *KeyRewriter) rewriteTableKey(key []byte, isFromSpan bool) ([]byte, bool, error) {
+// rewriteTableKey rewrites the table IDs in the key.
+// It assumes that any tenant ID has been stripped from the key so it operates
+// with the system codec. It is the responsibility of the caller to either
+// remap, or re-prepend any required tenant prefix.
+func (kr *KeyRewriter) rewriteTableKey(key []byte) ([]byte, bool, error) {
 	// Fetch the original table ID for descriptor lookup. Ignore errors because
 	// they will be caught later on if tableID isn't in descs or kr doesn't
 	// perform a rewrite.
@@ -221,89 +206,5 @@ func (kr *KeyRewriter) rewriteTableKey(key []byte, isFromSpan bool) ([]byte, boo
 	if desc == nil {
 		return nil, false, errors.Errorf("missing descriptor for table %d", tableID)
 	}
-	// Check if this key may have interleaved children.
-	k, _, indexID, err := keys.SystemSQLCodec.DecodeIndexPrefix(key)
-	if err != nil {
-		return nil, false, err
-	}
-	if len(k) == 0 {
-		// If there isn't any more data, we are at some split boundary.
-		return key, true, nil
-	}
-	idx, err := desc.FindIndexWithID(descpb.IndexID(indexID))
-	if err != nil {
-		return nil, false, err
-	}
-	if idx.NumInterleavedBy() == 0 {
-		// Not interleaved.
-		return key, true, nil
-	}
-	// We do not support interleaved secondary indexes.
-	if !idx.Primary() {
-		return nil, false, errors.New("restoring interleaved secondary indexes not supported")
-	}
-	colIDs, _ := catalog.FullIndexColumnIDs(idx)
-	var skipCols int
-	for i := 0; i < idx.NumInterleaveAncestors(); i++ {
-		skipCols += int(idx.GetInterleaveAncestor(i).SharedPrefixLen)
-	}
-	for i := 0; i < len(colIDs)-skipCols; i++ {
-		n, err := encoding.PeekLength(k)
-		if err != nil {
-			// PeekLength, and key decoding in general, can fail when reading the last
-			// value from a key that is coming from a span. Keys in spans are often
-			// altered e.g. by calling Next() or PrefixEnd() to ensure a given span is
-			// inclusive or for other reasons, but the manipulations sometimes change
-			// the encoded bytes, meaning they can no longer successfully decode as
-			// back to the original values. This is OK when span boundaries mostly are
-			// only required to be even divisions of keyspace, but when we try to go
-			// back to interpreting them as keys, it can fall apart. Partitioning a
-			// table (and applying zone configs) eagerly creates splits at the defined
-			// partition boundaries, using PrefixEnd for their ends, resulting in such
-			// spans.
-			//
-			// Fortunately, the only common span manipulations are to the trailing
-			// byte of a key (e.g. incrementing or appending a null) so for our needs
-			// here, if we fail to decode because of one of those manipulations, we
-			// can assume that we are at the end of the key as far as fields where a
-			// table ID which needs to be replaced can appear and consider the rewrite
-			// of this key as being compelted successfully.
-			//
-			// Finally unlike key rewrites of actual row-data, span rewrites do not
-			// need to be perfect: spans are only rewritten for use in pre-splitting
-			// and work distribution, so even if it turned out that this assumption
-			// was incorrect, it could cause a performance degradation but does not
-			// pose a correctness risk.
-			if isFromSpan {
-				return key, true, nil
-			}
-			return nil, false, err
-		}
-		k = k[n:]
-		// Check if we ran out of key before getting to an interleave child?
-		if len(k) == 0 {
-			return key, true, nil
-		}
-	}
-	// We might have an interleaved key.
-	k, ok = encoding.DecodeIfInterleavedSentinel(k)
-	if !ok {
-		return key, true, nil
-	}
-	if len(k) == 0 {
-		// We have seen some span keys end in an interleaved sentinel.
-		// Check if we ran out of key before getting to an interleave child?
-		return key, true, nil
-	}
-	prefix := key[:len(key)-len(k)]
-	k, ok, err = kr.rewriteTableKey(k, isFromSpan)
-	if err != nil {
-		return nil, false, err
-	}
-	if !ok {
-		// The interleaved child was not rewritten, skip this row.
-		return prefix, false, nil
-	}
-	key = append(prefix, k...)
 	return key, true, nil
 }

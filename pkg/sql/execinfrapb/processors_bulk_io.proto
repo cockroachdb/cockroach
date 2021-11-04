@@ -46,7 +46,8 @@ message BackfillerSpec {
   optional sqlbase.TableDescriptor table = 2 [(gogoproto.nullable) = false];
 
   // Sections of the table to be backfilled.
-  repeated TableReaderSpan spans = 3 [(gogoproto.nullable) = false];
+  reserved 3;
+  repeated roachpb.Span spans = 10 [(gogoproto.nullable) = false];
 
   // Run the backfill for approximately this duration.
   // The backfill will always process at least one backfill chunk.
@@ -276,6 +277,29 @@ message CSVWriterSpec {
   optional int64 chunk_size = 7 [(gogoproto.nullable) = false];
 
   // compression_codec specifies compression used for exported file.
+  optional FileCompression compression_codec = 5 [(gogoproto.nullable) = false];
+
+  // User who initiated the export. This is used to check access privileges
+  // when using FileTable ExternalStorage.
+  optional string user_proto = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+}
+
+// ParquetWriterSpec is the specification for a processor that consumes rows and
+// writes them to Parquet files at uri. It outputs a row per file written with
+// the file name, row count and byte size.
+message ParquetWriterSpec {
+  // destination as a cloud.ExternalStorage URI pointing to an export store
+  // location (directory).
+  optional string destination = 1 [(gogoproto.nullable) = false];
+  optional string name_pattern = 2 [(gogoproto.nullable) = false];
+  optional roachpb.ParquetOptions options = 3 [(gogoproto.nullable) = false];
+
+  // chunk_rows is num rows to write per file. 0 = no limit.
+  optional int64 chunk_rows = 4 [(gogoproto.nullable) = false];
+  // chunk_size is the target byte size per file.
+  optional int64 chunk_size = 7 [(gogoproto.nullable) = false];
+
+  // compression_codec specifies compression used for exported file. THIS IS ISN'T USED RIGHT NOW
   optional FileCompression compression_codec = 5 [(gogoproto.nullable) = false];
 
   // User who initiated the export. This is used to check access privileges

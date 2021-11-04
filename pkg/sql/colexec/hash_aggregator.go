@@ -202,12 +202,12 @@ func NewHashAggregator(
 	newSpillingQueueArgs *colexecutils.NewSpillingQueueArgs,
 	outputUnlimitedAllocator *colmem.Allocator,
 	maxOutputBatchMemSize int64,
-) (colexecop.ResettableOperator, error) {
+) colexecop.ResettableOperator {
 	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
 		args, args.Spec.Aggregations, hashAggregatorAllocSize, colexecagg.HashAggKind,
 	)
 	if err != nil {
-		return nil, err
+		colexecerror.InternalError(err)
 	}
 	hashAgg := &hashAggregator{
 		OneInputNode:          colexecop.NewOneInputNode(args.Input),
@@ -222,7 +222,7 @@ func NewHashAggregator(
 		aggFnsAlloc:           aggFnsAlloc,
 		hashAlloc:             aggBucketAlloc{allocator: args.Allocator},
 	}
-	hashAgg.accountingHelper.Init(outputUnlimitedAllocator, args.OutputTypes, nil /* notNeededVecIdxs */)
+	hashAgg.accountingHelper.Init(outputUnlimitedAllocator, args.OutputTypes)
 	hashAgg.bufferingState.tuples = colexecutils.NewAppendOnlyBufferedBatch(args.Allocator, args.InputTypes, nil /* colsToStore */)
 	hashAgg.datumAlloc.AllocSize = hashAggregatorAllocSize
 	hashAgg.aggHelper = newAggregatorHelper(args, &hashAgg.datumAlloc, true /* isHashAgg */, hashAggregatorMaxBuffered)
@@ -231,11 +231,11 @@ func NewHashAggregator(
 	}
 	if len(args.Spec.OrderedGroupCols) > 0 {
 		hashAgg.distincterInput = &colexecop.FeedOperator{}
-		hashAgg.distincter, hashAgg.distinctOutput, err = colexecbase.OrderedDistinctColsToOperators(
+		hashAgg.distincter, hashAgg.distinctOutput = colexecbase.OrderedDistinctColsToOperators(
 			hashAgg.distincterInput, args.Spec.OrderedGroupCols, args.InputTypes, false, /* nullsAreDistinct */
 		)
 	}
-	return hashAgg, err
+	return hashAgg
 }
 
 func (op *hashAggregator) Init(ctx context.Context) {

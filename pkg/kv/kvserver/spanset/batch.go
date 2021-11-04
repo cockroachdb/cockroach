@@ -215,9 +215,9 @@ func (i *MVCCIterator) FindSplitKey(
 
 // CheckForKeyCollisions is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) CheckForKeyCollisions(
-	sstData []byte, start, end roachpb.Key,
+	sstData []byte, start, end roachpb.Key, maxIntents int64,
 ) (enginepb.MVCCStats, error) {
-	return i.i.CheckForKeyCollisions(sstData, start, end)
+	return i.i.CheckForKeyCollisions(sstData, start, end, maxIntents)
 }
 
 // SetUpperBound is part of the storage.MVCCIterator interface.

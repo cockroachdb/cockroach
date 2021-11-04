@@ -189,7 +189,7 @@ func render(
 			err = errors.WithSecondaryError(err, r.describe(w, cols))
 		}
 
-		// completedHook, if provided, is called unconditonally of error.
+		// completedHook, if provided, is called unconditionally of error.
 		if completedHook != nil {
 			completedHook()
 		}

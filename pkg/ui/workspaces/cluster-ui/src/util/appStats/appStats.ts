@@ -214,6 +214,7 @@ export interface ExecutionStatistics {
   full_scan: boolean;
   failed: boolean;
   node_id: number;
+  transaction_fingerprint_id: Long;
   stats: StatementStatistics;
 }
 
@@ -233,6 +234,7 @@ export function flattenStatementStats(
     full_scan: stmt.key.key_data.full_scan,
     failed: stmt.key.key_data.failed,
     node_id: stmt.key.node_id,
+    transaction_fingerprint_id: stmt.key.key_data.transaction_fingerprint_id,
     stats: stmt.stats,
   }));
 }
@@ -261,4 +263,12 @@ export function statementKey(stmt: ExecutionStatistics): string {
     stmt.aggregated_ts +
     stmt.aggregation_interval
   );
+}
+
+// transactionScopedStatementKey is similar to statementKey, except that
+// it appends the transactionFingerprintID to the string key it generated.
+export function transactionScopedStatementKey(
+  stmt: ExecutionStatistics,
+): string {
+  return statementKey(stmt) + stmt.transaction_fingerprint_id.toString();
 }

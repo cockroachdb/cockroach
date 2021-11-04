@@ -33,23 +33,21 @@ func NewExprHelper() *ExprHelper {
 // ExprHelper is a utility struct that helps with expression handling in the
 // vectorized engine.
 type ExprHelper struct {
-	helper execinfrapb.ExprHelper
+	helper  execinfrapb.ExprHelper
+	SemaCtx *tree.SemaContext
 }
 
 // ProcessExpr processes the given expression and returns a well-typed
-// expression.
+// expression. Note that SemaCtx must be already set on h.
 func (h *ExprHelper) ProcessExpr(
-	expr execinfrapb.Expression,
-	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
-	typs []*types.T,
+	expr execinfrapb.Expression, evalCtx *tree.EvalContext, typs []*types.T,
 ) (tree.TypedExpr, error) {
 	if expr.LocalExpr != nil {
 		return expr.LocalExpr, nil
 	}
 	h.helper.Types = typs
 	tempVars := tree.MakeIndexedVarHelper(&h.helper, len(typs))
-	return execinfrapb.DeserializeExpr(expr.Expr, semaCtx, evalCtx, &tempVars)
+	return execinfrapb.DeserializeExpr(expr.Expr, h.SemaCtx, evalCtx, &tempVars)
 }
 
 // Remove unused warning.

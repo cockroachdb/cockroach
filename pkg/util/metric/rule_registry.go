@@ -28,9 +28,25 @@ func NewRuleRegistry() *RuleRegistry {
 	}
 }
 
-// AddRule adds a rule to the registry
+// AddRule adds a rule to the registry.
 func (r *RuleRegistry) AddRule(rule Rule) {
 	r.Lock()
 	defer r.Unlock()
 	r.rules = append(r.rules, rule)
+}
+
+// AddRules adds multiple rules to the registry.
+func (r *RuleRegistry) AddRules(rules []Rule) {
+	r.Lock()
+	defer r.Unlock()
+	r.rules = append(r.rules, rules...)
+}
+
+// Each calls the given closure for all rules.
+func (r *RuleRegistry) Each(f func(rule Rule)) {
+	r.Lock()
+	defer r.Unlock()
+	for _, currentRule := range r.rules {
+		f(currentRule)
+	}
 }

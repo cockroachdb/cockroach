@@ -922,13 +922,13 @@ WHERE
 project
  ├── columns: attname:3!null atttypid:4!null typbasetype:52 typtype:34
  ├── stats: [rows=198]
- ├── cost: 2911.11877
+ ├── cost: 2910.13877
  └── inner-join (merge)
       ├── columns: attname:3!null atttypid:4!null oid:28!null typtype:34 typbasetype:52
       ├── left ordering: +28
       ├── right ordering: +4
       ├── stats: [rows=198, distinct(4)=17.2927193, null(4)=0, distinct(28)=17.2927193, null(28)=0]
-      ├── cost: 2909.11877
+      ├── cost: 2908.13877
       ├── fd: (4)==(28), (28)==(4)
       ├── scan pg_type@pg_type_oid_idx [as=t]
       │    ├── columns: oid:28!null typtype:34 typbasetype:52

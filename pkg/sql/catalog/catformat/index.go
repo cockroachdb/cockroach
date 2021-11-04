@@ -42,10 +42,9 @@ func IndexForDisplay(
 	tableName *tree.TableName,
 	index catalog.Index,
 	partition string,
-	interleave string,
 	semaCtx *tree.SemaContext,
 ) (string, error) {
-	return indexForDisplay(ctx, table, tableName, index.IndexDesc(), index.Primary(), partition, interleave, semaCtx)
+	return indexForDisplay(ctx, table, tableName, index.IndexDesc(), index.Primary(), partition, semaCtx)
 }
 
 func indexForDisplay(
@@ -55,7 +54,6 @@ func indexForDisplay(
 	index *descpb.IndexDescriptor,
 	isPrimary bool,
 	partition string,
-	interleave string,
 	semaCtx *tree.SemaContext,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
@@ -93,7 +91,6 @@ func indexForDisplay(
 		f.WriteByte(')')
 	}
 
-	f.WriteString(interleave)
 	f.WriteString(partition)
 
 	if err := formatStorageConfigs(table, index, f); err != nil {

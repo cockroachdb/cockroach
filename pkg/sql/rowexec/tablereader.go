@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -165,15 +164,7 @@ func newTableReader(
 		return nil, err
 	}
 
-	nSpans := len(spec.Spans)
-	if cap(tr.Spans) >= nSpans {
-		tr.Spans = tr.Spans[:nSpans]
-	} else {
-		tr.Spans = make(roachpb.Spans, nSpans)
-	}
-	for i, s := range spec.Spans {
-		tr.Spans[i] = s.Span
-	}
+	tr.Spans = spec.Spans
 	if !tr.ignoreMisplannedRanges {
 		// Make a copy of the spans so that we could get the misplanned ranges
 		// info.

@@ -207,11 +207,7 @@ func injectSpanMeta(ctx context.Context, tracer *Tracer, clientSpan *Span) conte
 	} else {
 		md = md.Copy()
 	}
-
-	if err := tracer.InjectMetaInto(clientSpan.Meta(), metadataCarrier{md}); err != nil {
-		// We have no better place to record an error than the Span itself.
-		clientSpan.Recordf("error: %s", err)
-	}
+	tracer.InjectMetaInto(clientSpan.Meta(), metadataCarrier{md})
 	return metadata.NewOutgoingContext(ctx, md)
 }
 

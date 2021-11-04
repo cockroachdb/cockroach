@@ -424,7 +424,7 @@ vectorized: true
 │
 └── • render
     │
-    └── • group
+    └── • group (hash)
         │ group by: column_name, ordinal_position, column_default, is_nullable, generation_expression, is_hidden, crdb_sql_type
         │
         └── • window
@@ -517,7 +517,7 @@ vectorized: true
 │
 └── • render
     │
-    └── • group
+    └── • group (hash)
         │ group by: username
         │
         └── • sort
@@ -527,7 +527,7 @@ vectorized: true
                 │ equality: (username) = (member)
                 │ left cols are key
                 │
-                ├── • group
+                ├── • group (hash)
                 │   │ group by: username
                 │   │
                 │   └── • window

@@ -42,7 +42,7 @@ var (
 	// Unlike the original spec, this does not handle escaping rules.
 	//
 	// See "options" in https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS.
-	clusterNameLongOptionRE = regexp.MustCompile(`(?:-c\s*|--)cluster=([\S]*)`)
+	clusterIdentifierLongOptionRE = regexp.MustCompile(`(?:-c\s*|--)cluster=([\S]*)`)
 
 	// clusterNameRegex restricts cluster names to have between 6 and 20
 	// alphanumeric characters, with dashes allowed within the name (but not as a
@@ -51,10 +51,9 @@ var (
 )
 
 const (
-	// Cluster identifier is in the form "clustername-<tenant_id>. Tenant id is
-	// always in the end but the cluster name can also contain '-' or  digits.
-	// For example:
-	// "foo-7-10" -> cluster name is "foo-7" and tenant id is 10.
+	// Cluster identifier is in the form "<cluster name>-<tenant id>. Tenant ID
+	// is always in the end but the cluster name can also contain '-' or digits.
+	// (e.g. In "foo-7-10", cluster name is "foo-7" and tenant ID is "10")
 	clusterTenantSep = "-"
 )
 
@@ -566,66 +565,95 @@ var reportFailureToDirectory = func(
 	return directory.ReportFailure(ctx, tenantID, addr)
 }
 
-// clusterNameAndTenantFromParams extracts the cluster name from the connection
-// parameters, and rewrites the database param, if necessary. We currently
-// support embedding the cluster name in two ways:
-// - Within the database param (e.g. "happy-koala.defaultdb")
+// clusterNameAndTenantFromParams extracts the cluster name and tenant ID from
+// the connection parameters, and rewrites the database and options parameters,
+// if necessary.
 //
-// - Within the options param (e.g. "... --cluster=happy-koala ...").
+// We currently support embedding the cluster identifier in two ways:
+//
+// - Within the database param (e.g. "happy-koala-3.defaultdb")
+//
+// - Within the options param (e.g. "... --cluster=happy-koala-5 ...").
 //   PostgreSQL supports three different ways to set a run-time parameter
 //   through its command-line options, i.e. "-c NAME=VALUE", "-cNAME=VALUE", and
 //   "--NAME=VALUE".
 func clusterNameAndTenantFromParams(
 	ctx context.Context, msg *pgproto3.StartupMessage,
 ) (*pgproto3.StartupMessage, string, roachpb.TenantID, error) {
-	clusterNameFromDB, databaseName, err := parseDatabaseParam(msg.Parameters["database"])
+	clusterIdentifierDB, databaseName, err := parseDatabaseParam(msg.Parameters["database"])
 	if err != nil {
 		return msg, "", roachpb.MaxTenantID, err
 	}
 
-	clusterNameFromOpt, newOptionsParam, err := parseOptionsParam(msg.Parameters["options"])
+	clusterIdentifierOpt, newOptionsParam, err := parseOptionsParam(msg.Parameters["options"])
 	if err != nil {
 		return msg, "", roachpb.MaxTenantID, err
 	}
 
-	if clusterNameFromDB == "" && clusterNameFromOpt == "" {
-		return msg, "", roachpb.MaxTenantID, errors.New("missing cluster name in connection string")
+	// No cluster identifiers were specified.
+	if clusterIdentifierDB == "" && clusterIdentifierOpt == "" {
+		err := errors.New("missing cluster identifier")
+		err = errors.WithHint(err, clusterIdentifierHint)
+		return msg, "", roachpb.MaxTenantID, err
 	}
 
-	if clusterNameFromDB != "" && clusterNameFromOpt != "" {
-		return msg, "", roachpb.MaxTenantID, errors.New("multiple cluster names provided")
+	// Ambiguous cluster identifiers.
+	if clusterIdentifierDB != "" && clusterIdentifierOpt != "" &&
+		clusterIdentifierDB != clusterIdentifierOpt {
+		err := errors.New("multiple different cluster identifiers provided")
+		err = errors.WithHintf(err,
+			"Is '%s' or '%s' the identifier for the cluster that you're connecting to?",
+			clusterIdentifierDB, clusterIdentifierOpt)
+		err = errors.WithHint(err, clusterIdentifierHint)
+		return msg, "", roachpb.MaxTenantID, err
 	}
 
-	if clusterNameFromDB == "" {
-		clusterNameFromDB = clusterNameFromOpt
+	if clusterIdentifierDB == "" {
+		clusterIdentifierDB = clusterIdentifierOpt
 	}
 
-	sepIdx := strings.LastIndex(clusterNameFromDB, clusterTenantSep)
+	sepIdx := strings.LastIndex(clusterIdentifierDB, clusterTenantSep)
 
-	// Cluster name provided without a tenant ID in the end.
-	if sepIdx == -1 || sepIdx == len(clusterNameFromDB)-1 {
-		return msg, "", roachpb.MaxTenantID, errors.Errorf("invalid cluster name '%s'", clusterNameFromDB)
+	// Cluster identifier provided without a tenant ID in the end.
+	if sepIdx == -1 || sepIdx == len(clusterIdentifierDB)-1 {
+		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
+		err = errors.WithHint(err, missingTenantIDHint)
+		err = errors.WithHint(err, clusterNameFormHint)
+		return msg, "", roachpb.MaxTenantID, err
 	}
 
-	clusterNameSansTenant, tenantIDStr := clusterNameFromDB[:sepIdx], clusterNameFromDB[sepIdx+1:]
-	if !clusterNameRegex.MatchString(clusterNameSansTenant) {
-		return msg, "", roachpb.MaxTenantID, errors.Errorf("invalid cluster name '%s'", clusterNameFromDB)
+	clusterName, tenantIDStr := clusterIdentifierDB[:sepIdx], clusterIdentifierDB[sepIdx+1:]
+
+	// Cluster name does not conform to the expected format (e.g. too short).
+	if !clusterNameRegex.MatchString(clusterName) {
+		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
+		err = errors.WithHintf(err, "Is '%s' a valid cluster name?", clusterName)
+		err = errors.WithHint(err, clusterNameFormHint)
+		return msg, "", roachpb.MaxTenantID, err
 	}
 
+	// Tenant ID cannot be parsed.
 	tenID, err := strconv.ParseUint(tenantIDStr, 10, 64)
 	if err != nil {
 		// Log these non user-facing errors.
-		log.Errorf(ctx, "cannot parse tenant ID in %s: %v", clusterNameFromDB, err)
-		return msg, "", roachpb.MaxTenantID, errors.Errorf("invalid cluster name '%s'", clusterNameFromDB)
+		log.Errorf(ctx, "cannot parse tenant ID in %s: %v", clusterIdentifierDB, err)
+		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
+		err = errors.WithHintf(err, "Is '%s' a valid tenant ID?", tenantIDStr)
+		err = errors.WithHint(err, clusterNameFormHint)
+		return msg, "", roachpb.MaxTenantID, err
 	}
 
+	// This case only happens if tenID is 0 or 1 (system tenant).
 	if tenID < roachpb.MinTenantID.ToUint64() {
 		// Log these non user-facing errors.
-		log.Errorf(ctx, "%s contains an invalid tenant ID", clusterNameFromDB)
-		return msg, "", roachpb.MaxTenantID, errors.Errorf("invalid cluster name '%s'", clusterNameFromDB)
+		log.Errorf(ctx, "%s contains an invalid tenant ID", clusterIdentifierDB)
+		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
+		err = errors.WithHintf(err, "Tenant ID %d is invalid.", tenID)
+		return msg, "", roachpb.MaxTenantID, err
 	}
 
 	// Make and return a copy of the startup msg so the original is not modified.
+	// We will rewrite database and options in the new startup message.
 	paramsOut := map[string]string{}
 	for key, value := range msg.Parameters {
 		if key == "database" {
@@ -638,20 +666,21 @@ func clusterNameAndTenantFromParams(
 			paramsOut[key] = value
 		}
 	}
+
 	outMsg := &pgproto3.StartupMessage{
 		ProtocolVersion: msg.ProtocolVersion,
 		Parameters:      paramsOut,
 	}
-
-	return outMsg, clusterNameSansTenant, roachpb.MakeTenantID(tenID), nil
+	return outMsg, clusterName, roachpb.MakeTenantID(tenID), nil
 }
 
 // parseDatabaseParam parses the database parameter from the PG connection
-// string, and tries to extract the cluster name if present. The cluster
-// name should be embedded in the database parameter using the dot (".")
-// delimiter in the form of "<cluster name>.<database name>". This approach
-// is safe because dots are not allowed in the database names themselves.
-func parseDatabaseParam(databaseParam string) (clusterName, databaseName string, err error) {
+// string, and tries to extract the cluster identifier if present. The cluster
+// identifier should be embedded in the database parameter using the dot (".")
+// delimiter in the form of "<cluster identifier>.<database name>". This
+// approach is safe because dots are not allowed in the database names
+// themselves.
+func parseDatabaseParam(databaseParam string) (clusterIdentifier, databaseName string, err error) {
 	// Database param is not provided.
 	if databaseParam == "" {
 		return "", "", nil
@@ -664,21 +693,21 @@ func parseDatabaseParam(databaseParam string) (clusterName, databaseName string,
 		return "", databaseParam, nil
 	}
 
-	clusterName, databaseName = parts[0], parts[1]
+	clusterIdentifier, databaseName = parts[0], parts[1]
 
 	// Ensure that the param is in the right format if the delimiter is provided.
-	if len(parts) > 2 || clusterName == "" || databaseName == "" {
+	if len(parts) > 2 || clusterIdentifier == "" || databaseName == "" {
 		return "", "", errors.New("invalid database param")
 	}
 
-	return clusterName, databaseName, nil
+	return clusterIdentifier, databaseName, nil
 }
 
 // parseOptionsParam parses the options parameter from the PG connection string,
-// and tries to return the cluster name if present. It also returns the options
-// parameter with the cluster name stripped out. Just like PostgreSQL, the
-// sqlproxy supports three different ways to set a run-time parameter through
-// its command-line options:
+// and tries to return the cluster identifier if present. It also returns the
+// options parameter with the cluster key stripped out. Just like PostgreSQL,
+// the sqlproxy supports three different ways to set a run-time parameter
+// through its command-line options:
 //     -c NAME=VALUE (commonly used throughout documentation around PGOPTIONS)
 //     -cNAME=VALUE
 //     --NAME=VALUE
@@ -688,22 +717,23 @@ func parseDatabaseParam(databaseParam string) (clusterName, databaseName string,
 // parse this, we need to traverse the string from left to right, and look at
 // every single argument, but that involves quite a bit of work, so we'll punt
 // for now.
-func parseOptionsParam(optionsParam string) (clusterName, newOptionsParam string, err error) {
+func parseOptionsParam(optionsParam string) (clusterIdentifier, newOptionsParam string, err error) {
 	// Only search up to 2 in case of large inputs.
-	matches := clusterNameLongOptionRE.FindAllStringSubmatch(optionsParam, 2 /* n */)
+	matches := clusterIdentifierLongOptionRE.FindAllStringSubmatch(optionsParam, 2 /* n */)
 	if len(matches) == 0 {
 		return "", optionsParam, nil
 	}
 
 	if len(matches) > 1 {
 		// Technically we could still allow requests to go through if all
-		// cluster names match, but we don't want to parse the entire string, so
-		// we will just error out if at least two cluster flags are provided.
+		// cluster identifiers match, but we don't want to parse the entire
+		// string, so we will just error out if at least two cluster flags are
+		// provided.
 		return "", "", errors.New("multiple cluster flags provided")
 	}
 
 	// Length of each match should always be 2 with the given regex, one for
-	// the full string, and the other for the cluster name.
+	// the full string, and the other for the cluster identifier.
 	if len(matches[0]) != 2 {
 		// We don't want to panic here.
 		return "", "", errors.New("internal server error")
@@ -713,7 +743,27 @@ func parseOptionsParam(optionsParam string) (clusterName, newOptionsParam string
 	if len(matches[0][1]) == 0 {
 		return "", "", errors.New("invalid cluster flag")
 	}
+
 	newOptionsParam = strings.ReplaceAll(optionsParam, matches[0][0], "")
 	newOptionsParam = strings.TrimSpace(newOptionsParam)
 	return matches[0][1], newOptionsParam, nil
 }
+
+const clusterIdentifierHint = `Ensure that your cluster identifier is uniquely specified using any of the
+following methods:
+
+1) Database parameter:
+   Use "<cluster identifier>.<database name>" as the database parameter.
+   (e.g. database="active-roach-42.defaultdb")
+
+2) Options parameter:
+   Use "--cluster=<cluster identifier>" as the options parameter.
+   (e.g. options="--cluster=active-roach-42")
+
+For more details, please visit our docs site at:
+	https://www.cockroachlabs.com/docs/cockroachcloud/connect-to-a-serverless-cluster
+`
+
+const clusterNameFormHint = "Cluster identifiers come in the form of <name>-<tenant ID> (e.g. lazy-roach-3)."
+
+const missingTenantIDHint = "Did you forget to include your tenant ID in the cluster identifier?"

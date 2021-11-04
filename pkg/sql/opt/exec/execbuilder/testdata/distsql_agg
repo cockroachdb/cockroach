@@ -52,7 +52,7 @@ FROM data GROUP BY b
 distribution: full
 vectorized: true
 ·
-• group
+• group (hash)
 │ group by: b
 │
 └── • scan
@@ -513,7 +513,7 @@ vectorized: true
 ·
 • render
 │
-└── • group
+└── • group (hash)
     │ group by: c, d
     │
     └── • render
@@ -533,7 +533,7 @@ vectorized: true
 ·
 • render
 │
-└── • group
+└── • group (streaming)
     │ group by: c, d
     │ ordered: +c,+d
     │
@@ -558,7 +558,7 @@ vectorized: true
 ·
 • render
 │
-└── • group
+└── • group (hash)
     │ group by: c, d
     │
     └── • render
@@ -579,7 +579,7 @@ vectorized: true
 • filter
 │ filter: sum > 10
 │
-└── • group
+└── • group (hash)
     │ group by: d
     │
     └── • render
@@ -597,7 +597,7 @@ EXPLAIN (DISTSQL) SELECT avg(a+b), c FROM data GROUP BY c, d HAVING c = d
 distribution: full
 vectorized: true
 ·
-• group
+• group (hash)
 │ group by: d
 │
 └── • render
@@ -618,7 +618,7 @@ EXPLAIN (DISTSQL) SELECT sum(a+b), sum(a+b) FILTER (WHERE a < d), sum(a+b) FILTE
 distribution: full
 vectorized: true
 ·
-• group
+• group (hash)
 │ group by: d
 │
 └── • render
@@ -637,7 +637,7 @@ EXPLAIN (DISTSQL) SELECT sum(a+b), sum(a+b) FILTER (WHERE a < d), sum(a+b) FILTE
 distribution: full
 vectorized: true
 ·
-• group
+• group (hash)
 │ group by: d
 │
 └── • render
@@ -793,7 +793,7 @@ EXPLAIN (DISTSQL) SELECT a, max(b) FROM sorted_data GROUP BY a
 distribution: full
 vectorized: true
 ·
-• group
+• group (hash)
 │ group by: a
 │
 └── • scan
@@ -809,7 +809,7 @@ EXPLAIN (DISTSQL) SELECT a, max(b) FROM sorted_data GROUP BY a ORDER BY a
 distribution: full
 vectorized: true
 ·
-• group
+• group (streaming)
 │ group by: a
 │ ordered: +a
 │
@@ -826,7 +826,7 @@ EXPLAIN (DISTSQL) SELECT c, min(b), a FROM sorted_data GROUP BY a, c
 distribution: full
 vectorized: true
 ·
-• group
+• group (streaming)
 │ group by: a
 │ ordered: +a
 │
@@ -843,7 +843,7 @@ EXPLAIN (DISTSQL) SELECT c, min(b), a FROM sorted_data GROUP BY a, c ORDER BY a
 distribution: full
 vectorized: true
 ·
-• group
+• group (streaming)
 │ group by: a
 │ ordered: +a
 │
@@ -860,7 +860,7 @@ EXPLAIN (DISTSQL) SELECT b, max(c) FROM sorted_data@foo GROUP BY b
 distribution: full
 vectorized: true
 ·
-• group
+• group (streaming)
 │ group by: b
 │ ordered: +b
 │
@@ -885,7 +885,7 @@ vectorized: true
 │ left cols are key
 │ right cols are key
 │
-├── • group
+├── • group (streaming)
 │   │ group by: a
 │   │ ordered: +a
 │   │
@@ -894,7 +894,7 @@ vectorized: true
 │         table: sorted_data@sorted_data_pkey
 │         spans: FULL SCAN
 │
-└── • group
+└── • group (streaming)
     │ group by: b
     │ ordered: +b
     │
@@ -915,7 +915,7 @@ EXPLAIN (DISTSQL) SELECT sum(x) FROM (SELECT a, b::float + c AS x FROM data) GRO
 distribution: full
 vectorized: true
 ·
-• group
+• group (streaming)
 │ group by: a
 │ ordered: +a
 │
@@ -934,7 +934,7 @@ EXPLAIN (DISTSQL) SELECT sum(x) FROM (SELECT a, b::float + c AS x FROM data) WHE
 distribution: full
 vectorized: true
 ·
-• group
+• group (streaming)
 │ group by: a
 │ ordered: +a
 │
@@ -981,7 +981,7 @@ NULL       /1/1     {2}       2
 query T
 EXPLAIN (opt,verbose) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b
 ----
-group-by
+group-by (streaming)
  ├── columns: b:2 count:5
  ├── grouping columns: b:2
  ├── internal-ordering: +2 opt(1)
@@ -1009,7 +1009,7 @@ EXPLAIN (verbose) SELECT b, count(*), corr(a, b) FROM data2 WHERE a=1 GROUP BY b
 distribution: full
 vectorized: true
 ·
-• group
+• group (streaming)
 │ columns: (b, count, corr)
 │ estimated row count: 10 (missing stats)
 │ aggregate 0: count_rows()
@@ -1030,7 +1030,7 @@ EXPLAIN (DISTSQL) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b;
 distribution: full
 vectorized: true
 ·
-• group
+• group (streaming)
 │ group by: b
 │ ordered: +b
 │
@@ -1052,7 +1052,7 @@ EXPLAIN (DISTSQL) SELECT sum(v) FROM data INNER LOOKUP JOIN uv ON (a=u) GROUP BY
 distribution: full
 vectorized: true
 ·
-• group
+• group (streaming)
 │ group by: u
 │ ordered: +u
 │

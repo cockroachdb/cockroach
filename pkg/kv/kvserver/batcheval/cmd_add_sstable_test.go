@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
 var engineImpls = []struct {
@@ -497,6 +499,9 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 			e := engineImpl.create()
 			defer e.Close()
 
+			st := cluster.MakeTestingClusterSettings()
+			evalCtx := (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext()
+
 			for _, kv := range mvccKVsFromStrs([]strKv{
 				{"a", 2, "aa"},
 				{"b", 1, "bb"},
@@ -552,6 +557,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				sstBytes := getSSTBytes(sstKVs)
 				stats := getStats(roachpb.Key("a"), roachpb.Key("b"), sstBytes)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -579,6 +585,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -608,6 +615,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -635,6 +643,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				sstBytes := getSSTBytes(sstKVs)
 				stats := getStats(roachpb.Key("c"), roachpb.Key("i"), sstBytes)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -667,6 +676,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -695,6 +705,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -724,6 +735,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -741,16 +753,16 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 			}
 
-			// Test key collision when ingesting a key which has a write intent in the
+			// Test key collision when ingesting keys which have write intents in the
 			// existing data.
 			{
 				sstKVs := mvccKVsFromStrs([]strKv{
 					{"f", 2, "ff"},
-					{"q", 4, "qq"},
-					{"t", 3, "ttt"}, // has a write intent in the existing data.
+					{"q", 4, "qq"},  // has a write intent in the existing data
+					{"t", 3, "ttt"}, // has a write intent in the existing data
 				})
 
-				// Add in a write intent.
+				// Add in two write intents.
 				ts := hlc.Timestamp{WallTime: 7}
 				txn := roachpb.MakeTransaction(
 					"test",
@@ -760,17 +772,23 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					base.DefaultMaxClockOffset.Nanoseconds(),
 				)
 				if err := storage.MVCCPut(
+					ctx, e, nil, []byte("q"), ts,
+					roachpb.MakeValueFromBytes([]byte("q")),
+					&txn,
+				); err != nil {
+					t.Fatalf("%+v", err)
+				}
+				if err := storage.MVCCPut(
 					ctx, e, nil, []byte("t"), ts,
 					roachpb.MakeValueFromBytes([]byte("tt")),
 					&txn,
 				); err != nil {
-					if !errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
-						t.Fatalf("%+v", err)
-					}
+					t.Fatalf("%+v", err)
 				}
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -783,7 +801,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "conflicting intents on \"t") {
+				if !testutils.IsError(err, "conflicting intents on \"q\", \"t\"") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -809,6 +827,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -838,6 +857,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				sstBytes := getSSTBytes(sstKVs)
 				stats := getStats(roachpb.Key("e"), roachpb.Key("zz"), sstBytes)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -867,6 +887,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -895,6 +916,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -923,6 +945,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -962,6 +985,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				commandStats := enginepb.MVCCStats{}
 
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -1055,4 +1079,80 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAddSSTableDisallowShadowingIntentResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Start a transaction that writes an intent at b.
+	txn := db.NewTxn(ctx, "intent")
+	require.NoError(t, txn.Put(ctx, "b", "intent"))
+
+	// Generate an SSTable that covers keys a, b, and c, and submit it with high
+	// priority. This is going to abort the transaction above, encounter its
+	// intent, and resolve it.
+	sst := makeSST(t, s.Clock().Now(), map[string]string{
+		"a": "1",
+		"b": "2",
+		"c": "3",
+	})
+	stats := sstStats(t, sst)
+
+	ba := roachpb.BatchRequest{}
+	ba.Header.UserPriority = roachpb.MaxUserPriority
+	ba.Add(&roachpb.AddSSTableRequest{
+		RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")},
+		Data:              sst,
+		MVCCStats:         stats,
+		DisallowShadowing: true,
+	})
+	_, pErr := db.NonTransactionalSender().Send(ctx, ba)
+	require.Nil(t, pErr)
+
+	// The transaction should now be aborted.
+	err := txn.Commit(ctx)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "TransactionRetryWithProtoRefreshError: TransactionAbortedError")
+}
+
+func makeSST(t *testing.T, ts hlc.Timestamp, kvs map[string]string) []byte {
+	t.Helper()
+
+	sstFile := &storage.MemFile{}
+	writer := storage.MakeBackupSSTWriter(sstFile)
+	defer writer.Close()
+
+	keys := make([]string, 0, len(kvs))
+	for key := range kvs {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		key := storage.MVCCKey{Key: roachpb.Key(k), Timestamp: ts}
+		value := roachpb.Value{}
+		value.SetString(kvs[k])
+		value.InitChecksum(key.Key)
+		require.NoError(t, writer.Put(key, value.RawBytes))
+	}
+	require.NoError(t, writer.Finish())
+	writer.Close()
+	return sstFile.Data()
+}
+
+func sstStats(t *testing.T, sst []byte) *enginepb.MVCCStats {
+	t.Helper()
+
+	iter, err := storage.NewMemSSTIterator(sst, true)
+	require.NoError(t, err)
+	defer iter.Close()
+
+	stats, err := storage.ComputeStatsForRange(iter, keys.MinKey, keys.MaxKey, 0)
+	require.NoError(t, err)
+	return &stats
 }

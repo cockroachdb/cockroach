@@ -1,0 +1,83 @@
+# Test the behavior of the kvsubscriber in the presence of internal
+# subscription errors. During errors, the store-reader should present a snapshot
+# view of the state before the error occurred. It should also be safe to
+# bounce the same subscriber and have the handlers observe a [max,min) update
+# indicating their view of all span configs needs to be refreshed. When
+# consulting the store-reader after, it should observe a more up-to-date
+# snapshot than earlier. We should also continue to observe incremental updates
+# there-on-forth.
+
+start
+----
+
+update
+upsert [a,c):A
+upsert [d,f):D
+----
+
+updates
+----
+/M{in-ax}
+[a,c)
+[d,f)
+
+store-reader key=a
+----
+conf=A
+
+store-reader key=d
+----
+conf=D
+
+# Inject a hard error. Subsequent updates aren't observed by the subscriber. The
+# store-reader should also still be readable and present a snapshot of the state
+# pre-error.
+inject-buffer-overflow
+----
+
+update
+upsert [a,c):B
+delete [d,f)
+----
+
+updates
+----
+
+store-reader key=a
+----
+conf=A
+
+store-reader key=d
+----
+conf=D
+
+# Bounce the kvsubscriber. We should observe a catch-all update as a result, and
+# observe a more up-to-date snapshot of the span configuration state. We should
+# also receive incremental updates.
+start
+----
+
+updates
+----
+/M{in-ax}
+
+store-reader key=a
+----
+conf=B
+
+store-reader key=d
+----
+conf=MISSING
+
+update
+upsert [a,c):C
+----
+
+updates
+----
+/M{in-ax}
+[a,c)
+
+store-reader key=a
+----
+conf=C

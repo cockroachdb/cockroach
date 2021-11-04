@@ -34,16 +34,10 @@ import (
 // However, if the optimizer can prove that only a small number of rows will
 // be deleted, it'll enable autoCommit for delete range.
 type deleteRangeNode struct {
-	// interleavedFastPath is true if we can take the fast path despite operating
-	// on an interleaved table.
-	interleavedFastPath bool
 	// spans are the spans to delete.
 	spans roachpb.Spans
 	// desc is the table descriptor the delete is operating on.
 	desc catalog.TableDescriptor
-	// interleavedDesc are the table descriptors of any child interleaved tables
-	// the delete is operating on.
-	interleavedDesc []catalog.TableDescriptor
 	// fetcher is around to decode the returned keys from the DeleteRange, so that
 	// we can count the number of rows deleted.
 	fetcher row.Fetcher
@@ -92,26 +86,12 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	if err := params.p.cancelChecker.Check(); err != nil {
 		return err
 	}
-	if d.interleavedFastPath {
-		for i := range d.spans {
-			d.spans[i].EndKey = d.spans[i].EndKey.PrefixEnd()
-		}
-	}
 
 	// Configure the fetcher, which is only used to decode the returned keys from
 	// the DeleteRange, and is never used to actually fetch kvs.
-	allTables := make([]row.FetcherTableArgs, len(d.interleavedDesc)+1)
-	allTables[0] = row.FetcherTableArgs{
+	table := row.FetcherTableArgs{
 		Desc:  d.desc,
 		Index: d.desc.GetPrimaryIndex(),
-		Spans: d.spans,
-	}
-	for i, interleaved := range d.interleavedDesc {
-		allTables[i+1] = row.FetcherTableArgs{
-			Desc:  interleaved,
-			Index: interleaved.GetPrimaryIndex(),
-			Spans: d.spans,
-		}
 	}
 	if err := d.fetcher.Init(
 		params.ctx,
@@ -123,7 +103,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		false, /* isCheck */
 		params.p.alloc,
 		nil, /* memMonitor */
-		allTables...,
+		table,
 	); err != nil {
 		return err
 	}

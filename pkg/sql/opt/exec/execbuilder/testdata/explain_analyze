@@ -22,6 +22,7 @@ regions: <hidden>
   KV contention time: 0µs
   KV rows read: 0
   KV bytes read: 0 B
+  estimated max memory allocated: 0 B
   missing stats
   table: kv@kv_pkey
   spans: [/2 - ]
@@ -49,6 +50,7 @@ regions: <hidden>
   KV contention time: 0µs
   KV rows read: 3
   KV bytes read: 24 B
+  estimated max memory allocated: 0 B
   missing stats
   table: kv@kv_pkey
   spans: [/2 - ]
@@ -75,6 +77,8 @@ regions: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
 │ vectorized batch count: 0
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
 │ estimated row count: 990 (missing stats)
 │ equality: (v) = (a)
 │ right cols are key
@@ -89,6 +93,7 @@ regions: <hidden>
 │     KV contention time: 0µs
 │     KV rows read: 4
 │     KV bytes read: 32 B
+│     estimated max memory allocated: 0 B
 │     MVCC step count (ext/int): 0/0
 │     MVCC seek count (ext/int): 0/0
 │     estimated row count: 1,000 (missing stats)
@@ -105,6 +110,7 @@ regions: <hidden>
       KV contention time: 0µs
       KV rows read: 3
       KV bytes read: 24 B
+      estimated max memory allocated: 0 B
       MVCC step count (ext/int): 0/0
       MVCC seek count (ext/int): 0/0
       estimated row count: 1,000 (missing stats)

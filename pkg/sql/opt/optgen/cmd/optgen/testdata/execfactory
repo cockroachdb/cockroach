@@ -39,6 +39,13 @@ import (
 // leaf nodes, or they take other nodes previously constructed by this same
 // factory as children.
 //
+// The PlanGistFactory further requires that the factory methods be called in
+// natural tree order, that is, after an operator's children are constructed the
+// next factory method to be called must be the parent of those nodes. The gist's
+// flattened tree representation relies on this to enable the use of a stack to
+// hold children, thus avoiding the complexity of dealing with other tree traversal
+// methods.
+//
 // The TypedExprs passed to these functions refer to columns of the input node
 // via IndexedVars.
 type Factory interface {

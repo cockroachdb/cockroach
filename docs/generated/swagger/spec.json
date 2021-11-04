@@ -1207,7 +1207,7 @@
           "x-go-name": "Indexes"
         },
         "range_count": {
-          "description": "range_count is the size of the table in ranges. This provides a rough\nestimate of the storage requirements for the table.\nTODO(mrtracy): The TableStats method also returns a range_count field which\nis more accurate than this one; TableDetails calculates this number using\na potentially faster method that is subject to cache staleness. We should\nconsider removing or renaming this field to reflect that difference. See\nGithub issue #5435 for more information.",
+          "description": "range_count is the size of the table in ranges. This provides a rough\nestimate of the storage requirements for the table.\nTODO(mrtracy): The TableStats method also returns a range_count field which\nis more accurate than this one; TableDetails calculates this number using\na potentially faster method that is subject to cache staleness. We should\nconsider removing or renaming this field to reflect that difference. See\nGitHub issue #5435 for more information.",
           "type": "integer",
           "format": "int64",
           "x-go-name": "RangeCount"
@@ -1534,7 +1534,7 @@
           "x-go-name": "GlobalReads"
         },
         "inherited_constraints": {
-          "description": "InheritedContraints specifies if the value in the Constraints field was\ninherited from the zone's parent or specified explicitly by the user.\n\nNB: We need this extra field because the non-nullable nature of\n`constraints` means that there is no other way to disambiguate between an\nunset `constraints` attribute and an empty one.",
+          "description": "InheritedConstraints specifies if the value in the Constraints field was\ninherited from the zone's parent or specified explicitly by the user.\n\nNB: We need this extra field because the non-nullable nature of\n`constraints` means that there is no other way to disambiguate between an\nunset `constraints` attribute and an empty one.",
           "type": "boolean",
           "x-go-name": "InheritedConstraints"
         },
@@ -1780,7 +1780,7 @@
       "type": "object",
       "properties": {
         "logged_out": {
-          "description": "Indicates whether logout was succeessful.",
+          "description": "Indicates whether logout was successful.",
           "type": "boolean",
           "x-go-name": "LoggedOut"
         }

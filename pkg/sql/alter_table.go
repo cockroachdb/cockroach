@@ -225,10 +225,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 					// Translate this operation into an ALTER PRIMARY KEY command.
 					alterPK := &tree.AlterTableAlterPrimaryKey{
-						Columns:    d.Columns,
-						Sharded:    d.Sharded,
-						Interleave: d.Interleave,
-						Name:       d.Name,
+						Columns: d.Columns,
+						Sharded: d.Sharded,
+						Name:    d.Name,
 					}
 					if err := params.p.AlterPrimaryKey(
 						params.ctx,

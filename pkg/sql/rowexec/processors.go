@@ -286,6 +286,16 @@ func NewProcessor(
 		}
 		return NewCSVWriterProcessor(flowCtx, processorID, *core.CSVWriter, inputs[0], outputs[0])
 	}
+	if core.ParquetWriter != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		if NewParquetWriterProcessor == nil {
+			return nil, errors.New("ParquetWriter processor unimplemented")
+		}
+		return NewParquetWriterProcessor(flowCtx, processorID, *core.ParquetWriter, inputs[0],
+			outputs[0])
+	}
 	if core.BulkRowWriter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
@@ -386,6 +396,9 @@ var NewStreamIngestionDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.
 
 // NewCSVWriterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewCSVWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.CSVWriterSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
+
+// NewParquetWriterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewParquetWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ParquetWriterSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewChangeAggregatorProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewChangeAggregatorProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ChangeAggregatorSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)

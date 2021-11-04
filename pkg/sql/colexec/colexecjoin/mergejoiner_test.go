@@ -95,7 +95,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 	rightMJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsRight, nTuples)
 	leftHJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsLeft, nTuples)
 	rightHJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsRight, nTuples)
-	mj, err := NewMergeJoinOp(
+	mj := NewMergeJoinOp(
 		testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
 		colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 		leftMJSource, rightMJSource, typs, typs,
@@ -103,9 +103,6 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 		testDiskAcc, evalCtx,
 	)
-	if err != nil {
-		t.Fatal("error in merge join op constructor", err)
-	}
 	mj.Init(ctx)
 	hj := NewHashJoiner(
 		testAllocator, testAllocator, HashJoinerSpec{
@@ -131,7 +128,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 			hjOutputTuples = append(hjOutputTuples, colexectestutils.GetTupleFromBatch(b, i))
 		}
 	}
-	err = colexectestutils.AssertTuplesSetsEqual(hjOutputTuples, mjOutputTuples, evalCtx)
+	err := colexectestutils.AssertTuplesSetsEqual(hjOutputTuples, mjOutputTuples, evalCtx)
 	// Note that the error message can be extremely verbose (it
 	// might contain all output tuples), so we manually check that
 	// comparing err to nil returns true (if we were to use
@@ -188,14 +185,13 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 	getNewMergeJoiner := func(leftSource, rightSource colexecop.Operator) colexecop.Operator {
 		benchMemAccount.Clear(ctx)
-		base, err := newMergeJoinBase(
+		base := newMergeJoinBase(
 			colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory), execinfra.DefaultMemoryLimit, queueCfg, colexecop.NewTestingSemaphore(mjFDLimit),
 			descpb.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 			[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 			testDiskAcc,
 		)
-		require.NoError(b, err)
 		return &mergeJoinInnerOp{mergeJoinBase: base}
 	}
 

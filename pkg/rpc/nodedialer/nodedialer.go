@@ -51,7 +51,7 @@ type Dialer struct {
 	breakers [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*wrappedBreaker
 }
 
-// DialerOpt contains ocnfiguration options for a Dialer.
+// DialerOpt contains configuration options for a Dialer.
 type DialerOpt struct {
 	// TestingKnobs contains testing utilities.
 	TestingKnobs DialerTestingKnobs

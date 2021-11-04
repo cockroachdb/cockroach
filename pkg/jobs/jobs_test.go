@@ -587,7 +587,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.sqlDB.Exec(t, "PAUSE JOB $1", j.ID())
 		rts.check(t, jobs.StatusPaused)
 
-		rts.sqlDB.ExpectErr(t, "paused and has non-nil FinalResumeError resume", "CANCEL JOB $1", j.ID())
+		rts.sqlDB.ExpectErr(t, "paused and has non-nil FinalResumeError .* resume failed", "CANCEL JOB $1", j.ID())
 		rts.check(t, jobs.StatusPaused)
 
 		rts.sqlDB.Exec(t, "RESUME JOB $1", j.ID())
@@ -809,7 +809,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		// Inject an error in the update to move the job to "succeeeded" one time.
+		// Inject an error in the update to move the job to "succeeded" one time.
 		var failed atomic.Value
 		failed.Store(false)
 		rts.beforeUpdate = func(orig, updated jobs.JobMetadata) error {
@@ -2797,7 +2797,7 @@ func TestUnmigratedSchemaChangeJobs(t *testing.T) {
 		case <-time.After(100 * time.Millisecond):
 			// With an adopt interval of 10 ms, within 100ms we can be reasonably sure
 			// that the job was not adopted. At the very least, the test would be
-			// flakey.
+			// flaky.
 		}
 	})
 

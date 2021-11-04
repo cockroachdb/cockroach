@@ -116,7 +116,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
 		)
-		mergeJoiner, err := colexecjoin.NewMergeJoinOp(
+		mergeJoiner := colexecjoin.NewMergeJoinOp(
 			tu.testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
 			colexecop.NewTestingSemaphore(4), descpb.InnerJoin, leftInput, rightInput,
 			[]*types.T{types.Int}, []*types.T{types.Int},
@@ -124,9 +124,6 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			tu.testDiskAcc, tu.evalCtx,
 		)
-		if err != nil {
-			t.Fatal(err)
-		}
 		timeAdvancingMergeJoiner := &timeAdvancingOperator{
 			OneInputHelper: colexecop.MakeOneInputHelper(mergeJoiner),
 			timeSource:     timeSource,

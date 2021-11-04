@@ -19,7 +19,7 @@ project
  ├── fd: ()-->(12), (1)-->(2,7,9,11)
  ├── prune: (1,2,7,9,11,12)
  ├── interesting orderings: (+1 opt(12))
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: x:1(int!null) y:2(int) sum:7(float!null) avg:9(float) string_agg:11(string!null)
  │    ├── grouping columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
@@ -105,7 +105,7 @@ project
  ├── columns: s:4(string)
  ├── prune: (4)
  ├── interesting orderings: (-4)
- └── group-by
+ └── group-by (hash)
       ├── columns: z:3(float!null) s:4(string)
       ├── grouping columns: z:3(float!null) s:4(string)
       ├── key: (3,4)
@@ -129,7 +129,7 @@ SELECT y, sum(z) FROM xyzs GROUP BY z, y
 project
  ├── columns: y:2(int) sum:7(float!null)
  ├── prune: (2,7)
- └── group-by
+ └── group-by (hash)
       ├── columns: y:2(int) z:3(float!null) sum:7(float!null)
       ├── grouping columns: y:2(int) z:3(float!null)
       ├── key: (2,3)
@@ -152,7 +152,7 @@ project
 build
 SELECT z, max(s) FROM xyzs GROUP BY z
 ----
-group-by
+group-by (hash)
  ├── columns: z:3(float!null) max:7(string)
  ├── grouping columns: z:3(float!null)
  ├── key: (3)
@@ -181,7 +181,7 @@ project
  ├── columns: s:4(string)
  ├── prune: (4)
  ├── interesting orderings: (-4)
- └── group-by
+ └── group-by (hash)
       ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
       ├── grouping columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
       ├── key: (1)
@@ -207,7 +207,7 @@ SELECT (SELECT sum(x) FROM (SELECT y, u FROM kuv) GROUP BY u) FROM xyzs GROUP BY
 project
  ├── columns: sum:16(decimal)
  ├── prune: (16)
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: xyzs.y:2(int) sum:14(decimal!null)
  │    ├── grouping columns: xyzs.y:2(int)
  │    ├── key: (2)
@@ -244,7 +244,7 @@ project
                      ├── outer: (2,14)
                      ├── fd: ()-->(15)
                      ├── prune: (15)
-                     ├── group-by
+                     ├── group-by (hash)
                      │    ├── columns: u:8(float)
                      │    ├── grouping columns: u:8(float)
                      │    ├── outer: (2)
@@ -273,7 +273,7 @@ project
 build
 SELECT * FROM (VALUES (1), (2), (1), (NULL)) GROUP BY column1
 ----
-group-by
+group-by (hash)
  ├── columns: column1:1(int)
  ├── grouping columns: column1:1(int)
  ├── cardinality: [1 - 4]
@@ -298,7 +298,7 @@ group-by
 opt
 SELECT x, count(y) FROM xyzs GROUP BY x HAVING x=1
 ----
-group-by
+group-by (streaming)
  ├── columns: x:1(int!null) count:7(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -327,7 +327,7 @@ GROUP BY x, y
 project
  ├── columns: variance:7(decimal) stddev:8(decimal) corr:9(float)
  ├── prune: (7-9)
- └── group-by
+ └── group-by (hash)
       ├── columns: x:1(int!null) y:2(int) variance:7(decimal) stddev:8(decimal) corr:9(float)
       ├── grouping columns: x:1(int!null) y:2(int)
       ├── key: (1)

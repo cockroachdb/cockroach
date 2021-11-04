@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -51,11 +50,7 @@ func NewExternalHashAggregator(
 		newAggArgs.Input = partitionedInputs[0]
 		// We don't need to track the input tuples when we have already spilled.
 		// TODO(yuzefovich): it might be worth increasing the number of buckets.
-		op, err := NewHashAggregator(&newAggArgs, nil /* newSpillingQueueArgs */, outputUnlimitedAllocator, maxOutputBatchMemSize)
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
-		return op
+		return NewHashAggregator(&newAggArgs, nil /* newSpillingQueueArgs */, outputUnlimitedAllocator, maxOutputBatchMemSize)
 	}
 	spec := newAggArgs.Spec
 	diskBackedFallbackOpConstructor := func(
@@ -68,11 +63,7 @@ func NewExternalHashAggregator(
 			partitionedInputs[0], newAggArgs.InputTypes,
 			makeOrdering(spec.GroupCols), maxNumberActivePartitions,
 		)
-		diskBackedFallbackOp, err := NewOrderedAggregator(&newAggArgs)
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
-		return diskBackedFallbackOp
+		return NewOrderedAggregator(&newAggArgs)
 	}
 	eha := newHashBasedPartitioner(
 		newAggArgs.Allocator,

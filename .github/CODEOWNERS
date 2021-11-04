@@ -208,7 +208,7 @@
 /pkg/internal/rsg/           @cockroachdb/sql-queries
 /pkg/internal/sqlsmith/      @cockroachdb/sql-queries
 /pkg/internal/team/          @cockroachdb/test-eng
-/pkg/jobs/                   @cockroachdb/sql-schema
+/pkg/jobs/                   @cockroachdb/cdc-prs
 /pkg/keys/                   @cockroachdb/kv-prs
 # Don't ping KV on updates to reserved descriptor IDs and such.
 /pkg/keys/constants.go       @cockroachdb/kv-prs-noreview
@@ -236,6 +236,7 @@
 /pkg/roachpb/string_test.go  @cockroachdb/kv-prs
 /pkg/roachpb/tenant*         @cockroachdb/kv-prs
 /pkg/roachpb/version*        @cockroachdb/server
+/pkg/roachprod/              @cockroachdb/dev-inf
 /pkg/rpc/                    @cockroachdb/server-prs
 /pkg/scheduledjobs/          @cockroachdb/bulk-prs
 /pkg/security/               @cockroachdb/server-prs @cockroachdb/prodsec

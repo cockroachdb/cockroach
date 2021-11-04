@@ -32,6 +32,12 @@ func Example_sql_format() {
 	// Sanity check for other array types.
 	c.RunWithArgs([]string{"sql", "-e", "select array[true, false], array['01:01'::time], array['2021-03-20'::date]"})
 	c.RunWithArgs([]string{"sql", "-e", "select array[123::int2], array[123::int4], array[123::int8]"})
+	// Check that tuples and user-defined types are escaped correctly.
+	c.RunWithArgs([]string{"sql", "-e", `create table tup (a text, b int8)`})
+	c.RunWithArgs([]string{"sql", "-e", `select row('\n',1), row('\\n',2), '("\n",3)'::tup, '("\\n",4)'::tup`})
+	c.RunWithArgs([]string{"sql", "-e", `select '{"(n,1)","(\n,2)","(\\n,3)"}'::tup[]`})
+	c.RunWithArgs([]string{"sql", "-e", `create type e as enum('a', '\n')`})
+	c.RunWithArgs([]string{"sql", "-e", `select '\n'::e, '{a, "\\n"}'::e[]`})
 
 	// Output:
 	// sql -e create database t; create table t.times (bare timestamp, withtz timestamptz)
@@ -79,4 +85,17 @@ func Example_sql_format() {
 	// sql -e select array[123::int2], array[123::int4], array[123::int8]
 	// array	array	array
 	// {123}	{123}	{123}
+	// sql -e create table tup (a text, b int8)
+	// CREATE TABLE
+	// sql -e select row('\n',1), row('\\n',2), '("\n",3)'::tup, '("\\n",4)'::tup
+	// row	row	tup	tup
+	// "(""\\n"",1)"	"(""\\\\n"",2)"	(n,3)	"(""\\n"",4)"
+	// sql -e select '{"(n,1)","(\n,2)","(\\n,3)"}'::tup[]
+	// tup
+	// "{""(n,1)"",""(n,2)"",""(n,3)""}"
+	// sql -e create type e as enum('a', '\n')
+	// CREATE TYPE
+	// sql -e select '\n'::e, '{a, "\\n"}'::e[]
+	// e	e
+	// \n	"{a,""\\n""}"
 }

@@ -564,8 +564,12 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var containsLargeFullTableScan bool
 	var containsLargeFullIndexScan bool
 	var containsMutation bool
+	var gf *explain.PlanGistFactory
+	if !opc.p.SessionData().DisablePlanGists {
+		gf = explain.NewPlanGistFactory(f)
+		f = gf
+	}
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
-		// No instrumentation.
 		bld := execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
 		plan, err := bld.Build()
 		if err != nil {
@@ -598,6 +602,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 		containsMutation = bld.ContainsMutation
 
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
+	}
+	if gf != nil {
+		planTop.instrumentation.planGist = gf.PlanGist()
 	}
 
 	if stmt.ExpectedTypes != nil {
@@ -633,4 +640,10 @@ func (opc *optPlanningCtx) runExecBuilder(
 		planTop.catalog = &opc.catalog
 	}
 	return nil
+}
+
+// DecodeGist Avoid an import cycle by keeping the cat out of the tree, RFC: is
+// there a better way?
+func (p *planner) DecodeGist(gist string) ([]string, error) {
+	return explain.DecodePlanGistToRows(gist, &p.optPlanningCtx.catalog)
 }

@@ -547,3 +547,35 @@ SET LOCAL intervalstyle = 'postgres' -- normalized!
 SET LOCAL intervalstyle = ('postgres') -- fully parenthesized
 SET LOCAL intervalstyle = '_' -- literals removed
 SET LOCAL intervalstyle = 'postgres' -- identifiers removed
+
+parse
+SET a.b = 'd'
+----
+SET "a.b" = 'd' -- normalized!
+SET "a.b" = ('d') -- fully parenthesized
+SET "a.b" = '_' -- literals removed
+SET "a.b" = 'd' -- identifiers removed
+
+parse
+SET a.b.c = 'd'
+----
+SET "a.b.c" = 'd' -- normalized!
+SET "a.b.c" = ('d') -- fully parenthesized
+SET "a.b.c" = '_' -- literals removed
+SET "a.b.c" = 'd' -- identifiers removed
+
+parse
+RESET a.b.c
+----
+RESET "a.b.c" -- normalized!
+RESET "a.b.c" -- fully parenthesized
+RESET "a.b.c" -- literals removed
+RESET "a.b.c" -- identifiers removed
+
+parse
+SHOW a.b.c
+----
+SHOW "a.b.c" -- normalized!
+SHOW "a.b.c" -- fully parenthesized
+SHOW "a.b.c" -- literals removed
+SHOW "a.b.c" -- identifiers removed

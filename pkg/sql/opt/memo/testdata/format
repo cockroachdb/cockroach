@@ -23,7 +23,7 @@ project
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
  │    ├── prune: (6)
- │    └── group-by
+ │    └── group-by (hash)
  │         ├── columns: t.public.t.a:1(int) min:6(int!null)
  │         ├── grouping columns: t.public.t.a:1(int)
  │         ├── immutable
@@ -75,7 +75,7 @@ project
  │    ├── stats: [rows=98.1771622, distinct(1)=98.1771622, null(1)=1]
  │    ├── cost: 1122.50329
  │    ├── ordering: +1
- │    └── group-by
+ │    └── group-by (hash)
  │         ├── columns: t.public.t.a:1(int) min:6(int!null)
  │         ├── grouping columns: t.public.t.a:1(int)
  │         ├── stats: [rows=98.1771622, distinct(1)=98.1771622, null(1)=1]
@@ -119,7 +119,7 @@ project
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
  │    ├── prune: (6)
- │    └── group-by
+ │    └── group-by (hash)
  │         ├── columns: a:1(int) min:6(int!null)
  │         ├── grouping columns: a:1(int)
  │         ├── immutable
@@ -163,7 +163,7 @@ project
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
  │    ├── prune: (6)
- │    └── group-by
+ │    └── group-by (hash)
  │         ├── columns: a:1 min:6!null
  │         ├── grouping columns: a:1
  │         ├── immutable
@@ -207,7 +207,7 @@ project
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
  │    ├── prune: (6)
- │    └── group-by
+ │    └── group-by (hash)
  │         ├── columns: a:1(int) min:6(int)
  │         ├── grouping columns: a:1(int)
  │         ├── immutable
@@ -251,7 +251,7 @@ project
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
  │    ├── prune: (6)
- │    └── group-by
+ │    └── group-by (hash)
  │         ├── columns: a:1 min:6
  │         ├── grouping columns: a:1
  │         ├── immutable
@@ -293,7 +293,7 @@ project
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── prune: (6)
- │    └── group-by
+ │    └── group-by (hash)
  │         ├── stats: [rows=98.1771622, distinct(1)=98.1771622, null(1)=1]
  │         ├── cost: 1105.5623
  │         ├── key: (1)
@@ -331,7 +331,7 @@ SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 project
  ├── sort
- │    └── group-by
+ │    └── group-by (hash)
  │         ├── select
  │         │    ├── scan t
  │         │    └── filters
@@ -411,7 +411,7 @@ project
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
  │    ├── prune: (6)
- │    └── group-by
+ │    └── group-by (hash)
  │         ├── columns: t.public.t.a:1(int) min:6(int!null)
  │         ├── grouping columns: t.public.t.a:1(int)
  │         ├── immutable
@@ -476,7 +476,7 @@ project
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
  │    ├── prune: (6)
- │    └── group-by
+ │    └── group-by (hash)
  │         ├── columns: t.public.t.a:1(int) min:6(int!null)
  │         ├── grouping columns: t.public.t.a:1(int)
  │         ├── immutable
@@ -535,7 +535,7 @@ project
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
  │    ├── prune: (6)
- │    └── group-by
+ │    └── group-by (hash)
  │         ├── columns: t.public.t.a:1(int) min:6(int!null)
  │         ├── grouping columns: t.public.t.a:1(int)
  │         ├── immutable

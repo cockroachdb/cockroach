@@ -182,6 +182,9 @@ type Descriptor interface {
 	// DescriptorProto prepares this descriptor for serialization.
 	DescriptorProto() *descpb.Descriptor
 
+	// NewBuilder initializes a DescriptorBuilder with this descriptor.
+	NewBuilder() DescriptorBuilder
+
 	// GetReferencedDescIDs returns the IDs of all descriptors directly referenced
 	// by this descriptor, including itself.
 	GetReferencedDescIDs() (DescriptorIDSet, error)
@@ -260,9 +263,6 @@ type TableDescriptor interface {
 	// Sequences count as physical tables because their values are stored in
 	// the KV layer.
 	IsPhysicalTable() bool
-	// IsInterleaved returns true if any part of this this table is interleaved with
-	// another table's data.
-	IsInterleaved() bool
 	// MaterializedView returns whether or not this TableDescriptor is a
 	// MaterializedView.
 	MaterializedView() bool

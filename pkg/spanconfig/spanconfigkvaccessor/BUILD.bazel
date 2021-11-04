@@ -15,6 +15,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",
@@ -26,7 +27,7 @@ go_library(
 go_test(
     name = "spanconfigkvaccessor_test",
     srcs = [
-        "datadriven_test.go",
+        "kvaccessor_test.go",
         "main_test.go",
         "validation_test.go",
     ],

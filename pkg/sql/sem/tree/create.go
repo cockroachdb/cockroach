@@ -213,7 +213,6 @@ type CreateIndex struct {
 	// Extra columns to be stored together with the indexed ones as an optimization
 	// for improved reading performance.
 	Storing          NameList
-	Interleave       *InterleaveDef
 	PartitionByIndex *PartitionByIndex
 	StorageParams    StorageParams
 	Predicate        Expr
@@ -260,9 +259,6 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 		ctx.WriteString(" STORING (")
 		ctx.FormatNode(&node.Storing)
 		ctx.WriteByte(')')
-	}
-	if node.Interleave != nil {
-		ctx.FormatNode(node.Interleave)
 	}
 	if node.PartitionByIndex != nil {
 		ctx.FormatNode(node.PartitionByIndex)
@@ -937,7 +933,6 @@ type IndexTableDef struct {
 	Columns          IndexElemList
 	Sharded          *ShardedIndexDef
 	Storing          NameList
-	Interleave       *InterleaveDef
 	Inverted         bool
 	PartitionByIndex *PartitionByIndex
 	StorageParams    StorageParams
@@ -964,9 +959,6 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString(" STORING (")
 		ctx.FormatNode(&node.Storing)
 		ctx.WriteByte(')')
-	}
-	if node.Interleave != nil {
-		ctx.FormatNode(node.Interleave)
 	}
 	if node.PartitionByIndex != nil {
 		ctx.FormatNode(node.PartitionByIndex)
@@ -1036,9 +1028,6 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString(" STORING (")
 		ctx.FormatNode(&node.Storing)
 		ctx.WriteByte(')')
-	}
-	if node.Interleave != nil {
-		ctx.FormatNode(node.Interleave)
 	}
 	if node.PartitionByIndex != nil {
 		ctx.FormatNode(node.PartitionByIndex)
@@ -1212,32 +1201,6 @@ type ShardedIndexDef struct {
 func (node *ShardedIndexDef) Format(ctx *FmtCtx) {
 	ctx.WriteString(" USING HASH WITH BUCKET_COUNT = ")
 	ctx.FormatNode(node.ShardBuckets)
-}
-
-// InterleaveDef represents an interleave definition within a CREATE TABLE
-// or CREATE INDEX statement.
-type InterleaveDef struct {
-	Parent       TableName
-	Fields       NameList
-	DropBehavior DropBehavior
-}
-
-// Format implements the NodeFormatter interface.
-func (node *InterleaveDef) Format(ctx *FmtCtx) {
-	ctx.WriteString(" INTERLEAVE IN PARENT ")
-	ctx.FormatNode(&node.Parent)
-	ctx.WriteString(" (")
-	for i := range node.Fields {
-		if i > 0 {
-			ctx.WriteString(", ")
-		}
-		ctx.FormatNode(&node.Fields[i])
-	}
-	ctx.WriteString(")")
-	if node.DropBehavior != DropDefault {
-		ctx.WriteString(" ")
-		ctx.WriteString(node.DropBehavior.String())
-	}
 }
 
 // PartitionByType is an enum of each type of partitioning (LIST/RANGE).
@@ -1429,7 +1392,6 @@ const (
 type CreateTable struct {
 	IfNotExists      bool
 	Table            TableName
-	Interleave       *InterleaveDef
 	PartitionByTable *PartitionByTable
 	Persistence      Persistence
 	StorageParams    StorageParams
@@ -1495,9 +1457,6 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 		ctx.WriteString(" (")
 		ctx.FormatNode(&node.Defs)
 		ctx.WriteByte(')')
-		if node.Interleave != nil {
-			ctx.FormatNode(node.Interleave)
-		}
 		if node.PartitionByTable != nil {
 			ctx.FormatNode(node.PartitionByTable)
 		}

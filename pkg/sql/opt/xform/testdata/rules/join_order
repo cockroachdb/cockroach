@@ -316,7 +316,7 @@ memo (optimized, ~24KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:
  ├── G1: (inner-join G2 G3 G4) (merge-join G2 G3 G5 inner-join,+1,+10)
  │    └── [presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12]
  │         ├── best: (merge-join G2="[ordering: +1]" G3 G5 inner-join,+1,+10)
- │         └── cost: 2153.99
+ │         └── cost: 2151.99
  ├── G2: (scan bx,cols=(1,2))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan bx,cols=(1,2))
@@ -327,7 +327,7 @@ memo (optimized, ~24KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:
  ├── G3: (inner-join G6 G7 G8) (merge-join G6 G7 G5 inner-join,+5,+11) (lookup-join G9 G8 abc,keyCols=[15],outCols=(5,6,9-12))
  │    └── []
  │         ├── best: (merge-join G6="[ordering: +5]" G7 G5 inner-join,+5,+11)
- │         └── cost: 1079.54
+ │         └── cost: 1078.54
  ├── G4: (filters G10)
  ├── G5: (filters)
  ├── G6: (scan cy,cols=(5,6))
@@ -550,7 +550,7 @@ memo (optimized, ~25KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:
  ├── G3: (inner-join G6 G7 G8) (merge-join G6 G7 G5 inner-join,+6,+10)
  │    ├── [ordering: +(6|10|13)]
  │    │    ├── best: (merge-join G6="[ordering: +6]" G7="[ordering: +(10|13)]" G5 inner-join,+6,+10)
- │    │    └── cost: 3860.47
+ │    │    └── cost: 3860.46
  │    └── []
  │         ├── best: (inner-join G6 G7 G8)
  │         └── cost: 3401.72
@@ -616,7 +616,7 @@ memo (optimized, ~55KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:
  ├── G3: (inner-join G5 G9 G7) (inner-join G9 G5 G7) (inner-join G10 G14 G12) (inner-join G14 G10 G12) (inner-join G15 G18 G12) (inner-join G18 G15 G12) (merge-join G9 G5 G19 inner-join,+10,+6) (merge-join G14 G10 G19 inner-join,+13,+10) (lookup-join G15 G19 abc,keyCols=[10],outCols=(5,6,9,10,13-16)) (merge-join G18 G15 G19 inner-join,+13,+10)
  │    ├── [ordering: +(6|10|13)]
  │    │    ├── best: (merge-join G9="[ordering: +(10|13)]" G5="[ordering: +6]" G19 inner-join,+10,+6)
- │    │    └── cost: 3860.47
+ │    │    └── cost: 3860.48
  │    └── []
  │         ├── best: (inner-join G5 G9 G7)
  │         └── cost: 3401.72
@@ -631,7 +631,7 @@ memo (optimized, ~55KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:
  ├── G6: (inner-join G2 G9 G21) (inner-join G9 G2 G21) (inner-join G10 G16 G12) (inner-join G16 G10 G12) (inner-join G13 G18 G12) (inner-join G18 G13 G12) (merge-join G9 G2 G19 inner-join,+10,+2) (merge-join G16 G10 G19 inner-join,+13,+10) (lookup-join G13 G19 abc,keyCols=[10],outCols=(1,2,9,10,13-16)) (merge-join G18 G13 G19 inner-join,+13,+10)
  │    ├── [ordering: +(2|10|13)]
  │    │    ├── best: (merge-join G9="[ordering: +(10|13)]" G2="[ordering: +2]" G19 inner-join,+10,+2)
- │    │    └── cost: 3860.47
+ │    │    └── cost: 3860.48
  │    └── []
  │         ├── best: (inner-join G2 G9 G21)
  │         └── cost: 3401.72
@@ -660,7 +660,7 @@ memo (optimized, ~55KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:
  ├── G11: (inner-join G2 G14 G4) (inner-join G14 G2 G4) (inner-join G5 G16 G4) (inner-join G16 G5 G4) (inner-join G8 G18 G23) (inner-join G18 G8 G23) (merge-join G14 G2 G19 inner-join,+6,+2) (merge-join G16 G5 G19 inner-join,+2,+6) (lookup-join G8 G19 abc,keyCols=[6],outCols=(1,2,5,6,13-16)) (merge-join G18 G8 G19 inner-join,+13,+6)
  │    ├── [ordering: +(2|6|13)]
  │    │    ├── best: (merge-join G14="[ordering: +(6|13)]" G2="[ordering: +2]" G19 inner-join,+6,+2)
- │    │    └── cost: 3860.47
+ │    │    └── cost: 3860.48
  │    └── []
  │         ├── best: (inner-join G2 G14 G4)
  │         └── cost: 3401.72

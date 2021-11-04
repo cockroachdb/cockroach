@@ -228,15 +228,21 @@ func makeImport(s *Smither) (tree.Statement, bool) {
 	tab := s.name("tab")
 	s.lock.Lock()
 	schema := fmt.Sprintf("/%s%s", exp, exportSchema)
-	s.bulkFiles[schema] = importCreateTableRE.ReplaceAll(
+	tableSchema := importCreateTableRE.ReplaceAll(
 		s.bulkFiles[schema],
 		[]byte(fmt.Sprintf("CREATE TABLE %s (", tab)),
 	)
 	s.lock.Unlock()
 
+	// Create the table to be imported into.
+	_, err := s.db.Exec(string(tableSchema))
+	if err != nil {
+		return nil, false
+	}
+
 	return &tree.Import{
 		Table:      tree.NewUnqualifiedTableName(tab),
-		CreateFile: tree.NewStrVal(s.bulkSrv.URL + schema),
+		Into:       true,
 		FileFormat: "CSV",
 		Files:      files,
 		Options: tree.KVOptions{

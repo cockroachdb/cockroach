@@ -602,10 +602,6 @@ type Table struct {
 	writeOnlyIdxCount  int
 	deleteOnlyIdxCount int
 
-	// interleaved is true if the table's rows are interleaved with rows from
-	// other table(s).
-	interleaved bool
-
 	outboundFKs []ForeignKeyConstraint
 	inboundFKs  []ForeignKeyConstraint
 
@@ -950,26 +946,6 @@ func (ti *Index) Predicate() (string, bool) {
 // ImplicitPartitioningColumnCount is part of the cat.Index interface.
 func (ti *Index) ImplicitPartitioningColumnCount() int {
 	return 0
-}
-
-// InterleaveAncestorCount is part of the cat.Index interface.
-func (ti *Index) InterleaveAncestorCount() int {
-	return 0
-}
-
-// InterleaveAncestor is part of the cat.Index interface.
-func (ti *Index) InterleaveAncestor(i int) (table, index cat.StableID, numKeyCols int) {
-	panic("no interleavings")
-}
-
-// InterleavedByCount is part of the cat.Index interface.
-func (ti *Index) InterleavedByCount() int {
-	return 0
-}
-
-// InterleavedBy is part of the cat.Index interface.
-func (ti *Index) InterleavedBy(i int) (table, index cat.StableID) {
-	panic("no interleavings")
 }
 
 // GeoConfig is part of the cat.Index interface.

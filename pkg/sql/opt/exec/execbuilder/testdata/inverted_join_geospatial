@@ -324,7 +324,7 @@ vectorized: true
 │   │ render count: @S2
 │   │ render count_rows: count_rows
 │   │
-│   └── • group
+│   └── • group (hash)
 │       │ columns: (lk, count_rows)
 │       │ estimated row count: 333 (missing stats)
 │       │ aggregate 0: count_rows()

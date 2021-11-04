@@ -1107,56 +1107,68 @@ CREATE TABLE t (a duration);
 			err:    `unsupported import format`,
 		},
 		{
-			name:   "sequences",
-			create: `i int8 default nextval('s')`,
-			typ:    "CSV",
-			err:    `"s" not found`,
-		},
-		{
-			name:   "statistics collection",
-			create: "a INT",
-			typ:    "CSV",
-			data: "0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n" +
-				"10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n" +
-				"20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n" +
-				"30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n" +
-				"40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n" +
-				"50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n" +
-				"60\n61\n62\n63\n64\n65\n66\n67\n68\n69\n" +
-				"70\n71\n72\n73\n74\n75\n76\n77\n78\n79\n" +
-				"80\n81\n82\n83\n84\n85\n86\n87\n88\n89\n" +
-				"90\n91\n92\n93\n94\n95\n96\n97\n98\n99\n",
+			name: "statistics collection",
+			typ:  "PGDUMP",
+			data: func() string {
+				var sb strings.Builder
+				_, err := fmt.Fprint(&sb, `
+CREATE TABLE t (a INT);
+COPY public.t (a) FROM stdin;
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+\.
+`)
+				require.NoError(t, err)
+				return sb.String()
+			}(),
 			query: map[string][][]string{
 				"SELECT column_names, row_count, distinct_count, null_count " +
 					"FROM [SHOW STATISTICS FOR TABLE t] " +
 					"WHERE statistics_name = '__import__' " +
 					"ORDER BY column_names": {
-					{"{a}", "100", "10", "1"},
-					{"{rowid}", "100", "10", "1"},
+					{"{a}", "10", "1", "0"},
+					{"{rowid}", "10", "1", "0"},
 				},
 			},
 		},
 		{
-			name:   "statistics collection multi",
-			create: "a INT PRIMARY KEY, b INT, INDEX (b, a)",
-			typ:    "CSV",
-			data: "0,0\n1,1\n2,2\n3,3\n4,4\n5,5\n6,6\n7,7\n8,8\n9,9\n" +
-				"10,10\n11,11\n12,12\n13,13\n14,14\n15,15\n16,16\n17,17\n18,18\n19,19\n" +
-				"20,20\n21,21\n22,22\n23,23\n24,24\n25,25\n26,26\n27,27\n28,28\n29,29\n" +
-				"30,30\n31,31\n32,32\n33,33\n34,34\n35,35\n36,36\n37,37\n38,38\n39,39\n" +
-				"40,40\n41,41\n42,42\n43,43\n44,44\n45,45\n46,46\n47,47\n48,48\n49,49\n" +
-				"50,50\n51,51\n52,52\n53,53\n54,54\n55,55\n56,56\n57,57\n58,58\n59,59\n" +
-				"60,60\n61,61\n62,62\n63,63\n64,64\n65,65\n66,66\n67,67\n68,68\n69,69\n" +
-				"70,70\n71,71\n72,72\n73,73\n74,74\n75,75\n76,76\n77,77\n78,78\n79,79\n" +
-				"80,80\n81,81\n82,82\n83,83\n84,84\n85,85\n86,86\n87,87\n88,88\n89,89\n" +
-				"90,90\n91,91\n92,92\n93,93\n94,94\n95,95\n96,96\n97,97\n98,98\n99,99",
+			name: "statistics collection multi",
+			typ:  "PGDUMP",
+			data: func() string {
+				var sb strings.Builder
+				_, err := fmt.Fprint(&sb, `
+CREATE TABLE t (a INT PRIMARY KEY, b INT, INDEX(b, a));
+COPY public.t (a, b) FROM stdin;
+1	1
+2	2
+3	3
+4	4
+5	5
+6	6
+7	7
+8	8
+9	9
+10	10
+\.
+`)
+				require.NoError(t, err)
+				return sb.String()
+			}(),
 			query: map[string][][]string{
 				"SELECT column_names, row_count, distinct_count, null_count " +
 					"FROM [SHOW STATISTICS FOR TABLE t] " +
 					"WHERE statistics_name = '__import__' " +
 					"ORDER BY column_names": {
-					{"{a}", "100", "10", "1"},
-					{"{b}", "100", "10", "1"},
+					{"{a}", "10", "1", "0"},
+					{"{b}", "10", "1", "0"},
 				},
 			},
 		},
@@ -1214,7 +1226,8 @@ CREATE TABLE t (a duration);
 				defer sqlDB.Exec(t, fmt.Sprintf(`DROP DATABASE %s`, dbName))
 				var q string
 				if tc.create != "" {
-					q = fmt.Sprintf(`IMPORT TABLE t (%s) %s DATA ($1) %s`, tc.create, tc.typ, tc.with)
+					sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, tc.create))
+					q = fmt.Sprintf(`IMPORT INTO t %s DATA ($1) %s`, tc.typ, tc.with)
 				} else {
 					q = fmt.Sprintf(`IMPORT %s ($1) %s`, tc.typ, tc.with)
 				}
@@ -1242,7 +1255,8 @@ CREATE TABLE t (a duration);
 	t.Run("mysqlout multiple", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE mysqlout; USE mysqlout`)
 		mockRecorder.dataString = "1"
-		sqlDB.Exec(t, `IMPORT TABLE t (s STRING) DELIMITED DATA ($1, $1)`, srv.URL)
+		sqlDB.Exec(t, `CREATE TABLE t (s STRING)`)
+		sqlDB.Exec(t, `IMPORT INTO t DELIMITED DATA ($1, $1)`, srv.URL)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1"}, {"1"}})
 	})
 }
@@ -1714,20 +1728,20 @@ func TestImportRowLimit(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-
+			defer sqlDB.Exec(t, `DROP TABLE IF EXISTS t`)
 			data = test.data
-			importTableQuery := fmt.Sprintf(`IMPORT TABLE t (%s) %s DATA ($1) %s`, test.create, test.typ, test.with)
+			importIntoQuery := fmt.Sprintf(`IMPORT INTO t %s DATA ($1) %s`, test.typ, test.with)
 
 			if test.err != "" {
-				sqlDB.ExpectErr(t, test.err, importTableQuery, srv.URL)
-
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
+				sqlDB.ExpectErr(t, test.err, importIntoQuery, srv.URL)
 			} else {
 				if test.typ == "CSV" || test.typ == "AVRO" || test.typ == "DELIMITED" {
-					sqlDB.Exec(t, importTableQuery, srv.URL)
+					sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
+					sqlDB.Exec(t, importIntoQuery, srv.URL)
 
 					// Ensure that the table data is as we expect.
 					sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
-					sqlDB.Exec(t, `DROP TABLE t`)
 
 				} else if test.typ == "PGDUMP" || test.typ == "MYSQLDUMP" {
 					sqlDB.Exec(t, `DROP TABLE IF EXISTS t, u`)
@@ -1844,7 +1858,8 @@ func TestImportRowLimit(t *testing.T) {
 		defer sqlDB.Exec(t, (`DROP DATABASE test`))
 
 		data = "pear\navocado\nwatermelon\nsugar"
-		sqlDB.Exec(t, `IMPORT TABLE t (s STRING) CSV DATA ($1, $2) WITH row_limit='2'`,
+		sqlDB.Exec(t, `CREATE TABLE t (s STRING)`)
+		sqlDB.Exec(t, `IMPORT INTO t CSV DATA ($1, $2) WITH row_limit='2'`,
 			srv.URL, srv.URL)
 
 		sqlDB.CheckQueryResults(t, `SELECT * FROM t`,
@@ -1854,23 +1869,17 @@ func TestImportRowLimit(t *testing.T) {
 	})
 }
 
-func TestImportCSVStmt(t *testing.T) {
+func TestFailedImportGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderShort(t)
-	skip.UnderRace(t, "takes >1min under race")
 
 	const nodes = 3
-
-	numFiles := nodes + 2
-	rowsPerFile := 1000
-	rowsPerRaceFile := 16
 
 	var forceFailure bool
 	blockGC := make(chan struct{})
 
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "csv")
+	baseDir := testutils.TestDataPath(t, "pgdump")
 	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		SQLMemoryPoolSize: 256 << 20,
 		ExternalIODir:     baseDir,
@@ -1901,6 +1910,97 @@ func TestImportCSVStmt(t *testing.T) {
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 
+	forceFailure = true
+	defer func() { forceFailure = false }()
+	defer gcjob.SetSmallMaxGCIntervalForTest()()
+	beforeImport, err := tree.MakeDTimestampTZ(tc.Server(0).Clock().Now().GoTime(), time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sqlDB.Exec(t, "CREATE DATABASE failedimport; USE failedimport;")
+	// Hit a failure during import.
+	sqlDB.ExpectErr(
+		t, `testing injected failure`,
+		fmt.Sprintf(`IMPORT TABLE simple FROM PGDUMP ('%s') WITH ignore_unsupported_statements`, "nodelocal://1/simple.sql"),
+	)
+	// Nudge the registry to quickly adopt the job.
+	tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+
+	// In the case of the test, the ID of the table that will be cleaned up due
+	// to the failed import will be one higher than the ID of the empty database
+	// it was created in.
+	dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "failedimport")
+	tableID := descpb.ID(dbID + 1)
+	var td catalog.TableDescriptor
+	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		td, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Ensure that we have garbage written to the descriptor that we want to
+	// clean up.
+	tests.CheckKeyCount(t, kvDB, td.TableSpan(keys.SystemSQLCodec), 87)
+
+	// Allow GC to progress.
+	close(blockGC)
+	// Ensure that a GC job was created, and wait for it to finish.
+	doneGCQuery := fmt.Sprintf(
+		"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = '%s' AND status = '%s' AND created > %s",
+		"SCHEMA CHANGE GC", jobs.StatusSucceeded, beforeImport.String(),
+	)
+	sqlDB.CheckQueryResultsRetry(t, doneGCQuery, [][]string{{"1"}})
+	// Expect there are no more KVs for this span.
+	tests.CheckKeyCount(t, kvDB, td.TableSpan(keys.SystemSQLCodec), 0)
+}
+
+// Verify that a failed import will clean up after itself. This means:
+//  - Delete the garbage data that it partially imported.
+//  - Delete the table descriptor for the table that was created during the
+//  import.
+func TestImportCSVStmt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderShort(t)
+	skip.UnderRace(t, "takes >1min under race")
+
+	const nodes = 3
+
+	numFiles := nodes + 2
+	rowsPerFile := 1000
+	rowsPerRaceFile := 16
+
+	var forceFailure bool
+
+	ctx := context.Background()
+	baseDir := testutils.TestDataPath(t, "csv")
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		SQLMemoryPoolSize: 256 << 20,
+		ExternalIODir:     baseDir,
+	}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+
+	for i := range tc.Servers {
+		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*importResumer)
+				r.testingKnobs.afterImport = func(_ backupccl.RowCount) error {
+					if forceFailure {
+						return errors.New("testing injected failure")
+					}
+					return nil
+				}
+				return r
+			},
+		}
+	}
+
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+
 	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 	if util.RaceEnabled {
 		// This test takes a while with the race detector, so reduce the number of
@@ -1909,139 +2009,112 @@ func TestImportCSVStmt(t *testing.T) {
 		rowsPerFile = rowsPerRaceFile
 	}
 
-	// Table schema used in IMPORT TABLE tests.
-	schema := []interface{}{"nodelocal://0/table"}
 	empty := []string{"'nodelocal://0/empty.csv'"}
-	emptySchema := []interface{}{"nodelocal://0/empty.schema"}
 
 	// Support subtests by keeping track of the number of jobs that are executed.
 	testNum := -1
 	expectedRows := numFiles * rowsPerFile
 	for i, tc := range []struct {
-		name    string
-		query   string        // must have one `%s` for the files list.
-		args    []interface{} // will have backupPath appended
-		files   []string
-		jobOpts string
-		err     string
+		name        string
+		createQuery string
+		query       string // must have one `%s` for the files list.
+		files       []string
+		jobOpts     string
+		err         string
 	}{
 		{
-			"schema-in-file",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
-			schema,
-			testFiles.files,
-			``,
-			"",
-		},
-		{
-			"schema-in-file-intodb",
-			`IMPORT TABLE csv1.t CREATE USING $1 CSV DATA (%s)`,
-			schema,
-			testFiles.files,
-			``,
-			"",
-		},
-		{
-			"schema-in-query",
-			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s)`,
-			nil,
-			testFiles.files,
-			``,
-			"",
-		},
-		{
-			"schema-in-query-opts",
-			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2'`,
-			nil,
+			"query-opts",
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2'`,
 			testFiles.filesWithOpts,
 			` WITH comment = '#', delimiter = '|', "nullif" = '', skip = '2'`,
 			"",
 		},
 		{
 			// Force some SST splits.
-			"schema-in-file-sstsize",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH sstsize = '10K'`,
-			schema,
+			"file-sstsize",
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s) WITH sstsize = '10K'`,
 			testFiles.files,
 			` WITH sstsize = '10K'`,
 			"",
 		},
 		{
 			"empty-file",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
-			schema,
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s)`,
 			empty,
 			``,
 			"",
 		},
 		{
 			"empty-with-files",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
-			schema,
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s)`,
 			append(empty, testFiles.files...),
 			``,
 			"",
 		},
 		{
-			"schema-in-file-auto-decompress",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'auto'`,
-			schema,
+			"auto-decompress",
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'auto'`,
 			testFiles.files,
 			` WITH decompress = 'auto'`,
 			"",
 		},
 		{
-			"schema-in-file-no-decompress",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'none'`,
-			schema,
+			"no-decompress",
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'none'`,
 			testFiles.files,
 			` WITH decompress = 'none'`,
 			"",
 		},
 		{
-			"schema-in-file-explicit-gzip",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'gzip'`,
-			schema,
+			"explicit-gzip",
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'gzip'`,
 			testFiles.gzipFiles,
 			` WITH decompress = 'gzip'`,
 			"",
 		},
 		{
-			"schema-in-file-auto-gzip",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'auto'`,
-			schema,
+			"auto-gzip",
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'auto'`,
 			testFiles.bzipFiles,
 			` WITH decompress = 'auto'`,
 			"",
 		},
 		{
-			"schema-in-file-implicit-gzip",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
-			schema,
+			"implicit-gzip",
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s)`,
 			testFiles.gzipFiles,
 			``,
 			"",
 		},
 		{
-			"schema-in-file-explicit-bzip",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'bzip'`,
-			schema,
+			"explicit-bzip",
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'bzip'`,
 			testFiles.bzipFiles,
 			` WITH decompress = 'bzip'`,
 			"",
 		},
 		{
-			"schema-in-file-auto-bzip",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'auto'`,
-			schema,
+			"auto-bzip",
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'auto'`,
 			testFiles.bzipFiles,
 			` WITH decompress = 'auto'`,
 			"",
 		},
 		{
-			"schema-in-file-implicit-bzip",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
-			schema,
+			"implicit-bzip",
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s)`,
 			testFiles.bzipFiles,
 			``,
 			"",
@@ -2049,40 +2122,40 @@ func TestImportCSVStmt(t *testing.T) {
 		// NB: successes above, failures below, because we check the i-th job.
 		{
 			"bad-opt-name",
-			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH foo = 'bar'`,
-			nil,
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s) WITH foo = 'bar'`,
 			testFiles.files,
 			``,
 			"invalid option \"foo\"",
 		},
 		{
 			"primary-key-dup",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
-			schema,
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s)`,
 			testFiles.filesWithDups,
 			``,
 			"duplicate key in primary index",
 		},
 		{
 			"no-database",
-			`IMPORT TABLE nonexistent.t CREATE USING $1 CSV DATA (%s)`,
-			schema,
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO nonexistent.t CSV DATA (%s)`,
 			testFiles.files,
 			``,
 			`database does not exist: "nonexistent.t"`,
 		},
 		{
 			"into-db-fails",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH into_db = 'test'`,
-			schema,
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s) WITH into_db = 'test'`,
 			testFiles.files,
 			``,
 			`invalid option "into_db"`,
 		},
 		{
-			"schema-in-file-no-decompress-gzip",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'none'`,
-			schema,
+			"no-decompress-gzip",
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'none'`,
 			testFiles.gzipFiles,
 			` WITH decompress = 'none'`,
 			// This returns different errors for `make test` and `make testrace` but
@@ -2090,28 +2163,20 @@ func TestImportCSVStmt(t *testing.T) {
 			`field`,
 		},
 		{
-			"schema-in-file-decompress-gzip",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'gzip'`,
-			schema,
+			"decompress-gzip",
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'gzip'`,
 			testFiles.files,
 			` WITH decompress = 'gzip'`,
 			"gzip: invalid header",
 		},
 		{
 			"csv-with-invalid-delimited-option",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH fields_delimited_by = '|'`,
-			schema,
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s) WITH fields_delimited_by = '|'`,
 			testFiles.files,
 			``,
 			"invalid option",
-		},
-		{
-			"empty-schema-in-file",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
-			emptySchema,
-			testFiles.files,
-			``,
-			"expected 1 create table statement",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2127,18 +2192,22 @@ func TestImportCSVStmt(t *testing.T) {
 				rows, idx, bytes int
 			}
 
+			if tc.createQuery != "" {
+				sqlDB.Exec(t, tc.createQuery)
+			}
+
 			var result int
 			query := fmt.Sprintf(tc.query, strings.Join(tc.files, ", "))
 			testNum++
 			if tc.err != "" {
-				sqlDB.ExpectErr(t, tc.err, query, tc.args...)
+				sqlDB.ExpectErr(t, tc.err, query)
 				return
 			}
-			sqlDB.QueryRow(t, query, tc.args...).Scan(
+			sqlDB.QueryRow(t, query).Scan(
 				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes,
 			)
 
-			jobPrefix := fmt.Sprintf(`IMPORT TABLE %s.public.t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))`, intodb)
+			jobPrefix := fmt.Sprintf(`IMPORT INTO %s.public.t`, intodb)
 
 			var intodbID descpb.ID
 			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = '%s'`,
@@ -2206,105 +2275,41 @@ func TestImportCSVStmt(t *testing.T) {
 	// Verify unique_rowid is replaced for tables without primary keys.
 	t.Run("unique_rowid", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE pk")
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE pk.t (a INT8, b STRING) CSV DATA (%s)`, strings.Join(testFiles.files, ", ")))
+		sqlDB.Exec(t, `CREATE TABLE pk.t (a INT8, b STRING)`)
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO pk.t CSV DATA (%s)`, strings.Join(testFiles.files, ", ")))
 		// Verify the rowids are being generated as expected.
 		sqlDB.CheckQueryResults(t,
 			`SELECT count(*) FROM pk.t`,
 			sqlDB.QueryStr(t, `
-				SELECT count(*) FROM
-					(SELECT * FROM
-						(SELECT generate_series(0, $1 - 1) file),
-						(SELECT generate_series(1, $2) rownum)
-					)
-			`, numFiles, rowsPerFile),
+					SELECT count(*) FROM
+						(SELECT * FROM
+							(SELECT generate_series(0, $1 - 1) file),
+							(SELECT generate_series(1, $2) rownum)
+						)
+				`, numFiles, rowsPerFile),
 		)
 	})
 
 	// Verify a failed IMPORT won't prevent a second IMPORT.
 	t.Run("checkpoint-leftover", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE checkpoint; USE checkpoint")
+		sqlDB.Exec(t, `CREATE TABLE t (a INT8 PRIMARY KEY, b STRING)`)
 
 		// Specify wrong number of columns.
 		sqlDB.ExpectErr(
-			t, "expected 1 fields, got 2",
-			fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY) CSV DATA (%s)`, testFiles.files[0]),
-		)
-
-		// Specify wrong table name; still shouldn't leave behind a checkpoint file.
-		sqlDB.ExpectErr(
-			t, `file specifies a schema for table t`,
-			fmt.Sprintf(`IMPORT TABLE bad CREATE USING $1 CSV DATA (%s)`, testFiles.files[0]), schema[0],
+			t, "error parsing row 1: expected 1 fields, got 2",
+			fmt.Sprintf(`IMPORT INTO t (a) CSV DATA (%s)`, testFiles.files[0]),
 		)
 
 		// Expect it to succeed with correct columns.
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[0]))
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t CSV DATA (%s)`, testFiles.files[0]))
 
 		// A second attempt should fail fast. A "slow fail" is the error message
 		// "restoring table desc and namespace entries: table already exists".
 		sqlDB.ExpectErr(
-			t, `relation "t" already exists`,
-			fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[0]),
+			t, `ingested key collides with an existing one`,
+			fmt.Sprintf(`IMPORT INTO t CSV DATA (%s)`, testFiles.files[0]),
 		)
-	})
-
-	// Verify that a failed import will clean up after itself. This means:
-	//  - Delete the garbage data that it partially imported.
-	//  - Delete the table descriptor for the table that was created during the
-	//  import.
-	t.Run("failed-import-gc", func(t *testing.T) {
-		forceFailure = true
-		defer func() { forceFailure = false }()
-		defer gcjob.SetSmallMaxGCIntervalForTest()()
-		beforeImport, err := tree.MakeDTimestampTZ(tc.Server(0).Clock().Now().GoTime(), time.Millisecond)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		sqlDB.Exec(t, "CREATE DATABASE failedimport; USE failedimport;")
-		// Hit a failure during import.
-		sqlDB.ExpectErr(
-			t, `testing injected failure`,
-			fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[1]),
-		)
-		// Nudge the registry to quickly adopt the job.
-		tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-
-		// In the case of the test, the ID of the table that will be cleaned up due
-		// to the failed import will be one higher than the ID of the empty database
-		// it was created in.
-		dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "failedimport")
-		tableID := descpb.ID(dbID + 1)
-		var td catalog.TableDescriptor
-		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			td, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableID)
-			return err
-		}); err != nil {
-			t.Fatal(err)
-		}
-		// Ensure that we have garbage written to the descriptor that we want to
-		// clean up.
-		tests.CheckKeyCount(t, kvDB, td.TableSpan(keys.SystemSQLCodec), rowsPerFile)
-
-		// Allow GC to progress.
-		close(blockGC)
-		// Ensure that a GC job was created, and wait for it to finish.
-		doneGCQuery := fmt.Sprintf(
-			"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = '%s' AND status = '%s' AND created > %s",
-			"SCHEMA CHANGE GC", jobs.StatusSucceeded, beforeImport.String(),
-		)
-		sqlDB.CheckQueryResultsRetry(t, doneGCQuery, [][]string{{"1"}})
-		// Expect there are no more KVs for this span.
-		tests.CheckKeyCount(t, kvDB, td.TableSpan(keys.SystemSQLCodec), 0)
-		// Expect that the table descriptor is deleted.
-		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			_, err := catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableID)
-			if !testutils.IsError(err, "descriptor not found") {
-				return err
-			}
-			return nil
-		}); err != nil {
-			t.Fatal(err)
-		}
 	})
 
 	// Test basic role based access control. Users who have the admin role should
@@ -2323,22 +2328,13 @@ func TestImportCSVStmt(t *testing.T) {
 		}
 		defer testuser.Close()
 
-		t.Run("IMPORT TABLE", func(t *testing.T) {
-			if _, err := testuser.Exec(fmt.Sprintf(`IMPORT TABLE rbac_superuser (a INT8 PRIMARY KEY,
-b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
-				t.Fatal(err)
-			}
-		})
-
-		t.Run("IMPORT INTO", func(t *testing.T) {
-			if _, err := testuser.Exec("CREATE TABLE rbac_into_superuser (a INT8 PRIMARY KEY, " +
-				"b STRING)"); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO rbac_into_superuser (a, b) CSV DATA (%s)`, testFiles.files[0])); err != nil {
-				t.Fatal(err)
-			}
-		})
+		if _, err := testuser.Exec("CREATE TABLE rbac_into_superuser (a INT8 PRIMARY KEY, " +
+			"b STRING)"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO rbac_into_superuser (a, b) CSV DATA (%s)`, testFiles.files[0])); err != nil {
+			t.Fatal(err)
+		}
 	})
 
 	// Verify DEFAULT columns and SERIAL are allowed but not evaluated.
@@ -2355,17 +2351,20 @@ b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 		sqlDB.Exec(t, `SET DATABASE = d`)
 
 		const (
-			query = `IMPORT TABLE t (
-				a SERIAL8,
-				b INT8 DEFAULT unique_rowid(),
-				c STRING DEFAULT 's',
-				d SERIAL8,
-				e INT8 DEFAULT unique_rowid(),
-				f STRING DEFAULT 's',
-				PRIMARY KEY (a, b, c)
-			) CSV DATA ($1)`
+			create = `CREATE TABLE t (
+					a SERIAL8,
+					b INT8 DEFAULT unique_rowid(),
+					c STRING DEFAULT 's',
+					d SERIAL8,
+					e INT8 DEFAULT unique_rowid(),
+					f STRING DEFAULT 's',
+					PRIMARY KEY (a, b, c)
+				)`
+			query  = `IMPORT INTO t CSV DATA ($1)`
 			nullif = ` WITH nullif=''`
 		)
+
+		sqlDB.Exec(t, create)
 
 		data = ",5,e,7,,"
 		t.Run(data, func(t *testing.T) {
@@ -2421,8 +2420,8 @@ b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 		data := []byte("1,2")
 		require.NoError(t, cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(data)))
 
-		sqlDB.Exec(t, fmt.Sprintf("IMPORT TABLE foo (id INT PRIMARY KEY, "+
-			"id2 INT) CSV DATA ('%s')", userfileURI))
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, id2 INT)`)
+		sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO foo CSV DATA ('%s')", userfileURI))
 		sqlDB.CheckQueryResults(t, "SELECT * FROM foo", sqlDB.QueryStr(t, "SELECT 1, 2"))
 
 		require.NoError(t, userfileStorage.Delete(ctx, ""))
@@ -2437,8 +2436,8 @@ b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 		data := []byte("1,2")
 		require.NoError(t, cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(data)))
 
-		sqlDB.Exec(t, fmt.Sprintf("IMPORT TABLE baz (id INT PRIMARY KEY, "+
-			"id2 INT) CSV DATA ('%s')", userfileURI))
+		sqlDB.Exec(t, `CREATE TABLE baz (id INT PRIMARY KEY, id2 INT)`)
+		sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO baz CSV DATA ('%s')", userfileURI))
 		sqlDB.CheckQueryResults(t, "SELECT * FROM baz", sqlDB.QueryStr(t, "SELECT 1, 2"))
 
 		require.NoError(t, userfileStorage.Delete(ctx, ""))
@@ -2448,9 +2447,10 @@ b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 		sqlDB.Exec(t, `USE defaultdb`)
 		sqlDB.Exec(t, `CREATE USER foo`)
 		sqlDB.Exec(t, `GRANT ALL ON DATABASE defaultdb TO foo`)
+		sqlDB.Exec(t, `CREATE TABLE import_with_db_privs (a INT8 PRIMARY KEY, b STRING)`)
 
 		sqlDB.Exec(t, fmt.Sprintf(`
-	IMPORT TABLE import_with_db_privs (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`,
+		IMPORT INTO import_with_db_privs CSV DATA (%s)`,
 			testFiles.files[0]))
 
 		// Verify correct number of rows via COUNT.
@@ -2492,20 +2492,30 @@ func TestImportFeatureFlag(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
+	data := `
+CREATE TABLE t (id INT);
+INSERT INTO foo VALUES (1);
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+
 	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 
 	// Feature flag is off — test that IMPORT and IMPORT INTO surface error.
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.import.enabled = FALSE`)
 	sqlDB.ExpectErr(t, `feature IMPORT was disabled by the database administrator`,
-		fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[0]))
+		fmt.Sprintf(`IMPORT TABLE t FROM PGDUMP '%s'`, srv.URL))
 	sqlDB.Exec(t, `CREATE TABLE feature_flags (a INT8 PRIMARY KEY, b STRING)`)
 	sqlDB.ExpectErr(t, `feature IMPORT was disabled by the database administrator`,
 		fmt.Sprintf(`IMPORT INTO feature_flags (a, b) CSV DATA (%s)`, testFiles.files[0]))
 
 	// Feature flag is on — test that IMPORT and IMPORT INTO do not error.
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.import.enabled = TRUE`)
-	sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`,
-		testFiles.files[0]))
+	sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t FROM PGDUMP '%s'`, srv.URL))
 	sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO feature_flags (a, b) CSV DATA (%s)`, testFiles.files[0]))
 }
 
@@ -2515,7 +2525,9 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 	const nodes = 3
 
 	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "pgdump")
 	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		ExternalIODir:     baseDir,
 		SQLMemoryPoolSize: 256 << 20,
 	}})
 	defer tc.Stopper().Stop(ctx)
@@ -2539,23 +2551,22 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 	filename := "path/to/file"
 	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, filename)
 
-	writeToUserfile := func(filename string) {
+	writeToUserfile := func(filename, data string) {
 		// Write to userfile storage now that testuser has CREATE privileges.
 		ie := tc.Server(0).InternalExecutor().(*sql.InternalExecutor)
 		fileTableSystem1, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
 			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, security.TestUserName(), ie, tc.Server(0).DB())
 		require.NoError(t, err)
-		require.NoError(t, cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte("1,aaa"))))
+		require.NoError(t, cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte(data))))
 	}
 
 	t.Run("import-RBAC", func(t *testing.T) {
-		userfileDest := dest + "/" + t.Name()
+		userFileDest := dest + "/" + t.Name()
 		testuser := startTestUser()
 
 		// User has no privileges at this point. Check that an IMPORT requires
 		// CREATE privileges on the database.
-		_, err := testuser.Exec(fmt.Sprintf(`IMPORT TABLE rbac_import_priv (a INT8 PRIMARY KEY,
-b STRING) CSV DATA ('%s')`, userfileDest))
+		_, err := testuser.Exec(fmt.Sprintf(`IMPORT TABLE simple FROM PGDUMP '%s'`, userFileDest))
 		require.True(t, testutils.IsError(err, "testuser does not have CREATE privilege on database"))
 
 		// Grant user CREATE privilege on the database.
@@ -2569,11 +2580,12 @@ b STRING) CSV DATA ('%s')`, userfileDest))
 		defer testuser.Close()
 
 		// Write to userfile now that the user has CREATE privileges.
-		writeToUserfile(t.Name())
+		writeToUserfile(t.Name(), `
+CREATE TABLE simple (id INT);
+`)
 
 		// Import should now have the required privileges to start the job.
-		_, err = testuser.Exec(fmt.Sprintf(`IMPORT TABLE rbac_import_priv (a INT8 PRIMARY KEY,
-b STRING) CSV DATA ('%s')`, userfileDest))
+		_, err = testuser.Exec(fmt.Sprintf(`IMPORT TABLE simple FROM PGDUMP '%s'`, userFileDest))
 		require.NoError(t, err)
 	})
 
@@ -2605,7 +2617,7 @@ b) CSV DATA ('%s')`, userFileDest))
 		defer testuser.Close()
 
 		// Write to userfile now that the user has CREATE privileges.
-		writeToUserfile(t.Name())
+		writeToUserfile(t.Name(), "1,aaa")
 
 		// Import should now have the required privileges to start the job.
 		_, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO rbac_import_into_priv (a,b) CSV DATA ('%s')`,
@@ -2638,6 +2650,7 @@ func TestURIRequiresAdminRole(t *testing.T) {
 	testuser, err := gosql.Open("postgres", pgURL.String())
 	require.NoError(t, err)
 	defer testuser.Close()
+	rootDB.Exec(t, `CREATE TABLE foo (id INT)`)
 
 	for _, tc := range []struct {
 		name          string
@@ -2691,7 +2704,7 @@ func TestURIRequiresAdminRole(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name+"-via-import", func(t *testing.T) {
-			_, err := testuser.Exec(fmt.Sprintf(`IMPORT TABLE foo (id INT) CSV DATA ('%s')`, tc.uri))
+			_, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO foo CSV DATA ('%s')`, tc.uri))
 			if tc.requiresAdmin {
 				require.True(t, testutils.IsError(err, "only users with the admin role are allowed to IMPORT"))
 			} else {
@@ -2732,19 +2745,22 @@ func TestExportImportRoundTrip(t *testing.T) {
 		// with a unique directory name per run.
 		{
 			stmts: `EXPORT INTO CSV 'nodelocal://0/%[1]s' FROM SELECT ARRAY['a', 'b', 'c'];
-							IMPORT TABLE t (x TEXT[]) CSV DATA ('nodelocal://0/%[1]s/export*-n*.0.csv')`,
+							CREATE TABLE t (x TEXT[]);
+							IMPORT INTO t CSV DATA ('nodelocal://0/%[1]s/export*-n*.0.csv')`,
 			tbl:      "t",
 			expected: `SELECT ARRAY['a', 'b', 'c']`,
 		},
 		{
 			stmts: `EXPORT INTO CSV 'nodelocal://0/%[1]s' FROM SELECT ARRAY[b'abc', b'\141\142\143', b'\x61\x62\x63'];
-							IMPORT TABLE t (x BYTES[]) CSV DATA ('nodelocal://0/%[1]s/export*-n*.0.csv')`,
+							CREATE TABLE t (x BYTES[]);
+							IMPORT INTO t CSV DATA ('nodelocal://0/%[1]s/export*-n*.0.csv')`,
 			tbl:      "t",
 			expected: `SELECT ARRAY[b'abc', b'\141\142\143', b'\x61\x62\x63']`,
 		},
 		{
 			stmts: `EXPORT INTO CSV 'nodelocal://0/%[1]s' FROM SELECT 'dog' COLLATE en;
-							IMPORT TABLE t (x STRING COLLATE en) CSV DATA ('nodelocal://0/%[1]s/export*-n*.0.csv')`,
+							CREATE TABLE t (x STRING COLLATE en);
+							IMPORT INTO t CSV DATA ('nodelocal://0/%[1]s/export*-n*.0.csv')`,
 			tbl:      "t",
 			expected: `SELECT 'dog' COLLATE en`,
 		},
@@ -3628,10 +3644,10 @@ func benchUserUpload(b *testing.B, uploadBaseURI string) {
 	b.SetBytes(numBytes)
 	b.ResetTimer()
 
+	sqlDB.Exec(b, `CREATE TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))`)
 	sqlDB.Exec(b,
 		fmt.Sprintf(
-			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))
-			CSV DATA ('%s%s')`,
+			`IMPORT INTO t CSV DATA ('%s%s')`,
 			uploadBaseURI, testFileBase,
 		))
 }
@@ -4622,54 +4638,6 @@ INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
 			expectedResults: [][]string{{"1", "2"}, {"3", "4"}},
 		},
 		{
-			into:          false,
-			name:          "import-table-csv",
-			data:          "35,23\n67,10",
-			create:        "a INT, c INT AS (a + b) STORED, b INT",
-			format:        "CSV",
-			expectedError: "to use computed columns, use IMPORT INTO",
-		},
-		{
-			into:          false,
-			name:          "import-table-csv-virtual",
-			data:          "35,23\n67,10",
-			create:        "a INT, c INT AS (a + b) VIRTUAL, b INT",
-			format:        "CSV",
-			expectedError: "to import into a table with virtual computed columns, use IMPORT INTO",
-		},
-		{
-			into:          false,
-			name:          "import-table-csv-expression-index",
-			data:          "35,23\n67,10",
-			create:        "a INT, b INT, INDEX ((a + b))",
-			format:        "CSV",
-			expectedError: "to import into a table with expression indexes, use IMPORT INTO",
-		},
-		{
-			into:            false,
-			name:            "import-table-avro",
-			data:            avroData,
-			create:          "a INT, c INT AS (a + b) STORED, b INT",
-			format:          "AVRO",
-			expectedResults: [][]string{{"1", "3", "2"}, {"3", "7", "4"}},
-		},
-		{
-			into:          false,
-			name:          "import-table-avro-virtual",
-			data:          avroData,
-			create:        "a INT, c INT AS (a + b) VIRTUAL, b INT",
-			format:        "AVRO",
-			expectedError: "to import into a table with virtual computed columns, use IMPORT INTO",
-		},
-		{
-			into:          false,
-			name:          "import-table-avro-expression-index",
-			data:          avroData,
-			create:        "a INT, b INT, INDEX ((a + b))",
-			format:        "AVRO",
-			expectedError: "to import into a table with expression indexes, use IMPORT INTO",
-		},
-		{
 			into:            false,
 			name:            "pgdump",
 			data:            pgdumpData,
@@ -4687,12 +4655,7 @@ INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
 				importStmt = fmt.Sprintf(`IMPORT INTO users (%s) %s DATA (%q)`,
 					test.targetCols, test.format, srv.URL)
 			} else {
-				if test.format == "CSV" || test.format == "AVRO" {
-					importStmt = fmt.Sprintf(
-						`IMPORT TABLE users (%s) %s DATA (%q)`, test.create, test.format, srv.URL)
-				} else {
-					importStmt = fmt.Sprintf(`IMPORT %s (%q)`, test.format, srv.URL)
-				}
+				importStmt = fmt.Sprintf(`IMPORT %s (%q)`, test.format, srv.URL)
 			}
 			if test.expectedError != "" {
 				sqlDB.ExpectErr(t, test.expectedError, importStmt)
@@ -5076,7 +5039,8 @@ func TestImportWorkerFailure(t *testing.T) {
 		urls[i] = fmt.Sprintf("'%s/%d'", srv.URL, i)
 	}
 	csvURLs := strings.Join(urls, ", ")
-	query := fmt.Sprintf(`IMPORT TABLE t (i INT8 PRIMARY KEY) CSV DATA (%s) WITH sstsize = '1B'`, csvURLs)
+	sqlDB.Exec(t, `CREATE TABLE t (i INT8 PRIMARY KEY)`)
+	query := fmt.Sprintf(`IMPORT INTO t CSV DATA (%s) WITH sstsize = '1B'`, csvURLs)
 
 	errCh := make(chan error)
 	go func() {
@@ -5130,12 +5094,8 @@ func TestImportMVCCChecksums(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	sqlDB.Exec(t, `IMPORT TABLE d.t (
-		a INT8 PRIMARY KEY,
-		b INT8,
-		c INT8,
-		INDEX (b) STORING (c)
-	) CSV DATA ($1)`, srv.URL)
+	sqlDB.Exec(t, `CREATE TABLE d.t (a INT8 PRIMARY KEY, b INT8, c INT8, INDEX (b) STORING (c))`)
+	sqlDB.Exec(t, `IMPORT INTO d.t CSV DATA ($1)`, srv.URL)
 	sqlDB.Exec(t, `UPDATE d.t SET c = 2 WHERE a = 1`)
 }
 
@@ -5171,7 +5131,6 @@ func TestImportMysql(t *testing.T) {
 		query    string
 		args     []interface{}
 	}{
-		{`read data only`, expectSimple, `IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea) MYSQLDUMP DATA ($1)`, simple},
 		{`single table dump`, expectSimple, `IMPORT TABLE simple FROM MYSQLDUMP ($1)`, simple},
 		{`second table dump`, expectSecond, `IMPORT TABLE second FROM MYSQLDUMP ($1) WITH skip_foreign_keys`, second},
 		{`simple from multi`, expectSimple, `IMPORT TABLE simple FROM MYSQLDUMP ($1)`, multitable},
@@ -5315,14 +5274,24 @@ func TestImportDelimited(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
 	testRows, configs := getMysqlOutfileTestdata(t)
+	checkQueryResults := func(validationQuery string) {
+		for idx, row := range sqlDB.QueryStr(t, validationQuery) {
+			expected, actual := testRows[idx].s, row[1]
+			if expected == injectNull {
+				expected = "NULL"
+			}
+
+			if expected != actual {
+				t.Fatalf("expected row i=%s string to be %q, got %q", row[0], expected, actual)
+			}
+		}
+	}
 
 	for i, cfg := range configs {
 		t.Run(cfg.name, func(t *testing.T) {
 			var opts []interface{}
 
-			cmd := fmt.Sprintf(`IMPORT TABLE test%d (i INT8 PRIMARY KEY, s text, b bytea) DELIMITED DATA ($1)`, i)
 			opts = append(opts, fmt.Sprintf("nodelocal://0%s", strings.TrimPrefix(cfg.filename, baseDir)))
-
 			var flags []string
 			if cfg.opts.RowSeparator != '\n' {
 				opts = append(opts, string(cfg.opts.RowSeparator))
@@ -5340,20 +5309,6 @@ func TestImportDelimited(t *testing.T) {
 				opts = append(opts, string(cfg.opts.Escape))
 				flags = append(flags, fmt.Sprintf("fields_escaped_by = $%d", len(opts)))
 			}
-			if len(flags) > 0 {
-				cmd += " WITH " + strings.Join(flags, ", ")
-			}
-			sqlDB.Exec(t, cmd, opts...)
-			for idx, row := range sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM test%d ORDER BY i", i)) {
-				expected, actual := testRows[idx].s, row[1]
-				if expected == injectNull {
-					expected = "NULL"
-				}
-
-				if expected != actual {
-					t.Fatalf("expected row i=%s string to be %q, got %q", row[0], expected, actual)
-				}
-			}
 			// Test if IMPORT INTO works here by testing that they produce the same
 			// results as IMPORT TABLE.
 			t.Run("import-into", func(t *testing.T) {
@@ -5364,9 +5319,7 @@ func TestImportDelimited(t *testing.T) {
 					intoCmd += " WITH " + strings.Join(flags, ", ")
 				}
 				sqlDB.Exec(t, intoCmd, opts...)
-				importStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM test%d ORDER BY i", i))
-				intoStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM into%d ORDER BY i", i))
-				require.Equal(t, importStr, intoStr)
+				checkQueryResults(fmt.Sprintf(`SELECT i, s, b FROM into%d ORDER BY i`, i))
 			})
 			t.Run("import-into-target-cols-reordered", func(t *testing.T) {
 				defer sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE into%d`, i))
@@ -5376,12 +5329,7 @@ func TestImportDelimited(t *testing.T) {
 					intoCmd += " WITH " + strings.Join(flags, ", ")
 				}
 				sqlDB.Exec(t, intoCmd, opts...)
-				colNames := []string{"i", "s", "b"}
-				for _, colName := range colNames {
-					importStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT (%s) FROM test%d ORDER BY i", colName, i))
-					intoStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT (%s) FROM into%d ORDER BY i", colName, i))
-					require.Equal(t, importStr, intoStr)
-				}
+				checkQueryResults(fmt.Sprintf(`SELECT i, s, b FROM into%d ORDER BY i`, i))
 			})
 		})
 	}
@@ -5407,11 +5355,35 @@ func TestImportPgCopy(t *testing.T) {
 
 	testRows, configs := getPgCopyTestdata(t)
 
+	checkQueryResults := func(validationQuery string) {
+		for idx, row := range sqlDB.QueryStr(t, validationQuery) {
+			{
+				expected, actual := testRows[idx].s, row[1]
+				if expected == injectNull {
+					expected = "NULL"
+				}
+
+				if expected != actual {
+					t.Fatalf("expected row i=%s string to be %q, got %q", row[0], expected, actual)
+				}
+			}
+
+			{
+				expected, actual := testRows[idx].b, row[2]
+				if expected == nil {
+					expected = []byte("NULL")
+				}
+				if !bytes.Equal(expected, []byte(actual)) {
+					t.Fatalf("expected rowi=%s bytes to be %q, got %q", row[0], expected, actual)
+				}
+			}
+		}
+	}
+
 	for i, cfg := range configs {
 		t.Run(cfg.name, func(t *testing.T) {
 			var opts []interface{}
 
-			cmd := fmt.Sprintf(`IMPORT TABLE test%d (i INT8 PRIMARY KEY, s text, b bytea) PGCOPY DATA ($1)`, i)
 			opts = append(opts, fmt.Sprintf("nodelocal://0%s", strings.TrimPrefix(cfg.filename, baseDir)))
 
 			var flags []string
@@ -5423,33 +5395,6 @@ func TestImportPgCopy(t *testing.T) {
 				opts = append(opts, cfg.opts.Null)
 				flags = append(flags, fmt.Sprintf("nullif = $%d", len(opts)))
 			}
-			if len(flags) > 0 {
-				cmd += " WITH " + strings.Join(flags, ", ")
-			}
-			t.Log(cmd, opts)
-			sqlDB.Exec(t, cmd, opts...)
-			for idx, row := range sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM test%d ORDER BY i", i)) {
-				{
-					expected, actual := testRows[idx].s, row[1]
-					if expected == injectNull {
-						expected = "NULL"
-					}
-
-					if expected != actual {
-						t.Fatalf("expected row i=%s string to be %q, got %q", row[0], expected, actual)
-					}
-				}
-
-				{
-					expected, actual := testRows[idx].b, row[2]
-					if expected == nil {
-						expected = []byte("NULL")
-					}
-					if !bytes.Equal(expected, []byte(actual)) {
-						t.Fatalf("expected rowi=%s bytes to be %q, got %q", row[0], expected, actual)
-					}
-				}
-			}
 			// Test if IMPORT INTO works here by testing that they produce the same
 			// results as IMPORT TABLE.
 			t.Run("import-into", func(t *testing.T) {
@@ -5460,9 +5405,7 @@ func TestImportPgCopy(t *testing.T) {
 					intoCmd += " WITH " + strings.Join(flags, ", ")
 				}
 				sqlDB.Exec(t, intoCmd, opts...)
-				importStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM test%d ORDER BY i", i))
-				intoStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM into%d ORDER BY i", i))
-				require.Equal(t, importStr, intoStr)
+				checkQueryResults(fmt.Sprintf(`SELECT * FROM into%d ORDER BY i`, i))
 			})
 			t.Run("import-into-target-cols-reordered", func(t *testing.T) {
 				defer sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE into%d`, i))
@@ -5472,12 +5415,7 @@ func TestImportPgCopy(t *testing.T) {
 					intoCmd += " WITH " + strings.Join(flags, ", ")
 				}
 				sqlDB.Exec(t, intoCmd, opts...)
-				colNames := []string{"i", "s", "b"}
-				for _, colName := range colNames {
-					importStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT (%s) FROM test%d ORDER BY i", colName, i))
-					intoStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT (%s) FROM into%d ORDER BY i", colName, i))
-					require.Equal(t, importStr, intoStr)
-				}
+				checkQueryResults(fmt.Sprintf(`SELECT i, s, b FROM into%d ORDER BY i`, i))
 			})
 		})
 	}
@@ -5516,19 +5454,6 @@ func TestImportPgDump(t *testing.T) {
 		query    string
 		args     []interface{}
 	}{
-		{
-			`read data only`,
-			expectSimple,
-			`IMPORT TABLE simple (
-				i INT8,
-				s text,
-				b bytea,
-				CONSTRAINT simple_pkey PRIMARY KEY (i),
-				UNIQUE INDEX simple_b_s_idx (b, s),
-				INDEX simple_s_idx (s)
-			) PGDUMP DATA ($1) WITH ignore_unsupported_statements`,
-			simple,
-		},
 		{`single table dump`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1) WITH ignore_unsupported_statements`, simple},
 		{`second table dump`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1) WITH ignore_unsupported_statements`, second},
 		{`simple from multi`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1) WITH ignore_unsupported_statements`, multitable},
@@ -6320,13 +6245,6 @@ func TestImportAvro(t *testing.T) {
 	simpleJSON := fmt.Sprintf("nodelocal://0/%s", "simple-sorted.json")
 	simplePrettyJSON := fmt.Sprintf("nodelocal://0/%s", "simple-sorted.pjson")
 	simpleBinRecords := fmt.Sprintf("nodelocal://0/%s", "simple-sorted-records.avro")
-	tableSchema := fmt.Sprintf("nodelocal://0/%s", "simple-schema.sql")
-
-	data, err := ioutil.ReadFile("testdata/avro/simple-schema.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	simpleSchema := string(data)
 
 	tests := []struct {
 		name   string
@@ -6335,11 +6253,6 @@ func TestImportAvro(t *testing.T) {
 		args   []interface{}
 		err    bool
 	}{
-		{
-			name: "import-ocf",
-			sql:  "IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea) AVRO DATA ($1)",
-			args: []interface{}{simpleOcf},
-		},
 		{
 			name:   "import-ocf-into-table",
 			sql:    "IMPORT INTO simple AVRO DATA ($1)",
@@ -6353,14 +6266,10 @@ func TestImportAvro(t *testing.T) {
 			args:   []interface{}{simpleOcf},
 		},
 		{
-			name: "import-ocf-create-using",
-			sql:  "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
-			args: []interface{}{tableSchema, simpleOcf},
-		},
-		{
-			name: "import-json-records",
-			sql:  "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2) WITH data_as_json_records, schema_uri=$3",
-			args: []interface{}{tableSchema, simpleJSON, simpleSchemaURI},
+			name:   "import-json-records",
+			sql:    "IMPORT INTO simple AVRO DATA ($1) WITH data_as_json_records, schema_uri=$2",
+			create: "CREATE TABLE simple (i INT8, s text, b bytea)",
+			args:   []interface{}{simpleJSON, simpleSchemaURI},
 		},
 		{
 			name:   "import-json-records-into-table-ignores-extra-fields",
@@ -6369,47 +6278,43 @@ func TestImportAvro(t *testing.T) {
 			args:   []interface{}{simpleJSON, simpleSchemaURI},
 		},
 		{
-			name: "import-json-records-inline-schema",
-			sql:  "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2) WITH data_as_json_records, schema=$3",
-			args: []interface{}{tableSchema, simpleJSON, simpleSchema},
+			name:   "import-json-pretty-printed-records",
+			sql:    "IMPORT INTO simple AVRO DATA ($1) WITH data_as_json_records, schema_uri=$2",
+			create: "CREATE TABLE simple (i INT8 PRIMARY KEY)",
+			args:   []interface{}{simplePrettyJSON, simpleSchemaURI},
 		},
 		{
-			name: "import-json-pretty-printed-records",
-			sql:  "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2) WITH data_as_json_records, schema_uri=$3",
-			args: []interface{}{tableSchema, simplePrettyJSON, simpleSchemaURI},
+			name:   "import-avro-fragments",
+			sql:    "IMPORT INTO simple AVRO DATA ($1) WITH data_as_binary_records, records_terminated_by='', schema_uri=$2",
+			create: "CREATE TABLE simple (i INT8 PRIMARY KEY)",
+			args:   []interface{}{simpleBinRecords, simpleSchemaURI},
 		},
 		{
-			name: "import-avro-fragments",
-			sql:  "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2) WITH data_as_binary_records, records_terminated_by='', schema_uri=$3",
-			args: []interface{}{tableSchema, simpleBinRecords, simpleSchemaURI},
+			name:   "fail-import-expect-ocf-got-json",
+			sql:    "IMPORT INTO simple AVRO DATA ($2)",
+			create: "CREATE TABLE simple (i INT8 PRIMARY KEY)",
+			args:   []interface{}{simpleJSON},
+			err:    true,
 		},
 		{
-			name: "fail-import-expect-ocf-got-json",
-			sql:  "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
-			args: []interface{}{tableSchema, simpleJSON},
-			err:  true,
+			name:   "relaxed-import-sets-missing-fields",
+			sql:    "IMPORT INTO simple AVRO DATA ($1)",
+			create: "CREATE TABLE simple (i INT8 PRIMARY KEY, s text, b bytea, z int)",
+			args:   []interface{}{simpleOcf},
 		},
 		{
-			name: "relaxed-import-sets-missing-fields",
-			sql:  "IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea, z int) AVRO DATA ($1)",
-			args: []interface{}{simpleOcf},
+			name:   "strict-import-errors-missing-fields",
+			sql:    "IMPORT INTO simple AVRO DATA ($1) WITH strict_validation",
+			create: "CREATE TABLE simple (i INT8 PRIMARY KEY, s text, b bytea, z int)",
+			args:   []interface{}{simpleOcf},
+			err:    true,
 		},
 		{
-			name: "relaxed-import-ignores-extra-fields",
-			sql:  "IMPORT TABLE simple (i INT8 PRIMARY KEY) AVRO DATA ($1)",
-			args: []interface{}{simpleOcf},
-		},
-		{
-			name: "strict-import-errors-missing-fields",
-			sql:  "IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea, z int) AVRO DATA ($1) WITH strict_validation",
-			args: []interface{}{simpleOcf},
-			err:  true,
-		},
-		{
-			name: "strict-import-errors-extra-fields",
-			sql:  "IMPORT TABLE simple (i INT8 PRIMARY KEY) AVRO DATA ($1) WITH strict_validation",
-			args: []interface{}{simpleOcf},
-			err:  true,
+			name:   "strict-import-errors-extra-fields",
+			sql:    "IMPORT INTO simple AVRO DATA ($1) WITH strict_validation",
+			create: "CREATE TABLE simple (i INT8 PRIMARY KEY)",
+			args:   []interface{}{simpleOcf},
+			err:    true,
 		},
 	}
 
@@ -6498,11 +6403,6 @@ func TestImportMultiRegion(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Table schemas for USING
-	tableSchemaMR := fmt.Sprintf("nodelocal://0/avro/%s", "simple-schema-multi-region.sql")
-	tableSchemaMRRegionalByRow := fmt.Sprintf("nodelocal://0/avro/%s",
-		"simple-schema-multi-region-regional-by-row.sql")
-
 	viewsAndSequencesTestCases := []struct {
 		desc      string
 		importSQL string
@@ -6564,27 +6464,12 @@ DROP VIEW IF EXISTS v`,
 			during    string
 		}{
 			{
-				name:      "import-create-using-multi-region-to-non-multi-region-database",
-				db:        "foo",
-				table:     "simple",
-				sql:       "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
-				args:      []interface{}{tableSchemaMR, simpleOcf},
-				errString: "cannot restore or create multi-region table simple into non-multi-region database foo",
-			},
-			{
-				name:  "import-create-using-multi-region-regional-by-table-to-multi-region-database",
-				db:    "multi_region",
-				table: "simple",
-				sql:   "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
-				args:  []interface{}{tableSchemaMR, simpleOcf},
-			},
-			{
-				name:      "import-create-using-multi-region-regional-by-row-to-multi-region-database",
-				db:        "multi_region",
-				table:     "simple",
-				sql:       "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
-				args:      []interface{}{tableSchemaMRRegionalByRow, simpleOcf},
-				errString: "IMPORT to REGIONAL BY ROW table not supported",
+				name:   "import-create-using-multi-region-regional-by-table-to-multi-region-database",
+				db:     "multi_region",
+				table:  "simple",
+				sql:    "IMPORT INTO simple AVRO DATA ($1)",
+				create: "CREATE TABLE simple (i integer PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY TABLE",
+				args:   []interface{}{simpleOcf},
 			},
 			{
 				name:   "import-into-multi-region-regional-by-row-default-col-to-multi-region-database",
@@ -6636,7 +6521,7 @@ CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s typ, b bytea) LOCALITY RE
 `,
 				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
 				during: `ALTER TYPE typ ADD VALUE 'b'`,
-				errString: `type descriptor "typ" \(67\) has been ` +
+				errString: `type descriptor "typ" \(66\) has been ` +
 					`modified, potentially incompatibly, since import planning; ` +
 					`aborting to avoid possible corruption`,
 				args: []interface{}{srv.URL},
@@ -6837,6 +6722,7 @@ func TestImportClientDisconnect(t *testing.T) {
 	pgURL, cleanup := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(),
 		"TestImportClientDisconnect-testuser", url.User("testuser"))
 	defer cleanup()
+	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v STRING)")
 
 	// Kick off the import on a new connection which we're going to close.
 	done := make(chan struct{})
@@ -6849,7 +6735,7 @@ func TestImportClientDisconnect(t *testing.T) {
 		db, err := pgx.ConnectConfig(ctx, connCfg)
 		assert.NoError(t, err)
 		defer func() { _ = db.Close(ctx) }()
-		_, err = db.Exec(ctxToCancel, `IMPORT TABLE foo (k INT PRIMARY KEY, v STRING) CSV DATA ($1)`, srv.URL)
+		_, err = db.Exec(ctxToCancel, `IMPORT INTO foo CSV DATA ($1)`, srv.URL)
 		assert.Equal(t, context.Canceled, errors.Unwrap(err))
 	}()
 
@@ -6991,26 +6877,25 @@ func TestImportInTenant(t *testing.T) {
 	t11 := sqlutils.MakeSQLRunner(conn11)
 
 	const userfileURI = "userfile://defaultdb.public.root/test.csv"
-	const importStmt = "IMPORT TABLE foo (k INT PRIMARY KEY, v INT) CSV DATA ($1)"
+	const createStmt = "CREATE TABLE foo (k INT PRIMARY KEY, v INT)"
+	const importStmt = "IMPORT INTO foo CSV DATA ($1)"
 
 	// Upload different files to same userfile name on each of host and tenants.
 	require.NoError(t, putUserfile(ctx, conn, security.RootUserName(), userfileURI, []byte("1,2\n3,4")))
 	require.NoError(t, putUserfile(ctx, conn10, security.RootUserName(), userfileURI, []byte("10,2")))
 	require.NoError(t, putUserfile(ctx, conn11, security.RootUserName(), userfileURI, []byte("11,22\n33,44\n55,66")))
 
+	sqlDB.Exec(t, createStmt)
 	sqlDB.Exec(t, importStmt, userfileURI)
 	sqlDB.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"1", "2"}, {"3", "4"}})
 
+	t10.Exec(t, createStmt)
 	t10.Exec(t, importStmt, userfileURI)
 	t10.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"10", "2"}})
 
+	t11.Exec(t, createStmt)
 	t11.Exec(t, importStmt, userfileURI)
 	t11.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"11", "22"}, {"33", "44"}, {"55", "66"}})
-
-	const createStmt = "CREATE TABLE bar (k INT PRIMARY KEY, v INT)"
-	const importIntoStmt = "IMPORT INTO bar CSV DATA ($1)"
-	t10.Exec(t, createStmt)
-	t10.Exec(t, importIntoStmt, userfileURI)
 }
 
 func putUserfile(
@@ -7073,24 +6958,24 @@ func TestDetachedImport(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(connDB)
 
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
+	sqlDB.Exec(t, "CREATE TABLE simple (i INT8 PRIMARY KEY, s text, b bytea)")
 
 	simpleOcf := fmt.Sprintf("nodelocal://0/%s", "simple.ocf")
 
-	importQuery := `IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea) AVRO DATA ($1)`
-	importQueryDetached := importQuery + " WITH DETACHED"
 	importIntoQuery := `IMPORT INTO simple AVRO DATA ($1)`
 	importIntoQueryDetached := importIntoQuery + " WITH DETACHED"
 
 	// DETACHED import w/out transaction is okay.
 	var jobID jobspb.JobID
-	sqlDB.QueryRow(t, importQueryDetached, simpleOcf).Scan(&jobID)
+	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
 	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
 
 	sqlDB.Exec(t, "DROP table simple")
+	sqlDB.Exec(t, "CREATE TABLE simple (i INT8 PRIMARY KEY, s text, b bytea)")
 
 	// Running import under transaction requires DETACHED option.
 	importWithoutDetached := func(txn *gosql.Tx) error {
-		return txn.QueryRow(importQuery, simpleOcf).Scan(&jobID)
+		return txn.QueryRow(importIntoQuery, simpleOcf).Scan(&jobID)
 	}
 	err := crdb.ExecuteTx(ctx, connDB, nil, importWithoutDetached)
 	require.True(t,
@@ -7098,24 +6983,26 @@ func TestDetachedImport(t *testing.T) {
 
 	// We can execute IMPORT under transaction with detached option.
 	importWithDetached := func(txn *gosql.Tx) error {
-		return txn.QueryRow(importQueryDetached, simpleOcf).Scan(&jobID)
+		return txn.QueryRow(importIntoQueryDetached, simpleOcf).Scan(&jobID)
 	}
 	err = crdb.ExecuteTx(ctx, connDB, nil, importWithDetached)
 	require.NoError(t, err)
 	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
 
 	sqlDB.Exec(t, "DROP table simple")
+	sqlDB.Exec(t, "CREATE TABLE simple (i INT8 PRIMARY KEY, s text, b bytea)")
 
 	// Detached import should fail when the table already exists.
-	sqlDB.QueryRow(t, importQueryDetached, simpleOcf).Scan(&jobID)
+	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
 	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
-	sqlDB.QueryRow(t, importQueryDetached, simpleOcf).Scan(&jobID)
+	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
 	waitForJobResult(t, tc, jobID, jobs.StatusFailed)
 
 	sqlDB.Exec(t, "DROP table simple")
+	sqlDB.Exec(t, "CREATE TABLE simple (i INT8 PRIMARY KEY, s text, b bytea)")
 
 	// Detached import into should fail when there are key collisions.
-	sqlDB.QueryRow(t, importQueryDetached, simpleOcf).Scan(&jobID)
+	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
 	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
 	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
 	waitForJobResult(t, tc, jobID, jobs.StatusFailed)
@@ -7163,10 +7050,12 @@ func TestImportJobEventLogging(t *testing.T) {
 	// the event log for the entries.
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 	beforeImport := timeutil.Now()
-	importQuery := `IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea) AVRO DATA ($1)`
+	createQuery := `CREATE TABLE simple (i INT8 PRIMARY KEY, s text, b bytea)`
+	importQuery := `IMPORT INTO simple AVRO DATA ($1)`
 
 	var jobID int64
 	var unused interface{}
+	sqlDB.Exec(t, createQuery)
 	sqlDB.QueryRow(t, importQuery, simpleOcf).Scan(&jobID, &unused, &unused, &unused, &unused,
 		&unused)
 
@@ -7178,8 +7067,8 @@ func TestImportJobEventLogging(t *testing.T) {
 	// Now let's test the events that are emitted when a job fails.
 	forceFailure = true
 	beforeSecondImport := timeutil.Now()
-	secondImport := `IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea) AVRO DATA ($1)`
-	sqlDB.ExpectErrSucceedsSoon(t, "testing injected failure", secondImport, simpleOcf)
+	sqlDB.Exec(t, createQuery)
+	sqlDB.ExpectErrSucceedsSoon(t, "testing injected failure", importQuery, simpleOcf)
 
 	row := sqlDB.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] WHERE status = 'failed'")
 	row.Scan(&jobID)
@@ -7217,9 +7106,8 @@ CREATE TABLE default_int (
 	defer srv.Close()
 
 	tests := []struct {
-		name             string
-		query            string
-		nonBundledFormat bool
+		name  string
+		query string
 	}{
 		{
 			name:  "import pgdump",
@@ -7237,17 +7125,6 @@ CREATE TABLE default_int (
 			name:  "import table from mysqldump",
 			query: `IMPORT TABLE default_int FROM MYSQLDUMP ($1)`,
 		},
-		{
-			name: "non-bundled csv format",
-			query: `
-IMPORT TABLE default_int (
-    a INTEGER PRIMARY KEY,
-    b INT
-)
-CSV DATA ($1)
-`,
-			nonBundledFormat: true,
-		},
 	}
 
 	for _, test := range tests {
@@ -7259,11 +7136,6 @@ CSV DATA ($1)
 				// Set default int size
 				sqlDB.Exec(t, fmt.Sprintf("set cluster setting sql.defaults.default_int_size = %d;", defaultIntSize))
 				sqlDB.Exec(t, fmt.Sprintf("set default_int_size = %d;", defaultIntSize))
-
-				if test.nonBundledFormat {
-					// Initialize empty data for non-bundled import format
-					data = ""
-				}
 
 				sqlDB.Exec(t, test.query, srv.URL)
 

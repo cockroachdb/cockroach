@@ -46,7 +46,7 @@ sort
       ├── immutable
       ├── key: (49)
       ├── fd: (49)-->(56)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: b_name:49!null sum:55!null
       │    ├── grouping columns: b_name:49!null
       │    ├── immutable
@@ -137,7 +137,7 @@ sort
       ├── immutable
       ├── key: (3)
       ├── fd: (3)-->(56)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: b_name:3!null sum:55!null
       │    ├── grouping columns: b_name:3!null
       │    ├── immutable
@@ -320,7 +320,7 @@ top-k
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(23,24)
-      ├── group-by
+      ├── group-by (streaming)
       │    ├── columns: ca_id:1!null customer_account.ca_bal:6!null sum:22
       │    ├── grouping columns: ca_id:1!null
       │    ├── internal-ordering: +1
@@ -396,7 +396,7 @@ top-k
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(23,24)
-      ├── group-by
+      ├── group-by (streaming)
       │    ├── columns: ca_id:1!null customer_account.ca_bal:6!null sum:22
       │    ├── grouping columns: ca_id:1!null
       │    ├── internal-ordering: +1

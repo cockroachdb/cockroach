@@ -27,9 +27,11 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/errors"
 )
 
 // Workaround for bazel auto-generated code. goimports does not automatically
@@ -39,6 +41,8 @@ var (
 	_ apd.Context
 	_ duration.Duration
 	_ json.JSON
+	_ = colexecerror.InternalError
+	_ = errors.AssertionFailedf
 )
 
 // {{/*
@@ -53,6 +57,86 @@ const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
 const _TYPE_WIDTH = 0
 
 // */}}
+
+// TypedVecs represents a slice of Vecs that have been converted into the typed
+// columns. The idea is that every Vec is stored both in Vecs slice as well as
+// in the typed slice, in order. Components that know the type of the vector
+// they are working with can then access the typed column directly, avoiding
+// expensive type casts.
+type TypedVecs struct {
+	Vecs  []Vec
+	Nulls []*Nulls
+
+	// Fields below need to be accessed by an index mapped via ColsMap.
+	// {{range .}}
+	// {{range .WidthOverloads}}
+	_TYPECols []_GOTYPESLICE
+	// {{end}}
+	// {{end}}
+	// ColsMap contains the positions of the corresponding vectors in the slice
+	// for the same types. For example, if we have a batch with
+	//   types = [Int64, Int64, Bool, Bytes, Bool, Int64],
+	// then ColsMap will be
+	//                      [0, 1, 0, 0, 1, 2]
+	//                       ^  ^  ^  ^  ^  ^
+	//                       |  |  |  |  |  |
+	//                       |  |  |  |  |  3rd among all Int64's
+	//                       |  |  |  |  2nd among all Bool's
+	//                       |  |  |  1st among all Bytes's
+	//                       |  |  1st among all Bool's
+	//                       |  2nd among all Int64's
+	//                       1st among all Int64's
+	ColsMap []int
+}
+
+// SetBatch updates TypedVecs to represent all vectors from batch.
+func (v *TypedVecs) SetBatch(batch Batch) {
+	v.Vecs = batch.ColVecs()
+	if cap(v.Nulls) < len(v.Vecs) {
+		v.Nulls = make([]*Nulls, len(v.Vecs))
+		v.ColsMap = make([]int, len(v.Vecs))
+	} else {
+		v.Nulls = v.Nulls[:len(v.Vecs)]
+		v.ColsMap = v.ColsMap[:len(v.Vecs)]
+	}
+	// {{range .}}
+	// {{range .WidthOverloads}}
+	v._TYPECols = v._TYPECols[:0]
+	// {{end}}
+	// {{end}}
+	for i, vec := range v.Vecs {
+		v.Nulls[i] = vec.Nulls()
+		switch vec.CanonicalTypeFamily() {
+		// {{range .}}
+		case _CANONICAL_TYPE_FAMILY:
+			switch vec.Type().Width() {
+			// {{range .WidthOverloads}}
+			case _TYPE_WIDTH:
+				v.ColsMap[i] = len(v._TYPECols)
+				v._TYPECols = append(v._TYPECols, vec.TemplateType())
+				// {{end}}
+			}
+		// {{end}}
+		default:
+			colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", vec.Type()))
+		}
+	}
+}
+
+// Reset performs a deep reset of v while keeping the references to the slices.
+func (v *TypedVecs) Reset() {
+	v.Vecs = nil
+	for i := range v.Nulls {
+		v.Nulls[i] = nil
+	}
+	// {{range .}}
+	// {{range .WidthOverloads}}
+	for i := range v._TYPECols {
+		v._TYPECols[i] = nil
+	}
+	// {{end}}
+	// {{end}}
+}
 
 func (m *memColumn) Append(args SliceArgs) {
 	switch m.CanonicalTypeFamily() {

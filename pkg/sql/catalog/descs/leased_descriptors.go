@@ -64,8 +64,7 @@ func (m maxTimestampBoundDeadlineHolder) UpdateDeadline(
 
 func makeLeasedDescriptors(lm leaseManager) leasedDescriptors {
 	return leasedDescriptors{
-		lm:    lm,
-		cache: nstree.MakeMap(),
+		lm: lm,
 	}
 }
 

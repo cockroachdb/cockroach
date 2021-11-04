@@ -103,6 +103,15 @@ func (lResult *LocalResult) String() string {
 		lResult.MaybeGossipNodeLiveness)
 }
 
+// RequiresRaft returns true if the local result needs to go via Raft, e.g. in
+// order to apply side effects under Raft.
+func (lResult *LocalResult) RequiresRaft() bool {
+	// Gossip triggers require raftMu to be held.
+	return lResult.MaybeGossipNodeLiveness != nil ||
+		lResult.MaybeGossipSystemConfig ||
+		lResult.MaybeGossipSystemConfigIfHaveFailure
+}
+
 // DetachEncounteredIntents returns (and removes) those encountered
 // intents from the LocalEvalResult which are supposed to be handled.
 func (lResult *LocalResult) DetachEncounteredIntents() []roachpb.Intent {

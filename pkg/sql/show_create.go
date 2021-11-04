@@ -59,10 +59,9 @@ type ShowCreateDisplayOptions struct {
 // ShowCreateTable returns a valid SQL representation of the CREATE
 // TABLE statement used to create the given table.
 //
-// The names of the tables references by foreign keys, and the
-// interleaved parent if any, are prefixed by their own database name
-// unless it is equal to the given dbPrefix. This allows us to elide
-// the prefix when the given table references other tables in the
+// The names of the tables referenced by foreign keys are prefixed by their own
+// database name unless it is equal to the given dbPrefix. This allows us to
+// elide the prefix when the given table references other tables in the
 // current database.
 func ShowCreateTable(
 	ctx context.Context,
@@ -134,61 +133,30 @@ func ShowCreateTable(
 			return "", err
 		}
 	}
-	allIdx := append(
-		append([]catalog.Index{}, desc.PublicNonPrimaryIndexes()...),
-		desc.GetPrimaryIndex())
-	for _, idx := range allIdx {
-		// Only add indexes to the create_statement column, and not to the
-		// create_nofks column if they are not associated with an INTERLEAVE
-		// statement.
-		// Initialize to false if Interleave has no ancestors, indicating that the
-		// index is not interleaved at all.
-		includeInterleaveClause := idx.NumInterleaveAncestors() == 0
-		if displayOptions.FKDisplayMode != OmitFKClausesFromCreate {
-			// The caller is instructing us to not omit FK clauses from inside the CREATE.
-			// (i.e. the caller does not want them as separate DDL.)
-			// Since we're including FK clauses, we need to also include the PARTITION and INTERLEAVE
-			// clauses as well.
-			includeInterleaveClause = true
+	for _, idx := range desc.PublicNonPrimaryIndexes() {
+		// Showing the primary index is handled above.
+
+		// Build the PARTITION BY clause.
+		var partitionBuf bytes.Buffer
+		if err := ShowCreatePartitioning(
+			a, p.ExecCfg().Codec, desc, idx, idx.GetPartitioning(), &partitionBuf, 1 /* indent */, 0, /* colOffset */
+		); err != nil {
+			return "", err
 		}
-		if !idx.Primary() && includeInterleaveClause {
-			// Showing the primary index is handled above.
 
-			// Build the PARTITION BY clause.
-			var partitionBuf bytes.Buffer
-			if err := ShowCreatePartitioning(
-				a, p.ExecCfg().Codec, desc, idx, idx.GetPartitioning(), &partitionBuf, 1 /* indent */, 0, /* colOffset */
-			); err != nil {
-				return "", err
-			}
-
-			// Add interleave or Foreign Key indexes only to the create_table columns,
-			// and not the create_nofks column.
-			var interleaveBuf bytes.Buffer
-			if includeInterleaveClause {
-				// TODO(mgartner): The logic in showCreateInterleave can be
-				// moved to catformat.IndexForDisplay.
-				if err := showCreateInterleave(idx, &interleaveBuf, dbPrefix, lCtx); err != nil {
-					return "", err
-				}
-			}
-
-			f.WriteString(",\n\t")
-			idxStr, err := catformat.IndexForDisplay(
-				ctx,
-				desc,
-				&descpb.AnonymousTable,
-				idx,
-				partitionBuf.String(),
-				interleaveBuf.String(),
-				p.RunParams(ctx).p.SemaCtx(),
-			)
-			if err != nil {
-				return "", err
-			}
-			f.WriteString(idxStr)
-
+		f.WriteString(",\n\t")
+		idxStr, err := catformat.IndexForDisplay(
+			ctx,
+			desc,
+			&descpb.AnonymousTable,
+			idx,
+			partitionBuf.String(),
+			p.RunParams(ctx).p.SemaCtx(),
+		)
+		if err != nil {
+			return "", err
 		}
+		f.WriteString(idxStr)
 	}
 
 	// Create the FAMILY and CONSTRAINTs of the CREATE statement
@@ -197,9 +165,6 @@ func ShowCreateTable(
 		return "", err
 	}
 
-	if err := showCreateInterleave(desc.GetPrimaryIndex(), &f.Buffer, dbPrefix, lCtx); err != nil {
-		return "", err
-	}
 	if err := ShowCreatePartitioning(
 		a, p.ExecCfg().Codec, desc, desc.GetPrimaryIndex(), desc.GetPrimaryIndex().GetPartitioning(), &f.Buffer, 0 /* indent */, 0, /* colOffset */
 	); err != nil {

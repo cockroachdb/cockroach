@@ -1316,19 +1316,10 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 
 	ctx := context.Background()
 
-	makeTableDesc := func(interleaved bool) catalog.TableDescriptor {
-		var interleave descpb.InterleaveDescriptor
-		if interleaved {
-			interleave = descpb.InterleaveDescriptor{
-				Ancestors: []descpb.InterleaveDescriptor_Ancestor{{}},
-			}
-		}
+	makeTableDesc := func() catalog.TableDescriptor {
 		tableDesc := descpb.TableDescriptor{
-			PrimaryIndex: descpb.IndexDescriptor{
-				Interleave: interleave,
-			},
+			PrimaryIndex: descpb.IndexDescriptor{},
 		}
-
 		b := tabledesc.NewBuilder(&tableDesc)
 		err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
 		if err != nil {
@@ -1386,18 +1377,9 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &indexJoinNode{
 				input: scanToParallelize,
-				table: &scanNode{desc: makeTableDesc(false /* interleaved */)},
+				table: &scanNode{desc: makeTableDesc()},
 			}}},
 			hasScanNodeToParallelize: true,
-		},
-		{
-			plan: planComponents{main: planMaybePhysical{planNode: &indexJoinNode{
-				input: scanToParallelize,
-				table: &scanNode{desc: makeTableDesc(true /* interleaved */)},
-			}}},
-			// Vectorized index join is only supported for non-interleaved
-			// tables.
-			prohibitParallelization: true,
 		},
 		{
 			plan:                     planComponents{main: planMaybePhysical{planNode: &limitNode{plan: scanToParallelize}}},

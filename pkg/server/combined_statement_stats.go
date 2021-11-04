@@ -113,6 +113,7 @@ func collectCombinedStatements(
 	query := fmt.Sprintf(
 		`SELECT
 				fingerprint_id,
+				transaction_fingerprint_id,
 				app_name,
 				aggregated_ts,
 				metadata,
@@ -122,7 +123,7 @@ func collectCombinedStatements(
 			FROM crdb_internal.statement_statistics
 			%s`, whereClause)
 
-	const expectedNumDatums = 7
+	const expectedNumDatums = 8
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-by-interval", nil,
 		sessiondata.InternalExecutorOverride{
@@ -157,30 +158,37 @@ func collectCombinedStatements(
 			return nil, err
 		}
 
-		app := string(tree.MustBeDString(row[1]))
-		aggregatedTs := tree.MustBeDTimestampTZ(row[2]).Time
+		var transactionFingerprintID uint64
+		if transactionFingerprintID, err = sqlstatsutil.DatumToUint64(row[1]); err != nil {
+			return nil, err
+		}
+
+		app := string(tree.MustBeDString(row[2]))
+		aggregatedTs := tree.MustBeDTimestampTZ(row[3]).Time
 
 		var metadata roachpb.CollectedStatementStatistics
-		metadataJSON := tree.MustBeDJSON(row[3]).JSON
+		metadataJSON := tree.MustBeDJSON(row[4]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &metadata); err != nil {
 			return nil, err
 		}
 
 		metadata.Key.App = app
+		metadata.Key.TransactionFingerprintID =
+			roachpb.TransactionFingerprintID(transactionFingerprintID)
 
-		statsJSON := tree.MustBeDJSON(row[4]).JSON
+		statsJSON := tree.MustBeDJSON(row[5]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {
 			return nil, err
 		}
 
-		planJSON := tree.MustBeDJSON(row[5]).JSON
+		planJSON := tree.MustBeDJSON(row[6]).JSON
 		plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
 		if err != nil {
 			return nil, err
 		}
 		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 
-		aggInterval := tree.MustBeDInterval(row[6]).Duration
+		aggInterval := tree.MustBeDInterval(row[7]).Duration
 
 		stmt := serverpb.StatementsResponse_CollectedStatementStatistics{
 			Key: serverpb.StatementsResponse_ExtendedStatementStatisticsKey{

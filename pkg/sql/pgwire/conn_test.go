@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"database/sql/driver"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -22,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1274,16 +1276,59 @@ func TestConnCloseCancelsAuth(t *testing.T) {
 	<-authBlocked
 }
 
+// TestConnServerAbortsOnRepeatedErrors checks that if the server keeps seeing
+// a non-connection-closed error repeatedly, then it eventually the server
+// aborts the connection.
+func TestConnServerAbortsOnRepeatedErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	var shouldError uint32 = 0
+	testingKnobError := fmt.Errorf("a random error")
+	s, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Insecure: true,
+			Knobs: base.TestingKnobs{
+				PGWireTestingKnobs: &sql.PGWireTestingKnobs{
+					AfterReadMsgTestingKnob: func(ctx context.Context) error {
+						if atomic.LoadUint32(&shouldError) == 0 {
+							return nil
+						}
+						return testingKnobError
+					},
+				},
+			},
+		})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	defer db.Close()
+
+	conn, err := db.Conn(ctx)
+	require.NoError(t, err)
+
+	atomic.StoreUint32(&shouldError, 1)
+	for i := 0; i < maxRepeatedErrorCount+100; i++ {
+		var s int
+		err := conn.QueryRowContext(ctx, "SELECT 1").Scan(&s)
+		if err != nil {
+			if strings.Contains(err.Error(), testingKnobError.Error()) {
+				continue
+			}
+			if errors.Is(err, driver.ErrBadConn) {
+				// The server closed the connection, which is what we want!
+				require.GreaterOrEqualf(t, i, maxRepeatedErrorCount,
+					"the server should have aborted after seeing %d errors",
+					maxRepeatedErrorCount,
+				)
+				return
+			}
+		}
+	}
+	require.FailNow(t, "should have seen ErrBadConn before getting here")
+}
+
 func TestParseClientProvidedSessionParameters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// The test server is used only incidentally by this test: this is not the
-	// server that the client will connect to; we just use it on the side to
-	// execute some metadata queries that pgx sends whenever it opens a
-	// connection.
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true, UseDatabase: "system"})
-	defer s.Stopper().Stop(context.Background())
 
 	// Start a pgwire "server".
 	addr := util.TestAddr
@@ -1447,6 +1492,22 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 				require.Equal(t, "2.3.4.5:5432", args.RemoteAddr.String())
 			},
 		},
+		{
+			desc:  "normalize to lower case in options parameter",
+			query: "user=root&options=-c DateStyle=YMD,ISO",
+			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+				require.NoError(t, err)
+				require.Equal(t, "YMD,ISO", args.SessionDefaults["datestyle"])
+			},
+		},
+		{
+			desc:  "normalize to lower case in query parameters",
+			query: "user=root&DateStyle=ISO,YMD",
+			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+				require.NoError(t, err)
+				require.Equal(t, "ISO,YMD", args.SessionDefaults["datestyle"])
+			},
+		},
 	}
 
 	baseURL := fmt.Sprintf("postgres://%s/system?sslmode=disable", serverAddr)
@@ -1454,20 +1515,22 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 
+			var connErr error
 			go func() {
-				url := fmt.Sprintf("%s&%s", baseURL, tc.query)
-				c, err := gosql.Open("postgres", url)
-				require.NoError(t, err)
-
 				ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 				defer cancel()
+				url := fmt.Sprintf("%s&%s", baseURL, tc.query)
+				var c *pgx.Conn
+				c, connErr = pgx.Connect(ctx, url)
+				if connErr != nil {
+					return
+				}
 				// ignore the error because there is no answer from the server, we are
 				// interested in parsing session arguments only
-				_ = c.PingContext(ctx)
+				_ = c.Ping(ctx)
 				// closing connection immediately, since getSessionArgs is blocking
-				_ = c.Close()
+				_ = c.Close(ctx)
 			}()
-
 			// Wait for the client to connect and perform the handshake.
 			_, args, err := getSessionArgs(ln, true /* trustRemoteAddr */)
 			tc.assert(t, args, err)
@@ -1478,9 +1541,15 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 func TestSetSessionArguments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
+	defer db.Close()
+
+	_, err := db.Exec("SET CLUSTER SETTING sql.defaults.datestyle.enabled = true")
+	require.NoError(t, err)
+	_, err = db.Exec("SET CLUSTER SETTING sql.defaults.intervalstyle.enabled = true")
+	require.NoError(t, err)
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
 		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(security.RootUser),
@@ -1488,7 +1557,12 @@ func TestSetSessionArguments(t *testing.T) {
 	defer cleanupFunc()
 
 	q := pgURL.Query()
-	q.Add("options", "  --user=test -c    search_path=public,testsp %20 --default-transaction-isolation=read\\ uncommitted   -capplication_name=test  --datestyle=iso\\ ,\\ mdy\\  ")
+	q.Add("options", "  --user=test -c    search_path=public,testsp %20 "+
+		"--default-transaction-isolation=read\\ uncommitted   "+
+		"-capplication_name=test  "+
+		"--DateStyle=ymd\\ ,\\ iso\\  "+
+		"-c intervalstyle%3DISO_8601 "+
+		"-ccustom_option.custom_option=test2")
 	pgURL.RawQuery = q.Encode()
 	noBufferDB, err := gosql.Open("postgres", pgURL.String())
 
@@ -1518,7 +1592,8 @@ func TestSetSessionArguments(t *testing.T) {
 		// all transactions execute with serializable isolation.
 		"default_transaction_isolation": "serializable",
 		"application_name":              "test",
-		"datestyle":                     "ISO, MDY",
+		"datestyle":                     "ISO, YMD",
+		"intervalstyle":                 "iso_8601",
 	}
 	expectedFoundOptions := len(expectedOptions)
 
@@ -1537,6 +1612,11 @@ func TestSetSessionArguments(t *testing.T) {
 		}
 	}
 	require.Equal(t, expectedFoundOptions, foundOptions)
+
+	// Custom session options don't show up on SHOW ALL
+	var customOption string
+	require.NoError(t, conn.QueryRow(ctx, "SHOW custom_option.custom_option").Scan(&customOption))
+	require.Equal(t, "test2", customOption)
 
 	if err := conn.Close(ctx); err != nil {
 		t.Fatal(err)

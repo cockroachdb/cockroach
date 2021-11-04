@@ -51,11 +51,13 @@ message Target {
 enum Status {
   UNKNOWN = 0;
   ABSENT = 1;
-  DELETE_ONLY = 2;
-  DELETE_AND_WRITE_ONLY = 3;
-  BACKFILLED = 4;
-  VALIDATED = 5;
-  PUBLIC = 6;
+  DROPPED = 2;
+  DELETE_ONLY = 3;
+  DELETE_AND_WRITE_ONLY = 4;
+  BACKFILLED = 5;
+  VALIDATED = 6;
+  TXN_DROPPED = 7;
+  PUBLIC = 8;
 }
 
 message Column {

@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -62,8 +61,10 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	cSchema, ok := schemadesc.GetVirtualSchemaByID(n.tableDesc.GetParentSchemaID())
-	if !ok {
+	schema, err := params.p.Descriptors().GetImmutableSchemaByID(
+		params.ctx, params.extendedEvalCtx.Txn, n.tableDesc.GetParentSchemaID(), tree.SchemaLookupFlags{},
+	)
+	if err != nil {
 		return err
 	}
 
@@ -78,16 +79,16 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 	switch kind := constraint.Kind; kind {
 	case descpb.ConstraintTypePK:
 		constraintDesc := constraint.Index
-		n.oid = hasher.PrimaryKeyConstraintOid(n.tableDesc.GetParentID(), cSchema.GetName(), n.tableDesc.GetID(), constraintDesc)
+		n.oid = hasher.PrimaryKeyConstraintOid(n.tableDesc.GetParentID(), schema.GetName(), n.tableDesc.GetID(), constraintDesc)
 	case descpb.ConstraintTypeFK:
 		constraintDesc := constraint.FK
-		n.oid = hasher.ForeignKeyConstraintOid(n.tableDesc.GetParentID(), cSchema.GetName(), n.tableDesc.GetID(), constraintDesc)
+		n.oid = hasher.ForeignKeyConstraintOid(n.tableDesc.GetParentID(), schema.GetName(), n.tableDesc.GetID(), constraintDesc)
 	case descpb.ConstraintTypeUnique:
 		constraintDesc := constraint.Index.ID
-		n.oid = hasher.UniqueConstraintOid(n.tableDesc.GetParentID(), cSchema.GetName(), n.tableDesc.GetID(), constraintDesc)
+		n.oid = hasher.UniqueConstraintOid(n.tableDesc.GetParentID(), schema.GetName(), n.tableDesc.GetID(), constraintDesc)
 	case descpb.ConstraintTypeCheck:
 		constraintDesc := constraint.CheckConstraint
-		n.oid = hasher.CheckConstraintOid(n.tableDesc.GetParentID(), cSchema.GetName(), n.tableDesc.GetID(), constraintDesc)
+		n.oid = hasher.CheckConstraintOid(n.tableDesc.GetParentID(), schema.GetName(), n.tableDesc.GetID(), constraintDesc)
 
 	}
 	// Setting the comment to NULL is the

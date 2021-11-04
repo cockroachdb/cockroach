@@ -12,7 +12,6 @@ package jobsprotectedts_test
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"testing"
 
@@ -97,10 +96,13 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 	_, recRemains := mkJobAndRecord()
 	ensureNotExists := func(ctx context.Context, txn *kv.Txn, ptsID uuid.UUID) (err error) {
 		_, err = ptp.GetRecord(ctx, txn, ptsID)
+		if err == nil {
+			return errors.New("found pts record, waiting for ErrNotExists")
+		}
 		if errors.Is(err, protectedts.ErrNotExists) {
 			return nil
 		}
-		return fmt.Errorf("waiting for %v, got %v", protectedts.ErrNotExists, err)
+		return errors.Wrap(err, "waiting for ErrNotExists")
 	}
 	testutils.SucceedsSoon(t, func() (err error) {
 		return s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -174,10 +176,13 @@ func TestSchedulesProtectedTimestamp(t *testing.T) {
 	_, recSchedule := mkScheduleAndRecord("do-not-drop")
 	ensureNotExists := func(ctx context.Context, txn *kv.Txn, ptsID uuid.UUID) (err error) {
 		_, err = ptp.GetRecord(ctx, txn, ptsID)
+		if err == nil {
+			return errors.New("found pts record, waiting for ErrNotExists")
+		}
 		if errors.Is(err, protectedts.ErrNotExists) {
 			return nil
 		}
-		return fmt.Errorf("waiting for %v, got %v", protectedts.ErrNotExists, err)
+		return errors.Wrap(err, "waiting for ErrNotExists")
 	}
 	testutils.SucceedsSoon(t, func() (err error) {
 		return s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

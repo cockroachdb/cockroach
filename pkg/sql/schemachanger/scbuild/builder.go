@@ -17,39 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
-
-// AuthorizationAccessor for checking authorization (e.g. desc privileges).
-type AuthorizationAccessor interface {
-	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
-	CheckPrivilege(
-		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind,
-	) error
-	// HasAdminRole verifies if a user has an admin role
-	HasAdminRole(ctx context.Context) (bool, error)
-	// HasOwnership returns if the role or any role the role is a member of
-	// has ownership privilege of the desc.
-	HasOwnership(ctx context.Context, descriptor catalog.Descriptor) (bool, error)
-}
-
-// Dependencies are non-stateful objects needed for planning schema
-// changes.
-type Dependencies struct {
-	// TODO(ajwerner): Inject a better interface than this.
-	Res          resolver.SchemaResolver
-	SemaCtx      *tree.SemaContext
-	EvalCtx      *tree.EvalContext
-	Descs        *descs.Collection
-	AuthAccessor AuthorizationAccessor
-}
 
 // buildContext is the entry point for planning schema changes. From AST nodes
 // for DDL statements, it constructs targets which represent schema changes to
@@ -202,42 +175,6 @@ func (b *buildContext) addNode(dir scpb.Target_Direction, elem scpb.Element) {
 	})
 }
 
-// getTableDescriptorForLockingChange returns a table descriptor that is
-// guaranteed to have no concurrent running schema changes and can therefore
-// undergo a "locking" change, or else a ConcurrentSchemaChangeError if the
-// table is not currently in the required state. Locking changes roughly
-// correspond to schema changes with mutations, which must be serialized and
-// (in the new schema changer) require mutual exclusion.
-func (b *buildContext) getTableDescriptorForLockingChange(
-	ctx context.Context, tn *tree.TableName,
-) (catalog.TableDescriptor, error) {
-	table, err := b.getTableDescriptor(ctx, tn)
-	if err != nil {
-		return nil, err
-	}
-	if HasConcurrentSchemaChanges(table) {
-		return nil, &ConcurrentSchemaChangeError{descID: table.GetID()}
-	}
-	return table, nil
-}
-
-func (b *buildContext) getTableDescriptor(
-	ctx context.Context, tn *tree.TableName,
-) (catalog.TableDescriptor, error) {
-	// This will return an error for dropped and offline tables, but it's possible
-	// that later iterations of the builder will want to handle those cases
-	// in a different way.
-	_, table, err := resolver.ResolveExistingTableObject(ctx, b.Res, tn,
-		tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				Required:    true,
-				AvoidCached: true,
-			},
-		},
-	)
-	return table, err
-}
-
 // HasConcurrentSchemaChanges returns whether the table descriptor is undergoing
 // concurrent schema changes.
 func HasConcurrentSchemaChanges(table catalog.TableDescriptor) bool {
@@ -246,4 +183,10 @@ func HasConcurrentSchemaChanges(table catalog.TableDescriptor) bool {
 	// statement execution, we'll have to take into account mutations that were
 	// written in this transaction.
 	return len(table.AllMutations()) > 0
+}
+
+func onErrPanic(err error) {
+	if err != nil {
+		panic(err)
+	}
 }

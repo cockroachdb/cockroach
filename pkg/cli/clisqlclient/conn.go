@@ -155,7 +155,7 @@ func (c *sqlConn) EnsureConn() error {
 		// connections only once instead. The context is only used for dialing.
 		conn, err := connector.Connect(context.TODO())
 		if err != nil {
-			// Connection failed: if the failure is due to a mispresented
+			// Connection failed: if the failure is due to a missing
 			// password, we're going to fill the password here.
 			//
 			// TODO(knz): CockroachDB servers do not properly fill SQLSTATE

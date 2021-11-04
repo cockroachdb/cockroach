@@ -186,7 +186,7 @@ memo (optimized, ~37KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:1
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (inner-join G8 G9 G7) (inner-join G9 G8 G7) (merge-join G2 G3 G10 inner-join,+1,+7) (merge-join G3 G2 G10 inner-join,+7,+1) (lookup-join G3 G10 abc@ab,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G5 G6 G10 inner-join,+7,+12) (merge-join G6 G5 G10 inner-join,+12,+7) (lookup-join G6 G10 stu,keyCols=[12],outCols=(1-3,7-9,12-14)) (merge-join G8 G9 G10 inner-join,+7,+12) (lookup-join G8 G10 xyz@xy,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G9 G8 G10 inner-join,+12,+7)
  │    └── [presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14]
  │         ├── best: (merge-join G5="[ordering: +7]" G6="[ordering: +(1|12)]" G10 inner-join,+7,+12)
- │         └── cost: 13054.10
+ │         └── cost: 13045.10
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan abc@ab,cols=(1-3))
@@ -197,10 +197,10 @@ memo (optimized, ~37KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:1
  ├── G3: (inner-join G5 G9 G7) (inner-join G9 G5 G7) (merge-join G5 G9 G10 inner-join,+7,+12) (lookup-join G5 G10 xyz@xy,keyCols=[7],outCols=(7-9,12-14)) (merge-join G9 G5 G10 inner-join,+12,+7) (lookup-join G9 G10 stu,keyCols=[12],outCols=(7-9,12-14))
  │    ├── [ordering: +(7|12)]
  │    │    ├── best: (merge-join G5="[ordering: +7]" G9="[ordering: +12]" G10 inner-join,+7,+12)
- │    │    └── cost: 11929.36
+ │    │    └── cost: 11920.36
  │    └── []
  │         ├── best: (merge-join G5="[ordering: +7]" G9="[ordering: +12]" G10 inner-join,+7,+12)
- │         └── cost: 11929.36
+ │         └── cost: 11920.36
  ├── G4: (filters G11)
  ├── G5: (scan stu,cols=(7-9)) (scan stu@uts,cols=(7-9))
  │    ├── [ordering: +7]
@@ -219,11 +219,11 @@ memo (optimized, ~37KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:1
  ├── G7: (filters G13)
  ├── G8: (inner-join G2 G5 G4) (inner-join G5 G2 G4) (merge-join G2 G5 G10 inner-join,+1,+7) (lookup-join G2 G10 stu,keyCols=[1],outCols=(1-3,7-9)) (merge-join G5 G2 G10 inner-join,+7,+1) (lookup-join G5 G10 abc@ab,keyCols=[7],outCols=(1-3,7-9))
  │    ├── [ordering: +(1|7)]
- │    │    ├── best: (merge-join G2="[ordering: +1]" G5="[ordering: +7]" G10 inner-join,+1,+7)
- │    │    └── cost: 11929.36
+ │    │    ├── best: (merge-join G5="[ordering: +7]" G2="[ordering: +1]" G10 inner-join,+7,+1)
+ │    │    └── cost: 11920.36
  │    └── []
- │         ├── best: (merge-join G2="[ordering: +1]" G5="[ordering: +7]" G10 inner-join,+1,+7)
- │         └── cost: 11929.36
+ │         ├── best: (merge-join G5="[ordering: +7]" G2="[ordering: +1]" G10 inner-join,+7,+1)
+ │         └── cost: 11920.36
  ├── G9: (scan xyz,cols=(12-14)) (scan xyz@xy,cols=(12-14)) (scan xyz@yz,cols=(12-14))
  │    ├── [ordering: +12]
  │    │    ├── best: (scan xyz@xy,cols=(12-14))
@@ -239,160 +239,6 @@ memo (optimized, ~37KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:1
  ├── G15: (variable s)
  ├── G16: (eq G14 G17)
  └── G17: (variable x)
-
-# Regression test for #36226.
-exec-ddl
-CREATE TABLE parent1 (pid1 INT PRIMARY KEY, pa1 INT)
-----
-
-exec-ddl
-CREATE TABLE child1 (
-  pid1 INT,
-  cid1 INT,
-  ca1 INT,
-  PRIMARY KEY(pid1, cid1)
-)
-INTERLEAVE IN PARENT parent1 (pid1)
-----
-
-exec-ddl
-CREATE TABLE grandchild1 (
-  pid1 INT,
-  cid1 INT,
-  gcid1 INT,
-  gca1 INT,
-  PRIMARY KEY(pid1, cid1, gcid1)
-)
-INTERLEAVE IN PARENT child1 (pid1, cid1)
-----
-
-opt expect=ReorderJoins join-limit=4
-SELECT * FROM grandchild1
-JOIN child1 USING (pid1, cid1)
-JOIN parent1 USING (pid1)
-ORDER BY pid1
-----
-project
- ├── columns: pid1:1!null cid1:2!null gcid1:3!null gca1:4 ca1:9 pa1:13
- ├── key: (1-3)
- ├── fd: (1-3)-->(4), (1,2)-->(9), (1)-->(13)
- ├── ordering: +1
- └── inner-join (lookup parent1)
-      ├── columns: grandchild1.pid1:1!null grandchild1.cid1:2!null gcid1:3!null gca1:4 child1.pid1:7!null child1.cid1:8!null ca1:9 parent1.pid1:12!null pa1:13
-      ├── key columns: [1] = [12]
-      ├── lookup columns are key
-      ├── key: (3,8,12)
-      ├── fd: (1-3)-->(4), (7,8)-->(9), (1)==(7,12), (7)==(1,12), (2)==(8), (8)==(2), (12)-->(13), (12)==(1,7)
-      ├── ordering: +(1|7|12) [actual: +1]
-      ├── inner-join (merge)
-      │    ├── columns: grandchild1.pid1:1!null grandchild1.cid1:2!null gcid1:3!null gca1:4 child1.pid1:7!null child1.cid1:8!null ca1:9
-      │    ├── left ordering: +1,+2
-      │    ├── right ordering: +7,+8
-      │    ├── key: (3,7,8)
-      │    ├── fd: (1-3)-->(4), (7,8)-->(9), (1)==(7), (7)==(1), (2)==(8), (8)==(2)
-      │    ├── ordering: +(1|7) [actual: +1]
-      │    ├── scan grandchild1
-      │    │    ├── columns: grandchild1.pid1:1!null grandchild1.cid1:2!null gcid1:3!null gca1:4
-      │    │    ├── key: (1-3)
-      │    │    ├── fd: (1-3)-->(4)
-      │    │    └── ordering: +1,+2
-      │    ├── scan child1
-      │    │    ├── columns: child1.pid1:7!null child1.cid1:8!null ca1:9
-      │    │    ├── key: (7,8)
-      │    │    ├── fd: (7,8)-->(9)
-      │    │    └── ordering: +7,+8
-      │    └── filters (true)
-      └── filters (true)
-
-memo expect=ReorderJoins join-limit=4
-SELECT * FROM grandchild1
-JOIN child1 USING (pid1, cid1)
-JOIN parent1 USING (pid1)
-ORDER BY pid1
-----
-memo (optimized, ~34KB, required=[presentation: pid1:1,cid1:2,gcid1:3,gca1:4,ca1:9,pa1:13] [ordering: +1])
- ├── G1: (project G2 G3 pid1 cid1 gcid1 gca1 ca1 pa1)
- │    ├── [presentation: pid1:1,cid1:2,gcid1:3,gca1:4,ca1:9,pa1:13] [ordering: +1]
- │    │    ├── best: (project G2="[ordering: +(1|7|12)]" G3 pid1 cid1 gcid1 gca1 ca1 pa1)
- │    │    └── cost: 2816.50
- │    └── []
- │         ├── best: (project G2 G3 pid1 cid1 gcid1 gca1 ca1 pa1)
- │         └── cost: 2816.50
- ├── G2: (inner-join G4 G5 G6) (inner-join G7 G8 G9) (inner-join G8 G7 G9) (inner-join G10 G11 G9) (inner-join G11 G10 G9) (inner-join G5 G4 G6) (merge-join G4 G5 G12 inner-join,+1,+12) (lookup-join G4 G12 parent1,keyCols=[1],outCols=(1-4,7-9,12,13)) (merge-join G7 G8 G12 inner-join,+1,+2,+7,+8) (merge-join G8 G7 G12 inner-join,+7,+8,+1,+2) (lookup-join G8 G12 grandchild1,keyCols=[7 8],outCols=(1-4,7-9,12,13)) (merge-join G10 G11 G12 inner-join,+7,+8,+1,+2) (merge-join G11 G10 G12 inner-join,+1,+2,+7,+8) (lookup-join G11 G12 child1,keyCols=[1 2],outCols=(1-4,7-9,12,13)) (merge-join G5 G4 G12 inner-join,+12,+1)
- │    ├── [ordering: +(1|7|12)]
- │    │    ├── best: (lookup-join G4="[ordering: +(1|7)]" G12 parent1,keyCols=[1],outCols=(1-4,7-9,12,13))
- │    │    └── cost: 2815.48
- │    └── []
- │         ├── best: (lookup-join G4 G12 parent1,keyCols=[1],outCols=(1-4,7-9,12,13))
- │         └── cost: 2815.48
- ├── G3: (projections)
- ├── G4: (inner-join G7 G10 G9) (inner-join G10 G7 G9) (merge-join G7 G10 G12 inner-join,+1,+2,+7,+8) (lookup-join G7 G12 child1,keyCols=[1 2],outCols=(1-4,7-9)) (merge-join G10 G7 G12 inner-join,+7,+8,+1,+2) (lookup-join G10 G12 grandchild1,keyCols=[7 8],outCols=(1-4,7-9))
- │    ├── [ordering: +(1|7)]
- │    │    ├── best: (merge-join G7="[ordering: +1,+2]" G10="[ordering: +7,+8]" G12 inner-join,+1,+2,+7,+8)
- │    │    └── cost: 2210.46
- │    └── []
- │         ├── best: (merge-join G7="[ordering: +1,+2]" G10="[ordering: +7,+8]" G12 inner-join,+1,+2,+7,+8)
- │         └── cost: 2210.46
- ├── G5: (scan parent1,cols=(12,13))
- │    ├── [ordering: +12]
- │    │    ├── best: (scan parent1,cols=(12,13))
- │    │    └── cost: 1064.42
- │    └── []
- │         ├── best: (scan parent1,cols=(12,13))
- │         └── cost: 1064.42
- ├── G6: (filters G13)
- ├── G7: (scan grandchild1,cols=(1-4))
- │    ├── [ordering: +1,+2]
- │    │    ├── best: (scan grandchild1,cols=(1-4))
- │    │    └── cost: 1104.82
- │    ├── [ordering: +1]
- │    │    ├── best: (scan grandchild1,cols=(1-4))
- │    │    └── cost: 1104.82
- │    └── []
- │         ├── best: (scan grandchild1,cols=(1-4))
- │         └── cost: 1104.82
- ├── G8: (inner-join G10 G5 G14) (inner-join G5 G10 G14) (merge-join G10 G5 G12 inner-join,+7,+12) (lookup-join G10 G12 parent1,keyCols=[7],outCols=(7-9,12,13)) (merge-join G5 G10 G12 inner-join,+12,+7) (lookup-join G5 G12 child1,keyCols=[12],outCols=(7-9,12,13))
- │    ├── [ordering: +(7|12),+8]
- │    │    ├── best: (sort G8)
- │    │    └── cost: 2459.51
- │    ├── [ordering: +(7|12)]
- │    │    ├── best: (merge-join G10="[ordering: +7]" G5="[ordering: +12]" G12 inner-join,+7,+12)
- │    │    └── cost: 2179.06
- │    └── []
- │         ├── best: (merge-join G10="[ordering: +7]" G5="[ordering: +12]" G12 inner-join,+7,+12)
- │         └── cost: 2179.06
- ├── G9: (filters G15 G16)
- ├── G10: (scan child1,cols=(7-9))
- │    ├── [ordering: +7,+8]
- │    │    ├── best: (scan child1,cols=(7-9))
- │    │    └── cost: 1084.62
- │    ├── [ordering: +7]
- │    │    ├── best: (scan child1,cols=(7-9))
- │    │    └── cost: 1084.62
- │    └── []
- │         ├── best: (scan child1,cols=(7-9))
- │         └── cost: 1084.62
- ├── G11: (inner-join G7 G5 G6) (inner-join G5 G7 G6) (merge-join G7 G5 G12 inner-join,+1,+12) (lookup-join G7 G12 parent1,keyCols=[1],outCols=(1-4,12,13)) (merge-join G5 G7 G12 inner-join,+12,+1) (lookup-join G5 G12 grandchild1,keyCols=[12],outCols=(1-4,12,13))
- │    ├── [ordering: +(1|12),+2]
- │    │    ├── best: (sort G11)
- │    │    └── cost: 2489.71
- │    ├── [ordering: +(1|12)]
- │    │    ├── best: (merge-join G7="[ordering: +1]" G5="[ordering: +12]" G12 inner-join,+1,+12)
- │    │    └── cost: 2199.26
- │    └── []
- │         ├── best: (merge-join G7="[ordering: +1]" G5="[ordering: +12]" G12 inner-join,+1,+12)
- │         └── cost: 2199.26
- ├── G12: (filters)
- ├── G13: (eq G17 G18)
- ├── G14: (filters G19)
- ├── G15: (eq G17 G20)
- ├── G16: (eq G21 G22)
- ├── G17: (variable grandchild1.pid1)
- ├── G18: (variable parent1.pid1)
- ├── G19: (eq G20 G18)
- ├── G20: (variable child1.pid1)
- ├── G21: (variable grandchild1.cid1)
- └── G22: (variable child1.cid1)
 
 # Cross joins are not reordered apart from commutation.
 memo
@@ -448,7 +294,7 @@ memo (optimized, ~32KB, required=[presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:1
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+3,+6) (merge-join G3 G2 G5 inner-join,+6,+3) (lookup-join G3 G5 stu@uts,keyCols=[6],outCols=(1-3,6-8,12-14,18-22))
  │    └── [presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22]
  │         ├── best: (merge-join G2="[ordering: +3]" G3="[ordering: +(6|12|18)]" G5 inner-join,+3,+6)
- │         └── cost: 14209.14
+ │         └── cost: 14200.14
  ├── G2: (scan stu,cols=(1-3)) (scan stu@uts,cols=(1-3))
  │    ├── [ordering: +3]
  │    │    ├── best: (scan stu@uts,cols=(1-3))
@@ -649,13 +495,13 @@ SELECT * FROM abc
 LEFT JOIN stu ON a = s
 LEFT JOIN small ON a = m
 ----
-left-join (merge)
+right-join (merge)
+ ├── scan stu
  ├── left-join (merge)
  │    ├── scan abc@ab
  │    ├── sort
  │    │    └── scan small
  │    └── filters (true)
- ├── scan stu
  └── filters (true)
 
 # Don't add a join between xyz and stu to the memo (because doing so would
@@ -1101,8 +947,8 @@ ReorderJoins
 Source expression:
   full-join (hash)
    ├── full-join (merge)
-   │    ├── scan abc@ab
    │    ├── scan stu
+   │    ├── scan abc@ab
    │    └── filters (true)
    ├── scan xyz
    └── filters
@@ -1134,8 +980,8 @@ New expression 3 of 3:
   full-join (hash)
    ├── scan xyz
    ├── full-join (merge)
-   │    ├── scan abc@ab
    │    ├── scan stu
+   │    ├── scan abc@ab
    │    └── filters (true)
    └── filters
         └── b = y
@@ -1255,9 +1101,9 @@ ReorderJoins
 ================================================================================
 Source expression:
   left-join (hash)
-   ├── left-join (merge)
-   │    ├── scan abc@ab
+   ├── right-join (merge)
    │    ├── scan stu
+   │    ├── scan abc@ab
    │    └── filters (true)
    ├── scan xyz
    └── filters
@@ -1314,8 +1160,8 @@ ReorderJoins
 Source expression:
   left-join (hash)
    ├── full-join (merge)
-   │    ├── scan abc@ab
    │    ├── scan stu
+   │    ├── scan abc@ab
    │    └── filters (true)
    ├── scan xyz
    └── filters
@@ -1521,8 +1367,8 @@ ReorderJoins
 Source expression:
   inner-join (hash)
    ├── inner-join (merge)
-   │    ├── scan abc@ab
    │    ├── scan stu
+   │    ├── scan abc@ab
    │    └── filters (true)
    ├── scan xyz
    └── filters
@@ -1532,8 +1378,8 @@ New expression 1 of 1:
   inner-join (hash)
    ├── scan xyz
    ├── inner-join (merge)
-   │    ├── scan abc@ab
    │    ├── scan stu
+   │    ├── scan abc@ab
    │    └── filters (true)
    └── filters
         └── s = x
@@ -1864,15 +1710,15 @@ SELECT * FROM abc JOIN xyz ON a=x
 ----
 inner-join (merge)
  ├── columns: a:1!null b:2 c:3 x:7!null y:8 z:9
- ├── left ordering: +1
- ├── right ordering: +7
+ ├── left ordering: +7
+ ├── right ordering: +1
  ├── fd: (1)==(7), (7)==(1)
- ├── scan abc@ab
- │    ├── columns: a:1 b:2 c:3
- │    └── ordering: +1
  ├── scan xyz@xy
  │    ├── columns: x:7 y:8 z:9
  │    └── ordering: +7
+ ├── scan abc@ab
+ │    ├── columns: a:1 b:2 c:3
+ │    └── ordering: +1
  └── filters (true)
 
 memo
@@ -1881,8 +1727,8 @@ SELECT * FROM abc JOIN xyz ON a=x
 memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+7) (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,7-9)) (merge-join G3 G2 G5 inner-join,+7,+1) (lookup-join G3 G5 abc@ab,keyCols=[7],outCols=(1-3,7-9))
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
- │         ├── best: (merge-join G2="[ordering: +1]" G3="[ordering: +7]" G5 inner-join,+1,+7)
- │         └── cost: 1238.46
+ │         ├── best: (merge-join G3="[ordering: +7]" G2="[ordering: +1]" G5 inner-join,+7,+1)
+ │         └── cost: 1237.56
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan abc@ab,cols=(1-3))
@@ -1930,15 +1776,15 @@ SELECT * FROM abc JOIN xyz ON x=a
 ----
 inner-join (merge)
  ├── columns: a:1!null b:2 c:3 x:7!null y:8 z:9
- ├── left ordering: +1
- ├── right ordering: +7
+ ├── left ordering: +7
+ ├── right ordering: +1
  ├── fd: (1)==(7), (7)==(1)
- ├── scan abc@ab
- │    ├── columns: a:1 b:2 c:3
- │    └── ordering: +1
  ├── scan xyz@xy
  │    ├── columns: x:7 y:8 z:9
  │    └── ordering: +7
+ ├── scan abc@ab
+ │    ├── columns: a:1 b:2 c:3
+ │    └── ordering: +1
  └── filters (true)
 
 opt
@@ -1946,15 +1792,15 @@ SELECT * FROM abc JOIN xyz ON a=x AND a=x AND x=a
 ----
 inner-join (merge)
  ├── columns: a:1!null b:2 c:3 x:7!null y:8 z:9
- ├── left ordering: +1
- ├── right ordering: +7
+ ├── left ordering: +7
+ ├── right ordering: +1
  ├── fd: (1)==(7), (7)==(1)
- ├── scan abc@ab
- │    ├── columns: a:1 b:2 c:3
- │    └── ordering: +1
  ├── scan xyz@xy
  │    ├── columns: x:7 y:8 z:9
  │    └── ordering: +7
+ ├── scan abc@ab
+ │    ├── columns: a:1 b:2 c:3
+ │    └── ordering: +1
  └── filters (true)
 
 # Use constraints to force the choice of an index which doesn't help, and
@@ -2273,16 +2119,16 @@ left-join (merge)
  │    └── ordering: +13
  ├── inner-join (merge)
  │    ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
- │    ├── left ordering: +1,+2
- │    ├── right ordering: +7,+8
+ │    ├── left ordering: +7,+8
+ │    ├── right ordering: +1,+2
  │    ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
- │    ├── ordering: +(1|7) [actual: +1]
- │    ├── scan abc@ab
- │    │    ├── columns: a:1 b:2 c:3
- │    │    └── ordering: +1,+2
+ │    ├── ordering: +(1|7) [actual: +7]
  │    ├── scan xyz@xy
  │    │    ├── columns: x:7 y:8 z:9
  │    │    └── ordering: +7,+8
+ │    ├── scan abc@ab
+ │    │    ├── columns: a:1 b:2 c:3
+ │    │    └── ordering: +1,+2
  │    └── filters (true)
  └── filters (true)
 
@@ -2300,16 +2146,16 @@ left-join (merge)
  │    └── ordering: +15,+14
  ├── inner-join (merge)
  │    ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
- │    ├── left ordering: +1,+2
- │    ├── right ordering: +7,+8
+ │    ├── left ordering: +7,+8
+ │    ├── right ordering: +1,+2
  │    ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
- │    ├── ordering: +(1|7),+(2|8) [actual: +1,+2]
- │    ├── scan abc@ab
- │    │    ├── columns: a:1 b:2 c:3
- │    │    └── ordering: +1,+2
+ │    ├── ordering: +(1|7),+(2|8) [actual: +7,+8]
  │    ├── scan xyz@xy
  │    │    ├── columns: x:7 y:8 z:9
  │    │    └── ordering: +7,+8
+ │    ├── scan abc@ab
+ │    │    ├── columns: a:1 b:2 c:3
+ │    │    └── ordering: +1,+2
  │    └── filters (true)
  └── filters (true)
 
@@ -5457,7 +5303,7 @@ GROUP BY n.name, n.geom
 project
  ├── columns: name:16!null popn_per_sqkm:22
  ├── immutable
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: name:16!null n.geom:17!null sum:21
  │    ├── grouping columns: name:16!null n.geom:17!null
  │    ├── immutable
@@ -6055,7 +5901,7 @@ with &1 (q)
  └── project
       ├── columns: count:43 count_rows:31!null
       ├── immutable
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: n.boroname:25 count_rows:31!null
       │    ├── grouping columns: n.boroname:25
       │    ├── immutable
@@ -8268,11 +8114,22 @@ inner-join-apply
  │    └── key: (1-3)
  ├── inner-join (merge)
  │    ├── columns: p:6!null q:7!null r:8 pqr.s:9 pqr.t:10 a:13!null b:14 c:15 "?column?":19
- │    ├── left ordering: +7
- │    ├── right ordering: +13
+ │    ├── left ordering: +13
+ │    ├── right ordering: +7
  │    ├── outer: (1)
  │    ├── immutable
  │    ├── fd: (6)-->(7-10), (13)-->(19), (7)==(13), (13)==(7)
+ │    ├── project
+ │    │    ├── columns: "?column?":19 a:13 b:14 c:15
+ │    │    ├── outer: (1)
+ │    │    ├── immutable
+ │    │    ├── fd: (13)-->(19)
+ │    │    ├── ordering: +13
+ │    │    ├── scan abc@ab
+ │    │    │    ├── columns: a:13 b:14 c:15
+ │    │    │    └── ordering: +13
+ │    │    └── projections
+ │    │         └── a:13 * stu.s:1 [as="?column?":19, outer=(1,13), immutable]
  │    ├── index-join pqr
  │    │    ├── columns: p:6!null q:7 r:8 pqr.s:9 pqr.t:10
  │    │    ├── cardinality: [0 - 5]
@@ -8285,17 +8142,6 @@ inner-join-apply
  │    │         ├── key: (6)
  │    │         ├── fd: (6)-->(7)
  │    │         └── ordering: +7
- │    ├── project
- │    │    ├── columns: "?column?":19 a:13 b:14 c:15
- │    │    ├── outer: (1)
- │    │    ├── immutable
- │    │    ├── fd: (13)-->(19)
- │    │    ├── ordering: +13
- │    │    ├── scan abc@ab
- │    │    │    ├── columns: a:13 b:14 c:15
- │    │    │    └── ordering: +13
- │    │    └── projections
- │    │         └── a:13 * stu.s:1 [as="?column?":19, outer=(1,13), immutable]
  │    └── filters (true)
  └── filters (true)
 

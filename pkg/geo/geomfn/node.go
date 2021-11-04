@@ -183,7 +183,7 @@ func collectEndpoints(ls *geom.LineString) []*geom.Point {
 
 // splitLineByPoint splits the line using the Point provided.
 // Returns a bool representing whether the line was splitted or not, and a slice of output LineStrings.
-// The Point must be on provided line and not an endpoint, otherwise false is returned along with unsplitted line.
+// The Point must be on provided line and not an endpoint, otherwise false is returned along with unsplit line.
 func splitLineByPoint(l *geom.LineString, p geom.Coord) (bool, []*geom.LineString, error) {
 	// Do not split if Point is not on line.
 	if !xy.IsOnLine(l.Layout(), p, l.FlatCoords()) {

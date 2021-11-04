@@ -1114,7 +1114,7 @@ func (r *testRunner) addWorker(ctx context.Context, name string) *workerStatus {
 	return w
 }
 
-// removeWorker deletes the bookkepping for a worker that has finished running.
+// removeWorker deletes the bookkeeping for a worker that has finished running.
 func (r *testRunner) removeWorker(ctx context.Context, name string) {
 	r.workersMu.Lock()
 	delete(r.workersMu.workers, name)

@@ -151,6 +151,10 @@ type ServerConfig struct {
 	// introduce dependency on the sql package.
 	SQLStatsController tree.SQLStatsController
 
+	// IndexUsageStatsController is an interface used to reset index usage stats without
+	// the need to introduce dependency on the sql package.
+	IndexUsageStatsController tree.IndexUsageStatsController
+
 	// SQLSQLResponseAdmissionQ is the admission queue to use for
 	// SQLSQLResponseWork.
 	SQLSQLResponseAdmissionQ *admission.WorkQueue

@@ -36,14 +36,14 @@ import (
 //
 func TestSetDataDriven(t *testing.T) {
 	datadriven.Walk(t, "testdata/set", func(t *testing.T, path string) {
-		tr := MakeSet()
+		var tr Set
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			return testSetDataDriven(t, d, tr)
+			return testSetDataDriven(t, d, &tr)
 		})
 	})
 }
 
-func testSetDataDriven(t *testing.T, d *datadriven.TestData, tr Set) string {
+func testSetDataDriven(t *testing.T, d *datadriven.TestData, tr *Set) string {
 	switch d.Cmd {
 	case "add":
 		a := parseArgs(t, d, argName, argParentID|argParentSchemaID)

@@ -19,6 +19,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -640,5 +644,65 @@ func BenchmarkQueryCache(b *testing.B) {
 				})
 			}
 		})
+	}
+}
+
+func TestPlanGistControl(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	internalPlanner, cleanup := NewInternalPlanner(
+		"test",
+		kv.NewTxn(ctx, db, s.NodeID()),
+		security.RootUserName(),
+		&MemoryMetrics{},
+		&execCfg,
+		sessiondatapb.SessionData{},
+	)
+	defer cleanup()
+
+	p := internalPlanner.(*planner)
+	stmt, err := parser.ParseOne("SELECT 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.stmt = makeStatement(stmt, ClusterWideID{})
+	if err := p.makeOptimizerPlan(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if p.SessionData().DisablePlanGists {
+		t.Error("expected gists to be enabled by default")
+	}
+
+	if p.instrumentation.planGist.String() == "" {
+		t.Error("expected gist by default")
+	}
+
+	internalPlanner, cleanup = NewInternalPlanner(
+		"test",
+		kv.NewTxn(ctx, db, s.NodeID()),
+		security.RootUserName(),
+		&MemoryMetrics{},
+		&execCfg,
+		sessiondatapb.SessionData{},
+	)
+	defer cleanup()
+
+	p = internalPlanner.(*planner)
+	p.SessionData().DisablePlanGists = true
+
+	p.stmt = makeStatement(stmt, ClusterWideID{})
+	if err := p.makeOptimizerPlan(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if p.instrumentation.planGist.String() != "" {
+		t.Error("expected no gist")
 	}
 }

@@ -37,7 +37,7 @@ type Team struct {
 	// CODEOWNERS, code reviews for the @cockroachdb/bulk-io team). This map
 	// does not contain TeamName.
 	Aliases map[Alias]Purpose `yaml:"aliases"`
-	// TriageColumnID is the Github Column ID to assign issues to.
+	// TriageColumnID is the GitHub Column ID to assign issues to.
 	TriageColumnID int `yaml:"triage_column_id"`
 	// Email is the email address for this team.
 	//

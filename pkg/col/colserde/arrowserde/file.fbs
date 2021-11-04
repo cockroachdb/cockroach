@@ -42,7 +42,7 @@ struct Block {
   metaDataLength: int;
 
   /// Length of the data (this is aligned so there can be a gap between this and
-  /// the metatdata).
+  /// the metadata).
   bodyLength: long;
 }
 

@@ -19,6 +19,7 @@ go_library(
     name = "idxusage",
     srcs = [
         "cluster_settings.go",
+        "index_usage_stats_controller.go",
         "local_idx_usage_stats.go",
         "test_utils.go",
     ],
@@ -27,6 +28,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/roachpb:with-mocks",
+        "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/log",

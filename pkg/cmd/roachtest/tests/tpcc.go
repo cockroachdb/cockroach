@@ -50,14 +50,17 @@ const (
 )
 
 type tpccOptions struct {
-	Warehouses       int
-	ExtraRunArgs     string
-	ExtraSetupArgs   string
-	Chaos            func() Chaos                // for late binding of stopper
-	During           func(context.Context) error // for running a function during the test
-	Duration         time.Duration               // if zero, TPCC is not invoked
-	SetupType        tpccSetupType
+	Warehouses     int
+	ExtraRunArgs   string
+	ExtraSetupArgs string
+	Chaos          func() Chaos                // for late binding of stopper
+	During         func(context.Context) error // for running a function during the test
+	Duration       time.Duration               // if zero, TPCC is not invoked
+	SetupType      tpccSetupType
+	// PrometheusConfig, if set, overwrites the default prometheus config settings.
 	PrometheusConfig *prometheus.Config
+	// DisablePrometheus will force prometheus to not start up.
+	DisablePrometheus bool
 	// WorkloadInstances contains a list of instances for
 	// workloads to run against.
 	// If unset, it will run one workload which talks to
@@ -690,9 +693,9 @@ func registerTPCC(r registry.Registry) {
 		EstimatedMax:   gceOrAws(cloud, 2400, 3000),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
-		Nodes:                   3,
-		CPUs:                    16,
-		AdmissionControlEnabled: true,
+		Nodes:                    3,
+		CPUs:                     16,
+		AdmissionControlDisabled: true,
 
 		LoadWarehouses: gceOrAws(cloud, 3000, 3500),
 		EstimatedMax:   gceOrAws(cloud, 2400, 3000),
@@ -798,12 +801,12 @@ func (l tpccBenchLoadConfig) numLoadNodes(d tpccBenchDistribution) int {
 }
 
 type tpccBenchSpec struct {
-	Nodes                   int
-	CPUs                    int
-	Chaos                   bool
-	AdmissionControlEnabled bool
-	Distribution            tpccBenchDistribution
-	LoadConfig              tpccBenchLoadConfig
+	Nodes                    int
+	CPUs                     int
+	Chaos                    bool
+	AdmissionControlDisabled bool
+	Distribution             tpccBenchDistribution
+	LoadConfig               tpccBenchLoadConfig
 
 	// The number of warehouses to load into the cluster before beginning
 	// benchmarking. Should be larger than EstimatedMax and should be a
@@ -854,8 +857,8 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 	if b.Chaos {
 		nameParts = append(nameParts, "chaos")
 	}
-	if b.AdmissionControlEnabled {
-		nameParts = append(nameParts, "admission")
+	if b.AdmissionControlDisabled {
+		nameParts = append(nameParts, "no-admission")
 	}
 
 	opts := []spec.Option{spec.CPU(b.CPUs)}
@@ -1031,9 +1034,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	c.EncryptDefault(false)
 	c.EncryptAtRandom(false)
 	c.Start(ctx, append(b.startOpts(), roachNodes)...)
-	if b.AdmissionControlEnabled {
-		EnableAdmissionControl(ctx, t, c)
-	}
+	SetAdmissionControl(ctx, t, c, !b.AdmissionControlDisabled)
 	useHAProxy := b.Chaos
 	const restartWait = 15 * time.Second
 	{
@@ -1122,9 +1123,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		}
 
 		c.Start(ctx, append(b.startOpts(), roachNodes)...)
-		if b.AdmissionControlEnabled {
-			EnableAdmissionControl(ctx, t, c)
-		}
+		SetAdmissionControl(ctx, t, c, !b.AdmissionControlDisabled)
 	}
 
 	s := search.NewLineSearcher(1, b.LoadWarehouses, b.EstimatedMax, initStepSize, precision)
@@ -1435,6 +1434,9 @@ func setupPrometheus(
 		if c.IsLocal() {
 			return nil, func() {}
 		}
+		if opts.DisablePrometheus {
+			return nil, func() {}
+		}
 		workloadNode := c.Node(c.Spec().NodeCount)
 		cfg = &prometheus.Config{
 			PrometheusNode: workloadNode,
@@ -1447,6 +1449,9 @@ func setupPrometheus(
 				prometheus.MakeWorkloadScrapeConfig("workload", makeWorkloadScrapeNodes(workloadNode, workloadInstances)),
 			},
 		}
+	}
+	if opts.DisablePrometheus {
+		t.Fatal("test has PrometheusConfig but DisablePrometheus was on")
 	}
 	if c.IsLocal() {
 		t.Skip("skipping test as prometheus is needed, but prometheus does not yet work locally")

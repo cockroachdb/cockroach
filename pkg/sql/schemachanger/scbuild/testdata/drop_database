@@ -55,7 +55,6 @@ DROP DATABASE db1 CASCADE
   details:
     databaseId: 52
     dependentObjects:
-    - 29
     - 53
     - 54
     - 57

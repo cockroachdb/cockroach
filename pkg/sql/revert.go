@@ -56,8 +56,7 @@ func RevertTables(
 
 	spans := make([]roachpb.Span, 0, len(tables))
 
-	// Check that all the tables are revertable -- i.e. offline and that their
-	// full interleave hierarchy is being reverted.
+	// Check that all the tables are revertable -- i.e. offline.
 	for i := range tables {
 		if tables[i].GetState() != descpb.DescriptorState_OFFLINE {
 			return errors.New("only offline tables can be reverted")
@@ -65,20 +64,6 @@ func RevertTables(
 
 		if !tables[i].IsPhysicalTable() {
 			return errors.Errorf("cannot revert virtual table %s", tables[i].GetName())
-		}
-		for _, idx := range tables[i].NonDropIndexes() {
-			for j := 0; j < idx.NumInterleaveAncestors(); j++ {
-				parent := idx.GetInterleaveAncestor(j)
-				if !reverting[parent.TableID] {
-					return errors.New("cannot revert table without reverting all interleaved tables and indexes")
-				}
-			}
-			for j := 0; j < idx.NumInterleavedBy(); j++ {
-				child := idx.GetInterleavedBy(j)
-				if !reverting[child.Table] {
-					return errors.New("cannot revert table without reverting all interleaved tables and indexes")
-				}
-			}
 		}
 		spans = append(spans, tables[i].TableSpan(execCfg.Codec))
 	}

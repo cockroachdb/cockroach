@@ -41,7 +41,7 @@ func NewAcknowledgedCounter(initialCount uint64) *AcknowledgedCounter {
 	return c
 }
 
-// Last returns the largest value v such that all values in [initialCount, v) are ackowledged.
+// Last returns the largest value v such that all values in [initialCount, v) are acknowledged.
 func (c *AcknowledgedCounter) Last() uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()

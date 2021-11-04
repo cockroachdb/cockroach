@@ -24,6 +24,9 @@ import (
 // for smithing.
 type Setup func(*rand.Rand) string
 
+// RandTableSetupName is the name of the table setup that creates random tables.
+const RandTableSetupName = "rand-tables"
+
 // Setups is a collection of useful initial table states.
 var Setups = map[string]Setup{
 	"empty": wrapCommonSetup(stringSetup("")),
@@ -32,8 +35,8 @@ var Setups = map[string]Setup{
 	"seed": wrapCommonSetup(stringSetup(seedTable)),
 	// seed-vec is like seed except only types supported by vectorized
 	// execution are used.
-	"seed-vec":    wrapCommonSetup(stringSetup(vecSeedTable)),
-	"rand-tables": wrapCommonSetup(randTables),
+	"seed-vec":         wrapCommonSetup(stringSetup(vecSeedTable)),
+	RandTableSetupName: wrapCommonSetup(randTables),
 }
 
 // wrapCommonSetup wraps setup steps common to all SQLSmith setups around the
@@ -80,7 +83,6 @@ func randTablesN(r *rand.Rand, n int) string {
 	sb.WriteString(`
 		SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 		SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false;
-		SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true;
 	`)
 
 	// Create the random tables.

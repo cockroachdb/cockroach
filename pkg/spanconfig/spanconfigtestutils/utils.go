@@ -76,6 +76,67 @@ func ParseSpanConfigEntry(t *testing.T, conf string) roachpb.SpanConfigEntry {
 	}
 }
 
+// ParseKVAccessorGetArguments is a helper function that parses datadriven
+// kvaccessor-get arguments into the relevant spans. The input is of the
+// following form:
+//
+// 		span [a,e)
+// 		span [a,b)
+// 		span [b,c)
+//
+func ParseKVAccessorGetArguments(t *testing.T, input string) []roachpb.Span {
+	var spans []roachpb.Span
+	for _, line := range strings.Split(input, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		const spanPrefix = "span "
+		if !strings.HasPrefix(line, spanPrefix) {
+			t.Fatalf("malformed line %q, expected to find spanPrefix %q", line, spanPrefix)
+		}
+		line = strings.TrimPrefix(line, spanPrefix)
+		spans = append(spans, ParseSpan(t, line))
+	}
+	return spans
+}
+
+// ParseKVAccessorUpdateArguments is a helper function that parses datadriven
+// kvaccessor-update arguments into the relevant spans. The input is of the
+// following form:
+//
+// 		delete [c,e)
+// 		upsert [c,d):C
+// 		upsert [d,e):D
+//
+func ParseKVAccessorUpdateArguments(
+	t *testing.T, input string,
+) ([]roachpb.Span, []roachpb.SpanConfigEntry) {
+	var toDelete []roachpb.Span
+	var toUpsert []roachpb.SpanConfigEntry
+	for _, line := range strings.Split(input, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		const upsertPrefix, deletePrefix = "upsert ", "delete "
+		switch {
+		case strings.HasPrefix(line, deletePrefix):
+			line = strings.TrimPrefix(line, line[:len(deletePrefix)])
+			toDelete = append(toDelete, ParseSpan(t, line))
+		case strings.HasPrefix(line, upsertPrefix):
+			line = strings.TrimPrefix(line, line[:len(upsertPrefix)])
+			toUpsert = append(toUpsert, ParseSpanConfigEntry(t, line))
+		default:
+			t.Fatalf("malformed line %q, expected to find prefix %q or %q",
+				line, upsertPrefix, deletePrefix)
+		}
+	}
+	return toDelete, toUpsert
+}
+
 // PrintSpan is a helper function that transforms roachpb.Span into a string of
 // the form "[start,end)". The span is assumed to have been constructed by the
 // ParseSpan helper above.

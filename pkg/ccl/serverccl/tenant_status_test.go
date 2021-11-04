@@ -31,11 +31,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -115,13 +117,31 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	require.NoError(t, err)
 
 	request := &serverpb.StatementsRequest{}
-
-	tenantStats, err := tenantStatusServer.Statements(ctx, request)
-	require.NoError(t, err)
-
 	combinedStatsRequest := &serverpb.CombinedStatementsStatsRequest{}
-	tenantCombinedStats, err := tenantStatusServer.CombinedStatementStats(ctx, combinedStatsRequest)
-	require.NoError(t, err)
+	var tenantStats *serverpb.StatementsResponse
+	var tenantCombinedStats *serverpb.StatementsResponse
+
+	// Populate `tenantStats` and `tenantCombinedStats`. The tenant server
+	// `Statements` and `CombinedStatements` methods are backed by the
+	// sqlinstance system which uses a cache populated through rangefeed
+	// for keeping track of SQL pod data. We use `SucceedsSoon` to eliminate
+	// race condition with the sqlinstance cache population such as during
+	// a stress test.
+	testutils.SucceedsSoon(t, func() error {
+		tenantStats, err = tenantStatusServer.Statements(ctx, request)
+		if err != nil {
+			return err
+		}
+		if tenantStats == nil || len(tenantStats.Statements) == 0 {
+			return errors.New("tenant statements are unexpectedly empty")
+		}
+
+		tenantCombinedStats, err = tenantStatusServer.CombinedStatementStats(ctx, combinedStatsRequest)
+		if tenantCombinedStats == nil || len(tenantCombinedStats.Statements) == 0 {
+			return errors.New("tenant combined statements are unexpectedly empty")
+		}
+		return nil
+	})
 
 	path := "/_status/statements"
 	var nonTenantStats serverpb.StatementsResponse
@@ -297,6 +317,112 @@ func TestResetSQLStatsRPCForTenant(t *testing.T) {
 
 			ensureExpectedStmtFingerprintExistsInRPCResponse(t, stmts, statsFromControlCluster, "control")
 		})
+	}
+}
+
+func TestResetIndexUsageStatsRPCForTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "expensive tests")
+
+	ctx := context.Background()
+
+	statsIngestionCb, statsIngestionNotifier := idxusage.CreateIndexStatsIngestedCallbackForTest()
+
+	knobs := tests.CreateTestingKnobs()
+	knobs.IndexUsageStatsKnobs = &idxusage.TestingKnobs{
+		OnIndexUsageStatsProcessedCallback: statsIngestionCb,
+	}
+
+	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
+	defer testHelper.cleanup(ctx, t)
+
+	testingCluster := testHelper.testCluster()
+	controlCluster := testHelper.controlCluster()
+
+	for _, cluster := range []tenantCluster{testingCluster, controlCluster} {
+		// Create tables and insert data.
+		cluster.tenantConn(0).Exec(t, `
+CREATE TABLE test (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX(a)
+)
+`)
+
+		cluster.tenantConn(0).Exec(t, `
+INSERT INTO test
+VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
+`)
+
+		// Record scan on primary index.
+		cluster.tenantConn(0).Exec(t, "SELECT * FROM test")
+
+		// Record scan on secondary index.
+		cluster.tenantConn(1).Exec(t, "SELECT * FROM test@test_a_idx")
+		testTableIDStr := cluster.tenantConn(2).QueryStr(t, "SELECT 'test'::regclass::oid")[0][0]
+		testTableID, err := strconv.Atoi(testTableIDStr)
+		require.NoError(t, err)
+
+		// Wait for the stats to be ingested.
+		require.NoError(t,
+			idxusage.WaitForIndexStatsIngestionForTest(statsIngestionNotifier, map[roachpb.IndexUsageKey]struct{}{
+				{
+					TableID: roachpb.TableID(testTableID),
+					IndexID: 1,
+				}: {},
+				{
+					TableID: roachpb.TableID(testTableID),
+					IndexID: 2,
+				}: {},
+			}, 2 /* expectedEventCnt*/, 5*time.Second /* timeout */),
+		)
+
+		query := `
+SELECT
+  table_id,
+  index_id,
+  total_reads,
+  extract_duration('second', now() - last_read) < 5
+FROM
+  crdb_internal.index_usage_statistics
+WHERE
+  table_id = $1
+`
+		// Assert index usage data was inserted.
+		actual := cluster.tenantConn(2).QueryStr(t, query, testTableID)
+		expected := [][]string{
+			{testTableIDStr, "1", "1", "true"},
+			{testTableIDStr, "2", "1", "true"},
+		}
+		require.Equal(t, expected, actual)
+	}
+
+	// Reset index usage stats.
+	status := testingCluster.tenantStatusSrv(1 /* idx */)
+	_, err := status.ResetIndexUsageStats(ctx, &serverpb.ResetIndexUsageStatsRequest{})
+	require.NoError(t, err)
+
+	resp, err := status.IndexUsageStatistics(ctx, &serverpb.IndexUsageStatisticsRequest{})
+	require.NoError(t, err)
+
+	// Require index usage metrics to be reset.
+	for _, stats := range resp.Statistics {
+		require.Equal(t, uint64(0), stats.Stats.TotalReadCount)
+		require.Equal(t, time.Time{}, stats.Stats.LastRead)
+	}
+
+	// Ensure tenant data isolation.
+	status = controlCluster.tenantStatusSrv(1 /* idx */)
+	resp, err = status.IndexUsageStatistics(ctx, &serverpb.IndexUsageStatisticsRequest{})
+	require.NoError(t, err)
+
+	// Require index usage metrics to not be reset.
+	for _, stats := range resp.Statistics {
+		require.NotEqual(t, uint64(0), stats.Stats.TotalReadCount)
+		require.NotEqual(t, time.Time{}, stats.Stats.LastRead)
 	}
 }
 

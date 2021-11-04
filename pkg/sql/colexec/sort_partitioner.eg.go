@@ -45,68 +45,70 @@ type partitioner interface {
 }
 
 // newPartitioner returns a new partitioner on type t.
-func newPartitioner(t *types.T, nullsAreDistinct bool) (partitioner, error) {
+func newPartitioner(t *types.T, nullsAreDistinct bool) partitioner {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerBool{nullsAreDistinct: nullsAreDistinct}, nil
+			return partitionerBool{nullsAreDistinct: nullsAreDistinct}
 		}
 	case types.BytesFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerBytes{nullsAreDistinct: nullsAreDistinct}, nil
+			return partitionerBytes{nullsAreDistinct: nullsAreDistinct}
 		}
 	case types.DecimalFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerDecimal{nullsAreDistinct: nullsAreDistinct}, nil
+			return partitionerDecimal{nullsAreDistinct: nullsAreDistinct}
 		}
 	case types.IntFamily:
 		switch t.Width() {
 		case 16:
-			return partitionerInt16{nullsAreDistinct: nullsAreDistinct}, nil
+			return partitionerInt16{nullsAreDistinct: nullsAreDistinct}
 		case 32:
-			return partitionerInt32{nullsAreDistinct: nullsAreDistinct}, nil
+			return partitionerInt32{nullsAreDistinct: nullsAreDistinct}
 		case -1:
 		default:
-			return partitionerInt64{nullsAreDistinct: nullsAreDistinct}, nil
+			return partitionerInt64{nullsAreDistinct: nullsAreDistinct}
 		}
 	case types.FloatFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerFloat64{nullsAreDistinct: nullsAreDistinct}, nil
+			return partitionerFloat64{nullsAreDistinct: nullsAreDistinct}
 		}
 	case types.TimestampTZFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerTimestamp{nullsAreDistinct: nullsAreDistinct}, nil
+			return partitionerTimestamp{nullsAreDistinct: nullsAreDistinct}
 		}
 	case types.IntervalFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerInterval{nullsAreDistinct: nullsAreDistinct}, nil
+			return partitionerInterval{nullsAreDistinct: nullsAreDistinct}
 		}
 	case types.JsonFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerJSON{nullsAreDistinct: nullsAreDistinct}, nil
+			return partitionerJSON{nullsAreDistinct: nullsAreDistinct}
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerDatum{nullsAreDistinct: nullsAreDistinct}, nil
+			return partitionerDatum{nullsAreDistinct: nullsAreDistinct}
 		}
 	}
-	return nil, errors.Errorf("unsupported partition type %s", t)
+	colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", t))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 // partitionerBool partitions an arbitrary-length colVec by running a distinct

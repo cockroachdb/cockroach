@@ -176,6 +176,12 @@ func (v TableImplicitRecordType) DescriptorProto() *descpb.Descriptor {
 	return nil
 }
 
+// NewBuilder implements the Descriptor interface.
+func (v TableImplicitRecordType) NewBuilder() catalog.DescriptorBuilder {
+	v.panicNotSupported("NewBuilder")
+	return nil
+}
+
 // GetReferencedDescIDs implements the Descriptor interface.
 func (v TableImplicitRecordType) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	return catalog.DescriptorIDSet{}, errors.AssertionFailedf(

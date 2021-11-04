@@ -19,8 +19,8 @@ import "github.com/cockroachdb/cockroach/pkg/settings"
 var DummyVars = map[string]sessionVar{
 	"enable_seqscan": makeDummyBooleanSessionVar(
 		"enable_seqscan",
-		func(evalCtx *extendedEvalContext) string {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableSeqScan)
+		func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableSeqScan), nil
 		},
 		func(m sessionDataMutator, v bool) {
 			m.SetEnableSeqScan(v)
@@ -29,8 +29,8 @@ var DummyVars = map[string]sessionVar{
 	),
 	"synchronous_commit": makeDummyBooleanSessionVar(
 		"synchronous_commit",
-		func(evalCtx *extendedEvalContext) string {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().SynchronousCommit)
+		func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().SynchronousCommit), nil
 		},
 		func(m sessionDataMutator, v bool) {
 			m.SetSynchronousCommit(v)
@@ -118,10 +118,10 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	// "idle_in_transaction_session_timeout",
 	"ignore_checksum_failure",
 	"join_collapse_limit",
-	"lc_messages",
-	"lc_monetary",
-	"lc_numeric",
-	"lc_time",
+	// "lc_messages",
+	// "lc_monetary",
+	// "lc_numeric",
+	// "lc_time",
 	"lo_compat_privileges",
 	"local_preload_libraries",
 	// "lock_timeout",

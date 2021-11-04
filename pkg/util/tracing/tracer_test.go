@@ -253,7 +253,7 @@ func TestSterileSpan(t *testing.T) {
 
 	// Check that the meta of a sterile span doesn't get injected into carriers.
 	carrier := metadataCarrier{metadata.MD{}}
-	require.NoError(t, tr.InjectMetaInto(sp1.Meta(), carrier))
+	tr.InjectMetaInto(sp1.Meta(), carrier)
 	require.Len(t, carrier.MD, 0)
 }
 
@@ -268,9 +268,7 @@ func TestTracerInjectExtract(t *testing.T) {
 		t.Fatalf("expected noop Span: %+v", noop1)
 	}
 	carrier := metadataCarrier{metadata.MD{}}
-	if err := tr.InjectMetaInto(noop1.Meta(), carrier); err != nil {
-		t.Fatal(err)
-	}
+	tr.InjectMetaInto(noop1.Meta(), carrier)
 	if len(carrier.MD) != 0 {
 		t.Errorf("noop Span has carrier: %+v", carrier)
 	}
@@ -296,9 +294,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	s1.SetVerbose(true)
 
 	carrier = metadataCarrier{metadata.MD{}}
-	if err := tr.InjectMetaInto(s1.Meta(), carrier); err != nil {
-		t.Fatal(err)
-	}
+	tr.InjectMetaInto(s1.Meta(), carrier)
 
 	wireSpanMeta, err = tr2.ExtractMetaFrom(carrier)
 	if err != nil {
@@ -355,7 +351,7 @@ func TestTracer_PropagateNonRecordingRealSpanAcrossRPCBoundaries(t *testing.T) {
 	defer sp1.Finish()
 	carrier := metadataCarrier{MD: metadata.MD{}}
 	require.True(t, spanInclusionFuncForClient(sp1))
-	require.NoError(t, tr1.InjectMetaInto(sp1.Meta(), carrier))
+	tr1.InjectMetaInto(sp1.Meta(), carrier)
 	require.Equal(t, 2, carrier.Len(), "%+v", carrier) // trace id and span id
 
 	tr2 := NewTracer()
@@ -385,14 +381,8 @@ func TestOtelTracer(t *testing.T) {
 	// Put something in the span.
 	s.Record("hello")
 
-	const testBaggageKey = "test-baggage"
-	const testBaggageVal = "test-val"
-	s.SetBaggageItem(testBaggageKey, testBaggageVal)
-
 	carrier := metadataCarrier{metadata.MD{}}
-	if err := tr.InjectMetaInto(s.Meta(), carrier); err != nil {
-		t.Fatal(err)
-	}
+	tr.InjectMetaInto(s.Meta(), carrier)
 
 	// ExtractMetaFrom also extracts the embedded OpenTelemetry context.
 	wireSpanMeta, err := tr.ExtractMetaFrom(carrier)
@@ -400,28 +390,12 @@ func TestOtelTracer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s2 := tr.StartSpan("child", WithParentAndManualCollection(wireSpanMeta))
-
-	exp := map[string]string{
-		testBaggageKey: testBaggageVal,
-	}
-	require.Equal(t, exp, s2.Meta().Baggage)
-	// Note: we don't propagate baggage to the otel spans very well - we don't use
-	// the otel baggage features. We do, however, set attributes on the shadow
-	// spans when we can, which happens to be sufficient for this test.
+	tr.StartSpan("child", WithParentAndManualCollection(wireSpanMeta))
 
 	rs := sr.Started()
 	require.Len(t, rs, 2)
 	require.Len(t, rs[0].Events(), 1)
 	require.Equal(t, "hello", rs[0].Events()[0].Name)
-	require.Len(t, rs[0].Attributes(), 1)
-	require.Equal(t,
-		attribute.KeyValue{Key: testBaggageKey, Value: attribute.StringValue(testBaggageVal)},
-		rs[0].Attributes()[0])
-	require.Len(t, rs[1].Attributes(), 1)
-	require.Equal(t,
-		attribute.KeyValue{Key: testBaggageKey, Value: attribute.StringValue(testBaggageVal)},
-		rs[1].Attributes()[0])
 	require.Equal(t, rs[0].SpanContext().TraceID(), rs[1].Parent().TraceID())
 	require.Equal(t, rs[0].SpanContext().SpanID(), rs[1].Parent().SpanID())
 }

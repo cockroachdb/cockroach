@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -119,7 +118,7 @@ func decodeIndex(
 	}
 	values := make([]EncDatum, index.NumKeyColumns())
 	colDirs := index.IndexDesc().KeyColumnDirections
-	_, ok, _, err := DecodeIndexKey(codec, tableDesc, index, types, values, colDirs, key)
+	_, ok, _, err := DecodeIndexKey(codec, types, values, colDirs, key)
 	if err != nil {
 		return nil, err
 	}
@@ -950,320 +949,6 @@ func TestMarshalColumnValue(t *testing.T) {
 	}
 }
 
-type interleaveTableArgs struct {
-	indexKeyArgs indexKeyTest
-	values       []tree.Datum
-}
-
-type interleaveInfo struct {
-	tableID  uint64
-	values   []tree.Datum
-	equivSig []byte
-	children map[string]*interleaveInfo
-}
-
-func createHierarchy() map[string]*interleaveInfo {
-	return map[string]*interleaveInfo{
-		"t1": {
-			tableID: 50,
-			values:  []tree.Datum{tree.NewDInt(10)},
-			children: map[string]*interleaveInfo{
-				"t2": {
-					tableID: 100,
-					values:  []tree.Datum{tree.NewDInt(10), tree.NewDInt(15)},
-				},
-				"t3": {
-					tableID: 150,
-					values:  []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)},
-					children: map[string]*interleaveInfo{
-						"t4": {
-							tableID: 20,
-							values:  []tree.Datum{tree.NewDInt(10), tree.NewDInt(30)},
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-type equivSigTestCases struct {
-	name     string
-	table    interleaveTableArgs
-	expected [][]byte
-}
-
-func createEquivTCs(hierarchy map[string]*interleaveInfo) []equivSigTestCases {
-	return []equivSigTestCases{
-		{
-			name: "NoAncestors",
-			table: interleaveTableArgs{
-				indexKeyArgs: indexKeyTest{tableID: 50},
-				values:       []tree.Datum{tree.NewDInt(10)},
-			},
-			expected: [][]byte{hierarchy["t1"].equivSig},
-		},
-
-		{
-			name: "OneAncestor",
-			table: interleaveTableArgs{
-				indexKeyArgs: indexKeyTest{tableID: 100, primaryInterleaves: []descpb.ID{50}},
-				values:       []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)},
-			},
-			expected: [][]byte{hierarchy["t1"].equivSig, hierarchy["t1"].children["t2"].equivSig},
-		},
-
-		{
-			name: "TwoAncestors",
-			table: interleaveTableArgs{
-				indexKeyArgs: indexKeyTest{tableID: 20, primaryInterleaves: []descpb.ID{50, 150}},
-				values:       []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(30)},
-			},
-			expected: [][]byte{hierarchy["t1"].equivSig, hierarchy["t1"].children["t3"].equivSig, hierarchy["t1"].children["t3"].children["t4"].equivSig},
-		},
-	}
-}
-
-// equivSignatures annotates the hierarchy with the equivalence signatures
-// for each table and returns an in-order depth-first traversal of the
-// equivalence signatures.
-func equivSignatures(
-	hierarchy map[string]*interleaveInfo, parent []byte, signatures [][]byte,
-) [][]byte {
-	for _, info := range hierarchy {
-		// Reset the reference to the parent for every child.
-		curParent := parent
-		curParent = encoding.EncodeUvarintAscending(curParent, info.tableID)
-		// Primary ID is always 1
-		curParent = encoding.EncodeUvarintAscending(curParent, 1)
-		info.equivSig = make([]byte, len(curParent))
-		copy(info.equivSig, curParent)
-		signatures = append(signatures, info.equivSig)
-		if len(info.children) > 0 {
-			curParent = encoding.EncodeInterleavedSentinel(curParent)
-			signatures = equivSignatures(info.children, curParent, signatures)
-		}
-	}
-	return signatures
-}
-
-func TestIndexKeyEquivSignature(t *testing.T) {
-	hierarchy := createHierarchy()
-	hierarchySigs := equivSignatures(hierarchy, nil /*parent*/, nil /*signatures*/)
-	// validEquivSigs is necessary for IndexKeyEquivSignatures.
-	validEquivSigs := make(map[string]int)
-	for i, sig := range hierarchySigs {
-		validEquivSigs[string(sig)] = i
-	}
-
-	// Required buffers when extracting the index key's equivalence signature.
-	var keySigBuf, keyRestBuf []byte
-
-	for _, tc := range createEquivTCs(hierarchy) {
-		t.Run(tc.name, func(t *testing.T) {
-			// We need to initialize this for makeTableDescForTest.
-			tc.table.indexKeyArgs.primaryValues = tc.table.values
-			// Setup descriptors and form an index key.
-			desc, colMap := makeTableDescForTest(tc.table.indexKeyArgs)
-			primaryKeyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.GetPrimaryIndexID())
-			primaryKey, _, err := EncodeIndexKey(
-				desc, desc.GetPrimaryIndex(), colMap, tc.table.values, primaryKeyPrefix)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			tableIdx, restKey, match, err := IndexKeyEquivSignature(primaryKey, validEquivSigs, keySigBuf, keyRestBuf)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !match {
-				t.Fatalf("expected to extract equivalence signature from index key, instead false returned")
-			}
-
-			tableSig := tc.expected[len(tc.expected)-1]
-			expectedTableIdx := validEquivSigs[string(tableSig)]
-			if expectedTableIdx != tableIdx {
-				t.Fatalf("table index returned does not match table index from validEquivSigs.\nexpected %d\nactual %d", expectedTableIdx, tableIdx)
-			}
-
-			// Column values should be at the beginning of the
-			// remaining bytes of the key.
-			pkIndexDesc := desc.GetPrimaryIndex().IndexDesc()
-			colVals, nullColID, err := EncodeColumns(
-				pkIndexDesc.KeyColumnIDs,
-				pkIndexDesc.KeyColumnDirections,
-				colMap,
-				tc.table.values,
-				nil, /* keyPrefix */
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if nullColID != 0 {
-				t.Fatalf("unexpected null values when encoding expected column values")
-			}
-
-			if !bytes.Equal(colVals, restKey[:len(colVals)]) {
-				t.Fatalf("missing column values from rest of key.\nexpected %v\nactual %v", colVals, restKey[:len(colVals)])
-			}
-
-			// The remaining bytes of the key should be the same
-			// length as the primary key minus the equivalence
-			// signature bytes.
-			if len(primaryKey)-len(tableSig) != len(restKey) {
-				t.Fatalf("unexpected rest of key length, expected %d, actual %d", len(primaryKey)-len(tableSig), len(restKey))
-			}
-		})
-	}
-}
-
-// TestTableEquivSignatures verifies that TableEquivSignatures returns a slice
-// of slice references to a table's interleave ancestors' equivalence
-// signatures.
-func TestTableEquivSignatures(t *testing.T) {
-	hierarchy := createHierarchy()
-	equivSignatures(hierarchy, nil /*parent*/, nil /*signatures*/)
-
-	for _, tc := range createEquivTCs(hierarchy) {
-		t.Run(tc.name, func(t *testing.T) {
-			// We need to initialize this for makeTableDescForTest.
-			tc.table.indexKeyArgs.primaryValues = tc.table.values
-			// Setup descriptors and form an index key.
-			desc, _ := makeTableDescForTest(tc.table.indexKeyArgs)
-			equivSigs, err := TableEquivSignatures(desc, desc.GetPrimaryIndex())
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if len(equivSigs) != len(tc.expected) {
-				t.Fatalf("expected %d equivalence signatures from TableEquivSignatures, actual %d", len(tc.expected), len(equivSigs))
-			}
-			for i, sig := range equivSigs {
-				if !bytes.Equal(sig, tc.expected[i]) {
-					t.Fatalf("equivalence signatures at index %d do not match.\nexpected\t%v\nactual\t%v", i, tc.expected[i], sig)
-				}
-			}
-		})
-	}
-}
-
-// TestEquivSignature verifies that invoking IndexKeyEquivSignature for an encoded index key
-// for a given table-index pair returns the equivalent equivalence signature as
-// that of the table-index from invoking TableEquivSignatures.
-// It also checks that the equivalence signature is not equivalent to any other
-// tables' equivalence signatures.
-func TestEquivSignature(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		tables []interleaveTableArgs
-	}{
-		{
-			name: "Simple",
-			tables: []interleaveTableArgs{
-				{
-					indexKeyArgs: indexKeyTest{tableID: 50},
-					values:       []tree.Datum{tree.NewDInt(10)},
-				},
-				{
-					indexKeyArgs: indexKeyTest{tableID: 51},
-					values:       []tree.Datum{tree.NewDInt(20)},
-				},
-			},
-		},
-
-		{
-			name: "ParentAndChild",
-			tables: []interleaveTableArgs{
-				{
-					indexKeyArgs: indexKeyTest{tableID: 50},
-					values:       []tree.Datum{tree.NewDInt(10)},
-				},
-				{
-					indexKeyArgs: indexKeyTest{tableID: 51, primaryInterleaves: []descpb.ID{50}},
-					values:       []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)},
-				},
-			},
-		},
-
-		{
-			name: "Siblings",
-			tables: []interleaveTableArgs{
-				{
-					indexKeyArgs: indexKeyTest{tableID: 50},
-					values:       []tree.Datum{tree.NewDInt(10)},
-				},
-				{
-					indexKeyArgs: indexKeyTest{tableID: 51, primaryInterleaves: []descpb.ID{50}},
-					values:       []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)},
-				},
-				{
-					indexKeyArgs: indexKeyTest{tableID: 52, primaryInterleaves: []descpb.ID{50}},
-					values:       []tree.Datum{tree.NewDInt(30), tree.NewDInt(40)},
-				},
-			},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			keyEquivSigs := make([][]byte, len(tc.tables))
-			tableEquivSigs := make([][]byte, len(tc.tables))
-
-			for i, table := range tc.tables {
-				// We need to initialize this for makeTableDescForTest.
-				table.indexKeyArgs.primaryValues = table.values
-
-				// Setup descriptors and form an index key.
-				desc, colMap := makeTableDescForTest(table.indexKeyArgs)
-				primaryKeyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.GetPrimaryIndexID())
-				primaryKey, _, err := EncodeIndexKey(
-					desc, desc.GetPrimaryIndex(), colMap, table.values, primaryKeyPrefix)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				// Extract out the table's equivalence signature.
-				tempEquivSigs, err := TableEquivSignatures(desc, desc.GetPrimaryIndex())
-				if err != nil {
-					t.Fatal(err)
-				}
-				// The last signature is this table's.
-				tableEquivSigs[i] = tempEquivSigs[len(tempEquivSigs)-1]
-
-				validEquivSigs := make(map[string]int)
-				for i, sig := range tempEquivSigs {
-					validEquivSigs[string(sig)] = i
-				}
-				// Extract out the corresponding table index
-				// of the index key's signature.
-				tableIdx, _, _, err := IndexKeyEquivSignature(primaryKey, validEquivSigs, nil /*keySigBuf*/, nil /*keyRestBuf*/)
-				if err != nil {
-					t.Fatal(err)
-				}
-				// Map the table index back to the signature.
-				keyEquivSigs[i] = tempEquivSigs[tableIdx]
-			}
-
-			for i, keySig := range keyEquivSigs {
-				for j, tableSig := range tableEquivSigs {
-					if i == j {
-						// The corresponding table should have the same
-						// equivalence signature as the one derived from the key.
-						if !bytes.Equal(keySig, tableSig) {
-							t.Fatalf("IndexKeyEquivSignature differs from equivalence signature for its table.\nKeySignature: %v\nTableSignature: %v", keySig, tableSig)
-						}
-					} else {
-						// A different table should not have
-						// the same equivalence signature.
-						if bytes.Equal(keySig, tableSig) {
-							t.Fatalf("IndexKeyEquivSignature produces equivalent signature for a different table.\nKeySignature: %v\nTableSignature: %v", keySig, tableSig)
-						}
-					}
-				}
-			}
-
-		})
-	}
-}
-
 func TestDecodeTableValue(t *testing.T) {
 	a := &DatumAlloc{}
 	for _, tc := range []struct {
@@ -1299,10 +984,6 @@ func TestDecodeTableValue(t *testing.T) {
 	}
 }
 
-// See CreateTestInterleavedHierarchy for the longest chain used for the short
-// format.
-var shortFormTables = [3]string{"parent1", "child1", "grandchild1"}
-
 // ExtractIndexKey constructs the index (primary) key for a row from any index
 // key/value entry, including secondary indexes.
 //
@@ -1330,23 +1011,9 @@ func ExtractIndexKey(
 	}
 	values := make([]EncDatum, index.NumKeyColumns())
 	dirs := index.IndexDesc().KeyColumnDirections
-	if index.NumInterleaveAncestors() > 0 {
-		// TODO(dan): In the interleaved index case, we parse the key twice; once to
-		// find the index id so we can look up the descriptor, and once to extract
-		// the values. Only parse once.
-		var ok bool
-		_, ok, _, err = DecodeIndexKey(codec, tableDesc, index, indexTypes, values, dirs, entry.Key)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			return nil, errors.Errorf("descriptor did not match key")
-		}
-	} else {
-		key, _, err = DecodeKeyVals(indexTypes, values, dirs, key)
-		if err != nil {
-			return nil, err
-		}
+	key, _, err = DecodeKeyVals(indexTypes, values, dirs, key)
+	if err != nil {
+		return nil, err
 	}
 
 	// Extract the values for index.KeySuffixColumnIDs

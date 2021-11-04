@@ -31,7 +31,7 @@ import (
 
 func newSingleDistinct(
 	input colexecop.Operator, distinctColIdx int, outputCol []bool, t *types.T, nullsAreDistinct bool,
-) (colexecop.Operator, error) {
+) colexecop.Operator {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
@@ -42,7 +42,7 @@ func newSingleDistinct(
 				distinctColIdx:   distinctColIdx,
 				outputCol:        outputCol,
 				nullsAreDistinct: nullsAreDistinct,
-			}, nil
+			}
 		}
 	case types.BytesFamily:
 		switch t.Width() {
@@ -53,7 +53,7 @@ func newSingleDistinct(
 				distinctColIdx:   distinctColIdx,
 				outputCol:        outputCol,
 				nullsAreDistinct: nullsAreDistinct,
-			}, nil
+			}
 		}
 	case types.DecimalFamily:
 		switch t.Width() {
@@ -64,7 +64,7 @@ func newSingleDistinct(
 				distinctColIdx:   distinctColIdx,
 				outputCol:        outputCol,
 				nullsAreDistinct: nullsAreDistinct,
-			}, nil
+			}
 		}
 	case types.IntFamily:
 		switch t.Width() {
@@ -74,14 +74,14 @@ func newSingleDistinct(
 				distinctColIdx:   distinctColIdx,
 				outputCol:        outputCol,
 				nullsAreDistinct: nullsAreDistinct,
-			}, nil
+			}
 		case 32:
 			return &distinctInt32Op{
 				OneInputHelper:   colexecop.MakeOneInputHelper(input),
 				distinctColIdx:   distinctColIdx,
 				outputCol:        outputCol,
 				nullsAreDistinct: nullsAreDistinct,
-			}, nil
+			}
 		case -1:
 		default:
 			return &distinctInt64Op{
@@ -89,7 +89,7 @@ func newSingleDistinct(
 				distinctColIdx:   distinctColIdx,
 				outputCol:        outputCol,
 				nullsAreDistinct: nullsAreDistinct,
-			}, nil
+			}
 		}
 	case types.FloatFamily:
 		switch t.Width() {
@@ -100,7 +100,7 @@ func newSingleDistinct(
 				distinctColIdx:   distinctColIdx,
 				outputCol:        outputCol,
 				nullsAreDistinct: nullsAreDistinct,
-			}, nil
+			}
 		}
 	case types.TimestampTZFamily:
 		switch t.Width() {
@@ -111,7 +111,7 @@ func newSingleDistinct(
 				distinctColIdx:   distinctColIdx,
 				outputCol:        outputCol,
 				nullsAreDistinct: nullsAreDistinct,
-			}, nil
+			}
 		}
 	case types.IntervalFamily:
 		switch t.Width() {
@@ -122,7 +122,7 @@ func newSingleDistinct(
 				distinctColIdx:   distinctColIdx,
 				outputCol:        outputCol,
 				nullsAreDistinct: nullsAreDistinct,
-			}, nil
+			}
 		}
 	case types.JsonFamily:
 		switch t.Width() {
@@ -133,7 +133,7 @@ func newSingleDistinct(
 				distinctColIdx:   distinctColIdx,
 				outputCol:        outputCol,
 				nullsAreDistinct: nullsAreDistinct,
-			}, nil
+			}
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
@@ -144,10 +144,12 @@ func newSingleDistinct(
 				distinctColIdx:   distinctColIdx,
 				outputCol:        outputCol,
 				nullsAreDistinct: nullsAreDistinct,
-			}, nil
+			}
 		}
 	}
-	return nil, errors.Errorf("unsupported distinct type %s", t)
+	colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", t))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 // distinctBoolOp runs a distinct on the column in distinctColIdx, writing

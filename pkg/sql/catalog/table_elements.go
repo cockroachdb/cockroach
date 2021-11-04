@@ -119,7 +119,6 @@ type Index interface {
 
 	GetID() descpb.IndexID
 	GetName() string
-	IsInterleaved() bool
 	IsPartial() bool
 	IsUnique() bool
 	IsDisabled() bool
@@ -140,12 +139,6 @@ type Index interface {
 	GetPartitioning() Partitioning
 
 	ExplicitColumnStartIdx() int
-
-	NumInterleaveAncestors() int
-	GetInterleaveAncestor(ancestorOrdinal int) descpb.InterleaveDescriptor_Ancestor
-
-	NumInterleavedBy() int
-	GetInterleavedBy(interleavedByOrdinal int) descpb.ForeignKeyReference
 
 	NumKeyColumns() int
 	GetKeyColumnID(columnOrdinal int) descpb.ColumnID

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -400,16 +401,6 @@ func (r *Replica) canAttempt1PCEvaluation(
 	return true
 }
 
-// OnePCNotAllowedError signifies that a request had the Require1PC flag set,
-// but 1PC evaluation was not possible for one reason or another.
-type OnePCNotAllowedError struct{}
-
-var _ error = OnePCNotAllowedError{}
-
-func (OnePCNotAllowedError) Error() string {
-	return "could not commit in one phase as requested"
-}
-
 // evaluateWriteBatch evaluates the supplied batch.
 //
 // If the batch is transactional and has all the hallmarks of a 1PC commit (i.e.
@@ -455,7 +446,7 @@ func (r *Replica) evaluateWriteBatch(
 		// terminate this request early.
 		arg, ok := ba.GetArg(roachpb.EndTxn)
 		if ok && arg.(*roachpb.EndTxnRequest).Require1PC {
-			return nil, enginepb.MVCCStats{}, nil, result.Result{}, roachpb.NewError(OnePCNotAllowedError{})
+			return nil, enginepb.MVCCStats{}, nil, result.Result{}, roachpb.NewError(kv.OnePCNotAllowedError{})
 		}
 	}
 

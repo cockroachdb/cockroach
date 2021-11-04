@@ -73,6 +73,7 @@ regions: <hidden>
       KV contention time: 0µs
       KV rows read: 5
       KV bytes read: 40 B
+      estimated max memory allocated: 0 B
       missing stats
       table: kv@kv_pkey
       spans: FULL SCAN
@@ -95,6 +96,8 @@ regions: <hidden>
 │ nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 5
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
 │ equality: (k) = (k)
 │ left cols are key
 │ right cols are key
@@ -107,6 +110,7 @@ regions: <hidden>
 │     KV contention time: 0µs
 │     KV rows read: 5
 │     KV bytes read: 40 B
+│     estimated max memory allocated: 0 B
 │     missing stats
 │     table: kv@kv_pkey
 │     spans: FULL SCAN
@@ -119,6 +123,7 @@ regions: <hidden>
       KV contention time: 0µs
       KV rows read: 5
       KV bytes read: 40 B
+      estimated max memory allocated: 0 B
       missing stats
       table: kw@kw_pkey
       spans: FULL SCAN
@@ -139,10 +144,9 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 │             ├ *colexec.invariantsChecker
 │             │ └ *colexec.countOp
 │             │   └ *colexec.invariantsChecker
-│             │     └ *colexecbase.simpleProjectOp
-│             │       └ *colexecutils.CancelChecker
-│             │         └ *colexec.invariantsChecker
-│             │           └ *colfetcher.ColBatchScan
+│             │     └ *colexecutils.CancelChecker
+│             │       └ *colexec.invariantsChecker
+│             │         └ *colfetcher.ColBatchScan
 │             ├ *colexec.invariantsChecker
 │             │ └ *colrpc.Inbox
 │             ├ *colexec.invariantsChecker
@@ -157,40 +161,36 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 │     └ *colexec.invariantsChecker
 │       └ *colexec.countOp
 │         └ *colexec.invariantsChecker
-│           └ *colexecbase.simpleProjectOp
-│             └ *colexecutils.CancelChecker
-│               └ *colexec.invariantsChecker
-│                 └ *colfetcher.ColBatchScan
+│           └ *colexecutils.CancelChecker
+│             └ *colexec.invariantsChecker
+│               └ *colfetcher.ColBatchScan
 ├ Node 3
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
 │     └ *colexec.invariantsChecker
 │       └ *colexec.countOp
 │         └ *colexec.invariantsChecker
-│           └ *colexecbase.simpleProjectOp
-│             └ *colexecutils.CancelChecker
-│               └ *colexec.invariantsChecker
-│                 └ *colfetcher.ColBatchScan
+│           └ *colexecutils.CancelChecker
+│             └ *colexec.invariantsChecker
+│               └ *colfetcher.ColBatchScan
 ├ Node 4
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
 │     └ *colexec.invariantsChecker
 │       └ *colexec.countOp
 │         └ *colexec.invariantsChecker
-│           └ *colexecbase.simpleProjectOp
-│             └ *colexecutils.CancelChecker
-│               └ *colexec.invariantsChecker
-│                 └ *colfetcher.ColBatchScan
+│           └ *colexecutils.CancelChecker
+│             └ *colexec.invariantsChecker
+│               └ *colfetcher.ColBatchScan
 └ Node 5
   └ *colrpc.Outbox
     └ *colexecutils.deselectorOp
       └ *colexec.invariantsChecker
         └ *colexec.countOp
           └ *colexec.invariantsChecker
-            └ *colexecbase.simpleProjectOp
-              └ *colexecutils.CancelChecker
-                └ *colexec.invariantsChecker
-                  └ *colfetcher.ColBatchScan
+            └ *colexecutils.CancelChecker
+              └ *colexec.invariantsChecker
+                └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2

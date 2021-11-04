@@ -75,7 +75,6 @@ func (r *registry) buildGraph(currentPhase scop.Phase, initial scpb.State) (*scg
 						op.from = op.to
 						op.ops = func(element scpb.Element) []scop.Op { return nil }
 					}
-
 					edgesToAdd = append(edgesToAdd, toAdd{
 						transition: op,
 						n:          n,

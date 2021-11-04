@@ -7,7 +7,8 @@ CREATE DATABASE d; USE d
 exec
 SET extra_float_digits = -1;
 SET enable_zigzag_join = false;
-SET search_path = public
+SET search_path = public;
+SET custom_option.custom_option = 'test'
 ----
 
 let $x

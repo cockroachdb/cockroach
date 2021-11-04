@@ -108,7 +108,7 @@ func eventInternal(sp *tracing.Span, el *ctxEventLog, isErr bool, entry *logEntr
 		// TODO(obs-inf): figure out a way to signal that this is an error. We could
 		// use a different "error" key (provided it shows up in LightStep). Things
 		// like NetTraceIntegrator would need to be modified to understand the
-		// difference. We could also set a special Tag or Baggage on the span. See
+		// difference. We could also set a special Tag on the span. See
 		// #8827 for more discussion.
 		_ = isErr
 		return

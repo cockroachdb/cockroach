@@ -2913,7 +2913,7 @@ type QueryIntentRequest struct {
 	// transaction could have performed overlapping writes, in which case only the
 	// latest sequence number will remain. We assume that if a transaction has
 	// successfully written an intent at a larger sequence number then it must
-	// have succeeeded in writing an intent at the smaller sequence number as
+	// have succeeded in writing an intent at the smaller sequence number as
 	// well.
 	//
 	// QueryIntentRequests may be issued in non-transactional BatchRequests or in
@@ -3977,7 +3977,7 @@ type ExportRequest struct {
 	// is used as a lower bound and header Timestamp as higher bound or exported
 	// entries.
 	MVCCFilter MVCCFilter `protobuf:"varint,4,opt,name=mvcc_filter,json=mvccFilter,proto3,enum=cockroach.roachpb.MVCCFilter" json:"mvcc_filter,omitempty"`
-	// StartTime is only used whe MVCCFilter is set to All.
+	// StartTime is only used when MVCCFilter is set to All.
 	StartTime hlc.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time"`
 	// Split large rows in the middle of key sequence. This option will allow
 	// large history being broken up into target_file_size chunks and prevent
@@ -6681,6 +6681,8 @@ type Header struct {
 	// RangeInfo with up-to-date information.
 	ClientRangeInfo ClientRangeInfo `protobuf:"bytes,17,opt,name=client_range_info,json=clientRangeInfo,proto3" json:"client_range_info"`
 	// gateway_node_id is the ID of the gateway node where the request originated.
+	// For requests from tenants, this is set to the NodeID of the KV node handling
+	// the BatchRequest.
 	GatewayNodeID NodeID `protobuf:"varint,11,opt,name=gateway_node_id,json=gatewayNodeId,proto3,casttype=NodeID" json:"gateway_node_id,omitempty"`
 	// If set, the request will return to the client before proposing the
 	// request into Raft. All consensus processing will be performed

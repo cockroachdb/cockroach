@@ -101,7 +101,7 @@ func evalExport(
 
 	var evalExportTrace types.StringValue
 	if cArgs.EvalCtx.NodeID() == h.GatewayNodeID {
-		evalExportTrace.Value = fmt.Sprintf("evaluating Export on local node %d", cArgs.EvalCtx.NodeID())
+		evalExportTrace.Value = fmt.Sprintf("evaluating Export on gateway node %d", cArgs.EvalCtx.NodeID())
 	} else {
 		evalExportTrace.Value = fmt.Sprintf("evaluating Export on remote node %d", cArgs.EvalCtx.NodeID())
 	}
@@ -151,6 +151,11 @@ func evalExport(
 
 	maxRunTime := exportRequestMaxIterationTime.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 
+	var maxIntents uint64
+	if m := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV); m > 0 {
+		maxIntents = uint64(m)
+	}
+
 	// Time-bound iterators only make sense to use if the start time is set.
 	useTBI := args.EnableTimeBoundIteratorOptimization && !args.StartTime.IsEmpty()
 	// Only use resume timestamp if splitting mid key is enabled.
@@ -170,6 +175,7 @@ func evalExport(
 			ExportAllRevisions: exportAllRevisions,
 			TargetSize:         targetSize,
 			MaxSize:            maxSize,
+			MaxIntents:         maxIntents,
 			StopMidKey:         args.SplitMidKey,
 			UseTBI:             useTBI,
 			ResourceLimiter:    storage.NewResourceLimiter(storage.ResourceLimiterOptions{MaxRunTime: maxRunTime}, timeutil.DefaultTimeSource{}),

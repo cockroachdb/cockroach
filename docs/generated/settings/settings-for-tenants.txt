@@ -1,7 +1,10 @@
 Setting	Type	Default	Description
-admission.kv.enabled	boolean	false	when true, work performed by the KV layer is subject to admission control
-admission.sql_kv_response.enabled	boolean	false	when true, work performed by the SQL layer when receiving a KV response is subject to admission control
-admission.sql_sql_response.enabled	boolean	false	when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control
+admission.kv.enabled	boolean	true	when true, work performed by the KV layer is subject to admission control
+admission.sql_kv_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a KV response is subject to admission control
+admission.sql_sql_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control
+bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP
+bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attempt is considered timed out, which causes the backup to fail
+bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads
 bulkio.stream_ingestion.minimum_flush_interval	duration	5s	the minimum timestamp between flushes; flushes may still occur if internal buffers fill up
 changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds
 cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage
@@ -76,7 +79,6 @@ sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references 
 sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed
 sql.cross_db_sequence_references.enabled	boolean	false	if true, sequences referenced by tables from other databases are allowed
 sql.cross_db_views.enabled	boolean	false	if true, creating views that refer to other databases is allowed
-sql.defaults.copy_partitioning_when_deinterleaving_table.enabled	boolean	false	default value for enable_copying_partitioning_when_deinterleaving_table session variable
 sql.defaults.datestyle	enumeration	iso, mdy	default value for DateStyle session setting [iso, mdy = 0, iso, dmy = 1, iso, ymd = 2]
 sql.defaults.datestyle.enabled	boolean	false	default value for datestyle_enabled session setting
 sql.defaults.default_int_size	integer	8	the size, in bytes, of an INT type
@@ -96,7 +98,6 @@ sql.defaults.idle_in_session_timeout	duration	0s	default value for the idle_in_s
 sql.defaults.idle_in_transaction_session_timeout	duration	0s	default value for the idle_in_transaction_session_timeout; controls the duration a session is permitted to idle in a transaction before the session is terminated; if set to 0, there is no timeout
 sql.defaults.implicit_select_for_update.enabled	boolean	true	default value for enable_implicit_select_for_update session setting; enables FOR UPDATE locking during the row-fetch phase of mutation statements
 sql.defaults.insert_fast_path.enabled	boolean	true	default value for enable_insert_fast_path session setting; enables a specialized insert path
-sql.defaults.interleaved_tables.enabled	boolean	false	allows creation of interleaved tables or indexes
 sql.defaults.intervalstyle	enumeration	postgres	default value for IntervalStyle session setting [postgres = 0, iso_8601 = 1, sql_standard = 2]
 sql.defaults.intervalstyle.enabled	boolean	false	default value for intervalstyle_enabled session setting
 sql.defaults.large_full_scan_rows	float	1000	default value for large_full_scan_rows session setting which determines the maximum table size allowed for a full scan when disallow_full_table_scans is set to true

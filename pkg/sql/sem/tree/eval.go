@@ -2983,8 +2983,8 @@ func MatchLikeEscape(
 
 	like, err := optimizedLikeFunc(pattern, caseInsensitive, escapeRune)
 	if err != nil {
-		return DBoolFalse, pgerror.Newf(
-			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
+		return DBoolFalse, pgerror.Wrap(
+			err, pgcode.InvalidRegularExpression, "LIKE regexp compilation failed")
 	}
 
 	if like == nil {
@@ -3008,8 +3008,8 @@ func ConvertLikeToRegexp(
 	key := likeKey{s: pattern, caseInsensitive: caseInsensitive, escape: escape}
 	re, err := ctx.ReCache.GetRegexp(key)
 	if err != nil {
-		return nil, pgerror.Newf(
-			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
+		return nil, pgerror.Wrap(
+			err, pgcode.InvalidRegularExpression, "LIKE regexp compilation failed")
 	}
 	return re, nil
 }
@@ -3033,8 +3033,8 @@ func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum
 
 	like, err := optimizedLikeFunc(pattern, caseInsensitive, '\\')
 	if err != nil {
-		return DBoolFalse, pgerror.Newf(
-			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
+		return DBoolFalse, pgerror.Wrap(
+			err, pgcode.InvalidRegularExpression, "LIKE regexp compilation failed")
 	}
 
 	if like == nil {
@@ -3225,6 +3225,9 @@ type EvalPlanner interface {
 
 	// ExternalWriteFile writes the content to an external file URI.
 	ExternalWriteFile(ctx context.Context, uri string, content []byte) error
+
+	// DecodeGist exposes gist functionality to the builtin functions.
+	DecodeGist(gist string) ([]string, error)
 }
 
 // CompactEngineSpanFunc is used to compact an engine key span at the given
@@ -3304,7 +3307,7 @@ type PrivilegedAccessor interface {
 		ctx context.Context, parentID int64, name string,
 	) (DInt, bool, error)
 
-	// LookupZoneConfig returns the zone config given a namespace id.
+	// LookupZoneConfigByNamespaceID returns the zone config given a namespace id.
 	// It is meant as a replacement for looking up system.zones directly.
 	// Returns the config byte array, a bool representing whether the namespace exists,
 	// and an error if there is one.
@@ -3441,6 +3444,13 @@ func (*EvalContextTestingKnobs) ModuleTestingKnobs() {}
 type SQLStatsController interface {
 	ResetClusterSQLStats(ctx context.Context) error
 	CreateSQLStatsCompactionSchedule(ctx context.Context) error
+}
+
+// IndexUsageStatsController is an interface embedded in EvalCtx which can be
+// used by the builtins to reset index usage stats in the cluster. This interface
+// is introduced to avoid circular dependency.
+type IndexUsageStatsController interface {
+	ResetIndexUsageStats(ctx context.Context) error
 }
 
 // EvalContext defines the context in which to evaluate an expression, allowing
@@ -3586,6 +3596,8 @@ type EvalContext struct {
 	SQLLivenessReader sqlliveness.Reader
 
 	SQLStatsController SQLStatsController
+
+	IndexUsageStatsController IndexUsageStatsController
 
 	// CompactEngineSpan is used to force compaction of a span in a store.
 	CompactEngineSpan CompactEngineSpanFunc

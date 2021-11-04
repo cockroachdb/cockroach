@@ -149,7 +149,7 @@ inner-join-apply
  │    │    ├── cost: 1094.72
  │    │    └── prune: (7-9)
  │    └── filters
- │         └── eq [type=bool, outer=(1,7,8), immutable, constraints=(/1: (/NULL - ])]
+ │         └── eq [type=bool, outer=(1,7,8), immutable, constraints=(/1: (/NULL - ]), fd=(7,8)-->(1)]
  │              ├── variable: t.public.abc.a:1 [type=int]
  │              └── plus [type=int]
  │                   ├── variable: t.public.def.d:7 [type=int]

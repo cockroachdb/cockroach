@@ -195,7 +195,7 @@ func (c *CustomFuncs) SplitLimitedScanIntoUnionScans(
 	}
 	keyPrefixLength := cons.Columns.Count()
 	for i := 0; i < cons.Columns.Count(); i++ {
-		if limitOrdering.Columns[0].Group.Contains(cons.Columns.Get(i).ID()) {
+		if limitOrdering.Group(0).Contains(cons.Columns.Get(i).ID()) {
 			keyPrefixLength = i
 			break
 		}
