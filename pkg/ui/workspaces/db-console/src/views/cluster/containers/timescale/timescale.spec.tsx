@@ -21,7 +21,7 @@ import {
 } from "./index";
 import * as timewindow from "src/redux/timewindow";
 import moment from "moment";
-import { refreshNodes } from "src/redux/apiReducers";
+import { refreshNodes, refreshSettings } from "src/redux/apiReducers";
 import "src/enzymeInit";
 import { MemoryRouter } from "react-router";
 import TimeFrameControls from "../../components/controls";
@@ -70,6 +70,9 @@ describe("<TimeScaleDropdown>", function() {
       dispatchRefreshNodes: refreshNodes,
       setTimeScale: timewindow.setTimeScale,
       setTimeRange: timewindow.setTimeRange,
+      refreshNodeSettings: refreshSettings,
+      durationWith10secResolution: moment.duration(10, "d"),
+      durationWithStoredData: moment.duration(90, "d"),
     };
     spy = sinon.spy();
   });

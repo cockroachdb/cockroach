@@ -86,3 +86,15 @@ export function LongToMoment(timestamp: Long): moment.Moment {
   }
   return moment.utc(NanoToMilli(timestamp.toNumber()));
 }
+
+// durationFromISO8601String function converts a string date in ISO8601 format to moment.Duration
+export const durationFromISO8601String = (value: string): moment.Duration => {
+  if (!value) {
+    return undefined;
+  }
+  value = value.toUpperCase();
+  if (!value.startsWith("P")) {
+    value = `PT${value}`;
+  }
+  return moment.duration(value);
+};
