@@ -1046,8 +1046,7 @@ func (w CommonBufferSinkConfigWrapper) MarshalYAML() (interface{}, error) {
 	if w.IsNone() {
 		return "NONE", nil
 	}
-	b, err := yaml.Marshal(w.CommonBufferSinkConfig)
-	return string(b), err
+	return w.CommonBufferSinkConfig, nil
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
