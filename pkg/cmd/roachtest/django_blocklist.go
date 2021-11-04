@@ -181,8 +181,9 @@ var djangoIgnoreList21_2 = blocklist{
 }
 
 var djangoIgnoreList21_1 = blocklist{
-	"schema.tests.SchemaTests.test_alter_field_db_collation":          "will be fixed in django-cockroachdb v3.2.2",
-	"schema.tests.SchemaTests.test_alter_field_type_and_db_collation": "will be fixed in django-cockroachdb v3.2.2",
+	"migrations.test_operations.OperationTests.test_remove_field_m2m_with_through": "will be fixed in django-cockroachdb v3.2.2",
+	"schema.tests.SchemaTests.test_alter_field_db_collation":                       "will be fixed in django-cockroachdb v3.2.2",
+	"schema.tests.SchemaTests.test_alter_field_type_and_db_collation":              "will be fixed in django-cockroachdb v3.2.2",
 }
 
 var djangoIgnoreList20_2 = blocklist{
