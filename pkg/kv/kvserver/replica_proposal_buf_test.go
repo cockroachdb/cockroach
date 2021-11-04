@@ -152,6 +152,10 @@ func (t *testProposer) withGroupLocked(fn func(proposerRaft) error) error {
 	return fn(t.raftGroup)
 }
 
+func (t *testProposer) leaseDebug() string {
+	return ""
+}
+
 func (t *testProposer) registerProposalLocked(p *ProposalData) {
 	t.registered++
 }
