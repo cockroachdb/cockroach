@@ -213,6 +213,7 @@ message StoreDescriptor {
   roachpb.Attributes attrs = 2 [(gogoproto.nullable) = false];
   NodeDescriptor node = 3 [(gogoproto.nullable) = false];
   roachpb.StoreCapacity capacity = 4 [(gogoproto.nullable) = false];
+  roachpb.StoreProperties properties = 5 [(gogoproto.nullable) = false];
 }
 
 // StoreStatus records the most recent values of metrics for a store.
