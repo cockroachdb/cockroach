@@ -735,39 +735,52 @@ func (desc *immutable) MakeTypesT(
 	}
 }
 
-// HydrateTypesInTableDescriptor uses typeLookup to install metadata in the
-// types present in a table descriptor. typeLookup retrieves the fully
-// qualified name and descriptor for a particular ID.
-func HydrateTypesInTableDescriptor(
-	ctx context.Context, desc *descpb.TableDescriptor, res catalog.TypeDescriptorResolver,
+// EnsureTypeIsHydrated makes sure that t is a fully-hydrated type.
+func EnsureTypeIsHydrated(
+	ctx context.Context, t *types.T, res catalog.TypeDescriptorResolver,
 ) error {
-	hydrateCol := func(col *descpb.ColumnDescriptor) error {
-		if col.Type.UserDefined() {
-			// Look up its type descriptor.
-			td, err := GetUserDefinedTypeDescID(col.Type)
-			if err != nil {
-				return err
-			}
-			name, typDesc, err := res.GetTypeDescriptor(ctx, td)
-			if err != nil {
-				return err
-			}
-			// Note that this will no-op if the type is already hydrated.
-			if err := typDesc.HydrateTypeInfoWithName(ctx, col.Type, &name, res); err != nil {
+	// maybeHydrateType checks if t is a user-defined type that hasn't been
+	// hydrated yet, and installs the metadata if so.
+	maybeHydrateType := func(ctx context.Context, t *types.T, res catalog.TypeDescriptorResolver) error {
+		if !t.UserDefined() || t.IsHydrated() {
+			return nil
+		}
+		id, err := GetUserDefinedTypeDescID(t)
+		if err != nil {
+			return err
+		}
+		elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, id)
+		if err != nil {
+			return err
+		}
+		return elemTypDesc.HydrateTypeInfoWithName(ctx, t, &elemTypName, res)
+	}
+	if t.Family() == types.TupleFamily {
+		for _, typ := range t.TupleContents() {
+			if err := maybeHydrateType(ctx, typ, res); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
+	return maybeHydrateType(ctx, t, res)
+}
+
+// HydrateTypesInTableDescriptor uses res to install metadata in the types
+// present in a table descriptor. res retrieves the fully qualified name and
+// descriptor for a particular ID.
+func HydrateTypesInTableDescriptor(
+	ctx context.Context, desc *descpb.TableDescriptor, res catalog.TypeDescriptorResolver,
+) error {
 	for i := range desc.Columns {
-		if err := hydrateCol(&desc.Columns[i]); err != nil {
+		if err := EnsureTypeIsHydrated(ctx, desc.Columns[i].Type, res); err != nil {
 			return err
 		}
 	}
 	for i := range desc.Mutations {
 		mut := &desc.Mutations[i]
 		if col := mut.GetColumn(); col != nil {
-			if err := hydrateCol(col); err != nil {
+			if err := EnsureTypeIsHydrated(ctx, col.Type, res); err != nil {
 				return err
 			}
 		}
@@ -806,15 +819,9 @@ func (desc *immutable) HydrateTypeInfoWithName(
 			case types.ArrayFamily:
 				// Hydrate the element type.
 				elemType := typ.ArrayContents()
-				return hydrateElementType(ctx, elemType, res)
+				return EnsureTypeIsHydrated(ctx, elemType, res)
 			case types.TupleFamily:
-				for _, t := range typ.TupleContents() {
-					if t.UserDefined() {
-						if err := hydrateElementType(ctx, t, res); err != nil {
-							return err
-						}
-					}
-				}
+				return EnsureTypeIsHydrated(ctx, typ, res)
 			default:
 				return errors.AssertionFailedf("unhandled alias type family %s", typ.Family())
 			}
@@ -823,21 +830,6 @@ func (desc *immutable) HydrateTypeInfoWithName(
 	default:
 		return errors.AssertionFailedf("unknown type descriptor kind %s", desc.Kind)
 	}
-}
-
-func hydrateElementType(ctx context.Context, t *types.T, res catalog.TypeDescriptorResolver) error {
-	id, err := GetUserDefinedTypeDescID(t)
-	if err != nil {
-		return err
-	}
-	elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, id)
-	if err != nil {
-		return err
-	}
-	if err := elemTypDesc.HydrateTypeInfoWithName(ctx, t, &elemTypName, res); err != nil {
-		return err
-	}
-	return nil
 }
 
 // NumEnumMembers implements the TypeDescriptor interface.

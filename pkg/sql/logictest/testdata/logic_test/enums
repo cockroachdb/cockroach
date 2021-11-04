@@ -1600,3 +1600,19 @@ SELECT * FROM enum_table
 ----
 a
 c
+
+# Regression test for not hydrating an enum when it is used in a tuple.
+statement ok
+DROP TYPE IF EXISTS greeting;
+CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi');
+CREATE TABLE seed AS SELECT g::INT8 AS _int8 FROM generate_series(1, 5) AS g;
+WITH
+  cte1 (col1)
+    AS (
+      SELECT * FROM (VALUES (COALESCE((NULL, 'hello':::greeting), (1, 'howdy':::greeting))), ((2, 'hi':::greeting)))
+    ),
+  cte2 (col2) AS (SELECT _int8 FROM seed)
+SELECT
+  col1, col2
+FROM
+  cte1, cte2;
