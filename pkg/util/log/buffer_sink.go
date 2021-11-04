@@ -172,6 +172,9 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 
 // flusher concatenates bundled messages and sends them to the child sink.
 //
+// TODO(knz): How does this interact with the flusher logic in log_flush.go?
+// See: https://github.com/cockroachdb/cockroach/issues/72458
+//
 // TODO(knz): this code should be extended to detect server shutdowns:
 // as currently implemented the flusher will only terminate after all
 // the writes in the channel are completed. If the writes are slow,
