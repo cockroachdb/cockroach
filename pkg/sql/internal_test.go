@@ -546,8 +546,8 @@ func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 	require.True(t, txn.IsSerializablePushAndRefreshNotPossible())
 
 	tr := s.Tracer()
-	execCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
-	defer cancel()
+	execCtx, collect := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
+	defer collect()
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	_, err = ie.Exec(execCtx, "test", txn, "select 42")
 	require.NoError(t, err)

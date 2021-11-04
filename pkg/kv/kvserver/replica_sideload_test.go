@@ -413,9 +413,9 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	}
 
 	runOne := func(k string, test testCase) {
-		ctx, collect, cancel := tracing.ContextWithRecordingSpan(
+		ctx, collect := tracing.ContextWithRecordingSpan(
 			context.Background(), tracing.NewTracer(), "test-recording")
-		defer cancel()
+		defer collect()
 
 		eng := storage.NewDefaultInMemForTesting()
 		defer eng.Close()
@@ -583,8 +583,8 @@ func testRaftSSTableSideloadingProposal(t *testing.T, eng storage.Engine) {
 
 	tr := tc.store.cfg.AmbientCtx.Tracer
 	tr.TestingRecordAsyncSpans() // we assert on async span traces in this test
-	ctx, collect, cancel := tracing.ContextWithRecordingSpan(context.Background(), tr, "test-recording")
-	defer cancel()
+	ctx, collect := tracing.ContextWithRecordingSpan(context.Background(), tr, "test-recording")
+	defer collect()
 
 	const (
 		key       = "foo"

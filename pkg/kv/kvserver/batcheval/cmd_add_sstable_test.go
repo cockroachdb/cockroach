@@ -126,8 +126,8 @@ func runTestDBAddSSTable(
 		}
 
 		// Do an initial ingest.
-		ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
-		defer cancel()
+		ingestCtx, collect := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
+		defer collect()
 		if err := db.AddSSTable(
 			ingestCtx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
 		); err != nil {
@@ -205,8 +205,8 @@ func runTestDBAddSSTable(
 			before = metrics.AddSSTableApplicationCopies.Count()
 		}
 		for i := 0; i < 2; i++ {
-			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
-			defer cancel()
+			ingestCtx, collect := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
+			defer collect()
 
 			if err := db.AddSSTable(
 				ingestCtx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
@@ -260,8 +260,8 @@ func runTestDBAddSSTable(
 			before = metrics.AddSSTableApplications.Count()
 		}
 		for i := 0; i < 2; i++ {
-			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
-			defer cancel()
+			ingestCtx, collect := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
+			defer collect()
 
 			if err := db.AddSSTable(
 				ingestCtx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsWrites, hlc.Timestamp{},

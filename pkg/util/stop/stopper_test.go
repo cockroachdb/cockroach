@@ -695,8 +695,8 @@ func TestStopperRunAsyncTaskTracing(t *testing.T) {
 		}))
 	s := stop.NewStopper(stop.WithTracer(tr))
 
-	ctx, getRecording, finish := tracing.ContextWithRecordingSpan(
-		context.Background(), tr, "parent")
+	ctx, getRecording := tracing.ContextWithRecordingSpan(context.Background(), tr, "parent")
+	defer getRecording()
 	root := tracing.SpanFromContext(ctx)
 	require.NotNil(t, root)
 	traceID := root.TraceID()
@@ -744,7 +744,6 @@ func TestStopperRunAsyncTaskTracing(t *testing.T) {
 	}
 
 	s.Stop(ctx)
-	finish()
 	require.NoError(t, tracing.CheckRecordedSpans(getRecording(), `
 		span: parent
 			tags: _verbose=1

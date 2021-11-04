@@ -113,9 +113,9 @@ func TestSpanImport(t *testing.T) {
 	expectedErr := "my expected error"
 	server.pErr = roachpb.NewErrorf(expectedErr /* nolint:fmtsafe */)
 
-	recCtx, getRec, cancel := tracing.ContextWithRecordingSpan(
+	recCtx, getRec := tracing.ContextWithRecordingSpan(
 		ctx, tracing.NewTracer(), "test")
-	defer cancel()
+	defer getRec()
 
 	server.tr = tracing.SpanFromContext(recCtx).Tracer()
 

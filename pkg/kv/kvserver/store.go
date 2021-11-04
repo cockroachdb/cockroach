@@ -2897,8 +2897,8 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (StoreKeyS
 // carrying out any changes, returning all trace messages collected along the way.
 // Intended to help power a debug endpoint.
 func (s *Store) AllocatorDryRun(ctx context.Context, repl *Replica) (tracing.Recording, error) {
-	ctx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, s.cfg.AmbientCtx.Tracer, "allocator dry run")
-	defer cancel()
+	ctx, collect := tracing.ContextWithRecordingSpan(ctx, s.cfg.AmbientCtx.Tracer, "allocator dry run")
+	defer collect()
 	canTransferLease := func(ctx context.Context, repl *Replica) bool { return true }
 	_, err := s.replicateQueue.processOneChange(
 		ctx, repl, canTransferLease, true /* dryRun */)
@@ -2948,9 +2948,9 @@ func (s *Store) ManuallyEnqueue(
 		}
 	}
 
-	ctx, collect, cancel := tracing.ContextWithRecordingSpan(
+	ctx, collect := tracing.ContextWithRecordingSpan(
 		ctx, s.cfg.AmbientCtx.Tracer, fmt.Sprintf("manual %s queue run", queueName))
-	defer cancel()
+	defer collect()
 
 	if !skipShouldQueue {
 		log.Eventf(ctx, "running %s.shouldQueue", queueName)

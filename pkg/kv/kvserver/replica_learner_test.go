@@ -912,8 +912,8 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			// Trace the Send call so we can verify that it hit the exact `learner
 			// replicas cannot serve follower reads` branch that we're trying to test.
-			sendCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "manual read request")
-			defer cancel()
+			sendCtx, collect := tracing.ContextWithRecordingSpan(ctx, tr, "manual read request")
+			defer collect()
 			_, pErr := repl.Send(sendCtx, req)
 			err := pErr.GoError()
 			if !testutils.IsError(err, `not lease holder`) {

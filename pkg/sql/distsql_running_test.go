@@ -123,8 +123,8 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	iter := 0
 	// We'll trace to make sure the test isn't fooling itself.
 	tr := s.TracerI().(*tracing.Tracer)
-	runningCtx, getRec, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test")
-	defer cancel()
+	runningCtx, getRec := tracing.ContextWithRecordingSpan(ctx, tr, "test")
+	defer getRec()
 	err = shortDB.Txn(runningCtx, func(ctx context.Context, txn *kv.Txn) error {
 		iter++
 		if iter == 1 {

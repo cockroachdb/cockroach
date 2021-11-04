@@ -8360,8 +8360,8 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 
 	tr := tc.store.cfg.AmbientCtx.Tracer
 	tr.TestingRecordAsyncSpans() // we assert on async span traces in this test
-	opCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
-	defer cancel()
+	opCtx, collect := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
+	defer collect()
 
 	ba = roachpb.BatchRequest{}
 	et, etH := endTxnArgs(txn, true /* commit */)

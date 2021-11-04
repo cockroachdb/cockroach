@@ -150,8 +150,8 @@ RETURNING id;`).Scan(&secondID))
 	// another job. We'll make sure this happens by polling the trace to see
 	// the log line indicating what we want.
 	tr := tc.Server(0).TracerI().(*tracing.Tracer)
-	recCtx, getRecording, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test")
-	defer cancel()
+	recCtx, getRecording := tracing.ContextWithRecordingSpan(ctx, tr, "test")
+	defer getRecording()
 	upgrade2Err := make(chan error, 1)
 	go func() {
 		// Use an internal executor to get access to the trace as it happens.

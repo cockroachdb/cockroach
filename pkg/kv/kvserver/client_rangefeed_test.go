@@ -207,10 +207,10 @@ func TestRangefeedIsRoutedToNonVoter(t *testing.T) {
 
 	startTS := db.Clock().Now()
 	rangefeedCtx, rangefeedCancel := context.WithCancel(ctx)
-	rangefeedCtx, getRec, cancel := tracing.ContextWithRecordingSpan(rangefeedCtx,
+	rangefeedCtx, getRec := tracing.ContextWithRecordingSpan(rangefeedCtx,
 		tracing.NewTracer(),
 		"rangefeed over non-voter")
-	defer cancel()
+	defer getRec()
 
 	// Do a read on the range to make sure that the dist sender learns about the
 	// latest state of the range (with the new non-voter).

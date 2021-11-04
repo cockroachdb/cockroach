@@ -76,8 +76,8 @@ func CheckPushResult(
 	ba := roachpb.BatchRequest{}
 	ba.Add(&pushReq)
 
-	recCtx, collectRec, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test trace")
-	defer cancel()
+	recCtx, collectRec := tracing.ContextWithRecordingSpan(ctx, tr, "test trace")
+	defer collectRec()
 
 	resp, pErr := db.NonTransactionalSender().Send(recCtx, ba)
 	if pErr != nil {
