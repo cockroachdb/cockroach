@@ -569,7 +569,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 					spec.Size.Percent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 
-			details = append(details, fmt.Sprintf("store %d: RocksDB, max size %s, max open file limit %d",
+			details = append(details, fmt.Sprintf("store %d: Pebble, max size %s, max open file limit %d",
 				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 
 			storageConfig := base.StorageConfig{
