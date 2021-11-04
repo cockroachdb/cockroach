@@ -107,45 +107,6 @@ func allSpansGuard() *concurrency.Guard {
 	}
 }
 
-func testRangeDescriptor() *roachpb.RangeDescriptor {
-	return &roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKeyMin,
-		EndKey:   roachpb.RKeyMax,
-		InternalReplicas: []roachpb.ReplicaDescriptor{
-			{
-				ReplicaID: 1,
-				NodeID:    1,
-				StoreID:   1,
-			},
-		},
-		NextReplicaID: 2,
-	}
-}
-
-// boostrapMode controls how the first range is created in testContext.
-type bootstrapMode int
-
-const (
-	// Use Store.WriteInitialData, which writes the range descriptor and other
-	// metadata. Most tests should use this mode because it more closely resembles
-	// the real world.
-	bootstrapRangeWithMetadata bootstrapMode = iota
-	// Create a range with NewRange and Store.AddRangeTest. The store's data
-	// will be persisted but metadata will not.
-	//
-	// Tests which run in this mode play fast and loose; they want
-	// a Replica which doesn't have too many moving parts, but then
-	// may still exercise a sizable amount of code, be it by accident
-	// or design. We bootstrap them here with what's absolutely
-	// necessary to not immediately crash on a Raft command, but
-	// nothing more.
-	// If you read this and you're writing a new test, try not to
-	// use this mode - it's deprecated and tends to get in the way
-	// of new development.
-	bootstrapRangeOnly
-)
-
 // leaseExpiry returns a duration in nanos after which any range lease the
 // Replica may hold is expired. It is more precise than LeaseExpiration
 // in that it returns the minimal duration necessary.
@@ -181,14 +142,13 @@ func upToDateRaftStatus(repls []roachpb.ReplicaDescriptor) *raft.Status {
 // will be used as-is.
 type testContext struct {
 	testing.TB
-	transport     *RaftTransport
-	store         *Store
-	repl          *Replica
-	rangeID       roachpb.RangeID
-	gossip        *gossip.Gossip
-	engine        storage.Engine
-	manualClock   *hlc.ManualClock
-	bootstrapMode bootstrapMode
+	transport   *RaftTransport
+	store       *Store
+	repl        *Replica
+	rangeID     roachpb.RangeID
+	gossip      *gossip.Gossip
+	engine      storage.Engine
+	manualClock *hlc.ManualClock
 }
 
 func (tc *testContext) Clock() *hlc.Clock {
@@ -231,105 +191,80 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 		Settings:   cfg.Settings,
 	})
 	grpcServer := rpc.NewServer(rpcContext) // never started
-	if tc.gossip == nil {
-		tc.gossip = gossip.NewTest(1, rpcContext, grpcServer, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
-	}
-	if tc.transport == nil {
-		dialer := nodedialer.New(rpcContext, gossip.AddressResolver(tc.gossip))
-		tc.transport = NewRaftTransport(cfg.AmbientCtx, cfg.Settings, dialer, grpcServer, stopper)
-	}
-	if tc.engine == nil {
-		disableSeparatedIntents :=
-			!cfg.Settings.Version.ActiveVersionOrEmpty(context.Background()).IsActive(
-				clusterversion.PostSeparatedIntentsMigration)
-		log.Infof(context.Background(), "engine creation is randomly setting disableSeparatedIntents: %t",
-			disableSeparatedIntents)
-		var err error
-		tc.engine, err = storage.Open(context.Background(),
-			storage.InMemory(),
-			storage.Attributes(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}),
-			storage.MaxSize(1<<20),
-			storage.SetSeparatedIntents(disableSeparatedIntents),
-			storage.Settings(cfg.Settings))
-		if err != nil {
-			t.Fatal(err)
-		}
-		stopper.AddCloser(tc.engine)
-	}
-	if tc.store == nil {
-		cv := clusterversion.ClusterVersion{Version: bootstrapVersion}
-		cfg.Gossip = tc.gossip
-		cfg.Transport = tc.transport
-		cfg.StorePool = NewTestStorePool(cfg)
-		// Create a test sender without setting a store. This is to deal with the
-		// circular dependency between the test sender and the store. The actual
-		// store will be passed to the sender after it is created and bootstrapped.
-		factory := &testSenderFactory{}
-		cfg.DB = kv.NewDB(cfg.AmbientCtx, factory, cfg.Clock, stopper)
+	require.Nil(t, tc.gossip)
+	tc.gossip = gossip.NewTest(1, rpcContext, grpcServer, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	require.Nil(t, tc.transport)
+	dialer := nodedialer.New(rpcContext, gossip.AddressResolver(tc.gossip))
+	tc.transport = NewRaftTransport(cfg.AmbientCtx, cfg.Settings, dialer, grpcServer, stopper)
 
-		require.NoError(t, WriteClusterVersion(ctx, tc.engine, cv))
-		if err := InitEngine(ctx, tc.engine, roachpb.StoreIdent{
-			ClusterID: uuid.MakeV4(),
-			NodeID:    1,
-			StoreID:   1,
-		}); err != nil {
-			t.Fatal(err)
-		}
-		if err := clusterversion.Initialize(ctx, cv.Version, &cfg.Settings.SV); err != nil {
-			t.Fatal(err)
-		}
-		tc.store = NewStore(ctx, cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
-		// Now that we have our actual store, monkey patch the factory used in cfg.DB.
-		factory.setStore(tc.store)
-		// We created the store without a real KV client, so it can't perform splits
-		// or merges.
-		tc.store.splitQueue.SetDisabled(true)
-		tc.store.mergeQueue.SetDisabled(true)
+	require.Nil(t, tc.engine)
+	disableSeparatedIntents :=
+		!cfg.Settings.Version.ActiveVersionOrEmpty(context.Background()).IsActive(
+			clusterversion.PostSeparatedIntentsMigration)
+	log.Infof(context.Background(), "engine creation is randomly setting disableSeparatedIntents: %t",
+		disableSeparatedIntents)
 
-		if tc.repl == nil && tc.bootstrapMode == bootstrapRangeWithMetadata {
-			if err := WriteInitialClusterData(
-				ctx, tc.store.Engine(),
-				nil, /* initialValues */
-				bootstrapVersion,
-				1 /* numStores */, nil /* splits */, cfg.Clock.PhysicalNow(),
-				cfg.TestingKnobs,
-			); err != nil {
-				t.Fatal(err)
-			}
-		}
-		if err := tc.store.Start(ctx, stopper); err != nil {
-			t.Fatal(err)
-		}
-		tc.store.WaitForInit()
+	var err error
+	tc.engine, err = storage.Open(context.Background(),
+		storage.InMemory(),
+		storage.Attributes(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}),
+		storage.MaxSize(1<<20),
+		storage.SetSeparatedIntents(disableSeparatedIntents),
+		storage.Settings(cfg.Settings))
+	require.NoError(t, err)
+	stopper.AddCloser(tc.engine)
+
+	require.Nil(t, tc.store)
+	cv := clusterversion.ClusterVersion{Version: bootstrapVersion}
+	cfg.Gossip = tc.gossip
+	cfg.Transport = tc.transport
+	cfg.StorePool = NewTestStorePool(cfg)
+	// Create a test sender without setting a store. This is to deal with the
+	// circular dependency between the test sender and the store. The actual
+	// store will be passed to the sender after it is created and bootstrapped.
+	factory := &testSenderFactory{}
+	cfg.DB = kv.NewDB(cfg.AmbientCtx, factory, cfg.Clock, stopper)
+
+	require.NoError(t, WriteClusterVersion(ctx, tc.engine, cv))
+	if err := InitEngine(ctx, tc.engine, roachpb.StoreIdent{
+		ClusterID: uuid.MakeV4(),
+		NodeID:    1,
+		StoreID:   1,
+	}); err != nil {
+		t.Fatal(err)
 	}
-
-	realRange := tc.repl == nil
-
-	if realRange {
-		if tc.bootstrapMode == bootstrapRangeOnly {
-			testDesc := testRangeDescriptor()
-			if err := stateloader.WriteInitialRangeState(
-				ctx, tc.store.Engine(), *testDesc, roachpb.Version{},
-			); err != nil {
-				t.Fatal(err)
-			}
-			repl, err := newReplica(ctx, testDesc, tc.store, 1)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := tc.store.AddReplica(repl); err != nil {
-				t.Fatal(err)
-			}
-		}
-		var err error
-		tc.repl, err = tc.store.GetReplica(1)
-		if err != nil {
-			t.Fatal(err)
-		}
-		tc.rangeID = tc.repl.RangeID
+	if err := clusterversion.Initialize(ctx, cv.Version, &cfg.Settings.SV); err != nil {
+		t.Fatal(err)
 	}
+	tc.store = NewStore(ctx, cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
+	// Now that we have our actual store, monkey patch the factory used in cfg.DB.
+	factory.setStore(tc.store)
+	// We created the store without a real KV client, so it can't perform splits
+	// or merges.
+	tc.store.splitQueue.SetDisabled(true)
+	tc.store.mergeQueue.SetDisabled(true)
 
-	if err := tc.initConfigs(realRange, t); err != nil {
+	require.Nil(t, tc.repl)
+	if err := WriteInitialClusterData(
+		ctx, tc.store.Engine(),
+		nil, /* initialValues */
+		bootstrapVersion,
+		1 /* numStores */, nil /* splits */, cfg.Clock.PhysicalNow(),
+		cfg.TestingKnobs,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := tc.store.Start(ctx, stopper); err != nil {
+		t.Fatal(err)
+	}
+	tc.store.WaitForInit()
+	tc.repl, err = tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc.rangeID = tc.repl.RangeID
+
+	if err := tc.initConfigs(t); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -365,7 +300,7 @@ func (tc *testContext) SendWrapped(args roachpb.Request) (roachpb.Response, *roa
 }
 
 // initConfigs creates default configuration entries.
-func (tc *testContext) initConfigs(realRange bool, t testing.TB) error {
+func (tc *testContext) initConfigs(t testing.TB) error {
 	// Put an empty system config into gossip so that gossip callbacks get
 	// run. We're using a fake config, but it's hooked into SystemConfig.
 	if err := tc.gossip.AddInfoProto(gossip.KeySystemConfig,
@@ -4788,50 +4723,6 @@ func TestErrorsDontCarryWriteTooOldFlag(t *testing.T) {
 	require.False(t, pErr.GetTxn().WriteTooOld)
 }
 
-// TestReplicaLaziness verifies that Raft Groups are brought up lazily.
-func TestReplicaLaziness(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	// testWithAction is a function that creates an uninitialized Raft group,
-	// calls the supplied function, and then tests that the Raft group is
-	// initialized.
-	testWithAction := func(action func() roachpb.Request) {
-		tc := testContext{bootstrapMode: bootstrapRangeOnly}
-		stopper := stop.NewStopper()
-		defer stopper.Stop(context.Background())
-		tc.Start(t, stopper)
-
-		if status := tc.repl.RaftStatus(); status != nil {
-			t.Fatalf("expected raft group to not be initialized, got RaftStatus() of %v", status)
-		}
-		var ba roachpb.BatchRequest
-		request := action()
-		ba.Add(request)
-		if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
-			t.Fatalf("unexpected error: %s", pErr)
-		}
-
-		if tc.repl.RaftStatus() == nil {
-			t.Fatalf("expected raft group to be initialized")
-		}
-	}
-
-	testWithAction(func() roachpb.Request {
-		put := putArgs(roachpb.Key("a"), []byte("value"))
-		return &put
-	})
-
-	testWithAction(func() roachpb.Request {
-		get := getArgs(roachpb.Key("a"))
-		return &get
-	})
-
-	testWithAction(func() roachpb.Request {
-		scan := scanArgs(roachpb.Key("a"), roachpb.Key("b"))
-		return scan
-	})
-}
-
 // TestBatchRetryCantCommitIntents tests that transactional retries cannot
 // commit intents.
 // It also tests current behavior - that a retried transactional batch can lay
@@ -6372,25 +6263,15 @@ func verifyRangeStats(
 func TestRangeStatsComputation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := testContext{
-		bootstrapMode: bootstrapRangeOnly,
-	}
+	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 	ctx := context.Background()
 
-	baseStats := initialStats()
-	// The initial stats contain an empty lease and no prior read summary, but
-	// there will be an initial nontrivial lease requested with the first write
-	// below. This lease acquisition will, in turn, create a prior read summary.
-	baseStats.Add(enginepb.MVCCStats{
-		SysBytes: 66,
-		SysCount: 1,
-	})
+	baseStats := tc.repl.GetMVCCStats()
 
-	// Our clock might not be set to zero.
-	baseStats.LastUpdateNanos = tc.manualClock.UnixNano()
+	require.NoError(t, verifyRangeStats(tc.engine, tc.repl.RangeID, baseStats))
 
 	// Put a value.
 	pArgs := putArgs([]byte("a"), []byte("value1"))

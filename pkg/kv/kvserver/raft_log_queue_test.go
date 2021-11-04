@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -857,20 +856,7 @@ func TestTruncateLogRecompute(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	dir, cleanup := testutils.TempDir(t)
-	defer cleanup()
-
-	eng, err := storage.Open(ctx,
-		storage.Filesystem(dir),
-		storage.CacheSize(1<<20 /* 1 MiB */))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer eng.Close()
-
-	tc := testContext{
-		engine: eng,
-	}
+	tc := testContext{}
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
