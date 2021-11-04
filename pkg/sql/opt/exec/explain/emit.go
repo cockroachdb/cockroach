@@ -201,6 +201,19 @@ func (e *emitter) nodeName(n *Node) (string, error) {
 			return "values", nil
 		}
 
+	case groupByOp:
+		a := n.args.(*groupByArgs)
+		switch a.groupingOrderType {
+		case exec.Streaming:
+			return "group (streaming)", nil
+		case exec.PartialStreaming:
+			return "group (partial streaming)", nil
+		case exec.NoStreaming:
+			return "group (hash)", nil
+		default:
+			return "", errors.AssertionFailedf("unhandled group by order type %d", a.groupingOrderType)
+		}
+
 	case hashJoinOp:
 		a := n.args.(*hashJoinArgs)
 		if len(n.args.(*hashJoinArgs).LeftEqCols) == 0 {
@@ -280,7 +293,7 @@ var nodeNames = [...]string{
 	explainOptOp:           "explain",
 	exportOp:               "export",
 	filterOp:               "filter",
-	groupByOp:              "group",
+	groupByOp:              "", // This node does not have a fixed name.
 	hashJoinOp:             "", // This node does not have a fixed name.
 	indexJoinOp:            "index join",
 	insertFastPathOp:       "insert fast path",
@@ -375,6 +388,12 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		}
 		if s.KVBytesRead.HasValue() {
 			e.ob.AddField("KV bytes read", humanize.IBytes(s.KVBytesRead.Value()))
+		}
+		if s.MaxAllocatedMem.HasValue() {
+			e.ob.AddField("estimated max memory allocated", humanize.IBytes(s.MaxAllocatedMem.Value()))
+		}
+		if s.MaxAllocatedDisk.HasValue() {
+			e.ob.AddField("estimated max sql temp disk usage", humanize.IBytes(s.MaxAllocatedDisk.Value()))
 		}
 		if e.ob.flags.Verbose {
 			if s.StepCount.HasValue() {

@@ -1097,7 +1097,7 @@ scalar-group-by
  │    ├── immutable
  │    ├── key: (13)
  │    ├── fd: (1)-->(9), (13)-->(25), (1)==(13), (13)==(1)
- │    ├── group-by
+ │    ├── group-by (streaming)
  │    │    ├── columns: d_w_id:13!null sum:25
  │    │    ├── grouping columns: d_w_id:13!null
  │    │    ├── internal-ordering: +13
@@ -1131,7 +1131,7 @@ FROM new_order
 GROUP BY no_d_id, no_w_id
 ORDER BY no_w_id, no_d_id
 ----
-group-by
+group-by (streaming)
  ├── columns: max:6!null  [hidden: no_d_id:2!null no_w_id:3!null]
  ├── grouping columns: no_d_id:2!null no_w_id:3!null
  ├── key: (2,3)
@@ -1151,7 +1151,7 @@ FROM "order"
 GROUP BY o_d_id, o_w_id
 ORDER BY o_w_id, o_d_id
 ----
-group-by
+group-by (streaming)
  ├── columns: max:11!null  [hidden: o_d_id:2!null o_w_id:3!null]
  ├── grouping columns: o_d_id:2!null o_w_id:3!null
  ├── key: (2,3)
@@ -1186,7 +1186,7 @@ scalar-group-by
  │    ├── immutable
  │    ├── key: (2,3)
  │    ├── fd: (2,3)-->(6-8)
- │    ├── group-by
+ │    ├── group-by (streaming)
  │    │    ├── columns: no_d_id:2!null no_w_id:3!null max:6!null min:7!null count_rows:8!null
  │    │    ├── grouping columns: no_d_id:2!null no_w_id:3!null
  │    │    ├── internal-ordering: +3,+2
@@ -1213,7 +1213,7 @@ FROM "order"
 GROUP BY o_w_id, o_d_id
 ORDER BY o_w_id, o_d_id
 ----
-group-by
+group-by (streaming)
  ├── columns: sum:11  [hidden: o_d_id:2!null o_w_id:3!null]
  ├── grouping columns: o_d_id:2!null o_w_id:3!null
  ├── key: (2,3)
@@ -1232,7 +1232,7 @@ FROM order_line
 GROUP BY ol_w_id, ol_d_id
 ORDER BY ol_w_id, ol_d_id
 ----
-group-by
+group-by (streaming)
  ├── columns: count:13!null  [hidden: ol_d_id:2!null ol_w_id:3!null]
  ├── grouping columns: ol_d_id:2!null ol_w_id:3!null
  ├── key: (2,3)
@@ -1342,7 +1342,7 @@ except-all
  │    ├── key: (1-3)
  │    ├── fd: (1-3)-->(7)
  │    └── ordering: +3,+2,-1
- └── group-by
+ └── group-by (streaming)
       ├── columns: ol_o_id:11!null ol_d_id:12!null ol_w_id:13!null count_rows:23!null
       ├── grouping columns: ol_o_id:11!null ol_d_id:12!null ol_w_id:13!null
       ├── key: (11-13)
@@ -1375,7 +1375,7 @@ except-all
  ├── internal-ordering: +3,+2,-1,+13
  ├── key: (1-3)
  ├── fd: (1-3)-->(13)
- ├── group-by
+ ├── group-by (streaming)
  │    ├── columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null count_rows:13!null
  │    ├── grouping columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null
  │    ├── key: (1-3)

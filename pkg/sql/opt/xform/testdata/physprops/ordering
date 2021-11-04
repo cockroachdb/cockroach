@@ -427,7 +427,7 @@ scalar-group-by
 opt
 SELECT a, min(b) FROM abc GROUP BY a ORDER BY a
 ----
-group-by
+group-by (streaming)
  ├── columns: a:1!null min:6!null
  ├── grouping columns: a:1!null
  ├── key: (1)
@@ -443,7 +443,7 @@ group-by
 opt
 SELECT a, b, min(c) FROM abc GROUP BY a, b ORDER BY a
 ----
-group-by
+group-by (streaming)
  ├── columns: a:1!null b:2!null min:6!null
  ├── grouping columns: a:1!null b:2!null
  ├── internal-ordering: +1,+2
@@ -461,7 +461,7 @@ group-by
 opt
 SELECT a, b, min(c) FROM abc GROUP BY a, b ORDER BY a, b
 ----
-group-by
+group-by (streaming)
  ├── columns: a:1!null b:2!null min:6!null
  ├── grouping columns: a:1!null b:2!null
  ├── key: (1,2)
@@ -478,7 +478,7 @@ group-by
 opt
 SELECT a, b, min(c) FROM abc GROUP BY b, a ORDER BY a, b
 ----
-group-by
+group-by (streaming)
  ├── columns: a:1!null b:2!null min:6!null
  ├── grouping columns: a:1!null b:2!null
  ├── key: (1,2)
@@ -501,7 +501,7 @@ sort (segmented)
  ├── key: (1,2)
  ├── fd: (1,2)-->(6)
  ├── ordering: +1,+6
- └── group-by
+ └── group-by (streaming)
       ├── columns: a:1!null b:2!null min:6!null
       ├── grouping columns: a:1!null b:2!null
       ├── internal-ordering: +1,+2
@@ -520,7 +520,7 @@ sort (segmented)
 opt
 SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY c) GROUP BY a, b ORDER BY a, b
 ----
-group-by
+group-by (streaming)
  ├── columns: a:1!null b:2!null array_agg:6!null
  ├── grouping columns: a:1!null b:2!null
  ├── internal-ordering: +3 opt(1,2)
@@ -538,7 +538,7 @@ group-by
 opt
 SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY a, b, c) GROUP BY a, b ORDER BY a, b
 ----
-group-by
+group-by (streaming)
  ├── columns: a:1!null b:2!null array_agg:6!null
  ├── grouping columns: a:1!null b:2!null
  ├── internal-ordering: +3 opt(1,2)
@@ -556,7 +556,7 @@ group-by
 opt
 SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY b, c, a) GROUP BY b, a ORDER BY a, b
 ----
-group-by
+group-by (streaming)
  ├── columns: a:1!null b:2!null array_agg:6!null
  ├── grouping columns: a:1!null b:2!null
  ├── internal-ordering: +3 opt(1,2)
@@ -576,7 +576,7 @@ group-by
 opt
 SELECT sum(c) FROM abc WHERE a = 1 GROUP BY b ORDER BY b
 ----
-group-by
+group-by (streaming)
  ├── columns: sum:6!null  [hidden: b:2!null]
  ├── grouping columns: b:2!null
  ├── key: (2)
@@ -598,7 +598,7 @@ SELECT sum(d) FROM abcd GROUP BY a, b, c
 ----
 project
  ├── columns: sum:8
- └── group-by
+ └── group-by (hash)
       ├── columns: a:1 b:2 c:3 sum:8
       ├── grouping columns: a:1 b:2 c:3
       ├── key: (1-3)
@@ -615,7 +615,7 @@ SELECT sum(a) FROM abcd GROUP BY b, c, d
 ----
 project
  ├── columns: sum:8
- └── group-by
+ └── group-by (hash)
       ├── columns: b:2 c:3 d:4 sum:8
       ├── grouping columns: b:2 c:3 d:4
       ├── key: (2-4)
@@ -631,7 +631,7 @@ SELECT array_agg(d) FROM (SELECT * FROM abcd ORDER BY c) GROUP BY a, b
 ----
 project
  ├── columns: array_agg:8
- └── group-by
+ └── group-by (hash)
       ├── columns: a:1 b:2 array_agg:8
       ├── grouping columns: a:1 b:2
       ├── internal-ordering: +3 opt(1,2)

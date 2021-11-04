@@ -1019,7 +1019,7 @@ SELECT EXISTS(SELECT * FROM xy WHERE expr<0) FROM (SELECT k+1 AS expr FROM a)
 project
  ├── columns: exists:13!null
  ├── immutable
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: true_agg:15 rownum:17!null
  │    ├── grouping columns: rownum:17!null
  │    ├── immutable

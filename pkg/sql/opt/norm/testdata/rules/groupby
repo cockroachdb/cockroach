@@ -98,7 +98,7 @@ distinct-on
 norm expect-not=ConvertGroupByToDistinct
 SELECT s, f, sum(f) FROM a GROUP BY s, f
 ----
-group-by
+group-by (hash)
  ├── columns: s:4!null f:3 sum:8
  ├── grouping columns: f:3 s:4!null
  ├── key: (3,4)
@@ -138,7 +138,7 @@ scan xy
 norm expect=EliminateJoinUnderGroupByLeft
 SELECT k, max(r1) FROM fks INNER JOIN (SELECT * FROM (VALUES (1), (2)) f(t)) ON True GROUP BY k
 ----
-group-by
+group-by (hash)
  ├── columns: k:1!null max:8!null
  ├── grouping columns: k:1!null
  ├── key: (1)
@@ -174,7 +174,7 @@ scalar-group-by
 norm expect=EliminateJoinUnderGroupByLeft
 SELECT x, max(y) FROM xy LEFT JOIN fks ON True GROUP BY x
 ----
-group-by
+group-by (hash)
  ├── columns: x:1!null max:11
  ├── grouping columns: x:1!null
  ├── key: (1)
@@ -191,7 +191,7 @@ group-by
 norm expect=EliminateJoinUnderGroupByLeft disable=EliminateJoinUnderProjectLeft
 SELECT k, sum(r1) FROM fks LEFT JOIN xy ON x=r1 GROUP BY k
 ----
-group-by
+group-by (hash)
  ├── columns: k:1!null sum:11!null
  ├── grouping columns: k:1!null
  ├── key: (1)
@@ -210,7 +210,7 @@ group-by
 norm expect=EliminateJoinUnderGroupByLeft disable=EliminateJoinUnderProjectLeft
 SELECT x, sum(y) FROM xy LEFT JOIN fks ON x=k GROUP BY x
 ----
-group-by
+group-by (hash)
  ├── columns: x:1!null sum:11
  ├── grouping columns: x:1!null
  ├── key: (1)
@@ -230,7 +230,7 @@ group-by
 norm expect=EliminateJoinUnderGroupByLeft disable=EliminateJoinUnderProjectLeft
 SELECT k, sum(r1) FROM fks LEFT JOIN xy ON x=r2 GROUP BY k
 ----
-group-by
+group-by (hash)
  ├── columns: k:1!null sum:11!null
  ├── grouping columns: k:1!null
  ├── key: (1)
@@ -248,7 +248,7 @@ group-by
 norm expect=EliminateJoinUnderGroupByLeft disable=EliminateJoinUnderProjectLeft
 SELECT k, sum(r1) FROM fks INNER JOIN xy ON x=r1 GROUP BY k
 ----
-group-by
+group-by (hash)
  ├── columns: k:1!null sum:11!null
  ├── grouping columns: k:1!null
  ├── key: (1)
@@ -265,7 +265,7 @@ group-by
 norm expect=EliminateJoinUnderGroupByLeft
 SELECT max(y) FROM xy LEFT JOIN fks ON True GROUP BY x ORDER BY x
 ----
-group-by
+group-by (streaming)
  ├── columns: max:11  [hidden: x:1!null]
  ├── grouping columns: x:1!null
  ├── key: (1)
@@ -345,7 +345,7 @@ distinct-on
 norm expect-not=EliminateJoinUnderGroupByLeft
 SELECT k, sum(r1) FROM fks INNER JOIN xy ON True GROUP BY k
 ----
-group-by
+group-by (hash)
  ├── columns: k:1!null sum:11!null
  ├── grouping columns: k:1!null
  ├── key: (1)
@@ -369,7 +369,7 @@ group-by
 norm expect-not=EliminateJoinUnderGroupByLeft
 SELECT k, sum(r1) FROM fks INNER JOIN xy ON x=r2 GROUP BY k
 ----
-group-by
+group-by (hash)
  ├── columns: k:1!null sum:11!null
  ├── grouping columns: k:1!null
  ├── key: (1)
@@ -396,7 +396,7 @@ group-by
 norm expect-not=EliminateJoinUnderGroupByLeft
 SELECT x, max(y) FROM xy LEFT JOIN fks ON True GROUP BY x, k ORDER BY x, k
 ----
-group-by
+group-by (streaming)
  ├── columns: x:1!null max:11  [hidden: k:5]
  ├── grouping columns: x:1!null k:5
  ├── key: (1,5)
@@ -432,7 +432,7 @@ group-by
 norm expect=EliminateJoinUnderGroupByRight disable=EliminateJoinUnderProjectRight
 SELECT k, sum(r1) FROM xy INNER JOIN fks ON x = r1 GROUP BY k
 ----
-group-by
+group-by (hash)
  ├── columns: k:5!null sum:11!null
  ├── grouping columns: k:5!null
  ├── key: (5)
@@ -604,7 +604,7 @@ SELECT min(s) FROM (SELECT i, s FROM (SELECT * FROM a UNION SELECT * FROM a)) GR
 ----
 project
  ├── columns: min:20!null
- └── group-by
+ └── group-by (hash)
       ├── columns: i:16!null min:20!null
       ├── grouping columns: i:16!null
       ├── key: (16)
@@ -790,7 +790,7 @@ SELECT min(s) FROM (SELECT i+1 AS i2, s FROM a) GROUP BY i2
 project
  ├── columns: min:9!null
  ├── immutable
- └── group-by
+ └── group-by (hash)
       ├── columns: i2:8!null min:9!null
       ├── grouping columns: i2:8!null
       ├── immutable
@@ -814,7 +814,7 @@ project
 norm expect=ReduceGroupingCols
 SELECT k, min(i), f, s FROM a GROUP BY s, f, k
 ----
-group-by
+group-by (hash)
  ├── columns: k:1!null min:8!null f:3 s:4!null
  ├── grouping columns: k:1!null
  ├── key: (1)
@@ -834,7 +834,7 @@ group-by
 norm expect=ReduceGroupingCols
 SELECT k, sum(DISTINCT i), f, s FROM a, xy GROUP BY s, f, k
 ----
-group-by
+group-by (hash)
  ├── columns: k:1!null sum:12!null f:3 s:4!null
  ├── grouping columns: k:1!null
  ├── key: (1)
@@ -863,7 +863,7 @@ SELECT min(f) FROM a GROUP BY i, s, k
 ----
 project
  ├── columns: min:8
- └── group-by
+ └── group-by (hash)
       ├── columns: i:2!null s:4!null min:8
       ├── grouping columns: i:2!null s:4!null
       ├── key: (2,4)
@@ -880,7 +880,7 @@ project
 norm expect=ReduceGroupingCols
 SELECT sum(f), i FROM a GROUP BY k, i, f HAVING k=1
 ----
-group-by
+group-by (streaming)
  ├── columns: sum:8 i:2!null
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -1297,7 +1297,7 @@ SELECT sum(DISTINCT k) FROM a GROUP BY i
 ----
 project
  ├── columns: sum:8!null
- └── group-by
+ └── group-by (hash)
       ├── columns: i:2!null sum:8!null
       ├── grouping columns: i:2!null
       ├── key: (2)
@@ -1317,7 +1317,7 @@ SELECT sum(DISTINCT a) FROM abc GROUP BY b
 ----
 project
  ├── columns: sum:6!null
- └── group-by
+ └── group-by (hash)
       ├── columns: b:2!null sum:6!null
       ├── grouping columns: b:2!null
       ├── key: (2)
@@ -1338,7 +1338,7 @@ SELECT sum(DISTINCT a) FROM abc GROUP BY b, c
 ----
 project
  ├── columns: sum:6!null
- └── group-by
+ └── group-by (hash)
       ├── columns: b:2!null c:3!null sum:6!null
       ├── grouping columns: b:2!null c:3!null
       ├── key: (2,3)
@@ -1356,7 +1356,7 @@ SELECT sum(DISTINCT i), avg(DISTINCT f) FROM a GROUP BY k
 ----
 project
  ├── columns: sum:8!null avg:9
- └── group-by
+ └── group-by (hash)
       ├── columns: k:1!null sum:8!null avg:9
       ├── grouping columns: k:1!null
       ├── key: (1)
@@ -1378,7 +1378,7 @@ SELECT sum(DISTINCT u), stddev(DISTINCT w), avg(DISTINCT z) FROM uvwz GROUP BY v
 ----
 project
  ├── columns: sum:8!null stddev:9 avg:10!null
- └── group-by
+ └── group-by (hash)
       ├── columns: v:2!null sum:8!null stddev:9 avg:10!null
       ├── grouping columns: v:2!null
       ├── key: (2)
@@ -1465,7 +1465,7 @@ SELECT sum(DISTINCT k) FILTER (WHERE f > 0) FROM a GROUP BY i
 ----
 project
  ├── columns: sum:9
- └── group-by
+ └── group-by (hash)
       ├── columns: i:2!null sum:9
       ├── grouping columns: i:2!null
       ├── key: (2)
@@ -1492,7 +1492,7 @@ SELECT sum(DISTINCT a) FILTER (WHERE c > 0) FROM abc GROUP BY b
 ----
 project
  ├── columns: sum:7
- └── group-by
+ └── group-by (hash)
       ├── columns: b:2!null sum:7
       ├── grouping columns: b:2!null
       ├── key: (2)
@@ -1517,7 +1517,7 @@ SELECT sum(DISTINCT a) FILTER (WHERE c > 0) FROM abc GROUP BY b, c
 ----
 project
  ├── columns: sum:7
- └── group-by
+ └── group-by (hash)
       ├── columns: b:2!null c:3!null sum:7
       ├── grouping columns: b:2!null c:3!null
       ├── key: (2,3)
@@ -1543,7 +1543,7 @@ SELECT sum(DISTINCT i) FILTER (WHERE f > 0), avg(DISTINCT f) FILTER (WHERE i > 0
 ----
 project
  ├── columns: sum:9 avg:11
- └── group-by
+ └── group-by (hash)
       ├── columns: k:1!null sum:9 avg:11
       ├── grouping columns: k:1!null
       ├── key: (1)
@@ -1581,7 +1581,7 @@ GROUP BY v
 ----
 project
  ├── columns: sum:9 stddev:11 avg:13
- └── group-by
+ └── group-by (hash)
       ├── columns: v:2!null sum:9 stddev:11 avg:13
       ├── grouping columns: v:2!null
       ├── key: (2)
@@ -2709,7 +2709,7 @@ scalar-group-by
 norm expect=PushAggDistinctIntoGroupBy
 SELECT b, count(DISTINCT y) FROM xyzbs GROUP BY b
 ----
-group-by
+group-by (hash)
  ├── columns: b:4!null count:8!null
  ├── grouping columns: b:4!null
  ├── cardinality: [0 - 2]
@@ -2729,7 +2729,7 @@ group-by
 norm expect=PushAggDistinctIntoGroupBy
 SELECT b, s, count(DISTINCT y) FROM xyzbs GROUP BY b, s
 ----
-group-by
+group-by (hash)
  ├── columns: b:4!null s:5 count:8!null
  ├── grouping columns: b:4!null s:5
  ├── key: (4,5)
@@ -2748,7 +2748,7 @@ group-by
 norm expect=PushAggDistinctIntoGroupBy
 SELECT s, corr(DISTINCT y, z) FROM xyzbs GROUP BY s
 ----
-group-by
+group-by (hash)
  ├── columns: s:5 corr:8
  ├── grouping columns: s:5
  ├── key: (5)
@@ -2772,7 +2772,7 @@ SELECT array_agg(DISTINCT s) FROM (SELECT * FROM a ORDER BY i) GROUP BY f
 ----
 project
  ├── columns: array_agg:8!null
- └── group-by
+ └── group-by (hash)
       ├── columns: f:3 array_agg:8!null
       ├── grouping columns: f:3
       ├── internal-ordering: +2 opt(3)
@@ -3180,7 +3180,7 @@ SELECT count(z) FROM xyzbs GROUP BY s
 ----
 project
  ├── columns: count:8!null
- └── group-by
+ └── group-by (hash)
       ├── columns: s:5 count:8!null
       ├── grouping columns: s:5
       ├── key: (5)
@@ -3195,7 +3195,7 @@ SELECT count(1) FROM xyzbs GROUP BY s
 ----
 project
  ├── columns: count:9!null
- └── group-by
+ └── group-by (hash)
       ├── columns: s:5 count:9!null
       ├── grouping columns: s:5
       ├── key: (5)
@@ -3210,7 +3210,7 @@ SELECT count(1+z) FROM xyzbs GROUP BY s
 ----
 project
  ├── columns: count:9!null
- └── group-by
+ └── group-by (hash)
       ├── columns: s:5 count:9!null
       ├── grouping columns: s:5
       ├── key: (5)
@@ -3265,7 +3265,7 @@ SELECT count(DISTINCT y) FROM xyzbs GROUP BY z
 ----
 project
  ├── columns: count:8!null
- └── group-by
+ └── group-by (hash)
       ├── columns: z:3!null count:8!null
       ├── grouping columns: z:3!null
       ├── key: (3)
@@ -3327,7 +3327,7 @@ SELECT regr_count(z, x) FROM xyzbs GROUP BY s
 ----
 project
  ├── columns: regr_count:8!null
- └── group-by
+ └── group-by (hash)
       ├── columns: s:5 regr_count:8!null
       ├── grouping columns: s:5
       ├── key: (5)
@@ -3342,7 +3342,7 @@ SELECT regr_count(1, 1) FROM xyzbs GROUP BY s
 ----
 project
  ├── columns: regr_count:9!null
- └── group-by
+ └── group-by (hash)
       ├── columns: s:5 regr_count:9!null
       ├── grouping columns: s:5
       ├── key: (5)
@@ -3357,7 +3357,7 @@ SELECT regr_count(1+z, x) FROM xyzbs GROUP BY s
 ----
 project
  ├── columns: regr_count:9!null
- └── group-by
+ └── group-by (hash)
       ├── columns: s:5 regr_count:9!null
       ├── grouping columns: s:5
       ├── key: (5)
@@ -3558,7 +3558,7 @@ SELECT sum(s) FROM (SELECT y, sum(x) AS s FROM xy GROUP BY x) GROUP BY y
 ----
 project
  ├── columns: sum:6!null
- └── group-by
+ └── group-by (hash)
       ├── columns: y:2 sum:6!null
       ├── grouping columns: y:2
       ├── key: (2)
@@ -3577,7 +3577,7 @@ SELECT sum(s) FROM (SELECT a, sum(c) AS s FROM abc GROUP BY a, b) GROUP BY a
 ----
 project
  ├── columns: sum:7!null
- └── group-by
+ └── group-by (hash)
       ├── columns: a:1!null sum:7!null
       ├── grouping columns: a:1!null
       ├── key: (1)
@@ -3629,7 +3629,7 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6)
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: y:2 avg:5!null
  │    ├── grouping columns: y:2
  │    ├── key: (2)
@@ -3654,7 +3654,7 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(7-9)
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: y:2 sum:5!null count:6!null
  │    ├── grouping columns: y:2
  │    ├── key: (2)
@@ -3683,12 +3683,12 @@ SELECT max(m) FROM (SELECT max(x) AS m, sum(x) AS s FROM xy GROUP BY y) GROUP BY
 ----
 project
  ├── columns: max:7!null
- └── group-by
+ └── group-by (hash)
       ├── columns: sum:6!null max:7!null
       ├── grouping columns: sum:6!null
       ├── key: (6)
       ├── fd: (6)-->(7)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: y:2 max:5!null sum:6!null
       │    ├── grouping columns: y:2
       │    ├── key: (2)
@@ -3716,7 +3716,7 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(10)
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: u:1!null sum:8!null
  │    ├── grouping columns: u:1!null
  │    ├── internal-ordering: -3 opt(1)

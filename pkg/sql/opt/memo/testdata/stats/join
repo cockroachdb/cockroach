@@ -282,7 +282,7 @@ project
 build
 SELECT sum(v), x, v FROM xysd, uv GROUP BY x, v
 ----
-group-by
+group-by (hash)
  ├── columns: sum:12(decimal!null) x:1(int!null) v:8(int!null)
  ├── grouping columns: x:1(int!null) v:8(int!null)
  ├── stats: [rows=500000, distinct(1,8)=500000, null(1,8)=0]
@@ -315,7 +315,7 @@ group-by
 norm
 SELECT sum(v), x, v FROM xysd, uv WHERE x=u GROUP BY x, v
 ----
-group-by
+group-by (hash)
  ├── columns: sum:12(decimal!null) x:1(int!null) v:8(int!null)
  ├── grouping columns: x:1(int!null) v:8(int!null)
  ├── stats: [rows=10000, distinct(1,8)=10000, null(1,8)=0]
@@ -439,7 +439,7 @@ project
  ├── columns: count:12(int!null)
  ├── immutable
  ├── stats: [rows=138.170075]
- └── group-by
+ └── group-by (hash)
       ├── columns: y:2(int) count_rows:12(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
@@ -476,7 +476,7 @@ project
  ├── columns: count:12(int!null)
  ├── immutable
  ├── stats: [rows=400]
- └── group-by
+ └── group-by (hash)
       ├── columns: y:2(int) count_rows:12(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
@@ -513,7 +513,7 @@ project
  ├── columns: count:12(int!null)
  ├── immutable
  ├── stats: [rows=400]
- └── group-by
+ └── group-by (hash)
       ├── columns: y:2(int) count_rows:12(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
@@ -550,7 +550,7 @@ project
  ├── columns: count:12(int!null)
  ├── immutable
  ├── stats: [rows=399.903879]
- └── group-by
+ └── group-by (hash)
       ├── columns: y:2(int) count_rows:12(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
@@ -587,7 +587,7 @@ project
  ├── columns: count:12(int!null)
  ├── immutable
  ├── stats: [rows=400]
- └── group-by
+ └── group-by (hash)
       ├── columns: y:2(int) count_rows:12(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable

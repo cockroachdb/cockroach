@@ -62,7 +62,7 @@ SELECT count(*) FROM (SELECT x, y FROM a) GROUP BY x, y
 project
  ├── columns: count:7(int!null)
  ├── stats: [rows=2000]
- └── group-by
+ └── group-by (hash)
       ├── columns: x:1(int!null) y:2(int) count_rows:7(int!null)
       ├── grouping columns: x:1(int!null) y:2(int)
       ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
@@ -108,7 +108,7 @@ select
 build
 SELECT * FROM (SELECT concat(s, y::string), x FROM a) AS q(v, x) GROUP BY v, x
 ----
-group-by
+group-by (hash)
  ├── columns: v:7(string) x:1(int!null)
  ├── grouping columns: x:1(int!null) concat:7(string)
  ├── immutable
@@ -193,7 +193,7 @@ project
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       └── filters
            └── exists [type=bool, outer=(3), correlated-subquery]
-                └── group-by
+                └── group-by (hash)
                      ├── columns: column12:12(bool)
                      ├── grouping columns: column12:12(bool)
                      ├── outer: (3)

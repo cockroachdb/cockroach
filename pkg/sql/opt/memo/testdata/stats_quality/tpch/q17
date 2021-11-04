@@ -79,7 +79,7 @@ project
  │    │    │    │    ├── stats: [rows=284.037462, distinct(19)=284.037462, null(19)=0, distinct(49)=284.037462, null(49)=0]
  │    │    │    │    ├── key: (19)
  │    │    │    │    ├── fd: (19)-->(49)
- │    │    │    │    ├── group-by
+ │    │    │    │    ├── group-by (streaming)
  │    │    │    │    │    ├── save-table-name: q17_group_by_6
  │    │    │    │    │    ├── columns: p_partkey:19(int!null) avg:48(float!null)
  │    │    │    │    │    ├── grouping columns: p_partkey:19(int!null)

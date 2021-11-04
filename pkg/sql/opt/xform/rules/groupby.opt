@@ -339,3 +339,72 @@
         (ErrorOnDup $private)
     )
 )
+
+# GenerateLimitedGroupByScans generates a set of Scan alternatives for
+# each matching index on the scanned table, and an IndexJoin to supply columns
+# missing from the index. This differs from GenerateIndexScans, which does not
+# generate index joins for non-covering indexes.
+#
+# This rule is useful when we have a partially ordered GROUP BY column and a
+# LIMIT that limits how many rows to aggregate, as in the following example:
+#
+# CREATE TABLE t (a INT, b INT, INDEX (a))
+# SELECT a, b, count(*) FROM t GROUP BY a, b LIMIT 10
+#
+# Without this rule, the following expression with a full scan would be
+# generated:
+#  limit
+#   ├── columns: a:1 b:2 count:6!null
+#   ├── group-by
+#   │    ├── columns: a:1 b:2 count_rows:6!null
+#   │    ├── grouping columns: a:1 b:2
+#   │    ├── limit hint: 10.00
+#   │    ├── scan t
+#   │    │    └── columns: a:1 b:2
+#   │    └── aggregations
+#   │         └── count-rows [as=count_rows:6]
+#   └── 10
+#
+# When GenerateLimitedGroupByScans is applied, we can explore the following
+# expression:
+#  limit
+#   ├── columns: a:1 b:2 count:6!null
+#   ├── group-by
+#   │    ├── columns: a:1 b:2 count_rows:6!null
+#   │    ├── grouping columns: a:1 b:2
+#   │    ├── limit hint: 10.00
+#   │    ├── index-join t
+#   │    │    ├── columns: a:1 b:2
+#   │    │    ├── ordering: +1
+#   │    │    ├── limit hint: 10.00
+#   │    │    └── scan t@secondary
+#   │    │         ├── columns: a:1 rowid:3!null
+#   │    │         ├── ordering: +1
+#   │    │         └── limit hint: 10.00
+#   │    └── aggregations
+#   │         └── count-rows [as=count_rows:6]
+#   └── 10
+#
+# This can have better performance than the original expression, since this
+# allows us to explore a group by with partially ordered grouping columns
+# provided by the index and use an index join to supply the remaining grouping
+# columns. Then we would not necessarily need a full scan on t due to the limit
+# hint.
+[GenerateLimitedGroupByScans, Explore]
+(Limit
+    (GroupBy
+        (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+        $aggs:*
+        $groupbyPrivate:* & (IsCanonicalGroupBy $groupbyPrivate)
+    )
+    $limitExpr:(Const $limit:*) & (IsPositiveInt $limit)
+    $ordering:*
+)
+=>
+(GenerateLimitedGroupByScans
+    $scanPrivate
+    $aggs
+    $groupbyPrivate
+    $limitExpr
+    $ordering
+)

@@ -46,7 +46,7 @@ sort
  ├── key: (6)
  ├── fd: (6)-->(30)
  ├── ordering: +6
- └── group-by
+ └── group-by (hash)
       ├── save-table-name: q4_group_by_2
       ├── columns: o_orderpriority:6(char!null) count_rows:30(int!null)
       ├── grouping columns: o_orderpriority:6(char!null)

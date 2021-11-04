@@ -146,7 +146,7 @@ func scanBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Or
 			// Column not in output; we are done.
 			break
 		}
-		direction := (indexCol.Descending != reverse) // != is bool XOR
+		direction := indexCol.Descending != reverse // != is bool XOR
 		provided = append(provided, opt.MakeOrderingColumn(colID, direction))
 	}
 

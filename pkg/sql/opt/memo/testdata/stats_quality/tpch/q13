@@ -43,14 +43,14 @@ sort
  ├── key: (22)
  ├── fd: (22)-->(23)
  ├── ordering: -23,-22
- └── group-by
+ └── group-by (hash)
       ├── save-table-name: q13_group_by_2
       ├── columns: count:22(int!null) count_rows:23(int!null)
       ├── grouping columns: count:22(int!null)
       ├── stats: [rows=148813, distinct(22)=148813, null(22)=0, distinct(23)=148813, null(23)=0]
       ├── key: (22)
       ├── fd: (22)-->(23)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── save-table-name: q13_group_by_3
       │    ├── columns: c_custkey:1(int!null) count:22(int!null)
       │    ├── grouping columns: c_custkey:1(int!null)

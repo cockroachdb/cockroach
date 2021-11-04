@@ -288,7 +288,7 @@ limit
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(2,6)
- ├── group-by
+ ├── group-by (streaming)
  │    ├── columns: y:2 count_rows:6!null
  │    ├── grouping columns: y:2
  │    ├── internal-ordering: +2
@@ -318,7 +318,7 @@ limit
  ├── stats: [rows=1e-07]
  ├── key: (2)
  ├── fd: (2)-->(6)
- ├── group-by
+ ├── group-by (streaming)
  │    ├── columns: y:2 count_rows:6!null
  │    ├── grouping columns: y:2
  │    ├── internal-ordering: +2 opt(3)
@@ -350,7 +350,7 @@ limit
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3,6)
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: z:3 count_rows:6!null
  │    ├── grouping columns: z:3
  │    ├── key: (3)

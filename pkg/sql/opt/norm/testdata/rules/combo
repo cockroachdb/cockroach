@@ -1907,7 +1907,7 @@ TryDecorrelateScalarGroupBy
   + │    │    │    │    ├── columns: x:1!null bool_or:14
   + │    │    │    │    ├── key: (1)
   + │    │    │    │    ├── fd: (1)-->(14)
-  + │    │    │    │    └── group-by
+  + │    │    │    │    └── group-by (hash)
   + │    │    │    │         ├── columns: x:1!null bool_or:14
   + │    │    │    │         ├── grouping columns: x:1!null
   + │    │    │    │         ├── key: (1)
@@ -1972,7 +1972,7 @@ TryDecorrelateProjectSelect
     │    │    │    │    ├── columns: x:1!null bool_or:14
     │    │    │    │    ├── key: (1)
     │    │    │    │    ├── fd: (1)-->(14)
-    │    │    │    │    └── group-by
+    │    │    │    │    └── group-by (hash)
     │    │    │    │         ├── columns: x:1!null bool_or:14
     │    │    │    │         ├── grouping columns: x:1!null
     │    │    │    │         ├── key: (1)
@@ -2058,7 +2058,7 @@ DecorrelateJoin
     │    │    │    │    ├── columns: x:1!null bool_or:14
     │    │    │    │    ├── key: (1)
     │    │    │    │    ├── fd: (1)-->(14)
-    │    │    │    │    └── group-by
+    │    │    │    │    └── group-by (hash)
     │    │    │    │         ├── columns: x:1!null bool_or:14
     │    │    │    │         ├── grouping columns: x:1!null
     │    │    │    │         ├── key: (1)
@@ -2121,7 +2121,7 @@ PushFilterIntoJoinRight
     │    │    │    │    ├── columns: x:1!null bool_or:14
     │    │    │    │    ├── key: (1)
     │    │    │    │    ├── fd: (1)-->(14)
-    │    │    │    │    └── group-by
+    │    │    │    │    └── group-by (hash)
     │    │    │    │         ├── columns: x:1!null bool_or:14
     │    │    │    │         ├── grouping columns: x:1!null
     │    │    │    │         ├── key: (1)
@@ -2196,7 +2196,7 @@ PushSelectIntoProject
     │    │    │    │    ├── columns: x:1!null bool_or:14
     │    │    │    │    ├── key: (1)
     │    │    │    │    ├── fd: (1)-->(14)
-    │    │    │    │    └── group-by
+    │    │    │    │    └── group-by (hash)
     │    │    │    │         ├── columns: x:1!null bool_or:14
     │    │    │    │         ├── grouping columns: x:1!null
     │    │    │    │         ├── key: (1)
@@ -2271,7 +2271,7 @@ EliminateSelect
     │    │    │    │    ├── columns: x:1!null bool_or:14
     │    │    │    │    ├── key: (1)
     │    │    │    │    ├── fd: (1)-->(14)
-    │    │    │    │    └── group-by
+    │    │    │    │    └── group-by (hash)
     │    │    │    │         ├── columns: x:1!null bool_or:14
     │    │    │    │         ├── grouping columns: x:1!null
     │    │    │    │         ├── key: (1)
@@ -2353,7 +2353,7 @@ PruneJoinRightCols
     │    │    │    │    ├── columns: x:1!null bool_or:14
     │    │    │    │    ├── key: (1)
     │    │    │    │    ├── fd: (1)-->(14)
-    │    │    │    │    └── group-by
+    │    │    │    │    └── group-by (hash)
     │    │    │    │         ├── columns: x:1!null bool_or:14
     │    │    │    │         ├── grouping columns: x:1!null
     │    │    │    │         ├── key: (1)
@@ -2423,7 +2423,7 @@ EliminateGroupByProject
     │    │    │    │    ├── columns: x:1!null bool_or:14
     │    │    │    │    ├── key: (1)
     │    │    │    │    ├── fd: (1)-->(14)
-    │    │    │    │    └── group-by
+    │    │    │    │    └── group-by (hash)
     │    │    │    │         ├── columns: x:1!null bool_or:14
     │    │    │    │         ├── grouping columns: x:1!null
     │    │    │    │         ├── key: (1)
@@ -2511,12 +2511,12 @@ EliminateProject
     │    │    │    ├── key: (1)
     │    │    │    ├── fd: (1)-->(14)
   - │    │    │    ├── project
-  + │    │    │    ├── group-by
+  + │    │    │    ├── group-by (hash)
     │    │    │    │    ├── columns: x:1!null bool_or:14
   + │    │    │    │    ├── grouping columns: x:1!null
     │    │    │    │    ├── key: (1)
     │    │    │    │    ├── fd: (1)-->(14)
-  - │    │    │    │    └── group-by
+  - │    │    │    │    └── group-by (hash)
   - │    │    │    │         ├── columns: x:1!null bool_or:14
   - │    │    │    │         ├── grouping columns: x:1!null
   - │    │    │    │         ├── key: (1)
@@ -2600,12 +2600,12 @@ EliminateSelect
     │    │    ├── key: (1)
     │    │    ├── fd: (1)-->(15)
   - │    │    ├── select
-  + │    │    ├── group-by
+  + │    │    ├── group-by (hash)
     │    │    │    ├── columns: x:1!null bool_or:14
   + │    │    │    ├── grouping columns: x:1!null
     │    │    │    ├── key: (1)
     │    │    │    ├── fd: (1)-->(14)
-  - │    │    │    ├── group-by
+  - │    │    │    ├── group-by (hash)
   - │    │    │    │    ├── columns: x:1!null bool_or:14
   - │    │    │    │    ├── grouping columns: x:1!null
   + │    │    │    ├── left-join (hash)
@@ -2684,12 +2684,12 @@ EliminateSelect
     │    ├── fd: (1)-->(15)
   - │    ├── project
   - │    │    ├── columns: case:15 x:1!null
-  + │    ├── group-by
+  + │    ├── group-by (hash)
   + │    │    ├── columns: x:1!null bool_or:14
   + │    │    ├── grouping columns: x:1!null
     │    │    ├── key: (1)
   - │    │    ├── fd: (1)-->(15)
-  - │    │    ├── group-by
+  - │    │    ├── group-by (hash)
   - │    │    │    ├── columns: x:1!null bool_or:14
   - │    │    │    ├── grouping columns: x:1!null
   + │    │    ├── fd: (1)-->(14)
@@ -2767,7 +2767,7 @@ PruneProjectCols
   - │    ├── key: (1)
   - │    ├── fd: (1)-->(15)
   + │    ├── columns: case:15
-    │    ├── group-by
+    │    ├── group-by (hash)
     │    │    ├── columns: x:1!null bool_or:14
     │    │    ├── grouping columns: x:1!null
     │    │    ├── key: (1)
@@ -2813,10 +2813,10 @@ InlineProjectInProject
     ├── columns: r:12
   - ├── project
   - │    ├── columns: case:15
-  - │    ├── group-by
+  - │    ├── group-by (hash)
   - │    │    ├── columns: x:1!null bool_or:14
   - │    │    ├── grouping columns: x:1!null
-  + ├── group-by
+  + ├── group-by (hash)
   + │    ├── columns: x:1!null bool_or:14
   + │    ├── grouping columns: x:1!null
   + │    ├── key: (1)
@@ -2905,7 +2905,7 @@ CommuteLeftJoin (higher cost)
 --------------------------------------------------------------------------------
    project
     ├── columns: r:12
-    ├── group-by
+    ├── group-by (hash)
     │    ├── columns: x:1!null bool_or:14
     │    ├── grouping columns: x:1!null
     │    ├── key: (1)
@@ -2951,7 +2951,7 @@ GenerateMergeJoins
 ================================================================================
    project
     ├── columns: r:12
-    ├── group-by
+    ├── group-by (hash)
     │    ├── columns: x:1!null bool_or:14
     │    ├── grouping columns: x:1!null
     │    ├── key: (1)
@@ -3002,7 +3002,7 @@ HoistProjectFromLeftJoin (higher cost)
 --------------------------------------------------------------------------------
    project
     ├── columns: r:12
-    ├── group-by
+    ├── group-by (hash)
     │    ├── columns: x:1!null bool_or:14
     │    ├── grouping columns: x:1!null
     │    ├── key: (1)
@@ -3064,7 +3064,7 @@ CommuteLeftJoin (higher cost)
 --------------------------------------------------------------------------------
    project
     ├── columns: r:12
-    ├── group-by
+    ├── group-by (hash)
     │    ├── columns: x:1!null bool_or:14
     │    ├── grouping columns: x:1!null
     │    ├── key: (1)
@@ -3109,7 +3109,7 @@ GenerateMergeJoins (higher cost)
 --------------------------------------------------------------------------------
    project
     ├── columns: r:12
-    ├── group-by
+    ├── group-by (hash)
     │    ├── columns: x:1!null bool_or:14
     │    ├── grouping columns: x:1!null
     │    ├── key: (1)
@@ -3160,7 +3160,7 @@ GenerateLookupJoinsWithFilter (higher cost)
 --------------------------------------------------------------------------------
    project
     ├── columns: r:12
-    ├── group-by
+    ├── group-by (hash)
     │    ├── columns: x:1!null bool_or:14
     │    ├── grouping columns: x:1!null
     │    ├── key: (1)
@@ -3210,7 +3210,7 @@ GenerateMergeJoins (higher cost)
 --------------------------------------------------------------------------------
    project
     ├── columns: r:12
-    ├── group-by
+    ├── group-by (hash)
     │    ├── columns: x:1!null bool_or:14
     │    ├── grouping columns: x:1!null
     │    ├── key: (1)
@@ -3260,7 +3260,7 @@ GenerateMergeJoins (higher cost)
 --------------------------------------------------------------------------------
    project
     ├── columns: r:12
-    ├── group-by
+    ├── group-by (hash)
     │    ├── columns: x:1!null bool_or:14
     │    ├── grouping columns: x:1!null
     │    ├── key: (1)
@@ -3321,7 +3321,8 @@ GenerateStreamingGroupBy
 ================================================================================
    project
     ├── columns: r:12
-    ├── group-by
+  - ├── group-by (hash)
+  + ├── group-by (streaming)
     │    ├── columns: x:1!null bool_or:14
     │    ├── grouping columns: x:1!null
   + │    ├── internal-ordering: +1
@@ -3369,7 +3370,7 @@ Final best expression
 ================================================================================
   project
    ├── columns: r:12
-   ├── group-by
+   ├── group-by (streaming)
    │    ├── columns: x:1!null bool_or:14
    │    ├── grouping columns: x:1!null
    │    ├── internal-ordering: +1

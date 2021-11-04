@@ -1713,7 +1713,7 @@ vectorized: true
 │ order: -count_rows,+s_name
 │ k: 100
 │
-└── • group
+└── • group (hash)
     │ estimated row count: 0
     │ group by: s_name
     │

@@ -29,7 +29,7 @@ explain(shape):
 │
 └── • render
     │
-    └── • group
+    └── • group (hash)
         │ group by: b_name
         │
         └── • render
@@ -71,7 +71,7 @@ explain(gist):
 │
 └── • render
     │
-    └── • group
+    └── • group (hash)
         │ group by: _
         │
         └── • render
@@ -126,7 +126,7 @@ explain(shape):
 │
 └── • render
     │
-    └── • group
+    └── • group (streaming)
         │ group by: ca_id
         │ ordered: +ca_id
         │
@@ -154,7 +154,7 @@ explain(gist):
 │
 └── • render
     │
-    └── • group
+    └── • group (hash)
         │ group by: _
         │
         └── • render
