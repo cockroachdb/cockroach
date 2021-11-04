@@ -693,6 +693,7 @@ descriptor and store capacity.
 | attrs | [cockroach.roachpb.Attributes](#cockroach.server.serverpb.NodesResponseExternal-cockroach.roachpb.Attributes) |  |  | [reserved](#support-status) |
 | node | [NodeDescriptor](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeDescriptor) |  |  | [reserved](#support-status) |
 | capacity | [cockroach.roachpb.StoreCapacity](#cockroach.server.serverpb.NodesResponseExternal-cockroach.roachpb.StoreCapacity) |  |  | [reserved](#support-status) |
+| properties | [cockroach.roachpb.StoreProperties](#cockroach.server.serverpb.NodesResponseExternal-cockroach.roachpb.StoreProperties) |  |  | [reserved](#support-status) |
 
 
 
@@ -952,6 +953,7 @@ descriptor and store capacity.
 | attrs | [cockroach.roachpb.Attributes](#cockroach.server.serverpb.NodeResponse-cockroach.roachpb.Attributes) |  |  | [reserved](#support-status) |
 | node | [NodeDescriptor](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeDescriptor) |  |  | [reserved](#support-status) |
 | capacity | [cockroach.roachpb.StoreCapacity](#cockroach.server.serverpb.NodeResponse-cockroach.roachpb.StoreCapacity) |  |  | [reserved](#support-status) |
+| properties | [cockroach.roachpb.StoreProperties](#cockroach.server.serverpb.NodeResponse-cockroach.roachpb.StoreProperties) |  |  | [reserved](#support-status) |
 
 
 

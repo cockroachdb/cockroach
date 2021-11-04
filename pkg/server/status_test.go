@@ -2669,6 +2669,17 @@ func TestStatusServer_nodeStatusToResp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var nodeStatus = &statuspb.NodeStatus{
+		StoreStatuses: []statuspb.StoreStatus{
+			{Desc: roachpb.StoreDescriptor{
+				Properties: roachpb.StoreProperties{
+					Encrypted: true,
+					FileStoreProperties: &roachpb.FileStoreProperties{
+						Path:   "/secret",
+						FsType: "ext4",
+					},
+				},
+			}},
+		},
 		Desc: roachpb.NodeDescriptor{
 			Address: util.UnresolvedAddr{
 				NetworkField: "network",
@@ -2696,6 +2707,9 @@ func TestStatusServer_nodeStatusToResp(t *testing.T) {
 	require.Empty(t, resp.Desc.Attrs.Attrs)
 	require.Empty(t, resp.Desc.LocalityAddress)
 	require.Empty(t, resp.Desc.SQLAddress)
+	require.True(t, resp.StoreStatuses[0].Desc.Properties.Encrypted)
+	require.NotEmpty(t, resp.StoreStatuses[0].Desc.Properties.FileStoreProperties.FsType)
+	require.Empty(t, resp.StoreStatuses[0].Desc.Properties.FileStoreProperties.Path)
 
 	// Now fetch all the node statuses as admin.
 	resp = nodeStatusToResp(nodeStatus, true)
@@ -2705,6 +2719,9 @@ func TestStatusServer_nodeStatusToResp(t *testing.T) {
 	require.NotEmpty(t, resp.Desc.Attrs.Attrs)
 	require.NotEmpty(t, resp.Desc.LocalityAddress)
 	require.NotEmpty(t, resp.Desc.SQLAddress)
+	require.True(t, resp.StoreStatuses[0].Desc.Properties.Encrypted)
+	require.NotEmpty(t, resp.StoreStatuses[0].Desc.Properties.FileStoreProperties.FsType)
+	require.NotEmpty(t, resp.StoreStatuses[0].Desc.Properties.FileStoreProperties.Path)
 }
 
 func TestStatusAPIContentionEvents(t *testing.T) {
