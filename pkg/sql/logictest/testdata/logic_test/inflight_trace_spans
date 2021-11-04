@@ -40,6 +40,9 @@ statement ok
 INSERT INTO kv VALUES('k', 'v');
 COMMIT
 
+statement ok
+SET TRACING = off
+
 # Confirm that the trace and its associated spans are no longer tracked.
 query B
 SELECT count(*) = 0

@@ -1950,10 +1950,6 @@ type SessionTracing struct {
 	// ex is the connExecutor to which this SessionTracing is tied.
 	ex *connExecutor
 
-	// firstTxnSpan is the span of the first txn that was active when session
-	// tracing was enabled. It is finished and unset in StopTracing.
-	firstTxnSpan *tracing.Span
-
 	// connSpan is the connection's span. This is recording. It is finished and
 	// unset in StopTracing.
 	connSpan *tracing.Span
@@ -1970,16 +1966,7 @@ func (st *SessionTracing) getSessionTrace() ([]traceRow, error) {
 		return st.lastRecording, nil
 	}
 
-	return generateSessionTraceVTable(st.getRecording())
-}
-
-// getRecording returns the recorded spans of the current trace.
-func (st *SessionTracing) getRecording() []tracingpb.RecordedSpan {
-	var spans []tracingpb.RecordedSpan
-	if st.firstTxnSpan != nil {
-		spans = append(spans, st.firstTxnSpan.GetRecording()...)
-	}
-	return append(spans, st.connSpan.GetRecording()...)
+	return generateSessionTraceVTable(st.connSpan.GetRecording())
 }
 
 // StartTracing starts "session tracing". From this moment on, everything
@@ -2031,41 +2018,42 @@ func (st *SessionTracing) StartTracing(
 		return nil
 	}
 
+	// Hijack the conn's ctx with one that has a recording span. All future
+	// transactions will inherit from this span, so they'll all be recorded.
+	var newConnCtx context.Context
+	{
+		connCtx := st.ex.ctxHolder.connCtx
+		opName := "session recording"
+		newConnCtx, st.connSpan = tracing.EnsureChildSpan(
+			connCtx,
+			st.ex.server.cfg.AmbientCtx.Tracer,
+			opName,
+			tracing.WithForceRealSpan(),
+		)
+		st.connSpan.SetVerbose(true)
+		st.ex.ctxHolder.hijack(newConnCtx)
+	}
+
 	// If we're inside a transaction, hijack the txn's ctx with one that has a
 	// recording span.
 	if _, ok := st.ex.machine.CurState().(stateNoTxn); !ok {
 		txnCtx := st.ex.state.Ctx
-		if sp := tracing.SpanFromContext(txnCtx); sp == nil {
+		sp := tracing.SpanFromContext(txnCtx)
+		if sp == nil {
 			return errors.Errorf("no txn span for SessionTracing")
 		}
+		// We're hijacking this span and we're never going to un-hijack it, so it's
+		// up to us to finish it.
+		sp.Finish()
 
-		newTxnCtx, sp := tracing.EnsureChildSpan(txnCtx, st.ex.server.cfg.AmbientCtx.Tracer,
-			"session tracing", tracing.WithForceRealSpan())
-		sp.SetVerbose(true)
-		st.ex.state.Ctx = newTxnCtx
-		st.firstTxnSpan = sp
+		st.ex.state.Ctx, _ = tracing.EnsureChildSpan(
+			newConnCtx, st.ex.server.cfg.AmbientCtx.Tracer, "session tracing")
 	}
 
 	st.enabled = true
 	st.kvTracingEnabled = kvTracingEnabled
 	st.showResults = showResults
 	st.recordingType = recType
-
-	// Now hijack the conn's ctx with one that has a recording span.
-
-	connCtx := st.ex.ctxHolder.connCtx
-	opName := "session recording"
-	newConnCtx, sp := tracing.EnsureChildSpan(
-		connCtx,
-		st.ex.server.cfg.AmbientCtx.Tracer,
-		opName,
-		tracing.WithForceRealSpan(),
-	)
-	sp.SetVerbose(true)
-	st.connSpan = sp
-
-	// Hijack the connections context.
-	st.ex.ctxHolder.hijack(newConnCtx)
 
 	return nil
 }
@@ -2082,19 +2070,17 @@ func (st *SessionTracing) StopTracing() error {
 	st.recordingType = tracing.RecordingOff
 
 	// Accumulate all recordings and finish the tracing spans.
-	var spans []tracingpb.RecordedSpan
-	if st.firstTxnSpan != nil {
-		spans = append(spans, st.firstTxnSpan.GetRecording()...)
-		st.firstTxnSpan.Finish()
-		st.firstTxnSpan = nil
-	}
-	spans = append(spans, st.connSpan.GetRecording()...)
+	rec := st.connSpan.GetRecording()
+	// We're about to finish this span, but there might be a child that remains
+	// open - the child corresponding to the current transaction. We don't want
+	// that span to be recording any more.
+	st.connSpan.SetVerbose(false)
 	st.connSpan.Finish()
 	st.connSpan = nil
 	st.ex.ctxHolder.unhijack()
 
 	var err error
-	st.lastRecording, err = generateSessionTraceVTable(spans)
+	st.lastRecording, err = generateSessionTraceVTable(rec)
 	return err
 }
 
