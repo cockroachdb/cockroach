@@ -143,7 +143,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ID:   51,
 				Name: "db1",
 				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-					"schema1": {ID: 52, Dropped: false},
+					"schema1": {ID: 52},
 				},
 			},
 			schemaDescs: []descpb.SchemaDescriptor{
@@ -169,7 +169,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ID:   51,
 				Name: "db1",
 				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-					"schema1": {ID: 500, Dropped: false},
+					"schema1": {ID: 500},
 				},
 			},
 		},
@@ -179,7 +179,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ID:   51,
 				Name: "db1",
 				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-					"schema1": {ID: 52, Dropped: false},
+					"schema1": {ID: 52},
 				},
 			},
 			schemaDescs: []descpb.SchemaDescriptor{

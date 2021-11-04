@@ -123,6 +123,7 @@ go_library(
         "lookup_join.go",
         "max_one_row.go",
         "mem_metrics.go",
+        "name_util.go",
         "notice.go",
         "opaque.go",
         "opt_catalog.go",

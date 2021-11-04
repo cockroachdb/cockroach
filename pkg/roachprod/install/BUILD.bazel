@@ -21,10 +21,13 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cli/exit",
+        "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
         "//pkg/roachprod/errors",
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/ui",
+        "//pkg/roachprod/vm/aws",
+        "//pkg/roachprod/vm/local",
         "//pkg/util/envutil",
         "//pkg/util/httputil",
         "//pkg/util/log",
@@ -39,7 +42,10 @@ go_library(
 
 go_test(
     name = "install_test",
-    srcs = ["start_template_test.go"],
+    srcs = [
+        "cluster_synced_test.go",
+        "start_template_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":install"],
     deps = [

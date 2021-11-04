@@ -14,12 +14,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"text/tabwriter"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
@@ -28,12 +29,91 @@ import (
 // ProviderName is config.Local.
 const ProviderName = config.Local
 
-func init() {
-	vm.Providers[ProviderName] = &Provider{}
+// VMDir returns the local directory for a given node in a cluster.
+// Node indexes start at 1.
+//
+// If the cluster name is "local", node 1 directory is:
+//   ${HOME}/local/1
+//
+// If the cluster name is "local-foo", node 1 directory is:
+//   ${HOME}/local/foo-1
+//
+// WARNING: when we destroy a local cluster, we remove these directories so it's
+// important that this function never returns things like "" or "/".
+func VMDir(clusterName string, nodeIdx int) string {
+	if nodeIdx < 1 {
+		panic("invalid nodeIdx")
+	}
+	localDir := os.ExpandEnv("${HOME}/local")
+	if clusterName == config.Local {
+		return filepath.Join(localDir, fmt.Sprintf("%d", nodeIdx))
+	}
+	name := strings.TrimPrefix(clusterName, config.Local+"-")
+	return filepath.Join(localDir, fmt.Sprintf("%s-%d", name, nodeIdx))
+}
+
+// Init initializes the Local provider and registers it into vm.Providers.
+func Init(storage VMStorage) {
+	vm.Providers[ProviderName] = &Provider{
+		clusters: make(cloud.Clusters),
+		storage:  storage,
+	}
+}
+
+// AddCluster adds the metadata of a local cluster; used when loading the saved
+// metadata for local clusters.
+func AddCluster(cluster *cloud.Cluster) {
+	p := vm.Providers[ProviderName].(*Provider)
+	p.clusters[cluster.Name] = cluster
+}
+
+// DeleteCluster destroys a local cluster. It assumes that the cockroach
+// processes are stopped.
+func DeleteCluster(name string) error {
+	p := vm.Providers[ProviderName].(*Provider)
+	c := p.clusters[name]
+	if c == nil {
+		return fmt.Errorf("local cluster %s does not exist", name)
+	}
+	fmt.Printf("Deleting local cluster %s\n", name)
+
+	for i := range c.VMs {
+		if err := os.RemoveAll(VMDir(c.Name, i+1)); err != nil {
+			return err
+		}
+	}
+
+	if err := p.storage.DeleteCluster(name); err != nil {
+		return err
+	}
+
+	delete(p.clusters, name)
+	return nil
+}
+
+// Clusters returns a list of all known local clusters.
+func Clusters() []string {
+	p := vm.Providers[ProviderName].(*Provider)
+	return p.clusters.Names()
+}
+
+// VMStorage is the interface for saving metadata for local clusters.
+type VMStorage interface {
+	// SaveCluster saves the metadata for a local cluster. It is expected that
+	// when the program runs again, this same metadata will be reported via
+	// AddCluster.
+	SaveCluster(cluster *cloud.Cluster) error
+
+	// DeleteCluster deletes the metadata for a local cluster.
+	DeleteCluster(name string) error
 }
 
 // A Provider is used to create stub VM objects.
-type Provider struct{}
+type Provider struct {
+	clusters cloud.Clusters
+
+	storage VMStorage
+}
 
 // No-op implementation of ProviderFlags
 type emptyFlags struct{}
@@ -62,33 +142,75 @@ func (p *Provider) ConfigSSH() error {
 
 // Create just creates fake host-info entries in the local filesystem
 func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
-	path := filepath.Join(os.ExpandEnv(config.DefaultHostDir), config.Local)
-	file, err := os.Create(path)
-	if err != nil {
-		return errors.Wrapf(err, "problem creating file %s", path)
+	now := timeutil.Now()
+	c := &cloud.Cluster{
+		Name:      opts.ClusterName,
+		CreatedAt: now,
+		Lifetime:  time.Hour,
+		VMs:       make(vm.List, len(names)),
 	}
-	defer file.Close()
 
-	// Align columns left and separate with at least two spaces.
-	tw := tabwriter.NewWriter(file, 0, 8, 2, ' ', 0)
-	if _, err := tw.Write([]byte("# user@host\tlocality\n")); err != nil {
-		return err
+	if !config.IsLocalClusterName(c.Name) {
+		return errors.Errorf("'%s' is not a valid local cluster name", c.Name)
 	}
-	for i := 0; i < len(names); i++ {
-		if _, err := tw.Write([]byte(fmt.Sprintf(
-			"%s@%s\t%s\n", config.OSUser.Username, "127.0.0.1", "region=local,zone=local"))); err != nil {
+
+	// We will need to assign ports to the nodes, and they must not conflict with
+	// any other local clusters.
+	var portsTaken util.FastIntSet
+	for _, c := range p.clusters {
+		for i := range c.VMs {
+			portsTaken.Add(c.VMs[i].SQLPort)
+			portsTaken.Add(c.VMs[i].AdminUIPort)
+		}
+	}
+	sqlPort := config.DefaultSQLPort
+	adminUIPort := config.DefaultAdminUIPort
+
+	// getPort returns the first available port (starting at *port), and modifies
+	// (*port) to be the following value.
+	getPort := func(port *int) int {
+		for portsTaken.Contains(*port) {
+			(*port)++
+		}
+		result := *port
+		portsTaken.Add(result)
+		(*port)++
+		return result
+	}
+
+	for i := range names {
+		c.VMs[i] = vm.VM{
+			Name:             "localhost",
+			CreatedAt:        now,
+			Lifetime:         time.Hour,
+			PrivateIP:        "127.0.0.1",
+			Provider:         ProviderName,
+			ProviderID:       ProviderName,
+			PublicIP:         "127.0.0.1",
+			RemoteUser:       config.OSUser.Username,
+			VPC:              ProviderName,
+			MachineType:      ProviderName,
+			Zone:             ProviderName,
+			SQLPort:          getPort(&sqlPort),
+			AdminUIPort:      getPort(&adminUIPort),
+			LocalClusterName: c.Name,
+		}
+
+		err := os.MkdirAll(VMDir(c.Name, i+1), 0755)
+		if err != nil {
 			return err
 		}
 	}
-	if err := tw.Flush(); err != nil {
-		return errors.Wrapf(err, "problem writing file %s", path)
+	if err := p.storage.SaveCluster(c); err != nil {
+		return err
 	}
+	p.clusters[c.Name] = c
 	return nil
 }
 
-// Delete is part of the vm.Provider interface. This implementation is a no-op.
+// Delete is part of the vm.Provider interface.
 func (p *Provider) Delete(vms vm.List) error {
-	return nil
+	panic("DeleteCluster should be used")
 }
 
 // Reset is part of the vm.Provider interface. This implementation is a no-op.
@@ -111,28 +233,14 @@ func (p *Provider) Flags() vm.ProviderFlags {
 	return &emptyFlags{}
 }
 
-// List constructs N-many localhost VM instances, using SyncedCluster as a way to remember
-// how many nodes we should have
-func (p *Provider) List() (ret vm.List, _ error) {
-	if sc, ok := install.Clusters[ProviderName]; ok {
-		now := timeutil.Now()
-		for range sc.VMs {
-			ret = append(ret, vm.VM{
-				Name:        "localhost",
-				CreatedAt:   now,
-				Lifetime:    time.Hour,
-				PrivateIP:   "127.0.0.1",
-				Provider:    ProviderName,
-				ProviderID:  ProviderName,
-				PublicIP:    "127.0.0.1",
-				RemoteUser:  config.OSUser.Username,
-				VPC:         ProviderName,
-				MachineType: ProviderName,
-				Zone:        ProviderName,
-			})
-		}
+// List reports all the local cluster "VM" instances.
+func (p *Provider) List() (vm.List, error) {
+	var result vm.List
+	for _, clusterName := range p.clusters.Names() {
+		c := p.clusters[clusterName]
+		result = append(result, c.VMs...)
 	}
-	return
+	return result, nil
 }
 
 // Name returns the name of the Provider, which will also surface in VM.Provider
@@ -143,4 +251,9 @@ func (p *Provider) Name() string {
 // Active is part of the vm.Provider interface.
 func (p *Provider) Active() bool {
 	return true
+}
+
+// ProjectActive is part of the vm.Provider interface.
+func (p *Provider) ProjectActive(project string) bool {
+	return project == ""
 }

@@ -43,15 +43,17 @@ func DefaultProject() string {
 // projects for which a cron GC job exists.
 var projectsWithGC = []string{defaultProject, "andrei-jepsen"}
 
-// init will inject the GCE provider into vm.Providers, but only if the gcloud tool is available on the local path.
-func init() {
-	var p vm.Provider = &Provider{}
+// Init registers the GCE provider into vm.Providers.
+//
+// If the gcloud tool is not available on the local path, the provider is a
+// stub.
+func Init() {
+	var p vm.Provider
 	if _, err := exec.LookPath("gcloud"); err != nil {
-		p = flagstub.New(p, "please install the gcloud CLI utilities "+
+		p = flagstub.New(&Provider{}, "please install the gcloud CLI utilities "+
 			"(https://cloud.google.com/sdk/downloads)")
 	} else {
-		gceP := makeProvider()
-		p = &gceP
+		p = newProvider()
 	}
 	vm.Providers[ProviderName] = p
 }
@@ -162,6 +164,8 @@ func (jsonVM *jsonVM) toVM(project string, opts *ProviderOpts) (ret *vm.VM) {
 		MachineType: machineType,
 		Zone:        zone,
 		Project:     project,
+		SQLPort:     config.DefaultSQLPort,
+		AdminUIPort: config.DefaultAdminUIPort,
 	}
 }
 
@@ -342,8 +346,8 @@ type Provider struct {
 	opts ProviderOpts
 }
 
-func makeProvider() Provider {
-	return Provider{opts: DefaultProviderOpts()}
+func newProvider() *Provider {
+	return &Provider{opts: DefaultProviderOpts()}
 }
 
 // CleanSSH TODO(peter): document
@@ -671,4 +675,14 @@ func (p *Provider) Name() string {
 // Active is part of the vm.Provider interface.
 func (p *Provider) Active() bool {
 	return true
+}
+
+// ProjectActive is part of the vm.Provider interface.
+func (p *Provider) ProjectActive(project string) bool {
+	for _, p := range p.GetProjects() {
+		if p == project {
+			return true
+		}
+	}
+	return false
 }

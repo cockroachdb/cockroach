@@ -85,3 +85,8 @@ func (p *provider) Name() string {
 func (p *provider) Active() bool {
 	return false
 }
+
+// ProjectActive is part of the vm.Provider interface.
+func (p *provider) ProjectActive(project string) bool {
+	return false
+}

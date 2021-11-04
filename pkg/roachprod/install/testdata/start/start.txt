@@ -20,8 +20,6 @@ set -euo pipefail
 LOCAL=true
 ADVERTISE_FIRST_IP=
 LOG_DIR='./path with spaces/logs/$THIS_DOES_NOT_EVER_GET_EXPANDED'
-NODE_NUM=1
-TAG=tigtag
 BINARY=./cockroach
 START_CMD=start-single-node
 KEY_CMD=echo foo && \
@@ -31,13 +29,13 @@ ARGS=(
 '--log "file-defaults: {dir: '"'"'/path with spaces/logs'"'"', exit-on-error: false}"'
 )
 ENV_VARS=(
+ROACHPROD=1/tigtag
 COCKROACH=foo
 ROCKCOACH=17%
 )
 
 # End of templated code.
 
-ENV_VARS+=("ROACHPROD=${NODE_NUM}${TAG}")
 if [[ -n "${ADVERTISE_FIRST_IP}" ]]; then
   ARGS+=("--advertise-host" "$(hostname -I | awk '{print $1}')")
 fi

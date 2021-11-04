@@ -13,9 +13,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -104,7 +102,11 @@ func (n *renameTableNode) startExec(params runParams) error {
 	ctx := params.ctx
 	tableDesc := n.tableDesc
 	oldTn := n.oldTn
-	prevDBID := tableDesc.ParentID
+	oldNameKey := descpb.NameInfo{
+		ParentID:       tableDesc.GetParentID(),
+		ParentSchemaID: tableDesc.GetParentSchemaID(),
+		Name:           tableDesc.GetName(),
+	}
 
 	var targetDbDesc catalog.DatabaseDescriptor
 	var targetSchemaDesc catalog.SchemaDescriptor
@@ -232,24 +234,19 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	descID := tableDesc.GetID()
-	parentSchemaID := tableDesc.GetParentSchemaID()
+	// Populate namespace update batch.
+	b := p.txn.NewBatch()
+	p.renameNamespaceEntry(ctx, b, oldNameKey, tableDesc)
 
-	renameDetails := descpb.NameInfo{
-		ParentID:       prevDBID,
-		ParentSchemaID: parentSchemaID,
-		Name:           oldTn.Table()}
-	tableDesc.AddDrainingName(renameDetails)
-
+	// Write the updated table descriptor.
 	if err := p.writeSchemaChange(
 		ctx, tableDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}
 
-	newTbKey := catalogkeys.NewNameKeyComponents(targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table())
-
-	if err := p.writeNameKey(ctx, newTbKey, descID); err != nil {
+	// Run the namespace update batch.
+	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}
 
@@ -540,16 +537,4 @@ func (n *renameTableNode) checkForCrossDbReferences(
 		}
 	}
 	return nil
-}
-
-// writeNameKey writes a name key to a batch and runs the batch.
-func (p *planner) writeNameKey(ctx context.Context, nameKey catalog.NameKey, ID descpb.ID) error {
-	marshalledKey := catalogkeys.EncodeNameKey(p.ExecCfg().Codec, nameKey)
-	b := &kv.Batch{}
-	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", marshalledKey, ID)
-	}
-	b.CPut(marshalledKey, ID, nil)
-
-	return p.txn.Run(ctx, b)
 }

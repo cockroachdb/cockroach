@@ -220,8 +220,9 @@ func (mc *MemRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) e
 // Sort is part of the SortableRowContainer interface.
 func (mc *MemRowContainer) Sort(ctx context.Context) {
 	mc.invertSorting = false
-	cancelChecker := cancelchecker.NewCancelChecker(ctx)
-	sort.Sort(mc, cancelChecker)
+	var cancelChecker cancelchecker.CancelChecker
+	cancelChecker.Reset(ctx)
+	sort.Sort(mc, &cancelChecker)
 }
 
 // Reorder implements ReorderableRowContainer. We don't need to create a new

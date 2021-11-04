@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,9 +36,10 @@ import (
 // ProviderName is aws.
 const ProviderName = "aws"
 
-// init will inject the AWS provider into vm.Providers, but only
-// if the aws tool is available on the local path.
-func init() {
+// Init initializes the AWS provider and registers it into vm.Providers.
+//
+// If the aws tool is not available on the local path, the provider is a stub.
+func Init() {
 	// aws-cli version 1 automatically base64 encodes the string passed as --public-key-material.
 	// Version 2 supports file:// and fileb:// prefixes for text and binary files.
 	// The latter prefix will base64-encode the file contents. See
@@ -773,6 +775,8 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 				VPC:         in.VpcID,
 				MachineType: in.InstanceType,
 				Zone:        in.Placement.AvailabilityZone,
+				SQLPort:     config.DefaultSQLPort,
+				AdminUIPort: config.DefaultAdminUIPort,
 			}
 			ret = append(ret, m)
 		}
@@ -937,4 +941,9 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 // Active is part of the vm.Provider interface.
 func (p *Provider) Active() bool {
 	return true
+}
+
+// ProjectActive is part of the vm.Provider interface.
+func (p *Provider) ProjectActive(project string) bool {
+	return project == ""
 }

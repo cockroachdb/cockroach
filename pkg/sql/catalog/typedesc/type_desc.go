@@ -257,6 +257,8 @@ func (desc *immutable) RegionNamesIncludingTransitioning() (descpb.RegionNames, 
 }
 
 // SetDrainingNames implements the MutableDescriptor interface.
+//
+// Deprecated: Do not use.
 func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names
 }
@@ -443,8 +445,15 @@ func (desc *Mutable) SetParentSchemaID(schemaID descpb.ID) {
 
 // AddDrainingName adds a draining name to the TypeDescriptor's slice of
 // draining names.
+//
+// Deprecated: Do not use.
 func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
 	desc.DrainingNames = append(desc.DrainingNames, name)
+}
+
+// SetName sets the TypeDescriptor's name.
+func (desc *Mutable) SetName(name string) {
+	desc.Name = name
 }
 
 // EnumMembers is a sortable list of TypeDescriptor_EnumMember, sorted by the

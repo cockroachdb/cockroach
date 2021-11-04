@@ -75,7 +75,7 @@ type aggregatorBase struct {
 	row              rowenc.EncDatumRow
 	scratch          []byte
 
-	cancelChecker *cancelchecker.CancelChecker
+	cancelChecker cancelchecker.CancelChecker
 }
 
 // init initializes the aggregatorBase.
@@ -335,7 +335,7 @@ func (ag *orderedAggregator) Start(ctx context.Context) {
 func (ag *aggregatorBase) start(ctx context.Context, procName string) {
 	ctx = ag.StartInternal(ctx, procName)
 	ag.input.Start(ctx)
-	ag.cancelChecker = cancelchecker.NewCancelChecker(ctx)
+	ag.cancelChecker.Reset(ctx)
 	ag.runningState = aggAccumulating
 }
 

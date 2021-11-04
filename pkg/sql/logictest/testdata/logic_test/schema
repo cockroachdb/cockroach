@@ -154,11 +154,6 @@ ALTER SCHEMA myschema RENAME TO another_schema
 statement ok
 ALTER SCHEMA another_schema RENAME TO another_one
 
-# The names should be draining, so we can't use the old ones
-# anymore.
-statement error pq: schema "myschema" already exists
-ALTER SCHEMA another_one RENAME TO myschema
-
 statement ok
 ROLLBACK
 
@@ -215,20 +210,6 @@ DROP SCHEMA dropped
 
 statement error pq: cannot create "dropped.t" because the target database or schema does not exist
 CREATE TABLE dropped.t (x INT)
-
-statement ok
-ROLLBACK
-
-# We shouldn't be able to create a conflicting schema name in the same transaction
-# that it is dropped in.
-statement ok
-BEGIN
-
-statement ok
-DROP SCHEMA dropped
-
-statement error pq: schema "dropped" already exists
-CREATE SCHEMA dropped
 
 statement ok
 ROLLBACK
@@ -823,18 +804,6 @@ CREATE SCHEMA sc2
 
 statement ok
 CREATE TYPE sc3 as enum('foo')
-
-statement ok
-BEGIN
-
-statement ok
-DROP SCHEMA sc2
-
-statement error pgcode 55000 schema "sc2" is being dropped, try again later
-CREATE SCHEMA IF NOT EXISTS sc2
-
-statement ok
-END
 
 # Regression test for #62920. The bug that motivated this test would populate
 # the schema entry in the database with the database's name rather than the

@@ -57,7 +57,7 @@ func cockroachNodeBinary(c *SyncedCluster, node int) string {
 		return "./" + config.Binary
 	}
 
-	path := filepath.Join(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), node), config.Binary)
+	path := filepath.Join(c.localVMDir(node), config.Binary)
 	if _, err := os.Stat(path); err == nil {
 		return path
 	}
@@ -125,11 +125,6 @@ func getCockroachVersion(c *SyncedCluster, node int) (*version.Version, error) {
 		verString = strings.TrimSpace(string(out))
 	}
 	return version.Parse(verString)
-}
-
-// GetAdminUIPort returns the admin UI port for ths specified RPC port.
-func GetAdminUIPort(connPort int) int {
-	return connPort + 1
 }
 
 func argExists(args []string, target string) int {
@@ -245,27 +240,25 @@ func (Cockroach) NodeDir(c *SyncedCluster, index, storeIndex int) string {
 		if storeIndex != 1 {
 			panic("Cockroach.NodeDir only supports one store for local deployments")
 		}
-		return os.ExpandEnv(fmt.Sprintf("${HOME}/local/%d/data", index))
+		return filepath.Join(c.localVMDir(index), "data")
 	}
 	return fmt.Sprintf("/mnt/data%d/cockroach", storeIndex)
 }
 
 // LogDir implements the ClusterImpl.NodeDir interface.
 func (Cockroach) LogDir(c *SyncedCluster, index int) string {
-	dir := "logs"
 	if c.IsLocal() {
-		dir = os.ExpandEnv(fmt.Sprintf("${HOME}/local/%d/logs", index))
+		return filepath.Join(c.localVMDir(index), "logs")
 	}
-	return dir
+	return "logs"
 }
 
 // CertsDir implements the ClusterImpl.NodeDir interface.
 func (Cockroach) CertsDir(c *SyncedCluster, index int) string {
-	dir := "certs"
 	if c.IsLocal() {
-		dir = os.ExpandEnv(fmt.Sprintf("${HOME}/local/%d/certs", index))
+		return filepath.Join(c.localVMDir(index), "certs")
 	}
-	return dir
+	return "certs"
 }
 
 // NodeURL implements the ClusterImpl.NodeDir interface.
@@ -289,17 +282,12 @@ func (Cockroach) NodeURL(c *SyncedCluster, host string, port int) string {
 
 // NodePort implements the ClusterImpl.NodeDir interface.
 func (Cockroach) NodePort(c *SyncedCluster, index int) int {
-	const basePort = 26257
-	port := basePort
-	if c.IsLocal() {
-		port += (index - 1) * 2
-	}
-	return port
+	return c.VMs[index-1].SQLPort
 }
 
 // NodeUIPort implements the ClusterImpl.NodeDir interface.
 func (r Cockroach) NodeUIPort(c *SyncedCluster, index int) int {
-	return GetAdminUIPort(r.NodePort(c, index))
+	return c.VMs[index-1].AdminUIPort
 }
 
 // SQL implements the ClusterImpl.NodeDir interface.
@@ -335,7 +323,7 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 
 		var cmd string
 		if c.IsLocal() {
-			cmd = fmt.Sprintf(`cd ${HOME}/local/%d ; `, c.Nodes[nodeIdx])
+			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(c.Nodes[nodeIdx]))
 		}
 		cmd += cockroachNodeBinary(c, c.Nodes[nodeIdx]) + " sql --url " +
 			r.NodeURL(c, "localhost", r.NodePort(c, c.Nodes[nodeIdx])) + " " +
@@ -388,7 +376,7 @@ func (h *crdbInstallHelper) startNode(
 		sess.SetStdin(strings.NewReader(startCmd))
 		var cmd string
 		if h.c.IsLocal() {
-			cmd = fmt.Sprintf(`cd ${HOME}/local/%d ; `, nodes[nodeIdx])
+			cmd = fmt.Sprintf(`cd %s ; `, h.c.localVMDir(nodes[nodeIdx]))
 		}
 		cmd += `cat > cockroach.sh && chmod +x cockroach.sh`
 		if out, err := sess.CombinedOutput(cmd); err != nil {
@@ -408,7 +396,7 @@ func (h *crdbInstallHelper) startNode(
 
 	var cmd string
 	if h.c.IsLocal() {
-		cmd = fmt.Sprintf(`cd ${HOME}/local/%d ; `, nodes[nodeIdx])
+		cmd = fmt.Sprintf(`cd %s ; `, h.c.localVMDir(nodes[nodeIdx]))
 	}
 	cmd += "./cockroach.sh"
 	out, err := sess.CombinedOutput(cmd)
@@ -439,8 +427,8 @@ func (h *crdbInstallHelper) generateStartCmd(
 	return execStartTemplate(startTemplateData{
 		LogDir: h.c.Impl.LogDir(h.c, nodes[nodeIdx]),
 		KeyCmd: h.generateKeyCmd(nodeIdx, extraArgs),
-		Tag:    h.c.Tag,
 		EnvVars: append(append([]string{
+			fmt.Sprintf("ROACHPROD=%s", h.c.roachprodEnvValue(nodes[nodeIdx])),
 			"GOTRACEBACK=crash",
 			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1",
 		}, h.c.Env...), h.getEnvVars()...),
@@ -448,17 +436,21 @@ func (h *crdbInstallHelper) generateStartCmd(
 		StartCmd:         startCmd,
 		Args:             args,
 		MemoryMax:        config.MemoryMax,
-		NodeNum:          nodes[nodeIdx],
 		Local:            h.c.IsLocal(),
 		AdvertiseFirstIP: advertiseFirstIP,
 	})
 }
 
 type startTemplateData struct {
-	LogDir, KeyCmd, Tag, Binary, StartCmd, MemoryMax string
-	EnvVars, Args                                    []string
-	NodeNum                                          int
-	Local, AdvertiseFirstIP                          bool
+	Local            bool
+	AdvertiseFirstIP bool
+	LogDir           string
+	Binary           string
+	StartCmd         string
+	KeyCmd           string
+	MemoryMax        string
+	Args             []string
+	EnvVars          []string
 }
 
 func execStartTemplate(data startTemplateData) (string, error) {
@@ -543,9 +535,10 @@ func (h *crdbInstallHelper) generateStartArgs(
 		}
 	}
 
-	port := h.r.NodePort(h.c, nodes[nodeIdx])
-	args = append(args, fmt.Sprintf("--port=%d", port))
-	args = append(args, fmt.Sprintf("--http-port=%d", GetAdminUIPort(port)))
+	args = append(args,
+		fmt.Sprintf("--port=%d", h.r.NodePort(h.c, nodes[nodeIdx])),
+		fmt.Sprintf("--http-port=%d", h.r.NodeUIPort(h.c, nodes[nodeIdx])),
+	)
 	if locality := h.c.locality(nodes[nodeIdx]); locality != "" {
 		if idx := argExists(extraArgs, "--locality"); idx == -1 {
 			args = append(args, "--locality="+locality)
@@ -636,7 +629,7 @@ func (h *crdbInstallHelper) generateClusterSettingCmd(nodeIdx int) string {
 
 	var clusterSettingCmd string
 	if h.c.IsLocal() {
-		clusterSettingCmd = `cd ${HOME}/local/1 ; `
+		clusterSettingCmd = fmt.Sprintf(`cd %s ; `, h.c.localVMDir(1))
 	}
 
 	binary := cockroachNodeBinary(h.c, nodes[nodeIdx])
@@ -661,7 +654,7 @@ func (h *crdbInstallHelper) generateInitCmd(nodeIdx int) string {
 
 	var initCmd string
 	if h.c.IsLocal() {
-		initCmd = `cd ${HOME}/local/1 ; `
+		initCmd = fmt.Sprintf(`cd %s ; `, h.c.localVMDir(1))
 	}
 
 	path := fmt.Sprintf("%s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx], 1 /* storeIndex */), "cluster-bootstrapped")
@@ -722,8 +715,8 @@ func (h *crdbInstallHelper) shouldAdvertisePublicIP() bool {
 	// If we're creating nodes that span VPC (e.g. AWS multi-region or
 	// multi-cloud), we'll tell the nodes to advertise their public IPs
 	// so that attaching nodes to the cluster Just Works.
-	for i, vpc := range h.c.VPCs {
-		if i > 0 && vpc != h.c.VPCs[0] {
+	for i := range h.c.VMs {
+		if i > 0 && h.c.VMs[i].VPC != h.c.VMs[0].VPC {
 			return true
 		}
 	}

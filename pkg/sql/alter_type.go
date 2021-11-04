@@ -275,23 +275,27 @@ func (p *planner) performRenameTypeDesc(
 	newSchemaID descpb.ID,
 	jobDesc string,
 ) error {
-	// Record the rename details in the descriptor for draining.
-	name := descpb.NameInfo{
-		ParentID:       desc.ParentID,
-		ParentSchemaID: desc.ParentSchemaID,
-		Name:           desc.Name,
+	oldNameKey := descpb.NameInfo{
+		ParentID:       desc.GetParentID(),
+		ParentSchemaID: desc.GetParentSchemaID(),
+		Name:           desc.GetName(),
 	}
-	desc.AddDrainingName(name)
 
-	// Set the descriptor up with the new name.
-	desc.Name = newName
-	// Set the descriptor to the new schema ID.
+	// Update the type descriptor with the new name and new schema ID.
+	desc.SetName(newName)
 	desc.SetParentSchemaID(newSchemaID)
+
+	// Populate the namespace update batch.
+	b := p.txn.NewBatch()
+	p.renameNamespaceEntry(ctx, b, oldNameKey, desc)
+
+	// Write the updated type descriptor.
 	if err := p.writeTypeSchemaChange(ctx, desc, jobDesc); err != nil {
 		return err
 	}
-	// Write the new namespace key.
-	return p.writeNameKey(ctx, desc, desc.ID)
+
+	// Run the namespace update batch.
+	return p.txn.Run(ctx, b)
 }
 
 func (p *planner) renameTypeValue(

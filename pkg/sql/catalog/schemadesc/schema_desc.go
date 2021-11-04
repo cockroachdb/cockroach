@@ -83,8 +83,17 @@ type Mutable struct {
 var _ redact.SafeMessager = (*immutable)(nil)
 
 // SetDrainingNames implements the MutableDescriptor interface.
+//
+// Deprecated: Do not use.
 func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names
+}
+
+// AddDrainingName implements the MutableDescriptor interface.
+//
+// Deprecated: Do not use.
+func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
+	desc.DrainingNames = append(desc.DrainingNames, name)
 }
 
 // GetParentSchemaID implements the Descriptor interface.
@@ -277,14 +286,8 @@ func (desc *Mutable) SetOffline(reason string) {
 	desc.OfflineReason = reason
 }
 
-// SetName sets the name of the schema. It handles installing a draining name
-// for the old name of the descriptor.
+// SetName sets the name of the schema.
 func (desc *Mutable) SetName(name string) {
-	desc.DrainingNames = append(desc.DrainingNames, descpb.NameInfo{
-		ParentID:       desc.ParentID,
-		ParentSchemaID: keys.RootNamespaceID,
-		Name:           desc.Name,
-	})
 	desc.Name = name
 }
 

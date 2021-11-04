@@ -25,10 +25,6 @@ SELECT 'hi'::renameagain
 ----
 hi
 
-# newname is draining, so it should not be available for use.
-statement error pq: type \"newname\" already exists
-ALTER TYPE renameagain RENAME TO newname
-
 statement ok
 ROLLBACK
 
@@ -53,7 +49,6 @@ hi
 statement ok
 COMMIT
 
-# newname should be available for use after draining.
 statement ok
 ALTER TYPE new__name RENAME TO newname
 

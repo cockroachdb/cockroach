@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -89,9 +88,6 @@ func TestRenameTable(t *testing.T) {
 
 // Test that a SQL txn that resolved a name can keep resolving that name during
 // its lifetime even after the table has been renamed.
-// Also tests that the name of a renamed table cannot be reused until everybody
-// has stopped using it. Otherwise, we'd have different transactions in the
-// systems using a single name for different tables.
 // Also tests that the old name cannot be used by node that doesn't have a lease
 // on the old version even while the name mapping still exists.
 func TestTxnCanStillResolveOldName(t *testing.T) {
@@ -191,15 +187,6 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	// Check that the name cannot be reused while somebody still has a lease on
-	// the old one (the mechanism for ensuring this is that the entry for the old
-	// name is not deleted from the database until the async schema changer checks
-	// that there's no more leases on the old version).
-	if _, err := db.Exec("CREATE TABLE test.t (a INT PRIMARY KEY)"); !testutils.IsError(
-		err, `relation "test.public.t" already exists`) {
-		t.Fatal(err)
-	}
-
 	if err := txn.Commit(); err != nil {
 		t.Fatal(err)
 	}
@@ -281,12 +268,6 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		if _, err := txn.Exec("SELECT * FROM test.t"); err != nil {
 			t.Fatal(err)
 		}
-		// Check that we cannot use the old name.
-		if _, err := txn.Exec(`
-SELECT * FROM test.t2
-`); !testutils.IsError(err, "relation \"test.t2\" does not exist") {
-			t.Fatalf("err = %v", err)
-		}
 		if err := txn.Rollback(); err != nil {
 			t.Fatal(err)
 		}
@@ -336,98 +317,6 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 	if _, err := db.Exec("CREATE TABLE test.t3 (a INT PRIMARY KEY)"); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// Tests that a RENAME while a name is being drained will result in the
-// table version being incremented again, implying that all old names
-// are drained correctly. The new RENAME will succeed with
-// all old names drained.
-func TestRenameDuringDrainingName(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// two channels that signal the start of the second rename
-	// and the end of the second rename.
-	startRename := make(chan interface{})
-	finishRename := make(chan interface{})
-	serverParams := base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLSchemaChanger: &SchemaChangerTestingKnobs{
-				OldNamesDrainedNotification: func() {
-					if startRename != nil {
-						// Run second rename.
-						start := startRename
-						startRename = nil
-						close(start)
-						<-finishRename
-					}
-				},
-				// Don't run the schema changer for the second RENAME so that we can be
-				// sure that the first schema changer runs both schema changes. This
-				// behavior is due to the fact that the schema changer for the first job
-				// will process all the draining names on the table descriptor,
-				// including the ones queued up by the second job. It's not ideal since
-				// we would like jobs to manage their own state without interference
-				// from other jobs, but that's how schema change jobs work right now.
-				SchemaChangeJobNoOp: func() bool {
-					return startRename == nil
-				},
-			},
-		}}
-
-	s, db, kvDB := serverutils.StartServer(t, serverParams)
-	defer s.Stopper().Stop(context.Background())
-
-	sql := `
-CREATE DATABASE test;
-CREATE TABLE test.t (a INT PRIMARY KEY);
-`
-	_, err := db.Exec(sql)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
-	// The expected version will be the result of two increments for the two
-	// schema changes and one increment for signaling of the completion of the
-	// drain. See the above comment for an explanation of why there's only one
-	// expected version update for draining names.
-	expectedVersion := tableDesc.GetVersion() + 3
-
-	// Concurrently, rename the table.
-	start := startRename
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		if _, err := db.Exec("ALTER TABLE test.t RENAME TO test.t2"); err != nil {
-			t.Error(err)
-		}
-		wg.Done()
-	}()
-
-	<-start
-	if _, err := db.Exec("ALTER TABLE test.t2 RENAME TO test.t3"); err != nil {
-		t.Fatal(err)
-	}
-	close(finishRename)
-
-	wg.Wait()
-
-	// Table rename to t3 was successful.
-	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t3")
-	if version := tableDesc.GetVersion(); expectedVersion != version {
-		t.Fatalf("version mismatch: expected = %d, current = %d", expectedVersion, version)
-	}
-
-	// Old names are gone.
-	if _, err := db.Exec("SELECT * FROM test.t"); !testutils.IsError(
-		err, `relation "test.t" does not exist`) {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec("SELECT * FROM test.t2"); !testutils.IsError(
-		err, `relation "test.t2" does not exist`) {
 		t.Fatal(err)
 	}
 }
