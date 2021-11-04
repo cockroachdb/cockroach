@@ -79,7 +79,7 @@ func (s *Store) tryGetOrCreateReplica(
 	creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
 	// The common case: look up an existing (initialized) replica.
-	if repl, ok := s.mu.replicas.Load(rangeID); ok {
+	if repl, ok := s.mu.replicasByRangeID.Load(rangeID); ok {
 		repl.raftMu.Lock() // not unlocked on success
 		repl.mu.Lock()
 
@@ -295,7 +295,7 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 	// It's ok for the replica to exist in the replicas map as long as it is the
 	// same replica object. This occurs during splits where the right-hand side
 	// is added to the replicas map before it is initialized.
-	if existing, loaded := s.mu.replicas.LoadOrStore(
+	if existing, loaded := s.mu.replicasByRangeID.LoadOrStore(
 		repl.RangeID, repl); loaded && existing != repl {
 		return errors.Errorf("%s: replica already exists", repl)
 	}

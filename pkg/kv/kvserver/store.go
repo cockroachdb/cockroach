@@ -364,7 +364,7 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 	// stale) view of all Replicas without holding the Store lock. In particular,
 	// no locks are acquired during the copy process.
 	rs.repls = nil
-	_ = rs.store.mu.replicas.Range(func(repl *Replica) error {
+	_ = rs.store.mu.replicasByRangeID.Range(func(repl *Replica) error {
 		rs.repls = append(rs.repls, repl)
 		return nil
 	})
@@ -586,7 +586,7 @@ type Store struct {
 		syncutil.RWMutex
 		// Map of replicas by Range ID (map[roachpb.RangeID]*Replica). This
 		// includes `uninitReplicas`. May be read without holding Store.mu.
-		replicas rangeIDReplicaMap
+		replicasByRangeID rangeIDReplicaMap
 		// A btree key containing objects of type *Replica or *ReplicaPlaceholder.
 		// Both types have an associated key range; the btree is keyed on their
 		// start keys.
@@ -2411,7 +2411,7 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 
 // GetReplicaIfExists returns the replica with the given RangeID or nil.
 func (s *Store) GetReplicaIfExists(rangeID roachpb.RangeID) *Replica {
-	if repl, ok := s.mu.replicas.Load(rangeID); ok {
+	if repl, ok := s.mu.replicasByRangeID.Load(rangeID); ok {
 		return repl
 	}
 	return nil
@@ -2459,7 +2459,7 @@ func (s *Store) getOverlappingKeyRangeLocked(
 // RaftStatus returns the current raft status of the local replica of
 // the given range.
 func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
-	if repl, ok := s.mu.replicas.Load(rangeID); ok {
+	if repl, ok := s.mu.replicasByRangeID.Load(rangeID); ok {
 		return repl.RaftStatus()
 	}
 	return nil
@@ -2590,7 +2590,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 // performance critical code.
 func (s *Store) ReplicaCount() int {
 	var count int
-	_ = s.mu.replicas.Range(func(*Replica) error {
+	_ = s.mu.replicasByRangeID.Range(func(*Replica) error {
 		count++
 		return nil
 	})

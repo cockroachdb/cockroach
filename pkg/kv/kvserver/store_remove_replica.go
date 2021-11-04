@@ -238,7 +238,7 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 	defer s.mu.Unlock()
 
 	// Sanity check, could be removed.
-	existing, stillExists := s.mu.replicas.Load(rep.RangeID)
+	existing, stillExists := s.mu.replicasByRangeID.Load(rep.RangeID)
 	if !stillExists {
 		log.Fatalf(ctx, "uninitialized replica was removed in the meantime")
 	}
@@ -263,7 +263,7 @@ func (s *Store) unlinkReplicaByRangeIDLocked(ctx context.Context, rangeID roachp
 	s.unquiescedReplicas.Unlock()
 	delete(s.mu.uninitReplicas, rangeID)
 	s.replicaQueues.Delete(int64(rangeID))
-	s.mu.replicas.Delete(rangeID)
+	s.mu.replicasByRangeID.Delete(rangeID)
 	s.unregisterLeaseholderByID(ctx, rangeID)
 }
 

@@ -522,13 +522,13 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 		default:
 		}
 
-		_ = store.mu.replicas.Range(func(repl *Replica) error {
+		_ = store.mu.replicasByRangeID.Range(func(repl *Replica) error {
 			m[repl.RangeID] = struct{}{}
 			return nil
 		})
 
 		for k := range m {
-			if _, ok := store.mu.replicas.Load(k); !ok {
+			if _, ok := store.mu.replicasByRangeID.Load(k); !ok {
 				t.Fatalf("r%d disappeared from Store.mu.replicas map", k)
 			}
 		}
