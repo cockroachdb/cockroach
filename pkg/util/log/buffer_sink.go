@@ -138,6 +138,7 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 			// TODO(knz): this seems incomplete: there may be multiple
 			// goroutines writing to messageCh concurrently, and so multiple
 			// messages might be queued when Done() signals termination.
+			// See: https://github.com/cockroachdb/cockroach/issues/72455
 			select {
 			case m := <-bs.messageCh:
 				appendMessage(m)
