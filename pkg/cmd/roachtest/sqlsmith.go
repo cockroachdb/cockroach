@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"os"
@@ -24,6 +25,7 @@ import (
 )
 
 func registerSQLSmith(r *testRegistry) {
+	const numNodes = 4
 	setups := map[string]sqlsmith.Setup{
 		"empty":       sqlsmith.Setups["empty"],
 		"seed":        sqlsmith.Setups["seed"],
@@ -98,7 +100,11 @@ func registerSQLSmith(r *testRegistry) {
 		setup := setupFunc(rng)
 		setting := settingFunc(rng)
 
-		conn := c.Conn(ctx, 1)
+		allConns := make([]*gosql.DB, 0, numNodes)
+		for node := 1; node <= numNodes; node++ {
+			allConns = append(allConns, c.Conn(ctx, node))
+		}
+		conn := allConns[0]
 		t.Status("executing setup")
 		c.l.Printf("setup:\n%s", setup)
 		if _, err := conn.Exec(setup); err != nil {
@@ -204,22 +210,20 @@ func registerSQLSmith(r *testRegistry) {
 						logStmt(stmt)
 						t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
 					}
-				} else if strings.Contains(es, "communication error") {
-					// A communication error can be because
-					// a non-gateway node has crashed.
-					logStmt(stmt)
-					t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
 				}
 				// Ignore other errors because they happen so
 				// frequently (due to sqlsmith not crafting
 				// executable queries 100% of the time) and are
 				// never interesting.
+				// TODO(yuzefovich): reevaluate this assumption.
 			}
 
-			// Ping the gateway to make sure it didn't crash.
-			if err := conn.PingContext(ctx); err != nil {
-				logStmt(stmt)
-				t.Fatalf("ping: %v\nprevious sql:\n%s;", err, stmt)
+			// Ping all nodes to make sure they didn't crash.
+			for idx, c := range allConns {
+				if err := c.PingContext(ctx); err != nil {
+					logStmt(stmt)
+					t.Fatalf("ping node %d: %v\nprevious sql:\n%s;", idx+1, err, stmt)
+				}
 			}
 		}
 	}
@@ -229,7 +233,7 @@ func registerSQLSmith(r *testRegistry) {
 			Name: fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			// NB: sqlsmith failures should never block a release.
 			Owner:      OwnerSQLQueries,
-			Cluster:    makeClusterSpec(4),
+			Cluster:    makeClusterSpec(numNodes),
 			MinVersion: "v20.2.0",
 			Timeout:    time.Minute * 20,
 			Run: func(ctx context.Context, t *test, c *cluster) {
