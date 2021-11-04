@@ -4140,7 +4140,8 @@ CREATE TABLE crdb_internal.kv_store_status (
   writes_per_second  FLOAT NOT NULL,
   bytes_per_replica  JSON NOT NULL,
   writes_per_replica JSON NOT NULL,
-  metrics            JSON NOT NULL
+  metrics            JSON NOT NULL,
+  properties         JSON NOT NULL
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -4171,6 +4172,19 @@ CREATE TABLE crdb_internal.kv_store_status (
 						return err
 					}
 					metrics.Add(k, metric)
+				}
+
+				properties := json.NewObjectBuilder(3)
+				properties.Add("read_only", json.FromBool(s.Desc.Properties.ReadOnly))
+				properties.Add("encrypted", json.FromBool(s.Desc.Properties.Encrypted))
+				if fsprops := s.Desc.Properties.FileStoreProperties; fsprops != nil {
+					jprops := json.NewObjectBuilder(5)
+					jprops.Add("path", json.FromString(fsprops.Path))
+					jprops.Add("fs_type", json.FromString(fsprops.FsType))
+					jprops.Add("mount_point", json.FromString(fsprops.MountPoint))
+					jprops.Add("mount_options", json.FromString(fsprops.MountOptions))
+					jprops.Add("block_device", json.FromString(fsprops.BlockDevice))
+					properties.Add("file_store_properties", jprops.Build())
 				}
 
 				percentilesToJSON := func(ps roachpb.Percentiles) (json.JSON, error) {
@@ -4231,6 +4245,7 @@ CREATE TABLE crdb_internal.kv_store_status (
 					tree.NewDJSON(bytesPerReplica),
 					tree.NewDJSON(writesPerReplica),
 					tree.NewDJSON(metrics.Build()),
+					tree.NewDJSON(properties.Build()),
 				); err != nil {
 					return err
 				}
