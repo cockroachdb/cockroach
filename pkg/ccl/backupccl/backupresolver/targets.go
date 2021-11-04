@@ -113,7 +113,7 @@ func (r *DescriptorResolver) LookupSchema(
 		//    in 22.2, when we're guaranteed to not have synthesized public schemas
 		//    for the non-system databases.
 		if !scOk && scID == keys.SystemPublicSchemaID ||
-			!scOk && scID == keys.PublicSchemaID {
+			!scOk && scID == keys.PublicSchemaIDForBackup {
 			scDesc, scOk = schemadesc.GetPublicSchema(), true
 		}
 		if dbOk && scOk {

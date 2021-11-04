@@ -302,10 +302,9 @@ const (
 	// requires the limit to always be overshot in order to properly enforce
 	// limits when splitting requests.
 	TargetBytesAvoidExcess
-
-	// *************************************************
 	// Public schema is backed by a descriptor.
 	PublicSchemasWithDescriptors
+
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
 	// *************************************************

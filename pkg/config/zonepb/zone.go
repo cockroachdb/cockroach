@@ -166,16 +166,9 @@ func ResolveZoneSpecifier(
 	if err != nil {
 		return 0, err
 	}
-	// TODO(richardjcai): Remove version gating logic in 22.2.
-	var schemaID uint32
-	if !version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) && tn.SchemaName == tree.PublicSchemaName {
-		schemaID = keys.PublicSchemaID
-	} else {
-		// TODO(richardjcai): Make sure resolveName handles the mixed version case.
-		schemaID, err = resolveName(databaseID, keys.RootNamespaceID, tn.Schema())
-		if err != nil {
-			return 0, err
-		}
+	schemaID, err := resolveName(databaseID, keys.RootNamespaceID, tn.Schema())
+	if err != nil {
+		return 0, err
 	}
 	tableID, err := resolveName(databaseID, schemaID, tn.Table())
 	if err != nil {

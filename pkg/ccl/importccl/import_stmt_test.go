@@ -6008,8 +6008,6 @@ func TestImportPgDumpDropTable(t *testing.T) {
 		CREATE TABLE u (a INT);
 		INSERT INTO u VALUES (55);
 		CREATE TABLE t(x int);`
-		//DROP TABLE t;`
-		//sqlDB.Exec(t, `IMPORT PGDUMP ($1)`, srv.URL)
 		sqlDB.ExpectErr(t, `drop table "t" and then retry the import`, `IMPORT PGDUMP ($1)`, srv.URL)
 
 		// Since the PGDump failed on error, table `u` should not exist.
