@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -50,6 +52,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
+
+// featurePgdumpEnabled is used to enable and disable the new IMPORT PGDUMP logic.
+var featurePgdumpEnabled = func() *settings.BoolSetting {
+	s := settings.RegisterBoolSetting(
+		"feature.import.dump.enabled",
+		"set to true to enable the new IMPORT PGDUMP logic that "+
+			"uses an internal executor to run DDL statements, false to disable; default is true",
+		true,
+	)
+	s.SetVisibility(settings.Reserved)
+	return s
+}()
 
 type importResumer struct {
 	job      *jobs.Job
@@ -78,6 +92,16 @@ type preparedSchemaMetadata struct {
 	queuedSchemaJobs      []jobspb.JobID
 }
 
+// prepareForPgDumpImport prepares the import job prior to the ingestion phase.
+func prepareForPgDumpImport(
+	p sql.JobExecContext, details jobspb.ImportDetails,
+) jobspb.ImportDetails {
+	importDetails := details
+	importDetails.PrepareComplete = true
+	importDetails.Walltime = p.ExecCfg().Clock.Now().WallTime
+	return importDetails
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
@@ -104,18 +128,22 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				}
 				var err error
 				curDetails := details
-				if len(details.Schemas) != 0 {
-					schemaMetadata, err = r.prepareSchemasForIngestion(ctx, p, curDetails, txn, descsCol)
+				if useNewDumpSchemaParsing(format, p) {
+					preparedDetails = prepareForPgDumpImport(p, curDetails)
+				} else {
+					if len(details.Schemas) != 0 {
+						schemaMetadata, err = r.prepareSchemasForIngestion(ctx, p, curDetails, txn, descsCol)
+						if err != nil {
+							return err
+						}
+						curDetails = schemaMetadata.schemaPreparedDetails
+					}
+
+					preparedDetails, err = r.prepareTablesForIngestion(ctx, p, curDetails, txn, descsCol,
+						schemaMetadata)
 					if err != nil {
 						return err
 					}
-					curDetails = schemaMetadata.schemaPreparedDetails
-				}
-
-				preparedDetails, err = r.prepareTablesForIngestion(ctx, p, curDetails, txn, descsCol,
-					schemaMetadata)
-				if err != nil {
-					return err
 				}
 
 				// Telemetry for multi-region.
@@ -273,7 +301,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	if err := r.publishSchemas(ctx, p.ExecCfg()); err != nil {
+	if err := r.remapTablesAndSchemasToTargetDatabase(ctx, p.ExecCfg()); err != nil {
 		return err
 	}
 
@@ -281,17 +309,16 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	// As of 21.2 we do not write a protected timestamp record during IMPORT INTO.
-	// In case of a mixed version cluster with 21.1 and 21.2 nodes, it is possible
-	// that the job was planned on an older node and then resumed on a 21.2 node.
-	// Thus, we still need to clear the timestamp record that was written when the
-	// IMPORT INTO was planned on the older node.
-	//
-	// TODO(adityamaru): Remove in 22.1.
-	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return r.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
-	}); err != nil {
-		log.Errorf(ctx, "failed to release protected timestamp: %v", err)
+	if err := r.publishSchemas(ctx, p.ExecCfg()); err != nil {
+		return err
+	}
+
+	// Drop the temporary import database once we have published the descriptors
+	// to a PUBLIC state.
+	if _, err := p.ExecCfg().InternalExecutor.ExecEx(ctx, "drop-temp-import-database", nil,
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, fmt.Sprintf(`DROP DATABASE IF EXISTS %s`,
+			getImportTempDBName(r.job.ID()))); err != nil {
+		return err
 	}
 
 	emitImportJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
@@ -724,30 +751,46 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 			}
 		}
 
+		var tableRewrites map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite
+		var schemaRewrites map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite
 		var schemaDescs []*schemadesc.Mutable
 		var tableDescs []*tabledesc.Mutable
 		var err error
 		walltime := p.ExecCfg().Clock.Now().WallTime
 
-		if tableDescs, schemaDescs, err = parseAndCreateBundleTableDescs(
-			ctx, p, details, seqVals, skipFKs, dbDesc, files, format, walltime, owner,
-			r.job.ID()); err != nil {
-			return err
+		if useNewDumpSchemaParsing(format, p) {
+			evalCtx := &p.ExtendedEvalContext().EvalContext
+			tableRewrites, schemaRewrites, tableDescs, schemaDescs, err = processDDLStatements(ctx, evalCtx,
+				p, details, r.job.ID(), files[0], format, defaultScanBuffer, parentID)
+			if err != nil {
+				return err
+			}
+		} else {
+			tableDescs, schemaDescs, err = parseAndCreateBundleTableDescs(
+				ctx, p, details, seqVals, skipFKs, dbDesc, files, format, walltime, owner,
+				r.job.ID())
+			if err != nil {
+				return err
+			}
 		}
 
 		schemaDetails := make([]jobspb.ImportDetails_Schema, len(schemaDescs))
 		for i, schemaDesc := range schemaDescs {
-			schemaDetails[i] = jobspb.ImportDetails_Schema{Desc: schemaDesc.SchemaDesc()}
+			schemaDetails[i] = jobspb.ImportDetails_Schema{
+				Desc:               schemaDesc.SchemaDesc(),
+				DescriptorRewrites: schemaRewrites,
+			}
 		}
 		details.Schemas = schemaDetails
 
 		tableDetails := make([]jobspb.ImportDetails_Table, len(tableDescs))
 		for i, tableDesc := range tableDescs {
 			tableDetails[i] = jobspb.ImportDetails_Table{
-				Name:   tableDesc.GetName(),
-				Desc:   tableDesc.TableDesc(),
-				SeqVal: seqVals[tableDescs[i].ID],
-				IsNew:  true,
+				Name:               tableDesc.GetName(),
+				Desc:               tableDesc.TableDesc(),
+				SeqVal:             seqVals[tableDescs[i].ID],
+				IsNew:              true,
+				DescriptorRewrites: tableRewrites,
 			}
 		}
 		details.Tables = tableDetails
@@ -857,6 +900,141 @@ func parseAndCreateBundleTableDescs(
 	}
 
 	return tableDescs, schemaDescs, err
+}
+
+// remapTablesAndSchemasToTargetDatabase remaps the tables and schemas that have
+// been imported as part of an IMPORT PGDUMP to point to the target database,
+// since they would have been created in the `importTempPgDumpDB` during the
+// import. This is only required if the dump file did not have a `CREATE DATABASE`
+// statement, as in that case we import into the sessions current database.
+// If a `CREATE DATABASE` statement was present, we simply rename the temp
+// database to the name in the query.
+//
+// For all other imports, this method is a no-op.
+func (r *importResumer) remapTablesAndSchemasToTargetDatabase(
+	ctx context.Context, execCfg *sql.ExecutorConfig,
+) error {
+	details := r.job.Details().(jobspb.ImportDetails)
+
+	err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+		b := txn.NewBatch()
+
+		// Remap tables to point to the new target database.
+		for _, tbl := range details.Tables {
+			if r, ok := tbl.DescriptorRewrites[tbl.Desc.GetID()]; ok {
+				oldTableDesc, err := descsCol.GetImmutableTableByID(ctx, txn, tbl.Desc.ID,
+					tree.ObjectLookupFlags{
+						CommonLookupFlags: tree.CommonLookupFlags{
+							Required:       true,
+							IncludeOffline: true,
+						},
+					})
+				if err != nil {
+					return err
+				}
+
+				newTableDesc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
+				if err != nil {
+					return err
+				}
+				// Check if a rewrite was queued for the table descriptor. This is
+				// currently only used by IMPORT PGDUMP where the dump file does not have
+				// an explicit `CREATE DATABASE` statement.
+				// The rewrite points the descriptor to the target database since it would
+				// have been created in `importTempPgDumpDB`.
+				newTableDesc.ParentID = r.ParentID
+				// Delete old namespace entry.
+				b.Del(catalogkeys.EncodeNameKey(execCfg.Codec, oldTableDesc))
+				// Put new namespace entry.
+				b.CPut(catalogkeys.EncodeNameKey(execCfg.Codec, newTableDesc), newTableDesc.GetID(), nil)
+
+				if err := descsCol.WriteDescToBatch(
+					ctx, false /* kvTrace */, newTableDesc, b,
+				); err != nil {
+					return errors.Wrapf(err, "remapping table %d", newTableDesc.ID)
+				}
+			}
+		}
+
+		// Remap schemas to point to the new target database.
+		databaseToSchemasToAdd := make(map[descpb.ID][]catalog.SchemaDescriptor)
+		for _, schema := range details.Schemas {
+			// Check if a rewrite was queued for the schema descriptor. This is
+			// currently only used by IMPORT PGDUMP where the dump file does not have
+			// an explicit `CREATE DATABASE` statement.
+			// The rewrite points the descriptor to the target database since it would
+			// have been created in `importTempPgDumpDB`.
+			if r, ok := schema.DescriptorRewrites[schema.Desc.GetID()]; ok {
+				oldSchemaDesc, err := descsCol.GetImmutableSchemaByID(ctx, txn, schema.Desc.ID, tree.SchemaLookupFlags{
+					Required:       true,
+					IncludeOffline: true,
+				})
+				if err != nil {
+					return err
+				}
+				newDesc, err := descsCol.GetMutableDescriptorByID(ctx, schema.Desc.GetID(), txn)
+				if err != nil {
+					return err
+				}
+				newSchemaDesc, ok := newDesc.(*schemadesc.Mutable)
+				if !ok {
+					return errors.Newf("expected schema descriptor with ID %v, got %v",
+						schema.Desc.GetID(), newDesc)
+				}
+				newSchemaDesc.ParentID = r.ParentID
+				databaseToSchemasToAdd[newSchemaDesc.ParentID] = append(databaseToSchemasToAdd[newSchemaDesc.ParentID],
+					newSchemaDesc)
+
+				// Delete old namespace entry.
+				b.Del(catalogkeys.EncodeNameKey(execCfg.Codec, oldSchemaDesc))
+				// Put new namespace entry.
+				b.CPut(catalogkeys.EncodeNameKey(execCfg.Codec, newSchemaDesc), newSchemaDesc.GetID(), nil)
+
+				if err := descsCol.WriteDescToBatch(
+					ctx, false /* kvTrace */, newSchemaDesc, b,
+				); err != nil {
+					return errors.Wrapf(err, "remapping schema %d", newSchemaDesc.ID)
+				}
+			}
+		}
+
+		// Add schemas to the "new" parent database descriptor.
+		//
+		// We don't remove these schemas from the "old" parent database descriptor
+		// i.e. the temporary import database since we are going to drop that
+		// database at the end IMPORT anyways.
+		// TODO(adityamaru): Revisit that this note is sane.
+		for parentID := range databaseToSchemasToAdd {
+			desc, err := descsCol.GetMutableDescriptorByID(ctx, parentID, txn)
+			if err != nil {
+				return err
+			}
+
+			dbDesc, ok := desc.(*dbdesc.Mutable)
+			if !ok {
+				return errors.Newf("expected ID %d to refer to the database being imported into",
+					details.ParentID)
+			}
+
+			if dbDesc.Schemas == nil {
+				dbDesc.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
+			}
+			for _, schema := range databaseToSchemasToAdd[parentID] {
+				dbDesc.Schemas[schema.GetName()] =
+					descpb.DatabaseDescriptor_SchemaInfo{ID: schema.GetID(), Dropped: false}
+			}
+			if err := descsCol.WriteDescToBatch(
+				ctx, false /* kvTrace */, desc, b,
+			); err != nil {
+				return err
+			}
+		}
+		if err := txn.Run(ctx, b); err != nil {
+			return errors.Wrap(err, "remapping tables and schemas")
+		}
+		return nil
+	})
+	return err
 }
 
 // publishTables updates the status of imported tables from OFFLINE to PUBLIC.
@@ -1005,6 +1183,7 @@ func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.Executo
 					schema.Desc.GetID(), newDesc)
 			}
 			newSchemaDesc.SetPublic()
+
 			if err := descsCol.WriteDescToBatch(
 				ctx, false /* kvTrace */, newSchemaDesc, b,
 			); err != nil {
@@ -1297,9 +1476,13 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 		if err != nil {
 			return err
 		}
-		// TODO(adityamaru): Remove in 22.1 since we do not write PTS records during
-		// IMPORT INTO from 21.2+.
-		return r.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
+
+		if _, err := cfg.InternalExecutor.ExecEx(ctx, "drop-temp-import-database", txn,
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+			fmt.Sprintf(`DROP DATABASE IF EXISTS %s CASCADE`, getImportTempDBName(r.job.ID()))); err != nil {
+			return err
+		}
+		return nil
 	}); err != nil {
 		return err
 	}

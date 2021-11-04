@@ -10,8 +10,10 @@ package importccl
 
 import (
 	"context"
+	"fmt"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -32,13 +34,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	importTempPgdumpDB = "crdb_temp_pgdump_import"
-)
+func getImportTempDBName(jobID jobspb.JobID) string {
+	importTempPgdumpDB := "crdb_temp_pgdump_import"
+	return fmt.Sprintf("%s_%d", importTempPgdumpDB, jobID)
+}
 
 // createTempImportDatabase creates a temporary database where we will create
 // all the PGDUMP objects during the import.
-func createTempImportDatabase(ctx context.Context, p sql.JobExecContext) (descpb.ID, error) {
+func createTempImportDatabase(
+	ctx context.Context, p sql.JobExecContext, jobID jobspb.JobID,
+) (descpb.ID, error) {
 	id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 	if err != nil {
 		return 0, err
@@ -50,7 +55,7 @@ func createTempImportDatabase(ctx context.Context, p sql.JobExecContext) (descpb
 	// I tried moving the database descriptor to OFFLINE instead of mucking with
 	// privileges, but this prevents us from running any DDL statements on this
 	// database.
-	tempDBDesc := dbdesc.NewInitial(id, importTempPgdumpDB, security.NodeUserName())
+	tempDBDesc := dbdesc.NewInitial(id, getImportTempDBName(jobID), security.NodeUserName())
 	return tempDBDesc.GetID(), sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn,
 		col *descs.Collection) error {
 		b := txn.NewBatch()
@@ -59,15 +64,23 @@ func createTempImportDatabase(ctx context.Context, p sql.JobExecContext) (descpb
 		); err != nil {
 			return err
 		}
-		b.CPut(catalogkeys.MakeDatabaseNameKey(p.ExecCfg().Codec, importTempPgdumpDB), tempDBDesc.GetID(), nil)
+		b.CPut(catalogkeys.MakeDatabaseNameKey(p.ExecCfg().Codec, getImportTempDBName(jobID)), tempDBDesc.GetID(), nil)
 		return txn.Run(ctx, b)
 	})
 }
 
 type postgresDDLHandler struct {
+	jobID            jobspb.JobID
+	targetTableName  string
 	dumpDatabaseName string
 	// TODO(adityamaru): Maybe memory monitor?
-	bufferedDDLStmts []string
+	bufferedDDLStmts      []string
+	unsupportedStmtLogger *unsupportedStmtLogger
+}
+
+func useNewDumpSchemaParsing(format roachpb.IOFileFormat, p sql.JobExecContext) bool {
+	return format.Format == roachpb.IOFileFormat_PgDump &&
+		featurePgdumpEnabled.Get(&p.ExecCfg().Settings.SV)
 }
 
 func formatPostgresStatement(n tree.NodeFormatter) string {
@@ -80,7 +93,7 @@ func formatPostgresStatement(n tree.NodeFormatter) string {
 }
 
 func rewritePostgresStatementTableName(
-	n tree.NodeFormatter, dumpDatabaseName string,
+	n tree.NodeFormatter, dumpDatabaseName string, jobID jobspb.JobID,
 ) (string, error) {
 	var err error
 	f := tree.NewFmtCtx(
@@ -95,7 +108,7 @@ func rewritePostgresStatementTableName(
 						tn.CatalogName, dumpDatabaseName)
 					return
 				}
-				tn.CatalogName = importTempPgdumpDB
+				tn.CatalogName = tree.Name(getImportTempDBName(jobID))
 			}
 			// TODO (adityamaru): Is it possible for dump files to have db.object names?
 			// In that case, if the node has an explicit schema name, then this could
@@ -125,6 +138,10 @@ func bufferDDLPostgresStatement(
 	parentID descpb.ID,
 	handler *postgresDDLHandler,
 ) error {
+	doesMatchTargetTable := func(schemaQualifiedName schemaAndTableName) bool {
+		return handler.targetTableName == "" || handler.targetTableName == schemaQualifiedName.String()
+	}
+	ignoreUnsupportedStmts := handler.unsupportedStmtLogger.ignoreUnsupported
 	switch stmt := postgresStmt.(type) {
 	case *tree.CreateDatabase:
 		// If we have previously seen a `CREATE DATABASE` statement then we error
@@ -134,6 +151,12 @@ func bufferDDLPostgresStatement(
 		}
 		handler.dumpDatabaseName = string(stmt.Name)
 	case *tree.CreateSchema:
+		// If a target table is specified we do not want to create any user defined
+		// schemas. This is because we only allow specifying target table's in the
+		// public schema.
+		if handler.targetTableName != "" {
+			return nil
+		}
 		// If the schema specifies an explicit database name, replace it with the
 		// temporary pgdump database being imported into.
 		if stmt.Schema.ExplicitCatalog {
@@ -141,18 +164,33 @@ func bufferDDLPostgresStatement(
 				return errors.AssertionFailedf("catalog name %s does not match dump target database name %s",
 					stmt.Schema.CatalogName, handler.dumpDatabaseName)
 			}
-			stmt.Schema.CatalogName = importTempPgdumpDB
+			stmt.Schema.CatalogName = tree.Name(getImportTempDBName(handler.jobID))
 		}
 		handler.bufferedDDLStmts = append(handler.bufferedDDLStmts, formatPostgresStatement(stmt))
 	case *tree.CreateTable:
+		schemaQualifiedName, err := getSchemaAndTableName(&stmt.Table)
+		if err != nil {
+			return err
+		}
+		if !doesMatchTargetTable(schemaQualifiedName) {
+			return nil
+		}
 		// If the `CREATE TABLE` specifies an explicit database name, replace it
 		// with the temporary pgdump database being imported into.
-		s, err := rewritePostgresStatementTableName(stmt, handler.dumpDatabaseName)
+		s, err := rewritePostgresStatementTableName(stmt, handler.dumpDatabaseName, handler.jobID)
 		if err != nil {
 			return err
 		}
 		handler.bufferedDDLStmts = append(handler.bufferedDDLStmts, s)
 	case *tree.AlterTable:
+		schemaQualifiedName, err := getSchemaAndTableName2(stmt.Table)
+		if err != nil {
+			return err
+		}
+		if !doesMatchTargetTable(schemaQualifiedName) {
+			return nil
+		}
+
 		// If the `ALTER TABLE` statement has an explicit database name, replace it
 		// with the temporary pgdump database being imported into.
 		if stmt.Table.HasExplicitCatalog() {
@@ -160,7 +198,7 @@ func bufferDDLPostgresStatement(
 				return errors.AssertionFailedf("catalog name %s does not match dump target database name %s",
 					stmt.Table.Parts[2], handler.dumpDatabaseName)
 			}
-			stmt.Table.Parts[2] = importTempPgdumpDB
+			stmt.Table.Parts[2] = getImportTempDBName(handler.jobID)
 		}
 		for _, cmd := range stmt.Cmds {
 			switch cmd := cmd.(type) {
@@ -169,7 +207,7 @@ func bufferDDLPostgresStatement(
 				case *tree.ForeignKeyConstraintTableDef:
 					// TODO(adityamaru): handle FKs and fk skip option.
 					if con.Table.ExplicitCatalog {
-						con.Table.CatalogName = importTempPgdumpDB
+						con.Table.CatalogName = tree.Name(getImportTempDBName(handler.jobID))
 					}
 				default:
 					// TODO(adityamaru): confirm that not other constraint can have a
@@ -179,42 +217,72 @@ func bufferDDLPostgresStatement(
 			case *tree.AlterTableSetVisible:
 			case *tree.AlterTableAddColumn:
 				if cmd.IfNotExists {
+					if ignoreUnsupportedStmts {
+						err := handler.unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
+						if err != nil {
+							return err
+						}
+						continue
+					}
 					return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported statement: %s", stmt))
 				}
 			case *tree.AlterTableSetNotNull:
 			default:
+				if ignoreUnsupportedStmts {
+					err := handler.unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
+					if err != nil {
+						return err
+					}
+					continue
+				}
 				return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported statement: %s", stmt))
 			}
 		}
 		handler.bufferedDDLStmts = append(handler.bufferedDDLStmts, formatPostgresStatement(stmt))
 	case *tree.CreateIndex:
+		schemaQualifiedTableName, err := getSchemaAndTableName(&stmt.Table)
+		if err != nil {
+			return err
+		}
+		if !doesMatchTargetTable(schemaQualifiedTableName) {
+			return nil
+		}
+
 		// If the `CREATE INDEX` specifies an explicit database name, replace it
 		// with the temporary pgdump database being imported into.
-		s, err := rewritePostgresStatementTableName(stmt, handler.dumpDatabaseName)
+		s, err := rewritePostgresStatementTableName(stmt, handler.dumpDatabaseName, handler.jobID)
 		if err != nil {
 			return err
 		}
 		handler.bufferedDDLStmts = append(handler.bufferedDDLStmts, s)
 	case *tree.AlterSchema:
-		// If the schema specifies an explicit database name, replace it with the
-		// temporary pgdump database being imported into.
-		if stmt.Schema.ExplicitCatalog {
-			if stmt.Schema.CatalogName != tree.Name(handler.dumpDatabaseName) {
-				return errors.AssertionFailedf("catalog name %s does not match dump target database name %s",
-					stmt.Schema.CatalogName, handler.dumpDatabaseName)
-			}
-			stmt.Schema.CatalogName = importTempPgdumpDB
+		if ignoreUnsupportedStmts {
+			return handler.unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
 		}
-		handler.bufferedDDLStmts = append(handler.bufferedDDLStmts, formatPostgresStatement(stmt))
+		return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported statement: %s", stmt))
 	case *tree.CreateSequence:
-		s, err := rewritePostgresStatementTableName(stmt, handler.dumpDatabaseName)
+		schemaQualifiedTableName, err := getSchemaAndTableName(&stmt.Name)
+		if err != nil {
+			return err
+		}
+		if !doesMatchTargetTable(schemaQualifiedTableName) {
+			return nil
+		}
+
+		s, err := rewritePostgresStatementTableName(stmt, handler.dumpDatabaseName, handler.jobID)
 		if err != nil {
 			return err
 		}
 		handler.bufferedDDLStmts = append(handler.bufferedDDLStmts, s)
 	case *tree.AlterTableOwner:
+		if ignoreUnsupportedStmts {
+			return handler.unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
+		}
 		return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported statement: %s", stmt))
 	case *tree.AlterSequence:
+		if ignoreUnsupportedStmts {
+			return handler.unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
+		}
 		return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported %T statement: %s", stmt, stmt))
 	// Some SELECT statements mutate schema. Search for those here.
 	case *tree.Select:
@@ -241,6 +309,12 @@ func bufferDDLPostgresStatement(
 					if fn == nil {
 						err := errors.Errorf("unsupported function call: %s in stmt: %s",
 							expr.Func.String(), stmt.String())
+						if ignoreUnsupportedStmts {
+							if err := handler.unsupportedStmtLogger.log(err.Error(), false /* isParseError */); err != nil {
+								return err
+							}
+							continue
+						}
 						return wrapErrorWithUnsupportedHint(err)
 					}
 					// Attempt to convert all func exprs to datums.
@@ -268,7 +342,12 @@ func bufferDDLPostgresStatement(
 					for _, fnStmt := range fnStmts {
 						switch ast := fnStmt.AST.(type) {
 						case *tree.AlterTable:
-							alterTableHandler := &postgresDDLHandler{}
+							alterTableHandler := &postgresDDLHandler{
+								jobID:                 handler.jobID,
+								targetTableName:       handler.targetTableName,
+								dumpDatabaseName:      handler.dumpDatabaseName,
+								unsupportedStmtLogger: handler.unsupportedStmtLogger,
+							}
 							err := bufferDDLPostgresStatement(ctx, evalCtx, ast, p, parentID, alterTableHandler)
 							if err != nil {
 								return err
@@ -281,11 +360,25 @@ func bufferDDLPostgresStatement(
 					}
 				default:
 					err := errors.Errorf("unsupported %T SELECT expr: %s", expr, expr)
+					if ignoreUnsupportedStmts {
+						err := handler.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+						if err != nil {
+							return err
+						}
+						continue
+					}
 					return wrapErrorWithUnsupportedHint(err)
 				}
 			}
 		default:
 			err := errors.Errorf("unsupported %T SELECT %s", sel, sel)
+			if ignoreUnsupportedStmts {
+				err := handler.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+				if err != nil {
+					return err
+				}
+				return nil
+			}
 			return wrapErrorWithUnsupportedHint(err)
 		}
 	case *tree.DropTable:
@@ -326,6 +419,9 @@ func bufferDDLPostgresStatement(
 		// - ignore SETs and DMLs.
 		// - ANALYZE is syntactic sugar for CreateStatistics. It can be ignored
 		// because the auto stats stuff will pick up the changes and run if needed.
+		if ignoreUnsupportedStmts {
+			return handler.unsupportedStmtLogger.log(fmt.Sprintf("%s", stmt), false /* isParseError */)
+		}
 		return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported %T statement: %s", stmt, stmt))
 	case *tree.CreateType:
 		return errors.New("IMPORT PGDUMP does not support user defined types; please" +
@@ -335,6 +431,9 @@ func bufferDDLPostgresStatement(
 			return stmt
 		}
 	default:
+		if ignoreUnsupportedStmts {
+			return handler.unsupportedStmtLogger.log(fmt.Sprintf("%s", stmt), false /* isParseError */)
+		}
 		return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported %T statement: %s", stmt, stmt))
 	}
 	return nil
@@ -349,12 +448,15 @@ func parseDDLStatementsFromDumpFile(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	p sql.JobExecContext,
+	jobID jobspb.JobID,
 	dumpFile string,
 	format roachpb.IOFileFormat,
 	maxRowSize int,
 	parentID descpb.ID,
+	targetTableName string,
 ) (postgresDDLHandler, error) {
-	handler := postgresDDLHandler{bufferedDDLStmts: make([]string, 0)}
+	handler := postgresDDLHandler{
+		jobID: jobID, bufferedDDLStmts: make([]string, 0), targetTableName: targetTableName}
 	// Open the dump file.
 	store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, dumpFile, p.User())
 	if err != nil {
@@ -373,8 +475,14 @@ func parseDDLStatementsFromDumpFile(
 	}
 	defer reader.Close()
 
+	// Setup a logger to handle unsupported DDL statements in the PGDUMP file.
+	unsupportedStmtLogger := makeUnsupportedStmtLogger(ctx, p.User(), int64(jobID),
+		format.PgDump.IgnoreUnsupported, format.PgDump.IgnoreUnsupportedLog, schemaParsing,
+		p.ExecCfg().DistSQLSrv.ExternalStorage)
+	handler.unsupportedStmtLogger = unsupportedStmtLogger
+
 	// Start reading postgres statements.
-	ps := newPostgreStream(ctx, reader, maxRowSize, &unsupportedStmtLogger{} /* unsupportedStmtLogger */)
+	ps := newPostgreStream(ctx, reader, maxRowSize, unsupportedStmtLogger)
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
@@ -387,6 +495,13 @@ func parseDDLStatementsFromDumpFile(
 			return handler, err
 		}
 	}
+
+	// Flush the unsupported statement log.
+	logErr := unsupportedStmtLogger.flush()
+	if logErr != nil {
+		return handler, logErr
+	}
+
 	return handler, nil
 }
 
@@ -395,7 +510,8 @@ func runDDLStatementsFromDumpFile(
 ) error {
 	for _, stmt := range h.bufferedDDLStmts {
 		_, err := p.ExecCfg().InternalExecutor.ExecEx(ctx, "import-pgdump-ddl", nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: security.RootUserName(), Database: importTempPgdumpDB}, stmt)
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName(),
+				Database: getImportTempDBName(h.jobID)}, stmt)
 		if err != nil {
 			return errors.Wrapf(err, "executing %s", stmt)
 		}
@@ -404,8 +520,21 @@ func runDDLStatementsFromDumpFile(
 }
 
 func moveObjectsInTempDatabaseToState(
-	ctx context.Context, p sql.JobExecContext, tempDatabaseID descpb.ID, state descpb.DescriptorState,
-) ([]*tabledesc.Mutable, []*schemadesc.Mutable, error) {
+	ctx context.Context,
+	p sql.JobExecContext,
+	tempDatabaseID descpb.ID,
+	state descpb.DescriptorState,
+	dumpHasDatabase bool,
+	parentID descpb.ID,
+) (
+	map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite,
+	map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite,
+	[]*tabledesc.Mutable,
+	[]*schemadesc.Mutable,
+	error,
+) {
+	tableRewrites := make(map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite)
+	schemaRewrites := make(map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite)
 	importedTables := make([]*tabledesc.Mutable, 0)
 	importedSchemas := make([]*schemadesc.Mutable, 0)
 	err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
@@ -424,6 +553,15 @@ func moveObjectsInTempDatabaseToState(
 			mutTableDesc.State = state
 			if state == descpb.DescriptorState_OFFLINE {
 				mutTableDesc.OfflineReason = "importing"
+			}
+			// If the dump file did not specify a database, we must queue a rewrite
+			// for the descriptor to point it to the target database that was resolved
+			// during import planning.
+			if !dumpHasDatabase {
+				tableRewrites[desc.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{
+					ID:       desc.GetID(),
+					ParentID: parentID,
+				}
 			}
 			importedTables = append(importedTables, mutTableDesc)
 			if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, mutTableDesc, b); err != nil {
@@ -445,6 +583,15 @@ func moveObjectsInTempDatabaseToState(
 			if state == descpb.DescriptorState_OFFLINE {
 				mutSchemaDesc.OfflineReason = "importing"
 			}
+			// If the dump file did not specify a database, we must queue a rewrite
+			// for the descriptor to point it to the target database that was resolved
+			// during import planning.
+			if !dumpHasDatabase {
+				schemaRewrites[desc.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{
+					ID:       desc.GetID(),
+					ParentID: parentID,
+				}
+			}
 			importedSchemas = append(importedSchemas, mutSchemaDesc)
 			if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, mutSchemaDesc, b); err != nil {
 				return err
@@ -455,7 +602,7 @@ func moveObjectsInTempDatabaseToState(
 		// probably set those to offline too.
 		return txn.Run(ctx, b)
 	})
-	return importedTables, importedSchemas, err
+	return tableRewrites, schemaRewrites, importedTables, importedSchemas, err
 }
 
 // TODO(adityamaru): Figure out job resumption semantics.
@@ -464,40 +611,67 @@ func processDDLStatements(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	p sql.JobExecContext,
+	details jobspb.ImportDetails,
+	jobID jobspb.JobID,
 	dumpFile string,
 	format roachpb.IOFileFormat,
 	maxRowSize int,
 	parentID descpb.ID,
-) ([]*tabledesc.Mutable, []*schemadesc.Mutable, error) {
+) (
+	map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite,
+	map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite,
+	[]*tabledesc.Mutable,
+	[]*schemadesc.Mutable,
+	error,
+) {
+	// A single table entry in the import job details when importing a bundle format
+	// indicates that we are performing a single table import.
+	// This info is populated during the planning phase.
+	var tableName string
+	if len(details.Tables) > 0 {
+		tableName = details.Tables[0].Name
+	}
+
 	// Create a temporary database that we will run DDL statements against.
-	// This database will be in an OFFLINE state thereby remaining invisible to
-	// the user for the duration of the IMPORT.
-	tempDescDBID, err := createTempImportDatabase(ctx, p)
+	tempDescDBID, err := createTempImportDatabase(ctx, p, jobID)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "creating temporary import database")
+		return nil, nil, nil, nil, errors.Wrap(err, "creating temporary import database")
 	}
 
 	// Parse DDL statements in the dump file, and replace all qualified object
 	// names to point to the temporary database we created above.
-	h, err := parseDDLStatementsFromDumpFile(ctx, evalCtx, p, dumpFile, format, maxRowSize, parentID)
+	h, err := parseDDLStatementsFromDumpFile(ctx, evalCtx, p, jobID, dumpFile, format, maxRowSize, parentID, tableName)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "parsing DDL statements from dump file")
+		return nil, nil, nil, nil, errors.Wrap(err, "parsing DDL statements from dump file")
 	}
 
 	// Run the buffered DDL statements.
 	if err := runDDLStatementsFromDumpFile(ctx, p, h); err != nil {
-		return nil, nil, errors.Wrap(err, "running DDL statements from dump file")
+		return nil, nil, nil, nil, errors.Wrap(err, "running DDL statements from dump file")
 	}
 
-	// Moved all tables, schemas, sequences in the temporary database to an
-	// OFFLINE state.
-	tableDescs, schemaDescs, err := moveObjectsInTempDatabaseToState(ctx, p, tempDescDBID, descpb.DescriptorState_OFFLINE)
+	// If the dump file had a `CREATE DATABASE` stmt, we rename the temp database
+	// to the provided name.
+	dumpHasDatabase := h.dumpDatabaseName != ""
+	if dumpHasDatabase {
+		_, err := p.ExecCfg().InternalExecutor.ExecEx(ctx, "rename-temp-import-db", nil, /* txn */
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName(), Database: getImportTempDBName(h.jobID)},
+			fmt.Sprintf(`ALTER DATABASE %s RENAME TO %s`, getImportTempDBName(h.jobID), h.dumpDatabaseName))
+		if err != nil {
+			return nil, nil, nil, nil, errors.Wrap(err, "renaming temp import database")
+		}
+	}
+
+	// Move all tables, schemas, sequences in the temporary database to an OFFLINE
+	// state.
+	tableRewrites, schemaRewrites, tableDescs, schemaDescs, err := moveObjectsInTempDatabaseToState(ctx, p, tempDescDBID,
+		descpb.DescriptorState_OFFLINE, dumpHasDatabase, parentID)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "moving objects in temp database to offline state")
+		return nil, nil, nil, nil, errors.Wrap(err, "moving objects in temp database to offline state")
 	}
 
 	// TODO(adityamaru): Now it is safe to run the grants since the objects are
 	// all offline.
 
-	return tableDescs, schemaDescs, nil
+	return tableRewrites, schemaRewrites, tableDescs, schemaDescs, nil
 }

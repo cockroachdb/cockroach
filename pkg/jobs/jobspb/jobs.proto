@@ -282,10 +282,18 @@ message ImportDetails {
     bool is_new = 20;
     bool was_empty = 22;
     repeated string target_cols = 21;
+    map<uint32, RestoreDetails.DescriptorRewrite> descriptor_rewrites = 23 [
+      (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+    ];
     reserved 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17;
+
+    // Next ID: 24
   }
   message Schema {
     sqlbase.SchemaDescriptor desc = 1;
+    map<uint32, RestoreDetails.DescriptorRewrite> descriptor_rewrites = 2 [
+      (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+    ];
   }
   message Type {
     sqlbase.TypeDescriptor desc = 1;

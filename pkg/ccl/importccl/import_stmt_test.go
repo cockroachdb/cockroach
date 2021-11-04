@@ -5471,10 +5471,11 @@ func TestImportPgDump(t *testing.T) {
 	i INT8 NOT NULL,
 	s STRING NULL,
 	b BYTES NULL,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT simple_pkey PRIMARY KEY (i ASC),
 	UNIQUE INDEX simple_b_s_idx (b ASC, s ASC),
 	INDEX simple_s_idx (s ASC),
-	FAMILY "primary" (i, s, b)
+	FAMILY "primary" (i, s, b, rowid)
 )`,
 				}})
 
@@ -5512,8 +5513,9 @@ func TestImportPgDump(t *testing.T) {
 					"second", `CREATE TABLE public.second (
 	i INT8 NOT NULL,
 	s STRING NULL,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT second_pkey PRIMARY KEY (i ASC),
-	FAMILY "primary" (i, s)
+	FAMILY "primary" (i, s, rowid)
 )`,
 				}})
 				res := sqlDB.QueryStr(t, "SELECT * FROM second ORDER BY i")
@@ -5536,7 +5538,7 @@ func TestImportPgDump(t *testing.T) {
 			if c.expected == expectAll {
 				sqlDB.CheckQueryResults(t, `SHOW CREATE TABLE seqtable`, [][]string{{
 					"seqtable", `CREATE TABLE public.seqtable (
-	a INT8 NULL DEFAULT nextval('public.a_seq'::REGCLASS),
+	a INT8 NULL,
 	b INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT seqtable_pkey PRIMARY KEY (rowid ASC),
@@ -5797,18 +5799,6 @@ func TestImportPgDumpGeo(t *testing.T) {
 
 		// Verify both created tables are identical.
 		importCreate := sqlDB.QueryStr(t, "SELECT create_statement FROM [SHOW CREATE importdb.nyc_census_blocks]")
-		// Families are slightly different due to rowid showing up in exec but
-		// not import (possibly due to the ALTER TABLE statement that makes
-		// gid a primary key), so add that into import to match exec.
-		importCreate[0][0] = strings.Replace(importCreate[0][0], "boroname, geom", "boroname, rowid, geom", 1)
-		// The rowid column is implicitly created as ALTER PRIMARY KEY only comes into effect later.
-		// As such, insert the line.
-		importCreate[0][0] = strings.Replace(
-			importCreate[0][0],
-			"boroname VARCHAR(32) NULL",
-			"boroname VARCHAR(32) NULL,\n\trowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid()",
-			1,
-		)
 		sqlDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE execdb.nyc_census_blocks]", importCreate)
 
 		importCols := "blkid, popn_total, popn_white, popn_black, popn_nativ, popn_asian, popn_other, boroname"
@@ -5857,6 +5847,9 @@ func TestImportPgDumpDropTable(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	// TODO(adityamaru): Figure out how to handle DROP TABLE in new PGDUMP
+	// implementation.
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.import.dump.enabled = false`)
 
 	var data string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -5952,9 +5945,11 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/schema.sql' WITH ignore_unsupported_statements")
 
 		// Check that we have imported 4 schemas.
-		expectedSchemaNames := [][]string{{"bar"}, {"baz"}, {"foo"}, {"public"}}
+		importedSchemas := [][]string{{"bar"}, {"baz"}, {"foo"}, {"public"}}
+		expectedSchemaNames := [][]string{{"bar"}, {"baz"}, {"crdb_internal"}, {"foo"},
+			{"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}}
 		sqlDB.CheckQueryResults(t,
-			`SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner IS NOT NULL ORDER BY schema_name`,
+			`SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY schema_name`,
 			expectedSchemaNames)
 
 		// Check that we have a test table in each schema with the expected content.
@@ -5967,17 +5962,12 @@ table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 			[][]string{{"bar", expectedTableName}, {"bar", expectedTableName2}, {"bar", expectedSeqName},
 				{"baz", expectedTableName}, {"foo", expectedTableName}, {"public", expectedTableName}})
 
-		for _, schemaCollection := range expectedSchemaNames {
+		for _, schemaCollection := range importedSchemas {
 			for _, schema := range schemaCollection {
 				sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT * FROM %s.%s`, schema, expectedTableName),
 					expectedContent)
 			}
 		}
-
-		// There should be two jobs, the import and a job updating the parent
-		// database descriptor.
-		sqlDB.CheckQueryResults(t, `SELECT job_type, status FROM [SHOW JOBS] ORDER BY job_type`,
-			[][]string{{"IMPORT", "succeeded"}, {"SCHEMA CHANGE", "succeeded"}})
 
 		// Attempt to rename one of the imported schema's so as to verify that
 		// parent database descriptor has been updated with information about the
@@ -6057,6 +6047,7 @@ table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 				}
 		}
 
+		sqlDB.Exec(t, `SET CLUSTER SETTING feature.import.dump.enabled = false`)
 		sqlDB.Exec(t, `CREATE DATABASE failedimportpgdump; SET DATABASE = failedimportpgdump`)
 		// Hit a failure during import.
 		sqlDB.ExpectErr(

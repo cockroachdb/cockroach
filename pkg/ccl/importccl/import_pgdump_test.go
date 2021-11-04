@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -156,10 +157,10 @@ SELECT AddGeometryColumn('', 'nyc_census_blocks','geom','26918','MULTIPOLYGON',2
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			data = test.data
-			h, err := parseDDLStatementsFromDumpFile(ctx, &evalCtx, execCtx, srv.URL,
+			h, err := parseDDLStatementsFromDumpFile(ctx, &evalCtx, execCtx, 0 /* jobID */, srv.URL,
 				roachpb.IOFileFormat{PgDump: roachpb.PgDumpOptions{
 					MaxRowSize: defaultScanBuffer,
-				}}, defaultScanBuffer, 0)
+				}}, defaultScanBuffer, 0, "")
 			if test.error != "" {
 				require.True(t, testutils.IsError(err, test.error))
 			} else {
@@ -235,7 +236,8 @@ ALTER TABLE db.s.z ALTER COLUMN id2 SET DEFAULT 0;
 
 	for _, test := range tests {
 		data = test.data
-		tables, schemas, err := processDDLStatements(ctx, &evalCtx, execCtx, srv.URL,
+		_, _, tables, schemas, err := processDDLStatements(ctx, &evalCtx, execCtx,
+			jobspb.ImportDetails{}, 0 /* jobID */, srv.URL,
 			roachpb.IOFileFormat{PgDump: roachpb.PgDumpOptions{
 				MaxRowSize: defaultScanBuffer,
 			}}, defaultScanBuffer, 0)
@@ -245,7 +247,7 @@ ALTER TABLE db.s.z ALTER COLUMN id2 SET DEFAULT 0;
 		require.Equal(t, len(test.expectedSchemas), len(schemas))
 
 		var tempImportDBID descpb.ID
-		tdb.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='%s'`, importTempPgdumpDB)).Scan(&tempImportDBID)
+		tdb.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='%s'`, getImportTempDBName(0))).Scan(&tempImportDBID)
 
 		for i, table := range tables {
 			require.Equal(t, table.GetName(), test.expectedTables[i])
@@ -261,8 +263,9 @@ ALTER TABLE db.s.z ALTER COLUMN id2 SET DEFAULT 0;
 
 		// For test purposes move all objects to PUBLIC so that we can drop the
 		// database.
-		_, _, err = moveObjectsInTempDatabaseToState(ctx, execCtx, tempImportDBID, descpb.DescriptorState_PUBLIC)
+		_, _, _, _, err = moveObjectsInTempDatabaseToState(ctx, execCtx, tempImportDBID,
+			descpb.DescriptorState_PUBLIC, true /* dumpHasDatabase */, 0 /* parentID */)
 		require.NoError(t, err)
-		tdb.Exec(t, fmt.Sprintf(`DROP DATABASE %s CASCADE`, importTempPgdumpDB))
+		tdb.Exec(t, fmt.Sprintf(`DROP DATABASE %s CASCADE`, getImportTempDBName(0)))
 	}
 }
