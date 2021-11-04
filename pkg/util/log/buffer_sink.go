@@ -29,6 +29,7 @@ import (
 // sent, which currently drops the messages but retains their count for later
 // reporting.
 // TODO(knz): Actually report the count of dropped messages.
+// See: https://github.com/cockroachdb/cockroach/issues/72453
 //
 // Should an error occur in the child sink, it's forwarded to the provided
 // errCallback (unless forceSync is requested, in which case the error is returned
@@ -235,6 +236,8 @@ type bufferSinkBundle struct {
 	// plus enough for separators.
 	byteLen int
 	// droppedCount is the number of dropped messages due to buffer fullness.
+	// TODO(knz): This needs to get reported somehow, see
+	// https://github.com/cockroachdb/cockroach/issues/72453
 	droppedCount int
 	// errorCh, if non-nil, expects to receive the (possibly nil) error
 	// after the flush completes.
