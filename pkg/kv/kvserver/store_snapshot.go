@@ -450,7 +450,7 @@ func (s *Store) canAcceptSnapshotLocked(
 	desc := *snapHeader.State.Desc
 
 	// First, check for an existing Replica.
-	existingRepl, ok := s.mu.replicas.Load(desc.RangeID)
+	existingRepl, ok := s.mu.replicasByRangeID.Load(desc.RangeID)
 	if !ok {
 		return nil, errors.Errorf("canAcceptSnapshotLocked requires a replica present")
 	}
