@@ -34,6 +34,7 @@ go_library(
         "slice_go1.9.go",
         "sst_iterator.go",
         "sst_writer.go",
+        "store_properties.go",
         "temp_engine.go",
         "testing_knobs.go",
         ":gen-resourcelimitreached-stringer",  # keep
@@ -79,6 +80,7 @@ go_library(
         "@com_github_cockroachdb_pebble//vfs/atomicfs",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_github_elastic_gosigar//:gosigar",
         "@com_github_gogo_protobuf//proto",
     ],
 )
