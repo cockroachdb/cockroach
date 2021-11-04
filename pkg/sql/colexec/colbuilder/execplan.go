@@ -735,7 +735,7 @@ func NewColOperator(
 			var scanOp colfetcher.ScanOperator
 			var resultTypes []*types.T
 			if evalCtx.SessionData().LocalOnlySessionData.PlanDirectScan {
-				scan, err := colfetcher.NewColDirectBatchScan(
+				scan, err := colfetcher.NewColBatchDirectScan(
 					ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
 					flowCtx, evalCtx, args.ExprHelper, core.TableReader, post, estimatedRowCount,
 				)

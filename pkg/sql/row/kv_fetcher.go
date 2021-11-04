@@ -182,7 +182,14 @@ func (f *KVFetcher) NextKV(
 			}, lastKey, nil
 		}
 
-		moreKVs, f.kvs, f.batchResponse, err = f.NextBatch(ctx)
+		var res KVBatchFetcherResult
+		moreKVs, res, err = f.NextBatch(ctx)
+		f.kvs = res.KVs
+		f.batchResponse = res.BatchResponse
+		if res.ColBatch != nil {
+			return false, kv, false,
+				errors.AssertionFailedf("unexpectedly got a coldata.Batch result in a non-direct fetch")
+		}
 		if err != nil {
 			return moreKVs, kv, false, err
 		}
@@ -214,13 +221,13 @@ type SpanKVFetcher struct {
 // NextBatch implements the KvBatchFetcher interface.
 func (f *SpanKVFetcher) NextBatch(
 	ctx context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error) {
+) (ok bool, resp KVBatchFetcherResult, err error) {
 	if len(f.KVs) == 0 {
-		return false, nil, nil, nil
+		return false, resp, nil
 	}
 	res := f.KVs
 	f.KVs = nil
-	return true, res, nil, nil
+	return true, KVBatchFetcherResult{KVs: res}, nil
 }
 
 func (f *SpanKVFetcher) Close(context.Context) {}
@@ -257,7 +264,7 @@ func MakeBackupSSTKVFetcher(
 
 func (f *BackupSSTKVFetcher) NextBatch(
 	ctx context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error) {
+) (ok bool, resp KVBatchFetcherResult, err error) {
 	res := make([]roachpb.KeyValue, 0)
 
 	copyKV := func(mvccKey storage.MVCCKey, value []byte) roachpb.KeyValue {
@@ -275,7 +282,7 @@ func (f *BackupSSTKVFetcher) NextBatch(
 		valid, err := f.iter.Valid()
 		if err != nil {
 			err = errors.Wrapf(err, "iter key value of table data")
-			return false, nil, nil, err
+			return false, resp, err
 		}
 
 		if !valid || !f.iter.UnsafeKey().Less(f.endKeyMVCC) {
@@ -318,9 +325,9 @@ func (f *BackupSSTKVFetcher) NextBatch(
 
 	}
 	if len(res) == 0 {
-		return false, nil, nil, err
+		return false, resp, err
 	}
-	return true, res, nil, nil
+	return true, KVBatchFetcherResult{KVs: res}, nil
 }
 
 func (f *BackupSSTKVFetcher) Close(context.Context) {

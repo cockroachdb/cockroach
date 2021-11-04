@@ -457,15 +457,15 @@ func NewColIndexJoin(
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	fetcher.cFetcherArgs = cFetcherArgs{
-		spec.LockingStrength,
-		spec.LockingWaitPolicy,
-		flowCtx.EvalCtx.SessionData().LockTimeout,
-		execinfra.GetWorkMemLimit(flowCtx),
+		lockStrength:   spec.LockingStrength,
+		lockWaitPolicy: spec.LockingWaitPolicy,
+		lockTimeout:    flowCtx.EvalCtx.SessionData().LockTimeout,
+		memoryLimit:    execinfra.GetWorkMemLimit(flowCtx),
 		// Note that the correct estimated row count will be set by the index
 		// joiner for each set of spans to read.
-		0,     /* estimatedRowCount */
-		false, /* reverse */
-		flowCtx.TraceKV,
+		estimatedRowCount: 0,
+		reverse:           false,
+		traceKV:           flowCtx.TraceKV,
 	}
 	if err = fetcher.Init(flowCtx.Codec(), fetcherAllocator, kvFetcherMemAcc, tableArgs, spec.HasSystemColumns); err != nil {
 		fetcher.Release()

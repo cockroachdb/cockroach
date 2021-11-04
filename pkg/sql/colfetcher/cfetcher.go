@@ -216,6 +216,11 @@ type cFetcherArgs struct {
 	// traceKV indicates whether or not session tracing is enabled. It is set
 	// when initializing the fetcher.
 	traceKV bool
+
+	// allocateFreshBatches indicates whether the CFetcher will allocate new
+	// batches on each Next invocation, or instead just reuse a single batch.
+	// The default behavior, false, is to reuse a single batch.
+	allocateFreshBatches bool
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -351,8 +356,13 @@ func (rf *cFetcher) resetBatch() {
 			minDesiredCapacity = int(rf.estimatedRowCount)
 		}
 	}
+	//fmt.Println("Setting mindesired cap to ", minDesiredCapacity, rf.memoryLimit)
+	var batch coldata.Batch
+	if !rf.allocateFreshBatches {
+		batch = rf.machine.batch
+	}
 	rf.machine.batch, reallocated = rf.accountingHelper.ResetMaybeReallocate(
-		rf.table.typs, rf.machine.batch, minDesiredCapacity, rf.memoryLimit,
+		rf.table.typs, batch, minDesiredCapacity, rf.memoryLimit,
 	)
 	if reallocated {
 		rf.machine.colvecs.SetBatch(rf.machine.batch)
@@ -984,6 +994,8 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			if rf.machine.rowIdx >= rf.machine.batch.Capacity() ||
 				(rf.maxCapacity > 0 && rf.machine.rowIdx >= rf.maxCapacity) ||
 				(rf.machine.limitHint > 0 && rf.machine.rowIdx >= rf.machine.limitHint) {
+				// fmt.Println("Emitting batch", rf.machine.rowIdx, rf.machine.batch.Capacity(), rf.maxCapacity,
+				//rf.machine.limitHint)
 				// We either
 				//   1. have no more room in our batch, so output it immediately
 				// or

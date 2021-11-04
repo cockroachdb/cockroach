@@ -173,7 +173,7 @@ func populateTableArgs(
 	// the processor initialization, but neither ColBatchScan nor cFetcher are
 	// processors, so we need to do the hydration ourselves.
 	var err error
-	if flowCtx != nil {
+	if flowCtx.TypeResolverFactory != nil {
 		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
 		err = resolver.HydrateTypeSlice(ctx, args.typs)
 	}
