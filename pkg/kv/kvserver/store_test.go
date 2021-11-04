@@ -199,6 +199,20 @@ type testStoreOpts struct {
 	createSystemRanges bool
 }
 
+func (opts *testStoreOpts) splits() (_kvs []roachpb.KeyValue, _splits []roachpb.RKey) {
+	kvs, splits := bootstrap.MakeMetadataSchema(
+		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+	).GetInitialValues()
+	if !opts.createSystemRanges {
+		return kvs, nil
+	}
+	splits = append(config.StaticSplits(), splits...)
+	sort.Slice(splits, func(i, j int) bool {
+		return splits[i].Less(splits[j])
+	})
+	return kvs, splits
+}
+
 type mockNodeStore struct {
 	desc *roachpb.NodeDescriptor
 }
@@ -294,17 +308,7 @@ func createTestStoreWithoutStart(
 	store.Ident = &storeIdent // would usually be set during Store.Start, but can't call that yet
 	stores.AddStore(store)
 
-	var splits []roachpb.RKey
-	kvs, tableSplits := bootstrap.MakeMetadataSchema(
-		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
-	).GetInitialValues()
-	if opts.createSystemRanges {
-		splits = config.StaticSplits()
-		splits = append(splits, tableSplits...)
-		sort.Slice(splits, func(i, j int) bool {
-			return splits[i].Less(splits[j])
-		})
-	}
+	kvs, splits := opts.splits()
 	if err := WriteInitialClusterData(
 		context.Background(), eng, kvs, /* initialValues */
 		clusterversion.TestingBinaryVersion,
