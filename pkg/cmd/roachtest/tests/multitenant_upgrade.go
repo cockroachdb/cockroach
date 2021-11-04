@@ -126,6 +126,8 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 			return err
 		}
 		defer db.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
 		_, err = db.ExecContext(ctx, `SELECT 1`)
 		return err
 	}); err != nil {
