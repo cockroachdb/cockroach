@@ -743,6 +743,8 @@ type Engine interface {
 	Attrs() roachpb.Attributes
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (roachpb.StoreCapacity, error)
+	// Properties returns the low-level properties for the engine's underlying storage.
+	Properties() roachpb.StoreProperties
 	// Compact forces compaction over the entire database.
 	Compact() error
 	// Flush causes the engine to write all in-memory data to disk
