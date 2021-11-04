@@ -102,46 +102,30 @@ func TestIndexForDisplay(t *testing.T) {
 	}
 
 	testData := []struct {
-		index      descpb.IndexDescriptor
-		tableName  tree.TableName
-		partition  string
-		interleave string
-		expected   string
+		index     descpb.IndexDescriptor
+		tableName tree.TableName
+		partition string
+		expected  string
 	}{
-		{baseIndex, descpb.AnonymousTable, "", "", "INDEX baz (a ASC, b DESC)"},
-		{baseIndex, tableName, "", "", "INDEX baz ON foo.public.bar (a ASC, b DESC)"},
-		{uniqueIndex, descpb.AnonymousTable, "", "", "UNIQUE INDEX baz (a ASC, b DESC)"},
-		{invertedIndex, descpb.AnonymousTable, "", "", "INVERTED INDEX baz (a)"},
-		{storingIndex, descpb.AnonymousTable, "", "", "INDEX baz (a ASC, b DESC) STORING (c)"},
-		{partialIndex, descpb.AnonymousTable, "", "", "INDEX baz (a ASC, b DESC) WHERE a > 1:::INT8"},
-		{expressionIndex, descpb.AnonymousTable, "", "", "INDEX baz (a ASC, (a + b) DESC, b ASC)"},
+		{baseIndex, descpb.AnonymousTable, "", "INDEX baz (a ASC, b DESC)"},
+		{baseIndex, tableName, "", "INDEX baz ON foo.public.bar (a ASC, b DESC)"},
+		{uniqueIndex, descpb.AnonymousTable, "", "UNIQUE INDEX baz (a ASC, b DESC)"},
+		{invertedIndex, descpb.AnonymousTable, "", "INVERTED INDEX baz (a)"},
+		{storingIndex, descpb.AnonymousTable, "", "INDEX baz (a ASC, b DESC) STORING (c)"},
+		{partialIndex, descpb.AnonymousTable, "", "INDEX baz (a ASC, b DESC) WHERE a > 1:::INT8"},
+		{expressionIndex, descpb.AnonymousTable, "", "INDEX baz (a ASC, (a + b) DESC, b ASC)"},
 		{
 			partialIndex,
 			descpb.AnonymousTable,
 			" PARTITION BY LIST (a) (PARTITION p VALUES IN (2))",
-			"",
 			"INDEX baz (a ASC, b DESC) PARTITION BY LIST (a) (PARTITION p VALUES IN (2)) WHERE a > 1:::INT8",
-		},
-		{
-			partialIndex,
-			descpb.AnonymousTable,
-			"",
-			" INTERLEAVE IN PARENT par (a)",
-			"INDEX baz (a ASC, b DESC) INTERLEAVE IN PARENT par (a) WHERE a > 1:::INT8",
-		},
-		{
-			partialIndex,
-			descpb.AnonymousTable,
-			" PARTITION BY LIST (a) (PARTITION p VALUES IN (2))",
-			" INTERLEAVE IN PARENT par (a)",
-			"INDEX baz (a ASC, b DESC) INTERLEAVE IN PARENT par (a) PARTITION BY LIST (a) (PARTITION p VALUES IN (2)) WHERE a > 1:::INT8",
 		},
 	}
 
 	for testIdx, tc := range testData {
 		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
 			got, err := indexForDisplay(
-				ctx, tableDesc, &tc.tableName, &tc.index, false /* isPrimary */, tc.partition, tc.interleave, &semaCtx,
+				ctx, tableDesc, &tc.tableName, &tc.index, false /* isPrimary */, tc.partition, &semaCtx,
 			)
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)

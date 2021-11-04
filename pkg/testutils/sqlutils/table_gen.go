@@ -57,7 +57,7 @@ func genValues(w io.Writer, firstRow, lastRow int, fn GenRowFn, shouldPrint bool
 func CreateTable(
 	tb testing.TB, sqlDB *gosql.DB, tableName, schema string, numRows int, fn GenRowFn,
 ) {
-	CreateTableInterleaved(tb, sqlDB, tableName, schema, "" /*interleaveSchema*/, numRows, fn)
+	CreateTableDebug(tb, sqlDB, tableName, schema, numRows, fn, false /* print */)
 }
 
 // CreateTableDebug is identical to debug, but allows for the added option of
@@ -70,38 +70,9 @@ func CreateTableDebug(
 	fn GenRowFn,
 	shouldPrint bool,
 ) {
-	CreateTableInterleavedDebug(tb, sqlDB, tableName, schema, "" /*interleaveSchema*/, numRows, fn, shouldPrint)
-}
-
-// CreateTableInterleaved is identical to CreateTable with the added option
-// of specifying an interleave schema for interleaving the table.
-func CreateTableInterleaved(
-	tb testing.TB,
-	sqlDB *gosql.DB,
-	tableName, schema, interleaveSchema string,
-	numRows int,
-	fn GenRowFn,
-) {
-	CreateTableInterleavedDebug(tb, sqlDB, tableName, schema, interleaveSchema, numRows, fn, false /* print */)
-}
-
-// CreateTableInterleavedDebug is identical to CreateTableInterleaved with the
-// option of printing the table being created.
-func CreateTableInterleavedDebug(
-	tb testing.TB,
-	sqlDB *gosql.DB,
-	tableName, schema, interleaveSchema string,
-	numRows int,
-	fn GenRowFn,
-	shouldPrint bool,
-) {
-	if interleaveSchema != "" {
-		interleaveSchema = fmt.Sprintf(`INTERLEAVE IN PARENT %s.%s`, TestDB, interleaveSchema)
-	}
-
 	r := MakeSQLRunner(sqlDB)
 	stmt := fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s;`, TestDB)
-	stmt += fmt.Sprintf(`CREATE TABLE %s.%s (%s) %s;`, TestDB, tableName, schema, interleaveSchema)
+	stmt += fmt.Sprintf(`CREATE TABLE %s.%s (%s);`, TestDB, tableName, schema)
 	r.Exec(tb, stmt)
 	if shouldPrint {
 		fmt.Printf("Creating table: %s\n%s\n", tableName, schema)

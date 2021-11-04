@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -103,29 +102,6 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 	details, progress, err := initDetailsAndProgress(ctx, execCfg, r.jobID)
 	if err != nil {
 		return err
-	}
-
-	// If there are any interleaved indexes to drop as part of a table TRUNCATE
-	// operation, then drop the indexes before waiting on the GC timer.
-	if len(details.InterleavedIndexes) > 0 {
-		// Before deleting any indexes, ensure that old versions of the table
-		// descriptor are no longer in use.
-		_, err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, details.InterleavedTable.ID)
-		if err != nil {
-			return err
-		}
-		interleavedIndexIDs := make([]descpb.IndexID, len(details.InterleavedIndexes))
-		for i := range details.InterleavedIndexes {
-			interleavedIndexIDs[i] = details.InterleavedIndexes[i].ID
-		}
-		if err := sql.TruncateInterleavedIndexes(
-			ctx,
-			execCfg,
-			tabledesc.NewBuilder(details.InterleavedTable).BuildImmutableTable(),
-			interleavedIndexIDs,
-		); err != nil {
-			return err
-		}
 	}
 
 	tableDropTimes, indexDropTimes := getDropTimes(details)

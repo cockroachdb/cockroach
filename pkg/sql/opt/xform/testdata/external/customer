@@ -72,7 +72,7 @@ CREATE TABLE article (
 	UNIQUE INDEX article_hash_key (hash ASC),
 	UNIQUE INDEX article_idx_read_key (id ASC) STORING (read),
 	FAMILY "primary" (id, feed, folder, hash, title, summary, content, link, read, date, retrieved)
-) INTERLEAVE IN PARENT feed (folder, feed)
+)
 ----
 
 opt

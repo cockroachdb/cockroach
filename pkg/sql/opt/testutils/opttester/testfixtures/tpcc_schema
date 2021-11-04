@@ -29,7 +29,7 @@ CREATE TABLE district
     d_next_o_id  integer,
     primary key (d_w_id, d_id),
     foreign key (d_w_id) references warehouse (w_id)
-) interleave in parent warehouse (d_w_id)
+)
 ----
 
 exec-ddl
@@ -59,7 +59,7 @@ CREATE TABLE customer
     primary key (c_w_id, c_d_id, c_id),
     index customer_idx (c_w_id, c_d_id, c_last, c_first),
     foreign key (c_w_id, c_d_id) references district (d_w_id, d_id)
-) interleave in parent district (c_w_id, c_d_id)
+)
 ----
 
 exec-ddl
@@ -94,7 +94,7 @@ CREATE TABLE "order"
     primary key (o_w_id, o_d_id, o_id DESC),
     unique index order_idx (o_w_id, o_d_id, o_c_id, o_id DESC) storing (o_entry_d, o_carrier_id),
     foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id)
-) interleave in parent district (o_w_id, o_d_id)
+)
 ----
 
 exec-ddl
@@ -105,7 +105,7 @@ CREATE TABLE new_order
     no_w_id  integer   not null,
     primary key (no_w_id, no_d_id, no_o_id),
     foreign key (no_w_id, no_d_id, no_o_id) references "order" (o_w_id, o_d_id, o_id)
-) interleave in parent "order" (no_w_id, no_d_id, no_o_id)
+)
 ----
 
 exec-ddl
@@ -143,7 +143,7 @@ CREATE TABLE stock
     primary key (s_w_id, s_i_id),
     foreign key (s_w_id) references warehouse (w_id),
     foreign key (s_i_id) references item (i_id)
-) interleave in parent warehouse (s_w_id)
+)
 ----
 
 exec-ddl
@@ -162,5 +162,5 @@ CREATE TABLE order_line
     primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number),
     foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id),
     foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id)
-) interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)
+)
 ----

@@ -49,10 +49,7 @@ func (sd *spanConfigDecoder) decode(kv roachpb.KeyValue) (entry roachpb.SpanConf
 	{
 		types := []*types.T{tbl.PublicColumns()[0].GetType()}
 		startKeyRow := make([]rowenc.EncDatum, 1)
-		_, matches, _, err := rowenc.DecodeIndexKey(
-			keys.SystemSQLCodec, tbl, tbl.GetPrimaryIndex(),
-			types, startKeyRow, nil, kv.Key,
-		)
+		_, matches, _, err := rowenc.DecodeIndexKey(keys.SystemSQLCodec, types, startKeyRow, nil /* colDirs */, kv.Key)
 		if err != nil {
 			return roachpb.SpanConfigEntry{}, errors.Wrapf(err, "failed to decode key: %v", kv.Key)
 		}

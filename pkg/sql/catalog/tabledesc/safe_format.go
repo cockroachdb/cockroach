@@ -129,28 +129,6 @@ func formatSafeIndex(
 	if idx.Predicate != "" {
 		w.Printf(", Partial: true")
 	}
-	if !idx.Interleave.Equal(&descpb.InterleaveDescriptor{}) {
-		w.Printf(", InterleaveParents: [")
-		for i := range idx.Interleave.Ancestors {
-			a := &idx.Interleave.Ancestors[i]
-			if i > 0 {
-				w.Printf(", ")
-			}
-			w.Printf("{TableID: %d, IndexID: %d}", a.TableID, a.IndexID)
-		}
-		w.Printf("]")
-	}
-	if len(idx.InterleavedBy) > 0 {
-		w.Printf(", InterleaveChildren: [")
-		for i := range idx.InterleavedBy {
-			a := &idx.InterleavedBy[i]
-			if i > 0 {
-				w.Printf(", ")
-			}
-			w.Printf("{TableID: %d, IndexID: %d}", a.Table, a.Index)
-		}
-		w.Printf("]")
-	}
 	w.Printf(", KeyColumns: [")
 	for i := range idx.KeyColumnIDs {
 		if i > 0 {

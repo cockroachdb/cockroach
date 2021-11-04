@@ -228,40 +228,6 @@ func getAllDescChanges(
 	return res, nil
 }
 
-func ensureInterleavesIncluded(tables []catalog.TableDescriptor) error {
-	inBackup := make(map[descpb.ID]bool, len(tables))
-	for _, t := range tables {
-		inBackup[t.GetID()] = true
-	}
-
-	for _, table := range tables {
-		if err := catalog.ForEachIndex(table, catalog.IndexOpts{
-			AddMutations: true,
-		}, func(index catalog.Index) error {
-			for i := 0; i < index.NumInterleaveAncestors(); i++ {
-				a := index.GetInterleaveAncestor(i)
-				if !inBackup[a.TableID] {
-					return errors.Errorf(
-						"cannot backup table %q without interleave parent (ID %d)", table.GetName(), a.TableID,
-					)
-				}
-			}
-			for i := 0; i < index.NumInterleavedBy(); i++ {
-				c := index.GetInterleavedBy(i)
-				if !inBackup[c.Table] {
-					return errors.Errorf(
-						"cannot backup table %q without interleave child table (ID %d)", table.GetName(), c.Table,
-					)
-				}
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func lookupDatabaseID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string,
 ) (descpb.ID, error) {

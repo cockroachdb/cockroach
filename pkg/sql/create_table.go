@@ -290,16 +290,6 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 		return err
 	}
-	if n.n.Interleave != nil {
-		telemetry.Inc(sqltelemetry.CreateInterleavedTableCounter)
-		interleaveIgnored, err := interleavedTableDeprecationAction(params)
-		if err != nil {
-			return err
-		}
-		if interleaveIgnored {
-			n.n.Interleave = nil
-		}
-	}
 	if n.n.Persistence.IsTemporary() {
 		telemetry.Inc(sqltelemetry.CreateTempTableCounter)
 
@@ -426,14 +416,6 @@ func (n *createTableNode) startExec(params runParams) error {
 			),
 		); err != nil {
 			return err
-		}
-	}
-
-	for _, index := range desc.NonDropIndexes() {
-		if index.NumInterleaveAncestors() > 0 {
-			if err := params.p.finalizeInterleave(params.ctx, desc, index.IndexDesc()); err != nil {
-				return err
-			}
 		}
 	}
 
@@ -681,11 +663,6 @@ func addUniqueWithoutIndexTableDef(
 	if len(d.Storing) > 0 {
 		return pgerror.New(pgcode.FeatureNotSupported,
 			"unique constraints without an index cannot store columns",
-		)
-	}
-	if d.Interleave != nil {
-		return pgerror.New(pgcode.FeatureNotSupported,
-			"interleaved unique constraints without an index are not supported",
 		)
 	}
 	if d.PartitionByIndex.ContainsPartitions() {
@@ -1048,168 +1025,6 @@ func ResolveFK(
 	return nil
 }
 
-func (p *planner) addInterleave(
-	ctx context.Context,
-	desc *tabledesc.Mutable,
-	index *descpb.IndexDescriptor,
-	interleave *tree.InterleaveDef,
-) error {
-	return addInterleave(ctx, p.txn, p, desc, index, interleave)
-}
-
-// addInterleave marks an index as one that is interleaved in some parent data
-// according to the given definition.
-func addInterleave(
-	ctx context.Context,
-	txn *kv.Txn,
-	vt resolver.SchemaResolver,
-	desc *tabledesc.Mutable,
-	index *descpb.IndexDescriptor,
-	interleave *tree.InterleaveDef,
-) error {
-	if interleave.DropBehavior != tree.DropDefault {
-		return unimplemented.NewWithIssuef(
-			7854, "unsupported shorthand %s", interleave.DropBehavior)
-	}
-
-	if desc.IsLocalityRegionalByRow() {
-		return interleaveOnRegionalByRowError()
-	}
-
-	_, parentTable, err := resolver.ResolveExistingTableObject(
-		ctx, vt, &interleave.Parent, tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc),
-	)
-	if err != nil {
-		return err
-	}
-	parentIndex := parentTable.GetPrimaryIndex()
-
-	// typeOfIndex is used to give more informative error messages.
-	var typeOfIndex string
-	if index.ID == desc.GetPrimaryIndexID() {
-		typeOfIndex = "primary key"
-	} else {
-		typeOfIndex = "index"
-	}
-
-	if len(interleave.Fields) != parentIndex.NumKeyColumns() {
-		return pgerror.Newf(
-			pgcode.InvalidSchemaDefinition,
-			"declared interleaved columns (%s) must match the parent's primary index (%s)",
-			&interleave.Fields,
-			strings.Join(parentIndex.IndexDesc().KeyColumnNames, ", "),
-		)
-	}
-	if len(interleave.Fields) > len(index.KeyColumnIDs) {
-		return pgerror.Newf(
-			pgcode.InvalidSchemaDefinition,
-			"declared interleaved columns (%s) must be a prefix of the %s columns being interleaved (%s)",
-			&interleave.Fields,
-			typeOfIndex,
-			strings.Join(index.KeyColumnNames, ", "),
-		)
-	}
-
-	for i := 0; i < parentIndex.NumKeyColumns(); i++ {
-		targetColID := parentIndex.GetKeyColumnID(i)
-		targetCol, err := parentTable.FindColumnWithID(targetColID)
-		if err != nil {
-			return err
-		}
-		col, err := desc.FindColumnWithID(index.KeyColumnIDs[i])
-		if err != nil {
-			return err
-		}
-		if string(interleave.Fields[i]) != col.GetName() {
-			return pgerror.Newf(
-				pgcode.InvalidSchemaDefinition,
-				"declared interleaved columns (%s) must refer to a prefix of the %s column names being interleaved (%s)",
-				&interleave.Fields,
-				typeOfIndex,
-				strings.Join(index.KeyColumnNames, ", "),
-			)
-		}
-		if !col.GetType().Identical(targetCol.GetType()) || index.KeyColumnDirections[i] != parentIndex.GetKeyColumnDirection(i) {
-			return pgerror.Newf(
-				pgcode.InvalidSchemaDefinition,
-				"declared interleaved columns (%s) must match type and sort direction of the parent's primary index (%s)",
-				&interleave.Fields,
-				strings.Join(parentIndex.IndexDesc().KeyColumnNames, ", "),
-			)
-		}
-	}
-
-	ancestorPrefix := make([]descpb.InterleaveDescriptor_Ancestor, parentIndex.NumInterleaveAncestors())
-	for i := range ancestorPrefix {
-		ancestorPrefix[i] = parentIndex.GetInterleaveAncestor(i)
-	}
-
-	intl := descpb.InterleaveDescriptor_Ancestor{
-		TableID:         parentTable.GetID(),
-		IndexID:         parentIndex.GetID(),
-		SharedPrefixLen: uint32(parentIndex.NumKeyColumns()),
-	}
-	for _, ancestor := range ancestorPrefix {
-		intl.SharedPrefixLen -= ancestor.SharedPrefixLen
-	}
-	index.Interleave = descpb.InterleaveDescriptor{Ancestors: append(ancestorPrefix, intl)}
-
-	desc.State = descpb.DescriptorState_ADD
-	return nil
-}
-
-// finalizeInterleave creates backreferences from an interleaving parent to the
-// child data being interleaved.
-func (p *planner) finalizeInterleave(
-	ctx context.Context, desc *tabledesc.Mutable, index *descpb.IndexDescriptor,
-) error {
-	// TODO(dan): This is similar to finalizeFKs. Consolidate them
-	if len(index.Interleave.Ancestors) == 0 {
-		return nil
-	}
-	// Only the last ancestor needs the backreference.
-	ancestor := index.Interleave.Ancestors[len(index.Interleave.Ancestors)-1]
-	var ancestorTable *tabledesc.Mutable
-	if ancestor.TableID == desc.ID {
-		ancestorTable = desc
-	} else {
-		var err error
-		ancestorTable, err = p.Descriptors().GetMutableTableVersionByID(ctx, ancestor.TableID, p.txn)
-		if err != nil {
-			return err
-		}
-	}
-	ancestorIndex, err := ancestorTable.FindIndexWithID(ancestor.IndexID)
-	if err != nil {
-		return err
-	}
-	ancestorIndex.IndexDesc().InterleavedBy = append(ancestorIndex.IndexDesc().InterleavedBy,
-		descpb.ForeignKeyReference{Table: desc.ID, Index: index.ID})
-
-	if err := p.writeSchemaChange(
-		ctx, ancestorTable, descpb.InvalidMutationID,
-		fmt.Sprintf(
-			"updating ancestor table %s(%d) for table %s(%d)",
-			ancestorTable.Name, ancestorTable.ID, desc.Name, desc.ID,
-		),
-	); err != nil {
-		return err
-	}
-
-	if desc.State == descpb.DescriptorState_ADD {
-		desc.State = descpb.DescriptorState_PUBLIC
-
-		// No job description, since this is presumably part of some larger schema change.
-		if err := p.writeSchemaChange(
-			ctx, desc, descpb.InvalidMutationID, "",
-		); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 // CreatePartitioning returns a set of implicit columns and a new partitioning
 // descriptor to build an index with partitioning fields populated to align with
 // the tree.PartitionBy clause.
@@ -1504,11 +1319,6 @@ func NewTableDesc(
 			regionalByRowCol = n.Locality.RegionalByRowColumn
 		}
 
-		// Check no interleaving is on the table.
-		if n.Interleave != nil {
-			return nil, interleaveOnRegionalByRowError()
-		}
-
 		// Check PARTITION BY is not set on anything partitionable, and also check
 		// for the existence of the column to partition by.
 		regionalByRowColExists := false
@@ -1665,9 +1475,6 @@ func NewTableDesc(
 				}
 				if n.PartitionByTable.ContainsPartitions() {
 					return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
-				}
-				if n.Interleave != nil {
-					return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
 				}
 				buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
 				if err != nil {
@@ -1873,9 +1680,6 @@ func NewTableDesc(
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
-				if d.Interleave != nil {
-					return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
-				}
 				if isRegionalByRow {
 					return nil, hashShardedIndexesOnRegionalByRowError()
 				}
@@ -1957,9 +1761,6 @@ func NewTableDesc(
 			if err := desc.AddSecondaryIndex(idx); err != nil {
 				return nil, err
 			}
-			if d.Interleave != nil {
-				return nil, unimplemented.NewWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
-			}
 		case *tree.UniqueConstraintTableDef:
 			if d.WithoutIndex {
 				// We will add the unique constraint below.
@@ -1995,9 +1796,6 @@ func NewTableDesc(
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
-				if n.Interleave != nil && d.PrimaryKey {
-					return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
-				}
 				if isRegionalByRow {
 					return nil, hashShardedIndexesOnRegionalByRowError()
 				}
@@ -2064,12 +1862,6 @@ func NewTableDesc(
 				if err := desc.AddPrimaryIndex(idx); err != nil {
 					return nil, err
 				}
-				if d.Interleave != nil {
-					return nil, unimplemented.NewWithIssue(
-						45710,
-						"interleave not supported in primary key constraint definition",
-					)
-				}
 				for _, c := range columns {
 					primaryIndexColumnSet[string(c.Column)] = struct{}{}
 				}
@@ -2077,9 +1869,6 @@ func NewTableDesc(
 				if err := desc.AddSecondaryIndex(idx); err != nil {
 					return nil, err
 				}
-			}
-			if d.Interleave != nil {
-				return nil, unimplemented.NewWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 		case *tree.CheckConstraintTableDef, *tree.ForeignKeyConstraintTableDef, *tree.FamilyTableDef:
 			// pass, handled below.
@@ -2143,12 +1932,6 @@ func NewTableDesc(
 		// Increment the counter if this index could be storing data across multiple column families.
 		if idx.NumSecondaryStoredColumns() > 1 && len(desc.Families) > 1 {
 			telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
-		}
-	}
-
-	if n.Interleave != nil {
-		if err := addInterleave(ctx, txn, vt, &desc, desc.GetPrimaryIndex().IndexDesc(), n.Interleave); err != nil {
-			return nil, err
 		}
 	}
 
@@ -2453,9 +2236,8 @@ func newTableDesc(
 		regionConfig = &conf
 	}
 
-	// We need to run NewTableDesc with caching disabled, because
-	// it needs to pull in descriptors from FK depended-on tables
-	// and interleaved parents using their current state in KV.
+	// We need to run NewTableDesc with caching disabled, because it needs to pull
+	// in descriptors from FK depended-on tables using their current state in KV.
 	// See the comment at the start of NewTableDesc() and ResolveFK().
 	params.p.runWithOptions(resolveFlags{skipCache: true, contextDatabaseID: db.GetID()}, func() {
 		ret, err = NewTableDesc(
@@ -2931,10 +2713,6 @@ func regionalByRowDefaultColDef(
 
 func hashShardedIndexesOnRegionalByRowError() error {
 	return pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes are not compatible with REGIONAL BY ROW tables")
-}
-
-func interleaveOnRegionalByRowError() error {
-	return pgerror.New(pgcode.FeatureNotSupported, "interleaved tables are not compatible with REGIONAL BY ROW tables")
 }
 
 func checkTypeIsSupported(ctx context.Context, settings *cluster.Settings, typ *types.T) error {
