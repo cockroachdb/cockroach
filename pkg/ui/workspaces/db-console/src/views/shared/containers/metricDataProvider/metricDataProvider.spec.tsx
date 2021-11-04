@@ -24,6 +24,8 @@ import {
   QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
 import { MetricsDataProviderUnconnected as MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
+import { refreshSettings } from "src/redux/apiReducers";
+import moment from "moment";
 
 // TextGraph is a proof-of-concept component used to demonstrate that
 // MetricsDataProvider is working correctly. Used in tests.
@@ -44,6 +46,7 @@ function makeDataProvider(
   metrics: MetricsQuery,
   timeInfo: QueryTimeInfo,
   rm: typeof requestMetrics,
+  refreshNodeSettings: typeof refreshSettings = _.noop as typeof refreshSettings,
 ) {
   return shallow(
     <MetricsDataProvider
@@ -51,6 +54,9 @@ function makeDataProvider(
       metrics={metrics}
       timeInfo={timeInfo}
       requestMetrics={rm}
+      refreshNodeSettings={refreshNodeSettings}
+      resolution10sStorageTTL={moment.duration(10, "d")}
+      resolution30mStorageTTL={moment.duration(90, "d")}
     >
       <TextGraph>
         <Axis>
@@ -256,6 +262,9 @@ describe("<MetricsDataProvider>", function() {
             metrics={null}
             timeInfo={timespan1}
             requestMetrics={spy}
+            refreshNodeSettings={_.noop as typeof refreshSettings}
+            resolution10sStorageTTL={moment.duration(10, "d")}
+            resolution30mStorageTTL={moment.duration(90, "d")}
           >
             <Fragment>
               <TextGraph>
