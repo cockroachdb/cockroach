@@ -1475,7 +1475,7 @@ project
                                     ├── columns: count_rows:16!null
                                     └── project
                                          ├── columns: count_rows:16!null
-                                         └── group-by
+                                         └── group-by (hash)
                                               ├── columns: count_rows:16!null a:17
                                               ├── grouping columns: a:17
                                               ├── project
@@ -1506,7 +1506,7 @@ project
                           └── subquery [as=y:17]
                                └── max1-row
                                     ├── columns: column16:16
-                                    └── group-by
+                                    └── group-by (hash)
                                          ├── columns: column16:16
                                          ├── grouping columns: column16:16
                                          └── project
@@ -1539,7 +1539,7 @@ project
                                          ├── columns: r:18!null
                                          ├── select
                                          │    ├── columns: a:16!null a:17!null
-                                         │    ├── group-by
+                                         │    ├── group-by (hash)
                                          │    │    ├── columns: a:16 a:17
                                          │    │    ├── grouping columns: a:16 a:17
                                          │    │    └── project
@@ -1569,7 +1569,7 @@ project
                      ├── columns: array:13
                      ├── select
                      │    ├── columns: t1.a:6 count_rows:11!null a:12!null
-                     │    ├── group-by
+                     │    ├── group-by (hash)
                      │    │    ├── columns: t1.a:6 count_rows:11!null a:12
                      │    │    ├── grouping columns: t1.a:6 a:12
                      │    │    ├── project
@@ -1618,7 +1618,7 @@ project
                                     ├── columns: r:21
                                     └── project
                                          ├── columns: r:21
-                                         ├── group-by
+                                         ├── group-by (hash)
                                          │    ├── columns: a:20
                                          │    ├── grouping columns: a:20
                                          │    └── project
@@ -1662,7 +1662,7 @@ project
                                     │    ├── columns: i:9 max:15
                                     │    ├── ordering: +9
                                     │    ├── limit hint: 1.00
-                                    │    └── group-by
+                                    │    └── group-by (hash)
                                     │         ├── columns: i:9 max:15
                                     │         ├── grouping columns: i:9
                                     │         ├── project
@@ -1849,7 +1849,7 @@ SELECT (SELECT row(max(t1.a), max(t2.a), max(t1.a + t2.a)) FROM t1) FROM t2 GROU
 ----
 project
  ├── columns: row:17
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: t2.a:1 max:13
  │    ├── grouping columns: t2.a:1
  │    ├── project
@@ -1936,7 +1936,7 @@ project
       │         ├── columns: max:11
       │         └── project
       │              ├── columns: max:11
-      │              └── group-by
+      │              └── group-by (hash)
       │                   ├── columns: t1.b:7 max:11
       │                   ├── grouping columns: t1.b:7
       │                   ├── project
@@ -1951,7 +1951,7 @@ project
                 ├── columns: max:19
                 └── project
                      ├── columns: max:19
-                     ├── group-by
+                     ├── group-by (hash)
                      │    ├── columns: t1.b:13
                      │    ├── grouping columns: t1.b:13
                      │    └── project
@@ -1971,7 +1971,7 @@ GROUP BY t2.b;
 ----
 project
  ├── columns: array:20 array:21
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: t2.b:2 max:18
  │    ├── grouping columns: t2.b:2
  │    ├── project
@@ -2013,7 +2013,7 @@ GROUP BY t2.a, t2.b;
 ----
 project
  ├── columns: array:30 array:31 array:32
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: t2.a:1 t2.b:2 max:19
  │    ├── grouping columns: t2.a:1 t2.b:2
  │    ├── project
@@ -2029,7 +2029,7 @@ project
       ├── array-flatten [as=array:30]
       │    └── project
       │         ├── columns: max:11
-      │         └── group-by
+      │         └── group-by (hash)
       │              ├── columns: max:11 b:12
       │              ├── grouping columns: b:12
       │              ├── project
@@ -2044,7 +2044,7 @@ project
       ├── array-flatten [as=array:31]
       │    └── project
       │         ├── columns: max:21
-      │         ├── group-by
+      │         ├── group-by (hash)
       │         │    ├── columns: b:20
       │         │    ├── grouping columns: b:20
       │         │    └── project
@@ -2058,7 +2058,7 @@ project
       └── array-flatten [as=array:32]
            └── project
                 ├── columns: max:28
-                └── group-by
+                └── group-by (hash)
                      ├── columns: max:28 b:29
                      ├── grouping columns: b:29
                      ├── project
@@ -2106,7 +2106,7 @@ project
  │    │                   ├── columns: max:23
  │    │                   └── project
  │    │                        ├── columns: max:23
- │    │                        └── group-by
+ │    │                        └── group-by (hash)
  │    │                             ├── columns: max:23 b:24
  │    │                             ├── grouping columns: b:24
  │    │                             ├── project
@@ -2186,7 +2186,7 @@ error (42803): aggregate functions are not allowed in WHERE
 build
 SELECT s FROM a WHERE (SELECT count(i) >= 100 FROM a) GROUP BY s
 ----
-group-by
+group-by (hash)
  ├── columns: s:4
  ├── grouping columns: s:4
  └── project

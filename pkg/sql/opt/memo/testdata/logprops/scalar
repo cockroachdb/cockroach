@@ -216,7 +216,7 @@ INNER JOIN (SELECT * FROM uv WHERE now() > '2018-01-01')
 ON x=u
 GROUP BY div
 ----
-group-by
+group-by (hash)
  ├── columns: sum:11(decimal!null) div:5(decimal)
  ├── grouping columns: div:5(decimal)
  ├── stable

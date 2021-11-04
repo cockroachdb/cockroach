@@ -283,7 +283,7 @@ CREATE TABLE vehicles (
 opt
 select v.owner_id, count(*) from rides r, vehicles v where v.id = r.vehicle_id group by v.owner_id
 ----
-group-by
+group-by (hash)
  ├── columns: owner_id:14 count:20!null
  ├── grouping columns: owner_id:14
  ├── key: (14)
@@ -327,7 +327,7 @@ CREATE TABLE data (
 opt
 SELECT id, sum(value) FROM data GROUP BY id
 ----
-group-by
+group-by (streaming)
  ├── columns: id:1 sum:16
  ├── grouping columns: id:1
  ├── internal-ordering: +1

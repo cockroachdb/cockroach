@@ -5303,7 +5303,7 @@ GROUP BY n.name, n.geom
 project
  ├── columns: name:16!null popn_per_sqkm:22
  ├── immutable
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: name:16!null n.geom:17!null sum:21
  │    ├── grouping columns: name:16!null n.geom:17!null
  │    ├── immutable
@@ -5901,7 +5901,7 @@ with &1 (q)
  └── project
       ├── columns: count:43 count_rows:31!null
       ├── immutable
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: n.boroname:25 count_rows:31!null
       │    ├── grouping columns: n.boroname:25
       │    ├── immutable

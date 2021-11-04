@@ -73,6 +73,7 @@ regions: <hidden>
       KV contention time: 0µs
       KV rows read: 5
       KV bytes read: 40 B
+      estimated max memory allocated: 0 B
       missing stats
       table: kv@kv_pkey
       spans: FULL SCAN
@@ -95,6 +96,8 @@ regions: <hidden>
 │ nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 5
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
 │ equality: (k) = (k)
 │ left cols are key
 │ right cols are key
@@ -107,6 +110,7 @@ regions: <hidden>
 │     KV contention time: 0µs
 │     KV rows read: 5
 │     KV bytes read: 40 B
+│     estimated max memory allocated: 0 B
 │     missing stats
 │     table: kv@kv_pkey
 │     spans: FULL SCAN
@@ -119,6 +123,7 @@ regions: <hidden>
       KV contention time: 0µs
       KV rows read: 5
       KV bytes read: 40 B
+      estimated max memory allocated: 0 B
       missing stats
       table: kw@kw_pkey
       spans: FULL SCAN

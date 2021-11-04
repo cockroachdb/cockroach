@@ -41,7 +41,7 @@ SELECT avg(f) FROM a WHERE i=5 GROUP BY i+(random()*10)::int, i+1
 project
  ├── columns: avg:8
  ├── volatile
- └── group-by
+ └── group-by (hash)
       ├── columns: avg:8 column9:9
       ├── grouping columns: column9:9
       ├── volatile

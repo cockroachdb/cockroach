@@ -49,7 +49,7 @@ sort
  ├── key: (9,10)
  ├── fd: (9,10)-->(19,20,22,24-28)
  ├── ordering: +9,+10
- └── group-by
+ └── group-by (hash)
       ├── save-table-name: q1_group_by_2
       ├── columns: l_returnflag:9(char!null) l_linestatus:10(char!null) sum:19(float!null) sum:20(float!null) sum:22(float!null) sum:24(float!null) avg:25(float!null) avg:26(float!null) avg:27(float!null) count_rows:28(int!null)
       ├── grouping columns: l_returnflag:9(char!null) l_linestatus:10(char!null)

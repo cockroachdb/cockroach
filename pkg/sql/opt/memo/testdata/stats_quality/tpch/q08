@@ -71,7 +71,7 @@ sort
       ├── stats: [rows=728.862489, distinct(77)=728.862489, null(77)=0, distinct(82)=728.862489, null(82)=0]
       ├── key: (77)
       ├── fd: (77)-->(82)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── save-table-name: q8_group_by_3
       │    ├── columns: o_year:77(float) sum:80(float!null) sum:81(float!null)
       │    ├── grouping columns: o_year:77(float)

@@ -192,7 +192,7 @@ SELECT 1 r FROM kv GROUP BY v
 ----
 project
  ├── columns: r:7!null
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: v:2
  │    ├── grouping columns: v:2
  │    └── project
@@ -287,7 +287,7 @@ error (22023): unsupported comparison operator: <string> < <int>
 build
 SELECT count(*), k FROM kv GROUP BY k
 ----
-group-by
+group-by (hash)
  ├── columns: count:7!null k:1!null
  ├── grouping columns: k:1!null
  ├── project
@@ -301,7 +301,7 @@ group-by
 build
 SELECT count(*), k FROM kv GROUP BY 2
 ----
-group-by
+group-by (hash)
  ├── columns: count:7!null k:1!null
  ├── grouping columns: k:1!null
  ├── project
@@ -355,7 +355,7 @@ error (42601): non-integer constant in GROUP BY: 'a'
 build
 SELECT count(*), kv.s FROM kv GROUP BY s
 ----
-group-by
+group-by (hash)
  ├── columns: count:7!null s:4
  ├── grouping columns: s:4
  ├── project
@@ -368,7 +368,7 @@ group-by
 build
 SELECT count(*), s FROM kv GROUP BY kv.s
 ----
-group-by
+group-by (hash)
  ├── columns: count:7!null s:4
  ├── grouping columns: s:4
  ├── project
@@ -381,7 +381,7 @@ group-by
 build
 SELECT count(*), kv.s FROM kv GROUP BY kv.s
 ----
-group-by
+group-by (hash)
  ├── columns: count:7!null s:4
  ├── grouping columns: s:4
  ├── project
@@ -394,7 +394,7 @@ group-by
 build
 SELECT count(*), s FROM kv GROUP BY s
 ----
-group-by
+group-by (hash)
  ├── columns: count:7!null s:4
  ├── grouping columns: s:4
  ├── project
@@ -408,7 +408,7 @@ group-by
 build
 SELECT v, count(*), w FROM kv GROUP BY v, w
 ----
-group-by
+group-by (hash)
  ├── columns: v:2 count:7!null w:3
  ├── grouping columns: v:2 w:3
  ├── project
@@ -422,7 +422,7 @@ group-by
 build
 SELECT v, count(*), w FROM kv GROUP BY 1, 3
 ----
-group-by
+group-by (hash)
  ├── columns: v:2 count:7!null w:3
  ├── grouping columns: v:2 w:3
  ├── project
@@ -436,7 +436,7 @@ group-by
 build
 SELECT count(*), upper(s) FROM kv GROUP BY upper(s)
 ----
-group-by
+group-by (hash)
  ├── columns: count:7!null upper:8
  ├── grouping columns: column8:8
  ├── project
@@ -454,7 +454,7 @@ SELECT count(*) FROM kv GROUP BY 1+2
 ----
 project
  ├── columns: count:7!null
- └── group-by
+ └── group-by (hash)
       ├── columns: count_rows:7!null column8:8!null
       ├── grouping columns: column8:8!null
       ├── project
@@ -471,7 +471,7 @@ SELECT count(*) FROM kv GROUP BY length('abc')
 ----
 project
  ├── columns: count:7!null
- └── group-by
+ └── group-by (hash)
       ├── columns: count_rows:7!null column8:8
       ├── grouping columns: column8:8
       ├── project
@@ -489,7 +489,7 @@ SELECT count(*), upper(s) FROM kv GROUP BY s
 ----
 project
  ├── columns: count:7!null upper:8
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: s:4 count_rows:7!null
  │    ├── grouping columns: s:4
  │    ├── project
@@ -511,7 +511,7 @@ error (42803): column "s" must appear in the GROUP BY clause or be used in an ag
 build
 SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
-group-by
+group-by (hash)
  ├── columns: count:7!null r:8
  ├── grouping columns: column8:8
  ├── project
@@ -530,7 +530,7 @@ SELECT count(*), k+v AS r FROM kv GROUP BY k, v
 ----
 project
  ├── columns: count:7!null r:8
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: k:1!null v:2 count_rows:7!null
  │    ├── grouping columns: k:1!null v:2
  │    ├── project
@@ -566,7 +566,7 @@ error (42803): max(): avg(): aggregate function calls cannot be nested
 build
 SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM kv GROUP BY kv.v + kv.w
 ----
-group-by
+group-by (hash)
  ├── columns: count_1:7!null lx:8
  ├── grouping columns: column8:8
  ├── project
@@ -643,7 +643,7 @@ SELECT v, count(k) FROM kv GROUP BY v ORDER BY v
 sort
  ├── columns: v:2 count:7!null
  ├── ordering: +2
- └── group-by
+ └── group-by (hash)
       ├── columns: v:2 count:7!null
       ├── grouping columns: v:2
       ├── project
@@ -660,7 +660,7 @@ SELECT v, count(k) FROM kv GROUP BY v ORDER BY v DESC
 sort
  ├── columns: v:2 count:7!null
  ├── ordering: -2
- └── group-by
+ └── group-by (hash)
       ├── columns: v:2 count:7!null
       ├── grouping columns: v:2
       ├── project
@@ -677,7 +677,7 @@ SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k) DESC
 sort
  ├── columns: v:2 count:7!null
  ├── ordering: -7
- └── group-by
+ └── group-by (hash)
       ├── columns: v:2 count:7!null
       ├── grouping columns: v:2
       ├── project
@@ -696,7 +696,7 @@ sort
  ├── ordering: +8
  └── project
       ├── columns: column8:8 v:2 count:7!null
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: v:2 count:7!null
       │    ├── grouping columns: v:2
       │    ├── project
@@ -715,7 +715,7 @@ SELECT v FROM kv GROUP BY v ORDER BY sum(k)
 sort
  ├── columns: v:2  [hidden: sum:7!null]
  ├── ordering: +7
- └── group-by
+ └── group-by (hash)
       ├── columns: v:2 sum:7!null
       ├── grouping columns: v:2
       ├── project
@@ -732,7 +732,7 @@ SELECT v, count(k) FROM kv GROUP BY v ORDER BY 1 DESC
 sort
  ├── columns: v:2 count:7!null
  ├── ordering: -2
- └── group-by
+ └── group-by (hash)
       ├── columns: v:2 count:7!null
       ├── grouping columns: v:2
       ├── project
@@ -794,7 +794,7 @@ scalar-group-by
 build
 SELECT upper(s), count(DISTINCT k), count(DISTINCT v), count(DISTINCT (v)) FROM kv GROUP BY upper(s)
 ----
-group-by
+group-by (hash)
  ├── columns: upper:9 count:7!null count:8!null count:8!null
  ├── grouping columns: column9:9
  ├── project
@@ -1703,7 +1703,7 @@ SELECT 1 r FROM kv GROUP BY kv.*;
 ----
 project
  ├── columns: r:7!null
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: k:1!null v:2 w:3 s:4
  │    ├── grouping columns: k:1!null v:2 w:3 s:4
  │    └── project
@@ -1744,7 +1744,7 @@ sort
  ├── ordering: +2
  └── project
       ├── columns: to_hex:9 b:2 xor_agg:8
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: b:2 xor_agg:7 xor_agg:8
       │    ├── grouping columns: b:2
       │    ├── project
@@ -1858,7 +1858,7 @@ SELECT (b, a) AS r FROM ab GROUP BY (b, a)
 ----
 project
  ├── columns: r:5
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: a:1!null b:2
  │    ├── grouping columns: a:1!null b:2
  │    └── project
@@ -1874,7 +1874,7 @@ SELECT min(y), (b, a) AS r
 ----
 project
  ├── columns: min:10 r:11
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: a:1!null b:2 x:5 min:10
  │    ├── grouping columns: a:1!null b:2 x:5
  │    ├── project
@@ -1898,7 +1898,7 @@ SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k)
 sort
  ├── columns: v:2 count:7!null
  ├── ordering: +7
- └── group-by
+ └── group-by (hash)
       ├── columns: v:2 count:7!null
       ├── grouping columns: v:2
       ├── project
@@ -1915,7 +1915,7 @@ SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
 sort
  ├── columns: v:2 count:7!null
  ├── ordering: +7
- └── group-by
+ └── group-by (hash)
       ├── columns: v:2 count_rows:7!null
       ├── grouping columns: v:2
       ├── project
@@ -1931,7 +1931,7 @@ SELECT v, count(1) FROM kv GROUP BY v ORDER BY count(1)
 sort
  ├── columns: v:2 count:8!null
  ├── ordering: +8
- └── group-by
+ └── group-by (hash)
       ├── columns: v:2 count:8!null
       ├── grouping columns: v:2
       ├── project
@@ -1949,7 +1949,7 @@ SELECT (k+v)/(v+w) AS r FROM kv GROUP BY k+v, v+w;
 ----
 project
  ├── columns: r:9
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: column7:7 column8:8
  │    ├── grouping columns: column7:7 column8:8
  │    └── project
@@ -1968,7 +1968,7 @@ SELECT sum(t.kv.w), t.kv.v FROM t.kv GROUP BY v, kv.k * w
 ----
 project
  ├── columns: sum:7 v:2
- └── group-by
+ └── group-by (hash)
       ├── columns: t.public.kv.v:2 sum:7 column8:8
       ├── grouping columns: t.public.kv.v:2 column8:8
       ├── project
@@ -1986,7 +1986,7 @@ SELECT sum(t.kv.w), lower(s), t.kv.v + k * t.kv.w AS r, t.kv.v FROM t.kv GROUP B
 ----
 project
  ├── columns: sum:7 lower:8 r:10 v:2
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: t.public.kv.v:2 sum:7 column8:8 column9:9
  │    ├── grouping columns: t.public.kv.v:2 column8:8 column9:9
  │    ├── project
@@ -2008,7 +2008,7 @@ SELECT b1.b AND abc.c AND b2.b AS r FROM bools b1, bools b2, abc GROUP BY b1.b A
 ----
 project
  ├── columns: r:16
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: b2.b:5 column15:15
  │    ├── grouping columns: b2.b:5 column15:15
  │    └── project
@@ -2040,7 +2040,7 @@ SELECT b1.b OR abc.c OR b2.b AS r FROM bools b1, bools b2, abc GROUP BY b1.b OR 
 ----
 project
  ├── columns: r:16
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: b2.b:5 column15:15
  │    ├── grouping columns: b2.b:5 column15:15
  │    └── project
@@ -2072,7 +2072,7 @@ SELECT k % w % v AS r FROM kv GROUP BY k % w, v
 ----
 project
  ├── columns: r:8
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: v:2 column7:7
  │    ├── grouping columns: v:2 column7:7
  │    └── project
@@ -2089,7 +2089,7 @@ SELECT concat(concat(s, a), a) FROM kv, abc GROUP BY concat(s, a), a
 ----
 project
  ├── columns: concat:14
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: a:7!null column13:13
  │    ├── grouping columns: a:7!null column13:13
  │    └── project
@@ -2116,7 +2116,7 @@ SELECT k < w AND v != 5 AS r FROM kv GROUP BY k < w, v
 ----
 project
  ├── columns: r:8
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: v:2 column7:7
  │    ├── grouping columns: v:2 column7:7
  │    └── project
@@ -2142,7 +2142,7 @@ SELECT a.bar @> b.baz AND b.baz @> b.baz AS r FROM foo AS a, foo AS b GROUP BY a
 ----
 project
  ├── columns: r:12
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: b.baz:7 column11:11
  │    ├── grouping columns: b.baz:7 column11:11
  │    └── project
@@ -2169,7 +2169,7 @@ SELECT b.baz <@ a.bar AND b.baz <@ b.baz AS r FROM foo AS a, foo AS b GROUP BY b
 ----
 project
  ├── columns: r:12
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: b.baz:7 column11:11
  │    ├── grouping columns: b.baz:7 column11:11
  │    └── project
@@ -2196,7 +2196,7 @@ SELECT date_trunc('second', a.t) - date_trunc('minute', b.t) AS r FROM times a, 
 ----
 project
  ├── columns: r:9
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: column7:7 column8:8
  │    ├── grouping columns: column7:7 column8:8
  │    └── project
@@ -2223,7 +2223,7 @@ error (42803): column "t" must appear in the GROUP BY clause or be used in an ag
 build
 SELECT NOT b AS r FROM bools GROUP BY NOT b
 ----
-group-by
+group-by (hash)
  ├── columns: r:5
  ├── grouping columns: column5:5
  └── project
@@ -2243,7 +2243,7 @@ SELECT NOT b AS r FROM bools GROUP BY b
 ----
 project
  ├── columns: r:5
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: b:1
  │    ├── grouping columns: b:1
  │    └── project
@@ -2258,7 +2258,7 @@ SELECT +k * (-w) AS r FROM kv GROUP BY +k, -w
 ----
 project
  ├── columns: r:8
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: k:1!null column7:7
  │    ├── grouping columns: k:1!null column7:7
  │    └── project
@@ -2275,7 +2275,7 @@ SELECT k * (-w) FROM kv GROUP BY +k, -w
 ----
 project
  ├── columns: "?column?":8
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: k:1!null column7:7
  │    ├── grouping columns: k:1!null column7:7
  │    └── project
@@ -2292,7 +2292,7 @@ SELECT +k * (-w) AS r FROM kv GROUP BY k, w
 ----
 project
  ├── columns: r:7
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: k:1!null w:3
  │    ├── grouping columns: k:1!null w:3
  │    └── project
@@ -2307,7 +2307,7 @@ SELECT 1 + min(v*2) AS r FROM kv GROUP BY k+3
 ----
 project
  ├── columns: r:10
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: min:8 column9:9!null
  │    ├── grouping columns: column9:9!null
  │    ├── project
@@ -2328,7 +2328,7 @@ SELECT count(*) FROM kv GROUP BY k, k
 ----
 project
  ├── columns: count:7!null
- └── group-by
+ └── group-by (hash)
       ├── columns: k:1!null count_rows:7!null
       ├── grouping columns: k:1!null
       ├── project
@@ -2343,7 +2343,7 @@ SELECT count(upper(s)) FROM kv GROUP BY upper(s)
 ----
 project
  ├── columns: count:8!null
- └── group-by
+ └── group-by (hash)
       ├── columns: column7:7 count:8!null
       ├── grouping columns: column7:7
       ├── project
@@ -2361,7 +2361,7 @@ SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
 ----
 project
  ├── columns: sum:13!null
- └── group-by
+ └── group-by (hash)
       ├── columns: k:1!null v:2 w:3 s:4 sum:13!null
       ├── grouping columns: k:1!null v:2 w:3 s:4
       ├── project
@@ -2493,7 +2493,7 @@ scalar-group-by
 build
 SELECT y, count(*) FILTER (WHERE x > 5) FROM xyz GROUP BY y
 ----
-group-by
+group-by (hash)
  ├── columns: y:2 count:8!null
  ├── grouping columns: y:2
  ├── project
@@ -2524,7 +2524,7 @@ sort
  ├── ordering: +7
  └── project
       ├── columns: max:7!null
-      └── group-by
+      └── group-by (hash)
            ├── columns: v:2 max:7!null
            ├── grouping columns: v:2
            ├── project
@@ -2543,7 +2543,7 @@ sort
  ├── ordering: +7
  └── project
       ├── columns: max:7!null
-      └── group-by
+      └── group-by (hash)
            ├── columns: v:2 max:7!null
            ├── grouping columns: v:2
            ├── project
@@ -2562,7 +2562,7 @@ sort
  ├── ordering: +7
  └── project
       ├── columns: max:7!null
-      └── group-by
+      └── group-by (hash)
            ├── columns: v:2 max:7!null
            ├── grouping columns: v:2
            ├── project
@@ -2581,7 +2581,7 @@ sort
  ├── ordering: +7
  └── project
       ├── columns: max:7!null
-      └── group-by
+      └── group-by (hash)
            ├── columns: v:2 max:7!null
            ├── grouping columns: v:2
            ├── project
@@ -2600,7 +2600,7 @@ sort
  ├── ordering: +8
  └── project
       ├── columns: mk2:8!null max:7!null
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: v:2 max:7!null
       │    ├── grouping columns: v:2
       │    ├── project
@@ -2621,7 +2621,7 @@ SELECT max((k+v)/(k-v)) AS r, (k+v)*(k-v) AS s FROM kv GROUP BY k+v, k-v
 ----
 project
  ├── columns: r:8 s:11
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: max:8 column9:9 column10:10
  │    ├── grouping columns: column9:9 column10:10
  │    ├── project
@@ -2643,7 +2643,7 @@ SELECT max((k+v)/(k-v)) AS r, (k+v)*(k-v) AS s FROM kv GROUP BY k+v, (k+v)/(k-v)
 ----
 project
  ├── columns: r:8 s:10
- └── group-by
+ └── group-by (hash)
       ├── columns: column7:7 max:8 column9:9 column10:10
       ├── grouping columns: column7:7 column9:9 column10:10
       ├── project
@@ -3659,7 +3659,7 @@ FROM
 GROUP BY
 firstCol, secondCol, thirdCol;
 ----
-group-by
+group-by (hash)
  ├── columns: firstcol:1(int!null) secondcol:2(int) thirdcol:2(int)
  ├── grouping columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
  ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
@@ -3794,7 +3794,7 @@ SELECT array_agg(col1 ORDER BY col1) FROM tab GROUP BY col2
 ----
 project
  ├── columns: array_agg:7
- └── group-by
+ └── group-by (hash)
       ├── columns: col2:2!null array_agg:7
       ├── grouping columns: col2:2!null
       ├── window partition=(2) ordering=+1
@@ -3813,7 +3813,7 @@ SELECT array_agg(col1 ORDER BY col1), array_agg(col3 ORDER BY col1) FROM tab GRO
 ----
 project
  ├── columns: array_agg:7 array_agg:8
- └── group-by
+ └── group-by (hash)
       ├── columns: col2:2!null array_agg:7 array_agg:8
       ├── grouping columns: col2:2!null
       ├── window partition=(2) ordering=+1
@@ -3838,7 +3838,7 @@ project
  ├── columns: array_agg:7 array_agg:8
  └── select
       ├── columns: col2:2!null array_agg:7 array_agg:8
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: col2:2!null array_agg:7 array_agg:8
       │    ├── grouping columns: col2:2!null
       │    ├── window partition=(2) ordering=+1
@@ -3900,7 +3900,7 @@ SELECT array_agg(col1 ORDER BY col1) FROM tab GROUP BY upper(col3)
 ----
 project
  ├── columns: array_agg:7
- └── group-by
+ └── group-by (hash)
       ├── columns: array_agg:7 column8:8
       ├── grouping columns: column8:8
       ├── window partition=(8) ordering=+1
@@ -3921,7 +3921,7 @@ project
 build
 SELECT array_agg(col1 ORDER BY col1), upper(col3) FROM tab GROUP BY upper(col3)
 ----
-group-by
+group-by (hash)
  ├── columns: array_agg:7 upper:8
  ├── grouping columns: column8:8
  ├── window partition=(8) ordering=+1
@@ -3944,7 +3944,7 @@ SELECT array_agg(lower(col3)) FROM tab GROUP BY upper(col3)
 ----
 project
  ├── columns: array_agg:8
- └── group-by
+ └── group-by (hash)
       ├── columns: array_agg:8 column9:9
       ├── grouping columns: column9:9
       ├── project
@@ -4031,7 +4031,7 @@ SELECT v FROM kv GROUP BY k
 ----
 project
  ├── columns: v:2
- └── group-by
+ └── group-by (hash)
       ├── columns: k:1!null v:2
       ├── grouping columns: k:1!null v:2
       └── project
@@ -4045,7 +4045,7 @@ SELECT v FROM kv GROUP BY k, v
 ----
 project
  ├── columns: v:2
- └── group-by
+ └── group-by (hash)
       ├── columns: k:1!null v:2
       ├── grouping columns: k:1!null v:2
       └── project
@@ -4058,7 +4058,7 @@ SELECT count(*), k+v FROM kv GROUP BY k
 ----
 project
  ├── columns: count:7!null "?column?":8
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: k:1!null v:2 count_rows:7!null
  │    ├── grouping columns: k:1!null v:2
  │    ├── project
@@ -4077,7 +4077,7 @@ project
  ├── columns: count:7!null
  └── select
       ├── columns: k:1!null v:2!null count_rows:7!null
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: k:1!null v:2 count_rows:7!null
       │    ├── grouping columns: k:1!null v:2
       │    ├── project
@@ -4092,7 +4092,7 @@ project
 build
 SELECT k, v, count(*) FROM kv JOIN ab ON a=k GROUP BY k
 ----
-group-by
+group-by (hash)
  ├── columns: k:1!null v:2 count:11!null
  ├── grouping columns: k:1!null v:2
  ├── project
@@ -4119,7 +4119,7 @@ SELECT x, y FROM abxy GROUP BY a, b
 ----
 project
  ├── columns: x:3 y:4
- └── group-by
+ └── group-by (hash)
       ├── columns: a:1!null b:2!null x:3 y:4
       ├── grouping columns: a:1!null b:2!null x:3 y:4
       └── project
@@ -4133,7 +4133,7 @@ SELECT x, y FROM abxy GROUP BY x, a, b
 ----
 project
  ├── columns: x:3 y:4
- └── group-by
+ └── group-by (hash)
       ├── columns: a:1!null b:2!null x:3 y:4
       ├── grouping columns: a:1!null b:2!null x:3 y:4
       └── project
@@ -4146,7 +4146,7 @@ SELECT x, y FROM abxy GROUP BY x, y, a, b
 ----
 project
  ├── columns: x:3 y:4
- └── group-by
+ └── group-by (hash)
       ├── columns: a:1!null b:2!null x:3 y:4
       ├── grouping columns: a:1!null b:2!null x:3 y:4
       └── project
@@ -4159,7 +4159,7 @@ SELECT x, y FROM abxy NATURAL JOIN ab GROUP BY a, b
 ----
 project
  ├── columns: x:3 y:4
- └── group-by
+ └── group-by (hash)
       ├── columns: abxy.a:1!null abxy.b:2!null x:3 y:4
       ├── grouping columns: abxy.a:1!null abxy.b:2!null x:3 y:4
       └── project
@@ -4180,7 +4180,7 @@ SELECT x, y FROM abxy NATURAL JOIN ab GROUP BY a, b, x
 ----
 project
  ├── columns: x:3 y:4
- └── group-by
+ └── group-by (hash)
       ├── columns: abxy.a:1!null abxy.b:2!null x:3 y:4
       ├── grouping columns: abxy.a:1!null abxy.b:2!null x:3 y:4
       └── project
@@ -4198,7 +4198,7 @@ project
 build
 SELECT abxy.*, ab.* FROM abxy, ab GROUP BY abxy.a, abxy.b, ab.a
 ----
-group-by
+group-by (hash)
  ├── columns: a:1!null b:2!null x:3 y:4 a:7!null b:8
  ├── grouping columns: abxy.a:1!null abxy.b:2!null x:3 y:4 ab.a:7!null ab.b:8
  └── project
@@ -4223,7 +4223,7 @@ SELECT x FROM (SELECT a, b, x FROM abxy EXCEPT SELECT a, b, 1 FROM ab) GROUP BY 
 ----
 project
  ├── columns: x:3
- └── group-by
+ └── group-by (hash)
       ├── columns: abxy.a:1!null abxy.b:2 x:3
       ├── grouping columns: abxy.a:1!null abxy.b:2 x:3
       └── except
@@ -4249,7 +4249,7 @@ SELECT v, w FROM kv FULL JOIN ab ON k=a GROUP BY k
 ----
 project
  ├── columns: v:2 w:3
- └── group-by
+ └── group-by (hash)
       ├── columns: k:1 v:2 w:3
       ├── grouping columns: k:1 v:2 w:3
       └── project
@@ -4273,7 +4273,7 @@ error (42803): column "table_schema" must appear in the GROUP BY clause or be us
 build
 SELECT x + 1 AS z FROM abxy GROUP BY z
 ----
-group-by
+group-by (hash)
  ├── columns: z:7
  ├── grouping columns: z:7
  └── project
@@ -4289,7 +4289,7 @@ SELECT (x % 10) AS x FROM abxy GROUP BY x
 ----
 project
  ├── columns: x:7
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: abxy.x:3
  │    ├── grouping columns: abxy.x:3
  │    └── project
@@ -4312,7 +4312,7 @@ project
       └── subquery [as=x:13]
            └── max1-row
                 ├── columns: v:8
-                └── group-by
+                └── group-by (hash)
                      ├── columns: v:8
                      ├── grouping columns: v:8
                      └── project
@@ -4329,7 +4329,7 @@ error (42803): sum(): aggregate functions are not allowed in GROUP BY
 build
 SELECT x + 1 FROM abxy GROUP BY "?column?"
 ----
-group-by
+group-by (hash)
  ├── columns: "?column?":7
  ├── grouping columns: "?column?":7
  └── project
@@ -4361,7 +4361,7 @@ error (42702): GROUP BY "x" is ambiguous
 build
 SELECT (x + 1) AS u, (x + 1) AS u FROM abxy GROUP BY u
 ----
-group-by
+group-by (hash)
  ├── columns: u:7 u:7
  ├── grouping columns: u:7
  └── project
@@ -4382,7 +4382,7 @@ SELECT sum(x + 1) AS x, sum(y + 1) AS x FROM abxy GROUP BY x
 ----
 project
  ├── columns: x:8 x:10
- └── group-by
+ └── group-by (hash)
       ├── columns: x:3 sum:8 sum:10
       ├── grouping columns: x:3
       ├── project
@@ -4420,7 +4420,7 @@ project
  ├── columns: sum:7
  └── select
       ├── columns: t.y:4 sum:7
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: t.y:4 sum:7
       │    ├── grouping columns: t.y:4
       │    ├── project
@@ -4475,7 +4475,7 @@ GROUP BY ten
 ----
 select
  ├── columns: ten:5 sum:20
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: a.ten:5 sum:20
  │    ├── grouping columns: a.ten:5
  │    ├── project
@@ -4698,7 +4698,7 @@ project
  ├── columns: c0:1(int)
  └── select
       ├── columns: c0:1(int) min:6(float!null)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: c0:1(int) min:6(float)
       │    ├── grouping columns: c0:1(int)
       │    ├── project
