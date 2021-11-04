@@ -135,7 +135,7 @@ type Registry struct {
 		syncutil.Mutex
 
 		// adoptedJobs holds a map from job id to its context cancel func and epoch.
-		// It contains the that are adopted and rpobably being run. One exception is
+		// It contains the jobs that are adopted and probably being run. One exception is
 		// jobs scheduled inside a transaction, they will show in this map but will
 		// only be run when the transaction commits.
 		adoptedJobs map[jobspb.JobID]*adoptedJob
@@ -150,7 +150,7 @@ type Registry struct {
 // function that must be called once the caller is done with the planner.
 //
 // TODO(mjibson): Can we do something to avoid passing an interface{} here
-// that must be type casted in a Resumer? It cannot be done here because
+// that must be cast in a Resumer? It cannot be done here because
 // JobExecContext lives in the sql package, which would create a dependency
 // cycle if listed here. Furthermore, moving JobExecContext into a common
 // subpackage like sqlbase is difficult because of the amount of sql-only
@@ -236,7 +236,7 @@ func (r *Registry) CurrentlyRunningJobs() []jobspb.JobID {
 	return jobs
 }
 
-// ID returns a unique during the lifetume of the registry id that is
+// ID returns a unique during the lifetime of the registry id that is
 // used for keying sqlliveness claims held by the registry.
 func (r *Registry) ID() base.SQLInstanceID {
 	return r.nodeID.SQLInstanceID()
@@ -1241,7 +1241,10 @@ func (r *Registry) stepThroughStateMachine(
 		if err := job.canceled(ctx, nil /* txn */, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as canceled then it will be
 			// restarted during the next adopt loop and reverting will be retried.
-			return errors.Wrapf(err, "job %d: could not mark as canceled: %v", job.ID(), jobErr)
+			return errors.WithSecondaryError(
+				errors.Wrapf(err, "job %d: could not mark as canceled", job.ID()),
+				jobErr,
+			)
 		}
 		telemetry.Inc(TelemetryMetrics[jobType].Canceled)
 		return errors.WithSecondaryError(errors.Errorf("job %s", status), jobErr)
@@ -1264,7 +1267,10 @@ func (r *Registry) stepThroughStateMachine(
 		if err := job.reverted(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as reverting then it will be
 			// restarted during the next adopt loop and it will be retried.
-			return errors.Wrapf(err, "job %d: could not mark as reverting: %s", job.ID(), jobErr)
+			return errors.WithSecondaryError(
+				errors.Wrapf(err, "job %d: could not mark as reverting", job.ID()),
+				jobErr,
+			)
 		}
 		onFailOrCancelCtx := logtags.AddTag(ctx, "job", job.ID())
 		var err error
@@ -1301,7 +1307,10 @@ func (r *Registry) stepThroughStateMachine(
 		if err := job.failed(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
 			// restarted during the next adopt loop and reverting will be retried.
-			return errors.Wrapf(err, "job %d: could not mark as failed: %s", job.ID(), jobErr)
+			return errors.WithSecondaryError(
+				errors.Wrapf(err, "job %d: could not mark as failed", job.ID()),
+				jobErr,
+			)
 		}
 		telemetry.Inc(TelemetryMetrics[jobType].Failed)
 		return jobErr
@@ -1316,7 +1325,10 @@ func (r *Registry) stepThroughStateMachine(
 		if err := job.revertFailed(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
 			// restarted during the next adopt loop and reverting will be retried.
-			return errors.Wrapf(err, "job %d: could not mark as revert field: %s", job.ID(), jobErr)
+			return errors.WithSecondaryError(
+				errors.Wrapf(err, "job %d: could not mark as revert field", job.ID()),
+				jobErr,
+			)
 		}
 		return jobErr
 	default:
@@ -1401,7 +1413,7 @@ func (r *Registry) RetryMaxDelay() float64 {
 	return retryMaxDelaySetting.Get(&r.settings.SV).Seconds()
 }
 
-// maybeRecordRetriableExeuctionFailure will record a
+// maybeRecordExecutionFailure will record a
 // RetriableExecutionFailureError into the job payload.
 func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j *Job) {
 	var efe *retriableExecutionError

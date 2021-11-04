@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb:with-mocks",
+        "//pkg/settings",
         "//pkg/spanconfig",
         "//pkg/util/interval",
         "//pkg/util/log",
@@ -28,6 +29,7 @@ go_test(
         "//pkg/roachpb:with-mocks",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigtestutils",
+        "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_datadriven//:datadriven",

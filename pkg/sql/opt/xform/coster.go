@@ -843,7 +843,20 @@ func (c *coster) computeMergeJoinCost(join *memo.MergeJoinExpr) memo.Cost {
 	leftRowCount := join.Left.Relational().Stats.RowCount
 	rightRowCount := join.Right.Relational().Stats.RowCount
 
-	cost := memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
+	if (join.Op() == opt.SemiJoinOp || join.Op() == opt.AntiJoinOp) && leftRowCount < rightRowCount {
+		// If we have a semi or an anti join, during the execbuilding we choose
+		// the relation with smaller cardinality to be on the right side, so we
+		// need to swap row counts accordingly.
+		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
+		// choosing a side.
+		leftRowCount, rightRowCount = rightRowCount, leftRowCount
+	}
+
+	// The vectorized merge join in some cases buffers rows from the right side
+	// whereas the left side is processed in a streaming fashion. To account for
+	// this difference, we multiply both row counts so that a join with the
+	// smaller right side is preferred to the symmetric join.
+	cost := memo.Cost(0.9*leftRowCount+1.1*rightRowCount) * cpuCostFactor
 
 	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntMap{})
 	cost += filterSetup
@@ -1192,9 +1205,10 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.R
 
 	// If this is a streaming GroupBy with a limit hint, l, we only need to
 	// process enough input rows to output l rows.
-	isStreaming := isStreamingAggregation(private, required)
-	if isStreaming && grouping.Op() == opt.GroupByOp && required.LimitHint > 0 {
+	streamingType := private.GroupingOrderType(&required.Ordering)
+	if (streamingType != memo.NoStreaming) && grouping.Op() == opt.GroupByOp && required.LimitHint > 0 {
 		inputRowCount = streamingGroupByInputLimitHint(inputRowCount, outputRowCount, required.LimitHint)
+		outputRowCount = math.Min(outputRowCount, required.LimitHint)
 	}
 
 	// Cost per row depends on the number of grouping columns and the number of
@@ -1206,7 +1220,7 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.R
 	//
 	// The cost is chosen so that it's always less than the cost to sort the
 	// input.
-	if groupingColCount > 0 && !isStreaming {
+	if groupingColCount > 0 && streamingType != memo.Streaming {
 		// Add the cost to build the hash table.
 		cost += memo.Cost(inputRowCount) * cpuCostFactor
 
@@ -1527,17 +1541,6 @@ func localityMatchScore(zone cat.Zone, locality roachpb.Locality) float64 {
 
 	// Weight the constraintScore twice as much as the lease score.
 	return (constraintScore*2 + leaseScore) / 3
-}
-
-// isStreamingAggregation returns true if the GroupingPrivate indicates that
-// streaming aggregation will be performed during execution with the required
-// physical properties. Currently, streaming aggregation is performed when all
-// the grouping columns are ordered. The execution engine does not support
-// streaming aggregation with partially ordered grouping columns.
-func isStreamingAggregation(g *memo.GroupingPrivate, required *physical.Required) bool {
-	groupingColCount := g.GroupingCols.Len()
-	return groupingColCount > 0 &&
-		groupingColCount == len(ordering.StreamingGroupingColOrdering(g, &required.Ordering))
 }
 
 // streamingGroupByLimitHint calculates an appropriate limit hint for the input

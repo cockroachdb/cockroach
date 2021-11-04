@@ -192,7 +192,7 @@ func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
 
 	prefix.Schema = sc
 	found, obj, err := tc.getByName(
-		ctx, txn, db, sc, objectName, flags.AvoidCached, flags.RequireMutable,
+		ctx, txn, db, sc, objectName, flags.AvoidCached, flags.RequireMutable, flags.AvoidSynthetic,
 	)
 	if !found || err != nil {
 		return prefix, nil, err

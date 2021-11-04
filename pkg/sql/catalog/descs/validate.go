@@ -33,6 +33,7 @@ func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *k
 	if tc.skipValidationOnWrite || !ValidateOnWriteEnabled.Get(&tc.settings.SV) {
 		return nil
 	}
+
 	descs := tc.uncommitted.getUncommittedDescriptorsForValidation()
 	if len(descs) == 0 {
 		return nil

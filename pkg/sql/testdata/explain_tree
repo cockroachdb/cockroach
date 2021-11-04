@@ -94,7 +94,7 @@ network usage: 0 B (0 messages)
         │ render cid: (cid)[int]
         │ render sum: (sum)[decimal]
         │
-        └── • group
+        └── • group (hash)
             │ columns: (cid int, sum decimal)
             │ estimated row count: 98 (missing stats)
             │ aggregate 0: sum(value)
@@ -127,7 +127,7 @@ children:
 - name: render
   attrs: []
   children:
-  - name: group
+  - name: group (hash)
     attrs:
     - key: group by
       value: cid

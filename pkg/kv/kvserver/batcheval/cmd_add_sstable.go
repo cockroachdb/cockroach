@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -29,7 +30,74 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.AddSSTable, DefaultDeclareKeys, EvalAddSSTable)
+	RegisterReadWriteCommand(roachpb.AddSSTable, declareKeysAddSSTable, EvalAddSSTable)
+}
+
+func declareKeysAddSSTable(
+	rs ImmutableRangeState,
+	header roachpb.Header,
+	req roachpb.Request,
+	latchSpans, lockSpans *spanset.SpanSet,
+) {
+	// AddSSTable violates MVCC and closed timestamp invariants, so the
+	// concurrency semantics deserve special attention.
+	//
+	// AddSSTable cannot be in a transaction, cannot write intents or tombstones,
+	// cannot be split across ranges, and is always alone in a batch.
+	//
+	// The KV pairs in the SST already have fixed MVCC timestamps, independent of
+	// the batch timestamp. Pushes by other txns or the closed timestamp do not
+	// affect the MVCC timestamps. They can be at any time (past or future), even
+	// below the closed timestamp, and by default they can replace existing
+	// versions or write below existing versions and intents. This violates MVCC,
+	// because history must be immutable, and the closed timestamp, because writes
+	// should never happen below it.
+	//
+	// DisallowShadowing=true will prevent writing to keys that already exist
+	// (with any timestamp), returning an error -- except if the last version is a
+	// tombstone with a timestamp below the written key or if the timestamp and
+	// value exactly match the incoming write (for idempotency). If an intent is
+	// found, WriteIntentError will be returned in order to resolve it and retry:
+	// if the intent was aborted or a tombstone the request may succeed, but if it
+	// was a committed value the request will fail. This still violates MVCC (it
+	// may write a key in the past whose absence has already been observed by a
+	// reader) and the closed timestamp (it may write a key below it).
+	//
+	// The request header's Key and EndKey are set to cover the first and last key
+	// in the SST. Below, we always declare write latches across this span for
+	// isolation from concurrent requests. If DisallowShadowing=true, we must also
+	// declare lock spans over this span for isolation from concurrent
+	// transactions, and return WriteIntentError for any encountered intents to
+	// resolve them. This is particularly relevant for IMPORT INTO, which imports
+	// into an offline table that may contain unresolved intents from previous
+	// transactions.
+	//
+	// Taking out latches/locks across the entire SST span is very coarse, and we
+	// could instead iterate over the SST and take out point latches/locks, but
+	// the cost is likely not worth it since AddSSTable is often used with
+	// unpopulated spans.
+	//
+	// AddSSTable callers must take extreme care to only write into key/time spans
+	// that have never been accessed by a past transaction, and will not be
+	// accessed by a concurrent transaction, or to make sure these accesses are
+	// safe. Below is a list of current operations that use AddSSTable and their
+	// characteristics:
+	//
+	// | Operation              | DisallowShadowing | Timestamp    | Isolation via     |
+	// |------------------------|-------------------|--------------|-------------------|
+	// | Import                 | true              | Now          | Offline table     |
+	// | CREATE TABLE AS SELECT | true              | Read TS      | Table descriptor  |
+	// | Materialized views     | true              | Read TS      | Table descriptor  |
+	// | Index backfills        | false             | Now          | Index descriptor  |
+	// | Restore (backup)       | true              | Key TS       | Table descriptor  |
+	// | Streaming replication  | false             | Key TS       | Offline tenant    |
+	//
+	args := req.(*roachpb.AddSSTableRequest)
+	if args.DisallowShadowing {
+		DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans)
+	} else {
+		DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans)
+	}
 }
 
 // EvalAddSSTable evaluates an AddSSTable command.
@@ -53,7 +121,10 @@ func EvalAddSSTable(
 	var skippedKVStats enginepb.MVCCStats
 	var err error
 	if args.DisallowShadowing {
-		if skippedKVStats, err = checkForKeyCollisions(ctx, readWriter, mvccStartKey, mvccEndKey, args.Data); err != nil {
+		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+		skippedKVStats, err = checkForKeyCollisions(
+			ctx, readWriter, mvccStartKey, mvccEndKey, args.Data, maxIntents)
+		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
 		}
 	}
@@ -226,6 +297,7 @@ func checkForKeyCollisions(
 	mvccStartKey storage.MVCCKey,
 	mvccEndKey storage.MVCCKey,
 	data []byte,
+	maxIntents int64,
 ) (enginepb.MVCCStats, error) {
 	// Create iterator over the existing data.
 	existingDataIter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: mvccEndKey.Key})
@@ -238,5 +310,5 @@ func checkForKeyCollisions(
 		return enginepb.MVCCStats{}, nil
 	}
 
-	return existingDataIter.CheckForKeyCollisions(data, mvccStartKey.Key, mvccEndKey.Key)
+	return existingDataIter.CheckForKeyCollisions(data, mvccStartKey.Key, mvccEndKey.Key, maxIntents)
 }

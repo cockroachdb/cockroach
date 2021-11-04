@@ -16,6 +16,7 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
+import { InlineAlert } from "src/components";
 
 import * as protos from "src/js/protos";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
@@ -325,9 +326,24 @@ export class Nodes extends React.Component<NodesProps, {}> {
     );
   }
 
+  requiresAdmin() {
+    const {
+      nodesSummary: { nodeLastError },
+    } = this.props;
+
+    return nodeLastError?.message === "this operation requires admin privilege";
+  }
+
   render() {
     const { nodesSummary } = this.props;
     const { nodeStatusByID } = nodesSummary;
+
+    if (this.requiresAdmin()) {
+      return (
+        <InlineAlert title="" message="This page requires admin privileges." />
+      );
+    }
+
     if (_.isEmpty(nodesSummary.nodeIDs)) {
       return loading;
     }

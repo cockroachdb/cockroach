@@ -15,7 +15,8 @@ SELECT crdb_internal.update_tenant_resource_limits(5, 1000, 100, 0, now(), 0)
 
 # TODO(radu): inspect internal tenant_usage state.
 
-# Note this just marks the tenant as dropped but does not call GC.
+# Note this marks the tenant as dropped. The GC will not delete the tenant
+# until after the ttl expires.
 query I
 SELECT crdb_internal.destroy_tenant(5)
 ----

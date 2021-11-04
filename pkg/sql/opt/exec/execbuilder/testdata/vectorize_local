@@ -55,6 +55,7 @@ regions: <hidden>
   KV contention time: 0µs
   KV rows read: 2,001
   KV bytes read: 16 KiB
+  estimated max memory allocated: 0 B
   missing stats
   table: a@a_pkey
   spans: FULL SCAN
@@ -92,6 +93,7 @@ regions: <hidden>
       KV contention time: 0µs
       KV rows read: 2
       KV bytes read: 16 B
+      estimated max memory allocated: 0 B
       estimated row count: 1 (100% of the table; stats collected <hidden> ago)
       table: c@sec
       spans: FULL SCAN
@@ -104,7 +106,7 @@ EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
 project
  ├── columns: a:1
  ├── stats: [rows=10]
- ├── cost: 1120.82
+ ├── cost: 1121.819
  ├── prune: (1)
  └── inner-join (merge)
       ├── columns: c.a:1 d.b:8
@@ -112,7 +114,7 @@ project
       ├── left ordering: +1
       ├── right ordering: +8
       ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
-      ├── cost: 1120.7
+      ├── cost: 1121.699
       ├── fd: (1)==(8), (8)==(1)
       ├── sort
       │    ├── columns: c.a:1
@@ -155,12 +157,16 @@ regions: <hidden>
 │ nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
 │ equality: (a) = (b)
 │
 ├── • sort
 │   │ nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 2
+│   │ estimated max memory allocated: 0 B
+│   │ estimated max sql temp disk usage: 0 B
 │   │ estimated row count: 1
 │   │ order: +a
 │   │
@@ -172,6 +178,7 @@ regions: <hidden>
 │         KV contention time: 0µs
 │         KV rows read: 2
 │         KV bytes read: 16 B
+│         estimated max memory allocated: 0 B
 │         estimated row count: 1 (100% of the table; stats collected <hidden> ago)
 │         table: c@sec
 │         spans: FULL SCAN
@@ -184,6 +191,7 @@ regions: <hidden>
       KV contention time: 0µs
       KV rows read: 2
       KV bytes read: 16 B
+      estimated max memory allocated: 0 B
       missing stats
       table: d@d_pkey
       spans: FULL SCAN
@@ -447,3 +455,28 @@ EXPLAIN (VEC) DELETE FROM t70438 WHERE k=3 OR v=6
       └ *colexec.SerialUnorderedSynchronizer
         ├ *colfetcher.ColBatchScan
         └ *colfetcher.ColBatchScan
+
+# Some tests for set-op cross joins.
+statement ok
+CREATE TABLE t ();
+CREATE TABLE u ();
+INSERT INTO t (rowid) VALUES (1), (2);
+INSERT INTO u (rowid) VALUES (1);
+
+query T
+EXPLAIN (VEC) SELECT * FROM t INTERSECT ALL SELECT * FROM u
+----
+│
+└ Node 1
+  └ *colexecjoin.crossJoiner
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (VEC) SELECT * FROM t EXCEPT ALL SELECT * FROM u
+----
+│
+└ Node 1
+  └ *colexecjoin.crossJoiner
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan

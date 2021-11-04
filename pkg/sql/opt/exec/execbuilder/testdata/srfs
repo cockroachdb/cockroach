@@ -431,7 +431,7 @@ vectorized: true
 │ order: +any_not_null
 │ k: 10
 │
-└── • group
+└── • group (hash)
     │ columns: (id, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null)
     │ estimated row count: 14 (missing stats)
     │ aggregate 0: any_not_null(body)

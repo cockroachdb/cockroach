@@ -77,8 +77,7 @@ func RandCreateTables(
 	// Make some random tables.
 	tables := make([]tree.Statement, num)
 	for i := 0; i < num; i++ {
-		var interleave *tree.CreateTable
-		t := RandCreateTableWithInterleave(rng, prefix, i+1, interleave, nil)
+		t := RandCreateTable(rng, prefix, i+1)
 		tables[i] = t
 	}
 
@@ -91,7 +90,7 @@ func RandCreateTables(
 
 // RandCreateTable creates a random CreateTable definition.
 func RandCreateTable(rng *rand.Rand, prefix string, tableIdx int) *tree.CreateTable {
-	return RandCreateTableWithInterleave(rng, prefix, tableIdx, nil, nil)
+	return RandCreateTableWithColumnIndexNumberGenerator(rng, prefix, tableIdx, nil /* generateColumnIndexNumber */)
 }
 
 // RandCreateTableWithColumnIndexNumberGenerator creates a random CreateTable definition
@@ -99,40 +98,12 @@ func RandCreateTable(rng *rand.Rand, prefix string, tableIdx int) *tree.CreateTa
 func RandCreateTableWithColumnIndexNumberGenerator(
 	rng *rand.Rand, prefix string, tableIdx int, generateColumnIndexNumber func() int64,
 ) *tree.CreateTable {
-	return RandCreateTableWithInterleave(rng, prefix, tableIdx, nil, generateColumnIndexNumber)
-}
-
-// RandCreateTableWithInterleave creates a random CreateTable definition,
-// interleaved into the given other CreateTable definition.
-func RandCreateTableWithInterleave(
-	rng *rand.Rand,
-	prefix string,
-	tableIdx int,
-	interleaveInto *tree.CreateTable,
-	generateColumnIndexNumber func() int64,
-) *tree.CreateTable {
 	// columnDefs contains the list of Columns we'll add to our table.
 	nColumns := randutil.RandIntInRange(rng, 1, 20)
 	columnDefs := make([]*tree.ColumnTableDef, 0, nColumns)
 	// defs contains the list of Columns and other attributes (indexes, column
 	// families, etc) we'll add to our table.
 	defs := make(tree.TableDefs, 0, len(columnDefs))
-
-	// Find columnDefs from previous create table.
-	interleaveIntoColumnDefs := make(map[tree.Name]*tree.ColumnTableDef)
-	var interleaveIntoPK *tree.UniqueConstraintTableDef
-	if interleaveInto != nil {
-		for i := range interleaveInto.Defs {
-			switch d := interleaveInto.Defs[i].(type) {
-			case *tree.ColumnTableDef:
-				interleaveIntoColumnDefs[d.Name] = d
-			case *tree.UniqueConstraintTableDef:
-				if d.PrimaryKey {
-					interleaveIntoPK = d
-				}
-			}
-		}
-	}
 
 	// colIdx generates numbers that are incorporated into column names.
 	colIdx := func(ordinal int) int {
@@ -142,98 +113,43 @@ func RandCreateTableWithInterleave(
 		return ordinal
 	}
 
-	var interleaveDef *tree.InterleaveDef
-	if interleaveIntoPK != nil && len(interleaveIntoPK.Columns) > 0 {
-		// Make the interleave prefix, which has to be exactly the columns in the
-		// parent's primary index.
-		prefixLength := len(interleaveIntoPK.Columns)
-		fields := make(tree.NameList, prefixLength)
-		for i := range interleaveIntoPK.Columns[:prefixLength] {
-			def := interleaveIntoColumnDefs[interleaveIntoPK.Columns[i].Column]
-			columnDefs = append(columnDefs, def)
-			defs = append(defs, def)
-			fields[i] = def.Name
-		}
+	// Make new defs from scratch.
+	nComputedColumns := randutil.RandIntInRange(rng, 0, (nColumns+1)/2)
+	nNormalColumns := nColumns - nComputedColumns
+	for i := 0; i < nNormalColumns; i++ {
+		columnDef := randColumnTableDef(rng, tableIdx, colIdx(i))
+		columnDefs = append(columnDefs, columnDef)
+		defs = append(defs, columnDef)
+	}
 
-		extraCols := make([]*tree.ColumnTableDef, nColumns)
-		// Add more columns to the table.
-		for i := range extraCols {
-			// Loop until we generate an indexable column type.
-			var extraCol *tree.ColumnTableDef
-			for {
-				extraCol = randColumnTableDef(rng, tableIdx, colIdx(i+prefixLength))
-				extraColType := tree.MustBeStaticallyKnownType(extraCol.Type)
-				if colinfo.ColumnTypeIsIndexable(extraColType) {
-					break
-				}
-			}
-			extraCols[i] = extraCol
-			columnDefs = append(columnDefs, extraCol)
-			defs = append(defs, extraCol)
-		}
-
-		rng.Shuffle(nColumns, func(i, j int) {
-			extraCols[i], extraCols[j] = extraCols[j], extraCols[i]
-		})
-
-		// Create the primary key to interleave, maybe add some new columns to the
-		// one we're interleaving.
-		pk := &tree.UniqueConstraintTableDef{
-			PrimaryKey: true,
-			IndexTableDef: tree.IndexTableDef{
-				Columns: interleaveIntoPK.Columns[:prefixLength:prefixLength],
-			},
-		}
-		for i := range extraCols[:rng.Intn(len(extraCols))] {
-			pk.Columns = append(pk.Columns, tree.IndexElem{
-				Column:    extraCols[i].Name,
-				Direction: tree.Direction(rng.Intn(int(tree.Descending) + 1)),
+	// Make a random primary key with high likelihood.
+	if rng.Intn(8) != 0 {
+		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, false /* allowExpressions */)
+		if ok && !indexDef.Inverted {
+			defs = append(defs, &tree.UniqueConstraintTableDef{
+				PrimaryKey:    true,
+				IndexTableDef: indexDef,
 			})
 		}
-		defs = append(defs, pk)
-		interleaveDef = &tree.InterleaveDef{
-			Parent: interleaveInto.Table,
-			Fields: fields,
-		}
-	} else {
-		// Make new defs from scratch.
-		nComputedColumns := randutil.RandIntInRange(rng, 0, (nColumns+1)/2)
-		nNormalColumns := nColumns - nComputedColumns
-		for i := 0; i < nNormalColumns; i++ {
-			columnDef := randColumnTableDef(rng, tableIdx, colIdx(i))
-			columnDefs = append(columnDefs, columnDef)
-			defs = append(defs, columnDef)
-		}
-
-		// Make a random primary key with high likelihood.
-		if rng.Intn(8) != 0 {
-			indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, false /* allowExpressions */)
-			if ok && !indexDef.Inverted {
-				defs = append(defs, &tree.UniqueConstraintTableDef{
-					PrimaryKey:    true,
-					IndexTableDef: indexDef,
-				})
-			}
-			// Although not necessary for Cockroach to function correctly,
-			// but for ease of use for any code that introspects on the
-			// AST data structure (instead of the descriptor which doesn't
-			// exist yet), explicitly set all PK cols as NOT NULL.
-			for _, col := range columnDefs {
-				for _, elem := range indexDef.Columns {
-					if col.Name == elem.Column {
-						col.Nullable.Nullability = tree.NotNull
-					}
+		// Although not necessary for Cockroach to function correctly,
+		// but for ease of use for any code that introspects on the
+		// AST data structure (instead of the descriptor which doesn't
+		// exist yet), explicitly set all PK cols as NOT NULL.
+		for _, col := range columnDefs {
+			for _, elem := range indexDef.Columns {
+				if col.Name == elem.Column {
+					col.Nullable.Nullability = tree.NotNull
 				}
 			}
 		}
+	}
 
-		// Make defs for computed columns.
-		normalColDefs := columnDefs
-		for i := nNormalColumns; i < nColumns; i++ {
-			columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colIdx(i))
-			columnDefs = append(columnDefs, columnDef)
-			defs = append(defs, columnDef)
-		}
+	// Make defs for computed columns.
+	normalColDefs := columnDefs
+	for i := nNormalColumns; i < nColumns; i++ {
+		columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colIdx(i))
+		columnDefs = append(columnDefs, columnDef)
+		defs = append(defs, columnDef)
 	}
 
 	// Make indexes.
@@ -256,9 +172,8 @@ func RandCreateTableWithInterleave(
 	}
 
 	ret := &tree.CreateTable{
-		Table:      tree.MakeUnqualifiedTableName(tree.Name(fmt.Sprintf("%s%d", prefix, tableIdx))),
-		Defs:       defs,
-		Interleave: interleaveDef,
+		Table: tree.MakeUnqualifiedTableName(tree.Name(fmt.Sprintf("%s%d", prefix, tableIdx))),
+		Defs:  defs,
 	}
 
 	// Create some random column families.

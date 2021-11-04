@@ -12,7 +12,6 @@ package colrpc
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"math"
 	"sync/atomic"
@@ -33,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -208,7 +208,7 @@ func (i *Inbox) RunWithStream(
 	case readerCtx = <-i.contextCh:
 		log.VEvent(streamCtx, 2, "Inbox reader arrived")
 	case <-streamCtx.Done():
-		return fmt.Errorf("%s: streamCtx while waiting for reader (remote client canceled)", streamCtx.Err())
+		return errors.Wrap(streamCtx.Err(), "streamCtx error while waiting for reader (remote client canceled)")
 	case <-flowCtxDone:
 		// The flow context of the inbox host has been canceled. This can occur
 		// e.g. when the query is canceled, or when another stream encountered
@@ -233,7 +233,7 @@ func (i *Inbox) RunWithStream(
 		return nil
 	case <-streamCtx.Done():
 		// The client canceled the stream.
-		return fmt.Errorf("%s: streamCtx in Inbox stream handler (remote client canceled)", streamCtx.Err())
+		return errors.Wrap(streamCtx.Err(), "streamCtx error in Inbox stream handler (remote client canceled)")
 	}
 }
 
@@ -258,7 +258,7 @@ func (i *Inbox) Init(ctx context.Context) {
 		select {
 		case i.stream = <-i.streamCh:
 		case err := <-i.timeoutCh:
-			i.errCh <- fmt.Errorf("%s: remote stream arrived too late", err)
+			i.errCh <- errors.Wrap(err, "remote stream arrived too late")
 			return err
 		case <-i.Ctx.Done():
 			// Our reader canceled the context meaning that it no longer needs
@@ -325,7 +325,7 @@ func (i *Inbox) Next() coldata.Batch {
 			// Regardless of the cause we want to propagate such an error as
 			// expected one in all cases so that the caller could decide on how
 			// to handle it.
-			err = pgerror.Newf(pgcode.InternalConnectionFailure, "inbox communication error: %s", err)
+			err = pgerror.Wrap(err, pgcode.InternalConnectionFailure, "inbox communication error")
 			i.errCh <- err
 			colexecerror.ExpectedError(err)
 		}

@@ -281,7 +281,7 @@ func LineSubstring(g geo.Geometry, start, end float64) (geo.Geometry, error) {
 	}
 
 	lsLength := lineString.Length()
-	// A LineString which entirely consistents of the same point has length 0
+	// A LineString which entirely consistent of the same point has length 0
 	// and should return the single point that represents it.
 	if lsLength == 0 {
 		return geo.MakeGeometryFromGeomT(

@@ -36,7 +36,7 @@ func ParseAndRequireString(
 		}
 		d = formatBitArrayToType(r, t)
 	case types.BoolFamily:
-		d, err = ParseDBool(s)
+		d, err = ParseDBool(strings.TrimSpace(s))
 	case types.BytesFamily:
 		d, err = ParseDByte(s)
 	case types.DateFamily:
@@ -89,6 +89,8 @@ func ParseAndRequireString(
 		d, err = ParseDUuidFromString(s)
 	case types.EnumFamily:
 		d, err = MakeDEnumFromLogicalRepresentation(t, s)
+	case types.TupleFamily:
+		d, dependsOnContext, err = ParseDTupleFromString(ctx, s, t)
 	default:
 		return nil, false, errors.AssertionFailedf("unknown type %s (%T)", t, t)
 	}

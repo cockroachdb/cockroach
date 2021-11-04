@@ -98,9 +98,6 @@ type crdbSpanMu struct {
 		finishedChildren []tracingpb.RecordedSpan
 	}
 
-	// The Span's associated baggage.
-	baggage map[string]string
-
 	// tags are only captured when recording. These are tags that have been
 	// added to this Span, and will be appended to the tags in logTags when
 	// someone needs to actually observe the total set of tags that is a part of
@@ -205,9 +202,6 @@ func (s *crdbSpan) enableRecording(recType RecordingType) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.recording.recordingType.swap(recType)
-	if recType == RecordingVerbose {
-		s.setBaggageItemLocked(verboseTracingBaggageKey, "1")
-	}
 }
 
 // resetRecording clears any previously recorded info.
@@ -232,15 +226,7 @@ func (s *crdbSpan) disableRecording() {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	oldRecType := s.mu.recording.recordingType.swap(RecordingOff)
-	// We test the duration as a way to check if the Span has been finished. If it
-	// has, we don't want to do the call below as it might crash (at least if
-	// there's a netTr).
-	if (s.mu.duration == -1) && (oldRecType == RecordingVerbose) {
-		// Clear the verboseTracingBaggageKey baggage item, assuming that it was set by
-		// enableRecording().
-		s.setBaggageItemLocked(verboseTracingBaggageKey, "")
-	}
+	s.mu.recording.recordingType.swap(RecordingOff)
 }
 
 // TraceID is part of the RegistrySpan interface.
@@ -467,29 +453,6 @@ func (s *crdbSpan) recordInternalLocked(payload memorySizable, buffer *sizeLimit
 	buffer.AddLast(payload)
 }
 
-func (s *crdbSpan) setBaggageItemAndTag(restrictedKey, value string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.setBaggageItemLocked(restrictedKey, value)
-	// Don't set the tag if this is the special cased baggage item indicating
-	// span verbosity, as it is named nondescriptly and the recording knows
-	// how to display its verbosity independently.
-	if restrictedKey != verboseTracingBaggageKey {
-		s.setTagLocked(restrictedKey, attribute.StringValue(value))
-	}
-}
-
-func (s *crdbSpan) setBaggageItemLocked(restrictedKey, value string) {
-	if oldVal, ok := s.mu.baggage[restrictedKey]; ok && oldVal == value {
-		// No-op.
-		return
-	}
-	if s.mu.baggage == nil {
-		s.mu.baggage = make(map[string]string)
-	}
-	s.mu.baggage[restrictedKey] = value
-}
-
 // getStructuredEventsRecursively returns the structured events accumulated by
 // this span and its finished and still-open children.
 func (s *crdbSpan) getStructuredEventsRecursively(
@@ -538,6 +501,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		StartTime:      s.startTime,
 		Duration:       s.mu.duration,
 		RedactableLogs: true,
+		Verbose:        s.recordingType() == RecordingVerbose,
 	}
 
 	if rs.Duration == -1 {
@@ -583,12 +547,6 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		}
 	}
 
-	if len(s.mu.baggage) > 0 {
-		rs.Baggage = make(map[string]string)
-		for k, v := range s.mu.baggage {
-			rs.Baggage[k] = v
-		}
-	}
 	if wantTags {
 		if s.logTags != nil {
 			setLogTags(s.logTags.Get(), func(remappedKey string, tag *logtags.Tag) {

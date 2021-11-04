@@ -183,10 +183,6 @@ func IsPermanentSchemaChangeError(err error) bool {
 	if errors.IsAny(err,
 		context.Canceled,
 		context.DeadlineExceeded,
-		errExistingSchemaChangeLease,
-		errExpiredSchemaChangeLease,
-		errNotHitGCTTLDeadline,
-		errSchemaChangeDuringDrain,
 		errSchemaChangeNotFirstInLine,
 		errTableVersionMismatchSentinel,
 	) {
@@ -210,13 +206,7 @@ func IsPermanentSchemaChangeError(err error) bool {
 	return true
 }
 
-var (
-	errExistingSchemaChangeLease  = errors.Newf("an outstanding schema change lease exists")
-	errExpiredSchemaChangeLease   = errors.Newf("the schema change lease has expired")
-	errSchemaChangeNotFirstInLine = errors.Newf("schema change not first in line")
-	errNotHitGCTTLDeadline        = errors.Newf("not hit gc ttl deadline")
-	errSchemaChangeDuringDrain    = errors.Newf("a schema change ran during the drain phase, re-increment")
-)
+var errSchemaChangeNotFirstInLine = errors.Newf("schema change not first in line")
 
 type errTableVersionMismatch struct {
 	version  descpb.DescriptorVersion
@@ -1092,25 +1082,24 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			}
 			isRollback = m.IsRollback()
 			if idx := m.AsIndex(); m.Dropped() && idx != nil {
-				if canClearRangeForDrop(idx) {
-					// how we keep track of dropped index names (for, e.g., zone config
-					// lookups), even though in the absence of a GC job there's nothing to
-					// clean them up.
-					scTable.GCMutations = append(
-						scTable.GCMutations,
-						descpb.TableDescriptor_GCDescriptorMutation{
-							IndexID: idx.GetID(),
-						})
+				// how we keep track of dropped index names (for, e.g., zone config
+				// lookups), even though in the absence of a GC job there's nothing to
+				// clean them up.
+				scTable.GCMutations = append(
+					scTable.GCMutations,
+					descpb.TableDescriptor_GCDescriptorMutation{
+						IndexID: idx.GetID(),
+					})
 
-					description := sc.job.Payload().Description
-					if isRollback {
-						description = "ROLLBACK of " + description
-					}
-
-					if err := sc.createIndexGCJob(ctx, idx.GetID(), txn, description); err != nil {
-						return err
-					}
+				description := sc.job.Payload().Description
+				if isRollback {
+					description = "ROLLBACK of " + description
 				}
+
+				if err := sc.createIndexGCJob(ctx, idx.GetID(), txn, description); err != nil {
+					return err
+				}
+
 			}
 			if constraint := m.AsConstraint(); constraint != nil && constraint.Adding() {
 				if constraint.IsForeignKey() && constraint.ForeignKey().Validity == descpb.ConstraintValidity_Unvalidated {
@@ -1229,14 +1218,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 							localityConfigToSwapTo,
 						)
 					}
-				}
-
-				if err := maybeRemoveInterleaveBackreference(ctx, txn, descsCol, m, scTable, func(
-					ctx context.Context, ancestor *tabledesc.Mutable,
-				) error {
-					return descsCol.WriteDescToBatch(ctx, kvTrace, ancestor, b)
-				}); err != nil {
-					return err
 				}
 
 				// If we performed MakeMutationComplete on a PrimaryKeySwap mutation, then we need to start
@@ -1362,61 +1343,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// If this mutation is a primary key swap that is not being rolled back,
-// and the old index had an interleaved parent, remove the backreference
-// from the parent.
-func maybeRemoveInterleaveBackreference(
-	ctx context.Context,
-	txn *kv.Txn,
-	descsCol *descs.Collection,
-	mutation catalog.Mutation,
-	scTable *tabledesc.Mutable,
-	writeFunc func(ctx context.Context, ancestor *tabledesc.Mutable) error,
-) error {
-	if !mutation.Adding() {
-		return nil
-	}
-	pkSwap := mutation.AsPrimaryKeySwap()
-	if pkSwap == nil {
-		return nil
-	}
-	return pkSwap.ForEachOldIndexIDs(func(id descpb.IndexID) error {
-		oldIndex, err := scTable.FindIndexWithID(id)
-		if err != nil {
-			return err
-		}
-		if oldIndex.NumInterleaveAncestors() != 0 {
-			ancestorInfo := oldIndex.GetInterleaveAncestor(oldIndex.NumInterleaveAncestors() - 1)
-			ancestor, err := descsCol.GetMutableTableVersionByID(ctx, ancestorInfo.TableID, txn)
-			if err != nil {
-				return err
-			}
-			ancestorIdxI, err := ancestor.FindIndexWithID(ancestorInfo.IndexID)
-			if err != nil {
-				return err
-			}
-			ancestorIdx := ancestorIdxI.IndexDesc()
-			foundAncestor := false
-			for k, ref := range ancestorIdx.InterleavedBy {
-				if ref.Table == scTable.ID && ref.Index == oldIndex.GetID() {
-					if foundAncestor {
-						return errors.AssertionFailedf(
-							"ancestor entry in %s for %s@%s found more than once",
-							ancestor.Name, scTable.Name, oldIndex.GetName())
-					}
-					ancestorIdx.InterleavedBy = append(
-						ancestorIdx.InterleavedBy[:k], ancestorIdx.InterleavedBy[k+1:]...)
-					foundAncestor = true
-					if err := writeFunc(ctx, ancestor); err != nil {
-						return err
-					}
-				}
-			}
-		}
-		return nil
-	})
 }
 
 // maybeUpdateZoneConfigsForPKChange moves zone configs for any rewritten

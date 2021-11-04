@@ -12,73 +12,13 @@ rules
     - $parent-node[Type] = '*scpb.Node'
     - $parent-node[Target] = $parent-target
     - $parent-target[Direction] = DROP
-    - $parent-node[Status] IN [DELETE_ONLY, DELETE_AND_WRITE_ONLY]
+    - $parent-node[Status] IN [ABSENT]
     - $other-target[Type] = '*scpb.Target'
     - $other-target[Element] = $other
     - $other-node[Type] = '*scpb.Node'
     - $other-node[Target] = $other-target
     - $other-target[Direction] = DROP
     - $other-node[Status] = ABSENT
-- name: sequence owned by being dropped relies on sequence entering delete only
-  from: owned-by-node
-  to: seq-node
-  query:
-    - $owned-by[Type] = '*scpb.SequenceOwnedBy'
-    - $seq[Type] = '*scpb.Sequence'
-    - $owned-by[DescID] = $id
-    - $seq[DescID] = $id
-    - $owned-by-target[Type] = '*scpb.Target'
-    - $owned-by-target[Element] = $owned-by
-    - $owned-by-node[Type] = '*scpb.Node'
-    - $owned-by-node[Target] = $owned-by-target
-    - $owned-by-target[Direction] = DROP
-    - $owned-by-node[Status] = ABSENT
-    - $seq-target[Type] = '*scpb.Target'
-    - $seq-target[Element] = $seq
-    - $seq-node[Type] = '*scpb.Node'
-    - $seq-node[Target] = $seq-target
-    - $seq-target[Direction] = DROP
-    - $seq-node[Status] = ABSENT
-- name: table drop in public depends on absent sequence owned by?
-  from: tab-node
-  to: owned-by-node
-  query:
-    - $tab[Type] = '*scpb.Table'
-    - $owned-by[Type] = '*scpb.SequenceOwnedBy'
-    - $tab[DescID] = $id
-    - $owned-by[ReferencedDescID] = $id
-    - $tab-target[Type] = '*scpb.Target'
-    - $tab-target[Element] = $tab
-    - $tab-node[Type] = '*scpb.Node'
-    - $tab-node[Target] = $tab-target
-    - $tab-target[Direction] = DROP
-    - $tab-node[Status] = PUBLIC
-    - $owned-by-target[Type] = '*scpb.Target'
-    - $owned-by-target[Element] = $owned-by
-    - $owned-by-node[Type] = '*scpb.Node'
-    - $owned-by-node[Target] = $owned-by-target
-    - $owned-by-target[Direction] = DROP
-    - $owned-by-node[Status] = ABSENT
-- name: type reference something
-  from: type-node
-  to: type-ref-node
-  query:
-    - $type[Type] = '*scpb.Type'
-    - $type-ref[Type] = '*scpb.TypeReference'
-    - $type[DescID] = $id
-    - $type-ref[ReferencedDescID] = $id
-    - $type-target[Type] = '*scpb.Target'
-    - $type-target[Element] = $type
-    - $type-node[Type] = '*scpb.Node'
-    - $type-node[Target] = $type-target
-    - $type-target[Direction] = DROP
-    - $type-node[Status] = PUBLIC
-    - $type-ref-target[Type] = '*scpb.Target'
-    - $type-ref-target[Element] = $type-ref
-    - $type-ref-node[Type] = '*scpb.Node'
-    - $type-ref-node[Target] = $type-ref-target
-    - $type-ref-target[Direction] = DROP
-    - $type-ref-node[Status] = ABSENT
 - name: view depends on view
   from: from-node
   to: to-node
@@ -105,26 +45,6 @@ rules
     - $from[Type] = '*scpb.Table'
     - $to[Type] = '*scpb.View'
     - viewDependsOnTable(*scpb.View, *scpb.Table)($to, $from)
-    - $from-target[Type] = '*scpb.Target'
-    - $from-target[Element] = $from
-    - $from-node[Type] = '*scpb.Node'
-    - $from-node[Target] = $from-target
-    - $from-target[Direction] = DROP
-    - $from-node[Status] = PUBLIC
-    - $to-target[Type] = '*scpb.Target'
-    - $to-target[Element] = $to
-    - $to-node[Type] = '*scpb.Node'
-    - $to-node[Target] = $to-target
-    - $to-target[Direction] = DROP
-    - $to-node[Status] = ABSENT
-- name: view depends on type
-  from: from-node
-  to: to-node
-  query:
-    - $from[Type] = '*scpb.View'
-    - $to[Type] = '*scpb.TypeReference'
-    - $from[DescID] = $id
-    - $to[DescID] = $id
     - $from-target[Type] = '*scpb.Target'
     - $from-target[Element] = $from
     - $from-node[Type] = '*scpb.Node'
@@ -202,82 +122,83 @@ rules
     - $drop-idx-node[Target] = $drop-idx-target
     - $drop-idx-target[Direction] = DROP
     - $drop-idx-node[Status] = DELETE_AND_WRITE_ONLY
-- name: sequence default expr
-  from: seq-node
-  to: def-expr-node
+- name: dependency needs relation/type as non-synthetically dropped
+  from: dep-node
+  to: relation-node
   query:
-    - $seq[Type] = '*scpb.Sequence'
-    - $def-expr[Type] = '*scpb.DefaultExpression'
-    - defaultExpressionUsesSequence(*scpb.Sequence, *scpb.DefaultExpression)($seq, $def-expr)
-    - $seq-target[Type] = '*scpb.Target'
-    - $seq-target[Element] = $seq
-    - $seq-node[Type] = '*scpb.Node'
-    - $seq-node[Target] = $seq-target
-    - $seq-target[Direction] = DROP
-    - $seq-node[Status] = PUBLIC
-    - $def-expr-target[Type] = '*scpb.Target'
-    - $def-expr-target[Element] = $def-expr
-    - $def-expr-node[Type] = '*scpb.Node'
-    - $def-expr-node[Target] = $def-expr-target
-    - $def-expr-target[Direction] = DROP
-    - $def-expr-node[Status] = ABSENT
-- name: table default expr
-  from: tab-node
-  to: def-expr-node
+    - $relation[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Type']
+    - $dep[Type] IN ['*scpb.DefaultExpression', '*scpb.RelationDependedOnBy', '*scpb.SequenceOwnedBy', '*scpb.OutboundForeignKey']
+    - $relation[DescID] = $id
+    - $dep[DescID] = $id
+    - $relation-target[Type] = '*scpb.Target'
+    - $relation-target[Element] = $relation
+    - $relation-node[Type] = '*scpb.Node'
+    - $relation-node[Target] = $relation-target
+    - $relation-target[Direction] = DROP
+    - $relation-node[Status] = DROPPED
+    - $dep-target[Type] = '*scpb.Target'
+    - $dep-target[Element] = $dep
+    - $dep-node[Type] = '*scpb.Node'
+    - $dep-node[Target] = $dep-target
+    - $dep-target[Direction] = DROP
+    - $dep-node[Status] = ABSENT
+- name: dependency needs relation/type as non-synthetically dropped
+  from: dep-node
+  to: relation-node
   query:
-    - $tab[Type] = '*scpb.Table'
-    - $def-expr[Type] = '*scpb.DefaultExpression'
-    - $tab[DescID] = $id
-    - $def-expr[DescID] = $id
-    - $tab-target[Type] = '*scpb.Target'
-    - $tab-target[Element] = $tab
-    - $tab-node[Type] = '*scpb.Node'
-    - $tab-node[Target] = $tab-target
-    - $tab-target[Direction] = DROP
-    - $tab-node[Status] = PUBLIC
-    - $def-expr-target[Type] = '*scpb.Target'
-    - $def-expr-target[Element] = $def-expr
-    - $def-expr-node[Type] = '*scpb.Node'
-    - $def-expr-node[Target] = $def-expr-target
-    - $def-expr-target[Direction] = DROP
-    - $def-expr-node[Status] = ABSENT
-- name: table drop relation depended on
-  from: tab-node
-  to: rel-dep-node
+    - $relation[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Type']
+    - $dep[Type] IN ['*scpb.InboundForeignKey', '*scpb.TypeReference']
+    - $relation[DescID] = $id
+    - $dep[ReferencedDescID] = $id
+    - $relation-target[Type] = '*scpb.Target'
+    - $relation-target[Element] = $relation
+    - $relation-node[Type] = '*scpb.Node'
+    - $relation-node[Target] = $relation-target
+    - $relation-target[Direction] = DROP
+    - $relation-node[Status] = DROPPED
+    - $dep-target[Type] = '*scpb.Target'
+    - $dep-target[Element] = $dep
+    - $dep-node[Type] = '*scpb.Node'
+    - $dep-node[Target] = $dep-target
+    - $dep-target[Direction] = DROP
+    - $dep-node[Status] = ABSENT
+- name: relation/type needs dependency as dropped
+  from: relation-node
+  to: dep-node
   query:
-    - $tab[Type] = '*scpb.Table'
-    - $rel-dep[Type] = '*scpb.RelationDependedOnBy'
-    - $tab[DescID] = $dep-id
-    - $rel-dep[ReferencedDescID] = $dep-id
-    - $tab-target[Type] = '*scpb.Target'
-    - $tab-target[Element] = $tab
-    - $tab-node[Type] = '*scpb.Node'
-    - $tab-node[Target] = $tab-target
-    - $tab-target[Direction] = DROP
-    - $tab-node[Status] = PUBLIC
-    - $rel-dep-target[Type] = '*scpb.Target'
-    - $rel-dep-target[Element] = $rel-dep
-    - $rel-dep-node[Type] = '*scpb.Node'
-    - $rel-dep-node[Target] = $rel-dep-target
-    - $rel-dep-target[Direction] = DROP
-    - $rel-dep-node[Status] = ABSENT
-- name: table drop depends on outbound fk
-  from: tab-node
-  to: fk-node
+    - $relation[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Type']
+    - $dep[Type] IN ['*scpb.DefaultExpression', '*scpb.RelationDependedOnBy', '*scpb.SequenceOwnedBy', '*scpb.OutboundForeignKey']
+    - $relation[DescID] = $id
+    - $dep[DescID] = $id
+    - $relation-target[Type] = '*scpb.Target'
+    - $relation-target[Element] = $relation
+    - $relation-node[Type] = '*scpb.Node'
+    - $relation-node[Target] = $relation-target
+    - $relation-target[Direction] = DROP
+    - $relation-node[Status] = ABSENT
+    - $dep-target[Type] = '*scpb.Target'
+    - $dep-target[Element] = $dep
+    - $dep-node[Type] = '*scpb.Node'
+    - $dep-node[Target] = $dep-target
+    - $dep-target[Direction] = DROP
+    - $dep-node[Status] = ABSENT
+- name: relation/type needs dependency as dropped
+  from: relation-node
+  to: dep-node
   query:
-    - $tab[Type] = '*scpb.Table'
-    - $fk[Type] = '*scpb.OutboundForeignKey'
-    - $tab[DescID] = $dep-id
-    - $fk[DescID] = $dep-id
-    - $tab-target[Type] = '*scpb.Target'
-    - $tab-target[Element] = $tab
-    - $tab-node[Type] = '*scpb.Node'
-    - $tab-node[Target] = $tab-target
-    - $tab-target[Direction] = DROP
-    - $tab-node[Status] = PUBLIC
-    - $fk-target[Type] = '*scpb.Target'
-    - $fk-target[Element] = $fk
-    - $fk-node[Type] = '*scpb.Node'
-    - $fk-node[Target] = $fk-target
-    - $fk-target[Direction] = DROP
-    - $fk-node[Status] = ABSENT
+    - $relation[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Type']
+    - $dep[Type] IN ['*scpb.InboundForeignKey', '*scpb.TypeReference']
+    - $relation[DescID] = $id
+    - $dep[DescID] = $id
+    - $relation-target[Type] = '*scpb.Target'
+    - $relation-target[Element] = $relation
+    - $relation-node[Type] = '*scpb.Node'
+    - $relation-node[Target] = $relation-target
+    - $relation-target[Direction] = DROP
+    - $relation-node[Status] = ABSENT
+    - $dep-target[Type] = '*scpb.Target'
+    - $dep-target[Element] = $dep
+    - $dep-node[Type] = '*scpb.Node'
+    - $dep-node[Target] = $dep-target
+    - $dep-target[Direction] = DROP
+    - $dep-node[Status] = ABSENT

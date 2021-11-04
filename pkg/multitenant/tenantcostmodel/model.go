@@ -33,7 +33,7 @@ type RU float64
 //    have a base cost and a per-byte cost. Specifically, the cost of a read is:
 //      RUs = ReadRequest + <size of read in bytes> * ReadByte
 //    The cost of a write is:
-//      RUs = WriteRequst + <size of write in bytes> * WriteByte
+//      RUs = WriteRequest + <size of write in bytes> * WriteByte
 //
 //  - CPU usage on the tenant's SQL pods.
 //

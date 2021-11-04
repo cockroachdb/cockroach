@@ -252,7 +252,7 @@ func checkStoreRaftState(
 					return err
 				}
 				getReplicaInfo(rangeID).committedIndex = hs.Commit
-			case bytes.Equal(suffix, keys.LocalRaftTruncatedStateLegacySuffix):
+			case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
 				var trunc roachpb.RaftTruncatedState
 				if err := kv.Value.GetProto(&trunc); err != nil {
 					return err
@@ -264,12 +264,6 @@ func checkStoreRaftState(
 					return err
 				}
 				getReplicaInfo(rangeID).appliedIndex = state.RaftAppliedIndex
-			case bytes.Equal(suffix, keys.LocalRaftAppliedIndexLegacySuffix):
-				idx, err := kv.Value.GetInt()
-				if err != nil {
-					return err
-				}
-				getReplicaInfo(rangeID).appliedIndex = uint64(idx)
 			case bytes.Equal(suffix, keys.LocalRaftLogSuffix):
 				_, index, err := encoding.DecodeUint64Ascending(detail)
 				if err != nil {

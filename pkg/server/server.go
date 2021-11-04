@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	_ "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -176,6 +177,8 @@ type Server struct {
 	replicationReporter   *reports.Reporter
 	protectedtsProvider   protectedts.Provider
 	protectedtsReconciler *ptreconcile.Reconciler
+
+	spanConfigSubscriber *spanconfigkvsubscriber.KVSubscriber
 
 	sqlServer    *SQLServer
 	drainSleepFn func(time.Duration)
@@ -612,8 +615,26 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	var spanConfigAccessor spanconfig.KVAccessor
+	var spanConfigSubscriber *spanconfigkvsubscriber.KVSubscriber
 	if cfg.SpanConfigsEnabled {
 		storeCfg.SpanConfigsEnabled = true
+		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
+		if spanConfigKnobs != nil && spanConfigKnobs.StoreKVSubscriberOverride != nil {
+			storeCfg.SpanConfigSubscriber = spanConfigKnobs.StoreKVSubscriberOverride
+		} else {
+			spanConfigSubscriber = spanconfigkvsubscriber.New(
+				stopper,
+				db,
+				clock,
+				rangeFeedFactory,
+				keys.SpanConfigurationsTableID,
+				1<<20, /* 1 MB */
+				storeCfg.DefaultSpanConfig,
+				spanConfigKnobs,
+			)
+			storeCfg.SpanConfigSubscriber = spanConfigSubscriber
+		}
+
 		spanConfigAccessor = spanconfigkvaccessor.New(
 			db, internalExecutor, cfg.Settings,
 			systemschema.SpanConfigurationsTableName.FQString(),
@@ -808,6 +829,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		replicationReporter:    replicationReporter,
 		protectedtsProvider:    protectedtsProvider,
 		protectedtsReconciler:  protectedtsReconciler,
+		spanConfigSubscriber:   spanConfigSubscriber,
 		sqlServer:              sqlServer,
 		drainSleepFn:           drainSleepFn,
 		externalStorageBuilder: externalStorageBuilder,
@@ -1726,6 +1748,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	if s.cfg.SpanConfigsEnabled && s.spanConfigSubscriber != nil {
+		if err := s.spanConfigSubscriber.Start(ctx); err != nil {
+			return err
+		}
+	}
 	// Start garbage collecting system events.
 	//
 	// NB: As written, this falls awkwardly between SQL and KV. KV is used only

@@ -78,6 +78,7 @@ go_test(
         "//pkg/col/coldatatestutils",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

@@ -225,7 +225,7 @@ func (w *bytesWrittenWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// CSVMux returns a mux over http handers for csv data in all tables in the
+// CSVMux returns a mux over http handlers for csv data in all tables in the
 // given generators.
 func CSVMux(metas []Meta) *http.ServeMux {
 	mux := http.NewServeMux()

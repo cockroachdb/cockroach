@@ -162,33 +162,3 @@ func (rd *Deleter) DeleteRow(
 		return nil
 	})
 }
-
-// DeleteIndexRow adds to the batch the kv operations necessary to delete a
-// table row from the given index.
-func (rd *Deleter) DeleteIndexRow(
-	ctx context.Context, b *kv.Batch, idx catalog.Index, values []tree.Datum, traceKV bool,
-) error {
-	// We want to include empty k/v pairs because we want
-	// to delete all k/v's for this row. By setting includeEmpty
-	// to true, we will get a k/v pair for each family in the row,
-	// which will guarantee that we delete all the k/v's in this row.
-	secondaryIndexEntry, err := rowenc.EncodeSecondaryIndex(
-		rd.Helper.Codec,
-		rd.Helper.TableDesc,
-		idx,
-		rd.FetchColIDtoRowIndex,
-		values,
-		true, /* includeEmpty */
-	)
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range secondaryIndexEntry {
-		if traceKV {
-			log.VEventf(ctx, 2, "Del %s", entry.Key)
-		}
-		b.Del(entry.Key)
-	}
-	return nil
-}

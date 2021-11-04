@@ -1408,28 +1408,6 @@ func (oi *optIndex) ImplicitPartitioningColumnCount() int {
 	return oi.idx.GetPartitioning().NumImplicitColumns()
 }
 
-// InterleaveAncestorCount is part of the cat.Index interface.
-func (oi *optIndex) InterleaveAncestorCount() int {
-	return oi.idx.NumInterleaveAncestors()
-}
-
-// InterleaveAncestor is part of the cat.Index interface.
-func (oi *optIndex) InterleaveAncestor(i int) (table, index cat.StableID, numKeyCols int) {
-	a := oi.idx.GetInterleaveAncestor(i)
-	return cat.StableID(a.TableID), cat.StableID(a.IndexID), int(a.SharedPrefixLen)
-}
-
-// InterleavedByCount is part of the cat.Index interface.
-func (oi *optIndex) InterleavedByCount() int {
-	return oi.idx.NumInterleavedBy()
-}
-
-// InterleavedBy is part of the cat.Index interface.
-func (oi *optIndex) InterleavedBy(i int) (table, index cat.StableID) {
-	ref := oi.idx.GetInterleavedBy(i)
-	return cat.StableID(ref.Table), cat.StableID(ref.Index)
-}
-
 // GeoConfig is part of the cat.Index interface.
 func (oi *optIndex) GeoConfig() *geoindex.Config {
 	return &oi.idx.IndexDesc().GeoConfig
@@ -2175,26 +2153,6 @@ func (oi *optVirtualIndex) Ordinal() int {
 // ImplicitPartitioningColumnCount is part of the cat.Index interface.
 func (oi *optVirtualIndex) ImplicitPartitioningColumnCount() int {
 	return 0
-}
-
-// InterleaveAncestorCount is part of the cat.Index interface.
-func (oi *optVirtualIndex) InterleaveAncestorCount() int {
-	return 0
-}
-
-// InterleaveAncestor is part of the cat.Index interface.
-func (oi *optVirtualIndex) InterleaveAncestor(i int) (table, index cat.StableID, numKeyCols int) {
-	panic(errors.AssertionFailedf("no interleavings"))
-}
-
-// InterleavedByCount is part of the cat.Index interface.
-func (oi *optVirtualIndex) InterleavedByCount() int {
-	return 0
-}
-
-// InterleavedBy is part of the cat.Index interface.
-func (oi *optVirtualIndex) InterleavedBy(i int) (table, index cat.StableID) {
-	panic(errors.AssertionFailedf("no interleavings"))
 }
 
 // GeoConfig is part of the cat.Index interface.

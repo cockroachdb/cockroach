@@ -891,7 +891,8 @@ OPTGEN_TARGETS = \
 	pkg/sql/opt/rule_name.og.go \
 	pkg/sql/opt/rule_name_string.go \
 	pkg/sql/opt/exec/factory.og.go \
-	pkg/sql/opt/exec/explain/explain_factory.og.go
+	pkg/sql/opt/exec/explain/explain_factory.og.go \
+	pkg/sql/opt/exec/explain/plan_gist_factory.og.go \
 
 # removed-files is a list of files that used to exist in the
 # repository that need to be explicitly cleaned up to prevent build
@@ -1654,6 +1655,9 @@ pkg/sql/opt/exec/factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
 pkg/sql/opt/exec/explain/explain_factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
 	optgen -out $@ execexplain $(optgen-exec-defs)
 
+pkg/sql/opt/exec/explain/plan_gist_factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
+	optgen -out $@ execplangist $(optgen-exec-defs)
+
 .PHONY: clean-c-deps
 clean-c-deps:
 	rm -rf $(JEMALLOC_DIR)
@@ -1754,13 +1758,13 @@ optgen-package = ./pkg/sql/opt/optgen/cmd/optgen
 logictest-package = ./pkg/sql/logictest
 logictestccl-package = ./pkg/ccl/logictestccl
 logictestopt-package = ./pkg/sql/opt/exec/execbuilder
-terraformgen-package = ./pkg/cmd/roachprod/vm/aws/terraformgen
+terraformgen-package = ./pkg/roachprod/vm/aws/terraformgen
 logictest-bins := bin/logictest bin/logictestopt bin/logictestccl
 
 # Additional dependencies for binaries that depend on generated code.
 #
 # TODO(benesch): Derive this automatically. This is getting out of hand.
-bin/workload bin/docgen bin/execgen bin/roachtest $(logictest-bins): $(SQLPARSER_TARGETS) $(LOG_TARGETS) $(PROTOBUF_TARGETS)
+bin/workload bin/docgen bin/execgen bin/roachtest bin/roachvet $(logictest-bins): $(SQLPARSER_TARGETS) $(LOG_TARGETS) $(PROTOBUF_TARGETS)
 bin/workload bin/docgen bin/roachtest $(logictest-bins): $(LIBPROJ) $(CGO_FLAGS_FILES)
 bin/roachtest $(logictest-bins): $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(OPTGEN_TARGETS) | $(C_LIBS_DYNAMIC)
 

@@ -632,8 +632,11 @@ func ResolveTargetsToDescriptors(
 		return nil, nil, err
 	}
 
-	// Ensure interleaved tables appear after their parent. Since parents must be
-	// created before their children, simply sorting by ID accomplishes this.
+	// This sorting was originally required to support interleaves.
+	// Now that these have been removed, sorting is not strictly-speaking
+	// necessary but has been preserved to maintain the output of SHOW BACKUPS
+	// that certain tests rely on.
 	sort.Slice(matched.Descs, func(i, j int) bool { return matched.Descs[i].GetID() < matched.Descs[j].GetID() })
+
 	return matched.Descs, matched.ExpandedDB, nil
 }

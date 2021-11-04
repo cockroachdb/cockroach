@@ -111,12 +111,21 @@ func RandTypeFromSlice(rng *rand.Rand, typs []*types.T) *types.T {
 			}
 			return types.MakeArray(inner)
 		}
+		if typ.ArrayContents().Family() == types.TupleFamily {
+			// Generate tuples between 0 and 4 datums in length
+			len := rng.Intn(5)
+			contents := make([]*types.T, len)
+			for i := range contents {
+				contents[i] = RandTypeFromSlice(rng, typs)
+			}
+			return types.MakeArray(types.MakeTuple(contents))
+		}
 	case types.TupleFamily:
 		// Generate tuples between 0 and 4 datums in length
 		len := rng.Intn(5)
 		contents := make([]*types.T, len)
 		for i := range contents {
-			contents[i] = RandType(rng)
+			contents[i] = RandTypeFromSlice(rng, typs)
 		}
 		return types.MakeTuple(contents)
 	}

@@ -462,9 +462,12 @@ func (ef *execFactory) ConstructGroupBy(
 	groupColOrdering colinfo.ColumnOrdering,
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
+	groupingOrderType exec.GroupingOrderType,
 ) (exec.Node, error) {
 	inputPlan := input.(planNode)
 	inputCols := planColumns(inputPlan)
+	// TODO(harding): Use groupingOrder to determine when to use a hash
+	// aggregator.
 	n := &groupNode{
 		plan:             inputPlan,
 		funcs:            make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
@@ -1728,7 +1731,6 @@ func (ef *execFactory) ConstructDeleteRange(
 	table cat.Table,
 	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
-	interleavedTables []cat.Table,
 	autoCommit bool,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
@@ -1746,19 +1748,11 @@ func (ef *execFactory) ConstructDeleteRange(
 	}
 
 	dr := &deleteRangeNode{
-		interleavedFastPath: false,
-		spans:               spans,
-		desc:                tabDesc,
-		autoCommitEnabled:   autoCommit,
+		spans:             spans,
+		desc:              tabDesc,
+		autoCommitEnabled: autoCommit,
 	}
 
-	if len(interleavedTables) > 0 {
-		dr.interleavedFastPath = true
-		dr.interleavedDesc = make([]catalog.TableDescriptor, len(interleavedTables))
-		for i := range dr.interleavedDesc {
-			dr.interleavedDesc[i] = interleavedTables[i].(*optTable).desc
-		}
-	}
 	return dr, nil
 }
 
@@ -2061,11 +2055,10 @@ func (ef *execFactory) ConstructExplain(
 		return nil, errors.New("ENV only supported with (OPT) option")
 	}
 
-	explainFactory := explain.NewFactory(&execFactory{
+	plan, err := buildFn(&execFactory{
 		planner:   ef.planner,
 		isExplain: true,
 	})
-	plan, err := buildFn(explainFactory)
 	if err != nil {
 		return nil, err
 	}

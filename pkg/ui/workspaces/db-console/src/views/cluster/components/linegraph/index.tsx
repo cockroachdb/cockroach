@@ -445,9 +445,8 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
 
   componentDidUpdate(prevProps: Readonly<LineGraphProps>) {
     if (
-      !this.props.data ||
-      !this.props.data.results ||
-      prevProps.data === this.props.data
+      !this.props.data?.results ||
+      (prevProps.data === this.props.data && this.u !== undefined)
     ) {
       return;
     }

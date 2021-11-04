@@ -953,6 +953,7 @@ func init() {
 		varFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
 
 		varFlag(f, &serverCfg.Stores, cliflags.Store)
+		stringFlag(f, &startCtx.pidFile, cliflags.PIDFile)
 		stringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
 
 		stringSliceFlag(f, &serverCfg.SQLConfig.TenantKVAddrs, cliflags.KVAddrs)
@@ -969,6 +970,10 @@ func init() {
 		// refers to becomes known.
 		varFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
 		stringFlag(f, &startCtx.tempDir, cliflags.TempDir)
+
+		if backgroundFlagDefined {
+			boolFlag(f, &startBackground, cliflags.Background)
+		}
 	}
 
 	// Multi-tenancy proxy command flags.

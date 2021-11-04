@@ -10,12 +10,15 @@ ops
 DROP VIEW defaultdb.v1
 ----
 Stage 0
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 53
+Stage 1 (non-revertible)
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 53
     TableID: 52
-Stage 1 (non-revertible)
   *scop.MarkDescriptorAsDropped
-    TableID: 53
+    DescID: 53
+Stage 2 (non-revertible)
   *scop.DrainDescriptorName
     TableID: 53
   *scop.CreateGcJobForDescriptor
@@ -49,73 +52,104 @@ ops
 DROP VIEW defaultdb.v1 CASCADE
 ----
 Stage 0
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 53
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 54
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 55
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 56
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 59
+Stage 1 (non-revertible)
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 53
     TableID: 52
+  *scop.MarkDescriptorAsDropped
+    DescID: 53
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 54
     TableID: 53
+  *scop.MarkDescriptorAsDropped
+    DescID: 54
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 55
     TableID: 53
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 55
     TableID: 54
+  *scop.MarkDescriptorAsDropped
+    DescID: 55
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 56
     TableID: 54
+  *scop.MarkDescriptorAsDropped
+    DescID: 56
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 59
     TableID: 56
+  *scop.MarkDescriptorAsDropped
+    DescID: 59
   *scop.RemoveTypeBackRef
     DescID: 59
     TypeID: 57
   *scop.RemoveTypeBackRef
     DescID: 59
     TypeID: 58
-Stage 1 (non-revertible)
-  *scop.MarkDescriptorAsDropped
-    TableID: 53
-  *scop.DrainDescriptorName
-    TableID: 53
-  *scop.CreateGcJobForDescriptor
-    DescID: 53
-  *scop.MarkDescriptorAsDropped
-    TableID: 54
-  *scop.DrainDescriptorName
-    TableID: 54
-  *scop.CreateGcJobForDescriptor
-    DescID: 54
-  *scop.MarkDescriptorAsDropped
-    TableID: 55
+Stage 2 (non-revertible)
   *scop.DrainDescriptorName
     TableID: 55
   *scop.CreateGcJobForDescriptor
     DescID: 55
-  *scop.MarkDescriptorAsDropped
-    TableID: 56
   *scop.DrainDescriptorName
-    TableID: 56
+    TableID: 54
   *scop.CreateGcJobForDescriptor
-    DescID: 56
-  *scop.MarkDescriptorAsDropped
-    TableID: 59
+    DescID: 54
+  *scop.DrainDescriptorName
+    TableID: 53
+  *scop.CreateGcJobForDescriptor
+    DescID: 53
   *scop.DrainDescriptorName
     TableID: 59
   *scop.CreateGcJobForDescriptor
     DescID: 59
+  *scop.DrainDescriptorName
+    TableID: 56
+  *scop.CreateGcJobForDescriptor
+    DescID: 56
 
 deps
 DROP VIEW defaultdb.v1 CASCADE
 ----
+- from: [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT]
+  to:   [View:{DescID: 53}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, ABSENT]
+  to:   [View:{DescID: 53}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
+  to:   [View:{DescID: 54}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, ABSENT]
+  to:   [View:{DescID: 54}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, ABSENT]
+  to:   [View:{DescID: 56}, DROPPED]
+- from: [View:{DescID: 53}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT]
+- from: [View:{DescID: 53}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, ABSENT]
 - from: [View:{DescID: 53}, ABSENT]
   to:   [View:{DescID: 54}, ABSENT]
 - from: [View:{DescID: 53}, ABSENT]
   to:   [View:{DescID: 55}, ABSENT]
 - from: [View:{DescID: 54}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
+- from: [View:{DescID: 54}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, ABSENT]
+- from: [View:{DescID: 54}, ABSENT]
   to:   [View:{DescID: 55}, ABSENT]
 - from: [View:{DescID: 54}, ABSENT]
   to:   [View:{DescID: 56}, ABSENT]
+- from: [View:{DescID: 56}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, ABSENT]
 - from: [View:{DescID: 56}, ABSENT]
   to:   [View:{DescID: 59}, ABSENT]
 - from: [View:{DescID: 59}, ABSENT]

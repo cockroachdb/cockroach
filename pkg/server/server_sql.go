@@ -361,7 +361,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings, sqllivenessKnobs,
 	)
 	cfg.sqlInstanceProvider = instanceprovider.New(
-		cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr,
+		cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr, cfg.rangeFeedFactory, cfg.clock,
 	)
 
 	jobRegistry := cfg.circularJobRegistry
@@ -953,6 +953,12 @@ func (s *SQLServer) startSQLLivenessAndInstanceProviders(ctx context.Context) er
 		}
 	}
 	s.sqlLivenessProvider.Start(ctx)
+	// sqlInstanceProvider must always be started after sqlLivenessProvider
+	// as sqlInstanceProvider relies on the session initialized and maintained by
+	// sqlLivenessProvider.
+	if err := s.sqlInstanceProvider.Start(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 

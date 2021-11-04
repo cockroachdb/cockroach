@@ -33,9 +33,9 @@ type Graph struct {
 	// Maps a target to its index in targetNodes.
 	targetIdxMap map[*scpb.Target]int
 
-	// nodeOpEdges maps a Node to an opEdge that proceeds
+	// nodeOpEdgesFrom maps a Node to an opEdge that proceeds
 	// from it. A Node may have at most one opEdge from it.
-	nodeOpEdges map[*scpb.Node]*OpEdge
+	nodeOpEdgesFrom map[*scpb.Node]*OpEdge
 
 	// nodeDepEdges maps a Node to its dependencies.
 	// A Node dependency is another target node which must be
@@ -70,11 +70,11 @@ func New(initial scpb.State) (*Graph, error) {
 		return nil, err
 	}
 	g := Graph{
-		targetIdxMap: map[*scpb.Target]int{},
-		nodeOpEdges:  map[*scpb.Node]*OpEdge{},
-		nodeDepEdges: map[*scpb.Node][]*DepEdge{},
-		opToNode:     map[scop.Op]*scpb.Node{},
-		entities:     db,
+		targetIdxMap:    map[*scpb.Target]int{},
+		nodeOpEdgesFrom: map[*scpb.Node]*OpEdge{},
+		nodeDepEdges:    map[*scpb.Node][]*DepEdge{},
+		opToNode:        map[scop.Op]*scpb.Node{},
+		entities:        db,
 	}
 	for _, n := range initial {
 		if existing, ok := g.targetIdxMap[n.Target]; ok {
@@ -93,14 +93,15 @@ func New(initial scpb.State) (*Graph, error) {
 	return &g, nil
 }
 
-func (g *Graph) getNode(t *scpb.Target, s scpb.Status) (*scpb.Node, bool) {
+// GetNode returns the cached node for a given target and status.
+func (g *Graph) GetNode(t *scpb.Target, s scpb.Status) (*scpb.Node, bool) {
 	targetStatuses := g.getTargetStatusMap(t)
 	ts, ok := targetStatuses[s]
 	return ts, ok
 }
 
 // Suppress the linter.
-var _ = (*Graph)(nil).getNode
+var _ = (*Graph)(nil).GetNode
 
 func (g *Graph) getOrCreateNode(t *scpb.Target, s scpb.Status) (*scpb.Node, error) {
 	targetStatuses := g.getTargetStatusMap(t)
@@ -137,7 +138,7 @@ var _ = (*Graph)(nil).containsTarget
 // GetOpEdgeFrom returns the unique outgoing op edge from the specified node,
 // if one exists.
 func (g *Graph) GetOpEdgeFrom(n *scpb.Node) (*OpEdge, bool) {
-	oe, ok := g.nodeOpEdges[n]
+	oe, ok := g.nodeOpEdgesFrom[n]
 	return oe, ok
 }
 
@@ -162,15 +163,15 @@ func (g *Graph) AddOpEdges(
 	if oe.to, err = g.getOrCreateNode(t, to); err != nil {
 		return err
 	}
-	if existing, exists := g.nodeOpEdges[oe.from]; exists {
+	if existing, exists := g.nodeOpEdgesFrom[oe.from]; exists {
 		return errors.Errorf("duplicate outbound op edge %v and %v",
 			oe, existing)
 	}
 	g.edges = append(g.edges, oe)
-	g.nodeOpEdges[oe.from] = oe
+	g.nodeOpEdgesFrom[oe.from] = oe
 	// Store mapping from op to Edge
 	for _, op := range ops {
-		g.opToNode[op] = oe.From()
+		g.opToNode[op] = oe.To()
 	}
 	return nil
 }

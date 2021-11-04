@@ -50,7 +50,7 @@ func TestRecordingString(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	carrier := metadataCarrier{MD: metadata.MD{}}
-	require.NoError(t, tr.InjectMetaInto(root.Meta(), carrier))
+	tr.InjectMetaInto(root.Meta(), carrier)
 
 	wireSpanMeta, err := tr2.ExtractMetaFrom(carrier)
 	require.NoError(t, err)

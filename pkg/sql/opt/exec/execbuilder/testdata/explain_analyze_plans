@@ -69,7 +69,7 @@ maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
 ·
-• group
+• group (streaming)
 │ nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 5
@@ -80,6 +80,8 @@ regions: <hidden>
     │ nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 5
+    │ estimated max memory allocated: 0 B
+    │ estimated max sql temp disk usage: 0 B
     │ equality: (k) = (k)
     │ left cols are key
     │ right cols are key
@@ -92,6 +94,7 @@ regions: <hidden>
     │     KV contention time: 0µs
     │     KV rows read: 5
     │     KV bytes read: 40 B
+    │     estimated max memory allocated: 0 B
     │     missing stats
     │     table: kv@kv_pkey
     │     spans: FULL SCAN
@@ -104,6 +107,7 @@ regions: <hidden>
           KV contention time: 0µs
           KV rows read: 5
           KV bytes read: 40 B
+          estimated max memory allocated: 0 B
           missing stats
           table: kw@kw_pkey
           spans: FULL SCAN
@@ -127,18 +131,24 @@ regions: <hidden>
 │ nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 5
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
 │ order: +w
 │
 └── • distinct
     │ nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 5
+    │ estimated max memory allocated: 0 B
+    │ estimated max sql temp disk usage: 0 B
     │ distinct on: w
     │
     └── • hash join
         │ nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 5
+        │ estimated max memory allocated: 0 B
+        │ estimated max sql temp disk usage: 0 B
         │ equality: (k) = (w)
         │ left cols are key
         │
@@ -150,6 +160,7 @@ regions: <hidden>
         │     KV contention time: 0µs
         │     KV rows read: 5
         │     KV bytes read: 40 B
+        │     estimated max memory allocated: 0 B
         │     missing stats
         │     table: kv@kv_pkey
         │     spans: FULL SCAN
@@ -162,6 +173,7 @@ regions: <hidden>
               KV contention time: 0µs
               KV rows read: 5
               KV bytes read: 40 B
+              estimated max memory allocated: 0 B
               missing stats
               table: kw@kw_pkey
               spans: FULL SCAN
@@ -185,6 +197,8 @@ regions: <hidden>
 │ nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 25
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
 │
 ├── • ordinality
 │   │ nodes: <hidden>
@@ -199,6 +213,7 @@ regions: <hidden>
 │         KV contention time: 0µs
 │         KV rows read: 5
 │         KV bytes read: 40 B
+│         estimated max memory allocated: 0 B
 │         missing stats
 │         table: kv@kv_pkey
 │         spans: FULL SCAN
@@ -216,6 +231,7 @@ regions: <hidden>
           KV contention time: 0µs
           KV rows read: 5
           KV bytes read: 40 B
+          estimated max memory allocated: 0 B
           missing stats
           table: kv@kv_pkey
           spans: FULL SCAN
@@ -260,6 +276,8 @@ regions: <hidden>
 │ nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 5
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
 │
 └── • scan
       nodes: <hidden>
@@ -269,6 +287,7 @@ regions: <hidden>
       KV contention time: 0µs
       KV rows read: 5
       KV bytes read: 40 B
+      estimated max memory allocated: 0 B
       missing stats
       table: kv@kv_pkey
       spans: FULL SCAN
@@ -296,6 +315,7 @@ regions: <hidden>
   KV contention time: 0µs
   KV rows read: 0
   KV bytes read: 0 B
+  estimated max memory allocated: 0 B
   missing stats
   table: kv@kv_pkey
   spans: [/0 - /0]
@@ -352,6 +372,7 @@ regions: <hidden>
 │             KV contention time: 0µs
 │             KV rows read: 1
 │             KV bytes read: 8 B
+│             estimated max memory allocated: 0 B
 │             missing stats
 │             table: parent@parent_pkey
 │             spans: LIMITED SCAN

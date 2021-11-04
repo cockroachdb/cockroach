@@ -232,6 +232,8 @@ type CommonLookupFlags struct {
 	IncludeOffline bool
 	// IncludeOffline specifies if dropped descriptors should be visible.
 	IncludeDropped bool
+	// AvoidSynthetic specifies if the any synthetic descriptors will be ignored.
+	AvoidSynthetic bool
 }
 
 // SchemaLookupFlags is the flag struct suitable for GetSchemaByName().

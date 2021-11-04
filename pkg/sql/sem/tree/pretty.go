@@ -1239,9 +1239,6 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	if node.As() {
 		clauses = append(clauses, p.Doc(node.AsSource))
 	}
-	if node.Interleave != nil {
-		clauses = append(clauses, p.Doc(node.Interleave))
-	}
 	if node.PartitionByTable != nil {
 		clauses = append(clauses, p.Doc(node.PartitionByTable))
 	}
@@ -1559,22 +1556,6 @@ func (node *ShardedIndexDef) doc(p *PrettyCfg) pretty.Doc {
 	return pretty.Fold(pretty.ConcatSpace, parts...)
 }
 
-func (node *InterleaveDef) doc(p *PrettyCfg) pretty.Doc {
-	// Final layout:
-	//
-	// INTERLEAVE IN PARENT tbl (...) [RESTRICT|CASCADE]
-	//
-	parts := []pretty.Doc{
-		pretty.Keyword("INTERLEAVE IN PARENT"),
-		p.Doc(&node.Parent),
-		p.bracket("(", p.Doc(&node.Fields), ")"),
-	}
-	if node.DropBehavior != DropDefault {
-		parts = append(parts, pretty.Keyword(node.DropBehavior.String()))
-	}
-	return pretty.Fold(pretty.ConcatSpace, parts...)
-}
-
 func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	// CREATE [UNIQUE] [INVERTED] INDEX [name]
@@ -1619,9 +1600,6 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 			p.Doc(&node.Storing),
 			")", "",
 		))
-	}
-	if node.Interleave != nil {
-		clauses = append(clauses, p.Doc(node.Interleave))
 	}
 	if node.PartitionByIndex != nil {
 		clauses = append(clauses, p.Doc(node.PartitionByIndex))
@@ -1693,9 +1671,6 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 			p.Doc(&node.Storing),
 			")", ""))
 	}
-	if node.Interleave != nil {
-		clauses = append(clauses, p.Doc(node.Interleave))
-	}
 	if node.PartitionByIndex != nil {
 		clauses = append(clauses, p.Doc(node.PartitionByIndex))
 	}
@@ -1756,9 +1731,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 			p.Doc(&node.Storing),
 			")", ""))
 	}
-	if node.Interleave != nil {
-		clauses = append(clauses, p.Doc(node.Interleave))
-	}
+
 	if node.PartitionByIndex != nil {
 		clauses = append(clauses, p.Doc(node.PartitionByIndex))
 	}
@@ -2153,27 +2126,12 @@ func (node *Import) doc(p *PrettyCfg) pretty.Doc {
 			items = append(items, p.row("FROM", pretty.Nil))
 		}
 		items = append(items, p.row(node.FileFormat, p.Doc(&node.Files)))
-	} else {
-		if node.Into {
-			into := p.Doc(node.Table)
-			if node.IntoCols != nil {
-				into = p.nestUnder(into, p.bracket("(", p.Doc(&node.IntoCols), ")"))
-			}
-			items = append(items, p.row("INTO", into))
-		} else {
-			if node.CreateFile != nil {
-				items = append(items, p.row("TABLE", p.Doc(node.Table)))
-				items = append(items, p.row("CREATE USING", p.Doc(node.CreateFile)))
-			} else {
-				table := p.bracketDoc(
-					pretty.ConcatSpace(p.Doc(node.Table), pretty.Text("(")),
-					p.Doc(&node.CreateDefs),
-					pretty.Text(")"),
-				)
-				items = append(items, p.row("TABLE", table))
-			}
+	} else if node.Into {
+		into := p.Doc(node.Table)
+		if node.IntoCols != nil {
+			into = p.nestUnder(into, p.bracket("(", p.Doc(&node.IntoCols), ")"))
 		}
-
+		items = append(items, p.row("INTO", into))
 		data := p.bracketKeyword(
 			"DATA", " (",
 			p.Doc(&node.Files),
@@ -2181,6 +2139,7 @@ func (node *Import) doc(p *PrettyCfg) pretty.Doc {
 		)
 		items = append(items, p.row(node.FileFormat, data))
 	}
+
 	if node.Options != nil {
 		items = append(items, p.row("WITH", p.Doc(&node.Options)))
 	}

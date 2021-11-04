@@ -492,8 +492,11 @@ var (
 		types.Jsonb,
 		types.VarBit,
 		types.AnyEnum,
+		types.AnyEnumArray,
 		types.INetArray,
 		types.VarBitArray,
+		types.AnyTuple,
+		types.AnyTupleArray,
 	}
 	// StrValAvailBytes is the set of types convertible to byte array.
 	StrValAvailBytes = []*types.T{types.Bytes, types.Uuid, types.String, types.AnyEnum}

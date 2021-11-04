@@ -119,6 +119,7 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"sys.cpu.sys.ns",
 					"sys.cpu.user.ns",
+					"sys.cpu.now.ns",
 				},
 			},
 		},
@@ -2593,6 +2594,7 @@ var charts = []sectionDescription{
 					"jobs.migration.currently_running",
 					"jobs.auto_span_config_reconciliation.currently_running",
 					"jobs.auto_sql_stats_compaction.currently_running",
+					"jobs.stream_replication.currently_running",
 				},
 			},
 			{
@@ -2724,6 +2726,17 @@ var charts = []sectionDescription{
 					"jobs.stream_ingestion.resume_completed",
 					"jobs.stream_ingestion.resume_failed",
 					"jobs.stream_ingestion.resume_retry_error",
+				},
+			},
+			{
+				Title: "Stream Replication",
+				Metrics: []string{
+					"jobs.stream_replication.fail_or_cancel_completed",
+					"jobs.stream_replication.fail_or_cancel_failed",
+					"jobs.stream_replication.fail_or_cancel_retry_error",
+					"jobs.stream_replication.resume_completed",
+					"jobs.stream_replication.resume_failed",
+					"jobs.stream_replication.resume_retry_error",
 				},
 			},
 			{

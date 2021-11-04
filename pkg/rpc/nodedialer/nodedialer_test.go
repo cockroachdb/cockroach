@@ -184,9 +184,11 @@ func TestConnHealthTryDial(t *testing.T) {
 	defer stopper.Stop(ctx)
 	nd := New(rpcCtx, newSingleNodeResolver(staticNodeID, ln.Addr()))
 
+	// Make sure no connection exists yet, via ConnHealth().
+	require.Equal(t, rpc.ErrNoConnection, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
+
 	// When no connection exists, we expect ConnHealthTryDial to dial the node,
 	// which will return ErrNoHeartbeat at first but eventually succeed.
-	require.Equal(t, rpc.ErrNotHeartbeated, nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass))
 	require.Eventually(t, func() bool {
 		return nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass) == nil
 	}, time.Second, 10*time.Millisecond)

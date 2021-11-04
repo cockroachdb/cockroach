@@ -64,12 +64,12 @@ func TestConnRecover(t *testing.T) {
 	// and starts delivering ErrBadConn. We don't know the timing of
 	// this however.
 	testutils.SucceedsSoon(t, func() error {
-		if sqlRows, err := conn.Query(`SELECT 1`, nil); !errors.Is(err, driver.ErrBadConn) {
-			return errors.Newf("expected ErrBadConn, got %v", err)
-		} else if err == nil {
+		if sqlRows, err := conn.Query(`SELECT 1`, nil); err == nil {
 			if closeErr := sqlRows.Close(); closeErr != nil {
 				t.Fatal(closeErr)
 			}
+		} else if !errors.Is(err, driver.ErrBadConn) {
+			return errors.Newf("expected ErrBadConn, got %v", err)
 		}
 		return nil
 	})

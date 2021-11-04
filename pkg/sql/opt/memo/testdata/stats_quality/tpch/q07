@@ -65,7 +65,7 @@ sort
  ├── key: (50,56,61)
  ├── fd: (50,56,61)-->(63)
  ├── ordering: +50,+56,+61
- └── group-by
+ └── group-by (hash)
       ├── save-table-name: q7_group_by_2
       ├── columns: n1.n_name:50(char!null) n2.n_name:56(char!null) l_year:61(float) sum:63(float!null)
       ├── grouping columns: n1.n_name:50(char!null) n2.n_name:56(char!null) l_year:61(float)

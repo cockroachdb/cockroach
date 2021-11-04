@@ -582,7 +582,7 @@ WHERE
 						return errors.New("expected error, found none")
 					}
 					if !testutils.IsError(err, "invalid input value for enum") {
-						return errors.Newf("expected invalid input for enum error, found %v", err)
+						return errors.NewAssertionErrorWithWrappedErrf(err, "expected invalid input for enum error")
 					}
 					return nil
 				})

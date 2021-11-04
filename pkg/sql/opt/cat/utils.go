@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 )
@@ -237,23 +236,6 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 				prefixes.Child(datums.String())
 			}
 			FormatZone(p.Zone(), part)
-		}
-	}
-	if n := idx.InterleaveAncestorCount(); n > 0 {
-		c := child.Child("interleave ancestors")
-		for i := 0; i < n; i++ {
-			table, index, numKeyCols := idx.InterleaveAncestor(i)
-			c.Childf(
-				"table=%d index=%d (%d key column%s)",
-				table, index, numKeyCols, util.Pluralize(int64(numKeyCols)),
-			)
-		}
-	}
-	if n := idx.InterleavedByCount(); n > 0 {
-		c := child.Child("interleaved by")
-		for i := 0; i < n; i++ {
-			table, index := idx.InterleavedBy(i)
-			c.Childf("table=%d index=%d", table, index)
 		}
 	}
 	if pred, isPartial := idx.Predicate(); isPartial {

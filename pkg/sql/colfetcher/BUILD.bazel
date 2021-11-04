@@ -5,6 +5,7 @@ go_library(
     name = "colfetcher",
     srcs = [
         "cfetcher.go",
+        "cfetcher_setup.go",
         "colbatch_scan.go",
         "index_join.go",
         ":gen-fetcherstate-stringer",  # keep
@@ -23,6 +24,7 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/colconv",
         "//pkg/sql/colencoding",
+        "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexecspan",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
@@ -30,6 +32,7 @@ go_library(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/memsize",
+        "//pkg/sql/physicalplan",
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowinfra",

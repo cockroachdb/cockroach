@@ -352,18 +352,19 @@ func (ds *ServerImpl) setupFlow(
 			Tracer:           ds.ServerConfig.Tracer,
 			// Most processors will override this Context with their own context in
 			// ProcessorBase. StartInternal().
-			Context:            ctx,
-			Planner:            &faketreeeval.DummyEvalPlanner{},
-			PrivilegedAccessor: &faketreeeval.DummyPrivilegedAccessor{},
-			SessionAccessor:    &faketreeeval.DummySessionAccessor{},
-			ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
-			Sequence:           &faketreeeval.DummySequenceOperators{},
-			Tenant:             &faketreeeval.DummyTenantOperator{},
-			Regions:            &faketreeeval.DummyRegionOperator{},
-			InternalExecutor:   ie,
-			Txn:                leafTxn,
-			SQLLivenessReader:  ds.ServerConfig.SQLLivenessReader,
-			SQLStatsController: ds.ServerConfig.SQLStatsController,
+			Context:                   ctx,
+			Planner:                   &faketreeeval.DummyEvalPlanner{},
+			PrivilegedAccessor:        &faketreeeval.DummyPrivilegedAccessor{},
+			SessionAccessor:           &faketreeeval.DummySessionAccessor{},
+			ClientNoticeSender:        &faketreeeval.DummyClientNoticeSender{},
+			Sequence:                  &faketreeeval.DummySequenceOperators{},
+			Tenant:                    &faketreeeval.DummyTenantOperator{},
+			Regions:                   &faketreeeval.DummyRegionOperator{},
+			InternalExecutor:          ie,
+			Txn:                       leafTxn,
+			SQLLivenessReader:         ds.ServerConfig.SQLLivenessReader,
+			SQLStatsController:        ds.ServerConfig.SQLStatsController,
+			IndexUsageStatsController: ds.ServerConfig.IndexUsageStatsController,
 		}
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
@@ -465,6 +466,7 @@ func (ds *ServerImpl) newFlowContext(
 		DiskMonitor: execinfra.NewMonitor(
 			ctx, ds.ParentDiskMonitor, "flow-disk-monitor",
 		),
+		PreserveFlowSpecs: localState.PreserveFlowSpecs,
 	}
 
 	if localState.IsLocal && localState.Collection != nil {
@@ -532,6 +534,10 @@ type LocalState struct {
 	// LocalProcs is an array of planNodeToRowSource processors. It's in order and
 	// will be indexed into by the RowSourceIdx field in LocalPlanNodeSpec.
 	LocalProcs []execinfra.LocalProcessor
+
+	// PreserveFlowSpecs is true when the flow setup code needs to be careful
+	// when modifying the specifications of processors.
+	PreserveFlowSpecs bool
 }
 
 // MustUseLeafTxn returns true if a LeafTxn must be used. It is valid to call

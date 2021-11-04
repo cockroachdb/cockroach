@@ -4,12 +4,14 @@ go_library(
     name = "arrowserde",
     srcs = [
         "doc.go",
-        "file_generated.go",
-        "message_generated.go",
-        "schema_generated.go",
-        "tensor_generated.go",
+        "file_generated.go",  # keep
+        "message_generated.go",  # keep
+        "schema_generated.go",  # keep
+        "tensor_generated.go",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/col/colserde/arrowserde",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_google_flatbuffers//go"],
+    deps = [
+        "@com_github_google_flatbuffers//go",  # keep
+    ],
 )

@@ -117,7 +117,7 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	}
 	cross = "cross" + cross
 	volume := mustGetFlagString(cmd, volumeFlag)
-	args = append(args, fmt.Sprintf("--config=%s", cross))
+	args = append(args, fmt.Sprintf("--config=%s", cross), "--config=ci")
 	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false)
 	if err != nil {
 		return err
@@ -129,7 +129,7 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	// TODO(ricky): Actually, we need to shell-quote the arguments,
 	// but that's hard and I don't think it's necessary for now.
 	script.WriteString(fmt.Sprintf("bazel %s\n", strings.Join(args, " ")))
-	script.WriteString(fmt.Sprintf("BAZELBIN=`bazel info bazel-bin --color=no --config=%s`\n", cross))
+	script.WriteString(fmt.Sprintf("BAZELBIN=`bazel info bazel-bin --color=no --config=%s --config=ci`\n", cross))
 	for _, target := range buildTargets {
 		script.WriteString(fmt.Sprintf("cp $BAZELBIN/%s /artifacts\n", bazelutil.OutputOfBinaryRule(target.fullName)))
 	}

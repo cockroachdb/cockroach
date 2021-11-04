@@ -76,6 +76,7 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//proto",
         "@com_github_google_btree//:btree",
+        "@io_opentelemetry_go_otel//attribute",
     ],
 )
 
@@ -147,6 +148,7 @@ go_test(
         "//pkg/kv/kvbase",
         "//pkg/kv/kvclient/rangecache:with-mocks",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/tscache",

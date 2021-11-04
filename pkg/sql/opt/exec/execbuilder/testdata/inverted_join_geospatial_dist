@@ -272,7 +272,7 @@ vectorized: true
 │
 ├── • render
 │   │
-│   └── • group
+│   └── • group (hash)
 │       │ group by: lk
 │       │
 │       └── • lookup join (left outer)

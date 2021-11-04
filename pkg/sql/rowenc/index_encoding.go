@@ -43,10 +43,6 @@ import (
 func MakeIndexKeyPrefix(
 	codec keys.SQLCodec, desc catalog.TableDescriptor, indexID descpb.IndexID,
 ) []byte {
-	if i, err := desc.FindIndexWithID(indexID); err == nil && i.NumInterleaveAncestors() > 0 {
-		ancestor := i.GetInterleaveAncestor(0)
-		return codec.IndexPrefix(uint32(ancestor.TableID), uint32(ancestor.IndexID))
-	}
 	return codec.IndexPrefix(uint32(desc.GetID()), uint32(indexID))
 }
 
@@ -148,44 +144,10 @@ func EncodePartialIndexKey(
 	// We know we will append to the key which will cause the capacity to grow so
 	// make it bigger from the get-go.
 	// Add the length of the key prefix as an initial guess.
-	// Add 3 bytes for every ancestor: table,index id + interleave sentinel.
 	// Add 2 bytes for every column value. An underestimate for all but low integers.
-	key = growKey(keyPrefix, len(keyPrefix)+3*index.NumInterleaveAncestors()+2*len(values))
+	key = growKey(keyPrefix, len(keyPrefix)+2*len(values))
 
 	dirs := directions(index.IndexDesc().KeyColumnDirections)
-
-	if index.NumInterleaveAncestors() > 0 {
-		for i := 0; i < index.NumInterleaveAncestors(); i++ {
-			ancestor := index.GetInterleaveAncestor(i)
-			// The first ancestor is assumed to already be encoded in keyPrefix.
-			if i != 0 {
-				key = EncodePartialTableIDIndexID(key, ancestor.TableID, ancestor.IndexID)
-			}
-
-			partial := false
-			length := int(ancestor.SharedPrefixLen)
-			if length > len(colIDs) {
-				length = len(colIDs)
-				partial = true
-			}
-			key, colIDWithNullVal, err = EncodeColumns(colIDs[:length], dirs[:length], colMap, values, key)
-			if err != nil {
-				return nil, colIDWithNullVal, err
-			}
-			if partial {
-				// Early stop. Note that if we had exactly SharedPrefixLen columns
-				// remaining, we want to append the next tableID/indexID pair because
-				// that results in a more specific key.
-				return key, colIDWithNullVal, nil
-			}
-			colIDs, dirs = colIDs[length:], dirs[length:]
-			// Each ancestor is separated by an interleaved
-			// sentinel (0xfe).
-			key = encoding.EncodeInterleavedSentinel(key)
-		}
-
-		key = EncodePartialTableIDIndexID(key, tableDesc.GetID(), index.GetID())
-	}
 
 	var keyColIDWithNullVal, keySuffixColIDWithNullVal descpb.ColumnID
 	key, keyColIDWithNullVal, err = EncodeColumns(colIDs, dirs, colMap, values, key)
@@ -462,43 +424,6 @@ func MakeKeyFromEncDatums(
 	key := make(roachpb.Key, len(keyPrefix), len(keyPrefix)*2)
 	copy(key, keyPrefix)
 
-	if index.NumInterleaveAncestors() > 0 {
-		for i := 0; i < index.NumInterleaveAncestors(); i++ {
-			ancestor := index.GetInterleaveAncestor(i)
-			// The first ancestor is assumed to already be encoded in keyPrefix.
-			if i != 0 {
-				key = EncodePartialTableIDIndexID(key, ancestor.TableID, ancestor.IndexID)
-			}
-
-			partial := false
-			length := int(ancestor.SharedPrefixLen)
-			if length > len(types) {
-				length = len(types)
-				partial = true
-			}
-			var (
-				err error
-				n   bool
-			)
-			key, n, err = appendEncDatumsToKey(key, types[:length], values[:length], dirs[:length], alloc)
-			if err != nil {
-				return nil, false, false, err
-			}
-			containsNull = containsNull || n
-			if partial {
-				// Early stop - the number of desired columns was fewer than the number
-				// left in the current interleave.
-				return key, false, false, nil
-			}
-			types, values, dirs = types[length:], values[length:], dirs[length:]
-
-			// Each ancestor is separated by an interleaved
-			// sentinel (0xfe).
-			key = encoding.EncodeInterleavedSentinel(key)
-		}
-
-		key = EncodePartialTableIDIndexID(key, tableDesc.GetID(), index.GetID())
-	}
 	var (
 		err error
 		n   bool
@@ -550,12 +475,6 @@ func appendEncDatumsToKey(
 	return key, containsNull, nil
 }
 
-// EncodePartialTableIDIndexID encodes a table id followed by an index id to an
-// existing key. The key must already contain a tenant id.
-func EncodePartialTableIDIndexID(key []byte, tableID descpb.ID, indexID descpb.IndexID) []byte {
-	return keys.MakeTableIDIndexID(key, uint32(tableID), uint32(indexID))
-}
-
 // DecodePartialTableIDIndexID decodes a table id followed by an index id. The
 // input key must already have its tenant id removed.
 func DecodePartialTableIDIndexID(key []byte) ([]byte, descpb.ID, descpb.IndexID, error) {
@@ -574,58 +493,15 @@ func DecodeIndexKeyPrefix(
 	if err != nil {
 		return 0, nil, err
 	}
-
-	// TODO(dan): This whole operation is n^2 because of the interleaves
-	// bookkeeping. We could improve it to n with a prefix tree of components.
-
-	interleaves := append(make([]catalog.Index, 0, len(desc.ActiveIndexes())), desc.ActiveIndexes()...)
-
-	for component := 0; ; component++ {
-		var tableID descpb.ID
-		key, tableID, indexID, err = DecodePartialTableIDIndexID(key)
-		if err != nil {
-			return 0, nil, err
-		}
-		if tableID == desc.GetID() {
-			// Once desc's table id has been decoded, there can be no more
-			// interleaves.
-			break
-		}
-
-		for i := len(interleaves) - 1; i >= 0; i-- {
-			if interleaves[i].NumInterleaveAncestors() <= component ||
-				interleaves[i].GetInterleaveAncestor(component).TableID != tableID ||
-				interleaves[i].GetInterleaveAncestor(component).IndexID != indexID {
-
-				// This component, and thus this interleave, doesn't match what was
-				// decoded, remove it.
-				copy(interleaves[i:], interleaves[i+1:])
-				interleaves = interleaves[:len(interleaves)-1]
-			}
-		}
-		// The decoded key doesn't many any known interleaves
-		if len(interleaves) == 0 {
-			return 0, nil, errors.Errorf("no known interleaves for key")
-		}
-
-		// Anything left has the same SharedPrefixLen at index `component`, so just
-		// use the first one.
-		for i := uint32(0); i < interleaves[0].GetInterleaveAncestor(component).SharedPrefixLen; i++ {
-			l, err := encoding.PeekLength(key)
-			if err != nil {
-				return 0, nil, err
-			}
-			key = key[l:]
-		}
-
-		// Consume the interleaved sentinel.
-		var ok bool
-		key, ok = encoding.DecodeIfInterleavedSentinel(key)
-		if !ok {
-			return 0, nil, errors.Errorf("invalid interleave key")
-		}
+	var tableID descpb.ID
+	key, tableID, indexID, err = DecodePartialTableIDIndexID(key)
+	if err != nil {
+		return 0, nil, err
 	}
-
+	if tableID != desc.GetID() {
+		return 0, nil, errors.Errorf(
+			"unexpected table ID %d, expected %d instead", tableID, desc.GetID())
+	}
 	return indexID, key, err
 }
 
@@ -639,8 +515,6 @@ func DecodeIndexKeyPrefix(
 // no error.
 func DecodeIndexKey(
 	codec keys.SQLCodec,
-	desc catalog.TableDescriptor,
-	index catalog.Index,
 	types []*types.T,
 	vals []EncDatum,
 	colDirs []descpb.IndexDescriptor_Direction,
@@ -654,80 +528,11 @@ func DecodeIndexKey(
 	if err != nil {
 		return nil, false, false, err
 	}
-	return DecodeIndexKeyWithoutTableIDIndexIDPrefix(desc, index, types, vals, colDirs, key)
-}
-
-// DecodeIndexKeyWithoutTableIDIndexIDPrefix is the same as DecodeIndexKey,
-// except it expects its index key is missing in its tenant id and first table
-// id / index id key prefix.
-func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
-	desc catalog.TableDescriptor,
-	index catalog.Index,
-	types []*types.T,
-	vals []EncDatum,
-	colDirs []descpb.IndexDescriptor_Direction,
-	key []byte,
-) (remainingKey []byte, matches bool, foundNull bool, _ error) {
-	var decodedTableID descpb.ID
-	var decodedIndexID descpb.IndexID
-	var err error
-
-	if index.NumInterleaveAncestors() > 0 {
-		for i := 0; i < index.NumInterleaveAncestors(); i++ {
-			ancestor := index.GetInterleaveAncestor(i)
-			// Our input key had its first table id / index id chopped off, so
-			// don't try to decode those for the first ancestor.
-			if i != 0 {
-				key, decodedTableID, decodedIndexID, err = DecodePartialTableIDIndexID(key)
-				if err != nil {
-					return nil, false, false, err
-				}
-				if decodedTableID != ancestor.TableID || decodedIndexID != ancestor.IndexID {
-					return nil, false, false, nil
-				}
-			}
-
-			length := int(ancestor.SharedPrefixLen)
-			var isNull bool
-			key, isNull, err = DecodeKeyVals(types[:length], vals[:length], colDirs[:length], key)
-			if err != nil {
-				return nil, false, false, err
-			}
-			types, vals, colDirs = types[length:], vals[length:], colDirs[length:]
-			foundNull = foundNull || isNull
-
-			// Consume the interleaved sentinel.
-			var ok bool
-			key, ok = encoding.DecodeIfInterleavedSentinel(key)
-			if !ok {
-				return nil, false, false, nil
-			}
-		}
-
-		key, decodedTableID, decodedIndexID, err = DecodePartialTableIDIndexID(key)
-		if err != nil {
-			return nil, false, false, err
-		}
-		if decodedTableID != desc.GetID() || decodedIndexID != index.GetID() {
-			return nil, false, false, nil
-		}
-	}
-
-	var isNull bool
-	key, isNull, err = DecodeKeyVals(types, vals, colDirs, key)
+	remainingKey, foundNull, err = DecodeKeyVals(types, vals, colDirs, key)
 	if err != nil {
 		return nil, false, false, err
 	}
-	foundNull = foundNull || isNull
-
-	// We're expecting a column family id next (a varint). If
-	// interleavedSentinel is actually next, then this key is for a child
-	// table.
-	if _, ok := encoding.DecodeIfInterleavedSentinel(key); ok {
-		return nil, false, false, nil
-	}
-
-	return key, true, foundNull, nil
+	return remainingKey, true, foundNull, nil
 }
 
 // DecodeKeyVals decodes the values that are part of the key. The decoded
@@ -1528,177 +1333,14 @@ func EncodeSecondaryIndexes(
 	return secondaryIndexEntries, memUsedEncodingSecondaryIdxs, nil
 }
 
-// IndexKeyEquivSignature parses an index key if and only if the index key
-// belongs to a table where its equivalence signature and all its interleave
-// ancestors' signatures can be found in validEquivSignatures. Any tenant ID
-// prefix should be removed before calling this function.
-//
-// Its validEquivSignatures argument is a map containing equivalence signatures
-// of valid ancestors of the desired table and of the desired table itself.
-//
-// IndexKeyEquivSignature returns whether or not the index key satisfies the
-// above condition, the value mapped to by the desired table (could be a table
-// index), and the rest of the key that's not part of the signature.
-//
-// It also requires two []byte buffers: one for the signature (signatureBuf) and
-// one for the rest of the key (keyRestBuf).
-//
-// The equivalence signature defines the equivalence classes for the signature
-// of potentially interleaved tables. For example, the equivalence signatures
-// for the following interleaved indexes:
-//
-//    <parent@primary>
-//    <child@secondary>
-//
-// and index keys
-//    <parent index key>:   /<parent table id>/<parent index id>/<val 1>/<val 2>
-//    <child index key>:    /<parent table id>/<parent index id>/<val 1>/<val 2>/#/<child table id>/child index id>/<val 3>/<val 4>
-//
-// correspond to the equivalence signatures
-//    <parent@primary>:     /<parent table id>/<parent index id>
-//    <child@secondary>:    /<parent table id>/<parent index id>/#/<child table id>/<child index id>
-//
-// Equivalence signatures allow us to associate an index key with its table
-// without having to invoke DecodeIndexKey multiple times.
-//
-// IndexKeyEquivSignature will return false if the a table's ancestor'ssignature
-// or the table's signature (table which the index key belongs to) is not mapped
-// in validEquivSignatures.
-//
-// For example, suppose the given key is
-//
-//    /<t2 table id>/<t2 index id>/<val t2>/#/<t3 table id>/<t3 table id>/<val t3>
-//
-// and validEquivSignatures contains
-//
-//    /<t1 table id>/t1 index id>
-//    /<t1 table id>/t1 index id>/#/<t4 table id>/<t4 index id>
-//
-// IndexKeyEquivSignature will short-circuit and return false once
-//
-//    /<t2 table id>/<t2 index id>
-//
-// is processed since t2's signature is not specified in validEquivSignatures.
-func IndexKeyEquivSignature(
-	key []byte, validEquivSignatures map[string]int, signatureBuf []byte, restBuf []byte,
-) (tableIdx int, restResult []byte, success bool, err error) {
-	signatureBuf = signatureBuf[:0]
-	restResult = restBuf[:0]
-	for {
-		// Well-formed key is guaranteed to to have 2 varints for every
-		// ancestor: the TableID and descpb.IndexID.
-		// We extract these out and add them to our buffer.
-		for i := 0; i < 2; i++ {
-			idLen, err := encoding.PeekLength(key)
-			if err != nil {
-				return 0, nil, false, err
-			}
-			signatureBuf = append(signatureBuf, key[:idLen]...)
-			key = key[idLen:]
-		}
-
-		// The current signature (either an ancestor table's or the key's)
-		// is not one of the validEquivSignatures.
-		// We can short-circuit and return false.
-		recentTableIdx, found := validEquivSignatures[string(signatureBuf)]
-		if !found {
-			return 0, nil, false, nil
-		}
-
-		var isSentinel bool
-		// Peek and discard encoded index values.
-		for {
-			key, isSentinel = encoding.DecodeIfInterleavedSentinel(key)
-			// We stop once the key is empty or if we encounter a
-			// sentinel for the next TableID-descpb.IndexID pair.
-			if len(key) == 0 || isSentinel {
-				break
-			}
-			len, err := encoding.PeekLength(key)
-			if err != nil {
-				return 0, nil, false, err
-			}
-			// Append any other bytes (column values initially,
-			// then family ID and timestamp) to return.
-			restResult = append(restResult, key[:len]...)
-			key = key[len:]
-		}
-
-		if !isSentinel {
-			// The key has been fully decomposed and is valid up to
-			// this point.
-			// Return the most recent table index from
-			// validEquivSignatures.
-			return recentTableIdx, restResult, true, nil
-		}
-		// If there was a sentinel, we know there are more
-		// descendant(s).
-		// We insert an interleave sentinel and continue extracting the
-		// next descendant's IDs.
-		signatureBuf = encoding.EncodeInterleavedSentinel(signatureBuf)
-	}
-}
-
-// TableEquivSignatures returns the equivalence signatures for each interleave
-// ancestor and itself. See IndexKeyEquivSignature for more info.
-func TableEquivSignatures(
-	desc catalog.TableDescriptor, index catalog.Index,
-) (signatures [][]byte, err error) {
-	// signatures contains the slice reference to the signature of every
-	// ancestor of the current table-index.
-	// The last slice reference is the given table-index's signature.
-	signatures = make([][]byte, index.NumInterleaveAncestors()+1)
-	// fullSignature is the backing byte slice for each individual signature
-	// as it buffers each block of table and index IDs.
-	// We eagerly allocate 4 bytes for each of the two IDs per ancestor
-	// (which can fit Uvarint IDs up to 2^17-1 without another allocation),
-	// 1 byte for each interleave sentinel, and 4 bytes each for the given
-	// table's and index's ID.
-	fullSignature := make([]byte, 0, index.NumInterleaveAncestors()*9+8)
-
-	// Encode the table's ancestors' TableIDs and descpb.IndexIDs.
-	for i := 0; i < index.NumInterleaveAncestors(); i++ {
-		ancestor := index.GetInterleaveAncestor(i)
-		fullSignature = EncodePartialTableIDIndexID(fullSignature, ancestor.TableID, ancestor.IndexID)
-		// Create a reference up to this point for the ancestor's
-		// signature.
-		signatures[i] = fullSignature
-		// Append Interleave sentinel after every ancestor.
-		fullSignature = encoding.EncodeInterleavedSentinel(fullSignature)
-	}
-
-	// Encode the table's table and index IDs.
-	fullSignature = EncodePartialTableIDIndexID(fullSignature, desc.GetID(), index.GetID())
-	// Create a reference for the given table's signature as the last
-	// element of signatures.
-	signatures[len(signatures)-1] = fullSignature
-
-	return signatures, nil
-}
-
 // maxKeyTokens returns the maximum number of key tokens in an index's key,
 // including the table ID, index ID, and index column values (including extra
 // columns that may be stored in the key).
 // It requires knowledge of whether the key will or might contain a NULL value:
 // if uncertain, pass in true to 'overestimate' the maxKeyTokens.
 //
-// In general, a key belonging to an interleaved index grandchild is encoded as:
-//
-//    /table/index/<parent-pk1>/.../<parent-pkX>/#/table/index/<child-pk1>/.../<child-pkY>/#/table/index/<grandchild-pk1>/.../<grandchild-pkZ>
-//
-// The part of the key with respect to the grandchild index would be
-// the entire key since there are no grand-grandchild table/index IDs or
-// <grandgrandchild-pk>. The maximal prefix of the key that belongs to child is
-//
-//    /table/index/<parent-pk1>/.../<parent-pkX>/#/table/index/<child-pk1>/.../<child-pkY>
-//
-// and the maximal prefix of the key that belongs to parent is
-//
-//    /table/index/<parent-pk1>/.../<parent-pkX>
-//
 // This returns the maximum number of <tokens> in this prefix.
 func maxKeyTokens(index catalog.Index, containsNull bool) int {
-	nTables := index.NumInterleaveAncestors() + 1
 	nKeyCols := index.NumKeyColumns()
 
 	// Non-unique secondary indexes or unique secondary indexes with a NULL
@@ -1709,20 +1351,7 @@ func maxKeyTokens(index catalog.Index, containsNull bool) int {
 		nKeyCols += index.NumKeySuffixColumns()
 	}
 
-	// To illustrate how we compute max # of key tokens, take the
-	// key in the example above and let the respective index be child.
-	// We'd like to return the number of bytes in
-	//
-	//    /table/index/<parent-pk1>/.../<parent-pkX>/#/table/index/<child-pk1>/.../<child-pkY>
-	// For each table-index, there is
-	//    1. table ID
-	//    2. index ID
-	//    3. interleave sentinel
-	// or 3 * nTables.
-	// Each <parent-pkX> must be a part of the index's columns (nKeys).
-	// Finally, we do not want to include the interleave sentinel for the
-	// current index (-1).
-	return 3*nTables + nKeyCols - 1
+	return 2 + nKeyCols
 }
 
 // AdjustEndKeyForInterleave returns an exclusive end key. It does two things:

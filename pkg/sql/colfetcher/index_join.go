@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -388,7 +389,7 @@ func NewColIndexJoin(
 	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
 	evalCtx *tree.EvalContext,
-	semaCtx *tree.SemaContext,
+	helper *colexecargs.ExprHelper,
 	input colexecop.Operator,
 	spec *execinfrapb.JoinReaderSpec,
 	post *execinfrapb.PostProcessSpec,
@@ -414,25 +415,43 @@ func NewColIndexJoin(
 	// retrieving the hydrated immutable from cache.
 	table := spec.BuildTableDescriptor()
 	index := table.ActiveIndexes()[spec.IndexIdx]
-	tableArgs, err := populateTableArgs(
-		ctx, flowCtx, evalCtx, table, index,
-		nil /* invertedCol */, spec.Visibility, spec.HasSystemColumns,
+	tableArgs, idxMap, err := populateTableArgs(
+		ctx, flowCtx, evalCtx, table, index, nil, /* invertedCol */
+		spec.Visibility, spec.HasSystemColumns, post, helper,
 	)
 	if err != nil {
 		return nil, err
 	}
+	if idxMap != nil {
+		// The index join is fetching from the primary index, so there should be
+		// no mapping needed.
+		return nil, errors.AssertionFailedf("unexpectedly non-nil idx map for the index join")
+	}
 
 	// Retrieve the set of columns that the index join needs to fetch.
+	var neededColumns []uint32
+	var neededColOrdsInWholeTable util.FastIntSet
 	if post.OutputColumns != nil {
-		for _, neededColumn := range post.OutputColumns {
-			tableArgs.ValNeededForCol.Add(int(neededColumn))
+		neededColumns = post.OutputColumns
+		for _, neededColOrd := range neededColumns {
+			neededColOrdsInWholeTable.Add(int(neededColOrd))
 		}
 	} else {
 		proc := &execinfra.ProcOutputHelper{}
-		if err = proc.Init(post, tableArgs.typs, semaCtx, evalCtx); err != nil {
+		if err = proc.Init(post, tableArgs.typs, helper.SemaCtx, evalCtx); err != nil {
 			return nil, err
 		}
-		tableArgs.ValNeededForCol = proc.NeededColumns()
+		neededColOrdsInWholeTable = proc.NeededColumns()
+		neededColumns = make([]uint32, 0, neededColOrdsInWholeTable.Len())
+		for i, ok := neededColOrdsInWholeTable.Next(0); ok; i, ok = neededColOrdsInWholeTable.Next(i + 1) {
+			neededColumns = append(neededColumns, uint32(i))
+		}
+	}
+
+	if err = keepOnlyNeededColumns(
+		evalCtx, tableArgs, idxMap, neededColumns, post, helper, flowCtx.TraceKV, flowCtx.PreserveFlowSpecs,
+	); err != nil {
+		return nil, err
 	}
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
@@ -447,13 +466,13 @@ func NewColIndexJoin(
 		false, /* reverse */
 		flowCtx.TraceKV,
 	}
-	if err = fetcher.Init(flowCtx.Codec(), fetcherAllocator, kvFetcherMemAcc, tableArgs); err != nil {
+	if err = fetcher.Init(flowCtx.Codec(), fetcherAllocator, kvFetcherMemAcc, tableArgs, spec.HasSystemColumns); err != nil {
 		fetcher.Release()
 		return nil, err
 	}
 
 	spanAssembler := colexecspan.NewColSpanAssembler(
-		flowCtx.Codec(), allocator, table, index, inputTypes, tableArgs.ValNeededForCol,
+		flowCtx.Codec(), allocator, table, index, inputTypes, neededColOrdsInWholeTable,
 	)
 
 	op := &ColIndexJoin{

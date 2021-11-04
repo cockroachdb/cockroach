@@ -508,6 +508,12 @@ var (
 	AnyTuple = &T{InternalType: InternalType{
 		Family: TupleFamily, TupleContents: []*T{Any}, Oid: oid.T_record, Locale: &emptyLocale}}
 
+	// AnyTupleArray is a special type used only during static analysis as a wildcard
+	// type that matches an array of tuples with any number of fields of any type (including
+	// tuple types). Execution-time values should never have this type.
+	AnyTupleArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: AnyTuple, Oid: oid.T__record, Locale: &emptyLocale}}
+
 	// AnyCollatedString is a special type used only during static analysis as a
 	// wildcard type that matches a collated string with any locale. Execution-
 	// time values should never have this type.
@@ -578,6 +584,10 @@ var (
 	// VarBitArray is the type of an array value having VarBit-typed elements.
 	VarBitArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: VarBit, Oid: oid.T__varbit, Locale: &emptyLocale}}
+
+	// AnyEnumArray is the type of an array value having AnyEnum-typed elements.
+	AnyEnumArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: AnyEnum, Oid: oid.T_anyarray, Locale: &emptyLocale}}
 
 	// Int2Vector is a type-alias for an array of Int2 values with a different
 	// OID (T_int2vector instead of T__int2). It is a special VECTOR type used
@@ -1187,20 +1197,25 @@ func (t *T) TypeModifier() int32 {
 	if t.Oid() == oid.T_char {
 		return int32(-1)
 	}
-	if width := t.Width(); width != 0 {
-		switch t.Family() {
-		case StringFamily, CollatedStringFamily:
+
+	switch t.Family() {
+	case StringFamily, CollatedStringFamily:
+		if width := t.Width(); width != 0 {
 			// Postgres adds 4 to the attypmod for bounded string types, the
 			// var header size.
 			return width + 4
-		case BitFamily:
+		}
+	case BitFamily:
+		if width := t.Width(); width != 0 {
 			return width
-		case DecimalFamily:
-			// attTypMod is calculated by putting the precision in the upper
-			// bits and the scale in the lower bits of a 32-bit int, and adding
-			// 4 (the var header size). We mock this for clients' sake. See
-			// numeric.c.
-			return ((t.Precision() << 16) | width) + 4
+		}
+	case DecimalFamily:
+		// attTypMod is calculated by putting the precision in the upper
+		// bits and the scale in the lower bits of a 32-bit int, and adding
+		// 4 (the var header size). We mock this for clients' sake. See
+		// https://github.com/postgres/postgres/blob/5a2832465fd8984d089e8c44c094e6900d987fcd/src/backend/utils/adt/numeric.c#L1242.
+		if width, precision := t.Width(), t.Precision(); precision != 0 || width != 0 {
+			return ((precision << 16) | width) + 4
 		}
 	}
 	return int32(-1)

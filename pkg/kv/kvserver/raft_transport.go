@@ -39,11 +39,13 @@ import (
 const (
 	// Outgoing messages are queued per-node on a channel of this size.
 	//
-	// TODO(peter): The normal send buffer size is larger than we would like. It
-	// is a temporary patch for the issue discussed in #8630 where
-	// Store.HandleRaftRequest can block applying a preemptive snapshot for a
-	// long enough period of time that grpc flow control kicks in and messages
-	// are dropped on the sending side.
+	// This buffer was sized many moons ago and is very large. If the
+	// buffer fills up, we drop raft messages, so we'd be in trouble.
+	// But as is, the buffer can hold to a lot of memory, especially
+	// during RESTORE/IMPORT where we're routinely sending out SSTs,
+	// which weigh in at a few mbs each; an individual raft instance
+	// will limit how many it has in-flight per-follower, but groups
+	// don't compete among each other for budget.
 	raftSendBufferSize = 10000
 
 	// When no message has been queued for this duration, the corresponding

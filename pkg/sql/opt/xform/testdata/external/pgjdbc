@@ -202,18 +202,9 @@ sort
       │    │    │    │    │    │    │    ├── fd: ()-->(3,60), (2)==(9), (9)==(2), (7)==(44), (44)==(7)
       │    │    │    │    │    │    │    ├── inner-join (merge)
       │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null
-      │    │    │    │    │    │    │    │    ├── left ordering: +7
-      │    │    │    │    │    │    │    │    ├── right ordering: +44
+      │    │    │    │    │    │    │    │    ├── left ordering: +44
+      │    │    │    │    │    │    │    │    ├── right ordering: +7
       │    │    │    │    │    │    │    │    ├── fd: ()-->(60), (7)==(44), (44)==(7)
-      │    │    │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24!null
-      │    │    │    │    │    │    │    │    │    ├── ordering: +7
-      │    │    │    │    │    │    │    │    │    ├── scan pg_class@pg_class_oid_idx [as=c]
-      │    │    │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24
-      │    │    │    │    │    │    │    │    │    │    └── ordering: +7
-      │    │    │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │    │    │         ├── c.relkind:24 IN ('f', 'm', 'p', 'r', 'v') [outer=(24), constraints=(/24: [/'f' - /'f'] [/'m' - /'m'] [/'p' - /'p'] [/'r' - /'r'] [/'v' - /'v']; tight)]
-      │    │    │    │    │    │    │    │    │         └── c.relname:8 LIKE '%' [outer=(8), constraints=(/8: (/NULL - ])]
       │    │    │    │    │    │    │    │    ├── select
       │    │    │    │    │    │    │    │    │    ├── columns: attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null
       │    │    │    │    │    │    │    │    │    ├── fd: ()-->(60)
@@ -224,6 +215,15 @@ sort
       │    │    │    │    │    │    │    │    │    └── filters
       │    │    │    │    │    │    │    │    │         ├── attnum:49 > 0 [outer=(49), constraints=(/49: [/1 - ]; tight)]
       │    │    │    │    │    │    │    │    │         └── NOT attisdropped:60 [outer=(60), constraints=(/60: [/false - /false]; tight), fd=()-->(60)]
+      │    │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24!null
+      │    │    │    │    │    │    │    │    │    ├── ordering: +7
+      │    │    │    │    │    │    │    │    │    ├── scan pg_class@pg_class_oid_idx [as=c]
+      │    │    │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24
+      │    │    │    │    │    │    │    │    │    │    └── ordering: +7
+      │    │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │    │         ├── c.relkind:24 IN ('f', 'm', 'p', 'r', 'v') [outer=(24), constraints=(/24: [/'f' - /'f'] [/'m' - /'m'] [/'p' - /'p'] [/'r' - /'r'] [/'v' - /'v']; tight)]
+      │    │    │    │    │    │    │    │    │         └── c.relname:8 LIKE '%' [outer=(8), constraints=(/8: (/NULL - ])]
       │    │    │    │    │    │    │    │    └── filters (true)
       │    │    │    │    │    │    │    ├── select
       │    │    │    │    │    │    │    │    ├── columns: n.oid:2 n.nspname:3!null

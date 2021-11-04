@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -98,10 +97,24 @@ func (e *Exec) CommandContextWithInput(
 	return e.commandContextImpl(ctx, r, false, name, args...)
 }
 
+// CommandContextWithEnv is like CommandContextInheritingStdStreams, but
+// accepting an additional argument for environment variables.
+func (e *Exec) CommandContextWithEnv(
+	ctx context.Context, env []string, name string, args ...string,
+) error {
+	return e.commandContextInheritingStdStreamsImpl(ctx, env, name, args...)
+}
+
 // CommandContextInheritingStdStreams is like CommandContext, but stdin,
 // stdout, and stderr are passed directly to the terminal.
 func (e *Exec) CommandContextInheritingStdStreams(
 	ctx context.Context, name string, args ...string,
+) error {
+	return e.commandContextInheritingStdStreamsImpl(ctx, nil, name, args...)
+}
+
+func (e *Exec) commandContextInheritingStdStreamsImpl(
+	ctx context.Context, env []string, name string, args ...string,
 ) error {
 	var command string
 	if len(args) > 0 {
@@ -118,6 +131,7 @@ func (e *Exec) CommandContextInheritingStdStreams(
 		cmd.Stdout = e.stdout
 		cmd.Stderr = e.stderr
 		cmd.Dir = e.dir
+		cmd.Env = env
 
 		if err := cmd.Start(); err != nil {
 			return err
@@ -169,7 +183,7 @@ func (e *Exec) commandContextImpl(
 		cmd := exec.CommandContext(ctx, name, args...)
 		if silent {
 			cmd.Stdout = &buffer
-			cmd.Stderr = ioutil.Discard
+			cmd.Stderr = nil
 		} else {
 			cmd.Stdout = io.MultiWriter(e.stdout, &buffer)
 			cmd.Stderr = e.stderr

@@ -275,7 +275,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					return "ok", err
 
 				case "authlog":
-					if len(td.CmdArgs) < 0 {
+					if len(td.CmdArgs) < 1 {
 						t.Fatal("not enough arguments")
 					}
 					numEntries, err := strconv.Atoi(td.CmdArgs[0].Key)

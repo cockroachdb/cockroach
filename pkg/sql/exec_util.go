@@ -319,14 +319,6 @@ var preferLookupJoinsForFKs = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-// InterleavedTablesEnabled is the setting that controls whether it's possible
-// to create interleaved indexes or tables.
-var InterleavedTablesEnabled = settings.RegisterBoolSetting(
-	"sql.defaults.interleaved_tables.enabled",
-	"allows creation of interleaved tables or indexes",
-	false,
-).WithPublic()
-
 // optUseHistogramsClusterMode controls the cluster default for whether
 // histograms are used by the optimizer for cardinality estimation.
 // Note that it does not control histogram collection; regardless of the
@@ -466,12 +458,6 @@ var experimentalComputedColumnRewrites = settings.RegisterValidatedStringSetting
 		return err
 	},
 )
-
-var copyPartitioningWhenDeinterleavingTable = settings.RegisterBoolSetting(
-	`sql.defaults.copy_partitioning_when_deinterleaving_table.enabled`,
-	`default value for enable_copying_partitioning_when_deinterleaving_table session variable`,
-	false,
-).WithPublic()
 
 var propagateInputOrdering = settings.RegisterBoolSetting(
 	`sql.defaults.propagate_input_ordering.enabled`,
@@ -1322,6 +1308,10 @@ type PGWireTestingKnobs struct {
 	// AuthHook is used to override the normal authentication handling on new
 	// connections.
 	AuthHook func(context.Context) error
+
+	// AfterReadMsgTestingKnob is called after reading a message from the
+	// pgwire read buffer.
+	AfterReadMsgTestingKnob func(context.Context) error
 }
 
 var _ base.ModuleTestingKnobs = &PGWireTestingKnobs{}
@@ -1605,27 +1595,6 @@ func (p *planner) EvalAsOfTimestamp(
 	return asOf, nil
 }
 
-// ParseHLC parses a string representation of an `hlc.Timestamp`.
-// This differs from hlc.ParseTimestamp in that it parses the decimal
-// serialization of an hlc timestamp as opposed to the string serialization
-// performed by hlc.Timestamp.String().
-//
-// This function is used to parse:
-//
-//   1580361670629466905.0000000001
-//
-// hlc.ParseTimestamp() would be used to parse:
-//
-//   1580361670.629466905,1
-//
-func ParseHLC(s string) (hlc.Timestamp, error) {
-	dec, _, err := apd.NewFromString(s)
-	if err != nil {
-		return hlc.Timestamp{}, err
-	}
-	return tree.DecimalToHLC(dec)
-}
-
 // isAsOf analyzes a statement to bypass the logic in newPlan(), since
 // that requires the transaction to be started already. If the returned
 // timestamp is not nil, it is the timestamp to which a transaction
@@ -1754,9 +1723,10 @@ type SessionDefaults map[string]string
 
 // SessionArgs contains arguments for serving a client connection.
 type SessionArgs struct {
-	User            security.SQLUsername
-	IsSuperuser     bool
-	SessionDefaults SessionDefaults
+	User                        security.SQLUsername
+	IsSuperuser                 bool
+	SessionDefaults             SessionDefaults
+	CustomOptionSessionDefaults SessionDefaults
 	// RemoteAddr is the client's address. This is nil iff this is an internal
 	// client.
 	RemoteAddr            net.Addr
@@ -1802,7 +1772,7 @@ type registrySession interface {
 func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
 	queryID, err := StringToClusterWideID(queryIDStr)
 	if err != nil {
-		return false, fmt.Errorf("query ID %s malformed: %s", queryID, err)
+		return false, errors.Wrapf(err, "query ID %s malformed", queryID)
 	}
 
 	r.Lock()
@@ -2720,6 +2690,10 @@ func (m *sessionDataMutator) SetSynchronousCommit(val bool) {
 	m.data.SynchronousCommit = val
 }
 
+func (m *sessionDataMutator) SetDisablePlanGists(val bool) {
+	m.data.DisablePlanGists = val
+}
+
 func (m *sessionDataMutator) SetDistSQLMode(val sessiondatapb.DistSQLExecMode) {
 	m.data.DistSQLMode = val
 }
@@ -2805,6 +2779,13 @@ func (m *sessionDataMutator) UpdateSearchPath(paths []string) {
 func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 	m.data.Location = loc
 	m.bufferParamStatusUpdate("TimeZone", sessionDataTimeZoneFormat(loc))
+}
+
+func (m *sessionDataMutator) SetCustomOption(name, val string) {
+	if m.data.CustomOptions == nil {
+		m.data.CustomOptions = make(map[string]string)
+	}
+	m.data.CustomOptions[name] = val
 }
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {
@@ -2934,12 +2915,6 @@ func (m *sessionDataMutator) SetDateStyleEnabled(enabled bool) {
 // SetStubCatalogTablesEnabled sets default value for stub_catalog_tables.
 func (m *sessionDataMutator) SetStubCatalogTablesEnabled(enabled bool) {
 	m.data.StubCatalogTablesEnabled = enabled
-}
-
-// SetCopyPartitioningWhenDeinterleavingTable sets the value for
-// CopyPartitioningWhenDeinterleavingTable.
-func (m *sessionDataMutator) SetCopyPartitioningWhenDeinterleavingTable(b bool) {
-	m.data.CopyPartitioningWhenDeinterleavingTable = b
 }
 
 func (m *sessionDataMutator) SetExperimentalComputedColumnRewrites(val string) {

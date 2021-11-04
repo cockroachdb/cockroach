@@ -41,10 +41,10 @@ default_transaction_priority                           normal
 default_transaction_read_only                          off
 default_transaction_use_follower_reads                 off
 disable_partially_distributed_plans                    off
+disable_plan_gists                                     off
 disallow_full_table_scans                              off
 distsql                                                off
 distsql_workmem                                        64 MiB
-enable_copying_partitioning_when_deinterleaving_table  off
 enable_experimental_alter_column_type_general          off
 enable_experimental_stream_replication                 off
 enable_implicit_select_for_update                      on
@@ -71,6 +71,12 @@ intervalstyle                                          postgres
 intervalstyle_enabled                                  off
 is_superuser                                           on
 large_full_scan_rows                                   1000
+lc_collate                                             C.UTF-8
+lc_ctype                                               C.UTF-8
+lc_messages                                            C.UTF-8
+lc_monetary                                            C.UTF-8
+lc_numeric                                             C.UTF-8
+lc_time                                                C.UTF-8
 locality                                               region=test,dc=dc1
 locality_optimized_partitioned_index_scan              on
 lock_timeout                                           0

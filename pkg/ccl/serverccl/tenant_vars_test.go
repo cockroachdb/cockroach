@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/elastic/gosigar"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
@@ -46,6 +47,7 @@ func TestTenantVars(t *testing.T) {
 		TenantID: roachpb.MakeTenantID(10 /* id */),
 	})
 
+	startNowNanos := timeutil.Now().UnixNano()
 	url := "https://" + tenant.HTTPAddr() + "/_status/load"
 	client := http.Client{
 		Transport: &http.Transport{
@@ -70,18 +72,26 @@ func TestTenantVars(t *testing.T) {
 
 	sysCPU, found := metrics["sys_cpu_sys_ns"]
 	require.True(t, found)
-	require.True(t, found)
 	require.Len(t, sysCPU.GetMetric(), 1)
 	require.Equal(t, io_prometheus_client.MetricType_GAUGE, sysCPU.GetType())
 	cpuSysNanos := sysCPU.Metric[0].GetGauge().GetValue()
 
+	now, found := metrics["sys_cpu_now_ns"]
+	require.True(t, found)
+	require.Len(t, now.GetMetric(), 1)
+	require.Equal(t, io_prometheus_client.MetricType_GAUGE, now.GetType())
+	nowNanos := now.Metric[0].GetGauge().GetValue()
+
 	// The values are between zero and whatever User/Sys time is observed after the get.
 	require.Positive(t, cpuUserNanos)
 	require.Positive(t, cpuSysNanos)
+	require.Positive(t, nowNanos)
 	cpuTime := gosigar.ProcTime{}
 	require.NoError(t, cpuTime.Get(os.Getpid()))
 	require.LessOrEqual(t, cpuUserNanos, float64(cpuTime.User)*1e6)
 	require.LessOrEqual(t, cpuSysNanos, float64(cpuTime.Sys)*1e6)
+	require.GreaterOrEqual(t, nowNanos, float64(startNowNanos))
+	require.LessOrEqual(t, nowNanos, float64(timeutil.Now().UnixNano()))
 
 	resp, err = client.Get(url)
 	require.NoError(t, err)

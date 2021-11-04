@@ -201,17 +201,6 @@ func (sp *Span) SetTag(key string, value attribute.Value) {
 	sp.i.SetTag(key, value)
 }
 
-// SetBaggageItem attaches "baggage" to this span, a key:value pair that's
-// propagated to all future descendants of this Span. Any attached baggage
-// crosses RPC boundaries, and is copied transitively for every remote
-// descendant.
-func (sp *Span) SetBaggageItem(restrictedKey, value string) {
-	if sp.done() {
-		return
-	}
-	sp.i.SetBaggageItem(restrictedKey, value)
-}
-
 // TraceID retrieves a span's trace ID.
 func (sp *Span) TraceID() tracingpb.TraceID {
 	return sp.i.TraceID()
@@ -246,13 +235,7 @@ type SpanMeta struct {
 	otelCtx oteltrace.SpanContext
 
 	// If set, all spans derived from this context are being recorded.
-	//
-	// NB: at the time of writing, this is only ever set to RecordingVerbose
-	// and only if Baggage[verboseTracingBaggageKey] is set.
 	recordingType RecordingType
-
-	// The Span's associated baggage.
-	Baggage map[string]string
 
 	// sterile is set if this span does not want to have children spans. In that
 	// case, trying to create a child span will result in the would-be child being

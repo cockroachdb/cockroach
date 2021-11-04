@@ -72,11 +72,6 @@ func (w index) GetName() string {
 	return w.desc.Name
 }
 
-// IsInterleaved returns true iff the index is interleaved.
-func (w index) IsInterleaved() bool {
-	return w.desc.IsInterleaved()
-}
-
 // IsPartial returns true iff the index is a partial index.
 func (w index) IsPartial() bool {
 	return w.desc.IsPartial()
@@ -232,29 +227,6 @@ func (w index) GetEncodingType() descpb.IndexDescriptorEncodingType {
 		return descpb.PrimaryIndexEncoding
 	}
 	return w.desc.EncodingType
-}
-
-// NumInterleaveAncestors returns the number of interleave ancestors as per the
-// index descriptor.
-func (w index) NumInterleaveAncestors() int {
-	return len(w.desc.Interleave.Ancestors)
-}
-
-// GetInterleaveAncestor returns the ancestorOrdinal-th interleave ancestor.
-func (w index) GetInterleaveAncestor(ancestorOrdinal int) descpb.InterleaveDescriptor_Ancestor {
-	return w.desc.Interleave.Ancestors[ancestorOrdinal]
-}
-
-// NumInterleavedBy returns the number of tables/indexes that are interleaved
-// into this index.
-func (w index) NumInterleavedBy() int {
-	return len(w.desc.InterleavedBy)
-}
-
-// GetInterleavedBy returns the interleavedByOrdinal-th table/index that is
-// interleaved into this index.
-func (w index) GetInterleavedBy(interleavedByOrdinal int) descpb.ForeignKeyReference {
-	return w.desc.InterleavedBy[interleavedByOrdinal]
 }
 
 // NumKeyColumns returns the number of columns in the index key.

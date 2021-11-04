@@ -324,9 +324,11 @@ func loadVarsHandler(
 ) func(http.ResponseWriter, *http.Request) {
 	cpuUserNanos := metric.NewGauge(rsr.CPUUserNS.GetMetadata())
 	cpuSysNanos := metric.NewGauge(rsr.CPUSysNS.GetMetadata())
+	cpuNowNanos := metric.NewGauge(rsr.CPUNowNS.GetMetadata())
 	registry := metric.NewRegistry()
 	registry.AddMetric(cpuUserNanos)
 	registry.AddMetric(cpuSysNanos)
+	registry.AddMetric(cpuNowNanos)
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
@@ -334,11 +336,13 @@ func loadVarsHandler(
 			// Just log but don't return an error to match the _status/vars metrics handler.
 			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
 		}
+
 		// cpuTime.{User,Sys} are in milliseconds, convert to nanoseconds.
 		utime := userTimeMillis * 1e6
 		stime := sysTimeMillis * 1e6
 		cpuUserNanos.Update(utime)
 		cpuSysNanos.Update(stime)
+		cpuNowNanos.Update(timeutil.Now().UnixNano())
 
 		exporter := metric.MakePrometheusExporter()
 		exporter.ScrapeRegistry(registry, true)

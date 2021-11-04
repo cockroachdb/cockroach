@@ -53,8 +53,6 @@ func makeCollection(
 		hydratedTables: hydratedTables,
 		virtual:        makeVirtualDescriptors(virtualSchemas),
 		leased:         makeLeasedDescriptors(leaseMgr),
-		synthetic:      makeSyntheticDescriptors(),
-		uncommitted:    makeUncommittedDescriptors(),
 		kv:             makeKVDescriptors(codec),
 		temporary:      makeTemporaryDescriptors(codec, temporarySchemaProvider),
 	}
@@ -171,6 +169,7 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.kv.reset()
 	tc.synthetic.reset()
 	tc.deletedDescs = nil
+	tc.skipValidationOnWrite = false
 }
 
 // HasUncommittedTables returns true if the Collection contains uncommitted
@@ -383,6 +382,19 @@ func (tc *Collection) GetObjectNamesAndIDs(
 // documentation on syntheticDescriptors.
 func (tc *Collection) SetSyntheticDescriptors(descs []catalog.Descriptor) {
 	tc.synthetic.set(descs)
+}
+
+// AddSyntheticDescriptor replaces a descriptor with a synthetic
+// one temporarily for a given transaction. This synthetic descriptor
+// will be immutable.
+func (tc *Collection) AddSyntheticDescriptor(desc catalog.Descriptor) {
+	tc.synthetic.add(desc)
+}
+
+// RemoveSyntheticDescriptor removes a synthetic descriptor
+// override that temporarily exists for a given transaction.
+func (tc *Collection) RemoveSyntheticDescriptor(id descpb.ID) {
+	tc.synthetic.remove(id)
 }
 
 func (tc *Collection) codec() keys.SQLCodec {

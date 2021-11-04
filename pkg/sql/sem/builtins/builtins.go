@@ -4566,12 +4566,6 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return args[0], nil
 			},
-			// TODO(spaskob): this built-in currently does not actually delete the
-			// data but just marks it as DROP. This is for done for safety in case we
-			// would like to restore the tenant later. If data in needs to be removed
-			// use gc_tenant built-in.
-			// We should just add a new built-in called `drop_tenant` instead and use
-			// this one to really destroy the tenant.
 			Info:       "Destroys a tenant with the provided ID. Must be run by the System tenant.",
 			Volatility: tree.VolatilityVolatile,
 		},
@@ -4895,7 +4889,7 @@ value if you rely on the HLC for accuracy.`,
 					},
 				})
 				if err := ctx.Txn.Run(ctx.Context, b); err != nil {
-					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "message: %s", err)
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error fetching leaseholder")
 				}
 				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
 
@@ -4990,7 +4984,7 @@ value if you rely on the HLC for accuracy.`,
 					},
 				})
 				if err := ctx.Txn.Run(ctx.Context, b); err != nil {
-					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "message: %s", err)
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error fetching range stats")
 				}
 				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.RangeStatsResponse).MVCCStats
 				jsonStr, err := gojson.Marshal(&resp)
@@ -5663,6 +5657,8 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"crdb_internal.gc_tenant": makeBuiltin(
+		// TODO(jeffswenson): Delete internal_crdb.gc_tenant after the DestroyTenant
+		// changes are deployed to all Cockroach Cloud serverless hosts.
 		tree.FunctionProperties{
 			Category:     categoryMultiTenancy,
 			Undocumented: true,
@@ -6058,7 +6054,27 @@ table's zone configuration this will return NULL.`,
 			tree.VolatilityStable,
 		),
 	),
-
+	"crdb_internal.reset_index_usage_stats": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if evalCtx.IndexUsageStatsController == nil {
+					return nil, errors.AssertionFailedf("index usage stats controller not set")
+				}
+				ctx := evalCtx.Ctx()
+				if err := evalCtx.IndexUsageStatsController.ResetIndexUsageStats(ctx); err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(true), nil
+			},
+			Info:       `This function is used to clear the collected index usage statistics.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
 	"crdb_internal.reset_sql_stats": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,

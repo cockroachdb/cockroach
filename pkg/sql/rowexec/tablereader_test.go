@@ -71,13 +71,13 @@ func TestTableReader(t *testing.T) {
 
 	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
-	makeIndexSpan := func(start, end int) execinfrapb.TableReaderSpan {
+	makeIndexSpan := func(start, end int) roachpb.Span {
 		var span roachpb.Span
 		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, td, td.PublicNonPrimaryIndexes()[0].GetID()))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
 		span.EndKey = append(span.EndKey, prefix...)
 		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
-		return execinfrapb.TableReaderSpan{Span: span}
+		return span
 	}
 
 	testCases := []struct {
@@ -87,7 +87,7 @@ func TestTableReader(t *testing.T) {
 	}{
 		{
 			spec: execinfrapb.TableReaderSpec{
-				Spans: []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)}},
+				Spans: []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
 			},
 			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
@@ -97,7 +97,7 @@ func TestTableReader(t *testing.T) {
 		},
 		{
 			spec: execinfrapb.TableReaderSpec{
-				Spans: []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)}},
+				Spans: []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
 			},
 			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
@@ -110,7 +110,7 @@ func TestTableReader(t *testing.T) {
 			spec: execinfrapb.TableReaderSpec{
 				IndexIdx:  1,
 				Reverse:   true,
-				Spans:     []execinfrapb.TableReaderSpan{makeIndexSpan(4, 6)},
+				Spans:     []roachpb.Span{makeIndexSpan(4, 6)},
 				LimitHint: 1,
 			},
 			post: execinfrapb.PostProcessSpec{
@@ -125,6 +125,10 @@ func TestTableReader(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			testutils.RunTrueAndFalse(t, "row-source", func(t *testing.T, rowSource bool) {
 				ts := c.spec
+				// Make a copy of Spans because the table reader will modify
+				// them.
+				ts.Spans = make([]roachpb.Span, len(c.spec.Spans))
+				copy(ts.Spans, c.spec.Spans)
 				ts.Table = *td.TableDesc()
 
 				st := s.ClusterSettings()
@@ -228,16 +232,16 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 		Txn:    kv.NewTxn(ctx, tc.Server(0).DB(), tc.Server(0).NodeID()),
 		NodeID: evalCtx.NodeID,
 	}
-	spec := execinfrapb.TableReaderSpec{
-		Spans: []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)}},
-		Table: *td.TableDesc(),
-	}
 	post := execinfrapb.PostProcessSpec{
 		Projection:    true,
 		OutputColumns: []uint32{0},
 	}
 
 	testutils.RunTrueAndFalse(t, "row-source", func(t *testing.T, rowSource bool) {
+		spec := execinfrapb.TableReaderSpec{
+			Spans: []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
+			Table: *td.TableDesc(),
+		}
 		var out execinfra.RowReceiver
 		var buf *distsqlutils.RowBuffer
 		if !rowSource {
@@ -337,7 +341,7 @@ func TestTableReaderDrain(t *testing.T) {
 		NodeID: evalCtx.NodeID,
 	}
 	spec := execinfrapb.TableReaderSpec{
-		Spans: []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)}},
+		Spans: []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
 		Table: *td.TableDesc(),
 	}
 	post := execinfrapb.PostProcessSpec{
@@ -389,7 +393,7 @@ func TestLimitScans(t *testing.T) {
 	}
 	spec := execinfrapb.TableReaderSpec{
 		Table: *tableDesc.TableDesc(),
-		Spans: []execinfrapb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)}},
+		Spans: []roachpb.Span{tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)},
 	}
 	// We're going to ask for 3 rows, all contained in the first range.
 	const limit = 3
@@ -506,7 +510,7 @@ func BenchmarkTableReader(b *testing.B) {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			spec := execinfrapb.TableReaderSpec{
 				Table: *tableDesc.TableDesc(),
-				Spans: []execinfrapb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)}},
+				Spans: []roachpb.Span{tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)},
 			}
 			post := execinfrapb.PostProcessSpec{}
 

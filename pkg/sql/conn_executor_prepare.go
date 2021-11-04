@@ -76,7 +76,7 @@ func (ex *connExecutor) execPrepare(
 		// OID to Datum is not a 1-1 mapping (for example, int4 and int8
 		// both map to TypeInt), so we need to maintain the types sent by
 		// the client.
-		if inferredTypes[i] == 0 {
+		if inferredTypes[i] == 0 || inferredTypes[i] == oid.T_unknown {
 			t, _ := ps.ValueType(tree.PlaceholderIdx(i))
 			inferredTypes[i] = t.Oid()
 		}

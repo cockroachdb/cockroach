@@ -113,7 +113,7 @@ func TestTopKSorter(t *testing.T) {
 	for _, tc := range topKSortTestCases {
 		log.Infof(context.Background(), "%s", tc.description)
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen, tc.k, execinfra.DefaultMemoryLimit)
+			return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen, tc.k, execinfra.DefaultMemoryLimit), nil
 		})
 	}
 }
@@ -140,10 +140,7 @@ func TestTopKSortRandomized(t *testing.T) {
 				input := colexectestutils.NewOpTestInput(testAllocator, coldata.BatchSize(), tups, typs[:nCols])
 				// Use a normal sorter that sorts on the ordered columns as an oracle to
 				// compare with the top k sorter's output.
-				oracle, err := NewSorter(testAllocator, input, typs[:nCols], ordCols, execinfra.DefaultMemoryLimit)
-				if err != nil {
-					t.Fatal(err)
-				}
+				oracle := NewSorter(testAllocator, input, typs[:nCols], ordCols, execinfra.DefaultMemoryLimit)
 				oracle.Init(ctx)
 				var expected colexectestutils.Tuples
 				for expectedOut := oracle.Next(); expectedOut.Length() != 0; expectedOut = oracle.Next() {
@@ -157,8 +154,7 @@ func TestTopKSortRandomized(t *testing.T) {
 					colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, expected[:k],
 						colexectestutils.OrderedVerifier,
 						func(input []colexecop.Operator) (colexecop.Operator, error) {
-							return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, matchLen, uint64(k),
-								execinfra.DefaultMemoryLimit)
+							return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, matchLen, uint64(k), execinfra.DefaultMemoryLimit), nil
 						})
 				}
 			}
@@ -196,12 +192,8 @@ func BenchmarkSortTopK(b *testing.B) {
 							b.ResetTimer()
 							for n := 0; n < b.N; n++ {
 								var sorter colexecop.Operator
-								var err error
 								source := colexectestutils.NewFiniteChunksSource(testAllocator, batch, typs, nBatches, matchLen)
-								sorter, err = NewTopKSorter(testAllocator, source, typs, ordCols, matchLen, k, execinfra.DefaultMemoryLimit)
-								if err != nil {
-									b.Fatal(err)
-								}
+								sorter = NewTopKSorter(testAllocator, source, typs, ordCols, matchLen, k, execinfra.DefaultMemoryLimit)
 								sorter.Init(ctx)
 								for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
 								}

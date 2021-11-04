@@ -309,7 +309,7 @@ type RaftConfig struct {
 	// duration should be of the range lease active time. For example, with a
 	// value of 0.2 and a lease duration of 10 seconds, leases would be eagerly
 	// renewed 8 seconds into each lease. A value of zero means use the default
-	// and a value of -1 means never pre-emptively renew the lease. A value of 1
+	// and a value of -1 means never preemptively renew the lease. A value of 1
 	// means always renew.
 	RangeLeaseRenewalFraction float64
 

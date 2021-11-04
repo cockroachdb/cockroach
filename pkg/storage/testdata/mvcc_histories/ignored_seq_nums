@@ -572,3 +572,60 @@ with t=E
   check_intent k=o
 ----
 error: (*withstack.withStack:) meta: "o" -> expected intent, found none
+
+
+run ok
+with t=F k=o
+  txn_begin    ts=40
+  txn_advance  ts=50
+  txn_step     seq=10
+  put          v=a
+  txn_step     seq=20
+  put          v=b
+  check_intent
+  get
+----
+meta: "o" -> txn={id=00000000 key="o" pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+get: "o" -> /BYTES/b @50.000000000,0
+>> at end:
+txn: "F" meta={id=00000000 key="o" pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0
+data: "k"/14.000000000,0 -> /BYTES/b
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k/10"/11.000000000,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k/20"/11.000000000,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k/30"/11.000000000,0 -> /BYTES/30
+data: "m"/30.000000000,0 -> /BYTES/a
+data: "n"/45.000000000,0 -> /BYTES/c
+meta: "o"/0,0 -> txn={id=00000000 key="o" pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "o"/50.000000000,0 -> /BYTES/b
+
+
+# Do a push with a lower timestamp and an ignored seqnum. This should delete the
+# value at seqnum 20 but should *not* regress the intent's timestamp.
+
+run ok
+with t=F k=o
+  txn_ignore_seqs seqs=(15-25)
+  # the following operation is really a txn_backwards.
+  txn_advance    ts=45
+  resolve_intent status=PENDING
+  check_intent
+  get
+----
+meta: "o" -> txn={id=00000000 key="o" pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=10} ts=50.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
+get: "o" -> /BYTES/a @50.000000000,0
+>> at end:
+txn: "F" meta={id=00000000 key="o" pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0 isn=1
+data: "k"/14.000000000,0 -> /BYTES/b
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k/10"/11.000000000,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k/20"/11.000000000,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k/30"/11.000000000,0 -> /BYTES/30
+data: "m"/30.000000000,0 -> /BYTES/a
+data: "n"/45.000000000,0 -> /BYTES/c
+meta: "o"/0,0 -> txn={id=00000000 key="o" pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=10} ts=50.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "o"/50.000000000,0 -> /BYTES/a

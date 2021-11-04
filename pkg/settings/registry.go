@@ -105,10 +105,13 @@ var retiredSettings = map[string]struct{}{
 	"sql.telemetry.query_sampling.sample_rate":                       {},
 
 	// removed as of 22.1.
-	"sql.defaults.drop_enum_value.enabled": {},
-	"trace.lightstep.token":                {},
-	"trace.datadog.agent":                  {},
-	"trace.datadog.project":                {},
+	"sql.defaults.drop_enum_value.enabled":                             {},
+	"trace.lightstep.token":                                            {},
+	"trace.datadog.agent":                                              {},
+	"trace.datadog.project":                                            {},
+	"sql.defaults.interleaved_tables.enabled":                          {},
+	"sql.defaults.copy_partitioning_when_deinterleaving_table.enabled": {},
+	"server.declined_reservation_timeout":                              {},
 }
 
 // register adds a setting to the registry.

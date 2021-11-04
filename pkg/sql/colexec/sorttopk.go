@@ -42,9 +42,9 @@ func NewTopKSorter(
 	matchLen int,
 	k uint64,
 	maxOutputBatchMemSize int64,
-) (colexecop.ResettableOperator, error) {
+) colexecop.ResettableOperator {
 	if matchLen < 0 {
-		return nil, errors.AssertionFailedf("invalid matchLen %v", matchLen)
+		colexecerror.InternalError(errors.AssertionFailedf("invalid matchLen %v", matchLen))
 	}
 	base := &topKSorter{
 		allocator:             allocator,
@@ -62,18 +62,14 @@ func NewTopKSorter(
 		for i := range partialOrderCols {
 			partialOrderCols[i] = orderingCols[i].ColIdx
 		}
-		var err error
 		base.orderState.distincterInput = &colexecop.FeedOperator{}
-		base.orderState.distincter, base.orderState.distinctOutput, err = colexecbase.OrderedDistinctColsToOperators(
+		base.orderState.distincter, base.orderState.distinctOutput = colexecbase.OrderedDistinctColsToOperators(
 			base.orderState.distincterInput, partialOrderCols, inputTypes, false, /* nullsAreDistinct */
 		)
-		if err != nil {
-			return base, err
-		}
 	} else {
 		base.heaper = &topKHeaper{base}
 	}
-	return base, nil
+	return base
 }
 
 var _ colexecop.BufferingInMemoryOperator = &topKSorter{}

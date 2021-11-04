@@ -114,6 +114,10 @@ type instrumentationHelper struct {
 
 	// regions used only on EXPLAIN ANALYZE to be displayed as top-level stat.
 	regions []string
+
+	// planGist is a compressed version of plan that can be converted (lossily)
+	// back into a logical plan or be used to get a plan hash.
+	planGist explain.PlanGist
 }
 
 // outputMode indicates how the statement output needs to be populated (for
@@ -583,6 +587,8 @@ func (m execNodeTraceMetadata) annotateExplain(
 				nodeStats.SeekCount.MaybeAdd(stats.KV.NumInterfaceSeeks)
 				nodeStats.InternalSeekCount.MaybeAdd(stats.KV.NumInternalSeeks)
 				nodeStats.VectorizedBatchCount.MaybeAdd(stats.Output.NumBatches)
+				nodeStats.MaxAllocatedMem.MaybeAdd(stats.Exec.MaxAllocatedMem)
+				nodeStats.MaxAllocatedDisk.MaybeAdd(stats.Exec.MaxAllocatedDisk)
 			}
 			// If we didn't get statistics for all processors, we don't show the
 			// incomplete results. In the future, we may consider an incomplete flag
