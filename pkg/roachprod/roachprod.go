@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
+
 	// azure registers its provider with the top-level vm package.
 	_ "github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
@@ -429,8 +430,7 @@ func Run(clusterOpts install.SyncedCluster, SSHOptions string, cmdArray []string
 }
 
 // SQL runs `cockroach sql` on a remote cluster.
-func SQL(clusterOpts install.SyncedCluster, remoteCockroachBinary string, cmdArray []string) error {
-	config.Binary = remoteCockroachBinary
+func SQL(clusterOpts install.SyncedCluster, cmdArray []string) error {
 	c, err := newCluster(clusterOpts)
 	if err != nil {
 		return err

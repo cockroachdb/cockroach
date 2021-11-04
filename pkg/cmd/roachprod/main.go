@@ -62,21 +62,20 @@ destroy the cluster.
 }
 
 var (
-	numNodes           int
-	numRacks           int
-	username           string
-	dryrun             bool
-	destroyAllMine     bool
-	extendLifetime     time.Duration
-	wipePreserveCerts  bool
-	listDetails        bool
-	listJSON           bool
-	listMine           bool
-	listPattern        string
-	sqlCockroachBinary = "cockroach"
-	secure             = false
-	extraSSHOptions    = ""
-	nodeEnv            = []string{
+	numNodes          int
+	numRacks          int
+	username          string
+	dryrun            bool
+	destroyAllMine    bool
+	extendLifetime    time.Duration
+	wipePreserveCerts bool
+	listDetails       bool
+	listJSON          bool
+	listMine          bool
+	listPattern       string
+	secure            = false
+	extraSSHOptions   = ""
+	nodeEnv           = []string{
 		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
 		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
 	}
@@ -874,7 +873,7 @@ var sqlCmd = &cobra.Command{
 			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
 			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
 		}
-		return roachprod.SQL(clusterOpts, sqlCockroachBinary, args[1:])
+		return roachprod.SQL(clusterOpts, args[1:])
 	}),
 }
 
@@ -1229,7 +1228,7 @@ func main() {
 			fallthrough
 		case sqlCmd:
 			cmd.Flags().StringVarP(
-				&sqlCockroachBinary, "binary", "b", "cockroach",
+				&config.Binary, "binary", "b", config.Binary,
 				"the remote cockroach binary to use")
 			fallthrough
 		case pgurlCmd, adminurlCmd:
