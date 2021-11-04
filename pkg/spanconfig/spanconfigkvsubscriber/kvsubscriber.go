@@ -420,7 +420,7 @@ type handler struct {
 	fn          func(update roachpb.Span)
 }
 
-func (h handler) invoke(update roachpb.Span) {
+func (h *handler) invoke(update roachpb.Span) {
 	if !h.initialized {
 		h.fn(keys.EverythingSpan)
 		h.initialized = true
