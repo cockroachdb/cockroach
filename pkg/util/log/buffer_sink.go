@@ -123,6 +123,7 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 				// bufferSinkBundle already; with errorCh already set
 				// (ie. synchronous previous log entry) and then an entry
 				// is emitted with *another* errorCh, the first one gets lost.
+				// See: https://github.com/cockroachdb/cockroach/issues/72454
 				b.errorCh = m.errorCh
 			} else if timer == nil && bs.maxStaleness != 0 {
 				timer = time.After(bs.maxStaleness)
