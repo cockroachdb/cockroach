@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 )
 
 // This file contains common elements for all 3rd party test suite roachtests.
@@ -131,7 +132,7 @@ func repeatRunE(
 		}
 		return nil
 	}
-	return fmt.Errorf("all attempts failed for %s due to error: %s", operation, lastError)
+	return errors.Wrapf(lastError, "all attempts failed for %s", operation)
 }
 
 // repeatRunWithBuffer is the same function as c.RunWithBuffer but with an
@@ -164,7 +165,7 @@ func repeatRunWithBuffer(
 		}
 		return lastResult, nil
 	}
-	return nil, fmt.Errorf("all attempts failed for %s, with error: %s\n%s", operation, lastError, lastResult)
+	return nil, errors.Wrapf(lastError, "all attempts failed for %s\n%s", operation, lastResult)
 }
 
 // repeatGitCloneE is the same function as c.GitCloneE but with an automatic
@@ -193,7 +194,7 @@ func repeatGitCloneE(
 		}
 		return nil
 	}
-	return fmt.Errorf("could not clone %s due to error: %s", src, lastError)
+	return errors.Wrapf(lastError, "could not clone %s", src)
 }
 
 // repeatGetLatestTag fetches the latest (sorted) tag from a github repo.
@@ -290,7 +291,7 @@ func repeatGetLatestTag(
 
 		return releaseTags[len(releaseTags)-1].tag, nil
 	}
-	return "", fmt.Errorf("could not get tags from %s, due to error: %s", url, lastError)
+	return "", errors.Wrapf(lastError, "could not get tags from %s", url)
 }
 
 // gitCloneWithRecurseSubmodules clones a git repo from src into dest and checks out origin's

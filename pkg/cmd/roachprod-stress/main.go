@@ -79,7 +79,7 @@ func run() error {
 	{
 		fi, err := os.Stat(pkg)
 		if err != nil {
-			return fmt.Errorf("the pkg flag %q is not a directory relative to the current working directory: %v", pkg, err)
+			return errors.Wrapf(err, "the pkg flag %q is not a directory relative to the current working directory", pkg)
 		}
 		if !fi.Mode().IsDir() {
 			return fmt.Errorf("the pkg flag %q is not a directory relative to the current working directory", pkg)
@@ -88,7 +88,7 @@ func run() error {
 		// Verify that the test binary exists.
 		fi, err = os.Stat(localTestBin)
 		if err != nil {
-			return fmt.Errorf("test binary %q does not exist: %v", localTestBin, err)
+			return errors.Wrapf(err, "test binary %q does not exist", localTestBin)
 		}
 		if !fi.Mode().IsRegular() {
 			return fmt.Errorf("test binary %q is not a file", localTestBin)
@@ -113,19 +113,19 @@ func run() error {
 	}
 	if *flagFailure != "" {
 		if _, err := regexp.Compile(*flagFailure); err != nil {
-			return fmt.Errorf("bad failure regexp: %s", err)
+			return errors.Wrap(err, "bad failure regexp")
 		}
 	}
 	if *flagIgnore != "" {
 		if _, err := regexp.Compile(*flagIgnore); err != nil {
-			return fmt.Errorf("bad ignore regexp: %s", err)
+			return errors.Wrap(err, "bad ignore regexp")
 		}
 	}
 
 	cmd := exec.Command("roachprod", "status", cluster)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%v\n%s", err, out)
+		return errors.Wrapf(err, "%s", out)
 	}
 	nodes := strings.Count(string(out), "\n") - 1
 
@@ -160,15 +160,15 @@ func run() error {
 		tmpPath := "testdata" + strconv.Itoa(rand.Int())
 		cmd = exec.Command("roachprod", "run", cluster, "--", "rm", "-rf", testdataPath)
 		if output, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to remove old testdata: %v:\n%s", err, output)
+			return errors.Wrapf(err, "failed to remove old testdata:\n%s", output)
 		}
 		cmd = exec.Command("roachprod", "put", cluster, testdataPath, tmpPath)
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to copy testdata: %v", err)
+			return errors.Wrap(err, "failed to copy testdata")
 		}
 		cmd = exec.Command("roachprod", "run", cluster, "mv", tmpPath, testdataPath)
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to move testdata: %v", err)
+			return errors.Wrap(err, "failed to move testdata")
 		}
 	}
 	testBin := filepath.Join(pkg, localTestBin)
@@ -310,7 +310,7 @@ func run() error {
 				}
 				return err
 			default:
-				return fmt.Errorf("unexpected context error: %v", err)
+				return errors.Wrap(err, "unexpected context error")
 			}
 		}
 	}

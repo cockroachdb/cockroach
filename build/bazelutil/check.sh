@@ -34,6 +34,7 @@ pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto channe
 pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto log_channels.go log_channels_generated.go
 pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto logging.md ../../../docs/generated/logging.md
 pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto severity.go severity/severity_generated.go
+pkg/util/log/sinks.go://go:generate mockgen -package=log -source=sinks.go -destination=mock_generated.go -mock_names=logSink=MockLogSink logSink
 pkg/util/timeutil/zoneinfo.go://go:generate go run gen/main.go
 "
 
