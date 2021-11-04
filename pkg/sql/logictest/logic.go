@@ -1300,7 +1300,10 @@ func (t *logicTest) close() {
 // verbose is set.
 func (t *logicTest) outf(format string, args ...interface{}) {
 	if t.verbose {
-		fmt.Printf(format, args...)
+		finalArgs := make([]interface{}, 1+len(args))
+		finalArgs[0] = time.Now().Format("15:04:05")
+		copy(finalArgs[1:], args)
+		fmt.Printf("[%s] "+format, finalArgs...)
 		fmt.Println()
 		log.Infof(context.Background(), format, args...)
 	}
