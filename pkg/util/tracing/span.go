@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"go.opentelemetry.io/otel/attribute"
@@ -27,6 +28,16 @@ const (
 	// TagPrefix is prefixed to all tags that should be output in SHOW TRACE.
 	TagPrefix = "cockroach."
 )
+
+// !!! the default of true
+var ForceRealSpans = envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", true)
+var CrashOnUseAfterFinish = envutil.EnvOrDefaultBool("COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH", false)
+
+// DebugUseAfterFinish controls whether to debug uses of Span values after finishing.
+// FOR DEBUGGING ONLY. This will slow down the program.
+//
+// In particular, roachtests set this.
+var DebugUseAfterFinish = envutil.EnvOrDefaultBool("COCKROACH_DEBUG_SPAN_USE_AFTER_FINISH", false)
 
 // Span is the tracing Span that we use in CockroachDB. Depending on the tracing
 // configuration, it can hold anywhere between zero and three destinations for
@@ -59,8 +70,10 @@ type Span struct {
 	// single Span instance to be shared for many operations. When set, i is set
 	// such that i.isNoop() also returns true - so all operations are
 	// short-circuited.
-	noop        bool
-	finishStack string // !!!
+	noop bool
+	// finishStack is set if DebugUseAfterFinish is set. It represents the stack
+	// that called Finish(), in order to report it on further use.
+	finishStack string
 }
 
 // IsNoop returns true if this span is a black hole - it doesn't correspond to a
@@ -78,10 +91,21 @@ func (sp *Span) done() bool {
 		return true
 	}
 	alreadyFinished := atomic.LoadInt32(&sp.numFinishCalled) != 0
-	if alreadyFinished && util.CrdbTestBuild {
-		panic(fmt.Sprintf("!!! finish again on %p after previous finish at: %s",
-			sp, sp.finishStack))
+	// In test builds, we panic on span use after Finish. This is in preparation
+	// of span pooling, at which point use-after-Finish would become corruption.
+	if alreadyFinished && (util.CrdbTestBuild || CrashOnUseAfterFinish) {
+		var finishStack string
+		if sp.finishStack == "" {
+			finishStack = "<stack not captured. Set DebugUseAfterFinish>"
+		} else {
+			finishStack = sp.finishStack
+		}
+		if util.CrdbTestBuild {
+			panic(fmt.Sprintf("use of Span after Finish was previously called at: %s",
+				finishStack))
+		}
 	}
+
 	return alreadyFinished
 }
 
@@ -253,11 +277,6 @@ func (sp *Span) TraceID() tracingpb.TraceID {
 // being a root span.
 func (sp *Span) IsSterile() bool {
 	return sp.i.sterile
-}
-
-// !!!
-func (sp *Span) IsFinished() bool {
-	return atomic.LoadInt32(&sp.numFinishCalled) == 1
 }
 
 // SpanMeta is information about a Span that is not local to this

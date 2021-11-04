@@ -306,9 +306,6 @@ func NewTracer() *Tracer {
 	t := &Tracer{
 		activeSpansRegistry: makeSpanRegistry(),
 	}
-	// The noop span is marked as finished so that even in the case of a bug,
-	// it won't soak up data.
-	// !!! comment
 	t.noopSpan = &Span{noop: true, i: spanInner{tracer: t, sterile: true}}
 	return t
 }
@@ -583,6 +580,9 @@ func (t *Tracer) StartSpanCtx(
 // context.
 func (t *Tracer) AlwaysTrace() bool {
 	if t.testing.ForceRealSpans {
+		return true
+	}
+	if ForceRealSpans {
 		return true
 	}
 	otelTracer := t.getOtelTracer()
