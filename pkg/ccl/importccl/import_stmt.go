@@ -352,18 +352,20 @@ func importPlanHook(
 			return err
 		}
 
-		// Certain ExternalStorage URIs require super-user access. Check all the
-		// URIs passed to the IMPORT command.
-		for _, file := range filenamePatterns {
-			hasExplicitAuth, uriScheme, err := cloud.AccessIsWithExplicitAuth(file)
-			if err != nil {
-				return err
-			}
-			if !hasExplicitAuth {
-				err := p.RequireAdminRole(ctx,
-					fmt.Sprintf("IMPORT from the specified %s URI", uriScheme))
+		if !p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
+			// Certain ExternalStorage URIs require super-user access. Check all the
+			// URIs passed to the IMPORT command.
+			for _, file := range filenamePatterns {
+				hasExplicitAuth, uriScheme, err := cloud.AccessIsWithExplicitAuth(file)
 				if err != nil {
 					return err
+				}
+				if !hasExplicitAuth {
+					err := p.RequireAdminRole(ctx,
+						fmt.Sprintf("IMPORT from the specified %s URI", uriScheme))
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
