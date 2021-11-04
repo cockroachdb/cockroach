@@ -1325,11 +1325,13 @@ func (t *logicTest) close() {
 // out emits a message both on stdout and the log files if
 // verbose is set.
 func (t *logicTest) outf(format string, args ...interface{}) {
-	if t.verbose {
-		fmt.Printf(format, args...)
-		fmt.Println()
-		log.Infof(context.Background(), format, args...)
+	if !t.verbose {
+		return
 	}
+	log.Infof(context.Background(), format, args...)
+	msg := fmt.Sprintf(format, args...)
+	now := timeutil.Now().Format("15:04:05")
+	fmt.Printf("[%s] %s\n", now, msg)
 }
 
 // setUser sets the DB client to the specified user.
