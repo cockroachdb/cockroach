@@ -1452,18 +1452,30 @@ func TestAdminAPIJobs(t *testing.T) {
 	existingRunningIDs := getSystemJobIDs(t, sqlDB, jobs.StatusRunning)
 	existingIDs := append(existingSucceededIDs, existingRunningIDs...)
 
+	runningOnlyIds := []int64{1, 2, 4}
+	revertingOnlyIds := []int64{7, 8, 9}
+	retryRunningIds := []int64{6}
+	retryRevertingIds := []int64{10}
+
 	testJobs := []struct {
 		id       int64
 		status   jobs.Status
 		details  jobspb.Details
 		progress jobspb.ProgressDetails
 		username security.SQLUsername
+		numRuns  int64
+		lastRun  time.Time
 	}{
-		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, security.RootUserName()},
-		{2, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName()},
-		{3, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName()},
-		{4, jobs.StatusRunning, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, security.RootUserName()},
-		{5, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, authenticatedUserNameNoAdmin()},
+		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, security.RootUserName(), 1, time.Time{}},
+		{2, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName(), 1, timeutil.Now().Add(10 * time.Minute)},
+		{3, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName(), 1, time.Time{}},
+		{4, jobs.StatusRunning, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, security.RootUserName(), 2, time.Time{}},
+		{5, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, authenticatedUserNameNoAdmin(), 1, time.Time{}},
+		{6, jobs.StatusRunning, jobspb.ImportDetails{}, jobspb.ImportProgress{}, security.RootUserName(), 2, timeutil.Now().Add(10 * time.Minute)},
+		{7, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, security.RootUserName(), 1, time.Time{}},
+		{8, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, security.RootUserName(), 1, timeutil.Now().Add(10 * time.Minute)},
+		{9, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, security.RootUserName(), 2, time.Time{}},
+		{10, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, security.RootUserName(), 2, timeutil.Now().Add(10 * time.Minute)},
 	}
 	for _, job := range testJobs {
 		payload := jobspb.Payload{UsernameProto: job.username.EncodeProto(), Details: jobspb.WrapPayloadDetails(job.details)}
@@ -1490,8 +1502,8 @@ func TestAdminAPIJobs(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlDB.Exec(t,
-			`INSERT INTO system.jobs (id, status, payload, progress) VALUES ($1, $2, $3, $4)`,
-			job.id, job.status, payloadBytes, progressBytes,
+			`INSERT INTO system.jobs (id, status, payload, progress, num_runs, last_run) VALUES ($1, $2, $3, $4, $5, $6)`,
+			job.id, job.status, payloadBytes, progressBytes, job.numRuns, job.lastRun,
 		)
 	}
 
@@ -1504,23 +1516,33 @@ func TestAdminAPIJobs(t *testing.T) {
 	}{
 		{
 			"jobs",
-			append([]int64{5, 4, 3, 2, 1}, existingIDs...),
+			append([]int64{10, 9, 8, 7, 6, 5, 4, 3, 2, 1}, existingIDs...),
 			[]int64{5},
 		},
 		{
 			"jobs?limit=1",
+			[]int64{10},
 			[]int64{5},
-			[]int64{5},
-		},
-		{
-			"jobs?status=running",
-			append([]int64{4, 2, 1}, existingRunningIDs...),
-			[]int64{},
 		},
 		{
 			"jobs?status=succeeded",
 			append([]int64{5, 3}, existingSucceededIDs...),
 			[]int64{5},
+		},
+		{
+			"jobs?status=running",
+			append(append(append([]int64{}, runningOnlyIds...), retryRunningIds...), existingRunningIDs...),
+			[]int64{},
+		},
+		{
+			"jobs?status=reverting",
+			append(append([]int64{}, revertingOnlyIds...), retryRevertingIds...),
+			[]int64{},
+		},
+		{
+			"jobs?status=retrying",
+			append(append([]int64{}, retryRunningIds...), retryRevertingIds...),
+			[]int64{},
 		},
 		{
 			"jobs?status=pending",
@@ -1573,8 +1595,102 @@ func TestAdminAPIJobs(t *testing.T) {
 			if e, a := expected, resIDs; !reflect.DeepEqual(e, a) {
 				t.Errorf("%d: expected job IDs %v, but got %v", i, e, a)
 			}
+
 		}
 	})
+}
+
+func TestAdminAPIJobsDetails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	runningOnlyIds := []int64{1, 3, 5}
+	revertingOnlyIds := []int64{2, 4, 6}
+	retryRunningIds := []int64{7}
+	retryRevertingIds := []int64{8}
+
+	testJobs := []struct {
+		id       int64
+		status   jobs.Status
+		details  jobspb.Details
+		progress jobspb.ProgressDetails
+		username security.SQLUsername
+		numRuns  int64
+		lastRun  time.Time
+	}{
+		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, security.RootUserName(), 1, time.Time{}},
+		{2, jobs.StatusReverting, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName(), 1, time.Time{}},
+		{3, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName(), 1, timeutil.Now().Add(10 * time.Minute)},
+		{4, jobs.StatusReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, security.RootUserName(), 1, timeutil.Now().Add(10 * time.Minute)},
+		{5, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName(), 2, time.Time{}},
+		{6, jobs.StatusReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, security.RootUserName(), 2, time.Time{}},
+		{7, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName(), 2, timeutil.Now().Add(10 * time.Minute)},
+		{8, jobs.StatusReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, security.RootUserName(), 2, timeutil.Now().Add(10 * time.Minute)},
+	}
+	for _, job := range testJobs {
+		payload := jobspb.Payload{UsernameProto: job.username.EncodeProto(), Details: jobspb.WrapPayloadDetails(job.details)}
+		payloadBytes, err := protoutil.Marshal(&payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		progress := jobspb.Progress{Details: jobspb.WrapProgressDetails(job.progress)}
+		// Populate progress.Progress field with a specific progress type based on
+		// the job type.
+		if _, ok := job.progress.(jobspb.ChangefeedProgress); ok {
+			progress.Progress = &jobspb.Progress_HighWater{
+				HighWater: &hlc.Timestamp{},
+			}
+		} else {
+			progress.Progress = &jobspb.Progress_FractionCompleted{
+				FractionCompleted: 1.0,
+			}
+		}
+
+		progressBytes, err := protoutil.Marshal(&progress)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqlDB.Exec(t,
+			`INSERT INTO system.jobs (id, status, payload, progress, num_runs, last_run) VALUES ($1, $2, $3, $4, $5, $6)`,
+			job.id, job.status, payloadBytes, progressBytes, job.numRuns, job.lastRun,
+		)
+
+	}
+
+	var res serverpb.JobsResponse
+	if err := getAdminJSONProto(s, "jobs", &res); err != nil {
+		t.Fatal(err)
+	}
+
+	// test that the select statement correctly converts expected jobs to retry-____ statuses
+	expectedStatuses := []struct {
+		status string
+		ids    []int64
+	}{
+		{"running", runningOnlyIds},
+		{"reverting", revertingOnlyIds},
+		{"retry-running", retryRunningIds},
+		{"retry-reverting", retryRevertingIds},
+	}
+	for _, expected := range expectedStatuses {
+		jobsWithStatus := []serverpb.JobResponse{}
+		for _, job := range res.Jobs {
+			for _, expectedID := range expected.ids {
+				if job.ID == expectedID {
+					jobsWithStatus = append(jobsWithStatus, job)
+				}
+			}
+		}
+
+		for _, job := range jobsWithStatus {
+			assert.Equal(t, expected.status, job.Status)
+		}
+	}
 }
 
 func TestAdminAPILocations(t *testing.T) {

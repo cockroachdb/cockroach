@@ -261,7 +261,11 @@ go_library(
 
 go_test(
     name = "server_test",
+<<<<<<< HEAD
     size = "medium",
+=======
+    size = "enormous",
+>>>>>>> f0d0467c28 (ui/db-console: surface more job metrics around reverting and retrying in the)
     srcs = [
         "addjoin_test.go",
         "admin_cluster_test.go",
