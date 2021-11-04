@@ -539,6 +539,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				if err != nil {
 					return Engines{}, err
 				}
+				details = append(details, redact.Sprintf("store %d: %+v", i, e.Properties()))
 				engines = append(engines, e)
 			} else {
 				e, err := storage.Open(ctx,
@@ -604,6 +605,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if err != nil {
 				return Engines{}, err
 			}
+			details = append(details, redact.Sprintf("store %d: %+v", i, eng.Properties()))
 			engines = append(engines, eng)
 		}
 	}
