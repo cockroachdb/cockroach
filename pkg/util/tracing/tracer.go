@@ -1057,7 +1057,6 @@ func ContextWithRecordingSpan(
 	cancel = func() {
 		cancelCtx()
 		sp.Finish()
-		tr.Close()
 	}
 	return ctx, sp.GetRecording, cancel
 }
