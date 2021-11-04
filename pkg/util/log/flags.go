@@ -408,11 +408,13 @@ func attachBufferWrapper(ctx context.Context, s *sinkInfo, c logconfig.CommonSin
 	errCallback := func(err error) {
 		// TODO(knz): explain which sink is encountering the error in the
 		// error message.
+		// See: https://github.com/cockroachdb/cockroach/issues/72461
 		Ops.Errorf(context.Background(), "logging error: %v", err)
 	}
 	if s.criticality {
 		// TODO(knz): explain which sink is encountering the error in the
 		// error message.
+		// See: https://github.com/cockroachdb/cockroach/issues/72461
 		errCallback = func(err error) {
 			Ops.Errorf(context.Background(), "logging error: %v", err)
 
