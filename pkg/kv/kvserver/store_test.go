@@ -197,6 +197,7 @@ type testStoreOpts struct {
 	// set, the store will have all the system ranges that are generally created
 	// for a cluster at boostrap.
 	createSystemRanges bool
+	bootstrapVersion   roachpb.Version // defaults to TestingClusterVersion
 }
 
 func (opts *testStoreOpts) splits() (_kvs []roachpb.KeyValue, _splits []roachpb.RKey) {
@@ -235,7 +236,7 @@ func (d dummyFirstRangeProvider) OnFirstRangeChanged(f func(*roachpb.RangeDescri
 // engine without starting the store. It returns the store, the store
 // clock's manual unix nanos time and a stopper. The caller is
 // responsible for stopping the stopper upon completion.
-// Some fields of ctx are populated by this function.
+// Some fields of cfg are populated by this function.
 func createTestStoreWithoutStart(
 	t testing.TB, stopper *stop.Stopper, opts testStoreOpts, cfg *StoreConfig,
 ) *Store {
@@ -251,8 +252,17 @@ func createTestStoreWithoutStart(
 		Settings:   cfg.Settings,
 	})
 	server := rpc.NewServer(rpcContext) // never started
-	cfg.Gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
-	cfg.StorePool = NewTestStorePool(*cfg)
+
+	// Some tests inject their own Gossip and StorePool, via
+	// createTestAllocatorWithKnobs, at the time of writing
+	// TestChooseLeaseToTransfer and TestNoLeaseTransferToBehindReplicas. This is
+	// generally considered bad and should eventually be refactored away.
+	if cfg.Gossip == nil {
+		cfg.Gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	}
+	if cfg.StorePool == nil {
+		cfg.StorePool = NewTestStorePool(*cfg)
+	}
 	// Many tests using this test harness (as opposed to higher-level
 	// ones like multiTestContext or TestServer) want to micro-manage
 	// replicas and the background queues just get in the way. The
@@ -266,6 +276,7 @@ func createTestStoreWithoutStart(
 	cfg.TestingKnobs.DisableMergeQueue = true
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
+	require.Nil(t, cfg.Transport)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
 	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
@@ -293,12 +304,17 @@ func createTestStoreWithoutStart(
 		Stopper:           stopper,
 		HeartbeatInterval: -1,
 	}, ds)
+	require.Nil(t, cfg.DB)
 	cfg.DB = kv.NewDB(cfg.AmbientCtx, txnCoordSenderFactory, cfg.Clock, stopper)
 	store := NewStore(context.Background(), *cfg, eng, nodeDesc)
 	storeSender.Sender = store
 
 	storeIdent := roachpb.StoreIdent{NodeID: 1, StoreID: 1}
-	require.NoError(t, WriteClusterVersion(context.Background(), eng, clusterversion.TestingClusterVersion))
+	cv := clusterversion.TestingClusterVersion
+	if opts.bootstrapVersion != (roachpb.Version{}) {
+		cv = clusterversion.ClusterVersion{Version: opts.bootstrapVersion}
+	}
+	require.NoError(t, WriteClusterVersion(context.Background(), eng, cv))
 	if err := InitEngine(
 		context.Background(), eng, storeIdent,
 	); err != nil {
@@ -310,8 +326,7 @@ func createTestStoreWithoutStart(
 
 	kvs, splits := opts.splits()
 	if err := WriteInitialClusterData(
-		context.Background(), eng, kvs, /* initialValues */
-		clusterversion.TestingBinaryVersion,
+		context.Background(), eng, kvs /* initialValues */, cv.Version,
 		1 /* numStores */, splits, cfg.Clock.PhysicalNow(), cfg.TestingKnobs,
 	); err != nil {
 		t.Fatal(err)

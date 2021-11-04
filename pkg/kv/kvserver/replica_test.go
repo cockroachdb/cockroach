@@ -28,9 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -48,8 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -59,7 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -180,93 +175,38 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 ) {
 	tc.TB = t
 	ctx := context.Background()
-	// Setup fake zone config handler.
-	config.TestingSetupZoneConfigHook(stopper)
-	rpcContext := rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: cfg.AmbientCtx,
-		Config:     &base.Config{Insecure: true},
-		Clock:      cfg.Clock,
-		Stopper:    stopper,
-		Settings:   cfg.Settings,
-	})
-	grpcServer := rpc.NewServer(rpcContext) // never started
 	require.Nil(t, tc.gossip)
-	tc.gossip = gossip.NewTest(1, rpcContext, grpcServer, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	require.Nil(t, tc.transport)
-	dialer := nodedialer.New(rpcContext, gossip.AddressResolver(tc.gossip))
-	tc.transport = NewRaftTransport(cfg.AmbientCtx, cfg.Settings, dialer, grpcServer, stopper)
-
 	require.Nil(t, tc.engine)
-	disableSeparatedIntents :=
-		!cfg.Settings.Version.ActiveVersionOrEmpty(context.Background()).IsActive(
-			clusterversion.PostSeparatedIntentsMigration)
-	log.Infof(context.Background(), "engine creation is randomly setting disableSeparatedIntents: %t",
-		disableSeparatedIntents)
-
-	var err error
-	tc.engine, err = storage.Open(context.Background(),
-		storage.InMemory(),
-		storage.Attributes(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}),
-		storage.MaxSize(1<<20),
-		storage.SetSeparatedIntents(disableSeparatedIntents),
-		storage.Settings(cfg.Settings))
-	require.NoError(t, err)
-	stopper.AddCloser(tc.engine)
-
 	require.Nil(t, tc.store)
-	cv := clusterversion.ClusterVersion{Version: bootstrapVersion}
-	cfg.Gossip = tc.gossip
-	cfg.Transport = tc.transport
-	cfg.StorePool = NewTestStorePool(cfg)
-	// Create a test sender without setting a store. This is to deal with the
-	// circular dependency between the test sender and the store. The actual
-	// store will be passed to the sender after it is created and bootstrapped.
-	factory := &testSenderFactory{}
-	cfg.DB = kv.NewDB(cfg.AmbientCtx, factory, cfg.Clock, stopper)
-
-	require.NoError(t, WriteClusterVersion(ctx, tc.engine, cv))
-	if err := InitEngine(ctx, tc.engine, roachpb.StoreIdent{
-		ClusterID: uuid.MakeV4(),
-		NodeID:    1,
-		StoreID:   1,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := clusterversion.Initialize(ctx, cv.Version, &cfg.Settings.SV); err != nil {
-		t.Fatal(err)
-	}
-	tc.store = NewStore(ctx, cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
-	// Now that we have our actual store, monkey patch the factory used in cfg.DB.
-	factory.setStore(tc.store)
-	// We created the store without a real KV client, so it can't perform splits
-	// or merges.
-	tc.store.splitQueue.SetDisabled(true)
-	tc.store.mergeQueue.SetDisabled(true)
-
 	require.Nil(t, tc.repl)
-	if err := WriteInitialClusterData(
-		ctx, tc.store.Engine(),
-		nil, /* initialValues */
-		bootstrapVersion,
-		1 /* numStores */, nil /* splits */, cfg.Clock.PhysicalNow(),
-		cfg.TestingKnobs,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if err := tc.store.Start(ctx, stopper); err != nil {
-		t.Fatal(err)
-	}
-	tc.store.WaitForInit()
-	tc.repl, err = tc.store.GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tc.rangeID = tc.repl.RangeID
 
-	if err := tc.initConfigs(t); err != nil {
+	// NB: this also sets up fake zone config handlers via TestingSetupZoneConfigHook.
+	//
+	// TODO(tbg): the above is not good, figure out which tests need this and make them
+	// call it directly.
+	//
+	// NB: split queue, merge queue, and scanner are also disabled.
+	store := createTestStoreWithoutStart(
+		t, stopper, testStoreOpts{
+			createSystemRanges: false,
+			bootstrapVersion:   bootstrapVersion,
+		}, &cfg,
+	)
+	if err := store.Start(ctx, stopper); err != nil {
 		t.Fatal(err)
 	}
+	store.WaitForInit()
+	repl, err := store.GetReplica(1)
+	require.NoError(t, err)
+	tc.repl = repl
+	tc.rangeID = repl.RangeID
+	tc.gossip = store.cfg.Gossip
+	tc.transport = store.cfg.Transport
+	tc.engine = store.engine
+	tc.store = store
+	// TODO(tbg): see if this is needed. Would like to remove it.
+	require.NoError(t, tc.initConfigs(t))
 }
 
 func (tc *testContext) Sender() kv.Sender {
