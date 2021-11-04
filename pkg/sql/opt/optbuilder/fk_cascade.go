@@ -12,6 +12,7 @@ package optbuilder
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -774,13 +775,12 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	outCols := make(opt.ColList, numFKCols*2)
 	outColsOld := outCols[:numFKCols]
 	outColsNew := outCols[numFKCols:]
-	for i := range outColsOld {
-		c := md.ColumnMeta(oldValues[i])
-		outColsOld[i] = md.AddColumn(c.Alias, c.Type)
-	}
-	for i := range outColsNew {
-		c := md.ColumnMeta(newValues[i])
-		outColsNew[i] = md.AddColumn(c.Alias, c.Type)
+	for i := 0; i < numFKCols; i++ {
+		c := childTable.Column(fk.OriginColumnOrdinal(childTable, i))
+		oldName := fmt.Sprintf("%s_old", c.ColName())
+		newName := fmt.Sprintf("%s_new", c.ColName())
+		outColsOld[i] = md.AddColumn(oldName, c.DatumType())
+		outColsNew[i] = md.AddColumn(newName, c.DatumType())
 	}
 
 	md.AddWithBinding(binding, b.factory.ConstructFakeRel(&memo.FakeRelPrivate{
