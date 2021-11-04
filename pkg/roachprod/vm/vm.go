@@ -56,6 +56,19 @@ type VM struct {
 	// Project represents the project to which this vm belongs, if the VM is in a
 	// cloud that supports project (i.e. GCE). Empty otherwise.
 	Project string `json:"project"`
+
+	// SQLPort is the port on which the cockroach process is listening for SQL
+	// connections.
+	// Usually config.DefaultSQLPort, except for local clusters.
+	SQLPort int `json:"sql_port"`
+
+	// AdminUIPort is the port on which the cockroach process is listening for
+	// HTTP traffic for the Admin UI.
+	// Usually config.DefaultAdminUIPort, except for local clusters.
+	AdminUIPort int `json:"adminui_port"`
+
+	// LocalClusterName is only set for VMs in a local cluster.
+	LocalClusterName string `json:"local_cluster_name,omitempty"`
 }
 
 // Name generates the name for the i'th node in a cluster.
@@ -221,6 +234,10 @@ type Provider interface {
 	// Providers[gce.ProviderName] != nil doesn't work because
 	// Providers[gce.ProviderName] can be a stub.
 	Active() bool
+
+	// ProjectActive returns true if the given project is currently active in the
+	// provider.
+	ProjectActive(project string) bool
 }
 
 // DeleteCluster is an optional capability for a Provider which can

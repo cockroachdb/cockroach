@@ -229,7 +229,7 @@ import (
 type zigzagJoiner struct {
 	joinerBase
 
-	cancelChecker *cancelchecker.CancelChecker
+	cancelChecker cancelchecker.CancelChecker
 
 	// numTables stores the number of tables involved in the join.
 	numTables int
@@ -373,7 +373,7 @@ func valuesSpecToEncDatum(
 // Start is part of the RowSource interface.
 func (z *zigzagJoiner) Start(ctx context.Context) {
 	ctx = z.StartInternal(ctx, zigzagJoinerProcName)
-	z.cancelChecker = cancelchecker.NewCancelChecker(ctx)
+	z.cancelChecker.Reset(ctx)
 	log.VEventf(ctx, 2, "starting zigzag joiner run")
 }
 

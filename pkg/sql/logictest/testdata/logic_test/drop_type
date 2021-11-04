@@ -41,17 +41,6 @@ CREATE TYPE t AS ENUM ('hello')
 statement error pq: \"_t\" is an implicit array type and cannot be modified
 DROP TYPE _t
 
-# The dropped type name should be draining in the dropping transaction.
-statement ok
-BEGIN;
-DROP TYPE t
-
-statement error pq: type \"test.public.t\" already exists
-CREATE TYPE t AS ENUM ()
-
-statement ok
-ROLLBACK
-
 # Now check all of the fun cases around object dependencies.
 # Test a simple column dependency.
 statement ok

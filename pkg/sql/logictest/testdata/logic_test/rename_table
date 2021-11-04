@@ -179,38 +179,6 @@ COMMIT
 statement ok
 INSERT INTO d.kv (k,v) VALUES ('c', 'd')
 
-# A table rename disallows the use of the old name
-statement ok
-BEGIN
-
-statement ok
-ALTER TABLE d.kv RENAME TO d.kv2
-
-statement ok
-INSERT INTO d.kv2 (k,v) VALUES ('e', 'f')
-
-statement error pgcode 42P01 relation \"d.kv\" does not exist
-INSERT INTO d.kv (k,v) VALUES ('g', 'h')
-
-statement ok
-ROLLBACK
-
-# A database rename disallows the use of the old name.
-statement ok
-BEGIN
-
-statement ok
-ALTER DATABASE d RENAME TO dnew
-
-statement ok
-INSERT INTO dnew.kv (k,v) VALUES ('e', 'f')
-
-statement error pgcode 42P01 relation \"d.kv\" does not exist
-INSERT INTO d.kv (k,v) VALUES ('g', 'h')
-
-statement ok
-ROLLBACK
-
 # Check that on a rollback a database name cannot be used.
 statement ok
 BEGIN

@@ -52,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
@@ -1210,15 +1209,25 @@ type connExecutor struct {
 		// connExecutor's closure.
 		prepStmtsNamespaceMemAcc mon.BoundAccount
 
-		// onTxnFinish (if non-nil) will be called when txn is finished (either
-		// committed or aborted). It is set when txn is started but can remain
-		// unset when txn is executed within another higher-level txn.
-		onTxnFinish func(context.Context, txnEvent)
+		// shouldExecuteOnTxnFinish indicates that ex.onTxnFinish will be called
+		// when txn is finished (either committed or aborted). It is true when
+		// txn is started but can remain false when txn is executed within
+		// another higher-level txn.
+		shouldExecuteOnTxnFinish bool
 
-		// onTxnRestart (if non-nil) will be called when a txn is being retried. It
-		// is set when the txn is started but can remain unset when a txn is
-		// executed within another higher-level txn.
-		onTxnRestart func()
+		// txnFinishClosure contains fields that ex.onTxnFinish uses to execute.
+		txnFinishClosure struct {
+			// txnStartTime is the time that the transaction started.
+			txnStartTime time.Time
+			// implicit is whether or not the transaction was implicit.
+			implicit bool
+		}
+
+		// shouldExecuteOnTxnRestart indicates that ex.onTxnRestart will be
+		// called when txn is being retried. It is true when txn is started but
+		// can remain false when txn is executed within another higher-level
+		// txn.
+		shouldExecuteOnTxnRestart bool
 
 		// savepoints maintains the stack of savepoints currently open.
 		savepoints savepointStack
@@ -1513,15 +1522,9 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 			delete(ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals, name)
 		}
 		ex.extraTxnState.savepoints.clear()
-		// After txn is finished, we need to call onTxnFinish (if it's non-nil).
-		if ex.extraTxnState.onTxnFinish != nil {
-			ex.extraTxnState.onTxnFinish(ctx, ev)
-			ex.extraTxnState.onTxnFinish = nil
-		}
+		ex.onTxnFinish(ctx, ev)
 	case txnRestart:
-		if ex.extraTxnState.onTxnRestart != nil {
-			ex.extraTxnState.onTxnRestart()
-		}
+		ex.onTxnRestart()
 		ex.state.mu.Lock()
 		defer ex.state.mu.Unlock()
 		ex.state.mu.stmtCount = 0
@@ -2545,7 +2548,7 @@ func (ex *connExecutor) implicitTxn() bool {
 // initPlanner initializes a planner so it can can be used for planning a
 // query in the context of this session.
 func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
-	p.cancelChecker = cancelchecker.NewCancelChecker(ctx)
+	p.cancelChecker.Reset(ctx)
 
 	ex.initEvalCtx(ctx, &p.extendedEvalCtx, p)
 
@@ -2643,7 +2646,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case txnStart:
 		ex.extraTxnState.autoRetryCounter = 0
 		ex.extraTxnState.autoRetryReason = nil
-		ex.extraTxnState.onTxnFinish, ex.extraTxnState.onTxnRestart = ex.recordTransactionStart()
+		ex.recordTransactionStart()
 		// Bump the txn counter for logging.
 		ex.extraTxnState.txnCounter++
 		if !ex.server.cfg.Codec.ForSystemTenant() {

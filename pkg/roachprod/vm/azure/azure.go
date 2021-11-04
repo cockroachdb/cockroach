@@ -27,6 +27,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/profiles/latest/resources/mgmt/subscriptions"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/to"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -49,8 +50,10 @@ const (
 	tagSubnet    = "subnetPrefix"
 )
 
-// init registers Provider with the top-level vm package.
-func init() {
+// Init registers the Azure provider with vm.Providers.
+//
+// If the Azure CLI utilities are not installed, the provider is a stub.
+func Init() {
 	const unimplemented = "please install the Azure CLI utilities +" +
 		"(https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)"
 
@@ -90,6 +93,11 @@ func New() *Provider {
 // Active implements vm.Provider and always returns true.
 func (p *Provider) Active() bool {
 	return true
+}
+
+// ProjectActive is part of the vm.Provider interface.
+func (p *Provider) ProjectActive(project string) bool {
+	return project == ""
 }
 
 // CleanSSH implements vm.Provider, is a no-op, and returns nil.
@@ -410,7 +418,9 @@ func (p *Provider) List() (vm.List, error) {
 			MachineType: string(found.HardwareProfile.VMSize),
 			// We add a fake availability-zone suffix since other roachprod
 			// code assumes particular formats. For example, "eastus2z".
-			Zone: *found.Location + "z",
+			Zone:        *found.Location + "z",
+			SQLPort:     config.DefaultSQLPort,
+			AdminUIPort: config.DefaultAdminUIPort,
 		}
 
 		if createdPtr := found.Tags[tagCreated]; createdPtr == nil {

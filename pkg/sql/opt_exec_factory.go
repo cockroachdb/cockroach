@@ -247,11 +247,7 @@ func constructSimpleProjectForPlanNode(
 		r.reqOrdering = ReqOrdering(reqOrdering)
 		return r, nil
 	}
-	var inputCols colinfo.ResultColumns
-	if colNames == nil {
-		// We will need the names of the input columns.
-		inputCols = planColumns(n.(planNode))
-	}
+	inputCols := planColumns(n.(planNode))
 
 	var rb renderBuilder
 	rb.init(n, reqOrdering)

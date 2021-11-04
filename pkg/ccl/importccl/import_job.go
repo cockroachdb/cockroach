@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -601,7 +602,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 
 		// Update the parent database with this schema information.
 		dbDesc.Schemas[newMutableSchemaDescriptor.Name] =
-			descpb.DatabaseDescriptor_SchemaInfo{ID: newMutableSchemaDescriptor.ID, Dropped: false}
+			descpb.DatabaseDescriptor_SchemaInfo{ID: newMutableSchemaDescriptor.ID}
 
 		schemaMetadata.schemaRewrites[desc.Desc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
 			ID: id,
@@ -1485,22 +1486,33 @@ func (r *importResumer) dropSchemas(
 			return nil, errors.Newf("unable to resolve schema desc with ID %d", schema.Desc.ID)
 		}
 
-		schemaDesc.DrainingNames = append(schemaDesc.DrainingNames,
-			descpb.NameInfo{ParentID: details.ParentID, ParentSchemaID: keys.RootNamespaceID,
-				Name: schemaDesc.Name})
-
-		// Update the parent database with information about the dropped schema.
-		if dbDesc.Schemas == nil {
-			dbDesc.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
-		}
-		dbDesc.Schemas[schema.Desc.Name] = descpb.DatabaseDescriptor_SchemaInfo{ID: dbDesc.ID,
-			Dropped: true}
-
 		// Mark the descriptor as dropped and write it to the batch.
+		// Delete namespace entry or update draining names depending on version.
+
 		schemaDesc.SetDropped()
 		droppedSchemaIDs = append(droppedSchemaIDs, schemaDesc.GetID())
 
 		b := txn.NewBatch()
+		// TODO(postamar): remove version gate and else-block in 22.2
+		if execCfg.Settings.Version.IsActive(ctx, clusterversion.AvoidDrainingNames) {
+			if dbDesc.Schemas != nil {
+				delete(dbDesc.Schemas, schemaDesc.GetName())
+			}
+			b.Del(catalogkeys.EncodeNameKey(p.ExecCfg().Codec, schemaDesc))
+		} else {
+			//lint:ignore SA1019 removal of deprecated method call scheduled for 22.2
+			schemaDesc.AddDrainingName(descpb.NameInfo{
+				ParentID:       details.ParentID,
+				ParentSchemaID: keys.RootNamespaceID,
+				Name:           schemaDesc.Name,
+			})
+			// Update the parent database with information about the dropped schema.
+			if dbDesc.Schemas == nil {
+				dbDesc.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
+			}
+			dbDesc.Schemas[schema.Desc.Name] = descpb.DatabaseDescriptor_SchemaInfo{ID: dbDesc.ID, Dropped: true}
+		}
+
 		if err := descsCol.WriteDescToBatch(ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 			schemaDesc, b); err != nil {
 			return nil, err

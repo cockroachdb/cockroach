@@ -1049,11 +1049,6 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal("table should be invisible through SHOW TABLES")
 	}
 
-	// Check that CREATE TABLE with the same name returns a proper error.
-	if _, err := db.Exec(`CREATE TABLE test.t(a INT PRIMARY KEY)`); !testutils.IsError(err, `table "t" is being dropped, try again later`) {
-		t.Fatal(err)
-	}
-
 	// Check that DROP TABLE with the same name returns a proper error.
 	if _, err := db.Exec(`DROP TABLE test.t`); !testutils.IsError(err, `relation "test.t" does not exist`) {
 		t.Fatal(err)

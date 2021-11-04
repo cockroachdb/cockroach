@@ -124,6 +124,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		sqlStatsTablesMigration,
 	),
+	migration.NewTenantMigration(
+		"ensure that draining names are no longer in use",
+		toCV(clusterversion.DrainingNamesMigration),
+		NoPrecondition,
+		ensureNoDrainingNames,
+	),
 }
 
 func init() {

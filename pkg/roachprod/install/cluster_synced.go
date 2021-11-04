@@ -30,10 +30,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -59,14 +62,16 @@ type ClusterImpl interface {
 //
 // TODO(benesch): unify with CloudCluster.
 type SyncedCluster struct {
-	// name, vms, users, localities are populated at init time.
-	Name       string
-	VMs        []string
-	Users      []string
-	NumRacks   int
+	// Cluster metadata, obtained from the respective cloud provider.
+	cloud.Cluster
+
+	NumRacks int
+
+	// Localities are initialized from the VM metadata (VMs[i].Locality()) but can
+	// be modified by newCluster (see numRacks).
 	Localities []string
-	VPCs       []string
-	// all other fields are populated in newCluster.
+
+	// All other fields are populated in newCluster.
 	Nodes          []int
 	Secure         bool
 	CertsDir       string
@@ -85,11 +90,11 @@ type SyncedCluster struct {
 }
 
 func (c *SyncedCluster) host(index int) string {
-	return c.VMs[index-1]
+	return c.VMs[index-1].PublicIP
 }
 
 func (c *SyncedCluster) user(index int) string {
-	return c.Users[index-1]
+	return c.VMs[index-1].RemoteUser
 }
 
 func (c *SyncedCluster) locality(index int) string {
@@ -101,7 +106,11 @@ func (c *SyncedCluster) locality(index int) string {
 // TODO(tschottdorf): roachprod should cleanly encapsulate the home directory
 // which is currently the biggest culprit for awkward one-offs.
 func (c *SyncedCluster) IsLocal() bool {
-	return c.Name == config.Local
+	return config.IsLocalClusterName(c.Name)
+}
+
+func (c *SyncedCluster) localVMDir(nodeIdx int) string {
+	return local.VMDir(c.Name, nodeIdx)
 }
 
 // ServerNodes is the fully expanded, ordered list of nodes that any given
@@ -144,6 +153,51 @@ func (c *SyncedCluster) GetInternalIP(index int) (string, error) {
 		)
 	}
 	return ip, nil
+}
+
+// roachprodEnvValue returns the value of the ROACHPROD environment variable
+// that is set when starting a process. This value is used to recognize the
+// correct process, when monitoring or stopping.
+//
+// Normally, the value is of the form:
+//   [<local-cluster-name>/]<node-id>[/tag]
+//
+// Examples:
+//
+//  - non-local cluster without tags:
+//      ROACHPROD=1
+//
+//  - non-local cluster with tag foo:
+//      ROACHPROD=1/foo
+//
+//  - non-local cluster with hierarchical tag foo/bar:
+//      ROACHPROD=1/foo/bar
+//
+//  - local cluster:
+//      ROACHPROD=local-foo/1
+//
+//  - local cluster with tag bar:
+//      ROACHPROD=local-foo/1/bar
+//
+func (c *SyncedCluster) roachprodEnvValue(node int) string {
+	var parts []string
+	if c.IsLocal() {
+		parts = append(parts, c.Name)
+	}
+	parts = append(parts, fmt.Sprintf("%d", node))
+	if c.Tag != "" {
+		parts = append(parts, c.Tag)
+	}
+	return strings.Join(parts, "/")
+}
+
+// roachprodEnvRegex returns a regexp that matches the ROACHPROD value for the
+// given node.
+func (c *SyncedCluster) roachprodEnvRegex(node int) string {
+	escaped := strings.Replace(c.roachprodEnvValue(node), "/", "\\/", -1)
+	// We look for either a trailing space or a slash (in which case, we tolerate
+	// any remaining tag suffix).
+	return fmt.Sprintf(`ROACHPROD=%s[ \/]`, escaped)
 }
 
 // Start TODO(peter): document
@@ -202,16 +256,15 @@ echo ">>> roachprod stop: $(date)" >> %[1]s/roachprod.log
 ps axeww -o pid -o command >> %[1]s/roachprod.log
 pids=$(ps axeww -o pid -o command | \
   sed 's/export ROACHPROD=//g' | \
-  awk '/ROACHPROD=(%[2]d%[3]s)[ \/]/ { print $1 }')
+  awk '/%[2]s/ { print $1 }')
 if [ -n "${pids}" ]; then
-  kill -%[4]d ${pids}
-%[5]s
+  kill -%[3]d ${pids}
+%[4]s
 fi`,
-			c.Impl.LogDir(c, c.Nodes[i]), // [1]
-			c.Nodes[i],                   // [2]
-			c.escapedTag(),               // [3]
-			sig,                          // [4]
-			waitCmd,                      // [5]
+			c.Impl.LogDir(c, c.Nodes[i]),    // [1]
+			c.roachprodEnvRegex(c.Nodes[i]), // [2]
+			sig,                             // [3]
+			waitCmd,                         // [4]
 		)
 		return sess.CombinedOutput(cmd)
 	})
@@ -236,7 +289,7 @@ func (c *SyncedCluster) Wipe(preserveCerts bool) {
 				dirs = append(dirs, "certs*")
 			}
 			for _, dir := range dirs {
-				cmd += fmt.Sprintf(`rm -fr ${HOME}/local/%d/%s ;`, c.Nodes[i], dir)
+				cmd += fmt.Sprintf(`rm -fr %s/%s ;`, c.localVMDir(c.Nodes[i]), dir)
 			}
 		} else {
 			cmd = `sudo find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \; &&
@@ -266,8 +319,8 @@ func (c *SyncedCluster) Status() {
 		binary := cockroachNodeBinary(c, c.Nodes[i])
 		cmd := fmt.Sprintf(`out=$(ps axeww -o pid -o ucomm -o command | \
   sed 's/export ROACHPROD=//g' | \
-  awk '/ROACHPROD=(%d%s)[ \/]/ {print $2, $1}'`,
-			c.Nodes[i], c.escapedTag())
+  awk '/%s/ {print $2, $1}'`,
+			c.roachprodEnvRegex(c.Nodes[i]))
 		cmd += ` | sort | uniq);
 vers=$(` + binary + ` version 2>/dev/null | awk '/Build Tag:/ {print $NF}')
 if [ -n "${out}" -a -n "${vers}" ]; then
@@ -518,10 +571,10 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 		//
 		// That command should return immediately. And a "roachprod status" should
 		// reveal that the sleep command is running on the cluster.
-		nodeCmd := fmt.Sprintf(`export ROACHPROD=%d%s GOTRACEBACK=crash && bash -c %s`,
-			nodes[i], c.Tag, ssh.Escape1(expandedCmd))
+		nodeCmd := fmt.Sprintf(`export ROACHPROD=%s GOTRACEBACK=crash && bash -c %s`,
+			c.roachprodEnvValue(nodes[i]), ssh.Escape1(expandedCmd))
 		if c.IsLocal() {
-			nodeCmd = fmt.Sprintf("cd ${HOME}/local/%d ; %s", nodes[i], nodeCmd)
+			nodeCmd = fmt.Sprintf("cd %s; %s", c.localVMDir(nodes[i]), nodeCmd)
 		}
 
 		if stream {
@@ -616,9 +669,9 @@ func (c *SyncedCluster) SetupSSH() error {
 		return nil
 	}
 
-	if len(c.Nodes) == 0 || len(c.Users) == 0 || len(c.VMs) == 0 {
-		return fmt.Errorf("%s: invalid cluster: nodes=%d users=%d hosts=%d",
-			c.Name, len(c.Nodes), len(c.Users), len(c.VMs))
+	if len(c.Nodes) == 0 || len(c.VMs) == 0 {
+		return fmt.Errorf("%s: invalid cluster: nodes=%d hosts=%d",
+			c.Name, len(c.Nodes), len(c.VMs))
 	}
 
 	// Generate an ssh key that we'll distribute to all of the nodes in the
@@ -823,7 +876,7 @@ fi
 func (c *SyncedCluster) DistributeCerts() {
 	dir := ""
 	if c.IsLocal() {
-		dir = `${HOME}/local/1`
+		dir = c.localVMDir(1)
 	}
 
 	// Check to see if the certs have already been initialized.
@@ -870,18 +923,20 @@ func (c *SyncedCluster) DistributeCerts() {
 		var nodeNames []string
 		if c.IsLocal() {
 			// For local clusters, we only need to add one of the VM IP addresses.
-			nodeNames = append(nodeNames, "$(hostname)", c.VMs[0])
+			nodeNames = append(nodeNames, "$(hostname)", c.VMs[0].PublicIP)
 		} else {
 			// Add both the local and external IP addresses, as well as the
 			// hostnames to the node certificate.
 			nodeNames = append(nodeNames, ips...)
-			nodeNames = append(nodeNames, c.VMs...)
+			for i := range c.VMs {
+				nodeNames = append(nodeNames, c.VMs[i].PublicIP)
+			}
 			for i := range c.VMs {
 				nodeNames = append(nodeNames, fmt.Sprintf("%s-%04d", c.Name, i+1))
 				// On AWS nodes internally have a DNS name in the form ip-<ip address>
 				// where dots have been replaces with dashes.
 				// See https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html#vpc-dns-hostnames
-				if strings.Contains(c.Localities[i], "cloud=aws") {
+				if c.VMs[i].Provider == aws.ProviderName {
 					nodeNames = append(nodeNames, "ip-"+strings.ReplaceAll(ips[i], ".", "-"))
 				}
 			}
@@ -889,7 +944,7 @@ func (c *SyncedCluster) DistributeCerts() {
 
 		var cmd string
 		if c.IsLocal() {
-			cmd = `cd ${HOME}/local/1 ; `
+			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
 		}
 		cmd += fmt.Sprintf(`
 rm -fr certs
@@ -957,7 +1012,7 @@ tar cvf certs.tar certs
 		sess.SetStdin(bytes.NewReader(certsTar))
 		var cmd string
 		if c.IsLocal() {
-			cmd = fmt.Sprintf(`cd ${HOME}/local/%d ; `, nodes[i])
+			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(nodes[i]))
 		}
 		cmd += `tar xf -`
 		if out, err := sess.CombinedOutput(cmd); err != nil {
@@ -1080,7 +1135,7 @@ func (c *SyncedCluster) Put(src, dest string) {
 				if filepath.IsAbs(dest) {
 					to = dest
 				} else {
-					to = fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d/%s"), c.Nodes[i], dest)
+					to = filepath.Join(c.localVMDir(c.Nodes[i]), dest)
 				}
 				// Remove the destination if it exists, ignoring errors which we'll
 				// handle via the os.Symlink() call.
@@ -1388,7 +1443,7 @@ func (c *SyncedCluster) Get(src, dest string) {
 
 			if c.IsLocal() {
 				if !filepath.IsAbs(src) {
-					src = filepath.Join(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), c.Nodes[i]), src)
+					src = filepath.Join(c.localVMDir(c.Nodes[i]), src)
 				}
 
 				var copy func(src, dest string, info os.FileInfo) error
@@ -1607,12 +1662,12 @@ func (c *SyncedCluster) SSH(sshArgs, args []string) error {
 		allArgs = []string{
 			"/bin/bash", "-c",
 		}
-		cmd := fmt.Sprintf("cd ${HOME}/local/%d ; ", c.Nodes[0])
+		cmd := fmt.Sprintf("cd %s ; ", c.localVMDir(c.Nodes[0]))
 		if len(args) == 0 /* interactive */ {
 			cmd += "/bin/bash "
 		}
 		if len(args) > 0 {
-			cmd += fmt.Sprintf("export ROACHPROD=%d%s ; ", c.Nodes[0], c.Tag)
+			cmd += fmt.Sprintf("export ROACHPROD=%s ; ", c.roachprodEnvValue(c.Nodes[0]))
 			cmd += strings.Join(expandedArgs, " ")
 		}
 		allArgs = append(allArgs, cmd)
@@ -1626,7 +1681,9 @@ func (c *SyncedCluster) SSH(sshArgs, args []string) error {
 		allArgs = append(allArgs, sshAuthArgs()...)
 		allArgs = append(allArgs, sshArgs...)
 		if len(args) > 0 {
-			allArgs = append(allArgs, fmt.Sprintf("export ROACHPROD=%d%s ;", c.Nodes[0], c.Tag))
+			allArgs = append(allArgs, fmt.Sprintf(
+				"export ROACHPROD=%s ;", c.roachprodEnvValue(c.Nodes[0]),
+			))
 		}
 		allArgs = append(allArgs, expandedArgs...)
 	}
@@ -1787,10 +1844,6 @@ func (c *SyncedCluster) ParallelE(
 		return failed, errors.New("one or more parallel execution failure")
 	}
 	return nil, nil
-}
-
-func (c *SyncedCluster) escapedTag() string {
-	return strings.Replace(c.Tag, "/", "\\/", -1)
 }
 
 // Init initializes the cluster. It does it through node 1 (as per ServerNodes)
