@@ -542,6 +542,14 @@ func (node *ShowCreateAllTables) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CREATE ALL TABLES")
 }
 
+// ShowCreateAllTypes represents a SHOW CREATE ALL TYPES statement.
+type ShowCreateAllTypes struct{}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowCreateAllTypes) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW CREATE ALL TYPES")
+}
+
 // ShowCreateSchedules represents a SHOW CREATE SCHEDULE statement.
 type ShowCreateSchedules struct {
 	ScheduleID Expr

@@ -2231,8 +2231,7 @@ CREATE TABLE crdb_internal.create_type_statements (
   descriptor_id      INT,
   descriptor_name    STRING,
   create_statement   STRING,
-  enum_members       STRING[], -- populated only for ENUM types
-	INDEX (descriptor_id)
+  enum_members       STRING[] -- populated only for ENUM types
 )
 `,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
