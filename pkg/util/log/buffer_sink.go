@@ -180,6 +180,7 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 // the writes in the channel are completed. If the writes are slow,
 // the goroutine may not terminate properly when server shutdown is
 // requested.
+// See: https://github.com/cockroachdb/cockroach/issues/72459
 func (bs *bufferSink) flusher(ctx context.Context) {
 	for b := range bs.flushCh {
 		if len(b.messages) > 0 {
