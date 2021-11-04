@@ -558,7 +558,7 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 	s.updateLivenessMap()
 
-	_ = s.mu.replicasByRangeID.Range(func(r *Replica) error {
+	s.mu.replicasByRangeID.Range(func(r *Replica) {
 		r.mu.RLock()
 		quiescent := r.mu.quiescent
 		lagging := r.mu.laggingFollowersOnQuiesce
@@ -567,7 +567,6 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 		if quiescent && (lagging.MemberStale(l) || !laggingAccurate) {
 			r.unquiesce()
 		}
-		return nil
 	})
 }
 

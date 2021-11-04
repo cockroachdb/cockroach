@@ -522,9 +522,8 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 		default:
 		}
 
-		_ = store.mu.replicasByRangeID.Range(func(repl *Replica) error {
+		store.mu.replicasByRangeID.Range(func(repl *Replica) {
 			m[repl.RangeID] = struct{}{}
-			return nil
 		})
 
 		for k := range m {

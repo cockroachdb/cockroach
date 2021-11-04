@@ -364,9 +364,8 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 	// stale) view of all Replicas without holding the Store lock. In particular,
 	// no locks are acquired during the copy process.
 	rs.repls = nil
-	_ = rs.store.mu.replicasByRangeID.Range(func(repl *Replica) error {
+	rs.store.mu.replicasByRangeID.Range(func(repl *Replica) {
 		rs.repls = append(rs.repls, repl)
-		return nil
 	})
 
 	if rs.ordered {
@@ -2590,9 +2589,8 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 // performance critical code.
 func (s *Store) ReplicaCount() int {
 	var count int
-	_ = s.mu.replicasByRangeID.Range(func(*Replica) error {
+	s.mu.replicasByRangeID.Range(func(*Replica) {
 		count++
-		return nil
 	})
 	return count
 }
