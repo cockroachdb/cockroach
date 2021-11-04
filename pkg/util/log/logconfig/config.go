@@ -1054,9 +1054,11 @@ func (w *CommonBufferSinkConfigWrapper) UnmarshalYAML(fn func(interface{}) error
 	var v string
 	if err := fn(&v); err == nil {
 		if strings.ToUpper(v) == "NONE" {
+			d := time.Duration(0)
+			s := ByteSize(0)
 			w.CommonBufferSinkConfig = CommonBufferSinkConfig{
-				MaxStaleness:     func() *time.Duration { s := time.Duration(0); return &s }(),
-				FlushTriggerSize: func() *ByteSize { s := ByteSize(0); return &s }(),
+				MaxStaleness:     &d,
+				FlushTriggerSize: &s,
 			}
 			return nil
 		}
