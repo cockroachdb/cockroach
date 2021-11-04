@@ -1847,15 +1847,24 @@ func (s *adminServer) Jobs(
 		return nil, err
 	}
 
+	retryRunningCondition := "status='running' AND next_run > now() AND num_runs > 1"
+	retryRevertingCondition := "status='reverting' AND next_run > now() AND num_runs > 1"
+
 	q := makeSQLQuery()
 	q.Append(`
-      SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
-						 running_status, created, started, finished, modified,
-						 fraction_completed, high_water_timestamp, error
+      SELECT job_id, job_type, description, statement, user_name, descriptor_ids,
+            case
+              when ` + retryRunningCondition + `then 'retry-running' 
+              when ` + retryRevertingCondition + ` then 'retry-reverting' 
+              else status
+            end as status, running_status, created, started, finished, modified, fraction_completed,
+            high_water_timestamp, error, last_run, next_run, num_runs
         FROM crdb_internal.jobs
        WHERE true
 	`)
-	if req.Status != "" {
+	if req.Status == "retrying" {
+		q.Append(" AND ( ( " + retryRunningCondition + " ) OR ( " + retryRevertingCondition + " ) )")
+	} else if req.Status != "" {
 		q.Append(" AND status = $", req.Status)
 	}
 	if req.Type != jobspb.TypeUnspecified {
@@ -1929,6 +1938,9 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 		&fractionCompletedOrNil,
 		&highwaterOrNil,
 		&job.Error,
+		&job.LastRun,
+		&job.NextRun,
+		&job.NumRuns,
 	); err != nil {
 		return err
 	}
@@ -1972,7 +1984,8 @@ func (s *adminServer) Job(
 	const query = `
       SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
 						 running_status, created, started, finished, modified,
-						 fraction_completed, high_water_timestamp, error
+						 fraction_completed, high_water_timestamp, error, last_run,
+						 next_run, num_runs
         FROM crdb_internal.jobs
        WHERE job_id = $1`
 
