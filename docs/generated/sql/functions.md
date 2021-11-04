@@ -2546,6 +2546,9 @@ It is not recommended to perform this operation on a database with many
 tables.
 The output can be used to recreate a database.’</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.show_create_all_types"></a><code>crdb_internal.show_create_all_types(database_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of CREATE type statements.
+The output can be used to recreate a database.’</p>
+</span></td></tr>
 <tr><td><a name="decode"></a><code>decode(text: <a href="string.html">string</a>, format: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Decodes <code>data</code> using <code>format</code> (<code>hex</code> / <code>escape</code> / <code>base64</code>).</p>
 </span></td></tr>
 <tr><td><a name="decompress"></a><code>decompress(data: <a href="bytes.html">bytes</a>, codec: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Decompress <code>data</code> with the specified <code>codec</code> (<code>gzip</code>).</p>

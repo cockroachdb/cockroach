@@ -1,0 +1,53 @@
+statement ok
+CREATE DATABASE d
+
+statement ok
+USE d
+
+query T colnames
+SHOW CREATE ALL TYPES
+----
+create_statement
+
+statement ok
+CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');
+
+query T colnames
+SHOW CREATE ALL TYPES
+----
+create_statement
+CREATE TYPE public.status AS ENUM ('open', 'closed', 'inactive');
+
+statement ok
+CREATE TYPE tableObj AS ENUM('row', 'col');
+
+query T colnames
+SHOW CREATE ALL TYPES
+----
+create_statement
+CREATE TYPE public.status AS ENUM ('open', 'closed', 'inactive');
+CREATE TYPE public.tableobj AS ENUM ('row', 'col');
+
+statement ok
+DROP TYPE status
+
+query T colnames
+SHOW CREATE ALL TYPES
+----
+create_statement
+CREATE TYPE public.tableobj AS ENUM ('row', 'col');
+
+# type in user-defined schema
+statement ok
+CREATE SCHEMA s
+
+statement ok
+CREATE TYPE s.status AS ENUM ('a', 'b', 'c');
+
+query T colnames
+SHOW CREATE ALL TYPES
+----
+create_statement
+CREATE TYPE public.tableobj AS ENUM ('row', 'col');
+CREATE TYPE s.status AS ENUM ('a', 'b', 'c');
+
