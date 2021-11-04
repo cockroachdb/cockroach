@@ -606,6 +606,9 @@ message JobResponse {
   // to a "AS OF SYSTEM TIME" SQL statement.
   string highwater_decimal = 14;
   string running_status = 15;
+  google.protobuf.Timestamp last_run = 17 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp next_run = 18 [(gogoproto.stdtime) = true];
+  int64 num_runs = 19;
 }
 
 // LocationsRequest requests system locality location information.
