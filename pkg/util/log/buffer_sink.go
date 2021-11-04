@@ -156,6 +156,7 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 			// the flusher). Also it's not clear why this is using a custom
 			// atomic counter? Why not using a buffered channel and check
 			// via `select` that the write is possible?
+			// See: https://github.com/cockroachdb/cockroach/issues/72460
 			if atomic.LoadInt32(&bs.nInFlight) < bs.maxInFlight {
 				bs.flushCh <- b
 				atomic.AddInt32(&bs.nInFlight, 1)
