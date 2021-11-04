@@ -12,6 +12,10 @@ import React from "react";
 import { cockroach } from "src/js/protos";
 import { HighwaterTimestamp } from "src/views/jobs/highwaterTimestamp";
 import { JobStatus } from "./jobStatus";
+import { isRetrying } from "src/views/jobs/jobStatusOptions";
+import { TimestampToMoment } from "src/util/convert";
+import { DATE_FORMAT_24_UTC } from "src/util/format";
+import { Tooltip } from "@cockroachlabs/ui-components";
 import Job = cockroach.server.serverpb.IJobResponse;
 
 export interface JobStatusCellProps {
@@ -33,5 +37,26 @@ export const JobStatusCell: React.FC<JobStatusCellProps> = ({
       />
     );
   }
-  return <JobStatus job={job} lineWidth={lineWidth} compact={compact} />;
+
+  const jobStatus = (
+    <JobStatus job={job} lineWidth={lineWidth} compact={compact} />
+  );
+  if (isRetrying(job.status)) {
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <>
+            Next Execution Time:
+            <br />
+            {TimestampToMoment(job.next_run).format(DATE_FORMAT_24_UTC)}
+          </>
+        }
+      >
+        {jobStatus}
+      </Tooltip>
+    );
+  }
+  return jobStatus;
 };
