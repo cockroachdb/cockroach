@@ -24,6 +24,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/col/coldata",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
@@ -71,7 +72,6 @@ go_library(
         "//pkg/util/unique",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_gogo_protobuf//types",
     ],
 )
 

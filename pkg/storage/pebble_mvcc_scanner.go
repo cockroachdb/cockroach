@@ -79,6 +79,10 @@ func (s *singleResults) put(
 ) error {
 	s.count++
 	s.bytes += int64(len(key) + len(value))
+	/*
+		s.key = append([]byte{}, key...)
+		s.value = append([]byte{}, value...)
+	*/
 	s.key = key
 	s.value = value
 	return nil

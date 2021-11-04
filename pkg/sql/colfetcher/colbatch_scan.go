@@ -190,10 +190,15 @@ func newCFetcherWrapper(
 	specMessage proto.Message,
 	nexter storage.NextKVer,
 ) (storage.CFetcherWrapper, error) {
-	spec, ok := specMessage.(*execinfrapb.TableReaderSpec)
+	proc, ok := specMessage.(*execinfrapb.ProcessorSpec)
 	if !ok {
-		return nil, errors.AssertionFailedf("expected a TableReaderSpec, but found a %T", specMessage)
+		return nil, errors.AssertionFailedf("expected a ProcessorSpec, but found a %T", specMessage)
 	}
+	spec := proc.Core.TableReader
+	if spec == nil {
+		return nil, errors.AssertionFailedf("expected a TableReaderSpec, but found a %s", proc.Core)
+	}
+	post := &proc.Post
 	// TODO(ajwerner): The need to construct an ImmutableTableDescriptor here
 	// indicates that we're probably doing this wrong. Instead we should be
 	// just seting the ID and Version in the spec or something like that and
@@ -201,15 +206,15 @@ func newCFetcherWrapper(
 	table := spec.BuildTableDescriptor()
 	invertedColumn := tabledesc.FindInvertedColumn(table, spec.InvertedColumn)
 	tableArgs, idxMap, err := populateTableArgs(
-		ctx, nil, nil, table, table.ActiveIndexes()[spec.IndexIdx],
-		invertedColumn, spec.Visibility, spec.HasSystemColumns, nil, nil,
+		ctx, &execinfra.FlowCtx{}, nil, table, table.ActiveIndexes()[spec.IndexIdx],
+		invertedColumn, spec.Visibility, spec.HasSystemColumns, post, nil,
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	if err = keepOnlyNeededColumns(
-		nil, tableArgs, idxMap, spec.NeededColumns, &execinfrapb.PostProcessSpec{}, nil,
+		nil, tableArgs, idxMap, spec.NeededColumns, post, nil,
 		false, false,
 	); err != nil {
 		return nil, err
@@ -217,10 +222,15 @@ func newCFetcherWrapper(
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	fetcher.cFetcherArgs = cFetcherArgs{
-		memoryLimit:    execinfra.DefaultMemoryLimit,
-		lockStrength:   spec.LockingStrength,
-		lockWaitPolicy: spec.LockingWaitPolicy,
-		reverse:        spec.Reverse,
+		memoryLimit:       execinfra.DefaultMemoryLimit,
+		lockStrength:      spec.LockingStrength,
+		lockWaitPolicy:    spec.LockingWaitPolicy,
+		reverse:           spec.Reverse,
+		estimatedRowCount: proc.EstimatedRowCount,
+		// We set allocateFreshBatches to true so that the cfetcher continually
+		// gives us back new batches, so we don't have to do any further copying of
+		// each batch as it's returned from the cfetcher.
+		allocateFreshBatches: true,
 	}
 
 	if err = fetcher.Init(
@@ -232,6 +242,7 @@ func newCFetcherWrapper(
 	wrapper := cfetcherWrapper{}
 	wrapper.fetcher = *fetcher
 	wrapper.fetcher.fetcher = nexter
+	return &wrapper, nil
 	wrapper.converter, err = colserde.NewArrowBatchConverter(tableArgs.typs)
 	if err != nil {
 		return nil, err
@@ -249,24 +260,33 @@ type cfetcherWrapper struct {
 	serializer *colserde.RecordBatchSerializer
 }
 
-func (c *cfetcherWrapper) NextBatch(ctx context.Context) ([]byte, error) {
+func (c *cfetcherWrapper) NextBatch(
+	ctx context.Context, serialize bool,
+) ([]byte, coldata.Batch, error) {
 	batch, err := c.fetcher.NextBatch(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if batch.Length() == 0 {
-		return nil, nil
+		return nil, nil, nil
+	}
+	if !serialize {
+		return nil, batch, nil
 	}
 	data, err := c.converter.BatchToArrow(batch)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var buf bytes.Buffer
 	_, _, err = c.serializer.Serialize(&buf, data, batch.Length())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return buf.Bytes(), nil
+	return buf.Bytes(), nil, nil
+}
+
+func (c *cfetcherWrapper) Close(ctx context.Context) {
+	c.fetcher.Close(ctx)
 }
 
 var _ storage.CFetcherWrapper = &cfetcherWrapper{}
@@ -297,13 +317,13 @@ func NewColBatchScan(
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	fetcher.cFetcherArgs = cFetcherArgs{
-		spec.LockingStrength,
-		spec.LockingWaitPolicy,
-		flowCtx.EvalCtx.SessionData().LockTimeout,
-		execinfra.GetWorkMemLimit(flowCtx),
-		estimatedRowCount,
-		spec.Reverse,
-		flowCtx.TraceKV,
+		lockStrength:      spec.LockingStrength,
+		lockWaitPolicy:    spec.LockingWaitPolicy,
+		lockTimeout:       flowCtx.EvalCtx.SessionData().LockTimeout,
+		memoryLimit:       execinfra.GetWorkMemLimit(flowCtx),
+		estimatedRowCount: estimatedRowCount,
+		reverse:           spec.Reverse,
+		traceKV:           flowCtx.TraceKV,
 	}
 
 	if err = fetcher.Init(allocator, kvFetcherMemAcc, tableArgs); err != nil {

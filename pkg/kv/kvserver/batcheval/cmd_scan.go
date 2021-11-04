@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 )
 
@@ -74,17 +76,32 @@ func Scan(
 		}
 		reply.Rows = scanRes.KVs
 	case roachpb.COL_BATCH_RESPONSE:
-		var da types.DynamicAny
-		if err := types.UnmarshalAny(args.ScanSpec, &da); err != nil {
-			return result.Result{}, err
+		var msg proto.Message
+		switch ss := args.ScanSpec.ScanSpec.(type) {
+		case *types.Any:
+			var da types.DynamicAny
+			if err := types.UnmarshalAny(ss, &da); err != nil {
+				return result.Result{}, err
+			}
+			msg = da.Message
+		case *execinfrapb.ProcessorSpec:
+			msg = ss
 		}
 		scanRes, err = storage.MVCCScanToCols(
-			ctx, args.TenantId, reader, da.Message,
+			ctx, args.TenantId, reader, msg,
 			args.Key, args.EndKey, h.Timestamp, opts)
 		if err != nil {
 			return result.Result{}, err
 		}
-		reply.BatchResponses = scanRes.KVData
+		if scanRes.KVData != nil {
+			reply.BatchResponses = scanRes.KVData
+		}
+		if scanRes.ColBatches != nil {
+			reply.ColBatches.ColBatches = make([]interface{}, len(scanRes.ColBatches))
+			for i := range scanRes.ColBatches {
+				reply.ColBatches.ColBatches[i] = scanRes.ColBatches[i]
+			}
+		}
 	default:
 		panic(fmt.Sprintf("Unknown scanFormat %d", args.ScanFormat))
 	}

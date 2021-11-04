@@ -170,8 +170,10 @@ func (a *Allocator) ResetMaybeReallocate(
 		colexecerror.InternalError(errors.AssertionFailedf("invalid minDesiredCapacity %d", minDesiredCapacity))
 	} else if minDesiredCapacity == 0 {
 		minDesiredCapacity = 1
-	} else if minDesiredCapacity > coldata.BatchSize() {
-		minDesiredCapacity = coldata.BatchSize()
+		/*
+			} else if minDesiredCapacity > coldata.BatchSize() {
+				minDesiredCapacity = coldata.BatchSize()
+		*/
 	}
 	reallocated = true
 	if oldBatch == nil {

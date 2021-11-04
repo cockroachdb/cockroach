@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	protoTypes "github.com/gogo/protobuf/types"
+	"github.com/cockroachdb/errors"
 )
 
 type ColBatchDirectScan struct {
@@ -37,14 +37,15 @@ type ColBatchDirectScan struct {
 	batch   coldata.Batch
 	data    []*array.Data
 
-	converter       *colserde.ArrowBatchConverter
-	deser           *colserde.RecordBatchSerializer
-	flowCtx         *execinfra.FlowCtx
-	kvFetcherMemAcc *mon.BoundAccount
+	converter         *colserde.ArrowBatchConverter
+	deser             *colserde.RecordBatchSerializer
+	flowCtx           *execinfra.FlowCtx
+	kvFetcherMemAcc   *mon.BoundAccount
+	estimatedRowCount uint64
 }
 
-// NewColBatchScan creates a new ColBatchScan operator.
-func NewColDirectBatchScan(
+// NewColBatchDirectScan creates a new ColBatchDirectScan operator.
+func NewColBatchDirectScan(
 	ctx context.Context,
 	allocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
@@ -62,21 +63,32 @@ func NewColDirectBatchScan(
 	}
 
 	return &ColBatchDirectScan{
-		ColBatchScan:    scan,
-		data:            make([]*array.Data, len(scan.ResultTypes)),
-		spec:            *spec,
-		post:            *post,
-		kvFetcherMemAcc: kvFetcherMemAcc,
-		flowCtx:         flowCtx,
+		ColBatchScan:      scan,
+		data:              make([]*array.Data, len(scan.ResultTypes)),
+		spec:              *spec,
+		post:              *post,
+		estimatedRowCount: estimatedRowCount,
+		kvFetcherMemAcc:   kvFetcherMemAcc,
+		flowCtx:           flowCtx,
 	}, nil
 }
 
 func (c *ColBatchDirectScan) Init(ctx context.Context) {
 	c.ColBatchScan.Init(ctx)
-	spec, err := protoTypes.MarshalAny(&c.spec)
-	if err != nil {
-		colexecerror.InternalError(err)
+	scanSpec := &execinfrapb.ProcessorSpec{
+		Core: execinfrapb.ProcessorCoreUnion{
+			TableReader: &c.spec,
+		},
+		Post:              c.post,
+		EstimatedRowCount: c.estimatedRowCount,
 	}
+	/*
+		serializedSpec, err := types.MarshalAny(scanSpec)
+		if err != nil {
+			colexecerror.InternalError(err)
+		}
+	*/
+	var err error
 	c.deser, err = colserde.NewRecordBatchSerializer(c.ResultTypes)
 	if err != nil {
 		colexecerror.InternalError(err)
@@ -116,10 +128,9 @@ func (c *ColBatchDirectScan) Init(ctx context.Context) {
 		firstBatchLimit,
 		roachpb.COL_BATCH_RESPONSE,
 		row.ColFormatArgs{
-			Spec:          spec,
-			TenantID:      c.flowCtx.Codec().TenantID(),
-			IsProjection:  c.post.Projection,
-			OutputColumns: c.post.OutputColumns,
+			Spec:     scanSpec,
+			TenantID: c.flowCtx.Codec().TenantID(),
+			Post:     c.post,
 		},
 		c.spec.LockingStrength,
 		c.spec.LockingWaitPolicy,
@@ -135,15 +146,24 @@ func (c *ColBatchDirectScan) Init(ctx context.Context) {
 }
 
 func (c *ColBatchDirectScan) Next() coldata.Batch {
-	ok, _, response, err := c.fetcher.NextBatch(c.Ctx)
+	ok, res, err := c.fetcher.NextBatch(c.Ctx)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
-	if !ok || len(response) == 0 {
+	if !ok {
+		return coldata.ZeroBatch
+	}
+	if res.KVs != nil {
+		panic(errors.AssertionFailedf("unexpectedly encountered KVs in a direct scan"))
+	}
+	if res.ColBatch != nil {
+		return res.ColBatch
+	}
+	if len(res.BatchResponse) == 0 {
 		return coldata.ZeroBatch
 	}
 	c.data = c.data[:0]
-	batchLength, err := c.deser.Deserialize(&c.data, response)
+	batchLength, err := c.deser.Deserialize(&c.data, res.BatchResponse)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}

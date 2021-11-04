@@ -462,12 +462,26 @@ message ScanRequest {
   // scanned by the request.
   kv.kvserver.concurrency.lock.Strength key_locking = 5;
 
-  // This "any type" field is a serialized TableReaderSpec that can be used
-  // to initialize a columnar scan for MVCC. We use this generic type to resolve
-  // some painful circular dependency issues.
-  google.protobuf.Any scan_spec = 6;
+  // This "any type" field is a serialized ProcessorSpec, containing a
+  // TableReaderSpec that can be used to initialize a columnar scan for MVCC.
+  // We use this generic type to resolve some painful circular dependency issues.
+  ScanSpec scan_spec = 6;
 
   uint64 tenant_id = 7;
+}
+
+message ScanSpec {
+  option (gogoproto.gostring) = false;
+  option (gogoproto.equal) = false;
+  option (gogoproto.stringer) =  false;
+  option (gogoproto.marshaler) = false;
+  option (gogoproto.sizer) = false;
+  option (gogoproto.unmarshaler) = false;
+
+  // This "any type" field is a serialized ProcessorSpec, containing a
+  // TableReaderSpec that can be used to initialize a columnar scan for MVCC.
+  // We use this generic type to resolve some painful circular dependency issues.
+  bytes scan_spec = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "interface{}"];
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -492,6 +506,19 @@ message ScanResponse {
   // entry. There are num_keys total pairs across all entries, as defined by the
   // ResponseHeader. If set, rows will not be set and vice versa.
   repeated bytes batch_responses = 4;
+
+  ColBatches col_batches = 5 [(gogoproto.nullable) = false];
+}
+
+message ColBatches {
+  option (gogoproto.gostring) = false;
+  option (gogoproto.equal) = false;
+  option (gogoproto.stringer) =  false;
+  option (gogoproto.marshaler) = false;
+  option (gogoproto.sizer) = false;
+  option (gogoproto.unmarshaler) = false;
+  repeated bytes col_batches = 1 [(gogoproto.customtype) = "interface{}",
+                                  (gogoproto.nullable) = false];
 }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
@@ -519,10 +546,7 @@ message ReverseScanRequest {
   // scanned by the request.
   kv.kvserver.concurrency.lock.Strength key_locking = 5;
 
-  // This "any type" field is a serialized TableReaderSpec that can be used
-  // to initialize a columnar scan for MVCC. We use this generic type to resolve
-  // some painful circular dependency issues.
-  google.protobuf.Any scan_spec = 6;
+  ScanSpec scan_spec = 6;
 
   bool projection = 7;
 

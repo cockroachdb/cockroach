@@ -14,9 +14,11 @@ import (
 	"context"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -27,7 +29,14 @@ import (
 // of bytes, a column-oriented batch.
 type CFetcherWrapper interface {
 	// NextBatch gives back the next column-oriented batch.
-	NextBatch(ctx context.Context) ([]byte, error)
+	// If serialize is true, the returned batch will be the byte slice, serialized
+	// in Arrow batch format.
+	// If serialize is false, the returned batch will be the coldata.Batch.
+	NextBatch(ctx context.Context, serialize bool) ([]byte, coldata.Batch, error)
+
+	// Close release the resources held by this CFetcherWrapper. It *must* be
+	// called after use of the wrapper.
+	Close(ctx context.Context)
 }
 
 // NextKVer can fetch a new KV from somewhere. If MVCCDecodingStrategy is set
@@ -116,6 +125,10 @@ func (f *mvccScanFetchAdapter) NextKV(
 	lastKV := f.results.getLastKV()
 
 	enc := lastKV.Key
+	if len(enc) == 0 || len(lastKV.Value.RawBytes) == 0 {
+		return false, lastKV, false, nil
+		//return false, lastKV, false, errors.AssertionFailedf("unexpectedly received an empty lastKV")
+	}
 	switch mvccDecodeStrategy {
 	case MVCCDecodingRequired:
 		lastKV.Key, lastKV.Value.Timestamp, err = enginepb.DecodeKey(enc)
@@ -125,13 +138,10 @@ func (f *mvccScanFetchAdapter) NextKV(
 	case MVCCDecodingNotRequired:
 		lastKV.Key, _, ok = enginepb.SplitMVCCKey(enc)
 		if !ok {
-			return false, lastKV, false, errors.Errorf("invalid encoded mvcc key: %x", enc)
+			return false, lastKV, false, errors.AssertionFailedf("invalid encoded mvcc key: %x", enc)
 		}
 	}
-	// We always need to return true for finalReferenceToBatch, because each KV
-	// that we return will be instantly overwritten next time we advance the
-	// Pebble iterator.
-	return true, lastKV, true, nil
+	return true, lastKV, false, nil
 }
 
 // MVCCScanToCols is like MVCCScan, but it returns KVData in a serialized
@@ -208,6 +218,11 @@ func mvccScanToCols(
 		nil,
 	)
 	memMon.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	// TODO(jordan): This memory account is going to track all of the memory that
+	// we allocate for all of the returned batches. But, I think we're already
+	// accounting for targetBytes worth of memory somewhere higher up the stack...
+	// should we be not using any accounting here at all? Of course, our monitor
+	// is not hooked up to anything here, so perhaps none of those matters at all.
 	acc := memMon.MakeBoundAccount()
 	codec := keys.MakeSQLCodec(roachpb.MakeTenantID(tenantID))
 	wrapper, err := GetCFetcherWrapper(
@@ -220,6 +235,7 @@ func mvccScanToCols(
 	if err != nil {
 		return MVCCScanResult{}, err
 	}
+	defer wrapper.Close(ctx)
 
 	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
 	mvccScanner.results = &adapter.results
@@ -230,21 +246,37 @@ func mvccScanToCols(
 		return res, err
 	}
 
-	for {
-		batch, err := wrapper.NextBatch(ctx)
-		if err != nil {
-			return res, err
+	if grpcutil.IsLocalRequestContext(ctx) {
+		for {
+			_, batch, err := wrapper.NextBatch(ctx, false /* serialize */)
+			if err != nil {
+				return res, err
+			}
+			if batch == nil {
+				break
+			}
+			res.ColBatches = append(res.ColBatches, batch)
+			if mvccScanner.resumeReason != roachpb.RESUME_UNKNOWN {
+				break
+			}
 		}
-		if batch == nil {
-			break
+	} else {
+		for {
+			batch, _, err := wrapper.NextBatch(ctx, true /* serialize */)
+			if err != nil {
+				return res, err
+			}
+			if batch == nil {
+				break
+			}
+			res.KVData = append(res.KVData, batch)
 		}
-		res.KVData = append(res.KVData, batch)
 	}
 
 	mvccScanner.maybeFailOnMoreRecent()
 
 	var resume *roachpb.Span
-	if mvccScanner.maxKeys > 0 && mvccScanner.results.getCount() == mvccScanner.maxKeys && mvccScanner.advanceKey() {
+	if mvccScanner.curExcluded || mvccScanner.advanceKey() {
 		if mvccScanner.reverse {
 			// curKey was not added to results, so it needs to be included in the
 			// resume span.

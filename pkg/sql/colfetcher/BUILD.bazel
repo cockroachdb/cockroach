@@ -15,6 +15,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/col/coldata",
+        "//pkg/col/coldatatestutils",
         "//pkg/col/colserde",
         "//pkg/col/typeconv",
         "//pkg/keys",
@@ -56,7 +57,6 @@ go_library(
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
-        "@com_github_gogo_protobuf//types",
     ],
 )
 

@@ -754,3 +754,24 @@ func (ba BatchRequest) ValidateForEvaluation() error {
 	}
 	return nil
 }
+
+func (ColBatches) Size() int { return 0 }
+
+func (ColBatches) MarshalToSizedBuffer([]byte) (int, error) { return 0, nil }
+
+func (ColBatches) Unmarshal(b []byte) error {
+	if len(b) > 0 {
+		return errors.AssertionFailedf("unexpectedly unmarshaling a non-empty ColBatches")
+	}
+	return nil
+}
+
+func (ScanSpec) Size() int { return 0 }
+
+func (ScanSpec) MarshalToSizedBuffer([]byte) (int, error) {
+	panic("This should never be called (for now)")
+}
+
+func (ScanSpec) Unmarshal([]byte) error {
+	panic("This should never be called (for now)")
+}

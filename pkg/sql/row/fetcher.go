@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -56,9 +57,21 @@ type KVBatchFetcher interface {
 	// parameter if there are no more keys in the scan. May return either a slice
 	// of KeyValues or a batchResponse, numKvs pair, depending on the server
 	// version - both must be handled by calling code.
-	NextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error)
+	NextBatch(ctx context.Context) (ok bool, res KVBatchFetcherResult, err error)
 
 	Close(ctx context.Context)
+}
+
+// KVBatchFetcherResult represents returned data from a KVBatchFetcher. It
+// contains one field for every possible return format for a fetch. Only one of
+// the fields will ever be set.
+type KVBatchFetcherResult struct {
+	// KVs is just a list of raw KVs.
+	KVs []roachpb.KeyValue
+	// BatchResponse is a byte slice of data in the batch response format.
+	BatchResponse []byte
+	// ColBatch is a deserialized coldata.Batch, ready for use.
+	ColBatch coldata.Batch
 }
 
 type tableInfo struct {
