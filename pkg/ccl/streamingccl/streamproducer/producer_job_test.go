@@ -106,6 +106,20 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 	sql := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	registry := source.JobRegistry().(*jobs.Registry)
 
+	resetConstructor := func() {
+		jobs.RegisterConstructor(
+			jobspb.TypeStreamReplication,
+			func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+				ts := timeutil.DefaultTimeSource{}
+				return &producerJobResumer{
+					job:        job,
+					timeSource: ts,
+					timer:      ts.NewTimer(),
+				}
+			},
+		)
+	}
+
 	registerConstructor := func(initialTime time.Time) (*timeutil.ManualTime, func(), func(), func()) {
 		mt := timeutil.NewManualTime(initialTime)
 		waitUntilReverting := make(chan struct{})
@@ -165,6 +179,8 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		// Case 2: Resumer wakes up and find the job still active.
 		jobID, jr = makeProducerJobRecord(registry, 20, timeout, username)
 		mt, timeGiven, waitForTimeRequest, waitUntilReverting := registerConstructor(expirationTime(jr).Add(-5 * time.Millisecond))
+		defer resetConstructor()
+
 		require.NoError(t, startJob(jobID, jr))
 		waitForTimeRequest()
 		sql.CheckQueryResults(t, jobsQuery(jobID), [][]string{{"running"}})
