@@ -50,50 +50,23 @@ func IsDefaultCreatedDescriptor(descID descpb.ID) bool {
 
 // IndexKeyValDirs returns the corresponding encoding.Directions for all the
 // encoded values in index's "fullest" possible index key, including directions
-// for table/index IDs, the interleaved sentinel and the index column values.
-// For example, given
-//    CREATE INDEX foo ON bar (a, b DESC) INTERLEAVED IN PARENT bar (a)
-// a typical index key with all values specified could be
-//    /51/1/42/#/51/2/1337
-// which would return the slice
-//    {ASC, ASC, ASC, 0, ASC, ASC, DESC}
+// for table/index IDs and the index column values.
 func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
 	if index == nil {
 		return nil
 	}
 
-	dirs := make([]encoding.Direction, 0, (index.NumInterleaveAncestors()+1)*2+index.NumKeyColumns())
-
-	colIdx := 0
-	for i := 0; i < index.NumInterleaveAncestors(); i++ {
-		ancs := index.GetInterleaveAncestor(i)
-		// Table/Index IDs are always encoded ascending.
-		dirs = append(dirs, encoding.Ascending, encoding.Ascending)
-		for i := 0; i < int(ancs.SharedPrefixLen); i++ {
-			d, err := index.GetKeyColumnDirection(colIdx).ToEncodingDirection()
-			if err != nil {
-				panic(err)
-			}
-			dirs = append(dirs, d)
-			colIdx++
-		}
-
-		// The interleaved sentinel uses the 0 value for
-		// encoding.Direction when pretty-printing (see
-		// encoding.go:prettyPrintFirstValue).
-		dirs = append(dirs, 0)
-	}
+	dirs := make([]encoding.Direction, 0, 2+index.NumKeyColumns())
 
 	// The index's table/index ID.
 	dirs = append(dirs, encoding.Ascending, encoding.Ascending)
 
-	for colIdx < index.NumKeyColumns() {
+	for colIdx := 0; colIdx < index.NumKeyColumns(); colIdx++ {
 		d, err := index.GetKeyColumnDirection(colIdx).ToEncodingDirection()
 		if err != nil {
 			panic(err)
 		}
 		dirs = append(dirs, d)
-		colIdx++
 	}
 
 	return dirs

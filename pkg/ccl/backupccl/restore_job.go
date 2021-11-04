@@ -490,7 +490,7 @@ func rewriteBackupSpanKey(
 		return key, nil
 	}
 
-	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...), true /* isFromSpan */)
+	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...))
 	if err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"could not rewrite span start key: %s", key)

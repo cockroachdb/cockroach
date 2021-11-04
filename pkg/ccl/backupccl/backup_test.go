@@ -6369,48 +6369,6 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 		actualResolvedSpans = nil
 	})
 
-	t.Run("interleaved-spans", func(t *testing.T) {
-		runner.Exec(t, "CREATE DATABASE test; USE test;")
-		runner.Exec(t, "CREATE TABLE grandparent (a INT PRIMARY KEY, v BYTES, INDEX gpindex (v))")
-		runner.Exec(t, "CREATE TABLE parent (a INT, b INT, v BYTES, "+
-			"PRIMARY KEY(a, b)) INTERLEAVE IN PARENT grandparent(a)")
-		runner.Exec(t, "CREATE TABLE child (a INT, b INT, c INT, v BYTES, "+
-			"PRIMARY KEY(a, b, c), INDEX childindex(c)) INTERLEAVE IN PARENT parent(a, b)")
-
-		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s' WITH include_deprecated_interleaves`, baseBackupURI+t.Name()))
-		// /Table/59/{1-2} encompasses the pk of grandparent, and the interleaved
-		// tables parent and child.
-		// /Table/59/2 - /Table/59/3 is for the gpindex
-		// /Table/61/{2-3} is for the childindex
-		grandparentID := getTableID(db, "test", "grandparent")
-		childID := getTableID(db, "test", "child")
-		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-3}", grandparentID),
-			fmt.Sprintf("/Table/%d/{2-3}", childID)}, actualResolvedSpans)
-		runner.Exec(t, "DROP DATABASE test;")
-		actualResolvedSpans = nil
-	})
-
-	// This is a regression test for a bug that was fixed in
-	// https://github.com/cockroachdb/cockroach/pull/72270 where two (or more)
-	// public indexes followed by an interleaved index would result in index keys
-	// being missed during backup.
-	// Prior to the fix in https://github.com/cockroachdb/cockroach/pull/72270,
-	// the resolved spans would be `/Table/63/{1-3}` thereby missing the span for
-	// idx2.
-	// With the change we now backup `/Table/63/{1-4}` to include pkIndex, idx1,
-	// idx2 and idx3 (since it is interleaved it produces the span
-	// `/Table/63/{1-2}`).
-	t.Run("public-and-interleaved-indexes", func(t *testing.T) {
-		runner.Exec(t, "CREATE DATABASE test; USE test;")
-		runner.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b INT, v BYTES, INDEX idx1 (v), INDEX idx2(b))")
-		runner.Exec(t, "CREATE INDEX idx3 ON foo (a, b) INTERLEAVE IN PARENT foo (a)")
-		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s' WITH include_deprecated_interleaves`, baseBackupURI+t.Name()))
-		tableID := getTableID(db, "test", "foo")
-		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-4}", tableID)}, actualResolvedSpans)
-		runner.Exec(t, "DROP DATABASE test;")
-		actualResolvedSpans = nil
-	})
-
 	t.Run("revs-span-merge", func(t *testing.T) {
 		runner.Exec(t, "CREATE DATABASE test; USE test;")
 		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, "+

@@ -1382,15 +1382,13 @@ func (rf *cFetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
 	}
 	nIndexCols := rf.table.index.NumKeyColumns() + rf.table.index.NumKeySuffixColumns()
 	tableKeyVals := make([]rowenc.EncDatum, nIndexCols)
-	_, ok, _, err := rowenc.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
-		rf.table.desc,
-		rf.table.index,
+	_, _, err := rowenc.DecodeKeyVals(
 		rf.table.keyValTypes,
 		tableKeyVals,
 		rf.table.indexColumnDirs,
 		key[rf.table.knownPrefixLength:],
 	)
-	if !ok || err != nil {
+	if err != nil {
 		return nil, false
 	}
 	return rf.table.desc, true

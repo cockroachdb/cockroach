@@ -84,24 +84,9 @@ func MakeBuilder(
 	}
 
 	// Set up the interstices for encoding interleaved tables later.
+	//
+	// TODO(yuzefovich): simplify this, interleaves are dead now.
 	s.interstices[0] = s.KeyPrefix
-	if index.NumInterleaveAncestors() > 0 {
-		// TODO(rohany): too much of this code is copied from EncodePartialIndexKey.
-		sharedPrefixLen := 0
-		for i := 0; i < index.NumInterleaveAncestors(); i++ {
-			ancestor := index.GetInterleaveAncestor(i)
-			// The first ancestor is already encoded in interstices[0].
-			if i != 0 {
-				s.interstices[sharedPrefixLen] = rowenc.EncodePartialTableIDIndexID(
-					s.interstices[sharedPrefixLen], ancestor.TableID, ancestor.IndexID)
-			}
-			sharedPrefixLen += int(ancestor.SharedPrefixLen)
-			s.interstices[sharedPrefixLen] = encoding.EncodeInterleavedSentinel(
-				s.interstices[sharedPrefixLen])
-		}
-		s.interstices[sharedPrefixLen] = rowenc.EncodePartialTableIDIndexID(
-			s.interstices[sharedPrefixLen], table.GetID(), index.GetID())
-	}
 
 	return s
 }

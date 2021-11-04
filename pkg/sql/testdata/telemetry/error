@@ -89,14 +89,6 @@ errorcodes.XXUUU
 othererror.XXUUU
 othererror.XXUUU.crdb_internal.set_vmodule()
 
-# 0A000 is pgcode.FeatureNotSupported.
-feature-usage
-CREATE TABLE foo (a INT8 PRIMARY KEY, b INT8, INDEX (b) INTERLEAVE IN PARENT foo (b))
-----
-error: pq: unimplemented: use CREATE INDEX to make interleaved indexes
-errorcodes.0A000
-unimplemented.#9148
-
 # 22012 is pgcode.DivisionByZero.
 feature-usage
 SELECT 2/0

@@ -31,10 +31,6 @@ func SchemaNewTypeCounter(t string) telemetry.Counter {
 }
 
 var (
-	// CreateInterleavedTableCounter is to be incremented every time an
-	// interleaved table is being created.
-	CreateInterleavedTableCounter = telemetry.GetCounterOnce("sql.schema.create_interleaved_table")
-
 	// CreateTempTableCounter is to be incremented every time a TEMP TABLE
 	// has been created.
 	CreateTempTableCounter = telemetry.GetCounterOnce("sql.schema.create_temp_table")

@@ -683,16 +683,6 @@ func (b *buildContext) maybeCleanTableFKs(
 func (b *buildContext) dropTableDesc(
 	ctx context.Context, table catalog.TableDescriptor, behavior tree.DropBehavior,
 ) {
-	// Interleaved tables not supported in new schema changer.
-	if table.IsInterleaved() {
-		panic(&notImplementedError{
-			n: &tree.DropTable{
-				Names: []tree.TableName{
-					tree.MakeUnqualifiedTableName(tree.Name(table.GetName())),
-				},
-			},
-			detail: "drop on interleaved table"})
-	}
 
 	// Drop dependent views
 	onErrPanic(table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {

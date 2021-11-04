@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -84,16 +83,6 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 			if _, ok := td[ref.OriginTableID]; !ok {
 				if err := p.canRemoveFKBackreference(ctx, droppedDesc.Name, ref, n.DropBehavior); err != nil {
 					return nil, err
-				}
-			}
-		}
-		for _, idx := range droppedDesc.NonDropIndexes() {
-			for i := 0; i < idx.NumInterleavedBy(); i++ {
-				ref := idx.GetInterleavedBy(i)
-				if _, ok := td[ref.Table]; !ok {
-					if err := p.canRemoveInterleave(ctx, droppedDesc.Name, ref, n.DropBehavior); err != nil {
-						return nil, err
-					}
 				}
 			}
 		}
@@ -231,44 +220,6 @@ func (p *planner) canRemoveFKBackreference(
 	return p.CheckPrivilege(ctx, table, privilege.CREATE)
 }
 
-func (p *planner) canRemoveInterleave(
-	ctx context.Context, from string, ref descpb.ForeignKeyReference, behavior tree.DropBehavior,
-) error {
-	table, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.Table, p.txn)
-	if err != nil {
-		return err
-	}
-	// TODO(dan): It's possible to DROP a table that has a child interleave, but
-	// some loose ends would have to be addressed. The zone would have to be
-	// kept and deleted when the last table in it is removed. Also, the dropped
-	// table's descriptor would have to be kept around in some Dropped but
-	// non-public state for referential integrity of the `InterleaveDescriptor`
-	// pointers.
-	if behavior != tree.DropCascade {
-		return unimplemented.NewWithIssuef(
-			8036, "%q is interleaved by table %q", from, table.Name)
-	}
-	return p.CheckPrivilege(ctx, table, privilege.CREATE)
-}
-
-func (p *planner) removeInterleave(ctx context.Context, ref descpb.ForeignKeyReference) error {
-	table, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.Table, p.txn)
-	if err != nil {
-		return err
-	}
-	if table.Dropped() {
-		// The referenced table is being dropped. No need to modify it further.
-		return nil
-	}
-	idx, err := table.FindIndexWithID(ref.Index)
-	if err != nil {
-		return err
-	}
-	idx.IndexDesc().Interleave.Ancestors = nil
-	// No job description, since this is presumably part of some larger schema change.
-	return p.writeSchemaChange(ctx, table, descpb.InvalidMutationID, "")
-}
-
 // dropTableImpl does the work of dropping a table (and everything that depends
 // on it if `cascade` is enabled). It returns a list of view names that were
 // dropped due to `cascade` behavior. droppingParent indicates whether this
@@ -305,21 +256,6 @@ func (p *planner) dropTableImpl(
 		}
 	}
 	tableDesc.InboundFKs = nil
-
-	// Remove interleave relationships.
-	for _, idx := range tableDesc.NonDropIndexes() {
-		if idx.NumInterleaveAncestors() > 0 {
-			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
-				return droppedViews, err
-			}
-		}
-		for i := 0; i < idx.NumInterleavedBy(); i++ {
-			ref := idx.GetInterleavedBy(i)
-			if err := p.removeInterleave(ctx, ref); err != nil {
-				return droppedViews, err
-			}
-		}
-	}
 
 	// Remove sequence dependencies.
 	for _, col := range tableDesc.PublicColumns() {
@@ -439,15 +375,9 @@ func (p *planner) initiateDropTable(
 		)
 	}
 
-	// If the table is not interleaved , use the delayed GC mechanism to
-	// schedule usage of the more efficient ClearRange pathway. ClearRange will
-	// only work if the entire hierarchy of interleaved tables are dropped at
-	// once, as with ON DELETE CASCADE where the top-level "root" table is
-	// dropped.
-	//
-	// TODO(bram): If interleaved and ON DELETE CASCADE, we will be able to use
-	// this faster mechanism.
-	if tableDesc.IsTable() && !tableDesc.IsInterleaved() {
+	// Use the delayed GC mechanism to schedule usage of the more efficient
+	// ClearRange pathway.
+	if tableDesc.IsTable() {
 		tableDesc.DropTime = timeutil.Now().UnixNano()
 	}
 
@@ -661,54 +591,6 @@ func removeFKBackReferenceFromTable(
 	// Delete our match.
 	referencedTableDesc.InboundFKs = append(referencedTableDesc.InboundFKs[:matchIdx],
 		referencedTableDesc.InboundFKs[matchIdx+1:]...)
-	return nil
-}
-
-func (p *planner) removeInterleaveBackReference(
-	ctx context.Context, tableDesc *tabledesc.Mutable, idx catalog.Index,
-) error {
-	if idx.NumInterleaveAncestors() == 0 {
-		return nil
-	}
-	ancestor := idx.GetInterleaveAncestor(idx.NumInterleaveAncestors() - 1)
-	var t *tabledesc.Mutable
-	if ancestor.TableID == tableDesc.ID {
-		t = tableDesc
-	} else {
-		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ancestor.TableID, p.txn)
-		if err != nil {
-			return errors.Wrapf(err, "error resolving referenced table ID %d", ancestor.TableID)
-		}
-		t = lookup
-	}
-	if t.Dropped() {
-		// The referenced table is being dropped. No need to modify it further.
-		return nil
-	}
-	targetIdxI, err := t.FindIndexWithID(ancestor.IndexID)
-	if err != nil {
-		return err
-	}
-	targetIdx := targetIdxI.IndexDesc()
-	foundAncestor := false
-	for k, ref := range targetIdx.InterleavedBy {
-		if ref.Table == tableDesc.ID && ref.Index == idx.GetID() {
-			if foundAncestor {
-				return errors.AssertionFailedf(
-					"ancestor entry in %s for %s@%s found more than once", t.Name, tableDesc.Name, idx.GetName())
-			}
-			targetIdx.InterleavedBy = append(targetIdx.InterleavedBy[:k], targetIdx.InterleavedBy[k+1:]...)
-			foundAncestor = true
-		}
-	}
-	if t != tableDesc {
-		return p.writeSchemaChange(
-			ctx, t, descpb.InvalidMutationID,
-			fmt.Sprintf("removing reference for interleaved table %s(%d)",
-				t.Name, t.ID,
-			),
-		)
-	}
 	return nil
 }
 

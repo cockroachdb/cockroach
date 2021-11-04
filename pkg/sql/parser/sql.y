@@ -573,9 +573,6 @@ func (u *sqlSymUnion) dropBehavior() tree.DropBehavior {
 func (u *sqlSymUnion) validationBehavior() tree.ValidationBehavior {
     return u.val.(tree.ValidationBehavior)
 }
-func (u *sqlSymUnion) interleave() *tree.InterleaveDef {
-    return u.val.(*tree.InterleaveDef)
-}
 func (u *sqlSymUnion) partitionBy() *tree.PartitionBy {
     return u.val.(*tree.PartitionBy)
 }
@@ -795,9 +792,9 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
 %token <str> IDENTITY
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCLUDE_DEPRECATED_INTERLEAVES INCLUDING INCREMENT INCREMENTAL
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCLUDING INCREMENT INCREMENTAL
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
-%token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INTERLEAVE INITIALLY
+%token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
 %token <str> INNER INSERT INT INTEGER
 %token <str> INTERSECT INTERVAL INTO INTO_DB INVERTED IS ISERROR ISNULL ISOLATION
 
@@ -1140,7 +1137,6 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.AlterIndexCmds> alter_index_cmds
 
 %type <tree.DropBehavior> opt_drop_behavior
-%type <tree.DropBehavior> opt_interleave_drop_behavior
 
 %type <tree.ValidationBehavior> opt_validate_behavior
 
@@ -1189,7 +1185,6 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <[]tree.LikeTableOption> like_table_option_list
 %type <tree.LikeTableOption> like_table_option
 %type <tree.CreateTableOnCommitSetting> opt_create_table_on_commit
-%type <*tree.InterleaveDef> opt_interleave
 %type <*tree.PartitionBy> opt_partition_by partition_by partition_by_inner
 %type <*tree.PartitionByTable> opt_partition_by_table partition_by_table
 %type <*tree.PartitionByIndex> opt_partition_by_index partition_by_index
@@ -2239,12 +2234,11 @@ alter_table_cmd:
   }
   // ALTER TABLE <name> VALIDATE CONSTRAINT ...
   // ALTER TABLE <name> ALTER PRIMARY KEY USING INDEX <name>
-| ALTER PRIMARY KEY USING COLUMNS '(' index_params ')' opt_hash_sharded opt_interleave
+| ALTER PRIMARY KEY USING COLUMNS '(' index_params ')' opt_hash_sharded
   {
     $$.val = &tree.AlterTableAlterPrimaryKey{
       Columns: $7.idxElems(),
       Sharded: $9.shardedIndexDef(),
-      Interleave: $10.interleave(),
     }
   }
 | VALIDATE CONSTRAINT constraint_name
@@ -2596,7 +2590,6 @@ opt_clear_data:
 //    encryption_passphrase="secret": encrypt backups
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : encrypt backups using KMS
 //    detached: execute backup job asynchronously, without waiting for its completion
-//    include_deprecated_interleaves: allow backing up interleaved tables, even if future versions will be unable to restore.
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
@@ -2701,10 +2694,6 @@ backup_options:
 | KMS '=' string_or_placeholder_opt_list
   {
     $$.val = &tree.BackupOptions{EncryptionKMSURI: $3.stringOrPlaceholderOptList()}
-  }
-| INCLUDE_DEPRECATED_INTERLEAVES
-  {
-    $$.val = &tree.BackupOptions{IncludeDeprecatedInterleaves: true}
   }
 
 
@@ -6326,20 +6315,20 @@ alter_schema_stmt:
 // %Help: CREATE TABLE - create a new table
 // %Category: DDL
 // %Text:
-// CREATE [[GLOBAL | LOCAL] {TEMPORARY | TEMP}] TABLE [IF NOT EXISTS] <tablename> ( <elements...> ) [<interleave>] [<on_commit>]
-// CREATE [[GLOBAL | LOCAL] {TEMPORARY | TEMP}] TABLE [IF NOT EXISTS] <tablename> [( <colnames...> )] AS <source> [<interleave>] [<on commit>]
+// CREATE [[GLOBAL | LOCAL] {TEMPORARY | TEMP}] TABLE [IF NOT EXISTS] <tablename> ( <elements...> ) [<on_commit>]
+// CREATE [[GLOBAL | LOCAL] {TEMPORARY | TEMP}] TABLE [IF NOT EXISTS] <tablename> [( <colnames...> )] AS <source> [<on commit>]
 //
 // Table elements:
 //    <name> <type> [<qualifiers...>]
 //    [UNIQUE | INVERTED] INDEX [<name>] ( <colname> [ASC | DESC] [, ...] )
-//                            [USING HASH WITH BUCKET_COUNT = <shard_buckets>] [{STORING | INCLUDE | COVERING} ( <colnames...> )] [<interleave>]
+//                            [USING HASH WITH BUCKET_COUNT = <shard_buckets>] [{STORING | INCLUDE | COVERING} ( <colnames...> )]
 //    FAMILY [<name>] ( <colnames...> )
 //    [CONSTRAINT <name>] <constraint>
 //
 // Table constraints:
 //    PRIMARY KEY ( <colnames...> ) [USING HASH WITH BUCKET_COUNT = <shard_buckets>]
 //    FOREIGN KEY ( <colnames...> ) REFERENCES <tablename> [( <colnames...> )] [ON DELETE {NO ACTION | RESTRICT}] [ON UPDATE {NO ACTION | RESTRICT}]
-//    UNIQUE ( <colnames...> ) [{STORING | INCLUDE | COVERING} ( <colnames...> )] [<interleave>]
+//    UNIQUE ( <colnames...> ) [{STORING | INCLUDE | COVERING} ( <colnames...> )]
 //    CHECK ( <expr> )
 //
 // Column qualifiers:
@@ -6349,9 +6338,6 @@ alter_schema_stmt:
 //   COLLATE <collationname>
 //   AS ( <expr> ) { STORED | VIRTUAL }
 //
-// Interleave clause:
-//    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
-//
 // On commit clause:
 //    ON COMMIT {PRESERVE ROWS | DROP | DELETE ROWS}
 //
@@ -6359,36 +6345,34 @@ alter_schema_stmt:
 // WEBDOCS/create-table.html
 // WEBDOCS/create-table-as.html
 create_table_stmt:
-  CREATE opt_persistence_temp_table TABLE table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_interleave opt_partition_by_table opt_table_with opt_create_table_on_commit opt_locality
+  CREATE opt_persistence_temp_table TABLE table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_partition_by_table opt_table_with opt_create_table_on_commit opt_locality
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: false,
-      Interleave: $9.interleave(),
       Defs: $6.tblDefs(),
       AsSource: nil,
-      PartitionByTable: $10.partitionByTable(),
+      PartitionByTable: $9.partitionByTable(),
       Persistence: $2.persistence(),
-      StorageParams: $11.storageParams(),
-      OnCommit: $12.createTableOnCommitSetting(),
-      Locality: $13.locality(),
+      StorageParams: $10.storageParams(),
+      OnCommit: $11.createTableOnCommitSetting(),
+      Locality: $12.locality(),
     }
   }
-| CREATE opt_persistence_temp_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_interleave opt_partition_by_table opt_table_with opt_create_table_on_commit opt_locality
+| CREATE opt_persistence_temp_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_partition_by_table opt_table_with opt_create_table_on_commit opt_locality
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: true,
-      Interleave: $12.interleave(),
       Defs: $9.tblDefs(),
       AsSource: nil,
-      PartitionByTable: $13.partitionByTable(),
+      PartitionByTable: $12.partitionByTable(),
       Persistence: $2.persistence(),
-      StorageParams: $14.storageParams(),
-      OnCommit: $15.createTableOnCommitSetting(),
-      Locality: $16.locality(),
+      StorageParams: $13.storageParams(),
+      OnCommit: $14.createTableOnCommitSetting(),
+      Locality: $15.locality(),
     }
   }
 
@@ -6479,7 +6463,6 @@ create_table_as_stmt:
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: false,
-      Interleave: nil,
       Defs: $5.tblDefs(),
       AsSource: $8.slct(),
       StorageParams: $6.storageParams(),
@@ -6493,7 +6476,6 @@ create_table_as_stmt:
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: true,
-      Interleave: nil,
       Defs: $8.tblDefs(),
       AsSource: $11.slct(),
       StorageParams: $9.storageParams(),
@@ -6607,38 +6589,6 @@ like_table_option:
 | STORAGE			{ return unimplementedWithIssueDetail(sqllex, 47071, "like table in/excluding storage") }
 | ALL				{ $$.val = tree.LikeTableOption{Opt: tree.LikeTableOptAll} }
 
-
-opt_interleave:
-  INTERLEAVE IN PARENT table_name '(' name_list ')' opt_interleave_drop_behavior
-  {
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.InterleaveDef{
-      Parent: name,
-      Fields: $6.nameList(),
-      DropBehavior: $8.dropBehavior(),
-    }
-  }
-| /* EMPTY */
-  {
-    $$.val = (*tree.InterleaveDef)(nil)
-  }
-
-// TODO(dan): This can be removed in favor of opt_drop_behavior when #7854 is fixed.
-opt_interleave_drop_behavior:
-  CASCADE
-  {
-    /* SKIP DOC */
-    $$.val = tree.DropCascade
-  }
-| RESTRICT
-  {
-    /* SKIP DOC */
-    $$.val = tree.DropRestrict
-  }
-| /* EMPTY */
-  {
-    $$.val = tree.DropDefault
-  }
 
 partition:
   PARTITION partition_name
@@ -6943,20 +6893,19 @@ generated_by_default_as:
   GENERATED_BY_DEFAULT BY DEFAULT AS {}
 
 index_def:
-  INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
+  INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
   {
     $$.val = &tree.IndexTableDef{
       Name:             tree.Name($2),
       Columns:          $4.idxElems(),
       Sharded:          $6.shardedIndexDef(),
       Storing:          $7.nameList(),
-      Interleave:       $8.interleave(),
-      PartitionByIndex: $9.partitionByIndex(),
-      StorageParams:    $10.storageParams(),
-      Predicate:        $11.expr(),
+      PartitionByIndex: $8.partitionByIndex(),
+      StorageParams:    $9.storageParams(),
+      Predicate:        $10.expr(),
     }
   }
-| UNIQUE INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
+| UNIQUE INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef {
@@ -6964,10 +6913,9 @@ index_def:
         Columns:          $5.idxElems(),
         Sharded:          $7.shardedIndexDef(),
         Storing:          $8.nameList(),
-        Interleave:       $9.interleave(),
-        PartitionByIndex: $10.partitionByIndex(),
-        StorageParams:    $11.storageParams(),
-        Predicate:        $12.expr(),
+        PartitionByIndex: $9.partitionByIndex(),
+        StorageParams:    $10.storageParams(),
+        Predicate:        $11.expr(),
       },
     }
   }
@@ -7014,26 +6962,24 @@ constraint_elem:
     }
   }
 | UNIQUE opt_without_index '(' index_params ')'
-    opt_storing opt_interleave opt_partition_by_index opt_deferrable opt_where_clause
+    opt_storing opt_partition_by_index opt_deferrable opt_where_clause
   {
     $$.val = &tree.UniqueConstraintTableDef{
       WithoutIndex: $2.bool(),
       IndexTableDef: tree.IndexTableDef{
         Columns: $4.idxElems(),
         Storing: $6.nameList(),
-        Interleave: $7.interleave(),
-        PartitionByIndex: $8.partitionByIndex(),
-        Predicate: $10.expr(),
+        PartitionByIndex: $7.partitionByIndex(),
+        Predicate: $9.expr(),
       },
     }
   }
-| PRIMARY KEY '(' index_params ')' opt_hash_sharded opt_interleave
+| PRIMARY KEY '(' index_params ')' opt_hash_sharded
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef{
         Columns: $4.idxElems(),
         Sharded: $6.shardedIndexDef(),
-        Interleave: $7.interleave(),
       },
       PrimaryKey: true,
     }
@@ -7728,17 +7674,14 @@ enum_val_list:
 // %Text:
 // CREATE [UNIQUE | INVERTED] INDEX [CONCURRENTLY] [IF NOT EXISTS] [<idxname>]
 //        ON <tablename> ( <colname> [ASC | DESC] [, ...] )
-//        [USING HASH WITH BUCKET_COUNT = <shard_buckets>] [STORING ( <colnames...> )] [<interleave>]
+//        [USING HASH WITH BUCKET_COUNT = <shard_buckets>] [STORING ( <colnames...> )]
 //        [PARTITION BY <partition params>]
 //        [WITH <storage_parameter_list] [WHERE <where_conds...>]
-//
-// Interleave clause:
-//    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
 //
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE,
 // WEBDOCS/create-index.html
 create_index_stmt:
-  CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
+  CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
   {
     table := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -7748,15 +7691,14 @@ create_index_stmt:
       Columns:          $10.idxElems(),
       Sharded:          $12.shardedIndexDef(),
       Storing:          $13.nameList(),
-      Interleave:       $14.interleave(),
-      PartitionByIndex: $15.partitionByIndex(),
-      StorageParams:    $16.storageParams(),
-      Predicate:        $17.expr(),
+      PartitionByIndex: $14.partitionByIndex(),
+      StorageParams:    $15.storageParams(),
+      Predicate:        $16.expr(),
       Inverted:         $8.bool(),
       Concurrently:     $4.bool(),
     }
   }
-| CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
+| CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
   {
     table := $10.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -7767,15 +7709,14 @@ create_index_stmt:
       Columns:          $13.idxElems(),
       Sharded:          $15.shardedIndexDef(),
       Storing:          $16.nameList(),
-      Interleave:       $17.interleave(),
-      PartitionByIndex: $18.partitionByIndex(),
+      PartitionByIndex: $17.partitionByIndex(),
       Inverted:         $11.bool(),
-      StorageParams:    $19.storageParams(),
-      Predicate:        $20.expr(),
+      StorageParams:    $18.storageParams(),
+      Predicate:        $19.expr(),
       Concurrently:     $4.bool(),
     }
   }
-| CREATE opt_unique INVERTED INDEX opt_concurrently opt_index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
+| CREATE opt_unique INVERTED INDEX opt_concurrently opt_index_name ON table_name '(' index_params ')' opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
   {
     table := $8.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -7785,14 +7726,13 @@ create_index_stmt:
       Inverted:         true,
       Columns:          $10.idxElems(),
       Storing:          $12.nameList(),
-      Interleave:       $13.interleave(),
-      PartitionByIndex: $14.partitionByIndex(),
-      StorageParams:    $15.storageParams(),
-      Predicate:        $16.expr(),
+      PartitionByIndex: $13.partitionByIndex(),
+      StorageParams:    $14.storageParams(),
+      Predicate:        $15.expr(),
       Concurrently:     $5.bool(),
     }
   }
-| CREATE opt_unique INVERTED INDEX opt_concurrently IF NOT EXISTS index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
+| CREATE opt_unique INVERTED INDEX opt_concurrently IF NOT EXISTS index_name ON table_name '(' index_params ')' opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
   {
     table := $11.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -7803,10 +7743,9 @@ create_index_stmt:
       IfNotExists:      true,
       Columns:          $13.idxElems(),
       Storing:          $15.nameList(),
-      Interleave:       $16.interleave(),
-      PartitionByIndex: $17.partitionByIndex(),
-      StorageParams:    $18.storageParams(),
-      Predicate:        $19.expr(),
+      PartitionByIndex: $16.partitionByIndex(),
+      StorageParams:    $17.storageParams(),
+      Predicate:        $18.expr(),
       Concurrently:     $5.bool(),
     }
   }
@@ -13254,7 +13193,6 @@ unreserved_keyword:
 | IMMEDIATE
 | IMPORT
 | INCLUDE
-| INCLUDE_DEPRECATED_INTERLEAVES
 | INCLUDING
 | INCREMENT
 | INCREMENTAL
@@ -13262,7 +13200,6 @@ unreserved_keyword:
 | INHERITS
 | INJECT
 | INSERT
-| INTERLEAVE
 | INTO_DB
 | INVERTED
 | ISOLATION
