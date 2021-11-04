@@ -1163,6 +1163,12 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	tc.manualClock.Increment(11 + int64(tc.Clock().MaxOffset())) // advance time
 	now = tc.Clock().NowAsClockTimestamp()
 
+	ch := tc.gossip.RegisterSystemConfigChannel()
+	select {
+	case <-ch:
+	default:
+	}
+
 	// Give lease to this range.
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
 		Start:      now.ToTimestamp().Add(11, 0).UnsafeToClockTimestamp(),
@@ -1176,20 +1182,20 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutils.SucceedsSoon(t, func() error {
-		cfg := tc.gossip.GetSystemConfig()
-		if cfg == nil {
-			return errors.Errorf("expected system config to be set")
+	select {
+	case <-ch:
+	case <-time.After(testutils.DefaultSucceedsSoonDuration):
+		t.Fatalf("no SystemConfig gossiped after lease")
+	}
+	sysCfg := tc.gossip.GetSystemConfig()
+	var found bool
+	for _, cur := range sysCfg.Values {
+		if key.Equal(cur.Key) {
+			found = true
+			break
 		}
-		numValues := len(cfg.Values)
-		if numValues != 1 {
-			return errors.Errorf("num config values != 1; got %d", numValues)
-		}
-		if k := cfg.Values[numValues-1].Key; !k.Equal(key) {
-			return errors.Errorf("invalid key for config value (%q != %q)", k, key)
-		}
-		return nil
-	})
+	}
+	require.True(t, found, "key %s not found in SystemConfig")
 }
 
 // TestReplicaTSCacheLowWaterOnLease verifies that the low water mark
