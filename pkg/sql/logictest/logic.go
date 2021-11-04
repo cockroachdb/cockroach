@@ -1217,7 +1217,7 @@ type logicTest struct {
 	// new one, but keep some shared resources across the entire test. An example
 	// would be an IO directory used throughout the test.
 	testCleanupFuncs []func()
-	// progress holds the number of tests executed so far.
+	// progress holds the number of statements executed so far.
 	progress int
 	// failures holds the number of tests failed so far, when
 	// -try-harder is set.
@@ -3220,7 +3220,7 @@ func (t *logicTest) success(file string) {
 	now := timeutil.Now()
 	if now.Sub(t.lastProgress) >= 2*time.Second {
 		t.lastProgress = now
-		t.outf("--- progress: %s: %d statements/queries", file, t.progress)
+		t.outf("--- progress: %s: %d statements", file, t.progress)
 	}
 }
 
@@ -3593,7 +3593,7 @@ func RunLogicTestWithDefaultConfig(
 					now := timeutil.Now()
 					if now.Sub(progress.lastProgress) >= 2*time.Second {
 						progress.lastProgress = now
-						lt.outf("--- total progress: %d statements/queries", progress.total)
+						lt.outf("--- total progress: %d statements", progress.total)
 					}
 				})
 			}
