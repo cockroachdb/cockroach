@@ -483,7 +483,7 @@ sinks:
       redact: false
       redactable: true
       exit-on-error: false
-      buffering: |
+      buffering:
         max-staleness: 10s
         flush-trigger-size: 10KiB
         max-in-flight: 4
@@ -496,7 +496,7 @@ sinks:
       redact: false
       redactable: true
       exit-on-error: false
-      buffering: |
+      buffering:
         max-staleness: 15s
         flush-trigger-size: 5.0KiB
         max-in-flight: 4
@@ -509,7 +509,7 @@ sinks:
       redact: false
       redactable: true
       exit-on-error: false
-      buffering: |
+      buffering:
         max-staleness: 15s
         flush-trigger-size: 10KiB
         max-in-flight: 16
