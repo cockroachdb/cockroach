@@ -69,7 +69,6 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	// destroy status.
 	var desc *roachpb.RangeDescriptor
 	var replicaID roachpb.ReplicaID
-	var tenantID roachpb.TenantID
 	{
 		rep.readOnlyCmdMu.Lock()
 		rep.mu.Lock()
@@ -112,7 +111,6 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		rep.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
 			destroyReasonRemoved)
 		replicaID = rep.mu.replicaID
-		tenantID = rep.mu.tenantID
 		rep.mu.Unlock()
 		rep.readOnlyCmdMu.Unlock()
 	}
@@ -144,7 +142,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	// Destroy, but this configuration helps avoid races in stat verification
 	// tests.
 
-	s.metrics.subtractMVCCStats(ctx, tenantID, rep.GetMVCCStats())
+	s.metrics.subtractMVCCStats(ctx, rep.tenantMetricsRef, rep.GetMVCCStats())
 	s.metrics.ReplicaCount.Dec(1)
 	s.mu.Unlock()
 
