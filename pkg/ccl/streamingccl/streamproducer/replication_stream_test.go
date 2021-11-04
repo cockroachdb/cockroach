@@ -197,12 +197,11 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	defer reset()
 
 	t.Run("failed-after-timeout", func(t *testing.T) {
-		h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '1s'")
+		h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '1ms'")
 		rows := h.SysDB.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", h.Tenant.ID.ToUint64())
 		jobID := rows[0][0]
 
-		//time.Sleep(500 * time.Millisecond) // Wait for the job status transitioning
-		h.SysDB.SucceedsSoonDuration = 2 * time.Second
+		h.SysDB.SucceedsSoonDuration = 10 * time.Second
 		h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", jobID),
 			[][]string{{"failed"}})
 	})
@@ -212,9 +211,8 @@ func TestReplicationStreamInitialization(t *testing.T) {
 		rows := h.SysDB.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", h.Tenant.ID.ToUint64())
 		jobID := rows[0][0]
 
-		//time.Sleep(500 * time.Millisecond) // Wait for the job status transitioning
 		testDuration, now := 2*time.Second, timeutil.Now()
-		for start, end := now, now.Add(testDuration); start.Before(end); start = start.Add(200 * time.Millisecond) {
+		for start, end := now, now.Add(testDuration); start.Before(end); start = start.Add(300 * time.Millisecond) {
 			h.SysDB.CheckQueryResults(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", jobID),
 				[][]string{{"running"}})
 		}

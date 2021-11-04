@@ -22,6 +22,7 @@ type replicationStreamManagerImpl struct{}
 // inside streamingccl package.
 var CompleteStreamIngestionHook func(evalCtx *tree.EvalContext, txn *kv.Txn, jobID int, cutoverTimestamp hlc.Timestamp) error
 
+// CompleteStreamIngestion implements ReplicationStreamManager interface.
 func (r replicationStreamManagerImpl) CompleteStreamIngestion(
 	evalCtx *tree.EvalContext, txn *kv.Txn, jobID int, cutoverTimestamp hlc.Timestamp,
 ) error {
@@ -34,6 +35,7 @@ func (r replicationStreamManagerImpl) CompleteStreamIngestion(
 // StartReplicationStreamHook hooks an StartReplicationStream implementation inside streamingccl package.
 var StartReplicationStreamHook func(evalCtx *tree.EvalContext, txn *kv.Txn, tenantID uint64) (streaming.StreamID, error)
 
+// StartReplicationStream implements ReplicationStreamManager interface.
 func (r replicationStreamManagerImpl) StartReplicationStream(
 	evalCtx *tree.EvalContext, txn *kv.Txn, tenantID uint64,
 ) (streaming.StreamID, error) {
