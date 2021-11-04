@@ -150,8 +150,8 @@ RETURNING id;`).Scan(&secondID))
 	// another job. We'll make sure this happens by polling the trace to see
 	// the log line indicating what we want.
 	tr := tc.Server(0).TracerI().(*tracing.Tracer)
-	recCtx, getRecording, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test")
-	defer cancel()
+	recCtx, sp := tr.StartSpanCtx(ctx, "test", tracing.WithRecording(tracing.RecordingVerbose))
+	defer sp.Finish()
 	upgrade2Err := make(chan error, 1)
 	go func() {
 		// Use an internal executor to get access to the trace as it happens.
@@ -175,10 +175,11 @@ RETURNING id;`).Scan(&secondID))
 		// no processors actually create their own spans). Instead, a different
 		// way to observe the status of the migration manager should be
 		// introduced and should be used here.
-		if tracing.FindMsgInRecording(getRecording(), "found existing migration job") > 0 {
+		rec := sp.GetRecording(tracing.RecordingVerbose)
+		if tracing.FindMsgInRecording(rec, "found existing migration job") > 0 {
 			return nil
 		}
-		return errors.Errorf("waiting for job to be discovered: %v", getRecording())
+		return errors.Errorf("waiting for job to be discovered: %v", rec)
 	})
 	close(unblock)
 	require.NoError(t, <-upgrade1Err)

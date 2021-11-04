@@ -126,14 +126,14 @@ func runTestDBAddSSTable(
 		}
 
 		// Do an initial ingest.
-		ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
-		defer cancel()
+		ingestCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
+		defer getRecAndFinish()
 		if err := db.AddSSTable(
 			ingestCtx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
 		); err != nil {
 			t.Fatalf("%+v", err)
 		}
-		formatted := collect().String()
+		formatted := getRecAndFinish().String()
 		if err := testutils.MatchEach(formatted,
 			"evaluating AddSSTable",
 			"sideloadable proposal detected",
@@ -205,15 +205,15 @@ func runTestDBAddSSTable(
 			before = metrics.AddSSTableApplicationCopies.Count()
 		}
 		for i := 0; i < 2; i++ {
-			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
-			defer cancel()
+			ingestCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
+			defer getRecAndFinish()
 
 			if err := db.AddSSTable(
 				ingestCtx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
 			); err != nil {
 				t.Fatalf("%+v", err)
 			}
-			if err := testutils.MatchEach(collect().String(),
+			if err := testutils.MatchEach(getRecAndFinish().String(),
 				"evaluating AddSSTable",
 				"sideloadable proposal detected",
 				"ingested SSTable at index",
@@ -260,15 +260,15 @@ func runTestDBAddSSTable(
 			before = metrics.AddSSTableApplications.Count()
 		}
 		for i := 0; i < 2; i++ {
-			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
-			defer cancel()
+			ingestCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
+			defer getRecAndFinish()
 
 			if err := db.AddSSTable(
 				ingestCtx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsWrites, hlc.Timestamp{},
 			); err != nil {
 				t.Fatalf("%+v", err)
 			}
-			if err := testutils.MatchEach(collect().String(),
+			if err := testutils.MatchEach(getRecAndFinish().String(),
 				"evaluating AddSSTable",
 				"via regular write batch",
 			); err != nil {

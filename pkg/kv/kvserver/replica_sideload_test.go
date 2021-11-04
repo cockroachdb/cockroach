@@ -413,9 +413,9 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	}
 
 	runOne := func(k string, test testCase) {
-		ctx, collect, cancel := tracing.ContextWithRecordingSpan(
+		ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(
 			context.Background(), tracing.NewTracer(), "test-recording")
-		defer cancel()
+		defer getRecAndFinish()
 
 		eng := storage.NewDefaultInMemForTesting()
 		defer eng.Close()
@@ -444,7 +444,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 			t.Fatalf("%s: %+v", k, err)
 		}
 
-		if dump := collect().String(); test.expTrace != "" {
+		if dump := getRecAndFinish().String(); test.expTrace != "" {
 			if ok, err := regexp.MatchString(test.expTrace, dump); err != nil {
 				t.Fatalf("%s: %+v", k, err)
 			} else if !ok {
@@ -583,8 +583,8 @@ func testRaftSSTableSideloadingProposal(t *testing.T, eng storage.Engine) {
 
 	tr := tc.store.cfg.AmbientCtx.Tracer
 	tr.TestingRecordAsyncSpans() // we assert on async span traces in this test
-	ctx, collect, cancel := tracing.ContextWithRecordingSpan(context.Background(), tr, "test-recording")
-	defer cancel()
+	ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(context.Background(), tr, "test-recording")
+	defer getRecAndFinish()
 
 	const (
 		key       = "foo"
@@ -624,7 +624,7 @@ func testRaftSSTableSideloadingProposal(t *testing.T, eng storage.Engine) {
 		defer tc.repl.raftMu.Unlock()
 
 		if err := testutils.MatchInOrder(
-			collect().String(), "sideloadable proposal detected", "ingested SSTable",
+			getRecAndFinish().String(), "sideloadable proposal detected", "ingested SSTable",
 		); err != nil {
 			t.Fatal(err)
 		}
