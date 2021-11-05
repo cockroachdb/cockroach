@@ -199,9 +199,8 @@ Cloud Clusters
 Local Clusters
 
   A local cluster stores the per-node data in ${HOME}/local on the machine
-  roachprod is being run on. Local clusters requires local ssh access. Unlike
-  cloud clusters there can be only a single local cluster, the local cluster is
-  always named "local", and has no expiration (unlimited lifetime).
+  roachprod is being run on. Whether a cluster is local is specified on creation
+  by using the name 'local' or 'local-<anything>'. Local clusters have no expiration.
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
