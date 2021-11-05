@@ -88,7 +88,9 @@ func (s channelServer) HandleRaftResponse(
 }
 
 func (s channelServer) HandleSnapshot(
-	header *kvserver.SnapshotRequest_Header, stream kvserver.SnapshotResponseStream,
+	_ context.Context,
+	header *kvserver.SnapshotRequest_Header,
+	stream kvserver.SnapshotResponseStream,
 ) error {
 	panic("unexpected HandleSnapshot")
 }
