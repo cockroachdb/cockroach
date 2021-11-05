@@ -30,7 +30,7 @@ const (
 )
 
 // !!! the default of true
-var ForceRealSpans = envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", true)
+var ForceRealSpans = envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", false)
 var CrashOnUseAfterFinish = envutil.EnvOrDefaultBool("COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH", false)
 
 // DebugUseAfterFinish controls whether to debug uses of Span values after finishing.
