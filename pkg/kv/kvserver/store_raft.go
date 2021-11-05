@@ -65,9 +65,9 @@ func (q *raftRequestQueue) recycle(processed []raftRequestInfo) {
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
 // possible.
 func (s *Store) HandleSnapshot(
-	header *SnapshotRequest_Header, stream SnapshotResponseStream,
+	ctx context.Context, header *SnapshotRequest_Header, stream SnapshotResponseStream,
 ) error {
-	ctx := s.AnnotateCtx(stream.Context())
+	ctx = s.AnnotateCtx(ctx)
 	const name = "storage.Store: handle snapshot"
 	return s.stopper.RunTaskWithErr(ctx, name, func(ctx context.Context) error {
 		s.metrics.RaftRcvdMessages[raftpb.MsgSnap].Inc(1)

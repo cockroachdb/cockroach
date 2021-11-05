@@ -3229,7 +3229,9 @@ func (h *slowSnapRaftHandler) unblock() {
 }
 
 func (h *slowSnapRaftHandler) HandleSnapshot(
-	header *kvserver.SnapshotRequest_Header, respStream kvserver.SnapshotResponseStream,
+	ctx context.Context,
+	header *kvserver.SnapshotRequest_Header,
+	respStream kvserver.SnapshotResponseStream,
 ) error {
 	if header.RaftMessageRequest.RangeID == h.rangeID {
 		h.Lock()
@@ -3239,7 +3241,7 @@ func (h *slowSnapRaftHandler) HandleSnapshot(
 			<-waitCh
 		}
 	}
-	return h.RaftMessageHandler.HandleSnapshot(header, respStream)
+	return h.RaftMessageHandler.HandleSnapshot(ctx, header, respStream)
 }
 
 // TestStoreRangeMergeUninitializedLHSFollower reproduces a rare bug in which a

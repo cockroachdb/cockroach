@@ -1295,11 +1295,6 @@ func (c fakeSnapshotStream) Send(request *kvserver.SnapshotResponse) error {
 	return nil
 }
 
-// Context implements the SnapshotResponseStream interface.
-func (c fakeSnapshotStream) Context() context.Context {
-	return context.Background()
-}
-
 // TestFailedSnapshotFillsReservation tests that failing to finish applying an
 // incoming snapshot still cleans up the outstanding reservation that was made.
 func TestFailedSnapshotFillsReservation(t *testing.T) {
@@ -1340,7 +1335,7 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 	// "snapshot accepted" message.
 	expectedErr := errors.Errorf("")
 	stream := fakeSnapshotStream{nil, expectedErr}
-	if err := store1.HandleSnapshot(&header, stream); !errors.Is(err, expectedErr) {
+	if err := store1.HandleSnapshot(ctx, &header, stream); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected error %s, but found %v", expectedErr, err)
 	}
 	if n := store1.ReservationCount(); n != 0 {
@@ -3424,7 +3419,7 @@ func (d errorChannelTestHandler) HandleRaftResponse(
 }
 
 func (errorChannelTestHandler) HandleSnapshot(
-	_ *kvserver.SnapshotRequest_Header, _ kvserver.SnapshotResponseStream,
+	_ context.Context, _ *kvserver.SnapshotRequest_Header, _ kvserver.SnapshotResponseStream,
 ) error {
 	panic("unimplemented")
 }
