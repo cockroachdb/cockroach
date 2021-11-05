@@ -276,6 +276,10 @@ const (
 	// DrainingNamesMigration adds the migration which guarantees that no
 	// descriptors have draining names.
 	DrainingNamesMigration
+	// AlterSystemStmtDiagReqs adds the migration for
+	// system.statement_diagnostics_requests table to support collecting stmt
+	// bundles when the query latency exceeds the user provided threshold.
+	AlterSystemStmtDiagReqs
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -472,6 +476,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DrainingNamesMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 8},
+	},
+	{
+		Key:     AlterSystemStmtDiagReqs,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 10},
 	},
 
 	// *************************************************
