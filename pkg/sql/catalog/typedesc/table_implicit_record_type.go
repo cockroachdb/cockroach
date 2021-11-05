@@ -41,6 +41,8 @@ type TableImplicitRecordType struct {
 	privs *descpb.PrivilegeDescriptor
 }
 
+var _ typeDescriptor = (*TableImplicitRecordType)(nil)
+
 // CreateImplicitRecordTypeFromTableDesc creates a TypeDescriptor that represents
 // the implicit record type for a table, which has 1 field for every visible
 // column in the table.
@@ -209,8 +211,8 @@ func (v TableImplicitRecordType) TypeDesc() *descpb.TypeDescriptor {
 	return nil
 }
 
-// HydrateTypeInfoWithName implements the TypeDescriptor interface.
-func (v TableImplicitRecordType) HydrateTypeInfoWithName(
+// hydrateTypeInfoWithName implements the TypeDescriptor interface.
+func (v TableImplicitRecordType) hydrateTypeInfoWithName(
 	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) error {
 	if typ.IsHydrated() {
