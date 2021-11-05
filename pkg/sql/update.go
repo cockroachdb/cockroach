@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// THIS IS A TEST.
 var updateNodePool = sync.Pool{
 	New: func() interface{} {
 		return &updateNode{}
