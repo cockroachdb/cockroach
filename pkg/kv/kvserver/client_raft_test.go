@@ -5430,10 +5430,6 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 
 type noopRaftMessageResponseSteam struct{}
 
-func (n noopRaftMessageResponseSteam) Context() context.Context {
-	return context.Background()
-}
-
 func (n noopRaftMessageResponseSteam) Send(*kvserver.RaftMessageResponse) error {
 	return nil
 }
