@@ -1422,7 +1422,9 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 		{err: &roachpb.TransactionPushError{}, asyncAbort: false},
 		{err: &roachpb.TransactionRetryError{}, asyncAbort: false},
 		{err: &roachpb.RangeNotFoundError{}, asyncAbort: false},
-		{err: &roachpb.RangeKeyMismatchError{}, asyncAbort: false},
+		{err: &roachpb.RangeKeyMismatchError{
+			Ranges: []roachpb.RangeInfo{{}}}, asyncAbort: false,
+		},
 		{err: &roachpb.TransactionStatusError{}, asyncAbort: false},
 	}
 

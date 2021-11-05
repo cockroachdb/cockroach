@@ -216,7 +216,7 @@ func (s *Store) Send(
 		// We'll return info on the range that the request ended up being routed to
 		// and, to the extent that we have the info, the ranges containing the keys
 		// that the client requested, and all the ranges in between.
-		ri := t.Ranges()[0]
+		ri := t.Ranges[0]
 		skipRID := ri.Desc.RangeID // We already have info on one range, so don't add it again below.
 		startKey := ri.Desc.StartKey
 		if rSpan.Key.Less(startKey) {
