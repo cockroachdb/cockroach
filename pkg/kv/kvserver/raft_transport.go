@@ -72,7 +72,6 @@ var targetRaftOutgoingBatchSize = settings.RegisterByteSizeSetting(
 // RaftMessageResponseStream is the subset of the
 // MultiRaft_RaftMessageServer interface that is needed for sending responses.
 type RaftMessageResponseStream interface {
-	Context() context.Context
 	Send(*RaftMessageResponse) error
 }
 
@@ -83,10 +82,6 @@ type RaftMessageResponseStream interface {
 type lockedRaftMessageResponseStream struct {
 	wrapped MultiRaft_RaftMessageBatchServer
 	sendMu  syncutil.Mutex
-}
-
-func (s *lockedRaftMessageResponseStream) Context() context.Context {
-	return s.wrapped.Context()
 }
 
 func (s *lockedRaftMessageResponseStream) Send(resp *RaftMessageResponse) error {
