@@ -130,6 +130,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		ensureNoDrainingNames,
 	),
+	migration.NewTenantMigration(
+		"update system.statement_diagnostics_requests table to support conditional stmt diagnostics",
+		toCV(clusterversion.AlterSystemStmtDiagReqs),
+		NoPrecondition,
+		alterSystemStmtDiagReqs,
+	),
 }
 
 func init() {

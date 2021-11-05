@@ -1569,6 +1569,8 @@ system              public             630200280_35_1_not_null                  
 system              public             630200280_35_2_not_null                                                                                         system         public        statement_diagnostics_requests   CHECK            NO             NO
 system              public             630200280_35_3_not_null                                                                                         system         public        statement_diagnostics_requests   CHECK            NO             NO
 system              public             630200280_35_5_not_null                                                                                         system         public        statement_diagnostics_requests   CHECK            NO             NO
+system              public             630200280_35_6_not_null                                                                                         system         public        statement_diagnostics_requests   CHECK            NO             NO
+system              public             630200280_35_7_not_null                                                                                         system         public        statement_diagnostics_requests   CHECK            NO             NO
 system              public             primary                                                                                                         system         public        statement_diagnostics_requests   PRIMARY KEY      NO             NO
 system              public             630200280_42_10_not_null                                                                                        system         public        statement_statistics             CHECK            NO             NO
 system              public             630200280_42_11_not_null                                                                                        system         public        statement_statistics             CHECK            NO             NO
@@ -1728,6 +1730,8 @@ system              public             630200280_35_1_not_null                  
 system              public             630200280_35_2_not_null                                                                                         completed IS NOT NULL
 system              public             630200280_35_3_not_null                                                                                         statement_fingerprint IS NOT NULL
 system              public             630200280_35_5_not_null                                                                                         requested_at IS NOT NULL
+system              public             630200280_35_6_not_null                                                                                         min_execution_latency IS NOT NULL
+system              public             630200280_35_7_not_null                                                                                         expires_at IS NOT NULL
 system              public             630200280_36_1_not_null                                                                                         id IS NOT NULL
 system              public             630200280_36_2_not_null                                                                                         statement_fingerprint IS NOT NULL
 system              public             630200280_36_3_not_null                                                                                         statement IS NOT NULL
@@ -2099,7 +2103,9 @@ system         public        statement_diagnostics            statement         
 system         public        statement_diagnostics            statement_fingerprint                                                                                     2
 system         public        statement_diagnostics            trace                                                                                                     5
 system         public        statement_diagnostics_requests   completed                                                                                                 2
+system         public        statement_diagnostics_requests   expires_at                                                                                                7
 system         public        statement_diagnostics_requests   id                                                                                                        1
+system         public        statement_diagnostics_requests   min_execution_latency                                                                                     6
 system         public        statement_diagnostics_requests   requested_at                                                                                              5
 system         public        statement_diagnostics_requests   statement_diagnostics_id                                                                                  4
 system         public        statement_diagnostics_requests   statement_fingerprint                                                                                     3

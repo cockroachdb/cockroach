@@ -417,7 +417,7 @@ type StmtDiagnosticsRequester interface {
 	// tracing a query with the given fingerprint. Once this returns, calling
 	// shouldCollectDiagnostics() on the current node will return true for the given
 	// fingerprint.
-	InsertRequest(ctx context.Context, fprint string) error
+	InsertRequest(ctx context.Context, fprint string, minExecutionLatency time.Duration, expiresAfter time.Duration) error
 }
 
 // newStatusServer allocates and returns a statusServer.
