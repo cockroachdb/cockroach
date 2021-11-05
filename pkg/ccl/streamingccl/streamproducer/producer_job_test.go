@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -104,6 +103,8 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 
 	source := tc.Server(0)
 	sql := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	// Shorten the tracking frequency to make timer easy to be triggerred.
+	sql.Exec(t, "SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '1ms'")
 	registry := source.JobRegistry().(*jobs.Registry)
 
 	resetConstructor := func() {
@@ -171,10 +172,6 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		waitUntilReverting()
 		sql.SucceedsSoonDuration = 1 * time.Second
 		sql.CheckQueryResultsRetry(t, jobsQuery(jobID), [][]string{{"failed"}})
-
-		// Shorten the tracking frequency to make timer easy to be triggerred.
-		reset := streamingccl.TestingSetDefaultJobLivenessTrackingFrequency(1 * time.Millisecond)
-		defer reset()
 
 		// Case 2: Resumer wakes up and find the job still active.
 		jobID, jr = makeProducerJobRecord(registry, 20, timeout, username)

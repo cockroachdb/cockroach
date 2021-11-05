@@ -192,12 +192,10 @@ func TestReplicationStreamInitialization(t *testing.T) {
 
 	h, cleanup := streamingtest.NewReplicationHelper(t, serverArgs)
 	defer cleanup()
+	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10ms'")
 
-	reset := streamingccl.TestingSetDefaultJobLivenessTrackingFrequency(100 * time.Millisecond)
-	defer reset()
-
+	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '1ms'")
 	t.Run("failed-after-timeout", func(t *testing.T) {
-		h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '1ms'")
 		rows := h.SysDB.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", h.Tenant.ID.ToUint64())
 		jobID := rows[0][0]
 
@@ -206,8 +204,8 @@ func TestReplicationStreamInitialization(t *testing.T) {
 			[][]string{{"failed"}})
 	})
 
+	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10s'")
 	t.Run("continuously-running-within-timeout", func(t *testing.T) {
-		h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10s'")
 		rows := h.SysDB.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", h.Tenant.ID.ToUint64())
 		jobID := rows[0][0]
 

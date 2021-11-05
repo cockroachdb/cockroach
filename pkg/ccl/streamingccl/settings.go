@@ -14,17 +14,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 )
 
-// DefaultJobLivenessTrackingFrequency is the default frequency to check
+// StreamReplicationStreamLivenessTrackFrequency controls frequency to check
 // the liveness of a streaming replication producer job.
-var DefaultJobLivenessTrackingFrequency = 1 * time.Minute
-
-// TestingSetDefaultJobLivenessTrackingFrequency changes DefaultJobLivenessTrackingFrequency for tests.
-// Returns function to restore the frequency to its original value.
-func TestingSetDefaultJobLivenessTrackingFrequency(f time.Duration) func() {
-	old := DefaultJobLivenessTrackingFrequency
-	DefaultJobLivenessTrackingFrequency = f
-	return func() { DefaultJobLivenessTrackingFrequency = old }
-}
+var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSetting(
+	"stream_replication.stream_liveness_track_frequency",
+	"controls how frequent we check for the liveness of a replication stream producer job",
+	time.Minute,
+)
 
 // StreamReplicationJobLivenessTimeout controls how long we wait for to kill
 // an inactive producer job.

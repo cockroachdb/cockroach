@@ -62,18 +62,18 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 		progress := p.job.Progress()
 		return progress.GetStreamReplication().Expiration.Before(p.timeSource.Now())
 	}
+	trackFrequency := streamingccl.StreamReplicationStreamLivenessTrackFrequency.Get(execCfg.SV())
 	if isTimedOut(p.job) {
 		return errors.Errorf("replication stream %d timed out", p.job.ID())
 	}
-
-	p.timer.Reset(streamingccl.DefaultJobLivenessTrackingFrequency)
+	p.timer.Reset(trackFrequency)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-p.timer.Ch():
 			p.timer.MarkRead()
-			p.timer.Reset(streamingccl.DefaultJobLivenessTrackingFrequency)
+			p.timer.Reset(trackFrequency)
 			j, err := execCfg.JobRegistry.LoadJob(ctx, p.job.ID())
 			if err != nil {
 				return err
