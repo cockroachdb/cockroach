@@ -447,14 +447,20 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 			if errors.Is(err, kvevent.ErrBufferClosed) {
 				// ErrBufferClosed is a signal that
 				// our kvfeed has exited expectedly.
-				err = nil
-			}
+				if len(errors.GetAllDetails(err)) > 0 {
+					err = errors.Newf("%s", errors.FlattenDetails(err))
+				} else {
+					//No details indicates a feed that will be restarted
+					err = nil
+				}
+			} else {
 
-			select {
-			// If the poller errored first, that's the
-			// interesting one, so overwrite `err`.
-			case err = <-ca.errCh:
-			default:
+				select {
+				// If the poller errored first, that's the
+				// interesting one, so overwrite `err`.
+				case err = <-ca.errCh:
+				default:
+				}
 			}
 			// Shut down the poller if it wasn't already.
 			ca.cancel()

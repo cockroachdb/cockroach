@@ -43,8 +43,8 @@ type Writer interface {
 	Add(ctx context.Context, event Event) error
 	// Drain waits until all events buffered by this writer has been consumed.
 	Drain(ctx context.Context) error
-	// Close closes this writer.
-	Close(ctx context.Context) error
+	// Close closes this writer. reason may be added as a detail to ErrBufferClosed.
+	Close(ctx context.Context, reason error) error
 }
 
 // Type indicates the type of the event.
