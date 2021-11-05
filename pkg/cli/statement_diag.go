@@ -82,9 +82,20 @@ func runStmtDiagList(cmd *cobra.Command, args []string) (resErr error) {
 	} else {
 		fmt.Printf("Outstanding activation requests:\n")
 		w := tabwriter.NewWriter(&buf, 4, 0, 2, ' ', 0)
-		fmt.Fprint(w, "  ID\tActivation time\tStatement\n")
+		fmt.Fprint(w, "  ID\tActivation time\tStatement\tMin execution latency\tExpires at\n")
 		for _, r := range reqs {
-			fmt.Fprintf(w, "  %d\t%s\t%s\n", r.ID, r.RequestedAt.UTC().Format(timeFmt), r.Statement)
+			minExecLatency := "N/A"
+			if r.MinExecutionLatency != 0 {
+				minExecLatency = r.MinExecutionLatency.String()
+			}
+			expiresAt := "never"
+			if !r.ExpiresAt.IsZero() {
+				expiresAt = r.ExpiresAt.String()
+			}
+			fmt.Fprintf(
+				w, "  %d\t%s\t%s\t%s\t%s\n",
+				r.ID, r.RequestedAt.UTC().Format(timeFmt), r.Statement, minExecLatency, expiresAt,
+			)
 		}
 		_ = w.Flush()
 		fmt.Print(buf.String())

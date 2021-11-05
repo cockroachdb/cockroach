@@ -79,6 +79,10 @@ type StmtDiagActivationRequest struct {
 	// Statement is the SQL statement fingerprint.
 	Statement   string
 	RequestedAt time.Time
+	// Zero value indicates that there is no minimum latency set on the request.
+	MinExecutionLatency time.Duration
+	// Zero value indicates that the request never expires.
+	ExpiresAt time.Time
 }
 
 // StmtDiagListOutstandingRequests retrieves outstanding statement diagnostics
@@ -95,7 +99,7 @@ func StmtDiagListOutstandingRequests(conn Conn) ([]StmtDiagActivationRequest, er
 
 func stmtDiagListOutstandingRequestsInternal(conn Conn) ([]StmtDiagActivationRequest, error) {
 	rows, err := conn.Query(
-		`SELECT id, statement_fingerprint, requested_at
+		`SELECT id, statement_fingerprint, requested_at, EXTRACT(millisecond FROM min_execution_latency)::INT8, expires_at
 		 FROM system.statement_diagnostics_requests
 		 WHERE NOT completed
 		 ORDER BY requested_at DESC`,
@@ -105,17 +109,27 @@ func stmtDiagListOutstandingRequestsInternal(conn Conn) ([]StmtDiagActivationReq
 		return nil, err
 	}
 	var result []StmtDiagActivationRequest
-	vals := make([]driver.Value, 3)
+	vals := make([]driver.Value, 5)
 	for {
 		if err := rows.Next(vals); err == io.EOF {
 			break
 		} else if err != nil {
 			return nil, err
 		}
+		var minExecutionLatency time.Duration
+		if ms, ok := vals[3].(int64); ok {
+			minExecutionLatency = time.Millisecond * time.Duration(ms)
+		}
+		var expiresAt time.Time
+		if e, ok := vals[4].(time.Time); ok {
+			expiresAt = e
+		}
 		info := StmtDiagActivationRequest{
-			ID:          vals[0].(int64),
-			Statement:   vals[1].(string),
-			RequestedAt: vals[2].(time.Time),
+			ID:                  vals[0].(int64),
+			Statement:           vals[1].(string),
+			RequestedAt:         vals[2].(time.Time),
+			MinExecutionLatency: minExecutionLatency,
+			ExpiresAt:           expiresAt,
 		}
 		result = append(result, info)
 	}
