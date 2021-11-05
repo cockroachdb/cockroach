@@ -550,21 +550,22 @@ func removeSpaces(stmt string) string {
 	return stmt
 }
 
+func pk(name string) descpb.IndexDescriptor {
+	return descpb.IndexDescriptor{
+		Name:                tabledesc.PrimaryKeyIndexName("jobs"),
+		ID:                  1,
+		Unique:              true,
+		KeyColumnNames:      []string{name},
+		KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+		KeyColumnIDs:        []descpb.ColumnID{1},
+	}
+}
+
 // getDeprecatedJobsDescriptor returns the system.jobs table descriptor that was being used
 // before adding two new columns and an index in the current version.
 func getDeprecatedJobsDescriptor() *descpb.TableDescriptor {
 	uniqueRowIDString := "unique_rowid()"
 	nowString := "now():::TIMESTAMP"
-	pk := func(name string) descpb.IndexDescriptor {
-		return descpb.IndexDescriptor{
-			Name:                tabledesc.PrimaryKeyIndexName("jobs"),
-			ID:                  1,
-			Unique:              true,
-			KeyColumnNames:      []string{name},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-			KeyColumnIDs:        []descpb.ColumnID{1},
-		}
-	}
 
 	return &descpb.TableDescriptor{
 		Name:                    "jobs",
