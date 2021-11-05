@@ -17,7 +17,8 @@ import (
 // chanBuffer mediates between the changed data KVFeed and the rest of the
 // changefeed pipeline (which is backpressured all the way to the sink).
 type chanBuffer struct {
-	entriesCh chan Event
+	entriesCh    chan Event
+	closedReason error
 }
 
 // MakeChanBuffer returns an Buffer backed by an unbuffered channel.
@@ -45,7 +46,9 @@ func (b *chanBuffer) Drain(ctx context.Context) error {
 	return nil
 }
 
-func (b *chanBuffer) Close(_ context.Context) error {
+// CloseWithReason implements Writer interface.
+func (b *chanBuffer) CloseWithReason(_ context.Context, reason error) error {
+	b.closedReason = reason
 	close(b.entriesCh)
 	return nil
 }
@@ -60,7 +63,7 @@ func (b *chanBuffer) Get(ctx context.Context) (Event, error) {
 		if !ok {
 			// Our channel has been closed by the
 			// Writer. No more events will be returned.
-			return e, ErrBufferClosed
+			return e, ErrBufferClosed{reason: b.closedReason}
 		}
 		e.bufferGetTimestamp = timeutil.Now()
 		return e, nil
