@@ -130,7 +130,9 @@ func (sp *Span) Finish() {
 	}
 	atomic.StoreInt32(&sp.numFinishCalled, 1)
 	sp.i.Finish()
-	sp.finishStack = string(debug.Stack())
+	if DebugUseAfterFinish {
+		sp.finishStack = string(debug.Stack())
+	}
 }
 
 // FinishAndGetRecording finishes the span and gets a recording at the same
