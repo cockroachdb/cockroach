@@ -5068,8 +5068,13 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 }
 
 // wrapAsZeroOid wraps and oid as zero oid value
-func wrapAsZeroOid(oid oid.Oid) Datum {
-	return wrapWithOid(NewDString(ZeroDOidValue), oid)
+func wrapAsZeroOid(t *types.T) Datum {
+	tmpOid := NewDOid(0)
+	tmpOid.semanticType = t
+	if t.Oid() != oid.T_oid {
+		tmpOid.name = ZeroDOidValue
+	}
+	return tmpOid
 }
 
 // UnwrapDatum returns the base Datum type for a provided datum, stripping

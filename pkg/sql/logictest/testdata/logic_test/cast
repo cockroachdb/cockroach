@@ -281,62 +281,33 @@ SELECT 128::"char";
 statement error pgcode 22003 \"char\" out of range
 SELECT (-129)::"char";
 
-query T
-SELECT 0::oid::regproc
+query IOTOOOOOO
+SELECT i, i::oid, i::oid::text,
+  i::oid::regproc, i::oid::regprocedure, i::oid::regnamespace, i::oid::regclass, i::oid::regtype, i::oid::regrole
+FROM (VALUES (0), (1)) v(i)
 ----
--
+0  0  0  -  -  -  -  -  -
+1  1  1  1  1  1  1  1  1
 
-query T
-SELECT 0::oid::regprocedure
+query TOOOOOOOOOOOO
+SELECT i, i::regproc::oid, i::regprocedure::oid, i::regnamespace::oid, i::regtype::oid, i::regclass::oid, i::regrole::oid,
+  i::regproc, i::regprocedure, i::regnamespace, i::regtype, i::regclass, i::regrole
+FROM (VALUES ('-')) v(i)
 ----
--
+-  0  0  0  0  0  0  -  -  -  -  -  -
 
-query T
-SELECT 0::oid::regnamespace
-----
--
+statement error invalid input syntax for type oid: "-"
+SELECT i, i::oid FROM (VALUES ('-')) v(i)
 
-query T
-SELECT 0::oid::regclass
-----
--
+statement error invalid input syntax for type oid: "-"
+SELECT '-'::oid
 
-query T
-SELECT 1::oid::regproc
+query OOOOOOOOOOOO
+SELECT '-'::regclass, '-'::regclass::oid,
+  '-'::regproc, '-'::regproc::oid,
+  '-'::regprocedure, '-'::regprocedure::oid,
+  '-'::regnamespace, '-'::regnamespace::oid,
+  '-'::regtype, '-'::regtype::oid,
+  '-'::regrole, '-'::regrole::oid
 ----
-1
-
-query T
-SELECT 1::oid::regprocedure
-----
-1
-
-query T
-SELECT 1::oid::regnamespace
-----
-1
-
-query T
-SELECT 1::oid::regclass
-----
-1
-
-query T
-SELECT '-'::regproc::oid
-----
-0
-
-query T
-SELECT '-'::regprocedure::oid
-----
-0
-
-query T
-SELECT '-'::regnamespace::oid
-----
-0
-
-query T
-SELECT '-'::regclass::oid
-----
-0
+-  0  -  0  -  0  -  0  -  0  -  0

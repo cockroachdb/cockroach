@@ -2345,11 +2345,8 @@ func performCastWithoutPrecisionTruncation(
 			i := DInt(uint32(*v))
 			return performIntToOidCast(ctx, t, i)
 		case *DString:
-			if string(*v) == ZeroDOidValue {
-				// zero oid value is represented by '-' in postgres.
-				tmpOid := NewDOid(0)
-				tmpOid.semanticType = t
-				return tmpOid, nil
+			if string(*v) == ZeroDOidValue && t.Oid() != oid.T_oid {
+				return wrapAsZeroOid(t), nil
 			}
 			return ParseDOid(ctx, string(*v), t)
 		}
@@ -2397,7 +2394,7 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 			}
 			ret.name = typ.PGName()
 		} else if v == 0 {
-			return wrapAsZeroOid(t.Oid()), nil
+			return wrapAsZeroOid(t), nil
 		}
 		return ret, nil
 
@@ -2407,7 +2404,7 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 		ret := &DOid{semanticType: t, DInt: v}
 		if !ok {
 			if v == 0 {
-				return wrapAsZeroOid(t.Oid()), nil
+				return wrapAsZeroOid(t), nil
 			}
 			return ret, nil
 		}
@@ -2416,7 +2413,7 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 
 	default:
 		if v == 0 {
-			return wrapAsZeroOid(t.Oid()), nil
+			return wrapAsZeroOid(t), nil
 		}
 
 		dOid, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, NewDOid(v))
