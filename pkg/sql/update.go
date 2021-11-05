@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// THIS IS A TEST.
 var updateNodePool = sync.Pool{
 	New: func() interface{} {
 		return &updateNode{}
@@ -424,10 +425,10 @@ func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 // checks.
 func enforceLocalColumnConstraints(row tree.Datums, cols []catalog.Column) error {
 	for i, col := range cols {
-		if !col.IsNullable() && row[i] == tree.DNull {
-			return sqlerrors.NewNonNullViolationError(col.GetName())
-		}
-		outVal, err := tree.AdjustValueToType(col.GetType(), row[i])
+		if !col.IsNullable() && row[i] == tree.DNull { // TEST
+			return sqlerrors.NewNonNullViolationError(col.GetName()) // TEST
+		} // TEST
+		outVal, err := tree.AdjustValueToType(col.GetType(), row[i]) // TEST
 		if err != nil {
 			return err
 		}
