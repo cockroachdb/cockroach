@@ -2377,9 +2377,9 @@ func (s *SQLServer) startServeSQL(
 		tcpKeepAlive: envutil.EnvOrDefaultDuration("COCKROACH_SQL_TCP_KEEP_ALIVE", time.Minute),
 	}
 
-	_ = stopper.RunAsyncTask(pgCtx, "serve-conn", func(pgCtx context.Context) {
-		netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, stopper, pgL, func(conn net.Conn) {
-			connCtx := s.pgServer.AnnotateCtxForIncomingConn(pgCtx, conn)
+	_ = stopper.RunAsyncTask(pgCtx, "pgwire-listener", func(ctx context.Context) {
+		netutil.FatalIfUnexpected(connManager.ServeWith(ctx, stopper, pgL, func(conn net.Conn) {
+			connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
 			tcpKeepAlive.configure(connCtx, conn)
 
 			if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketTCP); err != nil {
@@ -2415,9 +2415,9 @@ func (s *SQLServer) startServeSQL(
 			return err
 		}
 
-		if err := stopper.RunAsyncTask(pgCtx, "unix-ln-serve", func(pgCtx context.Context) {
-			netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, stopper, unixLn, func(conn net.Conn) {
-				connCtx := s.pgServer.AnnotateCtxForIncomingConn(pgCtx, conn)
+		if err := stopper.RunAsyncTask(pgCtx, "unix-listener", func(ctx context.Context) {
+			netutil.FatalIfUnexpected(connManager.ServeWith(ctx, stopper, unixLn, func(conn net.Conn) {
+				connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
 				if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
 					log.Ops.Errorf(connCtx, "%v", err)
 				}
