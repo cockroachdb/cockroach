@@ -37,7 +37,7 @@ var CrashOnUseAfterFinish = envutil.EnvOrDefaultBool("COCKROACH_CRASH_ON_SPAN_US
 // FOR DEBUGGING ONLY. This will slow down the program.
 //
 // In particular, roachtests set this.
-var DebugUseAfterFinish = envutil.EnvOrDefaultBool("COCKROACH_DEBUG_SPAN_USE_AFTER_FINISH", false)
+var DebugUseAfterFinish = envutil.EnvOrDefaultBool("COCKROACH_DEBUG_SPAN_USE_AFTER_FINISH", true)
 
 // Span is the tracing Span that we use in CockroachDB. Depending on the tracing
 // configuration, it can hold anywhere between zero and three destinations for
