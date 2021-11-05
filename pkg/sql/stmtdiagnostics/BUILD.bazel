@@ -30,7 +30,7 @@ go_test(
     size = "medium",
     srcs = [
         "main_test.go",
-        "stament_diagnostics_helpers_test.go",
+        "statement_diagnostics_helpers_test.go",
         "statement_diagnostics_test.go",
     ],
     embed = [":stmtdiagnostics"],
@@ -49,6 +49,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",

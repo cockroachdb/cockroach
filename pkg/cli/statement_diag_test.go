@@ -32,13 +32,13 @@ func Example_statement_diag() {
 		        (20, 'SELECT _ FROM _ WHERE _ > _', 'SELECT a FROM t WHERE b > 1', '2010-01-02 03:04:06', ARRAY[1001,1002,1003]),
 		        (30, 'SELECT _ FROM _ WHERE _ > _', 'SELECT a FROM t WHERE b > 1', '2010-01-02 03:04:07', ARRAY[1001])`,
 
-		`INSERT INTO system.statement_diagnostics_requests(id, completed, statement_fingerprint, statement_diagnostics_id, requested_at)
-		 VALUES (1, TRUE, 'SELECT _ FROM _', 10, '2010-01-02 03:04:00'),
-		        (2, TRUE, 'SELECT _ FROM _ WHERE _ > _', 20, '2010-01-02 03:04:02'),
-		        (3, TRUE, 'SELECT _ FROM _ WHERE _ > _', 30, '2010-01-02 03:04:05'),
-						(4, FALSE, 'SELECT _ + _', NULL, '2010-01-02 03:04:10'),
-						(5, FALSE, 'SELECT _ - _', NULL, '2010-01-02 03:04:11'),
-						(6, FALSE, 'SELECT _ / _', NULL, '2010-01-02 03:04:12')`,
+		`INSERT INTO system.statement_diagnostics_requests(id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency_ms)
+		 VALUES (1, TRUE, 'SELECT _ FROM _', 10, '2010-01-02 03:04:00', 0),
+		        (2, TRUE, 'SELECT _ FROM _ WHERE _ > _', 20, '2010-01-02 03:04:02', 1000),
+		        (3, TRUE, 'SELECT _ FROM _ WHERE _ > _', 30, '2010-01-02 03:04:05', 100500),
+		        (4, FALSE, 'SELECT _ + _', NULL, '2010-01-02 03:04:10', 0),
+		        (5, FALSE, 'SELECT _ - _', NULL, '2010-01-02 03:04:11', 0),
+		        (6, FALSE, 'SELECT _ / _', NULL, '2010-01-02 03:04:12', 0)`,
 	}
 
 	for _, cmd := range commands {

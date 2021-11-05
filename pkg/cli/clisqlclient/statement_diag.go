@@ -77,8 +77,10 @@ func stmtDiagListBundlesInternal(conn Conn) ([]StmtDiagBundleInfo, error) {
 type StmtDiagActivationRequest struct {
 	ID int64
 	// Statement is the SQL statement fingerprint.
-	Statement   string
-	RequestedAt time.Time
+	Statement                       string
+	RequestedAt                     time.Time
+	MinExecutionLatencyMilliseconds int64
+	ExpiresAt                       time.Time
 }
 
 // StmtDiagListOutstandingRequests retrieves outstanding statement diagnostics
@@ -95,7 +97,7 @@ func StmtDiagListOutstandingRequests(conn Conn) ([]StmtDiagActivationRequest, er
 
 func stmtDiagListOutstandingRequestsInternal(conn Conn) ([]StmtDiagActivationRequest, error) {
 	rows, err := conn.Query(
-		`SELECT id, statement_fingerprint, requested_at
+		`SELECT id, statement_fingerprint, requested_at, min_execution_latency_ms, expires_at
 		 FROM system.statement_diagnostics_requests
 		 WHERE NOT completed
 		 ORDER BY requested_at DESC`,
@@ -105,17 +107,23 @@ func stmtDiagListOutstandingRequestsInternal(conn Conn) ([]StmtDiagActivationReq
 		return nil, err
 	}
 	var result []StmtDiagActivationRequest
-	vals := make([]driver.Value, 3)
+	vals := make([]driver.Value, 5)
 	for {
 		if err := rows.Next(vals); err == io.EOF {
 			break
 		} else if err != nil {
 			return nil, err
 		}
+		var minExecutionLatencyMilliseconds int64
+		if i, ok := vals[3].(int64); ok {
+			minExecutionLatencyMilliseconds = i
+		}
 		info := StmtDiagActivationRequest{
-			ID:          vals[0].(int64),
-			Statement:   vals[1].(string),
-			RequestedAt: vals[2].(time.Time),
+			ID:                              vals[0].(int64),
+			Statement:                       vals[1].(string),
+			RequestedAt:                     vals[2].(time.Time),
+			MinExecutionLatencyMilliseconds: minExecutionLatencyMilliseconds,
+			ExpiresAt:                       vals[4].(time.Time),
 		}
 		result = append(result, info)
 	}

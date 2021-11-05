@@ -10,12 +10,20 @@
 
 package stmtdiagnostics
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // InsertRequestInternal exposes the form of insert which returns the request ID
 // as an int64 to tests in this package.
-func (r *Registry) InsertRequestInternal(ctx context.Context, fprint string) (int64, error) {
-	id, err := r.insertRequestInternal(ctx, fprint)
+func (r *Registry) InsertRequestInternal(
+	ctx context.Context,
+	fprint string,
+	minExecutionLatencyMilliseconds int64,
+	expiresAfter time.Duration,
+) (int64, error) {
+	id, err := r.insertRequestInternal(ctx, fprint, minExecutionLatencyMilliseconds, expiresAfter)
 	return int64(id), err
 }
 
