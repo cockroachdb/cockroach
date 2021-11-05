@@ -2378,14 +2378,15 @@ func (s *SQLServer) startServeSQL(
 	}
 
 	_ = stopper.RunAsyncTask(pgCtx, "pgwire-listener", func(ctx context.Context) {
-		netutil.FatalIfUnexpected(connManager.ServeWith(ctx, stopper, pgL, func(conn net.Conn) {
+		err := connManager.ServeWith(ctx, stopper, pgL, func(conn net.Conn) {
 			connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
 			tcpKeepAlive.configure(connCtx, conn)
 
 			if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketTCP); err != nil {
 				log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
 			}
-		}))
+		})
+		netutil.FatalIfUnexpected(err)
 	})
 
 	// If a unix socket was requested, start serving there too.
@@ -2416,12 +2417,13 @@ func (s *SQLServer) startServeSQL(
 		}
 
 		if err := stopper.RunAsyncTask(pgCtx, "unix-listener", func(ctx context.Context) {
-			netutil.FatalIfUnexpected(connManager.ServeWith(ctx, stopper, unixLn, func(conn net.Conn) {
+			err := connManager.ServeWith(ctx, stopper, unixLn, func(conn net.Conn) {
 				connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
 				if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
 					log.Ops.Errorf(connCtx, "%v", err)
 				}
-			}))
+			})
+			netutil.FatalIfUnexpected(err)
 		}); err != nil {
 			return err
 		}
