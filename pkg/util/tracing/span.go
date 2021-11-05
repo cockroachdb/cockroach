@@ -122,8 +122,8 @@ func (sp *Span) SetOperationName(operationName string) {
 	sp.i.SetOperationName(operationName)
 }
 
-// Finish idempotently marks the Span as completed (at which point it will
-// silently drop any new data added to it). Finishing a nil *Span is a noop.
+// Finish marks the Span as completed. The Span should not be used any more.
+// Finishing a nil *Span is a noop.
 func (sp *Span) Finish() {
 	if sp == nil || sp.IsNoop() || sp.done() {
 		return
