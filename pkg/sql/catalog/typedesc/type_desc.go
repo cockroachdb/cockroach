@@ -34,9 +34,22 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-var _ catalog.TypeDescriptor = (*immutable)(nil)
-var _ catalog.TypeDescriptor = (*Mutable)(nil)
-var _ catalog.MutableDescriptor = (*Mutable)(nil)
+// typeDescriptor is an extension of catalog.TypeDescriptor that includes
+// methods that we want to keep unexported.
+type typeDescriptor interface {
+	catalog.TypeDescriptor
+	// hydrateTypeInfoWithName fills in user defined type metadata for
+	// a type and also sets the name in the metadata to the passed in name.
+	// This is used when hydrating a type with a known qualified name.
+	//
+	// Note that if the passed type is already hydrated, regardless of the
+	// version with which it has been hydrated, this is a no-op.
+	hydrateTypeInfoWithName(ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver) error
+}
+
+var _ typeDescriptor = (*immutable)(nil)
+var _ typeDescriptor = (*Mutable)(nil)
+var _ typeDescriptor = (*Mutable)(nil)
 
 // MakeSimpleAlias creates a type descriptor that is an alias for the input
 // type. It is intended to be used as an intermediate for name resolution, and
@@ -720,13 +733,13 @@ func (desc *immutable) MakeTypesT(
 	switch t := desc.Kind; t {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 		typ := types.MakeEnum(TypeIDToOID(desc.GetID()), TypeIDToOID(desc.ArrayTypeID))
-		if err := desc.HydrateTypeInfoWithName(ctx, typ, name, res); err != nil {
+		if err := desc.hydrateTypeInfoWithName(ctx, typ, name, res); err != nil {
 			return nil, err
 		}
 		return typ, nil
 	case descpb.TypeDescriptor_ALIAS:
 		// Hydrate the alias and return it.
-		if err := desc.HydrateTypeInfoWithName(ctx, desc.Alias, name, res); err != nil {
+		if err := desc.hydrateTypeInfoWithName(ctx, desc.Alias, name, res); err != nil {
 			return nil, err
 		}
 		return desc.Alias, nil
@@ -753,7 +766,7 @@ func EnsureTypeIsHydrated(
 		if err != nil {
 			return err
 		}
-		return elemTypDesc.HydrateTypeInfoWithName(ctx, t, &elemTypName, res)
+		return elemTypDesc.(typeDescriptor).hydrateTypeInfoWithName(ctx, t, &elemTypName, res)
 	}
 	if t.Family() == types.TupleFamily {
 		for _, typ := range t.TupleContents() {
@@ -788,8 +801,8 @@ func HydrateTypesInTableDescriptor(
 	return nil
 }
 
-// HydrateTypeInfoWithName implements the TypeDescriptor interface.
-func (desc *immutable) HydrateTypeInfoWithName(
+// hydrateTypeInfoWithName implements the typeDescriptor interface.
+func (desc *immutable) hydrateTypeInfoWithName(
 	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) error {
 	if typ.IsHydrated() {
