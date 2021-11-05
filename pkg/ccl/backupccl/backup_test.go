@@ -5955,7 +5955,8 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 
 		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
 		tableID := getTableID(db, "test", "foo")
-		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-4}", tableID)}, actualResolvedSpans)
+		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-2}", tableID),
+			fmt.Sprintf("/Table/%d/{3-4}", tableID)}, actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
@@ -5977,6 +5978,27 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 		childID := getTableID(db, "test", "child")
 		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-3}", grandparentID),
 			fmt.Sprintf("/Table/%d/{2-3}", childID)}, actualResolvedSpans)
+		runner.Exec(t, "DROP DATABASE test;")
+		actualResolvedSpans = nil
+	})
+
+	// This is a regression test for a bug that was fixed in
+	// https://github.com/cockroachdb/cockroach/pull/72270 where two (or more)
+	// public indexes followed by an interleaved index would result in index keys
+	// being missed during backup.
+	// Prior to the fix in https://github.com/cockroachdb/cockroach/pull/72270,
+	// the resolved spans would be `/Table/63/{1-3}` thereby missing the span for
+	// idx2.
+	// With the change we now backup `/Table/63/{1-4}` to include pkIndex, idx1,
+	// idx2 and idx3 (since it is interleaved it produces the span
+	// `/Table/63/{1-2}`).
+	t.Run("public-and-interleaved-indexes", func(t *testing.T) {
+		runner.Exec(t, "CREATE DATABASE test; USE test;")
+		runner.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b INT, v BYTES, INDEX idx1 (v), INDEX idx2(b))")
+		runner.Exec(t, "CREATE INDEX idx3 ON foo (a, b) INTERLEAVE IN PARENT foo (a)")
+		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s' WITH include_deprecated_interleaves`, baseBackupURI+t.Name()))
+		tableID := getTableID(db, "test", "foo")
+		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-4}", tableID)}, actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
@@ -6093,140 +6115,114 @@ func getMockTableDesc(
 	return tabledesc.NewBuilder(&mockTableDescriptor).BuildImmutableTable()
 }
 
-// Unit tests for the getLogicallyMergedTableSpans() method.
-// TODO(pbardea): Add ADDING and DROPPING indexes to these tests.
-func TestLogicallyMergedTableSpans(t *testing.T) {
+// Unit tests for the spansForAllTableIndexes and getPublicIndexTableSpans()
+// methods.
+func TestPublicIndexTableSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
 	codec := keys.TODOSQLCodec
+	execCfg := &sql.ExecutorConfig{
+		Codec: codec,
+	}
 	unusedMap := make(map[tableAndIndex]bool)
 	testCases := []struct {
-		name                       string
-		checkForKVInBoundsOverride func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error)
-		tableID                    descpb.ID
-		pkIndex                    descpb.IndexDescriptor
-		indexes                    []descpb.IndexDescriptor
-		addingIndexes              []descpb.IndexDescriptor
-		droppingIndexes            []descpb.IndexDescriptor
-		expectedSpans              []string
+		name                string
+		tableID             descpb.ID
+		pkIndex             descpb.IndexDescriptor
+		indexes             []descpb.IndexDescriptor
+		addingIndexes       []descpb.IndexDescriptor
+		droppingIndexes     []descpb.IndexDescriptor
+		expectedSpans       []string
+		expectedMergedSpans []string
 	}{
 		{
-			name: "contiguous-spans",
-			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
-				return false, nil
-			},
-			tableID:       55,
-			pkIndex:       getMockIndexDesc(1),
-			indexes:       []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
-			expectedSpans: []string{"/Table/55/{1-3}"},
+			name:                "contiguous-spans",
+			tableID:             55,
+			pkIndex:             getMockIndexDesc(1),
+			indexes:             []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+			expectedSpans:       []string{"/Table/55/{1-2}", "/Table/55/{2-3}"},
+			expectedMergedSpans: []string{"/Table/55/{1-3}"},
 		},
 		{
-			name: "dropped-span-between-two-spans",
-			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
-				if start.String() == "/Table/56/2" && end.String() == "/Table/56/3" {
-					return true, nil
-				}
-				return false, nil
-			},
-			tableID:         56,
-			pkIndex:         getMockIndexDesc(1),
-			indexes:         []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3)},
-			droppingIndexes: []descpb.IndexDescriptor{getMockIndexDesc(2)},
-			expectedSpans:   []string{"/Table/56/{1-2}", "/Table/56/{3-4}"},
+			name:                "dropped-span-between-two-spans",
+			tableID:             56,
+			pkIndex:             getMockIndexDesc(1),
+			indexes:             []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3)},
+			droppingIndexes:     []descpb.IndexDescriptor{getMockIndexDesc(2)},
+			expectedSpans:       []string{"/Table/56/{1-2}", "/Table/56/{3-4}"},
+			expectedMergedSpans: []string{"/Table/56/{1-2}", "/Table/56/{3-4}"},
 		},
 		{
-			name: "gced-span-between-two-spans",
-			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
-				return false, nil
-			},
-			tableID:       57,
-			pkIndex:       getMockIndexDesc(1),
-			indexes:       []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3)},
-			expectedSpans: []string{"/Table/57/{1-4}"},
+			name:                "gced-span-between-two-spans",
+			tableID:             57,
+			pkIndex:             getMockIndexDesc(1),
+			indexes:             []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3)},
+			expectedSpans:       []string{"/Table/57/{1-2}", "/Table/57/{3-4}"},
+			expectedMergedSpans: []string{"/Table/57/{1-2}", "/Table/57/{3-4}"},
 		},
 		{
-			name: "alternate-spans-dropped",
-			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
-				if (start.String() == "/Table/58/2" && end.String() == "/Table/58/3") ||
-					(start.String() == "/Table/58/4" && end.String() == "/Table/58/5") {
-					return true, nil
-				}
-				return false, nil
-			},
+			name:    "alternate-spans-dropped",
 			tableID: 58,
 			pkIndex: getMockIndexDesc(1),
 			indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
 				getMockIndexDesc(5)},
-			droppingIndexes: []descpb.IndexDescriptor{getMockIndexDesc(2), getMockIndexDesc(4)},
-			expectedSpans:   []string{"/Table/58/{1-2}", "/Table/58/{3-4}", "/Table/58/{5-6}"},
+			droppingIndexes:     []descpb.IndexDescriptor{getMockIndexDesc(2), getMockIndexDesc(4)},
+			expectedSpans:       []string{"/Table/58/{1-2}", "/Table/58/{3-4}", "/Table/58/{5-6}"},
+			expectedMergedSpans: []string{"/Table/58/{1-2}", "/Table/58/{3-4}", "/Table/58/{5-6}"},
 		},
 		{
-			name: "alternate-spans-gced",
-			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
-				return false, nil
-			},
+			name:    "alternate-spans-gced",
 			tableID: 59,
 			pkIndex: getMockIndexDesc(1),
 			indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
 				getMockIndexDesc(5)},
-			expectedSpans: []string{"/Table/59/{1-6}"},
+			expectedSpans:       []string{"/Table/59/{1-2}", "/Table/59/{3-4}", "/Table/59/{5-6}"},
+			expectedMergedSpans: []string{"/Table/59/{1-2}", "/Table/59/{3-4}", "/Table/59/{5-6}"},
 		},
 		{
-			name: "one-drop-one-gc",
-			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
-				if start.String() == "/Table/60/2" && end.String() == "/Table/60/3" {
-					return true, nil
-				}
-				return false, nil
-			},
+			name:    "one-drop-one-gc",
 			tableID: 60,
 			pkIndex: getMockIndexDesc(1),
 			indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
 				getMockIndexDesc(5)},
-			droppingIndexes: []descpb.IndexDescriptor{getMockIndexDesc(2)},
-			expectedSpans:   []string{"/Table/60/{1-2}", "/Table/60/{3-6}"},
+			droppingIndexes:     []descpb.IndexDescriptor{getMockIndexDesc(2)},
+			expectedSpans:       []string{"/Table/60/{1-2}", "/Table/60/{3-4}", "/Table/60/{5-6}"},
+			expectedMergedSpans: []string{"/Table/60/{1-2}", "/Table/60/{3-4}", "/Table/60/{5-6}"},
 		},
 		{
 			// Although there are no keys on index 2, we should not include its
 			// span since it holds an adding index.
-			name: "empty-adding-index",
-			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
-				return false, nil
-			},
+			name:    "empty-adding-index",
 			tableID: 61,
 			pkIndex: getMockIndexDesc(1),
 			indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
 				getMockIndexDesc(4)},
-			addingIndexes: []descpb.IndexDescriptor{getMockIndexDesc(2)},
-			expectedSpans: []string{"/Table/61/{1-2}", "/Table/61/{3-5}"},
-		},
-		{
-			// It is safe to include empty dropped indexes.
-			name: "empty-dropping-index",
-			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
-				return false, nil
-			},
-			tableID: 62,
-			pkIndex: getMockIndexDesc(1),
-			indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
-				getMockIndexDesc(4)},
-			droppingIndexes: []descpb.IndexDescriptor{getMockIndexDesc(2)},
-			expectedSpans:   []string{"/Table/62/{1-5}"},
+			addingIndexes:       []descpb.IndexDescriptor{getMockIndexDesc(2)},
+			expectedSpans:       []string{"/Table/61/{1-2}", "/Table/61/{3-4}", "/Table/61/{4-5}"},
+			expectedMergedSpans: []string{"/Table/61/{1-2}", "/Table/61/{3-5}"},
 		},
 	}
 
 	for _, test := range testCases {
-		t.Run(test.name, func(t *testing.T) {
-			tableDesc := getMockTableDesc(test.tableID, test.pkIndex,
-				test.indexes, test.addingIndexes, test.droppingIndexes)
-			spans, err := getLogicallyMergedTableSpans(ctx, tableDesc, unusedMap, codec,
-				hlc.Timestamp{}, test.checkForKVInBoundsOverride)
-			var mergedSpans []string
-			for _, span := range spans {
-				mergedSpans = append(mergedSpans, span.String())
-			}
+		tableDesc := getMockTableDesc(test.tableID, test.pkIndex,
+			test.indexes, test.addingIndexes, test.droppingIndexes)
+		t.Run(fmt.Sprintf("%s:%s", "getPublicIndexTableSpans", test.name), func(t *testing.T) {
+			spans, err := getPublicIndexTableSpans(tableDesc, unusedMap, codec)
 			require.NoError(t, err)
-			require.Equal(t, test.expectedSpans, mergedSpans)
+			var unmergedSpans []string
+			for _, span := range spans {
+				unmergedSpans = append(unmergedSpans, span.String())
+			}
+			require.Equal(t, test.expectedSpans, unmergedSpans)
+		})
+
+		t.Run(fmt.Sprintf("%s:%s", "spansForAllTableIndexes", test.name), func(t *testing.T) {
+			mergedSpans, err := spansForAllTableIndexes(execCfg, []catalog.TableDescriptor{tableDesc}, nil /* revs */)
+			require.NoError(t, err)
+			var mergedSpanStrings []string
+			for _, mSpan := range mergedSpans {
+				mergedSpanStrings = append(mergedSpanStrings, mSpan.String())
+			}
+			require.Equal(t, test.expectedMergedSpans, mergedSpanStrings)
 		})
 	}
 }
@@ -8217,4 +8213,58 @@ DROP TABLE foo;
 		InitManualReplication, base.TestClusterArgs{})
 	defer cleanupEmptyCluster()
 	sqlDBRestore.Exec(t, "RESTORE FROM $1 AS OF SYSTEM TIME "+aost, LocalFoo)
+}
+
+// TestGCDropIndexSpanExpansion is a regression test for
+// https://github.com/cockroachdb/cockroach/issues/72263.
+func TestGCDropIndexSpanExpansion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	aboutToGC := make(chan struct{})
+	allowGC := make(chan struct{})
+	var gcJobID jobspb.JobID
+	baseDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		ExternalIODir: baseDir,
+		Knobs: base.TestingKnobs{
+			GCJob: &sql.GCJobTestingKnobs{RunBeforePerformGC: func(id jobspb.JobID) error {
+				gcJobID = id
+				aboutToGC <- struct{}{}
+				<-allowGC
+				return nil
+			}},
+		},
+	}})
+	defer tc.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	sqlRunner.Exec(t, `
+CREATE DATABASE test; USE test;
+CREATE TABLE foo (id INT PRIMARY KEY, id2 INT, id3 INT, INDEX bar (id2), INDEX baz(id3));
+ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = '1';
+INSERT INTO foo VALUES (1, 2, 3);
+DROP INDEX foo@bar;
+`)
+
+	// Wait until the index is about to get gc'ed.
+	<-aboutToGC
+
+	// Take a full backup with revision history so it includes the PUBLIC version
+	// of index `bar` in the backed up spans.
+	sqlRunner.Exec(t, `BACKUP INTO 'nodelocal://0/foo' WITH revision_history`)
+
+	// Take an incremental backup with revision history. This backup will not
+	// include the dropped index span.
+	sqlRunner.Exec(t, `BACKUP INTO LATEST IN 'nodelocal://0/foo' WITH revision_history`)
+
+	// Allow the GC to complete.
+	close(allowGC)
+
+	// Wait for the GC to complete.
+	jobutils.WaitForJob(t, sqlRunner, gcJobID)
+
+	sqlRunner.Exec(t, `BACKUP INTO LATEST IN 'nodelocal://0/foo' WITH revision_history`)
 }
