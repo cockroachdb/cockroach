@@ -27,6 +27,10 @@ type stmtDiagnosticsRequest struct {
 	Completed              bool
 	StatementDiagnosticsID int
 	RequestedAt            time.Time
+	// Zero value indicates that there is no minimum latency set on the request.
+	MinExecutionLatency time.Duration
+	// Zero value indicates that the request never expires.
+	ExpiresAt time.Time
 }
 
 type stmtDiagnostics struct {
@@ -42,6 +46,8 @@ func (request *stmtDiagnosticsRequest) toProto() serverpb.StatementDiagnosticsRe
 		StatementFingerprint:   request.StatementFingerprint,
 		StatementDiagnosticsId: int64(request.StatementDiagnosticsID),
 		RequestedAt:            request.RequestedAt,
+		MinExecutionLatency:    request.MinExecutionLatency,
+		ExpiresAt:              request.ExpiresAt,
 	}
 	return resp
 }
@@ -55,7 +61,7 @@ func (diagnostics *stmtDiagnostics) toProto() serverpb.StatementDiagnostics {
 	return resp
 }
 
-// CreateStatementDiagnosticsRequest creates a statement diagnostics
+// CreateStatementDiagnosticsReport creates a statement diagnostics
 // request in the `system.statement_diagnostics_requests` table
 // to trace the next query matching the provided fingerprint.
 func (s *statusServer) CreateStatementDiagnosticsReport(
@@ -72,7 +78,9 @@ func (s *statusServer) CreateStatementDiagnosticsReport(
 		Report: &serverpb.StatementDiagnosticsReport{},
 	}
 
-	err := s.stmtDiagnosticsRequester.InsertRequest(ctx, req.StatementFingerprint)
+	err := s.stmtDiagnosticsRequester.InsertRequest(
+		ctx, req.StatementFingerprint, req.MinExecutionLatency, req.ExpiresAfter,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +113,9 @@ func (s *statusServer) StatementDiagnosticsRequests(
 			statement_fingerprint,
 			completed,
 			statement_diagnostics_id,
-			requested_at
+			requested_at,
+			min_execution_latency,
+			expires_at
 		FROM
 			system.statement_diagnostics_requests`)
 	if err != nil {
@@ -124,14 +134,18 @@ func (s *statusServer) StatementDiagnosticsRequests(
 			StatementFingerprint: statementFingerprint,
 			Completed:            completed,
 		}
-
 		if row[3] != tree.DNull {
 			sdi := int(*row[3].(*tree.DInt))
 			req.StatementDiagnosticsID = sdi
 		}
-
 		if requestedAt, ok := row[4].(*tree.DTimestampTZ); ok {
 			req.RequestedAt = requestedAt.Time
+		}
+		if minExecutionLatency, ok := row[5].(*tree.DInterval); ok {
+			req.MinExecutionLatency = time.Duration(minExecutionLatency.Duration.Nanos())
+		}
+		if expiresAt, ok := row[6].(*tree.DTimestampTZ); ok {
+			req.ExpiresAt = expiresAt.Time
 		}
 
 		requests = append(requests, req)

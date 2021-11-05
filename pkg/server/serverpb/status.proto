@@ -1247,10 +1247,26 @@ message StatementDiagnosticsReport {
     [ (gogoproto.nullable) = true ];
   google.protobuf.Timestamp requested_at = 5
     [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+  google.protobuf.Duration min_execution_latency = 6
+    [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
+  google.protobuf.Timestamp expires_at = 7
+    [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
 }
 
 message CreateStatementDiagnosticsReportRequest {
   string statement_fingerprint = 1;
+  // MinExecutionLatency, when non-zero, indicates the minimum execution latency
+  // of a query for which to collect the diagnostics report. In other words, if
+  // a query executes faster than this threshold, then the diagnostics report is
+  // not collected on it, and we will try to get a bundle the next time we see
+  // the query fingerprint.
+  //
+  // NB: if MinExecutionLatency is non-zero, then all queries that match the
+  // fingerprint will be traced until a slow enough query comes along. This
+  // tracing might have some performance overhead.
+  google.protobuf.Duration min_execution_latency = 2  [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
+  // ExpiresAfter, when non-zero, sets the expiration interval of this request.
+  google.protobuf.Duration expires_after = 3 [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
 }
 
 message CreateStatementDiagnosticsReportResponse {
