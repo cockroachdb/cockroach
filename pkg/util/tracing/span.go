@@ -30,8 +30,8 @@ const (
 )
 
 // !!! the default of true
-var ForceRealSpans = envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", false)
-var CrashOnUseAfterFinish = envutil.EnvOrDefaultBool("COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH", false)
+var ForceRealSpans = envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", true)
+var CrashOnUseAfterFinish = envutil.EnvOrDefaultBool("COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH", true)
 
 // DebugUseAfterFinish controls whether to debug uses of Span values after finishing.
 // FOR DEBUGGING ONLY. This will slow down the program.
@@ -100,10 +100,8 @@ func (sp *Span) done() bool {
 		} else {
 			finishStack = sp.finishStack
 		}
-		if util.CrdbTestBuild {
-			panic(fmt.Sprintf("use of Span after Finish was previously called at: %s",
-				finishStack))
-		}
+		panic(fmt.Sprintf("use of Span after Finish. Span: %s. Finish previously called at: %s",
+			sp.i.OperationName(), finishStack))
 	}
 
 	return alreadyFinished

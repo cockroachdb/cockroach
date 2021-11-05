@@ -152,6 +152,15 @@ func (s *spanInner) SetOperationName(operationName string) *spanInner {
 	return s
 }
 
+func (s *spanInner) OperationName() string {
+	if s.isNoop() {
+		return "noop"
+	}
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
+	return s.crdb.mu.operation
+}
+
 func (s *spanInner) SetTag(key string, value attribute.Value) *spanInner {
 	if s.isNoop() {
 		return s
