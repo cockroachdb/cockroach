@@ -495,7 +495,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 								}
 								key := req.(*roachpb.ScanRequest).Key.String()
 								endKey := req.(*roachpb.ScanRequest).EndKey.String()
-								if strings.Contains(key, "/1") && strings.Contains(endKey, "5/") {
+								if strings.Contains(key, "/1") && strings.Contains(endKey, "/6") {
 									blockedRead.Lock()
 									for !blockedRead.shouldUnblock {
 										blockedRead.unblockCond.Wait()
