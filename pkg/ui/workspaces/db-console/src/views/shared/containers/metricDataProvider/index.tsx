@@ -32,10 +32,6 @@ import { PayloadAction } from "src/interfaces/action";
 import { TimeWindow, TimeScale } from "src/redux/timewindow";
 import { History } from "history";
 import { refreshSettings } from "src/redux/apiReducers";
-import {
-  selectResolution10sStorageTTL,
-  selectResolution30mStorageTTL,
-} from "src/redux/clusterSettings";
 
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data
@@ -289,8 +285,6 @@ const metricsDataProviderConnected = connect(
     return {
       metrics: state.metrics.queries[ownProps.id],
       timeInfo: ownProps.current ? current() : timeInfoSelector(state),
-      resolution10sStorageTTL: selectResolution10sStorageTTL(state),
-      resolution30mStorageTTL: selectResolution30mStorageTTL(state),
     };
   },
   {
