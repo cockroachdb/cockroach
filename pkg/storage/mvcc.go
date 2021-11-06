@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -3912,8 +3911,7 @@ func MVCCFindSplitKey(
 	//
 	// In addition, we must never return a split key that falls within a table
 	// row. (Rows in tables with multiple column families are comprised of
-	// multiple keys, one key per column family.) However, we do allow a split
-	// key that falls between a row and its interleaved rows.
+	// multiple keys, one key per column family.)
 	//
 	// Managing this is complicated: the logic for picking a split key that
 	// creates ranges of the right size lives in C++, while the logic for
@@ -3964,9 +3962,8 @@ func MVCCFindSplitKey(
 			if err != nil {
 				return nil, err
 			}
-			// Allow a split key before other rows in the same table or before any
-			// rows in interleaved tables.
-			minSplitKey = encoding.EncodeInterleavedSentinel(firstRowKey)
+			// Allow a split key before other rows in the same table.
+			minSplitKey = firstRowKey.PrefixEnd()
 		}
 	}
 	if minSplitKey == nil {

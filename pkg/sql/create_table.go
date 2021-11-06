@@ -1202,8 +1202,8 @@ func NewTableDescOptionBypassLocalityOnNonMultiRegionDatabaseCheck() NewTableDes
 // NewTableDesc creates a table descriptor from a CreateTable statement.
 //
 // txn and vt can be nil if the table to be created does not contain references
-// to other tables (e.g. foreign keys or interleaving). This is useful at
-// bootstrap when creating descriptors for virtual tables.
+// to other tables (e.g. foreign keys). This is useful at bootstrap when
+// creating descriptors for virtual tables.
 //
 // parentID refers to the databaseID under which the descriptor is being
 // created and parentSchemaID refers to the schemaID of the schema under which

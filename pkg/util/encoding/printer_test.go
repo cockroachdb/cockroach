@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 func TestUndoPrefixEnd(t *testing.T) {
@@ -34,7 +33,7 @@ func TestUndoPrefixEnd(t *testing.T) {
 		{[]byte{0x01, 0x00}, nil},
 	} {
 		t.Run(fmt.Sprintf("undo-prefix/key=%q", tc.in), func(t *testing.T) {
-			result, ok := encoding.UndoPrefixEnd(tc.in)
+			result, ok := encoding.undoPrefixEnd(tc.in)
 			if !ok {
 				result = nil
 			}
@@ -54,7 +53,7 @@ func TestUndoPrefixEnd(t *testing.T) {
 		// Keys that end in 0xff do not roundtrip.
 	} {
 		t.Run(fmt.Sprintf("roundtrip/key=%q", k), func(t *testing.T) {
-			if r, ok := encoding.UndoPrefixEnd(roachpb.Key(k).PrefixEnd()); !ok || !bytes.Equal(k, r) {
+			if r, ok := encoding.undoPrefixEnd(roachpb.Key(k).PrefixEnd()); !ok || !bytes.Equal(k, r) {
 				t.Errorf("roundtripping resulted in %q", r)
 			}
 		})
