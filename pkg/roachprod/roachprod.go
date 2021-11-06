@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"golang.org/x/sys/unix"
-	"golang.org/x/term"
 )
 
 // verifyClusterName ensures that the given name conforms to
@@ -211,7 +210,7 @@ Available clusters:
 	c.Args = opts.Args
 	c.Tag = opts.Tag
 	c.UseTreeDist = opts.UseTreeDist
-	c.Quiet = opts.Quiet || !term.IsTerminal(int(os.Stdout.Fd()))
+	c.Quiet = opts.Quiet
 	c.MaxConcurrency = opts.MaxConcurrency
 	return c, nil
 }
