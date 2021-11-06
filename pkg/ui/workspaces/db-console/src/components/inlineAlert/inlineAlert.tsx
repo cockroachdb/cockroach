@@ -14,8 +14,9 @@ import classNames from "classnames/bind";
 import styles from "./inlineAlert.module.styl";
 import ErrorIcon from "assets/error-circle.svg";
 import InfoIcon from "assets/info-filled-circle.svg";
+import WarningIcon from "assets/warning.svg";
 
-export type InlineAlertIntent = "info" | "error";
+export type InlineAlertIntent = "info" | "error" | "warning";
 
 const cn = classNames.bind(styles);
 
@@ -36,6 +37,8 @@ export const InlineAlert: React.FC<InlineAlertProps> = ({
     switch (intent) {
       case "error":
         return ErrorIcon;
+      case "warning":
+        return WarningIcon;
       case "info":
       default:
         return InfoIcon;
