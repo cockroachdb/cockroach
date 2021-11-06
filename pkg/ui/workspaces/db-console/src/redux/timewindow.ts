@@ -248,8 +248,8 @@ export type AdjustTimeScaleReturnType = {
  * -----------X-----------------------------------X-----------------------X------>
  * [resolution30mStorageTTL]           [resolution10sStorageTTL]        [now]
  *
- * - time series older that resolution30mStorageTTL duration is subject for deletion
- * - time series before resolution30mStorageTTL and older that resolution10sStorageTTL is stored with
+ * - time series older than resolution30mStorageTTL duration is subject for deletion
+ * - time series before resolution30mStorageTTL and older than resolution10sStorageTTL is stored with
  * 30 min resolution only. 10s resolution data is removed for this period.
  * - time series before resolution10sStorageTTL is stored with 10s resolution
  *
