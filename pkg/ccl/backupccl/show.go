@@ -362,10 +362,10 @@ func backupShowerDefault(
 				}
 				descSizes := make(map[descpb.ID]RowCount)
 				for _, file := range manifest.Files {
-					// TODO(dan): This assumes each file in the backup only contains
-					// data from a single table, which is usually but not always
-					// correct. It does not account for interleaved tables or if a
-					// BACKUP happened to catch a newly created table that hadn't yet
+					// TODO(dan): This assumes each file in the backup only
+					// contains data from a single table, which is usually but
+					// not always correct. It does not account for a BACKUP that
+					// happened to catch a newly created table that hadn't yet
 					// been split into its own range.
 					_, tableID, err := encoding.DecodeUvarintAscending(file.Span.Key)
 					if err != nil {

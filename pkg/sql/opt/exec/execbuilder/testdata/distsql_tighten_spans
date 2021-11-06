@@ -145,12 +145,12 @@ SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 3] WHERE info LI
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 3 AND b <= 3] WHERE info LIKE '%spans%'
 ----
-      spans: -/3/3/#
+      spans: -/3/4
 
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 3 AND b < 4] WHERE info LIKE '%spans%'
 ----
-      spans: -/3/3/#
+      spans: -/3/4
 
 # Mixed bounds.
 query T
@@ -163,22 +163,22 @@ SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a >= 2 AND b <= 3] WH
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 0 AND b <= 0] WHERE info LIKE '%spans%'
 ----
-      spans: -/0/0/#
+      spans: -/0/1
 
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= -1 AND b <= -1] WHERE info LIKE '%spans%'
 ----
-      spans: -/-1/-1/#
+      spans: -/-1/0
 
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a = 1 AND b <= -9223372036854775808] WHERE info LIKE '%spans%'
 ----
-  spans: /1-/1/-9223372036854775808/#
+  spans: /1-/1/-9223372036854775807
 
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a = 1 AND b <= 9223372036854775807] WHERE info LIKE '%spans%'
 ----
-  spans: /1-/1/9223372036854775807/#
+  spans: /1-/1/9223372036854775807/PrefixEnd
 
 # Table c1 (interleaved table)
 
@@ -193,7 +193,7 @@ SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM c1 WHERE a <= 3] WHERE info LI
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM c1 WHERE a <= 3 AND b <= 3] WHERE info LIKE '%spans%'
 ----
-      spans: -/3/3/#
+      spans: -/3/4
 
 # Table p2 with interleaved index.
 
@@ -210,7 +210,7 @@ SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2 WHERE i >= 2] WHERE info LI
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2 WHERE i <= 5] WHERE info LIKE '%spans%'
 ----
-  spans: -/5/#
+  spans: -/6
 
 # From the interleaved index: no tightening at all.
 
