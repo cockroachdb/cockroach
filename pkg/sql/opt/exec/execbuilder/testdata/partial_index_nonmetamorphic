@@ -817,7 +817,7 @@ INSERT INTO inv VALUES (10, '{"a": "b"}', 'foo'), (11, '{"a": "b"}', 'baz')
 query T kvtrace
 UPDATE inv SET c = 'foo' WHERE a IN (10, 11)
 ----
-Scan /Table/55/1/1{0-1/#}
+Scan /Table/55/1/1{0-2}
 Put /Table/55/1/10/0 -> /TUPLE/
 Put /Table/55/1/11/0 -> /TUPLE/
 InitPut /Table/55/2/"a"/"b"/11/0 -> /BYTES/
@@ -830,7 +830,7 @@ INSERT INTO inv VALUES (12, '{"a": "b"}', 'foo'), (13, '{"a": "b"}', 'baz')
 query T kvtrace
 UPDATE inv SET c = 'fud' WHERE a IN (12, 13)
 ----
-Scan /Table/55/1/1{2-3/#}
+Scan /Table/55/1/1{2-4}
 Put /Table/55/1/12/0 -> /TUPLE/
 Del /Table/55/2/"a"/"b"/12/0
 Put /Table/55/1/13/0 -> /TUPLE/
@@ -904,7 +904,7 @@ INSERT INTO t57085_c VALUES (10, 1, true), (20, 1, false), (30, 2, true);
 query T kvtrace
 DELETE FROM t57085_p WHERE p = 1;
 ----
-DelRange /Table/56/1/1 - /Table/56/1/1/#
+DelRange /Table/56/1/1 - /Table/56/1/2
 Scan /Table/57/{1-2}
 Del /Table/57/2/1/10/0
 Del /Table/57/1/10/0

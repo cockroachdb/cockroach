@@ -457,7 +457,6 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 					ij.indexRow[:len(ij.prefixEqualityCols)],
 					ij.indexRowTypes[:len(ij.prefixEqualityCols)],
 					ij.index.IndexDesc().KeyColumnDirections,
-					ij.desc,
 					ij.index,
 					&ij.alloc,
 					nil, /* keyPrefix */
@@ -551,7 +550,6 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 				ij.indexRow[:len(ij.prefixEqualityCols)],
 				ij.indexRowTypes[:len(ij.prefixEqualityCols)],
 				ij.index.IndexDesc().KeyColumnDirections,
-				ij.desc,
 				ij.index,
 				&ij.alloc,
 				nil, /* keyPrefix */

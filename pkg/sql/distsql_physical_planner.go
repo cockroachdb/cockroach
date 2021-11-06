@@ -2633,10 +2633,10 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 
 	// Figure out the node where this zigzag joiner goes.
 	//
-	// TODO(itsbilal): Add support for restricting the Zigzag joiner
-	// to a certain set of spans (similar to the InterleavedReaderJoiner)
-	// on one side. Once that's done, we can split this processor across
-	// multiple nodes here. Until then, schedule on the current node.
+	// TODO(itsbilal): Add support for restricting the Zigzag joiner to a
+	// certain set of spans on one side. Once that's done, we can split this
+	// processor across multiple nodes here. Until then, schedule on the current
+	// node.
 	corePlacement := []physicalplan.ProcessorCorePlacement{{
 		NodeID: dsp.gatewayNodeID,
 		Core:   execinfrapb.ProcessorCoreUnion{ZigzagJoiner: &zigzagJoinerSpec},

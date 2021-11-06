@@ -792,7 +792,7 @@ vectorized: true
               columns: (n, sq)
               estimated row count: 333 (missing stats)
               table: square@square_pkey
-              spans: -/5/#
+              spans: -/6
 
 query T
 EXPLAIN (VERBOSE)
@@ -861,7 +861,7 @@ vectorized: true
       columns: (n, sq)
       estimated row count: 4 (missing stats)
       table: square@square_pkey
-      spans: /2-/5/#
+      spans: /2-/6
       parallel
 
 

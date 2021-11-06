@@ -1472,8 +1472,7 @@ func ValidateInvertedIndexes(
 		countReady[i] = make(chan struct{})
 
 		grp.GoCtx(func(ctx context.Context) error {
-			// Inverted indexes currently can't be interleaved, so a KV scan can be
-			// used to get the index length.
+			// KV scan can be used to get the index length.
 			// TODO (lucy): Switch to using DistSQL to get the count, so that we get
 			// distributed execution and avoid bypassing the SQL decoding
 			start := timeutil.Now()

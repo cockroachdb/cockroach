@@ -44,11 +44,9 @@ import (
 )
 
 type indexKeyTest struct {
-	tableID              descpb.ID
-	primaryInterleaves   []descpb.ID
-	secondaryInterleaves []descpb.ID
-	primaryValues        []tree.Datum // len must be at least primaryInterleaveComponents+1
-	secondaryValues      []tree.Datum // len must be at least secondaryInterleaveComponents+1
+	tableID         descpb.ID
+	primaryValues   []tree.Datum
+	secondaryValues []tree.Datum
 }
 
 func makeTableDescForTest(test indexKeyTest) (catalog.TableDescriptor, catalog.TableColMap) {
@@ -74,19 +72,6 @@ func makeTableDescForTest(test indexKeyTest) (catalog.TableDescriptor, catalog.T
 		}
 	}
 
-	makeInterleave := func(indexID descpb.IndexID, ancestorTableIDs []descpb.ID) descpb.InterleaveDescriptor {
-		var interleave descpb.InterleaveDescriptor
-		interleave.Ancestors = make([]descpb.InterleaveDescriptor_Ancestor, len(ancestorTableIDs))
-		for j, ancestorTableID := range ancestorTableIDs {
-			interleave.Ancestors[j] = descpb.InterleaveDescriptor_Ancestor{
-				TableID:         ancestorTableID,
-				IndexID:         1,
-				SharedPrefixLen: 1,
-			}
-		}
-		return interleave
-	}
-
 	tableDesc := descpb.TableDescriptor{
 		ID:      test.tableID,
 		Columns: columns,
@@ -94,7 +79,6 @@ func makeTableDescForTest(test indexKeyTest) (catalog.TableDescriptor, catalog.T
 			ID:                  1,
 			KeyColumnIDs:        primaryColumnIDs,
 			KeyColumnDirections: make([]descpb.IndexDescriptor_Direction, len(primaryColumnIDs)),
-			Interleave:          makeInterleave(1, test.primaryInterleaves),
 		},
 		Indexes: []descpb.IndexDescriptor{{
 			ID:                  2,
@@ -102,7 +86,6 @@ func makeTableDescForTest(test indexKeyTest) (catalog.TableDescriptor, catalog.T
 			KeySuffixColumnIDs:  primaryColumnIDs,
 			Unique:              true,
 			KeyColumnDirections: make([]descpb.IndexDescriptor_Direction, len(secondaryColumnIDs)),
-			Interleave:          makeInterleave(2, test.secondaryInterleaves),
 			Type:                secondaryType,
 		}},
 	}
@@ -144,31 +127,38 @@ func TestIndexKey(t *testing.T) {
 	var a DatumAlloc
 
 	tests := []indexKeyTest{
-		{50, nil, nil,
+		{
+			50,
 			[]tree.Datum{tree.NewDInt(10)},
 			[]tree.Datum{tree.NewDInt(20)},
 		},
-		{50, []descpb.ID{100}, nil,
+		{
+			50,
 			[]tree.Datum{tree.NewDInt(10), tree.NewDInt(11)},
 			[]tree.Datum{tree.NewDInt(20)},
 		},
-		{50, []descpb.ID{100, 200}, nil,
+		{
+			50,
 			[]tree.Datum{tree.NewDInt(10), tree.NewDInt(11), tree.NewDInt(12)},
 			[]tree.Datum{tree.NewDInt(20)},
 		},
-		{50, nil, []descpb.ID{100},
+		{
+			50,
 			[]tree.Datum{tree.NewDInt(10)},
 			[]tree.Datum{tree.NewDInt(20), tree.NewDInt(21)},
 		},
-		{50, []descpb.ID{100}, []descpb.ID{100},
+		{
+			50,
 			[]tree.Datum{tree.NewDInt(10), tree.NewDInt(11)},
 			[]tree.Datum{tree.NewDInt(20), tree.NewDInt(21)},
 		},
-		{50, []descpb.ID{100}, []descpb.ID{200},
+		{
+			50,
 			[]tree.Datum{tree.NewDInt(10), tree.NewDInt(11)},
 			[]tree.Datum{tree.NewDInt(20), tree.NewDInt(21)},
 		},
-		{50, []descpb.ID{100, 200}, []descpb.ID{100, 300},
+		{
+			50,
 			[]tree.Datum{tree.NewDInt(10), tree.NewDInt(11), tree.NewDInt(12)},
 			[]tree.Datum{tree.NewDInt(20), tree.NewDInt(21), tree.NewDInt(22)},
 		},
@@ -177,21 +167,13 @@ func TestIndexKey(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		var t indexKeyTest
 
-		t.primaryInterleaves = make([]descpb.ID, rng.Intn(10))
-		for j := range t.primaryInterleaves {
-			t.primaryInterleaves[j] = descpb.ID(1 + rng.Intn(10))
-		}
-		valuesLen := randutil.RandIntInRange(rng, len(t.primaryInterleaves)+1, len(t.primaryInterleaves)+10)
+		valuesLen := randutil.RandIntInRange(rng, 1, 10)
 		t.primaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.primaryValues {
 			t.primaryValues[j] = randgen.RandDatum(rng, types.Int, false /* nullOk */)
 		}
 
-		t.secondaryInterleaves = make([]descpb.ID, rng.Intn(10))
-		for j := range t.secondaryInterleaves {
-			t.secondaryInterleaves[j] = descpb.ID(1 + rng.Intn(10))
-		}
-		valuesLen = randutil.RandIntInRange(rng, len(t.secondaryInterleaves)+1, len(t.secondaryInterleaves)+10)
+		valuesLen = randutil.RandIntInRange(rng, 1, 10)
 		t.secondaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.secondaryValues {
 			t.secondaryValues[j] = randgen.RandDatum(rng, types.Int, true /* nullOk */)
@@ -373,10 +355,7 @@ func TestInvertedIndexKey(t *testing.T) {
 	runTest := func(value tree.Datum, expectedKeys int, version descpb.IndexDescriptorVersion) {
 		primaryValues := []tree.Datum{tree.NewDInt(10)}
 		secondaryValues := []tree.Datum{value}
-		tableDesc, colMap := makeTableDescForTest(
-			indexKeyTest{50, nil, nil,
-				primaryValues, secondaryValues,
-			})
+		tableDesc, colMap := makeTableDescForTest(indexKeyTest{50, primaryValues, secondaryValues})
 		for _, idx := range tableDesc.PublicNonPrimaryIndexes() {
 			idx.IndexDesc().Version = version
 		}

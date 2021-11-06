@@ -38,17 +38,17 @@ import (
 // (only when set by a user) and are the most specific entry in the normal
 // cluster-default/database/table/subzone config hierarchy.
 //
-// Each non-interleaved index and partition can be mapped to spans in the
-// keyspace. Indexes and range partitions each map to one span, while each list
-// partition maps to one or more spans. Each partition span is contained by some
-// index span and each subpartition span is contained by one of its parent
-// partition's spans. The spans for a given level of a range partitioning
-// (corresponding to one `PARTITION BY` in sql or one `PartitionDescriptor`) are
-// disjoint, but the spans for a given level of a list partitioning may overlap
-// if DEFAULT is used. A list partitioning which includes both (1, DEFAULT) and
-// (1, 2) will overlap with the latter getting precedence in the zone config
-// hierarchy. NB: In a valid PartitionDescriptor, no partitions with the same
-// number of DEFAULTs will overlap (this property is used by
+// Each index and partition can be mapped to spans in the keyspace. Indexes and
+// range partitions each map to one span, while each list partition maps to one
+// or more spans. Each partition span is contained by some index span and each
+// subpartition span is contained by one of its parent partition's spans. The
+// spans for a given level of a range partitioning (corresponding to one
+// `PARTITION BY` in sql or one `PartitionDescriptor`) are disjoint, but the
+// spans for a given level of a list partitioning may overlap if DEFAULT is
+// used. A list partitioning which includes both (1, DEFAULT) and (1, 2) will
+// overlap with the latter getting precedence in the zone config hierarchy. NB:
+// In a valid PartitionDescriptor, no partitions with the same number of
+// DEFAULTs will overlap (this property is used by
 // `indexCoveringsForPartitioning`).
 //
 // These subzone spans are kept denormalized to the relevant `system.zone` row

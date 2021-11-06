@@ -248,7 +248,7 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%DelRange%' OR message LIKE '%sending batch%'
 ----
-batch flow coordinator  DelRange /Table/57/1/5 - /Table/57/1/5/#
+batch flow coordinator  DelRange /Table/57/1/5 - /Table/57/1/6
 dist sender send        r43: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 
 statement ok

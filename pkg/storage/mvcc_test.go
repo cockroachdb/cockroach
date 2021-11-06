@@ -4524,9 +4524,6 @@ func TestFindValidSplitKeys(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const userID = keys.MinUserDescID
-	const interleave1 = userID + 1
-	const interleave2 = userID + 2
-	const interleave3 = userID + 3
 	// Manually creates rows corresponding to the schema:
 	// CREATE TABLE t (id1 STRING, id2 STRING, ... PRIMARY KEY (id1, id2, ...))
 	addTablePrefix := func(prefix roachpb.Key, id uint32, rowVals ...string) roachpb.Key {
@@ -4542,9 +4539,6 @@ func TestFindValidSplitKeys(t *testing.T) {
 	}
 	addColFam := func(rowKey roachpb.Key, colFam uint32) roachpb.Key {
 		return keys.MakeFamilyKey(append([]byte(nil), rowKey...), colFam)
-	}
-	addInterleave := func(rowKey roachpb.Key) roachpb.Key {
-		return encoding.EncodeInterleavedSentinel(rowKey)
 	}
 
 	type testCase struct {
@@ -4766,84 +4760,6 @@ func TestFindValidSplitKeys(t *testing.T) {
 			rangeStart: tablePrefix(userID, "a"),
 			expSplit:   tablePrefix(userID, "a", "b"),
 			expError:   false,
-		},
-		// One large first row with interleaved child rows. Check that we can
-		// split before the first interleaved row.
-		{
-			keys: []roachpb.Key{
-				addColFam(tablePrefix(userID, "a"), 0),
-				addColFam(tablePrefix(userID, "a"), 1),
-				addColFam(tablePrefix(userID, "a"), 2),
-				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"), 0),
-				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"), 1),
-				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave2, "c"), 1),
-			},
-			rangeStart: tablePrefix(userID, "a"),
-			expSplit:   addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
-			expError:   false,
-		},
-		// One large first row with a double interleaved child row. Check that
-		// we can split before the double interleaved row.
-		{
-			keys: []roachpb.Key{
-				addColFam(tablePrefix(userID, "a"), 0),
-				addColFam(tablePrefix(userID, "a"), 1),
-				addColFam(tablePrefix(userID, "a"), 2),
-				addColFam(addTablePrefix(addInterleave(
-					addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
-				), interleave2, "d"), 3),
-			},
-			rangeStart: tablePrefix(userID, "a"),
-			expSplit: addTablePrefix(addInterleave(
-				addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
-			), interleave2, "d"),
-			expError: false,
-		},
-		// Two interleaved rows. Check that we can split between them.
-		{
-			keys: []roachpb.Key{
-				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"), 0),
-				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"), 1),
-				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave2, "c"), 3),
-				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave2, "c"), 4),
-			},
-			rangeStart: addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
-			expSplit:   addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave2, "c"),
-			expError:   false,
-		},
-		// Two small rows with interleaved child rows after the second. Check
-		// that we can split before the first interleaved row.
-		{
-			keys: []roachpb.Key{
-				addColFam(tablePrefix(userID, "a"), 0),
-				addColFam(tablePrefix(userID, "b"), 0),
-				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "b")), interleave1, "b"), 0),
-				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "b")), interleave1, "b"), 1),
-				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "b")), interleave2, "c"), 1),
-			},
-			rangeStart: tablePrefix(userID, "a"),
-			expSplit:   addTablePrefix(addInterleave(tablePrefix(userID, "b")), interleave1, "b"),
-			expError:   false,
-		},
-		// A chain of interleaved rows. Check that we can split them.
-		{
-			keys: []roachpb.Key{
-				addColFam(tablePrefix(userID, "a"), 0),
-				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"), 0),
-				addColFam(addTablePrefix(addInterleave(
-					addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
-				), interleave2, "c"), 0),
-				addColFam(addTablePrefix(addInterleave(
-					addTablePrefix(addInterleave(
-						addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
-					), interleave2, "c"),
-				), interleave3, "d"), 0),
-			},
-			rangeStart: tablePrefix(userID, "a"),
-			expSplit: addTablePrefix(addInterleave(
-				addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
-			), interleave2, "c"),
-			expError: false,
 		},
 	}
 

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -183,11 +182,7 @@ func (op *spanAssemblerNoColFamily) ConsumeBatch(batch coldata.Batch, startIdx, 
 			op.keyBytes += len(span.Key)
 			span.EndKey = make(roachpb.Key, 0, len(op.scratchKey)+1)
 			span.EndKey = append(span.EndKey, op.scratchKey...)
-			// TODO(drewk): change this to use PrefixEnd() when interleaved indexes are
-			// permanently removed. Keep it this way for now to allow testing
-			// against the row engine, even though the vectorized index joiner doesn't
-			// allow interleaved indexes.
-			span.EndKey = encoding.EncodeInterleavedSentinel(span.EndKey)
+			span.EndKey = span.EndKey.PrefixEnd()
 			op.keyBytes += len(span.EndKey)
 			op.spans = append(op.spans, span)
 		}
