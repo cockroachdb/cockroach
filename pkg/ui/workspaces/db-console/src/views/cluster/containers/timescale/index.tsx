@@ -308,7 +308,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
   const setDateRange = ([start, end]: [moment.Moment, moment.Moment]) => {
     const twDuration = moment.duration(moment.utc(end).diff(start));
     const seconds = twDuration.asSeconds();
-    const timeScale = timewindow.findClosestTimeScale(seconds);
+    let timeScale = timewindow.findClosestTimeScale(seconds);
     const timeWindow = {
       ...currentWindow,
       start,
