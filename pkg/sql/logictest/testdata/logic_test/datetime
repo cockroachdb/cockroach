@@ -499,61 +499,61 @@ INSERT INTO ex VALUES
   (51, 'julian',       '4714-11-24 BC',                     0,                null),
   (52, 'julian',       '2016-02-10 19:46:33.306157519',    2457429.823996599, null)
 
-query IBR
-SELECT k, extract(element, input::timestamp) = extract_result, extract(element, input::timestamp) FROM ex ORDER BY k
+query IBBR
+SELECT k, extract(element, input::timestamp) = extract_result, date_part(element, input::timestamp) = extract_result, extract(element, input::timestamp) FROM ex ORDER BY k
 ----
-1  true 2001
-2  true 2016
-3  true 2016
-4  true 2
-5  true 1
-6  true 2
-7  true 3
-8  true 4
-9  true 4
-10 true 2
-11 true 2
-12 true 15
-13 true 1
-14 true 10
-15 true 10
-16 true 10
-17 true 2
-18 true 4
-19 true 100
-20 true 102
-21 true 86401.000001
-22 true 100801.000001
-23 true 9.86904299e+08
-24 true 12
-25 true 19
-26 true 23
-27 true 19
-28 true 23
-29 true 4
-30 true 46
-31 true 46
-32 true 59.234
-33 true 33.306158
-34 true 33.306158
-35 true 59234.567
-36 true 33306.158
-37 true 33306.158
-38 true 5.9345654e+07
-39 true 3.3306158e+07
-40 true 3.3306158e+07
-41 true 2
-42 true 7
-43 true 2008
-44 true 2008
-45 true 200
-46 true -202
-47 true 21
-48 true -1
-49 true 3
-50 true -2
-51 true 0
-52 true 2.4574298239966e+06
+1   true  true  2001
+2   true  true  2016
+3   true  true  2016
+4   true  true  2
+5   true  true  1
+6   true  true  2
+7   true  true  3
+8   true  true  4
+9   true  true  4
+10  true  true  2
+11  true  true  2
+12  true  true  15
+13  true  true  1
+14  true  true  10
+15  true  true  10
+16  true  true  10
+17  true  true  2
+18  true  true  4
+19  true  true  100
+20  true  true  102
+21  true  true  86401.000001
+22  true  true  100801.000001
+23  true  true  9.86904299e+08
+24  true  true  12
+25  true  true  19
+26  true  true  23
+27  true  true  19
+28  true  true  23
+29  true  true  4
+30  true  true  46
+31  true  true  46
+32  true  true  59.234
+33  true  true  33.306158
+34  true  true  33.306158
+35  true  true  59234.567
+36  true  true  33306.158
+37  true  true  33306.158
+38  true  true  5.9345654e+07
+39  true  true  3.3306158e+07
+40  true  true  3.3306158e+07
+41  true  true  2
+42  true  true  7
+43  true  true  2008
+44  true  true  2008
+45  true  true  200
+46  true  true  -202
+47  true  true  21
+48  true  true  -1
+49  true  true  3
+50  true  true  -2
+51  true  true  0
+52  true  true  2.4574298239966e+06
 
 query error extract\(\): unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamp)

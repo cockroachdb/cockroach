@@ -39,6 +39,11 @@ SELECT extract(minute from interval '10:55:01.456')
 ----
 55
 
+query R
+SELECT date_part('minute', interval '10:55:01.456')
+----
+55
+
 # tests various typmods of intervals
 # matches subset of tests in src/test/regress/expected/interval.out
 subtest interval_postgres_duration_type_tests
