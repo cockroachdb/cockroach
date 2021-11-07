@@ -207,30 +207,17 @@ SELECT TIME '05:40:00'::TIMETZ
 0000-01-01 05:40:00 +0300 +0300
 
 statement ok
-SET TIME ZONE 'America/New_York'
+SET TIME ZONE 'Asia/Tokyo'
 
 query T
 SHOW TIME ZONE
 ----
-America/New_York
+Asia/Tokyo
 
 query T
 SELECT TIME '05:40:00'::TIMETZ
 ----
-0000-01-01 05:40:00 -0400 -0400
-
-statement ok
-SET TIME ZONE 'PST8PDT'
-
-query T
-SHOW TIME ZONE
-----
-PST8PDT
-
-query T
-SELECT TIME '05:40:00'::TIMETZ
-----
-0000-01-01 05:40:00 -0700 -0700
+0000-01-01 05:40:00 +0900 +0900
 
 statement ok
 SET TIME ZONE 'zulu'
