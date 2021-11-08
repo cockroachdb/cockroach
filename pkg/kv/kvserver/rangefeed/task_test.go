@@ -224,9 +224,9 @@ func TestInitResolvedTSScan(t *testing.T) {
 		txn *roachpb.Transaction
 	}
 
-	makeEngine := func(enableSeparatedIntents bool) storage.Engine {
+	makeEngine := func() storage.Engine {
 		ctx := context.Background()
-		engine := storage.NewInMemForTesting(enableSeparatedIntents)
+		engine := storage.NewDefaultInMemForTesting()
 		testData := []op{
 			{kv: makeKV("a", "val1", 10)},
 			{kv: makeInline("b", "val2")},
@@ -290,16 +290,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 	}{
 		"legacy intent scanner": {
 			intentScanner: func() (IntentScanner, func()) {
-				engine := makeEngine(true)
-				iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-					UpperBound: endKey.AsRawKey(),
-				})
-				return NewLegacyIntentScanner(iter), func() { engine.Close() }
-			},
-		},
-		"legacy intent scanner with interleaved intents": {
-			intentScanner: func() (IntentScanner, func()) {
-				engine := makeEngine(false)
+				engine := makeEngine()
 				iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 					UpperBound: endKey.AsRawKey(),
 				})
@@ -308,8 +299,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 		},
 		"separated intent scanner": {
 			intentScanner: func() (IntentScanner, func()) {
-				engine := makeEngine(true)
-				require.True(t, engine.IsSeparatedIntentsEnabledForTesting(context.Background()))
+				engine := makeEngine()
 				lowerBound, _ := keys.LockTableSingleKey(startKey.AsRawKey(), nil)
 				upperBound, _ := keys.LockTableSingleKey(endKey.AsRawKey(), nil)
 				iter := engine.NewEngineIterator(storage.IterOptions{

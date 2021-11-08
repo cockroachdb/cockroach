@@ -482,9 +482,6 @@ type Pebble struct {
 	diskSlowCount   int64
 	diskStallCount  int64
 
-	// Copied from testing knobs.
-	disableSeparatedIntents bool
-
 	// Relevant options copied over from pebble.Options.
 	fs            vfs.FS
 	unencryptedFS vfs.FS
@@ -662,21 +659,20 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	}
 
 	p := &Pebble{
-		readOnly:                cfg.Opts.ReadOnly,
-		path:                    cfg.Dir,
-		auxDir:                  auxDir,
-		ballastPath:             ballastPath,
-		ballastSize:             cfg.BallastSize,
-		maxSize:                 cfg.MaxSize,
-		attrs:                   cfg.Attrs,
-		settings:                cfg.Settings,
-		encryption:              env,
-		fileRegistry:            fileRegistry,
-		fs:                      cfg.Opts.FS,
-		unencryptedFS:           unencryptedFS,
-		logger:                  cfg.Opts.Logger,
-		storeIDPebbleLog:        storeIDContainer,
-		disableSeparatedIntents: cfg.DisableSeparatedIntents,
+		readOnly:         cfg.Opts.ReadOnly,
+		path:             cfg.Dir,
+		auxDir:           auxDir,
+		ballastPath:      ballastPath,
+		ballastSize:      cfg.BallastSize,
+		maxSize:          cfg.MaxSize,
+		attrs:            cfg.Attrs,
+		settings:         cfg.Settings,
+		encryption:       env,
+		fileRegistry:     fileRegistry,
+		fs:               cfg.Opts.FS,
+		unencryptedFS:    unencryptedFS,
+		logger:           cfg.Opts.Logger,
+		storeIDPebbleLog: storeIDContainer,
 	}
 	cfg.Opts.EventListener = pebble.TeeEventListener(
 		pebble.MakeLoggingEventListener(pebbleLogger{
@@ -686,7 +682,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		p.makeMetricEventListener(ctx),
 	)
 	p.eventListener = &cfg.Opts.EventListener
-	p.wrappedIntentWriter = wrapIntentWriter(ctx, p, cfg.DisableSeparatedIntents)
+	p.wrappedIntentWriter = wrapIntentWriter(ctx, p)
 
 	// Read the current store cluster version.
 	storeClusterVersion, err := getMinVersion(unencryptedFS, cfg.Dir)
@@ -922,10 +918,10 @@ func (p *Pebble) ClearUnversioned(key roachpb.Key) error {
 // ClearIntent implements the Engine interface.
 func (p *Pebble) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) (int, error) {
-	_, separatedIntentCountDelta, err :=
+) error {
+	_, err :=
 		p.wrappedIntentWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, nil)
-	return separatedIntentCountDelta, err
+	return err
 }
 
 // ClearEngineKey implements the Engine interface.
@@ -1009,17 +1005,10 @@ func (p *Pebble) PutUnversioned(key roachpb.Key, value []byte) error {
 
 // PutIntent implements the Engine interface.
 func (p *Pebble) PutIntent(
-	ctx context.Context,
-	key roachpb.Key,
-	value []byte,
-	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
-	txnUUID uuid.UUID,
-) (int, error) {
-
-	_, separatedIntentCountDelta, err :=
-		p.wrappedIntentWriter.PutIntent(ctx, key, value, state, txnDidNotUpdateMeta, txnUUID, nil)
-	return separatedIntentCountDelta, err
+	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
+) error {
+	_, err := p.wrappedIntentWriter.PutIntent(ctx, key, value, txnUUID, nil)
+	return err
 }
 
 // PutEngineKey implements the Engine interface.
@@ -1033,11 +1022,6 @@ func (p *Pebble) PutEngineKey(key EngineKey, value []byte) error {
 // OverrideTxnDidNotUpdateMetaToFalse implements the Engine interface.
 func (p *Pebble) OverrideTxnDidNotUpdateMetaToFalse(ctx context.Context) bool {
 	return overrideTxnDidNotUpdateMetaToFalse(ctx, p.settings)
-}
-
-// IsSeparatedIntentsEnabledForTesting implements the Engine interface.
-func (p *Pebble) IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool {
-	return !p.disableSeparatedIntents
 }
 
 func (p *Pebble) put(key MVCCKey, value []byte) error {
@@ -1290,7 +1274,7 @@ func (p *Pebble) GetAuxiliaryDir() string {
 func (p *Pebble) NewBatch() Batch {
 	return newPebbleBatch(
 		p.db, p.db.NewIndexedBatch(), false, /* writeOnly */
-		p.disableSeparatedIntents, overrideTxnDidNotUpdateMetaToFalse(context.TODO(), p.settings))
+		overrideTxnDidNotUpdateMetaToFalse(context.TODO(), p.settings))
 }
 
 // NewReadOnly implements the Engine interface.
@@ -1300,7 +1284,7 @@ func (p *Pebble) NewReadOnly() ReadWriter {
 
 // NewUnindexedBatch implements the Engine interface.
 func (p *Pebble) NewUnindexedBatch(writeOnly bool) Batch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly, p.disableSeparatedIntents,
+	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly,
 		overrideTxnDidNotUpdateMetaToFalse(context.TODO(), p.settings))
 }
 
@@ -1772,7 +1756,7 @@ func (p *pebbleReadOnly) ClearUnversioned(key roachpb.Key) error {
 
 func (p *pebbleReadOnly) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) (int, error) {
+) error {
 	panic("not implemented")
 }
 
@@ -1813,13 +1797,8 @@ func (p *pebbleReadOnly) PutUnversioned(key roachpb.Key, value []byte) error {
 }
 
 func (p *pebbleReadOnly) PutIntent(
-	ctx context.Context,
-	key roachpb.Key,
-	value []byte,
-	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
-	txnUUID uuid.UUID,
-) (int, error) {
+	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
+) error {
 	panic("not implemented")
 }
 

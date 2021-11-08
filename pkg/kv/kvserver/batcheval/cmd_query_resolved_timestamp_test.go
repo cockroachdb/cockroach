@@ -35,7 +35,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	db := storage.NewInMemForTesting(true)
+	db := storage.NewDefaultInMemForTesting()
 	defer db.Close()
 
 	makeTS := func(ts int64) hlc.Timestamp {
@@ -217,7 +217,7 @@ func TestQueryResolvedTimestampErrors(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	db := storage.NewInMemForTesting(true)
+	db := storage.NewDefaultInMemForTesting()
 	defer db.Close()
 
 	txnUUID := uuid.FromUint128(uint128.FromInts(0, 12345))
