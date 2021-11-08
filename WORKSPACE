@@ -337,10 +337,10 @@ c_deps()
 # aforementioned PRs.
 http_archive(
     name = "rules_foreign_cc",
-    sha256 = "66ab1d53be0a7292e3838b3042ec51a228dbe901972ae57b4a8a7c4336b39ed7",
-    strip_prefix = "rules_foreign_cc-67211f9083234f51ef1d9c21a791ee93bc538143",
+    sha256 = "45d48c71f1b1eadc33a5ad15bbeca8ce42f9ef5ab5d7ee519fc4991e6a9e93d2",
+    strip_prefix = "cockroachdb-rules_foreign_cc-f1cff45",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_foreign_cc-67211f9083234f51ef1d9c21a791ee93bc538143.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_foreign_cc-master20210730-1-gf1cff45.zip",
     ],
 )
 
