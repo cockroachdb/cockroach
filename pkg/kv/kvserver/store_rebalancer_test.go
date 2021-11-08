@@ -892,14 +892,15 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 		&AllocatorTestingKnobs{AllowLeaseTransfersToReplicasNeedingSnapshots: true},
 	)
 	defer stopper.Stop(context.Background())
-	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
 	storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 	storeMap := storeListToMap(storeList)
 
 	localDesc := *noLocalityStores[0]
 	cfg := TestStoreConfig(nil)
 	cfg.Gossip = g
+	cfg.StorePool = a.storePool
 	s := createTestStoreWithoutStart(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+	gossiputil.NewStoreGossiper(cfg.Gossip).GossipStores(noLocalityStores, t)
 	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
 	rq := newReplicateQueue(s, a)
 	rr := newReplicaRankings()

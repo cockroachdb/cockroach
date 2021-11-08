@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -50,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -100,107 +103,52 @@ func (s *Store) TestSender() kv.Sender {
 	})
 }
 
-// testSenderFactory is an implementation of the
-// client.TxnSenderFactory interface.
-type testSenderFactory struct {
-	store        *Store
-	nonTxnSender *testSender
-}
-
-func (f *testSenderFactory) RootTransactionalSender(
-	txn *roachpb.Transaction, _ roachpb.UserPriority,
-) kv.TxnSender {
-	return kv.NewMockTransactionalSender(
-		func(
-			ctx context.Context, _ *roachpb.Transaction, ba roachpb.BatchRequest,
-		) (*roachpb.BatchResponse, *roachpb.Error) {
-			return f.store.Send(ctx, ba)
-		},
-		txn)
-}
-
-func (f *testSenderFactory) LeafTransactionalSender(tis *roachpb.LeafTxnInputState) kv.TxnSender {
-	return kv.NewMockTransactionalSender(
-		func(
-			ctx context.Context, _ *roachpb.Transaction, ba roachpb.BatchRequest,
-		) (*roachpb.BatchResponse, *roachpb.Error) {
-			return f.store.Send(ctx, ba)
-		},
-		&tis.Txn)
-}
-
-func (f *testSenderFactory) NonTransactionalSender() kv.Sender {
-	if f.nonTxnSender != nil {
-		return f.nonTxnSender
-	}
-	f.nonTxnSender = &testSender{store: f.store}
-	return f.nonTxnSender
-}
-
-func (f *testSenderFactory) setStore(s *Store) {
-	f.store = s
-	if f.nonTxnSender != nil {
-		// monkey-patch an already created Sender, helping with test bootstrapping.
-		f.nonTxnSender.store = s
-	}
-}
-
-// testSender is an implementation of the client.TxnSender interface
-// which passes all requests through to a single store.
-type testSender struct {
-	store *Store
-}
-
-// Send forwards the call to the single store. This is a poor man's
-// version of kv.TxnCoordSender, but it serves the purposes of
-// supporting tests in this package. Transactions are not supported.
-// Since kv/ depends on storage/, we can't get access to a
-// TxnCoordSender from here.
-// TODO(tschottdorf): {kv->storage}.LocalSender
-func (db *testSender) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	if et, ok := ba.GetArg(roachpb.EndTxn); ok {
-		return nil, roachpb.NewErrorf("%s method not supported", et.Method())
-	}
-	// Lookup range and direct request.
-	rs, err := keys.Range(ba.Requests)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-	repl := db.store.LookupReplica(rs.Key)
-	if repl == nil || !repl.Desc().ContainsKeyRange(rs.Key, rs.EndKey) {
-		panic(fmt.Sprintf("didn't find right replica for key: %s", rs.Key))
-	}
-	ba.RangeID = repl.RangeID
-	repDesc, err := repl.GetReplicaDescriptor()
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-	ba.Replica = repDesc
-	br, pErr := db.store.Send(ctx, ba)
-	if br != nil && br.Error != nil {
-		panic(roachpb.ErrorUnexpectedlySet(db.store, br))
-	}
-	if pErr != nil {
-		return nil, pErr
-	}
-	return br, nil
-}
-
 // testStoreOpts affords control over aspects of store creation.
 type testStoreOpts struct {
 	// If createSystemRanges is not set, the store will have a single range. If
 	// set, the store will have all the system ranges that are generally created
 	// for a cluster at boostrap.
 	createSystemRanges bool
+	bootstrapVersion   roachpb.Version // defaults to TestingClusterVersion
 }
+
+func (opts *testStoreOpts) splits() (_kvs []roachpb.KeyValue, _splits []roachpb.RKey) {
+	kvs, splits := bootstrap.MakeMetadataSchema(
+		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+	).GetInitialValues()
+	if !opts.createSystemRanges {
+		return kvs, nil
+	}
+	splits = append(config.StaticSplits(), splits...)
+	sort.Slice(splits, func(i, j int) bool {
+		return splits[i].Less(splits[j])
+	})
+	return kvs, splits
+}
+
+type mockNodeStore struct {
+	desc *roachpb.NodeDescriptor
+}
+
+func (m mockNodeStore) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	return m.desc, nil
+}
+
+type dummyFirstRangeProvider struct {
+	store *Store
+}
+
+func (d dummyFirstRangeProvider) GetFirstRangeDescriptor() (*roachpb.RangeDescriptor, error) {
+	return d.store.GetReplicaIfExists(1).Desc(), nil
+}
+
+func (d dummyFirstRangeProvider) OnFirstRangeChanged(f func(*roachpb.RangeDescriptor)) {}
 
 // createTestStoreWithoutStart creates a test store using an in-memory
 // engine without starting the store. It returns the store, the store
 // clock's manual unix nanos time and a stopper. The caller is
 // responsible for stopping the stopper upon completion.
-// Some fields of ctx are populated by this function.
+// Some fields of cfg are populated by this function.
 func createTestStoreWithoutStart(
 	t testing.TB, stopper *stop.Stopper, opts testStoreOpts, cfg *StoreConfig,
 ) *Store {
@@ -216,8 +164,17 @@ func createTestStoreWithoutStart(
 		Settings:   cfg.Settings,
 	})
 	server := rpc.NewServer(rpcContext) // never started
-	cfg.Gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
-	cfg.StorePool = NewTestStorePool(*cfg)
+
+	// Some tests inject their own Gossip and StorePool, via
+	// createTestAllocatorWithKnobs, at the time of writing
+	// TestChooseLeaseToTransfer and TestNoLeaseTransferToBehindReplicas. This is
+	// generally considered bad and should eventually be refactored away.
+	if cfg.Gossip == nil {
+		cfg.Gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	}
+	if cfg.StorePool == nil {
+		cfg.StorePool = NewTestStorePool(*cfg)
+	}
 	// Many tests using this test harness (as opposed to higher-level
 	// ones like multiTestContext or TestServer) want to micro-manage
 	// replicas and the background queues just get in the way. The
@@ -231,32 +188,57 @@ func createTestStoreWithoutStart(
 	cfg.TestingKnobs.DisableMergeQueue = true
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
+	require.Nil(t, cfg.Transport)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
-	factory := &testSenderFactory{}
-	cfg.DB = kv.NewDB(cfg.AmbientCtx, factory, cfg.Clock, stopper)
-	store := NewStore(context.Background(), *cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
-	factory.setStore(store)
+	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
+	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 
-	require.NoError(t, WriteClusterVersion(context.Background(), eng, clusterversion.TestingClusterVersion))
+	rangeProv := &dummyFirstRangeProvider{}
+	var storeSender struct{ kv.Sender }
+	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
+		AmbientCtx:         cfg.AmbientCtx,
+		Settings:           cfg.Settings,
+		Clock:              cfg.Clock,
+		NodeDescs:          mockNodeStore{desc: nodeDesc},
+		RPCContext:         rpcContext,
+		RPCRetryOptions:    &retry.Options{},
+		NodeDialer:         nodedialer.New(rpcContext, gossip.AddressResolver(cfg.Gossip)), // TODO
+		FirstRangeProvider: rangeProv,
+		TestingKnobs: kvcoord.ClientTestingKnobs{
+			TransportFactory: kvcoord.SenderTransportFactory(cfg.AmbientCtx.Tracer, &storeSender),
+		},
+	})
+
+	txnCoordSenderFactory := kvcoord.NewTxnCoordSenderFactory(kvcoord.TxnCoordSenderFactoryConfig{
+		AmbientCtx:        cfg.AmbientCtx,
+		Settings:          cfg.Settings,
+		Clock:             cfg.Clock,
+		Stopper:           stopper,
+		HeartbeatInterval: -1,
+	}, ds)
+	require.Nil(t, cfg.DB)
+	cfg.DB = kv.NewDB(cfg.AmbientCtx, txnCoordSenderFactory, cfg.Clock, stopper)
+	store := NewStore(context.Background(), *cfg, eng, nodeDesc)
+	storeSender.Sender = store
+
+	storeIdent := roachpb.StoreIdent{NodeID: 1, StoreID: 1}
+	cv := clusterversion.TestingClusterVersion
+	if opts.bootstrapVersion != (roachpb.Version{}) {
+		cv = clusterversion.ClusterVersion{Version: opts.bootstrapVersion}
+	}
+	require.NoError(t, WriteClusterVersion(context.Background(), eng, cv))
 	if err := InitEngine(
-		context.Background(), eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1},
+		context.Background(), eng, storeIdent,
 	); err != nil {
 		t.Fatal(err)
 	}
-	var splits []roachpb.RKey
-	kvs, tableSplits := bootstrap.MakeMetadataSchema(
-		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
-	).GetInitialValues()
-	if opts.createSystemRanges {
-		splits = config.StaticSplits()
-		splits = append(splits, tableSplits...)
-		sort.Slice(splits, func(i, j int) bool {
-			return splits[i].Less(splits[j])
-		})
-	}
+	rangeProv.store = store
+	store.Ident = &storeIdent // would usually be set during Store.Start, but can't call that yet
+	stores.AddStore(store)
+
+	kvs, splits := opts.splits()
 	if err := WriteInitialClusterData(
-		context.Background(), eng, kvs, /* initialValues */
-		clusterversion.TestingBinaryVersion,
+		context.Background(), eng, kvs /* initialValues */, cv.Version,
 		1 /* numStores */, splits, cfg.Clock.PhysicalNow(), cfg.TestingKnobs,
 	); err != nil {
 		t.Fatal(err)
@@ -428,77 +410,31 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// We need a fixed clock to avoid LastUpdateNanos drifting on us.
-	cfg := TestStoreConfig(hlc.NewClock(func() int64 { return 123 }, time.Nanosecond))
-	stopper := stop.NewStopper()
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	cfg := TestStoreConfig(nil)
+	store := createTestStoreWithConfig(t, stopper, testStoreOpts{}, &cfg)
 	defer stopper.Stop(ctx)
-	eng := storage.NewDefaultInMemForTesting()
-	stopper.AddCloser(eng)
-	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
-	factory := &testSenderFactory{}
-	cfg.DB = kv.NewDB(cfg.AmbientCtx, factory, cfg.Clock, stopper)
-	{
-		store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
-		// Can't start as haven't bootstrapped.
-		if err := store.Start(ctx, stopper); err == nil {
-			t.Error("expected failure starting un-bootstrapped store")
-		}
 
-		require.NoError(t, WriteClusterVersion(context.Background(), eng, clusterversion.TestingClusterVersion))
-		// Bootstrap with a fake ident.
-		if err := InitEngine(ctx, eng, testIdent); err != nil {
-			t.Fatalf("error bootstrapping store: %+v", err)
-		}
-
-		// Verify we can read the store ident after a flush.
-		if err := eng.Flush(); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := ReadStoreIdent(ctx, eng); err != nil {
-			t.Fatalf("unable to read store ident: %+v", err)
-		}
-
-		// Bootstrap the system ranges.
-		var splits []roachpb.RKey
-		kvs, tableSplits := bootstrap.MakeMetadataSchema(
-			keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
-		).GetInitialValues()
-		splits = config.StaticSplits()
-		splits = append(splits, tableSplits...)
-		sort.Slice(splits, func(i, j int) bool {
-			return splits[i].Less(splits[j])
-		})
-
-		if err := WriteInitialClusterData(
-			ctx, eng, kvs /* initialValues */, clusterversion.TestingBinaryVersion,
-			1 /* numStores */, splits, cfg.Clock.PhysicalNow(), cfg.TestingKnobs,
-		); err != nil {
-			t.Errorf("failure to create first range: %+v", err)
-		}
+	if _, err := ReadStoreIdent(ctx, store.Engine()); err != nil {
+		t.Fatalf("unable to read store ident: %+v", err)
 	}
 
-	// Now, attempt to initialize a store with a now-bootstrapped range.
-	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
-	if err := store.Start(ctx, stopper); err != nil {
-		t.Fatalf("failure initializing bootstrapped store: %+v", err)
-	}
-
-	for i := 1; i <= store.ReplicaCount(); i++ {
-		r, err := store.GetReplica(roachpb.RangeID(i))
-		if err != nil {
-			t.Fatalf("failure fetching range %d: %+v", i, err)
-		}
-		rs := r.GetMVCCStats()
-
+	store.VisitReplicas(func(repl *Replica) (more bool) {
+		// Stats should agree with recomputation. Hold raftMu to avoid
+		// background activity from creating discrepancies between engine
+		// and in-mem stats.
+		repl.raftMu.Lock()
+		defer repl.raftMu.Unlock()
+		memMS := repl.GetMVCCStats()
 		// Stats should agree with a recomputation.
-		now := r.store.Clock().Now()
-		if ms, err := rditer.ComputeStatsForRange(r.Desc(), eng, now.WallTime); err != nil {
-			t.Errorf("failure computing range's stats: %+v", err)
-		} else if ms != rs {
-			t.Errorf("expected range's stats to agree with recomputation: %s", pretty.Diff(ms, rs))
-		}
-	}
+		now := store.Clock().Now()
+		diskMS, err := rditer.ComputeStatsForRange(repl.Desc(), store.Engine(), now.WallTime)
+		require.NoError(t, err)
+		memMS.AgeTo(diskMS.LastUpdateNanos)
+		require.Equal(t, memMS, diskMS)
+		return true // more
+	})
 }
 
 // TestInitializeEngineErrors verifies bootstrap failure if engine
@@ -1203,25 +1139,13 @@ func TestStoreSendBadRange(t *testing.T) {
 func splitTestRange(store *Store, splitKey roachpb.RKey, t *testing.T) *Replica {
 	ctx := context.Background()
 	repl := store.LookupReplica(splitKey)
-	require.NotNil(t, repl)
-	rangeID, err := store.AllocateRangeID(ctx)
-	require.NoError(t, err)
-	rhsDesc := roachpb.NewRangeDescriptor(
-		rangeID, splitKey, repl.Desc().EndKey, repl.Desc().Replicas())
-	// Minimal amount of work to keep this deprecated machinery working: Write
-	// some required Raft keys.
-	err = stateloader.WriteInitialRangeState(ctx, store.engine, *rhsDesc, roachpb.Version{})
-	require.NoError(t, err)
-	newRng, err := newReplica(ctx, rhsDesc, store, repl.ReplicaID())
-	require.NoError(t, err)
-	newLeftDesc := *repl.Desc()
-	newLeftDesc.EndKey = splitKey
-	err = store.SplitRange(repl.AnnotateCtx(context.Background()), repl, newRng, &roachpb.SplitTrigger{
-		RightDesc: *rhsDesc,
-		LeftDesc:  newLeftDesc,
-	})
-	require.NoError(t, err)
-	return newRng
+	_, err := repl.AdminSplit(ctx, roachpb.AdminSplitRequest{
+		RequestHeader:  roachpb.RequestHeader{Key: splitKey.AsRawKey()},
+		SplitKey:       splitKey.AsRawKey(),
+		ExpirationTime: store.Clock().Now().Add(24*time.Hour.Nanoseconds(), 0),
+	}, "splitTestRange")
+	require.NoError(t, err.GoError())
+	return store.LookupReplica(splitKey)
 }
 
 // TestStoreSendOutOfRange passes a key not contained
