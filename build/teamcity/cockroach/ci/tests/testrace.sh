@@ -4,7 +4,7 @@ set -euo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 
-source "$dir/teamcity-support.sh"  # For $root
+source "$dir/teamcity-support.sh"  # For $root, changed_go_pkgs
 source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 
 tc_start_block "Determine changed packages"

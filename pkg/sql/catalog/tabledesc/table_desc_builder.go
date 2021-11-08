@@ -190,13 +190,19 @@ func maybeFillInDescriptor(
 ) (changes PostDeserializationTableDescriptorChanges, err error) {
 	changes.UpgradedFormatVersion = maybeUpgradeFormatVersion(desc)
 
+	changes.FixedIndexEncodingType = maybeFixPrimaryIndexEncoding(&desc.PrimaryIndex)
 	changes.UpgradedIndexFormatVersion = maybeUpgradePrimaryIndexFormatVersion(desc)
 	for i := range desc.Indexes {
-		changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || maybeUpgradeSecondaryIndexFormatVersion(&desc.Indexes[i])
+		idx := &desc.Indexes[i]
+		isFixed := maybeFixSecondaryIndexEncoding(idx)
+		changes.FixedIndexEncodingType = changes.FixedIndexEncodingType || isFixed
+		isUpgraded := maybeUpgradeSecondaryIndexFormatVersion(idx)
+		changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || isUpgraded
 	}
 	for i := range desc.Mutations {
 		if idx := desc.Mutations[i].GetIndex(); idx != nil {
-			changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || maybeUpgradeSecondaryIndexFormatVersion(idx)
+			isUpgraded := maybeUpgradeSecondaryIndexFormatVersion(idx)
+			changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || isUpgraded
 		}
 	}
 	changes.UpgradedNamespaceName = maybeUpgradeNamespaceName(desc)
@@ -558,5 +564,25 @@ func maybeUpgradeNamespaceName(d *descpb.TableDescriptor) (hasChanged bool) {
 		return false
 	}
 	d.Name = string(catconstants.NamespaceTableName)
+	return true
+}
+
+// maybeFixPrimaryIndexEncoding ensures that the index descriptor for a primary
+// index has the correct encoding type set.
+func maybeFixPrimaryIndexEncoding(idx *descpb.IndexDescriptor) (hasChanged bool) {
+	if idx.EncodingType == descpb.PrimaryIndexEncoding {
+		return false
+	}
+	idx.EncodingType = descpb.PrimaryIndexEncoding
+	return true
+}
+
+// maybeFixPrimaryIndexEncoding ensures that the index descriptor for a
+// secondary index has the correct encoding type set.
+func maybeFixSecondaryIndexEncoding(idx *descpb.IndexDescriptor) (hasChanged bool) {
+	if idx.EncodingType == descpb.SecondaryIndexEncoding {
+		return false
+	}
+	idx.EncodingType = descpb.SecondaryIndexEncoding
 	return true
 }
