@@ -27,6 +27,5 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@org_golang_x_sys//unix",
-        "@org_golang_x_term//:term",
     ],
 )
