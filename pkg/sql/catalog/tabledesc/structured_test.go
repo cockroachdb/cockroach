@@ -400,6 +400,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					KeyColumnIDs:        []descpb.ColumnID{1, 2},
 					KeyColumnNames:      []string{"foo", "bar"},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+					EncodingType:        descpb.PrimaryIndexEncoding,
 					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 				},
 				Indexes: []descpb.IndexDescriptor{
@@ -486,6 +487,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						KeyColumnIDs:        []descpb.ColumnID{2},
 						KeyColumnNames:      []string{"bar"},
 						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						EncodingType:        descpb.PrimaryIndexEncoding,
 						Version:             descpb.EmptyArraysInInvertedIndexesVersion,
 					},
 				},
