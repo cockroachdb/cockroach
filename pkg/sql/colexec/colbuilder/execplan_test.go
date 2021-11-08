@@ -97,12 +97,15 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 	args := &colexecargs.NewColOperatorArgs{
 		Spec: &execinfrapb.ProcessorSpec{
 			Core:        execinfrapb.ProcessorCoreUnion{TableReader: &tr},
 			ResultTypes: []*types.T{types.Int4},
 		},
 		StreamingMemAccount: &streamingMemAcc,
+		MonitorRegistry:     &monitorRegistry,
 	}
 	r1, err := NewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
@@ -117,6 +120,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 		},
 		Inputs:              []colexecargs.OpWithMetaInfo{{Root: r1.Root}},
 		StreamingMemAccount: &streamingMemAcc,
+		MonitorRegistry:     &monitorRegistry,
 	}
 	r, err := NewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)

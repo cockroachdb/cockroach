@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -1671,10 +1670,8 @@ func TestMergeJoiner(t *testing.T) {
 	}
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
-	var (
-		accounts []*mon.BoundAccount
-		monitors []*mon.BytesMonitor
-	)
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 	for _, tc := range getMJTestCases() {
 		for _, tc := range tc.mutateTypes() {
 			tc.init()
@@ -1708,24 +1705,17 @@ func TestMergeJoiner(t *testing.T) {
 							StreamingMemAccount: testMemAcc,
 							DiskQueueCfg:        queueCfg,
 							FDSemaphore:         colexecop.NewTestingSemaphore(mjFDLimit),
+							MonitorRegistry:     &monitorRegistry,
 						}
 						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
 						result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 						if err != nil {
 							return nil, err
 						}
-						accounts = append(accounts, result.OpAccounts...)
-						monitors = append(monitors, result.OpMonitors...)
 						return result.Root, nil
 					})
 			}
 		}
-	}
-	for _, acc := range accounts {
-		acc.Close(ctx)
-	}
-	for _, mon := range monitors {
-		mon.Stop(ctx)
 	}
 }
 
