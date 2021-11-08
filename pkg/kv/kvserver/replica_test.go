@@ -1182,20 +1182,23 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	select {
-	case <-ch:
-	case <-time.After(testutils.DefaultSucceedsSoonDuration):
-		t.Fatalf("no SystemConfig gossiped after lease")
-	}
-	sysCfg := tc.gossip.GetSystemConfig()
-	var found bool
-	for _, cur := range sysCfg.Values {
-		if key.Equal(cur.Key) {
-			found = true
-			break
+	testutils.SucceedsSoon(t, func() error {
+		sysCfg := tc.gossip.GetSystemConfig()
+		if sysCfg == nil {
+			return errors.Errorf("no system config yet")
 		}
-	}
-	require.True(t, found, "key %s not found in SystemConfig")
+		var found bool
+		for _, cur := range sysCfg.Values {
+			if key.Equal(cur.Key) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return errors.Errorf("key %s not found in SystemConfig", key)
+		}
+		return nil
+	})
 }
 
 // TestReplicaTSCacheLowWaterOnLease verifies that the low water mark
