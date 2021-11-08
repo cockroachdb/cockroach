@@ -798,10 +798,12 @@ type RaftMessageHandlerInterceptor struct {
 }
 
 func (mh RaftMessageHandlerInterceptor) HandleSnapshot(
-	header *kvserver.SnapshotRequest_Header, respStream kvserver.SnapshotResponseStream,
+	ctx context.Context,
+	header *kvserver.SnapshotRequest_Header,
+	respStream kvserver.SnapshotResponseStream,
 ) error {
 	mh.handleSnapshotFilter(header)
-	return mh.RaftMessageHandler.HandleSnapshot(header, respStream)
+	return mh.RaftMessageHandler.HandleSnapshot(ctx, header, respStream)
 }
 
 // TestStoreEmptyRangeSnapshotSize tests that the snapshot request header for a
