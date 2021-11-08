@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/marusama/semaphore"
 	"github.com/stretchr/testify/require"
@@ -52,11 +51,9 @@ func TestExternalHashAggregator(t *testing.T) {
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 
-	var (
-		accounts []*mon.BoundAccount
-		monitors []*mon.BytesMonitor
-	)
 	rng, _ := randutil.NewTestRand()
 	numForcedRepartitions := rng.Intn(5)
 	for _, cfg := range []struct {
@@ -131,7 +128,7 @@ func TestExternalHashAggregator(t *testing.T) {
 			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 				sem := colexecop.NewTestingSemaphore(ehaNumRequiredFDs)
 				semsToCheck = append(semsToCheck, sem)
-				op, accs, mons, closers, err := createExternalHashAggregator(
+				op, closers, err := createExternalHashAggregator(
 					ctx, flowCtx, &colexecagg.NewAggregatorArgs{
 						Allocator:      testAllocator,
 						MemAccount:     testMemAcc,
@@ -143,10 +140,8 @@ func TestExternalHashAggregator(t *testing.T) {
 						ConstArguments: constArguments,
 						OutputTypes:    outputTypes,
 					},
-					queueCfg, sem, numForcedRepartitions,
+					queueCfg, sem, numForcedRepartitions, &monitorRegistry,
 				)
-				accounts = append(accounts, accs...)
-				monitors = append(monitors, mons...)
 				require.Equal(t, numExpectedClosers, len(closers))
 				if !cfg.diskSpillingEnabled {
 					// Sanity check that indeed only the in-memory hash
@@ -160,12 +155,6 @@ func TestExternalHashAggregator(t *testing.T) {
 				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 			}
 		}
-	}
-	for _, acc := range accounts {
-		acc.Close(ctx)
-	}
-	for _, mon := range monitors {
-		mon.Stop(ctx)
 	}
 }
 
@@ -183,13 +172,11 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 		},
 		DiskMonitor: testDiskMonitor,
 	}
-	var (
-		memAccounts []*mon.BoundAccount
-		memMonitors []*mon.BytesMonitor
-	)
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 
 	aggFn := execinfrapb.Min
 	numRows := []int{coldata.BatchSize(), 64 * coldata.BatchSize(), 4096 * coldata.BatchSize()}
@@ -205,15 +192,11 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 				benchmarkAggregateFunction(
 					b, aggType{
 						new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
-							op, accs, mons, _, err := createExternalHashAggregator(
-								ctx, flowCtx, args, queueCfg,
-								&colexecop.TestingSemaphore{}, 0, /* numForcedRepartitions */
+							op, _, err := createExternalHashAggregator(
+								ctx, flowCtx, args, queueCfg, &colexecop.TestingSemaphore{},
+								0 /* numForcedRepartitions */, &monitorRegistry,
 							)
-							if err != nil {
-								b.Fatal(err)
-							}
-							memAccounts = append(memAccounts, accs...)
-							memMonitors = append(memMonitors, mons...)
+							require.NoError(b, err)
 							// The hash-based partitioner is not a
 							// ResettableOperator, so in order to not change the
 							// signatures of the aggregator constructors, we
@@ -229,19 +212,10 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 			}
 		}
 	}
-
-	for _, account := range memAccounts {
-		account.Close(ctx)
-	}
-	for _, monitor := range memMonitors {
-		monitor.Stop(ctx)
-	}
 }
 
 // createExternalHashAggregator is a helper function that instantiates a
-// disk-backed hash aggregator. It returns an operator and an error as well as
-// memory monitors and memory accounts that will need to be closed once the
-// caller is done with the operator.
+// disk-backed hash aggregator.
 func createExternalHashAggregator(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -249,7 +223,8 @@ func createExternalHashAggregator(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
 	numForcedRepartitions int,
-) (colexecop.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecop.Closer, error) {
+	monitorRegistry *colexecargs.MonitorRegistry,
+) (colexecop.Operator, []colexecop.Closer, error) {
 	spec := &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: newAggArgs.InputTypes}},
 		Core: execinfrapb.ProcessorCoreUnion{
@@ -264,8 +239,9 @@ func createExternalHashAggregator(
 		StreamingMemAccount: testMemAcc,
 		DiskQueueCfg:        diskQueueCfg,
 		FDSemaphore:         testingSemaphore,
+		MonitorRegistry:     monitorRegistry,
 	}
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-	return result.Root, result.OpAccounts, result.OpMonitors, result.ToClose, err
+	return result.Root, result.ToClose, err
 }

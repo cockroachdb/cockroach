@@ -12,7 +12,6 @@ package colbuilder
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"strings"
 
@@ -42,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -370,7 +368,7 @@ func (r opResult) createDiskBackedSort(
 		if useStreamingMemAccountForBuffering {
 			topKSorterMemAccount = streamingMemAccount
 		} else {
-			topKSorterMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
+			topKSorterMemAccount, sorterMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
 				ctx, flowCtx, spoolMemLimit, opNamePrefix+"topk-sort", processorID,
 			)
 		}
@@ -385,7 +383,7 @@ func (r opResult) createDiskBackedSort(
 		if useStreamingMemAccountForBuffering {
 			sortChunksMemAccount = streamingMemAccount
 		} else {
-			sortChunksMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
+			sortChunksMemAccount, sorterMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
 				ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-chunks", processorID,
 			)
 		}
@@ -399,7 +397,7 @@ func (r opResult) createDiskBackedSort(
 		if useStreamingMemAccountForBuffering {
 			sorterMemAccount = streamingMemAccount
 		} else {
-			sorterMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
+			sorterMemAccount, sorterMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
 				ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-all", processorID,
 			)
 		}
@@ -429,18 +427,18 @@ func (r opResult) createDiskBackedSort(
 			// sort itself is responsible for making sure that we stay within
 			// the memory limit.
 			sortUnlimitedAllocator := colmem.NewAllocator(
-				ctx, r.createUnlimitedMemAccount(
+				ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(
 					ctx, flowCtx, opName+"-sort", processorID,
 				), factory)
 			mergeUnlimitedAllocator := colmem.NewAllocator(
-				ctx, r.createUnlimitedMemAccount(
+				ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(
 					ctx, flowCtx, opName+"-merge", processorID,
 				), factory)
 			outputUnlimitedAllocator := colmem.NewAllocator(
-				ctx, r.createUnlimitedMemAccount(
+				ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(
 					ctx, flowCtx, opName+"-output", processorID,
 				), factory)
-			diskAccount := r.createDiskAccount(ctx, flowCtx, opName, processorID)
+			diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, processorID)
 			es := colexec.NewExternalSorter(
 				sortUnlimitedAllocator,
 				mergeUnlimitedAllocator,
@@ -659,28 +657,6 @@ func NewColOperator(
 ) (_ *colexecargs.NewColOperatorResult, err error) {
 	result := opResult{NewColOperatorResult: colexecargs.GetNewColOperatorResult()}
 	r := result.NewColOperatorResult
-	// Make sure that we clean up memory monitoring infrastructure in case of an
-	// error or a panic.
-	defer func() {
-		returnedErr := err
-		panicErr := recover()
-		if returnedErr != nil || panicErr != nil {
-			for _, acc := range result.OpAccounts {
-				acc.Close(ctx)
-			}
-			result.OpAccounts = result.OpAccounts[:0]
-			for _, mon := range result.OpMonitors {
-				mon.Stop(ctx)
-			}
-			result.OpMonitors = result.OpMonitors[:0]
-			if returnedErr != nil {
-				log.VEventf(ctx, 1, "vectorized planning failed: %v", returnedErr)
-			}
-		}
-		if panicErr != nil {
-			colexecerror.InternalError(logcrash.PanicAsError(0, panicErr))
-		}
-	}()
 	spec := args.Spec
 	inputs := args.Inputs
 	evalCtx := flowCtx.NewEvalCtx()
@@ -694,6 +670,9 @@ func NewColOperator(
 	if args.ExprHelper == nil {
 		args.ExprHelper = colexecargs.NewExprHelper()
 		args.ExprHelper.SemaCtx = flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
+	}
+	if args.MonitorRegistry == nil {
+		args.MonitorRegistry = &colexecargs.MonitorRegistry{}
 	}
 
 	core := &spec.Core
@@ -746,10 +725,10 @@ func NewColOperator(
 			// be able to precisely track the size of its output batch. This
 			// memory account is "streaming" in its nature, so we create an
 			// unlimited one.
-			cFetcherMemAcc := result.createUnlimitedMemAccount(
+			cFetcherMemAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
 				ctx, flowCtx, "cfetcher" /* opName */, spec.ProcessorID,
 			)
-			kvFetcherMemAcc := result.createUnlimitedMemAccount(
+			kvFetcherMemAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
 				ctx, flowCtx, "kvfetcher" /* opName */, spec.ProcessorID,
 			)
 			estimatedRowCount := spec.EstimatedRowCount
@@ -773,10 +752,10 @@ func NewColOperator(
 			// be able to precisely track the size of its output batch. This
 			// memory account is "streaming" in its nature, so we create an
 			// unlimited one.
-			cFetcherMemAcc := result.createUnlimitedMemAccount(
+			cFetcherMemAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
 				ctx, flowCtx, "cfetcher" /* opName */, spec.ProcessorID,
 			)
-			kvFetcherMemAcc := result.createUnlimitedMemAccount(
+			kvFetcherMemAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
 				ctx, flowCtx, "kvfetcher" /* opName */, spec.ProcessorID,
 			)
 			inputTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
@@ -857,7 +836,7 @@ func NewColOperator(
 				opName := "hash-aggregator"
 				outputUnlimitedAllocator := colmem.NewAllocator(
 					ctx,
-					result.createUnlimitedMemAccount(ctx, flowCtx, opName+"-output", spec.ProcessorID),
+					args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName+"-output", spec.ProcessorID),
 					factory,
 				)
 				// We have separate unit tests that instantiate the in-memory
@@ -869,7 +848,7 @@ func NewColOperator(
 					// The disk spilling is disabled by the cluster setting, so
 					// we give an unlimited memory account to the in-memory
 					// hash aggregator and don't set up the disk spiller.
-					hashAggregatorUnlimitedMemAccount := result.createUnlimitedMemAccount(
+					hashAggregatorUnlimitedMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(
 						ctx, flowCtx, opName, spec.ProcessorID,
 					)
 					newAggArgs.Allocator = colmem.NewAllocator(
@@ -892,14 +871,14 @@ func NewColOperator(
 					// We will give 20% of the hash aggregation budget to the
 					// output batch.
 					maxOutputBatchMemSize := totalMemLimit / 10
-					hashAggregatorMemAccount, hashAggregatorMemMonitorName := result.createMemAccountForSpillStrategyWithLimit(
+					hashAggregatorMemAccount, hashAggregatorMemMonitorName := args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
 						ctx, flowCtx, totalMemLimit/2-maxOutputBatchMemSize, opName, spec.ProcessorID,
 					)
 					spillingQueueMemMonitorName := hashAggregatorMemMonitorName + "-spilling-queue"
 					// We need to create a separate memory account for the
 					// spilling queue because it looks at how much memory it has
 					// already used in order to decide when to spill to disk.
-					spillingQueueMemAccount := result.createUnlimitedMemAccount(
+					spillingQueueMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(
 						ctx, flowCtx, spillingQueueMemMonitorName, spec.ProcessorID,
 					)
 					spillingQueueCfg := args.DiskQueueCfg
@@ -915,13 +894,13 @@ func NewColOperator(
 							MemoryLimit:        totalMemLimit / 2,
 							DiskQueueCfg:       spillingQueueCfg,
 							FDSemaphore:        args.FDSemaphore,
-							DiskAcc:            result.createDiskAccount(ctx, flowCtx, spillingQueueMemMonitorName, spec.ProcessorID),
+							DiskAcc:            args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, spillingQueueMemMonitorName, spec.ProcessorID),
 						},
 						outputUnlimitedAllocator,
 						maxOutputBatchMemSize,
 					)
 					ehaOpName := "external-hash-aggregator"
-					ehaMemAccount := result.createUnlimitedMemAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID)
+					ehaMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID)
 					// Note that we will use an unlimited memory account here
 					// even for the in-memory hash aggregator since it is easier
 					// to do so than to try to replace the memory account if the
@@ -946,7 +925,7 @@ func NewColOperator(
 								args,
 								&newAggArgs,
 								result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehaOpName, factory),
-								result.createDiskAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID),
+								args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID),
 								// Note that here we can use the same allocator
 								// object as we passed to the in-memory hash
 								// aggregator because only one (either in-memory
@@ -983,7 +962,7 @@ func NewColOperator(
 				// distinct operators, so we don't need to look at
 				// args.TestingKnobs.DiskSpillingDisabled and always instantiate
 				// a disk-backed one here.
-				distinctMemAccount, distinctMemMonitorName := result.createMemAccountForSpillStrategy(
+				distinctMemAccount, distinctMemMonitorName := args.MonitorRegistry.CreateMemAccountForSpillStrategy(
 					ctx, flowCtx, "distinct" /* opName */, spec.ProcessorID,
 				)
 				// TODO(yuzefovich): we have an implementation of partially
@@ -996,13 +975,13 @@ func NewColOperator(
 					core.Distinct.NullsAreDistinct, core.Distinct.ErrorOnDup,
 				)
 				edOpName := "external-distinct"
-				diskAccount := result.createDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID)
+				diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID)
 				result.Root = colexec.NewOneInputDiskSpiller(
 					inputs[0].Root, inMemoryUnorderedDistinct.(colexecop.BufferingInMemoryOperator),
 					distinctMemMonitorName,
 					func(input colexecop.Operator) colexecop.Operator {
 						unlimitedAllocator := colmem.NewAllocator(
-							ctx, result.createUnlimitedMemAccount(ctx, flowCtx, edOpName, spec.ProcessorID), factory,
+							ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, edOpName, spec.ProcessorID), factory,
 						)
 						return colexec.NewExternalDistinct(
 							unlimitedAllocator,
@@ -1042,8 +1021,8 @@ func NewColOperator(
 				// We are performing a cross-join, so we need to plan a
 				// specialized operator.
 				opName := "cross-joiner"
-				crossJoinerMemAccount := result.createUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID)
-				crossJoinerDiskAcc := result.createDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
+				crossJoinerMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID)
+				crossJoinerDiskAcc := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 				unlimitedAllocator := colmem.NewAllocator(ctx, crossJoinerMemAccount, factory)
 				result.Root = colexecjoin.NewCrossJoiner(
 					unlimitedAllocator,
@@ -1065,11 +1044,11 @@ func NewColOperator(
 					hashJoinerUnlimitedAllocator = streamingAllocator
 				} else {
 					opName := "hash-joiner"
-					hashJoinerMemAccount, hashJoinerMemMonitorName = result.createMemAccountForSpillStrategy(
+					hashJoinerMemAccount, hashJoinerMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategy(
 						ctx, flowCtx, opName, spec.ProcessorID,
 					)
 					hashJoinerUnlimitedAllocator = colmem.NewAllocator(
-						ctx, result.createUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+						ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
 					)
 				}
 				hjSpec := colexecjoin.MakeHashJoinerSpec(
@@ -1093,13 +1072,13 @@ func NewColOperator(
 					result.Root = inMemoryHashJoiner
 				} else {
 					opName := "external-hash-joiner"
-					diskAccount := result.createDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
+					diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 					result.Root = colexec.NewTwoInputDiskSpiller(
 						inputs[0].Root, inputs[1].Root, inMemoryHashJoiner.(colexecop.BufferingInMemoryOperator),
 						hashJoinerMemMonitorName,
 						func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
 							unlimitedAllocator := colmem.NewAllocator(
-								ctx, result.createUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+								ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
 							)
 							ehj := colexec.NewExternalHashJoiner(
 								unlimitedAllocator,
@@ -1155,10 +1134,10 @@ func NewColOperator(
 			// joiner itself is responsible for making sure that we stay within
 			// the memory limit, and it will fall back to disk if necessary.
 			unlimitedAllocator := colmem.NewAllocator(
-				ctx, result.createUnlimitedMemAccount(
+				ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(
 					ctx, flowCtx, opName, spec.ProcessorID,
 				), factory)
-			diskAccount := result.createDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
+			diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 			mj := colexecjoin.NewMergeJoinOp(
 				unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx),
 				args.DiskQueueCfg, args.FDSemaphore,
@@ -1310,42 +1289,56 @@ func NewColOperator(
 					case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
 						opName := opNamePrefix + "relative-rank"
 						result.finishBufferedWindowerArgs(
-							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, false /* needsBuffer */)
+							ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+							spec.ProcessorID, factory, false, /* needsBuffer */
+						)
 						result.Root, err = colexecwindow.NewRelativeRankOperator(
 							windowArgs, windowFn, wf.Ordering.Columns)
 					case execinfrapb.WindowerSpec_NTILE:
 						opName := opNamePrefix + "ntile"
 						result.finishBufferedWindowerArgs(
-							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, false /* needsBuffer */)
+							ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+							spec.ProcessorID, factory, false, /* needsBuffer */
+						)
 						result.Root = colexecwindow.NewNTileOperator(windowArgs, argIdxs[0])
 					case execinfrapb.WindowerSpec_LAG:
 						opName := opNamePrefix + "lag"
 						result.finishBufferedWindowerArgs(
-							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
+							ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+							spec.ProcessorID, factory, true, /* needsBuffer */
+						)
 						result.Root, err = colexecwindow.NewLagOperator(
 							windowArgs, argIdxs[0], argIdxs[1], argIdxs[2])
 					case execinfrapb.WindowerSpec_LEAD:
 						opName := opNamePrefix + "lead"
 						result.finishBufferedWindowerArgs(
-							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
+							ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+							spec.ProcessorID, factory, true, /* needsBuffer */
+						)
 						result.Root, err = colexecwindow.NewLeadOperator(
 							windowArgs, argIdxs[0], argIdxs[1], argIdxs[2])
 					case execinfrapb.WindowerSpec_FIRST_VALUE:
 						opName := opNamePrefix + "first_value"
 						result.finishBufferedWindowerArgs(
-							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
+							ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+							spec.ProcessorID, factory, true, /* needsBuffer */
+						)
 						result.Root, err = colexecwindow.NewFirstValueOperator(
 							windowArgs, wf.Frame, &wf.Ordering, argIdxs)
 					case execinfrapb.WindowerSpec_LAST_VALUE:
 						opName := opNamePrefix + "last_value"
 						result.finishBufferedWindowerArgs(
-							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
+							ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+							spec.ProcessorID, factory, true, /* needsBuffer */
+						)
 						result.Root, err = colexecwindow.NewLastValueOperator(
 							windowArgs, wf.Frame, &wf.Ordering, argIdxs)
 					case execinfrapb.WindowerSpec_NTH_VALUE:
 						opName := opNamePrefix + "nth_value"
 						result.finishBufferedWindowerArgs(
-							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
+							ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+							spec.ProcessorID, factory, true, /* needsBuffer */
+						)
 						result.Root, err = colexecwindow.NewNthValueOperator(
 							windowArgs, wf.Frame, &wf.Ordering, argIdxs)
 					default:
@@ -1355,7 +1348,9 @@ func NewColOperator(
 					// This is an aggregate window function.
 					opName := opNamePrefix + strings.ToLower(wf.Func.AggregateFunc.String())
 					result.finishBufferedWindowerArgs(
-						ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
+						ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+						spec.ProcessorID, factory, true, /* needsBuffer */
+					)
 					aggType := *wf.Func.AggregateFunc
 					switch *wf.Func.AggregateFunc {
 					case execinfrapb.CountRows:
@@ -1527,7 +1522,7 @@ func NewColOperator(
 			r.Root = colexec.NewInvariantsChecker(r.Root)
 		}
 		// Also verify planning assumptions.
-		r.AssertInvariants()
+		args.MonitorRegistry.AssertInvariants()
 	}
 	return r, err
 }
@@ -1647,89 +1642,6 @@ func (r *postProcessResult) planPostProcessSpec(
 	return nil
 }
 
-// getMemMonitorName returns a unique (for this opResult) memory monitor name.
-func (r opResult) getMemMonitorName(opName string, processorID int32, suffix string) string {
-	return fmt.Sprintf("%s-%d-%s-%d", opName, processorID, suffix, len(r.OpMonitors))
-}
-
-// createMemAccountForSpillStrategy instantiates a memory monitor and a memory
-// account to be used with a buffering Operator that can fall back to disk.
-// The default memory limit is used, if flowCtx.Cfg.ForceDiskSpill is used, this
-// will be 1. The receiver is updated to have references to both objects. Memory
-// monitor name is also returned.
-func (r opResult) createMemAccountForSpillStrategy(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, opName string, processorID int32,
-) (*mon.BoundAccount, string) {
-	monitorName := r.getMemMonitorName(opName, processorID, "limited" /* suffix */)
-	bufferingOpMemMonitor := execinfra.NewLimitedMonitor(
-		ctx, flowCtx.EvalCtx.Mon, flowCtx, monitorName,
-	)
-	r.OpMonitors = append(r.OpMonitors, bufferingOpMemMonitor)
-	bufferingMemAccount := bufferingOpMemMonitor.MakeBoundAccount()
-	r.OpAccounts = append(r.OpAccounts, &bufferingMemAccount)
-	return &bufferingMemAccount, monitorName
-}
-
-// createMemAccountForSpillStrategyWithLimit is the same as
-// createMemAccountForSpillStrategy except that it takes in a custom limit
-// instead of using the number obtained via execinfra.GetWorkMemLimit. Memory
-// monitor name is also returned.
-func (r opResult) createMemAccountForSpillStrategyWithLimit(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, limit int64, opName string, processorID int32,
-) (*mon.BoundAccount, string) {
-	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
-		limit = 1
-	}
-	monitorName := r.getMemMonitorName(opName, processorID, "limited" /* suffix */)
-	bufferingOpMemMonitor := mon.NewMonitorInheritWithLimit(monitorName, limit, flowCtx.EvalCtx.Mon)
-	bufferingOpMemMonitor.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
-	r.OpMonitors = append(r.OpMonitors, bufferingOpMemMonitor)
-	bufferingMemAccount := bufferingOpMemMonitor.MakeBoundAccount()
-	r.OpAccounts = append(r.OpAccounts, &bufferingMemAccount)
-	return &bufferingMemAccount, monitorName
-}
-
-// createUnlimitedMemAccount instantiates an unlimited memory monitor
-// and a memory account to be used with a buffering disk-backed Operator (or in
-// special circumstances in place of a streaming account when the precise memory
-// usage is needed by an operator). The receiver is updated to have references
-// to both objects. Note that the returned account is only "unlimited" in that
-// it does not have a hard limit that it enforces, but a limit might be enforced
-// by a root monitor.
-//
-// Note that the memory monitor name is not returned (unlike above) because no
-// caller actually needs it.
-func (r opResult) createUnlimitedMemAccount(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, opName string, processorID int32,
-) *mon.BoundAccount {
-	monitorName := r.getMemMonitorName(opName, processorID, "unlimited" /* suffix */)
-	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
-		ctx, flowCtx.EvalCtx.Mon, monitorName,
-	)
-	r.OpMonitors = append(r.OpMonitors, bufferingOpUnlimitedMemMonitor)
-	bufferingMemAccount := bufferingOpUnlimitedMemMonitor.MakeBoundAccount()
-	r.OpAccounts = append(r.OpAccounts, &bufferingMemAccount)
-	return &bufferingMemAccount
-}
-
-// createDiskAccount instantiates an unlimited disk monitor and a disk account
-// to be used for disk spilling infrastructure in vectorized engine.
-// TODO(azhng): consolidates all allocation monitors/account manage into one
-// place after branch cut for 20.1.
-//
-// Note that the memory monitor name is not returned (unlike above) because no
-// caller actually needs it.
-func (r opResult) createDiskAccount(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, opName string, processorID int32,
-) *mon.BoundAccount {
-	monitorName := r.getMemMonitorName(opName, processorID, "disk" /* suffix */)
-	opDiskMonitor := execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, monitorName)
-	r.OpMonitors = append(r.OpMonitors, opDiskMonitor)
-	opDiskAccount := opDiskMonitor.MakeBoundAccount()
-	r.OpAccounts = append(r.OpAccounts, &opDiskAccount)
-	return &opDiskAccount
-}
-
 type postProcessResult struct {
 	Op          colexecop.Operator
 	ColumnTypes []*types.T
@@ -1744,17 +1656,18 @@ func (r opResult) updateWithPostProcessResult(ppr postProcessResult) {
 func (r opResult) finishBufferedWindowerArgs(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
+	monitorRegistry *colexecargs.MonitorRegistry,
 	args *colexecwindow.WindowArgs,
 	opName string,
 	processorID int32,
 	factory coldata.ColumnFactory,
 	needsBuffer bool,
 ) {
-	args.DiskAcc = r.createDiskAccount(ctx, flowCtx, opName, processorID)
-	mainAcc := r.createUnlimitedMemAccount(ctx, flowCtx, opName, processorID)
+	args.DiskAcc = monitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, processorID)
+	mainAcc := monitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, processorID)
 	args.MainAllocator = colmem.NewAllocator(ctx, mainAcc, factory)
 	if needsBuffer {
-		bufferAcc := r.createUnlimitedMemAccount(ctx, flowCtx, opName, processorID)
+		bufferAcc := monitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, processorID)
 		args.BufferAllocator = colmem.NewAllocator(ctx, bufferAcc, factory)
 	}
 }

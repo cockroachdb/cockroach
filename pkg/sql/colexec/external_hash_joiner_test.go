@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/marusama/semaphore"
 	"github.com/stretchr/testify/require"
@@ -53,11 +52,9 @@ func TestExternalHashJoiner(t *testing.T) {
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 
-	var (
-		accounts []*mon.BoundAccount
-		monitors []*mon.BytesMonitor
-	)
 	rng, _ := randutil.NewTestRand()
 	numForcedRepartitions := rng.Intn(5)
 	// Test the case in which the default memory is used as well as the case in
@@ -88,17 +85,16 @@ func TestExternalHashJoiner(t *testing.T) {
 					//  conditionally explicitly call Close() on the hash joiner
 					//  (through result.ToClose) in cases where it is known the sorter
 					//  will not be drained.
-					hjOp, newAccounts, newMonitors, closers, err := createDiskBackedHashJoiner(
+					hjOp, closers, err := createDiskBackedHashJoiner(
 						ctx, flowCtx, spec, sources, func() {}, queueCfg,
 						numForcedRepartitions, delegateFDAcquisitions, sem,
+						&monitorRegistry,
 					)
 					// Expect three closers. These are the external hash joiner, and
 					// one external sorter for each input.
 					// TODO(asubiotto): Explicitly Close when testing.T is passed into
 					//  this constructor and we do a substring match.
 					require.Equal(t, 3, len(closers))
-					accounts = append(accounts, newAccounts...)
-					monitors = append(monitors, newMonitors...)
 					return hjOp, err
 				})
 				for i, sem := range semsToCheck {
@@ -107,12 +103,6 @@ func TestExternalHashJoiner(t *testing.T) {
 				tc.skipAllNullsInjection = oldSkipAllNullsInjection
 			}
 		}
-	}
-	for _, acc := range accounts {
-		acc.Close(ctx)
-	}
-	for _, mon := range monitors {
-		mon.Stop(ctx)
 	}
 }
 
@@ -158,26 +148,20 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	var spilled bool
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 	sem := colexecop.NewTestingSemaphore(externalHJMinPartitions)
 	// Ignore closers since the sorter should close itself when it is drained of
 	// all tuples. We assert this by checking that the semaphore reports a count
 	// of 0.
-	hj, accounts, monitors, _, err := createDiskBackedHashJoiner(
+	hj, _, err := createDiskBackedHashJoiner(
 		ctx, flowCtx, spec, []colexecop.Operator{leftSource, rightSource},
 		func() { spilled = true }, queueCfg,
 		// Force a repartition so that the recursive repartitioning always
 		// occurs.
 		1, /* numForcedRepartitions */
-		true /* delegateFDAcquisitions */, sem,
+		true /* delegateFDAcquisitions */, sem, &monitorRegistry,
 	)
-	defer func() {
-		for _, acc := range accounts {
-			acc.Close(ctx)
-		}
-		for _, mon := range monitors {
-			mon.Stop(ctx)
-		}
-	}()
 	require.NoError(t, err)
 	hj.Init(ctx)
 	// We have a full cross-product, so we should get the number of tuples
@@ -225,12 +209,11 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 		sourceTypes[colIdx] = types.Int
 	}
 
-	var (
-		memAccounts []*mon.BoundAccount
-		memMonitors []*mon.BytesMonitor
-	)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
+
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		for _, nRows := range []int{1, 1 << 4, 1 << 8, 1 << 12, 1 << 16, 1 << 20} {
@@ -262,13 +245,11 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
 						rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
-						hj, accounts, monitors, _, err := createDiskBackedHashJoiner(
+						hj, _, err := createDiskBackedHashJoiner(
 							ctx, flowCtx, spec, []colexecop.Operator{leftSource, rightSource},
 							func() {}, queueCfg, 0 /* numForcedRepartitions */, false, /* delegateFDAcquisitions */
-							colexecop.NewTestingSemaphore(VecMaxOpenFDsLimit),
+							colexecop.NewTestingSemaphore(VecMaxOpenFDsLimit), &monitorRegistry,
 						)
-						memAccounts = append(memAccounts, accounts...)
-						memMonitors = append(memMonitors, monitors...)
 						require.NoError(b, err)
 						hj.Init(ctx)
 						for b := hj.Next(); b.Length() > 0; b = hj.Next() {
@@ -278,19 +259,11 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 			}
 		}
 	}
-	for _, memAccount := range memAccounts {
-		memAccount.Close(ctx)
-	}
-	for _, memMonitor := range memMonitors {
-		memMonitor.Stop(ctx)
-	}
 }
 
 // createDiskBackedHashJoiner is a helper function that instantiates a
 // disk-backed hash join operator. The desired memory limit must have been
-// already set on flowCtx. It returns an operator and an error as well as
-// memory monitors and memory accounts that will need to be closed once the
-// caller is done with the operator.
+// already set on flowCtx.
 func createDiskBackedHashJoiner(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -301,13 +274,15 @@ func createDiskBackedHashJoiner(
 	numForcedRepartitions int,
 	delegateFDAcquisitions bool,
 	testingSemaphore semaphore.Semaphore,
-) (colexecop.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecop.Closer, error) {
+	monitorRegistry *colexecargs.MonitorRegistry,
+) (colexecop.Operator, []colexecop.Closer, error) {
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              colexectestutils.MakeInputs(sources),
 		StreamingMemAccount: testMemAcc,
 		DiskQueueCfg:        diskQueueCfg,
 		FDSemaphore:         testingSemaphore,
+		MonitorRegistry:     monitorRegistry,
 	}
 	// We will not use streaming memory account for the external hash join so
 	// that the in-memory hash join operator could hit the memory limit set on
@@ -316,5 +291,5 @@ func createDiskBackedHashJoiner(
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-	return result.Root, result.OpAccounts, result.OpMonitors, result.ToClose, err
+	return result.Root, result.ToClose, err
 }

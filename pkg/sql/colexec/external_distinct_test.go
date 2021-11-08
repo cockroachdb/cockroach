@@ -53,11 +53,9 @@ func TestExternalDistinct(t *testing.T) {
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 
-	var (
-		accounts []*mon.BoundAccount
-		monitors []*mon.BytesMonitor
-	)
 	rng, _ := randutil.NewTestRand()
 	numForcedRepartitions := rng.Intn(5)
 	// Test the case in which the default memory is used as well as the case in
@@ -85,13 +83,12 @@ func TestExternalDistinct(t *testing.T) {
 				// more than this number of file descriptors.
 				sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
 				semsToCheck = append(semsToCheck, sem)
-				distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
+				distinct, closers, err := createExternalDistinct(
 					ctx, flowCtx, input, tc.typs, tc.distinctCols, tc.nullsAreDistinct, tc.errorOnDup,
 					outputOrdering, queueCfg, sem, nil /* spillingCallbackFn */, numForcedRepartitions,
+					&monitorRegistry,
 				)
 				require.Equal(t, numExpectedClosers, len(closers))
-				accounts = append(accounts, newAccounts...)
-				monitors = append(monitors, newMonitors...)
 				return distinct, err
 			})
 			if tc.errorOnDup == "" || tc.noError {
@@ -104,12 +101,6 @@ func TestExternalDistinct(t *testing.T) {
 				}
 			}
 		}
-	}
-	for _, acc := range accounts {
-		acc.Close(ctx)
-	}
-	for _, mon := range monitors {
-		mon.Stop(ctx)
 	}
 }
 
@@ -133,11 +124,8 @@ func TestExternalDistinctSpilling(t *testing.T) {
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
-
-	var (
-		accounts []*mon.BoundAccount
-		monitors []*mon.BytesMonitor
-	)
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 
 	rng, _ := randutil.NewTestRand()
 	nCols := 1 + rng.Intn(3)
@@ -202,17 +190,16 @@ func TestExternalDistinctSpilling(t *testing.T) {
 			sem := colexecop.NewTestingSemaphore(0 /* limit */)
 			semsToCheck = append(semsToCheck, sem)
 			var outputOrdering execinfrapb.Ordering
-			distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
+			distinct, closers, err := createExternalDistinct(
 				ctx, flowCtx, input, typs, distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
 				outputOrdering, queueCfg, sem, func() { numSpills++ }, numForcedRepartitions,
+				&monitorRegistry,
 			)
 			require.NoError(t, err)
 			// Check that the external distinct and the disk-backed sort
 			// were added as Closers.
 			numExpectedClosers := 2
 			require.Equal(t, numExpectedClosers, len(closers))
-			accounts = append(accounts, newAccounts...)
-			monitors = append(monitors, newMonitors...)
 			numRuns++
 			return distinct, nil
 		},
@@ -226,13 +213,6 @@ func TestExternalDistinctSpilling(t *testing.T) {
 		// - numSpills == numRuns
 		// - numSpills == numRuns - 1.
 		require.GreaterOrEqual(t, numSpills, numRuns-1, "the spilling didn't occur in all cases")
-	}
-
-	for _, acc := range accounts {
-		acc.Close(ctx)
-	}
-	for _, mon := range monitors {
-		mon.Stop(ctx)
 	}
 }
 
@@ -295,13 +275,11 @@ func BenchmarkExternalDistinct(b *testing.B) {
 		},
 		DiskMonitor: testDiskMonitor,
 	}
-	var (
-		memAccounts []*mon.BoundAccount
-		memMonitors []*mon.BytesMonitor
-	)
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 
 	for _, spillForced := range []bool{false, true} {
 		for _, maintainOrdering := range []bool{false, true} {
@@ -322,14 +300,13 @@ func BenchmarkExternalDistinct(b *testing.B) {
 					if maintainOrdering {
 						outputOrdering = convertDistinctColsToOrdering(distinctCols)
 					}
-					op, accs, mons, _, err := createExternalDistinct(
+					op, _, err := createExternalDistinct(
 						ctx, flowCtx, []colexecop.Operator{input}, typs,
 						distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
 						outputOrdering, queueCfg, &colexecop.TestingSemaphore{},
 						nil /* spillingCallbackFn */, 0, /* numForcedRepartitions */
+						&monitorRegistry,
 					)
-					memAccounts = append(memAccounts, accs...)
-					memMonitors = append(memMonitors, mons...)
 					return op, err
 				},
 				func(nCols int) int {
@@ -340,18 +317,10 @@ func BenchmarkExternalDistinct(b *testing.B) {
 			)
 		}
 	}
-	for _, account := range memAccounts {
-		account.Close(ctx)
-	}
-	for _, monitor := range memMonitors {
-		monitor.Stop(ctx)
-	}
 }
 
 // createExternalDistinct is a helper function that instantiates a disk-backed
-// distinct operator. It returns an operator and an error as well as memory
-// monitors and memory accounts that will need to be closed once the caller is
-// done with the operator.
+// distinct operator.
 func createExternalDistinct(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -365,7 +334,8 @@ func createExternalDistinct(
 	testingSemaphore semaphore.Semaphore,
 	spillingCallbackFn func(),
 	numForcedRepartitions int,
-) (colexecop.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecop.Closer, error) {
+	monitorRegistry *colexecargs.MonitorRegistry,
+) (colexecop.Operator, []colexecop.Closer, error) {
 	distinctSpec := &execinfrapb.DistinctSpec{
 		DistinctColumns:  distinctCols,
 		NullsAreDistinct: nullsAreDistinct,
@@ -386,9 +356,10 @@ func createExternalDistinct(
 		StreamingMemAccount: testMemAcc,
 		DiskQueueCfg:        diskQueueCfg,
 		FDSemaphore:         testingSemaphore,
+		MonitorRegistry:     monitorRegistry,
 	}
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-	return result.Root, result.OpAccounts, result.OpMonitors, result.ToClose, err
+	return result.Root, result.ToClose, err
 }

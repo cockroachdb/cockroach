@@ -105,6 +105,8 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 		DiskMonitor: diskMonitor,
 	}
 	flowCtx.Cfg.TestingKnobs.ForceDiskSpill = args.forceDiskSpill
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 
 	inputsProc := make([]execinfra.RowSource, len(args.inputs))
 	inputsColOp := make([]execinfra.RowSource, len(args.inputs))
@@ -141,7 +143,8 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 			FS:        tempFS,
 			GetPather: colcontainer.GetPatherFunc(func(context.Context) string { return "" }),
 		},
-		FDSemaphore: colexecop.NewTestingSemaphore(256),
+		FDSemaphore:     colexecop.NewTestingSemaphore(256),
+		MonitorRegistry: &monitorRegistry,
 
 		// TODO(yuzefovich): adjust expression generator to not produce
 		// mixed-type timestamp-related expressions and then disallow the
@@ -157,14 +160,6 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		for _, memAccount := range result.OpAccounts {
-			memAccount.Close(ctx)
-		}
-		for _, memMonitor := range result.OpMonitors {
-			memMonitor.Stop(ctx)
-		}
-	}()
 
 	outColOp := colexec.NewMaterializer(
 		flowCtx,
