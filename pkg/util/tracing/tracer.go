@@ -818,7 +818,6 @@ func ContextWithRecordingSpan(
 		cancelCtx()
 		sp.SetVerbose(false)
 		sp.Finish()
-		tr.Close()
 	}
 	return ctx, sp.GetRecording, cancel
 }
