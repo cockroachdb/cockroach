@@ -29,84 +29,6 @@ func registerPebble(r registry.Registry) {
 		pebble = "./pebble.linux"
 	}
 
-	run := func(ctx context.Context, t test.Test, c cluster.Cluster, size int, dur int64) {
-		c.Put(ctx, pebble, "./pebble")
-
-		const initialKeys = 10_000_000
-		const cache = 4 << 30 // 4 GB
-		const dataDir = "$(dirname {store-dir})"
-		const dataTar = dataDir + "/data.tar"
-		const benchDir = dataDir + "/bench"
-
-		var duration = time.Duration(dur) * time.Minute
-
-		runCmd := func(cmd string) {
-			t.L().PrintfCtx(ctx, "> %s", cmd)
-			err := c.RunL(ctx, t.L(), c.All(), cmd)
-			t.L().Printf("> result: %+v", err)
-			if err := ctx.Err(); err != nil {
-				t.L().Printf("(note: incoming context was canceled: %s", err)
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		// Generate the initial DB state. This is somewhat time consuming for
-		// larger value sizes, so we do this once and reuse the same DB state on
-		// all of the workloads.
-		runCmd(fmt.Sprintf(
-			"(./pebble bench ycsb %s"+
-				" --wipe "+
-				" --workload=read=100"+
-				" --concurrency=1"+
-				" --values=%d"+
-				" --initial-keys=%d"+
-				" --cache=%d"+
-				" --num-ops=1 && "+
-				"rm -f %s && tar cvPf %s %s) > init.log 2>&1",
-			benchDir, size, initialKeys, cache, dataTar, dataTar, benchDir))
-
-		for _, workload := range []string{"A", "B", "C", "D", "E", "F"} {
-			keys := "zipf"
-			switch workload {
-			case "D":
-				keys = "uniform"
-			}
-
-			runCmd(fmt.Sprintf(
-				"rm -fr %s && tar xPf %s &&"+
-					" ./pebble bench ycsb %s"+
-					" --workload=%s"+
-					" --concurrency=256"+
-					" --values=%d"+
-					" --keys=%s"+
-					" --initial-keys=0"+
-					" --prepopulated-keys=%d"+
-					" --cache=%d"+
-					" --duration=%s > ycsb.log 2>&1",
-				benchDir, dataTar, benchDir, workload, size, keys, initialKeys, cache, duration))
-
-			runCmd(fmt.Sprintf("tar cvPf profiles_%s.tar *.prof", workload))
-
-			dest := filepath.Join(t.ArtifactsDir(), fmt.Sprintf("ycsb_%s.log", workload))
-			if err := c.Get(ctx, t.L(), "ycsb.log", dest, c.All()); err != nil {
-				t.Fatal(err)
-			}
-
-			profilesName := fmt.Sprintf("profiles_%s.tar", workload)
-			dest = filepath.Join(t.ArtifactsDir(), profilesName)
-			if err := c.Get(ctx, t.L(), profilesName, dest, c.All()); err != nil {
-				t.Fatal(err)
-			}
-
-			runCmd("rm -fr *.prof")
-		}
-	}
-
-	// Generate roachtests that run for both 10 minutes and 90 minutes. The former
-	// is useful for local testing, while the latter is used to populate the
-	// Pebble Nightly benchmarks.
 	for _, dur := range []int64{10, 90} {
 		for _, size := range []int{64, 1024} {
 			size := size
@@ -116,7 +38,7 @@ func registerPebble(r registry.Registry) {
 			// which creates a well-known directory structure that is in-turn
 			// relied-upon by the javascript on the Pebble Benchmarks webpage.
 			name := fmt.Sprintf("pebble/ycsb/size=%d", size)
-			tag := "pebble_nightly"
+			tag := "pebble_nightly_ycsb"
 
 			// For the shorter benchmark runs, we append a suffix to the name to avoid
 			// a name collision. This is safe to do as these tests are not executed as
@@ -134,9 +56,142 @@ func registerPebble(r registry.Registry) {
 				Cluster: r.MakeClusterSpec(5, spec.CPU(16)),
 				Tags:    []string{tag},
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					run(ctx, t, c, size, dur)
+					runPebbleYCSB(ctx, t, c, size, pebble, dur)
 				},
 			})
 		}
+	}
+
+	// Register the Pebble write benchmark. We only run the 1024 variant for now.
+	size := 1024
+	r.Add(registry.TestSpec{
+		Name:    fmt.Sprintf("pebble/write/size=%d", size),
+		Owner:   registry.OwnerStorage,
+		Timeout: 10 * time.Hour,
+		Cluster: r.MakeClusterSpec(5, spec.CPU(16), spec.SSD(16)),
+		Tags:    []string{"pebble_nightly_write"},
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runPebbleWriteBenchmark(ctx, t, c, size, pebble)
+		},
+	})
+}
+
+// runPebbleYCSB runs the Pebble YCSB benchmarks.
+func runPebbleYCSB(
+	ctx context.Context, t test.Test, c cluster.Cluster, size int, bin string, dur int64,
+) {
+	c.Put(ctx, bin, "./pebble")
+
+	const initialKeys = 10_000_000
+	const cache = 4 << 30 // 4 GB
+	const dataDir = "$(dirname {store-dir})"
+	const dataTar = dataDir + "/data.tar"
+	const benchDir = dataDir + "/bench"
+
+	var duration = time.Duration(dur) * time.Minute
+
+	// Generate the initial DB state. This is somewhat time consuming for
+	// larger value sizes, so we do this once and reuse the same DB state on
+	// all of the workloads.
+	runPebbleCmd(ctx, t, c, fmt.Sprintf(
+		"(./pebble bench ycsb %s"+
+			" --wipe "+
+			" --workload=read=100"+
+			" --concurrency=1"+
+			" --values=%d"+
+			" --initial-keys=%d"+
+			" --cache=%d"+
+			" --num-ops=1 && "+
+			"rm -f %s && tar cvPf %s %s) > init.log 2>&1",
+		benchDir, size, initialKeys, cache, dataTar, dataTar, benchDir))
+
+	for _, workload := range []string{"A", "B", "C", "D", "E", "F"} {
+		keys := "zipf"
+		switch workload {
+		case "D":
+			keys = "uniform"
+		}
+
+		runPebbleCmd(ctx, t, c, fmt.Sprintf(
+			"rm -fr %s && tar xPf %s &&"+
+				" ./pebble bench ycsb %s"+
+				" --workload=%s"+
+				" --concurrency=256"+
+				" --values=%d"+
+				" --keys=%s"+
+				" --initial-keys=0"+
+				" --prepopulated-keys=%d"+
+				" --cache=%d"+
+				" --duration=%s > ycsb.log 2>&1",
+			benchDir, dataTar, benchDir, workload, size, keys, initialKeys, cache, duration))
+
+		runPebbleCmd(ctx, t, c, fmt.Sprintf("tar cvPf profiles_%s.tar *.prof", workload))
+
+		dest := filepath.Join(t.ArtifactsDir(), fmt.Sprintf("ycsb_%s.log", workload))
+		if err := c.Get(ctx, t.L(), "ycsb.log", dest, c.All()); err != nil {
+			t.Fatal(err)
+		}
+
+		profilesName := fmt.Sprintf("profiles_%s.tar", workload)
+		dest = filepath.Join(t.ArtifactsDir(), profilesName)
+		if err := c.Get(ctx, t.L(), profilesName, dest, c.All()); err != nil {
+			t.Fatal(err)
+		}
+
+		runPebbleCmd(ctx, t, c, "rm -fr *.prof")
+	}
+}
+
+// runPebbleWriteBenchmark runs the Pebble write benchmark.
+func runPebbleWriteBenchmark(
+	ctx context.Context, t test.Test, c cluster.Cluster, size int, bin string,
+) {
+	c.Put(ctx, bin, "./pebble")
+
+	const (
+		duration    = 8 * time.Hour
+		dataDir     = "$(dirname {store-dir})"
+		benchDir    = dataDir + "/bench"
+		concurrency = 1024
+		rateStart   = 30_000
+	)
+
+	runPebbleCmd(ctx, t, c, fmt.Sprintf(
+		" ./pebble bench write %s"+
+			" --wipe"+
+			" --concurrency=%d"+
+			" --duration=%s"+
+			" --values=%d"+
+			" --rate-start=%d"+
+			" --debug > write.log 2>&1",
+		benchDir, concurrency, duration, size, rateStart,
+	))
+
+	runPebbleCmd(ctx, t, c, "tar cvPf profiles.tar *.prof")
+
+	dest := filepath.Join(t.ArtifactsDir(), "write.log")
+	if err := c.Get(ctx, t.L(), "write.log", dest, c.All()); err != nil {
+		t.Fatal(err)
+	}
+
+	profilesName := "profiles.tar"
+	dest = filepath.Join(t.ArtifactsDir(), profilesName)
+	if err := c.Get(ctx, t.L(), profilesName, dest, c.All()); err != nil {
+		t.Fatal(err)
+	}
+
+	runPebbleCmd(ctx, t, c, "rm -fr *.prof")
+}
+
+// runPebbleCmd runs the given command on all worker nodes in the test cluster.
+func runPebbleCmd(ctx context.Context, t test.Test, c cluster.Cluster, cmd string) {
+	t.L().PrintfCtx(ctx, "> %s", cmd)
+	err := c.RunL(ctx, t.L(), c.All(), cmd)
+	t.L().Printf("> result: %+v", err)
+	if err := ctx.Err(); err != nil {
+		t.L().Printf("(note: incoming context was canceled: %s", err)
+	}
+	if err != nil {
+		t.Fatal(err)
 	}
 }
