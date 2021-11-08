@@ -2685,95 +2685,8 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
-	"extract": makeBuiltin(
-		tree.FunctionProperties{Category: categoryDateAndTime},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
-			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				// extract timeSpan fromTime.
-				fromTS := args[1].(*tree.DTimestamp)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractTimeSpanFromTimestamp(ctx, fromTS.Time, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
-				"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
-				"hour, minute, second, millisecond, microsecond, epoch",
-			Volatility: tree.VolatilityImmutable,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Interval}},
-			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				fromInterval := args[1].(*tree.DInterval)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractTimeSpanFromInterval(fromInterval, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: millennium, century, decade, year,\n" +
-				"month, day, hour, minute, second, millisecond, microsecond, epoch",
-			Volatility: tree.VolatilityImmutable,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
-			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				date := args[1].(*tree.DDate)
-				fromTime, err := date.ToTime()
-				if err != nil {
-					return nil, err
-				}
-				return extractTimeSpanFromTimestamp(ctx, fromTime, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
-				"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
-				"hour, minute, second, millisecond, microsecond, epoch",
-			Volatility: tree.VolatilityImmutable,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
-			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				fromTSTZ := args[1].(*tree.DTimestampTZ)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractTimeSpanFromTimestampTZ(ctx, fromTSTZ.Time.In(ctx.GetLocation()), timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
-				"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
-				"hour, minute, second, millisecond, microsecond, epoch,\n" +
-				"timezone, timezone_hour, timezone_minute",
-			Volatility: tree.VolatilityStable,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
-			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				fromTime := args[1].(*tree.DTime)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractTimeSpanFromTime(fromTime, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
-			Volatility: tree.VolatilityImmutable,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
-			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				fromTime := args[1].(*tree.DTimeTZ)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractTimeSpanFromTimeTZ(fromTime, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch,\n" +
-				"timezone, timezone_hour, timezone_minute",
-			Volatility: tree.VolatilityImmutable,
-		},
-	),
+	"extract":   extractBuiltin,
+	"date_part": extractBuiltin,
 
 	// TODO(knz,otan): Remove in 20.2.
 	"extract_duration": makeBuiltin(
@@ -7818,6 +7731,96 @@ func arrayLower(arr *tree.DArray, dim int64) tree.Datum {
 	}
 	return arrayLower(a, dim-1)
 }
+
+var extractBuiltin = makeBuiltin(
+	tree.FunctionProperties{Category: categoryDateAndTime},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
+		ReturnType: tree.FixedReturnType(types.Float),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			// extract timeSpan fromTime.
+			fromTS := args[1].(*tree.DTimestamp)
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			return extractTimeSpanFromTimestamp(ctx, fromTS.Time, timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: millennium, century, decade, year, isoyear,\n" +
+			"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
+			"hour, minute, second, millisecond, microsecond, epoch",
+		Volatility: tree.VolatilityImmutable,
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Interval}},
+		ReturnType: tree.FixedReturnType(types.Float),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			fromInterval := args[1].(*tree.DInterval)
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			return extractTimeSpanFromInterval(fromInterval, timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: millennium, century, decade, year,\n" +
+			"month, day, hour, minute, second, millisecond, microsecond, epoch",
+		Volatility: tree.VolatilityImmutable,
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
+		ReturnType: tree.FixedReturnType(types.Float),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			date := args[1].(*tree.DDate)
+			fromTime, err := date.ToTime()
+			if err != nil {
+				return nil, err
+			}
+			return extractTimeSpanFromTimestamp(ctx, fromTime, timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: millennium, century, decade, year, isoyear,\n" +
+			"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
+			"hour, minute, second, millisecond, microsecond, epoch",
+		Volatility: tree.VolatilityImmutable,
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
+		ReturnType: tree.FixedReturnType(types.Float),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			fromTSTZ := args[1].(*tree.DTimestampTZ)
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			return extractTimeSpanFromTimestampTZ(ctx, fromTSTZ.Time.In(ctx.GetLocation()), timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: millennium, century, decade, year, isoyear,\n" +
+			"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
+			"hour, minute, second, millisecond, microsecond, epoch,\n" +
+			"timezone, timezone_hour, timezone_minute",
+		Volatility: tree.VolatilityStable,
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
+		ReturnType: tree.FixedReturnType(types.Float),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			fromTime := args[1].(*tree.DTime)
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			return extractTimeSpanFromTime(fromTime, timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
+		Volatility: tree.VolatilityImmutable,
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
+		ReturnType: tree.FixedReturnType(types.Float),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			fromTime := args[1].(*tree.DTimeTZ)
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			return extractTimeSpanFromTimeTZ(fromTime, timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: hour, minute, second, millisecond, microsecond, epoch,\n" +
+			"timezone, timezone_hour, timezone_minute",
+		Volatility: tree.VolatilityImmutable,
+	},
+)
 
 func extractTimeSpanFromTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
 	t := timeofday.TimeOfDay(*fromTime)

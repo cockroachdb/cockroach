@@ -76,8 +76,12 @@ type PostDeserializationTableDescriptorChanges struct {
 	// UpgradedFormatVersion indicates that the FormatVersion was upgraded.
 	UpgradedFormatVersion bool
 
+	// FixedIndexEncodingType indicates that the encoding type of a public index
+	// was fixed.
+	FixedIndexEncodingType bool
+
 	// UpgradedIndexFormatVersion indicates that the format version of at least
-	// one index descriptor was upgraded
+	// one index descriptor was upgraded.
 	UpgradedIndexFormatVersion bool
 
 	// UpgradedForeignKeyRepresentation indicates that the foreign key

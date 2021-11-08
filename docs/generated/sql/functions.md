@@ -435,6 +435,33 @@ and which stays constant throughout the transaction. This timestamp
 has no relationship with the commit order of concurrent transactions.</p>
 <p>This function is the preferred overload and will be evaluated by default.</p>
 </span></td></tr>
+<tr><td><a name="date_part"></a><code>date_part(element: <a href="string.html">string</a>, input: <a href="date.html">date</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<p>Compatible elements: millennium, century, decade, year, isoyear,
+quarter, month, week, dayofweek, isodow, dayofyear, julian,
+hour, minute, second, millisecond, microsecond, epoch</p>
+</span></td></tr>
+<tr><td><a name="date_part"></a><code>date_part(element: <a href="string.html">string</a>, input: <a href="interval.html">interval</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<p>Compatible elements: millennium, century, decade, year,
+month, day, hour, minute, second, millisecond, microsecond, epoch</p>
+</span></td></tr>
+<tr><td><a name="date_part"></a><code>date_part(element: <a href="string.html">string</a>, input: <a href="time.html">time</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<p>Compatible elements: hour, minute, second, millisecond, microsecond, epoch</p>
+</span></td></tr>
+<tr><td><a name="date_part"></a><code>date_part(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamp</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<p>Compatible elements: millennium, century, decade, year, isoyear,
+quarter, month, week, dayofweek, isodow, dayofyear, julian,
+hour, minute, second, millisecond, microsecond, epoch</p>
+</span></td></tr>
+<tr><td><a name="date_part"></a><code>date_part(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<p>Compatible elements: millennium, century, decade, year, isoyear,
+quarter, month, week, dayofweek, isodow, dayofyear, julian,
+hour, minute, second, millisecond, microsecond, epoch,
+timezone, timezone_hour, timezone_minute</p>
+</span></td></tr>
+<tr><td><a name="date_part"></a><code>date_part(element: <a href="string.html">string</a>, input: timetz) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<p>Compatible elements: hour, minute, second, millisecond, microsecond, epoch,
+timezone, timezone_hour, timezone_minute</p>
+</span></td></tr>
 <tr><td><a name="date_trunc"></a><code>date_trunc(element: <a href="string.html">string</a>, input: <a href="date.html">date</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Truncates <code>input</code> to precision <code>element</code>.  Sets all fields that are less
 significant than <code>element</code> to zero (or one, for day and month)</p>
 <p>Compatible elements: millennium, century, decade, year, quarter, month,
