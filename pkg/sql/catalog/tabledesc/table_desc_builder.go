@@ -185,14 +185,18 @@ func maybeFillInDescriptor(
 ) (changes PostDeserializationTableDescriptorChanges, err error) {
 	changes.UpgradedFormatVersion = maybeUpgradeFormatVersion(desc)
 
+	changes.FixedIndexEncodingType = maybeFixPrimaryIndexEncoding(&desc.PrimaryIndex)
 	changes.UpgradedIndexFormatVersion = maybeUpgradeIndexFormatVersion(&desc.PrimaryIndex)
 	for i := range desc.Indexes {
-		isUpgraded := maybeUpgradeSecondaryIndexFormatVersion(&desc.Indexes[i])
+		idx := &desc.Indexes[i]
+		isFixed := maybeFixSecondaryIndexEncoding(idx)
+		changes.FixedIndexEncodingType = changes.FixedIndexEncodingType || isFixed
+		isUpgraded := maybeUpgradeIndexFormatVersion(idx)
 		changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || isUpgraded
 	}
 	for i := range desc.Mutations {
 		if idx := desc.Mutations[i].GetIndex(); idx != nil {
-			isUpgraded := maybeUpgradeSecondaryIndexFormatVersion(idx)
+			isUpgraded := maybeUpgradeIndexFormatVersion(idx)
 			changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || isUpgraded
 		}
 	}
@@ -482,5 +486,25 @@ func maybeUpgradeIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged boo
 		return false
 	}
 	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
+	return true
+}
+
+// maybeFixPrimaryIndexEncoding ensures that the index descriptor for a primary
+// index has the correct encoding type set.
+func maybeFixPrimaryIndexEncoding(idx *descpb.IndexDescriptor) (hasChanged bool) {
+	if idx.EncodingType == descpb.PrimaryIndexEncoding {
+		return false
+	}
+	idx.EncodingType = descpb.PrimaryIndexEncoding
+	return true
+}
+
+// maybeFixPrimaryIndexEncoding ensures that the index descriptor for a
+// secondary index has the correct encoding type set.
+func maybeFixSecondaryIndexEncoding(idx *descpb.IndexDescriptor) (hasChanged bool) {
+	if idx.EncodingType == descpb.SecondaryIndexEncoding {
+		return false
+	}
+	idx.EncodingType = descpb.SecondaryIndexEncoding
 	return true
 }
