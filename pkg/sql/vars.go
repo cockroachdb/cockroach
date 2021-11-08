@@ -1865,6 +1865,36 @@ func init() {
 		sort.Strings(res)
 		return res
 	}()
+
+	// Initialize default session data.
+	m := sessionDataMutator{}
+	m.data = &sessiondata.DefaultSessionData
+	m.settings = &cluster.Settings{}
+
+	// List of vars we want to leave uninitialized.
+	noInitNames := map[string]bool{
+		// search_path must be nil to be initialized properly in sql.populateMinimalSessionData.
+		"search_path": true,
+		// these need a real cluster setting default to be set properly
+		"distsql_workmem":                          true,
+		"default_int_size":                         true,
+		"join_reader_ordering_strategy_batch_size": true,
+	}
+
+	for varName, v := range varGen {
+		if v.GlobalDefault != nil {
+			_, found := noInitNames[varName]
+			if found || v.Set == nil {
+				continue
+			}
+			hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
+			if hasDefault {
+				if err := v.Set(context.Background(), m, defVal); err != nil {
+					panic(err)
+				}
+			}
+		}
+	}
 }
 
 // makePostgresBoolGetStringValFn returns a function that evaluates and returns

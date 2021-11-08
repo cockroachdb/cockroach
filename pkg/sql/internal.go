@@ -169,9 +169,9 @@ func (ie *InternalExecutor) initConnEx(
 		appStatsBucketName = sd.ApplicationName
 	}
 	applicationStats := ie.s.sqlStats.GetApplicationStats(appStatsBucketName)
-
 	sds := sessiondata.NewStack(sd)
 	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
+
 	var ex *connExecutor
 	if txn == nil {
 		ex = ie.s.newConnExecutor(

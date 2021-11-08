@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -690,19 +689,12 @@ func (s *Server) GetLocalIndexStatistics() *idxusage.LocalIndexUsageStats {
 
 // newSessionData a SessionData that can be passed to newConnExecutor.
 func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
-	sd := &sessiondata.SessionData{
-		SessionData: sessiondatapb.SessionData{
-			UserProto: args.User.EncodeProto(),
-		},
-		LocalUnmigratableSessionData: sessiondata.LocalUnmigratableSessionData{
-			RemoteAddr: args.RemoteAddr,
-		},
-		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-			ResultsBufferSize: args.ConnResultsBufferSize,
-			IsSuperuser:       args.IsSuperuser,
-			CustomOptions:     make(map[string]string),
-		},
-	}
+	sd := sessiondata.NewSessionData()
+	sd.SessionData.UserProto = args.User.EncodeProto()
+	sd.LocalUnmigratableSessionData.RemoteAddr = args.RemoteAddr
+	sd.LocalOnlySessionData.ResultsBufferSize = args.ConnResultsBufferSize
+	sd.LocalOnlySessionData.IsSuperuser = args.IsSuperuser
+	sd.LocalOnlySessionData.CustomOptions = make(map[string]string)
 	for k, v := range args.CustomOptionSessionDefaults {
 		sd.CustomOptions[k] = v
 	}

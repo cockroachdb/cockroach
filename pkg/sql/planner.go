@@ -298,15 +298,15 @@ func newInternalPlanner(
 	// suitable contexts.
 	ctx := logtags.AddTag(context.Background(), opName, "")
 
-	sd := &sessiondata.SessionData{
-		SessionData:   sessionData,
-		SearchPath:    sessiondata.DefaultSearchPathForUser(user),
-		SequenceState: sessiondata.NewSequenceState(),
-		Location:      time.UTC,
-	}
+	sd := sessiondata.NewSessionData()
+	sd.SessionData = sessionData
+	sd.SearchPath = sessiondata.DefaultSearchPathForUser(user)
+	sd.SequenceState = sessiondata.NewSequenceState()
+	sd.Location = time.UTC
 	sd.SessionData.Database = "system"
 	sd.SessionData.UserProto = user.EncodeProto()
 	sd.SessionData.Internal = true
+
 	sds := sessiondata.NewStack(sd)
 
 	if params.collection == nil {

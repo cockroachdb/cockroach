@@ -15,7 +15,6 @@ import (
 	"math"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -86,14 +85,10 @@ func descForTable(
 }
 
 var testEvalCtx = &tree.EvalContext{
-	SessionDataStack: sessiondata.NewStack(
-		&sessiondata.SessionData{
-			Location: time.UTC,
-		},
-	),
-	StmtTimestamp: timeutil.Unix(100000000, 0),
-	Settings:      cluster.MakeTestingClusterSettings(),
-	Codec:         keys.SystemSQLCodec,
+	SessionDataStack: sessiondata.NewStack(sessiondata.NewSessionData()),
+	StmtTimestamp:    timeutil.Unix(100000000, 0),
+	Settings:         cluster.MakeTestingClusterSettings(),
+	Codec:            keys.SystemSQLCodec,
 }
 
 // Value generator represents a value of some data at specified row/col.

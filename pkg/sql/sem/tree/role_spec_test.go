@@ -53,7 +53,7 @@ func TestRoleSpecValidation(t *testing.T) {
 
 	for _, tc := range testCases {
 		roleSpec := RoleSpec{RoleSpecType: RoleName, Name: tc.username}
-		normalized, err := roleSpec.ToSQLUsername(&sessiondata.SessionData{}, security.UsernameCreation)
+		normalized, err := roleSpec.ToSQLUsername(sessiondata.NewSessionData(), security.UsernameCreation)
 		if !testutils.IsError(err, tc.err) {
 			t.Errorf("%q: expected %q, got %v", tc.username, tc.err, err)
 			continue

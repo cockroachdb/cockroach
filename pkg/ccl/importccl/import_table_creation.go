@@ -167,7 +167,7 @@ func MakeSimpleTableDescriptor(
 		Context:            ctx,
 		Sequence:           &importSequenceOperators{},
 		Regions:            makeImportRegionOperator(""),
-		SessionDataStack:   sessiondata.NewStack(&sessiondata.SessionData{}),
+		SessionDataStack:   sessiondata.NewStack(sessiondata.NewSessionData()),
 		ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
 		Settings:           st,
 	}

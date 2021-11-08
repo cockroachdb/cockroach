@@ -374,7 +374,7 @@ func TestAvroSchema(t *testing.T) {
 
 			for _, row := range rows {
 				evalCtx := &tree.EvalContext{
-					SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
+					SessionDataStack: sessiondata.NewStack(sessiondata.NewSessionData()),
 				}
 				serialized, err := origSchema.textualFromRow(row)
 				require.NoError(t, err)

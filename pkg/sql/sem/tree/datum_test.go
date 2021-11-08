@@ -140,12 +140,9 @@ func TestCompareTimestamps(t *testing.T) {
 			tc.desc,
 			func(t *testing.T) {
 				ctx := &EvalContext{
-					SessionDataStack: sessiondata.NewStack(
-						&sessiondata.SessionData{
-							Location: tc.location,
-						},
-					),
+					SessionDataStack: sessiondata.NewStack(sessiondata.NewSessionData()),
 				}
+				ctx.SessionData().Location = tc.location
 				res, err := compareTimestamps(ctx, tc.left, tc.right)
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expected, res)

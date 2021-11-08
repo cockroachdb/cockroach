@@ -305,3 +305,12 @@ func (s *Stack) PopAll() {
 func (s *Stack) Elems() []*SessionData {
 	return s.stack
 }
+
+// DefaultSessionData is a session data initialized with sessionVar initializer copied into new sessions.
+var DefaultSessionData SessionData
+
+// NewSessionData create a new session data with defaults populated.   See init in vars.go.
+func NewSessionData() *SessionData {
+	sd := DefaultSessionData
+	return &sd
+}
