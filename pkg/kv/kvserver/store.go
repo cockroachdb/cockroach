@@ -1314,10 +1314,10 @@ func IterateIDPrefixKeys(
 	}
 }
 
-// IterateRangeDescriptors calls the provided function with each descriptor
-// from the provided Engine. The return values of this method and fn have
-// semantics similar to engine.MVCCIterate.
-func IterateRangeDescriptors(
+// IterateRangeDescriptorsFromDisk calls the provided function with each
+// descriptor from the provided Engine. The return values of this method and fn
+// have semantics similar to engine.MVCCIterate.
+func IterateRangeDescriptorsFromDisk(
 	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
 ) error {
 	log.Event(ctx, "beginning range descriptor iteration")
@@ -1469,7 +1469,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// concurrently. Note that while we can perform this initialization
 	// concurrently, all of the initialization must be performed before we start
 	// listening for Raft messages and starting the process Raft loop.
-	err = IterateRangeDescriptors(ctx, s.engine,
+	err = IterateRangeDescriptorsFromDisk(ctx, s.engine,
 		func(desc roachpb.RangeDescriptor) error {
 			if !desc.IsInitialized() {
 				return errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
@@ -2077,10 +2077,24 @@ func (s *Store) recordNewPerSecondStats(newQPS, newWPS float64) {
 	s.asyncGossipStore(context.TODO(), message, false /* useCached */)
 }
 
+// VisitReplicasOption optionally modifies store.VisitReplicas.
+type VisitReplicasOption func(*storeReplicaVisitor)
+
+// WithReplicasInOrder is a VisitReplicasOption that ensures replicas are
+// visited in increasing RangeID order.
+func WithReplicasInOrder() VisitReplicasOption {
+	return func(visitor *storeReplicaVisitor) {
+		visitor.InOrder()
+	}
+}
+
 // VisitReplicas invokes the visitor on the Store's Replicas until the visitor returns false.
 // Replicas which are added to the Store after iteration begins may or may not be observed.
-func (s *Store) VisitReplicas(visitor func(*Replica) (wantMore bool)) {
+func (s *Store) VisitReplicas(visitor func(*Replica) (wantMore bool), opts ...VisitReplicasOption) {
 	v := newStoreReplicaVisitor(s)
+	for _, opt := range opts {
+		opt(v)
+	}
 	v.Visit(visitor)
 }
 
