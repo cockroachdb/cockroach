@@ -35,22 +35,22 @@ root
            ├── update-mapping:
            │    └── p_new:18 => child.p:9
            └── project
-                ├── columns: p_new:18 c:12!null child.p:13!null p:16!null p_new:17!null
+                ├── columns: p_new:18 c:12!null child.p:13!null p_old:16!null p_new:17!null
                 ├── inner-join (hash)
-                │    ├── columns: c:12!null child.p:13!null p:16!null p_new:17!null
+                │    ├── columns: c:12!null child.p:13!null p_old:16!null p_new:17!null
                 │    ├── scan child
                 │    │    └── columns: c:12!null child.p:13!null
                 │    ├── select
-                │    │    ├── columns: p:16!null p_new:17!null
+                │    │    ├── columns: p_old:16!null p_new:17!null
                 │    │    ├── with-scan &1
-                │    │    │    ├── columns: p:16!null p_new:17!null
+                │    │    │    ├── columns: p_old:16!null p_new:17!null
                 │    │    │    └── mapping:
-                │    │    │         ├──  parent.p:4 => p:16
+                │    │    │         ├──  parent.p:4 => p_old:16
                 │    │    │         └──  p_new:7 => p_new:17
                 │    │    └── filters
-                │    │         └── p:16 IS DISTINCT FROM p_new:17
+                │    │         └── p_old:16 IS DISTINCT FROM p_new:17
                 │    └── filters
-                │         └── child.p:13 = p:16
+                │         └── child.p:13 = p_old:16
                 └── projections
                      └── NULL::INT8 [as=p_new:18]
 
@@ -106,25 +106,25 @@ root
            │    ├── p_new:27 => child_multi.p:14
            │    └── p_new:27 => child_multi.q:15
            └── project
-                ├── columns: p_new:27 c:18!null child_multi.p:19!null child_multi.q:20!null p:23!null q:24!null p_new:25 q_new:26
+                ├── columns: p_new:27 c:18!null child_multi.p:19!null child_multi.q:20!null p_old:23!null p_new:24 q_old:25!null q_new:26
                 ├── inner-join (hash)
-                │    ├── columns: c:18!null child_multi.p:19!null child_multi.q:20!null p:23!null q:24!null p_new:25 q_new:26
+                │    ├── columns: c:18!null child_multi.p:19!null child_multi.q:20!null p_old:23!null p_new:24 q_old:25!null q_new:26
                 │    ├── scan child_multi
                 │    │    └── columns: c:18!null child_multi.p:19 child_multi.q:20
                 │    ├── select
-                │    │    ├── columns: p:23 q:24 p_new:25 q_new:26
+                │    │    ├── columns: p_old:23 p_new:24 q_old:25 q_new:26
                 │    │    ├── with-scan &1
-                │    │    │    ├── columns: p:23 q:24 p_new:25 q_new:26
+                │    │    │    ├── columns: p_old:23 p_new:24 q_old:25 q_new:26
                 │    │    │    └── mapping:
-                │    │    │         ├──  parent_multi.p:7 => p:23
-                │    │    │         ├──  parent_multi.q:8 => q:24
-                │    │    │         ├──  p_new:11 => p_new:25
+                │    │    │         ├──  parent_multi.p:7 => p_old:23
+                │    │    │         ├──  parent_multi.q:8 => q_old:25
+                │    │    │         ├──  p_new:11 => p_new:24
                 │    │    │         └──  q_new:12 => q_new:26
                 │    │    └── filters
-                │    │         └── (p:23 IS DISTINCT FROM p_new:25) OR (q:24 IS DISTINCT FROM q_new:26)
+                │    │         └── (p_old:23 IS DISTINCT FROM p_new:24) OR (q_old:25 IS DISTINCT FROM q_new:26)
                 │    └── filters
-                │         ├── child_multi.p:19 = p:23
-                │         └── child_multi.q:20 = q:24
+                │         ├── child_multi.p:19 = p_old:23
+                │         └── child_multi.q:20 = q_old:25
                 └── projections
                      └── NULL::INT8 [as=p_new:27]
 
@@ -159,25 +159,25 @@ root
            │    ├── p_new:26 => child_multi.p:13
            │    └── p_new:26 => child_multi.q:14
            └── project
-                ├── columns: p_new:26 c:17!null child_multi.p:18!null child_multi.q:19!null p:22!null q:23!null p_new:24!null q:25
+                ├── columns: p_new:26 c:17!null child_multi.p:18!null child_multi.q:19!null p_old:22!null p_new:23!null q_old:24!null q_new:25
                 ├── inner-join (hash)
-                │    ├── columns: c:17!null child_multi.p:18!null child_multi.q:19!null p:22!null q:23!null p_new:24!null q:25
+                │    ├── columns: c:17!null child_multi.p:18!null child_multi.q:19!null p_old:22!null p_new:23!null q_old:24!null q_new:25
                 │    ├── scan child_multi
                 │    │    └── columns: c:17!null child_multi.p:18 child_multi.q:19
                 │    ├── select
-                │    │    ├── columns: p:22!null q:23 p_new:24!null q:25
+                │    │    ├── columns: p_old:22!null p_new:23!null q_old:24 q_new:25
                 │    │    ├── with-scan &1
-                │    │    │    ├── columns: p:22!null q:23 p_new:24!null q:25
+                │    │    │    ├── columns: p_old:22!null p_new:23!null q_old:24 q_new:25
                 │    │    │    └── mapping:
-                │    │    │         ├──  parent_multi.p:7 => p:22
-                │    │    │         ├──  parent_multi.q:8 => q:23
-                │    │    │         ├──  p_new:11 => p_new:24
-                │    │    │         └──  parent_multi.q:8 => q:25
+                │    │    │         ├──  parent_multi.p:7 => p_old:22
+                │    │    │         ├──  parent_multi.q:8 => q_old:24
+                │    │    │         ├──  p_new:11 => p_new:23
+                │    │    │         └──  parent_multi.q:8 => q_new:25
                 │    │    └── filters
-                │    │         └── (p:22 IS DISTINCT FROM p_new:24) OR (q:23 IS DISTINCT FROM q:25)
+                │    │         └── (p_old:22 IS DISTINCT FROM p_new:23) OR (q_old:24 IS DISTINCT FROM q_new:25)
                 │    └── filters
-                │         ├── child_multi.p:18 = p:22
-                │         └── child_multi.q:19 = q:23
+                │         ├── child_multi.p:18 = p_old:22
+                │         └── child_multi.q:19 = q_old:24
                 └── projections
                      └── NULL::INT8 [as=p_new:26]
 
@@ -223,25 +223,25 @@ root
       │    ├── cascades
       │    │    └── fk2
       │    └── project
-      │         ├── columns: p_new:26 c:17!null child_multi.p:18!null child_multi.q:19!null p:22!null q:23!null p:24!null q_new:25
+      │         ├── columns: p_new:26 c:17!null child_multi.p:18!null child_multi.q:19!null p_old:22!null p_new:23!null q_old:24!null q_new:25
       │         ├── inner-join (hash)
-      │         │    ├── columns: c:17!null child_multi.p:18!null child_multi.q:19!null p:22!null q:23!null p:24!null q_new:25
+      │         │    ├── columns: c:17!null child_multi.p:18!null child_multi.q:19!null p_old:22!null p_new:23!null q_old:24!null q_new:25
       │         │    ├── scan child_multi
       │         │    │    └── columns: c:17!null child_multi.p:18 child_multi.q:19
       │         │    ├── select
-      │         │    │    ├── columns: p:22!null q:23 p:24!null q_new:25
+      │         │    │    ├── columns: p_old:22!null p_new:23!null q_old:24 q_new:25
       │         │    │    ├── with-scan &1
-      │         │    │    │    ├── columns: p:22!null q:23 p:24!null q_new:25
+      │         │    │    │    ├── columns: p_old:22!null p_new:23!null q_old:24 q_new:25
       │         │    │    │    └── mapping:
-      │         │    │    │         ├──  parent_multi.p:7 => p:22
-      │         │    │    │         ├──  parent_multi.q:8 => q:23
-      │         │    │    │         ├──  parent_multi.p:7 => p:24
+      │         │    │    │         ├──  parent_multi.p:7 => p_old:22
+      │         │    │    │         ├──  parent_multi.q:8 => q_old:24
+      │         │    │    │         ├──  parent_multi.p:7 => p_new:23
       │         │    │    │         └──  q_new:11 => q_new:25
       │         │    │    └── filters
-      │         │    │         └── (p:22 IS DISTINCT FROM p:24) OR (q:23 IS DISTINCT FROM q_new:25)
+      │         │    │         └── (p_old:22 IS DISTINCT FROM p_new:23) OR (q_old:24 IS DISTINCT FROM q_new:25)
       │         │    └── filters
-      │         │         ├── child_multi.p:18 = p:22
-      │         │         └── child_multi.q:19 = q:23
+      │         │         ├── child_multi.p:18 = p_old:22
+      │         │         └── child_multi.q:19 = q_old:24
       │         └── projections
       │              └── NULL::INT8 [as=p_new:26]
       └── cascade
@@ -252,25 +252,25 @@ root
                 │    ├── c_new:41 => grandchild.c:28
                 │    └── c_new:41 => grandchild.q:29
                 └── project
-                     ├── columns: c_new:41 g:32!null grandchild.c:33!null grandchild.q:34!null c:37!null q:38!null c:39!null p_new:40
+                     ├── columns: c_new:41 g:32!null grandchild.c:33!null grandchild.q:34!null c_old:37!null c_new:38!null q_old:39!null q_new:40
                      ├── inner-join (hash)
-                     │    ├── columns: g:32!null grandchild.c:33!null grandchild.q:34!null c:37!null q:38!null c:39!null p_new:40
+                     │    ├── columns: g:32!null grandchild.c:33!null grandchild.q:34!null c_old:37!null c_new:38!null q_old:39!null q_new:40
                      │    ├── scan grandchild
                      │    │    └── columns: g:32!null grandchild.c:33 grandchild.q:34
                      │    ├── select
-                     │    │    ├── columns: c:37!null q:38!null c:39!null p_new:40
+                     │    │    ├── columns: c_old:37!null c_new:38!null q_old:39!null q_new:40
                      │    │    ├── with-scan &2
-                     │    │    │    ├── columns: c:37!null q:38!null c:39!null p_new:40
+                     │    │    │    ├── columns: c_old:37!null c_new:38!null q_old:39!null q_new:40
                      │    │    │    └── mapping:
-                     │    │    │         ├──  child_multi.c:17 => c:37
-                     │    │    │         ├──  child_multi.q:19 => q:38
-                     │    │    │         ├──  child_multi.c:17 => c:39
-                     │    │    │         └──  p_new:26 => p_new:40
+                     │    │    │         ├──  child_multi.c:17 => c_old:37
+                     │    │    │         ├──  child_multi.q:19 => q_old:39
+                     │    │    │         ├──  child_multi.c:17 => c_new:38
+                     │    │    │         └──  p_new:26 => q_new:40
                      │    │    └── filters
-                     │    │         └── (c:37 IS DISTINCT FROM c:39) OR (q:38 IS DISTINCT FROM p_new:40)
+                     │    │         └── (c_old:37 IS DISTINCT FROM c_new:38) OR (q_old:39 IS DISTINCT FROM q_new:40)
                      │    └── filters
-                     │         ├── grandchild.c:33 = c:37
-                     │         └── grandchild.q:34 = q:38
+                     │         ├── grandchild.c:33 = c_old:37
+                     │         └── grandchild.q:34 = q_old:39
                      └── projections
                           └── NULL::INT8 [as=c_new:41]
 
@@ -326,25 +326,25 @@ root
       │    ├── cascades
       │    │    └── fk2
       │    └── project
-      │         ├── columns: p_new:29 c:20!null child_multi.p:21!null child_multi.q:22!null p:25!null q:26!null column2:27!null column3:28!null
+      │         ├── columns: p_new:29 c:20!null child_multi.p:21!null child_multi.q:22!null p_old:25!null p_new:26!null q_old:27!null q_new:28!null
       │         ├── inner-join (hash)
-      │         │    ├── columns: c:20!null child_multi.p:21!null child_multi.q:22!null p:25!null q:26!null column2:27!null column3:28!null
+      │         │    ├── columns: c:20!null child_multi.p:21!null child_multi.q:22!null p_old:25!null p_new:26!null q_old:27!null q_new:28!null
       │         │    ├── scan child_multi
       │         │    │    └── columns: c:20!null child_multi.p:21 child_multi.q:22
       │         │    ├── select
-      │         │    │    ├── columns: p:25 q:26 column2:27!null column3:28!null
+      │         │    │    ├── columns: p_old:25 p_new:26!null q_old:27 q_new:28!null
       │         │    │    ├── with-scan &1
-      │         │    │    │    ├── columns: p:25 q:26 column2:27!null column3:28!null
+      │         │    │    │    ├── columns: p_old:25 p_new:26!null q_old:27 q_new:28!null
       │         │    │    │    └── mapping:
-      │         │    │    │         ├──  parent_multi.p:10 => p:25
-      │         │    │    │         ├──  parent_multi.q:11 => q:26
-      │         │    │    │         ├──  column2:7 => column2:27
-      │         │    │    │         └──  column3:8 => column3:28
+      │         │    │    │         ├──  parent_multi.p:10 => p_old:25
+      │         │    │    │         ├──  parent_multi.q:11 => q_old:27
+      │         │    │    │         ├──  column2:7 => p_new:26
+      │         │    │    │         └──  column3:8 => q_new:28
       │         │    │    └── filters
-      │         │    │         └── (p:25 IS DISTINCT FROM column2:27) OR (q:26 IS DISTINCT FROM column3:28)
+      │         │    │         └── (p_old:25 IS DISTINCT FROM p_new:26) OR (q_old:27 IS DISTINCT FROM q_new:28)
       │         │    └── filters
-      │         │         ├── child_multi.p:21 = p:25
-      │         │         └── child_multi.q:22 = q:26
+      │         │         ├── child_multi.p:21 = p_old:25
+      │         │         └── child_multi.q:22 = q_old:27
       │         └── projections
       │              └── NULL::INT8 [as=p_new:29]
       └── cascade
@@ -355,25 +355,25 @@ root
                 │    ├── c_new:44 => grandchild.c:31
                 │    └── c_new:44 => grandchild.q:32
                 └── project
-                     ├── columns: c_new:44 g:35!null grandchild.c:36!null grandchild.q:37!null c:40!null q:41!null c:42!null p_new:43
+                     ├── columns: c_new:44 g:35!null grandchild.c:36!null grandchild.q:37!null c_old:40!null c_new:41!null q_old:42!null q_new:43
                      ├── inner-join (hash)
-                     │    ├── columns: g:35!null grandchild.c:36!null grandchild.q:37!null c:40!null q:41!null c:42!null p_new:43
+                     │    ├── columns: g:35!null grandchild.c:36!null grandchild.q:37!null c_old:40!null c_new:41!null q_old:42!null q_new:43
                      │    ├── scan grandchild
                      │    │    └── columns: g:35!null grandchild.c:36 grandchild.q:37
                      │    ├── select
-                     │    │    ├── columns: c:40!null q:41!null c:42!null p_new:43
+                     │    │    ├── columns: c_old:40!null c_new:41!null q_old:42!null q_new:43
                      │    │    ├── with-scan &2
-                     │    │    │    ├── columns: c:40!null q:41!null c:42!null p_new:43
+                     │    │    │    ├── columns: c_old:40!null c_new:41!null q_old:42!null q_new:43
                      │    │    │    └── mapping:
-                     │    │    │         ├──  child_multi.c:20 => c:40
-                     │    │    │         ├──  child_multi.q:22 => q:41
-                     │    │    │         ├──  child_multi.c:20 => c:42
-                     │    │    │         └──  p_new:29 => p_new:43
+                     │    │    │         ├──  child_multi.c:20 => c_old:40
+                     │    │    │         ├──  child_multi.q:22 => q_old:42
+                     │    │    │         ├──  child_multi.c:20 => c_new:41
+                     │    │    │         └──  p_new:29 => q_new:43
                      │    │    └── filters
-                     │    │         └── (c:40 IS DISTINCT FROM c:42) OR (q:41 IS DISTINCT FROM p_new:43)
+                     │    │         └── (c_old:40 IS DISTINCT FROM c_new:41) OR (q_old:42 IS DISTINCT FROM q_new:43)
                      │    └── filters
-                     │         ├── grandchild.c:36 = c:40
-                     │         └── grandchild.q:37 = q:41
+                     │         ├── grandchild.c:36 = c_old:40
+                     │         └── grandchild.q:37 = q_old:42
                      └── projections
                           └── NULL::INT8 [as=c_new:44]
 
@@ -434,25 +434,25 @@ root
       │    ├── cascades
       │    │    └── fk2
       │    └── project
-      │         ├── columns: p_new:30 c:21!null child_multi.p:22!null child_multi.q:23!null p:26!null q:27!null column2:28!null q:29
+      │         ├── columns: p_new:30 c:21!null child_multi.p:22!null child_multi.q:23!null p_old:26!null p_new:27!null q_old:28!null q_new:29
       │         ├── inner-join (hash)
-      │         │    ├── columns: c:21!null child_multi.p:22!null child_multi.q:23!null p:26!null q:27!null column2:28!null q:29
+      │         │    ├── columns: c:21!null child_multi.p:22!null child_multi.q:23!null p_old:26!null p_new:27!null q_old:28!null q_new:29
       │         │    ├── scan child_multi
       │         │    │    └── columns: c:21!null child_multi.p:22 child_multi.q:23
       │         │    ├── select
-      │         │    │    ├── columns: p:26 q:27 column2:28!null q:29
+      │         │    │    ├── columns: p_old:26 p_new:27!null q_old:28 q_new:29
       │         │    │    ├── with-scan &1
-      │         │    │    │    ├── columns: p:26 q:27 column2:28!null q:29
+      │         │    │    │    ├── columns: p_old:26 p_new:27!null q_old:28 q_new:29
       │         │    │    │    └── mapping:
-      │         │    │    │         ├──  parent_multi.p:10 => p:26
-      │         │    │    │         ├──  parent_multi.q:11 => q:27
-      │         │    │    │         ├──  column2:7 => column2:28
-      │         │    │    │         └──  parent_multi.q:11 => q:29
+      │         │    │    │         ├──  parent_multi.p:10 => p_old:26
+      │         │    │    │         ├──  parent_multi.q:11 => q_old:28
+      │         │    │    │         ├──  column2:7 => p_new:27
+      │         │    │    │         └──  parent_multi.q:11 => q_new:29
       │         │    │    └── filters
-      │         │    │         └── (p:26 IS DISTINCT FROM column2:28) OR (q:27 IS DISTINCT FROM q:29)
+      │         │    │         └── (p_old:26 IS DISTINCT FROM p_new:27) OR (q_old:28 IS DISTINCT FROM q_new:29)
       │         │    └── filters
-      │         │         ├── child_multi.p:22 = p:26
-      │         │         └── child_multi.q:23 = q:27
+      │         │         ├── child_multi.p:22 = p_old:26
+      │         │         └── child_multi.q:23 = q_old:28
       │         └── projections
       │              └── NULL::INT8 [as=p_new:30]
       └── cascade
@@ -463,25 +463,25 @@ root
                 │    ├── c_new:45 => grandchild.c:32
                 │    └── c_new:45 => grandchild.q:33
                 └── project
-                     ├── columns: c_new:45 g:36!null grandchild.c:37!null grandchild.q:38!null c:41!null q:42!null c:43!null p_new:44
+                     ├── columns: c_new:45 g:36!null grandchild.c:37!null grandchild.q:38!null c_old:41!null c_new:42!null q_old:43!null q_new:44
                      ├── inner-join (hash)
-                     │    ├── columns: g:36!null grandchild.c:37!null grandchild.q:38!null c:41!null q:42!null c:43!null p_new:44
+                     │    ├── columns: g:36!null grandchild.c:37!null grandchild.q:38!null c_old:41!null c_new:42!null q_old:43!null q_new:44
                      │    ├── scan grandchild
                      │    │    └── columns: g:36!null grandchild.c:37 grandchild.q:38
                      │    ├── select
-                     │    │    ├── columns: c:41!null q:42!null c:43!null p_new:44
+                     │    │    ├── columns: c_old:41!null c_new:42!null q_old:43!null q_new:44
                      │    │    ├── with-scan &2
-                     │    │    │    ├── columns: c:41!null q:42!null c:43!null p_new:44
+                     │    │    │    ├── columns: c_old:41!null c_new:42!null q_old:43!null q_new:44
                      │    │    │    └── mapping:
-                     │    │    │         ├──  child_multi.c:21 => c:41
-                     │    │    │         ├──  child_multi.q:23 => q:42
-                     │    │    │         ├──  child_multi.c:21 => c:43
-                     │    │    │         └──  p_new:30 => p_new:44
+                     │    │    │         ├──  child_multi.c:21 => c_old:41
+                     │    │    │         ├──  child_multi.q:23 => q_old:43
+                     │    │    │         ├──  child_multi.c:21 => c_new:42
+                     │    │    │         └──  p_new:30 => q_new:44
                      │    │    └── filters
-                     │    │         └── (c:41 IS DISTINCT FROM c:43) OR (q:42 IS DISTINCT FROM p_new:44)
+                     │    │         └── (c_old:41 IS DISTINCT FROM c_new:42) OR (q_old:43 IS DISTINCT FROM q_new:44)
                      │    └── filters
-                     │         ├── grandchild.c:37 = c:41
-                     │         └── grandchild.q:38 = q:42
+                     │         ├── grandchild.c:37 = c_old:41
+                     │         └── grandchild.q:38 = q_old:43
                      └── projections
                           └── NULL::INT8 [as=c_new:45]
 
@@ -541,25 +541,25 @@ root
       │    ├── cascades
       │    │    └── fk2
       │    └── project
-      │         ├── columns: p_new:32 c:23!null child_multi.p:24!null child_multi.q:25!null p:28!null q:29!null upsert_p:30!null q:31
+      │         ├── columns: p_new:32 c:23!null child_multi.p:24!null child_multi.q:25!null p_old:28!null p_new:29!null q_old:30!null q_new:31
       │         ├── inner-join (hash)
-      │         │    ├── columns: c:23!null child_multi.p:24!null child_multi.q:25!null p:28!null q:29!null upsert_p:30!null q:31
+      │         │    ├── columns: c:23!null child_multi.p:24!null child_multi.q:25!null p_old:28!null p_new:29!null q_old:30!null q_new:31
       │         │    ├── scan child_multi
       │         │    │    └── columns: c:23!null child_multi.p:24 child_multi.q:25
       │         │    ├── select
-      │         │    │    ├── columns: p:28 q:29 upsert_p:30!null q:31
+      │         │    │    ├── columns: p_old:28 p_new:29!null q_old:30 q_new:31
       │         │    │    ├── with-scan &1
-      │         │    │    │    ├── columns: p:28 q:29 upsert_p:30!null q:31
+      │         │    │    │    ├── columns: p_old:28 p_new:29!null q_old:30 q_new:31
       │         │    │    │    └── mapping:
-      │         │    │    │         ├──  parent_multi.p:10 => p:28
-      │         │    │    │         ├──  parent_multi.q:11 => q:29
-      │         │    │    │         ├──  upsert_p:16 => upsert_p:30
-      │         │    │    │         └──  parent_multi.q:11 => q:31
+      │         │    │    │         ├──  parent_multi.p:10 => p_old:28
+      │         │    │    │         ├──  parent_multi.q:11 => q_old:30
+      │         │    │    │         ├──  upsert_p:16 => p_new:29
+      │         │    │    │         └──  parent_multi.q:11 => q_new:31
       │         │    │    └── filters
-      │         │    │         └── (p:28 IS DISTINCT FROM upsert_p:30) OR (q:29 IS DISTINCT FROM q:31)
+      │         │    │         └── (p_old:28 IS DISTINCT FROM p_new:29) OR (q_old:30 IS DISTINCT FROM q_new:31)
       │         │    └── filters
-      │         │         ├── child_multi.p:24 = p:28
-      │         │         └── child_multi.q:25 = q:29
+      │         │         ├── child_multi.p:24 = p_old:28
+      │         │         └── child_multi.q:25 = q_old:30
       │         └── projections
       │              └── NULL::INT8 [as=p_new:32]
       └── cascade
@@ -570,25 +570,25 @@ root
                 │    ├── c_new:47 => grandchild.c:34
                 │    └── c_new:47 => grandchild.q:35
                 └── project
-                     ├── columns: c_new:47 g:38!null grandchild.c:39!null grandchild.q:40!null c:43!null q:44!null c:45!null p_new:46
+                     ├── columns: c_new:47 g:38!null grandchild.c:39!null grandchild.q:40!null c_old:43!null c_new:44!null q_old:45!null q_new:46
                      ├── inner-join (hash)
-                     │    ├── columns: g:38!null grandchild.c:39!null grandchild.q:40!null c:43!null q:44!null c:45!null p_new:46
+                     │    ├── columns: g:38!null grandchild.c:39!null grandchild.q:40!null c_old:43!null c_new:44!null q_old:45!null q_new:46
                      │    ├── scan grandchild
                      │    │    └── columns: g:38!null grandchild.c:39 grandchild.q:40
                      │    ├── select
-                     │    │    ├── columns: c:43!null q:44!null c:45!null p_new:46
+                     │    │    ├── columns: c_old:43!null c_new:44!null q_old:45!null q_new:46
                      │    │    ├── with-scan &2
-                     │    │    │    ├── columns: c:43!null q:44!null c:45!null p_new:46
+                     │    │    │    ├── columns: c_old:43!null c_new:44!null q_old:45!null q_new:46
                      │    │    │    └── mapping:
-                     │    │    │         ├──  child_multi.c:23 => c:43
-                     │    │    │         ├──  child_multi.q:25 => q:44
-                     │    │    │         ├──  child_multi.c:23 => c:45
-                     │    │    │         └──  p_new:32 => p_new:46
+                     │    │    │         ├──  child_multi.c:23 => c_old:43
+                     │    │    │         ├──  child_multi.q:25 => q_old:45
+                     │    │    │         ├──  child_multi.c:23 => c_new:44
+                     │    │    │         └──  p_new:32 => q_new:46
                      │    │    └── filters
-                     │    │         └── (c:43 IS DISTINCT FROM c:45) OR (q:44 IS DISTINCT FROM p_new:46)
+                     │    │         └── (c_old:43 IS DISTINCT FROM c_new:44) OR (q_old:45 IS DISTINCT FROM q_new:46)
                      │    └── filters
-                     │         ├── grandchild.c:39 = c:43
-                     │         └── grandchild.q:40 = q:44
+                     │         ├── grandchild.c:39 = c_old:43
+                     │         └── grandchild.q:40 = q_old:45
                      └── projections
                           └── NULL::INT8 [as=c_new:47]
 
@@ -638,11 +638,11 @@ root
            ├── partial index put columns: partial_index_put1:21 partial_index_put2:22
            ├── partial index del columns: partial_index_put1:21 partial_index_del2:23
            └── project
-                ├── columns: partial_index_put1:21 partial_index_put2:22 partial_index_del2:23!null c:13!null child_partial.p:14!null i:15 p:18!null p_new:19!null p_new:20
+                ├── columns: partial_index_put1:21 partial_index_put2:22 partial_index_del2:23!null c:13!null child_partial.p:14!null i:15 p_old:18!null p_new:19!null p_new:20
                 ├── project
-                │    ├── columns: p_new:20 c:13!null child_partial.p:14!null i:15 p:18!null p_new:19!null
+                │    ├── columns: p_new:20 c:13!null child_partial.p:14!null i:15 p_old:18!null p_new:19!null
                 │    ├── inner-join (hash)
-                │    │    ├── columns: c:13!null child_partial.p:14!null i:15 p:18!null p_new:19!null
+                │    │    ├── columns: c:13!null child_partial.p:14!null i:15 p_old:18!null p_new:19!null
                 │    │    ├── scan child_partial
                 │    │    │    ├── columns: c:13!null child_partial.p:14!null i:15
                 │    │    │    └── partial index predicates
@@ -651,16 +651,16 @@ root
                 │    │    │         └── child_partial_i_idx: filters
                 │    │    │              └── child_partial.p:14 > 0
                 │    │    ├── select
-                │    │    │    ├── columns: p:18!null p_new:19!null
+                │    │    │    ├── columns: p_old:18!null p_new:19!null
                 │    │    │    ├── with-scan &1
-                │    │    │    │    ├── columns: p:18!null p_new:19!null
+                │    │    │    │    ├── columns: p_old:18!null p_new:19!null
                 │    │    │    │    └── mapping:
-                │    │    │    │         ├──  parent_partial.p:4 => p:18
+                │    │    │    │         ├──  parent_partial.p:4 => p_old:18
                 │    │    │    │         └──  p_new:7 => p_new:19
                 │    │    │    └── filters
-                │    │    │         └── p:18 IS DISTINCT FROM p_new:19
+                │    │    │         └── p_old:18 IS DISTINCT FROM p_new:19
                 │    │    └── filters
-                │    │         └── child_partial.p:14 = p:18
+                │    │         └── child_partial.p:14 = p_old:18
                 │    └── projections
                 │         └── NULL::INT8 [as=p_new:20]
                 └── projections
@@ -711,9 +711,9 @@ root
            │    ├── p_new:20 => child_virt.p:9
            │    └── p_new:20 => v:10
            └── project
-                ├── columns: p_new:20 c:13!null child_virt.p:14!null v:15!null p:18!null p_new:19!null
+                ├── columns: p_new:20 c:13!null child_virt.p:14!null v:15!null p_old:18!null p_new:19!null
                 ├── inner-join (hash)
-                │    ├── columns: c:13!null child_virt.p:14!null v:15!null p:18!null p_new:19!null
+                │    ├── columns: c:13!null child_virt.p:14!null v:15!null p_old:18!null p_new:19!null
                 │    ├── project
                 │    │    ├── columns: v:15!null c:13!null child_virt.p:14!null
                 │    │    ├── scan child_virt
@@ -724,15 +724,15 @@ root
                 │    │    └── projections
                 │    │         └── child_virt.p:14 [as=v:15]
                 │    ├── select
-                │    │    ├── columns: p:18!null p_new:19!null
+                │    │    ├── columns: p_old:18!null p_new:19!null
                 │    │    ├── with-scan &1
-                │    │    │    ├── columns: p:18!null p_new:19!null
+                │    │    │    ├── columns: p_old:18!null p_new:19!null
                 │    │    │    └── mapping:
-                │    │    │         ├──  parent_virt.p:4 => p:18
+                │    │    │         ├──  parent_virt.p:4 => p_old:18
                 │    │    │         └──  p_new:7 => p_new:19
                 │    │    └── filters
-                │    │         └── p:18 IS DISTINCT FROM p_new:19
+                │    │         └── p_old:18 IS DISTINCT FROM p_new:19
                 │    └── filters
-                │         └── child_virt.p:14 = p:18
+                │         └── child_virt.p:14 = p_old:18
                 └── projections
                      └── NULL::INT8 [as=p_new:20]

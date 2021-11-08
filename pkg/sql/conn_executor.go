@@ -461,6 +461,12 @@ func (s *Server) GetSQLStatsController() *persistedsqlstats.Controller {
 	return s.sqlStatsController
 }
 
+// GetIndexUsageStatsController returns the idxusage.Controller for current
+// sql.Server's index usage stats.
+func (s *Server) GetIndexUsageStatsController() *idxusage.Controller {
+	return s.indexUsageStatsController
+}
+
 // GetSQLStatsProvider returns the provider for the sqlstats subsystem.
 func (s *Server) GetSQLStatsProvider() sqlstats.Provider {
 	return s.sqlStats

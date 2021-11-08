@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -340,8 +341,9 @@ func TestResetIndexUsageStatsRPCForTenant(t *testing.T) {
 
 	testingCluster := testHelper.testCluster()
 	controlCluster := testHelper.controlCluster()
+	var testingTableID, controlTableID string
 
-	for _, cluster := range []tenantCluster{testingCluster, controlCluster} {
+	for i, cluster := range []tenantCluster{testingCluster, controlCluster} {
 		// Create tables and insert data.
 		cluster.tenantConn(0).Exec(t, `
 CREATE TABLE test (
@@ -366,6 +368,13 @@ VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
 		testTableID, err := strconv.Atoi(testTableIDStr)
 		require.NoError(t, err)
 
+		// Set table ID outside of loop.
+		if i == 0 {
+			testingTableID = testTableIDStr
+		} else {
+			controlTableID = testTableIDStr
+		}
+
 		// Wait for the stats to be ingested.
 		require.NoError(t,
 			idxusage.WaitForIndexStatsIngestionForTest(statsIngestionNotifier, map[roachpb.IndexUsageKey]struct{}{
@@ -389,40 +398,62 @@ SELECT
 FROM
   crdb_internal.index_usage_statistics
 WHERE
-  table_id = $1
-`
+  table_id = ` + testTableIDStr
 		// Assert index usage data was inserted.
-		actual := cluster.tenantConn(2).QueryStr(t, query, testTableID)
 		expected := [][]string{
 			{testTableIDStr, "1", "1", "true"},
 			{testTableIDStr, "2", "1", "true"},
 		}
-		require.Equal(t, expected, actual)
+		cluster.tenantConn(2).CheckQueryResults(t, query, expected)
 	}
 
 	// Reset index usage stats.
+	timePreReset := timeutil.Now()
 	status := testingCluster.tenantStatusSrv(1 /* idx */)
 	_, err := status.ResetIndexUsageStats(ctx, &serverpb.ResetIndexUsageStatsRequest{})
 	require.NoError(t, err)
 
+	// Check that last reset time was updated for test cluster.
 	resp, err := status.IndexUsageStatistics(ctx, &serverpb.IndexUsageStatisticsRequest{})
 	require.NoError(t, err)
-
-	// Require index usage metrics to be reset.
-	for _, stats := range resp.Statistics {
-		require.Equal(t, uint64(0), stats.Stats.TotalReadCount)
-		require.Equal(t, time.Time{}, stats.Stats.LastRead)
-	}
+	require.True(t, resp.LastReset.After(timePreReset))
 
 	// Ensure tenant data isolation.
+	// Check that last reset time was not updated for control cluster.
 	status = controlCluster.tenantStatusSrv(1 /* idx */)
 	resp, err = status.IndexUsageStatistics(ctx, &serverpb.IndexUsageStatisticsRequest{})
 	require.NoError(t, err)
+	require.Equal(t, resp.LastReset, time.Time{})
 
-	// Require index usage metrics to not be reset.
-	for _, stats := range resp.Statistics {
-		require.NotEqual(t, uint64(0), stats.Stats.TotalReadCount)
-		require.NotEqual(t, time.Time{}, stats.Stats.LastRead)
+	// Query to fetch index usage stats. We do this instead of sending
+	// an RPC request so that we can filter by table id.
+	query := `
+SELECT
+  table_id,
+  total_reads,
+  last_read
+FROM
+  crdb_internal.index_usage_statistics
+WHERE
+  table_id = $1
+`
+
+	// Check that index usage stats were reset.
+	rows := testingCluster.tenantConn(2).QueryStr(t, query, testingTableID)
+	require.NotNil(t, rows)
+	for _, row := range rows {
+		require.Equal(t, row[1], "0", "expected total reads for table %s to be reset, but got %s",
+			row[0], row[1])
+		require.Equal(t, row[2], "NULL", "expected last read time for table %s to be reset, but got %s",
+			row[0], row[2])
+	}
+
+	// Ensure tenant data isolation.
+	rows = controlCluster.tenantConn(2).QueryStr(t, query, controlTableID)
+	require.NotNil(t, rows)
+	for _, row := range rows {
+		require.NotEqual(t, row[1], "0", "expected total reads for table %s to not be reset, but got %s", row[0], row[1])
+		require.NotEqual(t, row[2], "NULL", "expected last read time for table %s to not be reset, but got %s", row[0], row[2])
 	}
 }
 
