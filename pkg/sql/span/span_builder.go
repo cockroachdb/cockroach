@@ -12,6 +12,7 @@ package span
 
 import (
 	"sort"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -55,18 +56,25 @@ var _ = (*Builder).UnsetNeededColumns
 var _ = (*Builder).SetNeededFamilies
 var _ = (*Builder).UnsetNeededFamilies
 
-// MakeBuilder creates a Builder for a table and index.
+var builderPool = sync.Pool{
+	New: func() interface{} { return &Builder{} },
+}
+
+// MakeBuilder creates a Builder for a table and index. The returned object must
+// be Release()d when no longer needed.
 func MakeBuilder(
 	evalCtx *tree.EvalContext,
 	codec keys.SQLCodec,
 	table catalog.TableDescriptor,
 	index catalog.Index,
 ) *Builder {
-	s := &Builder{
+	s := builderPool.Get().(*Builder)
+	*s = Builder{
 		evalCtx:        evalCtx,
 		codec:          codec,
 		table:          table,
 		index:          index,
+		indexColTypes:  s.indexColTypes,
 		KeyPrefix:      rowenc.MakeIndexKeyPrefix(codec, table, index.GetID()),
 		interstices:    make([][]byte, index.NumKeyColumns()+index.NumKeySuffixColumns()+1),
 		neededFamilies: nil,
@@ -74,7 +82,11 @@ func MakeBuilder(
 
 	var columnIDs descpb.ColumnIDs
 	columnIDs, s.indexColDirs = catalog.FullIndexColumnIDs(index)
-	s.indexColTypes = make([]*types.T, len(columnIDs))
+	if cap(s.indexColTypes) < len(columnIDs) {
+		s.indexColTypes = make([]*types.T, len(columnIDs))
+	} else {
+		s.indexColTypes = s.indexColTypes[:len(columnIDs)]
+	}
 	for i, colID := range columnIDs {
 		col, _ := table.FindColumnWithID(colID)
 		// TODO (rohany): do I need to look at table columns with mutations here as well?
@@ -521,4 +533,14 @@ func (s *Builder) generateInvertedSpanKey(
 
 	span, _, err := s.SpanFromEncDatums(scratchRow, keyLen)
 	return span.Key, err
+}
+
+// Release implements the execinfra.Releasable interface.
+func (s *Builder) Release() {
+	*s = Builder{
+		// Note that the types are small objects, so we don't bother deeply
+		// resetting the indexColTypes slice.
+		indexColTypes: s.indexColTypes[:0],
+	}
+	builderPool.Put(s)
 }

@@ -519,6 +519,9 @@ func (z *zigzagJoiner) close() {
 	if z.InternalClose() {
 		for i := range z.infos {
 			z.infos[i].fetcher.Close(z.Ctx)
+			if sb := z.infos[i].spanBuilder; sb != nil {
+				sb.Release()
+			}
 		}
 		log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
 	}

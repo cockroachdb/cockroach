@@ -2346,6 +2346,9 @@ func performCastWithoutPrecisionTruncation(
 			i := DInt(uint32(*v))
 			return performIntToOidCast(ctx, t, i)
 		case *DString:
+			if t.Oid() != oid.T_oid && string(*v) == ZeroOidValue {
+				return wrapAsZeroOid(t), nil
+			}
 			return ParseDOid(ctx, string(*v), t)
 		}
 	case types.TupleFamily:
@@ -2384,7 +2387,7 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 	case oid.T_oid:
 		return &DOid{semanticType: t, DInt: v}, nil
 	case oid.T_regtype:
-		// Mapping an oid to a regtype is easy: we have a hardcoded map.
+		// Mapping an dOid to a regtype is easy: we have a hardcoded map.
 		ret := &DOid{semanticType: t, DInt: v}
 		if typ, ok := types.OidToType[oid.Oid(v)]; ok {
 			ret.name = typ.PGName()
@@ -2394,26 +2397,35 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 				return nil, err
 			}
 			ret.name = typ.PGName()
+		} else if v == 0 {
+			return wrapAsZeroOid(t), nil
 		}
 		return ret, nil
 
 	case oid.T_regproc, oid.T_regprocedure:
-		// Mapping an oid to a regproc is easy: we have a hardcoded map.
+		// Mapping an dOid to a regproc is easy: we have a hardcoded map.
 		name, ok := OidToBuiltinName[oid.Oid(v)]
 		ret := &DOid{semanticType: t, DInt: v}
 		if !ok {
+			if v == 0 {
+				return wrapAsZeroOid(t), nil
+			}
 			return ret, nil
 		}
 		ret.name = name
 		return ret, nil
 
 	default:
-		oid, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, NewDOid(v))
-		if err != nil {
-			oid = NewDOid(v)
-			oid.semanticType = t
+		if v == 0 {
+			return wrapAsZeroOid(t), nil
 		}
-		return oid, nil
+
+		dOid, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, NewDOid(v))
+		if err != nil {
+			dOid = NewDOid(v)
+			dOid.semanticType = t
+		}
+		return dOid, nil
 	}
 }
 
