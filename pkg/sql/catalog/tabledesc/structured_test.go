@@ -322,6 +322,9 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 		expValidErr string
 	}{
 		{ // 1
+			// In this simple case, we exercise most of the post-deserialization
+			// upgrades, in particular the primary index will have its encoding type
+			// and version properly set.
 			desc: descpb.TableDescriptor{
 				FormatVersion: descpb.BaseFormatVersion,
 				ID:            51,
@@ -374,6 +377,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 			},
 		},
 		{ // 2
+			// This test case is defined to be a no-op.
 			desc: descpb.TableDescriptor{
 				FormatVersion: descpb.InterleavedFormatVersion,
 				ID:            51,
@@ -400,6 +404,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					KeyColumnIDs:        []descpb.ColumnID{1, 2},
 					KeyColumnNames:      []string{"foo", "bar"},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+					EncodingType:        descpb.PrimaryIndexEncoding,
 					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 				},
 				Indexes: []descpb.IndexDescriptor{
@@ -418,6 +423,8 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 			upgraded: nil,
 		},
 		{ // 3
+			// In this case we expect validation to fail owing to a violation of
+			// assumptions for this secondary index's descriptor format version.
 			desc: descpb.TableDescriptor{
 				FormatVersion: descpb.BaseFormatVersion,
 				ID:            51,
@@ -452,6 +459,9 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 			expValidErr: "relation \"tbl\" (51): index \"other\" has column ID 1 present in: [KeyColumnIDs KeySuffixColumnIDs]",
 		},
 		{ // 4
+			// This test case is much like the first but more complex and with more
+			// indexes. All three should be upgraded to the latest version and have
+			// their encoding types fixed.
 			desc: descpb.TableDescriptor{
 				FormatVersion: descpb.BaseFormatVersion,
 				ID:            51,
@@ -486,6 +496,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						KeyColumnIDs:        []descpb.ColumnID{2},
 						KeyColumnNames:      []string{"bar"},
 						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						EncodingType:        descpb.PrimaryIndexEncoding,
 						Version:             descpb.EmptyArraysInInvertedIndexesVersion,
 					},
 				},
