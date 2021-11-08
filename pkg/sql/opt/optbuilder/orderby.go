@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -92,6 +93,11 @@ func (b *Builder) findIndexByName(table cat.Table, name tree.UnrestrictedName) (
 		if tree.Name(name) == idx.Name() {
 			return idx, nil
 		}
+	}
+	// Fallback to referencing @primary as the PRIMARY KEY.
+	// Note that indexes with "primary" as their name takes precedence above.
+	if name == tabledesc.LegacyPrimaryKeyIndexName {
+		return table.Index(0), nil
 	}
 
 	return nil, pgerror.Newf(pgcode.UndefinedObject,
