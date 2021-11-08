@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var rootCmd = &cobra.Command{
@@ -150,7 +151,7 @@ func clusterOpts(clusterName string) install.SyncedCluster {
 		Tag:            tag,
 		CertsDir:       certsDir,
 		Secure:         secure,
-		Quiet:          quiet,
+		Quiet:          quiet || !term.IsTerminal(int(os.Stdout.Fd())),
 		UseTreeDist:    useTreeDist,
 		Args:           nodeArgs,
 		Env:            nodeEnv,
