@@ -64,7 +64,7 @@ if [ "${#disks[@]}" -eq "0" ]; then
   echo "No disks mounted, creating ${mountpoint}"
   mkdir -p ${mountpoint}
   chmod 777 ${mountpoint}
-elif [ "${#disks[@]}" -eq "1" ] || [ -n "use_multiple_disks" ]; then
+elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
   disknum=1
   for disk in "${disks[@]}"
   do

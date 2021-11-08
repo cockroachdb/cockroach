@@ -202,15 +202,16 @@ type ProviderOpts struct {
 	// projects represent the GCE projects to operate on. Accessed through
 	// GetProject() or GetProjects() depending on whether the command accepts
 	// multiple projects or a single one.
-	projects       []string
-	ServiceAccount string
-	MachineType    string
-	MinCPUPlatform string
-	Zones          []string
-	Image          string
-	SSDCount       int
-	PDVolumeType   string
-	PDVolumeSize   int
+	projects         []string
+	ServiceAccount   string
+	MachineType      string
+	MinCPUPlatform   string
+	Zones            []string
+	Image            string
+	SSDCount         int
+	PDVolumeType     string
+	PDVolumeSize     int
+	UseMultipleDisks bool
 
 	// useSharedUser indicates that the shared user rather than the personal
 	// user should be used to ssh into the remote machines.
@@ -301,6 +302,9 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Type of the persistent disk volume, only used if local-ssd=false")
 	flags.IntVar(&o.PDVolumeSize, ProviderName+"-pd-volume-size", 500,
 		"Size in GB of persistent disk volume, only used if local-ssd=false")
+	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
+		o.UseMultipleDisks, "Enable the use of multiple stores by creating one store directory per disk. "+
+			"Default is to raid0 stripe all disks.")
 
 	flags.StringSliceVar(&o.Zones, ProviderName+"-zones", nil,
 		fmt.Sprintf("Zones for cluster. If zones are formatted as AZ:N where N is an integer, the zone\n"+
@@ -466,7 +470,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	}
 
 	// Create GCE startup script file.
-	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem)
+	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, p.opts.UseMultipleDisks)
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}

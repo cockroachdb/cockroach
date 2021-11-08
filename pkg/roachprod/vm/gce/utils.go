@@ -46,56 +46,85 @@ if [ -e /mnt/data1/.roachprod-initialized ]; then
   exit 0
 fi
 
-disknum=0
-# ignore the boot disk: /dev/disk/by-id/google-persistent-disk-0.
-{{if .Zfs}}
-  sudo apt-get update
-  sudo apt-get install -y zfsutils-linux
+{{ if not .Zfs }}
+mount_opts="defaults"
+{{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
+{{ end }}
 
-  # For zfs, we use the device names under /dev instead of the device
-  # links under /dev/disk/by-id/google-local* for local ssds, because
-  # there is an issue where the links for the zfs partitions which are
-  # created under /dev/disk/by-id/ when we run "zpool create ..." are
-  # inaccurate.
-  for d in $(ls /dev/nvme?n? /dev/disk/by-id/google-persistent-disk-[1-9]); do
-    let "disknum++"
-    # skip if the zpool was already created.
-    zpool list -v -P | grep ${d} > /dev/null
-    if [ $? -ne 0 ]; then
-      echo "Disk ${disknum}: ${d} not mounted, creating..."
-      mountpoint="/mnt/data${disknum}"
-      sudo mkdir -p "${mountpoint}"
-      sudo zpool create -f data${disknum} -m ${mountpoint} ${d}
-      sudo chmod 777 ${mountpoint}
-    else
-      echo "Disk ${disknum}: ${d} already mounted, skipping..."
-    fi
-  done
-{{else}}
-  mount_opts="defaults"
-  {{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
-  for d in $(ls /dev/disk/by-id/google-local-* /dev/disk/by-id/google-persistent-disk-[1-9]); do
-    let "disknum++"
-    grep -e "${d}" /etc/fstab > /dev/null
-    if [ $? -ne 0 ]; then
-      echo "Disk ${disknum}: ${d} not mounted, creating..."
-      mountpoint="/mnt/data${disknum}"
-      sudo mkdir -p "${mountpoint}"
-      sudo mkfs.ext4 -F ${d}
-      sudo mount -o ${mount_opts} ${d} ${mountpoint}
-      echo "${d} ${mountpoint} ext4 ${mount_opts} 1 1" | sudo tee -a /etc/fstab
-      sudo chmod 777 ${mountpoint}
-    else
-      echo "Disk ${disknum}: ${d} already mounted, skipping..."
-    fi
-  done
-{{end}}
+use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
 
-if [ "${disknum}" -eq "0" ]; then
-  echo "No disks mounted, creating /mnt/data1"
-  sudo mkdir -p /mnt/data1
-  sudo chmod 777 /mnt/data1
+disks=()
+mount_prefix="/mnt/data"
+
+{{ if .Zfs }}
+apt-get update -q
+apt-get install -yq zfsutils-linux
+
+# For zfs, we use the device names under /dev instead of the device
+# links under /dev/disk/by-id/google-local* for local ssds, because
+# there is an issue where the links for the zfs partitions which are
+# created under /dev/disk/by-id/ when we run "zpool create ..." are
+# inaccurate.
+for d in $(ls /dev/nvme?n? /dev/disk/by-id/google-persistent-disk-[1-9]); do
+  zpool list -v -P | grep ${d} > /dev/null
+  if [ $? -ne 0 ]; then
+{{ else }}
+for d in $(ls /dev/disk/by-id/google-local-* /dev/disk/by-id/google-persistent-disk-[1-9]); do 
+  if ! mount | grep ${d}; then
+{{ end }}
+    disks+=("${d}")
+    echo "Disk ${d} not mounted, creating..."
+  else
+    echo "Disk ${d} already mounted, skipping..."
+  fi
+done
+
+if [ "${#disks[@]}" -eq "0" ]; then
+  mountpoint="${mount_prefix}1"
+  echo "No disks mounted, creating ${mountpoint}"
+  mkdir -p ${mountpoint}
+  chmod 777 ${mountpoint}
+elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
+  disknum=1
+  for disk in "${disks[@]}"
+  do
+    mountpoint="${mount_prefix}${disknum}"
+    disknum=$((disknum + 1 ))
+    echo "Creating ${mountpoint}"
+    mkdir -p ${mountpoint}
+{{ if .Zfs }}
+    zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disk}
+    # NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
+{{ else }}
+    mkfs.ext4 -q -F ${disk}
+    mount -o ${mount_opts} ${disk} ${mountpoint}
+    echo "/dev/md0 ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+{{ end }}
+    chmod 777 ${mountpoint}
+  done
+else
+  mountpoint="${mount_prefix}1"
+  echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
+  mkdir -p ${mountpoint}
+{{ if .Zfs }}
+  zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disks[@]}
+  # NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
+{{ else }}
+  raiddisk="/dev/md0"
+  mdadm -q --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
+  mkfs.ext4 -q -F ${raiddisk}
+  mount -o ${mount_opts} ${raiddisk} ${mountpoint}
+  echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+{{ end }}
+  chmod 777 ${mountpoint}
 fi
+
+# Print the block device and FS usage output. This is useful for debugging.
+lsblk
+df -h
+{{ if .Zfs }}
+zpool list
+{{ end }}
 
 # sshguard can prevent frequent ssh connections to the same host. Disable it.
 systemctl stop sshguard
@@ -191,13 +220,20 @@ sudo touch /mnt/data1/.roachprod-initialized
 //
 // extraMountOpts, if not empty, is appended to the default mount options. It is
 // a comma-separated list of options for the "mount -o" flag.
-func writeStartupScript(extraMountOpts string, fileSystem string) (string, error) {
+func writeStartupScript(
+	extraMountOpts string, fileSystem string, useMultiple bool,
+) (string, error) {
 	type tmplParams struct {
-		ExtraMountOpts string
-		Zfs            bool
+		ExtraMountOpts   string
+		UseMultipleDisks bool
+		Zfs              bool
 	}
 
-	args := tmplParams{ExtraMountOpts: extraMountOpts, Zfs: fileSystem == vm.Zfs}
+	args := tmplParams{
+		ExtraMountOpts:   extraMountOpts,
+		UseMultipleDisks: useMultiple,
+		Zfs:              fileSystem == vm.Zfs,
+	}
 
 	tmpfile, err := ioutil.TempFile("", "gce-startup-script")
 	if err != nil {
