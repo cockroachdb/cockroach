@@ -155,9 +155,11 @@ func (s *Server) ServeWith(
 		tempDelay = 0
 		err := stopper.RunAsyncTask(ctx, "pgwire-serve", func(ctx context.Context) {
 			defer stopper.Recover(ctx)
+			// NB: ConnState is used to manage the list of active connections that
+			// need draining; see MakeServer().
 			s.Server.ConnState(rw, http.StateNew) // before Serve can return
+			defer s.Server.ConnState(rw, http.StateClosed)
 			serveConn(ctx, rw)
-			s.Server.ConnState(rw, http.StateClosed)
 		})
 		if err != nil {
 			return err
