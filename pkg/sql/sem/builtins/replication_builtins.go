@@ -52,6 +52,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 				cutoverTime := args[1].(*tree.DTimestampTZ).Time
 				cutoverTimestamp := hlc.Timestamp{WallTime: cutoverTime.UnixNano()}
 				err = mgr.CompleteStreamIngestion(evalCtx, evalCtx.Txn, jobID, cutoverTimestamp)
+				if err != nil {
+					return nil, err
+				}
 				return tree.NewDInt(tree.DInt(jobID)), err
 			},
 			Info: "This function can be used to signal a running stream ingestion job to complete. " +
@@ -84,6 +87,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 
 				tenantID := int(tree.MustBeDInt(args[0]))
 				jobID, err := mgr.StartReplicationStream(evalCtx, evalCtx.Txn, uint64(tenantID))
+				if err != nil {
+					return nil, err
+				}
 				return tree.NewDInt(tree.DInt(jobID)), err
 			},
 			Info: "This function can be used on the producer side to start a replication stream for " +

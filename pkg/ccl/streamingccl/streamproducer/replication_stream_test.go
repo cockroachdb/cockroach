@@ -199,17 +199,20 @@ func TestReplicationStreamInitialization(t *testing.T) {
 		rows := h.SysDB.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", h.Tenant.ID.ToUint64())
 		jobID := rows[0][0]
 
-		h.SysDB.SucceedsSoonDuration = 10 * time.Second
 		h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", jobID),
 			[][]string{{"failed"}})
 	})
 
-	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10s'")
+	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '30s'")
 	t.Run("continuously-running-within-timeout", func(t *testing.T) {
 		rows := h.SysDB.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", h.Tenant.ID.ToUint64())
 		jobID := rows[0][0]
 
-		testDuration, now := 2*time.Second, timeutil.Now()
+		h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", jobID),
+			[][]string{{"running"}})
+
+		// Ensures the job is continuously running for 3 seconds.
+		testDuration, now := 3*time.Second, timeutil.Now()
 		for start, end := now, now.Add(testDuration); start.Before(end); start = start.Add(300 * time.Millisecond) {
 			h.SysDB.CheckQueryResults(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", jobID),
 				[][]string{{"running"}})
