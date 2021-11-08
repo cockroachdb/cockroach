@@ -386,7 +386,7 @@ const (
 	//
 	// ChildSpan has consequences on memory usage: the memory lifetime of
 	// the task's span becomes tied to the lifetime of the parent. Generally
-	// ChildSpan should be used when the parent waits for the task to
+	// ChildSpan should be used when the parent usually waits for the task to
 	// complete, and the parent is not a long-running process.
 	ChildSpan
 

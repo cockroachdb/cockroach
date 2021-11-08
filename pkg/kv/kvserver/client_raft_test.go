@@ -1295,11 +1295,6 @@ func (c fakeSnapshotStream) Send(request *kvserver.SnapshotResponse) error {
 	return nil
 }
 
-// Context implements the SnapshotResponseStream interface.
-func (c fakeSnapshotStream) Context() context.Context {
-	return context.Background()
-}
-
 // TestFailedSnapshotFillsReservation tests that failing to finish applying an
 // incoming snapshot still cleans up the outstanding reservation that was made.
 func TestFailedSnapshotFillsReservation(t *testing.T) {
@@ -1340,7 +1335,7 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 	// "snapshot accepted" message.
 	expectedErr := errors.Errorf("")
 	stream := fakeSnapshotStream{nil, expectedErr}
-	if err := store1.HandleSnapshot(&header, stream); !errors.Is(err, expectedErr) {
+	if err := store1.HandleSnapshot(ctx, &header, stream); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected error %s, but found %v", expectedErr, err)
 	}
 	if n := store1.ReservationCount(); n != 0 {
@@ -3424,7 +3419,7 @@ func (d errorChannelTestHandler) HandleRaftResponse(
 }
 
 func (errorChannelTestHandler) HandleSnapshot(
-	_ *kvserver.SnapshotRequest_Header, _ kvserver.SnapshotResponseStream,
+	_ context.Context, _ *kvserver.SnapshotRequest_Header, _ kvserver.SnapshotResponseStream,
 ) error {
 	panic("unimplemented")
 }
@@ -5420,7 +5415,7 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 		FromReplica:   fromReplDesc,
 		ToReplica:     newReplDesc,
 		Message:       raftpb.Message{Type: raftpb.MsgVote, Term: 2},
-	}, noopRaftMessageResponseSteam{}))
+	}, noopRaftMessageResponseStream{}))
 	ts := waitForTombstone(t, store.Engine(), desc.RangeID)
 	require.Equal(t, ts.NextReplicaID, desc.NextReplicaID)
 	wg.Wait()
@@ -5428,17 +5423,13 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 	require.Regexp(t, "closed.*destroyed", err)
 }
 
-type noopRaftMessageResponseSteam struct{}
+type noopRaftMessageResponseStream struct{}
 
-func (n noopRaftMessageResponseSteam) Context() context.Context {
-	return context.Background()
-}
-
-func (n noopRaftMessageResponseSteam) Send(*kvserver.RaftMessageResponse) error {
+func (n noopRaftMessageResponseStream) Send(*kvserver.RaftMessageResponse) error {
 	return nil
 }
 
-var _ kvserver.RaftMessageResponseStream = noopRaftMessageResponseSteam{}
+var _ kvserver.RaftMessageResponseStream = noopRaftMessageResponseStream{}
 
 // TestElectionAfterRestart is an end-to-end test for shouldCampaignOnWakeLocked
 // (see TestReplicaShouldCampaignOnWake for the corresponding unit test). It sets

@@ -72,7 +72,6 @@ var targetRaftOutgoingBatchSize = settings.RegisterByteSizeSetting(
 // RaftMessageResponseStream is the subset of the
 // MultiRaft_RaftMessageServer interface that is needed for sending responses.
 type RaftMessageResponseStream interface {
-	Context() context.Context
 	Send(*RaftMessageResponse) error
 }
 
@@ -83,10 +82,6 @@ type RaftMessageResponseStream interface {
 type lockedRaftMessageResponseStream struct {
 	wrapped MultiRaft_RaftMessageBatchServer
 	sendMu  syncutil.Mutex
-}
-
-func (s *lockedRaftMessageResponseStream) Context() context.Context {
-	return s.wrapped.Context()
 }
 
 func (s *lockedRaftMessageResponseStream) Send(resp *RaftMessageResponse) error {
@@ -103,7 +98,6 @@ func (s *lockedRaftMessageResponseStream) Recv() (*RaftMessageRequestBatch, erro
 // SnapshotResponseStream is the subset of the
 // MultiRaft_RaftSnapshotServer interface that is needed for sending responses.
 type SnapshotResponseStream interface {
-	Context() context.Context
 	Send(*SnapshotResponse) error
 	Recv() (*SnapshotRequest, error)
 }
@@ -125,7 +119,7 @@ type RaftMessageHandler interface {
 
 	// HandleSnapshot is called for each new incoming snapshot stream, after
 	// parsing the initial SnapshotRequest_Header on the stream.
-	HandleSnapshot(header *SnapshotRequest_Header, respStream SnapshotResponseStream) error
+	HandleSnapshot(ctx context.Context, header *SnapshotRequest_Header, respStream SnapshotResponseStream) error
 }
 
 type raftTransportStats struct {
@@ -347,9 +341,14 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 	errCh := make(chan error, 1)
 
 	// Node stopping error is caught below in the select.
-	if err := t.stopper.RunAsyncTask(
-		stream.Context(), "storage.RaftTransport: processing batch",
-		func(ctx context.Context) {
+	taskCtx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
+	defer cancel()
+	if err := t.stopper.RunAsyncTaskEx(
+		taskCtx,
+		stop.TaskOpts{
+			TaskName: "storage.RaftTransport: processing batch",
+			SpanOpt:  stop.ChildSpan,
+		}, func(ctx context.Context) {
 			errCh <- func() error {
 				var stats *raftTransportStats
 				stream := &lockedRaftMessageResponseStream{wrapped: stream}
@@ -406,9 +405,14 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 // RaftSnapshot handles incoming streaming snapshot requests.
 func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error {
 	errCh := make(chan error, 1)
-	if err := t.stopper.RunAsyncTask(
-		stream.Context(), "storage.RaftTransport: processing snapshot",
-		func(ctx context.Context) {
+	taskCtx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
+	defer cancel()
+	if err := t.stopper.RunAsyncTaskEx(
+		taskCtx,
+		stop.TaskOpts{
+			TaskName: "storage.RaftTransport: processing snapshot",
+			SpanOpt:  stop.ChildSpan,
+		}, func(ctx context.Context) {
 			errCh <- func() error {
 				req, err := stream.Recv()
 				if err != nil {
@@ -426,7 +430,7 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 						rmr.FromReplica, rmr.ToReplica)
 					return roachpb.NewStoreNotFoundError(rmr.ToReplica.StoreID)
 				}
-				return handler.HandleSnapshot(req.Header, stream)
+				return handler.HandleSnapshot(ctx, req.Header, stream)
 			}()
 		}); err != nil {
 		return err
