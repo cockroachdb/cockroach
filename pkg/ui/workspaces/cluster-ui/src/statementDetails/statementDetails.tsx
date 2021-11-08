@@ -184,7 +184,7 @@ function AppLink(props: { app: string }) {
   return (
     <Link
       className={cx("app-name")}
-      to={`/sql-activity?tab=statements&${searchParams.toString()}`}
+      to={`/sql-activity?tab=Statements&${searchParams.toString()}`}
     >
       {props.app}
     </Link>
@@ -387,7 +387,7 @@ export class StatementDetails extends React.Component<
   };
 
   backToStatementsClick = (): void => {
-    this.props.history.push("/sql-activity?tab=statements");
+    this.props.history.push("/sql-activity?tab=Statements");
     if (this.props.onBackToStatementsClick) {
       this.props.onBackToStatementsClick();
     }
@@ -457,7 +457,7 @@ export class StatementDetails extends React.Component<
     if (!stats) {
       const sourceApp = queryByName(this.props.location, appAttr);
       const listUrl =
-        "/sql-activity?tab=statements" +
+        "/sql-activity?tab=Statements" +
         (sourceApp ? "&" + appAttr + "=" + sourceApp : "");
 
       return (
