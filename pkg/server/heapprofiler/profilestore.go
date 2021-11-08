@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -37,7 +38,10 @@ var (
 	maxCombinedFileSize = settings.RegisterByteSizeSetting(
 		"server.mem_profile.total_dump_size_limit",
 		"maximum combined disk size of preserved memory profiles",
-		128<<20, // 128MiB
+		envutil.EnvOrDefaultInt64(
+			"COCKROACH_SERVER_MEMPROFILE_TOTAL_SIZE_LIMIT",
+			128<<20, // 128MiB
+		),
 	)
 )
 
