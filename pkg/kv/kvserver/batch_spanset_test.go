@@ -596,7 +596,7 @@ func TestSpanSetMVCCResolveWriteIntentRange(t *testing.T) {
 		Status: roachpb.PENDING,
 	}
 	if _, _, err := storage.MVCCResolveWriteIntentRange(
-		ctx, batch, nil /* ms */, intent, 0, eng.IsSeparatedIntentsEnabledForTesting(ctx),
+		ctx, batch, nil /* ms */, intent, 0,
 	); err != nil {
 		t.Fatal(err)
 	}

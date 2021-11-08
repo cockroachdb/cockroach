@@ -67,7 +67,6 @@ var ForStickyEngineTesting ConfigOption = func(cfg *engineConfig) error {
 	if cfg.Settings == nil {
 		cfg.Settings = cluster.MakeTestingClusterSettings()
 	}
-	cfg.DisableSeparatedIntents = false
 	return nil
 }
 
@@ -134,15 +133,6 @@ func Hook(hookFunc func(*base.StorageConfig) error) ConfigOption {
 			return nil
 		}
 		return hookFunc(&cfg.PebbleConfig.StorageConfig)
-	}
-}
-
-// SetSeparatedIntents sets the config option(s) for separated intents. If the
-// bool argument is true, separated intents are _not_ written.
-func SetSeparatedIntents(disable bool) ConfigOption {
-	return func(cfg *engineConfig) error {
-		cfg.DisableSeparatedIntents = disable
-		return nil
 	}
 }
 

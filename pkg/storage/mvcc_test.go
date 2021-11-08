@@ -3683,7 +3683,7 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 			}
 			num, _, err := MVCCResolveWriteIntentRange(ctx, engine, nil,
 				roachpb.MakeLockUpdate(txn1e2Commit, roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}),
-				2, engine.IsSeparatedIntentsEnabledForTesting(ctx))
+				2)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3884,7 +3884,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 
 			num, resumeSpan, err := MVCCResolveWriteIntentRange(ctx, engine, nil,
 				roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: testKey1, EndKey: testKey4.Next()}),
-				math.MaxInt64, engine.IsSeparatedIntentsEnabledForTesting(ctx))
+				math.MaxInt64)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3977,7 +3977,7 @@ func TestMVCCResolveTxnRangeResume(t *testing.T) {
 			// Resolve up to 6 intents: the keys are 000, 033, 066, 099, 1212, 1515.
 			num, resumeSpan, err := MVCCResolveWriteIntentRange(ctx, rw, nil,
 				roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: roachpb.Key("00"), EndKey: roachpb.Key("33")}),
-				6, engine.IsSeparatedIntentsEnabledForTesting(ctx))
+				6)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -4025,7 +4025,7 @@ func TestMVCCResolveTxnRangeResumeWithManyVersions(t *testing.T) {
 			for {
 				// Resolve up to 20 intents.
 				num, resumeSpan, err := MVCCResolveWriteIntentRange(ctx, engine, nil, lockUpdate,
-					20, engine.IsSeparatedIntentsEnabledForTesting(ctx))
+					20)
 				require.NoError(t, err)
 				if resumeSpan == nil {
 					// Last call resolves 0 intents.
@@ -4247,7 +4247,7 @@ func TestRandomizedMVCCResolveWriteIntentRange(t *testing.T) {
 		func() {
 			batch := engs[i].eng.NewBatch()
 			defer batch.Close()
-			_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0, i == 0)
+			_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0)
 			require.NoError(t, err)
 			require.NoError(t, batch.Commit(false))
 		}()
@@ -4265,7 +4265,7 @@ func TestRandomizedMVCCResolveWriteIntentRange(t *testing.T) {
 			func() {
 				batch := engs[i].eng.NewBatch()
 				defer batch.Close()
-				_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0, i == 0)
+				_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0)
 				require.NoError(t, err)
 				require.NoError(t, batch.Commit(false))
 			}()
@@ -4354,7 +4354,7 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	}
 	// All the writes are ignored, so DEL is written for the intent. These
 	// should be buffered in the memtable.
-	_, _, err = MVCCResolveWriteIntentRange(ctx, eng, nil, lu, 0, true)
+	_, _, err = MVCCResolveWriteIntentRange(ctx, eng, nil, lu, 0)
 	require.NoError(t, err)
 	{
 		iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
@@ -4386,7 +4386,7 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	if debug {
 		log.Infof(ctx, "LockUpdate: %s", lu.String())
 	}
-	_, _, err = MVCCResolveWriteIntentRange(ctx, eng, nil, lu, 0, false)
+	_, _, err = MVCCResolveWriteIntentRange(ctx, eng, nil, lu, 0)
 	require.NoError(t, err)
 	// Compact the engine so that SINGLEDEL consumes the SETWITHDEL, becoming a
 	// DEL.

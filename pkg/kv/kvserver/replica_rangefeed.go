@@ -385,22 +385,13 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		// waiting for the Register call below to return.
 		r.raftMu.AssertHeld()
 
-		onlySeparatedIntents := r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.PostSeparatedIntentsMigration)
-
-		if onlySeparatedIntents {
-			lowerBound, _ := keys.LockTableSingleKey(desc.StartKey.AsRawKey(), nil)
-			upperBound, _ := keys.LockTableSingleKey(desc.EndKey.AsRawKey(), nil)
-			iter := r.Engine().NewEngineIterator(storage.IterOptions{
-				LowerBound: lowerBound,
-				UpperBound: upperBound,
-			})
-			return rangefeed.NewSeparatedIntentScanner(iter)
-
-		}
-		iter := r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-			UpperBound: desc.EndKey.AsRawKey(),
+		lowerBound, _ := keys.LockTableSingleKey(desc.StartKey.AsRawKey(), nil)
+		upperBound, _ := keys.LockTableSingleKey(desc.EndKey.AsRawKey(), nil)
+		iter := r.Engine().NewEngineIterator(storage.IterOptions{
+			LowerBound: lowerBound,
+			UpperBound: upperBound,
 		})
-		return rangefeed.NewLegacyIntentScanner(iter)
+		return rangefeed.NewSeparatedIntentScanner(iter)
 	}
 
 	p.Start(r.store.Stopper(), rtsIter)
