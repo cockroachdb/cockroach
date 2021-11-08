@@ -10,6 +10,7 @@
 
 import React from "react";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import Helmet from "react-helmet";
 import classNames from "classnames/bind";
 import styles from "../statementsPage/statementsPage.module.scss";
 import moment, { Moment } from "moment";
@@ -273,6 +274,7 @@ export class TransactionsPage extends React.Component<
   renderTransactionsList(): React.ReactElement {
     return (
       <div className={cx("table-area")}>
+        <Helmet title={"SQL Activity | Transactions"} />
         <Loading
           loading={!this.props?.data}
           error={this.props?.error}

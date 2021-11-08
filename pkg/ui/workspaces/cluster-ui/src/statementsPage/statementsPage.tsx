@@ -568,15 +568,13 @@ export class StatementsPage extends React.Component<
 
   render(): React.ReactElement {
     const {
-      location,
       refreshStatementDiagnosticsRequests,
       onActivateStatementDiagnostics,
       onDiagnosticsModalOpen,
     } = this.props;
-    const app = queryByName(location, appAttr);
     return (
       <div className={cx("root", "table-area")}>
-        <Helmet title={app ? `${app} App | Statements` : "Statements"} />
+        <Helmet title={"SQL Activity | Statements"} />
         <Loading
           loading={isNil(this.props.statements)}
           error={this.props.statementsError}

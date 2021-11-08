@@ -212,11 +212,10 @@ export class SessionsPage extends React.Component<
   };
 
   render(): React.ReactElement {
-    const { match, cancelSession, cancelQuery } = this.props;
-    const app = getMatchParamByName(match, appAttr);
+    const { cancelSession, cancelQuery } = this.props;
     return (
       <div className={sessionsPageCx("sessions-page")}>
-        <Helmet title={app ? `${app} App | Sessions` : "Sessions"} />
+        <Helmet title={"SQL Activity | Sessions"} />
         <Loading
           loading={isNil(this.props.sessions)}
           error={this.props.sessionsError}
