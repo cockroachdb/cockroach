@@ -1,4 +1,3 @@
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cmd/urlcheck/lib/urlcheck //pkg/cmd/urlcheck/lib/urlcheck:go_default_library
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
@@ -6,7 +5,7 @@ go_library(
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/urlcheck",
     visibility = ["//visibility:private"],
-    deps = ["//pkg/cmd/urlcheck/lib/urlcheck:go_default_library"],
+    deps = ["//pkg/cmd/urlcheck/lib/urlcheck"],
 )
 
 go_binary(
