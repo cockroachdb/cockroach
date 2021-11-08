@@ -90,13 +90,14 @@ func MaybeFixPrivileges(
 
 	fixSuperUser := func(user security.SQLUsername) {
 		privs := p.FindOrCreateUser(user)
-		if privs.Privileges != allowedPrivilegesBits {
+		oldPrivilegeBits := privs.Privileges
+		if oldPrivilegeBits != allowedPrivilegesBits {
 			if privilege.ALL.IsSetIn(allowedPrivilegesBits) {
 				privs.Privileges = privilege.ALL.Mask()
 			} else {
 				privs.Privileges = allowedPrivilegesBits
 			}
-			changed = true
+			changed = (privs.Privileges != oldPrivilegeBits) || changed
 		}
 	}
 

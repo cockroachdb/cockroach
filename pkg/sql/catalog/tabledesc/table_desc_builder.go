@@ -192,11 +192,13 @@ func maybeFillInDescriptor(
 
 	changes.UpgradedIndexFormatVersion = maybeUpgradePrimaryIndexFormatVersion(desc)
 	for i := range desc.Indexes {
-		changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || maybeUpgradeSecondaryIndexFormatVersion(&desc.Indexes[i])
+		isUpgraded := maybeUpgradeSecondaryIndexFormatVersion(&desc.Indexes[i])
+		changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || isUpgraded
 	}
 	for i := range desc.Mutations {
 		if idx := desc.Mutations[i].GetIndex(); idx != nil {
-			changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || maybeUpgradeSecondaryIndexFormatVersion(idx)
+			isUpgraded := maybeUpgradeSecondaryIndexFormatVersion(idx)
+			changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || isUpgraded
 		}
 	}
 	changes.UpgradedNamespaceName = maybeUpgradeNamespaceName(desc)
