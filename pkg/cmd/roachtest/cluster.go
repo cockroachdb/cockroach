@@ -835,7 +835,8 @@ func (f *clusterFactory) newCluster(
 	// Attempt to create a cluster several times to be able to move past
 	// temporary flakiness in the cloud providers.
 	const maxAttempts = 3
-	for i := 0; ; i++ {
+	// loop assumes maxAttempts is atleast (1).
+	for i := 1; ; i++ {
 		c := &clusterImpl{
 			// NB: this intentionally avoids re-using the name across iterations in
 			// the loop. See:
@@ -876,7 +877,7 @@ func (f *clusterFactory) newCluster(
 			log.Fatalf(ctx, "%v", err)
 		}
 
-		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i+1, maxAttempts)
+		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
 		err = execCmd(ctx, l, sargs...)
 		if err == nil {
 			if err := f.r.registerCluster(c); err != nil {
@@ -898,7 +899,7 @@ func (f *clusterFactory) newCluster(
 		// (when selecting the test) it's the best we can do for now.
 		c.destroyState.alloc = nil
 		c.Destroy(ctx, closeLogger, l)
-		if i > maxAttempts {
+		if i >= maxAttempts {
 			// Here we have to release the alloc, as we are giving up.
 			cfg.alloc.Release()
 			return nil, err
