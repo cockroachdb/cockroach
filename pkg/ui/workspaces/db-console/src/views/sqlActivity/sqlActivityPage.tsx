@@ -12,6 +12,7 @@
 // file on managed-service repo.
 
 import React, { useState, useEffect } from "react";
+import Helmet from "react-helmet";
 import { Tabs } from "antd";
 import { commonStyles, util } from "@cockroachlabs/cluster-ui";
 import SessionsPageConnected from "src/views/sessions/sessionsPage";
@@ -22,7 +23,7 @@ import { RouteComponentProps } from "react-router-dom";
 const { TabPane } = Tabs;
 
 const SQLActivityPage = (props: RouteComponentProps) => {
-  const defaultTab = util.queryByName(props.location, "tab") || "sessions";
+  const defaultTab = util.queryByName(props.location, "tab") || "Sessions";
   const [currentTab, setCurrentTab] = useState(defaultTab);
 
   const onTabChange = (tabId: string): void => {
@@ -32,7 +33,7 @@ const SQLActivityPage = (props: RouteComponentProps) => {
   };
 
   useEffect(() => {
-    const queryTab = util.queryByName(props.location, "tab") || "sessions";
+    const queryTab = util.queryByName(props.location, "tab") || "Sessions";
     if (queryTab !== currentTab) {
       setCurrentTab(queryTab);
     }
@@ -40,6 +41,7 @@ const SQLActivityPage = (props: RouteComponentProps) => {
 
   return (
     <div>
+      <Helmet title={defaultTab} />
       <h3 className={commonStyles("base-heading")}>SQL Activity</h3>
       <Tabs
         defaultActiveKey={defaultTab}
@@ -47,13 +49,13 @@ const SQLActivityPage = (props: RouteComponentProps) => {
         onChange={onTabChange}
         activeKey={currentTab}
       >
-        <TabPane tab="Sessions" key="sessions">
+        <TabPane tab="Sessions" key="Sessions">
           <SessionsPageConnected />
         </TabPane>
-        <TabPane tab="Transactions" key="transactions">
+        <TabPane tab="Transactions" key="Transactions">
           <TransactionsPageConnected />
         </TabPane>
-        <TabPane tab="Statements" key="statements">
+        <TabPane tab="Statements" key="Statements">
           <StatementsPageConnected />
         </TabPane>
       </Tabs>

@@ -11,14 +11,13 @@
 import React from "react";
 import { isNil, merge } from "lodash";
 
-import { getMatchParamByName, syncHistory } from "src/util/query";
+import { syncHistory } from "src/util/query";
 import { appAttr } from "src/util/constants";
 import {
   makeSessionsColumns,
   SessionInfo,
   SessionsSortedTable,
 } from "./sessionsTable";
-import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
 import { sessionsTable } from "src/util/docs";
@@ -211,11 +210,9 @@ export class SessionsPage extends React.Component<
   };
 
   render(): React.ReactElement {
-    const { match, cancelSession, cancelQuery } = this.props;
-    const app = getMatchParamByName(match, appAttr);
+    const { cancelSession, cancelQuery } = this.props;
     return (
       <div className={sessionsPageCx("sessions-page")}>
-        <Helmet title={app ? `${app} App | Sessions` : "Sessions"} />
         <Loading
           loading={isNil(this.props.sessions)}
           error={this.props.sessionsError}

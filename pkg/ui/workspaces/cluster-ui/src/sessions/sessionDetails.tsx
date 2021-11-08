@@ -126,7 +126,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
   backToSessionsPage = (): void => {
     const { history, onBackButtonClick } = this.props;
     onBackButtonClick && onBackButtonClick();
-    history.push("/sql-activity?tab=sessions");
+    history.push("/sql-activity?tab=Sessions");
   };
 
   render(): React.ReactElement {
