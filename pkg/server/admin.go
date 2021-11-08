@@ -42,6 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1816,6 +1818,15 @@ func (s *adminServer) DataDistribution(
 				zoneConfigQuery,
 			)
 			if err != nil {
+				// This case arises regularly in databases which were upgraded from
+				// 19.2 up to 20.2 and beyond. This occurs because, due to bugs, there
+				// is no namespace entry from system.namespace2 despite the fact that
+				// is the descriptor name for the new namespace table. It can also arise
+				// due to the non-transactional nature of this API.
+				if pgerror.GetPGCode(err) == pgcode.UndefinedTable {
+					continue
+				}
+
 				return nil, s.serverError(err)
 			}
 
