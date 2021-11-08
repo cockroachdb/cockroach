@@ -183,7 +183,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                 <Redirect
                   exact
                   from={`/statements`}
-                  to={`/sql-activity?${tabAttr}=statements`}
+                  to={`/sql-activity?${tabAttr}=Statements`}
                 />
                 <Redirect
                   exact
@@ -223,14 +223,14 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                 <Redirect
                   exact
                   from={`/statement`}
-                  to={`/sql-activity?${tabAttr}=statements`}
+                  to={`/sql-activity?${tabAttr}=Statements`}
                 />
 
                 {/* sessions */}
                 <Redirect
                   exact
                   from={`/sessions`}
-                  to={`/sql-activity?${tabAttr}=sessions`}
+                  to={`/sql-activity?${tabAttr}=Sessions`}
                 />
                 <Route
                   exact
@@ -242,7 +242,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                 <Redirect
                   exact
                   from={`/transactions`}
-                  to={`/sql-activity?${tabAttr}=transactions`}
+                  to={`/sql-activity?${tabAttr}=Transactions`}
                 />
 
                 {/* debug pages */}
