@@ -133,17 +133,13 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	clusterID := &cfg.RPCContext.ClusterID
 	server := rpc.NewServer(cfg.RPCContext) // never started
 	ltc.Gossip = gossip.New(ambient, clusterID, nc, cfg.RPCContext, server, ltc.stopper, metric.NewRegistry(), roachpb.Locality{}, zonepb.DefaultZoneConfigRef())
-	disableSeparatedIntents := !cfg.Settings.Version.ActiveVersionOrEmpty(
-		context.Background()).IsActive(clusterversion.PostSeparatedIntentsMigration)
-	log.Infof(context.Background(), "engine creation is randomly setting disableSeparatedIntents: %t",
-		disableSeparatedIntents)
 	var err error
 	ltc.Eng, err = storage.Open(
 		ambient.AnnotateCtx(context.Background()),
 		storage.InMemory(),
 		storage.CacheSize(0),
 		storage.MaxSize(50<<20 /* 50 MiB */),
-		storage.SetSeparatedIntents(disableSeparatedIntents))
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
