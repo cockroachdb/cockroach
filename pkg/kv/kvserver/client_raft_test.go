@@ -5415,7 +5415,7 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 		FromReplica:   fromReplDesc,
 		ToReplica:     newReplDesc,
 		Message:       raftpb.Message{Type: raftpb.MsgVote, Term: 2},
-	}, noopRaftMessageResponseSteam{}))
+	}, noopRaftMessageResponseStream{}))
 	ts := waitForTombstone(t, store.Engine(), desc.RangeID)
 	require.Equal(t, ts.NextReplicaID, desc.NextReplicaID)
 	wg.Wait()
@@ -5423,13 +5423,13 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 	require.Regexp(t, "closed.*destroyed", err)
 }
 
-type noopRaftMessageResponseSteam struct{}
+type noopRaftMessageResponseStream struct{}
 
-func (n noopRaftMessageResponseSteam) Send(*kvserver.RaftMessageResponse) error {
+func (n noopRaftMessageResponseStream) Send(*kvserver.RaftMessageResponse) error {
 	return nil
 }
 
-var _ kvserver.RaftMessageResponseStream = noopRaftMessageResponseSteam{}
+var _ kvserver.RaftMessageResponseStream = noopRaftMessageResponseStream{}
 
 // TestElectionAfterRestart is an end-to-end test for shouldCampaignOnWakeLocked
 // (see TestReplicaShouldCampaignOnWake for the corresponding unit test). It sets
