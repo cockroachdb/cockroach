@@ -281,13 +281,13 @@ func BenchmarkIntentScan(b *testing.B) {
 	skip.UnderShort(b, "setting up unflushed data takes too long")
 	defer log.Scope(b).Close(b)
 
-	for _, sep := range []bool{false, true} {
+	for _, sep := range []bool{true} {
 		b.Run(fmt.Sprintf("separated=%t", sep), func(b *testing.B) {
 			for _, numVersions := range []int{10, 100, 200, 400} {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, percentFlushed := range []int{0, 50, 80, 90, 100} {
 						b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
-							eng := setupMVCCInMemPebbleWithSeparatedIntents(b, !sep)
+							eng := setupMVCCInMemPebbleWithSeparatedIntents(b)
 							numFlushedVersions := (percentFlushed * numVersions) / 100
 							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, false, /* resolveAll */
 								1, false /* resolveIntentForLatestVersionWhenNotLockUpdate */)
@@ -345,13 +345,13 @@ func BenchmarkScanAllIntentsResolved(b *testing.B) {
 	skip.UnderShort(b, "setting up unflushed data takes too long")
 	defer log.Scope(b).Close(b)
 
-	for _, sep := range []bool{false, true} {
+	for _, sep := range []bool{true} {
 		b.Run(fmt.Sprintf("separated=%t", sep), func(b *testing.B) {
 			for _, numVersions := range []int{200} {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, percentFlushed := range []int{0, 50, 90, 100} {
 						b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
-							eng := setupMVCCInMemPebbleWithSeparatedIntents(b, !sep)
+							eng := setupMVCCInMemPebbleWithSeparatedIntents(b)
 							numFlushedVersions := (percentFlushed * numVersions) / 100
 							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, true, /* resolveAll */
 								1, false /* resolveIntentForLatestVersionWhenNotLockUpdate */)
@@ -416,13 +416,13 @@ func BenchmarkScanOneAllIntentsResolved(b *testing.B) {
 	skip.UnderShort(b, "setting up unflushed data takes too long")
 	defer log.Scope(b).Close(b)
 
-	for _, sep := range []bool{false, true} {
+	for _, sep := range []bool{true} {
 		b.Run(fmt.Sprintf("separated=%t", sep), func(b *testing.B) {
 			for _, numVersions := range []int{200} {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, percentFlushed := range []int{0, 50, 90, 100} {
 						b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
-							eng := setupMVCCInMemPebbleWithSeparatedIntents(b, !sep)
+							eng := setupMVCCInMemPebbleWithSeparatedIntents(b)
 							numFlushedVersions := (percentFlushed * numVersions) / 100
 							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, true, /* resolveAll */
 								1, false /* resolveIntentForLatestVersionWhenNotLockUpdate */)
@@ -468,13 +468,13 @@ func BenchmarkIntentResolution(b *testing.B) {
 	skip.UnderShort(b, "setting up unflushed data takes too long")
 	defer log.Scope(b).Close(b)
 
-	for _, sep := range []bool{false, true} {
+	for _, sep := range []bool{true} {
 		b.Run(fmt.Sprintf("separated=%t", sep), func(b *testing.B) {
 			for _, numVersions := range []int{10, 100, 200, 400} {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, percentFlushed := range []int{0, 50, 80, 90, 100} {
 						b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
-							eng := setupMVCCInMemPebbleWithSeparatedIntents(b, !sep)
+							eng := setupMVCCInMemPebbleWithSeparatedIntents(b)
 							numFlushedVersions := (percentFlushed * numVersions) / 100
 							lockUpdate := setupKeysWithIntent(b, eng, numVersions, numFlushedVersions,
 								false /* resolveAll */, 1,
@@ -513,7 +513,7 @@ func BenchmarkIntentRangeResolution(b *testing.B) {
 	skip.UnderShort(b, "setting up unflushed data takes too long")
 	defer log.Scope(b).Close(b)
 
-	for _, sep := range []bool{false, true} {
+	for _, sep := range []bool{true} {
 		b.Run(fmt.Sprintf("separated=%t", sep), func(b *testing.B) {
 			for _, numVersions := range []int{10, 100, 400} {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
@@ -528,7 +528,7 @@ func BenchmarkIntentRangeResolution(b *testing.B) {
 								b.Run(fmt.Sprintf("other-txn-intents=%t", haveOtherTxnUnresolvedIntents), func(b *testing.B) {
 									for _, percentFlushed := range []int{0, 50, 100} {
 										b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
-											eng := setupMVCCInMemPebbleWithSeparatedIntents(b, !sep)
+											eng := setupMVCCInMemPebbleWithSeparatedIntents(b)
 											numFlushedVersions := (percentFlushed * numVersions) / 100
 											lockUpdate := setupKeysWithIntent(b, eng, numVersions, numFlushedVersions,
 												false /* resolveAll */, sparseness, !haveOtherTxnUnresolvedIntents)
@@ -559,7 +559,7 @@ func BenchmarkIntentRangeResolution(b *testing.B) {
 												lockUpdate.Key = keys[rangeNum*numKeysPerRange]
 												lockUpdate.EndKey = keys[(rangeNum+1)*numKeysPerRange]
 												resolved, span, err := MVCCResolveWriteIntentRange(
-													context.Background(), batch, nil, lockUpdate, 1000 /* max */, sep)
+													context.Background(), batch, nil, lockUpdate, 1000 /* max */)
 												if err != nil {
 													b.Fatal(err)
 												}

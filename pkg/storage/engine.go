@@ -833,11 +833,6 @@ type Engine interface {
 	// that hard links can be used.
 	CreateCheckpoint(dir string) error
 
-	// IsSeparatedIntentsEnabledForTesting is a test only method used in tests
-	// that know that this enabled setting is not changing and need the value to
-	// adjust their expectations.
-	IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool
-
 	// SetMinVersion is used to signal to the engine the current minimum
 	// version that it must maintain compatibility with.
 	SetMinVersion(version roachpb.Version) error

@@ -70,7 +70,6 @@ func newPebbleBatch(
 	db *pebble.DB,
 	batch *pebble.Batch,
 	writeOnly bool,
-	disableSeparatedIntents bool,
 	overrideTxnDidNotUpdateMetaToFalse bool,
 ) *pebbleBatch {
 	pb := pebbleBatchPool.Get().(*pebbleBatch)
@@ -104,7 +103,7 @@ func newPebbleBatch(
 		// a correctness issue.
 		overrideTxnDidNotUpdateMetaToFalse: overrideTxnDidNotUpdateMetaToFalse,
 	}
-	pb.wrappedIntentWriter = wrapIntentWriter(context.Background(), pb, disableSeparatedIntents)
+	pb.wrappedIntentWriter = wrapIntentWriter(context.Background(), pb)
 	return pb
 }
 

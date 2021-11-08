@@ -3533,7 +3533,6 @@ func MVCCResolveWriteIntentRange(
 	ms *enginepb.MVCCStats,
 	intent roachpb.LockUpdate,
 	max int64,
-	onlySeparatedIntents bool,
 ) (int64, *roachpb.Span, error) {
 	if max < 0 {
 		resumeSpan := intent.Span // don't inline or `intent` would escape to heap
@@ -3551,14 +3550,14 @@ func MVCCResolveWriteIntentRange(
 	// resolution.
 	var iter iterForKeyVersions
 
-	// If onlySeparatedIntents, we can find relevant intents quickly by
+	// We can find relevant intents quickly by
 	// iterating over the lock table. We additionally require
 	// ConsistentIterators() since we want the two iterators to be mutually
 	// consistent (and production code will have consistent iterators).
 	//
 	// TODO(sumeer): when removing the slow path, use
 	// newMVCCIteratorByCloningEngineIter for the inconsistent iterators case.
-	if onlySeparatedIntents && rw.ConsistentIterators() {
+	if rw.ConsistentIterators() {
 		ltStart, _ := keys.LockTableSingleKey(intent.Key, nil)
 		ltEnd, _ := keys.LockTableSingleKey(intent.EndKey, nil)
 		engineIter := rw.NewEngineIterator(IterOptions{LowerBound: ltStart, UpperBound: ltEnd})

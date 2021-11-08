@@ -143,7 +143,7 @@ func (registry *stickyInMemEnginesRegistryImpl) GetOrCreateStickyInMemEngine(
 	if storeKnobs == nil || !storeKnobs.StorageKnobs.DisableSeparatedIntents {
 		options = append(options, storage.ForStickyEngineTesting)
 	} else {
-		options = append(options, storage.SetSeparatedIntents(true))
+		options = append(options, storage.SetSeparatedIntents())
 	}
 
 	log.Infof(ctx, "creating new sticky in-mem engine %s", spec.StickyInMemoryEngineID)

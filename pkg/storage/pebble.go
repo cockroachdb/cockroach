@@ -482,9 +482,6 @@ type Pebble struct {
 	diskSlowCount   int64
 	diskStallCount  int64
 
-	// Copied from testing knobs.
-	disableSeparatedIntents bool
-
 	// Relevant options copied over from pebble.Options.
 	fs            vfs.FS
 	unencryptedFS vfs.FS
@@ -662,21 +659,20 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	}
 
 	p := &Pebble{
-		readOnly:                cfg.Opts.ReadOnly,
-		path:                    cfg.Dir,
-		auxDir:                  auxDir,
-		ballastPath:             ballastPath,
-		ballastSize:             cfg.BallastSize,
-		maxSize:                 cfg.MaxSize,
-		attrs:                   cfg.Attrs,
-		settings:                cfg.Settings,
-		encryption:              env,
-		fileRegistry:            fileRegistry,
-		fs:                      cfg.Opts.FS,
-		unencryptedFS:           unencryptedFS,
-		logger:                  cfg.Opts.Logger,
-		storeIDPebbleLog:        storeIDContainer,
-		disableSeparatedIntents: cfg.DisableSeparatedIntents,
+		readOnly:         cfg.Opts.ReadOnly,
+		path:             cfg.Dir,
+		auxDir:           auxDir,
+		ballastPath:      ballastPath,
+		ballastSize:      cfg.BallastSize,
+		maxSize:          cfg.MaxSize,
+		attrs:            cfg.Attrs,
+		settings:         cfg.Settings,
+		encryption:       env,
+		fileRegistry:     fileRegistry,
+		fs:               cfg.Opts.FS,
+		unencryptedFS:    unencryptedFS,
+		logger:           cfg.Opts.Logger,
+		storeIDPebbleLog: storeIDContainer,
 	}
 	cfg.Opts.EventListener = pebble.TeeEventListener(
 		pebble.MakeLoggingEventListener(pebbleLogger{
@@ -686,7 +682,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		p.makeMetricEventListener(ctx),
 	)
 	p.eventListener = &cfg.Opts.EventListener
-	p.wrappedIntentWriter = wrapIntentWriter(ctx, p, cfg.DisableSeparatedIntents)
+	p.wrappedIntentWriter = wrapIntentWriter(ctx, p)
 
 	// Read the current store cluster version.
 	storeClusterVersion, err := getMinVersion(unencryptedFS, cfg.Dir)
@@ -1035,11 +1031,6 @@ func (p *Pebble) OverrideTxnDidNotUpdateMetaToFalse(ctx context.Context) bool {
 	return overrideTxnDidNotUpdateMetaToFalse(ctx, p.settings)
 }
 
-// IsSeparatedIntentsEnabledForTesting implements the Engine interface.
-func (p *Pebble) IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool {
-	return !p.disableSeparatedIntents
-}
-
 func (p *Pebble) put(key MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
@@ -1290,7 +1281,7 @@ func (p *Pebble) GetAuxiliaryDir() string {
 func (p *Pebble) NewBatch() Batch {
 	return newPebbleBatch(
 		p.db, p.db.NewIndexedBatch(), false, /* writeOnly */
-		p.disableSeparatedIntents, overrideTxnDidNotUpdateMetaToFalse(context.TODO(), p.settings))
+		overrideTxnDidNotUpdateMetaToFalse(context.TODO(), p.settings))
 }
 
 // NewReadOnly implements the Engine interface.
@@ -1300,7 +1291,7 @@ func (p *Pebble) NewReadOnly() ReadWriter {
 
 // NewUnindexedBatch implements the Engine interface.
 func (p *Pebble) NewUnindexedBatch(writeOnly bool) Batch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly, p.disableSeparatedIntents,
+	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly,
 		overrideTxnDidNotUpdateMetaToFalse(context.TODO(), p.settings))
 }
 

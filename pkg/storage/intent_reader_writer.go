@@ -29,17 +29,12 @@ import (
 // PutIntent, ClearIntent, ClearMVCCRangeAndIntents.
 type intentDemuxWriter struct {
 	w Writer
-
-	// Can only be set to true by testing knobs to disable writing of separated
-	// intents.
-	disableSeparatedIntents bool
 }
 
 func wrapIntentWriter(
-	ctx context.Context, w Writer, disableSeparatedIntents bool,
+	ctx context.Context, w Writer,
 ) intentDemuxWriter {
 	idw := intentDemuxWriter{w: w}
-	idw.disableSeparatedIntents = disableSeparatedIntents
 	return idw
 }
 
@@ -84,44 +79,19 @@ func (idw intentDemuxWriter) PutIntent(
 	txnUUID uuid.UUID,
 	buf []byte,
 ) (_ []byte, separatedIntentCountDelta int, _ error) {
-	writeSeparatedIntents := !idw.disableSeparatedIntents
 	var engineKey EngineKey
-	if state == ExistingIntentSeparated || writeSeparatedIntents {
-		engineKey, buf = LockTableKey{
-			Key:      key,
-			Strength: lock.Exclusive,
-			TxnUUID:  txnUUID[:],
-		}.ToEngineKey(buf)
-	}
-	if state == ExistingIntentSeparated && !writeSeparatedIntents {
-		// Switching this intent from separated to interleaved.
-		if txnDidNotUpdateMeta {
-			if err := idw.w.SingleClearEngineKey(engineKey); err != nil {
-				return buf, 0, err
-			}
-		} else {
-			if err := idw.w.ClearEngineKey(engineKey); err != nil {
-				return buf, 0, err
-			}
-		}
-	} else if state == ExistingIntentInterleaved && writeSeparatedIntents {
-		// Switching this intent from interleaved to separated.
-		if err := idw.w.ClearUnversioned(key); err != nil {
-			return buf, 0, err
-		}
-	}
+	engineKey, buf = LockTableKey{
+		Key:      key,
+		Strength: lock.Exclusive,
+		TxnUUID:  txnUUID[:],
+	}.ToEngineKey(buf)
+
 	// Else, staying separated or staying interleaved or there was no preceding
 	// intent, so don't need to explicitly clear.
-
-	if state == ExistingIntentSeparated {
-		separatedIntentCountDelta = -1
-	}
+	separatedIntentCountDelta = -1
 	// Write intent
-	if writeSeparatedIntents {
-		separatedIntentCountDelta++
-		return buf, separatedIntentCountDelta, idw.w.PutEngineKey(engineKey, value)
-	}
-	return buf, separatedIntentCountDelta, idw.w.PutUnversioned(key, value)
+	separatedIntentCountDelta++
+	return buf, separatedIntentCountDelta, idw.w.PutEngineKey(engineKey, value)
 }
 
 // ClearMVCCRangeAndIntents has the same behavior as
