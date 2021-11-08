@@ -1022,7 +1022,7 @@ func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) error {
 // successfully persisted timestamp greater then any wall time used by the
 // server.
 //
-// If prevHLCUpperBound is 0, the function sleeps up to max offset
+// If prevHLCUpperBound is 0, the function sleeps up to max offset.
 func ensureClockMonotonicity(
 	ctx context.Context,
 	clock *hlc.Clock,
@@ -1595,15 +1595,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return errors.Wrap(err, "reading max HLC upper bound")
 	}
 
-	if hlcUpperBound > 0 {
-		ensureClockMonotonicity(
-			ctx,
-			s.clock,
-			s.startTime,
-			hlcUpperBound,
-			s.clock.SleepUntil,
-		)
-	}
+	ensureClockMonotonicity(
+		ctx,
+		s.clock,
+		s.startTime,
+		hlcUpperBound,
+		s.clock.SleepUntil,
+	)
 
 	// Record a walltime that is lower than the lowest hlc timestamp this current
 	// instance of the node can use. We do not use startTime because it is lower

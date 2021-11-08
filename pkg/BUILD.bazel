@@ -77,6 +77,7 @@ ALL_TESTS = [
     "//pkg/cmd/github-pull-request-make:github-pull-request-make_test",
     "//pkg/cmd/internal/issues:issues_test",
     "//pkg/cmd/label-merged-pr:label-merged-pr_test",
+    "//pkg/cmd/mirror:mirror_test",
     "//pkg/cmd/prereqs:prereqs_test",
     "//pkg/cmd/publish-artifacts:publish-artifacts_test",
     "//pkg/cmd/publish-provisional-artifacts:publish-provisional-artifacts_test",
