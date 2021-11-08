@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1432,43 +1431,6 @@ func (mb *mutationBuilder) addAssignmentCasts(inScope *scope, outTypes []*types.
 
 	projectionScope.expr = mb.b.constructProject(expr, projectionScope.cols)
 	return projectionScope
-}
-
-// checkColumnIsNotGeneratedAlwaysAsIdentity verifies that if current column
-// is not created as an IDENTITY column with the
-// `GENERATED ALWAYS AS IDENTITY` syntax.
-// Such an IDENTITY column is not allowed to be overridden explicitly.
-// Users need to specify the INSERT/UPSERT/UPDATE statement with
-// the OVERRIDING SYSTEM VALUE syntax.
-//
-// TODO(janexing): to implement the OVERRIDING SYSTEM VALUE syntax
-// under `INSERT/UPSERT/UPDATE` statement.
-// check also https://github.com/cockroachdb/cockroach/issues/68201.
-//
-// This function is used in code for UPDATE, INSERT and UPSERT statement.
-func checkColumnIsNotGeneratedAlwaysAsIdentity(col *cat.Column) {
-	if !col.IsGeneratedAlwaysAsIdentity() {
-		return
-	}
-	colName := string(col.ColName())
-	err := sqlerrors.NewGeneratedAlwaysAsIdentityColumnOverrideError(colName)
-	panic(err)
-}
-
-// checkUpdateExpression verifies if current column
-// is compatible with the update expression.
-func checkUpdateExpression(col *cat.Column, updateExpr *tree.UpdateExpr) {
-	if col.IsGeneratedAlwaysAsIdentity() {
-		switch updateExpr.Expr.(type) {
-		// if current column was created with the `GENERATED ALWAYS` syntax,
-		// this column can only be updated to DEFAULT in the update statement.
-		case tree.DefaultVal:
-			return
-		default:
-			err := sqlerrors.NewGeneratedAlwaysAsIdentityColumnUpdateError(string(col.ColName()))
-			panic(err)
-		}
-	}
 }
 
 // partialIndexCount returns the number of public, write-only, and delete-only
