@@ -304,6 +304,13 @@ func validateParquetFile(t *testing.T, file string, truthRows [][]interface{}) e
 
 		t.Logf("\n Record %v:", count)
 		for i := 0; i < len(cols); i++ {
+			if truthRows[count][i] == nil {
+				// If we expect a null value, the row created by the parquet reader will not have the
+				// associated column.
+				_, ok := row[cols[i].SchemaElement.Name]
+				require.Equal(t, ok, false)
+				continue
+			}
 			var decodedV interface{}
 			v := row[cols[i].SchemaElement.Name]
 			switch vv := v.(type) {
@@ -342,24 +349,45 @@ func TestBasicParquetTypes(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT, a BOOL, INDEX (y))`)
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 14.3, true), (2, 'Bob', 2, 24.1, false), 
-(3, 'Carl', 1, 34.214,true)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 14.3, true), (2, 'Bob', 2, 24.1, 
+false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 'Bobby', 2, NULL,false),
+(6, NULL, NULL, NULL, NULL)`)
 
-	sqlDB.Exec(t, `EXPORT INTO PARQUET 'nodelocal://0/order_parquet' FROM SELECT *
-		FROM foo ORDER BY y ASC LIMIT 2`)
+	tests := []struct {
+		name     string
+		stmt     string
+		expected [][]interface{}
+	}{
+		{
+			name: "basic_parquet",
+			stmt: `EXPORT INTO PARQUET 'nodelocal://0/basic_parquet' FROM SELECT *
+							FROM foo WHERE y IS NOT NULL ORDER BY y ASC LIMIT 2 `,
+			expected: [][]interface{}{{int64(3), "Carl", int64(1), 34.214, true},
+				{int64(2), "Bob", int64(2), 24.1, false}},
+		},
+		{
+			name: "null_parquet",
+			stmt: `EXPORT INTO PARQUET 'nodelocal://0/null_parquet' FROM SELECT *
+							FROM foo ORDER BY x ASC LIMIT 2`,
+			expected: [][]interface{}{
+				{int64(6), nil, nil, nil, nil},
+				{int64(4), "Alex", int64(3), 14.3, nil}},
+		},
+	}
 
-	paths, err := filepath.Glob(filepath.Join(dir, "order_parquet",
-		parquetExportFilePattern))
-	require.NoError(t, err)
+	for _, test := range tests {
+		t.Logf("Test %s", test.name)
+		sqlDB.Exec(t, test.stmt)
+		paths, err := filepath.Glob(filepath.Join(dir, test.name,
+			parquetExportFilePattern))
+		require.NoError(t, err)
 
-	require.Equal(t, 1, len(paths))
+		require.Equal(t, 1, len(paths))
 
-	truth := [][]interface{}{
-		{int64(3), "Carl", int64(1), 34.214, true},
-		{int64(2), "Bob", int64(2), 24.1, false}}
+		err = validateParquetFile(t, paths[0], test.expected)
+		require.NoError(t, err)
 
-	err = validateParquetFile(t, paths[0], truth)
-	require.NoError(t, err)
+	}
 }
 
 func TestExportUniqueness(t *testing.T) {
