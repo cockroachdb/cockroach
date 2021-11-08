@@ -330,8 +330,8 @@ export default function Debug() {
       </DebugTable>
       <DebugTable heading="Tracing and Profiling Endpoints (local node only)">
         <DebugTableRow title="Tracing">
-          <DebugTableLink name="Requests" url="/debug/requests" />
-          <DebugTableLink name="Events" url="/debug/events" />
+          <DebugTableLink name="Requests" url="debug/requests" />
+          <DebugTableLink name="Events" url="debug/events" />
           <DebugTableLink
             name="Logs (JSON)"
             url="/debug/logspy?count=100&amp;duration=10s&amp;grep=.&flatten=0"

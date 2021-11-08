@@ -207,9 +207,10 @@ module.exports = (env, argv) => {
       contentBase: path.join(__dirname, `dist${env.dist}`),
       index: "",
       proxy: {
-        "/": {
+        "/clusters/12345/": {
           secure: false,
           target: env.target || process.env.TARGET,
+          pathRewrite: { "^/clusters/12345": "" },
         },
       },
     },
