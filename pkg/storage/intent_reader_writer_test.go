@@ -32,8 +32,6 @@ func readPrecedingIntentState(t *testing.T, d *datadriven.TestData) PrecedingInt
 	var str string
 	d.ScanArgs(t, "preceding", &str)
 	switch str {
-	case "interleaved":
-		return ExistingIntentInterleaved
 	case "separated":
 		return ExistingIntentSeparated
 	case "none":
@@ -210,12 +208,10 @@ func TestIntentDemuxWriter(t *testing.T) {
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "new-writer":
-				var separated bool
-				d.ScanArgs(t, "enable-separated", &separated)
 				// This is a low-level test that explicitly wraps the writer, so it
 				// doesn't matter how the original call to createTestPebbleEngine
 				// behaved in terms of separated intents config.
-				w = wrapIntentWriter(context.Background(), &pw, !separated)
+				w = wrapIntentWriter(context.Background(), &pw)
 				return ""
 			case "put-intent":
 				pw.reset()
@@ -237,15 +233,11 @@ func TestIntentDemuxWriter(t *testing.T) {
 				if err != nil {
 					return err.Error()
 				}
-				state := readPrecedingIntentState(t, d)
-				txnDidNotUpdateMeta := readTxnDidNotUpdateMeta(t, d)
-				var delta int
-				scratch, delta, err = w.PutIntent(
-					context.Background(), key, val, state, txnDidNotUpdateMeta, txnUUID, scratch)
+				scratch, err = w.PutIntent(context.Background(), key, val, txnUUID, scratch)
 				if err != nil {
 					return err.Error()
 				}
-				fmt.Fprintf(&pw.b, "Return Value: separated-delta=%d\n", delta)
+
 				printEngContents(&pw.b, eng)
 				return pw.b.String()
 			case "clear-intent":
@@ -256,12 +248,10 @@ func TestIntentDemuxWriter(t *testing.T) {
 				txnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(txn)))
 				state := readPrecedingIntentState(t, d)
 				txnDidNotUpdateMeta := readTxnDidNotUpdateMeta(t, d)
-				var delta int
-				scratch, delta, err = w.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, scratch)
+				scratch, err = w.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, scratch)
 				if err != nil {
 					return err.Error()
 				}
-				fmt.Fprintf(&pw.b, "Return Value: separated-delta=%d\n", delta)
 				printEngContents(&pw.b, eng)
 				return pw.b.String()
 			case "clear-range":

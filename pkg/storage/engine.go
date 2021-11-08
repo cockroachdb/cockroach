@@ -153,12 +153,6 @@ type MVCCIterator interface {
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
 	ValueProto(msg protoutil.Message) error
-	// When Key() is positioned on an intent, returns true iff this intent
-	// (represented by MVCCMetadata) is a separated lock/intent. This is a
-	// low-level method that should not be called from outside the storage
-	// package. It is part of the exported interface because there are structs
-	// outside the package that wrap and implement Iterator.
-	IsCurIntentSeparated() bool
 	// ComputeStats scans the underlying engine from start to end keys and
 	// computes stats counters based on the values. This method is used after a
 	// range is split to recompute stats for each subrange. The start key is
@@ -501,20 +495,15 @@ type Reader interface {
 type PrecedingIntentState int
 
 const (
-	// ExistingIntentInterleaved specifies that there is an existing intent and
-	// that it is interleaved.
-	ExistingIntentInterleaved PrecedingIntentState = iota
 	// ExistingIntentSeparated specifies that there is an existing intent and
 	// that it is separated (in the lock table key space).
-	ExistingIntentSeparated
+	ExistingIntentSeparated PrecedingIntentState = 1
 	// NoExistingIntent specifies that there isn't an existing intent.
-	NoExistingIntent
+	NoExistingIntent PrecedingIntentState = 2
 )
 
 func (is PrecedingIntentState) String() string {
 	switch is {
-	case ExistingIntentInterleaved:
-		return "ExistingIntentInterleaved"
 	case ExistingIntentSeparated:
 		return "ExistingIntentSeparated"
 	case NoExistingIntent:
@@ -557,7 +546,7 @@ type Writer interface {
 	// txnDidNotUpdateMeta allows for performance optimization when set to true,
 	// and has semantics defined in MVCCMetadata.TxnDidNotUpdateMeta (it can
 	// be conservatively set to false).
-	// REQUIRES: state is ExistingIntentInterleaved or ExistingIntentSeparated.
+	// REQUIRES: state is ExistingIntentSeparated.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	//
@@ -568,7 +557,7 @@ type Writer interface {
 	// ClearIntent by always doing single-clear.
 	ClearIntent(
 		key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-	) (separatedIntentCountDelta int, _ error)
+	) error
 	// ClearEngineKey removes the item from the db with the given EngineKey.
 	// Note that clear actually removes entries from the storage engine. This is
 	// a general-purpose and low-level method that should be used sparingly,
@@ -661,9 +650,7 @@ type Writer interface {
 	// conservatively set to false).
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
-	PutIntent(
-		ctx context.Context, key roachpb.Key, value []byte, state PrecedingIntentState,
-		txnDidNotUpdateMeta bool, txnUUID uuid.UUID) (separatedIntentCountDelta int, _ error)
+	PutIntent(ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID) error
 	// PutEngineKey sets the given key to the value provided. This is a
 	// general-purpose and low-level method that should be used sparingly,
 	// only when the other Put* methods are not applicable.
@@ -826,11 +813,6 @@ type Engine interface {
 	// which must not exist. The directory should be on the same file system so
 	// that hard links can be used.
 	CreateCheckpoint(dir string) error
-
-	// IsSeparatedIntentsEnabledForTesting is a test only method used in tests
-	// that know that this enabled setting is not changing and need the value to
-	// adjust their expectations.
-	IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool
 
 	// SetMinVersion is used to signal to the engine the current minimum
 	// version that it must maintain compatibility with.

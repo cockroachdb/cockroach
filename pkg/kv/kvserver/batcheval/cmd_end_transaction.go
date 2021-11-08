@@ -17,7 +17,6 @@ import (
 	"math"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -457,13 +456,7 @@ func resolveLocalLocks(
 		// These transactions rely on having their locks resolved synchronously.
 		resolveAllowance = math.MaxInt64
 	}
-	onlySeparatedIntents := false
-	st := evalCtx.ClusterSettings()
-	// Some tests have st == nil.
-	if st != nil {
-		onlySeparatedIntents = st.Version.ActiveVersionOrEmpty(ctx).IsActive(
-			clusterversion.PostSeparatedIntentsMigration)
-	}
+
 	for _, span := range args.LockSpans {
 		if err := func() error {
 			if resolveAllowance == 0 {
@@ -504,7 +497,7 @@ func resolveLocalLocks(
 			if inSpan != nil {
 				update.Span = *inSpan
 				num, resumeSpan, err := storage.MVCCResolveWriteIntentRange(
-					ctx, readWriter, ms, update, resolveAllowance, onlySeparatedIntents)
+					ctx, readWriter, ms, update, resolveAllowance)
 				if err != nil {
 					return err
 				}
