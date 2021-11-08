@@ -304,6 +304,13 @@ func validateParquetFile(t *testing.T, file string, truthRows [][]interface{}) e
 
 		t.Logf("\n Record %v:", count)
 		for i := 0; i < len(cols); i++ {
+			if truthRows[count][i] == nil {
+				// if we expect a null value, the row created by the parquet reader will not have the
+				// associated column
+				_, ok := row[cols[i].SchemaElement.Name]
+				require.Equal(t, ok, false)
+				continue
+			}
 			var decodedV interface{}
 			v := row[cols[i].SchemaElement.Name]
 			switch vv := v.(type) {
@@ -342,13 +349,13 @@ func TestBasicParquetTypes(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT, a BOOL, INDEX (y))`)
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 14.3, true), (2, 'Bob', 2, 24.1, false), 
-(3, 'Carl', 1, 34.214,true)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 14.3, true), (2, 'Bob', 2, 24.1, 
+false),(3, 'Carl', 1, 34.214,true)`)
 
-	sqlDB.Exec(t, `EXPORT INTO PARQUET 'nodelocal://0/order_parquet' FROM SELECT *
+	sqlDB.Exec(t, `EXPORT INTO PARQUET 'nodelocal://0/basic_parquet' FROM SELECT *
 		FROM foo ORDER BY y ASC LIMIT 2`)
 
-	paths, err := filepath.Glob(filepath.Join(dir, "order_parquet",
+	paths, err := filepath.Glob(filepath.Join(dir, "basic_parquet",
 		parquetExportFilePattern))
 	require.NoError(t, err)
 
@@ -359,6 +366,24 @@ func TestBasicParquetTypes(t *testing.T) {
 		{int64(2), "Bob", int64(2), 24.1, false}}
 
 	err = validateParquetFile(t, paths[0], truth)
+	require.NoError(t, err)
+
+	// Test EXPORT PARQUET WITH NULL VALUES
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (4, 'Alex', 3, 14.3, NULL), (5, 'Bobby', 2, NULL,false),
+(6, NULL, NULL, NULL, NULL)`)
+
+	sqlDB.Exec(t, `EXPORT INTO PARQUET 'nodelocal://0/null_parquet' FROM SELECT *
+		FROM foo ORDER BY x ASC LIMIT 2`)
+
+	nullTruth := [][]interface{}{
+		{int64(6), nil, nil, nil, nil},
+		{int64(4), "Alex", int64(3), 14.3, nil}}
+
+	paths, err = filepath.Glob(filepath.Join(dir, "null_parquet",
+		parquetExportFilePattern))
+	require.NoError(t, err)
+
+	err = validateParquetFile(t, paths[0], nullTruth)
 	require.NoError(t, err)
 }
 
