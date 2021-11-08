@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -44,7 +45,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1846,6 +1849,26 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	if err := getAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
 		t.Fatal(err)
 	}
+
+	// Clusters which were upgraded rather than bootstrapped are missing a
+	// namespace entry for namespace2. Remarkably this causes very few problems
+	// because very little refers to namespace2, however, it can cause problems
+	// in the data distribution page which uses the names in descriptors to
+	// then look up zone configurations by name. This tests that even when
+	// that namespace entry does not exist, no issues arise
+	t.Run("missing namespace entry for namespace2", func(t *testing.T) {
+		ctx := context.Background()
+		require.NoError(t, testCluster.Server(0).DB().Txn(ctx, func(
+			ctx context.Context, txn *kv.Txn,
+		) (err error) {
+			err = catalogkv.RemoveObjectNamespaceEntry(
+				ctx, txn, keys.SystemSQLCodec, keys.SystemDatabaseID, descpb.InvalidID,
+				systemschema.NamespaceTable.GetName(), // namespace2
+				false /* kvTrace */)
+			return err
+		}))
+		require.NoError(t, getAdminJSONProto(firstServer, "data_distribution", &resp))
+	})
 }
 
 func BenchmarkAdminAPIDataDistribution(b *testing.B) {
