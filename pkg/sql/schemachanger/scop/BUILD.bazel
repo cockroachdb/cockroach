@@ -20,6 +20,7 @@ go_library(
     deps = [
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/types",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

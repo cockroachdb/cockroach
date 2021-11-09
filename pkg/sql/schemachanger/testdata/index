@@ -11,7 +11,7 @@ begin transaction #1
 # begin StatementPhase
 # end StatementPhase
 # begin PreCommitPhase
-## stage 1 in PreCommitPhase: 1 MutationType ops
+## stage 1 in PreCommitPhase: 2 MutationType ops
 upsert descriptor #52
   ...
      id: 52
