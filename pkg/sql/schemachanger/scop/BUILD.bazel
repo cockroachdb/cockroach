@@ -19,7 +19,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/schemachanger/scpb",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

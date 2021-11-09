@@ -94,7 +94,7 @@ var ByName = map[string]Option{
 	"PASSWORD":               PASSWORD,
 	"LOGIN":                  LOGIN,
 	"NOLOGIN":                NOLOGIN,
-	"VALID_UNTIL":            VALIDUNTIL,
+	"VALID UNTIL":            VALIDUNTIL,
 	"CONTROLJOB":             CONTROLJOB,
 	"NOCONTROLJOB":           NOCONTROLJOB,
 	"CONTROLCHANGEFEED":      CONTROLCHANGEFEED,

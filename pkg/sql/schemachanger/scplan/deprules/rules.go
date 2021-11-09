@@ -131,17 +131,10 @@ func init() {
 }
 
 func init() {
-	columnInList := func(targetColumn descpb.ColumnID, columnList descpb.ColumnIDs) bool {
-		for _, column := range columnList {
-			if targetColumn == column {
-				return true
-			}
-		}
-		return false
-	}
+
 	column, columnTarget, columnNode := targetNodeVars("column")
 	index, indexTarget, indexNode := targetNodeVars("index")
-	var id, status, direction rel.Var = "id", "index-status", "direction"
+	var id, status, direction rel.Var = "id", "status", "direction"
 	register(
 		"column depends on indexes",
 		columnNode, indexNode,
@@ -158,23 +151,16 @@ func init() {
 			rel.Filter(
 				"columnInIndex", column, index,
 			)(func(from *scpb.Column, to scpb.Element) bool {
+				var idx *descpb.IndexDescriptor
 				switch to := to.(type) {
 				case *scpb.PrimaryIndex:
-					if columnInList(from.Column.ID, to.KeyColumnIDs) ||
-						columnInList(from.Column.ID, to.StoringColumnIDs) ||
-						columnInList(from.Column.ID, to.KeySuffixColumnIDs) {
-						return true
-					}
+					idx = &to.Index
 				case *scpb.SecondaryIndex:
-					if columnInList(from.Column.ID, to.KeyColumnIDs) ||
-						columnInList(from.Column.ID, to.StoringColumnIDs) ||
-						columnInList(from.Column.ID, to.KeySuffixColumnIDs) {
-						return true
-					}
+					idx = &to.Index
 				default:
 					panic(errors.AssertionFailedf("unexpected type %T", to))
 				}
-				return false
+				return indexContainsColumn(idx, from.Column.ID)
 			}),
 
 			direction.Entities(screl.Direction, columnTarget, indexTarget),
@@ -184,46 +170,10 @@ func init() {
 			screl.JoinTargetNode(index, indexTarget, indexNode),
 		),
 	)
-
-	register(
-		"index depends on column",
-		indexNode, columnNode,
-		screl.MustQuery(
-
-			column.Type((*scpb.Column)(nil)),
-			index.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-
-			id.Entities(screl.DescID, column, index),
-
-			rel.Filter(
-				"columnInIndex", column, index,
-			)(func(from *scpb.Column, to scpb.Element) bool {
-				switch to := to.(type) {
-				case *scpb.PrimaryIndex:
-					if columnInList(from.Column.ID, to.KeyColumnIDs) ||
-						columnInList(from.Column.ID, to.StoringColumnIDs) ||
-						columnInList(from.Column.ID, to.KeySuffixColumnIDs) {
-						return true
-					}
-				case *scpb.SecondaryIndex:
-					if columnInList(from.Column.ID, to.KeyColumnIDs) ||
-						columnInList(from.Column.ID, to.StoringColumnIDs) ||
-						columnInList(from.Column.ID, to.KeySuffixColumnIDs) {
-						return true
-					}
-				default:
-					panic(errors.AssertionFailedf("unexpected type %T", to))
-				}
-				return false
-			}),
-
-			joinTargetNode(column, columnTarget, columnNode, add, deleteOnly),
-			joinTargetNode(index, indexTarget, indexNode, add, deleteOnly),
-		),
-	)
 }
 
 func init() {
+
 	addIdx, addTarget, addNode := targetNodeVars("add-idx")
 	dropIdx, dropTarget, dropNode := targetNodeVars("drop-idx")
 	var id rel.Var = "id"
@@ -235,7 +185,7 @@ func init() {
 		rel.Filter(
 			"referenceEachOther", addIdx, dropIdx,
 		)(func(add, drop *scpb.PrimaryIndex) bool {
-			return add.IndexId != drop.IndexId
+			return add.OtherPrimaryIndexID == drop.Index.ID
 		}),
 
 		joinTargetNode(addIdx, addTarget, addNode,
@@ -255,53 +205,6 @@ func init() {
 		primaryIndexReferenceEachOther,
 	)
 }
-
-func init() {
-	addIdx, addTarget, addNode := targetNodeVars("add-idx")
-	partitioning, partitioningTarget, partitioningNode := targetNodeVars("partitioning")
-	var id rel.Var = "id"
-
-	register(
-		"partitioning information needs the basic index as created",
-		partitioningNode, addNode,
-		screl.MustQuery(
-			addIdx.Type((*scpb.PrimaryIndex)(nil)),
-			partitioning.Type((*scpb.Partitioning)(nil)),
-			id.Entities(screl.DescID, addIdx, partitioning),
-			id.Entities(screl.IndexID, addIdx, partitioning),
-
-			joinTargetNode(addIdx, addTarget, addNode,
-				add, deleteOnly),
-			joinTargetNode(partitioning, partitioningTarget, partitioningNode,
-				add, public),
-		),
-	)
-}
-
-func init() {
-	addIdx, addTarget, addNode := targetNodeVars("add-idx")
-	partitioning, partitioningTarget, partitioningNode := targetNodeVars("partitioning")
-	var id rel.Var = "id"
-
-	register(
-		"index needs partitioning information to be filled",
-		partitioningNode, addNode,
-		screl.MustQuery(
-			addIdx.Type((*scpb.PrimaryIndex)(nil)),
-			partitioning.Type((*scpb.Partitioning)(nil)),
-			id.Entities(screl.DescID, addIdx, partitioning),
-			id.Entities(screl.IndexID, addIdx, partitioning),
-
-			joinTargetNode(addIdx, addTarget, addNode,
-				add, deleteAndWriteOnly),
-			joinTargetNode(partitioning, partitioningTarget, partitioningNode,
-				add, public),
-		),
-	)
-}
-
-// TODO(ajwerner): What does this even mean? The sequence starts in
-// public.
 
 func init() {
 	depNeedsRelationToExitSynthDrop := func(ruleName string, depTypes []interface{}, depDescIDMatch rel.Attr) {
