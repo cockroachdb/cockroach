@@ -389,6 +389,7 @@ func updateStatsOnPut(
 			ms.ValCount--
 			ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
 			ms.IntentCount--
+			ms.SeparatedIntentCount--
 		}
 
 		// If the original intent is a deletion, we're removing the intent. This
@@ -542,6 +543,7 @@ func updateStatsOnResolve(
 	// IntentAge is always accrued from the intent's own timestamp on.
 	ms.IntentBytes -= orig.KeyBytes + orig.ValBytes
 	ms.IntentCount--
+	ms.SeparatedIntentCount--
 
 	// If there was a previous value (before orig.Timestamp), and it was not a
 	// deletion tombstone, then we have to adjust its GCBytesAge contribution
