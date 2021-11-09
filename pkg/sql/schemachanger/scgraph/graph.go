@@ -33,7 +33,7 @@ type Graph struct {
 	// Statement metadata for targets.
 	statements []*scpb.Statement
 
-	// Authorization information used by the targers.
+	// Authorization information used by the targets.
 	authorization scpb.Authorization
 
 	// Interns the Node so that pointer equality can be used.
@@ -59,6 +59,9 @@ type Graph struct {
 	// opToNode maps from an operation back to the
 	// opEdge that generated it as an index.
 	opToNode map[scop.Op]*scpb.Node
+
+	// noOpEdges that are marked as no-op.
+	noOpEdges map[*OpEdge]bool
 
 	edges []Edge
 
@@ -88,6 +91,7 @@ func New(initial scpb.State) (*Graph, error) {
 		nodeOpEdgesFrom:  map[*scpb.Node]*OpEdge{},
 		nodeDepEdgesFrom: btree.New(2),
 		nodeDepEdgesTo:   btree.New(2),
+		noOpEdges:        map[*OpEdge]bool{},
 		opToNode:         map[scop.Op]*scpb.Node{},
 		entities:         db,
 		statements:       initial.Statements,
@@ -108,6 +112,31 @@ func New(initial scpb.State) (*Graph, error) {
 		}
 	}
 	return &g, nil
+}
+
+// CloneForMutation shallow copies the main graph structure, and deep copies
+// any mutations / decorations on the graph.
+func (g *Graph) CloneForMutation() *Graph {
+	// Shallow copy the base structure.
+	clone := &Graph{
+		targets:          g.targets,
+		statements:       g.statements,
+		authorization:    g.authorization,
+		targetNodes:      g.targetNodes,
+		targetIdxMap:     g.targetIdxMap,
+		nodeOpEdgesFrom:  g.nodeOpEdgesFrom,
+		nodeDepEdgesFrom: g.nodeDepEdgesFrom,
+		nodeDepEdgesTo:   g.nodeDepEdgesTo,
+		opToNode:         g.opToNode,
+		edges:            g.edges,
+		entities:         g.entities,
+		noOpEdges:        make(map[*OpEdge]bool),
+	}
+	// Any decorations for mutations will be copied.
+	for edge, noop := range g.noOpEdges {
+		clone.noOpEdges[edge] = noop
+	}
+	return clone
 }
 
 // GetNode returns the cached node for a given target and status.
@@ -232,6 +261,18 @@ func (g *Graph) AddDepEdge(
 		order: toFrom,
 	})
 	return nil
+}
+
+// MarkOpEdgeAsNoOp marks an edge as no-op, so that no operations are emitted
+//during planning.
+func (g *Graph) MarkOpEdgeAsNoOp(edge *OpEdge) {
+	g.noOpEdges[edge] = true
+}
+
+// IsOpEdgeNoOp checks if an edge is marked as an edge that should emit no
+// operations.
+func (g *Graph) IsOpEdgeNoOp(edge *OpEdge) bool {
+	return g.noOpEdges[edge]
 }
 
 // GetMetadataFromTarget returns the metadata for a given target node.
