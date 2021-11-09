@@ -6,7 +6,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"golang.org/x/oauth2/google"
 	"hash/crc32"
 	"net/url"
@@ -122,7 +121,6 @@ func parseGCPURL(u sinkURL) (string, error) {
 
 //MakePubsubSink returns the corresponding pubsub sink based on the url given
 func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string) (Sink, error) {
-	log.Warningf(context.Background(), "\x1b[34m make pubsubsink \x1b[0m")
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
 	case changefeedbase.OptFormatJSON:
 	default:
@@ -188,8 +186,6 @@ func (p *pubsubSink) emitRow(
 	_ hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	log.Warningf(context.Background(), "\x1b[34m EMIT ROW \x1b[0m")
-	log.Warningf(context.Background(), string(key))
 	m := pubsubMessage{alloc: alloc, isFlush: false, message: payload{
 		Key:   key,
 		Value: value,
@@ -491,11 +487,12 @@ func (p *memPubsubSink) Flush(ctx context.Context) error {
 
 //Close calls the pubsubDesc Close
 func (p *memPubsubSink) Close() error {
-	//if p.pubsubSink != nil {
-	//	err := p.pubsubSink.close()
-	//	if err != nil {
-	//		return err
-	//	}
-	//}
+	p.pubsubSink.exitWorkers()
+	_ = p.pubsubSink.workerGroup.Wait()
+	close(p.pubsubSink.errChan)
+	close(p.pubsubSink.flushDone)
+	for i := 0; i < p.pubsubSink.numWorkers; i++ {
+		close(p.pubsubSink.eventsChans[i])
+	}
 	return nil
 }
