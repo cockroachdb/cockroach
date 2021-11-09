@@ -23,6 +23,12 @@ import (
 
 // ExecuteStage executes the provided ops. The ops must all be of the same type.
 func ExecuteStage(ctx context.Context, deps Dependencies, ops scop.Ops) error {
+	// It is perfectly valid to have empty stage after optimizations /
+	// transformations.
+	if ops == nil {
+		log.Infof(ctx, "skipping execution, no operations in this stage")
+		return nil
+	}
 	log.Infof(ctx, "executing %d ops of type %s", len(ops.Slice()), ops.Type().String())
 	switch typ := ops.Type(); typ {
 	case scop.MutationType:
@@ -54,7 +60,7 @@ func UpdateDescriptorJobIDs(
 			return err
 		}
 
-		// Currently all "locking" schema changes are on tables. This will probably
+		// Currently, all "locking" schema changes are on tables. This will probably
 		// need to be expanded at least to types.
 		table, ok := desc.(*tabledesc.Mutable)
 		if !ok {

@@ -33,7 +33,7 @@ type Graph struct {
 	// Statement metadata for targets.
 	statements []*scpb.Statement
 
-	// Authorization information used by the targers.
+	// Authorization information used by the targets.
 	authorization scpb.Authorization
 
 	// Interns the Node so that pointer equality can be used.
@@ -60,6 +60,10 @@ type Graph struct {
 	// opEdge that generated it as an index.
 	opToNode map[scop.Op]*scpb.Node
 
+	// optimizedOutOpEdges that are marked optimized out, and will not generate
+	// any operations.
+	optimizedOutOpEdges map[*OpEdge]bool
+
 	edges []Edge
 
 	entities *rel.Database
@@ -84,14 +88,15 @@ func New(initial scpb.State) (*Graph, error) {
 		return nil, err
 	}
 	g := Graph{
-		targetIdxMap:     map[*scpb.Target]int{},
-		nodeOpEdgesFrom:  map[*scpb.Node]*OpEdge{},
-		nodeDepEdgesFrom: btree.New(2),
-		nodeDepEdgesTo:   btree.New(2),
-		opToNode:         map[scop.Op]*scpb.Node{},
-		entities:         db,
-		statements:       initial.Statements,
-		authorization:    initial.Authorization,
+		targetIdxMap:        map[*scpb.Target]int{},
+		nodeOpEdgesFrom:     map[*scpb.Node]*OpEdge{},
+		nodeDepEdgesFrom:    btree.New(2),
+		nodeDepEdgesTo:      btree.New(2),
+		optimizedOutOpEdges: map[*OpEdge]bool{},
+		opToNode:            map[scop.Op]*scpb.Node{},
+		entities:            db,
+		statements:          initial.Statements,
+		authorization:       initial.Authorization,
 	}
 	for _, n := range initial.Nodes {
 		if existing, ok := g.targetIdxMap[n.Target]; ok {
@@ -108,6 +113,31 @@ func New(initial scpb.State) (*Graph, error) {
 		}
 	}
 	return &g, nil
+}
+
+// ShallowClone shallow copies the main graph structure, and deep copies
+// any mutations / decorations on the graph.
+func (g *Graph) ShallowClone() *Graph {
+	// Shallow copy the base structure.
+	clone := &Graph{
+		targets:             g.targets,
+		statements:          g.statements,
+		authorization:       g.authorization,
+		targetNodes:         g.targetNodes,
+		targetIdxMap:        g.targetIdxMap,
+		nodeOpEdgesFrom:     g.nodeOpEdgesFrom,
+		nodeDepEdgesFrom:    g.nodeDepEdgesFrom,
+		nodeDepEdgesTo:      g.nodeDepEdgesTo,
+		opToNode:            g.opToNode,
+		edges:               g.edges,
+		entities:            g.entities,
+		optimizedOutOpEdges: make(map[*OpEdge]bool),
+	}
+	// Any decorations for mutations will be copied.
+	for edge, noop := range g.optimizedOutOpEdges {
+		clone.optimizedOutOpEdges[edge] = noop
+	}
+	return clone
 }
 
 // GetNode returns the cached node for a given target and status.
@@ -232,6 +262,18 @@ func (g *Graph) AddDepEdge(
 		order: toFrom,
 	})
 	return nil
+}
+
+// MarkOpEdgeAsOptimizedOut marks an edge as no-op, so that no operations are emitted
+//during planning.
+func (g *Graph) MarkOpEdgeAsOptimizedOut(edge *OpEdge) {
+	g.optimizedOutOpEdges[edge] = true
+}
+
+// IsOpEdgeOptimizedOut checks if an edge is marked as an edge that should emit no
+// operations.
+func (g *Graph) IsOpEdgeOptimizedOut(edge *OpEdge) bool {
+	return g.optimizedOutOpEdges[edge]
 }
 
 // GetMetadataFromTarget returns the metadata for a given target node.
