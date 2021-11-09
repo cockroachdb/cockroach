@@ -398,6 +398,20 @@ func TestBackupRestoreMultiNodeRemote(t *testing.T) {
 	backupAndRestore(ctx, t, tc, []string{remoteFoo}, []string{LocalFoo}, numAccounts)
 }
 
+func TestNewStyleBackupRestoreMultiNodeRemote(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+	ctx, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	// Backing up to node2's local file system
+	remoteFoo := "nodelocal://2/foo"
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.experimental_21_2_mode.enabled = true")
+	backupAndRestore(ctx, t, tc, []string{remoteFoo}, []string{LocalFoo}, numAccounts)
+}
+
 func TestBackupRestorePartitioned(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
