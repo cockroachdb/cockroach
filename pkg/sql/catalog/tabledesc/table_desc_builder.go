@@ -104,6 +104,20 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges(
 	var err error
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
 	tdb.changes, err = maybeFillInDescriptor(ctx, dg, tdb.maybeModified, tdb.skipFKsWithNoMatchingTable)
+
+	return err
+}
+
+// MaybeAddGrantOptions implements the catalog.DescriptorBuilder
+// interface.
+func (tdb *tableDescriptorBuilder) MaybeAddGrantOptions(
+	ctx context.Context, dg catalog.DescGetter,
+) error {
+	var err error
+	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
+	tdb.changes, err = maybeFillInDescriptor(ctx, dg, tdb.maybeModified, tdb.skipFKsWithNoMatchingTable)
+	tdb.changes, err = maybeAddGrantOptionsToDescriptor(tdb.maybeModified)
+
 	return err
 }
 
@@ -224,6 +238,19 @@ func maybeFillInDescriptor(
 	if err != nil {
 		return PostDeserializationTableDescriptorChanges{}, err
 	}
+	return changes, nil
+}
+
+// maybeAddGrantOptionsToDescriptor performs any modifications needed to the table descriptor.
+// Currently, it just updates the grant option privileges
+func maybeAddGrantOptionsToDescriptor(
+	desc *descpb.TableDescriptor,
+) (changes PostDeserializationTableDescriptorChanges, err error) {
+
+	changes.UpgradedPrivileges = catprivilege.MaybeUpdateGrantOptions(
+		&desc.Privileges,
+	)
+
 	return changes, nil
 }
 

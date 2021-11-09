@@ -71,6 +71,16 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
 	return nil
 }
 
+// MaybeAddGrantOptions implements the catalog.DescriptorBuilder
+// interface.
+func (ddb *databaseDescriptorBuilder) MaybeAddGrantOptions(
+	_ context.Context, _ catalog.DescGetter,
+) error {
+	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
+	ddb.changed = catprivilege.MaybeUpdateGrantOptions(&ddb.maybeModified.Privileges)
+	return nil
+}
+
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
 func (ddb *databaseDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 	return ddb.BuildImmutableDatabase()

@@ -2299,8 +2299,6 @@ func (c *clusterImpl) Conn(ctx context.Context, node int) *gosql.DB {
 // ConnE returns a SQL connection to the specified node.
 func (c *clusterImpl) ConnE(ctx context.Context, node int) (*gosql.DB, error) {
 	urls, err := c.ExternalPGUrl(ctx, c.Node(node))
-	fmt.Println("THE URLS ARE:")
-	fmt.Println(urls)
 	if err != nil {
 		return nil, err
 	}
@@ -2311,15 +2309,13 @@ func (c *clusterImpl) ConnE(ctx context.Context, node int) (*gosql.DB, error) {
 	return db, nil
 }
 
-// ConnEUser returns a SQL connection to the specified node as a specific user
-func (c *clusterImpl) ConnEUser(ctx context.Context, node int, user string) (*gosql.DB, error) {
+// ConnEAsUser returns a SQL connection to the specified node as a specific user
+func (c *clusterImpl) ConnEAsUser(ctx context.Context, node int, user string) (*gosql.DB, error) {
 	urls, err := c.ExternalPGUrl(ctx, c.Node(node))
 	if err != nil {
 		return nil, err
 	}
-	//dataSourceName := fmt.Sprintf("%s?user=%s?password=%s", urls[0], user, password)
 	dataSourceName := strings.Replace(urls[0], "root", user, 1)
-	fmt.Println("datasourcename is: ", dataSourceName)
 	db, err := gosql.Open("postgres", dataSourceName)
 	if err != nil {
 		return nil, err

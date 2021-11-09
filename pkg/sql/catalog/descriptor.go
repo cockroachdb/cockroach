@@ -80,6 +80,13 @@ type DescriptorBuilder interface {
 	// representation upgrades to be skipped.
 	RunPostDeserializationChanges(ctx context.Context, dg DescGetter) error
 
+	// MaybeAddGrantOptions also attempts to perform post-deserialization
+	// changes to the descriptor being built, similar to RunPostDeserializationChanges
+	// above. The difference is that these changes will only ever be run during the
+	// migration in grant_option_migration.go and will stop once all nodes are upgraded
+	// and waitForUpgradeStep(c.All()) is called.
+	MaybeAddGrantOptions(ctx context.Context, dg DescGetter) error
+
 	// BuildImmutable returns an immutable Descriptor.
 	BuildImmutable() Descriptor
 

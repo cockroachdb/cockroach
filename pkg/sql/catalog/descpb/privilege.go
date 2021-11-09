@@ -41,6 +41,11 @@ const (
 	// These descriptors should have all the correct privileges and the owner field
 	// explicitly set. These descriptors should be strictly validated.
 	Version21_2
+
+	// GrantOptionVersion corresponds to descriptors created in 22.1 and onwards.
+	// These descriptors should have grant options for all their privileges
+	// if they have the GRANT or ALL were created prior to 22.1.
+	GrantOptionVersion
 )
 
 // Owner accesses the owner field.

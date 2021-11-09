@@ -47,6 +47,11 @@ func runPrivilegeVersionUpgrade(
 	}
 
 	const currentVersion = ""
+	fmt.Println("<------------------------------------------------>")
+	fmt.Println("predecessor version is: ", predecessorVersion)
+	fmt.Println("build version is: ", buildVersion)
+	fmt.Println("mainVersion is: ", currentVersion)
+	fmt.Println("<------------------------------------------------>")
 	upgradeTest := func(
 		dbPrivs, schemaPrivs, tablePrivs, typePrivs privilege.List) *versionUpgradeTest {
 		steps := []versionStep{
