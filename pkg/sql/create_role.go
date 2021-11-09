@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -118,29 +119,9 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		)
 	}
 
-	var hashedPassword []byte
-	if n.roleOptions.Contains(roleoption.PASSWORD) {
-		isNull, password, err := n.roleOptions.GetPassword()
-		if err != nil {
-			return err
-		}
-		if !isNull && params.extendedEvalCtx.ExecCfg.RPCContext.Config.Insecure {
-			// We disallow setting a non-empty password in insecure mode
-			// because insecure means an observer may have MITM'ed the change
-			// and learned the password.
-			//
-			// It's valid to clear the password (WITH PASSWORD NULL) however
-			// since that forces cert auth when moving back to secure mode,
-			// and certs can't be MITM'ed over the insecure SQL connection.
-			return pgerror.New(pgcode.InvalidPassword,
-				"setting or updating a password is not supported in insecure mode")
-		}
-
-		if !isNull {
-			if hashedPassword, err = params.p.checkPasswordAndGetHash(params.ctx, password); err != nil {
-				return err
-			}
-		}
+	_, hashedPassword, err := retrievePasswordFromRoleOptions(params, n.roleOptions)
+	if err != nil {
+		return err
 	}
 
 	// Check if the user/role exists.
@@ -307,6 +288,37 @@ func (ua *userNameInfo) resolveUsername() (res security.SQLUsername, err error) 
 	return normalizedUsername, nil
 }
 
+func retrievePasswordFromRoleOptions(
+	params runParams, roleOptions roleoption.List,
+) (hasPasswordOpt bool, hashedPassword []byte, err error) {
+	if !roleOptions.Contains(roleoption.PASSWORD) {
+		return false, nil, nil
+	}
+	isNull, password, err := roleOptions.GetPassword()
+	if err != nil {
+		return true, nil, err
+	}
+	if !isNull && params.extendedEvalCtx.ExecCfg.RPCContext.Config.Insecure {
+		// We disallow setting a non-empty password in insecure mode
+		// because insecure means an observer may have MITM'ed the change
+		// and learned the password.
+		//
+		// It's valid to clear the password (WITH PASSWORD NULL) however
+		// since that forces cert auth when moving back to secure mode,
+		// and certs can't be MITM'ed over the insecure SQL connection.
+		return true, nil, pgerror.New(pgcode.InvalidPassword,
+			"setting or updating a password is not supported in insecure mode")
+	}
+
+	if !isNull {
+		if hashedPassword, err = params.p.checkPasswordAndGetHash(params.ctx, password); err != nil {
+			return true, nil, err
+		}
+	}
+
+	return true, hashedPassword, nil
+}
+
 func (p *planner) checkPasswordAndGetHash(
 	ctx context.Context, password string,
 ) (hashedPassword []byte, err error) {
@@ -315,8 +327,23 @@ func (p *planner) checkPasswordAndGetHash(
 	}
 
 	st := p.ExecCfg().Settings
+	if security.AutoDetectPasswordHashes.Get(&st.SV) {
+		var isPreHashed, schemeSupported bool
+		var schemeName string
+		isPreHashed, schemeSupported, schemeName, hashedPassword, err = security.CheckPasswordHashValidity(ctx, []byte(password))
+		if err != nil {
+			return hashedPassword, pgerror.WithCandidateCode(err, pgcode.Syntax)
+		}
+		if isPreHashed {
+			if !schemeSupported {
+				return hashedPassword, unimplemented.NewWithIssueDetailf(42519, schemeName, "the password hash scheme %q is not supported", schemeName)
+			}
+			return hashedPassword, nil
+		}
+	}
+
 	if minLength := security.MinPasswordLength.Get(&st.SV); minLength >= 1 && int64(len(password)) < minLength {
-		return hashedPassword, errors.WithHintf(security.ErrPasswordTooShort,
+		return nil, errors.WithHintf(security.ErrPasswordTooShort,
 			"Passwords must be %d characters or longer.", minLength)
 	}
 

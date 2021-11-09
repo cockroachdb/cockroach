@@ -193,30 +193,11 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		}
 	}
 
-	if n.roleOptions.Contains(roleoption.PASSWORD) {
-		isNull, password, err := n.roleOptions.GetPassword()
-		if err != nil {
-			return err
-		}
-		if !isNull && params.extendedEvalCtx.ExecCfg.RPCContext.Config.Insecure {
-			// We disallow setting a non-empty password in insecure mode
-			// because insecure means an observer may have MITM'ed the change
-			// and learned the password.
-			//
-			// It's valid to clear the password (WITH PASSWORD NULL) however
-			// since that forces cert auth when moving back to secure mode,
-			// and certs can't be MITM'ed over the insecure SQL connection.
-			return pgerror.New(pgcode.InvalidPassword,
-				"setting or updating a password is not supported in insecure mode")
-		}
-
-		var hashedPassword []byte
-		if !isNull {
-			if hashedPassword, err = params.p.checkPasswordAndGetHash(params.ctx, password); err != nil {
-				return err
-			}
-		}
-
+	hasPasswordOpt, hashedPassword, err := retrievePasswordFromRoleOptions(params, n.roleOptions)
+	if err != nil {
+		return err
+	}
+	if hasPasswordOpt {
 		// Updating PASSWORD is a special case since PASSWORD lives in system.users
 		// while the rest of the role options lives in system.role_options.
 		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(

@@ -3197,3 +3197,34 @@ query B
 SELECT 'ACTIVE'::text ~ similar_to_escape(NULL::text)
 ----
 NULL
+
+subtest password_hash
+
+# Need to escapes the dollar signs since the testlogic language gives them special meaning.
+
+query error pgcode 42601 bcrypt algorithm version .3. requested is newer than current version .2.
+SELECT crdb_internal.check_password_hash_format(('CRDB-BCRYPT$'||'3a$'||'10$'||'vcmoIBvgeHjgScVHWRMWI.Z3v03WMixAw2bBS6qZihljSUuwi88Yq')::bytes)
+
+query error pgcode 42601 too short to be a bcrypted password
+SELECT crdb_internal.check_password_hash_format(('CRDB-BCRYPT$'||'2a$'||'10$'||'vcmoIBvgeHjgScVHWRMWI.Z3v0')::bytes)
+
+query error pgcode 42601 cost 1 is outside allowed range \(4,31\)
+SELECT crdb_internal.check_password_hash_format(('CRDB-BCRYPT$'||'2a$'||'01$'||'vcmoIBvgeHjgScVHWRMWI.Z3v03WMixAw2bBS6qZihljSUuwi88Yq')::bytes)
+
+query T
+SELECT crdb_internal.check_password_hash_format(('CRDB-BCRYPT$'||'2a$'||'10$'||'vcmoIBvgeHjgScVHWRMWI.Z3v03WMixAw2bBS6qZihljSUuwi88Yq')::bytes)
+----
+crdb-bcrypt
+
+# Legacy format, only recognized for parsing, not for storing passwords.
+query T
+SELECT crdb_internal.check_password_hash_format('md5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+----
+md5
+
+# Not yet supported for storing passwords, but recognized on input.
+query T
+SELECT crdb_internal.check_password_hash_format(('SCRAM-SHA-256$'||'4096:B5VaTCvCLDzZxSYL829oVA==$'||'3Ako3mNxNtdsaSOJl0Av3i6vyV2OiSP9Ly7famdFSbw=:d7BfSmrtjwbF74mSoOhQiDSpoIvlakXKdpBNb3Meunc=')::bytes)
+----
+scram-sha-256
+
