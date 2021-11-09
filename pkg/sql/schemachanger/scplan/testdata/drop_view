@@ -23,6 +23,10 @@ Stage 2 (non-revertible)
     TableID: 53
   *scop.CreateGcJobForDescriptor
     DescID: 53
+  *scop.DrainDescriptorName
+    TableID: 53
+  *scop.CreateGcJobForDescriptor
+    DescID: 53
 
 deps
 DROP VIEW defaultdb.v1
@@ -66,50 +70,50 @@ Stage 1 (non-revertible)
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 53
     TableID: 52
-  *scop.MarkDescriptorAsDropped
-    DescID: 53
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 54
-    TableID: 53
-  *scop.MarkDescriptorAsDropped
-    DescID: 54
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 55
-    TableID: 53
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 55
-    TableID: 54
-  *scop.MarkDescriptorAsDropped
-    DescID: 55
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 56
-    TableID: 54
-  *scop.MarkDescriptorAsDropped
-    DescID: 56
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 59
-    TableID: 56
-  *scop.MarkDescriptorAsDropped
-    DescID: 59
   *scop.RemoveTypeBackRef
     DescID: 59
     TypeID: 57
   *scop.RemoveTypeBackRef
     DescID: 59
     TypeID: 58
+  *scop.MarkDescriptorAsDropped
+    DescID: 56
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 59
+    TableID: 56
+  *scop.MarkDescriptorAsDropped
+    DescID: 54
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 55
+    TableID: 54
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 56
+    TableID: 54
+  *scop.MarkDescriptorAsDropped
+    DescID: 53
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 54
+    TableID: 53
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 55
+    TableID: 53
+  *scop.MarkDescriptorAsDropped
+    DescID: 55
+  *scop.MarkDescriptorAsDropped
+    DescID: 59
 Stage 2 (non-revertible)
   *scop.DrainDescriptorName
     TableID: 55
   *scop.CreateGcJobForDescriptor
     DescID: 55
   *scop.DrainDescriptorName
-    TableID: 54
+    TableID: 55
   *scop.CreateGcJobForDescriptor
-    DescID: 54
+    DescID: 55
   *scop.DrainDescriptorName
-    TableID: 53
+    TableID: 59
   *scop.CreateGcJobForDescriptor
-    DescID: 53
+    DescID: 59
   *scop.DrainDescriptorName
     TableID: 59
   *scop.CreateGcJobForDescriptor
@@ -118,6 +122,26 @@ Stage 2 (non-revertible)
     TableID: 56
   *scop.CreateGcJobForDescriptor
     DescID: 56
+  *scop.DrainDescriptorName
+    TableID: 56
+  *scop.CreateGcJobForDescriptor
+    DescID: 56
+  *scop.DrainDescriptorName
+    TableID: 54
+  *scop.CreateGcJobForDescriptor
+    DescID: 54
+  *scop.DrainDescriptorName
+    TableID: 54
+  *scop.CreateGcJobForDescriptor
+    DescID: 54
+  *scop.DrainDescriptorName
+    TableID: 53
+  *scop.CreateGcJobForDescriptor
+    DescID: 53
+  *scop.DrainDescriptorName
+    TableID: 53
+  *scop.CreateGcJobForDescriptor
+    DescID: 53
 
 deps
 DROP VIEW defaultdb.v1 CASCADE
