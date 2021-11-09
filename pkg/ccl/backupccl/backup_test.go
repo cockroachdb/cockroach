@@ -8282,3 +8282,26 @@ DROP INDEX foo@bar;
 
 	sqlRunner.Exec(t, `BACKUP INTO LATEST IN 'nodelocal://0/foo' WITH revision_history`)
 }
+
+// TestRestoreRemappingOfExistingUDTInColExpr is a regression test for a nil
+// pointer exception when restoring tables that point to existing types. When
+// updating the back references of the existing types we would index into a map
+// keyed on pre-rewrite IDs using a post rewrite ID.
+func TestRestoreRemappingOfExistingUDTInColExpr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `
+CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');
+CREATE TABLE foo (id INT PRIMARY KEY, what status default 'open');
+BACKUP DATABASE data to 'nodelocal://0/foo';
+DROP TABLE foo CASCADE;
+DROP TYPE status;
+CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');
+RESTORE TABLE foo FROM 'nodelocal://0/foo';
+`)
+}
