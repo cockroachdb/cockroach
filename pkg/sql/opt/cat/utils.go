@@ -16,6 +16,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -72,6 +73,11 @@ func ResolveTableIndex(
 			if idx := table.Index(i); idx.Name() == tree.Name(name.Index) {
 				return idx, tn, nil
 			}
+		}
+		// Fallback to referencing @primary as the PRIMARY KEY.
+		// Note that indexes with "primary" as their name takes precedence above.
+		if name.Index == tabledesc.LegacyPrimaryKeyIndexName {
+			return table.Index(0), tn, nil
 		}
 		return nil, DataSourceName{}, pgerror.Newf(
 			pgcode.UndefinedObject, "index %q does not exist", name.Index,

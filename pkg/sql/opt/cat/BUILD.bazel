@@ -23,6 +23,7 @@ go_library(
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
