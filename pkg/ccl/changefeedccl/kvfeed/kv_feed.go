@@ -317,9 +317,7 @@ func (f *kvFeed) scanIfShould(
 
 	// If we have initial checkpoint information specified, filter out
 	// spans which we no longer need to scan.
-	if initialScan {
-		spansToBackfill = filterCheckpointSpans(spansToBackfill, f.checkpoint)
-	}
+	spansToBackfill = filterCheckpointSpans(spansToBackfill, f.checkpoint)
 
 	if (!isInitialScan && f.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyNoBackfill) ||
 		len(spansToBackfill) == 0 {
