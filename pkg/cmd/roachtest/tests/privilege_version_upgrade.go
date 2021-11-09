@@ -47,6 +47,11 @@ func runPrivilegeVersionUpgrade(
 	}
 
 	const currentVersion = ""
+	fmt.Println("<------------------------------------------------>")
+	fmt.Println("predecessor version is: ", predecessorVersion)
+	fmt.Println("build version is: ", buildVersion)
+	fmt.Println("mainVersion is: ", currentVersion)
+	fmt.Println("<------------------------------------------------>")
 	upgradeTest := func(
 		dbPrivs, schemaPrivs, tablePrivs, typePrivs privilege.List) *versionUpgradeTest {
 		steps := []versionStep{
@@ -74,12 +79,30 @@ func runPrivilegeVersionUpgrade(
 		steps = append(
 			steps,
 			// Roll nodes forward and finalize upgrade.
+			//printSQL("select version();", 1),
+			//printSQL("select crdb_internal.node_executable_version();", 1),
+			//printSQL("select version();", 2),
+			//printSQL("select crdb_internal.node_executable_version();", 2),
+			//printSQL("select version();", 3),
+			//printSQL("select crdb_internal.node_executable_version();", 3),
 			binaryUpgradeStep(c.Node(3), currentVersion),
 			binaryUpgradeStep(c.Node(1), currentVersion),
 			binaryUpgradeStep(c.Node(2), currentVersion),
+			//printSQL("select version();", 1),
+			//printSQL("select crdb_internal.node_executable_version();", 1),
+			//printSQL("select version();", 2),
+			//printSQL("select crdb_internal.node_executable_version();", 2),
+			//printSQL("select version();", 3),
+			//printSQL("select crdb_internal.node_executable_version();", 3),
 
 			allowAutoUpgradeStep(1),
 			waitForUpgradeStep(c.All()),
+			//printSQL("select version();", 1),
+			//printSQL("select crdb_internal.node_executable_version();", 1),
+			//printSQL("select version();", 2),
+			//printSQL("select crdb_internal.node_executable_version();", 2),
+			//printSQL("select version();", 3),
+			//printSQL("select crdb_internal.node_executable_version();", 3),
 
 			checkDatabasePrivilegesStep(dbPrivs),
 			checkSchemaPrivilegesStep(schemaPrivs),

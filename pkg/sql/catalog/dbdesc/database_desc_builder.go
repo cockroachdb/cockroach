@@ -67,7 +67,18 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
 		privilege.Database,
 		ddb.maybeModified.GetName())
 	removedSelfEntryInSchemas := maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified)
-	ddb.changed = privsChanged || removedSelfEntryInSchemas
+	//grantOptionsAdded := catprivilege.MaybeAddGrantOptions(&ddb.maybeModified.Privileges)
+	ddb.changed = privsChanged || removedSelfEntryInSchemas //|| grantOptionsAdded
+	return nil
+}
+
+// RunMigrationOnlyChanges implements the catalog.DescriptorBuilder
+// interface.
+func (ddb *databaseDescriptorBuilder) RunMigrationOnlyChanges(
+	_ context.Context, _ catalog.DescGetter,
+) error {
+	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
+	ddb.changed = catprivilege.MaybeAddGrantOptions(&ddb.maybeModified.Privileges)
 	return nil
 }
 

@@ -80,6 +80,13 @@ type DescriptorBuilder interface {
 	// representation upgrades to be skipped.
 	RunPostDeserializationChanges(ctx context.Context, dg DescGetter) error
 
+	// RunMigrationOnlyChanges also attempts to perform post-deserialization
+	// changes to the descriptor being build, similar to RunPostDeserializationChanges
+	// above. The difference is that these changes will only every be run during the
+	// migration and will stop once all nodes are upgraded and waitForUpgradeStep(c.All())
+	// is called.
+	RunMigrationOnlyChanges(ctx context.Context, dg DescGetter) error
+
 	// BuildImmutable returns an immutable Descriptor.
 	BuildImmutable() Descriptor
 

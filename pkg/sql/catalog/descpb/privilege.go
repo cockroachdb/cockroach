@@ -41,6 +41,17 @@ const (
 	// These descriptors should have all the correct privileges and the owner field
 	// explicitly set. These descriptors should be strictly validated.
 	Version21_2
+
+	// GrantOptionVersion is an intermediate state between 21.2 and 22.1.
+	// The Descriptors involved in the migration will be set to this version
+	// so that the logic for adding grant options to previous users will only
+	// run during the migration.
+	GrantOptionVersion
+
+	// Version22_1 corresponds to desciptors created in 22.1 and onwards.
+	// These descriptors should have grant options for all their privileges
+	// if they have the GRANT or ALL were created prior to 22.1.
+	Version22_1
 )
 
 // Owner accesses the owner field.
