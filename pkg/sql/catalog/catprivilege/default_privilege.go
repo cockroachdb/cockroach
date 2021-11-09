@@ -234,7 +234,7 @@ func CreatePrivilegesFromDefaultPrivileges(
 		}
 	}
 
-	newPrivs.Version = descpb.Version21_2
+	newPrivs.Version = descpb.GrantOptionVersion
 
 	// TODO(richardjcai): Remove this depending on how we handle the migration.
 	//   For backwards compatibility, also "inherit" privileges from the dbDesc.
