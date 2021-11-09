@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1403,8 +1404,6 @@ func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
 // identical to its target column's type, an assignment cast must be performed.
 // If the value's type is the correct type, the assignment cast is a no-op.
 func (mb *mutationBuilder) addAssignmentCasts(inScope *scope, outTypes []*types.T) *scope {
-	expr := inScope.expr
-
 	projectionScope := inScope.push()
 	projectionScope.cols = make([]scopeColumn, 0, len(inScope.cols))
 	for i := 0; i < len(inScope.cols); i++ {
@@ -1415,11 +1414,7 @@ func (mb *mutationBuilder) addAssignmentCasts(inScope *scope, outTypes []*types.
 		if !tree.ValidCast(srcType, targetType, tree.CastContextAssignment) {
 			ord := mb.tabID.ColumnOrdinal(mb.targetColList[i])
 			colName := string(mb.tab.Column(ord).ColName())
-			err := pgerror.Newf(pgcode.DatatypeMismatch,
-				"value type %s doesn't match type %s of column %q",
-				srcType, targetType, tree.ErrNameString(colName))
-			err = errors.WithHint(err, "you will need to rewrite or cast the expression")
-			panic(err)
+			panic(sqlerrors.NewInvalidAssignmentCastError(srcType, targetType, colName))
 		}
 
 		// Create a new column which casts the input column to the correct
@@ -1429,7 +1424,7 @@ func (mb *mutationBuilder) addAssignmentCasts(inScope *scope, outTypes []*types.
 		mb.b.synthesizeColumn(projectionScope, inScope.cols[i].name, outTypes[i], nil /* expr */, cast)
 	}
 
-	projectionScope.expr = mb.b.constructProject(expr, projectionScope.cols)
+	projectionScope.expr = mb.b.constructProject(inScope.expr, projectionScope.cols)
 	return projectionScope
 }
 
