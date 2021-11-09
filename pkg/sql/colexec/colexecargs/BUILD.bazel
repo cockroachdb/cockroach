@@ -4,6 +4,7 @@ go_library(
     name = "colexecargs",
     srcs = [
         "expr.go",
+        "monitor_registry.go",
         "op_creation.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs",

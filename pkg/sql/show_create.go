@@ -199,11 +199,10 @@ func formatQuoteNames(buf *bytes.Buffer, names ...string) {
 // ShowCreate returns a valid SQL representation of the CREATE
 // statement used to create the descriptor passed in.
 //
-// The names of the tables references by foreign keys, and the
-// interleaved parent if any, are prefixed by their own database name
-// unless it is equal to the given dbPrefix. This allows us to elide
-// the prefix when the given table references other tables in the
-// current database.
+// The names of the tables references by foreign keys are prefixed by their own
+// database name unless it is equal to the given dbPrefix. This allows us to
+// elide the prefix when the given table references other tables in the current
+// database.
 func (p *planner) ShowCreate(
 	ctx context.Context,
 	dbPrefix string,

@@ -2187,7 +2187,7 @@ vectorized: true
 │                     columns: (r, s, i, j)
 │                     estimated row count: 9 (missing stats)
 │                     table: uniq_enum@uniq_enum_pkey
-│                     spans: /"\xc0"/11-/"\xc0"/20/#
+│                     spans: /"\xc0"/11-/"\xc0"/21
 │                     parallel
 │                     locking strength: for update
 │

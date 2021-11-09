@@ -1,6 +1,6 @@
 # LogicTest: 5node
 
-# The following tables form the interleaved hierarchy:
+# The following tables form the following (used to be interleaved) hierarchy:
 #   name:             primary key:                # rows:   'a' = id mod X :
 #   parent1           (pid1)                      40        8
 #     child1          (pid1, cid1)                150       66
@@ -22,9 +22,9 @@
 #   - one-to-many (parent1 - child1)
 #   - one-to-one and one-to-none (parent1 - child2)
 #   - parent-grandchild (parent1 - grandchild1)
-#   - multiple interleaved columns (child2 - grandchild2)
+#   - multiple "interleaved" columns (child2 - grandchild2)
 #   - additional ancestor above (child2 - grandchild2)
-#   - no interleaved relationship (parent1 - parent2, parent2 - child1)
+#   - no "interleaved" relationship (parent1 - parent2, parent2 - child1)
 
 #################
 # Create tables #
@@ -183,7 +183,7 @@ vectorized: true
           ordering: +pid1
           estimated row count: 3 (missing stats)
           table: parent1@parent1_pkey
-          spans: /3-/5/#
+          spans: /3-/6
           parallel
 
 query T
@@ -206,7 +206,7 @@ vectorized: true
       table: parent1@parent1_pkey
       spans: [/3 - /5]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckU9v00AQxe98itFwiWGR_xEOK0VyRQ24Sp0SB4EEPizeIV3J3TW7awkU5buj2EitqwSU3jxv5zdv3niH7meLHPMvN8uLooTZZVFtqo_LAKp8mb_dwAt4t15dQycsaR_D1aoooblVrYzhU1WU72HWKRkH8PlDvs7HAr71UZTSAtIALsrLh2KzgHmADLWRVIo7csi_Yow1w86ahpwz9iDthoZC_kIeMVS66_1Brhk2xhLyHXrlW0KOG_G9pTUJSTaMkKEkL1Q7jB23zDqr7oT9jQyrTmjHIUxfhW-w3jM0vb-f7LzYEvJ4z57mHk_d_x7suP08fH5ygeTkAve-vTZWkiU58awP5P9ajqS4JrulK6M02TCZpmjph59l8ctgYdX2dvxEhqvec8hes2zOsoRl6ckw6TnXXJPrjHb0ONTRydEhCcktjZdxprcN3VjTDDZjuRq4QZDk_PiajEWhh6fhdz-E4zPg5DGc_BNOJ3C0r_fP_gQAAP__qbkemg==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckdFv0zAQxt_5K0731IBR44TxYKlSJhYgU5eOpggkyIOJj85SZgfbkUBV_3eUBGnLtIHKW-67--6X73xA_6NFgfnn6_V5UcLioqh21Yd1BFW-zt_s4Dm83W6uoJOOTOBwuSlKaG50qzh8rIryHSw6rXgEn97n23wq4GsfxymtII3gvLy4LzYrOIuQobGKSnlLHsUX5Fgz7JxtyHvrBukwDhTqJ4qYoTZdHwa5ZthYRygOGHRoCQXu5LeWtiQVuWWMDBUFqdtx7fSXWef0rXS_kGHVSeMFLNOXy9dYHxnaPtxt9kHuCQU_sv-j8zn9z8FOxSdP4u-ovbFOkSM1I9aD818jj2S4IrenS6sNuWUyz9DS97DI-Ito5fT-ZvpEhps-CMheseyMZQnL0ifDpKfccku-s8bTw1CPbo6HJKT2NF3G2941dO1sM2KmcjP6RkGRD1M3mYrCjK3xse-b-Qnm5KE5-as5nZnjY3189jsAAP__HlAeSQ==
 
 # Swap parent1 and child1 tables.
 query T
@@ -238,7 +238,7 @@ vectorized: true
           ordering: +pid1
           estimated row count: 3 (missing stats)
           table: parent1@parent1_pkey
-          spans: /3-/5/#
+          spans: /3-/6
           parallel
 
 query T
@@ -261,7 +261,7 @@ vectorized: true
       table: parent1@parent1_pkey
       spans: [/3 - /5]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckdGL00AQxt_9K4bxpdGVZBPqw0Ihhxc1Ry89m4qC5mHNjr2F3G7c3YBS-r9LE-GuR6ucb5lv5zfffJMd-h8dCiw-3ywvygpml2W9qT8sI6iLZfFmAy_g7Xp1De2t7hSHq1VZQS8dmcDhY11W72DWa8Uj-PS-WBdTAV-HJMloAVkEF9XlQ7FdwDxChsYqquQdeRRfkGPDsHe2Je-tO0i7saFUP1EkDLXph3CQG4atdYRih0GHjlDgRn7raE1SkYsTZKgoSN2NY6eV897pO-l-IcO6l8YLiLNX8Wts9gztEO4n-yC3hILv2f-582P3P0c6bT-Pn59dID27wL3vYKxT5EgdeTYH8l8tJ1Jck9vSldWGXJwep-joe5jl_GW0cHp7O30iw9UQBOSc5SnLM5bPz4bJnnLNNfneGk-PQ52cnBySkNrSdBlvB9fSjbPtaDOVq5EbBUU-TK_pVJRmfBp_90OYPwFOH8PpX-HsCE72zf7Z7wAAAP__oz4elw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckdFr1EAQxt_9K4Z5uujKZRPqw8JBio2acs3Vy4mC5mHNjteFdDfubkA57n-XJEKb0irXt8w3880v3-wB_c8WBeZfrtfnRQmLi6LaVR_XEVT5On-7g5fwbru5guZGt4rD5aYooZOOTODwqSrK97DotOIRfP6Qb_OpgG99HKe0gjSC8_Livtis4CxChsYqKuUteRRfkWPNsHO2Ie-tG6TDOFCoXyhihtp0fRjkmmFjHaE4YNChJRS4k99b2pJU5JYxMlQUpG7HtdMvZ53Tt9L9RoZVJ40XsExfL99gfWRo-3C32Qe5JxT8yJ5H53P63yOdik-exN9Re2OdIkdqRqwH5_9GHslwRW5Pl1YbcstknqGlH2GR8VfRyun9zfSJDDd9EJBxliUsS1l29mSY9JRbbsl31nh6GOrRzfGQhNSepst427uGrp1tRsxUbkbfKCjyYeomU1GYsTU-9n0zP8GcPDQn_zSnM3N8rI8v_gQAAP__F9UeRg==
 
 # Select over two ranges for parent/child with split at grandchild key.
 # Also, rows with pid1 <= 30 should have 4 rows whereas pid1 > 30 should
@@ -292,7 +292,7 @@ vectorized: true
       ordering: +pid1
       estimated row count: 3 (missing stats)
       table: parent1@parent1_pkey
-      spans: /29-/31/#
+      spans: /29-/32
       parallel
 
 query T
@@ -315,7 +315,7 @@ vectorized: true
       table: parent1@parent1_pkey
       spans: [/29 - /31]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycUVFv0zAQfudXnI6XFgyJHXhYpEoZNIhMXTLSSoAgDyE-OkuZHWxHAlX976jJ0MjUgrY33_fdd9995x26Hy3GmH66Wp1nOcyW2Xqz_rCawzpdpW838AzelcUldLUl7TlcFFkOzbVqJYci_wO_7JTksLglxurj-7RMYTbp-NqHYUQLEGdzOM-Xx9hmARGfQ1Eu0xLefJ44IENtJOX1DTmMvyDHimFnTUPOGXuAdkNDJn9iHDJUuuv9Aa4YNsYSxjv0yreEMW7qby2VVEuyQYgMJflatcPYMUXSWXVT21_IcN3V2sUQiLMXQSSw2jM0vb-b7Xy9JYz5nj3On0_9byOfWoAHT0-uIE6ucOfca2MlWZIT1-qg_F_LkRyXZLd0YZQmG4hpjpa--1nCn88XVm2vxycyLHofQ_KKJa9ZwlkiWBKdzBM95KQluc5oR_dzHZ0cHsKQ3NJ4HGd629CVNc1gM5bFoBsASc6PrBiLTA_U8Od_i_kDxOK-WPxTHE3E4b7aP_kdAAD__w1uMwk=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycUcGO0zAQvfMVozm1YGjswGEjVcpCg8iqmyxpJUCQQ4iHrqWsHWxHAlX9d5Rk0ZJVCyo3z3vz5s0b79F9bzDC5OPN-jLNYLZKN9vN-_UcNsk6ebOFp_C2yK-hrSxpz-EqTzOob1UjOeTZb_hFqySH5T0xVh_eJUUCs0nHly4IQlqCuJjDZbY6xtZLCPkc8mKVFPD608QBGWojKavuyGH0GTmWDFtranLO2B7aDw2p_IFRwFDptvM9XDKsjSWM9uiVbwgj3FZfGyqokmQXATKU5CvVDGPHFHFr1V1lfyLDTVtpF8FCXDxfhALLA0PT-YfZzlc7wogf2P_586n_feTzFxAnF3jw7bSxkizJiWfZK__VciTFNdkdXRmlyS7ENEVD3_ws5s_mS6t2t-MTGeadjyB-yeJXLOYsFiwOT-YJzzloQa412tHjXEcnB30Ykjsaj-NMZ2u6saYebMYyH3QDIMn5kRVjkeqBGn78TzE_Qywei8VfxeFEHBzKw5NfAQAA__9ZXzK4
 
 # Parent-child where pid1 <= 15 have one joined row and pid1 > 15 have no
 # joined rows (since child2 only has 15 rows up to pid1 = 15).
@@ -609,7 +609,7 @@ vectorized: true
           table: parent1@parent1_pkey
           spans: FULL SCAN
 
-# Join on multiple interleaved columns with an overarching ancestor (parent1).
+# Join on multiple "interleaved" columns with an overarching ancestor (parent1).
 # Note there are 5 nodes because the filter cid2 >= 12 AND cid2 <= 14
 # creates a giant parent span which requires reading from all rows.
 query T
@@ -701,7 +701,7 @@ vectorized: true
           table: parent1@parent1_pkey
           spans: [/10 - /39]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycktFvmzAQxt_3V1i3F9C8gqEvRYpEtLKNKiFdSLVJGw8evlEkgpltpE1R_vcJUy0lajJlb_Z39_P33cEO9M8GIki-3C_maUac2zTf5J8WLsmTRfJuQ3S_dTqusDXsqqsFc6mVyse6EeyqHBTyfr1akqcmcrdKMzKWyUOeZh-IYzny-WOyTsYL-db7fogzwnyXzLPb52o5I-GNCxRaKTDjW9QQfQUGBYVOyRK1lmqQdrYhFb8g8inUbdebQS4olFIhRDswtWkQItjw7w2ukQtUng8UBBpeN_bZMWfcqXrL1W-gkHe81RHxmP_Wux6aV72JSMxoHECxpyB7czDShlcIEdvT_wvDpmGeNngiTXjjvT7kORkmOBnmkKFvpRKoUEz8i4H8V8sLEy1RVXgn6xaVF0wnavCHcWL2xp2punocj39nCM_tNLxkp_OqUlhxI5UXTgPkD0snZoOnPQXuScPrSwzXqDvZajze34sv-8PSUFQ4fgQte1XivZKltRmvK8tZQaA2YzUYL2lrS_Yvew6zC-DgGA7OwuEE9o_h8Cx8fQQX-1d_AgAA__-qVGdX
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycktFvmzAQxt_3V1j3BJpXMORlSJGIVrZRJaQLqTZp48HDN4pEMLONtCnK_z5hqrVETbb0zf7ufv6-O9iD_tlABMmX2-UizYhznebb_NPSJXmyTN5tie53TscVtoZddbVgLrVSeV83gl2Vg0Leb9Yr8tBEbtZpRsYyucvT7ANxLEc-f0w2yXgh33rfD3FOmO-SRXb9VC3nJHzrAoVWCsz4DjVEX4FBQaFTskStpRqkvW1IxS-IfAp12_VmkAsKpVQI0R5MbRqECLb8e4Mb5AKV5wMFgYbXjX12zBl3qt5x9Rso5B1vdUQ85r_xZkPzujcRiRmNAygOFGRvHo204RVCxA70ZWHYNMzDBv8jzckowckojwn6ViqBCsXEvRjIf7U8M88KVYU3sm5RecF0ngZ_GCdmr925qqv78fh3hvDcRsNLNrqoKoUVN1J54TRAfrdyYjZ42lPgnjScXWK4Qd3JVuPx_p592R-WhqLC8SNo2asSb5Usrc14XVvOCgK1GavBeElbW7L_2FOYXQAHx3BwFg4nsH8Mh2fh2RFcHF79CQAA__-uimb9
 
 ###############
 # Outer joins #
@@ -922,7 +922,7 @@ vectorized: true
           ordering: +pid1
           estimated row count: 40 (missing stats)
           table: outer_p1@outer_p1_pkey
-          spans: /0-/39/#
+          spans: /0-/40
           parallel
 
 query T
@@ -976,7 +976,7 @@ vectorized: true
           ordering: +pid1
           estimated row count: 20 (missing stats)
           table: outer_p1@outer_p1_pkey
-          spans: /1-/20/#
+          spans: /1-/21
           parallel
 
 query T
@@ -1045,7 +1045,7 @@ vectorized: true
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckVFr2zAQgN_3K8Q9JZtGLGVPgoDHloFDYmdxHgrFD6p1dQ2O5EoytAT_92I7kCYkLemTfSd9992d9uCeKxAwv1svf0cxGf2N0m36fzkm6Xw5_7Ml38m_TbIitbSoPSOLJIoPASdJTOpSMTLrPhwoaKMwljt0IO6BQUahtiZH54ztUvv-QqReQAQUSl03vktnFHJjEcQefOkrBAFb-VDhBqVCOwmAgkIvy6ove-gkrG25k_YVKKS11E6Qn5C1FEzjj2WdlwWCYC39mppdUvNb1Pyq-mhstLEKLaoTW9aRn1250P8KbYELU2q0E37af4WPfhSyH-OZLYun4RcoJI0XJGQ05DSc0vDX1WGmt-xxg6422uH5UBcrB90kqAocNuNMY3NcW5P3miFMeq5PKHR-OOVDEOn-qH_o9zC7AebnMP8Qnp7AQZu1394CAAD__9KKEzk=
 
-# Join on non-interleaved column uses hash joiner.
+# Join on "non-interleaved" column uses hash joiner.
 query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 ON pa1 = ca1
 ----
@@ -1088,7 +1088,7 @@ vectorized: true
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV1r2zwUx--fTyHOVftUQZZs58Uw8Ni6kdImXdPBYPjCjbTEkFqe7MBKyXcftlvSpJkUTWtyY_DLTzr6_SWfRyh_LiCC82_Xl--HI3TycTi5nXy5PEWT88vzD7fof_TpZnyFpvNswRm6GA9HaKbSnD89-DoZjj6jkyLjFKNpxtkpYMglF6P0XpQQfQcKGBhg8AFDABhCSDAUSk5FWUpVf_LYAEP-CyIPQ5YXy6p-nGCYSiUgeoQqqxYCIrhN7xbiRqRcKOIBBi6qNFs007T1xIXK7lP1ABgmRZqXEepAssIgl9XTqOvB7h7QPC3nm8PEFMcMklWCoazSmYCIrvDfFUg3R35hbUeVhJGAEUYYSnOOKJLVXCjX0tkfS18Ptcyl4kIJvjFYUpPPn-z6AGJ6hmN21s63reFKqJm4kFkuFOlucgvxozp5gk_fqWw2X98ChvGyilCzEhz7OA5w3MNxH8eDLRfrRfoOi9xR-kh2ZEEo3daxc-5gY266_94ILPYGoR4JvfpKvQ6hAQmD-kqDt9sq9DhbZXDQrcL2j4vZxPV8kjukS4Iu6ZLu2wXFjhNU76BB-fsHFVqdq_VR6hDaJ2G_vtL-28XlHycu6h00r2D_vHybvJ6PU-flH7EJi7Vhlf82reA4afWP1jB3FHYjykLmpdirHXr10gSfidZYKZdqKq6VnDbTtLfjhmtaDBdl1b5l7c0wb1_VBe4P91xgSl3o0AUe6GFqYYzZwT0XeMuYJR26wAM9zLZh7yXs63X7Wphu-va26cAlLD1sCEsPm8LS04aw9LAhrNAlrK6Lbj1s0K2HTbr1tEG3Hjbo7rno7rvo1sMG3XrYpFtPG3TrYYPugYtuatMsX_9CbbqlLW38-dv0S1va4Jy-ah5a6cnqv98BAAD__2JnI1g=
 
-# Subset join on interleaved columns uses hash joiner.
+# Subset join on "interleaved" columns uses hash joiner.
 query T
 EXPLAIN (DISTSQL) SELECT * FROM child2 JOIN grandchild2 USING(pid1, cid3)
 ----

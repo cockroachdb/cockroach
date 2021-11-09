@@ -76,7 +76,7 @@ func (t *PartitionTuple) String() string {
 // DecodePartitionTuple parses columns (which are a prefix of the columns of
 // `idxDesc`) encoded with the "value" encoding and returns the parsed datums.
 // It also reencodes them into a key as they would be for `idxDesc` (accounting
-// for index dirs, interleaves, subpartitioning, etc).
+// for index dirs, subpartitioning, etc).
 //
 // For a list partitioning, this returned key can be used as a prefix scan to
 // select all rows that have the given columns as a prefix (this is true even if

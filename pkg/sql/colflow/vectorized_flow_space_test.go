@@ -231,6 +231,8 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					result *colexecargs.NewColOperatorResult
 					err    error
 				)
+				args.MonitorRegistry = &colexecargs.MonitorRegistry{}
+				defer args.MonitorRegistry.Close(ctx)
 				// The memory error can occur either during planning or during
 				// execution, and we want to actually execute the "query" only
 				// if there was no error during planning. That is why we have
@@ -244,14 +246,6 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 						result.Root.Next()
 						result.Root.Next()
 					})
-				}
-				if result != nil {
-					for _, memAccount := range result.OpAccounts {
-						memAccount.Close(ctx)
-					}
-					for _, memMonitor := range result.OpMonitors {
-						memMonitor.Stop(ctx)
-					}
 				}
 				if expectNoMemoryError {
 					require.NoError(t, err, "expected success, found: ", err)

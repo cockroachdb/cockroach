@@ -56,6 +56,8 @@ func TestColBatchScanMeta(t *testing.T) {
 	st := s.ClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
 	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
@@ -84,6 +86,7 @@ func TestColBatchScanMeta(t *testing.T) {
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:                &spec,
 		StreamingMemAccount: testMemAcc,
+		MonitorRegistry:     &monitorRegistry,
 	}
 	res, err := colbuilder.NewColOperator(ctx, &flowCtx, args)
 	if err != nil {
@@ -125,13 +128,12 @@ func BenchmarkColBatchScan(b *testing.B) {
 		)
 		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			span := tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 			spec := execinfrapb.ProcessorSpec{
 				Core: execinfrapb.ProcessorCoreUnion{
 					TableReader: &execinfrapb.TableReaderSpec{
 						Table: *tableDesc.TableDesc(),
-						Spans: []roachpb.Span{
-							tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec),
-						},
+						// Spans will be set below.
 						NeededColumns: []uint32{0, 1},
 					}},
 				ResultTypes: types.TwoIntCols,
@@ -139,6 +141,8 @@ func BenchmarkColBatchScan(b *testing.B) {
 
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
+			var monitorRegistry colexecargs.MonitorRegistry
+			defer monitorRegistry.Close(ctx)
 
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
@@ -150,9 +154,14 @@ func BenchmarkColBatchScan(b *testing.B) {
 			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
+				// We have to set the spans on each iteration since the
+				// txnKVFetcher reuses the passed-in slice and destructively
+				// modifies it.
+				spec.Core.TableReader.Spans = []roachpb.Span{span}
 				args := &colexecargs.NewColOperatorArgs{
 					Spec:                &spec,
 					StreamingMemAccount: testMemAcc,
+					MonitorRegistry:     &monitorRegistry,
 				}
 				res, err := colbuilder.NewColOperator(ctx, &flowCtx, args)
 				if err != nil {

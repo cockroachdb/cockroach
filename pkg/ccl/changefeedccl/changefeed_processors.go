@@ -732,14 +732,6 @@ func (c *kvEventToRowConsumer) eventToRow(
 		return r, err
 	}
 
-	if _, ok := c.details.Targets[desc.GetID()]; !ok {
-		// This kv is for an interleaved table that we're not watching.
-		if log.V(3) {
-			log.Infof(ctx, `skipping key from unwatched table %s: %s`, desc.GetName(), event.KV().Key)
-		}
-		return r, nil
-	}
-
 	rf, err := c.rfCache.RowFetcherForTableDesc(desc)
 	if err != nil {
 		return r, err

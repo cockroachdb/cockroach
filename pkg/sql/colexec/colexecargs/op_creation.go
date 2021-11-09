@@ -17,13 +17,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 	"github.com/stretchr/testify/require"
 )
@@ -64,6 +62,7 @@ type NewColOperatorArgs struct {
 	FDSemaphore          semaphore.Semaphore
 	ExprHelper           *ExprHelper
 	Factory              coldata.ColumnFactory
+	MonitorRegistry      *MonitorRegistry
 	TestingKnobs         struct {
 		// SpillingCallbackFn will be called when the spilling from an in-memory
 		// to disk-backed operator occurs. It should only be set in tests.
@@ -107,47 +106,15 @@ type NewColOperatorResult struct {
 	// all other stats collectors since it requires special handling.
 	Columnarizer colexecop.VectorizedStatsCollector
 	ColumnTypes  []*types.T
-	OpMonitors   []*mon.BytesMonitor
-	OpAccounts   []*mon.BoundAccount
 	Releasables  []execinfra.Releasable
 }
 
 var _ execinfra.Releasable = &NewColOperatorResult{}
 
-// AssertInvariants confirms that all invariants are maintained by
-// NewColOperatorResult.
-func (r *NewColOperatorResult) AssertInvariants() {
-	// Check that all memory monitor names are unique (colexec.diskSpillerBase
-	// relies on this in order to catch "memory budget exceeded" errors only
-	// from "its own" component).
-	names := make(map[string]struct{}, len(r.OpMonitors))
-	for _, m := range r.OpMonitors {
-		if _, seen := names[m.Name()]; seen {
-			colexecerror.InternalError(errors.AssertionFailedf("monitor named %q encountered twice", m.Name()))
-		}
-		names[m.Name()] = struct{}{}
-	}
-}
-
-// TestCleanup releases the resources associated with this result. It should
-// only be used in tests.
-func (r *NewColOperatorResult) TestCleanup() error {
-	if err := r.ToClose.Close(); err != nil {
-		return err
-	}
-	for _, acc := range r.OpAccounts {
-		acc.Close(context.Background())
-	}
-	for _, m := range r.OpMonitors {
-		m.Stop(context.Background())
-	}
-	return nil
-}
-
-// TestCleanupNoError is the same as TestCleanup but asserts that no error is
-// returned.
+// TestCleanupNoError releases the resources associated with this result and
+// asserts that no error is returned. It should only be used in tests.
 func (r *NewColOperatorResult) TestCleanupNoError(t testing.TB) {
-	require.NoError(t, r.TestCleanup())
+	require.NoError(t, r.ToClose.Close())
 }
 
 var newColOperatorResultPool = sync.Pool{
@@ -190,12 +157,9 @@ func (r *NewColOperatorResult) Release() {
 			MetadataSources: r.MetadataSources[:0],
 			ToClose:         r.ToClose[:0],
 		},
-		// There is no need to deeply reset the column types and the memory
-		// monitoring infra slices because these objects are very tiny in the
-		// grand scheme of things.
+		// There is no need to deeply reset the column types because these
+		// objects are very tiny in the grand scheme of things.
 		ColumnTypes: r.ColumnTypes[:0],
-		OpMonitors:  r.OpMonitors[:0],
-		OpAccounts:  r.OpAccounts[:0],
 		Releasables: r.Releasables[:0],
 	}
 	newColOperatorResultPool.Put(r)

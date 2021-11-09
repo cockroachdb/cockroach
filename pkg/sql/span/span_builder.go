@@ -43,11 +43,6 @@ type Builder struct {
 	KeyPrefix []byte
 	alloc     rowenc.DatumAlloc
 
-	// TODO (rohany): The interstices are used to convert opt constraints into spans. In future work,
-	//  we should unify the codepaths and use the allocation free method used on datums.
-	//  This work is tracked in #42738.
-	interstices [][]byte
-
 	neededFamilies []descpb.FamilyID
 }
 
@@ -76,7 +71,6 @@ func MakeBuilder(
 		index:          index,
 		indexColTypes:  s.indexColTypes,
 		KeyPrefix:      rowenc.MakeIndexKeyPrefix(codec, table, index.GetID()),
-		interstices:    make([][]byte, index.NumKeyColumns()+index.NumKeySuffixColumns()+1),
 		neededFamilies: nil,
 	}
 
@@ -94,11 +88,6 @@ func MakeBuilder(
 			s.indexColTypes[i] = col.GetType()
 		}
 	}
-
-	// Set up the interstices for encoding interleaved tables later.
-	//
-	// TODO(yuzefovich): simplify this, interleaves are dead now.
-	s.interstices[0] = s.KeyPrefix
 
 	return s
 }
@@ -139,7 +128,7 @@ func (s *Builder) SpanFromEncDatums(
 	values rowenc.EncDatumRow, prefixLen int,
 ) (_ roachpb.Span, containsNull bool, _ error) {
 	return rowenc.MakeSpanFromEncDatums(
-		values[:prefixLen], s.indexColTypes[:prefixLen], s.indexColDirs[:prefixLen], s.table, s.index, &s.alloc, s.KeyPrefix)
+		values[:prefixLen], s.indexColTypes[:prefixLen], s.indexColDirs[:prefixLen], s.index, &s.alloc, s.KeyPrefix)
 }
 
 // SpanFromEncDatumsWithRange encodes a range span. The inequality is assumed to
@@ -163,8 +152,9 @@ func (s *Builder) SpanFromEncDatumsWithRange(
 	}
 
 	makeKeyFromRow := func(r rowenc.EncDatumRow, l int) (k roachpb.Key, cn bool, e error) {
-		k, _, cn, e = rowenc.MakeKeyFromEncDatums(r[:l], s.indexColTypes[:l], s.indexColDirs[:l],
-			s.table, s.index, &s.alloc, s.KeyPrefix)
+		k, _, cn, e = rowenc.MakeKeyFromEncDatums(
+			r[:l], s.indexColTypes[:l], s.indexColDirs[:l], s.index, &s.alloc, s.KeyPrefix,
+		)
 		return
 	}
 
@@ -356,7 +346,9 @@ func (s *Builder) appendSpansFromConstraintSpan(
 		return nil, err
 	}
 	if cs.StartBoundary() == constraint.IncludeBoundary {
-		span.Key = append(span.Key, s.interstices[cs.StartKey().Length()]...)
+		if cs.StartKey().IsEmpty() {
+			span.Key = append(span.Key, s.KeyPrefix...)
+		}
 	} else {
 		// We need to exclude the value this logical part refers to.
 		span.Key = span.Key.PrefixEnd()
@@ -366,7 +358,9 @@ func (s *Builder) appendSpansFromConstraintSpan(
 	if err != nil {
 		return nil, err
 	}
-	span.EndKey = append(span.EndKey, s.interstices[cs.EndKey().Length()]...)
+	if cs.EndKey().IsEmpty() {
+		span.EndKey = append(span.EndKey, s.KeyPrefix...)
+	}
 
 	// Optimization: for single row lookups on a table with one or more column
 	// families, only scan the relevant column families, and use GetRequests
@@ -381,31 +375,30 @@ func (s *Builder) appendSpansFromConstraintSpan(
 		}
 	}
 
-	// We tighten the end key to prevent reading interleaved children after the
-	// last parent key. If cs.End.Inclusive is true, we also advance the key as
-	// necessary.
-	endInclusive := cs.EndBoundary() == constraint.IncludeBoundary
-	span.EndKey, err = rowenc.AdjustEndKeyForInterleave(s.codec, s.table, s.index, span.EndKey, endInclusive)
-	if err != nil {
-		return nil, err
+	// We need to advance the end key if it is inclusive or the index is
+	// inverted.
+	if cs.EndBoundary() == constraint.IncludeBoundary || s.index.GetType() == descpb.IndexDescriptor_INVERTED {
+		span.EndKey = span.EndKey.PrefixEnd()
 	}
+
 	return append(appendTo, span), nil
 }
 
 // encodeConstraintKey encodes each logical part of a constraint.Key into a
-// roachpb.Key; interstices[i] is inserted before the i-th value.
+// roachpb.Key.
 func (s *Builder) encodeConstraintKey(
 	ck constraint.Key,
-) (_ roachpb.Key, containsNull bool, _ error) {
-	var key []byte
+) (key roachpb.Key, containsNull bool, err error) {
+	if ck.IsEmpty() {
+		return key, containsNull, nil
+	}
+	key = append(key, s.KeyPrefix...)
 	for i := 0; i < ck.Length(); i++ {
 		val := ck.Value(i)
 		if val == tree.DNull {
 			containsNull = true
 		}
-		key = append(key, s.interstices[i]...)
 
-		var err error
 		// For extra columns (like implicit columns), the direction
 		// is ascending.
 		dir := encoding.Ascending
