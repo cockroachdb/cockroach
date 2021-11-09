@@ -89,7 +89,11 @@ func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc 
 // statement used to create the given view. It is used in the implementation of
 // the crdb_internal.create_statements virtual table.
 func ShowCreateView(
-	ctx context.Context, semaCtx *tree.SemaContext, tn *tree.TableName, desc catalog.TableDescriptor,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
+	tn *tree.TableName,
+	desc catalog.TableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")
@@ -109,7 +113,7 @@ func ShowCreateView(
 	f.WriteString(") AS ")
 
 	// Deserialize user-defined types in the view query.
-	typeReplacedViewQuery, err := formatViewQueryTypesForDisplay(ctx, semaCtx, desc)
+	typeReplacedViewQuery, err := formatViewQueryTypesForDisplay(ctx, semaCtx, sessionData, desc)
 	if err != nil {
 		log.Warningf(ctx,
 			"error deserializing user defined types for view %s (%v): %+v",
@@ -162,7 +166,10 @@ func formatViewQuerySequencesForDisplay(
 // look for serialized user-defined types. If it finds any,
 // it will deserialize it to display its name.
 func formatViewQueryTypesForDisplay(
-	ctx context.Context, semaCtx *tree.SemaContext, desc catalog.TableDescriptor,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
+	desc catalog.TableDescriptor,
 ) (string, error) {
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		switch n := expr.(type) {
@@ -176,7 +183,8 @@ func formatViewQueryTypesForDisplay(
 			}
 
 			formattedExpr, err := schemaexpr.FormatExprForDisplay(
-				ctx, desc, expr.String(), semaCtx, tree.FmtParsable)
+				ctx, desc, expr.String(), semaCtx, sessionData, tree.FmtParsable,
+			)
 			if err != nil {
 				return false, expr, err
 			}
@@ -513,7 +521,11 @@ func ShowCreatePartitioning(
 // showConstraintClause creates the CONSTRAINT clauses for a CREATE statement,
 // writing them to tree.FmtCtx f
 func showConstraintClause(
-	ctx context.Context, desc catalog.TableDescriptor, semaCtx *tree.SemaContext, f *tree.FmtCtx,
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
+	f *tree.FmtCtx,
 ) error {
 	for _, e := range desc.AllActiveAndInactiveChecks() {
 		f.WriteString(",\n\t")
@@ -523,7 +535,7 @@ func showConstraintClause(
 			f.WriteString(" ")
 		}
 		f.WriteString("CHECK (")
-		expr, err := schemaexpr.FormatExprForDisplay(ctx, desc, e.Expr, semaCtx, tree.FmtParsable)
+		expr, err := schemaexpr.FormatExprForDisplay(ctx, desc, e.Expr, semaCtx, sessionData, tree.FmtParsable)
 		if err != nil {
 			return err
 		}
@@ -549,7 +561,7 @@ func showConstraintClause(
 		f.WriteString(")")
 		if c.IsPartial() {
 			f.WriteString(" WHERE ")
-			pred, err := schemaexpr.FormatExprForDisplay(ctx, desc, c.Predicate, semaCtx, tree.FmtParsable)
+			pred, err := schemaexpr.FormatExprForDisplay(ctx, desc, c.Predicate, semaCtx, sessionData, tree.FmtParsable)
 			if err != nil {
 				return err
 			}

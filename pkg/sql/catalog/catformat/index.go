@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 )
 
@@ -43,8 +44,9 @@ func IndexForDisplay(
 	index catalog.Index,
 	partition string,
 	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
 ) (string, error) {
-	return indexForDisplay(ctx, table, tableName, index.IndexDesc(), index.Primary(), partition, semaCtx)
+	return indexForDisplay(ctx, table, tableName, index.IndexDesc(), index.Primary(), partition, semaCtx, sessionData)
 }
 
 func indexForDisplay(
@@ -55,6 +57,7 @@ func indexForDisplay(
 	isPrimary bool,
 	partition string,
 	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	if index.Unique {
@@ -70,7 +73,7 @@ func indexForDisplay(
 		f.FormatNode(tableName)
 	}
 	f.WriteString(" (")
-	if err := FormatIndexElements(ctx, table, index, f, semaCtx); err != nil {
+	if err := FormatIndexElements(ctx, table, index, f, semaCtx, sessionData); err != nil {
 		return "", err
 	}
 	f.WriteByte(')')
@@ -99,9 +102,7 @@ func indexForDisplay(
 
 	if index.IsPartial() {
 		f.WriteString(" WHERE ")
-		pred, err := schemaexpr.FormatExprForDisplay(
-			ctx, table, index.Predicate, semaCtx, tree.FmtParsable,
-		)
+		pred, err := schemaexpr.FormatExprForDisplay(ctx, table, index.Predicate, semaCtx, sessionData, tree.FmtParsable)
 		if err != nil {
 			return "", err
 		}
@@ -122,6 +123,7 @@ func FormatIndexElements(
 	index *descpb.IndexDescriptor,
 	f *tree.FmtCtx,
 	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
 ) error {
 	startIdx := index.ExplicitColumnStartIdx()
 	for i, n := startIdx, len(index.KeyColumnIDs); i < n; i++ {
@@ -134,7 +136,7 @@ func FormatIndexElements(
 		}
 		if col.IsExpressionIndexColumn() {
 			expr, err := schemaexpr.FormatExprForExpressionIndexDisplay(
-				ctx, table, col.GetComputeExpr(), semaCtx, tree.FmtParsable,
+				ctx, table, col.GetComputeExpr(), semaCtx, sessionData, tree.FmtParsable,
 			)
 			if err != nil {
 				return err

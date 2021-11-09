@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -122,10 +123,11 @@ func TestIndexForDisplay(t *testing.T) {
 		},
 	}
 
+	sd := &sessiondata.SessionData{}
 	for testIdx, tc := range testData {
 		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
 			got, err := indexForDisplay(
-				ctx, tableDesc, &tc.tableName, &tc.index, false /* isPrimary */, tc.partition, &semaCtx,
+				ctx, tableDesc, &tc.tableName, &tc.index, false /* isPrimary */, tc.partition, &semaCtx, sd,
 			)
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
