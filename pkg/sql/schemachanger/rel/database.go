@@ -103,6 +103,41 @@ func (t *Database) Insert(v interface{}) error {
 	return nil
 }
 
+// Delete deletes an entity.
+func (t *Database) Delete(v interface{}) error {
+	e, err := toEntity(t.schema, v)
+	if err != nil {
+		return err
+	}
+	if err := t.delete(e); err != nil {
+		return err
+	}
+	for _, v := range e.m {
+		_, isEntity := t.schema.entityTypeSchemas[reflect.TypeOf(v)]
+		_, alreadyDefined := t.entities[v]
+		if isEntity && alreadyDefined {
+			if err := t.Delete(v); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (t *Database) delete(e *entity) error {
+	self := e.getComparableValue(t.schema, Self)
+
+	delete(t.entities, self)
+	for i := range t.indexes {
+		idx := &t.indexes[i]
+		idx.tree.Delete(&containerItem{
+			entity:    e,
+			indexSpec: &idx.indexSpec,
+		})
+	}
+	return nil
+}
+
 func (t *Database) insert(e *entity) error {
 	self := e.getComparableValue(t.schema, Self)
 	if existing, exists := t.entities[self]; exists {

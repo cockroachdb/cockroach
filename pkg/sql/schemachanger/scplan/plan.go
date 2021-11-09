@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/deprules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/opgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scopt"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
@@ -75,6 +76,9 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 		return Plan{}, err
 	}
 	if err := deprules.Apply(g); err != nil {
+		return Plan{}, err
+	}
+	if err := scopt.OptimizePlan(g); err != nil {
 		return Plan{}, err
 	}
 	stages := buildStages(initial, g, params)
