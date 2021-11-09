@@ -63,6 +63,18 @@ func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges(
 		privilege.Schema,
 		sdb.maybeModified.GetName(),
 	)
+	//grantOptionsAdded := catprivilege.MaybeAddGrantOptions(&sdb.maybeModified.Privileges)
+	//sdb.changed = sdb.changed || grantOptionsAdded
+	return nil
+}
+
+// RunMigrationOnlyChanges implements the catalog.DescriptorBuilder
+// interface
+func (sdb *schemaDescriptorBuilder) RunMigrationOnlyChanges(
+	_ context.Context, _ catalog.DescGetter,
+) error {
+	sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
+	sdb.changed = catprivilege.MaybeAddGrantOptions(&sdb.maybeModified.Privileges)
 	return nil
 }
 

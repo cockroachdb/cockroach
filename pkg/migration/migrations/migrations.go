@@ -130,6 +130,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		ensureNoDrainingNames,
 	),
+	migration.NewTenantMigration(
+		"track grant options on users and enable granting/revoking with them",
+		toCV(clusterversion.ValidateGrantOption),
+		NoPrecondition,
+		grantOptionMigration,
+	),
 }
 
 func init() {

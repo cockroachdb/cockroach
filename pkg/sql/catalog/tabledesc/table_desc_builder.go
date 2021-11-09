@@ -104,6 +104,21 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges(
 	var err error
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
 	tdb.changes, err = maybeFillInDescriptor(ctx, dg, tdb.maybeModified, tdb.skipFKsWithNoMatchingTable)
+	//tdb.changes, err = maybeAddGrantOptionsToDescriptor(tdb.maybeModified)
+
+	return err
+}
+
+// RunMigrationOnlyChanges implements the catalog.DescriptorBuilder
+// interface.
+func (tdb *tableDescriptorBuilder) RunMigrationOnlyChanges(
+	ctx context.Context, dg catalog.DescGetter,
+) error {
+	var err error
+	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
+	tdb.changes, err = maybeFillInDescriptor(ctx, dg, tdb.maybeModified, tdb.skipFKsWithNoMatchingTable)
+	tdb.changes, err = maybeAddGrantOptionsToDescriptor(tdb.maybeModified)
+
 	return err
 }
 
@@ -216,6 +231,10 @@ func maybeFillInDescriptor(
 		privilege.Table,
 		desc.GetName(),
 	)
+	//grantOptionsAdded := catprivilege.MaybeAddGrantOptions(
+	//	&desc.Privileges,
+	//)
+	//changes.UpgradedPrivileges = changes.UpgradedPrivileges || grantOptionsAdded
 
 	if dg != nil {
 		changes.UpgradedForeignKeyRepresentation, err = maybeUpgradeForeignKeyRepresentation(
@@ -224,6 +243,19 @@ func maybeFillInDescriptor(
 	if err != nil {
 		return PostDeserializationTableDescriptorChanges{}, err
 	}
+	return changes, nil
+}
+
+// maybeAddGrantOptionsToDescriptor performs any modifications needed to the table descriptor.
+// Currently, it just updates the grant option privileges
+func maybeAddGrantOptionsToDescriptor(
+	desc *descpb.TableDescriptor,
+) (changes PostDeserializationTableDescriptorChanges, err error) {
+
+	changes.UpgradedPrivileges = catprivilege.MaybeAddGrantOptions(
+		&desc.Privileges,
+	)
+
 	return changes, nil
 }
 

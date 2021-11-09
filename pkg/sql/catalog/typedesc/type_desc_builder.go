@@ -64,6 +64,18 @@ func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges(
 		privilege.Type,
 		tdb.maybeModified.GetName(),
 	)
+	//grantOptionsAdded := catprivilege.MaybeAddGrantOptions(&tdb.maybeModified.Privileges)
+	//tdb.changed = tdb.changed || grantOptionsAdded
+	return nil
+}
+
+// RunMigrationOnlyChanges implements the catalog.DescriptorBuilder
+// interface.
+func (tdb *typeDescriptorBuilder) RunMigrationOnlyChanges(
+	_ context.Context, _ catalog.DescGetter,
+) error {
+	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
+	tdb.changed = catprivilege.MaybeAddGrantOptions(&tdb.maybeModified.Privileges)
 	return nil
 }
 
