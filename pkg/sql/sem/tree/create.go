@@ -1768,7 +1768,9 @@ func (o KVOptions) ToRoleOptions(
 	roleOptions := make(roleoption.List, len(o))
 
 	for i, ro := range o {
-		option, err := roleoption.ToOption(ro.Key.String())
+		// Role options are always stored as keywords in ro.Key by the
+		// parser.
+		option, err := roleoption.ToOption(string(ro.Key))
 		if err != nil {
 			return nil, err
 		}
@@ -1801,23 +1803,21 @@ func (o KVOptions) ToRoleOptions(
 
 func (o *KVOptions) formatAsRoleOptions(ctx *FmtCtx) {
 	for _, option := range *o {
-		ctx.WriteString(" ")
-		ctx.WriteString(
-			// "_" replaces space (" ") in YACC for handling tree.Name formatting.
-			strings.ReplaceAll(
-				strings.ToUpper(option.Key.String()), "_", " "),
-		)
+		ctx.WriteByte(' ')
+		// Role option keys are always sequences of keywords separated
+		// by spaces.
+		ctx.WriteString(strings.ToUpper(string(option.Key)))
 
 		// Password is a special case.
-		if strings.ToUpper(option.Key.String()) == "PASSWORD" {
-			ctx.WriteString(" ")
+		if strings.HasSuffix(string(option.Key), "password") {
+			ctx.WriteByte(' ')
 			if ctx.flags.HasFlags(FmtShowPasswords) {
 				ctx.FormatNode(option.Value)
 			} else {
 				ctx.WriteString(PasswordSubstitution)
 			}
 		} else if option.Value != nil {
-			ctx.WriteString(" ")
+			ctx.WriteByte(' ')
 			if ctx.HasFlags(FmtHideConstants) {
 				ctx.WriteString("'_'")
 			} else {

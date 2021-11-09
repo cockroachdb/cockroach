@@ -2938,8 +2938,6 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		&ex.extraTxnState.descCollection,
 		ex.server.cfg.JobRegistry,
 		ex.server.cfg.IndexBackfiller,
-		MakeIndexValidator(ex.planner.Txn().DB(), ex.server.cfg.Codec, ex.planner.execCfg.InternalExecutor),
-		MakeCCLCallbacks(ex.server.cfg.Settings, ex.planner.EvalContext()),
 		ex.server.cfg.NewSchemaChangerTestingKnobs,
 		scs.stmts,
 		scop.PreCommitPhase,

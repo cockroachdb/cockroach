@@ -69,68 +69,6 @@ func (b *buildContext) alterTableCmd(
 	}
 }
 
-func primaryIndexElemFromDescriptor(
-	indexDesc *descpb.IndexDescriptor, tableDesc catalog.TableDescriptor,
-) *scpb.PrimaryIndex {
-	if len(indexDesc.Partitioning.Range) > 0 ||
-		len(indexDesc.Partitioning.List) > 0 {
-		panic(notImplementedError{n: nil, detail: "partitioning on new indexes is not supported."})
-	}
-	keyColumnDirs := make([]scpb.PrimaryIndex_Direction, 0, len(indexDesc.KeyColumnDirections))
-	for _, dir := range indexDesc.KeyColumnDirections {
-		switch dir {
-		case descpb.IndexDescriptor_DESC:
-			keyColumnDirs = append(keyColumnDirs, scpb.PrimaryIndex_DESC)
-		case descpb.IndexDescriptor_ASC:
-			keyColumnDirs = append(keyColumnDirs, scpb.PrimaryIndex_ASC)
-		default:
-			panic(errors.AssertionFailedf("Unknown direction type %s", dir))
-		}
-	}
-	return &scpb.PrimaryIndex{TableID: tableDesc.GetID(),
-		IndexId:             indexDesc.ID,
-		IndexName:           indexDesc.Name,
-		Unique:              indexDesc.Unique,
-		KeyColumnIDs:        indexDesc.KeyColumnIDs,
-		KeyColumnDirections: keyColumnDirs,
-		KeySuffixColumnIDs:  indexDesc.KeySuffixColumnIDs,
-		StoringColumnIDs:    indexDesc.StoreColumnIDs,
-		CompositeColumnIDs:  indexDesc.CompositeColumnIDs,
-		Inverted:            indexDesc.Type == descpb.IndexDescriptor_INVERTED,
-		ShardedDescriptor:   &indexDesc.Sharded}
-}
-
-func secondaryIndexElemFromDescriptor(
-	indexDesc *descpb.IndexDescriptor, tableDesc catalog.TableDescriptor,
-) *scpb.SecondaryIndex {
-	if len(indexDesc.Partitioning.Range) > 0 ||
-		len(indexDesc.Partitioning.List) > 0 {
-		panic(notImplementedError{n: nil, detail: "partitioning on new indexes is not supported."})
-	}
-	keyColumnDirs := make([]scpb.SecondaryIndex_Direction, 0, len(indexDesc.KeyColumnDirections))
-	for _, dir := range indexDesc.KeyColumnDirections {
-		switch dir {
-		case descpb.IndexDescriptor_DESC:
-			keyColumnDirs = append(keyColumnDirs, scpb.SecondaryIndex_DESC)
-		case descpb.IndexDescriptor_ASC:
-			keyColumnDirs = append(keyColumnDirs, scpb.SecondaryIndex_ASC)
-		default:
-			panic(errors.AssertionFailedf("Unknown direction type %s", dir))
-		}
-	}
-	return &scpb.SecondaryIndex{TableID: tableDesc.GetID(),
-		IndexId:             indexDesc.ID,
-		IndexName:           indexDesc.Name,
-		Unique:              indexDesc.Unique,
-		KeyColumnIDs:        indexDesc.KeyColumnIDs,
-		KeyColumnDirections: keyColumnDirs,
-		KeySuffixColumnIDs:  indexDesc.KeySuffixColumnIDs,
-		StoringColumnIDs:    indexDesc.StoreColumnIDs,
-		CompositeColumnIDs:  indexDesc.CompositeColumnIDs,
-		Inverted:            indexDesc.Type == descpb.IndexDescriptor_INVERTED,
-		ShardedDescriptor:   &indexDesc.Sharded}
-}
-
 func (b *buildContext) alterTableAddColumn(
 	ctx context.Context,
 	table catalog.TableDescriptor,
@@ -194,7 +132,7 @@ func (b *buildContext) alterTableAddColumn(
 		familyID = b.findOrAddColumnFamily(
 			table, familyName, d.Family.Create, d.Family.IfNotExists,
 		)
-	} else if !d.IsVirtual() { // FIXME: Compute columns should not have families?
+	} else {
 		// TODO(ajwerner,lucy-zhang): Deal with adding the first column to the
 		// table.
 		fam := table.GetFamilies()[0]
@@ -241,15 +179,16 @@ func (b *buildContext) alterTableAddColumn(
 		FamilyID:   familyID,
 		FamilyName: familyName,
 	})
-	// Computed columns do not exist inside the primary index,
-	if !col.Virtual {
-		b.addOrUpdatePrimaryIndexTargetsForAddColumn(table, colID, col.Name)
-		if idx := cdd.PrimaryKeyOrUniqueIndexDescriptor; idx != nil {
-			idxID := b.nextIndexID(table)
-			idx.ID = idxID
-			secondaryIndex := secondaryIndexElemFromDescriptor(idx, table)
-			b.addNode(scpb.Target_ADD, secondaryIndex)
-		}
+	newPrimaryIdxID := b.addOrUpdatePrimaryIndexTargetsForAddColumn(table, colID, col.Name)
+
+	if idx := cdd.PrimaryKeyOrUniqueIndexDescriptor; idx != nil {
+		idxID := b.nextIndexID(table)
+		idx.ID = idxID
+		b.addNode(scpb.Target_ADD, &scpb.SecondaryIndex{
+			TableID:      table.GetID(),
+			Index:        *idx,
+			PrimaryIndex: newPrimaryIdxID,
+		})
 	}
 }
 
@@ -456,8 +395,9 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForAddColumn(
 		if t, ok := n.Element().(*scpb.PrimaryIndex); ok &&
 			b.output[i].Target.Direction == scpb.Target_ADD &&
 			t.TableID == table.GetID() {
-			t.StoringColumnIDs = append(t.StoringColumnIDs, colID)
-			return t.IndexId
+			t.Index.StoreColumnIDs = append(t.Index.StoreColumnIDs, colID)
+			t.Index.StoreColumnNames = append(t.Index.StoreColumnNames, colName)
+			return t.Index.ID
 		}
 	}
 
@@ -481,10 +421,18 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForAddColumn(
 		newIdx.StoreColumnNames = append(newIdx.StoreColumnNames, colName)
 	}
 
-	b.addNode(scpb.Target_ADD, primaryIndexElemFromDescriptor(&newIdx, table))
+	b.addNode(scpb.Target_ADD, &scpb.PrimaryIndex{
+		TableID:             table.GetID(),
+		Index:               newIdx,
+		OtherPrimaryIndexID: table.GetPrimaryIndexID(),
+	})
 
 	// Drop the existing primary index.
-	b.addNode(scpb.Target_DROP, primaryIndexElemFromDescriptor(table.GetPrimaryIndex().IndexDesc(), table))
+	b.addNode(scpb.Target_DROP, &scpb.PrimaryIndex{
+		TableID:             table.GetID(),
+		Index:               table.GetPrimaryIndex().IndexDescDeepCopy(),
+		OtherPrimaryIndexID: newIdx.ID,
+	})
 
 	return idxID
 }
@@ -499,10 +447,11 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForDropColumn(
 		if t, ok := n.Element().(*scpb.PrimaryIndex); ok &&
 			n.Target.Direction == scpb.Target_ADD &&
 			t.TableID == table.GetID() {
-			for j := range t.StoringColumnIDs {
-				if t.StoringColumnIDs[j] == colID {
-					t.StoringColumnIDs = append(t.StoringColumnIDs[:j], t.StoringColumnIDs[j+1:]...)
-					return t.IndexId
+			for j := range t.Index.StoreColumnIDs {
+				if t.Index.StoreColumnIDs[j] == colID {
+					t.Index.StoreColumnIDs = append(t.Index.StoreColumnIDs[:j], t.Index.StoreColumnIDs[j+1:]...)
+					t.Index.StoreColumnNames = append(t.Index.StoreColumnNames[:j], t.Index.StoreColumnNames[j+1:]...)
+					return t.Index.ID
 				}
 
 				panic("index not found")
@@ -538,10 +487,18 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForDropColumn(
 		}
 	}
 
-	b.addNode(scpb.Target_ADD, primaryIndexElemFromDescriptor(&newIdx, table))
+	b.addNode(scpb.Target_ADD, &scpb.PrimaryIndex{
+		TableID:             table.GetID(),
+		Index:               newIdx,
+		OtherPrimaryIndexID: table.GetPrimaryIndexID(),
+	})
 
 	// Drop the existing primary index.
-	b.addNode(scpb.Target_DROP, primaryIndexElemFromDescriptor(table.GetPrimaryIndex().IndexDesc(), table))
+	b.addNode(scpb.Target_DROP, &scpb.PrimaryIndex{
+		TableID:             table.GetID(),
+		Index:               table.GetPrimaryIndex().IndexDescDeepCopy(),
+		OtherPrimaryIndexID: idxID,
+	})
 	return idxID
 }
 
@@ -577,12 +534,12 @@ func (b *buildContext) nextIndexID(table catalog.TableDescriptor) descpb.IndexID
 			continue
 		}
 		if ai, ok := n.Element().(*scpb.SecondaryIndex); ok {
-			if ai.IndexId > maxIdxID {
-				maxIdxID = ai.IndexId
+			if ai.Index.ID > maxIdxID {
+				maxIdxID = ai.Index.ID
 			}
 		} else if ai, ok := n.Element().(*scpb.PrimaryIndex); ok {
-			if ai.IndexId > maxIdxID {
-				maxIdxID = ai.IndexId
+			if ai.Index.ID > maxIdxID {
+				maxIdxID = ai.Index.ID
 			}
 		}
 	}

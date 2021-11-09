@@ -11,8 +11,6 @@
 package scgraph
 
 import (
-	"container/list"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -39,15 +37,10 @@ type Graph struct {
 	// from it. A Node may have at most one opEdge from it.
 	nodeOpEdgesFrom map[*scpb.Node]*OpEdge
 
-	// nodeDepEdgesFrom maps a Node from its dependencies.
+	// nodeDepEdges maps a Node to its dependencies.
 	// A Node dependency is another target node which must be
 	// reached before or concurrently with this node.
-	nodeDepEdgesFrom map[*scpb.Node][]*DepEdge
-
-	// nodeDepEdgesTo maps a Node to its dependencies.
-	// A Node dependency is another target node which must be
-	// reached before or concurrently with this node.
-	nodeDepEdgesTo map[*scpb.Node][]*DepEdge
+	nodeDepEdges map[*scpb.Node][]*DepEdge
 
 	// opToNode maps from an operation back to the
 	// opEdge that generated it as an index.
@@ -77,12 +70,11 @@ func New(initial scpb.State) (*Graph, error) {
 		return nil, err
 	}
 	g := Graph{
-		targetIdxMap:     map[*scpb.Target]int{},
-		nodeOpEdgesFrom:  map[*scpb.Node]*OpEdge{},
-		nodeDepEdgesFrom: map[*scpb.Node][]*DepEdge{},
-		nodeDepEdgesTo:   map[*scpb.Node][]*DepEdge{},
-		opToNode:         map[scop.Op]*scpb.Node{},
-		entities:         db,
+		targetIdxMap:    map[*scpb.Target]int{},
+		nodeOpEdgesFrom: map[*scpb.Node]*OpEdge{},
+		nodeDepEdges:    map[*scpb.Node][]*DepEdge{},
+		opToNode:        map[scop.Op]*scpb.Node{},
+		entities:        db,
 	}
 	for _, n := range initial {
 		if existing, ok := g.targetIdxMap[n.Target]; ok {
@@ -153,20 +145,9 @@ func (g *Graph) GetOpEdgeFrom(n *scpb.Node) (*OpEdge, bool) {
 // GetDepEdgesFrom returns the unique outgoing op edge from the specified node,
 // if one exists.
 func (g *Graph) GetDepEdgesFrom(n *scpb.Node) ([]*DepEdge, bool) {
-	de, ok := g.nodeDepEdgesFrom[n]
+	de, ok := g.nodeDepEdges[n]
 	return de, ok
 }
-
-var _ = (*Graph)(nil).GetDepEdgesFrom
-
-// GetDepEdgesTo returns the unique outgoing op edge to the specified node,
-// if one exists.
-func (g *Graph) GetDepEdgesTo(n *scpb.Node) ([]*DepEdge, bool) {
-	de, ok := g.nodeDepEdgesTo[n]
-	return de, ok
-}
-
-var _ = (*Graph)(nil).GetDepEdgesTo
 
 // AddOpEdges adds an op edges connecting the nodes for two statuses of a target.
 func (g *Graph) AddOpEdges(
@@ -200,8 +181,6 @@ func (g *Graph) GetNodeFromOp(op scop.Op) *scpb.Node {
 	return g.opToNode[op]
 }
 
-var _ = (*Graph)(nil).GetNodeFromOp
-
 // AddDepEdge adds a dep edge connecting two nodes (specified by their targets
 // and statuses).
 func (g *Graph) AddDepEdge(
@@ -219,8 +198,7 @@ func (g *Graph) AddDepEdge(
 		return err
 	}
 	g.edges = append(g.edges, de)
-	g.nodeDepEdgesFrom[de.from] = append(g.nodeDepEdgesFrom[de.from], de)
-	g.nodeDepEdgesTo[de.to] = append(g.nodeDepEdgesTo[de.to], de)
+	g.nodeDepEdges[de.from] = append(g.nodeDepEdges[de.from], de)
 	return nil
 }
 
@@ -271,50 +249,3 @@ func (de *DepEdge) To() *scpb.Node { return de.to }
 
 // Name returns the name of the rule which generated this edge.
 func (de *DepEdge) Name() string { return de.rule }
-
-// GetNodeRanks fetches ranks of nodes in topological order.
-func (g *Graph) GetNodeRanks() map[*scpb.Node]int {
-	backCycleExists := func(n *scpb.Node, de *DepEdge) bool {
-		var foundBack bool
-		_ = g.ForEachDepEdgeFrom(de.To(), func(maybeBack *DepEdge) error {
-			foundBack = foundBack || maybeBack.To() == n
-			return nil
-		})
-		return foundBack
-	}
-	l := list.New()
-	marks := make(map[*scpb.Node]bool)
-	var visit func(n *scpb.Node)
-	visit = func(n *scpb.Node) {
-		permanent, marked := marks[n]
-		if marked && !permanent {
-			panic("not a dag")
-		}
-		if marked && permanent {
-			return
-		}
-		marks[n] = false
-		_ = g.ForEachDepEdgeFrom(n, func(de *DepEdge) error {
-			// We want to eliminate cycles caused by swaps. In that
-			// case, we want to pretend that there is no edge from the
-			// add to the drop, and, in that way, the drop is ordered first.
-			if n.Direction == scpb.Target_ADD || !backCycleExists(n, de) {
-				visit(de.To())
-			}
-			return nil
-		})
-		marks[n] = true
-		l.PushFront(n)
-	}
-
-	_ = g.ForEachNode(func(n *scpb.Node) error {
-		visit(n)
-		return nil
-	})
-	rank := make(map[*scpb.Node]int, l.Len())
-	for i, cur := 0, l.Front(); i < l.Len(); i++ {
-		rank[cur.Value.(*scpb.Node)] = i
-		cur = cur.Next()
-	}
-	return rank
-}

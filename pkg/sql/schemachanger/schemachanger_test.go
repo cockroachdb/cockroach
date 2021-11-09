@@ -403,8 +403,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 		} {
 			_, err = conn.ExecContext(ctx, stmt)
 			assert.Truef(t,
-				testutils.IsError(err, `cannot perform a schema change on table "t"`) ||
-					testutils.IsError(err, `cannot perform TRUNCATE on "t" which has indexes being dropped`),
+				testutils.IsError(err, `cannot perform a schema change on table "t"`),
 				"statement: %s, error: %s", stmt, err,
 			)
 		}
