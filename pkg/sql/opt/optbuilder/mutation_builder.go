@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1395,7 +1396,16 @@ func (mb *mutationBuilder) addAssignmentCasts(inScope *scope, outTypes []*types.
 	// Do a quick check to see if any casts are needed.
 	castRequired := false
 	for i := 0; i < len(inScope.cols); i++ {
-		if !inScope.cols[i].typ.Identical(outTypes[i]) {
+		srcType := inScope.cols[i].typ
+		targetType := outTypes[i]
+		if !srcType.Identical(targetType) {
+			// Check if an assignment cast is available from the inScope column
+			// type to the out type.
+			if !tree.ValidCast(srcType, targetType, tree.CastContextAssignment) {
+				ord := mb.tabID.ColumnOrdinal(mb.targetColList[i])
+				colName := string(mb.tab.Column(ord).ColName())
+				panic(sqlerrors.NewInvalidAssignmentCastError(srcType, targetType, colName))
+			}
 			castRequired = true
 			break
 		}
@@ -1411,18 +1421,6 @@ func (mb *mutationBuilder) addAssignmentCasts(inScope *scope, outTypes []*types.
 		srcType := inScope.cols[i].typ
 		targetType := outTypes[i]
 		if !srcType.Identical(targetType) {
-			// Check if an assignment cast is available from the inScope column
-			// type to the out type.
-			if !tree.ValidCast(srcType, targetType, tree.CastContextAssignment) {
-				ord := mb.tabID.ColumnOrdinal(mb.targetColList[i])
-				colName := string(mb.tab.Column(ord).ColName())
-				err := pgerror.Newf(pgcode.DatatypeMismatch,
-					"value type %s doesn't match type %s of column %q",
-					srcType, targetType, tree.ErrNameString(colName))
-				err = errors.WithHint(err, "you will need to rewrite or cast the expression")
-				panic(err)
-			}
-
 			// Create a new column which casts the input column to the correct
 			// type.
 			variable := mb.b.factory.ConstructVariable(inScope.cols[i].id)
