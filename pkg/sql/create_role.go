@@ -117,36 +117,9 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		opName = "create-user"
 	}
 
-	var hashedPassword []byte
-	if pwAlreadyHashed := n.roleOptions.Contains(roleoption.HASHEDPASSWORD); pwAlreadyHashed ||
-		n.roleOptions.Contains(roleoption.PASSWORD) {
-		isNull, password, err := n.roleOptions.GetPassword()
-		if err != nil {
-			return err
-		}
-		if !isNull && params.extendedEvalCtx.ExecCfg.RPCContext.Config.Insecure {
-			// We disallow setting a non-empty password in insecure mode
-			// because insecure means an observer may have MITM'ed the change
-			// and learned the password.
-			//
-			// It's valid to clear the password (WITH PASSWORD NULL) however
-			// since that forces cert auth when moving back to secure mode,
-			// and certs can't be MITM'ed over the insecure SQL connection.
-			return pgerror.New(pgcode.InvalidPassword,
-				"setting or updating a password is not supported in insecure mode")
-		}
-
-		if !isNull {
-			if pwAlreadyHashed {
-				if hashedPassword, err = security.CheckPasswordHashValidity(params.ctx, password); err != nil {
-					return err
-				}
-			} else {
-				if hashedPassword, err = params.p.checkPasswordAndGetHash(params.ctx, password); err != nil {
-					return err
-				}
-			}
-		}
+	_, hashedPassword, err := retrievePasswordFromRoleOptions(params, n.roleOptions)
+	if err != nil {
+		return err
 	}
 
 	// Check if the user/role exists.
@@ -248,6 +221,45 @@ func (*CreateRoleNode) Values() tree.Datums { return tree.Datums{} }
 
 // Close implements the planNode interface.
 func (*CreateRoleNode) Close(context.Context) {}
+
+func retrievePasswordFromRoleOptions(
+	params runParams, roleOptions roleoption.List,
+) (hasPasswordOpt bool, hashedPassword []byte, err error) {
+	pwAlreadyHashed := roleOptions.Contains(roleoption.HASHEDPASSWORD)
+	if !(pwAlreadyHashed ||
+		roleOptions.Contains(roleoption.PASSWORD)) {
+		return false, nil, nil
+	}
+	isNull, password, err := roleOptions.GetPassword()
+	if err != nil {
+		return true, nil, err
+	}
+	if !isNull && params.extendedEvalCtx.ExecCfg.RPCContext.Config.Insecure {
+		// We disallow setting a non-empty password in insecure mode
+		// because insecure means an observer may have MITM'ed the change
+		// and learned the password.
+		//
+		// It's valid to clear the password (WITH PASSWORD NULL) however
+		// since that forces cert auth when moving back to secure mode,
+		// and certs can't be MITM'ed over the insecure SQL connection.
+		return true, nil, pgerror.New(pgcode.InvalidPassword,
+			"setting or updating a password is not supported in insecure mode")
+	}
+
+	if !isNull {
+		if pwAlreadyHashed {
+			if hashedPassword, err = security.CheckPasswordHashValidity(params.ctx, password); err != nil {
+				return true, nil, err
+			}
+		} else {
+			if hashedPassword, err = params.p.checkPasswordAndGetHash(params.ctx, password); err != nil {
+				return true, nil, err
+			}
+		}
+	}
+
+	return true, hashedPassword, nil
+}
 
 func (p *planner) checkPasswordAndGetHash(
 	ctx context.Context, password string,
