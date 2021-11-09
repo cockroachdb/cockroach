@@ -18,7 +18,11 @@ import {
   StatementsRequest,
 } from "src/api/statementsApi";
 import { actions as localStorageActions } from "src/store/localStorage";
-import { actions, UpdateDateRangePayload } from "./statements.reducer";
+import {
+  actions as statementActions,
+  UpdateDateRangePayload,
+} from "./statements.reducer";
+import { actions as transactionActions } from "src/store/transactions";
 import { rootActions } from "../reducers";
 
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
@@ -26,7 +30,7 @@ import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
 export function* refreshStatementsSaga(
   action?: PayloadAction<StatementsRequest>,
 ) {
-  yield put(actions.request(action?.payload));
+  yield put(statementActions.request(action?.payload));
 }
 
 export function* requestStatementsSaga(
@@ -36,15 +40,16 @@ export function* requestStatementsSaga(
     const result = yield action?.payload?.combined
       ? call(getCombinedStatements, action.payload)
       : call(getStatements);
-    yield put(actions.received(result));
+    yield put(statementActions.received(result));
+    yield put(transactionActions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(statementActions.failed(e));
   }
 }
 
 export function* receivedStatementsSaga(delayMs: number) {
   yield delay(delayMs);
-  yield put(actions.invalidated());
+  yield put(statementActions.invalidated());
 }
 
 export function* updateStatementesDateRangeSaga(
@@ -57,13 +62,13 @@ export function* updateStatementesDateRangeSaga(
       value: { start, end },
     }),
   );
-  yield put(actions.invalidated());
+  yield put(statementActions.invalidated());
   const req = new cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(start),
     end: Long.fromNumber(end),
   });
-  yield put(actions.refresh(req));
+  yield put(statementActions.refresh(req));
 }
 
 export function* statementsSaga(
@@ -72,16 +77,23 @@ export function* statementsSaga(
   yield all([
     throttleWithReset(
       cacheInvalidationPeriod,
-      actions.refresh,
-      [actions.invalidated, actions.failed, rootActions.resetState],
+      statementActions.refresh,
+      [
+        statementActions.invalidated,
+        statementActions.failed,
+        rootActions.resetState,
+      ],
       refreshStatementsSaga,
     ),
-    takeLatest(actions.request, requestStatementsSaga),
+    takeLatest(statementActions.request, requestStatementsSaga),
     takeLatest(
-      actions.received,
+      statementActions.received,
       receivedStatementsSaga,
       cacheInvalidationPeriod,
     ),
-    takeLatest(actions.updateDateRange, updateStatementesDateRangeSaga),
+    takeLatest(
+      statementActions.updateDateRange,
+      updateStatementesDateRangeSaga,
+    ),
   ]);
 }

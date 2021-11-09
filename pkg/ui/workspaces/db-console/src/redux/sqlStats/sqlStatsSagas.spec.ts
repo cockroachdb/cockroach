@@ -17,7 +17,7 @@ import {
 } from "./sqlStatsActions";
 import { resetSQLStatsSaga } from "./sqlStatsSagas";
 import { resetSQLStats } from "src/util/api";
-import { invalidateStatements, refreshStatements } from "src/redux/apiReducers";
+import { invalidateStatements } from "src/redux/apiReducers";
 import { throwError } from "redux-saga-test-plan/providers";
 
 import { cockroach } from "src/js/protos";
@@ -31,7 +31,6 @@ describe("SQL Stats sagas", () => {
         .provide([[call.fn(resetSQLStats), resetSQLStatsResponse]])
         .put(resetSQLStatsCompleteAction())
         .put(invalidateStatements())
-        .put(refreshStatements() as any)
         .run();
     });
 

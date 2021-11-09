@@ -21,6 +21,7 @@ import {
   ResetSQLStatsState,
 } from "./sqlStats.reducer";
 import { actions as statementActions } from "src/store/statements/statements.reducer";
+import { actions as transactionActions } from "src/store/transactions/transactions.reducer";
 
 describe("SQL Stats sagas", () => {
   describe("resetSQLStatsSaga", () => {
@@ -31,7 +32,7 @@ describe("SQL Stats sagas", () => {
         .provide([[matchers.call.fn(resetSQLStats), resetSQLStatsResponse]])
         .put(sqlStatsActions.received(resetSQLStatsResponse))
         .put(statementActions.invalidated())
-        .put(statementActions.refresh())
+        .put(transactionActions.invalidated())
         .withReducer(sqlStatsReducers)
         .hasFinalState<ResetSQLStatsState>({
           data: resetSQLStatsResponse,

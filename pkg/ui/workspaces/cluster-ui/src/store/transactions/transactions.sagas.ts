@@ -15,7 +15,8 @@ import {
   getCombinedStatements,
   StatementsRequest,
 } from "src/api/statementsApi";
-import { actions } from "./transactions.reducer";
+import { actions as statementActions } from "src/store/statements";
+import { actions as transactionActions } from "./transactions.reducer";
 import { rootActions } from "../reducers";
 
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
@@ -23,7 +24,7 @@ import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
 export function* refreshTransactionsSaga(
   action?: PayloadAction<StatementsRequest>,
 ) {
-  yield put(actions.request(action?.payload));
+  yield put(transactionActions.request(action?.payload));
 }
 
 export function* requestTransactionsSaga(
@@ -33,15 +34,16 @@ export function* requestTransactionsSaga(
     const result = yield action?.payload?.combined
       ? call(getCombinedStatements, action.payload)
       : call(getStatements);
-    yield put(actions.received(result));
+    yield put(transactionActions.received(result));
+    yield put(statementActions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(transactionActions.failed(e));
   }
 }
 
 export function* receivedTransactionsSaga(delayMs: number) {
   yield delay(delayMs);
-  yield put(actions.invalidated());
+  yield put(transactionActions.invalidated());
 }
 
 export function* transactionsSaga(
@@ -50,13 +52,17 @@ export function* transactionsSaga(
   yield all([
     throttleWithReset(
       cacheInvalidationPeriod,
-      actions.refresh,
-      [actions.invalidated, actions.failed, rootActions.resetState],
+      transactionActions.refresh,
+      [
+        transactionActions.invalidated,
+        transactionActions.failed,
+        rootActions.resetState,
+      ],
       refreshTransactionsSaga,
     ),
-    takeLatest(actions.request, requestTransactionsSaga),
+    takeLatest(transactionActions.request, requestTransactionsSaga),
     takeLatest(
-      actions.received,
+      transactionActions.received,
       receivedTransactionsSaga,
       cacheInvalidationPeriod,
     ),
