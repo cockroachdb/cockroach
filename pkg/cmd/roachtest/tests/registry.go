@@ -116,6 +116,7 @@ func RegisterTests(r registry.Registry) {
 	registerKVBench(r)
 	registerTypeORM(r)
 	registerLoadSplits(r)
+	registerValidateGrantOption(r)
 	registerVersion(r)
 	registerYCSB(r)
 	registerTPCHBench(r)
