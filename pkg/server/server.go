@@ -146,20 +146,22 @@ type Server struct {
 	rpcContext      *rpc.Context
 	engines         Engines
 	// The gRPC server on which the different RPC handlers will be registered.
-	grpc         *grpcServer
-	gossip       *gossip.Gossip
-	nodeDialer   *nodedialer.Dialer
-	nodeLiveness *liveness.NodeLiveness
-	storePool    *kvserver.StorePool
-	tcsFactory   *kvcoord.TxnCoordSenderFactory
-	distSender   *kvcoord.DistSender
-	db           *kv.DB
-	node         *Node
-	registry     *metric.Registry
-	recorder     *status.MetricsRecorder
-	runtime      *status.RuntimeStatSampler
-	updates      *diagnostics.UpdateChecker
-	ctSender     *sidetransport.Sender
+	grpc             *grpcServer
+	gossip           *gossip.Gossip
+	nodeDialer       *nodedialer.Dialer
+	nodeLiveness     *liveness.NodeLiveness
+	storePool        *kvserver.StorePool
+	tcsFactory       *kvcoord.TxnCoordSenderFactory
+	distSender       *kvcoord.DistSender
+	db               *kv.DB
+	node             *Node
+	registry         *metric.Registry
+	recorder         *status.MetricsRecorder
+	runtime          *status.RuntimeStatSampler
+	ruleRegistry     *metric.RuleRegistry
+	promRuleExporter *metric.PrometheusRuleExporter
+	updates          *diagnostics.UpdateChecker
+	ctSender         *sidetransport.Sender
 
 	admin           *adminServer
 	status          *statusServer
@@ -271,6 +273,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		clock = hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset))
 	}
 	registry := metric.NewRegistry()
+	ruleRegistry := metric.NewRuleRegistry()
+	promRuleExporter := metric.NewPrometheusRuleExporter(ruleRegistry)
 	stopper.SetTracer(cfg.AmbientCtx.Tracer)
 	stopper.AddCloser(cfg.AmbientCtx.Tracer)
 
@@ -402,6 +406,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	runtimeSampler := status.NewRuntimeStatSampler(ctx, clock)
 	registry.AddMetricStruct(runtimeSampler)
+
+	// Create and add KV metric rules
+	kvserver.CreateAndAddRules(ctx, ruleRegistry)
 
 	// A custom RetryOptions is created which uses stopper.ShouldQuiesce() as
 	// the Closer. This prevents infinite retry loops from occurring during
@@ -816,6 +823,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		node:                   node,
 		registry:               registry,
 		recorder:               recorder,
+		ruleRegistry:           ruleRegistry,
+		promRuleExporter:       promRuleExporter,
 		updates:                updates,
 		ctSender:               ctSender,
 		runtime:                runtimeSampler,
@@ -1822,7 +1831,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
-
 	// Register debugging endpoints.
 	var debugHandler http.Handler = s.debug
 	if s.cfg.RequireWebSession() {

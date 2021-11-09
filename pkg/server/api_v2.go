@@ -46,6 +46,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/gorilla/mux"
 )
 
@@ -80,10 +82,11 @@ func getSQLUsername(ctx context.Context) security.SQLUsername {
 // To register a new API endpoint, add it to the route definitions in
 // registerRoutes().
 type apiV2Server struct {
-	admin      *adminServer
-	authServer *authenticationV2Server
-	status     *statusServer
-	mux        *mux.Router
+	admin            *adminServer
+	authServer       *authenticationV2Server
+	status           *statusServer
+	promRuleExporter *metric.PrometheusRuleExporter
+	mux              *mux.Router
 }
 
 // newAPIV2Server returns a new apiV2Server.
@@ -94,10 +97,11 @@ func newAPIV2Server(ctx context.Context, s *Server) *apiV2Server {
 	authMux := newAuthenticationV2Mux(authServer, innerMux)
 	outerMux := mux.NewRouter()
 	a := &apiV2Server{
-		admin:      s.admin,
-		authServer: authServer,
-		status:     s.status,
-		mux:        outerMux,
+		admin:            s.admin,
+		authServer:       authServer,
+		status:           s.status,
+		mux:              outerMux,
+		promRuleExporter: s.promRuleExporter,
 	}
 	a.registerRoutes(innerMux, authMux)
 	return a
@@ -150,6 +154,7 @@ func (a *apiV2Server) registerRoutes(innerMux *mux.Router, authMux http.Handler)
 		{"databases/{database_name:[\\w.]+}/grants/", a.databaseGrants, true, regularRole, noOption},
 		{"databases/{database_name:[\\w.]+}/tables/", a.databaseTables, true, regularRole, noOption},
 		{"databases/{database_name:[\\w.]+}/tables/{table_name:[\\w.]+}/", a.tableDetails, true, regularRole, noOption},
+		{"rules/", a.listRules, false, regularRole, noOption},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)
@@ -314,4 +319,33 @@ func (a *apiV2Server) health(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSONResponse(ctx, w, 200, resp)
+}
+
+// swagger:operation GET /rules/ rules
+//
+// Get metric recording and alerting rule templates
+//
+// Endpoint to export recommended metric recording and alerting rules.
+// These rules are intended to be used as a guideline for aggregating
+// and using metrics for alerting purposes. All rules are in the
+// YAML format compatible with Prometheus recording and alerting
+// rules. All recording rules are grouped under 'rules/recording'
+// label while alerting rules are grouped under 'rules/alerts'.
+//
+// ---
+// produces:
+// - text/plain
+// responses:
+//   "200":
+//     description: Recording and Alert Rules
+//     schema:
+//       "$ref": "#/definitions/PrometheusRuleGroup"
+func (a *apiV2Server) listRules(w http.ResponseWriter, r *http.Request) {
+	a.promRuleExporter.ScrapeRegistry(r.Context())
+	response, err := a.promRuleExporter.PrintAsYAML()
+	if err != nil {
+		apiV2InternalError(r.Context(), err, w)
+	}
+	w.Header().Set(httputil.ContentTypeHeader, httputil.PlaintextContentType)
+	_, _ = w.Write(response)
 }
