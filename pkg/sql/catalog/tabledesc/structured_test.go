@@ -323,8 +323,8 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 	}{
 		{ // 1
 			// In this simple case, we exercise most of the post-deserialization
-			// upgrades, in particular the primary index will have its encoding type
-			// and version properly set.
+			// upgrades, in particular the primary index will have its format version
+			// properly set.
 			desc: descpb.TableDescriptor{
 				FormatVersion: descpb.BaseFormatVersion,
 				ID:            51,
@@ -460,8 +460,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 		},
 		{ // 4
 			// This test case is much like the first but more complex and with more
-			// indexes. All three should be upgraded to the latest version and have
-			// their encoding types fixed.
+			// indexes. All three should be upgraded to the latest format version.
 			desc: descpb.TableDescriptor{
 				FormatVersion: descpb.BaseFormatVersion,
 				ID:            51,
@@ -496,7 +495,6 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						KeyColumnIDs:        []descpb.ColumnID{2},
 						KeyColumnNames:      []string{"bar"},
 						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-						EncodingType:        descpb.PrimaryIndexEncoding,
 						Version:             descpb.EmptyArraysInInvertedIndexesVersion,
 					},
 				},
