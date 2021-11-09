@@ -24,8 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/descriptorutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -43,17 +41,6 @@ type CatalogReader interface {
 
 	// RemoveSyntheticDescriptor undoes the effects of AddSyntheticDescriptor.
 	RemoveSyntheticDescriptor(id descpb.ID)
-
-	// AddPartitioning adds partitioning information on an index descriptor.
-	AddPartitioning(
-		tableDesc *tabledesc.Mutable,
-		indexDesc *descpb.IndexDescriptor,
-		partitionFields []string,
-		listPartition []*scpb.ListPartition,
-		rangePartition []*scpb.RangePartitions,
-		allowedNewColumnNames []tree.Name,
-		allowImplicitPartitioning bool,
-	) error
 }
 
 // MutationVisitorStateUpdater is the interface for updating the visitor state.
@@ -452,36 +439,33 @@ func (m *visitor) MakeAddedColumnDeleteOnly(
 	if err != nil {
 		return err
 	}
+
 	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
 	// or what-not.
 	if op.Column.ID >= table.NextColumnID {
 		table.NextColumnID = op.Column.ID + 1
 	}
-	if !op.Column.IsComputed() ||
-		!op.Column.Virtual {
-		var foundFamily bool
-		for i := range table.Families {
-			fam := &table.Families[i]
-			if foundFamily = fam.ID == op.FamilyID; foundFamily {
-				fam.ColumnIDs = append(fam.ColumnIDs, op.Column.ID)
-				fam.ColumnNames = append(fam.ColumnNames, op.Column.Name)
-				break
-			}
+	var foundFamily bool
+	for i := range table.Families {
+		fam := &table.Families[i]
+		if foundFamily = fam.ID == op.FamilyID; foundFamily {
+			fam.ColumnIDs = append(fam.ColumnIDs, op.Column.ID)
+			fam.ColumnNames = append(fam.ColumnNames, op.Column.Name)
+			break
 		}
-		// Only create column families for non-computed columns
-		if !foundFamily {
-			table.Families = append(table.Families, descpb.ColumnFamilyDescriptor{
-				Name:        op.FamilyName,
-				ID:          op.FamilyID,
-				ColumnNames: []string{op.Column.Name},
-				ColumnIDs:   []descpb.ColumnID{op.Column.ID},
-			})
-			sort.Slice(table.Families, func(i, j int) bool {
-				return table.Families[i].ID < table.Families[j].ID
-			})
-			if table.NextFamilyID <= op.FamilyID {
-				table.NextFamilyID = op.FamilyID + 1
-			}
+	}
+	if !foundFamily {
+		table.Families = append(table.Families, descpb.ColumnFamilyDescriptor{
+			Name:        op.FamilyName,
+			ID:          op.FamilyID,
+			ColumnNames: []string{op.Column.Name},
+			ColumnIDs:   []descpb.ColumnID{op.Column.ID},
+		})
+		sort.Slice(table.Families, func(i, j int) bool {
+			return table.Families[i].ID < table.Families[j].ID
+		})
+		if table.NextFamilyID <= op.FamilyID {
+			table.NextFamilyID = op.FamilyID + 1
 		}
 	}
 	table.AddColumnMutation(&op.Column, descpb.DescriptorMutation_ADD)
@@ -511,81 +495,34 @@ func (m *visitor) MakeDroppedPrimaryIndexDeleteAndWriteOnly(
 	if err != nil {
 		return err
 	}
-	if table.PrimaryIndex.ID != op.IndexID {
-		return errors.AssertionFailedf("index being dropped (%d) does not match existing primary index (%d).", op.IndexID, table.PrimaryIndex.ID)
+
+	// NOTE: There is no ordering guarantee between operations which might
+	// touch the primary index. Remove it if it has not already been overwritten.
+	if table.PrimaryIndex.ID == op.Index.ID {
+		table.PrimaryIndex = descpb.IndexDescriptor{}
 	}
-	idx := protoutil.Clone(&table.PrimaryIndex).(*descpb.IndexDescriptor)
+
+	idx := protoutil.Clone(&op.Index).(*descpb.IndexDescriptor)
 	return table.AddIndexMutation(idx, descpb.DescriptorMutation_DROP)
 }
 
 func (m *visitor) MakeAddedIndexDeleteOnly(
 	ctx context.Context, op scop.MakeAddedIndexDeleteOnly,
 ) error {
+
 	table, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
+
 	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
 	// or what-not.
-	if op.IndexID >= table.NextIndexID {
-		table.NextIndexID = op.IndexID + 1
+	if op.Index.ID >= table.NextIndexID {
+		table.NextIndexID = op.Index.ID + 1
 	}
-	// Resolve column names
-	colNames := make([]string, 0, len(op.KeyColumnIDs))
-	for _, colID := range op.KeyColumnIDs {
-		column, err := table.FindColumnWithID(colID)
-		if err != nil {
-			return err
-		}
-		colNames = append(colNames, column.GetName())
-	}
-	storeColNames := make([]string, 0, len(op.StoreColumnIDs))
-	for _, colID := range op.StoreColumnIDs {
-		column, err := table.FindColumnWithID(colID)
-		if err != nil {
-			return err
-		}
-		storeColNames = append(storeColNames, column.GetName())
-	}
-	// Setup the index descriptor type.
-	indexType := descpb.IndexDescriptor_FORWARD
-	if op.Inverted {
-		indexType = descpb.IndexDescriptor_INVERTED
-	}
-	// Setup the encoding type.
-	encodingType := descpb.PrimaryIndexEncoding
-	indexVersion := descpb.PrimaryIndexWithStoredColumnsVersion
-	if op.SecondaryIndex {
-		encodingType = descpb.SecondaryIndexEncoding
-		indexVersion = descpb.StrictIndexColumnIDGuaranteesVersion
-	}
-	// Create an index descriptor from the the operation.
-	idx := &descpb.IndexDescriptor{
-		Name:                op.IndexName,
-		ID:                  op.IndexID,
-		Unique:              op.Unique,
-		Version:             indexVersion,
-		KeyColumnNames:      colNames,
-		KeyColumnIDs:        op.KeyColumnIDs,
-		StoreColumnIDs:      op.StoreColumnIDs,
-		StoreColumnNames:    storeColNames,
-		KeyColumnDirections: op.KeyColumnDirections,
-		Type:                indexType,
-		KeySuffixColumnIDs:  op.KeySuffixColumnIDs,
-		CompositeColumnIDs:  op.CompositeColumnIDs,
-		CreatedExplicitly:   true,
-		EncodingType:        encodingType,
-	}
-	if idx.Name == "" {
-		name, err := tabledesc.BuildIndexName(table, idx)
-		if err != nil {
-			return err
-		}
-		idx.Name = name
-	}
-	if op.ShardedDescriptor != nil {
-		idx.Sharded = *op.ShardedDescriptor
-	}
+	// Make some adjustments to the index descriptor so that it behaves correctly
+	// as a secondary index while being added.
+	idx := protoutil.Clone(&op.Index).(*descpb.IndexDescriptor)
 	return table.AddIndexMutation(idx, descpb.DescriptorMutation_ADD)
 }
 
@@ -609,28 +546,6 @@ func (m *visitor) AddCheckConstraint(ctx context.Context, op scop.AddCheckConstr
 	return nil
 }
 
-func (m *visitor) MakeAddedSecondaryIndexPublic(
-	ctx context.Context, op scop.MakeAddedSecondaryIndexPublic,
-) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil {
-		return err
-	}
-
-	for idx, idxMutation := range table.GetMutations() {
-		if idxMutation.GetIndex() != nil &&
-			idxMutation.GetIndex().ID == op.IndexID {
-			err := table.MakeMutationComplete(idxMutation)
-			if err != nil {
-				return err
-			}
-			table.Mutations = append(table.Mutations[:idx], table.Mutations[idx+1:]...)
-			break
-		}
-	}
-	return nil
-}
-
 func (m *visitor) MakeAddedPrimaryIndexPublic(
 	ctx context.Context, op scop.MakeAddedPrimaryIndexPublic,
 ) error {
@@ -638,20 +553,15 @@ func (m *visitor) MakeAddedPrimaryIndexPublic(
 	if err != nil {
 		return err
 	}
-	index, err := table.FindIndexWithID(op.IndexID)
-	if err != nil {
-		return err
-	}
-	indexDesc := index.IndexDescDeepCopy()
 	if _, err := removeMutation(
 		ctx,
 		table,
-		descriptorutils.MakeIndexIDMutationSelector(op.IndexID),
+		descriptorutils.MakeIndexIDMutationSelector(op.Index.ID),
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 	); err != nil {
 		return err
 	}
-	table.PrimaryIndex = indexDesc
+	table.PrimaryIndex = *(protoutil.Clone(&op.Index)).(*descpb.IndexDescriptor)
 	return nil
 }
 
@@ -704,22 +614,6 @@ func (m *visitor) DropForeignKeyRef(ctx context.Context, op scop.DropForeignKeyR
 	} else {
 		table.TableDesc().InboundFKs = newFks
 	}
-	return nil
-}
-
-func (m *visitor) AddIndexPartitionInfo(ctx context.Context, op scop.AddIndexPartitionInfo) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil {
-		return err
-	}
-	index, err := table.FindIndexWithID(op.IndexID)
-	if err != nil {
-		return err
-	}
-	return m.cr.AddPartitioning(table, index.IndexDesc(), op.PartitionFields, op.ListPartitions, op.RangePartitions, nil, true)
-}
-
-func (m *visitor) NoOpInfo(_ context.Context, _ scop.NoOpInfo) error {
 	return nil
 }
 

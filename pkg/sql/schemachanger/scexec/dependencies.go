@@ -18,11 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // Dependencies contains all the dependencies required by the executor.
@@ -30,7 +27,6 @@ type Dependencies interface {
 	Catalog() Catalog
 	TransactionalJobCreator() TransactionalJobCreator
 	IndexBackfiller() IndexBackfiller
-	IndexValidator() IndexValidator
 	IndexSpanSplitter() IndexSpanSplitter
 	JobProgressTracker() JobProgressTracker
 
@@ -93,39 +89,6 @@ type IndexBackfiller interface {
 		_ catalog.TableDescriptor,
 		source descpb.IndexID,
 		destinations ...descpb.IndexID,
-	) error
-}
-
-// Partitioner provides an interface that implements CCL exclusive
-// callbacks.
-type Partitioner interface {
-	CreatePartitioning(
-		ctx context.Context,
-		tableDesc *tabledesc.Mutable,
-		indexDesc descpb.IndexDescriptor,
-		partBy *tree.PartitionBy,
-		allowedNewColumnNames []tree.Name,
-		allowImplicitPartitioning bool,
-	) (newImplicitCols []catalog.Column, newPartitioning descpb.PartitioningDescriptor, err error)
-}
-
-// IndexValidator provides interfaces that allow indexes to be validated.
-type IndexValidator interface {
-	ValidateForwardIndexes(
-		ctx context.Context,
-		tableDesc catalog.TableDescriptor,
-		indexes []catalog.Index,
-		withFirstMutationPublic bool,
-		gatherAllInvalid bool,
-		override sessiondata.InternalExecutorOverride,
-	) error
-
-	ValidateInvertedIndexes(
-		ctx context.Context,
-		tableDesc catalog.TableDescriptor,
-		indexes []catalog.Index,
-		gatherAllInvalid bool,
-		override sessiondata.InternalExecutorOverride,
 	) error
 }
 

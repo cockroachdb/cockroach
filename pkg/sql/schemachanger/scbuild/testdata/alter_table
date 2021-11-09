@@ -21,29 +21,51 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
 - ADD PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}
   state: ABSENT
   details:
-    indexId: 2
-    indexName: new_primary_key
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    storingColumnIds:
-    - 2
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 2
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: new_primary_key
+      partitioning: {}
+      sharded: {}
+      storeColumnIds:
+      - 2
+      storeColumnNames:
+      - j
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 1
     tableId: 52
-    unique: true
 - DROP PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}
   state: PUBLIC
   details:
-    indexId: 1
-    indexName: foo_pkey
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 1
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: foo_pkey
+      partitioning: {}
+      sharded: {}
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 2
     tableId: 52
-    unique: true
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
@@ -65,29 +87,51 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 - ADD PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}
   state: ABSENT
   details:
-    indexId: 2
-    indexName: new_primary_key
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    storingColumnIds:
-    - 2
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 2
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: new_primary_key
+      partitioning: {}
+      sharded: {}
+      storeColumnIds:
+      - 2
+      storeColumnNames:
+      - j
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 1
     tableId: 52
-    unique: true
 - DROP PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}
   state: PUBLIC
   details:
-    indexId: 1
-    indexName: foo_pkey
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 1
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: foo_pkey
+      partitioning: {}
+      sharded: {}
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 2
     tableId: 52
-    unique: true
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
@@ -124,30 +168,53 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 - ADD PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}
   state: ABSENT
   details:
-    indexId: 2
-    indexName: new_primary_key
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    storingColumnIds:
-    - 2
-    - 3
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 2
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: new_primary_key
+      partitioning: {}
+      sharded: {}
+      storeColumnIds:
+      - 2
+      - 3
+      storeColumnNames:
+      - j
+      - k
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 1
     tableId: 52
-    unique: true
 - DROP PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}
   state: PUBLIC
   details:
-    indexId: 1
-    indexName: foo_pkey
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 1
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: foo_pkey
+      partitioning: {}
+      sharded: {}
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 2
     tableId: 52
-    unique: true
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
@@ -169,29 +236,51 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 - ADD PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}
   state: ABSENT
   details:
-    indexId: 2
-    indexName: new_primary_key
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    storingColumnIds:
-    - 2
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 2
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: new_primary_key
+      partitioning: {}
+      sharded: {}
+      storeColumnIds:
+      - 2
+      storeColumnNames:
+      - a
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 1
     tableId: 52
-    unique: true
 - DROP PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}
   state: PUBLIC
   details:
-    indexId: 1
-    indexName: foo_pkey
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 1
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: foo_pkey
+      partitioning: {}
+      sharded: {}
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 2
     tableId: 52
-    unique: true
 
 create-table
 CREATE TABLE defaultdb.bar (j INT);
@@ -230,55 +319,102 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 - ADD PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}
   state: ABSENT
   details:
-    indexId: 2
-    indexName: new_primary_key
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    storingColumnIds:
-    - 2
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 2
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: new_primary_key
+      partitioning: {}
+      sharded: {}
+      storeColumnIds:
+      - 2
+      storeColumnNames:
+      - a
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 1
     tableId: 52
-    unique: true
 - ADD PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}
   state: ABSENT
   details:
-    indexId: 2
-    indexName: new_primary_key
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 2
-    shardedDescriptor: {}
-    storingColumnIds:
-    - 1
-    - 3
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 2
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 2
+      keyColumnNames:
+      - rowid
+      name: new_primary_key
+      partitioning: {}
+      sharded: {}
+      storeColumnIds:
+      - 1
+      - 3
+      storeColumnNames:
+      - j
+      - b
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 1
     tableId: 53
-    unique: true
 - DROP PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}
   state: PUBLIC
   details:
-    indexId: 1
-    indexName: foo_pkey
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 1
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: foo_pkey
+      partitioning: {}
+      sharded: {}
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 2
     tableId: 52
-    unique: true
 - DROP PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}
   state: PUBLIC
   details:
-    indexId: 1
-    indexName: bar_pkey
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 2
-    shardedDescriptor: {}
-    storingColumnIds:
-    - 1
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 1
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 2
+      keyColumnNames:
+      - rowid
+      name: bar_pkey
+      partitioning: {}
+      sharded: {}
+      storeColumnIds:
+      - 1
+      storeColumnNames:
+      - j
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 2
     tableId: 53
-    unique: true

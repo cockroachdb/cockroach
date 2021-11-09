@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -2485,11 +2484,58 @@ func makeShardColumnDesc(
 	}
 	col.Name = tabledesc.GetShardColumnName(colNames, int32(buckets))
 	if useDatumsToBytes {
-		col.ComputeExpr = scbuild.MakeHashShardComputeExpr(colNames, buckets)
+		col.ComputeExpr = makeHashShardComputeExpr(colNames, buckets)
 	} else {
 		col.ComputeExpr = makeDeprecatedHashShardComputeExpr(colNames, buckets)
 	}
+
 	return col, nil
+}
+
+// makeDeprecatedHashShardComputeExpr creates the serialized computed expression for a hash shard
+// column based on the column names and the number of buckets. The expression will be
+// of the form:
+//
+//    mod(fnv32(crdb_internal.datums_to_bytes(...)),buckets)
+//
+func makeHashShardComputeExpr(colNames []string, buckets int) *string {
+	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
+		return tree.ResolvableFunctionReference{
+			FunctionReference: &tree.UnresolvedName{
+				NumParts: 1,
+				Parts:    tree.NameParts{funcName},
+			},
+		}
+	}
+	columnItems := func() tree.Exprs {
+		exprs := make(tree.Exprs, len(colNames))
+		for i := range exprs {
+			exprs[i] = &tree.ColumnItem{ColumnName: tree.Name(colNames[i])}
+		}
+		return exprs
+	}
+	hashedColumnsExpr := func() tree.Expr {
+		return &tree.FuncExpr{
+			Func: unresolvedFunc("fnv32"),
+			Exprs: tree.Exprs{
+				&tree.FuncExpr{
+					Func:  unresolvedFunc("crdb_internal.datums_to_bytes"),
+					Exprs: columnItems(),
+				},
+			},
+		}
+	}
+	modBuckets := func(expr tree.Expr) tree.Expr {
+		return &tree.FuncExpr{
+			Func: unresolvedFunc("mod"),
+			Exprs: tree.Exprs{
+				expr,
+				tree.NewDInt(tree.DInt(buckets)),
+			},
+		}
+	}
+	res := tree.Serialize(modBuckets(hashedColumnsExpr()))
+	return &res
 }
 
 // makeDeprecatedHashShardComputeExpr creates the serialized computed expression for a hash shard

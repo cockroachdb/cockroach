@@ -141,7 +141,7 @@ func (desc *wrapper) KeysPerRow(indexID descpb.IndexID) (int, error) {
 	return len(desc.Families), nil
 }
 
-// BuildIndexName returns an index name that is not equal to any
+// buildIndexName returns an index name that is not equal to any
 // of tableDesc's indexes, roughly following Postgres's conventions for naming
 // anonymous indexes. For example:
 //
@@ -154,7 +154,9 @@ func (desc *wrapper) KeysPerRow(indexID descpb.IndexID) (int, error) {
 //   CREATE INDEX ON t ((a + b), c, lower(d))
 //   => t_expr_c_expr1_idx
 //
-func BuildIndexName(tableDesc *Mutable, idx *descpb.IndexDescriptor) (string, error) {
+func buildIndexName(tableDesc *Mutable, index catalog.Index) (string, error) {
+	idx := index.IndexDesc()
+
 	// An index name has a segment for the table name, each key column, and a
 	// final word (either "idx" or "key").
 	segments := make([]string, 0, len(idx.KeyColumnNames)+2)
@@ -682,7 +684,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 	// Assign names to unnamed indexes.
 	err := catalog.ForEachDeletableNonPrimaryIndex(desc, func(idx catalog.Index) error {
 		if len(idx.GetName()) == 0 {
-			name, err := BuildIndexName(desc, idx.IndexDesc())
+			name, err := buildIndexName(desc, idx)
 			if err != nil {
 				return err
 			}

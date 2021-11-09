@@ -30,4 +30,3 @@ func (e SequenceOwnedBy) element() {}
 func (e Type) element() {}
 func (e Schema) element() {}
 func (e Database) element() {}
-func (e Partitioning) element() {}

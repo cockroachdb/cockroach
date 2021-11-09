@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "scgraph",
@@ -15,17 +15,5 @@ go_library(
         "//pkg/sql/schemachanger/screl",
         "//pkg/util/iterutil",
         "@com_github_cockroachdb_errors//:errors",
-    ],
-)
-
-go_test(
-    name = "scgraph_test",
-    srcs = ["graph_test.go"],
-    deps = [
-        ":scgraph",
-        "//pkg/sql/catalog/descpb",
-        "//pkg/sql/schemachanger/scop",
-        "//pkg/sql/schemachanger/scpb",
-        "@com_github_stretchr_testify//require",
     ],
 )

@@ -49,7 +49,6 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
-        "//pkg/sql/catalog",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
