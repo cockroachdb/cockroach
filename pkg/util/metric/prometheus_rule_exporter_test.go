@@ -26,11 +26,11 @@ func TestPrometheusRuleExporter(t *testing.T) {
 	rules, expectedYAMLText := getRulesAndExpectedYAML(t)
 	registry := NewRuleRegistry()
 	registry.AddRules(rules)
-	ruleExporter := NewPrometheusRuleExporter()
-	ruleExporter.ScrapeRegistry(ctx, registry)
-	yamlText, err := ruleExporter.PrintAsYAMLText()
+	ruleExporter := NewPrometheusRuleExporter(registry)
+	ruleExporter.ScrapeRegistry(ctx)
+	yaml, err := ruleExporter.PrintAsYAML()
 	require.NoError(t, err)
-	require.Equal(t, expectedYAMLText, yamlText)
+	require.Equal(t, expectedYAMLText, string(yaml))
 }
 
 func getRulesAndExpectedYAML(t *testing.T) (rules []Rule, expectedYAML string) {
