@@ -10,7 +10,6 @@ go_library(
         "opgen_default_expression.go",
         "opgen_inbound_foreign_key.go",
         "opgen_outbound_foreign_key.go",
-        "opgen_partitioning.go",
         "opgen_primary_index.go",
         "opgen_relation_depended_on_by.go",
         "opgen_schema.go",
@@ -27,7 +26,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/opgen",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/scgraph",
         "//pkg/sql/schemachanger/scop",

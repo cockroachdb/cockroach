@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -58,12 +57,10 @@ func (ti testInfra) newExecDeps(
 		ti.lm.Codec(),
 		txn,
 		descsCollection,
-		nil,                  /* jobRegistry */
-		noopBackfiller{},     /* indexBackfiller */
-		noopIndexValidator{}, /* indexValidator */
-		noopCCLCallbacks{},   /* noopCCLCallbacks */
-		nil,                  /* testingKnobs */
-		nil,                  /* statements */
+		nil,              /* jobRegistry */
+		noopBackfiller{}, /* indexBackfiller */
+		nil,              /* testingKnobs */
+		nil,              /* statements */
 		phase,
 	)
 }
@@ -158,13 +155,10 @@ CREATE TABLE db.t (
 	}
 
 	indexToAdd := descpb.IndexDescriptor{
-		ID:                2,
-		Name:              "foo",
-		Version:           descpb.StrictIndexColumnIDGuaranteesVersion,
-		CreatedExplicitly: true,
-		KeyColumnIDs:      []descpb.ColumnID{1},
-		KeyColumnNames:    []string{"i"},
-		StoreColumnNames:  []string{},
+		ID:             2,
+		Name:           "foo",
+		KeyColumnIDs:   []descpb.ColumnID{1},
+		KeyColumnNames: []string{"i"},
 		KeyColumnDirections: []descpb.IndexDescriptor_Direction{
 			descpb.IndexDescriptor_ASC,
 		},
@@ -189,12 +183,8 @@ CREATE TABLE db.t (
 			ops: func() scop.Ops {
 				return scop.MakeOps(
 					&scop.MakeAddedIndexDeleteOnly{
-						TableID:             table.ID,
-						IndexID:             indexToAdd.ID,
-						IndexName:           indexToAdd.Name,
-						KeyColumnIDs:        indexToAdd.KeyColumnIDs,
-						KeyColumnDirections: indexToAdd.KeyColumnDirections,
-						SecondaryIndex:      true,
+						TableID: table.ID,
+						Index:   indexToAdd,
 					},
 				)
 			},
@@ -237,6 +227,7 @@ CREATE TABLE db.t (
 // is fixed up.
 func TestSchemaChanger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	ctx := context.Background()
 	t.Run("add column", func(t *testing.T) {
 		ti := setupTestInfra(t)
@@ -259,14 +250,21 @@ func TestSchemaChanger(t *testing.T) {
 			//
 			targetSlice = []*scpb.Target{
 				scpb.NewTarget(scpb.Target_ADD, &scpb.PrimaryIndex{
-					TableID:             fooTable.GetID(),
-					IndexName:           "new_primary_key",
-					IndexId:             2,
-					KeyColumnIDs:        []descpb.ColumnID{1},
-					KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
-					StoringColumnIDs:    []descpb.ColumnID{2},
-					Unique:              true,
-					Inverted:            false,
+					TableID: fooTable.GetID(),
+					Index: descpb.IndexDescriptor{
+						Name:                "new_primary_key",
+						ID:                  2,
+						KeyColumnIDs:        []descpb.ColumnID{1},
+						KeyColumnNames:      []string{"i"},
+						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						StoreColumnIDs:      []descpb.ColumnID{2},
+						StoreColumnNames:    []string{"j"},
+						Unique:              true,
+						Type:                descpb.IndexDescriptor_FORWARD,
+						Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+						EncodingType:        descpb.PrimaryIndexEncoding,
+					},
+					OtherPrimaryIndexID: fooTable.GetPrimaryIndexID(),
 				}),
 				scpb.NewTarget(scpb.Target_ADD, &scpb.Column{
 					TableID:    fooTable.GetID(),
@@ -281,13 +279,17 @@ func TestSchemaChanger(t *testing.T) {
 					},
 				}),
 				scpb.NewTarget(scpb.Target_DROP, &scpb.PrimaryIndex{
-					TableID:             fooTable.GetID(),
-					IndexName:           "primary",
-					IndexId:             1,
-					KeyColumnIDs:        []descpb.ColumnID{1},
-					KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
-					Unique:              true,
-					Inverted:            false,
+					TableID: fooTable.GetID(),
+					Index: descpb.IndexDescriptor{
+						Name:                "primary",
+						ID:                  1,
+						KeyColumnIDs:        []descpb.ColumnID{1},
+						KeyColumnNames:      []string{"i"},
+						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						Unique:              true,
+						Type:                descpb.IndexDescriptor_FORWARD,
+					},
+					OtherPrimaryIndexID: 2,
 				}),
 			}
 
@@ -417,43 +419,4 @@ func (n noopBackfiller) BackfillIndex(
 	return nil
 }
 
-type noopIndexValidator struct{}
-
-func (noopIndexValidator) ValidateForwardIndexes(
-	ctx context.Context,
-	tableDesc catalog.TableDescriptor,
-	indexes []catalog.Index,
-	withFirstMutationPublic bool,
-	gatherAllInvalid bool,
-	override sessiondata.InternalExecutorOverride,
-) error {
-	return nil
-}
-
-func (noopIndexValidator) ValidateInvertedIndexes(
-	ctx context.Context,
-	tableDesc catalog.TableDescriptor,
-	indexes []catalog.Index,
-	gatherAllInvalid bool,
-	override sessiondata.InternalExecutorOverride,
-) error {
-	return nil
-}
-
-type noopCCLCallbacks struct {
-}
-
-func (noopCCLCallbacks) CreatePartitioning(
-	ctx context.Context,
-	tableDesc *tabledesc.Mutable,
-	indexDesc descpb.IndexDescriptor,
-	partBy *tree.PartitionBy,
-	allowedNewColumnNames []tree.Name,
-	allowImplicitPartitioning bool,
-) (newImplicitCols []catalog.Column, newPartitioning descpb.PartitioningDescriptor, err error) {
-	return nil, descpb.PartitioningDescriptor{}, nil
-}
-
 var _ scexec.IndexBackfiller = noopBackfiller{}
-var _ scexec.IndexValidator = noopIndexValidator{}
-var _ scexec.Partitioner = noopCCLCallbacks{}

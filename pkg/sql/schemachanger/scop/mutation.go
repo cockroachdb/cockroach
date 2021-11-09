@@ -10,10 +10,7 @@
 
 package scop
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 
 //go:generate go run ./generate_visitor.go scop Mutation mutation.go mutation_visitor_generated.go
 
@@ -31,19 +28,7 @@ type MakeAddedIndexDeleteOnly struct {
 	TableID descpb.ID
 
 	// Index represents the index as it should appear in the mutation.
-	PrimaryIndex        descpb.IndexID
-	IndexID             descpb.IndexID
-	IndexName           string
-	Unique              bool
-	KeyColumnIDs        []descpb.ColumnID
-	KeyColumnDirections []descpb.IndexDescriptor_Direction
-	KeySuffixColumnIDs  []descpb.ColumnID
-	StoreColumnIDs      []descpb.ColumnID
-	CompositeColumnIDs  []descpb.ColumnID
-	ShardedDescriptor   *descpb.ShardedDescriptor
-	Inverted            bool
-	Concurrently        bool
-	SecondaryIndex      bool
+	Index descpb.IndexDescriptor
 }
 
 // MakeAddedIndexDeleteAndWriteOnly transitions an index addition mutation from
@@ -54,20 +39,12 @@ type MakeAddedIndexDeleteAndWriteOnly struct {
 	IndexID descpb.IndexID
 }
 
-// MakeAddedSecondaryIndexPublic moves a new primary index from its mutation to
-// public.
-type MakeAddedSecondaryIndexPublic struct {
-	mutationOp
-	TableID descpb.ID
-	IndexID descpb.IndexID
-}
-
 // MakeAddedPrimaryIndexPublic moves a new primary index from its mutation to
 // public.
 type MakeAddedPrimaryIndexPublic struct {
 	mutationOp
 	TableID descpb.ID
-	IndexID descpb.IndexID
+	Index   descpb.IndexDescriptor
 }
 
 // MakeDroppedPrimaryIndexDeleteAndWriteOnly moves a dropped primary index from
@@ -76,11 +53,11 @@ type MakeDroppedPrimaryIndexDeleteAndWriteOnly struct {
 	mutationOp
 	TableID descpb.ID
 
-	// IndexID is the descriptor as it should be added as part of the mutation. The
+	// Index is the descriptor as it should be added as part of the mutation. The
 	// primary index of a table has a slightly different encoding than that of
 	// a secondary index. The value here sets it as it should be when adding
 	// the mutation, including the stored columns.
-	IndexID descpb.IndexID
+	Index descpb.IndexDescriptor
 }
 
 // CreateGcJobForDescriptor creates a GC job for a given descriptor.
@@ -249,21 +226,4 @@ type DropForeignKeyRef struct {
 type RemoveSequenceOwnedBy struct {
 	mutationOp
 	TableID descpb.ID
-}
-
-// AddIndexPartitionInfo adds partitoning information into
-// an index
-type AddIndexPartitionInfo struct {
-	mutationOp
-	TableID         descpb.ID
-	IndexID         descpb.IndexID
-	PartitionFields []string
-	ListPartitions  []*scpb.ListPartition
-	RangePartitions []*scpb.RangePartitions
-}
-
-// NoOpInfo a no-op mutation operation, which is allows
-// an emit function to conditionally generate operations.
-type NoOpInfo struct {
-	mutationOp
 }

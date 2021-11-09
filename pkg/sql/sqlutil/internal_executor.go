@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -143,21 +142,6 @@ type InternalExecutor interface {
 		stmt string,
 		qargs ...interface{},
 	) (InternalRows, error)
-
-	// WithSyntheticDescriptors sets the synthetic descriptors before running the
-	// the provided closure and resets them afterward. Used for queries/statements
-	// that need to use in-memory synthetic descriptors different from descriptors
-	// written to disk. These descriptors override all other descriptors on the
-	// immutable resolution path.
-	//
-	// Warning: Not safe for concurrent use from multiple goroutines. This API is
-	// flawed in that the internal executor is meant to function as a stateless
-	// wrapper, and creates a new connExecutor and descs.Collection on each query/
-	// statement, so these descriptors should really be specified at a per-query/
-	// statement level. See #34304.
-	WithSyntheticDescriptors(
-		descs []catalog.Descriptor, run func() error,
-	) error
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -196,11 +180,3 @@ type InternalRows interface {
 type SessionBoundInternalExecutorFactory func(
 	context.Context, *sessiondata.SessionData,
 ) InternalExecutor
-
-// InternalExecFn is the type of functions that operates using an internalExecutor.
-type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error
-
-// HistoricalInternalExecTxnRunner is like historicalTxnRunner except it only
-// passes the fn the exported InternalExecutor instead of the whole unexported
-// extendedEvalContenxt, so it can be implemented outside pkg/sql.
-type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
