@@ -56,37 +56,83 @@ type ClusterImpl interface {
 	NodeUIPort(c *SyncedCluster, index int) int
 }
 
-// A SyncedCluster is created from the information in the synced hosts file
-// and is used as the target for installing and managing various software
-// components.
-//
-// TODO(benesch): unify with CloudCluster.
-type SyncedCluster struct {
-	// Cluster metadata, obtained from the respective cloud provider.
-	cloud.Cluster
-
-	NumRacks int
-
-	// Localities are initialized from the VM metadata (VMs[i].Locality()) but can
-	// be modified by newCluster (see numRacks).
-	Localities []string
-
-	// All other fields are populated in newCluster.
-	Nodes          []int
+// ClusterSettings contains various knobs that affect operations on a cluster.
+type ClusterSettings struct {
 	Secure         bool
 	CertsDir       string
 	Env            []string
 	Args           []string
 	Tag            string
-	Impl           ClusterImpl
 	UseTreeDist    bool
 	Quiet          bool
+	NumRacks       int
 	MaxConcurrency int // used in Parallel
-	// AuthorizedKeys is used by SetupSSH to add additional authorized keys.
-	AuthorizedKeys []byte
+}
+
+// DefaultClusterSettings returns the default settings.
+func DefaultClusterSettings() ClusterSettings {
+	return ClusterSettings{
+		Tag:         "",
+		CertsDir:    "./certs",
+		Secure:      false,
+		Quiet:       false,
+		UseTreeDist: true,
+		Args:        nil,
+		Env: []string{
+			"COCKROACH_ENABLE_RPC_COMPRESSION=false",
+			"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
+		},
+		NumRacks:       0,
+		MaxConcurrency: 32,
+	}
+}
+
+var _ = DefaultClusterSettings
+
+// A SyncedCluster is created from the information in the synced hosts file
+// and is used as the target for installing and managing various software
+// components.
+//
+// TODO(radu): SyncedCluster is currently used in two "modes": it can be just a
+// metadata holder (only Cluster and DebugDir initialized) or it can be a usable
+// object (once Prepare() is called). This makes things harder to follow,
+// especially when we modify entries in the Clusters map in place. We should
+// separate the metadata.
+type SyncedCluster struct {
+	// Cluster metadata, obtained from the respective cloud provider.
+	cloud.Cluster
 
 	// Used to stash debug information.
 	DebugDir string
+
+	// Nodes is used by various commands like Start.
+	Nodes []int
+
+	ClusterSettings
+
+	Impl ClusterImpl
+
+	Localities []string
+
+	// AuthorizedKeys is used by SetupSSH to add additional authorized keys.
+	AuthorizedKeys []byte
+}
+
+// Prepare the SyncedCluster object for use, applying any ClusterSettings.
+func (c *SyncedCluster) Prepare(settings ClusterSettings) {
+	c.Impl = Cockroach{}
+	c.ClusterSettings = settings
+	c.Localities = make([]string, len(c.VMs))
+	for i := range c.VMs {
+		c.Localities[i] = c.VMs[i].Locality()
+		if c.NumRacks > 0 {
+			rack := fmt.Sprintf("rack=%d", i%c.NumRacks)
+			if c.Localities[i] != "" {
+				rack = "," + rack
+			}
+			c.Localities[i] += rack
+		}
+	}
 }
 
 func (c *SyncedCluster) host(index int) string {
@@ -101,10 +147,7 @@ func (c *SyncedCluster) locality(index int) string {
 	return c.Localities[index-1]
 }
 
-// IsLocal TODO(peter): document
-//
-// TODO(tschottdorf): roachprod should cleanly encapsulate the home directory
-// which is currently the biggest culprit for awkward one-offs.
+// IsLocal returns true if this is a local cluster (see vm/local).
 func (c *SyncedCluster) IsLocal() bool {
 	return config.IsLocalClusterName(c.Name)
 }

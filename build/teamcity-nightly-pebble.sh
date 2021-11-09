@@ -57,7 +57,7 @@ if ! timeout -s INT $((1000*60)) bin/roachtest run \
   --parallelism 3 \
   --teamcity \
   --cpu-quota=384 \
-  tag:pebble pebble; then
+  tag:pebble_nightly pebble; then
   exit_status=$?
 fi
 
