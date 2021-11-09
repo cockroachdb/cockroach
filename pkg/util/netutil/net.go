@@ -127,7 +127,10 @@ func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handl
 
 // ServeWith accepts connections on ln and serves them using serveConn.
 func (s *Server) ServeWith(
-	ctx context.Context, stopper *stop.Stopper, l net.Listener, serveConn func(net.Conn),
+	ctx context.Context,
+	stopper *stop.Stopper,
+	l net.Listener,
+	serveConn func(context.Context, net.Conn),
 ) error {
 	// Inspired by net/http.(*Server).Serve
 	var tempDelay time.Duration // how long to sleep on accept failure
@@ -150,12 +153,15 @@ func (s *Server) ServeWith(
 			return e
 		}
 		tempDelay = 0
-		go func() {
+		err := stopper.RunAsyncTask(ctx, "pgwire-serve", func(ctx context.Context) {
 			defer stopper.Recover(ctx)
 			s.Server.ConnState(rw, http.StateNew) // before Serve can return
-			serveConn(rw)
+			serveConn(ctx, rw)
 			s.Server.ConnState(rw, http.StateClosed)
-		}()
+		})
+		if err != nil {
+			return err
+		}
 	}
 }
 
@@ -169,10 +175,11 @@ func IsClosedConnection(err error) bool {
 		strings.Contains(err.Error(), "use of closed network connection")
 }
 
-// FatalIfUnexpected calls Log.Fatal(err) unless err is nil,
-// cmux.ErrListenerClosed, or the net package's errClosed.
+// FatalIfUnexpected calls Log.Fatal(err) unless err is nil, or an error that
+// comes from the net package indicating that the listener was closed or from
+// the Stopper indicating quiescence.
 func FatalIfUnexpected(err error) {
-	if err != nil && !IsClosedConnection(err) {
+	if err != nil && !IsClosedConnection(err) && !errors.Is(err, stop.ErrUnavailable) {
 		log.Fatalf(context.TODO(), "%+v", err)
 	}
 }
