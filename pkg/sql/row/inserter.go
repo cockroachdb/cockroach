@@ -163,6 +163,10 @@ func (ri *Inserter) InsertRow(
 	// because w is null, and the sole resident of that family.
 	// We don't want to insert empty k/v's like this, so we
 	// set includeEmpty to false.
+	if ri.Helper.TableDesc.GetName() == "t" {
+		fmt.Println("break")
+	}
+
 	primaryIndexKey, secondaryIndexEntries, err := ri.Helper.encodeIndexes(
 		ri.InsertColIDtoRowIndex, values, pm.IgnoreForPut, false /* includeEmpty */)
 	if err != nil {
