@@ -789,7 +789,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
 %token <str> GLOBAL GOAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
 
-%token <str> HAVING HASH HIGH HISTOGRAM HOUR
+%token <str> HAVING HASH HASHED HIGH HISTOGRAM HOUR
 
 %token <str> IDENTITY
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCLUDING INCREMENT INCREMENTAL
@@ -7447,6 +7447,10 @@ password_clause:
     // This is a legacy postgres syntax.
     $$.val = tree.KVOption{Key: tree.Name($2), Value: $3.expr()}
   }
+| HASHED PASSWORD string_or_placeholder
+  {
+    $$.val = tree.KVOption{Key: tree.Name("hashed password"), Value: $3.expr()}
+  }
 | PASSWORD string_or_placeholder
   {
     $$.val = tree.KVOption{Key: tree.Name($1), Value: $2.expr()}
@@ -13295,6 +13299,7 @@ unreserved_keyword:
 | GRANTS
 | GROUPS
 | HASH
+| HASHED
 | HIGH
 | HISTOGRAM
 | HOUR

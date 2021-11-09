@@ -872,6 +872,9 @@ ALTER ROLE testrole CREATEROLE NOCREATEROLE
 statement error pq: conflicting role options
 ALTER ROLE testrole CONTROLJOB NOCONTROLJOB
 
+statement error pq: conflicting role options
+CREATE ROLE rolewithcreate WITH PASSWORD foo HASHED PASSWORD bar
+
 statement error pq: redundant role options
 CREATE ROLE rolewithcreate WITH CREATEROLE CREATEROLE
 

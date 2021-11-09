@@ -118,7 +118,8 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	}
 
 	var hashedPassword []byte
-	if n.roleOptions.Contains(roleoption.PASSWORD) {
+	if pwAlreadyHashed := n.roleOptions.Contains(roleoption.HASHEDPASSWORD); pwAlreadyHashed ||
+		n.roleOptions.Contains(roleoption.PASSWORD) {
 		isNull, password, err := n.roleOptions.GetPassword()
 		if err != nil {
 			return err
@@ -136,8 +137,14 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		}
 
 		if !isNull {
-			if hashedPassword, err = params.p.checkPasswordAndGetHash(params.ctx, password); err != nil {
-				return err
+			if pwAlreadyHashed {
+				if hashedPassword, err = security.CheckPasswordHashValidity(params.ctx, password); err != nil {
+					return err
+				}
+			} else {
+				if hashedPassword, err = params.p.checkPasswordAndGetHash(params.ctx, password); err != nil {
+					return err
+				}
 			}
 		}
 	}
