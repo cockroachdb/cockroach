@@ -6,7 +6,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/catalog",
         "//pkg/sql/schemachanger/scgraph",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",

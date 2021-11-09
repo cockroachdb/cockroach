@@ -60,7 +60,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	progress := n.job.Progress()
 	newSchemaChangeProgress := progress.GetNewSchemaChange()
 	newSchemaChangeDetails := payload.GetNewSchemaChange()
-	deps := scdeps.NewJobExecutionDependencies(
+	deps := scdeps.NewJobRunDependencies(
 		execCfg.CollectionFactory,
 		execCfg.DB,
 		execCfg.InternalExecutor,

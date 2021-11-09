@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -1076,7 +1077,7 @@ type ExecutorConfig struct {
 	MigrationTestingKnobs         *migration.TestingKnobs
 	PGWireTestingKnobs            *PGWireTestingKnobs
 	SchemaChangerTestingKnobs     *SchemaChangerTestingKnobs
-	NewSchemaChangerTestingKnobs  *scexec.NewSchemaChangerTestingKnobs
+	NewSchemaChangerTestingKnobs  *scrun.NewSchemaChangerTestingKnobs
 	TypeSchemaChangerTestingKnobs *TypeSchemaChangerTestingKnobs
 	GCJobTestingKnobs             *GCJobTestingKnobs
 	DistSQLRunTestingKnobs        *execinfra.TestingKnobs

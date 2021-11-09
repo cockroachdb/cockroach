@@ -13,7 +13,6 @@ package scplan
 import (
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -27,13 +26,6 @@ import (
 type Params struct {
 	// ExecutionPhase indicates the phase that the plan should be constructed for.
 	ExecutionPhase scop.Phase
-	// CreatedDescriptorIDs contains IDs for new descriptors created by the same
-	// schema changer (i.e., earlier in the same transaction). New descriptors
-	// can have most of their schema changes fully executed in the same
-	// transaction.
-	//
-	// This doesn't do anything right now.
-	CreatedDescriptorIDs catalog.DescriptorIDSet
 }
 
 // A Plan is a schema change plan, primarily containing ops to be executed that

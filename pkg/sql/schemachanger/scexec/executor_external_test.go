@@ -53,7 +53,7 @@ type testInfra struct {
 }
 
 func (ti testInfra) newExecDeps(
-	txn *kv.Txn, descsCollection *descs.Collection, phase scop.Phase,
+	txn *kv.Txn, descsCollection *descs.Collection,
 ) scexec.Dependencies {
 	return scdeps.NewExecutorDependencies(
 		ti.lm.Codec(),
@@ -66,9 +66,7 @@ func (ti testInfra) newExecDeps(
 		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
 			return nil
 		},
-		nil, /* testingKnobs */
 		nil, /* statements */
-		phase,
 	)
 }
 
@@ -149,11 +147,11 @@ CREATE TABLE db.t (
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			exDeps := ti.newExecDeps(txn, descriptors, scop.PreCommitPhase)
+			exDeps := ti.newExecDeps(txn, descriptors)
 			_, orig, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.orig(), orig)
-			require.NoError(t, scexec.ExecuteOps(ctx, exDeps, c.ops()))
+			require.NoError(t, scexec.ExecuteStage(ctx, exDeps, c.ops()))
 			_, after, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.exp(), after)
@@ -332,8 +330,8 @@ func TestSchemaChanger(t *testing.T) {
 				require.NoError(t, err)
 				stages := sc.Stages
 				for _, s := range stages {
-					exDeps := ti.newExecDeps(txn, descriptors, phase)
-					require.NoError(t, scexec.ExecuteOps(ctx, exDeps, s.Ops))
+					exDeps := ti.newExecDeps(txn, descriptors)
+					require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
 					ts = s.After
 				}
 			}
@@ -348,8 +346,8 @@ func TestSchemaChanger(t *testing.T) {
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {
-				exDeps := ti.newExecDeps(txn, descriptors, scop.PostCommitPhase)
-				require.NoError(t, scexec.ExecuteOps(ctx, exDeps, s.Ops))
+				exDeps := ti.newExecDeps(txn, descriptors)
+				require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
 				after = s.After
 			}
 			return nil
@@ -401,8 +399,8 @@ func TestSchemaChanger(t *testing.T) {
 					})
 					require.NoError(t, err)
 					for _, s := range sc.Stages {
-						exDeps := ti.newExecDeps(txn, descriptors, phase)
-						require.NoError(t, scexec.ExecuteOps(ctx, exDeps, s.Ops))
+						exDeps := ti.newExecDeps(txn, descriptors)
+						require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
 						ts = s.After
 					}
 				}
@@ -417,8 +415,8 @@ func TestSchemaChanger(t *testing.T) {
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {
-				exDeps := ti.newExecDeps(txn, descriptors, scop.PostCommitPhase)
-				require.NoError(t, scexec.ExecuteOps(ctx, exDeps, s.Ops))
+				exDeps := ti.newExecDeps(txn, descriptors)
+				require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
 			}
 			return nil
 		}))
