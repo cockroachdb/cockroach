@@ -1,6 +1,4 @@
-# LogicTest: !3node-tenant(49854) !fakedist-spec-planning
-# TODO(asubiotto): Possibly split out the test that attempts to set a zone
-# config in order to run the other ones.
+# LogicTest: !fakedist-spec-planning
 
 statement ok
 CREATE TABLE foo (a int)
@@ -103,7 +101,7 @@ upper
 ROACH7
 
 query T
-SELECT unaccent(str) FROM ( VALUES 
+SELECT unaccent(str) FROM ( VALUES
    ('no_special_CHARACTERS1!'),
    ('Żółć'),
    ('⃞h̀ＥＬＬＯ`̀́⃞'),
@@ -2493,52 +2491,7 @@ SELECT pg_catalog.pg_client_encoding()
 ----
 UTF8
 
-subtest check_consistency
-
-# Sanity-check crdb_internal.check_consistency.
-
-statement error start key must be >= "\\x02"
-SELECT crdb_internal.check_consistency(true, '\x01', '\xffff')
-
-statement error end key must be < "\\xff\\xff"
-SELECT crdb_internal.check_consistency(true, '\x02', '\xffff00')
-
-statement error start key must be less than end key
-SELECT crdb_internal.check_consistency(true, '\x02', '\x02')
-
-statement error start key must be less than end key
-SELECT crdb_internal.check_consistency(true, '\x03', '\x02')
-
-query ITT
-SELECT range_id, status, regexp_replace(detail, '[0-9]+', '', 'g') FROM crdb_internal.check_consistency(true, '\x02', '\xffff') WHERE range_id = 1
-----
-1  RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: IntentAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: SeparatedIntentCount: SysBytes: SysCount: AbortSpanBytes:}
-
-# Without explicit keys, scans all ranges (we don't test this too precisely to
-# avoid flaking the test when the range count changes, just want to know that
-# we're touching multiple ranges).
-query B
-SELECT count(*) > 5 FROM crdb_internal.check_consistency(true, '', '')
-----
-true
-
-# Query that should touch only a single range.
-query B
-SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '\x03', '\x0300')
-----
-true
-
-# Ditto, but implicit start key \x02
-query B
-SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '', '\x0200')
-----
-true
-
-# Ditto, but implicit end key.
-query B
-SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '\xff', '')
-----
-true
+subtest width_bucket
 
 # Tests for width_bucket builtin
 query I
@@ -2660,108 +2613,6 @@ query T
 select to_hex('abc')
 ----
 616263
-
-# Test crdb_internal commands which execute as root, but
-# only checks for permissions afterwards.
-subtest crdb_internal_privileged_only
-
-user root
-
-statement ok
-CREATE DATABASE root_test;
-REVOKE CONNECT ON DATABASE root_test FROM public
-
-statement ok
-CREATE TABLE root_test.t(a int)
-
-statement ok
-ALTER DATABASE root_test CONFIGURE ZONE USING num_replicas = 5
-
-query I
-SELECT crdb_internal.get_namespace_id(0, 'does_not_exist')
-----
-NULL
-
-query I
-SELECT crdb_internal.get_namespace_id(0, 'root_test')
-----
-63
-
-query I
-SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
-----
-64
-
-query T
-SELECT crdb_internal.get_zone_config(-1)::string
-----
-NULL
-
-query T
-SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
-----
-\x2805500158017800
-
-query T
-SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
-----
-NULL
-
-# switch users -- this one has no permissions so expect errors
-user testuser
-
-query I
-SELECT crdb_internal.get_namespace_id(0, 'does_not_exist')
-----
-NULL
-
-query error insufficient privilege
-SELECT crdb_internal.get_namespace_id(0, 'root_test')
-
-query T
-SELECT crdb_internal.get_zone_config(-1)::string
-----
-NULL
-
-query error insufficient privilege
-SELECT crdb_internal.get_zone_config(61)::string -- based on root query. having no permissions blocks us from this test rapidly changing though.
-
-# give testuser permissions on everything and retest
-user root
-
-statement ok
-GRANT ALL ON DATABASE root_test TO testuser
-
-statement ok
-GRANT ALL ON root_test.t TO testuser
-
-user testuser
-
-query I
-SELECT crdb_internal.get_namespace_id(0, 'root_test')
-----
-63
-
-query I
-SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
-----
-64
-
-query T
-SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
-----
-\x2805500158017800
-
-query T
-SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
-----
-NULL
-
-# reset state to default
-user root
-
-statement ok
-DROP DATABASE root_test CASCADE
 
 # Test for timezone builtin.
 subtest timezone_test

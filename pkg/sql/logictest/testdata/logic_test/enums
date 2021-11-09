@@ -1,5 +1,3 @@
-# LogicTest: !3node-tenant(49854)
-
 statement ok
 CREATE TYPE t AS ENUM ()
 
@@ -1291,19 +1289,6 @@ CREATE TABLE table_ifne (x INT)
 # the implicit type with the same name as the table.
 statement ok
 CREATE TYPE IF NOT EXISTS table_ifne AS ENUM ('hi')
-
-# Regression test for incorrectly serializing NULL expression type annotation in
-# a enum tuple.
-statement ok
-CREATE TYPE greeting58889 AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning');
-CREATE TABLE t58889 AS SELECT enum_range('hello'::greeting58889)[g] as _enum FROM generate_series(1, 5) as g;
-ALTER TABLE t58889 SPLIT AT SELECT i FROM generate_series(1, 5) as g(i);
-ALTER TABLE t58889 SCATTER;
-
-query T
-SELECT _enum FROM t58889 WHERE _enum::greeting58889 IN (NULL, 'hi':::greeting58889);
-----
-hi
 
 
 subtest enum_array_cast
