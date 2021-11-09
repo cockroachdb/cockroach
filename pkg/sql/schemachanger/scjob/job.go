@@ -74,7 +74,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		execCfg.Settings,
 		execCfg.IndexValidator,
 		scsqldeps.NewCCLCallbacks(execCfg.Settings, nil),
-		execCfg.NewSchemaChangerTestingKnobs,
+		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		payload.Statement,
 	)
 	return scrun.RunSchemaChangesInJob(ctx, deps, n.job.ID(), payload.DescriptorIDs, *newSchemaChangeDetails, *newSchemaChangeProgress)

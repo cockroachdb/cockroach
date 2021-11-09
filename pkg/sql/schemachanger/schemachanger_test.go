@@ -88,7 +88,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 					return nil
 				},
 			},
-			SQLNewSchemaChanger: &scrun.NewSchemaChangerTestingKnobs{
+			SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
 				BeforeStage: func(p scplan.Plan, idx int) error {
 					// Assert that when job 3 is running, there are no mutations other
 					// than the ones associated with this schema change.
@@ -197,7 +197,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		var kvDB *kv.DB
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
-			SQLNewSchemaChanger: &scrun.NewSchemaChangerTestingKnobs{
+			SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
 				BeforeStage: func(p scplan.Plan, idx int) error {
 					// Verify that we never queue mutations for job 2 before finishing job
 					// 1.
@@ -333,7 +333,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 				return nil
 			},
 		},
-		SQLNewSchemaChanger: &scrun.NewSchemaChangerTestingKnobs{
+		SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, idx int) error {
 				// Verify that we never get a mutation ID not associated with the schema
 				// change that is running.
@@ -439,7 +439,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 				return nil
 			},
 		},
-		SQLNewSchemaChanger: &scrun.NewSchemaChangerTestingKnobs{
+		SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
 				// Verify that we never get a mutation ID not associated with the schema
 				// change that is running.

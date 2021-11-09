@@ -1073,21 +1073,21 @@ type ExecutorConfig struct {
 	RowMetrics           *row.Metrics
 	InternalRowMetrics   *row.Metrics
 
-	TestingKnobs                  ExecutorTestingKnobs
-	MigrationTestingKnobs         *migration.TestingKnobs
-	PGWireTestingKnobs            *PGWireTestingKnobs
-	SchemaChangerTestingKnobs     *SchemaChangerTestingKnobs
-	NewSchemaChangerTestingKnobs  *scrun.NewSchemaChangerTestingKnobs
-	TypeSchemaChangerTestingKnobs *TypeSchemaChangerTestingKnobs
-	GCJobTestingKnobs             *GCJobTestingKnobs
-	DistSQLRunTestingKnobs        *execinfra.TestingKnobs
-	EvalContextTestingKnobs       tree.EvalContextTestingKnobs
-	TenantTestingKnobs            *TenantTestingKnobs
-	BackupRestoreTestingKnobs     *BackupRestoreTestingKnobs
-	StreamingTestingKnobs         *StreamingTestingKnobs
-	IndexUsageStatsTestingKnobs   *idxusage.TestingKnobs
-	SQLStatsTestingKnobs          *sqlstats.TestingKnobs
-	TelemetryLoggingTestingKnobs  *TelemetryLoggingTestingKnobs
+	TestingKnobs                         ExecutorTestingKnobs
+	MigrationTestingKnobs                *migration.TestingKnobs
+	PGWireTestingKnobs                   *PGWireTestingKnobs
+	SchemaChangerTestingKnobs            *SchemaChangerTestingKnobs
+	DeclarativeSchemaChangerTestingKnobs *scrun.TestingKnobs
+	TypeSchemaChangerTestingKnobs        *TypeSchemaChangerTestingKnobs
+	GCJobTestingKnobs                    *GCJobTestingKnobs
+	DistSQLRunTestingKnobs               *execinfra.TestingKnobs
+	EvalContextTestingKnobs              tree.EvalContextTestingKnobs
+	TenantTestingKnobs                   *TenantTestingKnobs
+	BackupRestoreTestingKnobs            *BackupRestoreTestingKnobs
+	StreamingTestingKnobs                *StreamingTestingKnobs
+	IndexUsageStatsTestingKnobs          *idxusage.TestingKnobs
+	SQLStatsTestingKnobs                 *sqlstats.TestingKnobs
+	TelemetryLoggingTestingKnobs         *TelemetryLoggingTestingKnobs
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
 

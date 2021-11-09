@@ -83,7 +83,7 @@ func TestSchemaChangerSideEffects(t *testing.T) {
 
 				var deps *sctestdeps.TestState
 				stageCounters := make(map[scop.Phase]int)
-				testingKnobs := &scrun.NewSchemaChangerTestingKnobs{
+				testingKnobs := &scrun.TestingKnobs{
 					BeforeStage: func(p scplan.Plan, stageIdx int) error {
 						phase := p.Params.ExecutionPhase
 						stage := p.Stages[stageIdx]

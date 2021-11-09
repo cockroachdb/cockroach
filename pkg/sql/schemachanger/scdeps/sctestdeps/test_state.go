@@ -55,7 +55,7 @@ type TestState struct {
 	phase                             scop.Phase
 	sessionData                       sessiondata.SessionData
 	statements                        []string
-	testingKnobs                      *scrun.NewSchemaChangerTestingKnobs
+	testingKnobs                      *scrun.TestingKnobs
 	jobs                              []jobs.Record
 	txnCounter                        int
 	sideEffectLogBuffer               strings.Builder
@@ -67,7 +67,7 @@ func NewTestDependencies(
 	ctx context.Context,
 	t *testing.T,
 	tdb *sqlutils.SQLRunner,
-	testingKnobs *scrun.NewSchemaChangerTestingKnobs,
+	testingKnobs *scrun.TestingKnobs,
 	statements []string,
 ) *TestState {
 

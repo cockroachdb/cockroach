@@ -79,7 +79,7 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 	ctx context.Context, descID descpb.ID, scs SchemaChangerState,
 ) error {
 
-	if knobs := p.ExecCfg().NewSchemaChangerTestingKnobs; knobs != nil &&
+	if knobs := p.ExecCfg().DeclarativeSchemaChangerTestingKnobs; knobs != nil &&
 		knobs.BeforeWaitingForConcurrentSchemaChanges != nil {
 		knobs.BeforeWaitingForConcurrentSchemaChanges(scs.stmts)
 	}
@@ -166,7 +166,7 @@ func newSchemaChangerTxnRunDependencies(
 		scs.stmts,
 	)
 	runDeps := scdeps.NewTxnRunDependencies(
-		execDeps, phase, execCfg.NewSchemaChangerTestingKnobs,
+		execDeps, phase, execCfg.DeclarativeSchemaChangerTestingKnobs,
 	)
 	return runDeps
 }

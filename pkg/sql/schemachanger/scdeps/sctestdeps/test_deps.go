@@ -754,7 +754,7 @@ func (s *TestState) CreateJob(ctx context.Context, record jobs.Record) (jobspb.J
 }
 
 // TestingKnobs implements the scexec.Dependencies interface.
-func (s *TestState) TestingKnobs() *scrun.NewSchemaChangerTestingKnobs {
+func (s *TestState) TestingKnobs() *scrun.TestingKnobs {
 	return s.testingKnobs
 }
 
