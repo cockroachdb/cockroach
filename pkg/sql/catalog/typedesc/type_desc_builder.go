@@ -64,6 +64,18 @@ func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges(
 		privilege.Type,
 		tdb.maybeModified.GetName(),
 	)
+
+	return nil
+}
+
+// RunMigrationChanges implements the catalog.DescriptorBuilder
+// interface.
+func (tdb *typeDescriptorBuilder) RunMigrationChanges(
+	workFuncs ...catalog.MigrationWorkFunc,
+) error {
+	for _, applyChange := range workFuncs {
+		applyChange(tdb)
+	}
 	return nil
 }
 
@@ -134,4 +146,12 @@ func makeImmutable(desc *descpb.TypeDescriptor) immutable {
 	}
 
 	return immutDesc
+}
+
+// MaybeAddGrantOptionsType is called by maybeAddGrantOptions() in grant_option_migration.go
+// and potentially gives grant options to a new type descriptor.
+func MaybeAddGrantOptionsType(b TypeDescriptorBuilder) {
+	tdb := b.(*typeDescriptorBuilder)
+	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
+	tdb.changed = catprivilege.MaybeUpdateGrantOptions(&tdb.maybeModified.Privileges)
 }

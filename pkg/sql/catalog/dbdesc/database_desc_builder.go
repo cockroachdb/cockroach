@@ -73,6 +73,18 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
 	return nil
 }
 
+// RunMigrationChanges implements the catalog.DescriptorBuilder
+// interface.
+func (ddb *databaseDescriptorBuilder) RunMigrationChanges(
+	workFuncs ...catalog.MigrationWorkFunc,
+) error {
+	for _, applyChange := range workFuncs {
+		applyChange(ddb)
+	}
+
+	return nil
+}
+
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
 func (ddb *databaseDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 	return ddb.BuildImmutableDatabase()
@@ -195,4 +207,12 @@ func newInitialWithPrivileges(
 		option(&ret)
 	}
 	return NewBuilder(&ret).BuildCreatedMutableDatabase()
+}
+
+// MaybeAddGrantOptionsDatabase is called by maybeAddGrantOptions() in grant_option_migration.go
+// and potentially gives grant options to a new database descriptor.
+func MaybeAddGrantOptionsDatabase(b DatabaseDescriptorBuilder) {
+	ddb := b.(*databaseDescriptorBuilder)
+	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
+	ddb.changed = catprivilege.MaybeUpdateGrantOptions(&ddb.maybeModified.Privileges)
 }
