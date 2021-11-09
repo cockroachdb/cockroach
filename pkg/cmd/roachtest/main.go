@@ -47,6 +47,10 @@ func main() {
 	// Path to a local dir where the test logs and artifacts collected from
 	// cluster will be placed.
 	var artifacts string
+	// Path to the literal on-agent directory where artifacts are stored.
+	// May be different from `artifacts`. Only used for messages to
+	// ##teamcity[publishArtifacts] in Teamcity mode.
+	var literalArtifacts string
 	var httpPort int
 	var debugEnabled bool
 	var clusterID string
@@ -173,6 +177,9 @@ failed, it is 10. Any other exit status reports a problem with the test
 runner itself.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
+			if literalArtifacts == "" {
+				literalArtifacts = artifacts
+			}
 			return runTests(tests.RegisterTests, cliCfg{
 				args:                   args,
 				count:                  count,
@@ -181,6 +188,7 @@ runner itself.
 				httpPort:               httpPort,
 				parallelism:            parallelism,
 				artifactsDir:           artifacts,
+				literalArtifactsDir:    literalArtifacts,
 				user:                   username,
 				clusterID:              clusterID,
 				versionsBinaryOverride: versionsBinaryOverride,
@@ -208,6 +216,9 @@ runner itself.
 		Short:        "run automated benchmarks on cockroach cluster",
 		Long:         `Run automated benchmarks on existing or ephemeral cockroach clusters.`,
 		RunE: func(_ *cobra.Command, args []string) error {
+			if literalArtifacts == "" {
+				literalArtifacts = artifacts
+			}
 			return runTests(tests.RegisterBenchmarks, cliCfg{
 				args:                   args,
 				count:                  count,
@@ -227,6 +238,8 @@ runner itself.
 	for _, cmd := range []*cobra.Command{runCmd, benchCmd} {
 		cmd.Flags().StringVar(
 			&artifacts, "artifacts", "artifacts", "path to artifacts directory")
+		cmd.Flags().StringVar(
+			&literalArtifacts, "artifacts-literal", "", "literal path to on-agent artifacts directory. Used for messages to ##teamcity[publishArtifacts] in --teamcity mode. May be different from --artifacts; defaults to the value of --artifacts if not provided")
 		cmd.Flags().StringVar(
 			&cloud, "cloud", cloud, "cloud provider to use (aws, azure, or gce)")
 		cmd.Flags().StringVar(
@@ -288,6 +301,7 @@ type cliCfg struct {
 	httpPort               int
 	parallelism            int
 	artifactsDir           string
+	literalArtifactsDir    string
 	user                   string
 	clusterID              string
 	versionsBinaryOverride map[string]string
@@ -340,12 +354,13 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
 	l, tee := testRunnerLogger(context.Background(), cfg.parallelism, runnerLogPath)
 	lopt := loggingOpt{
-		l:             l,
-		tee:           tee,
-		stdout:        os.Stdout,
-		stderr:        os.Stderr,
-		artifactsDir:  cfg.artifactsDir,
-		runnerLogPath: runnerLogPath,
+		l:                   l,
+		tee:                 tee,
+		stdout:              os.Stdout,
+		stderr:              os.Stderr,
+		artifactsDir:        cfg.artifactsDir,
+		literalArtifactsDir: cfg.literalArtifactsDir,
+		runnerLogPath:       runnerLogPath,
 	}
 
 	// We're going to run all the workers (and thus all the tests) in a context
@@ -367,7 +382,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 
 	if teamCity {
 		// Collect the runner logs.
-		fmt.Printf("##teamcity[publishArtifacts '%s']\n", runnerDir)
+		fmt.Printf("##teamcity[publishArtifacts '%s']\n", filepath.Join(cfg.literalArtifactsDir, runnerLogsDir))
 	}
 	return err
 }
