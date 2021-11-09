@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -224,6 +225,7 @@ func compareTables(t *testing.T, expected, got *descpb.TableDescriptor) {
 			len(expectedIdx), idxNames(expectedIdx), len(gotIdx), idxNames(gotIdx),
 		)
 	}
+	sd := &sessiondata.SessionData{}
 	for i := range expected.Indexes {
 		ctx := context.Background()
 		semaCtx := tree.MakeSemaContext()
@@ -231,13 +233,13 @@ func compareTables(t *testing.T, expected, got *descpb.TableDescriptor) {
 		expectedDesc := tabledesc.NewBuilder(expected).BuildImmutableTable()
 		gotDesc := tabledesc.NewBuilder(got).BuildImmutableTable()
 		e, err := catformat.IndexForDisplay(
-			ctx, expectedDesc, tableName, expectedDesc.PublicNonPrimaryIndexes()[i], "" /* partition */, "" /* interleave */, &semaCtx,
+			ctx, expectedDesc, tableName, expectedDesc.PublicNonPrimaryIndexes()[i], "" /* partition */, "" /* interleave */, &semaCtx, sd,
 		)
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)
 		}
 		g, err := catformat.IndexForDisplay(
-			ctx, gotDesc, tableName, gotDesc.PublicNonPrimaryIndexes()[i], "" /* partition */, "" /* interleave */, &semaCtx,
+			ctx, gotDesc, tableName, gotDesc.PublicNonPrimaryIndexes()[i], "" /* partition */, "" /* interleave */, &semaCtx, sd,
 		)
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)
