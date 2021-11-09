@@ -66,6 +66,18 @@ func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges(
 	return nil
 }
 
+// RunMigrationOnlyChanges implements the catalog.DescriptorBuilder
+// interface.
+func (sdb *schemaDescriptorBuilder) RunMigrationOnlyChanges(
+	workFunc ...catalog.MigrationOnlyFunc,
+) error {
+	for _, applyChange := range workFunc {
+		applyChange(sdb)
+	}
+
+	return nil
+}
+
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
 func (sdb *schemaDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 	return sdb.BuildImmutableSchema()
@@ -110,4 +122,11 @@ func (sdb *schemaDescriptorBuilder) BuildCreatedMutableSchema() *Mutable {
 		immutable: immutable{SchemaDescriptor: *sdb.original},
 		changed:   sdb.changed,
 	}
+}
+
+func MaybeAddGrantOptionsSchema(b SchemaDescriptorBuilder) error {
+	sdb := b.(*schemaDescriptorBuilder)
+	sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
+	sdb.changed = catprivilege.MaybeUpdateGrantOptions(&sdb.maybeModified.Privileges)
+	return nil
 }

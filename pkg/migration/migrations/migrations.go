@@ -142,6 +142,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		alterSystemStmtDiagReqs,
 	),
+	migration.NewTenantMigration(
+		"track grant options on users and enable granting/revoking with them",
+		toCV(clusterversion.ValidateGrantOption),
+		NoPrecondition,
+		grantOptionMigration,
+	),
 }
 
 func init() {

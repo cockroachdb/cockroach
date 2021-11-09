@@ -64,6 +64,18 @@ func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges(
 		privilege.Type,
 		tdb.maybeModified.GetName(),
 	)
+
+	return nil
+}
+
+// RunMigrationOnlyChanges implements the catalog.DescriptorBuilder
+// interface.
+func (tdb *typeDescriptorBuilder) RunMigrationOnlyChanges(
+	workFunc ...catalog.MigrationOnlyFunc,
+) error {
+	for _, applyChange := range workFunc {
+		applyChange(tdb)
+	}
 	return nil
 }
 
@@ -134,4 +146,11 @@ func makeImmutable(desc *descpb.TypeDescriptor) immutable {
 	}
 
 	return immutDesc
+}
+
+func MaybeAddGrantOptionsType(b TypeDescriptorBuilder) error {
+	tdb := b.(*typeDescriptorBuilder)
+	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
+	tdb.changed = catprivilege.MaybeUpdateGrantOptions(&tdb.maybeModified.Privileges)
+	return nil
 }
