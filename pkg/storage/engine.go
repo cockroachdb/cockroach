@@ -505,18 +505,15 @@ type PrecedingIntentState int
 const (
 	// ExistingIntentInterleaved specifies that there is an existing intent and
 	// that it is interleaved.
-	ExistingIntentInterleaved PrecedingIntentState = iota
 	// ExistingIntentSeparated specifies that there is an existing intent and
 	// that it is separated (in the lock table key space).
-	ExistingIntentSeparated
+	ExistingIntentSeparated PrecedingIntentState = 1
 	// NoExistingIntent specifies that there isn't an existing intent.
-	NoExistingIntent
+	NoExistingIntent PrecedingIntentState = 2
 )
 
 func (is PrecedingIntentState) String() string {
 	switch is {
-	case ExistingIntentInterleaved:
-		return "ExistingIntentInterleaved"
 	case ExistingIntentSeparated:
 		return "ExistingIntentSeparated"
 	case NoExistingIntent:
@@ -570,7 +567,7 @@ type Writer interface {
 	// ClearIntent by always doing single-clear.
 	ClearIntent(
 		key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-	) (separatedIntentCountDelta int, _ error)
+	) error
 	// ClearEngineKey removes the item from the db with the given EngineKey.
 	// Note that clear actually removes entries from the storage engine. This is
 	// a general-purpose and low-level method that should be used sparingly,
@@ -665,7 +662,7 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after Put returns.
 	PutIntent(
 		ctx context.Context, key roachpb.Key, value []byte, state PrecedingIntentState,
-		txnDidNotUpdateMeta bool, txnUUID uuid.UUID) (separatedIntentCountDelta int, _ error)
+		txnDidNotUpdateMeta bool, txnUUID uuid.UUID) error
 	// PutEngineKey sets the given key to the value provided. This is a
 	// general-purpose and low-level method that should be used sparingly,
 	// only when the other Put* methods are not applicable.

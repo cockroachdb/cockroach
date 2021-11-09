@@ -542,9 +542,9 @@ func (s spanSetWriter) ClearUnversioned(key roachpb.Key) error {
 
 func (s spanSetWriter) ClearIntent(
 	key roachpb.Key, state storage.PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) (int, error) {
+) error {
 	if err := s.checkAllowed(key); err != nil {
-		return 0, err
+		return err
 	}
 	return s.w.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID)
 }
@@ -640,9 +640,9 @@ func (s spanSetWriter) PutIntent(
 	state storage.PrecedingIntentState,
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
-) (int, error) {
+) error {
 	if err := s.checkAllowed(key); err != nil {
-		return 0, err
+		return err
 	}
 	return s.w.PutIntent(ctx, key, value, state, txnDidNotUpdateMeta, txnUUID)
 }

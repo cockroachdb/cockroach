@@ -519,7 +519,7 @@ func (rw intentPrintingReadWriter) PutIntent(
 	state PrecedingIntentState,
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
-) (int, error) {
+) error {
 	rw.buf.Printf("called PutIntent(%v, _, %v, TDNUM(%t), %v)\n",
 		key, state, txnDidNotUpdateMeta, txnUUID)
 	return rw.ReadWriter.PutIntent(ctx, key, value, state, txnDidNotUpdateMeta, txnUUID)
@@ -527,7 +527,7 @@ func (rw intentPrintingReadWriter) PutIntent(
 
 func (rw intentPrintingReadWriter) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) (int, error) {
+) error {
 	rw.buf.Printf("called ClearIntent(%v, %v, TDNUM(%t), %v)\n",
 		key, state, txnDidNotUpdateMeta, txnUUID)
 	return rw.ReadWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID)

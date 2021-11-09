@@ -32,8 +32,6 @@ func readPrecedingIntentState(t *testing.T, d *datadriven.TestData) PrecedingInt
 	var str string
 	d.ScanArgs(t, "preceding", &str)
 	switch str {
-	case "interleaved":
-		return ExistingIntentInterleaved
 	case "separated":
 		return ExistingIntentSeparated
 	case "none":
@@ -239,13 +237,14 @@ func TestIntentDemuxWriter(t *testing.T) {
 				}
 				state := readPrecedingIntentState(t, d)
 				txnDidNotUpdateMeta := readTxnDidNotUpdateMeta(t, d)
-				var delta int
-				scratch, delta, err = w.PutIntent(
+				scratch, err = w.PutIntent(
 					context.Background(), key, val, state, txnDidNotUpdateMeta, txnUUID, scratch)
 				if err != nil {
 					return err.Error()
 				}
-				fmt.Fprintf(&pw.b, "Return Value: separated-delta=%d\n", delta)
+
+				// todo(bananabrick) : edit the test file here.
+				// fmt.Fprintf(&pw.b, "Return Value: separated-delta=%d\n", delta)
 				printEngContents(&pw.b, eng)
 				return pw.b.String()
 			case "clear-intent":
@@ -256,12 +255,12 @@ func TestIntentDemuxWriter(t *testing.T) {
 				txnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(txn)))
 				state := readPrecedingIntentState(t, d)
 				txnDidNotUpdateMeta := readTxnDidNotUpdateMeta(t, d)
-				var delta int
-				scratch, delta, err = w.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, scratch)
+				scratch, err = w.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, scratch)
 				if err != nil {
 					return err.Error()
 				}
-				fmt.Fprintf(&pw.b, "Return Value: separated-delta=%d\n", delta)
+				// todo: edit the test file here.
+				//fmt.Fprintf(&pw.b, "Return Value: separated-delta=%d\n", delta)
 				printEngContents(&pw.b, eng)
 				return pw.b.String()
 			case "clear-range":

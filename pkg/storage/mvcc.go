@@ -1077,23 +1077,23 @@ func (b *putBuffer) putIntentMeta(
 	key MVCCKey,
 	helper txnDidNotUpdateMetaHelper,
 	meta *enginepb.MVCCMetadata,
-) (keyBytes, valBytes int64, separatedIntentCountDelta int, err error) {
+) (keyBytes, valBytes int64, err error) {
 	if meta.Txn != nil && meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
 		// The timestamps are supposed to be in sync. If they weren't, it wouldn't
 		// be clear for readers which one to use for what.
-		return 0, 0, 0, errors.AssertionFailedf(
+		return 0, 0, errors.AssertionFailedf(
 			"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
 	}
 	helper.populateMeta(ctx, meta)
 	bytes, err := b.marshalMeta(meta)
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, err
 	}
-	if separatedIntentCountDelta, err = writer.PutIntent(
+	if err = writer.PutIntent(
 		ctx, key.Key, bytes, helper.state, helper.valueForPutIntent(), meta.Txn.ID); err != nil {
-		return 0, 0, 0, err
+		return 0, 0, err
 	}
-	return int64(key.EncodedSize()), int64(len(bytes)), separatedIntentCountDelta, nil
+	return int64(key.EncodedSize()), int64(len(bytes)), nil
 }
 
 // txnDidNotUpdateMetaHelper is used to decide what to put in the MVCCMetadata
@@ -1794,7 +1794,7 @@ func mvccPutInternal(
 	var metaKeySize, metaValSize int64
 	var separatedIntentCountDelta int
 	if newMeta.Txn != nil {
-		metaKeySize, metaValSize, separatedIntentCountDelta, err = buf.putIntentMeta(
+		metaKeySize, metaValSize, err = buf.putIntentMeta(
 			ctx, writer, metaKey,
 			txnDidNotUpdateMetaHelper{
 				txnDidNotUpdateMeta: txnDidNotUpdateMeta,
@@ -3221,7 +3221,6 @@ func mvccResolveWriteIntent(
 		return false, nil
 	}
 
-	var separatedIntentCountDelta int
 	// If we're committing, or if the commit timestamp of the intent has been moved forward, and if
 	// the proposed epoch matches the existing epoch: update the meta.Txn. For commit, it's set to
 	// nil; otherwise, we update its value. We may have to update the actual version value (remove old
@@ -3257,7 +3256,7 @@ func mvccResolveWriteIntent(
 			// overwriting a newer epoch (see comments above). The pusher's job isn't
 			// to do anything to update the intent but to move the timestamp forward,
 			// even if it can.
-			metaKeySize, metaValSize, separatedIntentCountDelta, err = buf.putIntentMeta(
+			metaKeySize, metaValSize, err = buf.putIntentMeta(
 				ctx, rw, metaKey,
 				txnDidNotUpdateMetaHelper{
 					txnDidNotUpdateMeta: canSingleDelHelper.v(),
@@ -3267,7 +3266,7 @@ func mvccResolveWriteIntent(
 				&buf.newMeta)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
-			separatedIntentCountDelta, err =
+			err =
 				rw.ClearIntent(metaKey.Key, precedingIntentState, canSingleDelHelper.onCommitIntent(), meta.Txn.ID)
 		}
 		if err != nil {
@@ -3323,7 +3322,7 @@ func mvccResolveWriteIntent(
 		// Update stat counters related to resolving the intent.
 		if ms != nil {
 			ms.Add(updateStatsOnResolve(intent.Key, prevValSize, origMetaKeySize, origMetaValSize,
-				metaKeySize, metaValSize, meta, &buf.newMeta, commit, separatedIntentCountDelta))
+				metaKeySize, metaValSize, meta, &buf.newMeta, commit, 0))
 		}
 
 		// Log the logical MVCC operation.
@@ -3393,14 +3392,14 @@ func mvccResolveWriteIntent(
 
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
-		if separatedIntentCountDelta, err =
+		if err =
 			rw.ClearIntent(metaKey.Key, precedingIntentState, canSingleDelHelper.onAbortIntent(), meta.Txn.ID); err != nil {
 			return false, err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
 		if ms != nil {
 			ms.Add(updateStatsOnClear(
-				intent.Key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0, separatedIntentCountDelta))
+				intent.Key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0, 0))
 		}
 		return true, nil
 	}
@@ -3413,7 +3412,7 @@ func mvccResolveWriteIntent(
 		KeyBytes: MVCCVersionTimestampSize,
 		ValBytes: valueSize,
 	}
-	if separatedIntentCountDelta, err =
+	if err =
 		rw.ClearIntent(metaKey.Key, precedingIntentState, canSingleDelHelper.onAbortIntent(), meta.Txn.ID); err != nil {
 		return false, err
 	}
@@ -3423,7 +3422,7 @@ func mvccResolveWriteIntent(
 	// Update stat counters with older version.
 	if ms != nil {
 		ms.Add(updateStatsOnClear(intent.Key, origMetaKeySize, origMetaValSize, metaKeySize,
-			metaValSize, meta, &buf.newMeta, unsafeNextKey.Timestamp.WallTime, separatedIntentCountDelta))
+			metaValSize, meta, &buf.newMeta, unsafeNextKey.Timestamp.WallTime, 0))
 	}
 
 	return true, nil

@@ -918,10 +918,10 @@ func (p *Pebble) ClearUnversioned(key roachpb.Key) error {
 // ClearIntent implements the Engine interface.
 func (p *Pebble) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) (int, error) {
-	_, separatedIntentCountDelta, err :=
+) error {
+	_, err :=
 		p.wrappedIntentWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, nil)
-	return separatedIntentCountDelta, err
+	return err
 }
 
 // ClearEngineKey implements the Engine interface.
@@ -1011,11 +1011,11 @@ func (p *Pebble) PutIntent(
 	state PrecedingIntentState,
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
-) (int, error) {
+) error {
 
-	_, separatedIntentCountDelta, err :=
+	_, err :=
 		p.wrappedIntentWriter.PutIntent(ctx, key, value, state, txnDidNotUpdateMeta, txnUUID, nil)
-	return separatedIntentCountDelta, err
+	return err
 }
 
 // PutEngineKey implements the Engine interface.
@@ -1763,7 +1763,7 @@ func (p *pebbleReadOnly) ClearUnversioned(key roachpb.Key) error {
 
 func (p *pebbleReadOnly) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) (int, error) {
+) error {
 	panic("not implemented")
 }
 
@@ -1810,7 +1810,7 @@ func (p *pebbleReadOnly) PutIntent(
 	state PrecedingIntentState,
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
-) (int, error) {
+) error {
 	panic("not implemented")
 }
 

@@ -47,10 +47,8 @@ func (idw intentDemuxWriter) ClearIntent(
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 	buf []byte,
-) (_ []byte, separatedIntentCountDelta int, _ error) {
+) (_ []byte, _ error) {
 	switch state {
-	case ExistingIntentInterleaved:
-		return buf, 0, idw.w.ClearUnversioned(key)
 	case ExistingIntentSeparated:
 		var engineKey EngineKey
 		engineKey, buf = LockTableKey{
@@ -59,11 +57,11 @@ func (idw intentDemuxWriter) ClearIntent(
 			TxnUUID:  txnUUID[:],
 		}.ToEngineKey(buf)
 		if txnDidNotUpdateMeta {
-			return buf, -1, idw.w.SingleClearEngineKey(engineKey)
+			return buf, idw.w.SingleClearEngineKey(engineKey)
 		}
-		return buf, -1, idw.w.ClearEngineKey(engineKey)
+		return buf, idw.w.ClearEngineKey(engineKey)
 	default:
-		return buf, 0, errors.AssertionFailedf("ClearIntent: invalid preceding state %d", state)
+		return buf, errors.AssertionFailedf("ClearIntent: invalid preceding state %d", state)
 	}
 }
 
@@ -78,15 +76,14 @@ func (idw intentDemuxWriter) PutIntent(
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 	buf []byte,
-) (_ []byte, separatedIntentCountDelta int, _ error) {
+) (_ []byte, _ error) {
 	var engineKey EngineKey
 	engineKey, buf = LockTableKey{
 		Key:      key,
 		Strength: lock.Exclusive,
 		TxnUUID:  txnUUID[:],
 	}.ToEngineKey(buf)
-	separatedIntentCountDelta = 0
-	return buf, separatedIntentCountDelta, idw.w.PutEngineKey(engineKey, value)
+	return buf, idw.w.PutEngineKey(engineKey, value)
 }
 
 // ClearMVCCRangeAndIntents has the same behavior as
