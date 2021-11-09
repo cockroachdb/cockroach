@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
 
-source "$(dirname "${0}")/teamcity-support.sh"
+dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
+
+source "$dir/teamcity-support.sh"  # For $root
+source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 
 # Entry point for the nightly roachtests. These are run from CI and require
-# appropriate secrets for the ${CLOUD} parameter (along with other things,
-# apologies, you're going to have to dig around for them below or even better
-# yet, look at the job).
+# appropriate secrets for the ${CLOUD} parameter (along with other things).
 
 if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "roachtest-nightly $(date)" -N "" -f ~/.ssh/id_rsa
@@ -16,12 +18,15 @@ fi
 artifacts=$PWD/artifacts
 mkdir -p "${artifacts}"
 chmod o+rwx "${artifacts}"
+mkdir bin
+chmod o+rwx bin
 
-# Disable global -json flag.
-export PATH=$PATH:$(GOFLAGS=; go env GOPATH)/bin
-
-build/builder/mkrelease.sh amd64-linux-gnu build bin/workload bin/roachtest bin/roachprod \
-  > "${artifacts}/build.txt" 2>&1 || (cat "${artifacts}/build.txt"; false)
+# Build binaries. Bazci will put them in `artifacts`, so move them to `bin`.
+run_bazel build/teamcity/cockroach/nightlies/roachtest_nightly_build.sh
+mv artifacts/bazel-bin/pkg/cmd/cockroach/cockroach_/cockroach bin
+mv artifacts/bazel-bin/pkg/cmd/roachprod/roachprod_/roachprod bin
+mv artifacts/bazel-bin/pkg/cmd/roachtest/roachtest_/roachtest bin
+mv artifacts/bazel-bin/pkg/cmd/workload/workload_/workload bin
 
 # Set up Google credentials. Note that we need this for all clouds since we upload
 # perf artifacts to Google Storage at the end.
@@ -81,6 +86,7 @@ CPUQUOTA=1024
 TESTS=""
 case "${CLOUD}" in
   gce)
+    ;;
   aws)
     PARALLELISM=3
     CPUQUOTA=384
@@ -100,14 +106,14 @@ esac
 # without a stack trace (probably SIGKILL).  We'd love to see a stack trace
 # though, so after 1200 minutes, kill with SIGINT which will allow roachtest to
 # fail tests and cleanup.
-timeout -s INT $((1200*60)) "build/teamcity-roachtest-invoke.sh" \
+run_bazel timeout -s INT $((1200*60)) "build/teamcity-roachtest-invoke.sh" \
   --cloud="${CLOUD}" \
   --count="${COUNT-1}" \
   --parallelism="${PARALLELISM}" \
   --cpu-quota="${CPUQUOTA}" \
   --cluster-id="${TC_BUILD_ID}" \
   --build-tag="${BUILD_TAG}" \
-  --cockroach="${PWD}/cockroach-linux-2.6.32-gnu-amd64" \
+  --cockroach="${PWD}/bin/cockroach" \
   --artifacts="${artifacts}" \
   --slack-token="${SLACK_TOKEN}" \
   "${TESTS}"
