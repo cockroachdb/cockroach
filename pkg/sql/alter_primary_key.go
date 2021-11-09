@@ -223,6 +223,13 @@ func (p *planner) AlterPrimaryKey(
 		// Make the copy of the old primary index not-interleaved. This decision
 		// can be revisited based on user experience.
 		oldPrimaryIndexCopy.Interleave = descpb.InterleaveDescriptor{}
+		// Set correct encoding type and format version (issue #71552).
+		oldPrimaryIndexCopy.EncodingType = descpb.SecondaryIndexEncoding
+		oldPrimaryIndexCopy.Version = descpb.BaseIndexFormatVersion
+		if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.VersionSecondaryIndexColumnFamilies) {
+			oldPrimaryIndexCopy.Version = descpb.SecondaryIndexFamilyFormatVersion
+		}
+
 		if err := addIndexMutationWithSpecificPrimaryKey(tableDesc, oldPrimaryIndexCopy, newPrimaryIndexDesc); err != nil {
 			return err
 		}
