@@ -1249,15 +1249,15 @@ insert transactions
  │    ├── column1:12 => dealerid:1
  │    ├── column2:13 => isbuy:2
  │    ├── column3:14 => date:3
- │    ├── column4:18 => accountname:4
- │    ├── column5:19 => customername:5
+ │    ├── accountname:18 => transactions.accountname:4
+ │    ├── customername:19 => transactions.customername:5
  │    ├── column6:17 => operationid:6
  │    ├── version_default:20 => version:7
  │    └── olddate_default:21 => olddate:8
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column1:12!null column2:13!null column3:14!null column6:17!null column4:18 column5:19 version_default:20 olddate_default:21!null
+      ├── columns: column1:12!null column2:13!null column3:14!null column6:17!null accountname:18 customername:19 version_default:20 olddate_default:21!null
       ├── cardinality: [1 - 1]
       ├── volatile
       ├── key: ()

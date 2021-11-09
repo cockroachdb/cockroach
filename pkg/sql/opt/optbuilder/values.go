@@ -90,6 +90,12 @@ func (b *Builder) buildValuesClause(
 				} else if !typ.Equivalent(colTypes[colIdx]) {
 					panic(pgerror.Newf(pgcode.DatatypeMismatch,
 						"VALUES types %s and %s cannot be matched", typ, colTypes[colIdx]))
+				} else if !colTypes[colIdx].IsCanonicalType() && !colTypes[colIdx].Identical(typ) {
+					// If the earlier expression is not a canonical type, and it
+					// is not identical to the current expression's type, then
+					// set the type to be the canonical type of both
+					// expressions.
+					colTypes[colIdx] = colTypes[colIdx].CanonicalType()
 				}
 			}
 			elems[elemPos] = b.buildScalar(texpr, inScope, nil, nil, nil)

@@ -1324,11 +1324,82 @@ func (f Family) Name() string {
 	return ret
 }
 
+// IsCanonicalType returns true if the type is the canonical type of its family.
+func (t *T) IsCanonicalType() bool {
+	switch t.Family() {
+	case BoolFamily:
+		return t.Identical(Bool)
+	case IntFamily:
+		return t.Identical(Int)
+	case FloatFamily:
+		return t.Identical(Float)
+	case DecimalFamily:
+		return t.Identical(Decimal)
+	case DateFamily:
+		return t.Identical(Date)
+	case TimestampFamily:
+		return t.Identical(Timestamp)
+	case IntervalFamily:
+		return t.Identical(Interval)
+	case StringFamily:
+		return t.Identical(String)
+	case BytesFamily:
+		return t.Identical(Bytes)
+	case TimestampTZFamily:
+		return t.Identical(TimestampTZ)
+	case CollatedStringFamily:
+		// CollatedStringFamily has no canonical type.
+		return false
+	case OidFamily:
+		return t.Identical(Oid)
+	case UnknownFamily:
+		return t.Identical(Unknown)
+	case UuidFamily:
+		return t.Identical(Uuid)
+	case ArrayFamily:
+		return t.ArrayContents().IsCanonicalType()
+	case INetFamily:
+		return t.Identical(INet)
+	case TimeFamily:
+		return t.Identical(Time)
+	case JsonFamily:
+		return t.Identical(Jsonb)
+	case TimeTZFamily:
+		return t.Identical(TimeTZ)
+	case TupleFamily:
+		types := t.TupleContents()
+		for i := range types {
+			if !types[i].IsCanonicalType() {
+				return false
+			}
+		}
+		return true
+	case BitFamily:
+		return t.Identical(VarBit)
+	case GeometryFamily:
+		return t.Identical(Geometry)
+	case GeographyFamily:
+		return t.Identical(Geography)
+	case EnumFamily:
+		// EnumFamily has no canonical type.
+		return false
+	case Box2DFamily:
+		return t.Identical(Box2D)
+	case AnyFamily:
+		return t.Identical(Any)
+	default:
+		panic(errors.AssertionFailedf("unexpected type family: %v", errors.Safe(t.Family())))
+	}
+}
+
 // CanonicalType returns the canonical type of the given type's family. The
 // original type is returned for some types that do not have a canonical type.
 // For array and tuple types, a new type is returned where the content types
 // have been set to their canonical types.
 func (t *T) CanonicalType() *T {
+	if t.IsCanonicalType() {
+		return t
+	}
 	switch t.Family() {
 	case BoolFamily:
 		return Bool
@@ -1360,11 +1431,7 @@ func (t *T) CanonicalType() *T {
 	case UuidFamily:
 		return Uuid
 	case ArrayFamily:
-		newContents := t.ArrayContents().CanonicalType()
-		if newContents == t.ArrayContents() {
-			return t
-		}
-		return MakeArray(newContents)
+		return MakeArray(t.ArrayContents().CanonicalType())
 	case INetFamily:
 		return INet
 	case TimeFamily:
@@ -1374,17 +1441,7 @@ func (t *T) CanonicalType() *T {
 	case TimeTZFamily:
 		return TimeTZ
 	case TupleFamily:
-		isCanonical := true
 		oldContents := t.TupleContents()
-		for i := range oldContents {
-			if oldContents[i].CanonicalType() != oldContents[i] {
-				isCanonical = false
-				break
-			}
-		}
-		if isCanonical {
-			return t
-		}
 		newContents := make([]*T, len(oldContents))
 		for i := range newContents {
 			newContents[i] = oldContents[i].CanonicalType()

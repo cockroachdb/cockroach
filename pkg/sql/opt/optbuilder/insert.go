@@ -583,17 +583,27 @@ func (mb *mutationBuilder) buildInputForInsert(
 	//
 	//   INSERT INTO <table> (...) VALUES (...)
 	//
+	// The desired types are always canonical types so that assignment casts
+	// are added for values that may be too wide for their target column. For
+	// example:
+	//
+	//   CREATE TABLE t (d DECIMAL(10, 0))
+	//   INSERT INTO t VALUES (1.56)
+	//
+	// The value 1.56 is assumed to be the canonical type of DECIMAL(10, 0),
+	// which is DECIMAL, and an assignment cast rounds the value to 2 so that it
+	// fits in d.
 	var desiredTypes []*types.T
 	if len(mb.targetColList) != 0 {
 		desiredTypes = make([]*types.T, len(mb.targetColList))
 		for i, colID := range mb.targetColList {
-			desiredTypes[i] = mb.md.ColumnMeta(colID).Type
+			desiredTypes[i] = mb.md.ColumnMeta(colID).Type.CanonicalType()
 		}
 	} else {
 		desiredTypes = make([]*types.T, 0, mb.tab.ColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 			if tabCol := mb.tab.Column(i); tabCol.Visibility() == cat.Visible && tabCol.Kind() == cat.Ordinary {
-				desiredTypes = append(desiredTypes, tabCol.DatumType())
+				desiredTypes = append(desiredTypes, tabCol.DatumType().CanonicalType())
 			}
 		}
 	}
@@ -608,10 +618,6 @@ func (mb *mutationBuilder) buildInputForInsert(
 		// No target columns have been added by previous steps, so add columns
 		// that are implicitly targeted by the input expression.
 		mb.addTargetTableColsForInsert(len(mb.outScope.cols))
-	}
-
-	if !isUpsert {
-		mb.outScope = mb.addAssignmentCasts(mb.outScope, desiredTypes)
 	}
 
 	// Loop over input columns and:
@@ -647,6 +653,10 @@ func (mb *mutationBuilder) buildInputForInsert(
 		// Record the ID of the column that contains the value to be inserted
 		// into the corresponding target table column.
 		mb.insertColIDs[ord] = inCol.id
+	}
+
+	if !isUpsert {
+		mb.addAssignmentCasts(mb.insertColIDs)
 	}
 }
 

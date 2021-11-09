@@ -980,6 +980,131 @@ func TestSQLStandardName(t *testing.T) {
 	}
 }
 
+func TestIsCanonicalType(t *testing.T) {
+	testCases := []struct {
+		typ      *T
+		expected bool
+	}{
+		// BOOL
+		{Bool, true},
+
+		// INT
+		{Int, true},
+		{Int4, false},
+		{Int2, false},
+
+		// FLOAT
+		{Float, true},
+		{Float4, false},
+
+		// DECIMAL
+		{Decimal, true},
+		{MakeDecimal(10, 0), false},
+		{MakeDecimal(5, 1), false},
+
+		// DATE
+		{Date, true},
+
+		// TIMESTAMP
+		{Timestamp, true},
+		{MakeTimestamp(10), false},
+
+		// TIMESTAMPTZ
+		{TimestampTZ, true},
+		{MakeTimestampTZ(10), false},
+
+		// TIME
+		{Time, true},
+		{MakeTime(10), false},
+
+		// TIMETZ
+		{TimeTZ, true},
+		{MakeTimeTZ(10), false},
+
+		// INTERVAL
+		{Interval, true},
+		{MakeInterval(IntervalTypeMetadata{Precision: 10, PrecisionIsSet: true}), false},
+
+		// STRING
+		{String, true},
+		{MakeString(10), false},
+		{VarChar, false},
+		{MakeVarChar(2), false},
+		{MakeChar(2), false},
+		{QChar, false},
+		{Name, false},
+
+		// BYTES
+		{Bytes, true},
+
+		// COLLATEDSTRING
+		// Collated strings do not have a canonical type.
+		{MakeCollatedString(String, "en-US"), false},
+
+		// OID
+		{Oid, true},
+
+		// UNKNOWN
+		{Unknown, true},
+
+		// UUID
+		{Uuid, true},
+
+		// INET
+		{INet, true},
+
+		// JSON
+		{Jsonb, true},
+
+		// BIT
+		{VarBit, true},
+		{MakeVarBit(10), false},
+		{MakeBit(10), false},
+
+		// GEOMETRY
+		{Geometry, true},
+		{MakeGeometry(geopb.ShapeType_MultiPoint, 4325), false},
+
+		// GEOGRAPHY
+		{Geography, true},
+		{MakeGeography(geopb.ShapeType_MultiPoint, 4325), false},
+
+		// ENUM
+		// Enums do not have a canonical type.
+		{MakeEnum(15210, 15213), false},
+
+		// BOX2D
+		{Box2D, true},
+
+		// ANY
+		{Any, true},
+
+		// ARRAY
+		{IntArray, true},
+		{MakeArray(Int), true},
+		{MakeArray(Int4), false},
+		{DecimalArray, true},
+		{MakeArray(Decimal), true},
+		{MakeArray(MakeDecimal(0, 0)), true},
+		{MakeArray(MakeDecimal(10, 2)), false},
+
+		// TUPLE
+		{MakeTuple([]*T{Int, Decimal}), true},
+		{MakeTuple([]*T{Int, MakeDecimal(0, 0)}), true},
+		{MakeTuple([]*T{Int4, MakeDecimal(10, 2)}), false},
+	}
+
+	for _, tc := range testCases {
+		if tc.typ.IsCanonicalType() != tc.expected {
+			not := ""
+			if !tc.expected {
+				not = "not"
+			}
+			t.Errorf("expect <%v> to %s be canonical", tc.typ.DebugString(), not)
+		}
+	}
+}
+
 func TestCanonicalType(t *testing.T) {
 	testCases := []struct {
 		typ      *T
@@ -1028,6 +1153,11 @@ func TestCanonicalType(t *testing.T) {
 		// STRING
 		{String, String},
 		{MakeString(10), String},
+		{VarChar, String},
+		{MakeVarChar(2), String},
+		{MakeChar(2), String},
+		{QChar, String},
+		{Name, String},
 
 		// BYTES
 		{Bytes, Bytes},
@@ -1076,12 +1206,16 @@ func TestCanonicalType(t *testing.T) {
 
 		// ARRAY
 		{IntArray, IntArray},
+		{MakeArray(Int), IntArray},
 		{MakeArray(Int4), IntArray},
 		{DecimalArray, DecimalArray},
+		{MakeArray(Decimal), DecimalArray},
+		{MakeArray(MakeDecimal(0, 0)), DecimalArray},
 		{MakeArray(MakeDecimal(10, 2)), DecimalArray},
 
 		// TUPLE
 		{MakeTuple([]*T{Int, Decimal}), MakeTuple([]*T{Int, Decimal})},
+		{MakeTuple([]*T{Int, MakeDecimal(0, 0)}), MakeTuple([]*T{Int, Decimal})},
 		{MakeTuple([]*T{Int4, MakeDecimal(10, 2)}), MakeTuple([]*T{Int, Decimal})},
 	}
 
