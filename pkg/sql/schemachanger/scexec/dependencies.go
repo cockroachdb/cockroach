@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -35,14 +34,9 @@ type Dependencies interface {
 	IndexSpanSplitter() IndexSpanSplitter
 	JobProgressTracker() JobProgressTracker
 	EventLogger() EventLogger
-	// TestingKnobs returns the testing knobs for the new schema changer.
-	TestingKnobs() *NewSchemaChangerTestingKnobs
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
-
-	// Phase returns the phase in which operations are to be executed.
-	Phase() scop.Phase
 }
 
 // Catalog encapsulates the catalog-related dependencies for the executor.
@@ -172,24 +166,4 @@ type JobProgressTracker interface {
 
 	GetResumeSpans(ctx context.Context, tableID descpb.ID, indexID descpb.IndexID) ([]roachpb.Span, error)
 	SetResumeSpans(ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, total, done []roachpb.Span) error
-}
-
-// NewSchemaChangerTestingKnobs are testing knobs for the executor.
-type NewSchemaChangerTestingKnobs struct {
-	// BeforeStage is called before ops passed to the executor are executed.
-	// Errors returned are injected into the executor.
-	BeforeStage func(ops scop.Ops, m TestingKnobMetadata) error
-	// BeforeWaitingForConcurrentSchemaChanges is called at the start of waiting
-	// for concurrent schema changes to finish.
-	BeforeWaitingForConcurrentSchemaChanges func(stmts []string)
-}
-
-// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
-func (*NewSchemaChangerTestingKnobs) ModuleTestingKnobs() {}
-
-// TestingKnobMetadata holds additional information about the execution of the
-// schema change that is used by the testing knobs.
-type TestingKnobMetadata struct {
-	Statements []string
-	Phase      scop.Phase
 }
