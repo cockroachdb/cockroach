@@ -358,7 +358,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 				// pg_attrdef only expects rows for columns with default values.
 				continue
 			}
-			displayExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, column.GetDefaultExpr(), &p.semaCtx, tree.FmtPGCatalog)
+			displayExpr, err := schemaexpr.FormatExprForDisplay(
+				ctx, table, column.GetDefaultExpr(), &p.semaCtx, p.SessionData(), tree.FmtPGCatalog,
+			)
 			if err != nil {
 				return err
 			}
@@ -897,12 +899,14 @@ func populateTableConstraints(
 					return err
 				}
 				f.WriteString("UNIQUE (")
-				if err := catformat.FormatIndexElements(ctx, table, con.Index, f, p.SemaCtx()); err != nil {
+				if err := catformat.FormatIndexElements(
+					ctx, table, con.Index, f, p.SemaCtx(), p.SessionData(),
+				); err != nil {
 					return err
 				}
 				f.WriteByte(')')
 				if con.Index.IsPartial() {
-					pred, err := schemaexpr.FormatExprForDisplay(ctx, table, con.Index.Predicate, p.SemaCtx(), tree.FmtPGCatalog)
+					pred, err := schemaexpr.FormatExprForDisplay(ctx, table, con.Index.Predicate, p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog)
 					if err != nil {
 						return err
 					}
@@ -923,9 +927,7 @@ func populateTableConstraints(
 					f.WriteString(" NOT VALID")
 				}
 				if con.UniqueWithoutIndexConstraint.Predicate != "" {
-					pred, err := schemaexpr.FormatExprForDisplay(
-						ctx, table, con.UniqueWithoutIndexConstraint.Predicate, p.SemaCtx(), tree.FmtPGCatalog,
-					)
+					pred, err := schemaexpr.FormatExprForDisplay(ctx, table, con.UniqueWithoutIndexConstraint.Predicate, p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog)
 					if err != nil {
 						return err
 					}
@@ -944,7 +946,7 @@ func populateTableConstraints(
 			if conkey, err = colIDArrayToDatum(con.CheckConstraint.ColumnIDs); err != nil {
 				return err
 			}
-			displayExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, con.Details, &p.semaCtx, tree.FmtPGCatalog)
+			displayExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, con.Details, &p.semaCtx, p.SessionData(), tree.FmtPGCatalog)
 			if err != nil {
 				return err
 			}
@@ -1708,11 +1710,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						if col.IsExpressionIndexColumn() {
 							colIDs = append(colIDs, 0)
 							formattedExpr, err := schemaexpr.FormatExprForDisplay(
-								ctx,
-								table,
-								col.GetComputeExpr(),
-								p.SemaCtx(),
-								tree.FmtPGCatalog,
+								ctx, table, col.GetComputeExpr(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog,
 							)
 							if err != nil {
 								return err
@@ -1758,11 +1756,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					indpred := tree.DNull
 					if index.IsPartial() {
 						formattedPred, err := schemaexpr.FormatExprForDisplay(
-							ctx,
-							table,
-							index.GetPredicate(),
-							p.SemaCtx(),
-							tree.FmtPGCatalog,
+							ctx, table, index.GetPredicate(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog,
 						)
 						if err != nil {
 							return err
@@ -1859,11 +1853,7 @@ func indexDefFromDescriptor(
 		}
 		if col.IsExpressionIndexColumn() {
 			formattedExpr, err := schemaexpr.FormatExprForDisplay(
-				ctx,
-				table,
-				col.GetComputeExpr(),
-				p.SemaCtx(),
-				tree.FmtPGCatalog,
+				ctx, table, col.GetComputeExpr(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog,
 			)
 			if err != nil {
 				return "", err
@@ -1886,7 +1876,9 @@ func indexDefFromDescriptor(
 	if index.IsPartial() {
 		// Format the raw predicate for display in order to resolve user-defined
 		// types to a human readable form.
-		formattedPred, err := schemaexpr.FormatExprForDisplay(ctx, table, index.GetPredicate(), p.SemaCtx(), tree.FmtPGCatalog)
+		formattedPred, err := schemaexpr.FormatExprForDisplay(
+			ctx, table, index.GetPredicate(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog,
+		)
 		if err != nil {
 			return "", err
 		}
