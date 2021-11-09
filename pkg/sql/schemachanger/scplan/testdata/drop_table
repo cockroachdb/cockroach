@@ -70,6 +70,23 @@ Stage 2 (non-revertible)
     DescID: 57
 Stage 3 (non-revertible)
   *scop.LogEvent
+    DescID: 55
+    Direction: 2
+    Element:
+      table:
+        tableId: 55
+    Metadata:
+      Statement: DROP TABLE defaultdb.shipments CASCADE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      Username: root
+  *scop.CreateGcJobForDescriptor
+    DescID: 55
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 57
+    TableID: 55
+  *scop.LogEvent
     DescID: 57
     Direction: 2
     Element:
@@ -90,6 +107,10 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [DefaultExpression:{DescID: 55, ColumnID: 1}, ABSENT]
   to:   [Table:{DescID: 55}, DROPPED]
 - from: [DefaultExpression:{DescID: 55, ColumnID: 5}, ABSENT]
+  to:   [Table:{DescID: 55}, DROPPED]
+- from: [ForeignKey:{DescID: 55, ReferencedDescID: 52, Name: fk_customers}, ABSENT]
+  to:   [Table:{DescID: 55}, DROPPED]
+- from: [ForeignKey:{DescID: 55, ReferencedDescID: 53, Name: fk_orders}, ABSENT]
   to:   [Table:{DescID: 55}, DROPPED]
 - from: [Namespace:{DescID: 55, Name: shipments}, ABSENT]
   to:   [Table:{DescID: 55}, DROPPED]

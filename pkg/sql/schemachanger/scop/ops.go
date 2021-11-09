@@ -28,6 +28,10 @@ type Ops interface {
 // returns an implementation of Ops corresponding to that type. The set of ops
 // must all be the same type, otherwise MakeOps will panic.
 func MakeOps(ops ...Op) Ops {
+	// The type of stage doesn't matter for nil ops.
+	if len(ops) == 0 {
+		return nil
+	}
 	var typ Type
 	for i, op := range ops {
 		if i == 0 {

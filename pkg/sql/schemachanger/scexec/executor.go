@@ -23,6 +23,12 @@ import (
 
 // ExecuteOps executes the provided ops. The ops must all be of the same type.
 func ExecuteOps(ctx context.Context, deps Dependencies, toExecute scop.Ops) error {
+	// It is perfectly valid to have empty stage after optimizations /
+	// transformations.
+	if toExecute == nil {
+		log.Infof(ctx, "skipping execution no operations in this stage")
+		return nil
+	}
 	log.Infof(ctx, "executing %d ops of type %s", len(toExecute.Slice()), toExecute.Type().String())
 
 	if deps.TestingKnobs() != nil && deps.TestingKnobs().BeforeStage != nil {

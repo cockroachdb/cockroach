@@ -60,6 +60,9 @@ type Graph struct {
 	// opEdge that generated it as an index.
 	opToNode map[scop.Op]*scpb.Node
 
+	// noOpEdges that are marked as no-op.
+	noOpEdges map[*OpEdge]bool
+
 	edges []Edge
 
 	entities *rel.Database
@@ -88,6 +91,7 @@ func New(initial scpb.State) (*Graph, error) {
 		nodeOpEdgesFrom:  map[*scpb.Node]*OpEdge{},
 		nodeDepEdgesFrom: btree.New(2),
 		nodeDepEdgesTo:   btree.New(2),
+		noOpEdges:        map[*OpEdge]bool{},
 		opToNode:         map[scop.Op]*scpb.Node{},
 		entities:         db,
 		statements:       initial.Statements,
@@ -221,6 +225,18 @@ func (g *Graph) AddDepEdge(
 		order: toFrom,
 	})
 	return nil
+}
+
+// MarkOpEdgeAsNoOp marks an edge as no-op, so that no operations are emitted
+//during planning.
+func (g *Graph) MarkOpEdgeAsNoOp(edge *OpEdge) {
+	g.noOpEdges[edge] = true
+}
+
+// IsOpEdgeNoOp checks if an edge is marked as an edge that should emit no
+// operations.
+func (g *Graph) IsOpEdgeNoOp(edge *OpEdge) bool {
+	return g.noOpEdges[edge]
 }
 
 // GetMetadataFromTarget returns the metadata for a given target node.
