@@ -302,7 +302,7 @@ func (r *testRunner) Run(
 				ctx, fmt.Sprintf("w%d", i) /* name */, r.work, qp,
 				stopper.ShouldQuiesce(),
 				clustersOpt.keepClustersOnTestFailure,
-				lopt.artifactsDir, lopt.runnerLogPath, lopt.tee, lopt.stdout,
+				lopt.artifactsDir, lopt.literalArtifactsDir, lopt.runnerLogPath, lopt.tee, lopt.stdout,
 				allocateCluster,
 				topt,
 				l,
@@ -368,6 +368,8 @@ type clusterAllocatorFn func(
 // name: The worker's name, to be used as a prefix for log messages.
 // artifactsRootDir: The artifacts dir. Each test's logs are going to be under a
 //   run_<n> dir. If empty, test log files will not be created.
+// literalArtifactsDir: The literal on-agent path where artifacts are stored.
+//      Only used for teamcity[publishArtifacts] messages.
 // testRunnerLogPath: The path to the test runner's log. It will be copied to
 //  	failing tests' artifacts dir if running under TeamCity.
 // stdout: The Writer to use for messages that need to go to stdout (e.g. the
@@ -382,6 +384,7 @@ func (r *testRunner) runWorker(
 	interrupt <-chan struct{},
 	debug bool,
 	artifactsRootDir string,
+	literalArtifactsDir string,
 	testRunnerLogPath string,
 	teeOpt logger.TeeOptType,
 	stdout io.Writer,
@@ -466,15 +469,13 @@ func (r *testRunner) runWorker(
 			escapedTestName := teamCityNameEscape(testToRun.spec.Name)
 			runSuffix := "run_" + strconv.Itoa(testToRun.runNum)
 
-			base := filepath.Join(artifactsRootDir, escapedTestName)
-
-			artifactsDir = filepath.Join(base, runSuffix)
+			artifactsDir = filepath.Join(filepath.Join(artifactsRootDir, escapedTestName), runSuffix)
 			logPath = filepath.Join(artifactsDir, "test.log")
 
 			// Map artifacts/TestFoo/run_?/** => TestFoo/run_?/**, i.e. collect the artifacts
 			// for this test exactly as they are laid out on disk (when the time
 			// comes).
-			artifactsSpec = fmt.Sprintf("%s/%s/** => %s/%s", base, runSuffix, escapedTestName, runSuffix)
+			artifactsSpec = fmt.Sprintf("%s/%s/** => %s/%s", filepath.Join(literalArtifactsDir, escapedTestName), runSuffix, escapedTestName, runSuffix)
 		}
 		testL, err := logger.RootLogger(logPath, teeOpt)
 		if err != nil {

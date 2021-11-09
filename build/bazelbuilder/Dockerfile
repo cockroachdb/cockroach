@@ -19,6 +19,7 @@ RUN apt-get update \
     make \
     netbase \
     openjdk-8-jre \
+    openssh-client \
     patchelf \
     unzip \
  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
@@ -48,6 +49,12 @@ RUN apt-get update && \
     make install && \
     cd .. && \
     rm -rf git-2.29.2.zip git-2.29.2
+
+RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
+ && echo 'deb https://packages.cloud.google.com/apt cloud-sdk main' | tee /etc/apt/sources.list.d/gcloud.list \
+ && apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    google-cloud-sdk
 
 RUN apt-get purge -y \
     apt-transport-https \
