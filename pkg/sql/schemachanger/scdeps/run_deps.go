@@ -28,7 +28,7 @@ import (
 // NewTxnRunDependencies constructs dependencies for use planning and running a
 // phase of a schema change during transaction execution.
 func NewTxnRunDependencies(
-	execDependencies scexec.Dependencies, phase scop.Phase, knobs *scrun.NewSchemaChangerTestingKnobs,
+	execDependencies scexec.Dependencies, phase scop.Phase, knobs *scrun.TestingKnobs,
 ) scrun.TxnRunDependencies {
 	return &runDeps{
 		execDeps:     execDependencies,
@@ -41,7 +41,7 @@ type runDeps struct {
 	execDeps scexec.Dependencies
 
 	phase        scop.Phase
-	testingKnobs *scrun.NewSchemaChangerTestingKnobs
+	testingKnobs *scrun.TestingKnobs
 }
 
 func (d *runDeps) ExecutorDependencies() scexec.Dependencies {
@@ -107,7 +107,7 @@ func NewJobRunDependencies(
 	settings *cluster.Settings,
 	indexValidator scexec.IndexValidator,
 	cclCallbacks scexec.Partitioner,
-	testingKnobs *scrun.NewSchemaChangerTestingKnobs,
+	testingKnobs *scrun.TestingKnobs,
 	statements []string,
 ) scrun.JobRunDependencies {
 	return &jobExecutionDeps{
@@ -141,7 +141,7 @@ type jobExecutionDeps struct {
 
 	codec        keys.SQLCodec
 	settings     *cluster.Settings
-	testingKnobs *scrun.NewSchemaChangerTestingKnobs
+	testingKnobs *scrun.TestingKnobs
 	statements   []string
 }
 
@@ -188,7 +188,7 @@ func (d *jobExecutionTxnDeps) Phase() scop.Phase {
 	return scop.PostCommitPhase
 }
 
-func (d *jobExecutionTxnDeps) TestingKnobs() *scrun.NewSchemaChangerTestingKnobs {
+func (d *jobExecutionTxnDeps) TestingKnobs() *scrun.TestingKnobs {
 	return d.testingKnobs
 }
 

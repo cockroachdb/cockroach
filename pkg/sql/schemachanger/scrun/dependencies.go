@@ -46,7 +46,7 @@ type TxnRunDependencies interface {
 	Phase() scop.Phase
 
 	// TestingKnobs returns the testing knobs for the new schema changer.
-	TestingKnobs() *NewSchemaChangerTestingKnobs
+	TestingKnobs() *TestingKnobs
 }
 
 // JobTxnFunc is used to run a transactional stage of a schema change on

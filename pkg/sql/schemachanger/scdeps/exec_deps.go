@@ -317,7 +317,7 @@ func (d *execDeps) TransactionalJobCreator() scexec.TransactionalJobCreator {
 }
 
 // TestingKnobs implements the scexec.Dependencies interface.
-func (d *runDeps) TestingKnobs() *scrun.NewSchemaChangerTestingKnobs {
+func (d *runDeps) TestingKnobs() *scrun.TestingKnobs {
 	return d.testingKnobs
 }
 

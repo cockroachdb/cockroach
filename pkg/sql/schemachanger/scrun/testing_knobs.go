@@ -12,8 +12,9 @@ package scrun
 
 import "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 
-// NewSchemaChangerTestingKnobs are testing knobs for the executor.
-type NewSchemaChangerTestingKnobs struct {
+// TestingKnobs are testing knobs which affect the running of declarative
+// schema changes.
+type TestingKnobs struct {
 	// BeforeStage is called before ops passed to the executor are executed.
 	// Errors returned are injected into the executor.
 	BeforeStage func(ops scplan.Plan, stageIdx int) error
@@ -24,4 +25,4 @@ type NewSchemaChangerTestingKnobs struct {
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
-func (*NewSchemaChangerTestingKnobs) ModuleTestingKnobs() {}
+func (*TestingKnobs) ModuleTestingKnobs() {}
