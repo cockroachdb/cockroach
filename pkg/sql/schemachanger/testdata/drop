@@ -83,6 +83,7 @@ create job #2: "GC for Dropping descriptors 55 "
 update progress of schema change job #1
 commit transaction #2
 begin transaction #3
+## stage 2 in PostCommitPhase: is empty
 update progress of schema change job #1
 upsert descriptor #55
   ...
@@ -589,6 +590,7 @@ upsert descriptor #70
 update progress of schema change job #1
 commit transaction #2
 begin transaction #3
+## stage 2 in PostCommitPhase: is empty
 update progress of schema change job #1
 upsert descriptor #60
   ...

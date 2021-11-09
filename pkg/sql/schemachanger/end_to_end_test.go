@@ -89,8 +89,13 @@ func TestSchemaChangerSideEffects(t *testing.T) {
 						stage := p.Stages[stageIdx]
 						phaseStageCount := stageCounters[phase] + 1
 						stageCounters[phase] = phaseStageCount
-						deps.LogSideEffectf("## stage %d in %s: %d %s ops",
-							phaseStageCount, phase, len(stage.Ops.Slice()), stage.Ops.Type())
+						if stage.Ops != nil {
+							deps.LogSideEffectf("## stage %d in %s: %d %s ops",
+								phaseStageCount, phase, len(stage.Ops.Slice()), stage.Ops.Type())
+						} else {
+							deps.LogSideEffectf("## stage %d in %s: is empty",
+								phaseStageCount, phase)
+						}
 						return nil
 					},
 				}

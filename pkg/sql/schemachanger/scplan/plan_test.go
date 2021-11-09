@@ -195,12 +195,16 @@ func marshalOps(t *testing.T, plan *scplan.Plan) string {
 		stages.WriteString(indentText(transitionsBuf.String(), "    "))
 		stages.WriteString("  ops:\n")
 		stageOps := ""
-		for _, op := range stage.Ops.Slice() {
-			opMap, err := scgraphviz.ToMap(op)
-			require.NoError(t, err)
-			data, err := yaml.Marshal(opMap)
-			require.NoError(t, err)
-			stageOps += fmt.Sprintf("%T\n%s", op, indentText(string(data), "  "))
+		// A stage could have no operations if we optimized them
+		// out.
+		if stage.Ops != nil {
+			for _, op := range stage.Ops.Slice() {
+				opMap, err := scgraphviz.ToMap(op)
+				require.NoError(t, err)
+				data, err := yaml.Marshal(opMap)
+				require.NoError(t, err)
+				stageOps += fmt.Sprintf("%T\n%s", op, indentText(string(data), "  "))
+			}
 		}
 		stages.WriteString(indentText(stageOps, "    "))
 	}
