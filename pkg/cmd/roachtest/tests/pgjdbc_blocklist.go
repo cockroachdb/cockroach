@@ -194,6 +194,7 @@ var pgjdbcBlockList22_1 = blocklist{
 	"org.postgresql.test.jdbc2.CopyTest.testCopyOutByRow":                                                                                                                      "41608",
 	"org.postgresql.test.jdbc2.CopyTest.testCopyQuery":                                                                                                                         "41608",
 	"org.postgresql.test.jdbc2.CopyTest.testLockReleaseOnCancelFailure":                                                                                                        "41608",
+	"org.postgresql.test.jdbc2.CursorFetchTest.testBasicFetch[binary = FORCE]":                                                                                                 "40195",
 	"org.postgresql.test.jdbc2.CursorFetchTest.testMultistatement[binary = FORCE]":                                                                                             "40195",
 	"org.postgresql.test.jdbc2.CursorFetchTest.testMultistatement[binary = REGULAR]":                                                                                           "40195",
 	"org.postgresql.test.jdbc2.DatabaseEncodingTest.testEncoding":                                                                                                              "41771",
