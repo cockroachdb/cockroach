@@ -280,6 +280,7 @@ type MVCCStats struct {
 	// in a cluster until all nodes in that cluster know how to read/write such
 	// intents, so mixed-version clusters with nodes preceding this knowledge
 	// will always have a 0 value for this field.
+	// todo(bananabrick) : make intentcount == separated intent count.
 	SeparatedIntentCount int64 `protobuf:"fixed64,16,opt,name=separated_intent_count,json=separatedIntentCount" json:"separated_intent_count"`
 	// sys_bytes is the number of bytes stored in system-local kv-pairs.
 	// This tracks the same quantity as (key_bytes + val_bytes), but

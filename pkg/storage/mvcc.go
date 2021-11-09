@@ -595,7 +595,6 @@ func updateStatsOnClear(
 	origMetaKeySize, origMetaValSize, restoredMetaKeySize, restoredMetaValSize int64,
 	orig, restored *enginepb.MVCCMetadata,
 	restoredNanos int64,
-	separatedIntentCountDelta int,
 ) enginepb.MVCCStats {
 
 	var ms enginepb.MVCCStats
@@ -666,8 +665,6 @@ func updateStatsOnClear(
 		ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
 		ms.IntentCount--
 	}
-	ms.SeparatedIntentCount += int64(separatedIntentCountDelta)
-
 	return ms
 }
 
@@ -2289,11 +2286,11 @@ func MVCCClearTimeRange(
 				restoredMeta.Timestamp = k.Timestamp.ToLegacyTimestamp()
 
 				ms.Add(updateStatsOnClear(
-					clearedMetaKey.Key, metaKeySize, 0, metaKeySize, 0, &clearedMeta, &restoredMeta, k.Timestamp.WallTime, 0,
+					clearedMetaKey.Key, metaKeySize, 0, metaKeySize, 0, &clearedMeta, &restoredMeta, k.Timestamp.WallTime,
 				))
 			} else {
 				// We cleared a revision of a different key, so nothing was "restored".
-				ms.Add(updateStatsOnClear(clearedMetaKey.Key, metaKeySize, 0, 0, 0, &clearedMeta, nil, 0, 0))
+				ms.Add(updateStatsOnClear(clearedMetaKey.Key, metaKeySize, 0, 0, 0, &clearedMeta, nil, 0))
 			}
 			clearedMetaKey.Key = clearedMetaKey.Key[:0]
 		}
@@ -2343,7 +2340,7 @@ func MVCCClearTimeRange(
 		// If we cleared on the last iteration, no older revision of that key was
 		// "restored", since otherwise we would have iterated over it.
 		origMetaKeySize := int64(clearedMetaKey.EncodedSize())
-		ms.Add(updateStatsOnClear(clearedMetaKey.Key, origMetaKeySize, 0, 0, 0, &clearedMeta, nil, 0, 0))
+		ms.Add(updateStatsOnClear(clearedMetaKey.Key, origMetaKeySize, 0, 0, 0, &clearedMeta, nil, 0))
 	}
 
 	return resume, flushClearedKeys(MVCCKey{Key: endKey})
@@ -3392,7 +3389,7 @@ func mvccResolveWriteIntent(
 		// Clear stat counters attributable to the intent we're aborting.
 		if ms != nil {
 			ms.Add(updateStatsOnClear(
-				intent.Key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0, 0))
+				intent.Key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0))
 		}
 		return true, nil
 	}
@@ -3415,7 +3412,7 @@ func mvccResolveWriteIntent(
 	// Update stat counters with older version.
 	if ms != nil {
 		ms.Add(updateStatsOnClear(intent.Key, origMetaKeySize, origMetaValSize, metaKeySize,
-			metaValSize, meta, &buf.newMeta, unsafeNextKey.Timestamp.WallTime, 0))
+			metaValSize, meta, &buf.newMeta, unsafeNextKey.Timestamp.WallTime))
 	}
 
 	return true, nil
