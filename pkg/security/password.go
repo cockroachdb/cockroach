@@ -80,6 +80,18 @@ func HashPassword(ctx context.Context, password string) ([]byte, error) {
 	return bcrypt.GenerateFromPassword(appendEmptySha256(password), BcryptCost)
 }
 
+// CheckPasswordHashValidity checks that a (user-provided) password
+// hash is recognized as a valid hash.
+func CheckPasswordHashValidity(ctx context.Context, hashedPassword string) ([]byte, error) {
+	res := []byte(hashedPassword)
+	// The Cost function parses the hash and checks its syntax.
+	_, err := bcrypt.Cost(res)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 // MinPasswordLength is the cluster setting that configures the
 // minimum SQL password length.
 var MinPasswordLength = settings.RegisterIntSetting(
