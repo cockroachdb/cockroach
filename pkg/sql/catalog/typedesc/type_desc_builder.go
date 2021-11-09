@@ -53,16 +53,18 @@ func (tdb *typeDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 // interface.
 func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges() {
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
-	tdb.changed = catprivilege.MaybeFixPrivileges(
+	fixedPrivileges := catprivilege.MaybeFixPrivileges(
 		&tdb.maybeModified.Privileges,
 		tdb.maybeModified.GetParentID(),
 		tdb.maybeModified.GetParentSchemaID(),
 		privilege.Type,
 		tdb.maybeModified.GetName(),
 	)
+	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(tdb.maybeModified.Privileges)
+	tdb.changed = fixedPrivileges || addedGrantOptions
 }
 
-// RunPostRestoreChanges implements the catalog.DescriptorBuilder interface.
+// RunRestoreChanges implements the catalog.DescriptorBuilder interface.
 func (tdb *typeDescriptorBuilder) RunRestoreChanges(_ func(id descpb.ID) catalog.Descriptor) error {
 	return nil
 }

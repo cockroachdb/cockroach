@@ -101,7 +101,7 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() {
 	tdb.changes = maybeFillInDescriptor(tdb.maybeModified)
 }
 
-// RunPostRestoreChanges implements the catalog.DescriptorBuilder interface.
+// RunRestoreChanges implements the catalog.DescriptorBuilder interface.
 func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 	descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) (err error) {
@@ -214,13 +214,15 @@ func maybeFillInDescriptor(
 	if parentSchemaID == descpb.InvalidID {
 		parentSchemaID = keys.PublicSchemaID
 	}
-	changes.UpgradedPrivileges = catprivilege.MaybeFixPrivileges(
+	fixedPrivileges := catprivilege.MaybeFixPrivileges(
 		&desc.Privileges,
 		desc.GetParentID(),
 		parentSchemaID,
 		privilege.Table,
 		desc.GetName(),
 	)
+	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(desc.Privileges)
+	changes.UpgradedPrivileges = fixedPrivileges || addedGrantOptions
 	return changes
 }
 
