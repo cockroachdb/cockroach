@@ -68,8 +68,19 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
 		descpb.InvalidID,
 		privilege.Database,
 		ddb.maybeModified.GetName())
+	grantOptionsChanged := catprivilege.MaybeUpdateGrantOptions(&ddb.maybeModified.Privileges)
 	removedSelfEntryInSchemas := maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified)
-	ddb.changed = privsChanged || removedSelfEntryInSchemas
+	ddb.changed = privsChanged || removedSelfEntryInSchemas || grantOptionsChanged
+	return nil
+}
+
+// MaybeAddGrantOptions implements the catalog.DescriptorBuilder
+// interface.
+func (ddb *databaseDescriptorBuilder) MaybeAddGrantOptions(
+	_ context.Context, _ catalog.DescGetter,
+) error {
+	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
+	ddb.changed = catprivilege.MaybeUpdateGrantOptions(&ddb.maybeModified.Privileges)
 	return nil
 }
 

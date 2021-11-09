@@ -2303,6 +2303,20 @@ func (c *clusterImpl) ConnE(ctx context.Context, node int) (*gosql.DB, error) {
 	return db, nil
 }
 
+// ConnEAsUser returns a SQL connection to the specified node as a specific user
+func (c *clusterImpl) ConnEAsUser(ctx context.Context, node int, user string) (*gosql.DB, error) {
+	urls, err := c.ExternalPGUrl(ctx, c.Node(node))
+	if err != nil {
+		return nil, err
+	}
+	dataSourceName := strings.Replace(urls[0], "root", user, 1)
+	db, err := gosql.Open("postgres", dataSourceName)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
 func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
 	var r option.NodeListOption
 	for _, o := range opts {

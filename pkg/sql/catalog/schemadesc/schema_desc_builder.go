@@ -63,6 +63,17 @@ func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges(
 		privilege.Schema,
 		sdb.maybeModified.GetName(),
 	)
+	sdb.changed = sdb.changed || catprivilege.MaybeUpdateGrantOptions(&sdb.maybeModified.Privileges)
+	return nil
+}
+
+// MaybeAddGrantOptions implements the catalog.DescriptorBuilder
+// interface.
+func (sdb *schemaDescriptorBuilder) MaybeAddGrantOptions(
+	_ context.Context, _ catalog.DescGetter,
+) error {
+	sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
+	sdb.changed = catprivilege.MaybeUpdateGrantOptions(&sdb.maybeModified.Privileges)
 	return nil
 }
 

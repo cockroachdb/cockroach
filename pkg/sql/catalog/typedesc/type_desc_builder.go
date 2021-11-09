@@ -64,6 +64,18 @@ func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges(
 		privilege.Type,
 		tdb.maybeModified.GetName(),
 	)
+	tdb.changed = tdb.changed || catprivilege.MaybeUpdateGrantOptions(&tdb.maybeModified.Privileges)
+
+	return nil
+}
+
+// MaybeAddGrantOptions implements the catalog.DescriptorBuilder
+// interface.
+func (tdb *typeDescriptorBuilder) MaybeAddGrantOptions(
+	_ context.Context, _ catalog.DescGetter,
+) error {
+	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
+	tdb.changed = catprivilege.MaybeUpdateGrantOptions(&tdb.maybeModified.Privileges)
 	return nil
 }
 

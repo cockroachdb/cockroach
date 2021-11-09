@@ -104,7 +104,19 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges(
 	var err error
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
 	tdb.changes, err = maybeFillInDescriptor(ctx, dg, tdb.maybeModified, tdb.skipFKsWithNoMatchingTable)
+
 	return err
+}
+
+// MaybeAddGrantOptions implements the catalog.DescriptorBuilder
+// interface.
+func (tdb *tableDescriptorBuilder) MaybeAddGrantOptions(
+	ctx context.Context, dg catalog.DescGetter,
+) error {
+	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
+	tdb.changes.UpgradedPrivileges = catprivilege.MaybeUpdateGrantOptions(&tdb.maybeModified.Privileges)
+
+	return nil
 }
 
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
@@ -218,6 +230,7 @@ func maybeFillInDescriptor(
 		privilege.Table,
 		desc.GetName(),
 	)
+	changes.UpgradedPrivileges = changes.UpgradedPrivileges || catprivilege.MaybeUpdateGrantOptions(&desc.Privileges)
 
 	if dg != nil {
 		changes.UpgradedForeignKeyRepresentation, err = maybeUpgradeForeignKeyRepresentation(

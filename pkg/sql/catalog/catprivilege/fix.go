@@ -138,3 +138,55 @@ func MaybeFixPrivileges(
 	}
 	return changed
 }
+
+// MaybeUpdateGrantOptions iterates over the users of the descriptor and checks
+// if they have the GRANT privilege - if so, then set the user's grant option
+// bits equal to the privilege bits.
+func MaybeUpdateGrantOptions(ptr **descpb.PrivilegeDescriptor) bool {
+	p := *ptr
+	changed := false
+	if p.Version >= descpb.GrantOptionVersion {
+		// do not apply changes because the grant bits will have already been set.
+		return changed
+	}
+
+	superuserAllGrantOptions := func(user security.SQLUsername) {
+		u := p.FindOrCreateUser(user)
+		if u.Privileges != u.WithGrantOption {
+			changed = true
+			u.WithGrantOption = u.Privileges
+		}
+	}
+
+	// give ALL to the grant option bits for the root and admin users since they are superusers.
+	superuserAllGrantOptions(security.RootUserName())
+	superuserAllGrantOptions(security.AdminRoleName())
+
+	for i := range p.Users {
+		u := &p.Users[i]
+
+		if u.User().IsRootUser() || u.User().IsAdminRole() {
+			// we've already checked superusers.
+			continue
+		}
+
+		if privilege.ALL.IsSetIn(u.Privileges) {
+			if !privilege.ALL.IsSetIn(u.WithGrantOption) {
+				changed = true
+			}
+			u.WithGrantOption = privilege.ALL.Mask()
+			continue
+		}
+		if privilege.GRANT.IsSetIn(u.Privileges) {
+			if u.Privileges != u.WithGrantOption {
+				changed = true
+			}
+			u.WithGrantOption |= u.Privileges
+		}
+	}
+
+	p.SetVersion(descpb.GrantOptionVersion)
+	changed = true
+
+	return changed
+}
