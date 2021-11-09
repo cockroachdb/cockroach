@@ -7584,13 +7584,12 @@ role_option:
 | password_clause
 | valid_until_clause
 
-
 role_options:
   role_option
   {
     $$.val = []tree.KVOption{$1.kvOption()}
   }
-|  role_options role_option
+| role_options role_option
   {
     $$.val = append($1.kvOptions(), $2.kvOption())
   }
@@ -7608,11 +7607,11 @@ opt_role_options:
 valid_until_clause:
   VALID UNTIL string_or_placeholder
   {
-    $$.val = tree.KVOption{Key: tree.Name(fmt.Sprintf("%s_%s",$1, $2)), Value: $3.expr()}
+    $$.val = tree.KVOption{Key: tree.Name("valid until"), Value: $3.expr()}
   }
 | VALID UNTIL NULL
   {
-    $$.val = tree.KVOption{Key: tree.Name(fmt.Sprintf("%s_%s",$1, $2)), Value: tree.DNull}
+    $$.val = tree.KVOption{Key: tree.Name("valid until"), Value: tree.DNull}
   }
 
 opt_view_recursive:
