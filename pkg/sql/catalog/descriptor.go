@@ -64,6 +64,10 @@ const (
 	IncludeConstraints = 0
 )
 
+// MigrationWorkFunc represents the work that is applied when
+// RunMigrationOnlyChanges() is called
+type MigrationWorkFunc = func(b DescriptorBuilder)
+
 // DescriptorBuilder interfaces are used to build catalog.Descriptor
 // objects.
 type DescriptorBuilder interface {
@@ -79,6 +83,13 @@ type DescriptorBuilder interface {
 	// argument is a DescGetter and a nil value will cause table foreign-key
 	// representation upgrades to be skipped.
 	RunPostDeserializationChanges(ctx context.Context, dg DescGetter) error
+
+	// RunMigrationChanges also attempts to perform post-deserialization
+	// changes to the descriptor being built, similar to RunPostDeserializationChanges
+	// above. The difference is that these changes will only ever be run during the
+	// migration in grant_option_migration.go and will stop once all nodes are upgraded
+	// and waitForUpgradeStep(c.All()) is called.
+	RunMigrationChanges(workFuncs ...MigrationWorkFunc) error
 
 	// BuildImmutable returns an immutable Descriptor.
 	BuildImmutable() Descriptor
