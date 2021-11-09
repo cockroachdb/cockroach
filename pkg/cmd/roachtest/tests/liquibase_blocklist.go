@@ -17,7 +17,13 @@ var liquibaseBlocklists = blocklistsForVersion{
 	{"v22.1", "liquibaseBlocklist22_1", liquibaseBlocklist22_1, "liquibaseIgnorelist21_2", liquibaseIgnorelist22_1},
 }
 
-var liquibaseBlocklist22_1 = liquibaseBlocklist21_2
+var liquibaseBlocklist22_1 = blocklist{
+	"liquibase.harness.change.ChangeObjectTests.apply addDefaultValueSequenceNext against cockroachdb 20.2; verify generated SQL and DB snapshot": "",
+	"liquibase.harness.change.ChangeObjectTests.apply alterSequence against cockroachdb 20.2; verify generated SQL and DB snapshot":               "",
+	"liquibase.harness.change.ChangeObjectTests.apply createSequence against cockroachdb 20.2; verify generated SQL and DB snapshot":              "",
+	"liquibase.harness.change.ChangeObjectTests.apply dropSequence against cockroachdb 20.2; verify generated SQL and DB snapshot":                "",
+	"liquibase.harness.change.ChangeObjectTests.apply renameSequence against cockroachdb 20.2; verify generated SQL and DB snapshot":              "",
+}
 
 var liquibaseBlocklist21_2 = blocklist{
 	"liquibase.harness.change.ChangeObjectTests.apply addDefaultValueSequenceNext against cockroachdb 20.2; verify generated SQL and DB snapshot": "",
