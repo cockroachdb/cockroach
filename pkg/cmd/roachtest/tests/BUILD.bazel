@@ -142,6 +142,7 @@ go_library(
         "util_disk_usage.go",
         "util_if_local.go",
         "util_load_group.go",
+        "validate_grant_option.go",
         "version.go",
         "version_upgrade_public_schema.go",
         "versionupgrade.go",
