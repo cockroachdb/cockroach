@@ -219,6 +219,20 @@ CREATE TABLE constraint_db.t2 (
 statement ok
 DROP DATABASE constraint_db CASCADE
 
+query TTT
+WITH cte AS (
+  SELECT job_type, description, status
+  FROM crdb_internal.jobs
+  WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
+  ORDER BY created DESC
+  LIMIT 4
+) SELECT * FROM cte ORDER BY job_type, description
+----
+SCHEMA CHANGE     DROP DATABASE constraint_db CASCADE                                                             succeeded
+SCHEMA CHANGE     updating table "t2" after removing constraint "fk" from table "constraint_db.public.t1"         succeeded
+SCHEMA CHANGE GC  GC for DROP DATABASE constraint_db CASCADE                                                      running
+SCHEMA CHANGE GC  GC for updating table "t2" after removing constraint "fk" from table "constraint_db.public.t1"  running
+
 query TTTTT
 SHOW DATABASES
 ----
