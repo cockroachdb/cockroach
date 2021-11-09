@@ -26,9 +26,10 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { RouteComponentProps } from "react-router-dom";
 
 import { AppState } from "src/store";
-import { StatementsState } from "../store/statements";
 import { selectDiagnosticsReportsPerStatement } from "../store/statementDiagnostics";
 import { AggregateStatistics } from "../statementsTable";
+import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
+import { SQLStatsState } from "../store/sqlStats";
 
 type ICollectedStatementStatistics = cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 export interface StatementsSummaryData {
@@ -47,11 +48,6 @@ export const adminUISelector = createSelector(
   adminUiState => adminUiState,
 );
 
-export const statementsSelector = createSelector(
-  adminUISelector,
-  adminUiState => adminUiState.statements,
-);
-
 export const localStorageSelector = createSelector(
   adminUISelector,
   adminUiState => adminUiState.localStorage,
@@ -59,53 +55,48 @@ export const localStorageSelector = createSelector(
 
 // selectApps returns the array of all apps with statement statistics present
 // in the data.
-export const selectApps = createSelector(
-  statementsSelector,
-  statementsState => {
-    if (!statementsState.data) {
-      return [];
-    }
+export const selectApps = createSelector(sqlStatsSelector, sqlStatsState => {
+  if (!sqlStatsState.data || !sqlStatsState.valid) {
+    return [];
+  }
 
-    let sawBlank = false;
-    let sawInternal = false;
-    const apps: { [app: string]: boolean } = {};
-    statementsState.data.statements.forEach(
-      (statement: ICollectedStatementStatistics) => {
-        if (
-          statementsState.data.internal_app_name_prefix &&
-          statement.key.key_data.app.startsWith(
-            statementsState.data.internal_app_name_prefix,
-          )
-        ) {
-          sawInternal = true;
-        } else if (statement.key.key_data.app) {
-          apps[statement.key.key_data.app] = true;
-        } else {
-          sawBlank = true;
-        }
-      },
-    );
-    return []
-      .concat(
-        sawInternal ? [statementsState.data.internal_app_name_prefix] : [],
-      )
-      .concat(sawBlank ? ["(unset)"] : [])
-      .concat(Object.keys(apps));
-  },
-);
+  let sawBlank = false;
+  let sawInternal = false;
+  const apps: { [app: string]: boolean } = {};
+  sqlStatsState.data.statements.forEach(
+    (statement: ICollectedStatementStatistics) => {
+      if (
+        sqlStatsState.data.internal_app_name_prefix &&
+        statement.key.key_data.app.startsWith(
+          sqlStatsState.data.internal_app_name_prefix,
+        )
+      ) {
+        sawInternal = true;
+      } else if (statement.key.key_data.app) {
+        apps[statement.key.key_data.app] = true;
+      } else {
+        sawBlank = true;
+      }
+    },
+  );
+  return []
+    .concat(sawInternal ? [sqlStatsState.data.internal_app_name_prefix] : [])
+    .concat(sawBlank ? ["(unset)"] : [])
+    .concat(Object.keys(apps));
+});
 
 // selectDatabases returns the array of all databases with statement statistics present
 // in the data.
 export const selectDatabases = createSelector(
-  statementsSelector,
-  statementsState => {
-    if (!statementsState.data) {
+  sqlStatsSelector,
+  sqlStatsState => {
+    if (!sqlStatsState.data) {
       return [];
     }
 
     return Array.from(
       new Set(
-        statementsState.data.statements.map(s =>
+        sqlStatsState.data.statements.map(s =>
           s.key.key_data.database ? s.key.key_data.database : "(unset)",
         ),
       ),
@@ -116,7 +107,7 @@ export const selectDatabases = createSelector(
 // selectTotalFingerprints returns the count of distinct statement fingerprints
 // present in the data.
 export const selectTotalFingerprints = createSelector(
-  statementsSelector,
+  sqlStatsSelector,
   state => {
     if (!state.data) {
       return 0;
@@ -128,7 +119,7 @@ export const selectTotalFingerprints = createSelector(
 
 // selectLastReset returns a string displaying the last time the statement
 // statistics were reset.
-export const selectLastReset = createSelector(statementsSelector, state => {
+export const selectLastReset = createSelector(sqlStatsSelector, state => {
   if (!state.data) {
     return "";
   }
@@ -137,11 +128,11 @@ export const selectLastReset = createSelector(statementsSelector, state => {
 });
 
 export const selectStatements = createSelector(
-  statementsSelector,
+  sqlStatsSelector,
   (_: AppState, props: RouteComponentProps) => props,
   selectDiagnosticsReportsPerStatement,
   (
-    state: StatementsState,
+    state: SQLStatsState,
     props: RouteComponentProps<any>,
     diagnosticsReportsPerStatement,
   ): AggregateStatistics[] => {
@@ -214,7 +205,7 @@ export const selectStatements = createSelector(
 );
 
 export const selectStatementsLastError = createSelector(
-  statementsSelector,
+  sqlStatsSelector,
   state => state.lastError,
 );
 

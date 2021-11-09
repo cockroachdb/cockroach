@@ -10,7 +10,6 @@
 
 import { combineReducers, createStore } from "redux";
 import { createAction, createReducer } from "@reduxjs/toolkit";
-import { StatementsState, reducer as statements } from "./statements";
 import { LocalStorageState, reducer as localStorage } from "./localStorage";
 import {
   StatementDiagnosticsState,
@@ -19,24 +18,23 @@ import {
 import { NodesState, reducer as nodes } from "./nodes";
 import { LivenessState, reducer as liveness } from "./liveness";
 import { SessionsState, reducer as sessions } from "./sessions";
-import { TransactionsState, reducer as transactions } from "./transactions";
 import {
   TerminateQueryState,
   reducer as terminateQuery,
 } from "./terminateQuery";
 import { UIConfigState, reducer as uiConfig } from "./uiConfig";
 import { DOMAIN_NAME } from "./utils";
+import { SQLStatsState, reducer as sqlStats } from "./sqlStats";
 
 export type AdminUiState = {
-  statements: StatementsState;
   statementDiagnostics: StatementDiagnosticsState;
   localStorage: LocalStorageState;
   nodes: NodesState;
   liveness: LivenessState;
   sessions: SessionsState;
-  transactions: TransactionsState;
   terminateQuery: TerminateQueryState;
   uiConfig: UIConfigState;
+  sqlStats: SQLStatsState;
 };
 
 export type AppState = {
@@ -46,13 +44,12 @@ export type AppState = {
 export const reducers = combineReducers<AdminUiState>({
   localStorage,
   statementDiagnostics,
-  statements,
   nodes,
   liveness,
   sessions,
-  transactions,
   terminateQuery,
   uiConfig,
+  sqlStats,
 });
 
 export const rootActions = {
