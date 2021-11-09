@@ -334,7 +334,6 @@ func updateStatsOnPut(
 	prevValSize int64,
 	origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64,
 	orig, meta *enginepb.MVCCMetadata,
-	separatedIntentCountDelta int,
 ) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
 
@@ -482,8 +481,6 @@ func updateStatsOnPut(
 		ms.IntentBytes += meta.KeyBytes + meta.ValBytes
 		ms.IntentCount++
 	}
-	ms.SeparatedIntentCount += int64(separatedIntentCountDelta)
-
 	return ms
 }
 
@@ -497,7 +494,6 @@ func updateStatsOnResolve(
 	origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64,
 	orig, meta *enginepb.MVCCMetadata,
 	commit bool,
-	separatedIntentCountDelta int,
 ) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
 
@@ -587,8 +583,6 @@ func updateStatsOnResolve(
 		ms.IntentBytes += meta.KeyBytes + meta.ValBytes
 		ms.IntentCount++
 	}
-	ms.SeparatedIntentCount += int64(separatedIntentCountDelta)
-
 	return ms
 }
 
@@ -1792,7 +1786,6 @@ func mvccPutInternal(
 	newMeta.Deleted = value == nil
 
 	var metaKeySize, metaValSize int64
-	var separatedIntentCountDelta int
 	if newMeta.Txn != nil {
 		metaKeySize, metaValSize, err = buf.putIntentMeta(
 			ctx, writer, metaKey,
@@ -1828,7 +1821,7 @@ func mvccPutInternal(
 	// Update MVCC stats.
 	if ms != nil {
 		ms.Add(updateStatsOnPut(key, prevValSize, origMetaKeySize, origMetaValSize,
-			metaKeySize, metaValSize, meta, newMeta, separatedIntentCountDelta))
+			metaKeySize, metaValSize, meta, newMeta))
 	}
 
 	// Log the logical MVCC operation.
@@ -3322,7 +3315,7 @@ func mvccResolveWriteIntent(
 		// Update stat counters related to resolving the intent.
 		if ms != nil {
 			ms.Add(updateStatsOnResolve(intent.Key, prevValSize, origMetaKeySize, origMetaValSize,
-				metaKeySize, metaValSize, meta, &buf.newMeta, commit, 0))
+				metaKeySize, metaValSize, meta, &buf.newMeta, commit))
 		}
 
 		// Log the logical MVCC operation.
@@ -4004,9 +3997,7 @@ func ComputeStatsForRange(
 	var ms enginepb.MVCCStats
 	// Only some callers are providing an MVCCIterator. The others don't have
 	// any intents.
-	_, countSeparatedIntents := iter.(MVCCIterator)
 	var meta enginepb.MVCCMetadata
-	var isSeparatedIntentMeta bool
 	var prevKey []byte
 	first := false
 
@@ -4062,7 +4053,6 @@ func ComputeStatsForRange(
 		if implicitMeta {
 			// No MVCCMetadata entry for this series of keys.
 			meta.Reset()
-			isSeparatedIntentMeta = false
 			meta.KeyBytes = MVCCVersionTimestampSize
 			meta.ValBytes = int64(len(unsafeValue))
 			meta.Deleted = len(unsafeValue) == 0
@@ -4081,9 +4071,6 @@ func ComputeStatsForRange(
 			if !implicitMeta {
 				if err := protoutil.Unmarshal(unsafeValue, &meta); err != nil {
 					return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
-				}
-				if countSeparatedIntents {
-					isSeparatedIntentMeta = true
 				}
 			}
 
@@ -4128,9 +4115,6 @@ func ComputeStatsForRange(
 				if meta.Txn != nil {
 					ms.IntentBytes += totalBytes
 					ms.IntentCount++
-					if isSeparatedIntentMeta {
-						ms.SeparatedIntentCount++
-					}
 					ms.IntentAge += nowNanos/1e9 - meta.Timestamp.WallTime/1e9
 				}
 				if meta.KeyBytes != MVCCVersionTimestampSize {
