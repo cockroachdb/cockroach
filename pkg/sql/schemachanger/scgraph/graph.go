@@ -294,7 +294,7 @@ func (g *Graph) GetNodeRanks() map[*scpb.Node]int {
 			return
 		}
 		marks[n] = false
-		_ = g.ForEachDepEdgeFrom(n, func(de *DepEdge) error {
+		_ = g.ForEachDepEdgeFromOrdered(n, func(de *DepEdge) error {
 			// We want to eliminate cycles caused by swaps. In that
 			// case, we want to pretend that there is no edge from the
 			// add to the drop, and, in that way, the drop is ordered first.

@@ -136,20 +136,10 @@ Stage 1 (non-revertible)
     DependedOnBy: 58
     TableID: 56
   *scop.MarkDescriptorAsDropped
-    DescID: 62
-  *scop.RemoveTypeBackRef
-    DescID: 64
-    TypeID: 62
-  *scop.MarkDescriptorAsDropped
-    DescID: 63
-  *scop.RemoveTypeBackRef
-    DescID: 64
-    TypeID: 63
-  *scop.MarkDescriptorAsDropped
-    DescID: 61
+    DescID: 58
   *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 64
-    TableID: 61
+    DependedOnBy: 59
+    TableID: 58
   *scop.MarkDescriptorAsDropped
     DescID: 59
   *scop.RemoveRelationDependedOnBy
@@ -159,10 +149,20 @@ Stage 1 (non-revertible)
     DependedOnBy: 61
     TableID: 59
   *scop.MarkDescriptorAsDropped
-    DescID: 58
+    DescID: 61
   *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 59
-    TableID: 58
+    DependedOnBy: 64
+    TableID: 61
+  *scop.MarkDescriptorAsDropped
+    DescID: 62
+  *scop.RemoveTypeBackRef
+    DescID: 64
+    TypeID: 62
+  *scop.MarkDescriptorAsDropped
+    DescID: 63
+  *scop.RemoveTypeBackRef
+    DescID: 64
+    TypeID: 63
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 60
     TableID: 58

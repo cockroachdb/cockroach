@@ -11,6 +11,8 @@
 package scgraph
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
@@ -61,6 +63,27 @@ type DepEdgeIterator func(de *DepEdge) error
 func (g *Graph) ForEachDepEdgeFrom(n *scpb.Node, it DepEdgeIterator) error {
 	edges := g.nodeDepEdgesFrom[n]
 	for _, e := range edges {
+		if err := it(e); err != nil {
+			if iterutil.Done(err) {
+				err = nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// ForEachDepEdgeFromOrdered iterates the dep edges in the graph,
+// sorting them based on the target index.
+func (g *Graph) ForEachDepEdgeFromOrdered(n *scpb.Node, it DepEdgeIterator) error {
+	edges := g.nodeDepEdgesFrom[n]
+	// Order edges based on the target indexes.
+	sortedEdges := make([]*DepEdge, len(edges))
+	copy(sortedEdges, edges)
+	sort.SliceStable(sortedEdges, func(i, j int) bool {
+		return g.targetIdxMap[sortedEdges[i].to.Target] < g.targetIdxMap[sortedEdges[j].to.Target]
+	})
+	for _, e := range sortedEdges {
 		if err := it(e); err != nil {
 			if iterutil.Done(err) {
 				err = nil
