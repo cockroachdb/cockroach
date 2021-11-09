@@ -13,6 +13,7 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -520,6 +521,11 @@ func (b *Builder) buildScan(
 					idx = i
 					break
 				}
+			}
+			// Fallback to referencing @primary as the PRIMARY KEY.
+			// Note that indexes with "primary" as their name takes precedence above.
+			if idx == -1 && indexFlags.Index == tabledesc.LegacyPrimaryKeyIndexName {
+				idx = 0
 			}
 			if idx == -1 {
 				var err error
