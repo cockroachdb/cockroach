@@ -100,16 +100,6 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (i
                                                             )
 ----
 Stage 0
-  *scop.AddIndexPartitionInfo
-    IndexID: 2
-    ListPartitions:
-    - name: p1
-      expr:
-      - "1"
-    PartitionFields:
-    - id
-    RangePartitions: []
-    TableID: 52
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
     KeyColumnDirections:
@@ -121,6 +111,16 @@ Stage 0
     SecondaryIndex: true
     StoreColumnIDs:
     - 3
+    TableID: 52
+  *scop.AddIndexPartitionInfo
+    IndexID: 2
+    ListPartitions:
+    - name: p1
+      expr:
+      - "1"
+    PartitionFields:
+    - id
+    RangePartitions: []
     TableID: 52
   *scop.SetIndexName
     IndexID: 2
@@ -149,6 +149,8 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (i
                                                             )
 ----
 - from: [IndexName:{DescID: 52, IndexID: 2, Name: id1}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY]
+- from: [Partitioning:{DescID: 52, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY]
 - from: [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_AND_WRITE_ONLY]
   to:   [IndexName:{DescID: 52, IndexID: 2, Name: id1}, PUBLIC]

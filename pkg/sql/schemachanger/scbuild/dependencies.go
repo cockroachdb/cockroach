@@ -100,6 +100,8 @@ func mustReadDatabase(
 	return db
 }
 
+var _ = mustReadDatabase
+
 func mustReadSchema(ctx context.Context, d Dependencies, id descpb.ID) catalog.SchemaDescriptor {
 	desc := d.CatalogReader().MustReadDescriptor(ctx, id)
 	schema, err := catalog.AsSchemaDescriptor(desc)

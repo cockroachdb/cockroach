@@ -61,11 +61,6 @@ type CatalogReader interface {
 	) error
 }
 
-type DescriptorCreator interface {
-	AddUncommittedDescriptor(ctx context.Context, desc catalog.MutableDescriptor) error
-	FinalizeAllMutations(ctx context.Context, id descpb.ID) error
-}
-
 // MutationVisitorStateUpdater is the interface for updating the visitor state.
 type MutationVisitorStateUpdater interface {
 

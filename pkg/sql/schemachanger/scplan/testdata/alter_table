@@ -16,31 +16,30 @@ Stage 0
     Nullable: true
     PgAttributeNum: 2
     TableID: 52
-  *scop.SetColumnName
-    ColumnID: 2
-    Name: j
-    TableID: 52
   *scop.LogEvent
     DescID: 52
     Direction: 1
     Element:
       column:
-        column:
-          id: 2
-          name: j
-          nullable: true
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
+        columnId: 2
         familyName: primary
+        nullable: true
+        pgAttributeNum: 2
         tableId: 52
+        type:
+          family: IntFamily
+          oid: 20
+          width: 64
     Metadata:
       Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8
       TargetMetadata:
         SourceElementID: 1
         SubWorkID: 1
       Username: root
+  *scop.SetColumnName
+    ColumnID: 2
+    Name: j
+    TableID: 52
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
     KeyColumnDirections:
@@ -105,32 +104,31 @@ Stage 0
     Nullable: true
     PgAttributeNum: 2
     TableID: 52
-  *scop.SetColumnName
-    ColumnID: 2
-    Name: j
-    TableID: 52
   *scop.LogEvent
     DescID: 52
     Direction: 1
     Element:
       column:
-        column:
-          defaultExpr: 123:::INT8
-          id: 2
-          name: j
-          nullable: true
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
+        columnId: 2
+        defaultExpr: 123:::INT8
         familyName: primary
+        nullable: true
+        pgAttributeNum: 2
         tableId: 52
+        type:
+          family: IntFamily
+          oid: 20
+          width: 64
     Metadata:
       Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
       TargetMetadata:
         SourceElementID: 1
         SubWorkID: 1
       Username: root
+  *scop.SetColumnName
+    ColumnID: 2
+    Name: j
+    TableID: 52
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
     KeyColumnDirections:
@@ -196,32 +194,31 @@ Stage 0
     Nullable: true
     PgAttributeNum: 2
     TableID: 52
-  *scop.SetColumnName
-    ColumnID: 2
-    Name: j
-    TableID: 52
   *scop.LogEvent
     DescID: 52
     Direction: 1
     Element:
       column:
-        column:
-          defaultExpr: 123:::INT8
-          id: 2
-          name: j
-          nullable: true
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
+        columnId: 2
+        defaultExpr: 123:::INT8
         familyName: primary
+        nullable: true
+        pgAttributeNum: 2
         tableId: 52
+        type:
+          family: IntFamily
+          oid: 20
+          width: 64
     Metadata:
       Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
       TargetMetadata:
         SourceElementID: 1
         SubWorkID: 1
       Username: root
+  *scop.SetColumnName
+    ColumnID: 2
+    Name: j
+    TableID: 52
   *scop.MakeAddedColumnDeleteOnly
     ColumnID: 3
     ColumnType:
@@ -238,17 +235,16 @@ Stage 0
     Direction: 1
     Element:
       column:
-        column:
-          defaultExpr: 456:::INT8
-          id: 3
-          name: k
-          nullable: true
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
+        columnId: 3
+        defaultExpr: 456:::INT8
         familyName: primary
+        nullable: true
+        pgAttributeNum: 3
         tableId: 52
+        type:
+          family: IntFamily
+          oid: 20
+          width: 64
     Metadata:
       Statement: ALTER TABLE defaultdb.foo ADD COLUMN k INT8 DEFAULT 456
       TargetMetadata:
@@ -331,32 +327,31 @@ Stage 0
     Nullable: true
     PgAttributeNum: 2
     TableID: 52
-  *scop.SetColumnName
-    ColumnID: 2
-    Name: a
-    TableID: 52
   *scop.LogEvent
     DescID: 52
     Direction: 1
     Element:
       column:
-        column:
-          computeExpr: i + 1:::INT8
-          id: 2
-          name: a
-          nullable: true
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
+        columnId: 2
+        computerExpr: i + 1:::INT8
         familyName: primary
+        nullable: true
+        pgAttributeNum: 2
         tableId: 52
+        type:
+          family: IntFamily
+          oid: 20
+          width: 64
     Metadata:
       Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
       TargetMetadata:
         SourceElementID: 1
         SubWorkID: 1
       Username: root
+  *scop.SetColumnName
+    ColumnID: 2
+    Name: a
+    TableID: 52
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
     KeyColumnDirections:
@@ -426,31 +421,30 @@ Stage 0
     Nullable: true
     PgAttributeNum: 2
     TableID: 52
-  *scop.SetColumnName
-    ColumnID: 2
-    Name: a
-    TableID: 52
   *scop.LogEvent
     DescID: 52
     Direction: 1
     Element:
       column:
-        column:
-          id: 2
-          name: a
-          nullable: true
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
+        columnId: 2
         familyName: primary
+        nullable: true
+        pgAttributeNum: 2
         tableId: 52
+        type:
+          family: IntFamily
+          oid: 20
+          width: 64
     Metadata:
       Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8
       TargetMetadata:
         SourceElementID: 1
         SubWorkID: 1
       Username: root
+  *scop.SetColumnName
+    ColumnID: 2
+    Name: a
+    TableID: 52
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
     KeyColumnDirections:
@@ -476,25 +470,20 @@ Stage 0
     Nullable: true
     PgAttributeNum: 3
     TableID: 53
-  *scop.SetColumnName
-    ColumnID: 3
-    Name: b
-    TableID: 53
   *scop.LogEvent
     DescID: 53
     Direction: 1
     Element:
       column:
-        column:
-          id: 3
-          name: b
-          nullable: true
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
+        columnId: 3
         familyName: primary
+        nullable: true
+        pgAttributeNum: 3
         tableId: 53
+        type:
+          family: IntFamily
+          oid: 20
+          width: 64
     Metadata:
       Statement: ALTER TABLE defaultdb.bar ADD COLUMN b INT8
       TargetMetadata:
@@ -502,6 +491,10 @@ Stage 0
         StatementID: 1
         SubWorkID: 1
       Username: root
+  *scop.SetColumnName
+    ColumnID: 3
+    Name: b
+    TableID: 53
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
     KeyColumnDirections:

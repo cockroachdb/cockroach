@@ -70,6 +70,47 @@ func (g *Graph) Database() *rel.Database {
 	return g.entities
 }
 
+// DeleteNode deletes a node inside a graph
+// and cleans up edges.
+func (g *Graph) DeleteNode(node *scpb.Node) error {
+	if err := g.entities.Delete(node); err != nil {
+		return err
+	}
+	edges := make([]Edge, 0, len(g.edges))
+	err := g.ForEachDepEdgeFrom(node, func(de *DepEdge) error {
+		edges = append(edges, de)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, edge := range edges {
+		g.nodeDepEdgesFrom.Delete(
+			&edgeTreeEntry{
+				g:     g,
+				edge:  edge,
+				order: fromTo,
+			},
+		)
+	}
+	delete(g.nodeOpEdgesFrom, node)
+	edgesWithout := make([]Edge, 0, len(g.edges))
+	for _, edgeToCheck := range g.edges {
+		skip := false
+		for _, edgeToDelete := range edges {
+			if edgeToDelete == edgeToCheck {
+				skip = true
+				break
+			}
+		}
+		if !skip {
+			edgesWithout = append(edgesWithout, edgeToCheck)
+		}
+	}
+	g.edges = edgesWithout
+	return nil
+}
+
 // New constructs a new Graph. All initial nodes ought to correspond to distinct
 // targets. If they do not, an error will be returned.
 func New(initial scpb.State) (*Graph, error) {
