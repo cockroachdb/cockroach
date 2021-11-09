@@ -56,13 +56,15 @@ func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges(
 	_ context.Context, _ catalog.DescGetter,
 ) error {
 	sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
-	sdb.changed = catprivilege.MaybeFixPrivileges(
+	privsChanged := catprivilege.MaybeFixPrivileges(
 		&sdb.maybeModified.Privileges,
 		sdb.maybeModified.GetParentID(),
 		descpb.InvalidID,
 		privilege.Schema,
 		sdb.maybeModified.GetName(),
 	)
+	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(&sdb.maybeModified.Privileges)
+	sdb.changed = privsChanged || addedGrantOptions
 	return nil
 }
 

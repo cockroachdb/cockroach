@@ -104,6 +104,7 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges(
 	var err error
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
 	tdb.changes, err = maybeFillInDescriptor(ctx, dg, tdb.maybeModified, tdb.skipFKsWithNoMatchingTable)
+
 	return err
 }
 
@@ -211,13 +212,15 @@ func maybeFillInDescriptor(
 	if parentSchemaID == descpb.InvalidID {
 		parentSchemaID = keys.PublicSchemaID
 	}
-	changes.UpgradedPrivileges = catprivilege.MaybeFixPrivileges(
+	fixedPrivileges := catprivilege.MaybeFixPrivileges(
 		&desc.Privileges,
 		desc.GetParentID(),
 		parentSchemaID,
 		privilege.Table,
 		desc.GetName(),
 	)
+	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(&desc.Privileges)
+	changes.UpgradedPrivileges = fixedPrivileges || addedGrantOptions
 
 	if dg != nil {
 		changes.UpgradedForeignKeyRepresentation, err = maybeUpgradeForeignKeyRepresentation(

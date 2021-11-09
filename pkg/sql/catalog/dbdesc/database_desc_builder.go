@@ -69,7 +69,8 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
 		privilege.Database,
 		ddb.maybeModified.GetName())
 	removedSelfEntryInSchemas := maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified)
-	ddb.changed = privsChanged || removedSelfEntryInSchemas
+	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(&ddb.maybeModified.Privileges)
+	ddb.changed = privsChanged || removedSelfEntryInSchemas || addedGrantOptions
 	return nil
 }
 
