@@ -194,8 +194,6 @@ func maybeFillInDescriptor(
 	changes.UpgradedIndexFormatVersion = maybeUpgradePrimaryIndexFormatVersion(desc)
 	for i := range desc.Indexes {
 		idx := &desc.Indexes[i]
-		isFixed := maybeFixSecondaryIndexEncoding(idx)
-		changes.FixedIndexEncodingType = changes.FixedIndexEncodingType || isFixed
 		isUpgraded := maybeUpgradeSecondaryIndexFormatVersion(idx)
 		changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || isUpgraded
 	}
@@ -574,15 +572,5 @@ func maybeFixPrimaryIndexEncoding(idx *descpb.IndexDescriptor) (hasChanged bool)
 		return false
 	}
 	idx.EncodingType = descpb.PrimaryIndexEncoding
-	return true
-}
-
-// maybeFixPrimaryIndexEncoding ensures that the index descriptor for a
-// secondary index has the correct encoding type set.
-func maybeFixSecondaryIndexEncoding(idx *descpb.IndexDescriptor) (hasChanged bool) {
-	if idx.EncodingType == descpb.SecondaryIndexEncoding {
-		return false
-	}
-	idx.EncodingType = descpb.SecondaryIndexEncoding
 	return true
 }
