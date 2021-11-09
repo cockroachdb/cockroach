@@ -52,6 +52,20 @@ Stage 3
     PrimaryIndexID: 1
     TableID: 52
 Stage 4
+  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    Index:
+      EncodingType: 1
+      ID: 1
+      KeyColumnDirections:
+      - 0
+      KeyColumnIDs:
+      - 1
+      KeyColumnNames:
+      - i
+      Name: foo_pkey
+      Unique: true
+      Version: 4
+    TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -67,20 +81,6 @@ Stage 4
       - 2
       StoreColumnNames:
       - j
-      Unique: true
-      Version: 4
-    TableID: 52
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    Index:
-      EncodingType: 1
-      ID: 1
-      KeyColumnDirections:
-      - 0
-      KeyColumnIDs:
-      - 1
-      KeyColumnNames:
-      - i
-      Name: foo_pkey
       Unique: true
       Version: 4
     TableID: 52
@@ -147,6 +147,20 @@ Stage 3
     PrimaryIndexID: 1
     TableID: 52
 Stage 4
+  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    Index:
+      EncodingType: 1
+      ID: 1
+      KeyColumnDirections:
+      - 0
+      KeyColumnIDs:
+      - 1
+      KeyColumnNames:
+      - i
+      Name: foo_pkey
+      Unique: true
+      Version: 4
+    TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -162,20 +176,6 @@ Stage 4
       - 2
       StoreColumnNames:
       - j
-      Unique: true
-      Version: 4
-    TableID: 52
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    Index:
-      EncodingType: 1
-      ID: 1
-      KeyColumnDirections:
-      - 0
-      KeyColumnIDs:
-      - 1
-      KeyColumnNames:
-      - i
-      Name: foo_pkey
       Unique: true
       Version: 4
     TableID: 52
@@ -260,6 +260,20 @@ Stage 3
     PrimaryIndexID: 1
     TableID: 52
 Stage 4
+  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    Index:
+      EncodingType: 1
+      ID: 1
+      KeyColumnDirections:
+      - 0
+      KeyColumnIDs:
+      - 1
+      KeyColumnNames:
+      - i
+      Name: foo_pkey
+      Unique: true
+      Version: 4
+    TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -277,20 +291,6 @@ Stage 4
       StoreColumnNames:
       - j
       - k
-      Unique: true
-      Version: 4
-    TableID: 52
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    Index:
-      EncodingType: 1
-      ID: 1
-      KeyColumnDirections:
-      - 0
-      KeyColumnIDs:
-      - 1
-      KeyColumnNames:
-      - i
-      Name: foo_pkey
       Unique: true
       Version: 4
     TableID: 52
@@ -360,6 +360,20 @@ Stage 3
     PrimaryIndexID: 1
     TableID: 52
 Stage 4
+  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    Index:
+      EncodingType: 1
+      ID: 1
+      KeyColumnDirections:
+      - 0
+      KeyColumnIDs:
+      - 1
+      KeyColumnNames:
+      - i
+      Name: foo_pkey
+      Unique: true
+      Version: 4
+    TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -375,20 +389,6 @@ Stage 4
       - 2
       StoreColumnNames:
       - a
-      Unique: true
-      Version: 4
-    TableID: 52
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    Index:
-      EncodingType: 1
-      ID: 1
-      KeyColumnDirections:
-      - 0
-      KeyColumnIDs:
-      - 1
-      KeyColumnNames:
-      - i
-      Name: foo_pkey
       Unique: true
       Version: 4
     TableID: 52
@@ -504,6 +504,20 @@ Stage 3
     PrimaryIndexID: 1
     TableID: 53
 Stage 4
+  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    Index:
+      EncodingType: 1
+      ID: 1
+      KeyColumnDirections:
+      - 0
+      KeyColumnIDs:
+      - 1
+      KeyColumnNames:
+      - i
+      Name: foo_pkey
+      Unique: true
+      Version: 4
+    TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -522,6 +536,9 @@ Stage 4
       Unique: true
       Version: 4
     TableID: 52
+  *scop.MakeColumnPublic
+    ColumnID: 2
+    TableID: 52
   *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
     Index:
       EncodingType: 1
@@ -529,16 +546,17 @@ Stage 4
       KeyColumnDirections:
       - 0
       KeyColumnIDs:
-      - 1
+      - 2
       KeyColumnNames:
-      - i
-      Name: foo_pkey
+      - rowid
+      Name: bar_pkey
+      StoreColumnIDs:
+      - 1
+      StoreColumnNames:
+      - j
       Unique: true
       Version: 4
-    TableID: 52
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
+    TableID: 53
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -556,24 +574,6 @@ Stage 4
       StoreColumnNames:
       - j
       - b
-      Unique: true
-      Version: 4
-    TableID: 53
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    Index:
-      EncodingType: 1
-      ID: 1
-      KeyColumnDirections:
-      - 0
-      KeyColumnIDs:
-      - 2
-      KeyColumnNames:
-      - rowid
-      Name: bar_pkey
-      StoreColumnIDs:
-      - 1
-      StoreColumnNames:
-      - j
       Unique: true
       Version: 4
     TableID: 53
