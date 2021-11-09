@@ -34,6 +34,7 @@ type PrometheusRuleNode struct {
 }
 
 // PrometheusRuleGroup is a list of recording and alerting rules.
+// swagger:model PrometheusRuleGroup
 type PrometheusRuleGroup struct {
 	Rules []PrometheusRuleNode `yaml:"rules"`
 }
@@ -41,46 +42,60 @@ type PrometheusRuleGroup struct {
 // PrometheusRuleExporter initializes recording and alert rules once from the registry.
 // These initialized values will be reused for every alert/rule scrapes.
 type PrometheusRuleExporter struct {
-	mu struct {
+	ruleRegistry *RuleRegistry
+	mu           struct {
 		syncutil.Mutex
+		// existingRules keeps track of rules already appended
+		// with RuleGroups. This prevents duplication of rules
+		// being added to RuleGroups map across multiple calls
+		// to the exporter.
+		existingRules map[string]struct{}
+		// RuleGroups keeps track of all declared rules in a
+		// YAML compatible format.
 		RuleGroups map[string]PrometheusRuleGroup
 	}
 }
 
 // NewPrometheusRuleExporter creates a new PrometheusRuleExporter.
-func NewPrometheusRuleExporter() *PrometheusRuleExporter {
-	var pe PrometheusRuleExporter
+func NewPrometheusRuleExporter(ruleRegistry *RuleRegistry) *PrometheusRuleExporter {
+	pe := PrometheusRuleExporter{
+		ruleRegistry: ruleRegistry,
+	}
 	pe.mu.RuleGroups = make(map[string]PrometheusRuleGroup)
+	pe.mu.existingRules = make(map[string]struct{})
 	return &pe
 }
 
 // ScrapeRegistry scrapes the RuleRegistry to convert the list of registered rules
 // to Prometheus compatible rules.
-func (re *PrometheusRuleExporter) ScrapeRegistry(ctx context.Context, rr *RuleRegistry) {
+func (re *PrometheusRuleExporter) ScrapeRegistry(ctx context.Context) {
 	re.mu.Lock()
 	defer re.mu.Unlock()
-	rr.Each(func(rule Rule) {
+	re.ruleRegistry.Each(func(rule Rule) {
 		ruleGroupName, ruleNode := rule.ToPrometheusRuleNode()
 		if ruleGroupName != alertRuleGroupName && ruleGroupName != recordingRuleGroupName {
 			log.Warning(ctx, "invalid prometheus group name, skipping rule")
 			return
 		}
+
+		// If rule has already been added to exporter's tracked rules,
+		// we can return
+		if _, ok := re.mu.existingRules[rule.Name()]; ok {
+			return
+		}
 		promRuleGroup := re.mu.RuleGroups[ruleGroupName]
 		promRuleGroup.Rules = append(promRuleGroup.Rules, ruleNode)
 		re.mu.RuleGroups[ruleGroupName] = promRuleGroup
+		re.mu.existingRules[rule.Name()] = struct{}{}
 	})
 }
 
-// PrintAsYAMLText returns the rules within PrometheusRuleExporter
-// as YAML text.
+// PrintAsYAML returns the rules within PrometheusRuleExporter
+// as YAML.
 // TODO(rimadeodhar): Pipe through the help field as comments
 // in the exported YAML.
-func (re *PrometheusRuleExporter) PrintAsYAMLText() (string, error) {
+func (re *PrometheusRuleExporter) PrintAsYAML() ([]byte, error) {
 	re.mu.Lock()
 	defer re.mu.Unlock()
-	output, err := yaml.Marshal(re.mu.RuleGroups)
-	if err != nil {
-		return "", err
-	}
-	return string(output), nil
+	return yaml.Marshal(re.mu.RuleGroups)
 }

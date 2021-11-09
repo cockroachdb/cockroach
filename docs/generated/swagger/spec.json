@@ -513,6 +513,24 @@
         }
       }
     },
+    "/rules/": {
+      "get": {
+        "description": "Endpoint to export recommended metric recording and alerting rules.\nThese rules are intended to be used as a guideline for aggregating\nand using metrics for alerting purposes. All rules are in the\nYAML format compatible with Prometheus recording and alerting\nrules. All recording rules are grouped under 'rules/recording'\nlabel while alerting rules are grouped under 'rules/alerts'.",
+        "produces": [
+          "text/plain"
+        ],
+        "summary": "Get metric recording and alerting rule templates",
+        "operationId": "rules",
+        "responses": {
+          "200": {
+            "description": "Recording and Alert Rules",
+            "schema": {
+              "$ref": "#/definitions/PrometheusRuleGroup"
+            }
+          }
+        }
+      }
+    },
     "/sessions/": {
       "get": {
         "security": [
@@ -955,6 +973,50 @@
         }
       },
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
+    },
+    "PrometheusRuleGroup": {
+      "type": "object",
+      "title": "PrometheusRuleGroup is a list of recording and alerting rules.",
+      "properties": {
+        "Rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PrometheusRuleNode"
+          }
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/util/metric"
+    },
+    "PrometheusRuleNode": {
+      "type": "object",
+      "title": "PrometheusRuleNode represents an individual rule node within the YAML output.",
+      "properties": {
+        "Alert": {
+          "type": "string"
+        },
+        "Annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "Expr": {
+          "type": "string"
+        },
+        "For": {
+          "type": "string"
+        },
+        "Labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "Record": {
+          "type": "string"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/util/metric"
     },
     "RangeProblems": {
       "type": "object",
