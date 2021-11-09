@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "docker",
+    srcs = ["docker_utils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/docker",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "docker_test",
+    size = "enormous",
+    srcs = ["docker_test.go"],
+    embed = [":docker"],
+)
