@@ -6164,6 +6164,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		KeyCount:    2,
 		ValCount:    2,
 		IntentCount: 1,
+		SeparatedIntentCount: 1,
 	})
 	if !tc.engine.OverrideTxnDidNotUpdateMetaToFalse(ctx) {
 		expMS.LiveBytes += 2

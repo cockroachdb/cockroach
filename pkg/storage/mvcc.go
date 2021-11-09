@@ -480,6 +480,7 @@ func updateStatsOnPut(
 	if meta.Txn != nil {
 		ms.IntentBytes += meta.KeyBytes + meta.ValBytes
 		ms.IntentCount++
+		ms.SeparatedIntentCount++
 	}
 	return ms
 }
@@ -582,6 +583,7 @@ func updateStatsOnResolve(
 		// updateStatsOnPut, not this method).
 		ms.IntentBytes += meta.KeyBytes + meta.ValBytes
 		ms.IntentCount++
+		ms.SeparatedIntentCount++
 	}
 	return ms
 }
@@ -664,6 +666,7 @@ func updateStatsOnClear(
 	if orig.Txn != nil {
 		ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
 		ms.IntentCount--
+		ms.SeparatedIntentCount--
 	}
 	return ms
 }
@@ -4112,6 +4115,7 @@ func ComputeStatsForRange(
 				if meta.Txn != nil {
 					ms.IntentBytes += totalBytes
 					ms.IntentCount++
+					ms.SeparatedIntentCount++
 					ms.IntentAge += nowNanos/1e9 - meta.Timestamp.WallTime/1e9
 				}
 				if meta.KeyBytes != MVCCVersionTimestampSize {
