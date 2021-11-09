@@ -894,7 +894,7 @@ vectorized: true
   columns: (d decimal, v decimal)
   estimated row count: 1 (missing stats)
   table: decfam@decfam_pkey
-  spans: /NaN/NaN-/NaN/NaN/#
+  spans: /NaN/NaN-/NaN/-Infinity
 
 # The NaN suffix is decimalNaNDesc, not decimalNaN(Asc).
 query T

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
 )
 
@@ -381,10 +380,8 @@ func TestCrossJoiner(t *testing.T) {
 	}
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
-	var (
-		accounts []*mon.BoundAccount
-		monitors []*mon.BytesMonitor
-	)
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
@@ -399,24 +396,16 @@ func TestCrossJoiner(t *testing.T) {
 						StreamingMemAccount: testMemAcc,
 						DiskQueueCfg:        queueCfg,
 						FDSemaphore:         colexecop.NewTestingSemaphore(externalHJMinPartitions),
+						MonitorRegistry:     &monitorRegistry,
 					}
 					result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 					if err != nil {
 						return nil, err
 					}
-					accounts = append(accounts, result.OpAccounts...)
-					monitors = append(monitors, result.OpMonitors...)
 					return result.Root, nil
 				})
 			}
 		}
-	}
-
-	for _, acc := range accounts {
-		acc.Close(ctx)
-	}
-	for _, mon := range monitors {
-		mon.Stop(ctx)
 	}
 }
 
@@ -439,12 +428,11 @@ func BenchmarkCrossJoiner(b *testing.B) {
 		sourceTypes[colIdx] = types.Int
 	}
 
-	var (
-		accounts []*mon.BoundAccount
-		monitors []*mon.BytesMonitor
-	)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
+
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		for _, joinType := range []descpb.JoinType{descpb.InnerJoin, descpb.LeftSemiJoin} {
@@ -470,6 +458,7 @@ func BenchmarkCrossJoiner(b *testing.B) {
 					StreamingMemAccount: testMemAcc,
 					DiskQueueCfg:        queueCfg,
 					FDSemaphore:         colexecop.NewTestingSemaphore(VecMaxOpenFDsLimit),
+					MonitorRegistry:     &monitorRegistry,
 				}
 				b.Run(fmt.Sprintf("spillForced=%t/type=%s/rows=%d", spillForced, joinType, nRows), func(b *testing.B) {
 					var nOutputRows int
@@ -485,9 +474,6 @@ func BenchmarkCrossJoiner(b *testing.B) {
 						args.Inputs[1].Root = colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
 						result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 						require.NoError(b, err)
-						accounts = append(accounts, result.OpAccounts...)
-						monitors = append(monitors, result.OpMonitors...)
-						require.NoError(b, err)
 						cj := result.Root
 						cj.Init(ctx)
 						for b := cj.Next(); b.Length() > 0; b = cj.Next() {
@@ -496,11 +482,5 @@ func BenchmarkCrossJoiner(b *testing.B) {
 				})
 			}
 		}
-	}
-	for _, acc := range accounts {
-		acc.Close(ctx)
-	}
-	for _, mon := range monitors {
-		mon.Stop(ctx)
 	}
 }

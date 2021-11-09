@@ -508,15 +508,20 @@ func BenchmarkTableReader(b *testing.B) {
 		}
 
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			span := tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 			spec := execinfrapb.TableReaderSpec{
 				Table: *tableDesc.TableDesc(),
-				Spans: []roachpb.Span{tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)},
+				// Spans will be set below.
 			}
 			post := execinfrapb.PostProcessSpec{}
 
 			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
+				// We have to set the spans on each iteration since the
+				// txnKVFetcher reuses the passed-in slice and destructively
+				// modifies it.
+				spec.Spans = []roachpb.Span{span}
 				tr, err := newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, nil /* output */)
 				if err != nil {
 					b.Fatal(err)

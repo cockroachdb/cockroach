@@ -1086,7 +1086,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 333 (missing stats)
   table: abc@abc_pkey
-  spans: /1/2-/3/4/#
+  spans: /1/2-/3/5
 
 # Regression test for #21831.
 statement ok
@@ -1331,7 +1331,7 @@ query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE 'Scan /Table/67/1%'
 ----
-Scan /Table/67/1/1{-/#}
+Scan /Table/67/1/{1-2}
 
 query T
 EXPLAIN SELECT * FROM noncover WHERE c = 6
