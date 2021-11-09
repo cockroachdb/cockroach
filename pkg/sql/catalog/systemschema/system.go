@@ -1424,7 +1424,7 @@ var (
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {
-			tbl.Privileges.Version = descpb.Version21_2
+			tbl.Privileges.Version = descpb.GrantOptionVersion
 			tbl.Privileges.Users = append(tbl.Privileges.Users, descpb.UserPrivileges{
 				UserProto:  security.PublicRoleName().EncodeProto(),
 				Privileges: privilege.List{privilege.SELECT}.ToBitField(),
