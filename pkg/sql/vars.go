@@ -234,32 +234,8 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	`database`: {
-		GetStringVal: func(
-			ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr,
-		) (string, error) {
-			dbName, err := getStringVal(&evalCtx.EvalContext, `database`, values)
-			if err != nil {
-				return "", err
-			}
-
-			if len(dbName) == 0 && evalCtx.SessionData().SafeUpdates {
-				return "", pgerror.DangerousStatementf("SET database to empty string")
-			}
-
-			if len(dbName) != 0 {
-				// Verify database descriptor exists.
-				if _, err := evalCtx.Descs.GetImmutableDatabaseByName(
-					ctx, evalCtx.Txn, dbName, tree.DatabaseLookupFlags{Required: true},
-				); err != nil {
-					return "", err
-				}
-			}
-			return dbName, nil
-		},
-		Set: func(_ context.Context, m sessionDataMutator, dbName string) error {
-			m.SetDatabase(dbName)
-			return nil
-		},
+		// SetWithPlanner is defined in init(), as otherwise there is a circular
+		// initialization loop with the planner.
 		Get: func(evalCtx *extendedEvalContext) (string, error) { return evalCtx.SessionData().Database, nil },
 		GlobalDefault: func(_ *settings.Values) string {
 			// The "defaultdb" value is set as session default in the pgwire
@@ -1798,6 +1774,35 @@ func init() {
 					return err
 				}
 				return p.setRole(ctx, local, u)
+			},
+		},
+		{
+			name: `database`,
+			fn: func(ctx context.Context, p *planner, local bool, dbName string) error {
+				if len(dbName) == 0 && p.EvalContext().SessionData().SafeUpdates {
+					return pgerror.DangerousStatementf("SET database to empty string")
+				}
+
+				if len(dbName) != 0 {
+					dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
+						ctx,
+						p.txn,
+						dbName,
+						tree.DatabaseLookupFlags{Required: true},
+					)
+					if err != nil {
+						return err
+					}
+					_ = dbDesc
+				}
+				return p.applyOnSessionDataMutators(
+					ctx,
+					local,
+					func(m sessionDataMutator) error {
+						m.SetDatabase(dbName)
+						return nil
+					},
+				)
 			},
 		},
 	} {

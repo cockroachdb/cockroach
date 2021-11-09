@@ -73,6 +73,12 @@ func resetSessionVar(ctx context.Context, m sessionDataMutator, varName string) 
 				return err
 			}
 		}
+	} else if varName == "database" {
+		// "database" has no `Set`, but has `SetWithPlanner`.
+		// If we're resetting, we are resetting to the initial connection setup,
+		// which matches postgresql (even if we lose CONNECT privileges, we are still
+		// allowed to reset).
+		m.SetDatabase(m.defaults[varName])
 	}
 	return nil
 }

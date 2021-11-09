@@ -823,6 +823,9 @@ func parseClientProvidedSessionParameters(
 					return sql.SessionArgs{}, pgerror.Wrapf(err, pgerror.GetPGCode(err), "options")
 				}
 			}
+		case "database":
+			// Catch. There is no `Set` defined on `database`, so move along and avoid
+			// the `loadParameter` call.
 		default:
 			err = loadParameter(ctx, key, value, &args)
 			if err != nil {
