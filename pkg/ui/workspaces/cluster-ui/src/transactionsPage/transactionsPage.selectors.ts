@@ -10,25 +10,18 @@
 
 import { createSelector } from "reselect";
 
-import {
-  adminUISelector,
-  localStorageSelector,
-} from "../statementsPage/statementsPage.selectors";
-
-export const selectTransactionsSlice = createSelector(
-  adminUISelector,
-  adminUiState => adminUiState.transactions,
-);
+import { localStorageSelector } from "../statementsPage/statementsPage.selectors";
+import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
 
 export const selectTransactionsData = createSelector(
-  selectTransactionsSlice,
+  sqlStatsSelector,
   transactionsState =>
     // The state is valid if we have successfully fetched data, and it has not yet been invalidated.
     transactionsState.valid ? transactionsState.data : null,
 );
 
 export const selectTransactionsLastError = createSelector(
-  selectTransactionsSlice,
+  sqlStatsSelector,
   state => state.lastError,
 );
 
