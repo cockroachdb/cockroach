@@ -104,7 +104,19 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges(
 	var err error
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
 	tdb.changes, err = maybeFillInDescriptor(ctx, dg, tdb.maybeModified, tdb.skipFKsWithNoMatchingTable)
+
 	return err
+}
+
+// RunMigrationChanges implements the catalog.DescriptorBuilder
+// interface.
+func (tdb *tableDescriptorBuilder) RunMigrationChanges(
+	workFuncs ...catalog.MigrationWorkFunc,
+) error {
+	for _, applyChange := range workFuncs {
+		applyChange(tdb)
+	}
+	return nil
 }
 
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
@@ -599,4 +611,12 @@ func maybeFixPrimaryIndexEncoding(idx *descpb.IndexDescriptor) (hasChanged bool)
 	}
 	idx.EncodingType = descpb.PrimaryIndexEncoding
 	return true
+}
+
+// MaybeAddGrantOptionsTable is called by maybeAddGrantOptions() in grant_option_migration.go
+// and potentially gives grant options to a new table descriptor.
+func MaybeAddGrantOptionsTable(b TableDescriptorBuilder) {
+	tdb := b.(*tableDescriptorBuilder)
+	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
+	tdb.changes.UpgradedPrivileges = catprivilege.MaybeUpdateGrantOptions(&tdb.maybeModified.Privileges)
 }
