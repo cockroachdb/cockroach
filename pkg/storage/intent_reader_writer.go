@@ -85,9 +85,7 @@ func (idw intentDemuxWriter) PutIntent(
 		Strength: lock.Exclusive,
 		TxnUUID:  txnUUID[:],
 	}.ToEngineKey(buf)
-	separatedIntentCountDelta = -1
-	// Write intent
-	separatedIntentCountDelta++
+	separatedIntentCountDelta = 0
 	return buf, separatedIntentCountDelta, idw.w.PutEngineKey(engineKey, value)
 }
 
