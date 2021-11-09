@@ -880,6 +880,7 @@ unreserved_keyword ::=
 	| 'DOUBLE'
 	| 'DROP'
 	| 'ENCODING'
+	| 'ENCRYPTED'
 	| 'ENCRYPTION_PASSPHRASE'
 	| 'ENUM'
 	| 'ENUMS'

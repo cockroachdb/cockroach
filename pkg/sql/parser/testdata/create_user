@@ -105,6 +105,15 @@ CREATE USER 'foo' WITH PASSWORD '*****' -- identifiers removed
 CREATE USER 'foo' WITH PASSWORD 'bar' -- passwords exposed
 
 parse
+CREATE USER foo ENCRYPTED PASSWORD bar
+----
+CREATE USER 'foo' WITH PASSWORD '*****' -- normalized!
+CREATE USER ('foo') WITH PASSWORD '*****' -- fully parenthesized
+CREATE USER '_' WITH PASSWORD '*****' -- literals removed
+CREATE USER 'foo' WITH PASSWORD '*****' -- identifiers removed
+CREATE USER 'foo' WITH PASSWORD 'bar' -- passwords exposed
+
+parse
 CREATE USER foo PASSWORD NULL
 ----
 CREATE USER 'foo' WITH PASSWORD '*****' -- normalized!
@@ -112,6 +121,15 @@ CREATE USER ('foo') WITH PASSWORD '*****' -- fully parenthesized
 CREATE USER '_' WITH PASSWORD '*****' -- literals removed
 CREATE USER 'foo' WITH PASSWORD '*****' -- identifiers removed
 CREATE USER 'foo' WITH PASSWORD NULL -- passwords exposed
+
+parse
+CREATE USER foo WITH ENCRYPTED PASSWORD bar
+----
+CREATE USER 'foo' WITH PASSWORD '*****' -- normalized!
+CREATE USER ('foo') WITH PASSWORD '*****' -- fully parenthesized
+CREATE USER '_' WITH PASSWORD '*****' -- literals removed
+CREATE USER 'foo' WITH PASSWORD '*****' -- identifiers removed
+CREATE USER 'foo' WITH PASSWORD 'bar' -- passwords exposed
 
 parse
 CREATE USER foo LOGIN VALID UNTIL NULL PASSWORD NULL
