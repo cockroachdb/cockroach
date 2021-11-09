@@ -300,7 +300,6 @@ func TestInitResolvedTSScan(t *testing.T) {
 		"separated intent scanner": {
 			intentScanner: func() (IntentScanner, func()) {
 				engine := makeEngine()
-				require.True(t, engine.IsSeparatedIntentsEnabledForTesting(context.Background()))
 				lowerBound, _ := keys.LockTableSingleKey(startKey.AsRawKey(), nil)
 				upperBound, _ := keys.LockTableSingleKey(endKey.AsRawKey(), nil)
 				iter := engine.NewEngineIterator(storage.IterOptions{

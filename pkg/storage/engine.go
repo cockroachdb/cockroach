@@ -153,12 +153,6 @@ type MVCCIterator interface {
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
 	ValueProto(msg protoutil.Message) error
-	// When Key() is positioned on an intent, returns true iff this intent
-	// (represented by MVCCMetadata) is a separated lock/intent. This is a
-	// low-level method that should not be called from outside the storage
-	// package. It is part of the exported interface because there are structs
-	// outside the package that wrap and implement Iterator.
-	IsCurIntentSeparated() bool
 	// ComputeStats scans the underlying engine from start to end keys and
 	// computes stats counters based on the values. This method is used after a
 	// range is split to recompute stats for each subrange. The start key is

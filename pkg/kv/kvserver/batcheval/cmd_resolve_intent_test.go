@@ -274,10 +274,5 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 
 func makeClusterSettingsUsingEngineIntentsSetting(engine storage.Engine) *cluster.Settings {
 	version := clusterversion.TestingBinaryVersion
-	if !engine.IsSeparatedIntentsEnabledForTesting(context.Background()) {
-		// Before SeparatedIntentsMigration, so intent resolution will not assume
-		// only separated intents.
-		version = clusterversion.ByKey(clusterversion.SeparatedIntentsMigration - 1)
-	}
 	return cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
 }

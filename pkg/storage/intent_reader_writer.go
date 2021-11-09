@@ -85,9 +85,6 @@ func (idw intentDemuxWriter) PutIntent(
 		Strength: lock.Exclusive,
 		TxnUUID:  txnUUID[:],
 	}.ToEngineKey(buf)
-
-	// Else, staying separated or staying interleaved or there was no preceding
-	// intent, so don't need to explicitly clear.
 	separatedIntentCountDelta = -1
 	// Write intent
 	separatedIntentCountDelta++

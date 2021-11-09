@@ -978,30 +978,31 @@ func MVCCGetAsTxn(
 // avoided.
 func mvccGetMetadata(
 	iter MVCCIterator, metaKey MVCCKey, iterAlreadyPositioned bool, meta *enginepb.MVCCMetadata,
-) (ok bool, isSeparated bool, keyBytes, valBytes int64, err error) {
+) (ok bool, keyBytes, valBytes int64, err error) {
 	if iter == nil {
-		return false, false, 0, 0, nil
+		return false, 0, 0, nil
 	}
 	if !iterAlreadyPositioned {
 		iter.SeekGE(metaKey)
 	}
 	if ok, err := iter.Valid(); !ok {
-		return false, false, 0, 0, err
+		return false, 0, 0, err
 	}
 
 	unsafeKey := iter.UnsafeKey()
 	if !unsafeKey.Key.Equal(metaKey.Key) {
-		return false, false, 0, 0, nil
+		return false, 0, 0, nil
 	}
 
 	if !unsafeKey.IsValue() {
 		if err := iter.ValueProto(meta); err != nil {
-			return false, false, 0, 0, err
+			return false, 0, 0, err
 		}
-		return true, iter.IsCurIntentSeparated(), int64(unsafeKey.EncodedSize()),
+		return true, int64(unsafeKey.EncodedSize()),
 			int64(len(iter.UnsafeValue())), nil
 	}
 
+	// todo(bananabrick): might have to remove this
 	meta.Reset()
 	// For values, the size of keys is always accounted for as
 	// MVCCVersionTimestampSize. The size of the metadata key is
@@ -1010,7 +1011,7 @@ func mvccGetMetadata(
 	meta.ValBytes = int64(len(iter.UnsafeValue()))
 	meta.Deleted = meta.ValBytes == 0
 	meta.Timestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
-	return true, false, int64(unsafeKey.EncodedSize()) - meta.KeyBytes, 0, nil
+	return true, int64(unsafeKey.EncodedSize()) - meta.KeyBytes, 0, nil
 }
 
 // putBuffer holds pointer data needed by mvccPutInternal. Bundling
@@ -1469,7 +1470,7 @@ func mvccPutInternal(
 	}
 
 	metaKey := MakeMVCCMetadataKey(key)
-	ok, isIntentSeparated, origMetaKeySize, origMetaValSize, err :=
+	ok, origMetaKeySize, origMetaValSize, err :=
 		mvccGetMetadata(iter, metaKey, false /* iterAlreadyPositioned */, &buf.meta)
 	if err != nil {
 		return err
@@ -1520,11 +1521,7 @@ func mvccPutInternal(
 		precedingIntentState = NoExistingIntent
 		txnDidNotUpdateMeta = true
 	} else {
-		if isIntentSeparated {
-			precedingIntentState = ExistingIntentSeparated
-		} else {
-			precedingIntentState = ExistingIntentInterleaved
-		}
+		precedingIntentState = ExistingIntentSeparated
 		if buf.meta.TxnDidNotUpdateMeta == nil {
 			txnDidNotUpdateMeta = false
 		} else {
@@ -2868,7 +2865,6 @@ type iterForKeyVersions interface {
 	UnsafeKey() MVCCKey
 	UnsafeValue() []byte
 	ValueProto(msg protoutil.Message) error
-	IsCurIntentSeparated() bool
 }
 
 // separatedIntentAndVersionIter is an implementation of iterForKeyVersions
@@ -2978,13 +2974,6 @@ func (s *separatedIntentAndVersionIter) ValueProto(msg protoutil.Message) error 
 	return protoutil.Unmarshal(v, msg)
 }
 
-func (s *separatedIntentAndVersionIter) IsCurIntentSeparated() bool {
-	if s.atMVCCIter {
-		panic(errors.AssertionFailedf("IsCurIntentSeparated called when not positioned at intent"))
-	}
-	return true
-}
-
 // mvccGetIntent uses an iterForKeyVersions that has been seeked to
 // metaKey.Key for a potential intent, and tries to retrieve an intent if it
 // is present. ok returns true iff an intent for that key is found. In that
@@ -2992,21 +2981,21 @@ func (s *separatedIntentAndVersionIter) IsCurIntentSeparated() bool {
 // is placed in meta.
 func mvccGetIntent(
 	iter iterForKeyVersions, metaKey MVCCKey, meta *enginepb.MVCCMetadata,
-) (ok bool, isSeparated bool, keyBytes, valBytes int64, err error) {
+) (ok bool, keyBytes, valBytes int64, err error) {
 	if ok, err := iter.Valid(); !ok {
-		return false, false, 0, 0, err
+		return false, 0, 0, err
 	}
 	unsafeKey := iter.UnsafeKey()
 	if !unsafeKey.Key.Equal(metaKey.Key) {
-		return false, false, 0, 0, nil
+		return false, 0, 0, nil
 	}
 	if unsafeKey.IsValue() {
-		return false, false, 0, 0, nil
+		return false, 0, 0, nil
 	}
 	if err := iter.ValueProto(meta); err != nil {
-		return false, false, 0, 0, err
+		return false, 0, 0, err
 	}
-	return true, iter.IsCurIntentSeparated(), int64(unsafeKey.EncodedSize()),
+	return true, int64(unsafeKey.EncodedSize()),
 		int64(len(iter.UnsafeValue())), nil
 }
 
@@ -3117,7 +3106,7 @@ func mvccResolveWriteIntent(
 ) (bool, error) {
 	metaKey := MakeMVCCMetadataKey(intent.Key)
 	meta := &buf.meta
-	ok, isIntentSeparated, origMetaKeySize, origMetaValSize, err :=
+	ok, origMetaKeySize, origMetaValSize, err :=
 		mvccGetIntent(iter, metaKey, meta)
 	if err != nil {
 		return false, err
@@ -3126,10 +3115,7 @@ func mvccResolveWriteIntent(
 		return false, nil
 	}
 	metaTimestamp := meta.Timestamp.ToTimestamp()
-	precedingIntentState := ExistingIntentInterleaved
-	if isIntentSeparated {
-		precedingIntentState = ExistingIntentSeparated
-	}
+	precedingIntentState := ExistingIntentSeparated
 	canSingleDelHelper := singleDelOptimizationHelper{
 		_didNotUpdateMeta: meta.TxnDidNotUpdateMeta,
 		_hasIgnoredSeqs:   len(intent.IgnoredSeqNums) > 0,
@@ -3722,7 +3708,7 @@ func MVCCGarbageCollect(
 	meta := &enginepb.MVCCMetadata{}
 	for _, gcKey := range keys {
 		encKey := MakeMVCCMetadataKey(gcKey.Key)
-		ok, _, metaKeySize, metaValSize, err :=
+		ok, metaKeySize, metaValSize, err :=
 			mvccGetMetadata(iter, encKey, false /* iterAlreadyPositioned */, meta)
 		if err != nil {
 			return err
@@ -4019,7 +4005,7 @@ func ComputeStatsForRange(
 	var ms enginepb.MVCCStats
 	// Only some callers are providing an MVCCIterator. The others don't have
 	// any intents.
-	iterForSeparatedIntents, countSeparatedIntents := iter.(MVCCIterator)
+	_, countSeparatedIntents := iter.(MVCCIterator)
 	var meta enginepb.MVCCMetadata
 	var isSeparatedIntentMeta bool
 	var prevKey []byte
@@ -4098,7 +4084,7 @@ func ComputeStatsForRange(
 					return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
 				}
 				if countSeparatedIntents {
-					isSeparatedIntentMeta = iterForSeparatedIntents.IsCurIntentSeparated()
+					isSeparatedIntentMeta = true
 				}
 			}
 
