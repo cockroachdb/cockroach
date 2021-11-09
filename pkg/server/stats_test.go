@@ -140,7 +140,7 @@ func TestEnsureSQLStatsAreFlushedForTelemetry(t *testing.T) {
 
 	statusServer := s.(*TestServer).status
 	sqlServer := s.(*TestServer).Server.sqlServer.pgServer.SQLServer
-	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+	sqlServer.GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
 	testutils.SucceedsSoon(t, func() error {
 		// Get the diagnostic info.
 		res, err := statusServer.Diagnostics(ctx, &serverpb.DiagnosticsRequest{NodeId: "local"})
