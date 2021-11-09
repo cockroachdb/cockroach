@@ -3,11 +3,13 @@ module github.com/cockroachdb/cockroach
 go 1.16
 
 require (
-	cloud.google.com/go/storage v1.16.0
+	cloud.google.com/go/kms v1.1.0 // indirect
+	cloud.google.com/go/pubsub v1.16.0
+	cloud.google.com/go/storage v1.18.2
 	github.com/Azure/azure-sdk-for-go v57.1.0+incompatible
 	github.com/Azure/azure-storage-blob-go v0.14.0
 	github.com/Azure/go-autorest/autorest v0.11.20
-	github.com/Azure/go-autorest/autorest/azure/auth v0.4.2
+	github.com/Azure/go-autorest/autorest/azure/auth v0.5.8
 	github.com/Azure/go-autorest/autorest/to v0.4.0
 	github.com/BurntSushi/toml v0.3.1
 	github.com/DataDog/zstd v1.4.8 // indirect
@@ -62,11 +64,13 @@ require (
 	github.com/edsrzf/mmap-go v1.0.0
 	github.com/elastic/gosigar v0.14.1
 	github.com/emicklei/dot v0.15.0
+	github.com/envoyproxy/go-control-plane v0.10.0 // indirect
+	github.com/envoyproxy/protoc-gen-validate v0.6.2 // indirect
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a
 	github.com/fraugster/parquet-go v0.4.0
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
 	github.com/go-ole/go-ole v1.2.4 // indirect
-	github.com/go-sql-driver/mysql v1.5.0
+	github.com/go-sql-driver/mysql v1.6.0
 	github.com/go-swagger/go-swagger v0.26.1
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang-commonmark/html v0.0.0-20180910111043-7d7c804e1d46 // indirect
@@ -151,21 +155,22 @@ require (
 	go.opentelemetry.io/otel/exporters/zipkin v1.0.0-RC3
 	go.opentelemetry.io/otel/sdk v1.0.0-RC3
 	go.opentelemetry.io/otel/trace v1.0.0-RC3
-	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97
+	gocloud.dev v0.24.0
+	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5
 	golang.org/x/exp v0.0.0-20210514180818-737f94c0881e
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
-	golang.org/x/net v0.0.0-20210913180222-943fd674d43e
-	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f
+	golang.org/x/net v0.0.0-20211101193420-4a448f8816b3
+	golang.org/x/oauth2 v0.0.0-20211028175245-ba495a64dcb5
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20211025201205-69cdffdb9359
+	golang.org/x/sys v0.0.0-20211102192858-4dd72447c267
 	golang.org/x/term v0.0.0-20210220032956-6a3ed077a48d
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
 	golang.org/x/tools v0.1.5
-	google.golang.org/api v0.56.0
-	google.golang.org/genproto v0.0.0-20210909211513-a8c4777a87af
-	google.golang.org/grpc v1.40.0
+	google.golang.org/api v0.60.0
+	google.golang.org/genproto v0.0.0-20211102202547-e9cf271f7f2c
+	google.golang.org/grpc v1.42.0
 	google.golang.org/grpc/examples v0.0.0-20210324172016-702608ffae4d // indirect
 	google.golang.org/protobuf v1.27.1
 	gopkg.in/yaml.v2 v2.4.0

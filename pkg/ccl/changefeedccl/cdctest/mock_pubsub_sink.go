@@ -28,37 +28,42 @@ func MakeMockPubsubSink(url string, ctx context.Context) (*MockPubsubSink, error
 }
 
 func (p *MockPubsubSink) Close() {
+	p.shutdown()
 	if p.sub != nil {
 		p.sub.Shutdown(p.ctx)
 	}
-	p.shutdown()
 	close(p.errChan)
 }
 
 func (p *MockPubsubSink) Dial() error{
-	sub ,err := pubsub.OpenSubscription(p.ctx, p.url)
+	var err error
+	p.sub, err = pubsub.OpenSubscription(p.ctx, p.url)
 	if err != nil {
 		return err
 	}
-	p.sub = sub
-	go p.recieve()
+	go p.receive()
 	return nil
 }
 
-func (p *MockPubsubSink) recieve() {
+func (p *MockPubsubSink) receive() {
 	for {
 		msg, err := p.sub.Receive(p.ctx)
 		if err != nil {
+			select {
+			case <-p.ctx.Done():
+				return
+			default:
+			}
 			p.errChan <- err
+			return
 		}
+		msg.Ack()
 		msgBody := string(msg.Body)
 		select {
 		case <-p.ctx.Done():
 			return
 		default:
-			if msgBody != "" {
-				p.push(msgBody)
-			}
+			p.push(msgBody)
 		}
 	}
 }
@@ -69,15 +74,15 @@ func (p *MockPubsubSink) push(msg string) {
 	p.mu.rows = append(p.mu.rows, msg)
 }
 
-func (p *MockPubsubSink) Pop() string{
+func (p *MockPubsubSink) Pop() *string{
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if len(p.mu.rows) > 0 {
 		oldest := p.mu.rows[0]
 		p.mu.rows = p.mu.rows[1:]
-		return oldest
+		return &oldest
 	}
-	return ""
+	return nil
 }
 
 func (p *MockPubsubSink)CheckSinkError() error{

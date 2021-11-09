@@ -6,6 +6,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"golang.org/x/oauth2/google"
 	"hash/crc32"
 	"net/url"
@@ -47,6 +48,7 @@ func isPubsubSink(u *url.URL) bool {
 type payload struct {
 	Key   json.RawMessage `json:"key"`
 	Value json.RawMessage `json:"value"`
+	Topic string `json:"topic"`
 }
 
 //pubsubMessage is sent to worker channels for workers to consume
@@ -120,6 +122,7 @@ func parseGCPURL(u sinkURL) (string, error) {
 
 //MakePubsubSink returns the corresponding pubsub sink based on the url given
 func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string) (Sink, error) {
+	log.Warningf(context.Background(), "\x1b[34m make pubsubsink \x1b[0m")
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
 	case changefeedbase.OptFormatJSON:
 	default:
@@ -134,11 +137,12 @@ func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string) (Si
 			changefeedbase.OptEnvelope, opts[changefeedbase.OptEnvelope])
 	}
 
-	if _, ok := opts[changefeedbase.OptKeyInValue]; !ok {
-		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
-	}
+	//if _, ok := opts[changefeedbase.OptKeyInValue]; !ok {
+	//	return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
+	//}
 
 	ctx, cancel := context.WithCancel(ctx)
+	//currently just harrdcoding numWorkers to 10, it will be a config option later down the road
 	p := &pubsubSink{workerCtx: ctx, url: sinkURL{u, u.Query()}, numWorkers: 10, exitWorkers: cancel}
 	p.setupWorkers()
 
@@ -179,14 +183,17 @@ func (p *pubsubSink) setTopic(topic *pubsub.Topic) {
 //EmitRow pushes a message to event channel where it is consumed by workers
 func (p *pubsubSink) emitRow(
 	ctx context.Context,
-	_ TopicDescriptor,
+	topic TopicDescriptor,
 	key, value []byte,
 	_ hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
+	log.Warningf(context.Background(), "\x1b[34m EMIT ROW \x1b[0m")
+	log.Warningf(context.Background(), string(key))
 	m := pubsubMessage{alloc: alloc, isFlush: false, message: payload{
 		Key:   key,
 		Value: value,
+		Topic: topic.GetName(),
 	}}
 	// calculate index by hashing key
 	i := p.workerIndex(key)
@@ -247,15 +254,16 @@ func (p *pubsubSink) flush(ctx context.Context) error {
 
 //Close closes all the channels and shutdowns the topic
 func (p *pubsubSink) close() error {
+	err := p.topic.Shutdown(p.getWorkerCtx())
+	if err != nil {
+		return errors.Wrapf(err, "closing pubsub topic")
+	}
+	p.exitWorkers()
 	_ = p.workerGroup.Wait()
 	close(p.errChan)
 	close(p.flushDone)
 	for i := 0; i < p.numWorkers; i++ {
 		close(p.eventsChans[i])
-	}
-	err := p.topic.Shutdown(p.getWorkerCtx())
-	if err != nil {
-		return errors.Wrapf(err, "closing pubsub topic")
 	}
 	return nil
 }
@@ -306,7 +314,7 @@ func (p *pubsubSink) workerLoop(workerIndex int) {
 				continue
 			}
 
-			m := payload{Key: msg.message.Key, Value: msg.message.Value}
+			m := msg.message
 			b, err := json.Marshal(m)
 			if err != nil {
 				p.exitWorkersWithError(err)
@@ -447,7 +455,7 @@ func (p *gcpPubsubSink) Close() error {
 
 //Dial opens topic using url
 func (p *memPubsubSink) Dial() error {
-	topic, err := pubsub.OpenTopic(p.pubsubSink.getWorkerCtx(), p.pubsubSink.getUrl().String())
+	topic, err := pubsub.OpenTopic(p.pubsubSink.getWorkerCtx(), p.pubsubSink.url.String())
 	if err != nil {
 		return err
 	}
@@ -483,11 +491,11 @@ func (p *memPubsubSink) Flush(ctx context.Context) error {
 
 //Close calls the pubsubDesc Close
 func (p *memPubsubSink) Close() error {
-	if p.pubsubSink != nil {
-		err := p.pubsubSink.close()
-		if err != nil {
-			return err
-		}
-	}
+	//if p.pubsubSink != nil {
+	//	err := p.pubsubSink.close()
+	//	if err != nil {
+	//		return err
+	//	}
+	//}
 	return nil
 }

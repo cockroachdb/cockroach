@@ -530,11 +530,15 @@ type enterpriseFeedFactory struct {
 }
 
 func (e enterpriseFeedFactory) startFeedJob(f *jobFeed, create string, args ...interface{}) error {
+	log.Warningf(context.Background(), "\x1b[34m before prepare job \x1b[0m")
 	e.di.prepareJob(f)
+	log.Warningf(context.Background(), "\x1b[34m after prepare job \x1b[0m")
 	if err := e.db.QueryRow(create, args...).Scan(&f.jobID); err != nil {
 		return err
 	}
+	log.Warningf(context.Background(), "\x1b[34m after query job \x1b[0m")
 	e.di.startJob(f)
+	log.Warningf(context.Background(), "\x1b[34m after start job \x1b[0m")
 	return nil
 }
 
@@ -1460,17 +1464,20 @@ func makePubsubFeedFactory(
 }
 
 func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.TestFeed, error) {
+	log.Warningf(context.Background(), "\x1b[34m Feed Start \x1b[0m")
 	parsed, err := parser.ParseOne(create)
 	if err != nil {
 		return nil, err
 	}
+	log.Warningf(context.Background(), "\x1b[34m Feed Parsed \x1b[0m")
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
 
 	if createStmt.SinkURI == nil {
 		createStmt.SinkURI = tree.NewStrVal(
 			fmt.Sprintf("%s://testfeedURL", memScheme))
 	}
-
+	log.Warningf(context.Background(), createStmt.String())
+	log.Warningf(context.Background(), "\x1b[34m Feed Create STMT \x1b[0m")
 	ctx := context.Background()
 	sinkDest, err := cdctest.MakeMockPubsubSink(fmt.Sprintf("%s://testfeedURL", memScheme), ctx)
 
@@ -1485,10 +1492,14 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		ss:             ss,
 		mockSink:       sinkDest,
 	}
+	log.Warningf(context.Background(), "\x1b[34m start feed job \x1b[0m")
 	if err := p.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+		log.Warningf(context.Background(), "\x1b[34m start feed fail \x1b[0m")
 		sinkDest.Close()
+		log.Warningf(context.Background(), "\x1b[34m start feed close \x1b[0m")
 		return nil, err
 	}
+	log.Warningf(context.Background(), "\x1b[34m start feed job success \x1b[0m")
 	c.mockSink.Dial()
 	return c, nil
 }
@@ -1511,43 +1522,55 @@ func (p *pubsubFeed) Partitions() []string {
 	return []string{``}
 }
 
+func extractJSONMessagePubsub(wrapped []byte) (value []byte, key []byte, topic string, err error){
+	parsed := payload{}
+	err = gojson.Unmarshal(wrapped, &parsed);
+	if err != nil {
+		return
+	}
+	valueParsed := parsed.Value
+	keyParsed := parsed.Key
+	topic = parsed.Topic
+
+
+	value, err = reformatJSON(valueParsed);
+	if err != nil {
+		return
+	}
+	key, err = reformatJSON(keyParsed);
+	if err != nil {
+		return
+	}
+	return
+}
+
 // Next implements TestFeed
 func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
+	log.Info(context.TODO(), "NEXT")
 	for {
 		err := p.mockSink.CheckSinkError()
 		if err != nil {
 			return nil, err
 		}
 		msg := p.mockSink.Pop()
-		if msg != "" {
+		if msg != nil {
 			m := &cdctest.TestFeedMessage{}
-			if msg != "" {
-				var err error
-				var resolved bool
-				resolved, err = isResolvedTimestamp([]byte(msg))
+			resolved, err := isResolvedTimestamp([]byte(*msg))
+			if err != nil {
+				return nil, err
+			}
+			msgBytes := []byte(*msg)
+			if resolved {
+				m.Resolved = msgBytes
+			} else {
+				m.Value, m.Key, m.Topic, err = extractJSONMessagePubsub(msgBytes)
 				if err != nil {
 					return nil, err
 				}
-				if resolved {
-					m.Resolved = []byte(msg)
-				} else {
-					wrappedValue, err := extractValueFromJSONMessage([]byte(msg))
-					if err != nil {
-						return nil, err
-					}
-					if m.Key, m.Value, err = extractKeyFromJSONValue(wrappedValue); err != nil {
-						return nil, err
-					}
-					if m.Topic, m.Value, err = extractTopicFromJSONValue(m.Value); err != nil {
-						return nil, err
-					}
-					if isNew := p.markSeen(m); !isNew {
-						continue
-					}
+				if isNew := p.markSeen(m); !isNew {
+					continue
 				}
-				return m, nil
 			}
-			m.Key, m.Value = nil, nil
 			return m, nil
 		}
 

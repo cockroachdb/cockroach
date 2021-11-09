@@ -88,7 +88,6 @@ func (s *testSubscriber)recieveRows(){
 }
 
 func TestRecieveRows(t *testing.T) {
-
 	sinkCtx := context.TODO()
 	u, err := url.Parse(testMemPubsubURI)
 	p, err := MakePubsubSink(sinkCtx, u, getGenericPubsubSinkOptions())
