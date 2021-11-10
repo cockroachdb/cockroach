@@ -10,6 +10,7 @@ CREATE TABLE assn_cast (
   i INT,
   t timestamp,
   d DECIMAL(10, 0),
+  a DECIMAL(10, 0)[],
   s STRING
 )
 
@@ -165,6 +166,21 @@ SELECT d FROM assn_cast WHERE d IS NOT NULL
 89
 123
 68
+
+statement ok
+INSERT INTO assn_cast(a) VALUES (ARRAY[5.55, 6.66::DECIMAL(10, 2)])
+
+statement ok
+PREPARE insert_a AS INSERT INTO assn_cast(a) VALUES ($1)
+
+statement ok
+EXECUTE insert_a(ARRAY[7.77, 8.88::DECIMAL(10, 2)])
+
+query T rowsort
+SELECT a FROM assn_cast WHERE a IS NOT NULL
+----
+{6,7}
+{8,9}
 
 statement ok
 INSERT INTO assn_cast(s) VALUES (1)
