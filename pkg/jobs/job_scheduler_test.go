@@ -217,17 +217,17 @@ func TestJobSchedulerDaemonGetWaitPeriod(t *testing.T) {
 	schedulerEnabledSetting.Override(ctx, sv, false)
 
 	// When disabled, we wait 5 minutes before rechecking.
-	require.EqualValues(t, 5*time.Minute, getWaitPeriod(sv, nil))
+	require.EqualValues(t, 5*time.Minute, getWaitPeriod(ctx, sv, nil))
 	schedulerEnabledSetting.Override(ctx, sv, true)
 
 	// When pace is too low, we use something more reasonable.
 	schedulerPaceSetting.Override(ctx, sv, time.Nanosecond)
-	require.EqualValues(t, minPacePeriod, getWaitPeriod(sv, nil))
+	require.EqualValues(t, minPacePeriod, getWaitPeriod(ctx, sv, nil))
 
 	// Otherwise, we use user specified setting.
 	pace := 42 * time.Second
 	schedulerPaceSetting.Override(ctx, sv, pace)
-	require.EqualValues(t, pace, getWaitPeriod(sv, nil))
+	require.EqualValues(t, pace, getWaitPeriod(ctx, sv, nil))
 }
 
 type recordScheduleExecutor struct {
