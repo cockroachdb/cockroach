@@ -161,7 +161,6 @@ func (fw *SSTWriter) PutIntent(
 	key roachpb.Key,
 	value []byte,
 	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 ) error {
 	return fw.put(MVCCKey{Key: key}, value)

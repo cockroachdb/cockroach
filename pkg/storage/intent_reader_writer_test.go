@@ -88,6 +88,7 @@ func printEngContents(b *strings.Builder, eng Engine) {
 			break
 		}
 		if key.IsMVCCKey() {
+			fmt.Println("here")
 			var k MVCCKey
 			if k, err = key.ToMVCCKey(); err != nil {
 				fmt.Fprintf(b, "error: %s\n", err.Error())
@@ -208,8 +209,6 @@ func TestIntentDemuxWriter(t *testing.T) {
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "new-writer":
-				var separated bool
-				d.ScanArgs(t, "enable-separated", &separated)
 				// This is a low-level test that explicitly wraps the writer, so it
 				// doesn't matter how the original call to createTestPebbleEngine
 				// behaved in terms of separated intents config.
@@ -236,9 +235,9 @@ func TestIntentDemuxWriter(t *testing.T) {
 					return err.Error()
 				}
 				state := readPrecedingIntentState(t, d)
-				txnDidNotUpdateMeta := readTxnDidNotUpdateMeta(t, d)
+				// _ = readTxnDidNotUpdateMeta(t, d) // todo(bananabrick) : remove this
 				scratch, err = w.PutIntent(
-					context.Background(), key, val, state, txnDidNotUpdateMeta, txnUUID, scratch)
+					context.Background(), key, val, state, txnUUID, scratch)
 				if err != nil {
 					return err.Error()
 				}

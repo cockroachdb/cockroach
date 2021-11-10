@@ -638,13 +638,12 @@ func (s spanSetWriter) PutIntent(
 	key roachpb.Key,
 	value []byte,
 	state storage.PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 ) error {
 	if err := s.checkAllowed(key); err != nil {
 		return err
 	}
-	return s.w.PutIntent(ctx, key, value, state, txnDidNotUpdateMeta, txnUUID)
+	return s.w.PutIntent(ctx, key, value, state, txnUUID)
 }
 
 func (s spanSetWriter) PutEngineKey(key storage.EngineKey, value []byte) error {

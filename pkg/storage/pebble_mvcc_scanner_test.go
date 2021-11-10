@@ -68,7 +68,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 
 	for _, k := range keys {
 		err = eng.PutIntent(
-			context.Background(), k, metaBytes, NoExistingIntent, true /* txnDidNotUpdateMeta */, uuid)
+			context.Background(), k, metaBytes, NoExistingIntent, uuid)
 		require.NoError(t, err)
 	}
 

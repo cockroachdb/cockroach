@@ -1009,12 +1009,11 @@ func (p *Pebble) PutIntent(
 	key roachpb.Key,
 	value []byte,
 	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 ) error {
 
 	_, err :=
-		p.wrappedIntentWriter.PutIntent(ctx, key, value, state, txnDidNotUpdateMeta, txnUUID, nil)
+		p.wrappedIntentWriter.PutIntent(ctx, key, value, state, txnUUID, nil)
 	return err
 }
 
@@ -1808,7 +1807,6 @@ func (p *pebbleReadOnly) PutIntent(
 	key roachpb.Key,
 	value []byte,
 	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 ) error {
 	panic("not implemented")

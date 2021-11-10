@@ -140,7 +140,7 @@ func (registry *stickyInMemEnginesRegistryImpl) GetOrCreateStickyInMemEngine(
 	// Don't randomize the separated intents if we explicitly want to disable
 	// them.
 	storeKnobs, _ := cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs)
-	if storeKnobs == nil || !storeKnobs.StorageKnobs.DisableSeparatedIntents {
+	if storeKnobs == nil {
 		options = append(options, storage.ForStickyEngineTesting)
 	} else {
 		options = append(options, storage.SetSeparatedIntents())

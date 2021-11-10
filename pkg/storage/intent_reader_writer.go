@@ -73,10 +73,11 @@ func (idw intentDemuxWriter) PutIntent(
 	key roachpb.Key,
 	value []byte,
 	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 	buf []byte,
 ) (_ []byte, _ error) {
+	// The intent is either staying separated, or there
+	// was no previous intent.
 	var engineKey EngineKey
 	engineKey, buf = LockTableKey{
 		Key:      key,

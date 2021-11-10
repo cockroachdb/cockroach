@@ -517,12 +517,11 @@ func (rw intentPrintingReadWriter) PutIntent(
 	key roachpb.Key,
 	value []byte,
 	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 ) error {
-	rw.buf.Printf("called PutIntent(%v, _, %v, TDNUM(%t), %v)\n",
-		key, state, txnDidNotUpdateMeta, txnUUID)
-	return rw.ReadWriter.PutIntent(ctx, key, value, state, txnDidNotUpdateMeta, txnUUID)
+	rw.buf.Printf("called PutIntent(%v, _, %v, %v)\n",
+		key, state, txnUUID)
+	return rw.ReadWriter.PutIntent(ctx, key, value, state, txnUUID)
 }
 
 func (rw intentPrintingReadWriter) ClearIntent(

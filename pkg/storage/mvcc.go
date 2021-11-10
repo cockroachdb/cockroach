@@ -1086,7 +1086,7 @@ func (b *putBuffer) putIntentMeta(
 		return 0, 0, err
 	}
 	if err = writer.PutIntent(
-		ctx, key.Key, bytes, helper.state, helper.valueForPutIntent(), meta.Txn.ID); err != nil {
+		ctx, key.Key, bytes, helper.state, meta.Txn.ID); err != nil {
 		return 0, 0, err
 	}
 	return int64(key.EncodedSize()), int64(len(bytes)), nil
