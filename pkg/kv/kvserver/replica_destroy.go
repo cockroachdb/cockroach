@@ -113,7 +113,9 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 	// call to postDestroyRaftMuLocked will currently leave the files around
 	// forever.
 	if r.raftMu.sideloaded != nil {
-		return r.raftMu.sideloaded.Clear(ctx)
+		if err := r.raftMu.sideloaded.Clear(ctx); err != nil {
+			return err
+		}
 	}
 
 	// Release the reference to this tenant in metrics, we know the tenant ID is
