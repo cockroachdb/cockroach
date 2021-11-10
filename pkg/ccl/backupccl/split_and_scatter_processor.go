@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
 
@@ -255,12 +256,19 @@ func (ssp *splitAndScatterProcessor) Start(ctx context.Context) {
 		cancel()
 		<-workerDone
 	}
-	go func() {
+	if err := ssp.flowCtx.Stopper().RunAsyncTaskEx(scatterCtx, stop.TaskOpts{
+		TaskName: "splitAndScatter-worker",
+		SpanOpt:  stop.ChildSpan,
+	}, func(ctx context.Context) {
 		defer close(workerDone)
 		defer close(ssp.doneScatterCh)
 		defer cancel()
 		ssp.scatterErr = ssp.runSplitAndScatter(scatterCtx, ssp.flowCtx, &ssp.spec, ssp.scatterer)
-	}()
+	}); err != nil {
+		ssp.scatterErr = err
+		cancel()
+		close(workerDone)
+	}
 }
 
 type entryNode struct {
