@@ -311,6 +311,36 @@ func (tc *Collection) GetAllTableDescriptorsInDatabase(
 	return ret, nil
 }
 
+// GetAllDescriptorsInDatabase returns all the descriptors visible to
+// the transaction under the database with the given ID. It first checks the
+// collection's cached descriptors before defaulting to a key-value scan, if
+// necessary.
+func (tc *Collection) GetAllDescriptorsInDatabase(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID,
+) ([]catalog.Descriptor, error) {
+	// Ensure the given ID does indeed belong to a database.
+	found, _, err := tc.getDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
+		AvoidCached: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
+	}
+	descs, err := tc.GetAllDescriptors(ctx, txn)
+	if err != nil {
+		return nil, err
+	}
+	var ret []catalog.Descriptor
+	for _, desc := range descs {
+		if desc.GetParentID() == dbID {
+			ret = append(ret, desc)
+		}
+	}
+	return ret, nil
+}
+
 // GetSchemasForDatabase returns the schemas for a given database
 // visible by the transaction. This uses the schema cache locally
 // if possible, or else performs a scan on kv.
