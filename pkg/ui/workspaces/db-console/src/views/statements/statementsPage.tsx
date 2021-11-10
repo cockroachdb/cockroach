@@ -46,7 +46,6 @@ import {
   trackDownloadDiagnosticsBundleAction,
   trackStatementsPaginationAction,
   trackStatementsSearchAction,
-  trackTableSortAction,
 } from "src/redux/analyticsActions";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { LocalSetting } from "src/redux/localsettings";
@@ -235,18 +234,25 @@ export const statementColumnsLocalSetting = new LocalSetting(
   null,
 );
 
+export const sortSettingLocalSetting = new LocalSetting(
+  "sortSetting/StatementsPage",
+  (state: AdminUIState) => state.localSettings,
+  { ascending: false, columnTitle: "executionCount" },
+);
+
 export default withRouter(
   connect(
     (state: AdminUIState, props: RouteComponentProps) => ({
       statements: selectStatements(state, props),
       statementsError: state.cachedData.statements.lastError,
-      dateRange: selectDateRange(state),
       apps: selectApps(state),
       databases: selectDatabases(state),
       totalFingerprints: selectTotalFingerprints(state),
       lastReset: selectLastReset(state),
       columns: statementColumnsLocalSetting.selectorToArray(state),
       nodeRegions: nodeRegionsByIDSelector(state),
+      dateRange: selectDateRange(state),
+      sortSetting: sortSettingLocalSetting.selector(state),
     }),
     {
       refreshStatements: refreshStatements,
@@ -260,7 +266,15 @@ export default withRouter(
       onSearchComplete: (results: AggregateStatistics[]) =>
         trackStatementsSearchAction(results.length),
       onPageChanged: trackStatementsPaginationAction,
-      onSortingChange: trackTableSortAction,
+      onSortingChange: (
+        _tableName: string,
+        columnName: string,
+        ascending: boolean,
+      ) =>
+        sortSettingLocalSetting.set({
+          ascending: ascending,
+          columnTitle: columnName,
+        }),
       onDiagnosticsReportDownload: (report: IStatementDiagnosticsReport) =>
         trackDownloadDiagnosticsBundleAction(report.statement_fingerprint),
       // We use `null` when the value was never set and it will show all columns.
