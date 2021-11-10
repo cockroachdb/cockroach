@@ -445,28 +445,26 @@ func (ca *changeAggregator) setupSpansAndFrontier(
 // processor did not finish completion, there is an excessive amount of nil
 // checking.
 func (ca *changeAggregator) close() {
-	if ca.InternalClose() {
-		// Shut down the poller if it wasn't already. Note that it will cancel
-		// the context used by all components, but ca.Ctx has been updated by
-		// InternalClose() to the "original" context (the one passed into
-		// StartInternal()).
-		ca.cancel()
-		// Wait for the poller to finish shutting down.
-		if ca.kvFeedDoneCh != nil {
-			<-ca.kvFeedDoneCh
-		}
-		if ca.sink != nil {
-			if err := ca.sink.Close(); err != nil {
-				log.Warningf(ca.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
-			}
-		}
-
-		ca.memAcc.Close(ca.Ctx)
-		if ca.kvFeedMemMon != nil {
-			ca.kvFeedMemMon.Stop(ca.Ctx)
-		}
-		ca.MemMonitor.Stop(ca.Ctx)
+	if ca.Closed {
+		return
 	}
+	ca.cancel()
+	// Wait for the poller to finish shutting down.
+	if ca.kvFeedDoneCh != nil {
+		<-ca.kvFeedDoneCh
+	}
+	if ca.sink != nil {
+		if err := ca.sink.Close(); err != nil {
+			log.Warningf(ca.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
+		}
+	}
+
+	ca.memAcc.Close(ca.Ctx)
+	if ca.kvFeedMemMon != nil {
+		ca.kvFeedMemMon.Stop(ca.Ctx)
+	}
+	ca.MemMonitor.Stop(ca.Ctx)
+	ca.InternalClose()
 }
 
 // Next is part of the RowSource interface.
