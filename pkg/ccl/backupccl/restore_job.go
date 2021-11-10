@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -2454,26 +2455,28 @@ func getRestoringPrivileges(
 	descCoverage tree.DescriptorCoverage,
 ) (updatedPrivileges *descpb.PrivilegeDescriptor, err error) {
 	switch desc := desc.(type) {
-	case catalog.TableDescriptor, catalog.SchemaDescriptor:
-		if wrote, ok := wroteDBs[desc.GetParentID()]; ok {
-			// If we're creating a new database in this restore, the privileges of the
-			// table and schema should be that of the parent DB.
-			//
-			// Leave the privileges of the temp system tables as the default too.
-			if descCoverage == tree.RequestedDescriptors || wrote.GetName() == restoreTempSystemDB {
-				updatedPrivileges = wrote.GetPrivileges()
-			}
-		} else if descCoverage == tree.RequestedDescriptors {
-			parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, desc.GetParentID())
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
-			}
-
-			// TODO(dt): Make this more configurable.
-			immutableDefaultPrivileges := parentDB.GetDefaultPrivilegeDescriptor()
-			updatedPrivileges = immutableDefaultPrivileges.CreatePrivilegesFromDefaultPrivileges(
-				parentDB.GetID(), user, tree.Tables, parentDB.GetPrivileges())
-		}
+	case catalog.TableDescriptor:
+		return getRestorePrivilegesForTableOrSchema(
+			ctx,
+			codec,
+			txn,
+			desc,
+			user,
+			wroteDBs,
+			descCoverage,
+			privilege.Table,
+		)
+	case catalog.SchemaDescriptor:
+		return getRestorePrivilegesForTableOrSchema(
+			ctx,
+			codec,
+			txn,
+			desc,
+			user,
+			wroteDBs,
+			descCoverage,
+			privilege.Schema,
+		)
 	case catalog.TypeDescriptor, catalog.DatabaseDescriptor:
 		if descCoverage == tree.RequestedDescriptors {
 			// If the restore is not a cluster restore we cannot know that the users on
@@ -2481,6 +2484,46 @@ func getRestoringPrivileges(
 			// backed up. So we wipe the privileges on the type/database.
 			updatedPrivileges = descpb.NewDefaultPrivilegeDescriptor(user)
 		}
+	}
+	return updatedPrivileges, nil
+}
+
+func getRestorePrivilegesForTableOrSchema(
+	ctx context.Context,
+	codec keys.SQLCodec,
+	txn *kv.Txn,
+	desc catalog.Descriptor,
+	user security.SQLUsername,
+	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
+	descCoverage tree.DescriptorCoverage,
+	privilegeType privilege.ObjectType,
+) (updatedPrivileges *descpb.PrivilegeDescriptor, err error) {
+	if wrote, ok := wroteDBs[desc.GetParentID()]; ok {
+		// If we're creating a new database in this restore, the privileges of the
+		// table and schema should be that of the parent DB.
+		//
+		// Leave the privileges of the temp system tables as the default too.
+		if descCoverage == tree.RequestedDescriptors || wrote.GetName() == restoreTempSystemDB {
+			updatedPrivileges = wrote.GetPrivileges()
+			for i, u := range updatedPrivileges.Users {
+				privObjectType := privilege.Table
+				if _, ok := desc.(catalog.SchemaDescriptor); ok {
+					privObjectType = privilege.Schema
+				}
+				updatedPrivileges.Users[i].Privileges =
+					privilege.ListFromBitField(u.Privileges, privObjectType).ToBitField()
+			}
+		}
+	} else if descCoverage == tree.RequestedDescriptors {
+		parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, desc.GetParentID())
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
+		}
+
+		// TODO(dt): Make this more configurable.
+		immutableDefaultPrivileges := parentDB.GetDefaultPrivilegeDescriptor()
+		updatedPrivileges = immutableDefaultPrivileges.CreatePrivilegesFromDefaultPrivileges(
+			parentDB.GetID(), user, tree.Tables, parentDB.GetPrivileges())
 	}
 	return updatedPrivileges, nil
 }
