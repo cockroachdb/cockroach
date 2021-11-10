@@ -32,10 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/json/jsonpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
-	"github.com/gogo/protobuf/jsonpb"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )

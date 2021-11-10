@@ -16,9 +16,9 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/util/json/jsonpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/jsonpb"
 )
 
 const (

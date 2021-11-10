@@ -13,7 +13,7 @@ package types
 import (
 	"bytes"
 
-	"github.com/gogo/protobuf/jsonpb"
+	"github.com/cockroachdb/cockroach/pkg/util/json/jsonpb"
 )
 
 // This file contains logic to allow the *types.T to properly marshal to json.

@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/util/json/jsonpb"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/jsonpb"
 )
 
 // JobID is the ID of a job.

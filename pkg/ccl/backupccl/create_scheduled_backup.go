@@ -36,8 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json/jsonpb"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/jsonpb"
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/gorhill/cronexpr"
 )

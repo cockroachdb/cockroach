@@ -14,7 +14,7 @@ import (
 	"encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
-	"github.com/gogo/protobuf/jsonpb"
+	"github.com/cockroachdb/cockroach/pkg/util/json/jsonpb"
 )
 
 // SecretMessage is a message which should be redacted.

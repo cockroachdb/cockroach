@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/json/jsonpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -68,7 +69,6 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/ttycolor"
 	humanize "github.com/dustin/go-humanize"
-	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
 	"github.com/spf13/cobra"
 )
