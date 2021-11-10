@@ -59,7 +59,8 @@ type restoreDataProcessor struct {
 	// 1) reading entries from the input
 	// 2) ingesting the data associated with those entries in the concurrent
 	// restore data workers.
-	phaseGroup ctxgroup.Group
+	phaseGroup           ctxgroup.Group
+	cancelWorkersAndWait func()
 
 	// sstCh is a channel that holds SSTs opened by the processor, but not yet
 	// ingested.
@@ -144,6 +145,11 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	ctx = rd.StartInternal(ctx, restoreDataProcName)
 	rd.input.Start(ctx)
 
+	ctx, cancel := context.WithCancel(ctx)
+	rd.cancelWorkersAndWait = func() {
+		cancel()
+		_ = rd.phaseGroup.Wait()
+	}
 	rd.phaseGroup = ctxgroup.WithContext(ctx)
 
 	entries := make(chan execinfrapb.RestoreSpanEntry, rd.numWorkers)
@@ -496,17 +502,17 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 
 // ConsumerClosed is part of the RowSource interface.
 func (rd *restoreDataProcessor) ConsumerClosed() {
-	if rd.InternalClose() {
-		if rd.metaCh != nil {
-			close(rd.metaCh)
-		}
-		if rd.sstCh != nil {
-			// Cleanup all the remaining open SSTs that have not been consumed.
-			for sst := range rd.sstCh {
-				sst.cleanup()
-			}
+	if rd.Closed {
+		return
+	}
+	rd.cancelWorkersAndWait()
+	if rd.sstCh != nil {
+		// Cleanup all the remaining open SSTs that have not been consumed.
+		for sst := range rd.sstCh {
+			sst.cleanup()
 		}
 	}
+	rd.InternalClose()
 }
 
 func init() {
