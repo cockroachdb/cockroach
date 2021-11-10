@@ -373,8 +373,8 @@ func TestValidateTypeDesc(t *testing.T) {
 		},
 	}).BuildImmutable()
 
-	defaultPrivileges := descpb.NewDefaultPrivilegeDescriptor(security.RootUserName())
-	invalidPrivileges := descpb.NewDefaultPrivilegeDescriptor(security.RootUserName())
+	defaultPrivileges := descpb.NewBasePrivilegeDescriptor(security.RootUserName())
+	invalidPrivileges := descpb.NewBasePrivilegeDescriptor(security.RootUserName())
 	// Make the PrivilegeDescriptor invalid by granting SELECT to a type.
 	invalidPrivileges.Grant(security.TestUserName(), privilege.List{privilege.SELECT})
 	typeDescID := descpb.ID(keys.MaxReservedDescID + 1)

@@ -319,7 +319,7 @@ func createPostgresSequences(
 			schema.GetID(),
 			getNextPlaceholderDescID(),
 			hlc.Timestamp{WallTime: walltime},
-			descpb.NewDefaultPrivilegeDescriptor(owner),
+			descpb.NewBasePrivilegeDescriptor(owner),
 			tree.PersistencePermanent,
 			nil, /* params */
 			// If this is multi-region, this will get added by WriteDescriptors.
