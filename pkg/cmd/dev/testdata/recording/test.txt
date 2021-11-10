@@ -2,7 +2,7 @@ bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
 
-bazel test //pkg/util/tracing:tracing_test --test_output errors
+bazel test //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all --test_output errors
 ----
 ----
 //pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 0.2s
@@ -15,7 +15,7 @@ bazel query 'kind(go_test,  //pkg/util/tracing/...)'
 ----
 //pkg/util/tracing:tracing_test
 
-bazel test //pkg/util/tracing:tracing_test --test_output errors
+bazel test //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all --test_output errors
 ----
 ----
 //pkg/util/tracing:tracing_test                                 [0m[32m(cached) PASSED[0m in 0.2s
@@ -28,7 +28,7 @@ bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
 
-bazel test //pkg/util/tracing:tracing_test '--test_filter=TestStartChild*' --test_output errors
+bazel test //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all '--test_filter=TestStartChild*' --test_output errors
 ----
 ----
 //pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 0.1s
@@ -41,7 +41,7 @@ bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
 
-bazel test //pkg/util/tracing:tracing_test '--test_filter=TestStartChild*' --test_output all --test_arg -test.v
+bazel test //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all '--test_filter=TestStartChild*' --test_output all --test_arg -test.v
 ----
 ----
 ==================== Test output for //pkg/util/tracing:tracing_test:
@@ -58,7 +58,7 @@ bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
 
-bazel test --remote_local_fallback --remote_cache=grpc://127.0.0.1:9092 --experimental_remote_downloader=grpc://127.0.0.1:9092 //pkg/util/tracing:tracing_test '--test_filter=TestStartChild*' --test_output errors
+bazel test --remote_local_fallback --remote_cache=grpc://127.0.0.1:9092 --experimental_remote_downloader=grpc://127.0.0.1:9092 //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all '--test_filter=TestStartChild*' --test_output errors
 ----
 ----
 //pkg/util/tracing:tracing_test                                 [0m[32m(cached) PASSED[0m in 0.0s
@@ -71,7 +71,7 @@ bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
 
-bazel test //pkg/util/tracing:tracing_test --nocache_test_results '--test_filter=TestStartChild*' --test_output errors
+bazel test //pkg/util/tracing:tracing_test --nocache_test_results --test_env=GOTRACEBACK=all '--test_filter=TestStartChild*' --test_output errors
 ----
 ----
 //pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 0.1s
@@ -84,7 +84,7 @@ bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
 
-bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress ' '--test_filter=TestStartChild*' --test_output streamed
+bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress ' '--test_filter=TestStartChild*' --test_output streamed
 ----
 ----
 //pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 12.3s
@@ -97,7 +97,7 @@ bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
 
-bazel test --local_cpu_resources=12 --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress -p=12 ' '--test_filter=TestStartChild*' --test_output streamed
+bazel test --local_cpu_resources=12 --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress -p=12 ' '--test_filter=TestStartChild*' --test_output streamed
 ----
 ----
 //pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 12.3s
@@ -110,7 +110,7 @@ bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
 
-bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_timeout=70 --run_under '@com_github_cockroachdb_stress//:stress -maxtime=10s ' '--test_filter=TestStartChild*' --test_output streamed
+bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all --test_timeout=70 --run_under '@com_github_cockroachdb_stress//:stress -maxtime=10s ' '--test_filter=TestStartChild*' --test_output streamed
 ----
 ----
 ==================== Test output for //pkg/util/tracing:tracing_test:
@@ -129,7 +129,7 @@ bazel query 'kind(go_test, //pkg/testutils:all)'
 ----
 //pkg/testutils:testutils_test
 
-bazel test //pkg/testutils:testutils_test --test_timeout=10 --test_output errors
+bazel test //pkg/testutils:testutils_test --test_env=GOTRACEBACK=all --test_timeout=10 --test_output errors
 ----
 ----
 [32mLoading:[0m 
@@ -158,7 +158,7 @@ bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
 
-bazel test //pkg/util/tracing:tracing_test --test_output errors -s
+bazel test //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all --test_output errors -s
 ----
 ----
 //pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 0.2s
@@ -175,10 +175,10 @@ bazel query 'kind(go_test, //pkg/roachpb:all)'
 ----
 ----
 
-bazel test //pkg/roachpb:roachpb_test //pkg/roachpb:string_test --test_output errors
+bazel test //pkg/roachpb:roachpb_test //pkg/roachpb:string_test --test_env=GOTRACEBACK=all --test_output errors
 ----
 
-bazel test pkg/roachpb:string_test --test_output errors
+bazel test pkg/roachpb:string_test --test_env=GOTRACEBACK=all --test_output errors
 ----
 
 bazel query 'kind(go_test, //pkg/testutils:all)'
@@ -189,7 +189,7 @@ bazel info workspace --color=no
 ----
 go/src/github.com/cockroachdb/cockroach
 
-bazel test //pkg/testutils:testutils_test --test_env=COCKROACH_WORKSPACE=go/src/github.com/cockroachdb/cockroach --test_arg -rewrite --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/testutils --test_output errors
+bazel test //pkg/testutils:testutils_test --test_env=GOTRACEBACK=all --test_env=COCKROACH_WORKSPACE=go/src/github.com/cockroachdb/cockroach --test_arg -rewrite --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/testutils --test_output errors
 ----
 
 bazel query 'kind(go_test, //pkg/testutils:all)'
@@ -204,5 +204,5 @@ bazel info workspace --color=no
 ----
 go/src/github.com/cockroachdb/cockroach
 
-bazel test //pkg/testutils:testutils_test //pkg/other/test:test_test --test_env=COCKROACH_WORKSPACE=go/src/github.com/cockroachdb/cockroach --test_arg -rewrite --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/testutils --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/other/test --test_output errors
+bazel test //pkg/testutils:testutils_test //pkg/other/test:test_test --test_env=GOTRACEBACK=all --test_env=COCKROACH_WORKSPACE=go/src/github.com/cockroachdb/cockroach --test_arg -rewrite --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/testutils --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/other/test --test_output errors
 ----
