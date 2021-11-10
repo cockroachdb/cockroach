@@ -65,17 +65,22 @@ const (
 
 	fieldNameTraceID = prefixTracerState + "traceid"
 	fieldNameSpanID  = prefixTracerState + "spanid"
+	// fieldNameRecordingType will contain the desired type of trace recording.
+	fieldNameRecordingType = "rec"
+
 	// fieldNameOtel{TraceID,SpanID} will contain the OpenTelemetry span info, hex
 	// encoded.
 	fieldNameOtelTraceID = prefixTracerState + "otel_traceid"
 	fieldNameOtelSpanID  = prefixTracerState + "otel_spanid"
 
-	// verboseTracingKey is the carrier key indicating that the trace has verbose
-	// recording enabled. It means that a) spans derived from this one will not be
-	// no-op spans and b) they will start recording.
+	// fieldNameDeprecatedVerboseTracing is the carrier key indicating that the trace
+	// has verbose recording enabled. It means that a) spans derived from this one
+	// will not be no-op spans and b) they will start recording.
 	//
 	// The key is named the way it is for backwards compatibility reasons.
-	verboseTracingKey = "crdb-baggage-sb"
+	// TODO(andrei): remove in 22.2, once we no longer need to set this key for
+	// compatibility with 21.2.
+	fieldNameDeprecatedVerboseTracing = "crdb-baggage-sb"
 
 	spanKindTagKey = "span.kind"
 )
@@ -152,6 +157,12 @@ type Tracer struct {
 	// Preallocated noopSpan, used to avoid creating spans when we are not using
 	// x/net/trace or lightstep and we are not recording.
 	noopSpan *Span
+
+	// backardsCompatibilityWith211, if set, makes the Tracer
+	// work with 21.1 remote nodes.
+	//
+	// Accessed atomically.
+	backwardsCompatibilityWith211 int64
 
 	// True if tracing to the debug/requests endpoint. Accessed via t.useNetTrace().
 	_useNetTrace int32 // updated atomically
@@ -604,9 +615,10 @@ func (t *Tracer) startSpanGeneric(
 		}
 	}
 
-	// Are we tracing everything, or have a parent, or want a real span? Then
-	// we create a real trace span. In all other cases, a noop span will do.
-	if !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan) {
+	// Are we tracing everything, or have a parent, or want a real span, or were
+	// asked for a recording? Then we create a real trace span. In all other
+	// cases, a noop span will do.
+	if !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan || opts.recordingType() != RecordingOff) {
 		return maybeWrapCtx(ctx, nil /* octx */, t.noopSpan)
 	}
 
@@ -711,14 +723,14 @@ func (t *Tracer) startSpanGeneric(
 	s := &helper.span
 
 	{
-		// If a parent is specified, link the newly created Span to the parent. This
-		// is done even when not recording because recording could be started later.
-		//
-		// We inherit the recording type of the local parent, if any, over the
-		// remote parent, if any. If neither are specified, we're not recording.
+		// If a parent is specified and the parent is recording, link the newly
+		// created Span to the parent so that the parent will later be able to
+		// collect the child's recording.
 		if opts.Parent != nil && opts.Parent.i.crdb != nil {
-			s.i.crdb.mu.parent = opts.Parent.i.crdb
-			defer opts.Parent.i.crdb.addChild(s.i.crdb)
+			if opts.Parent.i.crdb.recordingType() != RecordingOff {
+				s.i.crdb.mu.parent = opts.Parent.i.crdb
+				opts.Parent.i.crdb.addChild(s.i.crdb)
+			}
 		}
 		s.i.crdb.enableRecording(opts.recordingType())
 	}
@@ -728,6 +740,13 @@ func (t *Tracer) startSpanGeneric(
 	//
 	// NB: (opts.Parent != nil && opts.Parent.i.crdb == nil) is not possible at
 	// the moment, but let's not rely on that.
+	//
+	// TODO(andrei): We should be adding to the registry also if the span has a
+	// local parent but the parent is not recording, since in that case we haven't
+	// linked the span to the parent above. But I don't want to do that before
+	// optimizing the registry code. For now, not adding the span to the registry
+	// in this case doesn't really matter, since the only cases where we're
+	// creating spans is when the parent is recording.
 	if opts.Parent == nil || opts.Parent.i.crdb == nil {
 		t.activeSpansRegistry.addSpan(s.i.crdb)
 	}
@@ -780,16 +799,27 @@ func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) {
 		return
 	}
 
-	carrier.Set(fieldNameTraceID, strconv.FormatUint(uint64(sm.traceID), 16))
-	carrier.Set(fieldNameSpanID, strconv.FormatUint(uint64(sm.spanID), 16))
-
-	if sm.recordingType == RecordingVerbose {
-		// This key is dictated by backwards compatibility.
-		carrier.Set(verboseTracingKey, "1")
-	}
 	if sm.otelCtx.TraceID().IsValid() {
 		carrier.Set(fieldNameOtelTraceID, sm.otelCtx.TraceID().String())
 		carrier.Set(fieldNameOtelSpanID, sm.otelCtx.SpanID().String())
+	}
+
+	compatMode := atomic.LoadInt64(&t.backwardsCompatibilityWith211) == 1
+
+	// For compatibility with 21.1, we don't want to propagate the traceID when
+	// we're not recording. A 21.1 node interprets a traceID as wanting structured
+	// recording (or verbose recording if fieldNameDeprecatedVerboseTracing is also
+	// set).
+	if compatMode && sm.recordingType == RecordingOff {
+		return
+	}
+
+	carrier.Set(fieldNameTraceID, strconv.FormatUint(uint64(sm.traceID), 16))
+	carrier.Set(fieldNameSpanID, strconv.FormatUint(uint64(sm.spanID), 16))
+	carrier.Set(fieldNameRecordingType, sm.recordingType.ToCarrierValue())
+
+	if compatMode && sm.recordingType == RecordingVerbose {
+		carrier.Set(fieldNameDeprecatedVerboseTracing, "1")
 	}
 }
 
@@ -803,6 +833,7 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 	var spanID tracingpb.SpanID
 	var otelTraceID oteltrace.TraceID
 	var otelSpanID oteltrace.SpanID
+	var recordingTypeExplicit bool
 	var recordingType RecordingType
 
 	iterFn := func(k, v string) error {
@@ -833,8 +864,14 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 			if err != nil {
 				return err
 			}
-		case verboseTracingKey:
-			recordingType = RecordingVerbose
+		case fieldNameRecordingType:
+			recordingTypeExplicit = true
+			recordingType = RecordingTypeFromCarrierValue(v)
+		case fieldNameDeprecatedVerboseTracing:
+			// Compatibility with 21.2.
+			if !recordingTypeExplicit {
+				recordingType = RecordingVerbose
+			}
 		}
 		return nil
 	}
@@ -856,6 +893,13 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 
 	if traceID == 0 && spanID == 0 {
 		return noopSpanMeta, nil
+	}
+
+	if !recordingTypeExplicit && recordingType == RecordingOff {
+		// A 21.1 node (or a 21.2 mode running in backwards-compatibility mode)
+		// that passed a TraceID but not fieldNameDeprecatedVerboseTracing wants the
+		// structured events.
+		recordingType = RecordingStructured
 	}
 
 	var otelCtx oteltrace.SpanContext
@@ -881,11 +925,11 @@ type RegistrySpan interface {
 	TraceID() tracingpb.TraceID
 
 	// GetRecording returns the recording of the trace rooted at this span.
-	GetRecording() Recording
+	GetRecording(recType RecordingType) Recording
 
-	// SetVerboseRecursively sets the verbosity of the span appropriately and
+	// SetVerbose sets the verbosity of the span appropriately and
 	// recurses on its children.
-	SetVerboseRecursively(to bool)
+	SetVerbose(to bool)
 }
 
 var _ RegistrySpan = &crdbSpan{}
@@ -919,6 +963,15 @@ func (t *Tracer) ShouldRecordAsyncSpans() bool {
 	defer t.testingMu.Unlock()
 
 	return t.testingRecordAsyncSpans
+}
+
+// SetBackwardsCompatibilityWith211 toggles the compatibility mode.
+func (t *Tracer) SetBackwardsCompatibilityWith211(to bool) {
+	if to {
+		atomic.StoreInt64(&t.backwardsCompatibilityWith211, 1)
+	} else {
+		atomic.StoreInt64(&t.backwardsCompatibilityWith211, 0)
+	}
 }
 
 // ForkSpan forks the current span, if any[1]. Forked spans "follow from" the
@@ -1035,8 +1088,7 @@ var optsPool = sync.Pool{
 //
 // TODO(tbg): remove this method. It adds very little over EnsureChildSpan.
 func StartVerboseTrace(ctx context.Context, tr *Tracer, opName string) (context.Context, *Span) {
-	ctx, sp := EnsureChildSpan(ctx, tr, opName, WithForceRealSpan())
-	sp.SetVerbose(true)
+	ctx, sp := EnsureChildSpan(ctx, tr, opName, WithRecording(RecordingVerbose))
 	return ctx, sp
 }
 
@@ -1050,15 +1102,18 @@ func StartVerboseTrace(ctx context.Context, tr *Tracer, opName string) (context.
 func ContextWithRecordingSpan(
 	ctx context.Context, tr *Tracer, opName string,
 ) (_ context.Context, getRecording func() Recording, cancel func()) {
-	ctx, sp := tr.StartSpanCtx(ctx, opName, WithForceRealSpan())
-	sp.SetVerbose(true)
+	ctx, sp := tr.StartSpanCtx(ctx, opName, WithRecording(RecordingVerbose))
 	ctx, cancelCtx := context.WithCancel(ctx)
 
 	cancel = func() {
 		cancelCtx()
 		sp.Finish()
 	}
-	return ctx, sp.GetRecording, cancel
+	return ctx,
+		func() Recording {
+			return sp.GetRecording(RecordingVerbose)
+		},
+		cancel
 }
 
 // makeOtelSpan creates an OpenTelemetry span. If either of localParent or

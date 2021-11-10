@@ -171,10 +171,10 @@ func (ts *txnState) resetForNewSQLTxn(
 	var txnCtx context.Context
 	var sp *tracing.Span
 	duration := traceTxnThreshold.Get(&tranCtx.settings.SV)
-	if alreadyRecording || ts.testingForceRealTracingSpans || duration > 0 {
-		// WithForceRealSpan is used to support the use of session tracing,
-		// which will start recording on this span. Similarly, it enables the
-		// tracing of the txns that exceed the duration threshold.
+	if alreadyRecording || duration > 0 {
+		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer,
+			tracing.WithRecording(tracing.RecordingVerbose))
+	} else if ts.testingForceRealTracingSpans {
 		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer, tracing.WithForceRealSpan())
 	} else {
 		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer)
@@ -184,7 +184,6 @@ func (ts *txnState) resetForNewSQLTxn(
 	}
 
 	if !alreadyRecording && (duration > 0) {
-		sp.SetVerbose(true)
 		ts.recordingThreshold = duration
 		ts.recordingStart = timeutil.Now()
 	}
@@ -232,7 +231,7 @@ func (ts *txnState) finishSQLTxn() {
 	}
 
 	if ts.recordingThreshold > 0 {
-		logTraceAboveThreshold(ts.Ctx, sp.GetRecording(), "SQL txn", ts.recordingThreshold, timeutil.Since(ts.recordingStart))
+		logTraceAboveThreshold(ts.Ctx, sp.GetRecording(sp.RecordingType()), "SQL txn", ts.recordingThreshold, timeutil.Since(ts.recordingStart))
 	}
 
 	sp.Finish()

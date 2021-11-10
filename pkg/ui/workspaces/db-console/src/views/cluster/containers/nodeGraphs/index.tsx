@@ -26,7 +26,11 @@ import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import ClusterSummaryBar from "./summaryBar";
 
 import { AdminUIState } from "src/redux/state";
-import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
+import {
+  refreshNodes,
+  refreshLiveness,
+  refreshSettings,
+} from "src/redux/apiReducers";
 import {
   hoverStateSelector,
   HoverState,
@@ -64,7 +68,16 @@ import {
   setTimeScale,
   TimeWindow,
   TimeScale,
+  adjustTimeScale,
 } from "src/redux/timewindow";
+import { InlineAlert } from "src/components";
+import { Anchor } from "@cockroachlabs/cluster-ui";
+import { reduceStorageOfTimeSeriesDataOperationalFlags } from "src/util/docs";
+import moment from "moment";
+import {
+  selectResolution10sStorageTTL,
+  selectResolution30mStorageTTL,
+} from "src/redux/clusterSettings";
 interface GraphDashboard {
   label: string;
   component: (props: GraphDashboardProps) => React.ReactElement<any>[];
@@ -96,11 +109,14 @@ const dashboardDropdownOptions = _.map(dashboards, (dashboard, key) => {
 type MapStateToProps = {
   nodesSummary: NodesSummary;
   hoverState: HoverState;
+  resolution10sStorageTTL: moment.Duration;
+  resolution30mStorageTTL: moment.Duration;
 };
 
 type MapDispatchToProps = {
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
+  refreshNodeSettings: typeof refreshSettings;
   hoverOn: typeof hoverOn;
   hoverOff: typeof hoverOff;
   setTimeRange: (tw: TimeWindow) => PayloadAction<TimeWindow>;
@@ -111,10 +127,18 @@ type NodeGraphsProps = RouteComponentProps &
   MapStateToProps &
   MapDispatchToProps;
 
+type NodeGraphsState = {
+  showLowResolutionAlert: boolean;
+  showDeletedDataAlert: boolean;
+};
+
 /**
  * NodeGraphs renders the main content of the cluster graphs page.
  */
-export class NodeGraphs extends React.Component<NodeGraphsProps> {
+export class NodeGraphs extends React.Component<
+  NodeGraphsProps,
+  NodeGraphsState
+> {
   /**
    * Selector to compute node dropdown options from the current node summary
    * collection.
@@ -144,6 +168,14 @@ export class NodeGraphs extends React.Component<NodeGraphsProps> {
       );
     },
   );
+
+  constructor(props: NodeGraphsProps) {
+    super(props);
+    this.state = {
+      showDeletedDataAlert: false,
+      showLowResolutionAlert: false,
+    };
+  }
 
   refresh = () => {
     this.props.refreshNodes();
@@ -175,14 +207,52 @@ export class NodeGraphs extends React.Component<NodeGraphsProps> {
 
   componentDidMount() {
     this.refresh();
+    // settings won't change frequently so it's safe to request one
+    // when page is loaded.
+    this.props.refreshNodeSettings();
   }
 
   componentDidUpdate() {
     this.refresh();
   }
 
+  adjustTimeScaleOnChange = (
+    curTimeScale: TimeScale,
+    timeWindow: TimeWindow,
+  ): TimeScale => {
+    const { resolution10sStorageTTL, resolution30mStorageTTL } = this.props;
+    const adjustedTimeScale = adjustTimeScale(
+      curTimeScale,
+      timeWindow,
+      resolution10sStorageTTL,
+      resolution30mStorageTTL,
+    );
+    switch (adjustedTimeScale.adjustmentReason) {
+      case "low_resolution_period":
+        this.setState({
+          showLowResolutionAlert: true,
+          showDeletedDataAlert: false,
+        });
+        break;
+      case "deleted_data_period":
+        this.setState({
+          showLowResolutionAlert: false,
+          showDeletedDataAlert: true,
+        });
+        break;
+      default:
+        this.setState({
+          showLowResolutionAlert: false,
+          showDeletedDataAlert: false,
+        });
+        break;
+    }
+    return adjustedTimeScale.timeScale;
+  };
+
   render() {
     const { match, nodesSummary } = this.props;
+    const { showLowResolutionAlert, showDeletedDataAlert } = this.state;
     const selectedDashboard = getMatchParamByName(match, dashboardNameAttr);
     const dashboard = _.has(dashboards, selectedDashboard)
       ? selectedDashboard
@@ -239,6 +309,7 @@ export class NodeGraphs extends React.Component<NodeGraphsProps> {
           setTimeRange={this.props.setTimeRange}
           setTimeScale={this.props.setTimeScale}
           history={this.props.history}
+          adjustTimeScaleOnChange={this.adjustTimeScaleOnChange}
         >
           {React.cloneElement(graph, forwardParams)}
         </MetricsDataProvider>
@@ -277,9 +348,55 @@ export class NodeGraphs extends React.Component<NodeGraphsProps> {
             />
           </PageConfigItem>
           <PageConfigItem>
-            <TimeScaleDropdown />
+            <TimeScaleDropdown
+              adjustTimeScaleOnChange={this.adjustTimeScaleOnChange}
+            />
           </PageConfigItem>
         </PageConfig>
+        <section className="section">
+          {showLowResolutionAlert && (
+            <InlineAlert
+              title="Some data in this timeframe is shown at lower resolution."
+              intent="warning"
+              message={
+                <span>
+                  The 'timeseries.storage.resolution_10s.ttl' cluster setting
+                  determines how long data is stored at 10-second resolution.
+                  The remaining data is stored at 30-minute resolution. To
+                  configure these settings, refer to{" "}
+                  <Anchor
+                    href={reduceStorageOfTimeSeriesDataOperationalFlags}
+                    target="_blank"
+                  >
+                    the docs
+                  </Anchor>
+                  .
+                </span>
+              }
+            />
+          )}
+          {showDeletedDataAlert && (
+            <InlineAlert
+              title="Some data in this timeframe is no longer stored."
+              intent="warning"
+              message={
+                <span>
+                  The 'timeseries.storage.resolution_30m.ttl' cluster setting
+                  determines how long data is stored at 30-minute resolution.
+                  Data is no longer stored after this time period. To configure
+                  this setting, refer to{" "}
+                  <Anchor
+                    href={reduceStorageOfTimeSeriesDataOperationalFlags}
+                    target="_blank"
+                  >
+                    the docs
+                  </Anchor>
+                  .
+                </span>
+              }
+            />
+          )}
+        </section>
         <section className="section">
           <div className="l-columns">
             <div className="chart-group l-columns__left">{graphComponents}</div>
@@ -300,11 +417,14 @@ export class NodeGraphs extends React.Component<NodeGraphsProps> {
 const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   nodesSummary: nodesSummarySelector(state),
   hoverState: hoverStateSelector(state),
+  resolution10sStorageTTL: selectResolution10sStorageTTL(state),
+  resolution30mStorageTTL: selectResolution30mStorageTTL(state),
 });
 
 const mapDispatchToProps: MapDispatchToProps = {
   refreshNodes,
   refreshLiveness,
+  refreshNodeSettings: refreshSettings,
   hoverOn,
   hoverOff,
   setTimeRange: setTimeRange,

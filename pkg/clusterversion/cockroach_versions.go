@@ -277,6 +277,10 @@ const (
 	// descriptors have draining names.
 	DrainingNamesMigration
 
+	// TraceIDDoesntImplyStructuredRecording changes the contract about the kind
+	// of span that RPCs get on the server depending on the tracing context.
+	TraceIDDoesntImplyStructuredRecording
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -472,6 +476,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DrainingNamesMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 8},
+	},
+	{
+		Key:     TraceIDDoesntImplyStructuredRecording,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 10},
 	},
 
 	// *************************************************

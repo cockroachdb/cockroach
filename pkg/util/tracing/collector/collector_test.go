@@ -66,8 +66,7 @@ func newTestStructured(i string) *testStructuredImpl {
 // 		root2.child								<-- traceID2
 func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, tracingpb.TraceID, func()) {
 	// Start a root span on "node 1".
-	root := t1.StartSpan("root", tracing.WithForceRealSpan())
-	root.SetVerbose(true)
+	root := t1.StartSpan("root", tracing.WithRecording(tracing.RecordingVerbose))
 	root.RecordStructured(newTestStructured("root"))
 
 	time.Sleep(10 * time.Millisecond)
@@ -88,11 +87,10 @@ func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, tracingpb.TraceID, 
 	// Start another remote child span on "node 2" that we finish.
 	childRemoteChildFinished := t2.StartSpan("root.child.remotechilddone", tracing.WithParentAndManualCollection(child.Meta()))
 	childRemoteChildFinished.Finish()
-	child.ImportRemoteSpans(childRemoteChildFinished.GetRecording())
+	child.ImportRemoteSpans(childRemoteChildFinished.GetRecording(tracing.RecordingVerbose))
 
 	// Start a root span on "node 2".
-	root2 := t2.StartSpan("root2", tracing.WithForceRealSpan())
-	root2.SetVerbose(true)
+	root2 := t2.StartSpan("root2", tracing.WithRecording(tracing.RecordingVerbose))
 	root2.RecordStructured(newTestStructured("root2"))
 
 	// Start a child span on "node 2".

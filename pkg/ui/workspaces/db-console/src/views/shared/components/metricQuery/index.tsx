@@ -163,4 +163,8 @@ export interface MetricsDataComponentProps {
   setTimeRange?: (tw: TimeWindow) => PayloadAction<TimeWindow>;
   setTimeScale?: (ts: TimeScale) => PayloadAction<TimeScale>;
   history?: History;
+  adjustTimeScaleOnChange?: (
+    curTimeScale: TimeScale,
+    timeWindow: TimeWindow,
+  ) => TimeScale;
 }

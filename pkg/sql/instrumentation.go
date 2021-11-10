@@ -211,9 +211,11 @@ func (ih *instrumentationHelper) Setup(
 
 	if !ih.collectBundle && ih.withStatementTrace == nil && ih.outputMode == unmodifiedOutput {
 		if ih.collectExecStats {
-			// If we need to collect stats, create a non-verbose child span. Stats
-			// will be added as structured metadata and processed in Finish.
-			newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithForceRealSpan())
+			// If we need to collect stats, create a child span with structured
+			// recording. Stats will be added as structured metadata and processed in
+			// Finish.
+			newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement",
+				tracing.WithRecording(tracing.RecordingStructured))
 			ih.shouldFinishSpan = true
 			return newCtx, true
 		}
@@ -249,7 +251,7 @@ func (ih *instrumentationHelper) Finish(
 
 	// Record the statement information that we've collected.
 	// Note that in case of implicit transactions, the trace contains the auto-commit too.
-	trace := ih.sp.GetRecording()
+	trace := ih.sp.GetRecording(ih.sp.RecordingType())
 
 	if ih.withStatementTrace != nil {
 		ih.withStatementTrace(trace, stmtRawSQL)
