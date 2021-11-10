@@ -162,13 +162,21 @@ func (s *StoreIDContainer) Set(ctx context.Context, val int32) {
 type SQLInstanceID int32
 
 func (s SQLInstanceID) String() string {
-	return strconv.FormatInt(int64(s), 10)
+	if s == 0 {
+		return "?"
+	}
+	return strconv.Itoa(int(s))
 }
 
 // SQLIDContainer wraps a SQLInstanceID and optionally a NodeID.
 type SQLIDContainer struct {
 	w             errorutil.TenantSQLDeprecatedWrapper // NodeID
 	sqlInstanceID SQLInstanceID
+
+	// If the value has been set, str represents the instance ID
+	// converted to string. We precompute this value to speed up
+	// String() and keep it from allocating memory dynamically.
+	str atomic.Value
 }
 
 // NewSQLIDContainer sets up an SQLIDContainer. It is handed either a positive SQLInstanceID
@@ -196,6 +204,7 @@ func (c *SQLIDContainer) SetSQLInstanceID(sqlInstanceID SQLInstanceID) error {
 		return errors.New("attempting to initialize instance ID when node ID is set")
 	}
 	c.sqlInstanceID = sqlInstanceID
+	c.str.Store(strconv.Itoa(int(sqlInstanceID)))
 	return nil
 }
 
@@ -225,6 +234,44 @@ func (c *SQLIDContainer) SQLInstanceID() SQLInstanceID {
 		return SQLInstanceID(n)
 	}
 	return c.sqlInstanceID
+}
+
+// SafeValue implements the redact.SafeValue interface.
+func (c *SQLIDContainer) SafeValue() {}
+
+func (c *SQLIDContainer) String() string {
+	st := c.str.Load()
+	if st == nil {
+		// This can mean either that:
+		// - neither the instance ID nor the node ID has been set.
+		// - only the node ID has been set.
+		//
+		// In the latter case, we don't want to return "?" here, as in the
+		// NodeIDContainer case above: we want to return the node ID
+		// representation instead. Alas, there is no way to know
+		// but to open the node ID container box.
+		//
+		// TODO(knz): This could be greatly simplified if we accepted to
+		// use the same data type for both SQL instance ID and node ID
+		// containers.
+		v, ok := c.w.Optional()
+		if !ok {
+			// This is definitely not a node ID, and since we're in this
+			// branch of the conditional above, we don't have SQL instance
+			// ID either (yet).
+			return "?"
+		}
+		nc := v.(*NodeIDContainer)
+		st = nc.str.Load()
+		if st == nil {
+			// We're designating a Node ID, but it was not set yet.
+			return "?"
+		}
+		// Node ID was set. Keep its representation for the instance ID as
+		// well.
+		c.str.Store(st)
+	}
+	return st.(string)
 }
 
 // TestingIDContainer is an SQLIDContainer with hard-coded SQLInstanceID of 10 and
