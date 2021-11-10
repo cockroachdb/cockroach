@@ -367,6 +367,7 @@ ALL_TESTS = [
     "//pkg/util/interval/generic:generic_test",
     "//pkg/util/interval:interval_test",
     "//pkg/util/ipaddr:ipaddr_test",
+    "//pkg/util/json/jsonpb:jsonpb_test",
     "//pkg/util/json:json_test",
     "//pkg/util/limit:limit_test",
     "//pkg/util/log/eventpb:eventpb_test",

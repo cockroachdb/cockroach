@@ -728,6 +728,7 @@ func TestLint(t *testing.T) {
 			":!util/timeutil/now_windows.go",
 			":!util/timeutil/time.go",
 			":!util/timeutil/zoneinfo.go",
+			":!util/json/jsonpb/*",
 			":!util/tracing/span.go",
 			":!util/tracing/crdbspan.go",
 			":!util/tracing/tracer.go",
@@ -1029,6 +1030,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!sql/*.pb.go",
+			":!util/json/jsonpb/*",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
 			":!rpc/codec.go",
@@ -1073,6 +1075,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!*.pb.go",
+			":!util/json/jsonpb/*",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
 			":!util/encoding/encoding.go",
@@ -1117,6 +1120,7 @@ func TestLint(t *testing.T) {
 			`proto\.Equal`,
 			"--",
 			"*.go",
+			":!util/json/jsonpb/*",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1161,6 +1165,7 @@ func TestLint(t *testing.T) {
 			":!sql/protoreflect/redact.go",
 			":!sql/colexecerror/error.go",
 			":!util/contextutil/timeout_error.go",
+			":!util/json/jsonpb/*",
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",

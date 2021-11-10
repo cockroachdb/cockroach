@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "jsonpb",
+    srcs = ["jsonpb.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/json/jsonpb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_protobuf//types",
+    ],
+)
+
+go_test(
+    name = "jsonpb_test",
+    srcs = ["jsonpb_test.go"],
+    embed = [":jsonpb"],
+    deps = [
+        "//pkg/util/json/jsonpb/testprotos/jsonpb_test_proto",
+        "//pkg/util/json/jsonpb/testprotos/proto3_proto:proto3_proto_go_proto",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_protobuf//types",
+    ],
+)
