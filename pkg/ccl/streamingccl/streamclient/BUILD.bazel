@@ -41,6 +41,7 @@ go_test(
     ],
     embed = [":streamclient"],
     deps = [
+        "//pkg/base",
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/storageccl",

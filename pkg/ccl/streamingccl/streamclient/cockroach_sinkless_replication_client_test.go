@@ -12,6 +12,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"     // Ensure changefeed init hooks run.
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // Ensure we can start tenant.
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
@@ -57,7 +58,7 @@ func TestSinklessReplicationClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	defer log.Scope(t).Close(t)
-	h, cleanup := streamingtest.NewReplicationHelper(t)
+	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{})
 	defer cleanup()
 
 	ctx := context.Background()
