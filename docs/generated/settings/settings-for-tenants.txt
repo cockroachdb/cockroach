@@ -61,9 +61,9 @@ server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provide
 server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback) (this feature is experimental)
 server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`) (this feature is experimental)
 server.rangelog.ttl	duration	720h0m0s	if nonzero, range log entries older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
-server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with the rest of the shutdown process
-server.shutdown.lease_transfer_wait	duration	5s	the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process
-server.shutdown.query_wait	duration	10s	the server will wait for at least this amount of time for active queries to finish
+server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with the rest of the shutdown process (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
+server.shutdown.lease_transfer_wait	duration	5s	the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
+server.shutdown.query_wait	duration	10s	the server will wait for at least this amount of time for active queries to finish (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
 server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead
 server.user_login.timeout	duration	10s	timeout after which client authentication times out if some system range is unavailable (0 = no timeout)
 server.web_session.auto_logout.timeout	duration	168h0m0s	the duration that web sessions will survive before being periodically purged, since they were last used
