@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -238,6 +239,7 @@ func TestListIncremental(t *testing.T) {
 }
 
 func TestExportData(t *testing.T) {
+	skip.WithIssue(t, 72592)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -355,13 +357,15 @@ func TestExportData(t *testing.T) {
 			backupPaths:    []string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName), backupTestSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName)},
 			expectedDatums: "2,223,'dog'\n3,333,'mickey mouse'\n" + generateRows(4, 27),
 			flags:          "--max-rows=300",
-		}, {
+		},
+		{
 			name:           "show-data-of-incremental-backup-with-start-key-specified",
 			tableName:      "testDB.testschema.fooTable",
 			backupPaths:    []string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName), backupTestSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName)},
 			expectedDatums: generateRows(5, 26),
 			flags:          "--start-key=raw:\\xbf\\x89\\x8c\\x8c",
-		}, {
+		},
+		{
 			name:           "show-data-of-incremental-backup-with-start-key-and-max-rows-specified",
 			tableName:      "testDB.testschema.fooTable",
 			backupPaths:    []string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName), backupTestSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName)},
