@@ -698,6 +698,7 @@ SHOW GRANTS ON DATABASE db2
 database_name  grantee   privilege_type
 db2            admin     ALL
 db2            newgroup  ALL
+db2            public    CONNECT
 db2            root      ALL
 
 statement ok
@@ -1108,10 +1109,11 @@ statement error role name "public" is reserved
 DROP USER public
 
 statement ok
-CREATE DATABASE publicdb;
+CREATE DATABASE publicdb
 
 statement ok
 CREATE DATABASE privatedb;
+REVOKE CONNECT ON DATABASE privatedb FROM public
 
 statement ok
 CREATE TABLE publicdb.publictable (k int)
@@ -1139,12 +1141,17 @@ user testuser
 query TTTTT
 SHOW DATABASES
 ----
-publicdb  root  NULL  {}  NULL
+db2        root  NULL  {}  NULL
+defaultdb  root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+publicdb   root  NULL  {}  NULL
+test       root  NULL  {}  NULL
 
 query TTTTIT
 SHOW TABLES FROM publicdb
 ----
-public  publictable  table  root  0  NULL
+public  privatetable  table  root  0  NULL
+public  publictable   table  root  0  NULL
 
 query TTTTIT
 SHOW TABLES FROM privatedb
@@ -1192,6 +1199,8 @@ INSERT INTO publicdb.publictable VALUES (1)
 query TTTTIT
 SHOW TABLES FROM publicdb
 ----
+public  privatetable  table  root  0  NULL
+public  publictable   table  root  0  NULL
 
 # Test that non-admin users cannot drop admins.
 user root
