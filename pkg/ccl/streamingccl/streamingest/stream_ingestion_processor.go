@@ -291,23 +291,25 @@ func (sip *streamIngestionProcessor) ConsumerClosed() {
 }
 
 func (sip *streamIngestionProcessor) close() {
-	if sip.InternalClose() {
-		if sip.batcher != nil {
-			sip.batcher.Close()
-		}
-		if sip.maxFlushRateTimer != nil {
-			sip.maxFlushRateTimer.Stop()
-		}
-		if sip.closePoller != nil {
-			close(sip.closePoller)
-			// Wait for the goroutine to return so that we do not access processor
-			// state once it has shutdown.
-			sip.pollingWaitGroup.Wait()
-		}
-		// Wait for the merge goroutine.
-		for range sip.eventCh {
-		}
+	if sip.Closed {
+		return
 	}
+	if sip.batcher != nil {
+		sip.batcher.Close()
+	}
+	if sip.maxFlushRateTimer != nil {
+		sip.maxFlushRateTimer.Stop()
+	}
+	if sip.closePoller != nil {
+		close(sip.closePoller)
+		// Wait for the goroutine to return so that we do not access processor
+		// state once it has shutdown.
+		sip.pollingWaitGroup.Wait()
+	}
+	// Wait for the merge goroutine.
+	for range sip.eventCh {
+	}
+	sip.InternalClose()
 }
 
 // checkForCutoverSignal periodically loads the job progress to check for the
