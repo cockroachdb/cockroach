@@ -1,0 +1,25 @@
+commit 7ca0f1924b85a139190a3bc6fc5f5cc5ea5d6eb6
+Author: Rail Aliiev <rail@iqchoice.com>
+Date:   Wed Nov 10 09:44:34 2021 -0500
+
+    Save test output in test2json format
+    
+    If `GO_TEST_JSON_OUTPUT_FILE` environment variable is set, write the
+    test output in test2json format.
+
+diff --git a/go/tools/bzltestutil/wrap.go b/go/tools/bzltestutil/wrap.go
+index 382d636a..cbb2e7e6 100644
+--- a/go/tools/bzltestutil/wrap.go
++++ b/go/tools/bzltestutil/wrap.go
+@@ -85,6 +85,11 @@ func Wrap(pkg string) error {
+ 			return fmt.Errorf("error while generating testreport: %s", werr)
+ 		}
+ 	}
++	if out, ok := os.LookupEnv("GO_TEST_JSON_OUTPUT_FILE"); ok {
++		if err := ioutil.WriteFile(out, jsonBuffer.Bytes(), 0664); err != nil {
++			return fmt.Errorf("error writing test json: %s", err)
++		}
++	}
+ 	return err
+ }
+ 

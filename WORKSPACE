@@ -13,6 +13,10 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
+    patch_args = ["-p1"],
+    patches = [
+        "@cockroach//build/patches:com_github_bazelbuild_rules_go.patch",
+    ],
     sha256 = "f0af9c876235d2bc69bddb9c33126f78d95f0bc9cec2d5aa497d5cab6325e733",
     strip_prefix = "rules_go-4a7bcc9b9051eb6a12bcb03a9bf38138c4bbc2ea",
     urls = [

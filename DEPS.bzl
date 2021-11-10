@@ -594,6 +594,10 @@ def go_deps():
         name = "com_github_bazelbuild_rules_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/bazelbuild/rules_go",
+        patch_args = ["-p1"],
+        patches = [
+            "@cockroach//build/patches:com_github_bazelbuild_rules_go.patch",
+        ],
         sha256 = "0f69d51e54c1012f62434b68e6d49e2e1c1371a493926da58063e8461aa2b9ff",
         strip_prefix = "github.com/bazelbuild/rules_go@v0.26.0",
         urls = [
