@@ -211,11 +211,9 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			s.mu.Unlock()
 			return batch
 		case indexJoinDone:
-			// Eagerly close the index joiner. Note that Close() is idempotent,
-			// so it's ok if it'll be closed again.
-			if err := s.Close(); err != nil {
-				colexecerror.InternalError(err)
-			}
+			// Eagerly close the index joiner. Note that closeInternal() is
+			// idempotent, so it's ok if it'll be closed again.
+			s.closeInternal()
 			return coldata.ZeroBatch
 		}
 	}
@@ -550,15 +548,21 @@ func (s *ColIndexJoin) Release() {
 
 // Close implements the colexecop.Closer interface.
 func (s *ColIndexJoin) Close() error {
-	s.rf.Close(s.EnsureCtx())
+	s.closeInternal()
 	if s.tracingSpan != nil {
 		s.tracingSpan.Finish()
 		s.tracingSpan = nil
 	}
+	return nil
+}
+
+// closeInternal is a subset of Close() which doesn't finish the operator's
+// span.
+func (s *ColIndexJoin) closeInternal() {
+	s.rf.Close(s.EnsureCtx())
 	if s.spanAssembler != nil {
 		// spanAssembler can be nil if Release() has already been called.
 		s.spanAssembler.Close()
 	}
 	s.batch = nil
-	return nil
 }
