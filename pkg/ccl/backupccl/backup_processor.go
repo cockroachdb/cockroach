@@ -164,7 +164,6 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 		SpanOpt:  stop.ChildSpan,
 	}, func(ctx context.Context) {
 		defer cancel()
-		defer close(bp.progCh)
 		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh)
 	}); err != nil {
 		// The closure above hasn't run, so we have to do the cleanup.
@@ -225,12 +224,16 @@ type returnedSST struct {
 	atKeyBoundary  bool
 }
 
+// runBackupProcessor asynchronously runs the backup, reporting progress on
+// progCh. The channel is closed once all asynchronous work stops.
 func runBackupProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.BackupDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
+	defer close(progCh)
+
 	backupProcessorSpan := tracing.SpanFromContext(ctx)
 	clusterSettings := flowCtx.Cfg.Settings
 
