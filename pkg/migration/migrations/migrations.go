@@ -130,6 +130,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		ensureNoDrainingNames,
 	),
+	migration.NewTenantMigration(
+		"update synthetic public schemas to be backed by a descriptor",
+		toCV(clusterversion.PublicSchemasWithDescriptors),
+		NoPrecondition,
+		publicSchemaMigration,
+	),
 }
 
 func init() {
