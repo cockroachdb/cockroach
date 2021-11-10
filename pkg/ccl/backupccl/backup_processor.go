@@ -112,8 +112,11 @@ type backupDataProcessor struct {
 	spec    execinfrapb.BackupDataSpec
 	output  execinfra.RowReceiver
 
-	progCh    chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-	backupErr error
+	// cancelAndWaitForWorker cancels the producer goroutine and waits for it to
+	// finish. It can be called multiple times.
+	cancelAndWaitForWorker func()
+	progCh                 chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+	backupErr              error
 }
 
 var _ execinfra.Processor = &backupDataProcessor{}
@@ -136,6 +139,10 @@ func newBackupDataProcessor(
 		execinfra.ProcStateOpts{
 			// This processor doesn't have any inputs to drain.
 			InputsToDrain: nil,
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				bp.close()
+				return nil
+			},
 		}); err != nil {
 		return nil, err
 	}
@@ -145,7 +152,14 @@ func newBackupDataProcessor(
 // Start is part of the RowSource interface.
 func (bp *backupDataProcessor) Start(ctx context.Context) {
 	ctx = bp.StartInternal(ctx, backupProcessorName)
+	ctx, cancel := context.WithCancel(ctx)
+	bp.cancelAndWaitForWorker = func() {
+		cancel()
+		for range bp.progCh {
+		}
+	}
 	go func() {
+		defer cancel()
 		defer close(bp.progCh)
 		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh)
 	}()
@@ -171,6 +185,11 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 
 	bp.MoveToDraining(nil /* error */)
 	return nil, bp.DrainHelper()
+}
+
+func (bp *backupDataProcessor) close() {
+	bp.cancelAndWaitForWorker()
+	bp.ProcessorBase.InternalClose()
 }
 
 type spanAndTime struct {
