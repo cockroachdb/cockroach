@@ -8337,6 +8337,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 
 func TestBackupOnlyPublicIndexes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "likely slow under race")
 
