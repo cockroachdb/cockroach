@@ -433,6 +433,11 @@ func TestShowBackups(t *testing.T) {
 	require.Equal(t, 4, len(b1))
 	b2 := sqlDBRestore.QueryStr(t, `SELECT * FROM [SHOW BACKUP $1 IN $2] WHERE object_type='table'`, rows[1][0], full)
 	require.Equal(t, 3, len(b2))
+
+	require.Equal(t,
+		sqlDBRestore.QueryStr(t, `SHOW BACKUP $1 IN $2`, rows[2][0], full),
+		sqlDBRestore.QueryStr(t, `SHOW BACKUP LATEST IN $1`, full),
+	)
 }
 
 func TestShowBackupTenants(t *testing.T) {
