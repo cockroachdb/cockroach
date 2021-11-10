@@ -63,12 +63,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fuzzystrmatch"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -5697,39 +5695,6 @@ value if you rely on the HLC for accuracy.`,
 			},
 			Info: "This function can be used to report the usage of an arbitrary feature. The " +
 				"feature name is hashed for privacy purposes.",
-			Volatility: tree.VolatilityVolatile,
-		},
-	),
-
-	"crdb_internal.complete_stream_ingestion_job": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         categoryStreamIngestion,
-			DistsqlBlocklist: true,
-		},
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"job_id", types.Int},
-				{"cutover_ts", types.TimestampTZ},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				jobID := int(*args[0].(*tree.DInt))
-				cutoverTime := args[1].(*tree.DTimestampTZ).Time
-				cutoverTimestamp := hlc.Timestamp{WallTime: cutoverTime.UnixNano()}
-				if streaming.CompleteIngestionHook == nil {
-					return nil, errors.New("completing a stream ingestion job requires a CCL binary")
-				}
-				err := streaming.CompleteIngestionHook(evalCtx, evalCtx.Txn, jobID, cutoverTimestamp)
-				return tree.NewDInt(tree.DInt(jobID)), err
-			},
-			Info: "This function can be used to signal a running stream ingestion job to complete. " +
-				"The job will eventually stop ingesting, revert to the specified timestamp and leave the " +
-				"cluster in a consistent state. The specified timestamp can only be specified up to the" +
-				" microsecond. " +
-				"This function does not wait for the job to reach a terminal state, " +
-				"but instead returns the job id as soon as it has signaled the job to complete. " +
-				"This builtin can be used in conjunction with SHOW JOBS WHEN COMPLETE to ensure that the" +
-				" job has left the cluster in a consistent state.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),

@@ -13,11 +13,14 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"     // Ensure changefeed init hooks run.
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // Ensure we can start tenant.
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -25,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
@@ -106,7 +110,7 @@ func startReplication(
 func TestReplicationStreamTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	h, cleanup := streamingtest.NewReplicationHelper(t)
+	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{})
 	defer cleanup()
 
 	h.Tenant.SQL.Exec(t, `
@@ -173,5 +177,45 @@ INSERT INTO d.t2 VALUES (2);
 		expected = streamingtest.EncodeKV(t, h.Tenant.Codec, descr, 42, "привет", "мир")
 		secondObserved := feed.ObserveKey(ctx, expected.Key)
 		require.Equal(t, expected.Value.RawBytes, secondObserved.Value.RawBytes)
+	})
+}
+
+func TestReplicationStreamInitialization(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	serverArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	}
+
+	h, cleanup := streamingtest.NewReplicationHelper(t, serverArgs)
+	defer cleanup()
+	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10ms'")
+
+	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '1ms'")
+	t.Run("failed-after-timeout", func(t *testing.T) {
+		rows := h.SysDB.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", h.Tenant.ID.ToUint64())
+		jobID := rows[0][0]
+
+		h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", jobID),
+			[][]string{{"failed"}})
+	})
+
+	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '30s'")
+	t.Run("continuously-running-within-timeout", func(t *testing.T) {
+		rows := h.SysDB.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", h.Tenant.ID.ToUint64())
+		jobID := rows[0][0]
+
+		h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", jobID),
+			[][]string{{"running"}})
+
+		// Ensures the job is continuously running for 3 seconds.
+		testDuration, now := 3*time.Second, timeutil.Now()
+		for start, end := now, now.Add(testDuration); start.Before(end); start = start.Add(300 * time.Millisecond) {
+			h.SysDB.CheckQueryResults(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", jobID),
+				[][]string{{"running"}})
+		}
 	})
 }
