@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "alter_web_sessions_create_indexes.go",
         "database_role_settings.go",
+        "database_with_public_connect_privilege_migration.go",
         "delete_deprecated_namespace_tabledesc.go",
         "ensure_no_draining_names.go",
         "fix_descriptor_migration.go",
@@ -43,6 +44,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/privilege",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",
@@ -67,6 +69,7 @@ go_test(
     name = "migrations_test",
     srcs = [
         "alter_web_sessions_create_indexes_test.go",
+        "database_with_public_connect_privilege_migration_test.go",
         "delete_deprecated_namespace_tabledesc_external_test.go",
         "ensure_no_draining_names_external_test.go",
         "fix_descriptor_migration_external_test.go",

@@ -276,6 +276,9 @@ const (
 	// DrainingNamesMigration adds the migration which guarantees that no
 	// descriptors have draining names.
 	DrainingNamesMigration
+	// DatabaseWithPublicConnectPrivilegeMigration adds the migration giving the
+	// public role the connect privilege.
+	DatabaseWithPublicConnectPrivilegeMigration
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -472,6 +475,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DrainingNamesMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 8},
+	},
+	{
+		Key:     DatabaseWithPublicConnectPrivilegeMigration,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 10},
 	},
 
 	// *************************************************

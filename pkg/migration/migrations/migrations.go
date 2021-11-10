@@ -130,6 +130,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		ensureNoDrainingNames,
 	),
+	migration.NewTenantMigration(
+		"grant CONNECT privilege on public on each database",
+		toCV(clusterversion.DatabaseWithPublicConnectPrivilegeMigration),
+		NoPrecondition,
+		databaseWithPublicConnectPrivilegeMigration,
+	),
 }
 
 func init() {
