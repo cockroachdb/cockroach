@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -164,11 +165,19 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 		for range bp.progCh {
 		}
 	}
-	go func() {
-		defer cancel()
-		defer close(bp.progCh)
+	if err := bp.flowCtx.Stopper().RunAsyncTaskEx(ctx, stop.TaskOpts{
+		TaskName:  "backup-worker",
+		ChildSpan: true,
+	}, func(ctx context.Context) {
 		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh, bp.memAcc)
-	}()
+		cancel()
+		close(bp.progCh)
+	}); err != nil {
+		// The closure above hasn't run, so we have to do the cleanup.
+		bp.backupErr = err
+		cancel()
+		close(bp.progCh)
+	}
 }
 
 // Next is part of the RowSource interface.
