@@ -179,6 +179,10 @@ const statementsPagePropsFixture: StatementsPageProps = {
     "3": "gcp-us-west1",
     "4": "gcp-europe-west1",
   },
+  sortSetting: {
+    ascending: false,
+    columnTitle: "executionCount",
+  },
   columns: null,
   match: {
     path: "/statements",
