@@ -79,7 +79,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/etcd/raft/v3"
+	raft "go.etcd.io/etcd/raft/v3"
 	"golang.org/x/time/rate"
 )
 
@@ -2510,6 +2510,11 @@ func (s *Store) Attrs() roachpb.Attributes {
 	return s.engine.Attrs()
 }
 
+// Properties returns the properties of the underlying store.
+func (s *Store) Properties() roachpb.StoreProperties {
+	return s.engine.Properties()
+}
+
 // Capacity returns the capacity of the underlying storage engine. Note that
 // this does not include reservations.
 // Note that Capacity() has the side effect of updating some of the store's
@@ -2615,10 +2620,11 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 
 	// Initialize the store descriptor.
 	return &roachpb.StoreDescriptor{
-		StoreID:  s.Ident.StoreID,
-		Attrs:    s.Attrs(),
-		Node:     *s.nodeDesc,
-		Capacity: capacity,
+		StoreID:    s.Ident.StoreID,
+		Attrs:      s.Attrs(),
+		Node:       *s.nodeDesc,
+		Capacity:   capacity,
+		Properties: s.Properties(),
 	}, nil
 }
 

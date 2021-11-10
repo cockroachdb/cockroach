@@ -609,7 +609,8 @@ CREATE TABLE crdb_internal.kv_store_status (
    writes_per_second FLOAT8 NOT NULL,
    bytes_per_replica JSONB NOT NULL,
    writes_per_replica JSONB NOT NULL,
-   metrics JSONB NOT NULL
+   metrics JSONB NOT NULL,
+   properties JSONB NOT NULL
 )  CREATE TABLE crdb_internal.kv_store_status (
    node_id INT8 NOT NULL,
    store_id INT8 NOT NULL,
@@ -623,7 +624,8 @@ CREATE TABLE crdb_internal.kv_store_status (
    writes_per_second FLOAT8 NOT NULL,
    bytes_per_replica JSONB NOT NULL,
    writes_per_replica JSONB NOT NULL,
-   metrics JSONB NOT NULL
+   metrics JSONB NOT NULL,
+   properties JSONB NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.leases (
    node_id INT8 NOT NULL,
