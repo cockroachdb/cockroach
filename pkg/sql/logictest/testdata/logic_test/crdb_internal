@@ -806,6 +806,7 @@ SELECT * FROM crdb_internal.cluster_database_privileges
 ----
 database_name  grantee  privilege_type
 other_db       admin    ALL
+other_db       public   CONNECT
 other_db       root     ALL
 
 statement ok
@@ -817,6 +818,7 @@ SELECT * FROM crdb_internal.cluster_database_privileges
 ----
 database_name  grantee   privilege_type
 other_db       admin     ALL
+other_db       public    CONNECT
 other_db       root      ALL
 other_db       testuser  DROP
 
@@ -832,19 +834,24 @@ SELECT * FROM "".crdb_internal.cluster_database_privileges ORDER BY 1,2,3
 ----
 database_name  grantee   privilege_type
 defaultdb      admin     ALL
+defaultdb      public    CONNECT
 defaultdb      root      ALL
 other_db       admin     ALL
+other_db       public    CONNECT
 other_db       root      ALL
 other_db       testuser  DROP
 postgres       admin     ALL
+postgres       public    CONNECT
 postgres       root      ALL
 system         admin     GRANT
 system         admin     SELECT
 system         root      GRANT
 system         root      SELECT
 test           admin     ALL
+test           public    CONNECT
 test           root      ALL
 testdb         admin     ALL
+testdb         public    CONNECT
 testdb         root      ALL
 
 statement ok
@@ -855,19 +862,24 @@ SELECT * FROM crdb_internal.cluster_database_privileges ORDER BY 1,2,3
 ----
 database_name  grantee   privilege_type
 defaultdb      admin     ALL
+defaultdb      public    CONNECT
 defaultdb      root      ALL
 other_db       admin     ALL
+other_db       public    CONNECT
 other_db       root      ALL
 other_db       testuser  DROP
 postgres       admin     ALL
+postgres       public    CONNECT
 postgres       root      ALL
 system         admin     GRANT
 system         admin     SELECT
 system         root      GRANT
 system         root      SELECT
 test           admin     ALL
+test           public    CONNECT
 test           root      ALL
 testdb         admin     ALL
+testdb         public    CONNECT
 testdb         root      ALL
 
 statement ok

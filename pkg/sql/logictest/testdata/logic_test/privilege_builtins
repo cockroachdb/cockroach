@@ -446,7 +446,7 @@ SELECT has_database_privilege('bar', 'test', 'CREATE'),
        has_database_privilege('bar', 'test', 'CREATE, CONNECT'),
        has_database_privilege('bar', 'test', 'CREATE, TEMP')
 ----
-true  false  true  true  true  true
+true  true  true  true  true  true
 
 statement ok
 GRANT CONNECT ON DATABASE test TO bar

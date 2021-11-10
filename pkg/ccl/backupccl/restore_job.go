@@ -2477,12 +2477,19 @@ func getRestoringPrivileges(
 			descCoverage,
 			privilege.Schema,
 		)
-	case catalog.TypeDescriptor, catalog.DatabaseDescriptor:
+	case catalog.TypeDescriptor:
+		// If the restore is not a cluster restore we cannot know that the users on
+		// the restoring cluster match the ones that were on the cluster that was
+		// backed up. So we wipe the privileges on the type.
 		if descCoverage == tree.RequestedDescriptors {
-			// If the restore is not a cluster restore we cannot know that the users on
-			// the restoring cluster match the ones that were on the cluster that was
-			// backed up. So we wipe the privileges on the type/database.
 			updatedPrivileges = descpb.NewDefaultPrivilegeDescriptor(user)
+		}
+	case catalog.DatabaseDescriptor:
+		// If the restore is not a cluster restore we cannot know that the users on
+		// the restoring cluster match the ones that were on the cluster that was
+		// backed up. So we wipe the privileges on the database.
+		if descCoverage == tree.RequestedDescriptors {
+			updatedPrivileges = descpb.NewDefaultDatabasePrivilegeDescriptor(user)
 		}
 	}
 	return updatedPrivileges, nil

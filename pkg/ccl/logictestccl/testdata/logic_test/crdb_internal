@@ -54,6 +54,7 @@ subtest privileged_zones_test
 
 statement ok
 CREATE DATABASE db2; ALTER DATABASE db2 CONFIGURE ZONE USING num_replicas = 3;
+REVOKE CONNECT ON DATABASE db2 FROM public
 
 statement ok
 CREATE TABLE t3 (a INT PRIMARY KEY, b INT); CREATE INDEX myt3index ON t3 (b); ALTER INDEX myt3index CONFIGURE ZONE USING num_replicas = 5; ALTER TABLE t3 CONFIGURE ZONE USING num_replicas = 8

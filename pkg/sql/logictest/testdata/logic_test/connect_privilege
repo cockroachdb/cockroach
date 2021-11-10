@@ -6,6 +6,9 @@ SELECT schemaname, tablename, tableowner FROM pg_catalog.pg_tables WHERE tablena
 ----
 public  a  root
 
+statement ok
+REVOKE CONNECT ON DATABASE test FROM public
+
 user testuser
 
 query TTT

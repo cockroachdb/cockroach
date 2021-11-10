@@ -707,6 +707,7 @@ query T
 SELECT table_name FROM other_db.information_schema.tables WHERE table_catalog = 'other_db' AND table_schema = 'public'
 ----
 xyz
+abc
 
 # Check that one can see all tables with the empty prefix.
 query T rowsort
@@ -994,12 +995,14 @@ geography_columns
 geometry_columns
 spatial_ref_sys
 xyz
+abc
 
 # Check that the other_db tables become visible to non-root when the current database is changed.
 query T
 SET DATABASE = other_db; SELECT table_name FROM information_schema.tables WHERE table_catalog = 'other_db' AND table_schema = 'public'
 ----
 xyz
+abc
 
 user root
 
@@ -1403,6 +1406,7 @@ SELECT * FROM other_db.information_schema.tables WHERE table_catalog = 'other_db
 ----
 table_catalog  table_schema  table_name  table_type  is_insertable_into  version
 other_db       public        xyz         BASE TABLE  YES                 6
+other_db       public        abc         VIEW        NO                  1
 
 
 user root
