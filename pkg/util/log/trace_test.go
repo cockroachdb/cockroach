@@ -126,10 +126,10 @@ func TestEventLogAndTrace(t *testing.T) {
 	// Events to parent context should still go to the event log.
 	Event(ctxWithEventLog, "test6")
 
-	sp.Finish()
+	rec := sp.FinishAndGetRecording(tracing.RecordingVerbose)
 	el.Finish()
 
-	if err := tracing.CheckRecordedSpans(sp.GetRecording(tracing.RecordingVerbose), `
+	if err := tracing.CheckRecordedSpans(rec, `
 		span: s
 			tags: _verbose=1
 			event: test3

@@ -1110,8 +1110,7 @@ func ContextWithRecordingSpan(
 			if rec != nil {
 				return rec
 			}
-			sp.Finish()
-			rec = sp.GetRecording(RecordingVerbose)
+			rec = sp.FinishAndGetRecording(RecordingVerbose)
 			return rec
 		}
 }

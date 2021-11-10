@@ -30,8 +30,7 @@ func TestLogTags(t *testing.T) {
 	l = l.Add("tag2", "val2")
 	sp1 := tr.StartSpan("foo", WithForceRealSpan(), WithLogTags(l))
 	sp1.SetVerbose(true)
-	sp1.Finish()
-	require.NoError(t, CheckRecordedSpans(sp1.GetRecording(RecordingVerbose), `
+	require.NoError(t, CheckRecordedSpans(sp1.FinishAndGetRecording(RecordingVerbose), `
 		span: foo
 			tags: _verbose=1 tag1=val1 tag2=val2
 	`))
@@ -50,8 +49,7 @@ func TestLogTags(t *testing.T) {
 
 	sp2 := tr.StartSpan("bar", WithForceRealSpan(), WithLogTags(l))
 	sp2.SetVerbose(true)
-	sp2.Finish()
-	require.NoError(t, CheckRecordedSpans(sp2.GetRecording(RecordingVerbose), `
+	require.NoError(t, CheckRecordedSpans(sp2.FinishAndGetRecording(RecordingVerbose), `
 		span: bar
 			tags: _verbose=1 one=val1 two=val2
 	`))
@@ -68,8 +66,7 @@ func TestLogTags(t *testing.T) {
 
 	sp3 := tr.StartSpan("baz", WithLogTags(l), WithForceRealSpan())
 	sp3.SetVerbose(true)
-	sp3.Finish()
-	require.NoError(t, CheckRecordedSpans(sp3.GetRecording(RecordingVerbose), `
+	require.NoError(t, CheckRecordedSpans(sp3.FinishAndGetRecording(RecordingVerbose), `
 		span: baz
 			tags: _verbose=1 one=val1 two=val2
 	`))

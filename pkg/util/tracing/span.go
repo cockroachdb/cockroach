@@ -91,6 +91,17 @@ func (sp *Span) Finish() {
 	sp.i.Finish()
 }
 
+// FinishAndGetRecording finishes the span and gets a recording at the same
+// time. This is offered as a combined operation because, otherwise, the caller
+// would be forced to collect the recording before finishing and so the span
+// would appear to be unfinished in the recording (it's illegal to collect the
+// recording after the span finishes, except by using this method).
+func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
+	sp.Finish()
+	// Reach directly into sp.i to avoide the done() check in sp.GetRecording().
+	return sp.i.GetRecording(recType)
+}
+
 // GetRecording retrieves the current recording, if the Span has recording
 // enabled. This can be called while spans that are part of the recording are
 // still open; it can run concurrently with operations on those spans.
@@ -114,7 +125,6 @@ func (sp *Span) Finish() {
 // If recType is RecordingStructured, the return value will be nil if the span
 // doesn't have any structured events.
 func (sp *Span) GetRecording(recType RecordingType) Recording {
-	// It's always valid to get the recording, even for a finished span.
 	return sp.i.GetRecording(recType)
 }
 
