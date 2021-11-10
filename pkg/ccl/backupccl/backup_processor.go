@@ -107,8 +107,11 @@ type backupDataProcessor struct {
 	spec    execinfrapb.BackupDataSpec
 	output  execinfra.RowReceiver
 
-	progCh    chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-	backupErr error
+	// cancelAndWaitForWorker cancels the producer goroutine and waits for it to
+	// finish. It can be called multiple times.
+	cancelAndWaitForWorker func()
+	progCh                 chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+	backupErr              error
 
 	// BoundAccount to track memory usage of the backup processor.
 	memAcc *mon.BoundAccount
@@ -155,7 +158,14 @@ func newBackupDataProcessor(
 // Start is part of the RowSource interface.
 func (bp *backupDataProcessor) Start(ctx context.Context) {
 	ctx = bp.StartInternal(ctx, backupProcessorName)
+	ctx, cancel := context.WithCancel(ctx)
+	bp.cancelAndWaitForWorker = func() {
+		cancel()
+		for range bp.progCh {
+		}
+	}
 	go func() {
+		defer cancel()
 		defer close(bp.progCh)
 		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh, bp.memAcc)
 	}()
@@ -184,6 +194,7 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 }
 
 func (bp *backupDataProcessor) close() {
+	bp.cancelAndWaitForWorker()
 	bp.ProcessorBase.InternalClose()
 	bp.memAcc.Close(bp.Ctx)
 }
