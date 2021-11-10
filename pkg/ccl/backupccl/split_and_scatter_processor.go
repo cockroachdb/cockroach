@@ -257,8 +257,8 @@ func (ssp *splitAndScatterProcessor) Start(ctx context.Context) {
 		<-workerDone
 	}
 	if err := ssp.flowCtx.Stopper().RunAsyncTaskEx(scatterCtx, stop.TaskOpts{
-		TaskName: "splitAndScatter-worker",
-		SpanOpt:  stop.ChildSpan,
+		TaskName:  "splitAndScatter-worker",
+		ChildSpan: true,
 	}, func(ctx context.Context) {
 		ssp.scatterErr = runSplitAndScatter(scatterCtx, ssp.flowCtx, &ssp.spec, ssp.scatterer, ssp.doneScatterCh)
 		cancel()
