@@ -326,6 +326,10 @@ func TestAdminAPIDatabases(t *testing.T) {
 	if _, err := db.Exec(query); err != nil {
 		t.Fatal(err)
 	}
+	// Test needs to revoke CONNECT on the public database to be meaningful.
+	if _, err := db.Exec(fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM public", testdb)); err != nil {
+		t.Fatal(err)
+	}
 
 	// We have to create the non-admin user before calling
 	// "GRANT ... TO authenticatedUserNameNoAdmin".

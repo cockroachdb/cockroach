@@ -14,6 +14,7 @@ SHOW GRANTS ON DATABASE a
 ----
 database_name  grantee    privilege_type
 a              admin      ALL
+a              public     CONNECT
 a              readwrite  ALL
 a              root       ALL
 
@@ -23,6 +24,7 @@ SHOW GRANTS
 ----
 database_name  schema_name         relation_name                          grantee  privilege_type
 test           NULL                NULL                                   admin    ALL
+test           NULL                NULL                                   public   CONNECT
 test           NULL                NULL                                   root     ALL
 test           crdb_internal       NULL                                   admin    ALL
 test           crdb_internal       NULL                                   root     ALL
@@ -1889,6 +1891,7 @@ SHOW GRANTS ON DATABASE a
 ----
 database_name  grantee    privilege_type
 a              admin      ALL
+a              public     CONNECT
 a              readwrite  ALL
 a              root       ALL
 
