@@ -923,6 +923,14 @@ func ResolveFK(
 				"type of %q (%s) does not match foreign key %q.%q (%s)",
 				s.GetName(), s.GetType().String(), target.Name, t.GetName(), t.GetType().String())
 		}
+		// Send a notice to client if origin col type is not identical to the
+		// referenced col.
+		if s, t := originCols[i], referencedCols[i]; !s.GetType().Identical(t.GetType()) {
+			notice := pgnotice.Newf(
+				"type of foreign key column %q (%s) is not identical to referenced column %q.%q (%s)",
+				s.ColName(), s.GetType().String(), target.Name, t.GetName(), t.GetType().String())
+			evalCtx.ClientNoticeSender.BufferClientNotice(ctx, notice)
+		}
 	}
 
 	// Verify we are not writing a constraint over the same name.
