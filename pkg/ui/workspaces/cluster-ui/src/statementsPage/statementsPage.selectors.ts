@@ -237,3 +237,8 @@ export const selectDateRange = createSelector(
       Moment,
     ],
 );
+
+export const selectSortSetting = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["sortSetting/StatementsPage"],
+);
