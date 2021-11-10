@@ -1826,6 +1826,9 @@ func (c *clusterImpl) StartE(ctx context.Context, opts ...option.Option) error {
 	if !argExists(args, "--env=COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH") {
 		args = append(args, "--env=COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH=1")
 	}
+	if !argExists(args, "--env=COCKROACH_DEBUG_SPAN_USE_AFTER_FINISH") {
+		args = append(args, "--env=COCKROACH_DEBUG_SPAN_USE_AFTER_FINISH=1")
+	}
 
 	if err := execCmd(ctx, c.l, args...); err != nil {
 		return err
