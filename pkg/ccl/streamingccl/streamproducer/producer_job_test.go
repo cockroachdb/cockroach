@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -78,7 +77,7 @@ func makeCoordinatedTimer(
 
 type coordinatedResumer struct {
 	resumer            jobs.Resumer
-	revertingConfirmed chan<- struct{}
+	revertingFinished chan<- struct{}
 }
 
 // Resume behaves the same as the normal resumer.
@@ -90,7 +89,7 @@ func (c coordinatedResumer) Resume(ctx context.Context, execCtx interface{}) err
 // and notifies watcher after it finishes.
 func (c coordinatedResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	err := c.resumer.OnFailOrCancel(ctx, execCtx)
-	c.revertingConfirmed <- struct{}{}
+	c.revertingFinished <- struct{}{}
 	return err
 }
 
@@ -119,7 +118,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 
 	registerConstructor := func(initialTime time.Time) (*timeutil.ManualTime, func(), func(), func()) {
 		mt := timeutil.NewManualTime(initialTime)
-		waitUntilReverting := make(chan struct{})
+		waitJobFinishReverting := make(chan struct{})
 		in, out := make(chan struct{}, 1), make(chan struct{}, 1)
 		jobs.RegisterConstructor(jobspb.TypeStreamReplication, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			r := &producerJobResumer{
@@ -129,7 +128,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			}
 			return coordinatedResumer{
 				resumer:            r,
-				revertingConfirmed: waitUntilReverting,
+				revertingFinished: waitJobFinishReverting,
 			}
 		})
 		return mt,
@@ -140,7 +139,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 				<-out // Waits until caller starts waiting for a new timer event
 			},
 			func() {
-				<-waitUntilReverting // Waits until job reaches 'reverting' status
+				<-waitJobFinishReverting // Waits until job reaches 'reverting' status
 			}
 	}
 
@@ -175,13 +174,12 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			ptsID := uuid.MakeV4()
 			jr := makeProducerJobRecord(registry, 10, timeout, username, ptsID)
 			defer jobs.ResetConstructors()()
-			_, _, _, waitUntilReverting := registerConstructor(expirationTime(jr).Add(1 * time.Millisecond))
+			_, _, _, waitJobFinishReverting := registerConstructor(expirationTime(jr).Add(1 * time.Millisecond))
 
 			require.NoError(t, runJobWithProtectedTimestamp(ptsID, ts, jr))
 
-			waitUntilReverting()
-
-			sql.SucceedsSoonDuration = 3 * time.Second
+			waitJobFinishReverting()
+			
 			sql.CheckQueryResultsRetry(t, jobsQuery(jr.JobID), [][]string{{"failed"}})
 			// Ensures the protected timestamp record is released.
 			_, err := getPTSRecord(ptsID)
@@ -200,7 +198,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 
 			jr := makeProducerJobRecord(registry, 20, timeout, username, ptsID)
 			defer jobs.ResetConstructors()()
-			mt, timeGiven, waitForTimeRequest, waitUntilReverting := registerConstructor(expirationTime(jr).Add(-5 * time.Millisecond))
+			mt, timeGiven, waitForTimeRequest, waitJobFinishReverting := registerConstructor(expirationTime(jr).Add(-5 * time.Millisecond))
 
 			require.NoError(t, runJobWithProtectedTimestamp(ptsID, ts, jr))
 			waitForTimeRequest()
@@ -209,7 +207,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			// Reset the time to be after the timeout
 			mt.AdvanceTo(expirationTime(jr).Add(2 * time.Millisecond))
 			timeGiven()
-			waitUntilReverting()
+			waitJobFinishReverting()
 
 			status := sql.QueryStr(t, jobsQuery(jr.JobID))[0][0]
 			require.True(t, status == "reverting" || status == "failed")
@@ -235,7 +233,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 
 			updatedFrontier := hlc.Timestamp{
 				// Set up a big jump of the frontier timestamp to trigger protected timestamp update
-				WallTime: ptsTime.Add(streamingccl.MinProtectedTimestampUpdateAdvance).Add(1 * time.Second).UnixNano(),
+				WallTime: ptsTime.Add(1 * time.Second).UnixNano(),
 			}
 
 			require.NoError(t, source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

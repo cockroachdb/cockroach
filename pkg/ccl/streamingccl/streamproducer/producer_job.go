@@ -182,9 +182,7 @@ func updateReplicationStreamProgress(
 		return err
 	}
 
-	if shouldUpdatePTS := ptsRecord.Timestamp.
-		Add(streamingccl.MinProtectedTimestampUpdateAdvance.Nanoseconds(), 0).
-		Less(ts); shouldUpdatePTS {
+	if shouldUpdatePTS := ptsRecord.Timestamp.Less(ts); shouldUpdatePTS {
 		if err = ptsProvider.UpdateTimestamp(ctx, txn, *d.ProtectedTimestampRecord, ts); err != nil {
 			return err
 		}
