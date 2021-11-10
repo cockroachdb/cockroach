@@ -132,13 +132,22 @@ CREATE USER _ WITH PASSWORD '*****' -- identifiers removed
 CREATE USER foo WITH PASSWORD 'bar' -- passwords exposed
 
 parse
-CREATE USER foo WITH HASHED PASSWORD bar
+CREATE USER foo WITH PASSWORD bar USING HASH 'bcrypt'
 ----
-CREATE USER foo WITH HASHED PASSWORD '*****' -- normalized!
-CREATE USER foo WITH HASHED PASSWORD '*****' -- fully parenthesized
-CREATE USER foo WITH HASHED PASSWORD '*****' -- literals removed
-CREATE USER _ WITH HASHED PASSWORD '*****' -- identifiers removed
-CREATE USER foo WITH HASHED PASSWORD 'bar' -- passwords exposed
+CREATE USER foo WITH PASSWORD '*****' USING HASH 'bcrypt' -- normalized!
+CREATE USER foo WITH PASSWORD '*****' USING HASH 'bcrypt' -- fully parenthesized
+CREATE USER foo WITH PASSWORD '*****' USING HASH 'bcrypt' -- literals removed
+CREATE USER _ WITH PASSWORD '*****' USING HASH 'bcrypt' -- identifiers removed
+CREATE USER foo WITH PASSWORD 'bar' USING HASH 'bcrypt' -- passwords exposed
+
+parse
+CREATE USER foo WITH PASSWORD bar USING HASH 'woah WOAH \x '
+----
+CREATE USER foo WITH PASSWORD '*****' USING HASH e'woah woah \\x ' -- normalized!
+CREATE USER foo WITH PASSWORD '*****' USING HASH e'woah woah \\x ' -- fully parenthesized
+CREATE USER foo WITH PASSWORD '*****' USING HASH e'woah woah \\x ' -- literals removed
+CREATE USER _ WITH PASSWORD '*****' USING HASH e'woah woah \\x ' -- identifiers removed
+CREATE USER foo WITH PASSWORD 'bar' USING HASH e'woah woah \\x ' -- passwords exposed
 
 parse
 CREATE USER foo LOGIN VALID UNTIL NULL PASSWORD NULL

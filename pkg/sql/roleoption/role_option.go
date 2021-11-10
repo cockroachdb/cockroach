@@ -93,7 +93,7 @@ var ByName = map[string]Option{
 	"CREATEROLE":             CREATEROLE,
 	"NOCREATEROLE":           NOCREATEROLE,
 	"PASSWORD":               PASSWORD,
-	"HASHED PASSWORD":        HASHEDPASSWORD,
+	"BCRYPT PASSWORD":        HASHEDPASSWORD,
 	"LOGIN":                  LOGIN,
 	"NOLOGIN":                NOLOGIN,
 	"VALID UNTIL":            VALIDUNTIL,

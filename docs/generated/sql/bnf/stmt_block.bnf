@@ -2667,7 +2667,7 @@ sequence_option_elem ::=
 	| 'VIRTUAL'
 
 password_clause ::=
-	'HASHED' 'PASSWORD' string_or_placeholder
+	'PASSWORD' string_or_placeholder 'USING' 'HASH' 'SCONST'
 	| 'PASSWORD' string_or_placeholder
 	| 'PASSWORD' 'NULL'
 

@@ -1804,17 +1804,28 @@ func (o KVOptions) ToRoleOptions(
 func (o *KVOptions) formatAsRoleOptions(ctx *FmtCtx) {
 	for _, option := range *o {
 		ctx.WriteByte(' ')
+		isPasswordOpt := strings.HasSuffix(string(option.Key), "password")
 		// Role option keys are always sequences of keywords separated
 		// by spaces.
-		ctx.WriteString(strings.ToUpper(string(option.Key)))
+		if isPasswordOpt {
+			ctx.WriteString("PASSWORD")
+		} else {
+			ctx.WriteString(strings.ToUpper(string(option.Key)))
+		}
 
 		// Password is a special case.
-		if strings.HasSuffix(string(option.Key), "password") {
+		if isPasswordOpt {
 			ctx.WriteByte(' ')
 			if ctx.flags.HasFlags(FmtShowPasswords) {
 				ctx.FormatNode(option.Value)
 			} else {
 				ctx.WriteString(PasswordSubstitution)
+			}
+			if hashFunc := strings.TrimSuffix(string(option.Key), "password"); len(hashFunc) > 0 {
+				// Remove the trailing space.
+				hashFunc = hashFunc[:len(hashFunc)-1]
+				ctx.WriteString(" USING HASH ")
+				lexbase.EncodeSQLString(&ctx.Buffer, hashFunc)
 			}
 		} else if option.Value != nil {
 			ctx.WriteByte(' ')

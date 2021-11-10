@@ -7349,9 +7349,12 @@ password_clause:
     // This is a legacy postgres syntax.
     $$.val = tree.KVOption{Key: tree.Name($2), Value: $3.expr()}
   }
-| HASHED PASSWORD string_or_placeholder
+| PASSWORD string_or_placeholder USING HASH SCONST
   {
-    $$.val = tree.KVOption{Key: tree.Name("hashed password"), Value: $3.expr()}
+    // TODO(knz): If/when we want to support placeholders for the hash function,
+    // we will need to either evolve KVOption to accept two values, or
+    // store a tuple datum in the Value field.
+    $$.val = tree.KVOption{Key: tree.Name(strings.ToLower($5)+" password"), Value: $2.expr()}
   }
 | PASSWORD string_or_placeholder
   {
