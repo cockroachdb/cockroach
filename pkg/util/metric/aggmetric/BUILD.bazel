@@ -6,6 +6,7 @@ go_library(
         "agg_metric.go",
         "counter.go",
         "gauge.go",
+        "histogram.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric",
     visibility = ["//visibility:public"],
@@ -13,6 +14,7 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_codahale_hdrhistogram//:hdrhistogram",
         "@com_github_gogo_protobuf//proto",
         "@com_github_google_btree//:btree",
         "@com_github_prometheus_client_model//go",
@@ -25,9 +27,11 @@ go_test(
     srcs = ["agg_metric_test.go"],
     deps = [
         ":aggmetric",
+        "//pkg/base",
         "//pkg/roachpb:with-mocks",
         "//pkg/util/leaktest",
         "//pkg/util/metric",
+        "@com_github_prometheus_client_model//go",
         "@com_github_stretchr_testify//require",
     ],
 )
