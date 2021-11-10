@@ -165,15 +165,6 @@ func TestTracerRecording(t *testing.T) {
 	s1.Recordf("x=%d", 100)
 	require.Nil(t, s1.GetRecording(RecordingStructured))
 
-	// The child Span, now finished, will drop future recordings.
-	s3.Recordf("x=%d", 5)
-	if err := CheckRecordedSpans(s3.GetRecording(RecordingVerbose), `
-		span: c
-			tags: _verbose=1 tag=val
-			event: x=4
-	`); err != nil {
-		t.Fatal(err)
-	}
 	s1.Finish()
 }
 
@@ -182,9 +173,8 @@ func TestStartChildSpan(t *testing.T) {
 	sp1 := tr.StartSpan("parent", WithRecording(RecordingVerbose))
 	sp2 := tr.StartSpan("child", WithParentAndAutoCollection(sp1))
 	sp2.Finish()
-	sp1.Finish()
 
-	if err := CheckRecordedSpans(sp1.GetRecording(RecordingVerbose), `
+	if err := CheckRecordedSpans(sp1.FinishAndGetRecording(RecordingVerbose), `
 		span: parent
 			tags: _verbose=1
 			span: child
@@ -195,16 +185,14 @@ func TestStartChildSpan(t *testing.T) {
 
 	sp1 = tr.StartSpan("parent", WithRecording(RecordingVerbose))
 	sp2 = tr.StartSpan("child", WithParentAndManualCollection(sp1.Meta()))
-	sp2.Finish()
-	sp1.Finish()
-	if err := CheckRecordedSpans(sp1.GetRecording(RecordingVerbose), `
-		span: parent
+	if err := CheckRecordedSpans(sp2.FinishAndGetRecording(RecordingVerbose), `
+		span: child
 			tags: _verbose=1
 	`); err != nil {
 		t.Fatal(err)
 	}
-	if err := CheckRecordedSpans(sp2.GetRecording(RecordingVerbose), `
-		span: child
+	if err := CheckRecordedSpans(sp1.FinishAndGetRecording(RecordingVerbose), `
+		span: parent
 			tags: _verbose=1
 	`); err != nil {
 		t.Fatal(err)
@@ -214,8 +202,7 @@ func TestStartChildSpan(t *testing.T) {
 	sp2 = tr.StartSpan("child", WithParentAndAutoCollection(sp1),
 		WithLogTags(logtags.SingleTagBuffer("key", "val")))
 	sp2.Finish()
-	sp1.Finish()
-	if err := CheckRecordedSpans(sp1.GetRecording(RecordingVerbose), `
+	if err := CheckRecordedSpans(sp1.FinishAndGetRecording(RecordingVerbose), `
 		span: parent
 			tags: _verbose=1
 			span: child
@@ -304,10 +291,9 @@ func TestTracerInjectExtract(t *testing.T) {
 		t.Errorf("traceID doesn't match: parent %d child %d", trace1, trace2)
 	}
 	s2.Recordf("x=%d", 1)
-	s2.Finish()
 
 	// Verify that recording was started automatically.
-	rec := s2.GetRecording(RecordingVerbose)
+	rec := s2.FinishAndGetRecording(RecordingVerbose)
 	if err := CheckRecordedSpans(rec, `
 		span: remote op
 			tags: _verbose=1
@@ -324,9 +310,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	}
 
 	s1.ImportRemoteSpans(rec)
-	s1.Finish()
-
-	if err := CheckRecordedSpans(s1.GetRecording(RecordingVerbose), `
+	if err := CheckRecordedSpans(s1.FinishAndGetRecording(RecordingVerbose), `
 		span: a
 			tags: _verbose=1
 			span: remote op
@@ -543,10 +527,9 @@ func TestSpanRecordingFinished(t *testing.T) {
 	require.False(t, spanOpsWithFinished["root.child.remotechild"])
 
 	remoteChildChild.SetOperationName("root.child.remotechild-reimport")
-	remoteChildChild.Finish()
 	// NB: importing a span twice is essentially a bad idea. It's ok in
 	// this test though.
-	child.ImportRemoteSpans(remoteChildChild.GetRecording(RecordingVerbose))
+	child.ImportRemoteSpans(remoteChildChild.FinishAndGetRecording(RecordingVerbose))
 	child.Finish()
 	spanOpsWithFinished = getSpanOpsWithFinished(t, tr1)
 
@@ -654,8 +637,7 @@ span: a
 	tr.StartSpan("c", WithParentAndAutoCollection(s2))
 
 	s2.Finish()
-	s1.Finish()
-	require.NoError(t, CheckRecordedSpans(s1.GetRecording(RecordingVerbose), `
+	require.NoError(t, CheckRecordedSpans(s1.FinishAndGetRecording(RecordingVerbose), `
 span: a
     tags: _verbose=1
     span: b
@@ -681,4 +663,17 @@ func TestRegistryOrphanSpansBecomeRoots(t *testing.T) {
 	s2.Finish()
 	s3.Finish()
 	require.Len(t, tr.activeSpansRegistry.testingAll(), 0)
+}
+
+func TestContextWithRecordingSpan(t *testing.T) {
+	tr := NewTracer()
+	_, getRecAndFinish := ContextWithRecordingSpan(context.Background(), tr, "test")
+	// Test that the callback can be called multiple times.
+	rec1 := getRecAndFinish()
+	require.NoError(t, CheckRecordedSpans(rec1, `
+span: test
+	tags: _verbose=1
+`))
+	rec2 := getRecAndFinish()
+	require.Equal(t, rec1, rec2)
 }
