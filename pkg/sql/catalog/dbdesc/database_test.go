@@ -80,8 +80,8 @@ func TestMakeDatabaseDesc(t *testing.T) {
 	if desc.GetID() != id {
 		t.Fatalf("expected ID == %d, got %d", id, desc.GetID())
 	}
-	if len(desc.GetPrivileges().Users) != 2 {
-		t.Fatalf("wrong number of privilege users, expected 2, got: %d", len(desc.GetPrivileges().Users))
+	if len(desc.GetPrivileges().Users) != 3 {
+		t.Fatalf("wrong number of privilege users, expected 3, got: %d", len(desc.GetPrivileges().Users))
 	}
 }
 
@@ -96,7 +96,7 @@ func TestValidateDatabaseDesc(t *testing.T) {
 			descpb.DatabaseDescriptor{
 				Name:       "db",
 				ID:         0,
-				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+				Privileges: descpb.NewDefaultDatabasePrivilegeDescriptor(security.RootUserName()),
 			},
 		},
 		{
@@ -105,7 +105,7 @@ func TestValidateDatabaseDesc(t *testing.T) {
 				Name:         "multi-region-db",
 				ID:           200,
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{},
-				Privileges:   descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+				Privileges:   descpb.NewDefaultDatabasePrivilegeDescriptor(security.RootUserName()),
 			},
 		},
 	}
