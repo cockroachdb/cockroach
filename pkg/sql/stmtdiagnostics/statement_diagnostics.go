@@ -60,9 +60,12 @@ type Registry struct {
 		// internally; it'd deadlock.
 		syncutil.Mutex
 		// requests waiting for the right query to come along.
-		requestFingerprints map[RequestID]Request
+		requestFingerprints map[RequestID]*Request
 		// ids of requests that this node is in the process of servicing.
-		ongoing map[RequestID]struct{}
+		ongoing map[RequestID]*Request
+		// ongoingConditionalCount tracks how many of the requests in ongoing
+		// are conditional.
+		ongoingConditionalCount int
 
 		// epoch is observed before reading system.statement_diagnostics_requests, and then
 		// checked again before loading the tables contents. If the value changed in
@@ -86,10 +89,21 @@ type Request struct {
 	fingerprint         string
 	minExecutionLatency time.Duration
 	expiresAt           *time.Time
+	mu                  struct {
+		syncutil.Mutex
+		// ongoingCount tracks the number of ongoing queries matching the
+		// fingerprint that are currently being traced for this request. This is
+		// used only if the request is conditional.
+		ongoingCount int
+	}
 }
 
-func (r Request) isExpired(now time.Time) bool {
+func (r *Request) isExpired(now time.Time) bool {
 	return r.expiresAt != nil && r.expiresAt.Before(now)
+}
+
+func (r *Request) isConditional() bool {
+	return r.minExecutionLatency != 0
 }
 
 // NewRegistry constructs a new Registry.
@@ -182,8 +196,8 @@ type RequestID int
 // corresponding to the id column in statement_diagnostics.
 type CollectedInstanceID int
 
-// addRequestInternalLocked adds a request to r.mu.requests. If the request is
-// already present or it has already expired, the call is a noop.
+// addRequestInternalLocked adds a request to r.mu.requestFingerprints. If the
+// request is already present or it has already expired, the call is a noop.
 func (r *Registry) addRequestInternalLocked(
 	ctx context.Context,
 	id RequestID,
@@ -196,9 +210,9 @@ func (r *Registry) addRequestInternalLocked(
 		return
 	}
 	if r.mu.requestFingerprints == nil {
-		r.mu.requestFingerprints = make(map[RequestID]Request)
+		r.mu.requestFingerprints = make(map[RequestID]*Request)
 	}
-	r.mu.requestFingerprints[id] = Request{
+	r.mu.requestFingerprints[id] = &Request{
 		fingerprint:         queryFingerprint,
 		minExecutionLatency: minExecutionLatency,
 		expiresAt:           expiresAt,
@@ -211,8 +225,8 @@ func (r *Registry) findRequest(requestID RequestID) bool {
 	return r.findRequestLocked(requestID)
 }
 
-// findRequestLocked returns if the request already exists. If the request is
-// not ongoing and has already expired, it is removed from the registry (yet
+// findRequestLocked returns whether the request already exists. If the request
+// is not ongoing and has already expired, it is removed from the registry (yet
 // true is still returned).
 func (r *Registry) findRequestLocked(requestID RequestID) bool {
 	f, ok := r.mu.requestFingerprints[requestID]
@@ -331,30 +345,58 @@ RETURNING id;`
 }
 
 // CheckExecLatency returns true if the completed request's execution latency
-// satisfies the request's condition. If false is returned, then the request is
+// satisfies the request's condition. If false is returned and there are no
+// other ongoing queries being traced for this request, then the request is
 // added back to the registry if requestID is non-zero (i.e. it inlines the
 // logic of RemoveOngoing when false is returned).
 func (r *Registry) CheckExecLatency(
-	requestID RequestID, req Request, execLatency time.Duration,
+	requestID RequestID, req *Request, execLatency time.Duration,
 ) bool {
 	if req.minExecutionLatency <= execLatency {
 		return true
 	}
 	if requestID != 0 {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		r.mu.requestFingerprints[requestID] = req
-		delete(r.mu.ongoing, requestID)
+		// We definitely have a conditional request, so we need to check whether
+		// it is the last ongoing for this fingerprint. If so, we'll put the
+		// request back into the requestFingerprints pool.
+		req.mu.Lock()
+		defer req.mu.Unlock()
+		req.mu.ongoingCount--
+		if req.mu.ongoingCount == 0 {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			r.mu.requestFingerprints[requestID] = req
+			delete(r.mu.ongoing, requestID)
+			r.mu.ongoingConditionalCount--
+		}
 	}
 	return false
 }
 
 // RemoveOngoing removes the given request from the list of ongoing queries.
-func (r *Registry) RemoveOngoing(requestID RequestID) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	// Remove the request from r.mu.ongoing.
-	delete(r.mu.ongoing, requestID)
+func (r *Registry) RemoveOngoing(requestID RequestID, req *Request) {
+	if req == nil {
+		// The request for a bundle must have originated via the
+		// EXPLAIN ANALYZE (DEBUG), and it's not present in the Registry.
+		return
+	}
+	removeFromOngoing := !req.isConditional()
+	if !removeFromOngoing {
+		// If the request is conditional, remove only if it is the last
+		// instance.
+		req.mu.Lock()
+		req.mu.ongoingCount--
+		removeFromOngoing = req.mu.ongoingCount == 0
+		req.mu.Unlock()
+	}
+	if removeFromOngoing {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		delete(r.mu.ongoing, requestID)
+		if req.isConditional() {
+			r.mu.ongoingConditionalCount--
+		}
+	}
 }
 
 // ShouldCollectDiagnostics checks whether any data should be collected for the
@@ -366,36 +408,69 @@ func (r *Registry) RemoveOngoing(requestID RequestID) {
 // by CheckExecLatency when that returns false).
 func (r *Registry) ShouldCollectDiagnostics(
 	ctx context.Context, fingerprint string,
-) (shouldCollect bool, reqID RequestID, req Request) {
+) (shouldCollect bool, reqID RequestID, req *Request) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	// Return quickly if we have no requests to trace.
-	if len(r.mu.requestFingerprints) == 0 {
+	if len(r.mu.requestFingerprints) == 0 && r.mu.ongoingConditionalCount == 0 {
 		return false, 0, req
 	}
 
+	var isOngoingConditional bool
+	// First, check if this fingerprint matches a request that is not ongoing.
 	for id, f := range r.mu.requestFingerprints {
 		if f.fingerprint == fingerprint {
+			delete(r.mu.requestFingerprints, id)
+			if f.isExpired(timeutil.Now()) {
+				return false, 0, req
+			}
 			reqID = id
 			req = f
 			break
 		}
 	}
+
+	// If no match found yet, check whether it matches an ongoing conditional
+	// request.
+	if reqID == 0 {
+		for id, f := range r.mu.ongoing {
+			if f.isConditional() && f.fingerprint == fingerprint {
+				if f.isExpired(timeutil.Now()) {
+					// The request has already expired, but we'll let the
+					// ongoing instances finish.
+					return false, 0, req
+				}
+				reqID = id
+				req = f
+				isOngoingConditional = true
+				break
+			}
+		}
+	}
+
 	if reqID == 0 {
 		return false, 0, req
 	}
 
-	// Remove the request.
-	delete(r.mu.requestFingerprints, reqID)
-	if req.isExpired(timeutil.Now()) {
-		return false, 0, req
-	}
-
 	if r.mu.ongoing == nil {
-		r.mu.ongoing = make(map[RequestID]struct{})
+		r.mu.ongoing = make(map[RequestID]*Request)
 	}
-	r.mu.ongoing[reqID] = struct{}{}
+	if isOngoingConditional {
+		// This is an ongoing conditional request, so we simply need to
+		// increment the ref count.
+		req.mu.Lock()
+		req.mu.ongoingCount++
+		req.mu.Unlock()
+	} else {
+		r.mu.ongoing[reqID] = req
+		if req.isConditional() {
+			r.mu.ongoingConditionalCount++
+			// No need to acquire req.mu since we hold the only reference at the
+			// moment.
+			req.mu.ongoingCount = 1
+		}
+	}
 	return true, reqID, req
 }
 

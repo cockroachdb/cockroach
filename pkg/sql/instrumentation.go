@@ -92,7 +92,7 @@ type instrumentationHelper struct {
 	discardRows bool
 
 	diagRequestID           stmtdiagnostics.RequestID
-	diagRequest             stmtdiagnostics.Request
+	diagRequest             *stmtdiagnostics.Request
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry
 	withStatementTrace      func(trace tracing.Recording, stmt string)
 
@@ -320,7 +320,7 @@ func (ih *instrumentationHelper) Finish(
 				ih.origCtx, cfg.DB, ie, &p.curPlan, ob.BuildString(), trace, placeholders,
 			)
 			bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID)
-			ih.stmtDiagnosticsRecorder.RemoveOngoing(ih.diagRequestID)
+			ih.stmtDiagnosticsRecorder.RemoveOngoing(ih.diagRequestID, ih.diagRequest)
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
 		}
 	}

@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,7 +39,8 @@ import (
 func TestDiagnosticsRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	_, err := db.Exec("CREATE TABLE test (x int PRIMARY KEY)")
@@ -148,6 +150,47 @@ func TestDiagnosticsRequest(t *testing.T) {
 		require.NoError(t, err)
 		// The request must have expired by now.
 		checkNotCompleted(reqID)
+	})
+
+	// Verify that if we have an influx of queries matching the fingerprint of
+	// a conditional diagnostics request and at least one instance satisfies the
+	// conditional, then the bundle is collected.
+	t.Run("conditional with concurrency", func(t *testing.T) {
+		// TODO(yuzefovich): figure out how to open multiple connections to
+		// execute the queries concurrently.
+		t.Skip()
+
+		minExecutionLatency := 100 * time.Millisecond
+		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)", minExecutionLatency, expiresAfter)
+		require.NoError(t, err)
+		checkNotCompleted(reqID)
+
+		const numGoroutines = 10
+		// Open up separate DB connection for each goroutine.
+		conns := make([]*gosql.DB, numGoroutines)
+		for i := range conns {
+			conns[i] = serverutils.OpenDBConn(t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
+		}
+		// Spin up 10 goroutines where only the last one executes the query slow
+		// enough to satisfy the conditional.
+		var wg sync.WaitGroup
+		for i := range conns {
+			go func(i int) {
+				wg.Add(1)
+				defer wg.Done()
+				sleepDuration := fmt.Sprintf("0.0%d", i)
+				if i == numGoroutines-1 {
+					sleepDuration = "0.2"
+				}
+				_, err := conns[i].Exec("SELECT pg_sleep($1)", sleepDuration)
+				require.NoError(t, err)
+			}(i)
+		}
+
+		// Wait for all goroutines to finish and check that the bundle was
+		// collected.
+		wg.Wait()
+		checkCompleted(reqID)
 	})
 }
 
