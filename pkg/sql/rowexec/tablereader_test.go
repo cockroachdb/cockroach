@@ -401,8 +401,7 @@ func TestLimitScans(t *testing.T) {
 
 	// Now we're going to run the tableReader and trace it.
 	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("root", tracing.WithForceRealSpan())
-	sp.SetVerbose(true)
+	sp := tracer.StartSpan("root", tracing.WithRecording(tracing.RecordingVerbose))
 	ctx = tracing.ContextWithSpan(ctx, sp)
 	flowCtx.EvalCtx.Context = ctx
 	flowCtx.CollectStats = true
@@ -441,7 +440,7 @@ func TestLimitScans(t *testing.T) {
 	// scans from the same key as the DistSender retries scans when it detects
 	// splits.
 	re := regexp.MustCompile(fmt.Sprintf(`querying next range at /Table/%d/1(\S.*)?`, tableDesc.GetID()))
-	spans := sp.GetRecording()
+	spans := sp.GetRecording(tracing.RecordingVerbose)
 	ranges := make(map[string]struct{})
 	for _, span := range spans {
 		if span.Operation == tableReaderProcName {

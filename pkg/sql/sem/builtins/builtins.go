@@ -4311,7 +4311,7 @@ value if you rely on the HLC for accuracy.`,
 					return tree.DBoolFalse, nil
 				}
 
-				rootSpan.SetVerboseRecursively(verbosity)
+				rootSpan.SetVerbose(verbosity)
 				return tree.DBoolTrue, nil
 			},
 			Info:       "Returns true if root span was found and verbosity was set, false otherwise.",

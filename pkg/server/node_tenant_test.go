@@ -45,13 +45,12 @@ func TestRedactRecordingForTenant(t *testing.T) {
 			Add("tag_sensitive", tagSensitive).
 			Add("tag_not_sensitive", log.Safe(tagNotSensitive))
 		ctx := logtags.WithTags(context.Background(), tags)
-		ctx, sp := tracing.NewTracer().StartSpanCtx(ctx, "foo", tracing.WithForceRealSpan())
-		sp.SetVerbose(true)
+		ctx, sp := tracing.NewTracer().StartSpanCtx(ctx, "foo", tracing.WithRecording(tracing.RecordingVerbose))
 
 		log.Eventf(ctx, "%s %s", msgSensitive, log.Safe(msgNotSensitive))
 		sp.SetTag("all_span_tags_are_stripped", attribute.StringValue("because_no_redactability"))
 		sp.Finish()
-		rec := sp.GetRecording()
+		rec := sp.GetRecording(tracing.RecordingVerbose)
 		require.Len(t, rec, 1)
 		return rec
 	}

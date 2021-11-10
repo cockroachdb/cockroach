@@ -29,8 +29,7 @@ func TestTracingServiceGetSpanRecordings(t *testing.T) {
 	tracer1 := tracing.NewTracer()
 	setupTraces := func() (tracingpb.TraceID, func()) {
 		// Start a root span.
-		root1 := tracer1.StartSpan("root1", tracing.WithForceRealSpan())
-		root1.SetVerbose(true)
+		root1 := tracer1.StartSpan("root1", tracing.WithRecording(tracing.RecordingVerbose))
 
 		child1 := tracer1.StartSpan("root1.child", tracing.WithParentAndAutoCollection(root1))
 
@@ -41,8 +40,7 @@ func TestTracingServiceGetSpanRecordings(t *testing.T) {
 		fork1 := tracer1.StartSpan("fork1", tracing.WithParentAndManualCollection(root1.Meta()))
 
 		// Start span with different trace ID.
-		root2 := tracer1.StartSpan("root2", tracing.WithForceRealSpan())
-		root2.SetVerbose(true)
+		root2 := tracer1.StartSpan("root2", tracing.WithRecording(tracing.RecordingVerbose))
 		root2.Record("root2")
 
 		return root1.TraceID(), func() {

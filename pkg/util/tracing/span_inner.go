@@ -57,40 +57,26 @@ func (s *spanInner) isSterile() bool {
 	return s.sterile
 }
 
-func (s *spanInner) IsVerbose() bool {
-	return s.crdb.recordingType() == RecordingVerbose
+func (s *spanInner) RecordingType() RecordingType {
+	return s.crdb.recordingType()
 }
 
 func (s *spanInner) SetVerbose(to bool) {
-	// TODO(tbg): when always-on tracing is firmly established, we can remove the ugly
-	// caveat that SetVerbose(true) is a panic on a noop span because there will be no
-	// noop span.
 	if s.isNoop() {
 		panic(errors.AssertionFailedf("SetVerbose called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
 	}
-	if to {
-		s.crdb.enableRecording(RecordingVerbose)
-	} else {
-		s.crdb.disableRecording()
-	}
-}
-
-func (s *spanInner) SetVerboseRecursively(to bool) {
-	if s.isNoop() {
-		panic(errors.AssertionFailedf("SetVerboseRecursively called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
-	}
-	s.crdb.SetVerboseRecursively(to)
+	s.crdb.SetVerbose(to)
 }
 
 func (s *spanInner) ResetRecording() {
 	s.crdb.resetRecording()
 }
 
-func (s *spanInner) GetRecording() Recording {
+func (s *spanInner) GetRecording(recType RecordingType) Recording {
 	if s.isNoop() {
 		return nil
 	}
-	return s.crdb.GetRecording()
+	return s.crdb.GetRecording(recType)
 }
 
 func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
@@ -229,7 +215,7 @@ func (s *spanInner) Recordf(format string, args ...interface{}) {
 // hasVerboseSink returns false if there is no reason to even evaluate Record
 // because the result wouldn't be used for anything.
 func (s *spanInner) hasVerboseSink() bool {
-	if s.netTr == nil && s.otelSpan == nil && !s.IsVerbose() {
+	if s.netTr == nil && s.otelSpan == nil && s.RecordingType() != RecordingVerbose {
 		return false
 	}
 	return true

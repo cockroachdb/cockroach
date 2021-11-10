@@ -34,8 +34,7 @@ func TestRecordingString(t *testing.T) {
 	tr := NewTracer()
 	tr2 := NewTracer()
 
-	root := tr.StartSpan("root", WithForceRealSpan())
-	root.SetVerbose(true)
+	root := tr.StartSpan("root", WithRecording(RecordingVerbose))
 	root.Record("root 1")
 	{
 		// Hackily fix the timing on the first log message, so that we can check it later.
@@ -60,7 +59,7 @@ func TestRecordingString(t *testing.T) {
 	remoteChild.Record("remote child 1")
 	remoteChild.Finish()
 
-	remoteRec := remoteChild.GetRecording()
+	remoteRec := remoteChild.GetRecording(RecordingVerbose)
 	root.ImportRemoteSpans(remoteRec)
 
 	root.Record("root 3")
@@ -73,7 +72,7 @@ func TestRecordingString(t *testing.T) {
 	root.Record("root 5")
 	root.Finish()
 
-	rec := root.GetRecording()
+	rec := root.GetRecording(RecordingVerbose)
 	// Sanity check that the recording looks like we want. Note that this is not
 	// its String() representation; this just lists all the spans in order.
 	require.NoError(t, CheckRecordedSpans(rec, `
@@ -145,20 +144,18 @@ func parseLine(s string) (traceLine, error) {
 func TestRecordingInRecording(t *testing.T) {
 	tr := NewTracer()
 
-	root := tr.StartSpan("root", WithForceRealSpan())
-	root.SetVerbose(true)
-	child := tr.StartSpan("child", WithParentAndAutoCollection(root), WithForceRealSpan())
-	child.SetVerbose(true)
+	root := tr.StartSpan("root", WithRecording(RecordingVerbose))
+	child := tr.StartSpan("child", WithParentAndAutoCollection(root), WithRecording(RecordingVerbose))
 	// The remote grandchild is also recording, however since it's remote the spans
 	// have to be imported into the parent manually (this would usually happen via
 	// code at the RPC boundaries).
 	grandChild := tr.StartSpan("grandchild", WithParentAndManualCollection(child.Meta()))
 	grandChild.Finish()
-	child.ImportRemoteSpans(grandChild.GetRecording())
+	child.ImportRemoteSpans(grandChild.GetRecording(RecordingVerbose))
 	child.Finish()
 	root.Finish()
 
-	rootRec := root.GetRecording()
+	rootRec := root.GetRecording(RecordingVerbose)
 	require.NoError(t, CheckRecordedSpans(rootRec, `
 		span: root
 			tags: _verbose=1
@@ -168,7 +165,7 @@ func TestRecordingInRecording(t *testing.T) {
 					tags: _verbose=1
 		`))
 
-	childRec := child.GetRecording()
+	childRec := child.GetRecording(RecordingVerbose)
 	require.NoError(t, CheckRecordedSpans(childRec, `
 		span: child
 			tags: _verbose=1
@@ -187,8 +184,8 @@ func TestRecordingInRecording(t *testing.T) {
 func TestImportRemoteSpans(t *testing.T) {
 	for _, verbose := range []bool{false, true} {
 		t.Run(fmt.Sprintf("%s=%t", "verbose-child=", verbose), func(t *testing.T) {
-			tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
-			sp := tr.StartSpan("root")
+			tr := NewTracerWithOpt(context.Background())
+			sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 			ch := tr.StartSpan("child", WithParentAndManualCollection(sp.Meta()))
 			ch.RecordStructured(&types.Int32Value{Value: 4})
 			if verbose {
@@ -198,18 +195,18 @@ func TestImportRemoteSpans(t *testing.T) {
 			ch.Record("foo")
 			ch.SetVerbose(false)
 			ch.Finish()
-			sp.ImportRemoteSpans(ch.GetRecording())
+			sp.ImportRemoteSpans(ch.GetRecording(RecordingVerbose))
 			sp.Finish()
 
 			if verbose {
-				require.NoError(t, CheckRecording(sp.GetRecording(), `
+				require.NoError(t, CheckRecording(sp.GetRecording(RecordingVerbose), `
 				=== operation:root _verbose:1
-					=== operation:child
+					=== operation:child _verbose:1
 					event:foo
 					structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
 	`))
 			} else {
-				require.NoError(t, CheckRecording(sp.GetRecording(), `
+				require.NoError(t, CheckRecording(sp.GetRecording(RecordingStructured), `
 				=== operation:root
 				structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
 	`))
@@ -220,11 +217,11 @@ func TestImportRemoteSpans(t *testing.T) {
 
 func TestSpanRecordStructured(t *testing.T) {
 	tr := NewTracer()
-	sp := tr.StartSpan("root", WithForceRealSpan())
+	sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 	defer sp.Finish()
 
 	sp.RecordStructured(&types.Int32Value{Value: 4})
-	rec := sp.GetRecording()
+	rec := sp.GetRecording(RecordingStructured)
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].StructuredRecords, 1)
 	item := rec[0].StructuredRecords[0]
@@ -248,7 +245,7 @@ func TestSpanRecordStructuredLimit(t *testing.T) {
 	clock := timeutil.NewManualTime(now)
 	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{Clock: clock}))
 
-	sp := tr.StartSpan("root", WithForceRealSpan())
+	sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 	defer sp.Finish()
 
 	pad := func(i int) string { return fmt.Sprintf("%06d", i) }
@@ -267,7 +264,7 @@ func TestSpanRecordStructuredLimit(t *testing.T) {
 	}
 
 	sp.SetVerbose(true)
-	rec := sp.GetRecording()
+	rec := sp.GetRecording(RecordingVerbose)
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].StructuredRecords, numStructuredRecordings)
 	require.Equal(t, "1", rec[0].Tags["_dropped"])
@@ -297,15 +294,14 @@ func TestSpanRecordLimit(t *testing.T) {
 	clock := &timeutil.ManualTime{}
 	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{Clock: clock}))
 
-	sp := tr.StartSpan("root", WithForceRealSpan())
+	sp := tr.StartSpan("root", WithRecording(RecordingVerbose))
 	defer sp.Finish()
-	sp.SetVerbose(true)
 
 	msg := func(i int) string { return fmt.Sprintf("msg: %10d", i) }
 
 	// Determine the size of a log record by actually recording once.
 	sp.Recordf("%s", msg(42))
-	logSize := sp.GetRecording()[0].Logs[0].MemorySize()
+	logSize := sp.GetRecording(RecordingVerbose)[0].Logs[0].MemorySize()
 	sp.ResetRecording()
 
 	numLogs := maxLogBytesPerSpan / logSize
@@ -314,7 +310,7 @@ func TestSpanRecordLimit(t *testing.T) {
 		sp.Recordf("%s", msg(i))
 	}
 
-	rec := sp.GetRecording()
+	rec := sp.GetRecording(RecordingVerbose)
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].Logs, numLogs)
 	require.Equal(t, rec[0].Tags["_dropped"], "1")
@@ -350,9 +346,8 @@ func TestSpanReset(t *testing.T) {
 	clock := &timeutil.ManualTime{}
 	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{Clock: clock}))
 
-	sp := tr.StartSpan("root", WithForceRealSpan())
+	sp := tr.StartSpan("root", WithRecording(RecordingVerbose))
 	defer sp.Finish()
-	sp.SetVerbose(true)
 
 	for i := 1; i <= 10; i++ {
 		if i%2 == 0 {
@@ -362,7 +357,7 @@ func TestSpanReset(t *testing.T) {
 		}
 	}
 
-	require.NoError(t, CheckRecordedSpans(sp.GetRecording(), `
+	require.NoError(t, CheckRecordedSpans(sp.GetRecording(RecordingVerbose), `
 		span: root
 			tags: _unfinished=1 _verbose=1
 			event: 1
@@ -376,7 +371,7 @@ func TestSpanReset(t *testing.T) {
 			event: 9
 			event: structured=10
 		`))
-	require.NoError(t, CheckRecording(sp.GetRecording(), `
+	require.NoError(t, CheckRecording(sp.GetRecording(RecordingVerbose), `
 		=== operation:root _unfinished:1 _verbose:1
 		event:1
 		event:structured=2
@@ -397,17 +392,17 @@ func TestSpanReset(t *testing.T) {
 
 	sp.ResetRecording()
 
-	require.NoError(t, CheckRecordedSpans(sp.GetRecording(), `
+	require.NoError(t, CheckRecordedSpans(sp.GetRecording(RecordingVerbose), `
 		span: root
 			tags: _unfinished=1 _verbose=1
 		`))
-	require.NoError(t, CheckRecording(sp.GetRecording(), `
+	require.NoError(t, CheckRecording(sp.GetRecording(RecordingVerbose), `
 		=== operation:root _unfinished:1 _verbose:1
 	`))
 
 	msg := func(i int) string { return fmt.Sprintf("msg: %010d", i) }
 	sp.Record(msg(42))
-	logSize := sp.GetRecording()[0].Logs[0].MemorySize()
+	logSize := sp.GetRecording(RecordingVerbose)[0].Logs[0].MemorySize()
 	numLogs := maxLogBytesPerSpan / logSize
 	const extra = 10
 
@@ -415,15 +410,15 @@ func TestSpanReset(t *testing.T) {
 		sp.Record(msg(i))
 	}
 
-	require.Equal(t, sp.GetRecording()[0].Tags["_dropped"], "1")
+	require.Equal(t, sp.GetRecording(RecordingVerbose)[0].Tags["_dropped"], "1")
 	sp.ResetRecording()
-	_, found := sp.GetRecording()[0].Tags["_dropped"]
+	_, found := sp.GetRecording(RecordingVerbose)[0].Tags["_dropped"]
 	require.False(t, found)
 }
 
-func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
+func TestChildSpanRegisteredWithRecordingParent(t *testing.T) {
 	tr := NewTracer()
-	sp := tr.StartSpan("root", WithForceRealSpan())
+	sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 	defer sp.Finish()
 	ch := tr.StartSpan("child", WithParentAndAutoCollection(sp))
 	defer ch.Finish()
@@ -432,7 +427,7 @@ func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 	require.Equal(t, ch.i.crdb, children[0])
 	ch.RecordStructured(&types.Int32Value{Value: 5})
 	// Check that the child's structured event is in the recording.
-	rec := sp.GetRecording()
+	rec := sp.GetRecording(RecordingStructured)
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].StructuredRecords, 1)
 }
@@ -441,10 +436,10 @@ func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 // track at most maxChildrenPerSpan direct children.
 func TestSpanMaxChildren(t *testing.T) {
 	tr := NewTracer()
-	sp := tr.StartSpan("root", WithForceRealSpan())
+	sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 	defer sp.Finish()
 	for i := 0; i < maxChildrenPerSpan+123; i++ {
-		tr.StartSpan(fmt.Sprintf("child %d", i), WithParentAndAutoCollection(sp), WithForceRealSpan())
+		tr.StartSpan(fmt.Sprintf("child %d", i), WithParentAndAutoCollection(sp))
 		exp := i + 1
 		if exp > maxChildrenPerSpan {
 			exp = maxChildrenPerSpan
@@ -536,13 +531,13 @@ func TestSpanTagsInRecordings(t *testing.T) {
 	require.False(t, sp.IsVerbose())
 	sp.SetTag("foo2", attribute.StringValue("bar2"))
 	sp.Record("dummy recording")
-	rec := sp.GetRecording()
+	rec := sp.GetRecording(RecordingStructured)
 	require.Nil(t, rec)
 	// We didn't stringify the log tag.
 	require.Zero(t, int(counter))
 
 	sp.SetVerbose(true)
-	rec = sp.GetRecording()
+	rec = sp.GetRecording(RecordingVerbose)
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].Tags, 5) // _unfinished:1 _verbose:1 foo:tagbar foo1:1 foor2:bar2
 	_, ok := rec[0].Tags["foo"]
@@ -553,7 +548,7 @@ func TestSpanTagsInRecordings(t *testing.T) {
 
 	// Verify that subsequent tags are also captured.
 	sp.SetTag("foo3", attribute.StringValue("bar3"))
-	rec = sp.GetRecording()
+	rec = sp.GetRecording(RecordingVerbose)
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].Tags, 6)
 	_, ok = rec[0].Tags["foo3"]
@@ -567,7 +562,7 @@ func TestStructureRecording(t *testing.T) {
 			for _, finishCh2 := range []bool{true, false} {
 				t.Run(fmt.Sprintf("finish2=%t", finishCh2), func(t *testing.T) {
 					tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
-					sp := tr.StartSpan("root")
+					sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 					ch1 := tr.StartSpan("child", WithParentAndAutoCollection(sp))
 					ch2 := tr.StartSpan("grandchild", WithParentAndAutoCollection(ch1))
 					for i := int32(0); i < 5; i++ {
@@ -581,7 +576,7 @@ func TestStructureRecording(t *testing.T) {
 					if finishCh1 {
 						ch1.Finish()
 					}
-					rec := sp.GetRecording()
+					rec := sp.GetRecording(RecordingStructured)
 					require.Len(t, rec, 1)
 					require.Len(t, rec[0].StructuredRecords, 15)
 				})
