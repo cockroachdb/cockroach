@@ -49,7 +49,7 @@ import (
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
-	"github.com/dustin/go-humanize"
+	humanize "github.com/dustin/go-humanize"
 )
 
 const maxSyncDurationFatalOnExceededDefault = true
@@ -470,6 +470,7 @@ type Pebble struct {
 	ballastSize int64
 	maxSize     int64
 	attrs       roachpb.Attributes
+	properties  roachpb.StoreProperties
 	// settings must be non-nil if this Pebble instance will be used to write
 	// intents.
 	settings     *cluster.Settings
@@ -661,6 +662,8 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		}
 	}
 
+	storeProps := computeStoreProperties(ctx, cfg.Dir, cfg.Opts.ReadOnly, env != nil /* encryptionEnabled */)
+
 	p := &Pebble{
 		readOnly:                cfg.Opts.ReadOnly,
 		path:                    cfg.Dir,
@@ -669,6 +672,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		ballastSize:             cfg.BallastSize,
 		maxSize:                 cfg.MaxSize,
 		attrs:                   cfg.Attrs,
+		properties:              storeProps,
 		settings:                cfg.Settings,
 		encryption:              env,
 		fileRegistry:            fileRegistry,
@@ -1060,6 +1064,11 @@ func (p *Pebble) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails
 // Attrs implements the Engine interface.
 func (p *Pebble) Attrs() roachpb.Attributes {
 	return p.attrs
+}
+
+// Properties implements the Engine interface.
+func (p *Pebble) Properties() roachpb.StoreProperties {
+	return p.properties
 }
 
 // Capacity implements the Engine interface.

@@ -1470,8 +1470,25 @@ func nodeStatusToResp(n *statuspb.NodeStatus, isAdmin bool) serverpb.NodeRespons
 				Attrs:    ss.Desc.Attrs,
 				Node:     nodeDescriptor,
 				Capacity: ss.Desc.Capacity,
+
+				Properties: roachpb.StoreProperties{
+					ReadOnly:  ss.Desc.Properties.ReadOnly,
+					Encrypted: ss.Desc.Properties.Encrypted,
+				},
 			},
 			Metrics: ss.Metrics,
+		}
+		if fsprops := ss.Desc.Properties.FileStoreProperties; fsprops != nil {
+			sfsprops := &roachpb.FileStoreProperties{
+				FsType: fsprops.FsType,
+			}
+			if isAdmin {
+				sfsprops.Path = fsprops.Path
+				sfsprops.BlockDevice = fsprops.BlockDevice
+				sfsprops.MountPoint = fsprops.MountPoint
+				sfsprops.MountOptions = fsprops.MountOptions
+			}
+			statuses[i].Desc.Properties.FileStoreProperties = sfsprops
 		}
 	}
 

@@ -526,6 +526,20 @@ func (p Percentiles) SafeFormat(w redact.SafePrinter, _ rune) {
 		p.P10, p.P25, p.P50, p.P75, p.P90, p.PMax)
 }
 
+func (sc FileStoreProperties) String() string {
+	return redact.StringWithoutMarkers(sc)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (sc FileStoreProperties) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("{path=%s, fs=%s, blkdev=%s, mnt=%s opts=%s}",
+		sc.Path,
+		redact.SafeString(sc.FsType),
+		sc.BlockDevice,
+		sc.MountPoint,
+		sc.MountOptions)
+}
+
 // String returns a string representation of the StoreCapacity.
 func (sc StoreCapacity) String() string {
 	return redact.StringWithoutMarkers(sc)
