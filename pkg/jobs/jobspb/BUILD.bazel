@@ -13,8 +13,8 @@ go_library(
         "//pkg/cloud",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/protoreflect",
+        "//pkg/util/json/jsonpb",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_gogo_protobuf//jsonpb",
     ],
 )
 

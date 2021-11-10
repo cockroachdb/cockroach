@@ -23,9 +23,9 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/json/jsonpb",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_gogo_protobuf//jsonpb",
         "@com_github_lib_pq//oid",
     ],
 )

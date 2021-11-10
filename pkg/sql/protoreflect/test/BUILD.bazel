@@ -25,6 +25,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/protoreflect",
-        "@com_github_gogo_protobuf//jsonpb",
+        "//pkg/util/json/jsonpb",
     ],
 )

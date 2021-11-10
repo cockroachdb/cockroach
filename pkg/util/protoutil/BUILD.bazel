@@ -14,9 +14,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/protoutil",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/json/jsonpb",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_gogo_protobuf//jsonpb",
         "@com_github_gogo_protobuf//proto",
         "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
     ],

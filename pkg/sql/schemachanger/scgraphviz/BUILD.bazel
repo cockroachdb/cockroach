@@ -9,9 +9,9 @@ go_library(
         "//pkg/sql/schemachanger/scgraph",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan",
+        "//pkg/util/json/jsonpb",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_emicklei_dot//:dot",
-        "@com_github_gogo_protobuf//jsonpb",
     ],
 )

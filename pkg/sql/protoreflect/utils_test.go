@@ -22,11 +22,11 @@ import (
 	protoreflecttest "github.com/cockroachdb/cockroach/pkg/sql/protoreflect/test"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	jsonb "github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/json/jsonpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/gogo/protobuf/jsonpb"
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 )
