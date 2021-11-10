@@ -304,6 +304,9 @@ func (sip *streamIngestionProcessor) close() {
 			// state once it has shutdown.
 			sip.pollingWaitGroup.Wait()
 		}
+		// Wait for the merge goroutine.
+		for range sip.eventCh {
+		}
 	}
 }
 
@@ -359,8 +362,8 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(
 	}
 }
 
-// merge takes events from all the streams and merges them into a single
-// channel.
+// merge asynchronously takes events from all the streams and merges them into a single
+// channel. The returned channel is closed when the goroutines have shut down.
 func (sip *streamIngestionProcessor) merge(
 	ctx context.Context,
 	partitionStreams map[string]chan streamingccl.Event,
