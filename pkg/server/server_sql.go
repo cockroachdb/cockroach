@@ -375,6 +375,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 		td := tracedumper.NewTraceDumper(ctx, cfg.InflightTraceDirName, cfg.Settings)
 		*jobRegistry = *jobs.MakeRegistry(
+			ctx,
 			cfg.AmbientCtx,
 			cfg.stopper,
 			cfg.clock,
