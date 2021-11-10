@@ -232,6 +232,7 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 					Settings: st,
 					DB:       kvDB,
 					Codec:    keys.SystemSQLCodec,
+					Stopper:  tc.Stopper(),
 				},
 				EvalCtx:     &evalCtx,
 				DiskMonitor: testDiskMonitor,
