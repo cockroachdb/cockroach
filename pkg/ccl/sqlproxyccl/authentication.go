@@ -18,7 +18,7 @@ import (
 // authenticate handles the startup of the pgwire protocol to the point where
 // the connections is considered authenticated. If that doesn't happen, it
 // returns an error.
-var authenticate = func(clientConn, crdbConn net.Conn, throttleHook func(throttler.AttemptStatus) *pgproto3.ErrorResponse) error {
+var authenticate = func(clientConn, crdbConn net.Conn, throttleHook func(throttler.AttemptStatus) error) error {
 	fe := pgproto3.NewBackend(pgproto3.NewChunkReader(clientConn), clientConn)
 	be := pgproto3.NewFrontend(pgproto3.NewChunkReader(crdbConn), crdbConn)
 
@@ -70,10 +70,10 @@ var authenticate = func(clientConn, crdbConn net.Conn, throttleHook func(throttl
 		case *pgproto3.AuthenticationOk:
 			throttleError := throttleHook(throttler.AttemptOK)
 			if throttleError != nil {
-				if err = feSend(throttleError); err != nil {
+				if err = feSend(toPgError(throttleError)); err != nil {
 					return err
 				}
-				return newErrorf(codeProxyRefusedConnection, "connection attempt throttled")
+				return throttleError
 			}
 			if err = feSend(backendMsg); err != nil {
 				return err
@@ -84,10 +84,10 @@ var authenticate = func(clientConn, crdbConn net.Conn, throttleHook func(throttl
 		case *pgproto3.ErrorResponse:
 			throttleError := throttleHook(throttler.AttemptInvalidCredentials)
 			if throttleError != nil {
-				if err = feSend(throttleError); err != nil {
+				if err = feSend(toPgError(throttleError)); err != nil {
 					return err
 				}
-				return newErrorf(codeProxyRefusedConnection, "connection attempt throttled")
+				return throttleError
 			}
 			if err = feSend(backendMsg); err != nil {
 				return err

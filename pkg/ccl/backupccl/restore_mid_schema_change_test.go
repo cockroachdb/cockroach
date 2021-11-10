@@ -143,10 +143,12 @@ func expectedSCJobCount(scName string, isClusterRestore, after bool) int {
 		numBackgroundSCJobs = 1
 	}
 
+	// We drop defaultdb and postgres for full cluster restores
+	numBackgroundDropDatabaseSCJobs := 2
 	// Since we're doing a cluster restore, we need to account for all of
 	// the schema change jobs that existed in the backup.
 	if isClusterRestore {
-		expNumSCJobs += numBackgroundSCJobs
+		expNumSCJobs += numBackgroundSCJobs + numBackgroundDropDatabaseSCJobs
 
 		// If we're performing a cluster restore, we also need to include the drop
 		// crdb_temp_system job.
