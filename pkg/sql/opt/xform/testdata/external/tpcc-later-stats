@@ -369,13 +369,13 @@ insert order_line
  │    ├── column6:18 => order_line.ol_supply_w_id:6
  │    ├── ol_delivery_d_default:24 => ol_delivery_d:7
  │    ├── column7:19 => ol_quantity:8
- │    ├── column8:22 => ol_amount:9
- │    └── column9:23 => ol_dist_info:10
+ │    ├── ol_amount:22 => order_line.ol_amount:9
+ │    └── ol_dist_info:23 => order_line.ol_dist_info:10
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: ol_delivery_d_default:24 column8:22 column9:23 column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null column6:18!null column7:19!null
+ │    ├── columns: ol_delivery_d_default:24 ol_amount:22 ol_dist_info:23 column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null column6:18!null column7:19!null
  │    ├── cardinality: [6 - 6]
  │    ├── immutable
  │    ├── fd: ()-->(24)
@@ -390,9 +390,9 @@ insert order_line
  │    │    └── (3045, 2, 10, 6, 92966, 0, 4, 366.760000, 'saCXoEzmssaF9m9cdLXe0Yhg')
  │    └── projections
  │         ├── CAST(NULL AS TIMESTAMP) [as=ol_delivery_d_default:24]
- │         ├── assignment-cast: DECIMAL(6,2) [as=column8:22, outer=(20), immutable]
+ │         ├── assignment-cast: DECIMAL(6,2) [as=ol_amount:22, outer=(20), immutable]
  │         │    └── column8:20
- │         └── assignment-cast: CHAR(24) [as=column9:23, outer=(21), immutable]
+ │         └── assignment-cast: CHAR(24) [as=ol_dist_info:23, outer=(21), immutable]
  │              └── column9:21
  └── f-k-checks
       ├── f-k-checks-item: order_line(ol_w_id,ol_d_id,ol_o_id) -> order(o_w_id,o_d_id,o_id)
@@ -613,13 +613,13 @@ insert history
  │    ├── column4:15 => history.h_d_id:5
  │    ├── column5:16 => history.h_w_id:6
  │    ├── column7:18 => h_date:7
- │    ├── column6:20 => h_amount:8
- │    └── column8:21 => h_data:9
+ │    ├── h_amount:20 => history.h_amount:8
+ │    └── h_data:21 => history.h_data:9
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null column5:16!null column7:18!null column6:20 column8:21 rowid_default:22
+ │    ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null column5:16!null column7:18!null h_amount:20 h_data:21 rowid_default:22
  │    ├── cardinality: [1 - 1]
  │    ├── volatile
  │    ├── key: ()
