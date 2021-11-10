@@ -1256,6 +1256,8 @@ GRPC_GATEWAY_GOOGLEAPIS_PATH := ./vendor/$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)
 PROTO_MAPPINGS :=
 PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/api/annotations.proto=google.golang.org/genproto/googleapis/api/annotations,
 PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,
+PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,
+PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/struct.proto=github.com/gogo/protobuf/types,
 PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,
 PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,
 
