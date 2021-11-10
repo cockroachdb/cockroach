@@ -126,13 +126,15 @@ func RunSchemaChangesInJob(
 	jobDescriptorIDs []descpb.ID,
 	jobDetails jobspb.NewSchemaChangeDetails,
 	jobProgress jobspb.NewSchemaChangeProgress,
+	rollback bool,
 ) error {
 	state := makeState(ctx,
 		deps.ClusterSettings(),
 		jobDetails.Targets,
 		jobProgress.States,
 		jobProgress.Statements,
-		jobProgress.Authorization)
+		jobProgress.Authorization,
+		rollback)
 	sc, err := scplan.MakePlan(state, scplan.Params{ExecutionPhase: scop.PostCommitPhase})
 	if err != nil {
 		return err
@@ -194,6 +196,7 @@ func makeState(
 	states []scpb.Status,
 	statements []*scpb.Statement,
 	authorization *scpb.Authorization,
+	rollback bool,
 ) scpb.State {
 	if len(protos) != len(states) {
 		logcrash.ReportOrPanic(ctx, &sv.SV, "unexpected slice size mismatch %d and %d",
@@ -208,6 +211,14 @@ func makeState(
 		ts.Nodes[i] = &scpb.Node{
 			Target: protos[i],
 			Status: states[i],
+		}
+		if rollback {
+			switch ts.Nodes[i].Direction {
+			case scpb.Target_ADD:
+				ts.Nodes[i].Direction = scpb.Target_DROP
+			case scpb.Target_DROP:
+				ts.Nodes[i].Direction = scpb.Target_ADD
+			}
 		}
 	}
 	return ts
