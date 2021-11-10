@@ -974,7 +974,7 @@ func (s *SQLServer) initInstanceID(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = s.sqlIDContainer.SetSQLInstanceID(instanceID)
+	err = s.sqlIDContainer.SetSQLInstanceID(ctx, instanceID)
 	if err != nil {
 		return err
 	}

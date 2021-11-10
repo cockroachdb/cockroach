@@ -199,11 +199,27 @@ func NewSQLIDContainer(sqlInstanceID SQLInstanceID, nodeID *NodeIDContainer) *SQ
 // SetSQLInstanceID sets the SQL instance ID. It returns an error if
 // we attempt to set an instance ID when the nodeID has already been
 // initialized.
-func (c *SQLIDContainer) SetSQLInstanceID(sqlInstanceID SQLInstanceID) error {
+func (c *SQLIDContainer) SetSQLInstanceID(ctx context.Context, sqlInstanceID SQLInstanceID) error {
 	if _, ok := c.OptionalNodeID(); ok {
 		return errors.New("attempting to initialize instance ID when node ID is set")
 	}
-	c.sqlInstanceID = sqlInstanceID
+
+	// Use the same logic to set the instance ID as for the node ID.
+	//
+	// TODO(knz): All this could be advantageously simplified if we agreed
+	// to use the same type for NodeIDContainer and SQLIDContainer.
+	if sqlInstanceID <= 0 {
+		log.Fatalf(ctx, "trying to set invalid SQLInstanceID: %d", sqlInstanceID)
+	}
+	oldVal := atomic.SwapInt32((*int32)(&c.sqlInstanceID), int32(sqlInstanceID))
+	if oldVal == 0 {
+		if log.V(2) {
+			log.Infof(ctx, "SQLInstanceID set to %d", sqlInstanceID)
+		}
+	} else if oldVal != int32(sqlInstanceID) {
+		log.Fatalf(ctx, "different SQLInstanceIDs set: %d, then %d", oldVal, sqlInstanceID)
+	}
+
 	c.str.Store(strconv.Itoa(int(sqlInstanceID)))
 	return nil
 }
