@@ -176,22 +176,27 @@ class MetricsDataProvider extends React.Component<
   /**
    * Refresh nodes status query when props are changed; this will immediately
    * trigger a new request if the previous query is no longer valid.
+   * The query will not be considered stale until 10 seconds have passed,
+   * even if this provider has just been mounted. So, we can force a refresh
+   * when the provider mounts.
    */
-  refreshMetricsIfStale(props: MetricsDataProviderProps) {
+  refreshMetricsIfStale(props: MetricsDataProviderProps, forceRefresh = false) {
     const request = this.requestMessage(props);
     if (!request) {
       return;
     }
     const { metrics, requestMetrics, id } = props;
     const nextRequest = metrics && metrics.nextRequest;
-    if (!nextRequest || !_.isEqual(nextRequest, request)) {
+    const needsRefresh = forceRefresh || !nextRequest || !_.isEqual(nextRequest, request);
+    
+    if (needsRefresh) {
       requestMetrics(id, request);
     }
   }
 
   componentDidMount() {
     // Refresh nodes status query when mounting.
-    this.refreshMetricsIfStale(this.props);
+    this.refreshMetricsIfStale(this.props, true);
   }
 
   componentDidUpdate() {
