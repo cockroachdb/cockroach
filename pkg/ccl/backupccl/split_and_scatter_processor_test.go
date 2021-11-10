@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
@@ -60,6 +61,7 @@ func (s *mockScatterer) split(_ context.Context, _ keys.SQLCodec, _ roachpb.Key)
 // correct stream.
 func TestSplitAndScatterProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
