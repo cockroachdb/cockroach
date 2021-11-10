@@ -163,7 +163,7 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		privilege := descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
+		privilege := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
 		descs := catalog.MakeMapDescGetter()
 		test.desc.Privileges = privilege
 		desc := schemadesc.NewBuilder(&test.desc).BuildImmutable()

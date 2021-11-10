@@ -153,17 +153,17 @@ func NewPrivilegeDescriptor(
 // on non-system objects.
 var DefaultSuperuserPrivileges = privilege.List{privilege.ALL}
 
-// NewDefaultPrivilegeDescriptor returns a privilege descriptor
+// NewBasePrivilegeDescriptor returns a privilege descriptor
 // with ALL privileges for the root user and admin role.
-// NOTE: use NewDefaultDatabasePrivilegeDescriptor for databases.
-func NewDefaultPrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDescriptor {
+// NOTE: use NewBaseDatabasePrivilegeDescriptor for databases.
+func NewBasePrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDescriptor {
 	return NewCustomSuperuserPrivilegeDescriptor(DefaultSuperuserPrivileges, owner)
 }
 
-// NewDefaultDatabasePrivilegeDescriptor creates defaults privileges for a database.
+// NewBaseDatabasePrivilegeDescriptor creates defaults privileges for a database.
 // Here we also add the CONNECT privilege for the database.
-func NewDefaultDatabasePrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDescriptor {
-	p := NewDefaultPrivilegeDescriptor(owner)
+func NewBaseDatabasePrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDescriptor {
+	p := NewBasePrivilegeDescriptor(owner)
 	p.Grant(security.PublicRoleName(), privilege.List{privilege.CONNECT})
 	return p
 }

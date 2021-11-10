@@ -22,7 +22,7 @@ import (
 
 func TestPrivilege(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	descriptor := NewDefaultPrivilegeDescriptor(security.AdminRoleName())
+	descriptor := NewBasePrivilegeDescriptor(security.AdminRoleName())
 
 	testUser := security.TestUserName()
 	barUser := security.MakeSQLUsernameFromPreNormalizedString("bar")
@@ -255,7 +255,7 @@ func TestPrivilegeValidate(t *testing.T) {
 
 	testUser := security.TestUserName()
 
-	descriptor := NewDefaultPrivilegeDescriptor(security.AdminRoleName())
+	descriptor := NewBasePrivilegeDescriptor(security.AdminRoleName())
 	validate := func() error {
 		return descriptor.Validate(ID(keys.MinUserDescID), privilege.Table, "whatever", DefaultSuperuserPrivileges)
 	}
@@ -305,7 +305,7 @@ func TestValidPrivilegesForObjects(t *testing.T) {
 
 	for _, tc := range testCases {
 		for _, priv := range tc.validPrivileges {
-			privDesc := NewDefaultPrivilegeDescriptor(security.AdminRoleName())
+			privDesc := NewBasePrivilegeDescriptor(security.AdminRoleName())
 			privDesc.Grant(testUser, privilege.List{priv})
 			err := privDesc.Validate(id, tc.objectType, "whatever", DefaultSuperuserPrivileges)
 			if err != nil {
@@ -322,7 +322,7 @@ func TestValidPrivilegesForObjects(t *testing.T) {
 		}
 
 		for _, priv := range invalidPrivileges {
-			privDesc := NewDefaultPrivilegeDescriptor(security.AdminRoleName())
+			privDesc := NewBasePrivilegeDescriptor(security.AdminRoleName())
 			privDesc.Grant(testUser, privilege.List{priv})
 			err := privDesc.Validate(id, tc.objectType, "whatever", DefaultSuperuserPrivileges)
 			if err == nil {

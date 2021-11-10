@@ -184,7 +184,7 @@ func MakeSimpleTableDescriptor(
 		tableID,
 		nil, /* regionConfig */
 		hlc.Timestamp{WallTime: walltime},
-		descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
+		descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 		affected,
 		semaCtx,
 		&evalCtx,

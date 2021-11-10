@@ -1546,7 +1546,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		descs := catalog.MakeMapDescGetter()
 		descs.Descriptors[1] = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{ID: 1}).BuildImmutable()
 		for _, otherDesc := range test.otherDescs {
-			otherDesc.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
+			otherDesc.Privileges = descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
 			descs.Descriptors[otherDesc.ID] = NewBuilder(&otherDesc).BuildImmutable()
 		}
 		desc := NewBuilder(&test.desc).BuildImmutable()

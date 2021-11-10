@@ -96,7 +96,7 @@ func TestValidateDatabaseDesc(t *testing.T) {
 			descpb.DatabaseDescriptor{
 				Name:       "db",
 				ID:         0,
-				Privileges: descpb.NewDefaultDatabasePrivilegeDescriptor(security.RootUserName()),
+				Privileges: descpb.NewBaseDatabasePrivilegeDescriptor(security.RootUserName()),
 			},
 		},
 		{
@@ -105,7 +105,7 @@ func TestValidateDatabaseDesc(t *testing.T) {
 				Name:         "multi-region-db",
 				ID:           200,
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{},
-				Privileges:   descpb.NewDefaultDatabasePrivilegeDescriptor(security.RootUserName()),
+				Privileges:   descpb.NewBaseDatabasePrivilegeDescriptor(security.RootUserName()),
 			},
 		},
 	}
@@ -268,7 +268,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		privilege := descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
+		privilege := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
 		descs := catalog.MakeMapDescGetter()
 		test.desc.Privileges = privilege
 		desc := NewBuilder(&test.desc).BuildImmutable()
