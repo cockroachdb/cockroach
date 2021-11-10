@@ -2109,7 +2109,25 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}
 			}
 		}
 
-		return r.dropDescriptors(ctx, execCfg.JobRegistry, execCfg.Codec, txn, descsCol)
+		if err := r.dropDescriptors(ctx, execCfg.JobRegistry, execCfg.Codec, txn, descsCol); err != nil {
+			return err
+		}
+
+		if details.DescriptorCoverage == tree.AllDescriptors {
+			// We've dropped defaultdb and postgres in the planning phase, we must
+			// recreate them now if the full cluster restore failed.
+			ie := p.ExecCfg().InternalExecutor
+			_, err := ie.Exec(ctx, "recreate-defaultdb", txn, "CREATE DATABASE IF NOT EXISTS defaultdb")
+			if err != nil {
+				return err
+			}
+
+			_, err = ie.Exec(ctx, "recreate-postgres", txn, "CREATE DATABASE IF NOT EXISTS postgres")
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	}); err != nil {
 		return err
 	}

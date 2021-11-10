@@ -133,7 +133,13 @@ type proxyHandler struct {
 	certManager *certmgr.CertManager
 }
 
-var throttledError = newErrorf(codeProxyRefusedConnection, "connection attempt throttled")
+const throttledErrorHint string = `Connection throttling is triggered by repeated authentication failure. Make
+sure the username and password are correct.
+`
+
+var throttledError = errors.WithHint(
+	newErrorf(codeProxyRefusedConnection, "connection attempt throttled"),
+	throttledErrorHint)
 
 // newProxyHandler will create a new proxy handler with configuration based on
 // the provided options.
@@ -398,11 +404,11 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	defer func() { _ = crdbConn.Close() }()
 
 	// Perform user authentication.
-	if err := authenticate(conn, crdbConn, func(status throttler.AttemptStatus) *pgproto3.ErrorResponse {
+	if err := authenticate(conn, crdbConn, func(status throttler.AttemptStatus) error {
 		err := handler.throttleService.ReportAttempt(ctx, throttleTags, throttleTime, status)
 		if err != nil {
 			log.Errorf(ctx, "throttler refused connection after authentication: %v", err.Error())
-			return toPgError(throttledError)
+			return throttledError
 		}
 		return nil
 	}); err != nil {

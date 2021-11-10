@@ -2238,8 +2238,17 @@ INSERT INTO d.tb VALUES ('hello'), ('hello');
 	defer cleanupRestore()
 	// We should get an error when restoring the table.
 	sqlDBRestore.ExpectErr(t, "sst: no such file", `RESTORE FROM $1`, LocalFoo)
+
+	// Make sure the temp system db is not present.
 	row := sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT * FROM [SHOW DATABASES] WHERE database_name = '%s'`, restoreTempSystemDB))
 	require.Equal(t, 0, len(row))
+
+	// Make sure defaultdb and postgres are recreated.
+	sqlDBRestore.CheckQueryResults(t,
+		`SELECT * FROM system.namespace WHERE name = 'defaultdb' OR name ='postgres'`, [][]string{
+			{"0", "0", "defaultdb", "70"},
+			{"0", "0", "postgres", "71"},
+		})
 }
 
 func TestBackupRestoreUserDefinedSchemas(t *testing.T) {
@@ -6065,7 +6074,6 @@ func TestBackupRestoreCorruptedStatsIgnored(t *testing.T) {
 
 	var tableID int
 	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'bank'`).Scan(&tableID)
-	fmt.Println(tableID)
 	sqlDB.Exec(t, `BACKUP data.bank TO $1`, dest)
 
 	// Overwrite the stats file with some invalid data.
@@ -8199,23 +8207,19 @@ func TestFullClusterTemporaryBackupAndRestore(t *testing.T) {
 	sqlDBRestore.Exec(t, `RESTORE FROM 'nodelocal://0/full_cluster_backup'`)
 
 	// Before the reconciliation job runs we should be able to see the following:
-	// - 4 synthesized pg_temp sessions in defaultdb.
-	// We synthesize a new temp schema for each unique backed-up <dbID, schemaID>
-	// tuple of a temporary table descriptor.
+	// - 2 synthesized pg_temp sessions in defaultdb and 1 each in db1 and db2.
+	// We synthesize a new temp schema for each unique backed-up schemaID
+	// of a temporary table descriptor.
 	// - All temp tables remapped to belong to the associated synthesized temp
-	// schema, and in the defaultdb.
-	checkSchemasQuery := `SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%' ORDER BY
-schema_name`
-	sqlDBRestore.CheckQueryResults(t, checkSchemasQuery,
-		[][]string{{"pg_temp_0_0"}, {"pg_temp_0_1"}, {"pg_temp_0_2"}, {"pg_temp_0_3"}})
+	// schema in the original db.
+	checkSchemasQuery := `SELECT count(*) FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%'`
+	sqlDBRestore.CheckQueryResults(t, checkSchemasQuery, [][]string{{"2"}})
 
-	checkTempTablesQuery := `SELECT schema_name,
-table_name FROM [SHOW TABLES] ORDER BY schema_name, table_name`
-	sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{{"pg_temp_0_0", "t"},
-		{"pg_temp_0_1", "t"}, {"pg_temp_0_2", "t"}, {"pg_temp_0_3", "t"}})
+	checkTempTablesQuery := `SELECT table_name FROM [SHOW TABLES] ORDER BY table_name`
+	sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{{"t"}, {"t"}})
 
 	// Sanity check that the databases the temporary tables originally belonged to
-	// are restored and empty because of the remapping.
+	// are restored.
 	sqlDBRestore.CheckQueryResults(t,
 		`SELECT database_name FROM [SHOW DATABASES] ORDER BY database_name`,
 		[][]string{{"d1"}, {"d2"}, {"defaultdb"}, {"postgres"}, {"system"}})
@@ -8228,26 +8232,36 @@ table_name FROM [SHOW TABLES] ORDER BY schema_name, table_name`
 	sqlDBRestore.QueryRow(t, checkCommentQuery).Scan(&commentCount)
 	require.Equal(t, commentCount, 2)
 
-	// Check that show tables in one of the restored DBs returns an empty result.
+	// Check that show tables in one of the restored DBs returns the temporary
+	// table.
 	sqlDBRestore.Exec(t, "USE d1")
-	sqlDBRestore.CheckQueryResults(t, "SHOW TABLES", [][]string{})
+	sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{
+		{"t"},
+	})
+	sqlDBRestore.CheckQueryResults(t, checkSchemasQuery, [][]string{{"1"}})
 
 	sqlDBRestore.Exec(t, "USE d2")
-	sqlDBRestore.CheckQueryResults(t, "SHOW TABLES", [][]string{})
+	sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{
+		{"t"},
+	})
+	sqlDBRestore.CheckQueryResults(t, checkSchemasQuery, [][]string{{"1"}})
 
 	testutils.SucceedsSoon(t, func() error {
 		ch <- timeutil.Now()
 		<-finishedCh
 
-		// Check that all the synthesized temp schemas have been wiped.
-		sqlDBRestore.CheckQueryResults(t, checkSchemasQuery, [][]string{})
+		for _, database := range []string{"defaultdb", "d1", "d2"} {
+			sqlDBRestore.Exec(t, fmt.Sprintf("USE %s", database))
+			// Check that all the synthesized temp schemas have been wiped.
+			sqlDBRestore.CheckQueryResults(t, checkSchemasQuery, [][]string{{"0"}})
 
-		// Check that all the temp tables have been wiped.
-		sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{})
+			// Check that all the temp tables have been wiped.
+			sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{})
 
-		// Check that all the temp table comments have been wiped.
-		sqlDBRestore.QueryRow(t, checkCommentQuery).Scan(&commentCount)
-		require.Equal(t, commentCount, 0)
+			// Check that all the temp table comments have been wiped.
+			sqlDBRestore.QueryRow(t, checkCommentQuery).Scan(&commentCount)
+			require.Equal(t, commentCount, 0)
+		}
 		return nil
 	})
 }
