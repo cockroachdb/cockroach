@@ -186,8 +186,10 @@ type splitAndScatterProcessor struct {
 	spec    execinfrapb.SplitAndScatterSpec
 	output  execinfra.RowReceiver
 
-	scatterer      splitAndScatterer
-	stopScattering context.CancelFunc
+	scatterer splitAndScatterer
+	// cancelScatterAndWaitForWorker cancels the scatter goroutine and waits for
+	// it to finish.
+	cancelScatterAndWaitForWorker func()
 
 	doneScatterCh chan entryNode
 	// A cache for routing datums, so only 1 is allocated per node.
@@ -248,8 +250,13 @@ func (ssp *splitAndScatterProcessor) Start(ctx context.Context) {
 	// below from leaking when there are no errors. However, if that loop needs to
 	// exit early, runSplitAndScatter's context will be canceled.
 	scatterCtx, cancel := context.WithCancel(ctx)
-	ssp.stopScattering = cancel
+	workerDone := make(chan struct{})
+	ssp.cancelScatterAndWaitForWorker = func() {
+		cancel()
+		<-workerDone
+	}
 	go func() {
+		defer close(workerDone)
 		defer close(ssp.doneScatterCh)
 		defer cancel()
 		ssp.scatterErr = ssp.runSplitAndScatter(scatterCtx, ssp.flowCtx, &ssp.spec, ssp.scatterer)
@@ -309,9 +316,8 @@ func (ssp *splitAndScatterProcessor) ConsumerClosed() {
 // runs into an error and stops consuming scattered entries to make sure we
 // don't leak goroutines.
 func (ssp *splitAndScatterProcessor) close() {
-	if ssp.InternalClose() {
-		ssp.stopScattering()
-	}
+	ssp.cancelScatterAndWaitForWorker()
+	ssp.InternalClose()
 }
 
 // scatteredChunk is the entries of a chunk of entries to process along with the
