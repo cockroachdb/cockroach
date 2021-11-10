@@ -257,9 +257,9 @@ func (r *Registry) insertRequestInternal(ctx context.Context, fprint string) (Re
 	// pick up the request quickly if the right query comes around, without
 	// waiting for the poller.
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.mu.epoch++
 	r.addRequestInternalLocked(ctx, reqID, fprint)
+	r.mu.Unlock()
 
 	// Notify all the other nodes that they have to poll.
 	buf := make([]byte, 8)
