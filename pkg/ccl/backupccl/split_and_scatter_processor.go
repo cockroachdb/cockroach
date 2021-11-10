@@ -244,14 +244,14 @@ func newSplitAndScatterProcessor(
 // Start is part of the RowSource interface.
 func (ssp *splitAndScatterProcessor) Start(ctx context.Context) {
 	ctx = ssp.StartInternal(ctx, splitAndScatterProcessorName)
+	// Note that the loop over doneScatterCh in Next should prevent the goroutine
+	// below from leaking when there are no errors. However, if that loop needs to
+	// exit early, runSplitAndScatter's context will be canceled.
+	scatterCtx, cancel := context.WithCancel(ctx)
+	ssp.stopScattering = cancel
 	go func() {
-		// Note that the loop over doneScatterCh in Next should prevent this
-		// goroutine from leaking when there are no errors. However, if that loop
-		// needs to exit early, runSplitAndScatter's context will be canceled.
-		scatterCtx, stopScattering := context.WithCancel(ctx)
-		ssp.stopScattering = stopScattering
-
 		defer close(ssp.doneScatterCh)
+		defer cancel()
 		ssp.scatterErr = ssp.runSplitAndScatter(scatterCtx, ssp.flowCtx, &ssp.spec, ssp.scatterer)
 	}()
 }
@@ -310,9 +310,7 @@ func (ssp *splitAndScatterProcessor) ConsumerClosed() {
 // don't leak goroutines.
 func (ssp *splitAndScatterProcessor) close() {
 	if ssp.InternalClose() {
-		if ssp.stopScattering != nil {
-			ssp.stopScattering()
-		}
+		ssp.stopScattering()
 	}
 }
 
