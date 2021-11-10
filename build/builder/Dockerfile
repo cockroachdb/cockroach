@@ -16,7 +16,7 @@ FROM ubuntu:focal-20210119
 # gnupg2 - for apt
 # libncurses-dev - CRDB build system
 # make - CRDB build system
-# python - awscli install
+# python3,python3-venv - awscli install
 # rsync - sed build
 # texinfo - sed build
 RUN apt-get update \
@@ -39,7 +39,9 @@ RUN apt-get update \
     make \
     patch \
     patchelf \
-    python \
+    python-is-python3 \
+    python3 \
+    python3.8-venv \
     rsync \
     texinfo \
  && apt-get clean \
@@ -202,7 +204,8 @@ RUN ln -s /go/src/github.com/cockroachdb/cockroach/build/builder/mkrelease.sh /u
 
 RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.2.0/autouseradd-1.2.0-amd64.tar.gz -o autouseradd.tar.gz \
   && echo 'f7b0cf67564044c31ffc5e84c961726098b88b0296a57c84421659d56434a365 autouseradd.tar.gz' | sha256sum -c - \
-  && tar xzf autouseradd.tar.gz --strip-components 1 \
+  && tar xzf autouseradd.tar.gz -C / --strip-components 1 \
+  && chmod +x /usr/local/bin/autouseradd \
   && rm autouseradd.tar.gz
 
 COPY entrypoint.sh /usr/local/bin
