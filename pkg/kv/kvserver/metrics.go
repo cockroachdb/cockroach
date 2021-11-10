@@ -1475,6 +1475,10 @@ type TenantsStorageMetrics struct {
 	AbortSpanBytes *aggmetric.AggGauge
 
 	// This struct is invisible to the metric package.
+	//
+	// TODO(tbg): seems bad that this uses int64 keys but tenantIDs can
+	// span uint64. Bad things will happen if we ever use tenantIDs in
+	// excess of math.MaxInt64.
 	tenants syncutil.IntMap // map[roachpb.TenantID]*tenantStorageMetrics
 }
 
