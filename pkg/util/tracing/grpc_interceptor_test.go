@@ -194,9 +194,8 @@ func TestGRPCInterceptors(t *testing.T) {
 			require.NoError(t, types.UnmarshalAny(recAny, &rec))
 			require.Len(t, rec.StructuredRecords, 1)
 			sp.ImportRemoteSpans([]tracingpb.RecordedSpan{rec})
-			sp.Finish()
 			var n int
-			finalRecs := sp.GetRecording(tracing.RecordingVerbose)
+			finalRecs := sp.FinishAndGetRecording(tracing.RecordingVerbose)
 			sp.SetVerbose(false)
 			for _, rec := range finalRecs {
 				n += len(rec.StructuredRecords)
