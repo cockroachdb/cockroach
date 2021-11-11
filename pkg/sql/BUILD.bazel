@@ -308,6 +308,7 @@ go_library(
         "//pkg/sql/colflow",
         "//pkg/sql/commenter",
         "//pkg/sql/contention",
+        "//pkg/sql/contention/txnidcache",
         "//pkg/sql/covering",
         "//pkg/sql/delegate",
         "//pkg/sql/distsql",
