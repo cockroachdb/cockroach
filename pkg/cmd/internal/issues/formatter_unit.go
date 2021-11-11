@@ -104,9 +104,9 @@ var UnitTestFormatter = IssueFormatter{
 			r.Escaped("\n")
 		}
 
-		if len(data.Mention) > 0 {
+		if len(data.MentionOnCreate) > 0 {
 			r.Escaped("/cc")
-			for _, handle := range data.Mention {
+			for _, handle := range data.MentionOnCreate {
 				r.Escaped(" ")
 				r.Escaped(handle)
 			}

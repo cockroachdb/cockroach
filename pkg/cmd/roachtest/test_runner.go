@@ -935,7 +935,7 @@ func (r *testRunner) maybePostGithubIssue(
 	}
 
 	req := issues.PostRequest{
-		Mention:         mention,
+		MentionOnCreate: mention,
 		ProjectColumnID: projColID,
 		PackageName:     "roachtest",
 		TestName:        t.Name(),
