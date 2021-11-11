@@ -15,13 +15,13 @@ func _() {
 	_ = x[txnRestart-4]
 }
 
-const _txnEvent_name = "noEventtxnStarttxnCommittxnRollbacktxnRestart"
+const _txnEventType_name = "noEventtxnStarttxnCommittxnRollbacktxnRestart"
 
-var _txnEvent_index = [...]uint8{0, 7, 15, 24, 35, 45}
+var _txnEventType_index = [...]uint8{0, 7, 15, 24, 35, 45}
 
 func (i txnEventType) String() string {
-	if i < 0 || i >= txnEventType(len(_txnEvent_index)-1) {
+	if i < 0 || i >= txnEventType(len(_txnEventType_index)-1) {
 		return "txnEventType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _txnEvent_name[_txnEvent_index[i]:_txnEvent_index[i+1]]
+	return _txnEventType_name[_txnEventType_index[i]:_txnEventType_index[i+1]]
 }

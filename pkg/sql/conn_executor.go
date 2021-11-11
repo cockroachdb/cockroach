@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -279,6 +280,10 @@ type Server struct {
 	// node as gateway node.
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
+	// txnIDCache stores the mapping from transaction ID to transaction
+	// fingerprint IDs for all recently executed transactions.
+	txnIDCache *txnidcache.Cache
+
 	// Metrics is used to account normal queries.
 	Metrics Metrics
 
@@ -319,6 +324,10 @@ type Metrics struct {
 type ServerMetrics struct {
 	// StatsMetrics contains metrics for SQL statistics collection.
 	StatsMetrics StatsMetrics
+
+	// ContentionSubsystemMetrics contains metrics related to contention
+	// subsystem.
+	ContentionSubsystemMetrics txnidcache.Metrics
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -361,6 +370,9 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 			ChannelSize: idxusage.DefaultChannelSize,
 			Setting:     cfg.Settings,
 		}),
+		txnIDCache: txnidcache.NewTxnIDCache(
+			cfg.Settings,
+			&serverMetrics.ContentionSubsystemMetrics),
 	}
 
 	telemetryLoggingMetrics := &TelemetryLoggingMetrics{}
@@ -451,6 +463,7 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 				MetaSQLTxnStatsCollectionOverhead, 6*metricsSampleInterval,
 			),
 		},
+		ContentionSubsystemMetrics: txnidcache.NewMetrics(),
 	}
 }
 
@@ -462,6 +475,8 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// accumulated in the reporter when the telemetry server fails.
 	// Usually it is telemetry's reporter's job to clear the reporting SQL Stats.
 	s.reportedStats.Start(ctx, stopper)
+
+	s.txnIDCache.Start(ctx, stopper)
 }
 
 // GetSQLStatsController returns the persistedsqlstats.Controller for current
@@ -485,6 +500,11 @@ func (s *Server) GetSQLStatsProvider() sqlstats.Provider {
 // sql.Server's reported SQL Stats.
 func (s *Server) GetReportedSQLStatsController() *sslocal.Controller {
 	return s.reportedStatsController
+}
+
+// GetTxnIDCache returns the txnidcache.Cache for the current sql.Server.
+func (s *Server) GetTxnIDCache() *txnidcache.Cache {
+	return s.txnIDCache
 }
 
 // GetScrubbedStmtStats returns the statement statistics by app, with the
@@ -814,6 +834,7 @@ func (s *Server) newConnExecutor(
 		hasCreatedTemporarySchema: false,
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
 		indexUsageStats:           s.indexUsageStats,
+		txnIDCacheWriter:          s.txnIDCache,
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -985,9 +1006,9 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.sessionEventf(ctx, "finishing connExecutor")
 
-	txnEv := noEvent
+	txnEvType := noEvent
 	if _, noTxn := ex.machine.CurState().(stateNoTxn); !noTxn {
-		txnEv = txnRollback
+		txnEvType = txnRollback
 	}
 
 	if closeType == normalClose {
@@ -1019,7 +1040,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.state.finishExternalTxn()
 	}
 
-	if err := ex.resetExtraTxnState(ctx, txnEv); err != nil {
+	if err := ex.resetExtraTxnState(ctx, txnEvent{eventTyp: txnEvType}); err != nil {
 		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 	}
 
@@ -1401,6 +1422,10 @@ type connExecutor struct {
 
 	// indexUsageStats is used to track index usage stats.
 	indexUsageStats *idxusage.LocalIndexUsageStats
+
+	// txnIDCacheWriter is used to write txnidcache.ResolvedTxnID to the
+	// Transaction ID Cache.
+	txnIDCacheWriter txnidcache.Writer
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -1516,7 +1541,9 @@ func (ns *prepStmtNamespace) resetTo(
 }
 
 // resetExtraTxnState resets the fields of ex.extraTxnState when a transaction
-// commits, rolls back or restarts.
+// finishes execution (either commits, rollbacks or restarts). Based on the
+// transaction event, resetExtraTxnState invokes corresponding callbacks
+// (e.g. onTxnFinish() and onTxnRestart()).
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
 	ex.extraTxnState.jobs = nil
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
@@ -1536,7 +1563,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 		delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
 	}
 
-	switch ev {
+	switch ev.eventTyp {
 	case txnCommit, txnRollback:
 		for name, p := range ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals {
 			p.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
@@ -2046,7 +2073,7 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 	if _, ok := ex.machine.CurState().(stateOpen); !ok {
 		return nil
 	}
-	if advInfo.txnEvent == txnStart || advInfo.txnEvent == txnRestart {
+	if advInfo.txnEvent.eventTyp == txnStart || advInfo.txnEvent.eventTyp == txnRestart {
 		var nextPos CmdPos
 		switch advInfo.code {
 		case stayInPlace:
@@ -2228,7 +2255,7 @@ func (ex *connExecutor) execCopyIn(
 	} else {
 		txnOpt = copyTxnOpt{
 			resetExtraTxnState: func(ctx context.Context) error {
-				return ex.resetExtraTxnState(ctx, noEvent)
+				return ex.resetExtraTxnState(ctx, txnEvent{eventTyp: noEvent})
 			},
 		}
 	}
@@ -2680,7 +2707,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	}
 
 	// Handle transaction events which cause updates to txnState.
-	switch advInfo.txnEvent {
+	switch advInfo.txnEvent.eventTyp {
 	case noEvent:
 		_, nextStateIsAborted := ex.machine.CurState().(stateAborted)
 		// Update the deadline on the transaction based on the collections,
@@ -2696,7 +2723,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case txnStart:
 		ex.extraTxnState.autoRetryCounter = 0
 		ex.extraTxnState.autoRetryReason = nil
-		ex.recordTransactionStart()
+		ex.recordTransactionStart(advInfo.txnEvent.txnID)
 		// Bump the txn counter for logging.
 		ex.extraTxnState.txnCounter++
 		if !ex.server.cfg.Codec.ForSystemTenant() {
@@ -2719,7 +2746,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			err := errorutil.UnexpectedWithIssueErrorf(
 				26687,
 				"programming error: non-error event %s generated even though res.Err() has been set to: %s",
-				errors.Safe(advInfo.txnEvent.String()),
+				errors.Safe(advInfo.txnEvent.eventTyp.String()),
 				res.Err())
 			log.Errorf(ex.Ctx(), "%v", err)
 			errorutil.SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV, err)
