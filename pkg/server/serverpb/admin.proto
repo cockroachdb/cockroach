@@ -776,6 +776,15 @@ message CertBundleResponse {
   bytes bundle = 1;
 }
 
+message HttpProxyRequest {
+  bytes req = 1;
+}
+
+message HttpProxyResponse {
+  bytes body = 2;
+  int32 status = 3;
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
@@ -1010,4 +1019,6 @@ service Admin {
       body : "*"
     };
   }
+
+  rpc HttpProxy(HttpProxyRequest) returns (HttpProxyResponse) {}
 }

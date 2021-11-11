@@ -5821,3 +5821,48 @@ Support status: [reserved](#support-status)
 
 
 
+## HttpProxy
+
+
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| req | [bytes](#cockroach.server.serverpb.HttpProxyRequest-bytes) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| body | [bytes](#cockroach.server.serverpb.HttpProxyResponse-bytes) |  |  | [reserved](#support-status) |
+| status | [int32](#cockroach.server.serverpb.HttpProxyResponse-int32) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+

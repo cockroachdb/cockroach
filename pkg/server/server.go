@@ -2704,7 +2704,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}()
 		w = gzw
 	}
-	s.mux.ServeHTTP(w, r)
+
+	s.nodeRouterMiddleware(s.mux.ServeHTTP).ServeHTTP(w, r)
 }
 
 // TempDir returns the filepath of the temporary directory used for temp storage.
