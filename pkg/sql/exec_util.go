@@ -1406,6 +1406,14 @@ type ExecutorTestingKnobs struct {
 
 	// OnTxnRetry, if set, will be called if there is a transaction retry.
 	OnTxnRetry func(autoRetryReason error, evalCtx *tree.EvalContext)
+
+	// BeforeTxnStatsRecorded, if set, will be called before the statistics
+	// of a transaction is being recorded.
+	BeforeTxnStatsRecorded func(
+		sessionData *sessiondata.SessionData,
+		txnID uuid.UUID,
+		txnFingerprintID roachpb.TransactionFingerprintID,
+	)
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.

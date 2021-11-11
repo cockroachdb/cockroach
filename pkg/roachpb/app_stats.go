@@ -60,6 +60,9 @@ func ConstructStatementFingerprintID(
 // individual statement fingerprint IDs that comprise the transaction.
 type TransactionFingerprintID uint64
 
+// InvalidTransactionFingerprintID denotes an invalid transaction fingerprint ID.
+const InvalidTransactionFingerprintID = TransactionFingerprintID(0)
+
 // Size returns the size of the TransactionFingerprintID.
 func (t TransactionFingerprintID) Size() int64 {
 	return 8

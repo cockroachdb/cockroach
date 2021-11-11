@@ -1880,6 +1880,19 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Contention"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Transaction ID Cache Miss",
+				Metrics: []string{"sql.contention.txn_id_cache.miss"},
+			},
+			{
+				Title:   "Transaction ID Cache Read",
+				Metrics: []string{"sql.contention.txn_id_cache.read"},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "Bulk"}},
 		Charts: []chartDescription{
 			{
