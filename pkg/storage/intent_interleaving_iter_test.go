@@ -109,7 +109,6 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 	}
 	rawMVCCKey := iter.UnsafeRawMVCCKey()
 	if !engineKey.IsLockTableKey() {
-		fmt.Println("here2")
 		fmt.Fprintf(b, "output: engineKey should be a lock table key: %s\n", engineKey)
 		return
 	}
@@ -498,10 +497,9 @@ func generateRandomData(
 			}
 			val, err := protoutil.Marshal(&meta)
 			require.NoError(t, err)
-			isSeparated := rng.Int31n(2) == 0
 			ltKey := LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID[:]}
 			lkv = append(lkv, lockKeyValue{
-				key: ltKey, val: val, liveIntent: hasIntent && i == 0, separated: isSeparated})
+				key: ltKey, val: val, liveIntent: hasIntent && i == 0, separated: true})
 			mvcckv = append(mvcckv, MVCCKeyValue{
 				Key:   MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(ts)}},
 				Value: []byte("value"),
@@ -512,7 +510,7 @@ func generateRandomData(
 }
 
 func writeRandomData(
-	t *testing.T, eng Engine, lkv []lockKeyValue, mvcckv []MVCCKeyValue, interleave bool,
+	t *testing.T, eng Engine, lkv []lockKeyValue, mvcckv []MVCCKeyValue,
 ) {
 	batch := eng.NewBatch()
 	// Iterate in reverse order, so that older locks for a key are encountered
@@ -525,17 +523,10 @@ func writeRandomData(
 	// flushed, so both will be in the engine during iteration.
 	for i := len(lkv) - 1; i >= 0; i-- {
 		kv := lkv[i]
-		if interleave || !kv.separated {
-			require.NoError(t, batch.PutUnversioned(kv.key.Key, kv.val))
-			if !kv.liveIntent {
-				require.NoError(t, batch.ClearUnversioned(kv.key.Key))
-			}
-		} else {
-			eKey, _ := kv.key.ToEngineKey(nil)
-			require.NoError(t, batch.PutEngineKey(eKey, kv.val))
-			if !kv.liveIntent {
-				require.NoError(t, batch.SingleClearEngineKey(eKey))
-			}
+		eKey, _ := kv.key.ToEngineKey(nil)
+		require.NoError(t, batch.PutEngineKey(eKey, kv.val))
+		if !kv.liveIntent {
+			require.NoError(t, batch.SingleClearEngineKey(eKey))
 		}
 	}
 	for _, kv := range mvcckv {
@@ -622,7 +613,7 @@ func generateIterOps(rng *rand.Rand, mvcckv []MVCCKeyValue, isLocal bool) []stri
 	return ops
 }
 
-func doOps(t *testing.T, ops []string, eng Engine, interleave bool, out *strings.Builder) {
+func doOps(t *testing.T, ops []string, eng Engine, out *strings.Builder) {
 	var iter MVCCIterator
 	closeIter := func() {
 		if iter != nil {
@@ -646,11 +637,7 @@ func doOps(t *testing.T, ops []string, eng Engine, interleave bool, out *strings
 			if d.HasArg("upper") {
 				opts.UpperBound = scanRoachKey(t, &d, "upper")
 			}
-			if interleave {
-				iter = newIntentInterleavingIterator(eng, opts)
-			} else {
-				iter = eng.NewMVCCIterator(MVCCKeyIterKind, opts)
-			}
+			iter = eng.NewMVCCIterator(MVCCKeyIterKind, opts)
 			lowerStr := "nil"
 			if opts.LowerBound != nil {
 				lowerStr = string(makePrintableRoachpbKey(opts.LowerBound))
@@ -705,10 +692,10 @@ func TestRandomizedIntentInterleavingIter(t *testing.T) {
 	eng2 := createTestPebbleEngine()
 	defer eng1.Close()
 	defer eng2.Close()
-	writeRandomData(t, eng1, lockKV, mvccKV, false /* interleave */)
-	writeRandomData(t, eng1, localLockKV, localMvccKV, false /* interleave */)
-	writeRandomData(t, eng2, lockKV, mvccKV, true /* interleave */)
-	writeRandomData(t, eng2, localLockKV, localMvccKV, true /* interleave */)
+	writeRandomData(t, eng1, lockKV, mvccKV)
+	writeRandomData(t, eng1, localLockKV, localMvccKV)
+	writeRandomData(t, eng2, lockKV, mvccKV)
+	writeRandomData(t, eng2, localLockKV, localMvccKV)
 	var ops []string
 	for _, isLocal := range []bool{false, true} {
 		for i := 0; i < 10; i++ {
@@ -720,8 +707,10 @@ func TestRandomizedIntentInterleavingIter(t *testing.T) {
 		}
 	}
 	var out1, out2 strings.Builder
-	doOps(t, ops, eng1, true /* interleave */, &out1)
-	doOps(t, ops, eng2, false /* interleave */, &out2)
+	doOps(t, ops, eng1, &out1)
+	doOps(t, ops, eng2, &out2)
+	// todo(bananabrick) : this is comparing the same outputs, which doesn't
+	// do anything currently.
 	require.Equal(t, out1.String(), out2.String(),
 		fmt.Sprintf("seed=%d\n=== separated ===\n%s\n=== interleaved ===\n%s\n",
 			seed, out1.String(), out2.String()))
