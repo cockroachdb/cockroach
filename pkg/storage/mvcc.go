@@ -3504,11 +3504,7 @@ func (b IterAndBuf) Cleanup() {
 // intent span as the resume span. Returns the number of intents resolved and a
 // resume span if the max keys limit was exceeded.
 func MVCCResolveWriteIntentRange(
-	ctx context.Context,
-	rw ReadWriter,
-	ms *enginepb.MVCCStats,
-	intent roachpb.LockUpdate,
-	max int64,
+	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate, max int64,
 ) (int64, *roachpb.Span, error) {
 	if max < 0 {
 		resumeSpan := intent.Span // don't inline or `intent` would escape to heap

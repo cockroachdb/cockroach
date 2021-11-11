@@ -157,11 +157,7 @@ func (fw *SSTWriter) PutUnversioned(key roachpb.Key, value []byte) error {
 // (according to the comparator configured during writer creation). `Close`
 // cannot have been called.
 func (fw *SSTWriter) PutIntent(
-	ctx context.Context,
-	key roachpb.Key,
-	value []byte,
-	state PrecedingIntentState,
-	txnUUID uuid.UUID,
+	ctx context.Context, key roachpb.Key, value []byte, state PrecedingIntentState, txnUUID uuid.UUID,
 ) error {
 	return fw.put(MVCCKey{Key: key}, value)
 }

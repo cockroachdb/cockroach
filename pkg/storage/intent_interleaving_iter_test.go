@@ -109,14 +109,17 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 	}
 	rawMVCCKey := iter.UnsafeRawMVCCKey()
 	if !engineKey.IsLockTableKey() {
+		fmt.Println("here2")
 		fmt.Fprintf(b, "output: engineKey should be a lock table key: %s\n", engineKey)
 		return
 	}
+	fmt.Println("here")
 	ltKey, err := engineKey.ToLockTableKey()
 	if err != nil {
 		fmt.Fprintf(b, "output: engineKey should be a lock table key: %s\n", err.Error())
 		return
 	}
+	fmt.Println("here1")
 	// Strip off the sentinel byte.
 	rawMVCCKey = rawMVCCKey[:len(rawMVCCKey)-1]
 	if !bytes.Equal(ltKey.Key, rawMVCCKey) {

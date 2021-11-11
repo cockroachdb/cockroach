@@ -67,10 +67,7 @@ var pebbleBatchPool = sync.Pool{
 
 // Instantiates a new pebbleBatch.
 func newPebbleBatch(
-	db *pebble.DB,
-	batch *pebble.Batch,
-	writeOnly bool,
-	overrideTxnDidNotUpdateMetaToFalse bool,
+	db *pebble.DB, batch *pebble.Batch, writeOnly bool, overrideTxnDidNotUpdateMetaToFalse bool,
 ) *pebbleBatch {
 	pb := pebbleBatchPool.Get().(*pebbleBatch)
 	*pb = pebbleBatch{
@@ -449,11 +446,7 @@ func (p *pebbleBatch) PutUnversioned(key roachpb.Key, value []byte) error {
 
 // PutIntent implements the Batch interface.
 func (p *pebbleBatch) PutIntent(
-	ctx context.Context,
-	key roachpb.Key,
-	value []byte,
-	state PrecedingIntentState,
-	txnUUID uuid.UUID,
+	ctx context.Context, key roachpb.Key, value []byte, state PrecedingIntentState, txnUUID uuid.UUID,
 ) error {
 	var err error
 	p.scratch, err =
