@@ -2007,7 +2007,7 @@ CREATE TABLE t.after (k CHAR PRIMARY KEY, v CHAR);
 	t.expectLeases(afterDesc.GetID(), "/1/1")
 
 	// Call DeleteOrphanedLeases() with the server startup time.
-	t.node(1).DeleteOrphanedLeases(now)
+	t.node(1).DeleteOrphanedLeases(ctx, now)
 	// Orphaned lease is gone.
 	t.expectLeases(beforeDesc.GetID(), "")
 	t.expectLeases(afterDesc.GetID(), "/1/1")

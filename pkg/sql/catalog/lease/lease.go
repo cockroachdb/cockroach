@@ -430,7 +430,9 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 		// of the first context cancels other callers to the `acquireNodeLease()` method,
 		// because of its use of `singleflight.Group`. See issue #41780 for how this has
 		// happened.
-		newCtx, cancel := m.stopper.WithCancelOnQuiesce(logtags.WithTags(context.Background(), logtags.FromContext(ctx)))
+		baseCtx := m.ambientCtx.AnnotateCtx(context.Background())
+		baseCtx = logtags.WithTags(baseCtx, logtags.FromContext(ctx))
+		newCtx, cancel := m.stopper.WithCancelOnQuiesce(baseCtx)
 		defer cancel()
 		if m.isDraining() {
 			return nil, errors.New("cannot acquire lease when draining")
@@ -1166,7 +1168,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 // DeleteOrphanedLeases releases all orphaned leases created by a prior
 // instance of this node. timeThreshold is a walltime lower than the
 // lowest hlc timestamp that the current instance of the node can use.
-func (m *Manager) DeleteOrphanedLeases(timeThreshold int64) {
+func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64) {
 	if m.testingKnobs.DisableDeleteOrphanedLeases {
 		return
 	}
@@ -1179,7 +1181,9 @@ func (m *Manager) DeleteOrphanedLeases(timeThreshold int64) {
 
 	// Run as async worker to prevent blocking the main server Start method.
 	// Exit after releasing all the orphaned leases.
-	_ = m.stopper.RunAsyncTask(context.Background(), "del-orphaned-leases", func(ctx context.Context) {
+	newCtx := m.ambientCtx.AnnotateCtx(context.Background())
+	newCtx = logtags.WithTags(newCtx, logtags.FromContext(ctx))
+	_ = m.stopper.RunAsyncTask(newCtx, "del-orphaned-leases", func(ctx context.Context) {
 		// This could have been implemented using DELETE WHERE, but DELETE WHERE
 		// doesn't implement AS OF SYSTEM TIME.
 
