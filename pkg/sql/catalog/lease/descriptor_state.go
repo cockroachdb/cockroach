@@ -260,7 +260,7 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 		return nil
 	}
 	if l := maybeRemoveLease(); l != nil {
-		releaseLease(l, t.m)
+		releaseLease(ctx, l, t.m)
 	}
 }
 
