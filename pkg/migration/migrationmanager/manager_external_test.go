@@ -489,6 +489,8 @@ SELECT id
 
 // Test that the precondition prevents migrations from being run.
 func TestPrecondition(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Start by running v0. We want the precondition of v1 to prevent
 	// us from reaching v1 (or v2). We want the precondition to not be
