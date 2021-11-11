@@ -806,3 +806,21 @@ func (t *tenantStatusServer) ResetIndexUsageStats(
 
 	return resp, nil
 }
+
+func (t *tenantStatusServer) TableIndexStats(
+	ctx context.Context, req *serverpb.TableIndexStatsRequest,
+) (*serverpb.TableIndexStatsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
+	return getIndexUsageStatsExternal(ctx, req, t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics(),
+		t.sqlServer.internalExecutor)
+}
