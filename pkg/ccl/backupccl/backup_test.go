@@ -1285,6 +1285,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	fullDir := sanitizedFullDir + "moarSecretsHere"
 
 	backupDatabaseID := sqlutils.QueryDatabaseID(t, conn, "data")
+	backupSchemaID := sqlutils.QuerySchemaID(t, conn, "data", "public")
 	backupTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
 
 	sqlDB.Exec(t, `CREATE DATABASE restoredb`)
@@ -1310,6 +1311,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		),
 		DescriptorIDs: descpb.IDs{
 			descpb.ID(backupDatabaseID),
+			descpb.ID(backupSchemaID),
 			descpb.ID(backupTableID),
 		},
 	}); err != nil {
@@ -1325,6 +1327,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		),
 		DescriptorIDs: descpb.IDs{
 			descpb.ID(restoreDatabaseID + 1),
+			descpb.ID(restoreDatabaseID + 2),
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -1397,6 +1400,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 			sqlDB.Exec(t, `CREATE DATABASE restoredb`)
 			backupDatabaseID := sqlutils.QueryDatabaseID(t, conn, "data")
 			backupTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
+			backupSchemaID := sqlutils.QuerySchemaID(t, conn, "data", "public")
 			restoreDatabaseID := sqlutils.QueryDatabaseID(t, conn, "restoredb")
 
 			// Take an encrypted BACKUP.
@@ -1412,6 +1416,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 						backupLoc1, sanitizedEncryptionOption1),
 					DescriptorIDs: descpb.IDs{
 						descpb.ID(backupDatabaseID),
+						descpb.ID(backupSchemaID),
 						descpb.ID(backupTableID),
 					},
 				}); err != nil {
@@ -1431,6 +1436,7 @@ into_db='restoredb', %s)`, encryptionOption), backupLoc1)
 				),
 				DescriptorIDs: descpb.IDs{
 					descpb.ID(restoreDatabaseID + 1),
+					descpb.ID(restoreDatabaseID + 2),
 				},
 			}); err != nil {
 				t.Fatal(err)
@@ -1832,8 +1838,8 @@ func TestBackupRestoreResume(t *testing.T) {
 				DescriptorRewrites: map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite{
 					backupTableDesc.GetID(): {
 						ParentID:       descpb.ID(restoreDatabaseID),
+						ParentSchemaID: descpb.ID(restoreDatabaseID + 1),
 						ID:             restoreTableID,
-						ParentSchemaID: keys.PublicSchemaID,
 					},
 				},
 				URIs: []string{restoreDir},
@@ -2162,9 +2168,12 @@ func TestRestoreFailCleanup(t *testing.T) {
 	// Check the same for data.myschema.
 	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM system.namespace WHERE name = 'myschema'`, [][]string{{"1"}})
 
-	// Verify that the schema doesn't show up in the database's schema map.
+	// Verify that the only schema that appears is the public schema
 	dbDesc := catalogkv.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "restore")
-	require.Empty(t, dbDesc.DatabaseDesc().Schemas, "unexpected schema map entries %v", dbDesc.DatabaseDesc().Schemas)
+	require.Equal(t, len(dbDesc.DatabaseDesc().Schemas), 1)
+	if _, found := dbDesc.DatabaseDesc().Schemas[tree.PublicSchema]; !found {
+		t.Error("public schema not found")
+	}
 }
 
 // TestRestoreFailDatabaseCleanup tests that a failed RESTORE is cleaned up
@@ -2255,8 +2264,8 @@ INSERT INTO d.tb VALUES ('hello'), ('hello');
 	// Make sure defaultdb and postgres are recreated.
 	sqlDBRestore.CheckQueryResults(t,
 		`SELECT * FROM system.namespace WHERE name = 'defaultdb' OR name ='postgres'`, [][]string{
-			{"0", "0", "defaultdb", "70"},
-			{"0", "0", "postgres", "71"},
+			{"0", "0", "defaultdb", "74"},
+			{"0", "0", "postgres", "76"},
 		})
 }
 
@@ -2603,7 +2612,7 @@ INSERT INTO sc4.tb VALUES (4);
 		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "sc3")
 		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "sc4")
 		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "existingschema")
-		require.Len(t, dbDesc.DatabaseDesc().Schemas, 5)
+		require.Len(t, dbDesc.DatabaseDesc().Schemas, 6)
 	})
 	// Test when we remap schemas to existing schemas in the cluster.
 	t.Run("remap", func(t *testing.T) {
@@ -3502,7 +3511,9 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		// Ensure that the views were not restored since they are missing the tables they reference.
 		db.CheckQueryResults(t, `USE storestats; SHOW TABLES;`, [][]string{})
 
-		db.Exec(t, `RESTORE store.early_customers, store.referencing_early_customers from $1 WITH OPTIONS (skip_missing_views)`, LocalFoo)
+		// Need to specify into_db otherwise the restore gives error:
+		//  a database named "store" needs to exist to restore schema "public".
+		db.Exec(t, `RESTORE store.early_customers, store.referencing_early_customers from $1 WITH OPTIONS (skip_missing_views, into_db='storestats')`, LocalFoo)
 		// Ensure that the views were not restored since they are missing the tables they reference.
 		db.CheckQueryResults(t, `SHOW TABLES;`, [][]string{})
 
@@ -4004,7 +4015,8 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[3])
 
 	sqlDB.Exec(t, `DELETE FROM data.bank WHERE id >= $1 / 2`, numAccounts)
-	sqlDB.Exec(t, `ALTER TABLE other.sometable RENAME TO data.sometable`)
+	sqlDB.Exec(t, `CREATE TABLE data.sometable AS SELECT * FROM other.sometable`)
+	sqlDB.Exec(t, `DROP TABLE other.sometable`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[4])
 
 	sqlDB.Exec(t, `INSERT INTO data.sometable VALUES (2, 2), (4, 5), (6, 3)`)
@@ -4014,7 +4026,8 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	sqlDB.Exec(t, `TRUNCATE TABLE data.bank`)
 	sqlDB.Exec(t, `TRUNCATE TABLE data.bank`)
 	sqlDB.Exec(t, `TRUNCATE TABLE data.bank`)
-	sqlDB.Exec(t, `ALTER TABLE data.sometable RENAME TO other.sometable`)
+	sqlDB.Exec(t, `CREATE TABLE other.sometable AS SELECT * FROM data.sometable`)
+	sqlDB.Exec(t, `DROP TABLE data.sometable`)
 	sqlDB.Exec(t, `CREATE INDEX ON data.teller (name)`)
 	sqlDB.Exec(t, `INSERT INTO data.bank VALUES (2, 2), (4, 4)`)
 	sqlDB.Exec(t, `INSERT INTO data.teller VALUES (2, 'craig')`)
@@ -5182,7 +5195,7 @@ func TestPointInTimeRecovery(t *testing.T) {
 		// newbackup.bank could be done here by the operator.
 
 		sqlDB.Exec(t, `DROP TABLE data.bank`)
-		sqlDB.Exec(t, `ALTER TABLE newbackup.bank RENAME TO data.bank`)
+		sqlDB.Exec(t, `CREATE TABLE data.bank AS SELECT * FROM newbackup.bank`)
 		sqlDB.Exec(t, `DROP DATABASE newbackup`)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM data.bank ORDER BY id`, beforeBadThingData)
 	})
@@ -5207,7 +5220,7 @@ func TestPointInTimeRecovery(t *testing.T) {
 		// incbackup.bank could be done here by the operator.
 
 		sqlDB.Exec(t, `DROP TABLE data.bank`)
-		sqlDB.Exec(t, `ALTER TABLE incbackup.bank RENAME TO data.bank`)
+		sqlDB.Exec(t, `CREATE TABLE data.bank AS SELECT * FROM incbackup.bank`)
 		sqlDB.Exec(t, `DROP DATABASE incbackup`)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM data.bank ORDER BY id`, beforeBadThingData)
 	})
@@ -5549,7 +5562,7 @@ func TestBackupRestoreSequence(t *testing.T) {
 		newDB.Exec(t, `USE data`)
 
 		newDB.ExpectErr(
-			t, "pq: cannot restore table \"t\" without referenced sequence 54 \\(or \"skip_missing_sequences\" option\\)",
+			t, "pq: cannot restore table \"t\" without referenced sequence 57 \\(or \"skip_missing_sequences\" option\\)",
 			`RESTORE TABLE t FROM $1`, LocalFoo,
 		)
 
@@ -6790,7 +6803,7 @@ func TestPaginatedBackupTenant(t *testing.T) {
 
 	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test'`)
 	require.Equal(t, 1, numExportRequests)
-	startingSpan := roachpb.Span{Key: []byte("/Tenant/10/Table/53/1"), EndKey: []byte("/Tenant/10/Table/53/2")}
+	startingSpan := roachpb.Span{Key: []byte("/Tenant/10/Table/56/1"), EndKey: []byte("/Tenant/10/Table/56/2")}
 	require.Equal(t, exportRequestSpans, []string{startingSpan.String()})
 	resetStateVars()
 
@@ -6798,10 +6811,10 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='50b'`)
 	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test2'`)
 	require.Equal(t, 2, numExportRequests)
-	startingSpan = roachpb.Span{Key: []byte("/Tenant/10/Table/53/1"),
-		EndKey: []byte("/Tenant/10/Table/53/2")}
-	resumeSpan := roachpb.Span{Key: []byte("/Tenant/10/Table/53/1/510/0"),
-		EndKey: []byte("/Tenant/10/Table/53/2")}
+	startingSpan = roachpb.Span{Key: []byte("/Tenant/10/Table/56/1"),
+		EndKey: []byte("/Tenant/10/Table/56/2")}
+	resumeSpan := roachpb.Span{Key: []byte("/Tenant/10/Table/56/1/510/0"),
+		EndKey: []byte("/Tenant/10/Table/56/2")}
 	require.Equal(t, exportRequestSpans, []string{startingSpan.String(), resumeSpan.String()})
 	resetStateVars()
 
@@ -6811,11 +6824,11 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	require.Equal(t, 5, numExportRequests)
 	var expected []string
 	for _, resume := range []exportResumePoint{
-		{[]byte("/Tenant/10/Table/53/1"), []byte("/Tenant/10/Table/53/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/53/1/210/0"), []byte("/Tenant/10/Table/53/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/53/1/310/0"), []byte("/Tenant/10/Table/53/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/53/1/410/0"), []byte("/Tenant/10/Table/53/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/53/1/510/0"), []byte("/Tenant/10/Table/53/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/56/1"), []byte("/Tenant/10/Table/56/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/56/1/210/0"), []byte("/Tenant/10/Table/56/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/56/1/310/0"), []byte("/Tenant/10/Table/56/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/56/1/410/0"), []byte("/Tenant/10/Table/56/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/56/1/510/0"), []byte("/Tenant/10/Table/56/2"), withoutTS},
 	} {
 		expected = append(expected, requestSpanStr(roachpb.Span{Key: resume.key, EndKey: resume.endKey}, resume.timestamp))
 	}
@@ -6836,13 +6849,13 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	expected = nil
 	for _, resume := range []exportResumePoint{
 		{[]byte("/Tenant/10/Table/3"), []byte("/Tenant/10/Table/4"), withoutTS},
-		{[]byte("/Tenant/10/Table/57/1"), []byte("/Tenant/10/Table/57/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/57/1/210/0"), []byte("/Tenant/10/Table/57/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/61/1"), []byte("/Tenant/10/Table/61/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/61/1/210/0"), []byte("/Tenant/10/Table/61/2"), withoutTS},
 		// We have two entries for 210 because of history and super small table size
-		{[]byte("/Tenant/10/Table/57/1/210/0"), []byte("/Tenant/10/Table/57/2"), withTS},
-		{[]byte("/Tenant/10/Table/57/1/310/0"), []byte("/Tenant/10/Table/57/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/57/1/410/0"), []byte("/Tenant/10/Table/57/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/57/1/510/0"), []byte("/Tenant/10/Table/57/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/61/1/210/0"), []byte("/Tenant/10/Table/61/2"), withTS},
+		{[]byte("/Tenant/10/Table/61/1/310/0"), []byte("/Tenant/10/Table/61/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/61/1/410/0"), []byte("/Tenant/10/Table/61/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/61/1/510/0"), []byte("/Tenant/10/Table/61/2"), withoutTS},
 	} {
 		expected = append(expected, requestSpanStr(roachpb.Span{Key: resume.key, EndKey: resume.endKey}, resume.timestamp))
 	}
@@ -7435,7 +7448,7 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	// should hang. The timeout should save us in this case.
 	_, err := sqlSessions[1].DB.ExecContext(ctx, "BACKUP data.bank TO 'nodelocal://0/timeout'")
 	require.True(t, testutils.IsError(err,
-		"timeout: operation \"ExportRequest for span /Table/53/.*\" timed out after 3s"))
+		"timeout: operation \"ExportRequest for span /Table/56/.*\" timed out after 3s"))
 }
 
 func TestBackupDoesNotHangOnIntent(t *testing.T) {
@@ -7496,6 +7509,7 @@ func TestRestoreTypeDescriptorsRollBack(t *testing.T) {
 
 	sqlDB.Exec(t, `
 CREATE DATABASE db;
+CREATE SCHEMA db.s;
 CREATE TYPE db.typ AS ENUM();
 CREATE TABLE db.table (k INT PRIMARY KEY, v db.typ);
 `)
@@ -8413,7 +8427,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 
 	fullBackupSpans := getSpansFromManifest(t, locationToDir(fullBackup))
 	require.Equal(t, 1, len(fullBackupSpans))
-	require.Equal(t, "/Table/53/{1-2}", fullBackupSpans[0].String())
+	require.Equal(t, "/Table/56/{1-2}", fullBackupSpans[0].String())
 
 	// Now we're going to add an index. We should only see the index
 	// appear in the backup once it is PUBLIC.
@@ -8468,7 +8482,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 		inc3Loc, fullBackup, inc1Loc, inc2Loc)
 	inc3Spans := getSpansFromManifest(t, locationToDir(inc3Loc))
 	require.Equal(t, 1, len(inc3Spans))
-	require.Equal(t, "/Table/53/{2-3}", inc3Spans[0].String())
+	require.Equal(t, "/Table/56/{2-3}", inc3Spans[0].String())
 
 	// Drop the index.
 	sqlDB.Exec(t, `DROP INDEX new_balance_idx`)

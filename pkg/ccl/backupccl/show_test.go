@@ -67,6 +67,7 @@ FROM
 ORDER BY object_type, object_name`, full)
 	expectedObjects := [][]string{
 		{"NULL", "NULL", "data", "database", "full", "NULL", beforeTS, "NULL", "false"},
+		{"data", "NULL", "public", "schema", "full", "NULL", beforeTS, "NULL", "false"},
 		{"data", "NULL", "sc", "schema", "full", "NULL", beforeTS, "NULL", "false"},
 		{"data", "public", "bank", "table", "full", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"},
 		{"data", "sc", "t1", "table", "full", "NULL", beforeTS, strconv.Itoa(0), "false"},
@@ -94,6 +95,7 @@ ORDER BY object_type, object_name`, full)
 	require.Equal(t, [][]string{
 		// Full.
 		{"data", "full", "NULL", beforeTS, "NULL", "false"},
+		{"public", "full", "NULL", beforeTS, "NULL", "false"},
 		{"bank", "full", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"},
 		{"welcome", "full", "NULL", beforeTS, "NULL", "false"},
 		{"_welcome", "full", "NULL", beforeTS, "NULL", "false"},
@@ -102,6 +104,7 @@ ORDER BY object_type, object_name`, full)
 		{"t2", "full", "NULL", beforeTS, "0", "false"},
 		// Incremental.
 		{"data", "incremental", beforeTS, incTS, "NULL", "false"},
+		{"public", "incremental", beforeTS, incTS, "NULL", "false"},
 		{"bank", "incremental", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2)), "false"},
 		{"welcome", "incremental", beforeTS, incTS, "NULL", "false"},
 		{"_welcome", "incremental", beforeTS, incTS, "NULL", "false"},
@@ -166,15 +169,15 @@ ORDER BY object_type, object_name`, full)
 	details2Key := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, details2Desc, details2Desc.GetPrimaryIndexID()))
 
 	sqlDBRestore.CheckQueryResults(t, fmt.Sprintf(`SHOW BACKUP RANGES '%s'`, details), [][]string{
-		{"/Table/61/1", "/Table/61/2", string(details1Key), string(details1Key.PrefixEnd())},
-		{"/Table/62/1", "/Table/62/2", string(details2Key), string(details2Key.PrefixEnd())},
+		{"/Table/64/1", "/Table/64/2", string(details1Key), string(details1Key.PrefixEnd())},
+		{"/Table/65/1", "/Table/65/2", string(details2Key), string(details2Key.PrefixEnd())},
 	})
 
 	var showFiles = fmt.Sprintf(`SELECT start_pretty, end_pretty, size_bytes, rows
 		FROM [SHOW BACKUP FILES '%s']`, details)
 	sqlDBRestore.CheckQueryResults(t, showFiles, [][]string{
-		{"/Table/61/1/1", "/Table/61/1/42", "369", "41"},
-		{"/Table/61/1/42", "/Table/61/2", "531", "59"},
+		{"/Table/64/1/1", "/Table/64/1/42", "369", "41"},
+		{"/Table/64/1/42", "/Table/64/2", "531", "59"},
 	})
 	sstMatcher := regexp.MustCompile(`\d+\.sst`)
 	pathRows := sqlDB.QueryStr(t, `SELECT path FROM [SHOW BACKUP FILES $1]`, details)
@@ -354,6 +357,7 @@ GRANT UPDATE ON top_secret TO agent_bond;
 		want := [][]string{
 			{`mi5`, `database`, `GRANT ALL ON mi5 TO admin; GRANT CONNECT, CREATE, DELETE, DROP, GRANT, INSERT, ` +
 				`SELECT, ZONECONFIG ON mi5 TO agents; GRANT CONNECT ON mi5 TO public; GRANT ALL ON mi5 TO root; `, `root`},
+			{`public`, `schema`, `GRANT ALL ON public TO admin; GRANT CREATE, USAGE ON public TO public; GRANT ALL ON public TO root; `, `admin`},
 			{`locator`, `schema`, `GRANT ALL ON locator TO admin; GRANT CREATE, GRANT ON locator TO agent_bond; GRANT ALL ON locator TO m; ` +
 				`GRANT ALL ON locator TO root; `, `root`},
 			{`continent`, `type`, `GRANT ALL ON continent TO admin; GRANT GRANT ON continent TO agent_bond; GRANT ALL ON continent TO m; GRANT USAGE ON continent TO public; GRANT ALL ON continent TO root; `, `root`},
@@ -381,6 +385,7 @@ ALTER TABLE locator.agent_locations OWNER TO agent_bond;
 
 		want = [][]string{
 			{`agent_thomas`},
+			{`admin`},
 			{`agent_thomas`},
 			{`agent_bond`},
 			{`agent_bond`},
@@ -641,16 +646,17 @@ func TestShowBackupWithDebugIDs(t *testing.T) {
 
 	dbIDStr := strconv.Itoa(dbID)
 	publicIDStr := strconv.Itoa(publicID)
-	schemaIDStr := strconv.Itoa(dbID + 4)
+	schemaIDStr := strconv.Itoa(dbID + 5)
 
 	expectedObjects := [][]string{
 		{"NULL", "NULL", "NULL", "NULL", "data", dbIDStr, "database"},
-		{"data", dbIDStr, "public", publicIDStr, "bank", strconv.Itoa(dbID + 1), "table"},
-		{"data", dbIDStr, "public", publicIDStr, "welcome", strconv.Itoa(dbID + 2), "type"},
-		{"data", dbIDStr, "public", publicIDStr, "_welcome", strconv.Itoa(dbID + 3), "type"},
+		{"data", "54", "NULL", "NULL", "public", strconv.Itoa(dbID + 1), "schema"},
+		{"data", dbIDStr, "public", publicIDStr, "bank", strconv.Itoa(dbID + 2), "table"},
+		{"data", dbIDStr, "public", publicIDStr, "welcome", strconv.Itoa(dbID + 3), "type"},
+		{"data", dbIDStr, "public", publicIDStr, "_welcome", strconv.Itoa(dbID + 4), "type"},
 		{"data", dbIDStr, "NULL", "NULL", "sc", schemaIDStr, "schema"},
-		{"data", dbIDStr, "sc", schemaIDStr, "t1", strconv.Itoa(dbID + 5), "table"},
-		{"data", dbIDStr, "sc", schemaIDStr, "t2", strconv.Itoa(dbID + 6), "table"},
+		{"data", dbIDStr, "sc", schemaIDStr, "t1", strconv.Itoa(dbID + 6), "table"},
+		{"data", dbIDStr, "sc", schemaIDStr, "t2", strconv.Itoa(dbID + 7), "table"},
 	}
 
 	require.Equal(t, expectedObjects, res)

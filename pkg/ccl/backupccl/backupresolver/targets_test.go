@@ -54,12 +54,12 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			return catalogkv.NewBuilderWithMVCCTimestamp(descProto, ts1).BuildImmutable()
 		}
 		mkDB := func(id descpb.ID, name string) catalog.Descriptor {
-			return dbdesc.NewInitial(id, name, security.AdminRoleName())
+			return dbdesc.NewInitial(id, name, security.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID))
 		}
 		mkTyp := func(desc typDesc) catalog.Descriptor {
 			// Set a default parent schema for the type descriptors.
 			if desc.ParentSchemaID == descpb.InvalidID {
-				desc.ParentSchemaID = keys.PublicSchemaID
+				desc.ParentSchemaID = keys.PublicSchemaIDForBackup
 			}
 			return typedesc.NewBuilder(&desc).BuildImmutable()
 		}

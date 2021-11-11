@@ -80,12 +80,13 @@ func TestShowSummary(t *testing.T) {
 	"Files": [],
 	"Spans": "[]",
 	"DatabaseDescriptors": {
-		"52": "testdb"
+		"54": "testdb"
 	},
 	"TableDescriptors": {},
 	"TypeDescriptors": {},
 	"SchemaDescriptors": {
-		"29": "public"
+		"29": "public",
+		"55": "testdb.public"
 	}
 }
 `, ts1.GoTime().Format(time.RFC3339), srv.ClusterID(), build.GetInfo().Short())
@@ -121,29 +122,30 @@ func TestShowSummary(t *testing.T) {
 	"Files": [
 		{
 			"Path": "%s",
-			"Span": "/Table/59/{1-2}",
+			"Span": "/Table/62/{1-2}",
 			"DataSize": "20 B",
 			"IndexEntries": 0,
 			"Rows": 1
 		}
 	],
-	"Spans": "[/Table/58/{1-2} /Table/59/{1-2}]",
+	"Spans": "[/Table/61/{1-2} /Table/62/{1-2}]",
 	"DatabaseDescriptors": {
-		"52": "testdb"
+		"54": "testdb"
 	},
 	"TableDescriptors": {
-		"58": "testdb.public.footable",
-		"59": "testdb.testschema.footable"
+		"61": "testdb.public.footable",
+		"62": "testdb.testschema.footable"
 	},
 	"TypeDescriptors": {
-		"54": "testdb.public.footype",
-		"55": "testdb.public._footype",
-		"56": "testdb.testschema.footype",
-		"57": "testdb.testschema._footype"
+		"57": "testdb.public.footype",
+		"58": "testdb.public._footype",
+		"59": "testdb.testschema.footype",
+		"60": "testdb.testschema._footype"
 	},
 	"SchemaDescriptors": {
 		"29": "public",
-		"53": "testdb.testschema"
+		"55": "testdb.public",
+		"56": "testdb.testschema"
 	}
 }
 `, ts2.GoTime().Format(time.RFC3339), srv.ClusterID(), build.GetInfo().Short(), sstFile)
