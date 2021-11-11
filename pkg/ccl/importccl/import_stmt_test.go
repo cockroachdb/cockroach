@@ -1928,10 +1928,12 @@ func TestFailedImportGC(t *testing.T) {
 	tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 
 	// In the case of the test, the ID of the table that will be cleaned up due
-	// to the failed import will be one higher than the ID of the empty database
+	// to the failed import will be two higher than the ID of the empty database
 	// it was created in.
+	// We increment the id once for the public schema and a second time for the
+	// "MakeSimpleTableDescriptor".
 	dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "failedimport")
-	tableID := descpb.ID(dbID + 1)
+	tableID := descpb.ID(dbID + 2)
 	var td catalog.TableDescriptor
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		td, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableID)
@@ -1962,6 +1964,7 @@ func TestFailedImportGC(t *testing.T) {
 func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	skip.UnderShort(t)
 	skip.UnderRace(t, "takes >1min under race")
 
@@ -2213,8 +2216,8 @@ func TestImportCSVStmt(t *testing.T) {
 			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = '%s'`,
 				intodb)).Scan(&intodbID)
 			var publicSchemaID descpb.ID
-			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = '%s'`,
-				tree.PublicSchema)).Scan(&publicSchemaID)
+			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = '%s' AND "parentID" = %d`,
+				tree.PublicSchema, intodbID)).Scan(&publicSchemaID)
 			var tableID int64
 			sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE "parentID" = $1 AND "parentSchemaID" = $2`,
 				intodbID, publicSchemaID).Scan(&tableID)
@@ -2268,7 +2271,6 @@ func TestImportCSVStmt(t *testing.T) {
 					t.Fatal("expected > 1 SST files")
 				}
 			}
-
 		})
 	}
 
@@ -3791,7 +3793,7 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)
+	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaIDForBackup, descpb.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -4732,7 +4734,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)
+	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaIDForBackup, descpb.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -4833,7 +4835,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID,
+	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaIDForBackup,
 		descpb.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
@@ -5963,7 +5965,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		expectedTableName2 := "test2"
 		expectedSeqName := "testseq"
 		sqlDB.CheckQueryResults(t, `SELECT schema_name,
-table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
+	table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 			[][]string{{"bar", expectedTableName}, {"bar", expectedTableName2}, {"bar", expectedSeqName},
 				{"baz", expectedTableName}, {"foo", expectedTableName}, {"public", expectedTableName}})
 
@@ -6018,7 +6020,7 @@ table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 			expectedContent := [][]string{{"1", "abc"}, {"2", "def"}}
 			expectedTableName := "test"
 			sqlDB.CheckQueryResults(t, `SELECT schema_name,
-table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
+	table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 				[][]string{{"public", expectedTableName}})
 
 			// Check that the target table in the public schema was imported correctly.
@@ -6066,14 +6068,16 @@ table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 		tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 
 		dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "failedimportpgdump")
+		// The public schema in the database also uses an ID.
+		publicSchemaID := dbID + 1
 		// In the case of the test, the ID of the 3 schemas that will be cleaned up
 		// due to the failed import will be consecutive IDs after the ID of the
 		// empty database it was created in.
-		schemaIDs := []descpb.ID{descpb.ID(dbID + 1), descpb.ID(dbID + 2), descpb.ID(dbID + 3)}
+		schemaIDs := []descpb.ID{descpb.ID(publicSchemaID + 1), descpb.ID(publicSchemaID + 2), descpb.ID(publicSchemaID + 3)}
 		// The table IDs are allocated after the schemas are created. There is one
 		// extra table in the "public" schema.
-		tableIDs := []descpb.ID{descpb.ID(dbID + 4), descpb.ID(dbID + 5), descpb.ID(dbID + 6),
-			descpb.ID(dbID + 7)}
+		tableIDs := []descpb.ID{descpb.ID(publicSchemaID + 4), descpb.ID(publicSchemaID + 5), descpb.ID(publicSchemaID + 6),
+			descpb.ID(publicSchemaID + 7)}
 
 		// At this point we expect to see three jobs related to the cleanup.
 		// - SCHEMA CHANGE GC job for the table cleanup.
@@ -6505,7 +6509,7 @@ DROP VIEW IF EXISTS v`,
 				create: "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
 				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
 				during: `ALTER DATABASE multi_region ADD REGION "us-east2"`,
-				errString: `type descriptor "crdb_internal_region" \(54\) has been ` +
+				errString: `type descriptor "crdb_internal_region" \(57\) has been ` +
 					`modified, potentially incompatibly, since import planning; ` +
 					`aborting to avoid possible corruption`,
 				args: []interface{}{srv.URL},
@@ -6521,7 +6525,7 @@ CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s typ, b bytea) LOCALITY RE
 `,
 				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
 				during: `ALTER TYPE typ ADD VALUE 'b'`,
-				errString: `type descriptor "typ" \(66\) has been ` +
+				errString: `type descriptor "typ" \(70\) has been ` +
 					`modified, potentially incompatibly, since import planning; ` +
 					`aborting to avoid possible corruption`,
 				args: []interface{}{srv.URL},
