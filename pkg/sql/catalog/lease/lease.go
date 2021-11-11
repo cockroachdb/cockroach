@@ -430,7 +430,9 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 		// of the first context cancels other callers to the `acquireNodeLease()` method,
 		// because of its use of `singleflight.Group`. See issue #41780 for how this has
 		// happened.
-		newCtx, cancel := m.stopper.WithCancelOnQuiesce(logtags.WithTags(context.Background(), logtags.FromContext(ctx)))
+		baseCtx := m.ambientCtx.AnnotateCtx(context.Background())
+		baseCtx = logtags.WithTags(baseCtx, logtags.FromContext(ctx))
+		newCtx, cancel := m.stopper.WithCancelOnQuiesce(baseCtx)
 		defer cancel()
 		if m.isDraining() {
 			return nil, errors.New("cannot acquire lease when draining")
@@ -457,7 +459,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 			m.names.insert(newDescVersionState)
 		}
 		if toRelease != nil {
-			releaseLease(toRelease, m)
+			releaseLease(ctx, toRelease, m)
 		}
 		return true, nil
 	})
@@ -473,8 +475,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 }
 
 // releaseLease from store.
-func releaseLease(lease *storedLease, m *Manager) {
-	ctx := context.TODO()
+func releaseLease(ctx context.Context, lease *storedLease, m *Manager) {
 	if m.isDraining() {
 		// Release synchronously to guarantee release before exiting.
 		m.storage.release(ctx, m.stopper, lease)
@@ -482,8 +483,10 @@ func releaseLease(lease *storedLease, m *Manager) {
 	}
 
 	// Release to the store asynchronously, without the descriptorState lock.
+	newCtx := m.ambientCtx.AnnotateCtx(context.Background())
+	newCtx = logtags.WithTags(newCtx, logtags.FromContext(ctx))
 	if err := m.stopper.RunAsyncTask(
-		ctx, "sql.descriptorState: releasing descriptor lease",
+		newCtx, "sql.descriptorState: releasing descriptor lease",
 		func(ctx context.Context) {
 			m.storage.release(ctx, m.stopper, lease)
 		}); err != nil {
@@ -528,7 +531,7 @@ func purgeOldVersions(
 		leases := t.removeInactiveVersions()
 		t.mu.Unlock()
 		for _, l := range leases {
-			releaseLease(l, m)
+			releaseLease(ctx, l, m)
 		}
 	}
 
@@ -950,7 +953,9 @@ func (m *Manager) isDraining() bool {
 // to report work that needed to be done and which may or may not have
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
-func (m *Manager) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
+func (m *Manager) SetDraining(
+	ctx context.Context, drain bool, reporter func(int, redact.SafeString),
+) {
 	m.draining.Store(drain)
 	if !drain {
 		return
@@ -963,7 +968,7 @@ func (m *Manager) SetDraining(drain bool, reporter func(int, redact.SafeString))
 		leases := t.removeInactiveVersions()
 		t.mu.Unlock()
 		for _, l := range leases {
-			releaseLease(l, m)
+			releaseLease(ctx, l, m)
 		}
 		if reporter != nil {
 			// Report progress through the Drain RPC.
@@ -1166,7 +1171,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 // DeleteOrphanedLeases releases all orphaned leases created by a prior
 // instance of this node. timeThreshold is a walltime lower than the
 // lowest hlc timestamp that the current instance of the node can use.
-func (m *Manager) DeleteOrphanedLeases(timeThreshold int64) {
+func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64) {
 	if m.testingKnobs.DisableDeleteOrphanedLeases {
 		return
 	}
@@ -1179,7 +1184,9 @@ func (m *Manager) DeleteOrphanedLeases(timeThreshold int64) {
 
 	// Run as async worker to prevent blocking the main server Start method.
 	// Exit after releasing all the orphaned leases.
-	_ = m.stopper.RunAsyncTask(context.Background(), "del-orphaned-leases", func(ctx context.Context) {
+	newCtx := m.ambientCtx.AnnotateCtx(context.Background())
+	newCtx = logtags.WithTags(newCtx, logtags.FromContext(ctx))
+	_ = m.stopper.RunAsyncTask(newCtx, "del-orphaned-leases", func(ctx context.Context) {
 		// This could have been implemented using DELETE WHERE, but DELETE WHERE
 		// doesn't implement AS OF SYSTEM TIME.
 

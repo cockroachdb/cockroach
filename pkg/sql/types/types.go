@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 	"github.com/lib/pq/oid"
 )
 
@@ -2431,6 +2432,16 @@ func (t *T) String() string {
 		}
 	}
 	return t.Name()
+}
+
+// MarshalText is implemented here so that gogo/protobuf know how to text marshal
+// protobuf struct directly/indirectly depends on types.T without panic.
+func (t *T) MarshalText() (text []byte, err error) {
+	var buf bytes.Buffer
+	if err := proto.MarshalText(&buf, &t.InternalType); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // DebugString returns a detailed dump of the type protobuf struct, suitable for

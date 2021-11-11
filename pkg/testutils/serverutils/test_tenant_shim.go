@@ -14,6 +14,8 @@
 package serverutils
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 )
@@ -56,4 +58,7 @@ type TestTenantInterface interface {
 
 	// RPCContext returns the *rpc.Context
 	RPCContext() *rpc.Context
+
+	// AnnotateCtx annotates a context.
+	AnnotateCtx(context.Context) context.Context
 }

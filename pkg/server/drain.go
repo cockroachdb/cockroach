@@ -207,7 +207,7 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.Saf
 
 	// Drain the SQL leases. This must be done after the pgServer has
 	// given sessions a chance to finish ongoing work.
-	s.sqlServer.leaseMgr.SetDraining(true /* drain */, reporter)
+	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter)
 
 	// Done. This executes the defers set above to drain SQL leases.
 	return nil

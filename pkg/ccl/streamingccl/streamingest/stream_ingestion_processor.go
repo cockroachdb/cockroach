@@ -29,13 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 var minimumFlushInterval = settings.RegisterPublicDurationSettingWithExplicitUnit(
@@ -111,6 +111,10 @@ type streamIngestionProcessor struct {
 	// closePoller is used to shutdown the poller that checks the job for a
 	// cutover signal.
 	closePoller chan struct{}
+	// cancelMergeAndWait cancels the merging goroutines and waits for them to
+	// finish. It cannot be called concurrently with Next(), as it consumes from
+	// the merged channel.
+	cancelMergeAndWait func()
 
 	// mu is used to provide thread-safe read-write operations to ingestionErr
 	// and pollingErr.
@@ -234,11 +238,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		eventChs[id] = eventCh
 		errChs[id] = errCh
 	}
-	sip.eventCh, err = sip.merge(ctx, eventChs, errChs)
-	if err != nil {
-		sip.MoveToDraining(err)
-		return
-	}
+	sip.eventCh = sip.merge(ctx, eventChs, errChs)
 }
 
 // Next is part of the RowSource interface.
@@ -291,20 +291,26 @@ func (sip *streamIngestionProcessor) ConsumerClosed() {
 }
 
 func (sip *streamIngestionProcessor) close() {
-	if sip.InternalClose() {
-		if sip.batcher != nil {
-			sip.batcher.Close()
-		}
-		if sip.maxFlushRateTimer != nil {
-			sip.maxFlushRateTimer.Stop()
-		}
-		if sip.closePoller != nil {
-			close(sip.closePoller)
-			// Wait for the goroutine to return so that we do not access processor
-			// state once it has shutdown.
-			sip.pollingWaitGroup.Wait()
-		}
+	if sip.Closed {
+		return
 	}
+
+	if sip.batcher != nil {
+		sip.batcher.Close()
+	}
+	if sip.maxFlushRateTimer != nil {
+		sip.maxFlushRateTimer.Stop()
+	}
+	close(sip.closePoller)
+	// Wait for the processor goroutine to return so that we do not access
+	// processor state once it has shutdown.
+	sip.pollingWaitGroup.Wait()
+	// Wait for the merge goroutine.
+	if sip.cancelMergeAndWait != nil {
+		sip.cancelMergeAndWait()
+	}
+
+	sip.InternalClose()
 }
 
 // checkForCutoverSignal periodically loads the job progress to check for the
@@ -365,19 +371,27 @@ func (sip *streamIngestionProcessor) merge(
 	ctx context.Context,
 	partitionStreams map[string]chan streamingccl.Event,
 	errorStreams map[string]chan error,
-) (chan partitionEvent, error) {
+) chan partitionEvent {
 	merged := make(chan partitionEvent)
 
-	var g errgroup.Group
+	ctx, cancel := context.WithCancel(ctx)
+	g := ctxgroup.WithContext(ctx)
+
+	sip.cancelMergeAndWait = func() {
+		cancel()
+		// Wait until the merged channel is closed by the goroutine above.
+		for range merged {
+		}
+	}
 
 	for partition, eventCh := range partitionStreams {
 		partition := partition
 		eventCh := eventCh
 		errCh, ok := errorStreams[partition]
 		if !ok {
-			return nil, errors.Newf("could not find error channel for partition %q", partition)
+			log.Fatalf(ctx, "could not find error channel for partition %q", partition)
 		}
-		g.Go(func() error {
+		g.GoCtx(func(ctx context.Context) error {
 			ctxDone := ctx.Done()
 			for {
 				select {
@@ -412,7 +426,7 @@ func (sip *streamIngestionProcessor) merge(
 		close(merged)
 	}()
 
-	return merged, nil
+	return merged
 }
 
 // consumeEvents handles processing events on the merged event queue and returns

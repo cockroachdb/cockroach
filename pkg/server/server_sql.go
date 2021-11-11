@@ -112,6 +112,7 @@ import (
 // standalone SQLServer instances per tenant (the KV layer is shared across all
 // tenants).
 type SQLServer struct {
+	ambientCtx       log.AmbientContext
 	stopper          *stop.Stopper
 	sqlIDContainer   *base.SQLIDContainer
 	pgServer         *pgwire.Server
@@ -906,6 +907,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	return &SQLServer{
+		ambientCtx:              cfg.BaseConfig.AmbientCtx,
 		stopper:                 cfg.stopper,
 		sqlIDContainer:          cfg.nodeIDContainer,
 		pgServer:                pgServer,
@@ -1120,7 +1122,7 @@ func (s *SQLServer) preStart(
 
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
-	s.leaseMgr.DeleteOrphanedLeases(orphanedLeasesTimeThresholdNanos)
+	s.leaseMgr.DeleteOrphanedLeases(ctx, orphanedLeasesTimeThresholdNanos)
 
 	// Start scheduled jobs daemon.
 	jobs.StartJobSchedulerDaemon(
@@ -1163,4 +1165,9 @@ func (s *SQLServer) SQLInstanceID() base.SQLInstanceID {
 // testing.
 func (s *SQLServer) StartDiagnostics(ctx context.Context) {
 	s.diagnosticsReporter.PeriodicallyReportDiagnostics(ctx, s.stopper)
+}
+
+// AnnotateCtx annotates the given context with the server tracer and tags.
+func (s *SQLServer) AnnotateCtx(ctx context.Context) context.Context {
+	return s.ambientCtx.AnnotateCtx(ctx)
 }
