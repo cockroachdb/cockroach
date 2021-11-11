@@ -69,7 +69,7 @@ func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, is
 			r.Escaped("See also: ")
 			r.A("How To Investigate a Go Test Failure (internal)", "https://cockroachlabs.atlassian.net/l/c/HgfXfJgM")
 		},
-		Mention:         mentions,
+		MentionOnCreate: mentions,
 		ProjectColumnID: projColID,
 	}
 }

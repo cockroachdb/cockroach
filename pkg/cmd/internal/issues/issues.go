@@ -312,6 +312,9 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 	if len(rExisting.Issues) > 0 {
 		// We found an existing issue to post a comment into.
 		foundIssue = rExisting.Issues[0].Number
+		// We are not going to create an issue, so don't show
+		// MentionOnCreate to the formatter.Body call below.
+		data.MentionOnCreate = nil
 	}
 
 	data.RelatedIssues = rRelated.Issues
@@ -412,13 +415,10 @@ type PostRequest struct {
 	// A path to the test artifacts relative to the artifacts root. If nonempty,
 	// allows the poster formatter to construct a direct URL to this directory.
 	Artifacts string
-	// The email of the author. It will be translated into a GitHub handle and
-	// appended to the Mention slice below. This increases the chances of the
-	// "right person" seeing the failure early.
-	AuthorEmail string
-	// Mention is a slice of GitHub handles (@foo, @cockroachdb/some-team, etc)
-	// that should be mentioned in the message.
-	Mention []string
+	// MentionOnCreate is a slice of GitHub handles (@foo, @cockroachdb/some-team, etc)
+	// that should be mentioned in the message when creating a new issue. These are
+	// *not* mentioned when posting to an existing issue.
+	MentionOnCreate []string
 	// A help section of the issue, for example with links to documentation or
 	// instructions on how to reproduce the issue.
 	HelpCommand func(*Renderer)

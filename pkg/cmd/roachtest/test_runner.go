@@ -935,8 +935,7 @@ func (r *testRunner) maybePostGithubIssue(
 	}
 
 	req := issues.PostRequest{
-		AuthorEmail:     "", // intentionally unset - we add to the board and cc the team
-		Mention:         mention,
+		MentionOnCreate: mention,
 		ProjectColumnID: projColID,
 		PackageName:     "roachtest",
 		TestName:        t.Name(),
@@ -948,7 +947,6 @@ func (r *testRunner) maybePostGithubIssue(
 				"roachtest README",
 				"https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md",
 			)(renderer)
-			renderer.Escaped(" | ")
 			issues.HelpCommandAsLink(
 				"How To Investigate (internal)",
 				"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
