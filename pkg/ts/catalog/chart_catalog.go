@@ -1869,6 +1869,19 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Contention"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Number of discarded resolved transaction IDs",
+				Metrics: []string{"sql.contention.txn_id_cache.discarded_count"},
+			},
+			{
+				Title:   "Evicted Resolved Transaction IDs",
+				Metrics: []string{"sql.contention.txn_id_cache.evicted_count"},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "Bulk"}},
 		Charts: []chartDescription{
 			{
