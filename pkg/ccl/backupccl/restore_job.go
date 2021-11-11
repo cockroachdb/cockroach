@@ -1106,8 +1106,9 @@ func createImportingDescriptors(
 	tempSystemDBID := descpb.InvalidID
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		tempSystemDBID = getTempSystemDBID(details)
-		databases = append(databases, dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDB,
-			security.AdminRoleName()))
+		tempSystemDB := dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDB,
+			security.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID))
+		databases = append(databases, tempSystemDB)
 	}
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
@@ -1121,9 +1122,32 @@ func createImportingDescriptors(
 	if err := rewriteDatabaseDescs(mutableDatabases, details.DescriptorRewrites); err != nil {
 		return nil, nil, err
 	}
+
 	databaseDescs := make([]*descpb.DatabaseDescriptor, len(mutableDatabases))
 	for i, database := range mutableDatabases {
 		databaseDescs[i] = database.DatabaseDesc()
+	}
+
+	// Collect all schemas that are going to be restored.
+	var schemasToWrite []*schemadesc.Mutable
+	var writtenSchemas []catalog.SchemaDescriptor
+	for i := range schemas {
+		sc := schemas[i]
+		rw, ok := details.DescriptorRewrites[sc.ID]
+		if ok {
+			if !rw.ToExisting {
+				schemasToWrite = append(schemasToWrite, sc)
+				writtenSchemas = append(writtenSchemas, sc)
+			}
+		}
+	}
+
+	if err := rewriteSchemaDescs(schemasToWrite, details.DescriptorRewrites); err != nil {
+		return nil, nil, err
+	}
+
+	if err := remapPublicSchemas(ctx, p, mutableDatabases, &schemasToWrite, &writtenSchemas, &details); err != nil {
+		return nil, nil, err
 	}
 
 	// Assign new IDs and privileges to the tables, and update all references to
@@ -1169,22 +1193,6 @@ func createImportingDescriptors(
 	// descriptors will not be written to disk, and is only for accurate,
 	// in-memory resolution hereon out.
 	if err := rewriteTypeDescs(types, details.DescriptorRewrites); err != nil {
-		return nil, nil, err
-	}
-
-	// Collect all schemas that are going to be restored.
-	var schemasToWrite []*schemadesc.Mutable
-	var writtenSchemas []catalog.SchemaDescriptor
-	for i := range schemas {
-		sc := schemas[i]
-		rw := details.DescriptorRewrites[sc.ID]
-		if !rw.ToExisting {
-			schemasToWrite = append(schemasToWrite, sc)
-			writtenSchemas = append(writtenSchemas, sc)
-		}
-	}
-
-	if err := rewriteSchemaDescs(schemasToWrite, details.DescriptorRewrites); err != nil {
 		return nil, nil, err
 	}
 
@@ -1510,6 +1518,79 @@ func createImportingDescriptors(
 		}
 	}
 	return dataToPreRestore, dataToRestore, nil
+}
+
+// remapPublicSchemas is used to create a descriptor backed public schema
+// for databases that have virtual public schemas.
+// The rewrite map is updated with the new public schema id.
+func remapPublicSchemas(
+	ctx context.Context,
+	p sql.JobExecContext,
+	mutableDatabases []*dbdesc.Mutable,
+	schemasToWrite *[]*schemadesc.Mutable,
+	writtenSchemas *[]catalog.SchemaDescriptor,
+	details *jobspb.RestoreDetails,
+) error {
+	databaseToPublicSchemaID := make(map[descpb.ID]descpb.ID)
+	for _, db := range mutableDatabases {
+		if db.HasPublicSchemaWithDescriptor() {
+			continue
+		}
+		// mutableDatabases contains the list of databases being restored,
+		// if the database does not have a public schema backed by a descriptor
+		// (meaning they were created before 22.1), we need to create a public
+		// schema descriptor for it.
+		id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		if err != nil {
+			return err
+		}
+
+		if db.Schemas == nil {
+			db.Schemas = map[string]descpb.DatabaseDescriptor_SchemaInfo{
+				tree.PublicSchema: {
+					ID: id,
+				},
+			}
+		} else {
+			db.Schemas[tree.PublicSchema] = descpb.DatabaseDescriptor_SchemaInfo{ID: id}
+		}
+		// Every database must be initialized with the public schema.
+		// Create the SchemaDescriptor.
+		// In postgres, the user "postgres" is the owner of the public schema in a
+		// newly created db. Postgres and Public have USAGE and CREATE privileges.
+		// In CockroachDB, root is our substitute for the postgres user.
+		publicSchemaPrivileges := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
+		// By default, everyone has USAGE and CREATE on the public schema.
+		publicSchemaPrivileges.Grant(security.PublicRoleName(), privilege.List{privilege.CREATE, privilege.USAGE})
+		publicSchemaDesc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+			ParentID:   db.GetID(),
+			Name:       tree.PublicSchema,
+			ID:         id,
+			Privileges: publicSchemaPrivileges,
+			Version:    1,
+		}).BuildCreatedMutableSchema()
+
+		*schemasToWrite = append(*schemasToWrite, publicSchemaDesc)
+		*writtenSchemas = append(*writtenSchemas, publicSchemaDesc)
+		databaseToPublicSchemaID[db.GetID()] = id
+	}
+
+	// Now we need to handle rewriting the table parent schema ids.
+	for id, rw := range details.DescriptorRewrites {
+		if publicSchemaID, ok := databaseToPublicSchemaID[rw.ParentID]; ok {
+			// For all items that were previously mapped to a synthetic public
+			// schemas ID, update the ParentSchemaID to be the newly allocated ID.
+			//
+			// We also have to consider restoring tables from the system table
+			// where the system public schema still uses 29 as an ID.
+			if details.DescriptorRewrites[id].ParentSchemaID == keys.PublicSchemaIDForBackup ||
+				details.DescriptorRewrites[id].ParentSchemaID == descpb.InvalidID {
+				details.DescriptorRewrites[id].ParentSchemaID = publicSchemaID
+			}
+		}
+	}
+
+	return nil
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -2341,6 +2422,7 @@ func (r *restoreResumer) dropDescriptors(
 				delete(db.Schemas, sc.GetName())
 			}
 		}
+
 		if err := descsCol.WriteDescToBatch(
 			ctx, false /* kvTrace */, db, b,
 		); err != nil {

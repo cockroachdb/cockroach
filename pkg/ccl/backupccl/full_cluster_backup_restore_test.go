@@ -278,7 +278,7 @@ CREATE TABLE data2.foo (a int);
 	t.Run("ensure table IDs have not changed", func(t *testing.T) {
 		// Check that all tables have been restored. DISTINCT is needed in order to
 		// deal with the inclusion of schemas in the system.namespace table.
-		tableIDCheck := "SELECT DISTINCT name, id FROM system.namespace"
+		tableIDCheck := "SELECT * FROM system.namespace ORDER BY id"
 		sqlDBRestore.CheckQueryResults(t, tableIDCheck, sqlDB.QueryStr(t, tableIDCheck))
 	})
 
@@ -429,7 +429,7 @@ func TestDisallowFullClusterRestoreOnNonFreshCluster(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
 	sqlDBRestore.Exec(t, `CREATE DATABASE foo`)
 	sqlDBRestore.ExpectErr(t,
-		"pq: full cluster restore can only be run on a cluster with no tables or databases but found 1 descriptors: \\[foo\\]",
+		"pq: full cluster restore can only be run on a cluster with no tables or databases but found 2 descriptors: \\[foo public\\]",
 		`RESTORE FROM $1`, LocalFoo,
 	)
 }
@@ -1046,13 +1046,12 @@ func TestRestoreWithRecreatedDefaultDB(t *testing.T) {
 DROP DATABASE defaultdb;
 CREATE DATABASE defaultdb; 
 `)
+	row := sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'defaultdb'`)
+	var expectedDefaultDBID string
+	row.Scan(&expectedDefaultDBID)
 	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
 
 	sqlDBRestore.Exec(t, `RESTORE FROM $1`, LocalFoo)
-
-	// Since we dropped and recreated defaultdb, defaultdb has the next available
-	// id which is 52.
-	expectedDefaultDBID := "52"
 
 	sqlDBRestore.CheckQueryResults(t, `SELECT * FROM system.namespace WHERE name = 'defaultdb'`, [][]string{
 		{"0", "0", "defaultdb", expectedDefaultDBID},
