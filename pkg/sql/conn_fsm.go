@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlfsm"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // Constants for the String() representation of the session states. Shared with
@@ -199,6 +200,10 @@ func (eventRetriableErr) Event()       {}
 func (eventTxnRestart) Event()         {}
 func (eventTxnReleased) Event()        {}
 
+// Other constants.
+
+var emptyTxnID = uuid.UUID{}
+
 // TxnStateTransitions describe the transitions used by a connExecutor's
 // fsm.Machine. Args.Extended is a txnState, which is muted by the Actions.
 //
@@ -231,7 +236,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
 				ts := args.Extended.(*txnState)
-				ts.setAdvanceInfo(skipBatch, noRewind, noEvent)
+				ts.setAdvanceInfo(skipBatch, noRewind, noEvent, emptyTxnID)
 				return nil
 			},
 		},
@@ -284,7 +289,9 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 				args.Extended.(*txnState).setAdvanceInfo(
 					rewind,
 					args.Payload.(eventRetriableErrPayload).rewCap,
-					txnRestart)
+					txnRestart,
+					emptyTxnID,
+				)
 				return nil
 			},
 		},
@@ -306,7 +313,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Next: stateAborted{},
 			Action: func(args fsm.Args) error {
 				ts := args.Extended.(*txnState)
-				ts.setAdvanceInfo(skipBatch, noRewind, noEvent)
+				ts.setAdvanceInfo(skipBatch, noRewind, noEvent, emptyTxnID)
 				return nil
 			},
 		},
@@ -316,7 +323,12 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "ROLLBACK TO SAVEPOINT cockroach_restart",
 			Next:        stateOpen{ImplicitTxn: fsm.False},
 			Action: func(args fsm.Args) error {
-				args.Extended.(*txnState).setAdvanceInfo(advanceOne, noRewind, txnRestart)
+				args.Extended.(*txnState).setAdvanceInfo(
+					advanceOne,
+					noRewind,
+					txnRestart,
+					emptyTxnID,
+				)
 				return nil
 			},
 		},
@@ -325,7 +337,12 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Action: func(args fsm.Args) error {
 				// Note: Preparing the KV txn for restart has already happened by this
 				// point.
-				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, noEvent)
+				args.Extended.(*txnState).setAdvanceInfo(
+					skipBatch,
+					noRewind,
+					noEvent,
+					emptyTxnID,
+				)
 				return nil
 			},
 		},
@@ -333,7 +350,11 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "RELEASE SAVEPOINT cockroach_restart",
 			Next:        stateCommitWait{},
 			Action: func(args fsm.Args) error {
-				args.Extended.(*txnState).setAdvanceInfo(advanceOne, noRewind, txnCommit)
+				ts := args.Extended.(*txnState)
+				ts.mu.Lock()
+				txnID := ts.mu.txn.ID()
+				ts.mu.Unlock()
+				ts.setAdvanceInfo(advanceOne, noRewind, txnCommit, txnID)
 				return nil
 			},
 		},
@@ -361,7 +382,12 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "any other statement",
 			Next:        stateAborted{},
 			Action: func(args fsm.Args) error {
-				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, noEvent)
+				args.Extended.(*txnState).setAdvanceInfo(
+					skipBatch,
+					noRewind,
+					noEvent,
+					emptyTxnID,
+				)
 				return nil
 			},
 		},
@@ -377,7 +403,12 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "ROLLBACK TO SAVEPOINT (not cockroach_restart) success",
 			Next:        stateOpen{ImplicitTxn: fsm.False},
 			Action: func(args fsm.Args) error {
-				args.Extended.(*txnState).setAdvanceInfo(advanceOne, noRewind, noEvent)
+				args.Extended.(*txnState).setAdvanceInfo(
+					advanceOne,
+					noRewind,
+					noEvent,
+					emptyTxnID,
+				)
 				return nil
 			},
 		},
@@ -387,7 +418,12 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "ROLLBACK TO SAVEPOINT (not cockroach_restart) failed because txn needs restart",
 			Next:        stateAborted{},
 			Action: func(args fsm.Args) error {
-				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, noEvent)
+				args.Extended.(*txnState).setAdvanceInfo(
+					skipBatch,
+					noRewind,
+					noEvent,
+					emptyTxnID,
+				)
 				return nil
 			},
 		},
@@ -396,7 +432,12 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "ROLLBACK TO SAVEPOINT cockroach_restart",
 			Next:        stateOpen{ImplicitTxn: fsm.False},
 			Action: func(args fsm.Args) error {
-				args.Extended.(*txnState).setAdvanceInfo(advanceOne, noRewind, txnRestart)
+				args.Extended.(*txnState).setAdvanceInfo(
+					advanceOne,
+					noRewind,
+					txnRestart,
+					emptyTxnID,
+				)
 				return nil
 			},
 		},
@@ -421,7 +462,12 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "any other statement",
 			Next:        stateCommitWait{},
 			Action: func(args fsm.Args) error {
-				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, noEvent)
+				args.Extended.(*txnState).setAdvanceInfo(
+					skipBatch,
+					noRewind,
+					noEvent,
+					emptyTxnID,
+				)
 				return nil
 			},
 		},
@@ -445,7 +491,7 @@ func noTxnToOpen(args fsm.Args) error {
 		advCode = stayInPlace
 	}
 
-	ts.resetForNewSQLTxn(
+	newTxnID := ts.resetForNewSQLTxn(
 		connCtx,
 		txnTyp,
 		payload.txnSQLTimestamp,
@@ -455,15 +501,25 @@ func noTxnToOpen(args fsm.Args) error {
 		nil, /* txn */
 		payload.tranCtx,
 	)
-	ts.setAdvanceInfo(advCode, noRewind, txnStart)
+	ts.setAdvanceInfo(advCode, noRewind, txnStart, newTxnID)
 	return nil
 }
 
 // finishTxn finishes the transaction. It also calls setAdvanceInfo() with the
 // given event.
 func (ts *txnState) finishTxn(ev txnEvent) error {
-	ts.finishSQLTxn()
-	ts.setAdvanceInfo(advanceOne, noRewind, ev)
+	returnedTxnID := uuid.UUID{}
+	finishedTxnID := ts.finishSQLTxn()
+
+	// Only set the txnID field in the advanceInfo if the txnEvent is either
+	// txnCommit or txnRollback. Note that finishTxn(ev) is also called with
+	// noEvent when the state machine is in the stateCommitWait,
+	// (after executing RELEASE SAVEPOINT cockroach_restart) and a subsequent
+	// COMMIT statement is executed successfully.
+	if ev == txnCommit || ev == txnRollback {
+		returnedTxnID = finishedTxnID
+	}
+	ts.setAdvanceInfo(advanceOne, noRewind, ev, returnedTxnID)
 	return nil
 }
 
@@ -471,8 +527,8 @@ func (ts *txnState) finishTxn(ev txnEvent) error {
 func cleanupAndFinishOnError(args fsm.Args) error {
 	ts := args.Extended.(*txnState)
 	ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
-	ts.finishSQLTxn()
-	ts.setAdvanceInfo(skipBatch, noRewind, txnRollback)
+	finishedTxnID := ts.finishSQLTxn()
+	ts.setAdvanceInfo(skipBatch, noRewind, txnRollback, finishedTxnID)
 	return nil
 }
 
@@ -488,8 +544,8 @@ var BoundTxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Next: stateInternalError{},
 			Action: func(args fsm.Args) error {
 				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn()
-				ts.setAdvanceInfo(skipBatch, noRewind, txnRollback)
+				finishedTxnID := ts.finishSQLTxn()
+				ts.setAdvanceInfo(skipBatch, noRewind, txnRollback, finishedTxnID)
 				return nil
 			},
 		},
@@ -497,8 +553,8 @@ var BoundTxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Next: stateInternalError{},
 			Action: func(args fsm.Args) error {
 				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn()
-				ts.setAdvanceInfo(skipBatch, noRewind, txnRollback)
+				finishedTxnID := ts.finishSQLTxn()
+				ts.setAdvanceInfo(skipBatch, noRewind, txnRollback, finishedTxnID)
 				return nil
 			},
 		},
