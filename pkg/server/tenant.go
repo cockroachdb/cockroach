@@ -506,7 +506,7 @@ func makeTenantSQLServerArgs(
 
 	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, nil, st)
 
-	runtime := status.NewRuntimeStatSampler(context.Background(), clock)
+	runtime := status.NewRuntimeStatSampler(startupCtx, clock)
 	registry.AddMetricStruct(runtime)
 
 	esb := &externalStorageBuilder{}
