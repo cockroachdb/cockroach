@@ -806,3 +806,17 @@ func (t *tenantStatusServer) ResetIndexUsageStats(
 
 	return resp, nil
 }
+
+func (t *tenantStatusServer) TableIndexStats(
+	ctx context.Context, req *serverpb.TableIndexStatsRequest,
+) (*serverpb.TableIndexStatsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	return getTableIndexUsageStats(ctx, req, t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics(),
+		t.sqlServer.internalExecutor)
+}

@@ -115,7 +115,8 @@ message DatabaseDetailsResponse {
 
 // TableDetailsRequest is a request for detailed information about a table.
 message TableDetailsRequest {
-  // database is the database that contains the table we're interested in.
+  // database is the name of the database that contains the table we're
+  // interested in.
   string database = 1;
 
   // table is the name of the table that we're querying. Table may be
@@ -213,7 +214,8 @@ message TableDetailsResponse {
 // TableStatsRequest is a request for detailed, computationally expensive
 // information about a table.
 message TableStatsRequest {
-  // database is the database that contains the table we're interested in.
+  // database is the name of the database that contains the table we're
+  // interested in.
   string database = 1;
   // table is the name of the table that we're querying. Table may be
   // schema-qualified (schema.table) and each name component that contains
