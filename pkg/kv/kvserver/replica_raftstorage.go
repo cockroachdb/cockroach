@@ -766,6 +766,10 @@ func (r *Replica) applySnapshot(
 
 	isInitialSnap := !r.IsInitialized()
 	defer func() {
+		if e := recover(); e != nil {
+			// Re-panic to avoid the log.Fatal() below.
+			panic(e)
+		}
 		if err == nil {
 			desc, err := r.GetReplicaDescriptor()
 			if err != nil {

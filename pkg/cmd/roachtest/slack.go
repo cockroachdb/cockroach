@@ -17,7 +17,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nlopes/slack"
+	"github.com/slack-go/slack"
 )
 
 var slackToken string
@@ -29,9 +29,11 @@ func makeSlackClient() *slack.Client {
 	return slack.New(slackToken)
 }
 
-func findChannel(client *slack.Client, name string) (string, error) {
+func findChannel(client *slack.Client, name string, nextCursor string) (string, error) {
 	if client != nil {
-		channels, err := client.GetChannels(true)
+		channels, cursor, err := client.GetConversationsForUser(
+			&slack.GetConversationsForUserParameters{Cursor: nextCursor},
+		)
 		if err != nil {
 			return "", err
 		}
@@ -39,6 +41,9 @@ func findChannel(client *slack.Client, name string) (string, error) {
 			if channel.Name == name {
 				return channel.ID, nil
 			}
+		}
+		if cursor != "" {
+			return findChannel(client, name, cursor)
 		}
 	}
 	return "", fmt.Errorf("not found")
@@ -56,13 +61,9 @@ func postSlackReport(pass, fail, skip map[*testImpl]struct{}) {
 		return
 	}
 
-	channel, _ := findChannel(client, "production")
+	channel, _ := findChannel(client, "production", "")
 	if channel == "" {
 		return
-	}
-
-	params := slack.PostMessageParameters{
-		Username: "roachtest",
 	}
 
 	branch := "<unknown branch>"
@@ -82,6 +83,7 @@ func postSlackReport(pass, fail, skip map[*testImpl]struct{}) {
 	message := fmt.Sprintf("[%s] %s: %d passed, %d failed, %d skipped",
 		prefix, branch, len(pass), len(fail), len(skip))
 
+	var attachments []slack.Attachment
 	{
 		status := "good"
 		if len(fail) > 0 {
@@ -93,7 +95,7 @@ func postSlackReport(pass, fail, skip map[*testImpl]struct{}) {
 				"buildId=%s&buildTypeId=Cockroach_Nightlies_WorkloadNightly",
 				buildID)
 		}
-		params.Attachments = append(params.Attachments,
+		attachments = append(attachments,
 			slack.Attachment{
 				Color:     status,
 				Title:     message,
@@ -122,7 +124,7 @@ func postSlackReport(pass, fail, skip map[*testImpl]struct{}) {
 		for _, t := range tests {
 			fmt.Fprintf(&buf, "%s\n", t.Name())
 		}
-		params.Attachments = append(params.Attachments,
+		attachments = append(attachments,
 			slack.Attachment{
 				Color:    d.color,
 				Title:    fmt.Sprintf("%s: %d", d.title, len(tests)),
@@ -131,7 +133,11 @@ func postSlackReport(pass, fail, skip map[*testImpl]struct{}) {
 			})
 	}
 
-	if _, _, err := client.PostMessage(channel, "", params); err != nil {
+	if _, _, err := client.PostMessage(
+		channel,
+		slack.MsgOptionUsername("roachtest"),
+		slack.MsgOptionAttachments(attachments...),
+	); err != nil {
 		fmt.Println("unable to post slack report: ", err)
 	}
 }
