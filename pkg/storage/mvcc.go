@@ -1147,10 +1147,6 @@ type txnDidNotUpdateMetaHelper struct {
 	w                   Writer
 }
 
-func (t txnDidNotUpdateMetaHelper) valueForPutIntent() bool {
-	return t.txnDidNotUpdateMeta
-}
-
 func (t txnDidNotUpdateMetaHelper) populateMeta(ctx context.Context, meta *enginepb.MVCCMetadata) {
 	if t.state == NoExistingIntent && !t.w.OverrideTxnDidNotUpdateMetaToFalse(ctx) {
 		meta.TxnDidNotUpdateMeta = &trueValue
