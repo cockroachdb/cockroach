@@ -11,6 +11,8 @@
 package catalog
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -103,3 +105,13 @@ func (p ResolvedObjectPrefix) NamePrefix() tree.ObjectNamePrefix {
 	}
 	return n
 }
+
+// NumSystemColumns defines the number of supported system columns and must be
+// equal to len(colinfo.AllSystemColumnDescs) (enforced in colinfo package to
+// avoid an import cycle).
+const NumSystemColumns = 2
+
+// SmallestSystemColumnColumnID is a descpb.ColumnID with the smallest value
+// among all system columns (enforced in colinfo package to avoid an import
+// cycle).
+const SmallestSystemColumnColumnID = math.MaxUint32 - 1
