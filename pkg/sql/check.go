@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -39,12 +40,13 @@ import (
 func validateCheckExpr(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
 	exprStr string,
 	tableDesc *tabledesc.Mutable,
 	ie *InternalExecutor,
 	txn *kv.Txn,
 ) error {
-	expr, err := schemaexpr.FormatExprForDisplay(ctx, tableDesc, exprStr, semaCtx, tree.FmtParsable)
+	expr, err := schemaexpr.FormatExprForDisplay(ctx, tableDesc, exprStr, semaCtx, sessionData, tree.FmtParsable)
 	if err != nil {
 		return err
 	}
@@ -446,6 +448,7 @@ type checkSet = util.FastIntSet
 func checkMutationInput(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
 	tabDesc catalog.TableDescriptor,
 	checkOrds checkSet,
 	checkVals tree.Datums,
@@ -467,7 +470,9 @@ func checkMutationInput(
 		} else if !res && checkVals[colIdx] != tree.DNull {
 			// Failed to satisfy CHECK constraint, so unwrap the serialized
 			// check expression to display to the user.
-			expr, err := schemaexpr.FormatExprForDisplay(ctx, tabDesc, checks[i].Expr, semaCtx, tree.FmtParsable)
+			expr, err := schemaexpr.FormatExprForDisplay(
+				ctx, tabDesc, checks[i].Expr, semaCtx, sessionData, tree.FmtParsable,
+			)
 			if err != nil {
 				// If we ran into an error trying to read the check constraint, wrap it
 				// and return.

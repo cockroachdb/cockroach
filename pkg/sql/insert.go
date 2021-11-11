@@ -149,7 +149,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	if !r.checkOrds.Empty() {
 		checkVals := rowVals[len(r.insertCols):]
 		if err := checkMutationInput(
-			params.ctx, &params.p.semaCtx, r.ti.tableDesc(), r.checkOrds, checkVals,
+			params.ctx, &params.p.semaCtx, params.p.SessionData(), r.ti.tableDesc(), r.checkOrds, checkVals,
 		); err != nil {
 			return err
 		}
