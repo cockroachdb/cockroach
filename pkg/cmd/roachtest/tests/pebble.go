@@ -104,17 +104,31 @@ func registerPebble(r registry.Registry) {
 		}
 	}
 
+	// Generate roachtests that run for both 10 minutes and 90 minutes. The former
+	// is useful for local testing, while the latter is used to populate the
+	// Pebble Nightly benchmarks.
 	for _, dur := range []int64{10, 90} {
 		for _, size := range []int{64, 1024} {
 			size := size
-			var tag string
-			if dur == 90 {
-				tag = "pebble_nightly"
-			} else {
+
+			// NOTE: This test name should not change for benchmark data that gets
+			// persisted to S3, as it is relied-upon by the Pebble mkbench command,
+			// which creates a well-known directory structure that is in-turn
+			// relied-upon by the javascript on the Pebble Benchmarks webpage.
+			name := fmt.Sprintf("pebble/ycsb/size=%d", size)
+			tag := "pebble_nightly"
+
+			// For the shorter benchmark runs, we append a suffix to the name to avoid
+			// a name collision. This is safe to do as these tests are not executed as
+			// part of the nightly benchmark runs (see the tag used to filter, found
+			// in build/teamcity-nightly-pebble.sh).
+			if dur != 90 {
 				tag = "pebble"
+				name += "-short"
 			}
+
 			r.Add(registry.TestSpec{
-				Name:    fmt.Sprintf("pebble/ycsb/size=%d/duration=%d", size, dur),
+				Name:    name,
 				Owner:   registry.OwnerStorage,
 				Timeout: 12 * time.Hour,
 				Cluster: r.MakeClusterSpec(5, spec.CPU(16)),
