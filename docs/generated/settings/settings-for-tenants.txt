@@ -75,6 +75,7 @@ server.web_session.purge.max_deletions_per_cycle	integer	10	the maximum number o
 server.web_session.purge.period	duration	1h0m0s	the time until old sessions are deleted
 server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged
 server.web_session_timeout	duration	168h0m0s	the duration that a newly created web session will be valid
+sql.contention.txn_id_cache.max_size	byte size	64 MiB	the maximum byte size TxnID cache will use
 sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references across databases is allowed
 sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed
 sql.cross_db_sequence_references.enabled	boolean	false	if true, sequences referenced by tables from other databases are allowed
