@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -1909,7 +1911,7 @@ func (ex *connExecutor) recordTransactionStart() {
 	}
 }
 
-func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
+func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnID uuid.UUID) {
 	if ex.extraTxnState.shouldExecuteOnTxnFinish {
 		ex.extraTxnState.shouldExecuteOnTxnFinish = false
 		txnStart := ex.extraTxnState.txnFinishClosure.txnStartTime
@@ -1923,7 +1925,14 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 				transactionFingerprintID,
 			)
 		}
-		err := ex.recordTransaction(ctx, transactionFingerprintID, ev, implicit, txnStart)
+		if ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded != nil {
+			ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded(
+				ex.sessionData(),
+				txnID,
+				transactionFingerprintID,
+			)
+		}
+		err := ex.recordTransaction(ctx, txnID, transactionFingerprintID, ev, implicit, txnStart)
 		if err != nil {
 			if log.V(1) {
 				log.Warningf(ctx, "failed to record transaction stats: %s", err)
@@ -1954,6 +1963,7 @@ func (ex *connExecutor) onTxnRestart() {
 
 func (ex *connExecutor) recordTransaction(
 	ctx context.Context,
+	transactionID uuid.UUID,
 	transactionFingerprintID roachpb.TransactionFingerprintID,
 	ev txnEvent,
 	implicit bool,
@@ -1972,6 +1982,11 @@ func (ex *connExecutor) recordTransaction(
 	txnTime := txnEnd.Sub(txnStart)
 	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
+
+	ex.txnIDCacheWriter.Record(txnidcache.ResolvedTxnID{
+		TxnID:            transactionID,
+		TxnFingerprintID: transactionFingerprintID,
+	})
 
 	txnServiceLat := ex.phaseTimes.GetTransactionServiceLatency()
 	txnRetryLat := ex.phaseTimes.GetTransactionRetryLatency()

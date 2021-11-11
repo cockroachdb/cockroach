@@ -1,0 +1,88 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package txnidcache
+
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+)
+
+type strip struct {
+	syncutil.RWMutex
+	data     map[uuid.UUID]roachpb.TransactionFingerprintID
+	size     int64
+	capacity capacityLimiter
+}
+
+var _ reader = &strip{}
+
+func newStrip(capacity capacityLimiter) *strip {
+	c := &strip{
+		data:     make(map[uuid.UUID]roachpb.TransactionFingerprintID),
+		capacity: capacity,
+		size:     0,
+	}
+	return c
+}
+
+// tryInsertBlock takes two arguments:
+// * block: the messageBlock that will be inserted into the strip.
+// * blockStartingOffset: the offset into the block the strip will start reading
+//                        at.
+// The strip will starting reading the block from blockStartingOffset until
+// either:
+// * the strip is full: in this case, if the block is not fully consumed,
+//   tryInsertBlock returns the next unread blockIdx into the messageBlock
+//   and the boolean variable indicating that the block is not fully consumed.
+// * the block is fully consumed: this can happen in two scenarios:
+//   1. the messageBlock is fully populated, and we consumed the entirety
+//      of the block.
+//   2. the messageBlock is partially populated, and we have observed an invalid
+//      ResolvedTxnID.
+//   The returning blockIdx is insufficient for the caller to decide of the
+//   block has been fully consumed, hence the caller relies on the second
+//   returned boolean variable.
+func (c *strip) tryInsertBlock(
+	block messageBlock, blockStartingOffset int,
+) (endingOffset int, more bool) {
+	c.Lock()
+	defer c.Unlock()
+
+	blockIdx := blockStartingOffset
+	capn := c.capacity()
+	for ; blockIdx < messageBlockSize && block[blockIdx].valid() && c.size < capn; blockIdx++ {
+		c.data[block[blockIdx].TxnID] = block[blockIdx].TxnFingerprintID
+		c.size++
+	}
+	return blockIdx, blockIdx < messageBlockSize && block[blockIdx].valid()
+}
+
+func (c *strip) Lookup(txnID uuid.UUID) (roachpb.TransactionFingerprintID, bool) {
+	c.RLock()
+	defer c.RUnlock()
+	txnFingerprintID, found := c.data[txnID]
+	return txnFingerprintID, found
+}
+
+func (c *strip) clear() {
+	c.Lock()
+	defer c.Unlock()
+
+	// Instead of reallocating a new map, range-loop with delete can trigger
+	// golang compiler's optimization to use `memclr`.
+	// See: https://github.com/golang/go/issues/20138.
+	for key := range c.data {
+		delete(c.data, key)
+	}
+
+	c.size = 0
+}

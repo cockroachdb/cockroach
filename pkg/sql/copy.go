@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -218,7 +219,7 @@ type copyTxnOpt struct {
 
 	// resetExecutor should be called upon completing a batch from the copy
 	// machine when the copy machine handles its own transaction.
-	resetExtraTxnState func(ctx context.Context) error
+	resetExtraTxnState func(ctx context.Context, txnID uuid.UUID) error
 }
 
 // run consumes all the copy-in data from the network connection and inserts it
@@ -630,7 +631,7 @@ func (p *planner) preparePlannerForCopy(
 			defer func() {
 				// Note: combine errors will return nil if both are nil and the
 				// non-nil error in the case that there's just one.
-				err = errors.CombineErrors(err, txnOpt.resetExtraTxnState(ctx))
+				err = errors.CombineErrors(err, txnOpt.resetExtraTxnState(ctx, txn.ID()))
 			}()
 		}
 		if prevErr == nil {
