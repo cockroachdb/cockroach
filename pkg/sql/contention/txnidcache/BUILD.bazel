@@ -1,0 +1,57 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "txnidcache",
+    srcs = [
+        "cluster_settings.go",
+        "concurrent_write_buffer.go",
+        "metrics.go",
+        "provider.go",
+        "ring_store.go",
+        "strip.go",
+        "txn_id_cache.go",
+        "writer_pool.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/uuid",
+    ],
+)
+
+go_test(
+    name = "txnidcache_test",
+    srcs = [
+        "main_test.go",
+        "ring_store_test.go",
+        "strip_test.go",
+        "txn_id_cache_test.go",
+    ],
+    embed = [":txnidcache"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/tests",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

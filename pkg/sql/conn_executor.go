@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -63,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"golang.org/x/net/trace"
@@ -279,6 +281,10 @@ type Server struct {
 	// node as gateway node.
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
+	// txnIDCache stores the mapping from transaction ID to transaction
+	// fingerprint IDs for all recently executed transactions.
+	txnIDCache txnidcache.Provider
+
 	// Metrics is used to account normal queries.
 	Metrics Metrics
 
@@ -319,6 +325,10 @@ type Metrics struct {
 type ServerMetrics struct {
 	// StatsMetrics contains metrics for SQL statistics collection.
 	StatsMetrics StatsMetrics
+
+	// ContentionSubsystemMetrics contains metrics related to contention
+	// subsystem.
+	ContentionSubsystemMetrics txnidcache.Metrics
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -361,6 +371,9 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 			ChannelSize: idxusage.DefaultChannelSize,
 			Setting:     cfg.Settings,
 		}),
+		txnIDCache: txnidcache.NewTxnIDCache(
+			cfg.Settings,
+			&serverMetrics.ContentionSubsystemMetrics),
 	}
 
 	telemetryLoggingMetrics := &TelemetryLoggingMetrics{}
@@ -451,6 +464,7 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 				MetaSQLTxnStatsCollectionOverhead, 6*metricsSampleInterval,
 			),
 		},
+		ContentionSubsystemMetrics: txnidcache.NewMetrics(),
 	}
 }
 
@@ -462,6 +476,8 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// accumulated in the reporter when the telemetry server fails.
 	// Usually it is telemetry's reporter's job to clear the reporting SQL Stats.
 	s.reportedStats.Start(ctx, stopper)
+
+	s.txnIDCache.Start(ctx, stopper)
 }
 
 // GetSQLStatsController returns the persistedsqlstats.Controller for current
@@ -485,6 +501,11 @@ func (s *Server) GetSQLStatsProvider() sqlstats.Provider {
 // sql.Server's reported SQL Stats.
 func (s *Server) GetReportedSQLStatsController() *sslocal.Controller {
 	return s.reportedStatsController
+}
+
+// GetTxnIDCache returns the txnidcache.Cache for the current sql.Server.
+func (s *Server) GetTxnIDCache() txnidcache.Provider {
+	return s.txnIDCache
 }
 
 // GetScrubbedStmtStats returns the statement statistics by app, with the
@@ -814,6 +835,7 @@ func (s *Server) newConnExecutor(
 		hasCreatedTemporarySchema: false,
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
 		indexUsageStats:           s.indexUsageStats,
+		txnIDCacheWriter:          s.txnIDCache.GetWriter(),
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -984,6 +1006,7 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 
 func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.sessionEventf(ctx, "finishing connExecutor")
+	ex.txnIDCacheWriter.Close()
 
 	txnEv := noEvent
 	if _, noTxn := ex.machine.CurState().(stateNoTxn); !noTxn {
@@ -1019,7 +1042,8 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.state.finishExternalTxn()
 	}
 
-	if err := ex.resetExtraTxnState(ctx, txnEv); err != nil {
+	// Since we are closing connExecutor, no need to fetch txnID.
+	if err := ex.resetExtraTxnState(ctx, txnEv, uuid.UUID{}); err != nil {
 		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 	}
 
@@ -1401,6 +1425,10 @@ type connExecutor struct {
 
 	// indexUsageStats is used to track index usage stats.
 	indexUsageStats *idxusage.LocalIndexUsageStats
+
+	// txnIDCacheWriter is used to write txnidcache.ResolvedTxnID to the
+	// Transaction ID Cache.
+	txnIDCacheWriter txnidcache.Writer
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -1517,7 +1545,9 @@ func (ns *prepStmtNamespace) resetTo(
 
 // resetExtraTxnState resets the fields of ex.extraTxnState when a transaction
 // commits, rolls back or restarts.
-func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
+func (ex *connExecutor) resetExtraTxnState(
+	ctx context.Context, ev txnEvent, txnID uuid.UUID,
+) error {
 	ex.extraTxnState.jobs = nil
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 	ex.extraTxnState.schemaChangerState = SchemaChangerState{
@@ -1543,7 +1573,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 			delete(ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals, name)
 		}
 		ex.extraTxnState.savepoints.clear()
-		ex.onTxnFinish(ctx, ev)
+		ex.onTxnFinish(ctx, ev, txnID)
 	case txnRestart:
 		ex.onTxnRestart()
 		ex.state.mu.Lock()
@@ -2216,8 +2246,8 @@ func (ex *connExecutor) execCopyIn(
 		}
 	} else {
 		txnOpt = copyTxnOpt{
-			resetExtraTxnState: func(ctx context.Context) error {
-				return ex.resetExtraTxnState(ctx, noEvent)
+			resetExtraTxnState: func(ctx context.Context, txnID uuid.UUID) error {
+				return ex.resetExtraTxnState(ctx, noEvent, txnID)
 			},
 		}
 	}
@@ -2642,6 +2672,13 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		txnIsOpen = true
 	}
 
+	ex.state.mu.RLock()
+	var txnID uuid.UUID
+	if ex.state.mu.txn != nil {
+		txnID = ex.state.mu.txn.ID()
+	}
+	ex.state.mu.RUnlock()
+
 	ex.mu.Lock()
 	err := ex.machine.ApplyWithPayload(withStatement(ex.Ctx(), ex.curStmtAST), ev, payload)
 	ex.mu.Unlock()
@@ -2765,7 +2802,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 		fallthrough
 	case txnRestart, txnRollback:
-		if err := ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent); err != nil {
+		if err := ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, txnID); err != nil {
 			return advanceInfo{}, err
 		}
 	default:
