@@ -271,7 +271,11 @@ message RestoreDetails {
   // DebugPauseOn describes the events that the job should pause itself on for debugging purposes.
   string debug_pause_on = 20;
 
-  // NEXT ID: 22.
+  // ImportIntoDatabases stores the descriptors that are being restored to
+  // but not being restored themselves. They're needed to map tables to a
+  // public schema ID.
+  repeated sqlbase.DatabaseDescriptor import_into_databases = 22;
+  // NEXT ID: 23.
 }
 
 message RestoreProgress {

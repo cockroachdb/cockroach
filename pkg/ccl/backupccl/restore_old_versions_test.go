@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -68,6 +69,7 @@ func TestRestoreOldVersions(t *testing.T) {
 		exceptionalDirs             = testdataBase + "/exceptional"
 		privilegeDirs               = testdataBase + "/privileges"
 		multiRegionDirs             = testdataBase + "/multi-region"
+		publicSchemaDirs            = testdataBase + "/public-schema-remap"
 	)
 
 	t.Run("table-restore", func(t *testing.T) {
@@ -238,6 +240,17 @@ ORDER BY object_type, object_name`, [][]string{
 			t.Run(dir.Name(), restoreV201ZoneconfigPrivilegeTest(exportDir))
 		}
 	})
+
+	t.Run("public_schema_remap", func(t *testing.T) {
+		dirs, err := ioutil.ReadDir(publicSchemaDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(publicSchemaDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), restorePublicSchemaRemap(exportDir))
+		}
+	})
 }
 
 func restoreOldVersionTestWithInterleave(exportDir string) func(t *testing.T) {
@@ -387,6 +400,7 @@ func restoreV201ZoneconfigPrivilegeTest(exportDir string) func(t *testing.T) {
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
 		require.NoError(t, err)
+		fmt.Println("RESTORE FROM", LocalFoo)
 		sqlDB.Exec(t, `RESTORE FROM $1`, LocalFoo)
 		testDBGrants := [][]string{
 			{"test", "admin", "ALL"},
@@ -729,4 +743,45 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 		return exists
 	}
 	require.Falsef(t, hasSameNameSchema(dbName), "corrupted descriptor exists")
+}
+
+// restorePublicSchemaRemap tests that if we're restoring a database from
+// an older version where the database has a synthetic public schema, a real
+// descriptor backed public schema is created and the tables in the schema
+// are correctly mapped to the new public schema.
+func restorePublicSchemaRemap(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		const numAccounts = 1000
+		_, _, _, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
+		defer cleanupFn()
+
+		_, _, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
+			InitManualReplication, base.TestClusterArgs{})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
+		require.NoError(t, err)
+
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE %s FROM '%s'", "d", LocalFoo))
+
+		var restoredDBID, publicSchemaID, rowCount int
+		row := sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name='d' AND "parentID"=0`)
+		row.Scan(&restoredDBID)
+		row = sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='public' AND "parentID"=%d`, restoredDBID))
+		row.Scan(&publicSchemaID)
+
+		if publicSchemaID == keys.PublicSchemaID {
+			t.Fatalf("expected public schema id to not be %d", keys.PublicSchemaID)
+		}
+
+		row = sqlDB.QueryRow(t,
+			fmt.Sprintf(`SELECT count(1) FROM system.namespace WHERE name='t' AND "parentID"=%d AND "parentSchemaID"=%d`, restoredDBID, publicSchemaID))
+
+		row.Scan(&rowCount)
+		if rowCount != 1 {
+			t.Fatalf("expected to find 1 row, found %d", rowCount)
+		}
+
+		sqlDB.CheckQueryResults(t, `SELECT x FROM d.s.t`, [][]string{{"1"}, {"2"}})
+		sqlDB.CheckQueryResults(t, `SELECT x FROM d.public.t`, [][]string{{"3"}, {"4"}})
+	}
 }
