@@ -358,7 +358,15 @@ func makeTenantSQLServerArgs(
 	stopper *stop.Stopper, kvClusterName string, baseCfg BaseConfig, sqlCfg SQLConfig,
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
-	baseCfg.AmbientCtx.AddLogTag("sql", nil)
+
+	// We want all log messages issued on behalf of this SQL instance to report
+	// the instance ID (once known) as a tag.
+	instanceIDContainer := base.NewSQLIDContainer(0, nil)
+	// We use the tag "sqli" instead of just "sql" because the latter is
+	// too generic and would be hard to search if someone was looking at
+	// a log message and wondering what it stands for.
+	baseCfg.AmbientCtx.AddLogTag("sqli", instanceIDContainer)
+
 	// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
 	// and this tenant work.
 	//
@@ -511,7 +519,7 @@ func makeTenantSQLServerArgs(
 			externalStorageFromURI: externalStorageFromURI,
 			// Set instance ID to 0 and node ID to nil to indicate
 			// that the instance ID will be bound later during preStart.
-			nodeIDContainer: base.NewSQLIDContainer(0, nil),
+			nodeIDContainer: instanceIDContainer,
 		},
 		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
 			tenantConnect: tenantConnect,
