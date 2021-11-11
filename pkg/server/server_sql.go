@@ -1120,7 +1120,7 @@ func (s *SQLServer) preStart(
 
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
-	s.leaseMgr.DeleteOrphanedLeases(orphanedLeasesTimeThresholdNanos)
+	s.leaseMgr.DeleteOrphanedLeases(ctx, orphanedLeasesTimeThresholdNanos)
 
 	// Start scheduled jobs daemon.
 	jobs.StartJobSchedulerDaemon(
