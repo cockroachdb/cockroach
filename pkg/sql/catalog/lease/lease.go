@@ -459,7 +459,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 			m.names.insert(newDescVersionState)
 		}
 		if toRelease != nil {
-			releaseLease(toRelease, m)
+			releaseLease(ctx, toRelease, m)
 		}
 		return true, nil
 	})
@@ -475,8 +475,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 }
 
 // releaseLease from store.
-func releaseLease(lease *storedLease, m *Manager) {
-	ctx := context.TODO()
+func releaseLease(ctx context.Context, lease *storedLease, m *Manager) {
 	if m.isDraining() {
 		// Release synchronously to guarantee release before exiting.
 		m.storage.release(ctx, m.stopper, lease)
@@ -530,7 +529,7 @@ func purgeOldVersions(
 		leases := t.removeInactiveVersions()
 		t.mu.Unlock()
 		for _, l := range leases {
-			releaseLease(l, m)
+			releaseLease(ctx, l, m)
 		}
 	}
 
@@ -952,7 +951,9 @@ func (m *Manager) isDraining() bool {
 // to report work that needed to be done and which may or may not have
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
-func (m *Manager) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
+func (m *Manager) SetDraining(
+	ctx context.Context, drain bool, reporter func(int, redact.SafeString),
+) {
 	m.draining.Store(drain)
 	if !drain {
 		return
@@ -965,7 +966,7 @@ func (m *Manager) SetDraining(drain bool, reporter func(int, redact.SafeString))
 		leases := t.removeInactiveVersions()
 		t.mu.Unlock()
 		for _, l := range leases {
-			releaseLease(l, m)
+			releaseLease(ctx, l, m)
 		}
 		if reporter != nil {
 			// Report progress through the Drain RPC.
