@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -147,6 +148,7 @@ const (
 //   all the other arguments need to correspond to the attributes of this txn
 //   (unless otherwise specified).
 // tranCtx: A bag of extra execution context.
+// This function returns the ID of the new transaction.
 func (ts *txnState) resetForNewSQLTxn(
 	connCtx context.Context,
 	txnType txnType,
@@ -156,7 +158,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	readOnly tree.ReadWriteMode,
 	txn *kv.Txn,
 	tranCtx transitionCtx,
-) {
+) (txnID uuid.UUID) {
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
 	ts.isHistorical = false
@@ -204,6 +206,7 @@ func (ts *txnState) resetForNewSQLTxn(
 		}
 		ts.mu.txn = txn
 	}
+	txnID = ts.mu.txn.ID()
 	sp.SetTag("txn", attribute.StringValue(ts.mu.txn.ID().String()))
 	ts.mu.txnStart = timeutil.Now()
 	ts.mu.Unlock()
@@ -215,12 +218,15 @@ func (ts *txnState) resetForNewSQLTxn(
 	if err := ts.setReadOnlyMode(readOnly); err != nil {
 		panic(err)
 	}
+
+	return txnID
 }
 
 // finishSQLTxn finalizes a transaction's results and closes the root span for
 // the current SQL txn. This needs to be called before resetForNewSQLTxn() is
-// called for starting another SQL txn.
-func (ts *txnState) finishSQLTxn() {
+// called for starting another SQL txn. The ID of the finalized transaction is
+// returned.
+func (ts *txnState) finishSQLTxn() (txnID uuid.UUID) {
 	ts.mon.Stop(ts.Ctx)
 	if ts.cancel != nil {
 		ts.cancel()
@@ -238,17 +244,20 @@ func (ts *txnState) finishSQLTxn() {
 	sp.Finish()
 	ts.Ctx = nil
 	ts.mu.Lock()
+	txnID = ts.mu.txn.ID()
 	ts.mu.txn = nil
 	ts.mu.txnStart = time.Time{}
 	ts.mu.Unlock()
 	ts.recordingThreshold = 0
+	return txnID
 }
 
 // finishExternalTxn is a stripped-down version of finishSQLTxn used by
 // connExecutors that run within a higher-level transaction (through the
 // InternalExecutor). These guys don't want to mess with the transaction per-se,
-// but still want to clean up other stuff.
-func (ts *txnState) finishExternalTxn() {
+// but still want to clean up other stuff. The transaction ID of finished
+// transaction is returned.
+func (ts *txnState) finishExternalTxn() (finishedTxnID uuid.UUID) {
 	if ts.Ctx == nil {
 		ts.mon.Stop(ts.connCtx)
 	} else {
@@ -266,8 +275,12 @@ func (ts *txnState) finishExternalTxn() {
 	}
 	ts.Ctx = nil
 	ts.mu.Lock()
+	if ts.mu.txn != nil {
+		finishedTxnID = ts.mu.txn.ID()
+	}
 	ts.mu.txn = nil
 	ts.mu.Unlock()
+	return finishedTxnID
 }
 
 func (ts *txnState) setHistoricalTimestamp(
@@ -387,6 +400,13 @@ type advanceInfo struct {
 	// waiting for a retry.
 	txnEvent txnEvent
 
+	// txnID is filled when transaction starts, commits or aborts.
+	// When a transaction starts, txnID is set to the ID of the transaction that
+	// was created.
+	// When a transaction commits or aborts, txnID is set to the ID of the
+	// transaction that just finished execution.
+	txnID uuid.UUID
+
 	// Fields for the rewind code:
 
 	// rewCap is the capability to rewind to the beginning of the transaction.
@@ -420,7 +440,9 @@ var noRewind = rewindCapability{}
 // setAdvanceInfo sets the adv field. This has to be called as part of any state
 // transition. The connExecutor is supposed to inspect adv after any transition
 // and act on it.
-func (ts *txnState) setAdvanceInfo(code advanceCode, rewCap rewindCapability, ev txnEvent) {
+func (ts *txnState) setAdvanceInfo(
+	code advanceCode, rewCap rewindCapability, ev txnEvent, txnID uuid.UUID,
+) {
 	if ts.adv.code != advanceUnknown {
 		panic("previous advanceInfo has not been consume()d")
 	}
@@ -431,6 +453,7 @@ func (ts *txnState) setAdvanceInfo(code advanceCode, rewCap rewindCapability, ev
 		code:     code,
 		rewCap:   rewCap,
 		txnEvent: ev,
+		txnID:    txnID,
 	}
 }
 
