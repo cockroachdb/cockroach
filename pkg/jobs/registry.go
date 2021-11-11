@@ -249,7 +249,9 @@ func (r *Registry) ID() base.SQLInstanceID {
 // makeCtx returns a new context from r's ambient context and an associated
 // cancel func.
 func (r *Registry) makeCtx() (context.Context, func()) {
-	return context.WithCancel(r.ac.AnnotateCtx(r.serverCtx))
+	ctx := r.ac.AnnotateCtx(context.Background())
+	ctx = logtags.WithTags(ctx, logtags.FromContext(r.serverCtx))
+	return context.WithCancel(ctx)
 }
 
 // MakeJobID generates a new job ID.
