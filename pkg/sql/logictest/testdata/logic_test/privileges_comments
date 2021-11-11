@@ -8,7 +8,7 @@ user root
 
 statement ok
 CREATE DATABASE d45707; CREATE TABLE d45707.t45707(x INT);
-  GRANT SELECT ON DATABASE d45707 TO testuser;
+  GRANT CONNECT ON DATABASE d45707 TO testuser;
   GRANT SELECT ON d45707.t45707 TO testuser
 
 statement ok

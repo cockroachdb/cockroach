@@ -143,7 +143,6 @@ CREATE TABLE data2.foo (a int);
 	)
 	// Populate system.role_members.
 	sqlDB.Exec(t, `CREATE ROLE system_ops;`)
-	sqlDB.Exec(t, `GRANT CREATE, SELECT ON DATABASE data TO system_ops;`)
 	sqlDB.Exec(t, `GRANT system_ops TO maxroach1;`)
 
 	// Populate system.scheduled_jobs table with a first run in the future to prevent immediate adoption.

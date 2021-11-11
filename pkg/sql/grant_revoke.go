@@ -151,19 +151,6 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		return nil
 	}
 
-	if n.grantOn == privilege.Database {
-		compatiblePrivileges, err := convertPGIncompatibleDatabasePrivilegesToDefaultPrivileges(ctx, p, n, params)
-		if err != nil {
-			return err
-		}
-		// When granting, we exclude the incompatible privileges.
-		// Note: we can't do this when revoking in case the privilege was granted
-		// before 21.2 where this conversion does not happen.
-		if n.isGrant {
-			n.desiredprivs = compatiblePrivileges
-		}
-	}
-
 	var events []eventLogEntry
 
 	// First, update the descriptors. We want to catch all errors before
@@ -405,76 +392,4 @@ func (p *planner) validateRoles(
 	}
 
 	return nil
-}
-
-// convertPGIncompatibleDatabasePrivilegesToDefaultPrivileges takes the
-// incompatible database privileges in the grant statement and creates
-// a alter default privileges AST and plan node and executes the plan node.
-func convertPGIncompatibleDatabasePrivilegesToDefaultPrivileges(
-	ctx context.Context, p *planner, n *changePrivilegesNode, params runParams,
-) (compatiblePrivs privilege.List, err error) {
-	databaseTargets := n.targets.Databases
-
-	// Convert PGIncompatibleDatabase privileges to default privileges instead.
-	var incompatiblePrivs privilege.List
-	for _, priv := range n.desiredprivs {
-		if privilege.PGIncompatibleDBPrivileges.Contains(priv) {
-			incompatiblePrivs = append(incompatiblePrivs, priv)
-		} else {
-			compatiblePrivs = append(compatiblePrivs, priv)
-		}
-	}
-
-	// The incompatible privileges are added as default privileges for all roles
-	// on the databases.
-	for _, database := range databaseTargets {
-		// If n.targets.Database has elements, all descriptors must be database
-		// descriptors.
-		// The objectType is always Tables since the incompatible pg privileges
-		// are (SELECT, INSERT, UPDATE, DELETE) which were previously allowed
-		// for the sake of inheriting privileges from the DB to the table.
-		objectType := tree.Tables
-		var translatedStatement string
-		if len(incompatiblePrivs) > 0 {
-			alterDefaultPrivilegesASTNode := tree.AlterDefaultPrivileges{
-				ForAllRoles: true,
-				IsGrant:     n.isGrant,
-				Database:    &database,
-			}
-			if n.isGrant {
-				alterDefaultPrivilegesASTNode.Grant = tree.AbbreviatedGrant{
-					Grantees:   n.granteesNameList,
-					Privileges: incompatiblePrivs,
-					Target:     objectType,
-				}
-			} else if !n.isGrant {
-				// If revoke is specified, we need to revoke both existing privileges
-				// on the database and also default privileges.
-				alterDefaultPrivilegesASTNode.Revoke = tree.AbbreviatedRevoke{
-					Grantees:   n.granteesNameList,
-					Privileges: incompatiblePrivs,
-					Target:     objectType,
-				}
-			}
-			alterDefaultPrivilegesNode, err := p.alterDefaultPrivileges(
-				ctx, &alterDefaultPrivilegesASTNode,
-			)
-			if err != nil {
-				return nil, err
-			}
-			translatedStatement = fmt.Sprintf("USE %s; %s;", database.Normalize(),
-				alterDefaultPrivilegesASTNode.String())
-			if err := alterDefaultPrivilegesNode.startExec(params); err != nil {
-				return nil, err
-			}
-
-			p.BufferClientNotice(ctx, pgnotice.Newf(
-				"GRANT %s ON DATABASE is deprecated.\n"+
-					"This statement was automatically converted to %s\n"+
-					"Please use ALTER DEFAULT PRIVILEGES going forward",
-				incompatiblePrivs, translatedStatement,
-			))
-		}
-	}
-	return compatiblePrivs, nil
 }
