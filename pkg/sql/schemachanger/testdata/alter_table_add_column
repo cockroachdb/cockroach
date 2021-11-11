@@ -3,8 +3,9 @@ CREATE DATABASE db;
 CREATE TABLE db.public.tbl (i INT PRIMARY KEY)
 ----
 ...
-+database {0 0 db} -> 52
-+object {52 29 tbl} -> 53
++database {0 0 db} -> 54
++schema {54 0 public} -> 55
++object {54 55 tbl} -> 56
 
 test
 ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAULT 42
@@ -14,7 +15,7 @@ begin transaction #1
 # end StatementPhase
 # begin PreCommitPhase
 ## stage 1 in PreCommitPhase: 5 MutationType ops
-upsert descriptor #53
+upsert descriptor #56
   ...
      - columnIds:
        - 1
@@ -24,7 +25,7 @@ upsert descriptor #53
   +    - j
        name: primary
      formatVersion: 3
-     id: 53
+     id: 56
      modificationTime: {}
   +  mutations:
   +  - column:
@@ -72,16 +73,16 @@ upsert descriptor #53
   -  nextMutationId: 1
   +  nextIndexId: 3
   +  nextMutationId: 2
-     parentId: 52
+     parentId: 54
      primaryIndex:
   ...
        time: {}
-     unexposedParentSchemaId: 29
+     unexposedParentSchemaId: 55
   -  version: "1"
   +  version: "2"
 create job #1: "Schema change job"
-  descriptor IDs: [53]
-upsert descriptor #53
+  descriptor IDs: [56]
+upsert descriptor #56
   ...
        state: DELETE_ONLY
      name: tbl
@@ -94,7 +95,7 @@ commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
 ## stage 1 in PostCommitPhase: 2 MutationType ops
-upsert descriptor #53
+upsert descriptor #56
   ...
        direction: ADD
        mutationId: 1
@@ -111,7 +112,7 @@ upsert descriptor #53
      newSchemaChangeJobId: "1"
   ...
        time: {}
-     unexposedParentSchemaId: 29
+     unexposedParentSchemaId: 55
   -  version: "2"
   +  version: "3"
 update progress of schema change job #1
@@ -126,7 +127,7 @@ update progress of schema change job #1
 commit transaction #4
 begin transaction #5
 ## stage 4 in PostCommitPhase: 3 MutationType ops
-upsert descriptor #53
+upsert descriptor #56
   ...
          oid: 20
          width: 64
@@ -188,7 +189,7 @@ upsert descriptor #53
      nextIndexId: 3
   -  nextMutationId: 2
   +  nextMutationId: 3
-     parentId: 52
+     parentId: 54
      primaryIndex:
   +    createdExplicitly: true
        encodingType: 1
@@ -213,14 +214,14 @@ upsert descriptor #53
        version: 4
   ...
        time: {}
-     unexposedParentSchemaId: 29
+     unexposedParentSchemaId: 55
   -  version: "3"
   +  version: "4"
 update progress of schema change job #1
 commit transaction #5
 begin transaction #6
 ## stage 5 in PostCommitPhase: 1 MutationType ops
-upsert descriptor #53
+upsert descriptor #56
   ...
          version: 4
        mutationId: 2
@@ -230,18 +231,18 @@ upsert descriptor #53
      newSchemaChangeJobId: "1"
   ...
        time: {}
-     unexposedParentSchemaId: 29
+     unexposedParentSchemaId: 55
   -  version: "4"
   +  version: "5"
 update progress of schema change job #1
 commit transaction #6
 begin transaction #7
 ## stage 6 in PostCommitPhase: 2 MutationType ops
-create job #2: "GC for dropping table 53 index 1"
-  descriptor IDs: [53]
-upsert descriptor #53
+create job #2: "GC for dropping table 56 index 1"
+  descriptor IDs: [56]
+upsert descriptor #56
   ...
-     id: 53
+     id: 56
      modificationTime: {}
   -  mutations:
   -  - direction: DROP
@@ -269,11 +270,11 @@ upsert descriptor #53
      newSchemaChangeJobId: "1"
   ...
        time: {}
-     unexposedParentSchemaId: 29
+     unexposedParentSchemaId: 55
   -  version: "5"
   +  version: "6"
 update progress of schema change job #1
-upsert descriptor #53
+upsert descriptor #56
   ...
      mutations: []
      name: tbl

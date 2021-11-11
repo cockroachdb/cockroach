@@ -87,7 +87,6 @@ func TestSchemaChangeProcess(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
-	var id = descpb.ID(keys.MinNonPredefinedUserDescID + 1 /* skip over DB ID */)
 	var instance = base.SQLInstanceID(2)
 	stopper := stop.NewStopper()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -107,8 +106,6 @@ func TestSchemaChangeProcess(t *testing.T) {
 	)
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	defer stopper.Stop(context.Background())
-	changer := sql.NewSchemaChangerForTesting(
-		id, 0, instance, kvDB, leaseMgr, jobRegistry, &execCfg, cluster.MakeTestingClusterSettings())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -117,6 +114,11 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 `); err != nil {
 		t.Fatal(err)
 	}
+
+	tableID := descpb.ID(sqlutils.QueryTableID(t, sqlDB, "t", "public", "test"))
+
+	changer := sql.NewSchemaChangerForTesting(
+		tableID, 0, instance, kvDB, leaseMgr, jobRegistry, &execCfg, cluster.MakeTestingClusterSettings())
 
 	// Read table descriptor for version.
 	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
@@ -143,7 +145,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	index.ID = tableDesc.NextIndexID
 	tableDesc.NextIndexID++
 	changer = sql.NewSchemaChangerForTesting(
-		id, tableDesc.NextMutationID, instance, kvDB, leaseMgr, jobRegistry,
+		tableID, tableDesc.NextMutationID, instance, kvDB, leaseMgr, jobRegistry,
 		&execCfg, cluster.MakeTestingClusterSettings(),
 	)
 	tableDesc.TableDesc().Mutations = append(tableDesc.TableDesc().Mutations, descpb.DescriptorMutation{
@@ -2514,6 +2516,8 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 		t.Fatal(err)
 	}
 
+	tableID := descpb.ID(sqlutils.QueryTableID(t, sqlDB, "t", "public", "test"))
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -2527,7 +2531,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 
 	// Test that trying different schema changes results an error.
 	_, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN z INT`)
-	expected := `pq: relation "test" \(53\): unimplemented: cannot perform a schema change operation while a primary key change is in progress`
+	expected := fmt.Sprintf(`pq: relation "test" \(%d\): unimplemented: cannot perform a schema change operation while a primary key change is in progress`, tableID)
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected to find error %s but found %+v", expected, err)
 	}
@@ -2859,6 +2863,8 @@ CREATE TABLE t.test (
 		t.Fatal(err)
 	}
 
+	tableID := descpb.ID(sqlutils.QueryTableID(t, sqlDB, "t", "public", "test"))
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -2885,91 +2891,91 @@ CREATE TABLE t.test (
 	}
 
 	// Test that we only insert the necessary k/v's.
-	rows, err := sqlDB.Query(`
+	rows, err := sqlDB.Query(fmt.Sprintf(`
 	SET TRACING=on,kv,results;
 	INSERT INTO t.test VALUES (1, 2, 3, NULL, NULL, 6);
 	SET TRACING=off;
 	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-		message LIKE 'InitPut /Table/53/2%' ORDER BY message;`)
+		message LIKE 'InitPut /Table/%d/2%%' ORDER BY message;`, tableID))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	expected := []string{
-		"InitPut /Table/53/2/2/0 -> /TUPLE/1:1:Int/1",
+		fmt.Sprintf("InitPut /Table/%d/2/2/0 -> /TUPLE/1:1:Int/1", tableID),
 		// TODO (rohany): this k/v is spurious and should be removed
 		//  when #45343 is fixed.
-		"InitPut /Table/53/2/2/1/1 -> /INT/2",
-		"InitPut /Table/53/2/2/2/1 -> /TUPLE/3:3:Int/3",
-		"InitPut /Table/53/2/2/4/1 -> /INT/6",
+		fmt.Sprintf("InitPut /Table/%d/2/2/1/1 -> /INT/2", tableID),
+		fmt.Sprintf("InitPut /Table/%d/2/2/2/1 -> /TUPLE/3:3:Int/3", tableID),
+		fmt.Sprintf("InitPut /Table/%d/2/2/4/1 -> /INT/6", tableID),
 	}
 	require.Equal(t, expected, scanToArray(rows))
 
 	// Test that we remove all families when deleting.
-	rows, err = sqlDB.Query(`
+	rows, err = sqlDB.Query(fmt.Sprintf(`
 	SET TRACING=on, kv, results;
 	DELETE FROM t.test WHERE y = 2;
 	SET TRACING=off;
 	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-		message LIKE 'Del /Table/53/2%' ORDER BY message;`)
+		message LIKE 'Del /Table/%d/2%%' ORDER BY message;`, tableID))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	expected = []string{
-		"Del /Table/53/2/2/0",
-		"Del /Table/53/2/2/1/1",
-		"Del /Table/53/2/2/2/1",
-		"Del /Table/53/2/2/3/1",
-		"Del /Table/53/2/2/4/1",
+		fmt.Sprintf("Del /Table/%d/2/2/0", tableID),
+		fmt.Sprintf("Del /Table/%d/2/2/1/1", tableID),
+		fmt.Sprintf("Del /Table/%d/2/2/2/1", tableID),
+		fmt.Sprintf("Del /Table/%d/2/2/3/1", tableID),
+		fmt.Sprintf("Del /Table/%d/2/2/4/1", tableID),
 	}
 	require.Equal(t, expected, scanToArray(rows))
 
 	// Test that we update all families when the key changes.
-	rows, err = sqlDB.Query(`
+	rows, err = sqlDB.Query(fmt.Sprintf(`
 	INSERT INTO t.test VALUES (1, 2, 3, NULL, NULL, 6);
 	SET TRACING=on, kv, results;
 	UPDATE t.test SET y = 3 WHERE y = 2;
 	SET TRACING=off;
 	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-		message LIKE 'Put /Table/53/2%' OR
-		message LIKE 'Del /Table/53/2%' OR
-		message LIKE 'CPut /Table/53/2%';`)
+		message LIKE 'Put /Table/%d/2%%' OR
+		message LIKE 'Del /Table/%d/2%%' OR
+		message LIKE 'CPut /Table/%d/2%%';`, tableID, tableID, tableID))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	expected = []string{
-		"Del /Table/53/2/2/0",
-		"CPut /Table/53/2/3/0 -> /TUPLE/1:1:Int/1 (expecting does not exist)",
+		fmt.Sprintf("Del /Table/%d/2/2/0", tableID),
+		fmt.Sprintf("CPut /Table/%d/2/3/0 -> /TUPLE/1:1:Int/1 (expecting does not exist)", tableID),
 		// TODO (rohany): this k/v is spurious and should be removed
 		//  when #45343 is fixed.
-		"Del /Table/53/2/2/1/1",
-		"CPut /Table/53/2/3/1/1 -> /INT/3 (expecting does not exist)",
-		"Del /Table/53/2/2/2/1",
-		"CPut /Table/53/2/3/2/1 -> /TUPLE/3:3:Int/3 (expecting does not exist)",
-		"Del /Table/53/2/2/4/1",
-		"CPut /Table/53/2/3/4/1 -> /INT/6 (expecting does not exist)",
+		fmt.Sprintf("Del /Table/%d/2/2/1/1", tableID),
+		fmt.Sprintf("CPut /Table/%d/2/3/1/1 -> /INT/3 (expecting does not exist)", tableID),
+		fmt.Sprintf("Del /Table/%d/2/2/2/1", tableID),
+		fmt.Sprintf("CPut /Table/%d/2/3/2/1 -> /TUPLE/3:3:Int/3 (expecting does not exist)", tableID),
+		fmt.Sprintf("Del /Table/%d/2/2/4/1", tableID),
+		fmt.Sprintf("CPut /Table/%d/2/3/4/1 -> /INT/6 (expecting does not exist)", tableID),
 	}
 	require.Equal(t, expected, scanToArray(rows))
 
 	// Test that we only update necessary families when the key doesn't change.
-	rows, err = sqlDB.Query(`
+	rows, err = sqlDB.Query(fmt.Sprintf(`
 	SET TRACING=on, kv, results;
 	UPDATE t.test SET z = NULL, b = 5, c = NULL WHERE y = 3;
 	SET TRACING=off;
 	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-		message LIKE 'Put /Table/53/2%' OR
-		message LIKE 'Del /Table/53/2%' OR
-		message LIKE 'CPut /Table/53/2%';`)
+		message LIKE 'Put /Table/%d/2%%' OR
+		message LIKE 'Del /Table/%d/2%%' OR
+		message LIKE 'CPut /Table/%d/2%%';`, tableID, tableID, tableID))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	expected = []string{
-		"Del /Table/53/2/3/2/1",
-		"CPut /Table/53/2/3/3/1 -> /INT/5 (expecting does not exist)",
-		"Del /Table/53/2/3/4/1",
+		fmt.Sprintf("Del /Table/%d/2/3/2/1", tableID),
+		fmt.Sprintf("CPut /Table/%d/2/3/3/1 -> /INT/5 (expecting does not exist)", tableID),
+		fmt.Sprintf("Del /Table/%d/2/3/4/1", tableID),
 	}
 	require.Equal(t, expected, scanToArray(rows))
 

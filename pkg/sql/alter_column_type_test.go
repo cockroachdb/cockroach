@@ -13,6 +13,7 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -393,6 +394,8 @@ CREATE DATABASE t;
 CREATE TABLE t.test (x INT);
 `)
 
+	tableID := sqlutils.QueryTableID(t, db, "t", "public", "test")
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -405,7 +408,7 @@ ALTER TABLE t.test ALTER COLUMN x TYPE STRING;
 
 	<-childJobStartNotification
 
-	expected := `pq: relation "test" \(53\): unimplemented: cannot perform a schema change operation while an ALTER COLUMN TYPE schema change is in progress`
+	expected := fmt.Sprintf(`pq: relation "test" \(%d\): unimplemented: cannot perform a schema change operation while an ALTER COLUMN TYPE schema change is in progress`, tableID)
 	sqlDB.ExpectErr(t, expected, `
 ALTER TABLE t.test ADD COLUMN y INT;
 	`)

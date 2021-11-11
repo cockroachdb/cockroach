@@ -418,22 +418,6 @@ WHERE "eventType" = 'rename_database'
 statement ok
 SET DATABASE = test
 
-# convert database to schema
-##################
-
-statement ok
-ALTER DATABASE eventlogtonewname CONVERT TO SCHEMA WITH PARENT test
-
-query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
-FROM system.eventlog
-WHERE "eventType" = 'convert_to_schema'
-----
-1  {"DatabaseName": "eventlogtonewname", "EventType": "convert_to_schema", "NewDatabaseParent": "test", "Statement": "ALTER DATABASE eventlogtonewname CONVERT TO SCHEMA WITH PARENT test", "Tag": "CONVERT TO SCHEMA", "User": "root"}
-
-statement ok
-DROP SCHEMA eventlogtonewname
-
 ##################
 # Cluster Settings
 ##################
@@ -700,7 +684,6 @@ FROM system.eventlog
 WHERE "eventType" = 'drop_schema'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "drop_schema", "SchemaName": "test.eventlogtonewname", "Statement": "DROP SCHEMA \"\".eventlogtonewname", "Tag": "DROP SCHEMA", "User": "root"}
 1  {"EventType": "drop_schema", "SchemaName": "test.sc", "Statement": "DROP SCHEMA \"\".sc", "Tag": "DROP SCHEMA", "User": "root"}
 1  {"EventType": "drop_schema", "SchemaName": "test.s", "Statement": "DROP SCHEMA \"\".s, \"\".t", "Tag": "DROP SCHEMA", "User": "root"}
 1  {"EventType": "drop_schema", "SchemaName": "test.t", "Statement": "DROP SCHEMA \"\".s, \"\".t", "Tag": "DROP SCHEMA", "User": "root"}
@@ -778,12 +761,13 @@ ORDER BY 1,2,3,4,5,6
 query TTTTTT
 EXECUTE showOwners('atest')
 ----
-NULL  NULL      NULL  NULL      s     testuser
-NULL  NULL      NULL  NULL      t     testuser
-NULL  NULL      NULL  NULL      v     testuser
-NULL  NULL      _ty   testuser  NULL  NULL
-NULL  NULL      ty    testuser  NULL  NULL
-sc    testuser  NULL  NULL      NULL  NULL
+NULL    NULL      NULL  NULL      s     testuser
+NULL    NULL      NULL  NULL      t     testuser
+NULL    NULL      NULL  NULL      v     testuser
+NULL    NULL      _ty   testuser  NULL  NULL
+NULL    NULL      ty    testuser  NULL  NULL
+public  admin     NULL  NULL      NULL  NULL
+sc      testuser  NULL  NULL      NULL  NULL
 
 statement ok
 CREATE USER u;
@@ -803,12 +787,13 @@ ALTER DATABASE atest OWNER TO u;
 query TTTTTT
 EXECUTE showOwners('atest')
 ----
-NULL  NULL  NULL  NULL  s     testuser
-NULL  NULL  NULL  NULL  t     u
-NULL  NULL  NULL  NULL  v     testuser
-NULL  NULL  _ty   u     NULL  NULL
-NULL  NULL  ty    u     NULL  NULL
-sc    u     NULL  NULL  NULL  NULL
+NULL    NULL   NULL  NULL  s     testuser
+NULL    NULL   NULL  NULL  t     u
+NULL    NULL   NULL  NULL  v     testuser
+NULL    NULL   _ty   u     NULL  NULL
+NULL    NULL   ty    u     NULL  NULL
+public  admin  NULL  NULL  NULL  NULL
+sc      u      NULL  NULL  NULL  NULL
 
 # Verify that events were logged.
 query ITT
@@ -842,12 +827,13 @@ REASSIGN OWNED BY testuser TO v
 query TTTTTT
 EXECUTE showOwners('atest')
 ----
-NULL  NULL  NULL  NULL  s     v
-NULL  NULL  NULL  NULL  t     v
-NULL  NULL  NULL  NULL  v     v
-NULL  NULL  _ty   v     NULL  NULL
-NULL  NULL  ty    v     NULL  NULL
-sc    v     NULL  NULL  NULL  NULL
+NULL    NULL   NULL  NULL  s     v
+NULL    NULL   NULL  NULL  t     v
+NULL    NULL   NULL  NULL  v     v
+NULL    NULL   _ty   v     NULL  NULL
+NULL    NULL   ty    v     NULL  NULL
+public  admin  NULL  NULL  NULL  NULL
+sc      v      NULL  NULL  NULL  NULL
 
 # Verify that the ownership was transferred to v even including the view and sequence.
 query ITT

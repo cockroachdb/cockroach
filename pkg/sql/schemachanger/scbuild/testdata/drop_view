@@ -9,48 +9,48 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
 build
 DROP VIEW defaultdb.v1
 ----
-- DROP Locality:{DescID: 53}
+- DROP Locality:{DescID: 55}
   state: PUBLIC
   details:
-    descriptorId: 53
-- DROP Namespace:{DescID: 53, Name: v1}
+    descriptorId: 55
+- DROP Namespace:{DescID: 55, Name: v1}
   state: PUBLIC
   details:
-    databaseId: 29
-    descriptorId: 53
+    databaseId: 51
+    descriptorId: 55
     name: v1
     schemaId: 50
-- DROP Owner:{DescID: 53}
+- DROP Owner:{DescID: 55}
   state: PUBLIC
   details:
-    descriptorId: 53
+    descriptorId: 55
     owner: root
-- DROP RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}
+- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}
   state: PUBLIC
   details:
-    dependedOn: 53
-    tableId: 52
-- DROP UserPrivileges:{DescID: 53, Username: admin}
+    dependedOn: 55
+    tableId: 54
+- DROP UserPrivileges:{DescID: 55, Username: admin}
   state: PUBLIC
   details:
-    descriptorId: 53
+    descriptorId: 55
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 53, Username: public}
+- DROP UserPrivileges:{DescID: 55, Username: public}
   state: PUBLIC
   details:
-    descriptorId: 53
+    descriptorId: 55
     username: public
-- DROP UserPrivileges:{DescID: 53, Username: root}
+- DROP UserPrivileges:{DescID: 55, Username: root}
   state: PUBLIC
   details:
-    descriptorId: 53
+    descriptorId: 55
     privileges: 2
     username: root
-- DROP View:{DescID: 53}
+- DROP View:{DescID: 55}
   state: PUBLIC
   details:
-    tableId: 53
+    tableId: 55
 
 create-view
 CREATE VIEW defaultdb.v2 AS (SELECT name AS n1, name AS n2 FROM v1)
@@ -75,14 +75,6 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 build
 DROP VIEW defaultdb.v1 CASCADE
 ----
-- DROP Locality:{DescID: 53}
-  state: PUBLIC
-  details:
-    descriptorId: 53
-- DROP Locality:{DescID: 54}
-  state: PUBLIC
-  details:
-    descriptorId: 54
 - DROP Locality:{DescID: 55}
   state: PUBLIC
   details:
@@ -91,55 +83,53 @@ DROP VIEW defaultdb.v1 CASCADE
   state: PUBLIC
   details:
     descriptorId: 56
-- DROP Locality:{DescID: 59}
+- DROP Locality:{DescID: 57}
   state: PUBLIC
   details:
-    descriptorId: 59
-- DROP Namespace:{DescID: 53, Name: v1}
+    descriptorId: 57
+- DROP Locality:{DescID: 58}
   state: PUBLIC
   details:
-    databaseId: 29
-    descriptorId: 53
+    descriptorId: 58
+- DROP Locality:{DescID: 61}
+  state: PUBLIC
+  details:
+    descriptorId: 61
+- DROP Namespace:{DescID: 55, Name: v1}
+  state: PUBLIC
+  details:
+    databaseId: 51
+    descriptorId: 55
     name: v1
     schemaId: 50
-- DROP Namespace:{DescID: 54, Name: v2}
+- DROP Namespace:{DescID: 56, Name: v2}
   state: PUBLIC
   details:
-    databaseId: 29
-    descriptorId: 54
+    databaseId: 51
+    descriptorId: 56
     name: v2
     schemaId: 50
-- DROP Namespace:{DescID: 55, Name: v3}
+- DROP Namespace:{DescID: 57, Name: v3}
   state: PUBLIC
   details:
-    databaseId: 29
-    descriptorId: 55
+    databaseId: 51
+    descriptorId: 57
     name: v3
     schemaId: 50
-- DROP Namespace:{DescID: 56, Name: v4}
+- DROP Namespace:{DescID: 58, Name: v4}
   state: PUBLIC
   details:
-    databaseId: 29
-    descriptorId: 56
+    databaseId: 51
+    descriptorId: 58
     name: v4
     schemaId: 50
-- DROP Namespace:{DescID: 59, Name: v5}
+- DROP Namespace:{DescID: 61, Name: v5}
   state: PUBLIC
   details:
-    databaseId: 29
-    descriptorId: 59
+    databaseId: 51
+    descriptorId: 61
     name: v5
     schemaId: 50
-- DROP Owner:{DescID: 53}
-  state: PUBLIC
-  details:
-    descriptorId: 53
-    owner: root
-- DROP Owner:{DescID: 54}
-  state: PUBLIC
-  details:
-    descriptorId: 54
-    owner: root
 - DROP Owner:{DescID: 55}
   state: PUBLIC
   details:
@@ -150,75 +140,51 @@ DROP VIEW defaultdb.v1 CASCADE
   details:
     descriptorId: 56
     owner: root
-- DROP Owner:{DescID: 59}
+- DROP Owner:{DescID: 57}
   state: PUBLIC
   details:
-    descriptorId: 59
+    descriptorId: 57
     owner: root
-- DROP RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}
+- DROP Owner:{DescID: 58}
   state: PUBLIC
   details:
-    dependedOn: 53
-    tableId: 52
-- DROP RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}
+    descriptorId: 58
+    owner: root
+- DROP Owner:{DescID: 61}
   state: PUBLIC
   details:
-    dependedOn: 54
-    tableId: 53
-- DROP RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}
-  state: PUBLIC
-  details:
-    dependedOn: 55
-    tableId: 53
+    descriptorId: 61
+    owner: root
 - DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}
   state: PUBLIC
   details:
     dependedOn: 55
     tableId: 54
-- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}
+- DROP RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}
   state: PUBLIC
   details:
     dependedOn: 56
-    tableId: 54
-- DROP RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}
+    tableId: 55
+- DROP RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}
   state: PUBLIC
   details:
-    dependedOn: 59
+    dependedOn: 57
+    tableId: 55
+- DROP RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}
+  state: PUBLIC
+  details:
+    dependedOn: 57
     tableId: 56
-- DROP UserPrivileges:{DescID: 53, Username: admin}
+- DROP RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}
   state: PUBLIC
   details:
-    descriptorId: 53
-    privileges: 2
-    username: admin
-- DROP UserPrivileges:{DescID: 53, Username: public}
+    dependedOn: 58
+    tableId: 56
+- DROP RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}
   state: PUBLIC
   details:
-    descriptorId: 53
-    username: public
-- DROP UserPrivileges:{DescID: 53, Username: root}
-  state: PUBLIC
-  details:
-    descriptorId: 53
-    privileges: 2
-    username: root
-- DROP UserPrivileges:{DescID: 54, Username: admin}
-  state: PUBLIC
-  details:
-    descriptorId: 54
-    privileges: 2
-    username: admin
-- DROP UserPrivileges:{DescID: 54, Username: public}
-  state: PUBLIC
-  details:
-    descriptorId: 54
-    username: public
-- DROP UserPrivileges:{DescID: 54, Username: root}
-  state: PUBLIC
-  details:
-    descriptorId: 54
-    privileges: 2
-    username: root
+    dependedOn: 61
+    tableId: 58
 - DROP UserPrivileges:{DescID: 55, Username: admin}
   state: PUBLIC
   details:
@@ -253,31 +219,57 @@ DROP VIEW defaultdb.v1 CASCADE
     descriptorId: 56
     privileges: 2
     username: root
-- DROP UserPrivileges:{DescID: 59, Username: admin}
+- DROP UserPrivileges:{DescID: 57, Username: admin}
   state: PUBLIC
   details:
-    descriptorId: 59
+    descriptorId: 57
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 59, Username: public}
+- DROP UserPrivileges:{DescID: 57, Username: public}
   state: PUBLIC
   details:
-    descriptorId: 59
+    descriptorId: 57
     username: public
-- DROP UserPrivileges:{DescID: 59, Username: root}
+- DROP UserPrivileges:{DescID: 57, Username: root}
   state: PUBLIC
   details:
-    descriptorId: 59
+    descriptorId: 57
     privileges: 2
     username: root
-- DROP View:{DescID: 53}
+- DROP UserPrivileges:{DescID: 58, Username: admin}
   state: PUBLIC
   details:
-    tableId: 53
-- DROP View:{DescID: 54}
+    descriptorId: 58
+    privileges: 2
+    username: admin
+- DROP UserPrivileges:{DescID: 58, Username: public}
   state: PUBLIC
   details:
-    tableId: 54
+    descriptorId: 58
+    username: public
+- DROP UserPrivileges:{DescID: 58, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 58
+    privileges: 2
+    username: root
+- DROP UserPrivileges:{DescID: 61, Username: admin}
+  state: PUBLIC
+  details:
+    descriptorId: 61
+    privileges: 2
+    username: admin
+- DROP UserPrivileges:{DescID: 61, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 61
+    username: public
+- DROP UserPrivileges:{DescID: 61, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 61
+    privileges: 2
+    username: root
 - DROP View:{DescID: 55}
   state: PUBLIC
   details:
@@ -286,17 +278,25 @@ DROP VIEW defaultdb.v1 CASCADE
   state: PUBLIC
   details:
     tableId: 56
-- DROP View:{DescID: 59}
+- DROP View:{DescID: 57}
   state: PUBLIC
   details:
-    tableId: 59
-- DROP ViewDependsOnType:{DescID: 59, ReferencedDescID: 57}
+    tableId: 57
+- DROP View:{DescID: 58}
   state: PUBLIC
   details:
-    tableId: 59
-    typeId: 57
-- DROP ViewDependsOnType:{DescID: 59, ReferencedDescID: 58}
+    tableId: 58
+- DROP View:{DescID: 61}
   state: PUBLIC
   details:
-    tableId: 59
-    typeId: 58
+    tableId: 61
+- DROP ViewDependsOnType:{DescID: 61, ReferencedDescID: 59}
+  state: PUBLIC
+  details:
+    tableId: 61
+    typeId: 59
+- DROP ViewDependsOnType:{DescID: 61, ReferencedDescID: 60}
+  state: PUBLIC
+  details:
+    tableId: 61
+    typeId: 60

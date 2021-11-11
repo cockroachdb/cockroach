@@ -2,6 +2,10 @@
 # RowDescription message of the wire protocol. The IDs should remain consistent
 # even when joining tables or when using views.
 
+# TODO(richardjcai): Support let command similar to logic tests to
+# programmatically get the table id.
+# The first table created has id 54.
+
 # Prepare the environment.
 send
 Query {"String": "DROP VIEW IF EXISTS v; DROP TABLE IF EXISTS tab4; DROP TABLE IF EXISTS tab3; DROP TABLE IF EXISTS tab2; DROP TABLE IF EXISTS tab1"}
@@ -82,7 +86,7 @@ RowDescription
 until crdb_only
 RowDescription
 ----
-{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":52,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":54,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 
 until
 ReadyForQuery
@@ -104,7 +108,7 @@ RowDescription
 until crdb_only
 RowDescription
 ----
-{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":52,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":53,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":54,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":55,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 
 until
 ReadyForQuery
@@ -126,7 +130,7 @@ RowDescription
 until crdb_only
 RowDescription
 ----
-{"Type":"RowDescription","Fields":[{"Name":"v1","TableOID":52,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"v2","TableOID":53,"TableAttributeNumber":2,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"v1","TableOID":54,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"v2","TableOID":55,"TableAttributeNumber":2,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 
 until ignore_table_oids
 ReadyForQuery
@@ -149,7 +153,7 @@ RowDescription
 until crdb_only
 RowDescription
 ----
-{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":52,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"tab1_a","TableOID":53,"TableAttributeNumber":2,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":54,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"tab1_a","TableOID":55,"TableAttributeNumber":2,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 
 until ignore_table_oids
 ReadyForQuery
@@ -190,7 +194,7 @@ RowDescription
 until crdb_only
 RowDescription
 ----
-{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":55,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":57,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
 
 until
 DataRow
@@ -226,7 +230,7 @@ RowDescription
 until crdb_only
 RowDescription
 ----
-{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":55,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0},{"Name":"?column?","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":57,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0},{"Name":"?column?","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 
 
 until
@@ -285,7 +289,7 @@ RowDescription
 until crdb_only
 RowDescription
 ----
-{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":56,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":260,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":58,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":260,"Format":0}]}
 
 until
 DataRow
@@ -310,7 +314,7 @@ RowDescription
 until crdb_only
 RowDescription
 ----
-{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":56,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":260,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":58,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":260,"Format":0}]}
 
 until
 DataRow
@@ -373,7 +377,7 @@ RowDescription
 until crdb_only
 RowDescription
 ----
-{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":55,"TableAttributeNumber":2,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":57,"TableAttributeNumber":2,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
 
 
 until

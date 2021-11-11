@@ -30,6 +30,26 @@ func QueryDatabaseID(t testing.TB, sqlDB DBHandle, dbName string) uint32 {
 	return dbID
 }
 
+// QuerySchemaID returns the schema ID of the specified database.schema
+// using the system.namespace table.
+func QuerySchemaID(t testing.TB, sqlDB DBHandle, dbName, schemaName string) uint32 {
+	tableIDQuery := `
+ SELECT schemas.id FROM system.namespace schemas
+   JOIN system.namespace dbs ON dbs.id = schemas."parentID"
+   WHERE dbs.name = $1 AND schemas.name = $2
+ `
+	var schemaID uint32
+	result := sqlDB.QueryRowContext(
+		context.Background(),
+		tableIDQuery, dbName,
+		schemaName,
+	)
+	if err := result.Scan(&schemaID); err != nil {
+		t.Fatal(err)
+	}
+	return schemaID
+}
+
 // QueryTableID returns the table ID of the specified database.table
 // using the system.namespace table.
 func QueryTableID(

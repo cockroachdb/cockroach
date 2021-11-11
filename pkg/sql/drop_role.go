@@ -161,7 +161,8 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		return err
 	}
 
-	lCtx := newInternalLookupCtx(params.ctx, descs, nil /*prefix - we want all descriptors */, nil /* fallback */)
+	lCtx := newInternalLookupCtx(params.ctx, descs,
+		nil /*prefix - we want all descriptors */, nil /* fallback */)
 	// privileges are added.
 	for _, tbID := range lCtx.tbIDs {
 		tableDescriptor := lCtx.tbDescs[tbID]
