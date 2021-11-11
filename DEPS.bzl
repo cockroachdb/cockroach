@@ -1955,6 +1955,13 @@ def go_deps():
         version = "v0.0.0-20180623220736-973b3573c013",
     )
     go_repository(
+        name = "com_github_go_test_deep",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/go-test/deep",
+        sum = "h1:u2CU3YKy9I2pmu9pX0eq50wCgjfGIt539SqR7FbHiho=",
+        version = "v1.0.4",
+    )
+    go_repository(
         name = "com_github_go_zookeeper_zk",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/go-zookeeper/zk",
@@ -3387,13 +3394,6 @@ def go_deps():
         version = "v1.0.0",
     )
     go_repository(
-        name = "com_github_lusis_slack_test",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/lusis/slack-test",
-        sum = "h1:MNApn+Z+fIT4NPZopPfCc1obT6aY3SVM6DOctz1A9ZU=",
-        version = "v0.0.0-20190426140909-c40012f20018",
-    )
-    go_repository(
         name = "com_github_lyft_protoc_gen_star",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/lyft/protoc-gen-star",
@@ -3987,13 +3987,6 @@ def go_deps():
         importpath = "github.com/nkovacs/streamquote",
         sum = "h1:E2B8qYyeSgv5MXpmzZXRNp8IAQ4vjxIjhpAf5hv/tAg=",
         version = "v0.0.0-20170412213628-49af9bddb229",
-    )
-    go_repository(
-        name = "com_github_nlopes_slack",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/nlopes/slack",
-        sum = "h1:OVnHm7lv5gGT5gkcHsZAyw++oHVFihbjWbL3UceUpiA=",
-        version = "v0.4.0",
     )
     go_repository(
         name = "com_github_nvveen_gotty",
@@ -4724,6 +4717,13 @@ def go_deps():
         importpath = "github.com/sjmudd/stopwatch",
         sum = "h1:acClJNSOjUrAUKW+ZneCZymCFDWtSaJG5YQl8FoOlyI=",
         version = "v0.0.0-20170613150411-f380bf8a9be1",
+    )
+    go_repository(
+        name = "com_github_slack_go_slack",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/slack-go/slack",
+        sum = "h1:j7uOUDowybWf9eSgZg/AbGx6J1OPJB6SE8Z5dNl6Mtw=",
+        version = "v0.9.5",
     )
     go_repository(
         name = "com_github_smartystreets_assertions",
