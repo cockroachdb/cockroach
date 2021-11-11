@@ -13,10 +13,16 @@ package server
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -113,6 +119,154 @@ func indexUsageStatsLocal(
 	}
 	// Append last reset time.
 	resp.LastReset = idxUsageStats.GetLastReset()
+	return resp, nil
+}
+
+func (s *statusServer) TableIndexStats(
+	ctx context.Context, req *serverpb.TableIndexStatsRequest,
+) (*serverpb.TableIndexStatsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if _, err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+	return getTableIndexUsageStats(ctx, req, s.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics(),
+		s.sqlServer.internalExecutor)
+}
+
+func getTableIDFromDatabaseAndTableName(
+	ctx context.Context, database string, table string, ie *sql.InternalExecutor,
+) (int, error) {
+	// Fully qualified table name is either database.table or database.schema.table
+	fqtName, err := getFullyQualifiedTableName(database, table)
+	if err != nil {
+		return 0, err
+	}
+	names := strings.Split(fqtName, ".")
+
+	q := makeSQLQuery()
+	q.Append(`SELECT table_id FROM crdb_internal.tables `)
+	q.Append(`WHERE database_name = $ `, names[0])
+
+	if len(names) == 2 {
+		q.Append(`AND name = $`, names[1])
+	} else if len(names) == 3 {
+		q.Append(`AND schema_name = $ AND name = $`, names[1], names[2])
+	} else {
+		return 0, errors.Newf("expected array length 2 or 3, received %d", len(names))
+	}
+	if len(q.Errors()) > 0 {
+		return 0, combineAllErrors(q.Errors())
+	}
+
+	it, err := ie.QueryIteratorEx(ctx, "get-table-id", nil,
+		sessiondata.InternalExecutorOverride{
+			User:     security.NodeUserName(),
+			Database: database,
+		}, q.String(), q.QueryArguments()...)
+
+	if err != nil {
+		return 0, err
+	}
+
+	_, err = it.Next(ctx)
+	if err != nil {
+		return 0, err
+	}
+	row := it.Cur()
+	tableId := int(tree.MustBeDInt(row[0]))
+	return tableId, nil
+}
+
+// getTableIndexUsageStats is a helper function that reads the indexes
+// and their usage stats for a given database and table. This is meant
+// for external usages e.g. front-end.
+func getTableIndexUsageStats(
+	ctx context.Context,
+	req *serverpb.TableIndexStatsRequest,
+	idxUsageStatsProvider *idxusage.LocalIndexUsageStats,
+	ie *sql.InternalExecutor,
+) (*serverpb.TableIndexStatsResponse, error) {
+
+	tableId, err := getTableIDFromDatabaseAndTableName(ctx, req.Database, req.Table, ie)
+
+	if err != nil {
+		return nil, err
+	}
+
+	query := fmt.Sprintf(
+		`SELECT
+       ti.index_name,
+       ti.index_type,
+			 total_reads,
+			 last_read
+       FROM crdb_internal.index_usage_statistics AS us
+			 JOIN crdb_internal.table_indexes ti
+			 ON us.index_id = ti.index_id
+			 AND us.table_id = ti.descriptor_id
+       WHERE ti.descriptor_id = %d`,
+		tableId,
+	)
+
+	const expectedNumDatums = 4
+
+	it, err := ie.QueryIteratorEx(ctx, "index-usage-stats", nil,
+		sessiondata.InternalExecutorOverride{
+			User:     security.NodeUserName(),
+			Database: req.Database,
+		}, query)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var idxUsageStats []roachpb.CollectedIndexUsageStatistics
+	var ok bool
+
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() { err = errors.CombineErrors(err, it.Close()) }()
+
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		var row tree.Datums
+		if row = it.Cur(); row == nil {
+			return nil, errors.New("unexpected null row")
+		}
+
+		if row.Len() != expectedNumDatums {
+			return nil, errors.Newf("expected %d columns, received %d", expectedNumDatums, row.Len())
+		}
+
+		indexName := tree.MustBeDString(row[0])
+		indexType := tree.MustBeDString(row[1])
+		totalReads := uint64(tree.MustBeDInt(row[2]))
+		lastRead := time.Time{}
+		if row[3] != tree.DNull {
+			lastRead = tree.MustBeDTimestampTZ(row[3]).Time
+		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		idxStatsRow := roachpb.CollectedIndexUsageStatistics{
+			Stats: roachpb.IndexUsageStatistics{
+				TotalReadCount: totalReads,
+				LastRead:       lastRead,
+			},
+			IndexName: string(indexName),
+			IndexType: string(indexType),
+		}
+
+		idxUsageStats = append(idxUsageStats, idxStatsRow)
+	}
+
+	resp := &serverpb.TableIndexStatsResponse{
+		Statistics: idxUsageStats,
+		LastReset:  idxUsageStatsProvider.GetLastReset(),
+	}
+
 	return resp, nil
 }
 
