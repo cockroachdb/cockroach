@@ -370,7 +370,7 @@ func (c *transientCluster) Start(
 			// Steal latency map from the neighboring server.
 			latencyMap := c.servers[i].Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
 			c.infoLog(phaseCtx, "starting tenant node %d", i)
-			ts, err := c.servers[i].StartTenant(ctx, base.TestTenantArgs{
+			ts, err := c.servers[i].StartTenant(phaseCtx, base.TestTenantArgs{
 				// We set the tenant ID to i+2, since tenant 0 is not a tenant, and
 				// tenant 1 is the system tenant.
 				TenantID:      roachpb.MakeTenantID(uint64(i + 2)),
@@ -395,12 +395,12 @@ func (c *transientCluster) Start(
 			if !c.demoCtx.Insecure {
 				// Set up the demo username and password on each tenant.
 				ie := ts.DistSQLServer().(*distsql.ServerImpl).ServerConfig.Executor
-				_, err = ie.Exec(ctx, "tenant-password", nil,
+				_, err = ie.Exec(phaseCtx, "tenant-password", nil,
 					fmt.Sprintf("CREATE USER %s WITH PASSWORD %s", demoUsername, demoPassword))
 				if err != nil {
 					return err
 				}
-				_, err = ie.Exec(ctx, "tenant-grant", nil, fmt.Sprintf("GRANT admin TO %s", demoUsername))
+				_, err = ie.Exec(phaseCtx, "tenant-grant", nil, fmt.Sprintf("GRANT admin TO %s", demoUsername))
 				if err != nil {
 					return err
 				}
@@ -415,8 +415,11 @@ func (c *transientCluster) Start(
 		// initial replication factor for small clusters and creating the
 		// admin user.
 		c.infoLog(phaseCtx, "running initial SQL for demo cluster")
+		// Propagate the server log tags to the operations below, to include node ID etc.
+		server := c.firstServer.Server
+		phaseCtx = server.AnnotateCtx(phaseCtx)
 
-		if err := runInitialSQL(phaseCtx, c.firstServer.Server, c.demoCtx.NumNodes < 3, demoUsername, demoPassword); err != nil {
+		if err := runInitialSQL(phaseCtx, server, c.demoCtx.NumNodes < 3, demoUsername, demoPassword); err != nil {
 			return err
 		}
 		if c.demoCtx.Insecure {
@@ -428,7 +431,7 @@ func (c *transientCluster) Start(
 		}
 
 		// Prepare the URL for use by the SQL shell.
-		purl, err := c.getNetworkURLForServer(ctx, 0, true /* includeAppName */, c.demoCtx.Multitenant)
+		purl, err := c.getNetworkURLForServer(phaseCtx, 0, true /* includeAppName */, c.demoCtx.Multitenant)
 		if err != nil {
 			return err
 		}
@@ -436,9 +439,9 @@ func (c *transientCluster) Start(
 
 		// Write the URL to a file if this was requested by configuration.
 		if c.demoCtx.ListeningURLFile != "" {
-			c.infoLog(ctx, "listening URL file: %s", c.demoCtx.ListeningURLFile)
+			c.infoLog(phaseCtx, "listening URL file: %s", c.demoCtx.ListeningURLFile)
 			if err = ioutil.WriteFile(c.demoCtx.ListeningURLFile, []byte(fmt.Sprintf("%s\n", c.connURL)), 0644); err != nil {
-				c.warnLog(ctx, "failed writing the URL: %v", err)
+				c.warnLog(phaseCtx, "failed writing the URL: %v", err)
 			}
 		}
 
