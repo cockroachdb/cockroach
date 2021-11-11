@@ -99,7 +99,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 				EncodingType:        descpb.PrimaryIndexEncoding,
 				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 			},
-			Privileges:     descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
+			Privileges:     descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 			NextColumnID:   2,
 			NextFamilyID:   1,
 			NextIndexID:    2,

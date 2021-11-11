@@ -21,6 +21,14 @@ system         node   NULL            {}       NULL
 test           root   NULL            {}       NULL
 
 statement ok
+CREATE ROLE newrole LOGIN
+
+query B
+SELECT has_database_privilege('newrole', 'a', 'CONNECT')
+----
+true
+
+statement ok
 COMMENT ON DATABASE a IS 'A'
 
 query TTTTTT colnames

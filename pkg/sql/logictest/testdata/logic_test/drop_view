@@ -87,6 +87,10 @@ public  testuser1  view   root  0  NULL
 public  testuser2  view   root  0  NULL
 public  testuser3  view   root  0  NULL
 
+# Revoke needed for a meaningful test for testuser.
+statement ok
+REVOKE CONNECT ON DATABASE test FROM public
+
 user testuser
 
 statement ok

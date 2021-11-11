@@ -326,6 +326,14 @@ func TestAdminAPIDatabases(t *testing.T) {
 	if _, err := db.Exec(query); err != nil {
 		t.Fatal(err)
 	}
+	// Test needs to revoke CONNECT on the public database to properly exercise
+	// fine-grained permissions logic.
+	if _, err := db.Exec(fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM public", testdb)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("REVOKE CONNECT ON DATABASE defaultdb FROM public"); err != nil {
+		t.Fatal(err)
+	}
 
 	// We have to create the non-admin user before calling
 	// "GRANT ... TO authenticatedUserNameNoAdmin".
@@ -351,7 +359,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 		isAdmin     bool
 	}{
 		{[]string{"defaultdb", "postgres", "system", testdb}, true},
-		{[]string{testdb}, false},
+		{[]string{"postgres", testdb}, false},
 	} {
 		t.Run(fmt.Sprintf("isAdmin:%t", tc.isAdmin), func(t *testing.T) {
 			// Test databases endpoint.

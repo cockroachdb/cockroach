@@ -17,8 +17,9 @@ test       root  NULL  {}  NULL
 query TTT
 SHOW GRANTS ON DATABASE test
 ----
-test  admin  ALL
-test  root   ALL
+test  admin   ALL
+test  public  CONNECT
+test  root    ALL
 
 statement ok
 CREATE TABLE kv (
@@ -65,8 +66,9 @@ u          root  NULL  {}  NULL
 query TTT
 SHOW GRANTS ON DATABASE u
 ----
-u  admin  ALL
-u  root   ALL
+u  admin   ALL
+u  public  CONNECT
+u  root    ALL
 
 statement ok
 SET DATABASE = u
@@ -105,7 +107,10 @@ ALTER DATABASE t RENAME TO v
 query TTTTT
 SHOW DATABASES
 ----
-t  root  NULL  {}  NULL
+defaultdb  root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+t          root  NULL  {}  NULL
+u          root  NULL  {}  NULL
 
 # Test that owners can rename databases as long as they have the CREATEDB
 # privilege.

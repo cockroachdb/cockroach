@@ -2668,7 +2668,8 @@ subtest crdb_internal_privileged_only
 user root
 
 statement ok
-CREATE DATABASE root_test
+CREATE DATABASE root_test;
+REVOKE CONNECT ON DATABASE root_test FROM public
 
 statement ok
 CREATE TABLE root_test.t(a int)
