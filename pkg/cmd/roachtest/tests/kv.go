@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+const envKVFlags = "ROACHTEST_KV_FLAGS"
 
 func registerKV(r registry.Registry) {
 	type kvOptions struct {
@@ -102,7 +105,7 @@ func registerKV(r registry.Registry) {
 
 			splits := " --splits=" + strconv.Itoa(computeNumSplits(opts))
 			if opts.duration == 0 {
-				opts.duration = 10 * time.Minute
+				opts.duration = 30 * time.Minute
 			}
 			duration := " --duration=" + ifLocal(c, "10s", opts.duration.String())
 			var readPercent string
@@ -133,8 +136,14 @@ func registerKV(r registry.Registry) {
 				splits = "" // no splits
 				sequential = " --sequential"
 			}
+
+			var envFlags string
+			if e := os.Getenv(envKVFlags); e != "" {
+				envFlags = " " + e
+			}
+
 			cmd := fmt.Sprintf("./workload run kv --init"+
-				histograms+concurrency+splits+duration+readPercent+batchSize+blockSize+sequential+
+				histograms+concurrency+splits+duration+readPercent+batchSize+blockSize+sequential+envFlags+
 				" {pgurl:1-%d}", nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
@@ -146,10 +155,9 @@ func registerKV(r registry.Registry) {
 		// Standard configs.
 		{nodes: 1, cpus: 8, readPercent: 0},
 		// CPU overload test, to stress admission control.
-		{nodes: 1, cpus: 8, readPercent: 50, concMultiplier: 8192, duration: 20 * time.Minute},
+		{nodes: 1, cpus: 8, readPercent: 50, concMultiplier: 8192},
 		// IO write overload test, to stress admission control.
-		{nodes: 1, cpus: 8, readPercent: 0, concMultiplier: 4096, blockSize: 1 << 16, /* 64 KB */
-			duration: 20 * time.Minute},
+		{nodes: 1, cpus: 8, readPercent: 0, concMultiplier: 4096, blockSize: 1 << 16 /* 64 KB */},
 		{nodes: 1, cpus: 8, readPercent: 95},
 		{nodes: 1, cpus: 32, readPercent: 0},
 		{nodes: 1, cpus: 32, readPercent: 95},
