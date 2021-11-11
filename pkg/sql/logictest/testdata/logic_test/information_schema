@@ -377,7 +377,7 @@ test          crdb_internal       NULL                        NULL      NO
 test          information_schema  NULL                        NULL      NO
 test          pg_catalog          NULL                        NULL      NO
 test          pg_extension        NULL                        NULL      NO
-test          public              NULL                        NULL      NO
+test          public              NULL                        NULL      YES
 
 query TTTTT colnames
 SELECT * FROM INFormaTION_SCHEMa.schemata
@@ -387,7 +387,7 @@ test          crdb_internal       NULL                        NULL      NO
 test          information_schema  NULL                        NULL      NO
 test          pg_catalog          NULL                        NULL      NO
 test          pg_extension        NULL                        NULL      NO
-test          public              NULL                        NULL      NO
+test          public              NULL                        NULL      YES
 
 ## information_schema.tables
 
@@ -1904,12 +1904,12 @@ FROM information_schema.table_constraints
 ORDER BY TABLE_NAME, CONSTRAINT_TYPE, CONSTRAINT_NAME
 ----
 constraint_catalog  constraint_schema  constraint_name           table_catalog  table_schema  table_name  constraint_type  is_deferrable  initially_deferred
-constraint_db       public             3753077756_62_1_not_null  constraint_db  public        t1          CHECK            NO             NO
+constraint_db       public             1339486231_68_1_not_null  constraint_db  public        t1          CHECK            NO             NO
 constraint_db       public             c2                        constraint_db  public        t1          CHECK            NO             NO
 constraint_db       public             check_a                   constraint_db  public        t1          CHECK            NO             NO
 constraint_db       public             t1_pkey                   constraint_db  public        t1          PRIMARY KEY      NO             NO
 constraint_db       public             t1_a_key                  constraint_db  public        t1          UNIQUE           NO             NO
-constraint_db       public             3753077756_63_2_not_null  constraint_db  public        t2          CHECK            NO             NO
+constraint_db       public             1339486231_69_2_not_null  constraint_db  public        t2          CHECK            NO             NO
 constraint_db       public             fk                        constraint_db  public        t2          FOREIGN KEY      NO             NO
 
 query TTTT colnames
@@ -1918,7 +1918,7 @@ FROM information_schema.check_constraints
 ORDER BY CONSTRAINT_CATALOG, CONSTRAINT_NAME
 ----
 constraint_catalog  constraint_schema  constraint_name           check_clause
-constraint_db       public             3753077756_62_1_not_null  p IS NOT NULL
+constraint_db       public             1339486231_68_1_not_null  p IS NOT NULL
 constraint_db       public             c2                        ((a < 99:::INT8))
 constraint_db       public             check_a                   ((a > 4:::INT8))
 
@@ -1945,7 +1945,7 @@ WHERE tc.table_schema in ('public')
 ORDER BY tc.table_schema, tc.table_name, cc.constraint_name
 ----
 table_schema  table_name  constraint_name           check_clause
-public        t1          3753077756_62_1_not_null  p IS NOT NULL
+public        t1          1339486231_68_1_not_null  p IS NOT NULL
 public        t1          c2                        ((a < 99:::INT8))
 public        t1          check_a                   ((a > 4:::INT8))
 
@@ -2592,6 +2592,8 @@ root     other_db       pg_catalog          ALL             NULL
 admin    other_db       pg_extension        ALL             NULL
 root     other_db       pg_extension        ALL             NULL
 admin    other_db       public              ALL             NULL
+public   other_db       public              CREATE          NULL
+public   other_db       public              USAGE           NULL
 root     other_db       public              ALL             NULL
 
 statement ok
@@ -2612,6 +2614,8 @@ root     other_db       pg_catalog          ALL             NULL
 admin    other_db       pg_extension        ALL             NULL
 root     other_db       pg_extension        ALL             NULL
 admin    other_db       public              ALL             NULL
+public   other_db       public              CREATE          NULL
+public   other_db       public              USAGE           NULL
 root     other_db       public              ALL             NULL
 
 statement ok
@@ -2633,6 +2637,8 @@ root      other_db       pg_catalog          ALL             NULL
 admin     other_db       pg_extension        ALL             NULL
 root      other_db       pg_extension        ALL             NULL
 admin     other_db       public              ALL             NULL
+public    other_db       public              CREATE          NULL
+public    other_db       public              USAGE           NULL
 root      other_db       public              ALL             NULL
 
 ## information_schema.table_privileges and information_schema.role_table_grants

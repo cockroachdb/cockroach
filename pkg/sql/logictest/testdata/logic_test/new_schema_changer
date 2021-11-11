@@ -581,7 +581,7 @@ statement ok
 DROP SCHEMA db1.sc1 CASCADE
 
 statement ok
-DROP DATABASE db1
+DROP DATABASE db1 CASCADE
 
 # Drop database testing
 subtest drop_database
@@ -1019,5 +1019,5 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
-1  {"DatabaseName": "db1", "DroppedSchemaObjects": ["db1.sc1", "db1.sc2"], "EventType": "drop_database", "Statement": "DROP DATABASE db1 CASCADE", "User": "root"}
-1  {"DatabaseName": "db2", "DroppedSchemaObjects": ["db2.sc3"], "EventType": "drop_database", "Statement": "DROP DATABASE db2 CASCADE", "User": "root"}
+1  {"DatabaseName": "db1", "DroppedSchemaObjects": ["db1.public", "db1.sc1", "db1.sc2"], "EventType": "drop_database", "Statement": "DROP DATABASE db1 CASCADE", "User": "root"}
+1  {"DatabaseName": "db2", "DroppedSchemaObjects": ["db2.public", "db2.sc3"], "EventType": "drop_database", "Statement": "DROP DATABASE db2 CASCADE", "User": "root"}

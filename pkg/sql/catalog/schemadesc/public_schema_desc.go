@@ -27,6 +27,8 @@ import (
 // returned descriptor is not mapped to a database; every database has all of
 // the same virtual schemas and the ParentID on the returned descriptor will be
 // descpb.InvalidID.
+// This is deprecated and should not be used except for certain edge cases.
+// This will be removed in 22.2 completely.
 func GetPublicSchema() catalog.SchemaDescriptor {
 	return publicDesc
 }

@@ -13,6 +13,7 @@ package descs
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -82,7 +83,11 @@ func (impl *temporarySchemaProviderImpl) MaybeGetDatabaseForTemporarySchemaID(
 // schema lookup by ID path only returns descriptors owned by this session.
 // TODO(ajwerner):
 func (td *temporaryDescriptors) getSchemaByName(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string,
+	ctx context.Context,
+	txn *kv.Txn,
+	dbID descpb.ID,
+	schemaName string,
+	version clusterversion.Handle,
 ) (refuseFurtherLookup bool, _ catalog.SchemaDescriptor, _ error) {
 	// If a temp schema is requested, check if it's for the current session, or
 	// else fall back to reading from the store.
@@ -99,7 +104,9 @@ func (td *temporaryDescriptors) getSchemaByName(
 			}
 		}
 	}
-	exists, schemaID, err := catalogkv.ResolveSchemaID(ctx, txn, td.codec, dbID, schemaName)
+	exists, schemaID, err := catalogkv.ResolveSchemaID(
+		ctx, txn, td.codec, dbID, schemaName, version,
+	)
 	if !exists || err != nil {
 		return true, nil, err
 	}

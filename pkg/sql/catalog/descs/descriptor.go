@@ -160,7 +160,6 @@ func (tc *Collection) getByName(
 	name string,
 	avoidCached, mutable, avoidSynthetic bool,
 ) (found bool, desc catalog.Descriptor, err error) {
-
 	var parentID, parentSchemaID descpb.ID
 	if db != nil {
 		if sc == nil {
@@ -257,7 +256,7 @@ func getSchemaByName(
 	name string,
 	avoidCached, mutable, avoidSynthetic bool,
 ) (bool, catalog.Descriptor, error) {
-	if name == tree.PublicSchema {
+	if !db.HasPublicSchemaWithDescriptor() && name == tree.PublicSchema {
 		return true, schemadesc.GetPublicSchema(), nil
 	}
 	if sc := tc.virtual.getSchemaByName(name); sc != nil {
@@ -265,7 +264,7 @@ func getSchemaByName(
 	}
 	if isTemporarySchema(name) {
 		if refuseFurtherLookup, sc, err := tc.temporary.getSchemaByName(
-			ctx, txn, db.GetID(), name,
+			ctx, txn, db.GetID(), name, tc.settings.Version,
 		); refuseFurtherLookup || sc != nil || err != nil {
 			return sc != nil, sc, err
 		}

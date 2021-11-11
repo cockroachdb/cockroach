@@ -7,6 +7,8 @@ unimplemented.*
 sql.schema.validation_errors.*
 ----
 
+# TODO(richardjcai): Support "let" command to programmatically grab descriptor ids.
+
 # Table descriptor validation failure on read.
 feature-usage
 CREATE TABLE fktbl (id INT PRIMARY KEY);
@@ -14,13 +16,13 @@ CREATE TABLE tbl (customer INT NOT NULL REFERENCES fktbl (id));
 INSERT INTO system.users VALUES ('node', NULL, true);
 GRANT node TO root;
 UPDATE system.descriptor
-  SET descriptor=decode('0a86020a05666b74626c1834203228023a00422f0a02696410011a1a080110401800300050145a0c0800100018003000501060006000200030006800700078008001004802524d0a077072696d6172791001180122026964300140004a10080010001a00200028003000380040005a007a0408002000800100880100900102980100a20106080012001800a80100b20100ba010060026a1d0a090a0561646d696e10020a080a04726f6f7410021204726f6f741801800101880103980100b201130a077072696d61727910001a02696420012800b80101c20100e80100f2010408001200f801008002009202009a020a08f8e8fdaba793e2b816b20200b80200c0021dc80200e00200', 'hex')
+  SET descriptor=crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', '{"table": {"columns": [{"id": 1, "name": "id", "type": {"arrayContents": {"oid": 16}, "family": "IntFamily", "oid": 20, "width": 64}}], "createAsOfTime": {"wallTime": "1617223938180347000"}, "families": [{"columnIds": [1], "columnNames": ["id"], "name": "primary"}], "formatVersion": 3, "id": 54, "modificationTime": {}, "name": "fktbl", "nextColumnId": 2, "nextFamilyId": 1, "nextIndexId": 2, "nextMutationId": 1, "parentId": 50, "primaryIndex": {"foreignKey": {}, "geoConfig": {}, "id": 1, "interleave": {}, "keyColumnDirections": ["ASC"], "keyColumnIds": [1], "keyColumnNames": ["id"], "name": "primary", "partitioning": {}, "sharded": {}, "unique": true, "version": 2}, "privileges": {"ownerProto": "root", "users": [{"privileges": 2, "userProto": "admin"}, {"privileges": 2, "userProto": "root"}], "version": 1}, "replacementOf": {"time": {}}, "unexposedParentSchemaId": 29, "version": "2"}}')
   WHERE id IN (SELECT id FROM system.namespace WHERE name='fktbl');
 REVOKE node FROM root;
 DELETE FROM system.users WHERE username = 'node';
 SELECT * FROM tbl;
 ----
-error: pq: internal error: relation "tbl" (53): missing fk back reference "tbl_customer_fkey" to "tbl" from "fktbl"
+error: pq: internal error: relation "tbl" (55): missing fk back reference "tbl_customer_fkey" to "tbl" from "fktbl"
 errorcodes.XX000
 sql.schema.validation_errors.read.cross_references.relation
 
@@ -30,13 +32,13 @@ CREATE TYPE greeting AS ENUM('hello', 'hi');
 INSERT INTO system.users VALUES ('node', NULL, true);
 GRANT node TO root;
 UPDATE system.descriptor
-  SET descriptor=decode('1a5d0832101d1a0020362800320e0a0140120568656c6c6f18002000320b0a018012026869180020004037480152006800722a0a090a0561646d696e10020a0b0a067075626c69631080040a080a04726f6f7410021204726f6f7418017a00', 'hex')
+  SET descriptor=crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', '  {"type": {"arrayTypeId": 57, "enumMembers": [{"logicalRepresentation": "hello", "physicalRepresentation": "QA=="}, {"logicalRepresentation": "hi", "physicalRepresentation": "gA=="}], "id": 56, "modificationTime": {}, "parentId": 50, "parentSchemaId": 29, "privileges": {"ownerProto": "root", "users": [{"privileges": 2, "userProto": "admin"}, {"privileges": 512, "userProto": "public"}, {"privileges": 2, "userProto": "root"}], "version": 1}, "version": "1"}}')
   WHERE id IN (SELECT id FROM system.namespace WHERE name='greeting');
 REVOKE node FROM root;
 DELETE FROM system.users WHERE username = 'node';
 SELECT 'hi'::greeting
 ----
-error: pq: type "" (54): empty type name
+error: pq: type "" (56): empty type name
 errorcodes.42601
 sql.schema.validation_errors.read.self.type
 
@@ -47,7 +49,7 @@ BEGIN;
 ALTER TABLE t DROP CONSTRAINT t_pkey;
 COMMIT;
 ----
-error: pq: relation "t" (56): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
+error: pq: relation "t" (58): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 errorcodes.0A000
 sql.schema.validation_errors.write.pre_txn_commit.relation
 unimplemented.#48026

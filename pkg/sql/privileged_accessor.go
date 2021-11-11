@@ -29,10 +29,10 @@ import (
 // TODO(sqlexec): make this work for any arbitrary schema.
 // This currently only works for public schemas and databases.
 func (p *planner) LookupNamespaceID(
-	ctx context.Context, parentID int64, name string,
+	ctx context.Context, parentID int64, parentSchemaID int64, name string,
 ) (tree.DInt, bool, error) {
 	query := fmt.Sprintf(
-		`SELECT id FROM [%d AS namespace] WHERE "parentID" = $1 AND "parentSchemaID" IN (0, 29) AND name = $2`,
+		`SELECT id FROM [%d AS namespace] WHERE "parentID" = $1 AND "parentSchemaID" = $2 AND name = $3`,
 		keys.NamespaceTableID,
 	)
 	r, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
@@ -42,6 +42,7 @@ func (p *planner) LookupNamespaceID(
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		query,
 		parentID,
+		parentSchemaID,
 		name,
 	)
 	if err != nil {

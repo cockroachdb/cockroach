@@ -124,7 +124,7 @@ func getShowZoneConfigRow(
 		}
 	}
 
-	targetID, err := resolveZone(ctx, p.ExecCfg().Codec, p.txn, &zoneSpecifier)
+	targetID, err := resolveZone(ctx, p.ExecCfg().Codec, p.txn, &zoneSpecifier, p.ExecCfg().Settings.Version)
 	if err != nil {
 		return nil, err
 	}

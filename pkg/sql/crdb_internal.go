@@ -366,6 +366,7 @@ CREATE TABLE crdb_internal.tables (
 			}
 			dbNames := make(map[descpb.ID]string)
 			scNames := make(map[descpb.ID]string)
+			// TODO(richardjcai): Remove this case for keys.PublicSchemaID in 22.2.
 			scNames[keys.PublicSchemaID] = catconstants.PublicSchemaName
 			// Record database descriptors for name lookups.
 			for _, desc := range descs {
@@ -2302,28 +2303,40 @@ CREATE TABLE crdb_internal.create_schema_statements (
 )
 `,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachSchema(ctx, p, db, func(schemaDesc catalog.SchemaDescriptor) error {
-			switch schemaDesc.SchemaKind() {
-			case catalog.SchemaUserDefined:
-				node := &tree.CreateSchema{
-					Schema: tree.ObjectNamePrefix{
-						SchemaName:     tree.Name(schemaDesc.GetName()),
-						ExplicitSchema: true,
-					},
-				}
-				if err := addRow(
-					tree.NewDInt(tree.DInt(db.GetID())),         // database_id
-					tree.NewDString(db.GetName()),               // database_name
-					tree.NewDString(schemaDesc.GetName()),       // schema_name
-					tree.NewDInt(tree.DInt(schemaDesc.GetID())), // descriptor_id (schema_id)
-					tree.NewDString(tree.AsString(node)),        // create_statement
-				); err != nil {
-					return err
-				}
-
+		var dbDescs []catalog.DatabaseDescriptor
+		if db == nil {
+			var err error
+			dbDescs, err = p.Descriptors().GetAllDatabaseDescriptors(ctx, p.Txn())
+			if err != nil {
+				return err
 			}
-			return nil
-		})
+		} else {
+			dbDescs = append(dbDescs, db)
+		}
+		for _, db := range dbDescs {
+			return forEachSchema(ctx, p, db, func(schemaDesc catalog.SchemaDescriptor) error {
+				switch schemaDesc.SchemaKind() {
+				case catalog.SchemaUserDefined:
+					node := &tree.CreateSchema{
+						Schema: tree.ObjectNamePrefix{
+							SchemaName:     tree.Name(schemaDesc.GetName()),
+							ExplicitSchema: true,
+						},
+					}
+					if err := addRow(
+						tree.NewDInt(tree.DInt(db.GetID())),         // database_id
+						tree.NewDString(db.GetName()),               // database_name
+						tree.NewDString(schemaDesc.GetName()),       // schema_name
+						tree.NewDInt(tree.DInt(schemaDesc.GetID())), // descriptor_id (schema_id)
+						tree.NewDString(tree.AsString(node)),        // create_statement
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		}
+		return nil
 	},
 }
 
@@ -3223,6 +3236,7 @@ CREATE TABLE crdb_internal.zones (
 			return err
 		}
 		resolveID := func(id uint32) (parentID, parentSchemaID uint32, name string, err error) {
+			// TODO(richardjcai): Remove logic for keys.PublicSchemaID in 22.2.
 			if id == keys.PublicSchemaID {
 				return 0, 0, string(tree.PublicSchemaName), nil
 			}

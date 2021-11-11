@@ -326,7 +326,12 @@ func TestErrorOnRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const targetKeyString string = "/Table/53/1/1/0"
+	// We can't get the tableID programmatically here.
+	// The table id can be retrieved by doing.
+	// CREATE DATABASE test;
+	// CREATE TABLE test.t();
+	// SELECT id FROM system.namespace WHERE name = 't' AND "parentID" != 1
+	const targetKeyString string = "/Table/56/1/1/0"
 	var injectedErr int64
 
 	// We're going to inject an error into our EndTxn.
@@ -528,7 +533,12 @@ func TestQueryProgress(t *testing.T) {
 	var queryRunningAtomic, scannedBatchesAtomic int64
 	stalled, unblock := make(chan struct{}), make(chan struct{})
 
-	tableKey := keys.SystemSQLCodec.TablePrefix(keys.MinNonPredefinedUserDescID + 1)
+	// We can't get the tableID programmatically here.
+	// The table id can be retrieved by doing.
+	// CREATE DATABASE test;
+	// CREATE TABLE test.t();
+	// SELECT id FROM system.namespace WHERE name = 't' AND "parentID" != 1
+	tableKey := keys.SystemSQLCodec.TablePrefix(56)
 	tableSpan := roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 
 	// Install a store filter which, if queryRunningAtomic is 1, will count scan

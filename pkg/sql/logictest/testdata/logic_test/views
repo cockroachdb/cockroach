@@ -1,11 +1,11 @@
 statement ok
 SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
 
-# NOTE: Keep this table at the beginning of the file to ensure that its numeric
-#       reference is 53 (the numeric reference of the first table). If the
-#       numbering scheme in cockroach changes, this test will break.
 statement ok
 CREATE TABLE t (a INT PRIMARY KEY, b INT)
+
+let $t_id
+SELECT id FROM system.namespace WHERE name='t'
 
 statement ok
 INSERT INTO t VALUES (1, 99), (2, 98), (3, 97)
@@ -284,7 +284,7 @@ user root
 
 # Ensure that views work over tables identified by numeric reference.
 statement ok
-CREATE VIEW num_ref_view AS SELECT a, b FROM [53 AS t]
+CREATE VIEW num_ref_view AS SELECT a, b FROM [$t_id AS t]
 
 statement ok
 GRANT SELECT ON num_ref_view TO testuser
@@ -1148,7 +1148,7 @@ b
 subtest view-cascade-nesting
 
 statement ok
-CREATE TABLE t1nest (id INT PRIMARY KEY, name varchar(256))
+CREATE TABLE t1nest (id INT PRIMARY KEY, name varchar(2$t_id))
 
 statement ok
 CREATE VIEW v1nest AS (SELECT name FROM t1nest)

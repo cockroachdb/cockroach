@@ -387,7 +387,7 @@ CREATE TEMP TABLE t2 (temp int);
 		lease := leaseManager.names.get(
 			context.Background(),
 			tableDesc.GetParentID(),
-			descpb.ID(keys.PublicSchemaID),
+			tableDesc.GetParentSchemaID(),
 			tableName,
 			s.Clock().Now(),
 		)
@@ -438,43 +438,6 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	lease := leaseManager.names.get(
 		context.Background(),
 		tableDesc.GetParentID(),
-		tableDesc.GetParentSchemaID(),
-		"test2",
-		s.Clock().Now(),
-	)
-	if lease == nil {
-		t.Fatalf("new name not found in cache")
-	}
-	if lease.GetID() != tableDesc.GetID() {
-		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.GetID(), tableDesc.GetID())
-	}
-	lease.Release(context.Background())
-
-	// Rename to a different database.
-	if _, err := db.Exec("ALTER TABLE t.test2 RENAME TO t1.test2;"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Re-read the descriptor, to get the new ParentID.
-	newTableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t1", "test2")
-	if tableDesc.GetParentID() == newTableDesc.GetParentID() {
-		t.Fatalf("database didn't change")
-	}
-
-	// Check that the cache has been updated.
-	if leaseManager.names.get(
-		context.Background(),
-		tableDesc.GetParentID(),
-		tableDesc.GetParentSchemaID(),
-		"test2",
-		s.Clock().Now(),
-	) != nil {
-		t.Fatalf("old name still in cache")
-	}
-
-	lease = leaseManager.names.get(
-		context.Background(),
-		newTableDesc.GetParentID(),
 		tableDesc.GetParentSchemaID(),
 		"test2",
 		s.Clock().Now(),

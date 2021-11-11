@@ -670,13 +670,20 @@ user root
 statement ok
 REVOKE admin FROM newgroup
 
+statement ok
+CREATE SCHEMA db2.s1;
+
 user testuser
 
 statement error user testuser does not have SELECT privilege on relation role_members
 SELECT * FROM system.role_members
 
-statement error user testuser does not have CREATE privilege on database db2
+# This doesn't error because testuser has CREATE privilege on db2.public.
+statement ok
 CREATE TABLE db2.foo (k int);
+
+statement error pq: user testuser does not have CREATE privilege on schema s1
+CREATE TABLE db2.s1.foo (k int);
 
 user root
 
@@ -700,9 +707,6 @@ db2            admin     ALL
 db2            newgroup  ALL
 db2            public    CONNECT
 db2            root      ALL
-
-statement ok
-CREATE TABLE db2.foo (k int);
 
 statement ok
 INSERT INTO db2.foo VALUES (1),(2),(3);

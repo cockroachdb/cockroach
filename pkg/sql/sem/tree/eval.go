@@ -3344,7 +3344,7 @@ type PrivilegedAccessor interface {
 	// Returns the id, a bool representing whether the namespace exists, and an error
 	// if there is one.
 	LookupNamespaceID(
-		ctx context.Context, parentID int64, name string,
+		ctx context.Context, parentID int64, parentSchemaID int64, name string,
 	) (DInt, bool, error)
 
 	// LookupZoneConfigByNamespaceID returns the zone config given a namespace id.

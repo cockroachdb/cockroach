@@ -44,7 +44,9 @@ func TestDatabaseDescriptor(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
 	codec := keys.SystemSQLCodec
-	expectedCounter := int64(keys.MinNonPredefinedUserDescID)
+	// 54 is the first available id after defaultdb/postgres and their public
+	// schemas are allocated ids.
+	expectedCounter := int64(54)
 
 	// Test values before creating the database.
 	// descriptor ID counter.
@@ -84,7 +86,9 @@ func TestDatabaseDescriptor(t *testing.T) {
 
 	// Even though the CREATE above failed, the counter is still incremented
 	// (that's performed non-transactionally).
-	expectedCounter++
+	// We increment the counter by two since the create database allocates an
+	// id for both the database descriptor and it's public schema descriptor.
+	expectedCounter += 2
 
 	if ir, err := kvDB.Get(ctx, codec.DescIDSequenceKey()); err != nil {
 		t.Fatal(err)
@@ -119,7 +123,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
 	}
-	expectedCounter++
+	expectedCounter += 2
 
 	// Check keys again.
 	// descriptor ID counter.

@@ -11,36 +11,36 @@ DROP VIEW defaultdb.v1
 ----
 Stage 1 of 4
   transitions:
-    [View:{DescID: 53}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 53
+      DescID: 55
 Stage 2 of 4
   transitions:
-    [Namespace:{DescID: 53, Name: v1}, PUBLIC, DROP] -> ABSENT
+    [Namespace:{DescID: 55, Name: v1}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.DrainDescriptorName
-      TableID: 53
+      TableID: 55
 Stage 3 of 4 (non-revertible)
   transitions:
-    [View:{DescID: 53}, TXN_DROPPED, DROP] -> DROPPED
-    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescID: 53
+      DescID: 55
     *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 53
-      TableID: 52
+      DependedOnBy: 55
+      TableID: 54
 Stage 4 of 4 (non-revertible)
   transitions:
-    [View:{DescID: 53}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 55}, DROPPED, DROP] -> ABSENT
   ops:
     *scop.LogEvent
-      DescID: 53
+      DescID: 55
       Direction: 2
       Element:
         view:
-          tableId: 53
+          tableId: 55
       Metadata:
         Statement: DROP VIEW defaultdb.v1
         TargetMetadata:
@@ -48,21 +48,21 @@ Stage 4 of 4 (non-revertible)
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
-      DescID: 53
+      DescID: 55
 
 deps
 DROP VIEW defaultdb.v1
 ----
-- from: [Namespace:{DescID: 53, Name: v1}, ABSENT]
-  to:   [View:{DescID: 53}, DROPPED]
+- from: [Namespace:{DescID: 55, Name: v1}, ABSENT]
+  to:   [View:{DescID: 55}, DROPPED]
   kind: HappensAfter
   rule: namespace needs descriptor to be dropped
-- from: [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT]
-  to:   [View:{DescID: 53}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
+  to:   [View:{DescID: 55}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [View:{DescID: 53}, ABSENT]
-  to:   [Namespace:{DescID: 53, Name: v1}, ABSENT]
+- from: [View:{DescID: 55}, ABSENT]
+  to:   [Namespace:{DescID: 55, Name: v1}, ABSENT]
   kind: HappensAfter
   rule: descriptor can only be cleaned up once the name is drained
 
@@ -91,71 +91,58 @@ DROP VIEW defaultdb.v1 CASCADE
 ----
 Stage 1 of 4
   transitions:
-    [View:{DescID: 53}, PUBLIC, DROP] -> TXN_DROPPED
-    [View:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
     [View:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
     [View:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
-    [View:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
   ops:
-    *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 53
-    *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 54
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 56
     *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 59
+      DescID: 57
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 58
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 61
 Stage 2 of 4
   transitions:
-    [Namespace:{DescID: 53, Name: v1}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 54, Name: v2}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 55, Name: v3}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 56, Name: v4}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 59, Name: v5}, PUBLIC, DROP] -> ABSENT
+    [Namespace:{DescID: 55, Name: v1}, PUBLIC, DROP] -> ABSENT
+    [Namespace:{DescID: 56, Name: v2}, PUBLIC, DROP] -> ABSENT
+    [Namespace:{DescID: 57, Name: v3}, PUBLIC, DROP] -> ABSENT
+    [Namespace:{DescID: 58, Name: v4}, PUBLIC, DROP] -> ABSENT
+    [Namespace:{DescID: 61, Name: v5}, PUBLIC, DROP] -> ABSENT
   ops:
-    *scop.DrainDescriptorName
-      TableID: 53
-    *scop.DrainDescriptorName
-      TableID: 54
     *scop.DrainDescriptorName
       TableID: 55
     *scop.DrainDescriptorName
       TableID: 56
     *scop.DrainDescriptorName
-      TableID: 59
+      TableID: 57
+    *scop.DrainDescriptorName
+      TableID: 58
+    *scop.DrainDescriptorName
+      TableID: 61
 Stage 3 of 4 (non-revertible)
   transitions:
-    [View:{DescID: 53}, TXN_DROPPED, DROP] -> DROPPED
-    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, PUBLIC, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
-    [View:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
-    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 56}, TXN_DROPPED, DROP] -> DROPPED
-    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
-    [View:{DescID: 59}, TXN_DROPPED, DROP] -> DROPPED
-    [ViewDependsOnType:{DescID: 59, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
-    [ViewDependsOnType:{DescID: 59, ReferencedDescID: 58}, PUBLIC, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED
+    [View:{DescID: 58}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 61}, TXN_DROPPED, DROP] -> DROPPED
+    [ViewDependsOnType:{DescID: 61, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
+    [ViewDependsOnType:{DescID: 61, ReferencedDescID: 60}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescID: 53
-    *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 53
-      TableID: 52
-    *scop.MarkDescriptorAsDropped
-      DescID: 54
-    *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 54
-      TableID: 53
-    *scop.MarkDescriptorAsDropped
       DescID: 55
-    *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 55
-      TableID: 53
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 55
       TableID: 54
@@ -163,54 +150,39 @@ Stage 3 of 4 (non-revertible)
       DescID: 56
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 56
-      TableID: 54
+      TableID: 55
     *scop.MarkDescriptorAsDropped
-      DescID: 59
+      DescID: 57
     *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 59
+      DependedOnBy: 57
+      TableID: 55
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 57
       TableID: 56
+    *scop.MarkDescriptorAsDropped
+      DescID: 58
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 58
+      TableID: 56
+    *scop.MarkDescriptorAsDropped
+      DescID: 61
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 61
+      TableID: 58
     *scop.RemoveTypeBackRef
-      DescID: 59
-      TypeID: 57
+      DescID: 61
+      TypeID: 59
     *scop.RemoveTypeBackRef
-      DescID: 59
-      TypeID: 58
+      DescID: 61
+      TypeID: 60
 Stage 4 of 4 (non-revertible)
   transitions:
-    [View:{DescID: 53}, DROPPED, DROP] -> ABSENT
-    [View:{DescID: 54}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 55}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 56}, DROPPED, DROP] -> ABSENT
-    [View:{DescID: 59}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 57}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 58}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 61}, DROPPED, DROP] -> ABSENT
   ops:
-    *scop.LogEvent
-      DescID: 53
-      Direction: 2
-      Element:
-        view:
-          tableId: 53
-      Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 53
-    *scop.LogEvent
-      DescID: 54
-      Direction: 2
-      Element:
-        view:
-          tableId: 54
-      Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 54
     *scop.LogEvent
       DescID: 55
       Direction: 2
@@ -240,11 +212,11 @@ Stage 4 of 4 (non-revertible)
     *scop.CreateGcJobForDescriptor
       DescID: 56
     *scop.LogEvent
-      DescID: 59
+      DescID: 57
       Direction: 2
       Element:
         view:
-          tableId: 59
+          tableId: 57
       Metadata:
         Statement: DROP VIEW defaultdb.v1 CASCADE
         TargetMetadata:
@@ -252,92 +224,120 @@ Stage 4 of 4 (non-revertible)
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
-      DescID: 59
+      DescID: 57
+    *scop.LogEvent
+      DescID: 58
+      Direction: 2
+      Element:
+        view:
+          tableId: 58
+      Metadata:
+        Statement: DROP VIEW defaultdb.v1 CASCADE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 58
+    *scop.LogEvent
+      DescID: 61
+      Direction: 2
+      Element:
+        view:
+          tableId: 61
+      Metadata:
+        Statement: DROP VIEW defaultdb.v1 CASCADE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 61
 
 deps
 DROP VIEW defaultdb.v1 CASCADE
 ----
-- from: [Namespace:{DescID: 53, Name: v1}, ABSENT]
-  to:   [View:{DescID: 53}, DROPPED]
-  kind: HappensAfter
-  rule: namespace needs descriptor to be dropped
-- from: [Namespace:{DescID: 54, Name: v2}, ABSENT]
-  to:   [View:{DescID: 54}, DROPPED]
-  kind: HappensAfter
-  rule: namespace needs descriptor to be dropped
-- from: [Namespace:{DescID: 55, Name: v3}, ABSENT]
+- from: [Namespace:{DescID: 55, Name: v1}, ABSENT]
   to:   [View:{DescID: 55}, DROPPED]
   kind: HappensAfter
   rule: namespace needs descriptor to be dropped
-- from: [Namespace:{DescID: 56, Name: v4}, ABSENT]
+- from: [Namespace:{DescID: 56, Name: v2}, ABSENT]
   to:   [View:{DescID: 56}, DROPPED]
   kind: HappensAfter
   rule: namespace needs descriptor to be dropped
-- from: [Namespace:{DescID: 59, Name: v5}, ABSENT]
-  to:   [View:{DescID: 59}, DROPPED]
+- from: [Namespace:{DescID: 57, Name: v3}, ABSENT]
+  to:   [View:{DescID: 57}, DROPPED]
   kind: HappensAfter
   rule: namespace needs descriptor to be dropped
-- from: [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT]
-  to:   [View:{DescID: 53}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT]
-  to:   [View:{DescID: 53}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT]
-  to:   [View:{DescID: 54}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, ABSENT]
-  to:   [View:{DescID: 53}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
-  to:   [View:{DescID: 54}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
+- from: [Namespace:{DescID: 58, Name: v4}, ABSENT]
+  to:   [View:{DescID: 58}, DROPPED]
+  kind: HappensAfter
+  rule: namespace needs descriptor to be dropped
+- from: [Namespace:{DescID: 61, Name: v5}, ABSENT]
+  to:   [View:{DescID: 61}, DROPPED]
+  kind: HappensAfter
+  rule: namespace needs descriptor to be dropped
 - from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
   to:   [View:{DescID: 55}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, ABSENT]
-  to:   [View:{DescID: 54}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
+  to:   [View:{DescID: 55}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, ABSENT]
+- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
   to:   [View:{DescID: 56}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, ABSENT]
+- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
+  to:   [View:{DescID: 55}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
+  to:   [View:{DescID: 57}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT]
   to:   [View:{DescID: 56}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, ABSENT]
-  to:   [View:{DescID: 59}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT]
+  to:   [View:{DescID: 57}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [View:{DescID: 53}, ABSENT]
-  to:   [Namespace:{DescID: 53, Name: v1}, ABSENT]
-  kind: HappensAfter
-  rule: descriptor can only be cleaned up once the name is drained
-- from: [View:{DescID: 54}, ABSENT]
-  to:   [Namespace:{DescID: 54, Name: v2}, ABSENT]
-  kind: HappensAfter
-  rule: descriptor can only be cleaned up once the name is drained
+- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT]
+  to:   [View:{DescID: 56}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT]
+  to:   [View:{DescID: 58}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT]
+  to:   [View:{DescID: 58}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT]
+  to:   [View:{DescID: 61}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
 - from: [View:{DescID: 55}, ABSENT]
-  to:   [Namespace:{DescID: 55, Name: v3}, ABSENT]
+  to:   [Namespace:{DescID: 55, Name: v1}, ABSENT]
   kind: HappensAfter
   rule: descriptor can only be cleaned up once the name is drained
 - from: [View:{DescID: 56}, ABSENT]
-  to:   [Namespace:{DescID: 56, Name: v4}, ABSENT]
+  to:   [Namespace:{DescID: 56, Name: v2}, ABSENT]
   kind: HappensAfter
   rule: descriptor can only be cleaned up once the name is drained
-- from: [View:{DescID: 59}, ABSENT]
-  to:   [Namespace:{DescID: 59, Name: v5}, ABSENT]
+- from: [View:{DescID: 57}, ABSENT]
+  to:   [Namespace:{DescID: 57, Name: v3}, ABSENT]
+  kind: HappensAfter
+  rule: descriptor can only be cleaned up once the name is drained
+- from: [View:{DescID: 58}, ABSENT]
+  to:   [Namespace:{DescID: 58, Name: v4}, ABSENT]
+  kind: HappensAfter
+  rule: descriptor can only be cleaned up once the name is drained
+- from: [View:{DescID: 61}, ABSENT]
+  to:   [Namespace:{DescID: 61, Name: v5}, ABSENT]
   kind: HappensAfter
   rule: descriptor can only be cleaned up once the name is drained

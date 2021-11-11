@@ -1,0 +1,8 @@
+statement error pq: cannot drop schema "public"
+DROP SCHEMA public
+
+statement ok
+CREATE DATABASE test2
+
+statement error pq: cannot drop schema "public"
+DROP SCHEMA test2.public

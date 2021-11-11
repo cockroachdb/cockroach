@@ -394,10 +394,14 @@ func (p *planner) resolveTableForZone(
 // must be properly normalized already. It is the caller's
 // responsibility to do this using e.g .resolveTableForZone().
 func resolveZone(
-	ctx context.Context, codec keys.SQLCodec, txn *kv.Txn, zs *tree.ZoneSpecifier,
+	ctx context.Context,
+	codec keys.SQLCodec,
+	txn *kv.Txn,
+	zs *tree.ZoneSpecifier,
+	version clusterversion.Handle,
 ) (descpb.ID, error) {
 	errMissingKey := errors.New("missing key")
-	id, err := zonepb.ResolveZoneSpecifier(zs,
+	id, err := zonepb.ResolveZoneSpecifier(ctx, zs,
 		func(parentID uint32, schemaID uint32, name string) (uint32, error) {
 			found, id, err := catalogkv.LookupObjectID(ctx, txn, codec,
 				descpb.ID(parentID), descpb.ID(schemaID), name)
@@ -409,6 +413,7 @@ func resolveZone(
 			}
 			return uint32(id), nil
 		},
+		version,
 	)
 	if err != nil {
 		if errors.Is(err, errMissingKey) {
