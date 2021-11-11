@@ -146,18 +146,18 @@ func MaybeWithDatabaseRegionConfig(regionConfig *multiregion.RegionConfig) NewIn
 func NewInitial(
 	id descpb.ID, name string, owner security.SQLUsername, options ...NewInitialOption,
 ) *Mutable {
-	return NewInitialWithPrivileges(
+	return newInitialWithPrivileges(
 		id,
 		name,
-		descpb.NewDefaultPrivilegeDescriptor(owner),
+		descpb.NewBaseDatabasePrivilegeDescriptor(owner),
 		catprivilege.MakeNewDefaultPrivilegeDescriptor(),
 		options...,
 	)
 }
 
-// NewInitialWithPrivileges constructs a new Mutable for an initial version
+// newInitialWithPrivileges constructs a new Mutable for an initial version
 // from an id and name and custom privileges.
-func NewInitialWithPrivileges(
+func newInitialWithPrivileges(
 	id descpb.ID,
 	name string,
 	privileges *descpb.PrivilegeDescriptor,

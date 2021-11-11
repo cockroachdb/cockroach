@@ -192,7 +192,7 @@ func makeTable(useColFamilies bool) catalog.TableDescriptor {
 	var testTableDesc = descpb.TableDescriptor{
 		Name:       "abcd",
 		ID:         descpb.ID(tableID),
-		Privileges: descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
+		Privileges: descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 		Version:    1,
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "a", ID: 1, Type: types.Int},

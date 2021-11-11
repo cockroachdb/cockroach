@@ -78,7 +78,7 @@ func TestAllocateIDs(t *testing.T) {
 				return idx
 			}(),
 		},
-		Privileges:    descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
+		Privileges:    descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 		FormatVersion: descpb.InterleavedFormatVersion,
 	}).BuildCreatedMutableTable()
 	if err := desc.AllocateIDs(ctx); err != nil {
@@ -126,7 +126,7 @@ func TestAllocateIDs(t *testing.T) {
 				EncodingType:        descpb.PrimaryIndexEncoding,
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion},
 		},
-		Privileges:     descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
+		Privileges:     descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 		NextColumnID:   4,
 		NextFamilyID:   1,
 		NextIndexID:    5,
@@ -276,7 +276,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "foo"},
 				},
-				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+				Privileges: descpb.NewBasePrivilegeDescriptor(security.RootUserName()),
 			},
 			expUpgrade: true,
 			verify: func(i int, desc catalog.TableDescriptor) {
@@ -292,7 +292,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "foo"},
 				},
-				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+				Privileges: descpb.NewBasePrivilegeDescriptor(security.RootUserName()),
 			},
 			expUpgrade: false,
 			verify:     nil,
@@ -373,7 +373,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					EncodingType:        descpb.PrimaryIndexEncoding,
 					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 				},
-				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+				Privileges: descpb.NewBasePrivilegeDescriptor(security.RootUserName()),
 			},
 		},
 		{ // 2
@@ -418,7 +418,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						Version:             descpb.SecondaryIndexFamilyFormatVersion,
 					},
 				},
-				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+				Privileges: descpb.NewBasePrivilegeDescriptor(security.RootUserName()),
 			},
 			upgraded: nil,
 		},
@@ -548,7 +548,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 					},
 				},
-				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+				Privileges: descpb.NewBasePrivilegeDescriptor(security.RootUserName()),
 			},
 		},
 	}
@@ -603,7 +603,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 			{Name: "c", Type: types.Int}},
 		FormatVersion: descpb.InterleavedFormatVersion,
 		Indexes:       []descpb.IndexDescriptor{makeIndexDescriptor("d", []string{"b", "a"})},
-		Privileges:    descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
+		Privileges:    descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 		OutboundFKs: []descpb.ForeignKeyConstraint{
 			{
 				Name:              "fk",
