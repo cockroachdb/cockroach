@@ -1540,7 +1540,16 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	var descColumnIDs util.FastIntMap
 	colID := 0
 	for _, col := range info.desc.AllColumns() {
-		if col.Public() || returnMutations || (col.IsSystemColumn() && info.containsSystemColumns) {
+		var addCol bool
+		if col.IsSystemColumn() {
+			// If it is a system column, we want to treat it carefully because
+			// its ID is a very large number, so adding it into util.FastIntMap
+			// will incur an allocation.
+			addCol = info.containsSystemColumns
+		} else {
+			addCol = col.Public() || returnMutations
+		}
+		if addCol {
 			descColumnIDs.Set(colID, int(col.GetID()))
 			colID++
 		}
