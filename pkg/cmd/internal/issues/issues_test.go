@@ -183,6 +183,10 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 		}},
 	}
 
+	const rewrite = false
+	// You can set `rewrite=true` above and re-run.
+	t.Log("hint: this test supports rewriting, jump to this line to learn how")
+
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
 			for _, foundIssue := range []string{
@@ -276,13 +280,13 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 						repro = HelpCommandAsLink(c.reproTitle, c.reproURL)
 					}
 					req := PostRequest{
-						PackageName: c.packageName,
-						TestName:    c.testName,
-						Message:     c.message,
-						Artifacts:   c.artifacts,
-						Mention:     []string{"@nights-watch"},
-						HelpCommand: repro,
-						ExtraLabels: []string{"release-blocker"},
+						PackageName:     c.packageName,
+						TestName:        c.testName,
+						Message:         c.message,
+						Artifacts:       c.artifacts,
+						MentionOnCreate: []string{"@nights-watch"},
+						HelpCommand:     repro,
+						ExtraLabels:     []string{"release-blocker"},
 					}
 					require.NoError(t, p.post(ctx, UnitTestFormatter, req))
 					path := filepath.Join("testdata", "post", c.name+"-"+foundIssue+".txt")
@@ -292,7 +296,6 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 						exp, act := string(b), buf.String()
 						failed = failed || !assert.Equal(t, exp, act)
 					}
-					const rewrite = false
 					if failed && rewrite {
 						_ = os.MkdirAll(filepath.Dir(path), 0755)
 						require.NoError(t, ioutil.WriteFile(path, []byte(buf.String()), 0644))
