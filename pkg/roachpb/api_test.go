@@ -14,9 +14,12 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
+	proto "github.com/gogo/protobuf/proto"
+	"github.com/golang/protobuf/descriptor"
 	"github.com/stretchr/testify/require"
 )
 
@@ -304,5 +307,41 @@ func TestTenantConsumptionAddSub(t *testing.T) {
 	c.Sub(&b)
 	if exp := (TenantConsumption{}); c != exp {
 		t.Errorf("expected\n%#v\ngot\n%#v", exp, c)
+	}
+}
+
+// TestFlagDeps tests that flag dependencies as specified in flagDeps are
+// satisfied by all requests.
+func TestFlagDeps(t *testing.T) {
+	// Any non-zero-valued request variants that conditionally affect flags.
+	reqVariants := []Request{
+		&DeleteRangeRequest{Inline: true},
+		&GetRequest{KeyLocking: lock.Exclusive},
+		&ReverseScanRequest{KeyLocking: lock.Exclusive},
+		&ScanRequest{KeyLocking: lock.Exclusive},
+	}
+
+	// This will be more pleasant with the v2 Go Protobuf API that has reflection.
+	reqTypes := []Request{}
+	_, desc := descriptor.MessageDescriptorProto(&RequestUnion{})
+	for _, field := range desc.Field {
+		require.NotNil(t, field.TypeName, "found field with nil TypeName: %s", field)
+		require.NotZero(t, *field.TypeName, "found field with empty TypeName: %s", field)
+		name := (*field.TypeName)[1:]
+		msgType := proto.MessageType(name).Elem()
+		require.NotNil(t, msgType, "unknown message type %s", name)
+		reqTypes = append(reqTypes, reflect.New(msgType).Interface().(Request))
+	}
+
+	for _, req := range append(reqTypes, reqVariants...) {
+		flags := req.flags()
+		for flag, deps := range flagDeps {
+			if flags&flag != 0 {
+				for _, dep := range deps {
+					require.NotZero(t, flags&dep, "%s has flag %d, but not dependant flag %d",
+						reflect.TypeOf(req).Elem().Name(), flag, dep)
+				}
+			}
+		}
 	}
 }
