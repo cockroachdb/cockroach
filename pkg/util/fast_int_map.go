@@ -196,14 +196,12 @@ func (m FastIntMap) ForEach(fn func(key, val int)) {
 	}
 }
 
-// String prints out the contents of the map in the following format:
-//   map[key1:val1 key2:val2 ...]
+// ContentsIntoBuffer writes the contents of the map into the provided buffer in
+// the following format:
+//   key1:val1 key2:val2 ...
 // The keys are in ascending order.
-func (m FastIntMap) String() string {
-	var buf bytes.Buffer
-	buf.WriteString("map[")
+func (m FastIntMap) ContentsIntoBuffer(buf *bytes.Buffer) {
 	first := true
-
 	if m.large != nil {
 		keys := make([]int, 0, len(m.large))
 		for k := range m.large {
@@ -215,7 +213,7 @@ func (m FastIntMap) String() string {
 				buf.WriteByte(' ')
 			}
 			first = false
-			fmt.Fprintf(&buf, "%d:%d", k, m.large[k])
+			fmt.Fprintf(buf, "%d:%d", k, m.large[k])
 		}
 	} else {
 		for i := 0; i < numVals; i++ {
@@ -224,10 +222,19 @@ func (m FastIntMap) String() string {
 					buf.WriteByte(' ')
 				}
 				first = false
-				fmt.Fprintf(&buf, "%d:%d", i, val)
+				fmt.Fprintf(buf, "%d:%d", i, val)
 			}
 		}
 	}
+}
+
+// String prints out the contents of the map in the following format:
+//   map[key1:val1 key2:val2 ...]
+// The keys are in ascending order.
+func (m FastIntMap) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("map[")
+	m.ContentsIntoBuffer(&buf)
 	buf.WriteByte(']')
 	return buf.String()
 }
