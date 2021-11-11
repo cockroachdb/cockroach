@@ -1245,6 +1245,11 @@ func BenchmarkConcurrentSelect1(b *testing.B) {
 		b.Run(fmt.Sprintf("concurrentConn=%d", numOfConcurrentConn), func(b *testing.B) {
 			s, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
 			sqlServer := s.SQLServer().(*sql.Server)
+			_, err := db.Exec("SET CLUSTER SETTING sql.contention.txn_id_cache.max_size='1MB'")
+			if err != nil {
+				b.Fatalf("unable to set cluster setting %s", err)
+			}
+
 			defer s.Stopper().Stop(context.TODO())
 
 			starter := make(chan struct{})

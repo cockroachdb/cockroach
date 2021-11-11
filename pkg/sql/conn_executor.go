@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -64,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"golang.org/x/net/trace"
@@ -280,6 +282,10 @@ type Server struct {
 	// node as gateway node.
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
+	// txnIDCache stores the mapping from transaction ID to transaction
+	//fingerprint IDs for all recently executed.
+	txnIDCache *contention.TxnIDCache
+
 	// Metrics is used to account normal queries.
 	Metrics Metrics
 
@@ -320,6 +326,10 @@ type Metrics struct {
 type ServerMetrics struct {
 	// StatsMetrics contains metrics for SQL statistics collection.
 	StatsMetrics StatsMetrics
+
+	// ContentionSubsystemMetrics contains metrics related to contention
+	// subsystem.
+	ContentionSubsystemMetrics contention.Metrics
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -362,6 +372,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 			ChannelSize: idxusage.DefaultChannelSize,
 			Setting:     cfg.Settings,
 		}),
+		txnIDCache: contention.NewTxnIDCache(cfg.Settings, &serverMetrics.ContentionSubsystemMetrics),
 	}
 
 	telemetryLoggingMetrics := &TelemetryLoggingMetrics{}
@@ -452,6 +463,7 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 				MetaSQLTxnStatsCollectionOverhead, 6*metricsSampleInterval,
 			),
 		},
+		ContentionSubsystemMetrics: contention.NewMetrics(),
 	}
 }
 
@@ -486,6 +498,11 @@ func (s *Server) GetSQLStatsProvider() sqlstats.Provider {
 // sql.Server's reported SQL Stats.
 func (s *Server) GetReportedSQLStatsController() *sslocal.Controller {
 	return s.reportedStatsController
+}
+
+// GetTxnIDCache returns the contention.TxnIDCache for the current sql.Server.
+func (s *Server) GetTxnIDCache() *contention.TxnIDCache {
+	return s.txnIDCache
 }
 
 // GetScrubbedStmtStats returns the statement statistics by app, with the
@@ -1018,7 +1035,8 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.state.finishExternalTxn()
 	}
 
-	if err := ex.resetExtraTxnState(ctx, txnEv); err != nil {
+	// Since we are closing connExecutor, no need to fetch txnID.
+	if err := ex.resetExtraTxnState(ctx, txnEv, uuid.UUID{}); err != nil {
 		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 	}
 
@@ -1516,7 +1534,9 @@ func (ns *prepStmtNamespace) resetTo(
 
 // resetExtraTxnState resets the fields of ex.extraTxnState when a transaction
 // commits, rolls back or restarts.
-func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
+func (ex *connExecutor) resetExtraTxnState(
+	ctx context.Context, ev txnEvent, txnID uuid.UUID,
+) error {
 	ex.extraTxnState.jobs = nil
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 	ex.extraTxnState.schemaChangerState = SchemaChangerState{
@@ -1542,7 +1562,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 			delete(ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals, name)
 		}
 		ex.extraTxnState.savepoints.clear()
-		ex.onTxnFinish(ctx, ev)
+		ex.onTxnFinish(ctx, ev, txnID)
 	case txnRestart:
 		ex.onTxnRestart()
 		ex.state.mu.Lock()
@@ -2173,8 +2193,8 @@ func (ex *connExecutor) execCopyIn(
 		}
 	} else {
 		txnOpt = copyTxnOpt{
-			resetExtraTxnState: func(ctx context.Context) error {
-				return ex.resetExtraTxnState(ctx, noEvent)
+			resetExtraTxnState: func(ctx context.Context, txnID uuid.UUID) error {
+				return ex.resetExtraTxnState(ctx, noEvent, txnID)
 			},
 		}
 	}
@@ -2598,6 +2618,14 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		txnIsOpen = true
 	}
 
+	// TODO(azhng): wip: should we be smarter about this to reduce locking?
+	ex.state.mu.RLock()
+	var txnID uuid.UUID
+	if ex.state.mu.txn != nil {
+		txnID = ex.state.mu.txn.ID()
+	}
+	ex.state.mu.RUnlock()
+
 	ex.mu.Lock()
 	err := ex.machine.ApplyWithPayload(withStatement(ex.Ctx(), ex.curStmtAST), ev, payload)
 	ex.mu.Unlock()
@@ -2718,7 +2746,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 		fallthrough
 	case txnRestart, txnRollback:
-		if err := ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent); err != nil {
+		if err := ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, txnID); err != nil {
 			return advanceInfo{}, err
 		}
 	default:
