@@ -1233,7 +1233,7 @@ var informationSchemaStatisticsTable = virtualSchemaTable{
 							if _, isImplicit := implicitCols[col]; isImplicit {
 								// We add a row for each implicit column of index.
 								if err := appendRow(index, col, sequence,
-									indexDirectionAsc, false, true); err != nil {
+									indexDirectionAsc, index.IsUnique(), true); err != nil {
 									return err
 								}
 								sequence++
