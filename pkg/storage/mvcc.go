@@ -2967,7 +2967,7 @@ func (s *separatedIntentAndVersionIter) ValueProto(msg protoutil.Message) error 
 
 func (s *separatedIntentAndVersionIter) IsCurIntent() bool {
 	if s.atMVCCIter {
-		panic(errors.AssertionFailedf("IsCurIntentSeparated called when not positioned at intent"))
+		panic(errors.AssertionFailedf("IsCurIntent called when not positioned at intent"))
 	}
 	return true
 }
