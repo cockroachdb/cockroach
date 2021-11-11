@@ -503,8 +503,6 @@ type Reader interface {
 type PrecedingIntentState int
 
 const (
-	// ExistingIntentInterleaved specifies that there is an existing intent and
-	// that it is interleaved.
 	// ExistingIntentSeparated specifies that there is an existing intent and
 	// that it is separated (in the lock table key space).
 	ExistingIntentSeparated PrecedingIntentState = 1

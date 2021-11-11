@@ -31,9 +31,7 @@ type intentDemuxWriter struct {
 	w Writer
 }
 
-func wrapIntentWriter(
-	ctx context.Context, w Writer,
-) intentDemuxWriter {
+func wrapIntentWriter(ctx context.Context, w Writer) intentDemuxWriter {
 	idw := intentDemuxWriter{w: w}
 	return idw
 }
