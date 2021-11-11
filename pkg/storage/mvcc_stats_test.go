@@ -209,8 +209,6 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 				IntentBytes:          vKeySize + vValSize, // 12+10 = 22
 				GCBytesAge:           0,
 			}
-			fmt.Println(aggMS)
-			fmt.Println(&expMS)
 			assertEq(t, engine, "after put", aggMS, &expMS)
 
 			// Now commit the intent, but with a timestamp gap (i.e. this is a
@@ -237,8 +235,6 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 				GCBytesAge: 0, // this was once erroneously negative
 			}
 
-			fmt.Println(aggMS)
-			fmt.Println("expagg", &expAggMS)
 			assertEq(t, engine, "after committing", aggMS, &expAggMS)
 		})
 	}

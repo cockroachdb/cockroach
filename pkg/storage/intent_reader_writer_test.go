@@ -88,7 +88,6 @@ func printEngContents(b *strings.Builder, eng Engine) {
 			break
 		}
 		if key.IsMVCCKey() {
-			fmt.Println("here")
 			var k MVCCKey
 			if k, err = key.ToMVCCKey(); err != nil {
 				fmt.Fprintf(b, "error: %s\n", err.Error())
@@ -235,7 +234,6 @@ func TestIntentDemuxWriter(t *testing.T) {
 					return err.Error()
 				}
 				state := readPrecedingIntentState(t, d)
-				// _ = readTxnDidNotUpdateMeta(t, d) // todo(bananabrick) : remove this
 				scratch, err = w.PutIntent(
 					context.Background(), key, val, state, txnUUID, scratch)
 				if err != nil {
@@ -256,8 +254,6 @@ func TestIntentDemuxWriter(t *testing.T) {
 				if err != nil {
 					return err.Error()
 				}
-				// todo: edit the test file here.
-				//fmt.Fprintf(&pw.b, "Return Value: separated-delta=%d\n", delta)
 				printEngContents(&pw.b, eng)
 				return pw.b.String()
 			case "clear-range":
