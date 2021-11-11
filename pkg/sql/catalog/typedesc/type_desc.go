@@ -570,6 +570,7 @@ func (desc *immutable) validateEnumMembers(vea catalog.ValidationErrorAccumulato
 func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	ids := catalog.MakeDescriptorIDSet(desc.GetReferencingDescriptorIDs()...)
 	ids.Add(desc.GetParentID())
+	// TODO(richardjcai): Remove logic for keys.PublicSchemaID in 22.2.
 	if desc.GetParentSchemaID() != keys.PublicSchemaID {
 		ids.Add(desc.GetParentSchemaID())
 	}
@@ -594,6 +595,7 @@ func (desc *immutable) ValidateCrossReferences(
 	}
 
 	// Check that the parent schema exists.
+	// TODO(richardjcai): Remove logic for keys.PublicSchemaID in 22.2.
 	if desc.GetParentSchemaID() != keys.PublicSchemaID {
 		schemaDesc, err := vdg.GetSchemaDescriptor(desc.GetParentSchemaID())
 		vea.Report(err)

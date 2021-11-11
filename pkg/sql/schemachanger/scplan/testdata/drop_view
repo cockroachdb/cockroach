@@ -11,18 +11,18 @@ DROP VIEW defaultdb.v1
 ----
 Stage 0
   *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 53
+    DescID: 55
 Stage 1 (non-revertible)
   *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 53
-    TableID: 52
+    DependedOnBy: 55
+    TableID: 54
   *scop.MarkDescriptorAsDropped
-    DescID: 53
+    DescID: 55
 Stage 2 (non-revertible)
   *scop.DrainDescriptorName
-    TableID: 53
+    TableID: 55
   *scop.CreateGcJobForDescriptor
-    DescID: 53
+    DescID: 55
 
 deps
 DROP VIEW defaultdb.v1
@@ -53,29 +53,16 @@ DROP VIEW defaultdb.v1 CASCADE
 ----
 Stage 0
   *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 53
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 54
-  *scop.MarkDescriptorAsDroppedSynthetically
     DescID: 55
   *scop.MarkDescriptorAsDroppedSynthetically
     DescID: 56
   *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 59
+    DescID: 57
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 58
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 61
 Stage 1 (non-revertible)
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 53
-    TableID: 52
-  *scop.MarkDescriptorAsDropped
-    DescID: 53
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 54
-    TableID: 53
-  *scop.MarkDescriptorAsDropped
-    DescID: 54
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 55
-    TableID: 53
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 55
     TableID: 54
@@ -83,76 +70,89 @@ Stage 1 (non-revertible)
     DescID: 55
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 56
-    TableID: 54
+    TableID: 55
   *scop.MarkDescriptorAsDropped
     DescID: 56
   *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 59
+    DependedOnBy: 57
+    TableID: 55
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 57
     TableID: 56
   *scop.MarkDescriptorAsDropped
-    DescID: 59
+    DescID: 57
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 58
+    TableID: 56
+  *scop.MarkDescriptorAsDropped
+    DescID: 58
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 61
+    TableID: 58
+  *scop.MarkDescriptorAsDropped
+    DescID: 61
   *scop.RemoveTypeBackRef
-    DescID: 59
-    TypeID: 57
+    DescID: 61
+    TypeID: 59
   *scop.RemoveTypeBackRef
-    DescID: 59
-    TypeID: 58
+    DescID: 61
+    TypeID: 60
 Stage 2 (non-revertible)
+  *scop.DrainDescriptorName
+    TableID: 57
+  *scop.CreateGcJobForDescriptor
+    DescID: 57
+  *scop.DrainDescriptorName
+    TableID: 56
+  *scop.CreateGcJobForDescriptor
+    DescID: 56
   *scop.DrainDescriptorName
     TableID: 55
   *scop.CreateGcJobForDescriptor
     DescID: 55
   *scop.DrainDescriptorName
-    TableID: 54
+    TableID: 61
   *scop.CreateGcJobForDescriptor
-    DescID: 54
+    DescID: 61
   *scop.DrainDescriptorName
-    TableID: 53
+    TableID: 58
   *scop.CreateGcJobForDescriptor
-    DescID: 53
-  *scop.DrainDescriptorName
-    TableID: 59
-  *scop.CreateGcJobForDescriptor
-    DescID: 59
-  *scop.DrainDescriptorName
-    TableID: 56
-  *scop.CreateGcJobForDescriptor
-    DescID: 56
+    DescID: 58
 
 deps
 DROP VIEW defaultdb.v1 CASCADE
 ----
-- from: [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT]
-  to:   [View:{DescID: 53}, DROPPED]
-- from: [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, ABSENT]
-  to:   [View:{DescID: 53}, DROPPED]
-- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
-  to:   [View:{DescID: 54}, DROPPED]
-- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, ABSENT]
-  to:   [View:{DescID: 54}, DROPPED]
-- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, ABSENT]
+- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
+  to:   [View:{DescID: 55}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
+  to:   [View:{DescID: 55}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT]
   to:   [View:{DescID: 56}, DROPPED]
-- from: [View:{DescID: 53}, ABSENT]
-  to:   [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT]
-- from: [View:{DescID: 53}, ABSENT]
-  to:   [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, ABSENT]
-- from: [View:{DescID: 53}, ABSENT]
-  to:   [View:{DescID: 54}, ABSENT]
-- from: [View:{DescID: 53}, ABSENT]
-  to:   [View:{DescID: 55}, ABSENT]
-- from: [View:{DescID: 54}, ABSENT]
-  to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
-- from: [View:{DescID: 54}, ABSENT]
-  to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, ABSENT]
-- from: [View:{DescID: 54}, ABSENT]
-  to:   [View:{DescID: 55}, ABSENT]
-- from: [View:{DescID: 54}, ABSENT]
+- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT]
+  to:   [View:{DescID: 56}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT]
+  to:   [View:{DescID: 58}, DROPPED]
+- from: [View:{DescID: 55}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
+- from: [View:{DescID: 55}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
+- from: [View:{DescID: 55}, ABSENT]
   to:   [View:{DescID: 56}, ABSENT]
+- from: [View:{DescID: 55}, ABSENT]
+  to:   [View:{DescID: 57}, ABSENT]
 - from: [View:{DescID: 56}, ABSENT]
-  to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT]
 - from: [View:{DescID: 56}, ABSENT]
-  to:   [View:{DescID: 59}, ABSENT]
-- from: [View:{DescID: 59}, ABSENT]
-  to:   [TypeReference:{DescID: 59, ReferencedDescID: 57}, ABSENT]
-- from: [View:{DescID: 59}, ABSENT]
-  to:   [TypeReference:{DescID: 59, ReferencedDescID: 58}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT]
+- from: [View:{DescID: 56}, ABSENT]
+  to:   [View:{DescID: 57}, ABSENT]
+- from: [View:{DescID: 56}, ABSENT]
+  to:   [View:{DescID: 58}, ABSENT]
+- from: [View:{DescID: 58}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT]
+- from: [View:{DescID: 58}, ABSENT]
+  to:   [View:{DescID: 61}, ABSENT]
+- from: [View:{DescID: 61}, ABSENT]
+  to:   [TypeReference:{DescID: 61, ReferencedDescID: 59}, ABSENT]
+- from: [View:{DescID: 61}, ABSENT]
+  to:   [TypeReference:{DescID: 61, ReferencedDescID: 60}, ABSENT]

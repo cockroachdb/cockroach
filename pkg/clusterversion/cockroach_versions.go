@@ -276,8 +276,9 @@ const (
 	// DrainingNamesMigration adds the migration which guarantees that no
 	// descriptors have draining names.
 	DrainingNamesMigration
+	// Public schema is backed by a descriptor.
+	PublicSchemasWithDescriptors
 
-	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
 	// *************************************************
@@ -473,7 +474,10 @@ var versionsSingleton = keyedVersions{
 		Key:     DrainingNamesMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 8},
 	},
-
+	{
+		Key:     PublicSchemasWithDescriptors,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 10},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

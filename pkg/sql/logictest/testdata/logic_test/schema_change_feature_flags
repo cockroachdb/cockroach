@@ -66,7 +66,7 @@ statement error pq: feature ALTER DATABASE is part of the schema change category
 ALTER DATABASE d RENAME TO r
 
 # Test REPARENT DATABASE
-statement error pq: feature REPARENT DATABASE is part of the schema change category, which was disabled by the database administrator
+statement error pq: cannot perform ALTER DATABASE CONVERT TO SCHEMA in version
 ALTER DATABASE d CONVERT TO SCHEMA WITH PARENT test
 
 statement ok

@@ -9,8 +9,9 @@ statement error pq: role/user "fake_user" does not exist
 ALTER TABLE t OWNER TO fake_user
 
 # Superusers can alter owner to any user which has CREATE privileges on the
-# parent schema (or in the case of the public schema on the parent database.)
-statement error pq: user testuser does not have CREATE privilege on database test
+# parent schema. This succeeds since all users have CREATE on the public schema
+# by default.
+statement ok
 ALTER TABLE t OWNER TO testuser
 
 statement error pq: user testuser does not have CREATE privilege on schema s
@@ -21,11 +22,9 @@ statement ok
 ALTER TABLE IF EXISTS does_not_exist OWNER TO testuser
 
 statement ok
-GRANT CREATE ON DATABASE test TO testuser, testuser2;
 GRANT CREATE ON SCHEMA s TO testuser, testuser2
 
 statement ok
-ALTER TABLE t OWNER TO testuser;
 ALTER TABLE s.t OWNER TO testuser;
 ALTER TABLE t OWNER TO root;
 ALTER TABLE s.t OWNER TO root

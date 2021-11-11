@@ -18,9 +18,9 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-Put /Table/53/1/1/0 -> /TUPLE/
-Del /Table/53/1/1/1/1
-Del /Table/53/1/1/2/1
+Put /Table/56/1/1/0 -> /TUPLE/
+Del /Table/56/1/1/1/1
+Del /Table/56/1/1/2/1
 fast path completed
 rows affected: 1
 
@@ -38,9 +38,9 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan            Scan /Table/55/1/2/0
-batch flow coordinator  CPut /Table/55/1/2/0 -> /TUPLE/2:2:Int/3
-batch flow coordinator  InitPut /Table/55/2/3/0 -> /BYTES/0x8a
+colbatchscan            Scan /Table/59/1/2/0
+batch flow coordinator  CPut /Table/59/1/2/0 -> /TUPLE/2:2:Int/3
+batch flow coordinator  InitPut /Table/59/2/3/0 -> /BYTES/0x8a
 batch flow coordinator  fast path completed
 exec stmt               rows affected: 1
 
@@ -51,9 +51,9 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan            Scan /Table/55/1/1/0
-batch flow coordinator  CPut /Table/55/1/1/0 -> /TUPLE/2:2:Int/2
-batch flow coordinator  InitPut /Table/55/2/2/0 -> /BYTES/0x89
+colbatchscan            Scan /Table/59/1/1/0
+batch flow coordinator  CPut /Table/59/1/1/0 -> /TUPLE/2:2:Int/2
+batch flow coordinator  InitPut /Table/59/2/2/0 -> /BYTES/0x89
 batch flow coordinator  fast path completed
 exec stmt               rows affected: 1
 
@@ -65,9 +65,9 @@ set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan            Scan /Table/55/1/2/0
+colbatchscan            Scan /Table/59/1/2/0
 colbatchscan            fetched: /kv/kv_pkey/2/v -> /3
-batch flow coordinator  Put /Table/55/1/2/0 -> /TUPLE/2:2:Int/2
-batch flow coordinator  Del /Table/55/2/3/0
-batch flow coordinator  CPut /Table/55/2/2/0 -> /BYTES/0x8a (expecting does not exist)
+batch flow coordinator  Put /Table/59/1/2/0 -> /TUPLE/2:2:Int/2
+batch flow coordinator  Del /Table/59/2/3/0
+batch flow coordinator  CPut /Table/59/2/2/0 -> /BYTES/0x8a (expecting does not exist)
 exec stmt               execution failed after 0 rows: duplicate key value violates unique constraint "woo"
