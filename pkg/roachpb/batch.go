@@ -185,10 +185,10 @@ func (ba *BatchRequest) IsSingleRequest() bool {
 	return len(ba.Requests) == 1
 }
 
-// IsSingleSkipLeaseCheckRequest returns true iff the batch contains a single
-// request, and that request has the skipLeaseCheck flag set.
-func (ba *BatchRequest) IsSingleSkipLeaseCheckRequest() bool {
-	return ba.IsSingleRequest() && ba.hasFlag(skipLeaseCheck)
+// IsSingleSkipsLeaseCheckRequest returns true iff the batch contains a single
+// request, and that request has the skipsLeaseCheck flag set.
+func (ba *BatchRequest) IsSingleSkipsLeaseCheckRequest() bool {
+	return ba.IsSingleRequest() && ba.hasFlag(skipsLeaseCheck)
 }
 
 func (ba *BatchRequest) isSingleRequestWithMethod(m Method) bool {
@@ -339,7 +339,7 @@ func (ba *BatchRequest) GetPrevLeaseForLeaseRequest() Lease {
 
 // hasFlag returns true iff one of the requests within the batch contains the
 // specified flag.
-func (ba *BatchRequest) hasFlag(flag int) bool {
+func (ba *BatchRequest) hasFlag(flag flag) bool {
 	for _, union := range ba.Requests {
 		if (union.GetInner().flags() & flag) != 0 {
 			return true
@@ -350,7 +350,7 @@ func (ba *BatchRequest) hasFlag(flag int) bool {
 
 // hasFlagForAll returns true iff all of the requests within the batch contains
 // the specified flag.
-func (ba *BatchRequest) hasFlagForAll(flag int) bool {
+func (ba *BatchRequest) hasFlagForAll(flag flag) bool {
 	if len(ba.Requests) == 0 {
 		return false
 	}
@@ -534,7 +534,7 @@ func (ba *BatchRequest) Methods() []Method {
 // read that acquired a latch @ ts10 can't simply be bumped to ts 20 because
 // there might have been overlapping writes in the 10..20 window).
 func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
-	compatible := func(exFlags, newFlags int) bool {
+	compatible := func(exFlags, newFlags flag) bool {
 		// isAlone requests are never compatible.
 		if (exFlags&isAlone) != 0 || (newFlags&isAlone) != 0 {
 			return false
@@ -557,7 +557,7 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 	var parts [][]RequestUnion
 	for len(ba.Requests) > 0 {
 		part := ba.Requests
-		var gFlags, hFlags = -1, -1
+		var gFlags, hFlags flag = -1, -1
 		for i, union := range ba.Requests {
 			args := union.GetInner()
 			flags := args.flags()
