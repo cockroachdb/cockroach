@@ -238,7 +238,7 @@ go_library(
         "zone_config.go",
         ":gen-advancecode-stringer",  # keep
         ":gen-nodestatus-stringer",  # keep
-        ":gen-txnevent-stringer",  # keep
+        ":gen-txneventtype-stringer",  # keep
         ":gen-txntype-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql",
@@ -311,6 +311,7 @@ go_library(
         "//pkg/sql/colexec",
         "//pkg/sql/colflow",
         "//pkg/sql/contention",
+        "//pkg/sql/contention/txnidcache",
         "//pkg/sql/covering",
         "//pkg/sql/delegate",
         "//pkg/sql/descmetadata",
@@ -701,9 +702,9 @@ go_test(
 )
 
 stringer(
-    name = "gen-txnevent-stringer",
+    name = "gen-txneventtype-stringer",
     src = "txn_state.go",
-    typ = "txnEvent",
+    typ = "txnEventType",
 )
 
 stringer(
