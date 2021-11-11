@@ -60,7 +60,6 @@ k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
 k: LT{k: d, strength: Exclusive, uuid:4}, v: meta{ts: 50.000000000,0, txn: 4}
 
 # Overwrite an existing separated intent
-# todo(bananabrick) : Does the overwrite only happen if txn is the same?
 put-intent k=d ts=60 txn=4 preceding=separated
 ----
 === Calls ===

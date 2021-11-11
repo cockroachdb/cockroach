@@ -242,8 +242,6 @@ func TestIntentDemuxWriter(t *testing.T) {
 					return err.Error()
 				}
 
-				// todo(bananabrick) : edit the test file here.
-				// fmt.Fprintf(&pw.b, "Return Value: separated-delta=%d\n", delta)
 				printEngContents(&pw.b, eng)
 				return pw.b.String()
 			case "clear-intent":

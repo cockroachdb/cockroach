@@ -998,7 +998,6 @@ func mvccGetMetadata(
 			int64(len(iter.UnsafeValue())), nil
 	}
 
-	// todo(bananabrick): might have to remove this
 	meta.Reset()
 	// For values, the size of keys is always accounted for as
 	// MVCCVersionTimestampSize. The size of the metadata key is
