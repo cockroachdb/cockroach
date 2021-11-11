@@ -48,11 +48,11 @@ func TestBuffer(t *testing.T) {
 	}
 
 	{ // Flushing at a timestamp lower than buffered events should return nothing.
-		require.NoError(t, buffer.Add(ctx, makeEvent("a", ts(13)))) // a@13
-		require.NoError(t, buffer.Add(ctx, makeEvent("b", ts(11)))) // b@11
-		require.NoError(t, buffer.Add(ctx, makeEvent("c", ts(15)))) // c@15
-		require.NoError(t, buffer.Add(ctx, makeEvent("d", ts(12)))) // d@12
-		require.NoError(t, buffer.Add(ctx, makeEvent("e", ts(18)))) // e@18
+		require.NoError(t, buffer.Add(makeEvent("a", ts(13)))) // a@13
+		require.NoError(t, buffer.Add(makeEvent("b", ts(11)))) // b@11
+		require.NoError(t, buffer.Add(makeEvent("c", ts(15)))) // c@15
+		require.NoError(t, buffer.Add(makeEvent("d", ts(12)))) // d@12
+		require.NoError(t, buffer.Add(makeEvent("e", ts(18)))) // e@18
 
 		events := buffer.Flush(ctx, ts(10))
 		require.True(t, len(events) == 0)
@@ -75,18 +75,18 @@ func TestBuffer(t *testing.T) {
 	}
 
 	{ // Adding events with timestamps <= the last flush are discarded.
-		require.NoError(t, buffer.Add(ctx, makeEvent("a", ts(13)))) // a@13
-		require.NoError(t, buffer.Add(ctx, makeEvent("b", ts(11)))) // b@11
-		require.NoError(t, buffer.Add(ctx, makeEvent("c", ts(15)))) // c@15
-		require.NoError(t, buffer.Add(ctx, makeEvent("d", ts(12)))) // d@12
+		require.NoError(t, buffer.Add(makeEvent("a", ts(13)))) // a@13
+		require.NoError(t, buffer.Add(makeEvent("b", ts(11)))) // b@11
+		require.NoError(t, buffer.Add(makeEvent("c", ts(15)))) // c@15
+		require.NoError(t, buffer.Add(makeEvent("d", ts(12)))) // d@12
 
 		events := buffer.Flush(ctx, ts(15))
 		require.True(t, len(events) == 0)
 	}
 
 	{ // Additional events are flushed out at appropriate points.
-		require.NoError(t, buffer.Add(ctx, makeEvent("f", ts(19)))) // f@19
-		require.NoError(t, buffer.Add(ctx, makeEvent("g", ts(21)))) // g@21
+		require.NoError(t, buffer.Add(makeEvent("f", ts(19)))) // f@19
+		require.NoError(t, buffer.Add(makeEvent("g", ts(21)))) // g@21
 
 		events := buffer.Flush(ctx, ts(20))
 		require.True(t, len(events) == 2)
@@ -107,10 +107,10 @@ func TestBuffer(t *testing.T) {
 
 	{ // Ensure that buffer limits are respected.
 		for i := 0; i < limit; i++ {
-			require.NoError(t, buffer.Add(ctx, makeEvent("x", ts(101)))) // x@101
+			require.NoError(t, buffer.Add(makeEvent("x", ts(101)))) // x@101
 		}
 
-		err := buffer.Add(ctx, makeEvent("x", ts(101)))
+		err := buffer.Add(makeEvent("x", ts(101)))
 		require.ErrorIs(t, err, rangefeedbuffer.ErrBufferLimitExceeded)
 	}
 }
