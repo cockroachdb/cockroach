@@ -287,6 +287,10 @@ type Server struct {
 	// InternalMetrics is used to account internal queries.
 	InternalMetrics Metrics
 
+	// ServerMetrics is used to account for Server activities that are unrelated to
+	// query planning and execution.
+	ServerMetrics ServerMetrics
+
 	// TelemetryLoggingMetrics is used to track metrics for logging to the telemetry channel.
 	TelemetryLoggingMetrics *TelemetryLoggingMetrics
 }
@@ -307,24 +311,29 @@ type Metrics struct {
 	// statements.
 	ExecutedStatementCounters StatementCounters
 
-	// StatsMetrics contains metrics for SQL statistics collection.
-	StatsMetrics StatsMetrics
-
 	// GuardrailMetrics contains metrics related to different guardrails in the
 	// SQL layer.
 	GuardrailMetrics GuardrailMetrics
 }
 
+// ServerMetrics collects timeseries data about Server activities that are
+// unrelated to SQL planning and execution.
+type ServerMetrics struct {
+	// StatsMetrics contains metrics for SQL statistics collection.
+	StatsMetrics StatsMetrics
+}
+
 // NewServer creates a new Server. Start() needs to be called before the Server
 // is used.
 func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
-	metrics := makeMetrics(cfg, false /* internal */)
+	metrics := makeMetrics(false /* internal */)
+	serverMetrics := makeServerMetrics(cfg)
 	reportedSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemReportedSQLStatsStmtFingerprints,
 		sqlstats.MaxMemReportedSQLStatsTxnFingerprints,
-		metrics.StatsMetrics.ReportedSQLStatsMemoryCurBytesCount,
-		metrics.StatsMetrics.ReportedSQLStatsMemoryMaxBytesHist,
+		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryCurBytesCount,
+		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryMaxBytesHist,
 		pool,
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
@@ -335,8 +344,8 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		cfg.Settings,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
-		metrics.StatsMetrics.SQLStatsMemoryCurBytesCount,
-		metrics.StatsMetrics.SQLStatsMemoryMaxBytesHist,
+		serverMetrics.StatsMetrics.SQLStatsMemoryCurBytesCount,
+		serverMetrics.StatsMetrics.SQLStatsMemoryMaxBytesHist,
 		pool,
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
@@ -344,7 +353,8 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	s := &Server{
 		cfg:                     cfg,
 		Metrics:                 metrics,
-		InternalMetrics:         makeMetrics(cfg, true /* internal */),
+		InternalMetrics:         makeMetrics(true /* internal */),
+		ServerMetrics:           serverMetrics,
 		pool:                    pool,
 		reportedStats:           reportedSQLStats,
 		reportedStatsController: reportedSQLStatsController,
@@ -369,9 +379,9 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		SQLIDContainer:   cfg.NodeID,
 		JobRegistry:      s.cfg.JobRegistry,
 		Knobs:            cfg.SQLStatsTestingKnobs,
-		FlushCounter:     metrics.StatsMetrics.SQLStatsFlushStarted,
-		FailureCounter:   metrics.StatsMetrics.SQLStatsFlushFailure,
-		FlushDuration:    metrics.StatsMetrics.SQLStatsFlushDuration,
+		FlushCounter:     serverMetrics.StatsMetrics.SQLStatsFlushStarted,
+		FailureCounter:   serverMetrics.StatsMetrics.SQLStatsFlushFailure,
+		FlushDuration:    serverMetrics.StatsMetrics.SQLStatsFlushDuration,
 	}, memSQLStats)
 
 	s.sqlStats = persistedSQLStats
@@ -380,7 +390,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	return s
 }
 
-func makeMetrics(cfg *ExecutorConfig, internal bool) Metrics {
+func makeMetrics(internal bool) Metrics {
 	return Metrics{
 		EngineMetrics: EngineMetrics{
 			DistSQLSelectCount:    metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
@@ -407,36 +417,39 @@ func makeMetrics(cfg *ExecutorConfig, internal bool) Metrics {
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
 		ExecutedStatementCounters: makeExecutedStatementCounters(internal),
-		StatsMetrics: StatsMetrics{
-			SQLStatsMemoryMaxBytesHist: metric.NewHistogram(
-				getMetricMeta(MetaSQLStatsMemMaxBytes, internal),
-				cfg.HistogramWindowInterval,
-				log10int64times1000,
-				3, /* sigFigs */
-			),
-			SQLStatsMemoryCurBytesCount: metric.NewGauge(
-				getMetricMeta(MetaSQLStatsMemCurBytes, internal)),
-			ReportedSQLStatsMemoryMaxBytesHist: metric.NewHistogram(
-				getMetricMeta(MetaReportedSQLStatsMemMaxBytes, internal),
-				cfg.HistogramWindowInterval,
-				log10int64times1000,
-				3, /* sigFigs */
-			),
-			ReportedSQLStatsMemoryCurBytesCount: metric.NewGauge(
-				getMetricMeta(MetaReportedSQLStatsMemCurBytes, internal)),
-			DiscardedStatsCount:  metric.NewCounter(getMetricMeta(MetaDiscardedSQLStats, internal)),
-			SQLStatsFlushStarted: metric.NewCounter(getMetricMeta(MetaSQLStatsFlushStarted, internal)),
-			SQLStatsFlushFailure: metric.NewCounter(getMetricMeta(MetaSQLStatsFlushFailure, internal)),
-			SQLStatsFlushDuration: metric.NewLatency(
-				getMetricMeta(MetaSQLStatsFlushDuration, internal), 6*metricsSampleInterval,
-			),
-			SQLStatsRemovedRows: metric.NewCounter(getMetricMeta(MetaSQLStatsRemovedRows, internal)),
-		},
 		GuardrailMetrics: GuardrailMetrics{
 			TxnRowsWrittenLogCount: metric.NewCounter(getMetricMeta(MetaTxnRowsWrittenLog, internal)),
 			TxnRowsWrittenErrCount: metric.NewCounter(getMetricMeta(MetaTxnRowsWrittenErr, internal)),
 			TxnRowsReadLogCount:    metric.NewCounter(getMetricMeta(MetaTxnRowsReadLog, internal)),
 			TxnRowsReadErrCount:    metric.NewCounter(getMetricMeta(MetaTxnRowsReadErr, internal)),
+		},
+	}
+}
+
+func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
+	return ServerMetrics{
+		StatsMetrics: StatsMetrics{
+			SQLStatsMemoryMaxBytesHist: metric.NewHistogram(
+				MetaSQLStatsMemMaxBytes,
+				cfg.HistogramWindowInterval,
+				log10int64times1000,
+				3, /* sigFigs */
+			),
+			SQLStatsMemoryCurBytesCount: metric.NewGauge(MetaSQLStatsMemCurBytes),
+			ReportedSQLStatsMemoryMaxBytesHist: metric.NewHistogram(
+				MetaReportedSQLStatsMemMaxBytes,
+				cfg.HistogramWindowInterval,
+				log10int64times1000,
+				3, /* sigFigs */
+			),
+			ReportedSQLStatsMemoryCurBytesCount: metric.NewGauge(MetaReportedSQLStatsMemCurBytes),
+			DiscardedStatsCount:                 metric.NewCounter(MetaDiscardedSQLStats),
+			SQLStatsFlushStarted:                metric.NewCounter(MetaSQLStatsFlushStarted),
+			SQLStatsFlushFailure:                metric.NewCounter(MetaSQLStatsFlushFailure),
+			SQLStatsFlushDuration: metric.NewLatency(
+				MetaSQLStatsFlushDuration, 6*metricsSampleInterval,
+			),
+			SQLStatsRemovedRows: metric.NewCounter(MetaSQLStatsRemovedRows),
 		},
 	}
 }
