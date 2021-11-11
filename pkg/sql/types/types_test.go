@@ -1092,3 +1092,50 @@ func TestCanonicalType(t *testing.T) {
 		}
 	}
 }
+
+func TestEnumMetadata_MarshalText(t *testing.T) {
+	testCases := []struct {
+		testDesc    string
+		metadata    EnumMetadata
+		expectedStr string
+	}{
+		{
+			"with non-empty slices",
+			EnumMetadata{
+				PhysicalRepresentations: [][]byte{
+					{0x12, 0x34},
+					{0x56},
+				},
+				LogicalRepresentations: []string{"ev1", "ev2"},
+				IsMemberReadOnly:       []bool{true, false},
+			},
+			"PhysicalRepresentations<[0x12,0x34],[0x56]>,LogicalRepresentations<ev1,ev2>,IsMemberReadOnly<true,false>",
+		},
+		{
+			"with empty slices",
+			EnumMetadata{
+				PhysicalRepresentations: [][]byte{},
+				LogicalRepresentations:  []string{},
+				IsMemberReadOnly:        []bool{},
+			},
+			"PhysicalRepresentations<>,LogicalRepresentations<>,IsMemberReadOnly<>",
+		},
+		{
+			"with nil slices",
+			EnumMetadata{
+				PhysicalRepresentations: nil,
+				LogicalRepresentations:  nil,
+				IsMemberReadOnly:        nil,
+			},
+			"PhysicalRepresentations<>,LogicalRepresentations<>,IsMemberReadOnly<>",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.testDesc, func(t *testing.T) {
+			textRpr, err := testCase.metadata.MarshalText()
+			require.Nil(t, err)
+			require.Equal(t, testCase.expectedStr, string(textRpr))
+		})
+	}
+}

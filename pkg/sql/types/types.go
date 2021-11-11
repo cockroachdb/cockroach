@@ -12,9 +12,11 @@ package types
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"runtime/debug"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -211,6 +213,57 @@ type EnumMetadata struct {
 	// TODO (rohany): For small enums, having a map would be slower
 	//  than just an array. Investigate at what point the tradeoff
 	//  should occur, if at all.
+}
+
+// MarshalText implements the encoding.TextMarshaler interface. This is required
+// to make gogo/protobuf able to text marshal any protobuf struct which has
+// direct/indirect child field of EnumMetadata type, such as
+// descpb.ColumnDescriptor from which you can track down to a EnumMetadata field
+// through a field named "type" of types.T.
+func (e *EnumMetadata) MarshalText() (text []byte, err error) {
+	var bf bytes.Buffer
+
+	// Convert PhysicalRepresentations to byte slice representation of string like
+	// "PhysicalRepresentations<[0x12,0x34],[0x56]>".
+	bf.WriteString("PhysicalRepresentations<")
+	for i, bs := range e.PhysicalRepresentations {
+		if i > 0 {
+			bf.WriteString(",")
+		}
+		bf.WriteString("[")
+		for j := 0; j < len(bs); j++ {
+			if j > 0 {
+				bf.WriteString(",")
+			}
+			bf.WriteString("0x")
+			bf.WriteString(hex.EncodeToString(bs[j : j+1]))
+		}
+		bf.WriteString("]")
+	}
+	bf.WriteString(">,")
+
+	// Convert LogicalRepresentations to byte array representation of string like
+	// "LogicalRepresentations<str1,str2>".
+	bf.WriteString("LogicalRepresentations<")
+	for i, str := range e.LogicalRepresentations {
+		if i > 0 {
+			bf.WriteString(",")
+		}
+		bf.WriteString(str)
+	}
+	bf.WriteString(">,")
+
+	// Convert IsMemberReadOnly to byte array representation of string like
+	// "IsMemberReadOnly<true,false>".
+	bf.WriteString("IsMemberReadOnly<")
+	for i, bv := range e.IsMemberReadOnly {
+		if i > 0 {
+			bf.WriteString(",")
+		}
+		bf.WriteString(strconv.FormatBool(bv))
+	}
+	bf.WriteString(">")
+	return bf.Bytes(), nil
 }
 
 func (e *EnumMetadata) debugString() string {

@@ -36,11 +36,14 @@ go_test(
     srcs = [
         "minimum_type_version_test.go",
         "types_test.go",
+        "types_text_marshal_test.go",
     ],
     embed = [":types"],
     deps = [
         "//pkg/clusterversion",
         "//pkg/geo/geopb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/oidext",
         "//pkg/util/leaktest",
         "//pkg/util/log",
