@@ -559,6 +559,8 @@ func (sg *kvGranter) setAvailableIOTokensLocked(tokens int64) {
 // StoreGrantCoordinators) for KVWork that uses that store. See the
 // NewGrantCoordinators and NewGrantCoordinatorSQL functions.
 type GrantCoordinator struct {
+	ambientCtx log.AmbientContext
+
 	settings                *cluster.Settings
 	lastCPULoadSamplePeriod time.Duration
 
@@ -630,7 +632,9 @@ type makeRequesterFunc func(
 // chains to delay admission through the per store GrantCoordinators since
 // they are not trying to control CPU usage, so we turn off grant chaining in
 // those coordinators.
-func NewGrantCoordinators(opts Options) (GrantCoordinators, []metric.Struct) {
+func NewGrantCoordinators(
+	ambientCtx log.AmbientContext, opts Options,
+) (GrantCoordinators, []metric.Struct) {
 	makeRequester := makeWorkQueue
 	if opts.makeRequesterFunc != nil {
 		makeRequester = opts.makeRequesterFunc
@@ -646,6 +650,7 @@ func NewGrantCoordinators(opts Options) (GrantCoordinators, []metric.Struct) {
 		totalSlotsMetric: metrics.KVTotalSlots,
 	}
 	coord := &GrantCoordinator{
+		ambientCtx:           ambientCtx,
 		settings:             st,
 		cpuOverloadIndicator: kvSlotAdjuster,
 		cpuLoadListener:      kvSlotAdjuster,
@@ -729,7 +734,9 @@ func NewGrantCoordinators(opts Options) (GrantCoordinators, []metric.Struct) {
 // NewGrantCoordinatorSQL constructs a GrantCoordinator and WorkQueues for a
 // single-tenant SQL node in a multi-tenant cluster. Caller is responsible for
 // hooking this up to receive calls to CPULoad.
-func NewGrantCoordinatorSQL(opts Options) (*GrantCoordinator, []metric.Struct) {
+func NewGrantCoordinatorSQL(
+	ambientCtx log.AmbientContext, opts Options,
+) (*GrantCoordinator, []metric.Struct) {
 	makeRequester := makeWorkQueue
 	if opts.makeRequesterFunc != nil {
 		makeRequester = opts.makeRequesterFunc
@@ -740,6 +747,7 @@ func NewGrantCoordinatorSQL(opts Options) (*GrantCoordinator, []metric.Struct) {
 	metricStructs := append([]metric.Struct(nil), metrics)
 	sqlNodeCPU := &sqlNodeCPUOverloadIndicator{}
 	coord := &GrantCoordinator{
+		ambientCtx:           ambientCtx,
 		settings:             st,
 		cpuOverloadIndicator: sqlNodeCPU,
 		cpuLoadListener:      sqlNodeCPU,
@@ -814,8 +822,8 @@ func appendMetricStructsForQueues(ms []metric.Struct, coord *GrantCoordinator) [
 // pebbleMetricsTick is called every adjustmentInterval seconds and passes
 // through to the ioLoadListener, so that it can adjust the plan for future IO
 // token allocations.
-func (coord *GrantCoordinator) pebbleMetricsTick(m pebble.Metrics) {
-	coord.ioLoadListener.pebbleMetricsTick(m)
+func (coord *GrantCoordinator) pebbleMetricsTick(ctx context.Context, m pebble.Metrics) {
+	coord.ioLoadListener.pebbleMetricsTick(ctx, m)
 }
 
 // allocateIOTokensTick tells the ioLoadListener to allocate tokens.
@@ -855,9 +863,11 @@ func (coord *GrantCoordinator) GetWorkQueue(workKind WorkKind) *WorkQueue {
 // take into account the latest schedulers stats (indirectly, via the
 // implementation of cpuOverloadIndicator).
 func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod time.Duration) {
+	ctx := coord.ambientCtx.AnnotateCtx(context.Background())
+
 	if coord.lastCPULoadSamplePeriod != 0 && coord.lastCPULoadSamplePeriod != samplePeriod &&
 		KVAdmissionControlEnabled.Get(&coord.settings.SV) {
-		log.Infof(context.Background(), "CPULoad switching to period %s", samplePeriod.String())
+		log.Infof(ctx, "CPULoad switching to period %s", samplePeriod.String())
 	}
 	coord.lastCPULoadSamplePeriod = samplePeriod
 
@@ -1130,6 +1140,8 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, verb rune) {
 // that is used for KV work admission that takes into account store health.
 // Currently it is intended only for writes to stores.
 type StoreGrantCoordinators struct {
+	ambientCtx log.AmbientContext
+
 	settings                    *cluster.Settings
 	makeRequesterFunc           makeRequesterFunc
 	kvIOTokensExhaustedDuration *metric.Counter
@@ -1143,7 +1155,9 @@ type StoreGrantCoordinators struct {
 
 // SetPebbleMetricsProvider sets a PebbleMetricsProvider and causes the load
 // on the various storage engines to be used for admission control.
-func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(pmp PebbleMetricsProvider) {
+func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
+	startupCtx context.Context, pmp PebbleMetricsProvider,
+) {
 	if sgc.pebbleMetricsProvider != nil {
 		panic(errors.AssertionFailedf("SetPebbleMetricsProvider called more than once"))
 	}
@@ -1154,9 +1168,13 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(pmp PebbleMetricsPro
 	for _, m := range metrics {
 		gc := sgc.initGrantCoordinator(m.StoreID)
 		sgc.gcMap[m.StoreID] = gc
-		gc.pebbleMetricsTick(*m.Metrics)
+		gc.pebbleMetricsTick(startupCtx, *m.Metrics)
 		gc.allocateIOTokensTick()
 	}
+
+	// Attach tracer and log tags.
+	ctx := sgc.ambientCtx.AnnotateCtx(context.Background())
+
 	go func() {
 		var ticks int64
 		ticker := time.NewTicker(time.Second)
@@ -1168,14 +1186,14 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(pmp PebbleMetricsPro
 				if ticks%adjustmentInterval == 0 {
 					metrics := sgc.pebbleMetricsProvider.GetPebbleMetrics()
 					if len(metrics) != len(sgc.gcMap) {
-						log.Warningf(context.Background(),
+						log.Warningf(ctx,
 							"expected %d store metrics and found %d metrics", len(sgc.gcMap), len(metrics))
 					}
 					for _, m := range metrics {
 						if gc, ok := sgc.gcMap[m.StoreID]; ok {
-							gc.pebbleMetricsTick(*m.Metrics)
+							gc.pebbleMetricsTick(ctx, *m.Metrics)
 						} else {
-							log.Warningf(context.Background(),
+							log.Warningf(ctx,
 								"seeing metrics for unknown storeID %d", m.StoreID)
 						}
 					}
@@ -1470,7 +1488,7 @@ const adjustmentInterval = 15
 
 // pebbleMetricsTicks is called every adjustmentInterval seconds, and decides
 // the token allocations until the next call.
-func (io *ioLoadListener) pebbleMetricsTick(m pebble.Metrics) {
+func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, m pebble.Metrics) {
 	if !io.statsInitialized {
 		io.statsInitialized = true
 		// Initialize cumulative stats.
@@ -1481,7 +1499,7 @@ func (io *ioLoadListener) pebbleMetricsTick(m pebble.Metrics) {
 		io.totalTokens = unlimitedTokens
 		return
 	}
-	io.adjustTokens(m)
+	io.adjustTokens(ctx, m)
 }
 
 // allocateTokensTick gives out 1/adjustmentInterval of the totalTokens every
@@ -1519,7 +1537,7 @@ func (io *ioLoadListener) allocateTokensTick() {
 // many bytes are being moved out of L0 via compactions with the average
 // number of bytes being added to L0 per KV work. We want the former to be
 // (significantly) larger so that L0 returns to a healthy state.
-func (io *ioLoadListener) adjustTokens(m pebble.Metrics) {
+func (io *ioLoadListener) adjustTokens(ctx context.Context, m pebble.Metrics) {
 	io.tokensAllocated = 0
 	// Grab the cumulative stats.
 	admittedCount := io.kvRequester.getAdmittedCount()
@@ -1530,7 +1548,7 @@ func (io *ioLoadListener) adjustTokens(m pebble.Metrics) {
 	if bytesAdded < 0 {
 		// bytesAdded is a simple delta computation over individually cumulative
 		// stats, so should not be negative.
-		log.Warningf(context.Background(), "bytesAdded %d is negative", bytesAdded)
+		log.Warningf(ctx, "bytesAdded %d is negative", bytesAdded)
 		bytesAdded = 0
 	}
 	// bytesRemoved are due to finished compactions.
@@ -1549,7 +1567,7 @@ func (io *ioLoadListener) adjustTokens(m pebble.Metrics) {
 	var admitted uint64
 	doLog := true
 	if admittedCount < io.admittedCount {
-		log.Warningf(context.Background(), "admitted count decreased from %d to %d",
+		log.Warningf(ctx, "admitted count decreased from %d to %d",
 			io.admittedCount, admittedCount)
 	} else {
 		admitted = admittedCount - io.admittedCount
@@ -1588,7 +1606,7 @@ func (io *ioLoadListener) adjustTokens(m pebble.Metrics) {
 			io.totalTokens = int64(io.smoothedNumAdmit)
 		}
 		if doLog {
-			log.Infof(context.Background(),
+			log.Infof(ctx,
 				"IO overload on store %d (files %d, sub-levels %d): admitted: %d, added: %d, "+
 					"removed (%d, %d), admit: (%f, %d)",
 				io.storeID, m.Levels[0].NumFiles, m.Levels[0].Sublevels, admitted, bytesAdded,

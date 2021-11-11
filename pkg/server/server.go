@@ -450,15 +450,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender)
 
-	gcoords, metrics := admission.NewGrantCoordinators(admission.Options{
-		MinCPUSlots:                    1,
-		MaxCPUSlots:                    100000, /* TODO(sumeer): add cluster setting */
-		SQLKVResponseBurstTokens:       100000, /* TODO(sumeer): add cluster setting */
-		SQLSQLResponseBurstTokens:      100000, /* arbitrary, and unused */
-		SQLStatementLeafStartWorkSlots: 100,    /* arbitrary, and unused */
-		SQLStatementRootStartWorkSlots: 100,    /* arbitrary, and unused */
-		Settings:                       st,
-	})
+	gcoords, metrics := admission.NewGrantCoordinators(
+		cfg.AmbientCtx,
+		admission.Options{
+			MinCPUSlots:                    1,
+			MaxCPUSlots:                    100000, /* TODO(sumeer): add cluster setting */
+			SQLKVResponseBurstTokens:       100000, /* TODO(sumeer): add cluster setting */
+			SQLSQLResponseBurstTokens:      100000, /* arbitrary, and unused */
+			SQLStatementLeafStartWorkSlots: 100,    /* arbitrary, and unused */
+			SQLStatementRootStartWorkSlots: 100,    /* arbitrary, and unused */
+			Settings:                       st,
+		})
 	for i := range metrics {
 		registry.AddMetricStruct(metrics[i])
 	}
@@ -1635,7 +1637,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 	// Stores have been initialized, so Node can now provide Pebble metrics.
-	s.storeGrantCoords.SetPebbleMetricsProvider(s.node)
+	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, s.node)
 
 	log.Event(ctx, "started node")
 	if err := s.startPersistingHLCUpperBound(
