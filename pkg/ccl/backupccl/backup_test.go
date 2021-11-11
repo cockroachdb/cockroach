@@ -5003,7 +5003,7 @@ func TestRestoredPrivileges(t *testing.T) {
 	// Explicitly don't restore grants when just restoring a database since we
 	// cannot ensure that the same users exist in the restoring cluster.
 	data2Grants := sqlDB.QueryStr(t, `SHOW GRANTS ON DATABASE data2`)
-	sqlDB.Exec(t, `GRANT SELECT, INSERT, UPDATE, DELETE ON DATABASE data2 TO someone`)
+	sqlDB.Exec(t, `GRANT CONNECT, CREATE, DROP, GRANT, ZONECONFIG ON DATABASE data2 TO someone`)
 
 	withGrants := sqlDB.QueryStr(t, `SHOW GRANTS ON data.bank`)
 
@@ -5025,7 +5025,8 @@ func TestRestoredPrivileges(t *testing.T) {
 		sqlDBRestore := sqlutils.MakeSQLRunner(tc.Conns[0])
 		sqlDBRestore.Exec(t, `CREATE DATABASE data`)
 		sqlDBRestore.Exec(t, `CREATE USER someone`)
-		sqlDBRestore.Exec(t, `GRANT SELECT, INSERT, UPDATE, DELETE ON DATABASE data TO someone`)
+		sqlDBRestore.Exec(t, `USE data`)
+		sqlDBRestore.Exec(t, `ALTER DEFAULT PRIVILEGES GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO someone`)
 		sqlDBRestore.Exec(t, `RESTORE data.bank FROM $1`, LocalFoo)
 		sqlDBRestore.CheckQueryResults(t, `SHOW GRANTS ON data.bank`, withGrants)
 	})

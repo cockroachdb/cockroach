@@ -2598,7 +2598,7 @@ public   other_db       public              USAGE           NULL
 root     other_db       public              ALL             NULL
 
 statement ok
-GRANT SELECT ON DATABASE other_db TO testuser
+GRANT CONNECT ON DATABASE other_db TO testuser
 
 query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
@@ -3856,7 +3856,14 @@ NULL     root     system         public              span_configurations        
 NULL     root     system         public              span_configurations                    UPDATE          NULL          NO
 
 statement ok
+USE other_db;
+ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO testuser;
+
+statement ok
 CREATE TABLE other_db.xyz (i INT)
+
+statement ok
+USE test;
 
 statement ok
 CREATE VIEW other_db.abc AS SELECT i from other_db.xyz

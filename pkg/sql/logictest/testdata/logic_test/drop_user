@@ -127,7 +127,7 @@ CREATE USER user1
 statement ok
 CREATE TABLE foo(x INT);
 GRANT SELECT ON foo TO user3;
-GRANT SELECT, CONNECT ON DATABASE test TO user1
+GRANT CONNECT ON DATABASE test TO user1
 
 statement error cannot drop roles/users user1, user3: grants still exist on test, test.public.foo
 DROP USER IF EXISTS user1,user3
@@ -137,7 +137,7 @@ REVOKE SELECT ON foo FROM user3;
 DROP USER IF EXISTS user1,user3
 
 statement ok
-REVOKE SELECT, CONNECT ON DATABASE test FROM user1;
+REVOKE CONNECT ON DATABASE test FROM user1;
 DROP USER IF EXISTS user1,user3
 
 statement ok
