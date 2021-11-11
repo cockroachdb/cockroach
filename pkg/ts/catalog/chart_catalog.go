@@ -1861,6 +1861,23 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Contention"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Current memory usage for TxnID Cache",
+				Metrics: []string{"sql.contention.txn_id_cache.size"},
+			},
+			{
+				Title:   "Number of discarded resolved transaction IDs",
+				Metrics: []string{"sql.contention.txn_id_cache.discarded_count"},
+			},
+			{
+				Title:   "Evicted Resolved Transaction IDs",
+				Metrics: []string{"sql.contention.txn_id_cache.evicted_count"},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "Bulk"}},
 		Charts: []chartDescription{
 			{
