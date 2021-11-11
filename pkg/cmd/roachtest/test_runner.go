@@ -935,7 +935,6 @@ func (r *testRunner) maybePostGithubIssue(
 	}
 
 	req := issues.PostRequest{
-		AuthorEmail:     "", // intentionally unset - we add to the board and cc the team
 		Mention:         mention,
 		ProjectColumnID: projColID,
 		PackageName:     "roachtest",

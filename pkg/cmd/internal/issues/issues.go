@@ -412,10 +412,6 @@ type PostRequest struct {
 	// A path to the test artifacts relative to the artifacts root. If nonempty,
 	// allows the poster formatter to construct a direct URL to this directory.
 	Artifacts string
-	// The email of the author. It will be translated into a GitHub handle and
-	// appended to the Mention slice below. This increases the chances of the
-	// "right person" seeing the failure early.
-	AuthorEmail string
 	// Mention is a slice of GitHub handles (@foo, @cockroachdb/some-team, etc)
 	// that should be mentioned in the message.
 	Mention []string
