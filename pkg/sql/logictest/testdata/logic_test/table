@@ -68,7 +68,7 @@ SHOW INDEXES FROM c
 ----
 table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit
 c           c_bar_key      false       1             bar          ASC        false    false
-c           c_bar_key      false       2             id           ASC        false    true
+c           c_bar_key      false       2             id           ASC        true     true
 c           c_foo_bar_idx  true        1             foo          ASC        false    false
 c           c_foo_bar_idx  true        2             bar          DESC       false    false
 c           c_foo_bar_idx  true        3             id           ASC        false    true
@@ -85,7 +85,7 @@ SHOW INDEXES FROM c WITH COMMENT
 ----
 table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit  comment
 c           c_bar_key      false       1             bar          ASC        false    false     NULL
-c           c_bar_key      false       2             id           ASC        false    true      NULL
+c           c_bar_key      false       2             id           ASC        true     true      NULL
 c           c_foo_bar_idx  true        1             foo          ASC        false    false     NULL
 c           c_foo_bar_idx  true        2             bar          DESC       false    false     NULL
 c           c_foo_bar_idx  true        3             id           ASC        false    true      NULL
