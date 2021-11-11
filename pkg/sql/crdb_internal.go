@@ -2368,7 +2368,7 @@ CREATE TABLE crdb_internal.create_statements (
 		var err error
 		if table.IsView() {
 			descType = typeView
-			stmt, err = ShowCreateView(ctx, &p.semaCtx, &name, table)
+			stmt, err = ShowCreateView(ctx, &p.semaCtx, p.SessionData(), &name, table)
 		} else if table.IsSequence() {
 			descType = typeSequence
 			stmt, err = ShowCreateSequence(ctx, &name, table)
@@ -2489,7 +2489,9 @@ CREATE TABLE crdb_internal.table_columns (
 					for _, col := range columns {
 						defStr := tree.DNull
 						if col.HasDefault() {
-							defExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, col.GetDefaultExpr(), &p.semaCtx, tree.FmtParsable)
+							defExpr, err := schemaexpr.FormatExprForDisplay(
+								ctx, table, col.GetDefaultExpr(), &p.semaCtx, p.SessionData(), tree.FmtParsable,
+							)
 							if err != nil {
 								return err
 							}

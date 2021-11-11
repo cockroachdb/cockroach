@@ -1975,3 +1975,24 @@ ORDER BY pk
 ----
 0000-01-01 11:30:45.123 +0600 +0600  0000-01-01 11:30:45.123 +0600 +0600  0000-01-01 11:30:45.123 +0600 +0600  0000-01-01 11:30:45.123 +0600 +0600
 0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300
+
+# Regression test for #71776 -- intervalstyle should apply to pg_catalog.
+
+statement ok
+SET intervalstyle_enabled = true;
+SET intervalstyle = iso_8601;
+CREATE TABLE table_71776 (interval_col interval DEFAULT 'P3Y')
+
+query TTT
+SELECT a.attname,
+    format_type(a.atttypid, a.atttypmod),
+    pg_get_expr(d.adbin, d.adrelid)
+FROM pg_attribute a
+    LEFT JOIN pg_attrdef d ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+WHERE a.attrelid = 'table_71776'::regclass
+    AND a.attnum > 0
+    AND NOT a.attisdropped
+ORDER BY a.attnum
+----
+interval_col  interval  'P3Y'::INTERVAL
+rowid         bigint    unique_rowid()
