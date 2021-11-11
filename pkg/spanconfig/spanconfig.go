@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -117,6 +118,59 @@ func FullTranslate(
 	return s.Translate(ctx, descpb.IDs{keys.RootNamespaceID})
 }
 
+// SQLWatcher watches for events on system.zones and system.descriptors.
+type SQLWatcher interface {
+	// WatchForSQLUpdates watches for updates to zones and descriptors starting at
+	// the given timestamp (exclusive), informing callers using the handler
+	// callback.
+	//
+	// The handler callback[1] is invoked from time to time with a list of updates
+	// and a checkpointTS. Invocations of the handler callback provide the
+	// following semantics:
+	// 	1. Calls to the handler are serial.
+	// 	2. The timestamp supplied to the handler is monotonically increasing.
+	// 	3. The list of DescriptorUpdates supplied to handler includes all events
+	//	in the window (prevInvocationCheckpointTS, checkpointTS].
+	// 	4. No further calls to the handler are made if a call to the handler
+	// 	returns an error.
+	//
+	// These guarantees mean that users of this interface are free to persist the
+	// checkpointTS and later use it to re-establish a SQLWatcher without missing
+	// any updates.
+	//
+	// WatchForSQLUpdates can only ever be called once, effectively making the
+	// SQLWatcher a single use interface.
+	//
+	// WatchForSQLUpdates may run out of memory and return an error if it is
+	// tracking too many events between two checkpoints.
+	//
+	// [1] Users of this interface should not intend to do expensive work in the
+	// handler callback.
+	// TODO(arul): Possibly get rid of this limitation.
+	WatchForSQLUpdates(
+		ctx context.Context,
+		startTS hlc.Timestamp,
+		handler func(ctx context.Context, updates []DescriptorUpdate, checkpointTS hlc.Timestamp) error,
+	) error
+}
+
+// DescriptorUpdate captures the ID and type of a descriptor or zone that the
+// SQLWatcher has observed updated.
+type DescriptorUpdate struct {
+	// ID of the descriptor/zone that has been updated.
+	ID descpb.ID
+
+	// DescriptorType of the descriptor/zone that has been updated. Could be either
+	// the specific type or catalog.Any if no information is available.
+	DescriptorType catalog.DescriptorType
+}
+
+// SQLWatcherFactory is used to construct new SQLWatchers.
+type SQLWatcherFactory interface {
+	// New returns a new SQLWatcher.
+	New() SQLWatcher
+}
+
 // ReconciliationDependencies captures what's needed by the span config
 // reconciliation job to perform its task. The job is responsible for
 // reconciling a tenant's zone configurations with the clusters span
@@ -126,11 +180,7 @@ type ReconciliationDependencies interface {
 
 	SQLTranslator
 
-	// TODO(arul): We'll also want access to a "SQLWatcher", something that
-	// watches for changes to system.{descriptors, zones} to feed IDs to the
-	// SQLTranslator. These interfaces will be used by the "Reconciler to perform
-	// full/partial reconciliation, checkpoint the span config job, and update KV
-	// with the tenants span config state.
+	SQLWatcherFactory
 }
 
 // Store is a data structure used to store spans and their corresponding
@@ -235,8 +285,7 @@ func (u Update) Deletion() bool {
 	return u.Config.IsEmpty()
 }
 
-// Addition returns true if the update corresponds to a span config being
-// added.
+// Addition returns true if the update corresponds to a span config being added.
 func (u Update) Addition() bool {
 	return !u.Deletion()
 }
