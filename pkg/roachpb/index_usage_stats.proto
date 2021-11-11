@@ -58,4 +58,10 @@ message IndexUsageKey {
 message CollectedIndexUsageStatistics {
   optional IndexUsageKey key = 1 [(gogoproto.nullable) = false];
   optional IndexUsageStatistics stats = 2 [(gogoproto.nullable) = false];
+
+  // IndexName is the name of the index.
+  optional string IndexName = 3 [(gogoproto.nullable) = false];
+
+  // IndexType is the type of the index i.e. primary, secondary.
+  optional string IndexType = 4 [(gogoproto.nullable) = false];
 }
