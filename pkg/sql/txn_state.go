@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -131,7 +132,8 @@ const (
 )
 
 // resetForNewSQLTxn (re)initializes the txnState for a new transaction.
-// It creates a new client.Txn and initializes it using the session defaults.
+// It creates a new client.Txn and initializes it using the session defaults
+// and returns the ID of the new transaction.
 //
 // connCtx: The context in which the new transaction is started (usually a
 // 	 connection's context). ts.Ctx will be set to a child context and should be
@@ -156,7 +158,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	readOnly tree.ReadWriteMode,
 	txn *kv.Txn,
 	tranCtx transitionCtx,
-) {
+) (txnID uuid.UUID) {
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
 	ts.isHistorical = false
@@ -204,6 +206,7 @@ func (ts *txnState) resetForNewSQLTxn(
 		}
 		ts.mu.txn = txn
 	}
+	txnID = ts.mu.txn.ID()
 	sp.SetTag("txn", attribute.StringValue(ts.mu.txn.ID().String()))
 	ts.mu.txnStart = timeutil.Now()
 	ts.mu.Unlock()
@@ -215,12 +218,15 @@ func (ts *txnState) resetForNewSQLTxn(
 	if err := ts.setReadOnlyMode(readOnly); err != nil {
 		panic(err)
 	}
+
+	return txnID
 }
 
 // finishSQLTxn finalizes a transaction's results and closes the root span for
 // the current SQL txn. This needs to be called before resetForNewSQLTxn() is
-// called for starting another SQL txn.
-func (ts *txnState) finishSQLTxn() {
+// called for starting another SQL txn. The ID of the finalized transaction is
+// returned.
+func (ts *txnState) finishSQLTxn() (txnID uuid.UUID) {
 	ts.mon.Stop(ts.Ctx)
 	if ts.cancel != nil {
 		ts.cancel()
@@ -238,10 +244,12 @@ func (ts *txnState) finishSQLTxn() {
 	sp.Finish()
 	ts.Ctx = nil
 	ts.mu.Lock()
+	txnID = ts.mu.txn.ID()
 	ts.mu.txn = nil
 	ts.mu.txnStart = time.Time{}
 	ts.mu.Unlock()
 	ts.recordingThreshold = 0
+	return txnID
 }
 
 // finishExternalTxn is a stripped-down version of finishSQLTxn used by
@@ -343,16 +351,28 @@ const (
 	rewind
 )
 
-// txnEvent is part of advanceInfo, informing the connExecutor about some
+// TODO(azhng): wip: docs
+type txnEvent struct {
+	eventTyp txnEventType
+
+	// txnID is filled when transaction starts, commits or aborts.
+	// When a transaction starts, txnID is set to the ID of the transaction that
+	// was created.
+	// When a transaction commits or aborts, txnID is set to the ID of the
+	// transaction that just finished execution.
+	txnID uuid.UUID
+}
+
+// txnEventType is part of advanceInfo, informing the connExecutor about some
 // transaction events. It is used by the connExecutor to clear state associated
 // with a SQL transaction (other than the state encapsulated in TxnState; e.g.
 // schema changes and portals).
 //
-//go:generate stringer -type=txnEvent
-type txnEvent int
+//go:generate stringer -type=eventType
+type txnEventType int
 
 const (
-	noEvent txnEvent = iota
+	noEvent txnEventType = iota
 
 	// txnStart means that the statement that just ran started a new transaction.
 	// Note that when a transaction is restarted, txnStart event is not emitted.

@@ -19,9 +19,9 @@ const _txnEvent_name = "noEventtxnStarttxnCommittxnRollbacktxnRestart"
 
 var _txnEvent_index = [...]uint8{0, 7, 15, 24, 35, 45}
 
-func (i txnEvent) String() string {
-	if i < 0 || i >= txnEvent(len(_txnEvent_index)-1) {
-		return "txnEvent(" + strconv.FormatInt(int64(i), 10) + ")"
+func (i txnEventType) String() string {
+	if i < 0 || i >= txnEventType(len(_txnEvent_index)-1) {
+		return "txnEventType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 	return _txnEvent_name[_txnEvent_index[i]:_txnEvent_index[i+1]]
 }
