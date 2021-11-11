@@ -1714,8 +1714,7 @@ func TestScanSeparatedIntents(t *testing.T) {
 
 	for name, enableSeparatedIntents := range map[string]bool{"separated": true} {
 		t.Run(name, func(t *testing.T) {
-			eng, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */),
-				SetSeparatedIntents())
+			eng, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */))
 			require.NoError(t, err)
 			defer eng.Close()
 

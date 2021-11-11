@@ -95,7 +95,6 @@ func TestMVCCHistories(t *testing.T) {
 		// intents.
 		// We start from a clean slate in every test file.
 		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */),
-			SetSeparatedIntents(),
 			func(cfg *engineConfig) error {
 				// Latest cluster version, since these tests are not ones where we
 				// are examining differences related to separated intents.

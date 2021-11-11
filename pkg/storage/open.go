@@ -136,14 +136,6 @@ func Hook(hookFunc func(*base.StorageConfig) error) ConfigOption {
 	}
 }
 
-// SetSeparatedIntents sets the config option(s) for separated intents. If the
-// bool argument is true, separated intents are _not_ written.
-func SetSeparatedIntents() ConfigOption {
-	return func(cfg *engineConfig) error {
-		return nil
-	}
-}
-
 // A Location describes where the storage engine's data will be written. A
 // Location may be in-memory or on the filesystem.
 type Location struct {

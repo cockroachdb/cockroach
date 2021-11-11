@@ -58,7 +58,7 @@ func NewDefaultInMemForTesting(opts ...ConfigOption) Engine {
 // deterministically define whether it separates intents from MVCC data.
 func NewInMemForTesting(opts ...ConfigOption) Engine {
 	eng, err := Open(context.Background(), InMemory(),
-		SetSeparatedIntents(), MaxSize(1<<20), CombineOptions(opts...))
+		MaxSize(1<<20), CombineOptions(opts...))
 	if err != nil {
 		panic(err)
 	}

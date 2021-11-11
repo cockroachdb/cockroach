@@ -47,7 +47,6 @@ func setupMVCCInMemPebbleWithSeparatedIntents(b testing.TB) Engine {
 	peb, err := Open(
 		context.Background(),
 		InMemory(),
-		SetSeparatedIntents(),
 		CacheSize(testCacheSize))
 	if err != nil {
 		b.Fatalf("could not create new in-mem pebble instance: %+v", err)
