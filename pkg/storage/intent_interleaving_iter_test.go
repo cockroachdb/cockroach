@@ -735,8 +735,6 @@ func TestRandomizedIntentInterleavingIter(t *testing.T) {
 	var out1, out2 strings.Builder
 	doOps(t, ops, eng1, true /* interleave */, &out1)
 	doOps(t, ops, eng2, false /* interleave */, &out2)
-	// todo(bananabrick) : this is comparing the same outputs, which doesn't
-	// do anything currently.
 	require.Equal(t, out1.String(), out2.String(),
 		fmt.Sprintf("seed=%d\n=== separated ===\n%s\n=== interleaved ===\n%s\n",
 			seed, out1.String(), out2.String()))
