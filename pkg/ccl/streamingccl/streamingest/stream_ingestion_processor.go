@@ -298,12 +298,10 @@ func (sip *streamIngestionProcessor) close() {
 		if sip.maxFlushRateTimer != nil {
 			sip.maxFlushRateTimer.Stop()
 		}
-		if sip.closePoller != nil {
-			close(sip.closePoller)
-			// Wait for the goroutine to return so that we do not access processor
-			// state once it has shutdown.
-			sip.pollingWaitGroup.Wait()
-		}
+		close(sip.closePoller)
+		// Wait for the goroutine to return so that we do not access processor
+		// state once it has shutdown.
+		sip.pollingWaitGroup.Wait()
 	}
 }
 
