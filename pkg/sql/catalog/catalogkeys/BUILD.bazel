@@ -11,7 +11,6 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/sem/tree",
         "//pkg/util/encoding",
         "@com_github_cockroachdb_errors//:errors",
     ],

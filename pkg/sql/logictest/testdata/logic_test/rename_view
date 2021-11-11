@@ -134,48 +134,45 @@ GRANT DROP ON test.new_v TO testuser
 user testuser
 
 statement ok
-ALTER VIEW test.new_v RENAME TO test2.v
-
-statement ok
-ALTER VIEW test.v2 RENAME TO test2.v2
+ALTER VIEW test.new_v RENAME TO test.v
 
 query TTTTIT
 SHOW TABLES FROM test
 ----
 public  kv  table  root  0  NULL
 public  t   table  root  0  NULL
+public  v   view   root  0  NULL
+public  v2  view   root  0  NULL
 
 query TTTTIT
 SHOW TABLES FROM test2
 ----
-public  v   view  root  0  NULL
-public  v2  view  root  0  NULL
 
 user root
 
 query II rowsort
-SELECT * FROM test2.v
+SELECT * FROM test.v
 ----
 1 2
 3 4
 
 query II rowsort
-SELECT * FROM test2.v2
+SELECT * FROM test.v2
 ----
 4 16
 5 25
 
 statement ok
-CREATE VIEW v3 AS SELECT count(*) FROM test2.v AS v JOIN test2.v2 AS v2 ON v.k > v2.c1
+CREATE VIEW v3 AS SELECT count(*) FROM test.v AS v JOIN test.v2 AS v2 ON v.k > v2.c1
 
-statement error cannot rename relation "test2.public.v" because view "test.public.v3" depends on it
-ALTER VIEW test2.v RENAME TO test2.v3
+statement error cannot rename relation "test.public.v" because view "v3" depends on it
+ALTER VIEW test.v RENAME TO test.v3
 
-statement error cannot rename relation "test2.public.v2" because view "test.public.v3" depends on it
-ALTER VIEW test2.v2 RENAME TO v4
+statement error cannot rename relation "test.public.v2" because view "v3" depends on it
+ALTER VIEW test.v2 RENAME TO v4
 
 statement ok
 ALTER VIEW v3 RENAME TO v4
 
-statement error cannot rename relation "test2.public.v2" because view "test.public.v4" depends on it
-ALTER VIEW test2.v2 RENAME TO v5
+statement error cannot rename relation "test.public.v2" because view "v4" depends on it
+ALTER VIEW test.v2 RENAME TO v5

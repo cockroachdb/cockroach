@@ -18,23 +18,23 @@ Stage 0
     SecondaryIndex: true
     StoreColumnIDs:
     - 3
-    TableID: 52
+    TableID: 54
 Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 2
   *scop.BackfillIndex
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 3
   *scop.ValidateUniqueIndex
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 4
   *scop.MakeAddedSecondaryIndexPublic
     IndexID: 2
-    TableID: 52
+    TableID: 54
 
 deps
 CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money)
@@ -58,23 +58,23 @@ Stage 0
     SecondaryIndex: true
     StoreColumnIDs:
     - 3
-    TableID: 52
+    TableID: 54
 Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 2
   *scop.BackfillIndex
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 3
   *scop.ValidateUniqueIndex
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 4
   *scop.MakeAddedSecondaryIndexPublic
     IndexID: 2
-    TableID: 52
+    TableID: 54
 
 deps
 CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money)
@@ -98,23 +98,23 @@ Stage 0
     SecondaryIndex: true
     StoreColumnIDs:
     - 3
-    TableID: 52
+    TableID: 54
 Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 2
   *scop.BackfillIndex
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 3
   *scop.ValidateUniqueIndex
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 4
   *scop.MakeAddedSecondaryIndexPublic
     IndexID: 2
-    TableID: 52
+    TableID: 54
 
 deps
 CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (id) (

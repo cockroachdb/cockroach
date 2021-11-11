@@ -761,7 +761,7 @@ func fullyQualifyScheduledBackupTargetTables(
 						return err
 					}
 					resolvedSchema, _, err = catalogkv.ResolveSchemaID(ctx, txn, p.ExecCfg().Codec,
-						dbDesc.GetID(), tp.SchemaName.String())
+						dbDesc.GetID(), tp.SchemaName.String(), p.ExecCfg().Settings.Version)
 					return err
 				}); err != nil {
 					return nil, err

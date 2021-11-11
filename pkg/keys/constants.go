@@ -332,7 +332,9 @@ const (
 	// MinNonPredefinedUserDescID is the first descriptor ID used by
 	// user-level objects that are not created automatically on empty
 	// clusters (default databases).
-	MinNonPredefinedUserDescID = MinUserDescID + 2
+	// Two default databases and two public schemas are created by default using
+	// 4 ids.
+	MinNonPredefinedUserDescID = MinUserDescID + 4
 
 	// RootNamespaceID is the ID of the root namespace.
 	RootNamespaceID = 0
@@ -385,7 +387,19 @@ const (
 	ReplicationCriticalLocalitiesTableID = 26
 	ReplicationStatsTableID              = 27
 	ReportsMetaTableID                   = 28
-	PublicSchemaID                       = 29 // pseudo
+	// PublicSchemaID refers to old references where Public schemas are
+	// descriptorless.
+	// TODO(richardjcai): This should be fully removed in 22.2.
+	PublicSchemaID = 29 // pseudo
+	// PublicSchemaIDForBackup is used temporarily to determine cases of
+	// PublicSchemaID being used for backup.
+	// We need to keep this around since backups created prior to 22.1 use 29
+	// as the ID for a virtual public schema. In restores, we look for this 29
+	// and synthesize a public schema with a descriptor when necessary.
+	PublicSchemaIDForBackup = 29
+	// SystemPublicSchemaID represents the ID used for the pseudo public
+	// schema in the system database.
+	SystemPublicSchemaID = 29 // pseudo
 	// New NamespaceTableID for cluster version >= 20.1
 	// Ensures that NamespaceTable does not get gossiped again
 	NamespaceTableID                    = 30

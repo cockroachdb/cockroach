@@ -278,13 +278,14 @@ const (
 	// DrainingNamesMigration adds the migration which guarantees that no
 	// descriptors have draining names.
 	DrainingNamesMigration
-
 	// TraceIDDoesntImplyStructuredRecording changes the contract about the kind
 	// of span that RPCs get on the server depending on the tracing context.
 	TraceIDDoesntImplyStructuredRecording
 	// AlterSystemTableStatisticsAddAvgSizeCol adds the column avgSize to the
 	// table system.table_statistics that contains a new statistic.
 	AlterSystemTableStatisticsAddAvgSizeCol
+	// Public schema is backed by a descriptor.
+	PublicSchemasWithDescriptors
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -490,7 +491,10 @@ var versionsSingleton = keyedVersions{
 		Key:     AlterSystemTableStatisticsAddAvgSizeCol,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 12},
 	},
-
+	{
+		Key:     PublicSchemasWithDescriptors,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 14},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

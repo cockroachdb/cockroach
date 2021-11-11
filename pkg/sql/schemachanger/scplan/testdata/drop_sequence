@@ -7,19 +7,19 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 Stage 0
   *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 52
+    DescID: 54
 Stage 1 (non-revertible)
   *scop.MarkDescriptorAsDropped
-    DescID: 52
+    DescID: 54
 Stage 2 (non-revertible)
   *scop.DrainDescriptorName
-    TableID: 52
+    TableID: 54
   *scop.LogEvent
-    DescID: 52
+    DescID: 54
     Direction: 2
     Element:
       sequence:
-        sequenceId: 52
+        sequenceId: 54
     Metadata:
       Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
       TargetMetadata:
@@ -27,7 +27,7 @@ Stage 2 (non-revertible)
         SubWorkID: 1
       Username: root
   *scop.CreateGcJobForDescriptor
-    DescID: 52
+    DescID: 54
 
 create-table
 CREATE TABLE defaultdb.blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text)
@@ -42,29 +42,29 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 Stage 0
   *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 52
+    DescID: 54
 Stage 1 (non-revertible)
   *scop.RemoveColumnDefaultExpression
     ColumnID: 2
-    TableID: 53
+    TableID: 55
   *scop.UpdateRelationDeps
-    TableID: 53
+    TableID: 55
   *scop.RemoveColumnDefaultExpression
     ColumnID: 2
-    TableID: 54
+    TableID: 56
   *scop.UpdateRelationDeps
-    TableID: 54
+    TableID: 56
   *scop.MarkDescriptorAsDropped
-    DescID: 52
+    DescID: 54
 Stage 2 (non-revertible)
   *scop.DrainDescriptorName
-    TableID: 52
+    TableID: 54
   *scop.LogEvent
-    DescID: 52
+    DescID: 54
     Direction: 2
     Element:
       sequence:
-        sequenceId: 52
+        sequenceId: 54
     Metadata:
       Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
       TargetMetadata:
@@ -72,7 +72,7 @@ Stage 2 (non-revertible)
         SubWorkID: 1
       Username: root
   *scop.CreateGcJobForDescriptor
-    DescID: 52
+    DescID: 54
 
 
 deps

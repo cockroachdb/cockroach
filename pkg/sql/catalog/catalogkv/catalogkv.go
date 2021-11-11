@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -48,6 +49,22 @@ func GenerateUniqueDescID(ctx context.Context, db *kv.DB, codec keys.SQLCodec) (
 	return descpb.ID(newVal - 1), nil
 }
 
+// GenerateUniqueIDGreaterThanID increments the ID until we create an ID
+// greater than the id passed in.
+func GenerateUniqueIDGreaterThanID(
+	ctx context.Context, db *kv.DB, codec keys.SQLCodec, id int64,
+) (descpb.ID, error) {
+	for {
+		newVal, err := kv.IncrementValRetryable(ctx, db, codec.DescIDSequenceKey(), 1)
+		if err != nil {
+			return descpb.InvalidID, err
+		}
+		if newVal > id+1 {
+			return descpb.ID(newVal - 1), nil
+		}
+	}
+}
+
 // GetDescriptorID looks up the ID for plainKey.
 // InvalidID is returned if the name cannot be resolved.
 func GetDescriptorID(
@@ -67,12 +84,19 @@ func GetDescriptorID(
 
 // ResolveSchemaID resolves a schema's ID based on db and name.
 func ResolveSchemaID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	dbID descpb.ID,
+	scName string,
+	version clusterversion.Handle,
 ) (bool, descpb.ID, error) {
-	// Try to use the system name resolution bypass. Avoids a hotspot by explicitly
-	// checking for public schema.
-	if scName == tree.PublicSchema {
-		return true, keys.PublicSchemaID, nil
+	if !version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+		// Try to use the system name resolution bypass. Avoids a hotspot by explicitly
+		// checking for public schema.
+		if scName == tree.PublicSchema {
+			return true, keys.PublicSchemaID, nil
+		}
 	}
 
 	sKey := catalogkeys.NewNameKeyComponents(dbID, keys.RootNamespaceID, scName)

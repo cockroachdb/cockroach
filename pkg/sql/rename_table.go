@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -166,9 +167,18 @@ func (n *renameTableNode) startExec(params runParams) error {
 		)
 	}
 
-	// Special checks when attempting to move a table to a different database,
-	// which is usually not allowed.
+	// Ensure tables cannot be moved cross-database.
 	if oldTn.Catalog() != newTn.Catalog() {
+		// TODO(richardjcai): Remove this in 22.1. In 21.2, we allow moving tables
+		// from one database's public schema to another database's public schema
+		// as a special case. However after 22.1 all public schemas will be backed
+		// by a descriptor and will be a regular UDS. We do not support moving
+		// tables from a UDS to another database even if an UDS with the same name
+		// in the new database exists.
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+			return pgerror.Newf(pgcode.FeatureNotSupported,
+				"cannot change database of table using alter table rename to")
+		}
 		// Don't allow moving the table to a different database unless both the
 		// source and target schemas are the public schema. This preserves backward
 		// compatibility for the behavior prior to user-defined schemas.
