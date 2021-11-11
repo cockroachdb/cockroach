@@ -113,6 +113,20 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					curDetails = schemaMetadata.schemaPreparedDetails
 				}
 
+				// In 22.1, the Public schema should always be present in the database.
+				// Make sure it's part of schemaMetadata, it is not guaranteed to
+				// be added in prepareschemasForIngestion if we're not importing any
+				// schemas.
+				// The Public schema does will not change in the database so both the
+				// oldSchemaIDToName and newSchemaIDToName entries will be the
+				// same for the Public schema.
+				_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, details.ParentID, tree.DatabaseLookupFlags{Required: true})
+				if err != nil {
+					return err
+				}
+				schemaMetadata.oldSchemaIDToName[dbDesc.GetSchemaID(tree.PublicSchema)] = tree.PublicSchema
+				schemaMetadata.newSchemaIDToName[dbDesc.GetSchemaID(tree.PublicSchema)] = tree.PublicSchema
+
 				preparedDetails, err = r.prepareTablesForIngestion(ctx, p, curDetails, txn, descsCol,
 					schemaMetadata)
 				if err != nil {
@@ -261,6 +275,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			r.res.IndexEntries += count
 		}
 	}
+
 	if r.testingKnobs.afterImport != nil {
 		if err := r.testingKnobs.afterImport(r.res); err != nil {
 			return err
@@ -511,7 +526,7 @@ func prepareNewTablesForIngestion(
 			tree.NewUnqualifiedTableName(tree.Name(tbl.GetName())),
 		)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, `drop table "%s" and then retry the import`, tbl.GetName())
 		}
 	}
 
@@ -717,6 +732,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		}
 
 		var dbDesc catalog.DatabaseDescriptor
+		var scDesc catalog.SchemaDescriptor
 		{
 			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
@@ -725,7 +741,13 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 					Required:    true,
 					AvoidCached: true,
 				})
+				if err != nil {
+					return err
+				}
+				publicSchemaID := dbDesc.GetSchemaID(tree.PublicSchema)
+				scDesc, err = descriptors.GetImmutableSchemaByID(ctx, txn, publicSchemaID, tree.SchemaLookupFlags{})
 				return err
+
 			}); err != nil {
 				return err
 			}
@@ -737,7 +759,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		walltime := p.ExecCfg().Clock.Now().WallTime
 
 		if tableDescs, schemaDescs, err = parseAndCreateBundleTableDescs(
-			ctx, p, details, seqVals, skipFKs, dbDesc, files, format, walltime, owner,
+			ctx, p, details, seqVals, skipFKs, dbDesc, scDesc, files, format, walltime, owner,
 			r.job.ID()); err != nil {
 			return err
 		}
@@ -787,6 +809,7 @@ func parseAndCreateBundleTableDescs(
 	seqVals map[descpb.ID]int64,
 	skipFKs bool,
 	parentDB catalog.DatabaseDescriptor,
+	parentSchema catalog.SchemaDescriptor,
 	files []string,
 	format roachpb.IOFileFormat,
 	walltime int64,
@@ -829,10 +852,17 @@ func parseAndCreateBundleTableDescs(
 	case roachpb.IOFileFormat_Mysqldump:
 		fks.resolver.format.Format = roachpb.IOFileFormat_Mysqldump
 		evalCtx := &p.ExtendedEvalContext().EvalContext
+		id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		if err != nil {
+			return nil, nil, err
+		}
 		tableDescs, err = readMysqlCreateTable(
-			ctx, reader, evalCtx, p, defaultCSVTableID, parentDB, tableName, fks,
+			ctx, reader, evalCtx, p, id, parentDB, parentSchema, tableName, fks,
 			seqVals, owner, walltime,
 		)
+		if err != nil {
+			return nil, nil, err
+		}
 	case roachpb.IOFileFormat_PgDump:
 		fks.resolver.format.Format = roachpb.IOFileFormat_PgDump
 		evalCtx := &p.ExtendedEvalContext().EvalContext
@@ -843,7 +873,7 @@ func parseAndCreateBundleTableDescs(
 			p.ExecCfg().DistSQLSrv.ExternalStorage)
 
 		tableDescs, schemaDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName,
-			parentDB, walltime, fks, int(format.PgDump.MaxRowSize), owner, unsupportedStmtLogger)
+			parentDB, parentSchema, walltime, fks, int(format.PgDump.MaxRowSize), owner, unsupportedStmtLogger)
 
 		logErr := unsupportedStmtLogger.flush()
 		if logErr != nil {
@@ -1212,9 +1242,9 @@ func constructSchemaAndTableKey(
 	tableDesc *descpb.TableDescriptor, schemaIDToName map[descpb.ID]string,
 ) (schemaAndTableName, error) {
 	schemaName, ok := schemaIDToName[tableDesc.GetUnexposedParentSchemaID()]
-	if !ok && tableDesc.UnexposedParentSchemaID != keys.PublicSchemaID {
-		return schemaAndTableName{}, errors.Newf("invalid parent schema ID %d for table %s",
-			tableDesc.UnexposedParentSchemaID, tableDesc.GetName())
+	if !ok && schemaName != tree.PublicSchema {
+		return schemaAndTableName{}, errors.Newf("invalid parent schema %s with ID %d for table %s",
+			schemaName, tableDesc.UnexposedParentSchemaID, tableDesc.GetName())
 	}
 
 	return schemaAndTableName{schema: schemaName, table: tableDesc.GetName()}, nil

@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -433,7 +432,7 @@ func mysqlTableToCockroach(
 			seqName,
 			opts,
 			parentDB.GetID(),
-			keys.PublicSchemaID,
+			parentSchema.GetID(),
 			id,
 			time,
 			privilegeDesc,

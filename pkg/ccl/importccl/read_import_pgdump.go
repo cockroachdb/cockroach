@@ -304,6 +304,7 @@ func createPostgresSequences(
 	walltime int64,
 	owner security.SQLUsername,
 	schemaNameToDesc map[string]*schemadesc.Mutable,
+	execCfg *sql.ExecutorConfig,
 ) ([]*tabledesc.Mutable, error) {
 	ret := make([]*tabledesc.Mutable, 0)
 	for schemaAndTableName, seq := range createSeq {
@@ -339,15 +340,10 @@ func getSchemaByNameFromMap(
 	schemaAndTableName schemaAndTableName, schemaNameToDesc map[string]*schemadesc.Mutable,
 ) (catalog.SchemaDescriptor, error) {
 	var schema catalog.SchemaDescriptor
-	switch schemaAndTableName.schema {
-	case "", "public":
-		schema = schemadesc.GetPublicSchema()
-	default:
-		var ok bool
-		if schema, ok = schemaNameToDesc[schemaAndTableName.schema]; !ok {
-			return nil, errors.Newf("schema %q not found in the schemas created from the pgdump",
-				schema)
-		}
+	var ok bool
+	if schema, ok = schemaNameToDesc[schemaAndTableName.schema]; !ok {
+		return nil, errors.Newf("schema %q not found in the schemas created from the pgdump",
+			schema)
 	}
 	return schema, nil
 }
@@ -459,6 +455,7 @@ func readPostgresCreateTable(
 	p sql.JobExecContext,
 	match string,
 	parentDB catalog.DatabaseDescriptor,
+	publicSchema catalog.SchemaDescriptor,
 	walltime int64,
 	fks fkHandler,
 	max int,
@@ -503,6 +500,8 @@ func readPostgresCreateTable(
 	for _, schemaDesc := range schemaDescs {
 		schemaNameToDesc[schemaDesc.GetName()] = schemaDesc
 	}
+	schemaNameToDesc[tree.PublicSchema] =
+		schemadesc.NewBuilder(publicSchema.SchemaDesc()).BuildExistingMutableSchema()
 
 	// Construct sequence descriptors.
 	seqs, err := createPostgresSequences(
@@ -513,6 +512,7 @@ func readPostgresCreateTable(
 		walltime,
 		owner,
 		schemaNameToDesc,
+		p.ExecCfg(),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -845,7 +845,7 @@ func readPostgresStmt(
 					txn,
 					p.ExecCfg().Codec,
 					parentID,
-					keys.PublicSchemaID,
+					keys.PublicSchemaIDForBackup,
 					tree.NewUnqualifiedTableName(tree.Name(tableName)),
 				)
 				if err != nil {
