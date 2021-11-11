@@ -29,13 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 var minimumFlushInterval = settings.RegisterPublicDurationSettingWithExplicitUnit(
@@ -111,6 +111,10 @@ type streamIngestionProcessor struct {
 	// closePoller is used to shutdown the poller that checks the job for a
 	// cutover signal.
 	closePoller chan struct{}
+	// cancelMergeAndWait cancels the merging goroutines and waits for them to
+	// finish. It cannot be called concurrently with Next(), as it consumes from
+	// the merged channel.
+	cancelMergeAndWait func()
 
 	// mu is used to provide thread-safe read-write operations to ingestionErr
 	// and pollingErr.
@@ -299,9 +303,11 @@ func (sip *streamIngestionProcessor) close() {
 			sip.maxFlushRateTimer.Stop()
 		}
 		close(sip.closePoller)
-		// Wait for the goroutine to return so that we do not access processor
-		// state once it has shutdown.
+		// Wait for the processor goroutine to return so that we do not access
+		// processor state once it has shutdown.
 		sip.pollingWaitGroup.Wait()
+		// Wait for the merge goroutine.
+		sip.cancelMergeAndWait()
 	}
 }
 
@@ -366,7 +372,8 @@ func (sip *streamIngestionProcessor) merge(
 ) (chan partitionEvent, error) {
 	merged := make(chan partitionEvent)
 
-	var g errgroup.Group
+	ctx, cancel := context.WithCancel(ctx)
+	g := ctxgroup.WithContext(ctx)
 
 	for partition, eventCh := range partitionStreams {
 		partition := partition
@@ -375,7 +382,7 @@ func (sip *streamIngestionProcessor) merge(
 		if !ok {
 			return nil, errors.Newf("could not find error channel for partition %q", partition)
 		}
-		g.Go(func() error {
+		g.GoCtx(func(ctx context.Context) error {
 			ctxDone := ctx.Done()
 			for {
 				select {
@@ -409,6 +416,13 @@ func (sip *streamIngestionProcessor) merge(
 		sip.mu.ingestionErr = err
 		close(merged)
 	}()
+
+	sip.cancelMergeAndWait = func() {
+		cancel()
+		// Wait until the merged channel is closed by the goroutine above.
+		for range merged {
+		}
+	}
 
 	return merged, nil
 }
