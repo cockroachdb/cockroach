@@ -87,6 +87,11 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 			}
 			return nil, pgerror.Newf(pgcode.InvalidSchemaName, "unknown schema %q", scName)
 		}
+
+		if scName == tree.PublicSchema {
+			return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot drop schema %q", scName)
+		}
+
 		switch sc.SchemaKind() {
 		case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 			return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot drop schema %q", scName)

@@ -210,11 +210,11 @@ query TT colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS FROM system]
 ----
 schema_name         owner
+public              admin
 crdb_internal       NULL
 information_schema  NULL
 pg_catalog          NULL
 pg_extension        NULL
-public              admin
 
 query TT colnames
 SELECT * FROM [SHOW SEQUENCES FROM system]
@@ -327,11 +327,11 @@ query TT colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS]
 ----
 schema_name         owner
+public              admin
 crdb_internal       NULL
 information_schema  NULL
 pg_catalog          NULL
 pg_extension        NULL
-public              admin
 
 query TTTTIT colnames
 CREATE TABLE foo(x INT); SELECT * FROM [SHOW TABLES]

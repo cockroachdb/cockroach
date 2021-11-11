@@ -884,7 +884,7 @@ func getQualifiedTableName(
 		return "", err
 	}
 	schemaID := desc.GetParentSchemaID()
-	schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, execCfg.Codec, desc.GetParentID(), schemaID)
+	schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, execCfg.Codec, desc.GetParentID(), schemaID, execCfg.Settings.Version)
 	if err != nil {
 		return "", err
 	}

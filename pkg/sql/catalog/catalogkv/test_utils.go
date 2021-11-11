@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -110,7 +111,9 @@ func TestingGetSchemaDescriptor(
 ) (schema catalog.SchemaDescriptor) {
 	ctx := context.Background()
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		exists, schemaID, err := ResolveSchemaID(ctx, txn, codec, dbID, schemaName)
+		settings := cluster.MakeTestingClusterSettings()
+		exists, schemaID, err := ResolveSchemaID(ctx, txn, codec, dbID, schemaName,
+			settings.Version)
 		if err != nil {
 			panic(err)
 		} else if !exists {
@@ -139,7 +142,9 @@ func testingGetObjectDescriptor(
 		if !found {
 			return errors.Errorf("database %s not found", database)
 		}
-		exists, schemaID, err := ResolveSchemaID(ctx, txn, codec, dbID, schema)
+		settings := cluster.MakeTestingClusterSettings()
+		exists, schemaID, err := ResolveSchemaID(ctx, txn, codec, dbID, schema,
+			settings.Version)
 		if err != nil {
 			return err
 		}

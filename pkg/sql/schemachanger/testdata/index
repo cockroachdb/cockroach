@@ -2,7 +2,7 @@ setup
 CREATE TABLE t (k INT PRIMARY KEY, v STRING NOT NULL);
 ----
 ...
-+object {50 29 t} -> 52
++object {50 51 t} -> 54
 
 test
 CREATE INDEX idx1 ON t (v);
@@ -12,9 +12,9 @@ begin transaction #1
 # end StatementPhase
 # begin PreCommitPhase
 ## stage 1 in PreCommitPhase: 2 MutationType ops
-upsert descriptor #52
+upsert descriptor #54
   ...
-     id: 52
+     id: 54
      modificationTime: {}
   +  mutations:
   +  - direction: ADD
@@ -51,12 +51,12 @@ upsert descriptor #52
      primaryIndex:
   ...
        time: {}
-     unexposedParentSchemaId: 29
+     unexposedParentSchemaId: 51
   -  version: "1"
   +  version: "2"
 create job #1: "Schema change job"
-  descriptor IDs: [52]
-upsert descriptor #52
+  descriptor IDs: [54]
+upsert descriptor #54
   ...
        state: DELETE_ONLY
      name: t
@@ -69,7 +69,7 @@ commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
 ## stage 1 in PostCommitPhase: 1 MutationType ops
-upsert descriptor #52
+upsert descriptor #54
   ...
          version: 3
        mutationId: 1
@@ -79,7 +79,7 @@ upsert descriptor #52
      newSchemaChangeJobId: "1"
   ...
        time: {}
-     unexposedParentSchemaId: 29
+     unexposedParentSchemaId: 51
   -  version: "2"
   +  version: "3"
 update progress of schema change job #1
@@ -94,10 +94,10 @@ update progress of schema change job #1
 commit transaction #4
 begin transaction #5
 ## stage 4 in PostCommitPhase: 1 MutationType ops
-upsert descriptor #52
+upsert descriptor #54
   ...
      formatVersion: 3
-     id: 52
+     id: 54
   +  indexes:
   +  - createdExplicitly: true
   +    foreignKey: {}
@@ -147,11 +147,11 @@ upsert descriptor #52
      newSchemaChangeJobId: "1"
   ...
        time: {}
-     unexposedParentSchemaId: 29
+     unexposedParentSchemaId: 51
   -  version: "3"
   +  version: "4"
 update progress of schema change job #1
-upsert descriptor #52
+upsert descriptor #54
   ...
      modificationTime: {}
      name: t

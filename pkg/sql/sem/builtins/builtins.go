@@ -4929,6 +4929,33 @@ value if you rely on the HLC for accuracy.`,
 				id, found, err := ctx.PrivilegedAccessor.LookupNamespaceID(
 					ctx.Context,
 					int64(parentID),
+					0,
+					string(name),
+				)
+				if err != nil {
+					return nil, err
+				}
+				if !found {
+					return tree.DNull, nil
+				}
+				return tree.NewDInt(id), nil
+			},
+			Volatility: tree.VolatilityStable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"parent_id", types.Int},
+				{"parent_schema_id", types.Int},
+				{"name", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				parentID := tree.MustBeDInt(args[0])
+				parentSchemaID := tree.MustBeDInt(args[1])
+				name := tree.MustBeDString(args[2])
+				id, found, err := ctx.PrivilegedAccessor.LookupNamespaceID(
+					ctx.Context,
+					int64(parentID),
+					int64(parentSchemaID),
 					string(name),
 				)
 				if err != nil {
@@ -4957,6 +4984,7 @@ value if you rely on the HLC for accuracy.`,
 				name := tree.MustBeDString(args[0])
 				id, found, err := ctx.PrivilegedAccessor.LookupNamespaceID(
 					ctx.Context,
+					int64(0),
 					int64(0),
 					string(name),
 				)

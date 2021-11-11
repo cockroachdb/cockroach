@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
@@ -39,7 +38,9 @@ var DefaultUserDBs = []string{
 
 // MaxDefaultDescriptorID is the maximum ID of a descriptor that exists in a
 // new cluster.
-var MaxDefaultDescriptorID = descpb.ID(keys.MaxReservedDescID) + descpb.ID(len(DefaultUserDBs))
+// For each DefaultUserDB, we also create a public schema in it, hence we
+// multiply the number of default user dbs by 2 to get the number of descriptors.
+var MaxDefaultDescriptorID = keys.MaxReservedDescID + descpb.ID(len(DefaultUserDBs))*2
 
 // IsDefaultCreatedDescriptor returns whether or not a given descriptor ID is
 // present at the time of starting a cluster.
@@ -149,12 +150,6 @@ func MakePublicObjectNameKey(codec keys.SQLCodec, parentID descpb.ID, name strin
 // under the given database.
 func MakeSchemaNameKey(codec keys.SQLCodec, parentID descpb.ID, name string) roachpb.Key {
 	return EncodeNameKey(codec, NewNameKeyComponents(parentID, keys.RootNamespaceID, name))
-}
-
-// MakePublicSchemaNameKey returns the roachpb.Key corresponding to the public
-// schema scoped under the given database.
-func MakePublicSchemaNameKey(codec keys.SQLCodec, parentID descpb.ID) roachpb.Key {
-	return EncodeNameKey(codec, NewNameKeyComponents(parentID, keys.RootNamespaceID, tree.PublicSchema))
 }
 
 // MakeDatabaseNameKey returns the roachpb.Key corresponding to the database

@@ -7,31 +7,31 @@ DROP TYPE defaultdb.typ
 ----
 Stage 1 of 3
   transitions:
-    [Type:{DescID: 52}, PUBLIC, DROP] -> TXN_DROPPED
-    [Type:{DescID: 53}, PUBLIC, DROP] -> TXN_DROPPED
+    [Type:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
+    [Type:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 52
+      DescID: 54
     *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 53
+      DescID: 55
 Stage 2 of 3 (non-revertible)
   transitions:
-    [Type:{DescID: 52}, TXN_DROPPED, DROP] -> DROPPED
-    [Type:{DescID: 53}, TXN_DROPPED, DROP] -> DROPPED
+    [Type:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
+    [Type:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
   ops:
     *scop.MarkDescriptorAsDropped
-      DescID: 52
+      DescID: 54
     *scop.MarkDescriptorAsDropped
-      DescID: 53
+      DescID: 55
 Stage 3 of 3 (non-revertible)
   transitions:
-    [Type:{DescID: 52}, DROPPED, DROP] -> ABSENT
-    [Type:{DescID: 53}, DROPPED, DROP] -> ABSENT
+    [Type:{DescID: 54}, DROPPED, DROP] -> ABSENT
+    [Type:{DescID: 55}, DROPPED, DROP] -> ABSENT
   ops:
     *scop.DrainDescriptorName
-      TableID: 52
+      TableID: 54
     *scop.DrainDescriptorName
-      TableID: 53
+      TableID: 55
 
 deps
 DROP TYPE defaultdb.typ
