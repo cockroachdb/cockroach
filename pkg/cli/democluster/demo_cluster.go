@@ -408,6 +408,12 @@ func (c *transientCluster) Start(
 				}
 				c.tenantServers[i] = ts
 				c.infoLog(ctx, "started tenant %d: %s", i, ts.SQLAddr())
+
+				// Propagate the tenant server tags to the initialization
+				// context, so that the initialization messages below are
+				// properly annotated in traces.
+				ctx = ts.AnnotateCtx(ctx)
+
 				if !c.demoCtx.Insecure {
 					// Set up the demo username and password on each tenant.
 					ie := ts.DistSQLServer().(*distsql.ServerImpl).ServerConfig.Executor
