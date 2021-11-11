@@ -11,6 +11,9 @@
 package indexrec
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -18,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-// FindIndexCandidates returns a map storing potential indexes for each table
+// FindIndexCandidateSet returns a map storing potential indexes for each table
 // referenced in a query.
 //
 // 	1. Add a single index on all columns in a Group By or Order By expression if
@@ -38,25 +41,18 @@ import (
 //     - J is all indexes that come from rules 3 and 4.
 //     From these groups,construct the following multi-column index
 //     combinations: EQ + R, J + R, J + EQ, J + EQ + R.
-func FindIndexCandidates(rootExpr opt.Expr, md *opt.Metadata) map[cat.Table][][]cat.IndexColumn {
+func FindIndexCandidateSet(rootExpr opt.Expr, md *opt.Metadata) map[cat.Table][][]cat.IndexColumn {
 	candidateSet := indexCandidateSet{md: md}
 	candidateSet.init(rootExpr)
 	return candidateSet.overallCandidates
 }
 
-// WalkOptExprIndexesUsed finds indexes that are used in an expression.
-func WalkOptExprIndexesUsed(expr opt.Expr, md *opt.Metadata, indexes map[cat.StableID][]int) {
-	switch expr := expr.(type) {
-	case *memo.ScanExpr:
-		addIndexToOutputSet(expr.Index, expr.Table, md, indexes)
-	case *memo.LookupJoinExpr:
-		addIndexToOutputSet(expr.Index, expr.Table, md, indexes)
-	case *memo.InvertedJoinExpr:
-		addIndexToOutputSet(expr.Index, expr.Table, md, indexes)
-	}
-	for i, n := 0, expr.ChildCount(); i < n; i++ {
-		WalkOptExprIndexesUsed(expr.Child(i), md, indexes)
-	}
+// FindIndexRecommendationSet finds index candidates that are used in an
+// expression to determine a statement's index recommendation set.
+func FindIndexRecommendationSet(expr opt.Expr, md *opt.Metadata) string {
+	recommendationSet := indexRecommendationSet{md: md}
+	recommendationSet.init(expr)
+	return recommendationSet.getStringOutput()
 }
 
 // indexCandidateSet stores potential indexes that could be recommended for a
@@ -86,9 +82,9 @@ func (ics *indexCandidateSet) init(rootExpr opt.Expr) {
 
 // synthesizeIndexCandidates adds index candidates that are combinations of
 // candidates in the JOIN, EQUAL, and RANGE categories. See rule 5 in
-// FindIndexCandidates.
+// FindIndexCandidateSet.
 func (ics *indexCandidateSet) synthesizeIndexCandidates() {
-	// Copy indexes in each category to indexCandidates without duplicates.
+	// Copy indexes in each category to overallCandidates without duplicates.
 	copyIndexes(ics.equalCandidates, ics.overallCandidates)
 	copyIndexes(ics.rangeCandidates, ics.overallCandidates)
 	copyIndexes(ics.joinCandidates, ics.overallCandidates)
@@ -106,7 +102,7 @@ func (ics *indexCandidateSet) synthesizeIndexCandidates() {
 }
 
 // categorizeIndexCandidates finds potential index candidates for a given
-// query. See FindIndexCandidates for the list of candidate creation rules.
+// query. See FindIndexCandidateSet for the list of candidate creation rules.
 //
 // TODO(neha): Add information about potential STORING columns to add for
 // 	indexes where adding them could avoid index-joins.
@@ -191,7 +187,7 @@ func (ics indexCandidateSet) addOrderingIndex(ordering opt.Ordering) {
 }
 
 // addRangeExprIndex recursively walks a *memo.RangeExpr to find a
-// *memo.VariableExpr, and adds this to indexCandidates.
+// *memo.VariableExpr, and adds this to rangeCandidates.
 func (ics *indexCandidateSet) addRangeExprIndex(expr opt.Expr) {
 	switch expr := expr.(type) {
 	case *memo.VariableExpr:
@@ -202,7 +198,7 @@ func (ics *indexCandidateSet) addRangeExprIndex(expr opt.Expr) {
 	}
 }
 
-// addJoinIndexes adds single-column indexes to indexCandidates for each outer
+// addJoinIndexes adds single-column indexes to joinCandidates for each outer
 // column in a join predicate, if these indexes do not already exist. For each
 // table with multiple columns in the JOIN predicate, it also creates a single
 // index on all such columns.
@@ -211,6 +207,104 @@ func (ics *indexCandidateSet) addJoinIndexes(expr memo.FiltersExpr) {
 		addSingleColumnIndex(col, false /* desc */, ics.md, ics.joinCandidates)
 	}
 	addMultiColumnIndex(expr.OuterCols().ToList(), nil /* desc */, ics.md, ics.joinCandidates)
+}
+
+// indexRecommendationSet stores the hypothetical indexes that are used in a
+// statement's optimal plan (in usedIndexes), as well as the statement's
+// metadata.
+type indexRecommendationSet struct {
+	md          *opt.Metadata
+	usedIndexes map[cat.Table][]int
+}
+
+// init initializes an indexRecommendationSet, by allocating memory for it and
+// calling synthesizeIndexRecommendations.
+func (irs *indexRecommendationSet) init(expr opt.Expr) {
+	irs.usedIndexes = make(map[cat.Table][]int)
+	irs.synthesizeIndexRecommendations(expr)
+}
+
+// synthesizeIndexRecommendations recursively walks an expression tree to find
+// hypothetical indexes that are used in it.
+func (irs *indexRecommendationSet) synthesizeIndexRecommendations(expr opt.Expr) {
+	switch expr := expr.(type) {
+	case *memo.ScanExpr:
+		irs.addIndexToRecommendationSet(expr.Index, expr.Table)
+	case *memo.LookupJoinExpr:
+		irs.addIndexToRecommendationSet(expr.Index, expr.Table)
+	case *memo.InvertedJoinExpr:
+		irs.addIndexToRecommendationSet(expr.Index, expr.Table)
+	}
+	for i, n := 0, expr.ChildCount(); i < n; i++ {
+		irs.synthesizeIndexRecommendations(expr.Child(i))
+	}
+}
+
+// addIndexToRecommendationSet adds an index to the indexes map if it does not
+// exist already in the map and in the table.
+func (irs *indexRecommendationSet) addIndexToRecommendationSet(
+	indexOrd cat.IndexOrdinal, tabID opt.TableID,
+) {
+	hypTable := irs.md.TableMeta(tabID).Table.(*hypotheticalTable)
+	// Do not add real table indexes (that are not hypothetical).
+	if indexOrd < hypTable.Table.IndexCount() {
+		return
+	}
+	for _, existingIndex := range irs.usedIndexes[hypTable] {
+		if existingIndex == indexOrd {
+			return
+		}
+	}
+	irs.usedIndexes[hypTable] = append(irs.usedIndexes[hypTable], indexOrd)
+}
+
+// getStringOutput returns the string index recommendation output that will be
+// displayed below the statement plan in EXPLAIN.
+func (irs *indexRecommendationSet) getStringOutput() string {
+	if len(irs.usedIndexes) == 0 {
+		return ""
+	}
+	indexRecCount := 0
+	for t := range irs.usedIndexes {
+		indexRecCount += len(irs.usedIndexes[t])
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("\n\nIndex recommendations: %d\n\n", indexRecCount))
+	indexRecOrd := 1
+	for t, indexes := range irs.usedIndexes {
+		for _, indexOrd := range indexes {
+			sb.WriteString(fmt.Sprintf("%d. table: ", indexRecOrd))
+			indexRecOrd++
+			tableName := t.Name()
+			sb.WriteString(tableName.String() + "\n")
+			index := t.Index(indexOrd)
+			sb.WriteString("   columns: ")
+			indexCols := make([]string, index.ColumnCount())
+			for i, n := 0, index.ColumnCount(); i < n; i++ {
+				var colSb strings.Builder
+				indexCol := index.Column(i)
+				colName := indexCol.Column.ColName()
+				colSb.WriteString(colName.String())
+				sb.WriteString("[" + colName.String() + "] ")
+				if indexCol.Descending {
+					sb.WriteString("DESC")
+					colSb.WriteString(" DESC")
+				} else {
+					sb.WriteString("ASC")
+				}
+				if i != (n - 1) {
+					sb.WriteString(", ")
+				} else {
+					sb.WriteString("\n")
+				}
+				indexCols[i] = colSb.String()
+			}
+			sb.WriteString("   SQL command: ")
+			sqlCmd := fmt.Sprintf("CREATE INDEX ON %s (%s);", tableName.String(), strings.Join(indexCols, ", "))
+			sb.WriteString(sqlCmd + "\n\n")
+		}
+	}
+	return sb.String()
 }
 
 // copyIndexes copies indexes from one map to another, getting rid of duplicates
@@ -245,13 +339,12 @@ func constructIndexCombinations(
 	leftIndexMap, rightIndexMap, outputIndexes map[cat.Table][][]cat.IndexColumn,
 ) {
 	for t, leftIndexes := range leftIndexMap {
-		rightIndexes := rightIndexMap[t]
-		if rightIndexes == nil {
-			return
-		}
-
-		for _, leftIndex := range leftIndexes {
-			constructLeftIndexCombination(leftIndex, t, rightIndexes, outputIndexes)
+		if rightIndexes, found := rightIndexMap[t]; !found {
+			continue
+		} else {
+			for _, leftIndex := range leftIndexes {
+				constructLeftIndexCombination(leftIndex, t, rightIndexes, outputIndexes)
+			}
 		}
 	}
 }
@@ -278,25 +371,10 @@ func constructLeftIndexCombination(
 				updatedRightIndex = append(updatedRightIndex, rightCol)
 			}
 		}
-		addIndexToCandidates(append(leftIndex, updatedRightIndex...), tab, outputIndexes)
-	}
-}
-
-// addIndexToOutputSet adds an index to the indexes map if it does not exist
-// already.
-//
-// TODO(neha): Don't add indexes to recommendation if they already exist in the
-//   table.
-func addIndexToOutputSet(
-	index cat.IndexOrdinal, tabID opt.TableID, md *opt.Metadata, indexes map[cat.StableID][]int,
-) {
-	tabStableID := md.TableMeta(tabID).Table.ID()
-	for _, existingIndex := range indexes[tabStableID] {
-		if existingIndex == index {
-			return
+		if len(updatedRightIndex) > 0 {
+			addIndexToCandidates(append(leftIndex, updatedRightIndex...), tab, outputIndexes)
 		}
 	}
-	indexes[tabStableID] = append(indexes[tabStableID], index)
 }
 
 // addVariableExprIndex adds an index candidate to indexCandidates if the expr
@@ -380,21 +458,6 @@ func addIndexToCandidates(
 	currTable cat.Table,
 	indexCandidates map[cat.Table][][]cat.IndexColumn,
 ) {
-	// Do not add an index if it is equivalent to the primary index.
-	isPrimaryIdx := true
-	primaryIdx := currTable.Index(cat.PrimaryIndex)
-	for i, n := 0, primaryIdx.KeyColumnCount(); i < n; i++ {
-		if len(newIndex) != n {
-			isPrimaryIdx = false
-			break
-		} else if primaryIdx.Column(i) != newIndex[i] {
-			isPrimaryIdx = false
-		}
-	}
-	if isPrimaryIdx {
-		return
-	}
-
 	// Do not add duplicate indexes.
 	for _, existingIndex := range indexCandidates[currTable] {
 		if len(existingIndex) != len(newIndex) {

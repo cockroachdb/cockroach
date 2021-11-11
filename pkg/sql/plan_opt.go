@@ -525,19 +525,17 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	if err := bld.Build(); err != nil {
 		return nil, err
 	}
-	if _, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan); !isCanned {
-		if _, err := opc.optimizer.Optimize(); err != nil {
+
+	// For index recommendations, after building we must interrupt to find
+	// potential index candidates in the memo. Optimize is called from
+	// makeQueryIndexRecommendation.
+	if _, isExplain := opc.p.stmt.AST.(*tree.Explain); isExplain {
+		if err := opc.makeQueryIndexRecommendation(f); err != nil {
 			return nil, err
 		}
-	}
-
-	// For index recommendations, after optimizing we must interrupt to find index
-	// candidates in the optimized memo.
-	if stmt, isExplain := opc.p.stmt.AST.(*tree.Explain); isExplain {
-		if stmt.ExplainOptions.Flags[tree.ExplainFlagIndexRec] {
-			if err := opc.makeQueryIndexRecommendation(ctx, f); err != nil {
-				return nil, err
-			}
+	} else if _, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan); !isCanned {
+		if _, err := opc.optimizer.Optimize(); err != nil {
+			return nil, err
 		}
 	}
 
@@ -662,53 +660,60 @@ func (p *planner) DecodeGist(gist string) ([]string, error) {
 	return explain.DecodePlanGistToRows(gist, &p.optPlanningCtx.catalog)
 }
 
-// makeQueryIndexRecommendation builds/optimizes a statement and walks through
-// it to find potential index candidates. It then builds and optimizes the
-// statement with those indexes hypothetically added to the table. An index
-// recommendation for the query is outputted based on which hypothetical indexes
-// are helpful in the optimal plan.
-func (opc *optPlanningCtx) makeQueryIndexRecommendation(
-	ctx context.Context, f *norm.Factory,
-) error {
-	indexCandidates := indexrec.FindIndexCandidates(f.Memo().RootExpr(), f.Metadata())
-	oldTables, hypTables := indexrec.BuildHypotheticalTables(
-		indexCandidates, getTableZones(indexCandidates),
-	)
+// makeQueryIndexRecommendation builds a statement and walks through it to find
+// potential index candidates. It then optimizes the statement with those
+// indexes hypothetically added to the table. An index recommendation for the
+// query is outputted based on which hypothetical indexes are helpful in the
+// optimal plan.
+func (opc *optPlanningCtx) makeQueryIndexRecommendation(f *norm.Factory) error {
+	// Save the normalized memo created by the optbuilder.
+	savedMemo := opc.optimizer.DetachMemo()
 
-	err := opc.buildAndOptimizeWithTables(ctx, f, hypTables)
-	if err != nil {
+	// Use the optimizer to apply normalization rules that are not yet added to
+	// the memo, like *memo.SortExpr.
+	f.FoldingControl().AllowStableFolds()
+	if err := f.AssignPlaceholders(savedMemo); err != nil {
 		return err
 	}
-
-	indexes := make(map[cat.StableID][]int)
-	indexrec.WalkOptExprIndexesUsed(f.Memo().RootExpr(), f.Metadata(), indexes)
-	// TODO(neha): Output index recommendation information in the EXPLAIN
-
-	// Revert to executable plan without hypothetical indexes.
-	err = opc.buildAndOptimizeWithTables(ctx, f, oldTables)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// buildAndOptimizeWithTables builds and optimizes a query with each TableMeta
-// updated to store the corresponding table in the tables map.
-func (opc *optPlanningCtx) buildAndOptimizeWithTables(
-	ctx context.Context, f *norm.Factory, tables map[cat.StableID]cat.Table,
-) error {
-	opc.reset()
-	bld := optbuilder.New(ctx, &opc.p.semaCtx, opc.p.EvalContext(), &opc.catalog, f, opc.p.stmt.AST)
-	if err := bld.Build(); err != nil {
-		return err
-	}
-
-	opc.optimizer.Memo().Metadata().UpdateTableMeta(tables)
+	opc.optimizer.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		return ruleName.IsNormalize()
+	})
 	if _, err := opc.optimizer.Optimize(); err != nil {
 		return err
 	}
 
+	// Walk through fully normalized memo to determine index candidates and create
+	// hypothetical tables.
+	indexCandidates := indexrec.FindIndexCandidateSet(f.Memo().RootExpr(), f.Metadata())
+	oldTables, hypTables := indexrec.BuildHypotheticalTables(
+		indexCandidates, getTableZones(indexCandidates), getExistingIndexes(indexCandidates),
+	)
+
+	// Optimize with saved memo and hypothetical tables. Walk through the optimal
+	// plan to determine index recommendations.
+	opc.optimizer.DetachMemo()
+	if err := f.AssignPlaceholders(savedMemo); err != nil {
+		return err
+	}
+	opc.optimizer.Memo().Metadata().UpdateTableMeta(hypTables)
+	if _, err := opc.optimizer.Optimize(); err != nil {
+		return err
+	}
+
+	indexRecommendations := indexrec.FindIndexRecommendationSet(f.Memo().RootExpr(), f.Metadata())
+
+	// Re-optimize with saved memo and original table metadata to get an
+	// executable plan.
+	opc.optimizer.DetachMemo()
+	savedMemo.Metadata().UpdateTableMeta(oldTables)
+	if err := f.AssignPlaceholders(savedMemo); err != nil {
+		return err
+	}
+	if _, err := opc.optimizer.Optimize(); err != nil {
+		return err
+	}
+
+	opc.p.indexRecommendations = indexRecommendations
 	return nil
 }
 
@@ -722,4 +727,33 @@ func getTableZones(
 		tableZones[t] = t.(*optTable).zone
 	}
 	return tableZones
+}
+
+// getExistingIndexes returns a map from a table's cat.StableID to a slice of
+// indexes. This is used when building hypothetical tables to ensure a
+// hypothetical index is not added if an equivalent index already exists.
+func getExistingIndexes(
+	indexCandidates map[cat.Table][][]cat.IndexColumn,
+) (indexes map[cat.StableID][][]cat.IndexColumn) {
+	indexes = make(map[cat.StableID][][]cat.IndexColumn)
+	for tab := range indexCandidates {
+		tabIndexes := make([][]cat.IndexColumn, tab.IndexCount())
+		for i, n := 0, tab.IndexCount(); i < n; i++ {
+			currIndex := tab.Index(i).(*optIndex)
+			idx := currIndex.idx
+			existingIndex := make([]cat.IndexColumn, idx.NumKeyColumns())
+			for j, m := 0, idx.NumKeyColumns(); j < m; j++ {
+				id := idx.GetKeyColumnID(j)
+				dir := idx.GetKeyColumnDirection(i)
+				ord, _ := tab.(*optTable).lookupColumnOrdinal(id)
+				existingIndex[j] = cat.IndexColumn{
+					Column:     tab.Column(ord),
+					Descending: dir == descpb.IndexDescriptor_DESC,
+				}
+			}
+			tabIndexes[i] = existingIndex
+		}
+		indexes[tab.ID()] = tabIndexes
+	}
+	return indexes
 }
