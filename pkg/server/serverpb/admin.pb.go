@@ -361,7 +361,8 @@ var xxx_messageInfo_DatabaseDetailsResponse_Stats_MissingTable proto.InternalMes
 
 // TableDetailsRequest is a request for detailed information about a table.
 type TableDetailsRequest struct {
-	// database is the database that contains the table we're interested in.
+	// database is the name of the database that contains the table we're
+	// interested in.
 	Database string `protobuf:"bytes,1,opt,name=database,proto3" json:"database,omitempty"`
 	// table is the name of the table that we're querying. Table may be
 	// schema-qualified (schema.table) and each name component that contains
@@ -590,7 +591,8 @@ var xxx_messageInfo_TableDetailsResponse_Index proto.InternalMessageInfo
 // TableStatsRequest is a request for detailed, computationally expensive
 // information about a table.
 type TableStatsRequest struct {
-	// database is the database that contains the table we're interested in.
+	// database is the name of the database that contains the table we're
+	// interested in.
 	Database string `protobuf:"bytes,1,opt,name=database,proto3" json:"database,omitempty"`
 	// table is the name of the table that we're querying. Table may be
 	// schema-qualified (schema.table) and each name component that contains
