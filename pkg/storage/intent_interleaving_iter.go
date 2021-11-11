@@ -467,6 +467,7 @@ func (i *intentInterleavingIter) Valid() (bool, error) {
 
 func (i *intentInterleavingIter) Next() {
 	if i.err != nil {
+
 		return
 	}
 	if i.dir < 0 {
@@ -923,6 +924,10 @@ func (i *intentInterleavingIter) UnsafeRawMVCCKey() []byte {
 func (i *intentInterleavingIter) ValueProto(msg protoutil.Message) error {
 	value := i.UnsafeValue()
 	return protoutil.Unmarshal(value, msg)
+}
+
+func (i *intentInterleavingIter) IsCurIntent() bool {
+	return i.isCurAtIntentIter()
 }
 
 func (i *intentInterleavingIter) ComputeStats(

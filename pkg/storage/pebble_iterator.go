@@ -566,6 +566,12 @@ func (p *pebbleIterator) ValueProto(msg protoutil.Message) error {
 	return protoutil.Unmarshal(value, msg)
 }
 
+// IsCurIntent implements the MVCCIterator interface.
+func (p *pebbleIterator) IsCurIntent() bool {
+	// todo(bananabrick): Can this be true?
+	return false
+}
+
 // ComputeStats implements the MVCCIterator interface.
 func (p *pebbleIterator) ComputeStats(
 	start, end roachpb.Key, nowNanos int64,

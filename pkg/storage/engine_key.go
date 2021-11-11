@@ -205,7 +205,6 @@ func DecodeEngineKey(b []byte) (key EngineKey, ok bool) {
 	if keyPartEnd < 0 {
 		return EngineKey{}, false
 	}
-
 	// Key excludes the sentinel byte.
 	key.Key = b[:keyPartEnd]
 	if versionLen > 0 {

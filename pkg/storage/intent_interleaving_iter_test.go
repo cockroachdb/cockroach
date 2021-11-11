@@ -108,21 +108,43 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 		return
 	}
 	rawMVCCKey := iter.UnsafeRawMVCCKey()
-	if !engineKey.IsLockTableKey() {
-		fmt.Fprintf(b, "output: engineKey should be a lock table key: %s\n", engineKey)
-		return
+	if iter.IsCurIntent() {
+		if !engineKey.IsLockTableKey() {
+			fmt.Fprintf(b, "output: engineKey should be a lock table key: %s\n", engineKey)
+			return
+		}
+		ltKey, err := engineKey.ToLockTableKey()
+		if err != nil {
+			fmt.Fprintf(b, "output: engineKey should be a lock table key: %s\n", err.Error())
+			return
+		}
+		// Strip off the sentinel byte.
+		rawMVCCKey = rawMVCCKey[:len(rawMVCCKey)-1]
+		if !bytes.Equal(ltKey.Key, rawMVCCKey) {
+			fmt.Fprintf(b, "output: rawMVCCKey %x != ltKey.Key %x\n", rawMVCCKey, ltKey.Key)
+			return
+		}
+	} else {
+		if !engineKey.IsMVCCKey() {
+			fmt.Fprintf(b, "output: engineKey should be a MVCC key: %s\n", engineKey)
+			return
+		}
+		mvccKey, err := engineKey.ToMVCCKey()
+		if err != nil {
+			fmt.Fprintf(b, "output: engineKey should be a MVCC key: %s\n", err.Error())
+			return
+		}
+		if !bytes.Equal(iter.UnsafeRawKey(), iter.UnsafeRawMVCCKey()) {
+			fmt.Fprintf(b, "output: UnsafeRawKey %x != UnsafeRawMVCCKey %x\n",
+				iter.UnsafeRawKey(), iter.UnsafeRawMVCCKey())
+			return
+		}
+		if !mvccKey.Equal(iter.UnsafeKey()) {
+			fmt.Fprintf(b, "output: mvccKey %s != UnsafeKey %s\n", mvccKey, iter.UnsafeKey())
+			return
+		}
 	}
-	ltKey, err := engineKey.ToLockTableKey()
-	if err != nil {
-		fmt.Fprintf(b, "output: engineKey should be a lock table key: %s\n", err.Error())
-		return
-	}
-	// Strip off the sentinel byte.
-	rawMVCCKey = rawMVCCKey[:len(rawMVCCKey)-1]
-	if !bytes.Equal(ltKey.Key, rawMVCCKey) {
-		fmt.Fprintf(b, "output: rawMVCCKey %x != ltKey.Key %x\n", rawMVCCKey, ltKey.Key)
-		return
-	}
+
 	v1 := iter.UnsafeValue()
 	v2 := iter.Value()
 	if !bytes.Equal(v1, v2) {
@@ -613,7 +635,7 @@ func generateIterOps(rng *rand.Rand, mvcckv []MVCCKeyValue, isLocal bool) []stri
 	return ops
 }
 
-func doOps(t *testing.T, ops []string, eng Engine, out *strings.Builder) {
+func doOps(t *testing.T, ops []string, eng Engine, interleave bool, out *strings.Builder) {
 	var iter MVCCIterator
 	closeIter := func() {
 		if iter != nil {
@@ -637,7 +659,11 @@ func doOps(t *testing.T, ops []string, eng Engine, out *strings.Builder) {
 			if d.HasArg("upper") {
 				opts.UpperBound = scanRoachKey(t, &d, "upper")
 			}
-			iter = eng.NewMVCCIterator(MVCCKeyIterKind, opts)
+			if interleave {
+				iter = newIntentInterleavingIterator(eng, opts)
+			} else {
+				iter = eng.NewMVCCIterator(MVCCKeyIterKind, opts)
+			}
 			lowerStr := "nil"
 			if opts.LowerBound != nil {
 				lowerStr = string(makePrintableRoachpbKey(opts.LowerBound))
@@ -707,8 +733,8 @@ func TestRandomizedIntentInterleavingIter(t *testing.T) {
 		}
 	}
 	var out1, out2 strings.Builder
-	doOps(t, ops, eng1, &out1)
-	doOps(t, ops, eng2, &out2)
+	doOps(t, ops, eng1, true /* interleave */, &out1)
+	doOps(t, ops, eng2, false /* interleave */, &out2)
 	// todo(bananabrick) : this is comparing the same outputs, which doesn't
 	// do anything currently.
 	require.Equal(t, out1.String(), out2.String(),

@@ -153,6 +153,8 @@ type MVCCIterator interface {
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
 	ValueProto(msg protoutil.Message) error
+	// Returns true iff Key() is positioned on an intent.
+	IsCurIntent() bool
 	// ComputeStats scans the underlying engine from start to end keys and
 	// computes stats counters based on the values. This method is used after a
 	// range is split to recompute stats for each subrange. The start key is
