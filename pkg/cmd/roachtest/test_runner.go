@@ -948,7 +948,6 @@ func (r *testRunner) maybePostGithubIssue(
 				"roachtest README",
 				"https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md",
 			)(renderer)
-			renderer.Escaped(" | ")
 			issues.HelpCommandAsLink(
 				"How To Investigate (internal)",
 				"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
