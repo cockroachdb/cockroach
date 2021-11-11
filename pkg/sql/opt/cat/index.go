@@ -188,6 +188,8 @@ type Index interface {
 	// Partition returns the ith PARTITION BY LIST partition within the index
 	// definition, where i < PartitionCount.
 	Partition(i int) Partition
+
+	Invisible() bool
 }
 
 // IndexColumn describes a single column that is part of an index definition.

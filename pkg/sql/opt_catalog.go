@@ -1428,6 +1428,10 @@ func (oi *optIndex) Partition(i int) cat.Partition {
 	return &oi.partitions[i]
 }
 
+func (oi *optIndex) Invisible() bool {
+	return oi.idx.Invisible()
+}
+
 // optPartition implements cat.Partition and represents a PARTITION BY LIST
 // partition of an index.
 type optPartition struct {
@@ -2173,6 +2177,11 @@ func (oi *optVirtualIndex) PartitionCount() int {
 // Partition is part of the cat.Index interface.
 func (oi *optVirtualIndex) Partition(i int) cat.Partition {
 	return nil
+}
+
+// Partition is part of the cat.Index interface.
+func (oi *optVirtualIndex) Invisible() bool {
+	return false
 }
 
 // optVirtualFamily is a dummy implementation of cat.Family for the only family

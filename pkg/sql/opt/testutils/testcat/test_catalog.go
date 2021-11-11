@@ -968,6 +968,12 @@ func (ti *Index) Partition(i int) cat.Partition {
 	return &ti.partitions[i]
 }
 
+// Partition is part of the cat.Index interface.
+// TODO: fix this
+func (oi *Index) Invisible() bool {
+	return false
+}
+
 // Partition implements the cat.Partition interface for testing purposes.
 type Partition struct {
 	name   string

@@ -197,6 +197,7 @@ func MakeIndexDescriptor(
 		Unique:            n.Unique,
 		StoreColumnNames:  n.Storing.ToStrings(),
 		CreatedExplicitly: true,
+		Invisible:         n.Invisible,
 	}
 
 	if n.Inverted {

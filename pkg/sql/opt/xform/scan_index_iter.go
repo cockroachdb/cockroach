@@ -226,6 +226,11 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 
 		index := it.tabMeta.Table.Index(ord)
 
+		// Skip over invisible indexes unless they are forced.
+		if index.Invisible() && !it.scanPrivate.Flags.ForceIndex {
+			continue
+		}
+
 		// Skip over inverted indexes if rejectInvertedIndexes is set.
 		if it.hasRejectFlags(rejectInvertedIndexes) && index.IsInverted() {
 			continue

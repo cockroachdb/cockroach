@@ -64,3 +64,22 @@ type AlterIndexPartitionBy struct {
 func (node *AlterIndexPartitionBy) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.PartitionByIndex)
 }
+
+// AlterIndexVisibility represents a SET [NOT] VISIBLE statement.
+type AlterIndexVisibility struct {
+	// TODO should we have ALTER INDEX IF EXISTS ... SET NOT VISIBLE?
+	//IfExists bool
+	Index TableIndexName
+	// Cmds     AlterIndexCmds
+	Invisible bool
+}
+
+// Format implements the NodeFormatter interface.
+// TODO: fix this.
+func (node *AlterIndexVisibility) Format(ctx *FmtCtx) {
+	ctx.WriteString("SET")
+	if node.Invisible {
+		ctx.WriteString(" NOT")
+	}
+	ctx.WriteString(" VISIBLE")
+}

@@ -306,6 +306,10 @@ func (w index) GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID 
 	return w.desc.CompositeColumnIDs[compositeColumnOrdinal]
 }
 
+func (w index) Invisible() bool {
+	return w.desc.Invisible
+}
+
 // partitioning is the backing struct for a catalog.Partitioning interface.
 type partitioning struct {
 	desc *descpb.PartitioningDescriptor

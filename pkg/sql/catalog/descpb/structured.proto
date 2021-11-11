@@ -562,6 +562,10 @@ message IndexDescriptor {
   // TODO(mgartner): Update the comment to explain that columns are referenced
   // by their ID once #49766 is addressed.
   optional string predicate = 23 [(gogoproto.nullable) = false];
+
+  // Invisible is true for indexes that cannot be used by queries unless forced
+  // with an index hint.
+  optional bool invisible = 24 [(gogoproto.nullable) = false];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and

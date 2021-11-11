@@ -1244,7 +1244,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <types.IntervalTypeMetadata> opt_interval_qualifier interval_qualifier interval_second
 %type <tree.Expr> overlay_placing
 
-%type <bool> opt_unique opt_concurrently opt_cluster opt_without_index
+%type <bool> opt_unique opt_concurrently opt_cluster opt_without_index opt_not_visible
 %type <bool> opt_index_access_method
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
@@ -1800,6 +1800,7 @@ alter_range_stmt:
 //   ALTER INDEX ... UNSPLIT AT <selectclause>
 //   ALTER INDEX ... UNSPLIT ALL
 //   ALTER INDEX ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
+//   ALTER INDEX ... SET [NOT] VISIBLE
 //
 // Zone configurations:
 //   DISCARD
@@ -1817,6 +1818,7 @@ alter_index_stmt:
 | alter_scatter_index_stmt
 | alter_rename_index_stmt
 | alter_zone_index_stmt
+| alter_visible_index_stmt
 // ALTER INDEX has its error help token here because the ALTER INDEX
 // prefix is spread over multiple non-terminals.
 | ALTER INDEX error // SHOW HELP: ALTER INDEX
@@ -2014,6 +2016,22 @@ alter_zone_index_stmt:
        TableOrIndex: $3.tableIndexName(),
     }
     $$.val = s
+  }
+
+alter_visibility_index_stmt:
+  ALTER INDEX table_index_name SET index_visibility
+  {
+    $$.val = &tree.AlterIndexVisibility{Index: $3.newTableIndexName(), Invisible: $5.bool()}
+  }
+
+index_visibility:
+  NOT VISIBLE
+  {
+    $$.val = true
+  }
+| VISIBLE
+  {
+    $$.val = false
   }
 
 alter_zone_partition_stmt:
@@ -7681,11 +7699,12 @@ enum_val_list:
 //        [USING HASH WITH BUCKET_COUNT = <shard_buckets>] [STORING ( <colnames...> )]
 //        [PARTITION BY <partition params>]
 //        [WITH <storage_parameter_list] [WHERE <where_conds...>]
+//        [NOT VISIBLE]
 //
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE,
 // WEBDOCS/create-index.html
 create_index_stmt:
-  CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
+  CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_not_visible
   {
     table := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -7700,6 +7719,7 @@ create_index_stmt:
       Predicate:        $16.expr(),
       Inverted:         $8.bool(),
       Concurrently:     $4.bool(),
+      Invisible: 	$17.bool(),
     }
   }
 | CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
@@ -7852,6 +7872,16 @@ index_elem_options:
       }
     }
     $$.val = tree.IndexElem{Direction: dir, NullsOrder: nullsOrder}
+  }
+
+opt_not_visible:
+  NOT VISIBLE
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
   }
 
 opt_class:
