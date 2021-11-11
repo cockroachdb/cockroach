@@ -1928,7 +1928,7 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 			if log.V(1) {
 				log.Warningf(ctx, "failed to record transaction stats: %s", err)
 			}
-			ex.metrics.StatsMetrics.DiscardedStatsCount.Inc(1)
+			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
 		}
 	}
 }
