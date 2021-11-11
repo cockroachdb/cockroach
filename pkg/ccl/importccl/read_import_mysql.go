@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -300,7 +299,6 @@ func readMysqlCreateTable(
 	p sql.JobExecContext,
 	startingID descpb.ID,
 	parentDB catalog.DatabaseDescriptor,
-	parentSchema catalog.SchemaDescriptor,
 	match string,
 	fks fkHandler,
 	seqVals map[descpb.ID]int64,
@@ -337,7 +335,7 @@ func readMysqlCreateTable(
 				continue
 			}
 			id := descpb.ID(int(startingID) + len(ret))
-			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, p, parentDB, parentSchema, id, name, i.TableSpec, fks, seqVals, owner, walltime)
+			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, p, parentDB, id, name, i.TableSpec, fks, seqVals, owner, walltime)
 			if err != nil {
 				return nil, err
 			}
@@ -379,7 +377,6 @@ func mysqlTableToCockroach(
 	evalCtx *tree.EvalContext,
 	p sql.JobExecContext,
 	parentDB catalog.DatabaseDescriptor,
-	parentSchema catalog.SchemaDescriptor,
 	id descpb.ID,
 	name string,
 	in *mysql.TableSpec,
@@ -417,7 +414,10 @@ func mysqlTableToCockroach(
 			}
 		}
 	}
-
+	publicSchema, err := getPublicSchemaDescForDatabase(ctx, p.ExecCfg(), parentDB)
+	if err != nil {
+		return nil, nil, err
+	}
 	var seqDesc *tabledesc.Mutable
 	// If we have an auto-increment seq, create it and increment the id.
 	if seqName != "" {
@@ -433,7 +433,7 @@ func mysqlTableToCockroach(
 			seqName,
 			opts,
 			parentDB.GetID(),
-			keys.PublicSchemaID,
+			publicSchema.GetID(),
 			id,
 			time,
 			privilegeDesc,
@@ -469,7 +469,7 @@ func mysqlTableToCockroach(
 		// If the target table columns have data type INT or INTEGER, they need to
 		// be updated to conform to the session variable `default_int_size`.
 		if dType, ok := def.Type.(*types.T); ok {
-			if dType.Equivalent(types.Int) && p != nil {
+			if dType.Equivalent(types.Int) && p != nil && p.SessionData() != nil {
 				def.Type = parser.NakedIntTypeFromDefaultIntSize(p.SessionData().DefaultIntSize)
 			}
 		}
@@ -503,7 +503,7 @@ func mysqlTableToCockroach(
 	semaCtx := tree.MakeSemaContext()
 	semaCtxPtr := &semaCtx
 	// p is nil in some tests.
-	if p != nil {
+	if p != nil && p.SemaCtx() != nil {
 		semaCtxPtr = p.SemaCtx()
 	}
 
@@ -512,7 +512,7 @@ func mysqlTableToCockroach(
 	semaCtxPtr = makeSemaCtxWithoutTypeResolver(semaCtxPtr)
 	desc, err := MakeSimpleTableDescriptor(
 		ctx, semaCtxPtr, evalCtx.Settings, stmt, parentDB,
-		parentSchema, id, fks, time.WallTime,
+		publicSchema, id, fks, time.WallTime,
 	)
 	if err != nil {
 		return nil, nil, err

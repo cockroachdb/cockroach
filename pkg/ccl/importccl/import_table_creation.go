@@ -41,7 +41,7 @@ const (
 	// but they do match what would happen when creating a new database and
 	// table on an empty cluster.
 	defaultCSVParentID descpb.ID = keys.MinNonPredefinedUserDescID
-	defaultCSVTableID  descpb.ID = defaultCSVParentID + 1
+	defaultCSVTableID  descpb.ID = defaultCSVParentID + 2
 )
 
 type fkHandler struct {
@@ -67,22 +67,17 @@ func MakeTestingSimpleTableDescriptor(
 	walltime int64,
 ) (*tabledesc.Mutable, error) {
 	db := dbdesc.NewInitial(parentID, "foo", security.RootUserName())
-	var sc catalog.SchemaDescriptor
-	if parentSchemaID == keys.PublicSchemaID {
-		sc = schemadesc.GetPublicSchema()
-	} else {
-		sc = schemadesc.NewBuilder(&descpb.SchemaDescriptor{
-			Name:     "foo",
-			ID:       parentSchemaID,
-			Version:  1,
-			ParentID: parentID,
-			Privileges: descpb.NewPrivilegeDescriptor(
-				security.PublicRoleName(),
-				privilege.SchemaPrivileges,
-				security.RootUserName(),
-			),
-		}).BuildCreatedMutableSchema()
-	}
+	sc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+		Name:     "foo",
+		ID:       parentSchemaID,
+		Version:  1,
+		ParentID: parentID,
+		Privileges: descpb.NewPrivilegeDescriptor(
+			security.PublicRoleName(),
+			privilege.SchemaPrivileges,
+			security.RootUserName(),
+		),
+	}).BuildCreatedMutableSchema()
 	return MakeSimpleTableDescriptor(ctx, semaCtx, st, create, db, sc, tableID, fks, walltime)
 }
 
