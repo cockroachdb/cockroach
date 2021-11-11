@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -1881,7 +1883,14 @@ func payloadHasError(payload fsm.EventPayload) bool {
 }
 
 // recordTransactionStart records the start of the transaction.
-func (ex *connExecutor) recordTransactionStart() {
+func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
+	// Transaction fingerprint ID will be available once transaction finishes
+	// execution.
+	ex.txnIDCacheWriter.Record(txnidcache.ResolvedTxnID{
+		TxnID:            txnID,
+		TxnFingerprintID: roachpb.InvalidTransactionFingerprintID,
+	})
+
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
 	ex.state.mu.RUnlock()
@@ -1931,6 +1940,13 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 		if !implicit {
 			ex.statsCollector.EndExplicitTransaction(
 				ctx,
+				transactionFingerprintID,
+			)
+		}
+		if ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded != nil {
+			ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded(
+				ex.sessionData(),
+				ev.txnID,
 				transactionFingerprintID,
 			)
 		}
@@ -1991,13 +2007,18 @@ func (ex *connExecutor) recordTransaction(
 	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
 
+	ex.txnIDCacheWriter.Record(txnidcache.ResolvedTxnID{
+		TxnID:            ev.txnID,
+		TxnFingerprintID: transactionFingerprintID,
+	})
+
 	txnServiceLat := ex.phaseTimes.GetTransactionServiceLatency()
 	txnRetryLat := ex.phaseTimes.GetTransactionRetryLatency()
 	commitLat := ex.phaseTimes.GetCommitLatency()
 
 	recordedTxnStats := sqlstats.RecordedTxnStats{
 		TransactionTimeSec:      txnTime.Seconds(),
-		Committed:               ev == txnCommit,
+		Committed:               ev.eventType == txnCommit,
 		ImplicitTxn:             implicit,
 		RetryCount:              int64(ex.extraTxnState.autoRetryCounter),
 		StatementFingerprintIDs: ex.extraTxnState.transactionStatementFingerprintIDs,
