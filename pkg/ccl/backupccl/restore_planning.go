@@ -417,7 +417,7 @@ func allocateDescriptorRewrites(
 	}
 
 	needsNewParentIDs := make(map[string][]descpb.ID)
-
+	var needsNewParentSchemaIDs []descpb.ID
 	// Increment the DescIDSequenceKey so that it is higher than the max desc ID
 	// in the backup. This generator keeps produced the next descriptor ID.
 	var tempSysDBID descpb.ID
@@ -599,6 +599,12 @@ func allocateDescriptorRewrites(
 
 			if _, ok := restoreDBNames[targetDB]; ok {
 				needsNewParentIDs[targetDB] = append(needsNewParentIDs[targetDB], table.ID)
+				// We need to rewrite the Public schema id from 29 to the ID of the actual
+				// public schema that will be created.
+				if table.GetParentSchemaID() == keys.PublicSchemaID && targetDB != systemschema.SystemDatabaseName &&
+					targetDB != restoreTempSystemDB {
+					needsNewParentSchemaIDs = append(needsNewParentSchemaIDs, table.GetID())
+				}
 			} else if descriptorCoverage == tree.AllDescriptors {
 				// Set the remapped ID to the original parent ID, except for system tables which
 				// should be RESTOREd to the temporary system database.
@@ -646,6 +652,11 @@ func allocateDescriptorRewrites(
 				// Create the table rewrite with the new parent ID. We've done all the
 				// up-front validation that we can.
 				descriptorRewrites[table.ID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: parentID}
+				// We need to rewrite the Public schema id from 29 to the ID of the actual
+				// public schema that will be created.
+				if table.GetParentSchemaID() == keys.PublicSchemaID && targetDB != systemschema.SystemDatabaseName {
+					descriptorRewrites[table.ID].ParentSchemaID = parentDB.GetSchemaID(tree.PublicSchema)
+				}
 			}
 		}
 
@@ -759,6 +770,13 @@ func allocateDescriptorRewrites(
 						ID:         existingType.GetArrayTypeID(),
 						ToExisting: true,
 					}
+
+					// We need to rewrite the Public schema id from 29 to the ID of the actual
+					// public schema that will be created.
+					if typ.GetParentSchemaID() == keys.PublicSchemaID && targetDB != systemschema.SystemDatabaseName {
+						descriptorRewrites[typ.ID].ParentSchemaID = parentDB.GetSchemaID(tree.PublicSchema)
+						descriptorRewrites[typ.ArrayTypeID].ParentSchemaID = parentDB.GetSchemaID(tree.PublicSchema)
+					}
 				}
 			}
 		}
@@ -858,23 +876,33 @@ func allocateDescriptorRewrites(
 	// Generate new IDs for the schemas, tables, and types that need to be
 	// remapped.
 	for _, desc := range descriptorsToRemap {
-		newTableID, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		id, err := catalogkv.GenerateUniqueIDGreaterThanID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec, maxDescIDInBackup)
 		if err != nil {
 			return nil, err
 		}
-		descriptorRewrites[desc.GetID()].ID = newTableID
+		descriptorRewrites[desc.GetID()].ID = id
 	}
 
 	// Now that the descriptorRewrites contains a complete rewrite entry for every
 	// schema that is being restored, we can correctly populate the ParentSchemaID
 	// of all tables and types.
 	rewriteObject := func(desc catalog.Descriptor) {
-		curSchemaID := desc.GetParentSchemaID()
-		newSchemaID := curSchemaID
-		if rw, ok := descriptorRewrites[curSchemaID]; ok {
-			newSchemaID = rw.ID
+		// No need to rewrite if we already have an entry.
+		// In the case of a descriptor being restored from a synthesized public
+		// schema with ID 29, we need to map it ahead of time since the public
+		// schema ID 29 is not guaranteed to have a 1:1 mapping.
+		// (all old databases with synthesized public schemas use ID 29)
+		if descriptorRewrites[desc.GetID()].ParentSchemaID != 0 {
+			return
 		}
-		descriptorRewrites[desc.GetID()].ParentSchemaID = newSchemaID
+		curSchemaID := desc.GetParentSchemaID()
+		if curSchemaID != keys.PublicSchemaID {
+			newSchemaID := curSchemaID
+			if rw, ok := descriptorRewrites[curSchemaID]; ok {
+				newSchemaID = rw.ID
+			}
+			descriptorRewrites[desc.GetID()].ParentSchemaID = newSchemaID
+		}
 	}
 	for _, table := range tablesByID {
 		rewriteObject(table)
@@ -2183,19 +2211,21 @@ func planDatabaseModifiersForRestore(
 		)
 	}
 
-	var maxSeenID descpb.ID
-	for _, desc := range sqlDescs {
-		if desc.GetID() > maxSeenID {
-			maxSeenID = desc.GetID()
-		}
-	}
-
 	shouldRestoreDatabaseIDs := make(map[descpb.ID]struct{})
 	for _, db := range restoreDBs {
 		shouldRestoreDatabaseIDs[db.GetID()] = struct{}{}
 	}
 
 	var extraDescs []catalog.Descriptor
+	// Do one pass through the sql descs to map the database to its public schema.
+	dbToPublicSchema := make(map[descpb.ID]catalog.SchemaDescriptor)
+	for _, desc := range sqlDescs {
+		sc, isSc := desc.(*schemadesc.Mutable)
+		if !isSc {
+			continue
+		}
+		dbToPublicSchema[sc.GetParentID()] = sc
+	}
 	for _, desc := range sqlDescs {
 		// Only process database descriptors.
 		db, isDB := desc.(*dbdesc.Mutable)
@@ -2224,10 +2254,27 @@ func planDatabaseModifiersForRestore(
 			),
 		)
 
+		var maxSeenID descpb.ID
+		for _, desc := range sqlDescs {
+			if desc.GetID() > maxSeenID {
+				maxSeenID = desc.GetID()
+			}
+		}
 		// Allocate the region enum ID.
-		regionEnumID := maxSeenID + 1
-		regionEnumArrayID := maxSeenID + 2
-		maxSeenID += 2
+		regionEnumID, err := catalogkv.GenerateUniqueIDGreaterThanID(
+			ctx, p.ExecCfg().DB, p.ExecCfg().Codec, int64(maxSeenID),
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		maxSeenID = regionEnumID
+		regionEnumArrayID, err := catalogkv.GenerateUniqueIDGreaterThanID(
+			ctx, p.ExecCfg().DB, p.ExecCfg().Codec, int64(maxSeenID),
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		maxSeenID = regionEnumID
 
 		// Assign the multi-region configuration to the database descriptor.
 		sg, err := sql.TranslateSurvivalGoal(tree.SurvivalGoalDefault)
@@ -2249,10 +2296,17 @@ func planDatabaseModifiersForRestore(
 		}
 
 		// Create the multi-region enums.
+		var sc catalog.SchemaDescriptor
+		if db.HasPublicSchemaWithDescriptor() {
+			sc = dbToPublicSchema[db.GetID()]
+		} else {
+			sc = schemadesc.GetPublicSchema()
+		}
 		regionEnum, regionArrayEnum, err := restoreCreateDefaultPrimaryRegionEnums(
 			ctx,
 			p,
 			db,
+			sc,
 			regionConfig,
 			regionEnumID,
 			regionEnumArrayID,
@@ -2278,6 +2332,7 @@ func restoreCreateDefaultPrimaryRegionEnums(
 	ctx context.Context,
 	p sql.PlanHookState,
 	db *dbdesc.Mutable,
+	sc catalog.SchemaDescriptor,
 	regionConfig multiregion.RegionConfig,
 	regionEnumID descpb.ID,
 	regionEnumArrayID descpb.ID,
@@ -2286,7 +2341,6 @@ func restoreCreateDefaultPrimaryRegionEnums(
 	for _, regionName := range regionConfig.Regions() {
 		regionLabels = append(regionLabels, tree.EnumValue(regionName))
 	}
-	sc := schemadesc.GetPublicSchema()
 	regionEnum, err := sql.CreateEnumTypeDesc(
 		p.RunParams(ctx),
 		regionConfig.RegionEnumID(),
