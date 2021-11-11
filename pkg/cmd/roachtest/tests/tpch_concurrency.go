@@ -191,8 +191,9 @@ func registerTPCHConcurrency(r registry.Registry) {
 			// By default, the timeout is 10 hours which might not be sufficient
 			// given that a single iteration of checkConcurrency might take on
 			// the order of one hour, so in order to let each test run to
-			// complete we'll give it 24 hours.
-			Timeout: 24 * time.Hour,
+			// complete we'll give it 18 hours. Successful runs typically take
+			// a lot less, around six hours.
+			Timeout: 18 * time.Hour,
 		})
 	}
 }
