@@ -81,7 +81,7 @@ func (r *sqlStatsCompactionResumer) Resume(ctx context.Context, execCtx interfac
 		r.st,
 		ie,
 		db,
-		ie.s.Metrics.StatsMetrics.SQLStatsRemovedRows,
+		ie.s.ServerMetrics.StatsMetrics.SQLStatsRemovedRows,
 		p.ExecCfg().SQLStatsTestingKnobs)
 	if err = statsCompactor.DeleteOldestEntries(ctx); err != nil {
 		return err
