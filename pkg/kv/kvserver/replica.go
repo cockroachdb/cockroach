@@ -1320,7 +1320,7 @@ func (r *Replica) checkExecutionCanProceed(
 		st = kvserverpb.LeaseStatus{
 			Now: now,
 		}
-	} else if ba.IsSingleSkipLeaseCheckRequest() {
+	} else if ba.IsSingleSkipsLeaseCheckRequest() {
 		// For lease commands, use the provided previous lease for verification.
 		st = kvserverpb.LeaseStatus{
 			Lease: ba.GetPrevLeaseForLeaseRequest(),
