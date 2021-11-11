@@ -67,7 +67,7 @@ func StartTenant(
 		return nil, "", "", err
 	}
 
-	args, err := makeTenantSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
+	args, err := makeTenantSQLServerArgs(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -96,7 +96,18 @@ func StartTenant(
 	// TODO(davidh): Do we need to force this to be false?
 	baseCfg.SplitListenSQL = false
 
-	background := baseCfg.AmbientCtx.AnnotateCtx(context.Background())
+	// Add the server tags to the startup context.
+	//
+	// We use args.BaseConfig here instead of baseCfg directly because
+	// makeTenantSQLArgs defines its own AmbientCtx instance and it's
+	// defined by-value.
+	ctx = args.BaseConfig.AmbientCtx.AnnotateCtx(ctx)
+
+	// Add the server tags to a generic background context for use
+	// by async goroutines.
+	// We can only annotate the context after makeTenantSQLServerArgs
+	// has defined the instance ID container in the AmbientCtx.
+	background := args.BaseConfig.AmbientCtx.AnnotateCtx(context.Background())
 
 	// StartListenRPCAndSQL will replace the SQLAddr fields if we choose
 	// to share the SQL and gRPC port so here, since the tenant config
@@ -164,6 +175,16 @@ func StartTenant(
 	args.sqlStatusServer = tenantStatusServer
 	s, err := newSQLServer(ctx, args)
 	tenantStatusServer.sqlServer = s
+	// Also add the SQL instance tag to the tenant status server's
+	// ambient context.
+	//
+	// We use the tag "sqli" instead of just "sql" because the latter is
+	// too generic and would be hard to search if someone was looking at
+	// a log message and wondering what it stands for.
+	//
+	// TODO(knz): find a way to share common logging tags between
+	// multiple AmbientContext instances.
+	tenantStatusServer.AmbientContext.AddLogTag("sqli", s.sqlIDContainer)
 
 	if err != nil {
 		return nil, "", "", err
@@ -355,7 +376,11 @@ func loadVarsHandler(
 }
 
 func makeTenantSQLServerArgs(
-	stopper *stop.Stopper, kvClusterName string, baseCfg BaseConfig, sqlCfg SQLConfig,
+	startupCtx context.Context,
+	stopper *stop.Stopper,
+	kvClusterName string,
+	baseCfg BaseConfig,
+	sqlCfg SQLConfig,
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
 
@@ -366,6 +391,7 @@ func makeTenantSQLServerArgs(
 	// too generic and would be hard to search if someone was looking at
 	// a log message and wondering what it stands for.
 	baseCfg.AmbientCtx.AddLogTag("sqli", instanceIDContainer)
+	startupCtx = baseCfg.AmbientCtx.AnnotateCtx(startupCtx)
 
 	// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
 	// and this tenant work.
@@ -480,7 +506,7 @@ func makeTenantSQLServerArgs(
 
 	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, nil, st)
 
-	runtime := status.NewRuntimeStatSampler(context.Background(), clock)
+	runtime := status.NewRuntimeStatSampler(startupCtx, clock)
 	registry.AddMetricStruct(runtime)
 
 	esb := &externalStorageBuilder{}
