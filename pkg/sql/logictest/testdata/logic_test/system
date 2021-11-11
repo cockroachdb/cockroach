@@ -203,9 +203,7 @@ query TTT
 SHOW GRANTS ON DATABASE system
 ----
 system  admin  GRANT
-system  admin  SELECT
 system  root   GRANT
-system  root   SELECT
 
 query TTTTT
 SHOW GRANTS ON system.*
@@ -543,10 +541,10 @@ statement error pq: cannot GRANT on system object
 GRANT ALL ON DATABASE system TO testuser
 
 statement error pq: cannot GRANT on system object
-GRANT GRANT, SELECT, INSERT ON DATABASE system TO testuser
+GRANT CREATE ON DATABASE system TO testuser
 
 statement error pq: cannot GRANT on system object
-GRANT GRANT, SELECT ON DATABASE system TO testuser
+GRANT CREATE ON DATABASE system TO testuser
 
 statement error pq: cannot GRANT on system object
 GRANT ALL ON system.namespace TO testuser
@@ -565,7 +563,7 @@ statement error pq: cannot GRANT on system object
 GRANT ALL ON DATABASE system TO root
 
 statement error pq: cannot GRANT on system object
-GRANT DELETE, INSERT ON DATABASE system TO root
+GRANT CREATE ON DATABASE system TO root
 
 statement error pq: cannot GRANT on system object
 GRANT ALL ON system.namespace TO root
@@ -592,10 +590,10 @@ statement error pq: cannot GRANT on system object
 GRANT ALL ON DATABASE system TO admin
 
 statement error pq: cannot GRANT on system object
-GRANT DELETE, INSERT ON DATABASE system TO admin
+GRANT CREATE ON DATABASE system TO admin
 
 statement error pq: cannot REVOKE on system object
-REVOKE GRANT ON DATABASE system FROM admin
+REVOKE CREATE ON DATABASE system FROM admin
 
 statement error pq: cannot GRANT on system object
 GRANT ALL ON system.namespace TO admin

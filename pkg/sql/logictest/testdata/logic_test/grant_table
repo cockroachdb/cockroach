@@ -1006,13 +1006,9 @@ postgres       public        NULL                             public     CREATE
 postgres       public        NULL                             public     USAGE
 postgres       public        NULL                             root       ALL
 system         pg_extension  NULL                             admin      GRANT
-system         pg_extension  NULL                             admin      USAGE
 system         pg_extension  NULL                             root       GRANT
-system         pg_extension  NULL                             root       USAGE
 system         public        NULL                             admin      GRANT
-system         public        NULL                             admin      USAGE
 system         public        NULL                             root       GRANT
-system         public        NULL                             root       USAGE
 test           pg_extension  NULL                             admin      ALL
 test           pg_extension  NULL                             root       ALL
 test           public        NULL                             admin      ALL
@@ -1277,13 +1273,9 @@ postgres       pg_catalog          void                             root     ALL
 postgres       pg_extension        NULL                             root     ALL
 postgres       public              NULL                             root     ALL
 system         NULL                NULL                             root     GRANT
-system         NULL                NULL                             root     SELECT
 system         crdb_internal       NULL                             root     GRANT
-system         crdb_internal       NULL                             root     USAGE
 system         information_schema  NULL                             root     GRANT
-system         information_schema  NULL                             root     USAGE
 system         pg_catalog          NULL                             root     GRANT
-system         pg_catalog          NULL                             root     USAGE
 system         pg_catalog          "char"                           root     ALL
 system         pg_catalog          "char"[]                         root     ALL
 system         pg_catalog          anyelement                       root     ALL
@@ -1363,9 +1355,7 @@ system         pg_catalog          varchar                          root     ALL
 system         pg_catalog          varchar[]                        root     ALL
 system         pg_catalog          void                             root     ALL
 system         pg_extension        NULL                             root     GRANT
-system         pg_extension        NULL                             root     USAGE
 system         public              NULL                             root     GRANT
-system         public              NULL                             root     USAGE
 system         public              comments                         root     DELETE
 system         public              comments                         root     GRANT
 system         public              comments                         root     INSERT

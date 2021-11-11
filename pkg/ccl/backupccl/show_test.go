@@ -333,7 +333,7 @@ GRANT agents TO agent_bond;
 GRANT agents TO agent_thomas;
 
 GRANT ALL ON DATABASE mi5 TO agents;
-REVOKE UPDATE ON DATABASE mi5 FROM agents;
+--REVOKE UPDATE ON DATABASE mi5 FROM agents;
 
 GRANT ALL ON SCHEMA locator TO m;
 GRANT ALL ON SCHEMA locator TO agent_bond;
@@ -355,8 +355,8 @@ GRANT UPDATE ON top_secret TO agent_bond;
 		sqlDB.Exec(t, `BACKUP DATABASE mi5 TO $1;`, showPrivs)
 
 		want := [][]string{
-			{`mi5`, `database`, `GRANT ALL ON mi5 TO admin; GRANT CONNECT, CREATE, DELETE, DROP, GRANT, INSERT, ` +
-				`SELECT, ZONECONFIG ON mi5 TO agents; GRANT CONNECT ON mi5 TO public; GRANT ALL ON mi5 TO root; `, `root`},
+			{`mi5`, `database`, `GRANT ALL ON mi5 TO admin; GRANT ALL ` +
+				`ON mi5 TO agents; GRANT CONNECT ON mi5 TO public; GRANT ALL ON mi5 TO root; `, `root`},
 			{`public`, `schema`, `GRANT ALL ON public TO admin; GRANT CREATE, USAGE ON public TO public; GRANT ALL ON public TO root; `, `admin`},
 			{`locator`, `schema`, `GRANT ALL ON locator TO admin; GRANT CREATE, GRANT ON locator TO agent_bond; GRANT ALL ON locator TO m; ` +
 				`GRANT ALL ON locator TO root; `, `root`},
