@@ -346,12 +346,6 @@ func (r opResult) createDiskBackedSort(
 	opNamePrefix string,
 	factory coldata.ColumnFactory,
 ) colexecop.Operator {
-	streamingMemAccount := args.StreamingMemAccount
-	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
-	var (
-		sorterMemMonitorName string
-		inMemorySorter       colexecop.Operator
-	)
 	if len(ordering.Columns) == int(matchLen) {
 		// The input is already fully ordered, so there is nothing to sort.
 		return input
@@ -359,56 +353,44 @@ func (r opResult) createDiskBackedSort(
 	totalMemLimit := execinfra.GetWorkMemLimit(flowCtx)
 	spoolMemLimit := totalMemLimit * 4 / 5
 	maxOutputBatchMemSize := totalMemLimit - spoolMemLimit
+	var sortType string
 	if limit != 0 {
 		// There is a limit specified, so we know exactly how many rows the
 		// sorter should output. Use a top K sorter, which uses a heap to avoid
 		// storing more rows than necessary.
-		var topKSorterMemAccount *mon.BoundAccount
-		if useStreamingMemAccountForBuffering {
-			topKSorterMemAccount = streamingMemAccount
-		} else {
-			topKSorterMemAccount, sorterMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
-				ctx, flowCtx, spoolMemLimit, opNamePrefix+"topk-sort", processorID,
-			)
-		}
-		inMemorySorter = colexec.NewTopKSorter(
-			colmem.NewAllocator(ctx, topKSorterMemAccount, factory), input,
-			inputTypes, ordering.Columns, int(matchLen), uint64(limit), maxOutputBatchMemSize,
-		)
+		sortType = "topk-sort"
 	} else if matchLen > 0 {
 		// The input is already partially ordered. Use a chunks sorter to avoid
 		// loading all the rows into memory.
-		var sortChunksMemAccount *mon.BoundAccount
-		if useStreamingMemAccountForBuffering {
-			sortChunksMemAccount = streamingMemAccount
-		} else {
-			sortChunksMemAccount, sorterMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
-				ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-chunks", processorID,
-			)
-		}
+		sortType = "sort-chunks"
+	} else {
+		sortType = "sort-all"
+	}
+	sorterMemAccount, sorterMemMonitorName := args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
+		ctx, flowCtx, spoolMemLimit, opNamePrefix+sortType, processorID,
+	)
+	var inMemorySorter colexecop.Operator
+	switch sortType {
+	case "topk-sort":
+		inMemorySorter = colexec.NewTopKSorter(
+			colmem.NewAllocator(ctx, sorterMemAccount, factory), input,
+			inputTypes, ordering.Columns, int(matchLen), uint64(limit), maxOutputBatchMemSize,
+		)
+	case "sort-chunks":
 		inMemorySorter = colexec.NewSortChunks(
-			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
+			colmem.NewAllocator(ctx, sorterMemAccount, factory), input, inputTypes,
 			ordering.Columns, int(matchLen), maxOutputBatchMemSize,
 		)
-	} else {
+	case "sort-all":
 		// No optimizations possible. Default to the standard sort operator.
-		var sorterMemAccount *mon.BoundAccount
-		if useStreamingMemAccountForBuffering {
-			sorterMemAccount = streamingMemAccount
-		} else {
-			sorterMemAccount, sorterMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
-				ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-all", processorID,
-			)
-		}
 		inMemorySorter = colexec.NewSorter(
 			colmem.NewAllocator(ctx, sorterMemAccount, factory), input,
 			inputTypes, ordering.Columns, maxOutputBatchMemSize,
 		)
+	default:
+		colexecerror.InternalError(errors.AssertionFailedf("unexpected sortType %s", sortType))
 	}
-	if inMemorySorter == nil {
-		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly inMemorySorter is nil"))
-	}
-	if useStreamingMemAccountForBuffering || args.TestingKnobs.DiskSpillingDisabled {
+	if args.TestingKnobs.DiskSpillingDisabled {
 		// In some testing scenarios we actually don't want to create a
 		// disk-backed sort.
 		return inMemorySorter
@@ -665,7 +647,6 @@ func NewColOperator(
 	}
 	streamingMemAccount := args.StreamingMemAccount
 	streamingAllocator := colmem.NewAllocator(ctx, streamingMemAccount, factory)
-	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
 	if args.ExprHelper == nil {
 		args.ExprHelper = colexecargs.NewExprHelper()
 		args.ExprHelper.SemaCtx = flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.Txn)
@@ -1034,21 +1015,13 @@ func NewColOperator(
 				)
 				result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
 			} else {
-				var hashJoinerMemMonitorName string
-				var hashJoinerMemAccount *mon.BoundAccount
-				var hashJoinerUnlimitedAllocator *colmem.Allocator
-				if useStreamingMemAccountForBuffering {
-					hashJoinerMemAccount = streamingMemAccount
-					hashJoinerUnlimitedAllocator = streamingAllocator
-				} else {
-					opName := "hash-joiner"
-					hashJoinerMemAccount, hashJoinerMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategy(
-						ctx, flowCtx, opName, spec.ProcessorID,
-					)
-					hashJoinerUnlimitedAllocator = colmem.NewAllocator(
-						ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
-					)
-				}
+				opName := "hash-joiner"
+				hashJoinerMemAccount, hashJoinerMemMonitorName := args.MonitorRegistry.CreateMemAccountForSpillStrategy(
+					ctx, flowCtx, opName, spec.ProcessorID,
+				)
+				hashJoinerUnlimitedAllocator := colmem.NewAllocator(
+					ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+				)
 				hjSpec := colexecjoin.MakeHashJoinerSpec(
 					core.HashJoiner.Type,
 					core.HashJoiner.LeftEqColumns,
@@ -1063,7 +1036,7 @@ func NewColOperator(
 					hashJoinerUnlimitedAllocator, hjSpec, inputs[0].Root, inputs[1].Root,
 					colexecjoin.HashJoinerInitialNumBuckets,
 				)
-				if useStreamingMemAccountForBuffering || args.TestingKnobs.DiskSpillingDisabled {
+				if args.TestingKnobs.DiskSpillingDisabled {
 					// We will not be creating a disk-backed hash joiner because
 					// we're running a test that explicitly asked for only
 					// in-memory hash joiner.
