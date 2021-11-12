@@ -21,6 +21,7 @@ go_library(
         "allocator.go",
         "alterpk.go",
         "asyncpg.go",
+        "asyncpg_blocklist.go",
         "autoupgrade.go",
         "backup.go",
         "build_info.go",
