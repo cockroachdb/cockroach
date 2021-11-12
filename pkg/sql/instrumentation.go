@@ -245,13 +245,15 @@ func (ih *instrumentationHelper) Finish(
 	if ih.sp == nil {
 		return retErr
 	}
-	if ih.shouldFinishSpan {
-		ih.sp.Finish()
-	}
 
 	// Record the statement information that we've collected.
 	// Note that in case of implicit transactions, the trace contains the auto-commit too.
-	trace := ih.sp.GetRecording(ih.sp.RecordingType())
+	var trace tracing.Recording
+	if ih.shouldFinishSpan {
+		trace = ih.sp.FinishAndGetRecording(ih.sp.RecordingType())
+	} else {
+		trace = ih.sp.GetRecording(ih.sp.RecordingType())
+	}
 
 	if ih.withStatementTrace != nil {
 		ih.withStatementTrace(trace, stmtRawSQL)

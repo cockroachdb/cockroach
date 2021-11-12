@@ -57,9 +57,8 @@ func TestRecordingString(t *testing.T) {
 	remoteChild := tr2.StartSpan("remote child", WithParentAndManualCollection(wireSpanMeta))
 	root.Record("root 2")
 	remoteChild.Record("remote child 1")
-	remoteChild.Finish()
 
-	remoteRec := remoteChild.GetRecording(RecordingVerbose)
+	remoteRec := remoteChild.FinishAndGetRecording(RecordingVerbose)
 	root.ImportRemoteSpans(remoteRec)
 
 	root.Record("root 3")
@@ -70,9 +69,8 @@ func TestRecordingString(t *testing.T) {
 	ch2.Finish()
 
 	root.Record("root 5")
-	root.Finish()
 
-	rec := root.GetRecording(RecordingVerbose)
+	rec := root.FinishAndGetRecording(RecordingVerbose)
 	// Sanity check that the recording looks like we want. Note that this is not
 	// its String() representation; this just lists all the spans in order.
 	require.NoError(t, CheckRecordedSpans(rec, `
@@ -150,12 +148,16 @@ func TestRecordingInRecording(t *testing.T) {
 	// have to be imported into the parent manually (this would usually happen via
 	// code at the RPC boundaries).
 	grandChild := tr.StartSpan("grandchild", WithParentAndManualCollection(child.Meta()))
-	grandChild.Finish()
-	child.ImportRemoteSpans(grandChild.GetRecording(RecordingVerbose))
-	child.Finish()
-	root.Finish()
+	child.ImportRemoteSpans(grandChild.FinishAndGetRecording(RecordingVerbose))
+	childRec := child.FinishAndGetRecording(RecordingVerbose)
+	require.NoError(t, CheckRecordedSpans(childRec, `
+		span: child
+			tags: _verbose=1
+			span: grandchild
+				tags: _verbose=1
+		`))
 
-	rootRec := root.GetRecording(RecordingVerbose)
+	rootRec := root.FinishAndGetRecording(RecordingVerbose)
 	require.NoError(t, CheckRecordedSpans(rootRec, `
 		span: root
 			tags: _verbose=1
@@ -163,14 +165,6 @@ func TestRecordingInRecording(t *testing.T) {
 				tags: _verbose=1
 				span: grandchild
 					tags: _verbose=1
-		`))
-
-	childRec := child.GetRecording(RecordingVerbose)
-	require.NoError(t, CheckRecordedSpans(childRec, `
-		span: child
-			tags: _verbose=1
-			span: grandchild
-				tags: _verbose=1
 		`))
 
 	require.NoError(t, CheckRecording(childRec, `
@@ -194,19 +188,17 @@ func TestImportRemoteSpans(t *testing.T) {
 			}
 			ch.Record("foo")
 			ch.SetVerbose(false)
-			ch.Finish()
-			sp.ImportRemoteSpans(ch.GetRecording(RecordingVerbose))
-			sp.Finish()
+			sp.ImportRemoteSpans(ch.FinishAndGetRecording(RecordingVerbose))
 
 			if verbose {
-				require.NoError(t, CheckRecording(sp.GetRecording(RecordingVerbose), `
+				require.NoError(t, CheckRecording(sp.FinishAndGetRecording(RecordingVerbose), `
 				=== operation:root _verbose:1
 					=== operation:child _verbose:1
 					event:foo
 					structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
 	`))
 			} else {
-				require.NoError(t, CheckRecording(sp.GetRecording(RecordingStructured), `
+				require.NoError(t, CheckRecording(sp.FinishAndGetRecording(RecordingStructured), `
 				=== operation:root
 				structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
 	`))

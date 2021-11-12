@@ -56,9 +56,8 @@ func TestAnnotateCtxSpan(t *testing.T) {
 
 	Event(ctx1, "c")
 	sp2.Finish()
-	sp1.Finish()
 
-	if err := tracing.CheckRecordedSpans(sp1.GetRecording(tracing.RecordingVerbose), `
+	if err := tracing.CheckRecordedSpans(sp1.FinishAndGetRecording(tracing.RecordingVerbose), `
 		span: root
 			tags: _verbose=1
 			event: a
