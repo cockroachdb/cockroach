@@ -177,8 +177,7 @@ func TestNoDuplicateHeartbeatLoops(t *testing.T) {
 	if attempts != 2 {
 		t.Fatalf("expected 2 attempts, got: %d", attempts)
 	}
-	sp.Finish()
-	recording := sp.GetRecording(tracing.RecordingVerbose)
+	recording := sp.FinishAndGetRecording(tracing.RecordingVerbose)
 	var foundHeartbeatLoop bool
 	for _, sp := range recording {
 		if tracing.LogsContainMsg(sp, kvbase.SpawningHeartbeatLoopMsg) {
