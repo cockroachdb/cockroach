@@ -116,7 +116,11 @@ func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
 		}
 		// TODO(tschottdorf): remove replicate queue failures when the cluster first starts.
 		// Ditto queue.raftsnapshot.process.failure.
-		rows, err := db.QueryContext(ctx, `SELECT * FROM crdb_internal.gossip_alerts ORDER BY node_id ASC, store_id ASC`)
+		_, err = db.Exec(`USE system`)
+		if err != nil {
+			return err
+		}
+		rows, err := db.QueryContext(ctx, `SELECT * FROM crdb_internal.gossip_alerts ORDER BY node_id ASC, store_id ASC `)
 		_ = db.Close()
 		if err != nil {
 			return err
