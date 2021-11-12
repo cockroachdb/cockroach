@@ -209,20 +209,12 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 
 	var span *tracing.Span
 	ctx, span = execinfra.ProcessorSpan(ctx, "outbox")
+	defer span.Finish()
 	if span != nil && span.IsVerbose() {
 		m.statsCollectionEnabled = true
 		span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(m.flowCtx.ID.String()))
 		span.SetTag(execinfrapb.StreamIDTagKey, attribute.IntValue(int(m.streamID)))
 	}
-	// spanFinished specifies whether we've Finish()-ed the span. Some code
-	// paths (e.g. stats collection) need to prematurely call it to get trace
-	// data.
-	spanFinished := false
-	defer func() {
-		if !spanFinished {
-			span.Finish()
-		}
-	}()
 
 	if m.stream == nil {
 		conn, err := execinfra.GetConnForOutbox(
@@ -298,8 +290,6 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 						m.stats.FlowStats.MaxDiskUsage.Set(uint64(m.flowCtx.DiskMonitor.MaximumBytes()))
 					}
 					span.RecordStructured(&m.stats)
-					span.Finish()
-					spanFinished = true
 					if trace := execinfra.GetTraceData(ctx); trace != nil {
 						err := m.AddRow(ctx, nil, &execinfrapb.ProducerMetadata{TraceData: trace})
 						if err != nil {
