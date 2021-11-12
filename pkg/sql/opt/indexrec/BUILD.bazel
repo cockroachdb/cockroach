@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "indexrec",
+    srcs = ["index_candidate_set.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/memo",
+        "//pkg/util",
+    ],
+)
+
+go_test(
+    name = "indexrec_test",
+    srcs = ["index_candidate_set_test.go"],
+    embed = [":indexrec"],
+    deps = [
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/testutils/testcat",
+    ],
+)
