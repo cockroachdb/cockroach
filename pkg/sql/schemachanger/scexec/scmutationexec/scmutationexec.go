@@ -253,6 +253,9 @@ func (m *visitor) RemoveRelationDependedOnBy(
 			break
 		}
 	}
+	if len(tableDesc.DependedOnBy) == 0 {
+		tableDesc.DependedOnBy = nil
+	}
 	return nil
 }
 
@@ -364,6 +367,9 @@ func (m *visitor) MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(
 		table.Indexes = append(table.Indexes[:i], table.Indexes[i+1:]...)
 		break
 	}
+	if len(table.Indexes) == 0 {
+		table.Indexes = nil
+	}
 	if idx.ID == 0 {
 		return errors.AssertionFailedf("failed to find index %d in descriptor %v",
 			op.IndexID, table)
@@ -386,6 +392,9 @@ func (m *visitor) MakeDroppedColumnDeleteAndWriteOnly(
 		col = table.Columns[i]
 		table.Columns = append(table.Columns[:i], table.Columns[i+1:]...)
 		break
+	}
+	if len(table.Columns) == 0 {
+		table.Columns = nil
 	}
 	if col.ID == 0 {
 		return errors.AssertionFailedf("failed to find column %d in %v", col.ID, table)
@@ -619,6 +628,9 @@ func (m *visitor) MakeAddedSecondaryIndexPublic(
 			table.Mutations = append(table.Mutations[:idx], table.Mutations[idx+1:]...)
 			break
 		}
+	}
+	if len(table.Mutations) == 0 {
+		table.Mutations = nil
 	}
 	return nil
 }

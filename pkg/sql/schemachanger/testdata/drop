@@ -235,7 +235,6 @@ upsert descriptor #60
   -    columnIds:
   -    - 3
   -    id: 63
-  +  dependedOnBy: []
      families:
      - columnIds:
   ...
@@ -254,7 +253,6 @@ upsert descriptor #61
   -    columnIds:
   -    - 3
   -    id: 62
-  +  dependedOnBy: []
      families:
      - columnIds:
   ...
@@ -331,7 +329,6 @@ upsert descriptor #64
   -  - columnIds:
   -    - 1
   -    id: 66
-  +  dependedOnBy: []
      dependsOn:
      - 62
   ...
@@ -355,7 +352,6 @@ upsert descriptor #65
   -    - 1
   -    - 2
   -    id: 67
-  +  dependedOnBy: []
      dependsOn:
      - 64
   ...
@@ -384,7 +380,6 @@ upsert descriptor #67
   -    - 1
   -    - 2
   -    id: 70
-  +  dependedOnBy: []
      dependsOn:
      - 65
   ...
