@@ -752,6 +752,7 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	// Forbid timeutil.Now().Sub(t) in favor of timeutil.Since(t).
 	t.Run("TestNowSub", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
@@ -762,6 +763,7 @@ func TestLint(t *testing.T) {
 			`\btime(util)?\.Now\(\)\.Sub\(`,
 			"--",
 			"*.go",
+			":!*/lint_test.go", // This file.
 			":!cmd/dev/**",
 		)
 		if err != nil {
@@ -773,8 +775,8 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use 'timeutil.Since() or timeutil.Since()' instead "+
-				"because they're more efficient", s)
+			t.Errorf("\n%s <- forbidden; use 'timeutil.Since(t)' instead "+
+				"because it is more efficient", s)
 		}); err != nil {
 			t.Error(err)
 		}
