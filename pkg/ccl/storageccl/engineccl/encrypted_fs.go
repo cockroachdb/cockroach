@@ -364,7 +364,6 @@ func newEncryptedEnv(
 			storeKM: storeKeyManager,
 			dataKM:  dataKeyManager,
 		},
-		UpgradeVersion: dataKeyManager.UseMarker,
 	}, nil
 }
 

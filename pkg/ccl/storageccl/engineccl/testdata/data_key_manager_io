@@ -10,19 +10,10 @@ OK
 load dir=data-dir
 ----
 open-dir("data-dir")
-stat("data-dir/COCKROACHDB_DATA_KEYS")
-OK
-
-# Since there's no data keys registry file yet, use-marker should be a
-# noop.
-
-use-marker
-----
 OK
 
 # Setting the active store key should trigger initializing the registry
-# on disk. Since use-marker has already been called, the registry should
-# be initialized with a marker file.
+# on disk.
 
 set-active-store-key id=foo
 ----
@@ -98,32 +89,17 @@ OK
 load dir=data-dir
 ----
 open-dir("data-dir")
-stat("data-dir/COCKROACHDB_DATA_KEYS")
 OK
-
-# Since use-marker has not yet been called, the registry shouldn't use
-# it. Instead, it should replace the static COCKROACHDB_DATA_KEYS file.
 
 set-active-store-key id=foo
 ----
-create("data-dir/COCKROACHDB_DATA_KEYS.crdbtmp")
-write("data-dir/COCKROACHDB_DATA_KEYS.crdbtmp", <...280 bytes...>)
-sync("data-dir/COCKROACHDB_DATA_KEYS.crdbtmp")
-close("data-dir/COCKROACHDB_DATA_KEYS.crdbtmp")
-rename("data-dir/COCKROACHDB_DATA_KEYS.crdbtmp", "data-dir/COCKROACHDB_DATA_KEYS")
-open-dir("data-dir")
+create("data-dir/COCKROACHDB_DATA_KEYS_000001_monolith")
+write("data-dir/COCKROACHDB_DATA_KEYS_000001_monolith", <...280 bytes...>)
+sync("data-dir/COCKROACHDB_DATA_KEYS_000001_monolith")
+create("data-dir/marker.datakeys.000001.COCKROACHDB_DATA_KEYS_000001_monolith")
+close("data-dir/marker.datakeys.000001.COCKROACHDB_DATA_KEYS_000001_monolith")
 sync("data-dir")
-close("data-dir")
-
-# Calling use-marker should lay down a marker pointing to the existing
-# file.
-
-use-marker
-----
-create("data-dir/marker.datakeys.000001.COCKROACHDB_DATA_KEYS")
-close("data-dir/marker.datakeys.000001.COCKROACHDB_DATA_KEYS")
-sync("data-dir")
-OK
+close("data-dir/COCKROACHDB_DATA_KEYS_000001_monolith")
 
 set-active-store-key id=bar
 ----
@@ -132,9 +108,9 @@ write("data-dir/COCKROACHDB_DATA_KEYS_000002_monolith", <...489 bytes...>)
 sync("data-dir/COCKROACHDB_DATA_KEYS_000002_monolith")
 create("data-dir/marker.datakeys.000002.COCKROACHDB_DATA_KEYS_000002_monolith")
 close("data-dir/marker.datakeys.000002.COCKROACHDB_DATA_KEYS_000002_monolith")
-remove("data-dir/marker.datakeys.000001.COCKROACHDB_DATA_KEYS")
+remove("data-dir/marker.datakeys.000001.COCKROACHDB_DATA_KEYS_000001_monolith")
 sync("data-dir")
-remove("data-dir/COCKROACHDB_DATA_KEYS")
+remove("data-dir/COCKROACHDB_DATA_KEYS_000001_monolith")
 close("data-dir/COCKROACHDB_DATA_KEYS_000002_monolith")
 
 close
