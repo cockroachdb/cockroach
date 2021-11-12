@@ -613,6 +613,9 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		if refreshStats {
 			sc.refreshStats(latestDesc)
 		}
+
+		sc.execCfg.RefreshLocalSchemaMetrics(ctx)
+
 		return nil
 	}
 

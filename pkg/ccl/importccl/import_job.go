@@ -940,6 +940,8 @@ func (r *importResumer) publishTables(
 		execCfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
 	}
 
+	execCfg.RefreshLocalSchemaMetrics(ctx)
+
 	return nil
 }
 

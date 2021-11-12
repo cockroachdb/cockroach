@@ -125,6 +125,7 @@ go_test(
         "recorder_test.go",
         "runtime_stats_test.go",
         "runtime_test.go",
+        "schema_metrics_test.go",
     ],
     embed = [":status"],
     deps = [
@@ -136,7 +137,9 @@ go_test(
         "//pkg/server",
         "//pkg/server/status/statuspb:statuspb_go_proto",
         "//pkg/settings/cluster",
+        "//pkg/testutils/metrictestutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/ts/tspb",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
@@ -148,5 +151,6 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_kr_pretty//:pretty",
         "@com_github_shirou_gopsutil//net",
+        "@com_github_stretchr_testify//require",
     ],
 )

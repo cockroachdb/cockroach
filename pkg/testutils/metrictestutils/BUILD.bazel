@@ -2,8 +2,17 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "metrictestutils",
-    srcs = ["metrics_text.go"],
+    srcs = [
+        "metrics_tester.go",
+        "metrics_text.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/metrictestutils",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util/metric"],
+    deps = [
+        "//pkg/testutils",
+        "//pkg/util/metric",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_prometheus_client_model//go",
+        "@com_github_prometheus_common//expfmt",
+    ],
 )

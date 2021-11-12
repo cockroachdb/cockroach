@@ -1067,6 +1067,7 @@ type ExecutorConfig struct {
 	InternalExecutor *InternalExecutor
 	QueryCache       *querycache.C
 
+	SchemaMetrics        *SchemaMetrics
 	SchemaChangerMetrics *SchemaChangerMetrics
 	FeatureFlagMetrics   *featureflag.DenialMetrics
 	RowMetrics           *row.Metrics
@@ -1186,6 +1187,14 @@ func (cfg *ExecutorConfig) Organization() string {
 // GetFeatureFlagMetrics returns the value of the FeatureFlagMetrics struct.
 func (cfg *ExecutorConfig) GetFeatureFlagMetrics() *featureflag.DenialMetrics {
 	return cfg.FeatureFlagMetrics
+}
+
+// RefreshLocalSchemaMetrics trues up the schema metrics (database and table
+// count) on this node / pod only.
+func (cfg *ExecutorConfig) RefreshLocalSchemaMetrics(ctx context.Context) {
+	if err := cfg.SchemaMetrics.Refresh(ctx, cfg.InternalExecutor); err != nil {
+		log.Warningf(ctx, "failed to refresh schema metrics: %v", err)
+	}
 }
 
 // SV returns the setting values.

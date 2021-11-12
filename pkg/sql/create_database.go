@@ -162,6 +162,8 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 			}); err != nil {
 			return err
 		}
+
+		params.EvalContext().Txn.AddCommitTrigger(params.ExecCfg().RefreshLocalSchemaMetrics)
 	}
 	return nil
 }

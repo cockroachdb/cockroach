@@ -1632,6 +1632,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			}
 		}
 		emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
+		refreshSchemaMetrics(ctx, p)
 		return nil
 	}
 
@@ -1760,6 +1761,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 	// Emit an event now that the restore job has completed.
 	emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
+	refreshSchemaMetrics(ctx, p)
 
 	// Collect telemetry.
 	{
@@ -2082,6 +2084,10 @@ func emitRestoreJobEvent(
 	}); err != nil {
 		log.Warningf(ctx, "failed to log event: %v", err)
 	}
+}
+
+func refreshSchemaMetrics(ctx context.Context, p sql.JobExecContext) {
+	p.ExecCfg().RefreshLocalSchemaMetrics(ctx)
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface. Removes KV data that

@@ -11,6 +11,7 @@ package statusccl
 import (
 	"context"
 	gosql "database/sql"
+	"io"
 	"net/http"
 	"testing"
 
@@ -174,6 +175,15 @@ type httpClient struct {
 	t       *testing.T
 	client  http.Client
 	baseURL string
+}
+
+func (c *httpClient) GetPlainText(path string) string {
+	c.t.Helper()
+	resp, err := c.client.Get(c.baseURL + path)
+	require.NoError(c.t, err)
+	b, err := io.ReadAll(resp.Body)
+	require.NoError(c.t, err)
+	return string(b)
 }
 
 func (c *httpClient) GetJSON(path string, response protoutil.Message) {

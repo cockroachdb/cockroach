@@ -488,6 +488,8 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	params.p.Txn().AddCommitTrigger(params.p.ExecCfg().RefreshLocalSchemaMetrics)
+
 	// If we are in an explicit txn or the source has placeholders, we execute the
 	// CTAS query synchronously.
 	if n.n.As() && !params.p.ExtendedEvalContext().TxnImplicit {

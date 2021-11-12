@@ -1588,6 +1588,23 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Schema"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Databases",
+				Metrics: []string{"sql.schema.database_count"},
+			},
+			{
+				Title:   "Tables",
+				Metrics: []string{"sql.schema.table_count"},
+			},
+			{
+				Title:   "Updated",
+				Metrics: []string{"sql.schema.updated_at"},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "Schema Changer"}},
 		Charts: []chartDescription{
 			{

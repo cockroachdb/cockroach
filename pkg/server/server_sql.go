@@ -707,6 +707,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	} else {
 		execCfg.TypeSchemaChangerTestingKnobs = new(sql.TypeSchemaChangerTestingKnobs)
 	}
+	execCfg.SchemaMetrics = sql.NewSchemaMetrics()
+	cfg.registry.AddMetricStruct(execCfg.SchemaMetrics)
+
 	execCfg.SchemaChangerMetrics = sql.NewSchemaChangerMetrics()
 	cfg.registry.AddMetricStruct(execCfg.SchemaChangerMetrics)
 
@@ -1128,6 +1131,9 @@ func (s *SQLServer) preStart(
 	}
 
 	log.Infof(ctx, "done ensuring all necessary startup migrations have run")
+
+	// Initialize our database and table count gauges as we start up.
+	s.execCfg.RefreshLocalSchemaMetrics(ctx)
 
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
