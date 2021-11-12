@@ -11,7 +11,6 @@
 package install
 
 import (
-	"context"
 	_ "embed" // required for go:embed
 	"fmt"
 	"net/url"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
@@ -191,7 +189,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			fmt.Printf("%s: initializing cluster\n", h.c.Name)
 			initOut, err := h.initializeCluster(nodeIdx)
 			if err != nil {
-				log.Fatalf(context.Background(), "unable to initialize cluster: %v", err)
+				return nil, errors.WithDetail(err, "unable to initialize cluster")
 			}
 
 			if initOut != "" {
@@ -212,7 +210,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			markBootstrap := fmt.Sprintf("touch %s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx], 1 /* storeIndex */), "cluster-bootstrapped")
 			cmdOut, err := h.run(nodeIdx, markBootstrap)
 			if err != nil {
-				log.Fatalf(context.Background(), "unable to run cmd: %v", err)
+				return nil, errors.WithDetail(err, "unable to run cmd")
 			}
 			if cmdOut != "" {
 				fmt.Println(cmdOut)
@@ -225,7 +223,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		fmt.Printf("%s: setting cluster settings\n", h.c.Name)
 		clusterSettingsOut, err := h.setClusterSettings(nodeIdx)
 		if err != nil {
-			log.Fatalf(context.Background(), "unable to set cluster settings: %v", err)
+			return nil, errors.WithDetail(err, "unable to set cluster settings")
 		}
 		if clusterSettingsOut != "" {
 			fmt.Println(clusterSettingsOut)

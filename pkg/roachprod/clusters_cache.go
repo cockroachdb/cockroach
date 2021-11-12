@@ -139,7 +139,11 @@ func LoadClusters() error {
 		}
 
 		for _, vm := range c.VMs {
-			sc.Localities = append(sc.Localities, vm.Locality())
+			locality, err := vm.Locality()
+			if err != nil {
+				return err
+			}
+			sc.Localities = append(sc.Localities, locality)
 		}
 
 		install.Clusters[sc.Name] = sc

@@ -608,8 +608,7 @@ func Stop(name string, clusterOpts install.ClusterSettings, sig int, wait bool) 
 	if err != nil {
 		return err
 	}
-	c.Stop(sig, wait)
-	return nil
+	return c.Stop(sig, wait)
 }
 
 // Init initializes the cluster.
@@ -622,8 +621,7 @@ func Init(clusterName string, clusterOpts install.ClusterSettings, username stri
 	if err != nil {
 		return err
 	}
-	c.Init()
-	return nil
+	return c.Init()
 }
 
 // Wipe wipes the nodes in a cluster.
@@ -632,8 +630,7 @@ func Wipe(name string, clusterOpts install.ClusterSettings, wipePreserveCerts bo
 	if err != nil {
 		return err
 	}
-	c.Wipe(wipePreserveCerts)
-	return nil
+	return c.Wipe(wipePreserveCerts)
 }
 
 // Reformat reformats disks in a cluster to use the specified filesystem.
@@ -708,8 +705,7 @@ func Put(name string, clusterOpts install.ClusterSettings, src, dest string) err
 	if err != nil {
 		return err
 	}
-	c.Put(src, dest)
-	return nil
+	return c.Put(src, dest)
 }
 
 // Get copies a remote file from the nodes in a cluster.
