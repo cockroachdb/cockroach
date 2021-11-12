@@ -381,9 +381,9 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 					// Trace the request so we can determine whether it was served as a
 					// follower read. If running on a store with a follower replica and
 					// with a NEAREST routing policy, we expect follower reads.
-					ctx, collect, cancel := tracing.ContextWithRecordingSpan(
+					ctx, collectAndFinish := tracing.ContextWithRecordingSpan(
 						ctx, tracing.NewTracer(), "reader")
-					defer cancel()
+					defer collectAndFinish()
 
 					br, pErr := txn.NegotiateAndSend(ctx, ba)
 					if pErr != nil {
@@ -422,7 +422,7 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 					// where it would be valid for the request to be served by a follower
 					// or redirected to the leaseholder due to timing, so we make no
 					// assertion.
-					rec := collect()
+					rec := collectAndFinish()
 					expFollowerRead := store.StoreID() != lh.StoreID && strict && routeNearest
 					wasFollowerRead := kv.OnlyFollowerReads(rec)
 					ambiguous := !strict && routeNearest

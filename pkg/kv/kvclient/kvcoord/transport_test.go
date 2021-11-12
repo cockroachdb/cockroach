@@ -113,9 +113,9 @@ func TestSpanImport(t *testing.T) {
 	expectedErr := "my expected error"
 	server.pErr = roachpb.NewErrorf(expectedErr /* nolint:fmtsafe */)
 
-	recCtx, getRec, cancel := tracing.ContextWithRecordingSpan(
+	recCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(
 		ctx, tracing.NewTracer(), "test")
-	defer cancel()
+	defer getRecAndFinish()
 
 	server.tr = tracing.SpanFromContext(recCtx).Tracer()
 
@@ -127,7 +127,7 @@ func TestSpanImport(t *testing.T) {
 		t.Fatalf("expected err: %s, got: %q", expectedErr, br.Error)
 	}
 	expectedMsg := "mockInternalClient processing batch"
-	if tracing.FindMsgInRecording(getRec(), expectedMsg) == -1 {
+	if tracing.FindMsgInRecording(getRecAndFinish(), expectedMsg) == -1 {
 		t.Fatalf("didn't find expected message in trace: %s", expectedMsg)
 	}
 }

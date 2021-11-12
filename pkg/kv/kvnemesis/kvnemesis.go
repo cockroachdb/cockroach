@@ -58,7 +58,7 @@ func RunNemesis(
 		for atomic.AddInt64(&stepsStartedAtomic, 1) <= int64(numSteps) {
 			step := g.RandStep(rng)
 
-			recCtx, collect, cancel := tracing.ContextWithRecordingSpan(
+			recCtx, collect := tracing.ContextWithRecordingSpan(
 				ctx, tracing.NewTracer(), "txn step")
 			buf.Reset()
 			fmt.Fprintf(&buf, "step:")
@@ -66,7 +66,6 @@ func RunNemesis(
 			log.VEventf(recCtx, 2, "%v", buf.String())
 			err := a.Apply(recCtx, &step)
 			step.Trace = collect().String()
-			cancel()
 			if err != nil {
 				buf.Reset()
 				step.format(&buf, formatCtx{indent: `  ` + workerName + ` ERR `})

@@ -8360,8 +8360,8 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 
 	tr := tc.store.cfg.AmbientCtx.Tracer
 	tr.TestingRecordAsyncSpans() // we assert on async span traces in this test
-	opCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
-	defer cancel()
+	opCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
+	defer getRecAndFinish()
 
 	ba = roachpb.BatchRequest{}
 	et, etH := endTxnArgs(txn, true /* commit */)
@@ -8372,7 +8372,7 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	if _, err := tc.Sender().Send(opCtx, ba); err != nil {
 		t.Fatal(err)
 	}
-	formatted := collect().String()
+	formatted := getRecAndFinish().String()
 	if err := testutils.MatchInOrder(formatted,
 		// The first proposal is rejected.
 		"retry proposal.*applied at lease index.*but required",

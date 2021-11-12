@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scsqldeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -2949,6 +2950,8 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		&ex.extraTxnState.descCollection,
 		ex.server.cfg.JobRegistry,
 		ex.server.cfg.IndexBackfiller,
+		ex.server.cfg.IndexValidator,
+		scsqldeps.NewCCLCallbacks(ex.server.cfg.Settings, ex.planner.EvalContext()),
 		ex.server.cfg.NewSchemaChangerTestingKnobs,
 		scs.stmts,
 		scop.PreCommitPhase,

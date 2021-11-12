@@ -1125,6 +1125,9 @@ type ExecutorConfig struct {
 	// object which mostly just holds on to an ExecConfig.
 	IndexBackfiller *IndexBackfillPlanner
 
+	// IndexValidator is used to validate indexes.
+	IndexValidator scexec.IndexValidator
+
 	// ContentionRegistry is a node-level registry of contention events used for
 	// contention observability.
 	ContentionRegistry *contention.Registry
