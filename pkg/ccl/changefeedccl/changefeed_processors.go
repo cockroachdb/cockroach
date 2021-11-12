@@ -466,17 +466,22 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 			return ca.ProcessRowHelper(ca.resolvedSpanBuf.Pop()), nil
 		}
 		if err := ca.tick(); err != nil {
-			if errors.Is(err, kvevent.ErrBufferClosed) {
+			var e kvevent.ErrBufferClosed
+			if errors.As(err, &e) {
 				// ErrBufferClosed is a signal that
 				// our kvfeed has exited expectedly.
-				err = nil
-			}
+				err = e.Unwrap()
+				if errors.Is(err, kvevent.ErrNormalRestartReason) {
+					err = nil
+				}
+			} else {
 
-			select {
-			// If the poller errored first, that's the
-			// interesting one, so overwrite `err`.
-			case err = <-ca.errCh:
-			default:
+				select {
+				// If the poller errored first, that's the
+				// interesting one, so overwrite `err`.
+				case err = <-ca.errCh:
+				default:
+				}
 			}
 			// Shut down the poller if it wasn't already.
 			ca.cancel()

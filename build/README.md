@@ -166,7 +166,10 @@ file on your local branch, 2) push a commit containing this import to the `vendo
 6. Run `cd vendor && git diff && cd ..`  to ensure the vendor directory contains the package(s)
    you imported
 7. Run `make buildshort` to ensure your code compiles.
-8. Run `./dev generate bazel` to regenerate DEPS.bzl with the updated Go dependency information.
+8. Run `./dev generate bazel --mirror` to regenerate DEPS.bzl with the updated Go dependency information.
+   Note that you need engineer permissions to mirror dependencies; if you want to get the Bazel build
+   working locally without mirroring, `./dev generate bazel` will work, but you won't be able to check
+   your changes in.
 9. Follow instructions for [pushing the dependency to the `vendored` submodule](#pushing-the-dependency-to-the-vendored-submodule)
 
 ### Updating a Dependency

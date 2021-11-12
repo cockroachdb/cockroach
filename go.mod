@@ -84,6 +84,7 @@ require (
 	github.com/google/go-cmp v0.5.6
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
+	github.com/google/skylark v0.0.0-20181101142754-a5f7082aabed
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/gorilla/mux v1.8.0
 	github.com/goware/modvendor v0.5.0
@@ -197,3 +198,5 @@ replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.
 replace go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560
 
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
+
+replace github.com/maruel/panicparse/v2 => github.com/cockroachdb/panicparse/v2 v2.0.0-20211103220158-604c82a44f1e
