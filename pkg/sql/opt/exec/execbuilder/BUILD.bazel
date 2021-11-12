@@ -49,7 +49,7 @@ go_library(
 
 go_test(
     name = "execbuilder_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "builder_test.go",
         "main_test.go",
