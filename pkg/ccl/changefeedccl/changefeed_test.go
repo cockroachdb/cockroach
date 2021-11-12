@@ -119,11 +119,11 @@ func TestChangefeedBasics(t *testing.T) {
 		})
 	}
 
-	//t.Run(`sinkless`, sinklessTest(testFn))
-	//t.Run(`enterprise`, enterpriseTest(testFn))
-	//t.Run(`cloudstorage`, cloudStorageTest(testFn))
-	//t.Run(`kafka`, kafkaTest(testFn))
-	//t.Run(`webhook`, webhookTest(testFn))
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 	t.Run(`pubsub`, pubsubTest(testFn))
 
 	// NB running TestChangefeedBasics, which includes a DELETE, with
@@ -399,8 +399,7 @@ func TestChangefeedFullTableName(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	//t.Run(`pubsub`, pubsubTest(testFn))
-	//pubsub currently fails
+	t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 func TestChangefeedMultiTable(t *testing.T) {
@@ -1157,6 +1156,8 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	t.Run(`webhook`, webhookTest(testFn, feedTestNoTenants))
 	//t.Run(`pubsub`, pubsubTest(testFn, feedTestNoTenants))
 	//failing on payloads violate CDC per-key ordering guarantees for multiple altars
+	//because mempubsub does not gurantee ordering of keys
+	//https://github.com/google/go-cloud/blob/master/pubsub/mempubsub/mem.go#L262-L264
 	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
@@ -2107,7 +2108,7 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 
 		drainUntilErr := func(f cdctest.TestFeed) (err error) {
 			var msg *cdctest.TestFeedMessage
-			for msg, err = f.Next(); msg != nil; {
+			for msg, err = f.Next(); msg != nil; msg, err = f.Next() {
 			}
 			return err
 		}
@@ -2149,8 +2150,8 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	//t.Run(`pubsub`, pubsubTest(testFn))
-	//fails by hanging
+	t.Run(`pubsub`, pubsubTest(testFn))
+	//will sometimes fail, non deterministic
 }
 
 func TestChangefeedMonitoring(t *testing.T) {
@@ -3575,8 +3576,7 @@ func TestManyChangefeedsOneTable(t *testing.T) {
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	//t.Run(`pubsub`, pubsubTest(testFn))
-	//fails on unexpected result
+	t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 func TestUnspecifiedPrimaryKey(t *testing.T) {

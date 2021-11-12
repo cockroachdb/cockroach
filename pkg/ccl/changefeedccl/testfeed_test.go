@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -1447,6 +1448,7 @@ type pubsubFeedFactory struct {
 
 var _ cdctest.TestFeedFactory = (*pubsubFeedFactory)(nil)
 
+// makePubsubFeedFactory returns a TestFeedFactory implementation using the `pubsub` uri.
 func makePubsubFeedFactory(
 	srv serverutils.TestServerInterface, db *gosql.DB,
 ) cdctest.TestFeedFactory {
@@ -1459,6 +1461,7 @@ func makePubsubFeedFactory(
 	}
 }
 
+// Feed implements cdctest.TestFeedFactory
 func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.TestFeed, error) {
 	parsed, err := parser.ParseOne(create)
 	if err != nil {
@@ -1466,12 +1469,18 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
 
+	// creates a uuid as the url so that each testfeed object has a unique sink
+	// tests like TestManyChangefeedsOneTable require testfeeds to receive their own messages
+	// regardless of what the topic is
+	memPubsubUrl := fmt.Sprintf("%s://%s", memScheme, uuid.NewString())
+
 	if createStmt.SinkURI == nil {
 		createStmt.SinkURI = tree.NewStrVal(
-			fmt.Sprintf("%s://testfeedURL", memScheme))
+			memPubsubUrl)
 	}
+
 	ctx := context.Background()
-	sinkDest, err := cdctest.MakeMockPubsubSink(fmt.Sprintf("%s://testfeedURL", memScheme), ctx)
+	sinkDest, err := cdctest.MakeMockPubsubSink(memPubsubUrl, ctx)
 
 	ss := &sinkSynchronizer{}
 	wrapSink := func(s Sink) Sink {
@@ -1488,10 +1497,14 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		sinkDest.Close()
 		return nil, err
 	}
-	c.mockSink.Dial()
+	err = c.mockSink.Dial()
+	if err != nil{
+		return nil, err
+	}
 	return c, nil
 }
 
+// Server implements TestFeedFactory
 func (p *pubsubFeedFactory) Server() serverutils.TestServerInterface {
 	return p.s
 }
@@ -1510,6 +1523,7 @@ func (p *pubsubFeed) Partitions() []string {
 	return []string{``}
 }
 
+// extractJSONMessagePubsub extracts the value, key, and topic from a pubsub message
 func extractJSONMessagePubsub(wrapped []byte) (value []byte, key []byte, topic string, err error){
 	parsed := payload{}
 	err = gojson.Unmarshal(wrapped, &parsed);
