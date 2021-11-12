@@ -12,19 +12,27 @@ package tabledesc_test
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -386,5 +394,144 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 
 	_, err = conn.Exec(`ALTER TABLE d.t DROP COLUMN c2`)
 	require.NoError(t, err)
+}
 
+// TestLatestIndexDescriptorVersionValues tests the correct behavior of the
+// LatestIndexDescVersion version. The values it returns should reflect those
+// used when creating indexes.
+func TestLatestIndexDescriptorVersionValues(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	const vp = tabledesc.LatestPrimaryIndexDescriptorVersion
+	const vnp = tabledesc.LatestNonPrimaryIndexDescriptorVersion
+
+	// Create a test cluster that will be used to create all kinds of indexes.
+	// We make it hang while finalizing an ALTER PRIMARY KEY to cover the edge
+	// case of primary-index-encoded indexes in mutations.
+	swapNotification := make(chan struct{})
+	waitBeforeContinuing := make(chan struct{})
+	args := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				RunBeforePrimaryKeySwap: func() {
+					swapNotification <- struct{}{}
+					<-waitBeforeContinuing
+				},
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, args)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Populate the test cluster with all manner of indexes and index mutations.
+	tdb.Exec(t, "CREATE SEQUENCE s")
+	tdb.Exec(t, "CREATE MATERIALIZED VIEW v AS SELECT 1 AS e, 2 AS f")
+	tdb.Exec(t, "CREATE INDEX vsec ON v (f)")
+	tdb.Exec(t, "CREATE TABLE t (a INT NOT NULL PRIMARY KEY, b INT, c INT, d INT NOT NULL, INDEX tsec (b), UNIQUE (c))")
+	// Wait for schema changes to complete.
+	q := fmt.Sprintf(
+		`SELECT count(*) FROM [SHOW JOBS] WHERE job_type IN ('%s', '%s') AND status <> 'succeeded'`,
+		jobspb.TypeSchemaChange,
+		jobspb.TypeNewSchemaChange,
+	)
+	tdb.CheckQueryResultsRetry(t, q, [][]string{{"0"}})
+	// Hang on ALTER PRIMARY KEY finalization.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		tdb.Exec(t, "ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (d)")
+		wg.Done()
+	}()
+	<-swapNotification
+
+	test := func(desc catalog.TableDescriptor) {
+		require.Equal(t, descpb.PrimaryIndexEncoding, desc.GetPrimaryIndex().GetEncodingType())
+		require.Equal(t, vp, desc.GetPrimaryIndex().GetVersion())
+		for _, index := range desc.PublicNonPrimaryIndexes() {
+			require.Equal(t, descpb.SecondaryIndexEncoding, index.GetEncodingType())
+		}
+		nonPrimaries := desc.DeletableNonPrimaryIndexes()
+
+		switch desc.GetName() {
+		case "t":
+			require.Equal(t, 6, len(nonPrimaries))
+			for _, np := range nonPrimaries {
+				switch np.GetName() {
+				case "tsec":
+					require.True(t, np.Public())
+					require.Equal(t, vnp, np.GetVersion())
+
+				case "t_c_key":
+					require.True(t, np.Public())
+					require.True(t, np.IsUnique())
+					require.Equal(t, vnp, np.GetVersion())
+
+				case "t_a_key":
+					require.True(t, np.IsMutation())
+					require.Equal(t, descpb.SecondaryIndexEncoding, np.GetEncodingType())
+					require.Equal(t, vnp, np.GetVersion())
+
+				case "new_primary_key":
+					require.True(t, np.IsMutation())
+					require.Equal(t, descpb.PrimaryIndexEncoding, np.GetEncodingType())
+					require.Equal(t, vnp, np.GetVersion())
+
+				case "tsec_rewrite_for_primary_key_change":
+					require.True(t, np.IsMutation())
+					require.Equal(t, descpb.SecondaryIndexEncoding, np.GetEncodingType())
+					require.Equal(t, vnp, np.GetVersion())
+
+				case "t_c_key_rewrite_for_primary_key_change":
+					require.True(t, np.IsMutation())
+					require.True(t, np.IsUnique())
+					require.Equal(t, descpb.SecondaryIndexEncoding, np.GetEncodingType())
+					require.Equal(t, vnp, np.GetVersion())
+
+				default:
+					t.Fatalf("unexpected index or index mutation %q", np.GetName())
+				}
+			}
+		case "s":
+			require.Empty(t, nonPrimaries)
+
+		case "v":
+			require.Equal(t, 1, len(nonPrimaries))
+			np := nonPrimaries[0]
+			require.False(t, np.IsMutation())
+			require.Equal(t, "vsec", np.GetName())
+			require.Equal(t, vnp, np.GetVersion())
+		}
+	}
+
+	// We bypass the usual descriptor retrieval mechanisms because we don't want
+	// RunPostDeserializationChanges to run and potentially overwrite index
+	// descriptor versions.
+	rows := tdb.QueryStr(t, `
+		SELECT encode(descriptor, 'hex')
+		FROM system.descriptor
+		WHERE id IN ('t'::REGCLASS::INT, 's'::REGCLASS::INT, 'v'::REGCLASS::INT)`)
+	require.NotEmpty(t, rows)
+	for _, row := range rows {
+		require.NotEmpty(t, row)
+		bytes, err := hex.DecodeString(row[0])
+		require.NoError(t, err)
+		var descProto descpb.Descriptor
+		require.NoError(t, protoutil.Unmarshal(bytes, &descProto))
+		b := catalogkv.NewBuilderWithMVCCTimestamp(&descProto, hlc.Timestamp{WallTime: 1})
+		desc := b.BuildImmutable().(catalog.TableDescriptor)
+		test(desc)
+	}
+
+	// Test again but with RunPostDeserializationChanges.
+	for _, name := range []string{`t`, `s`, `v`} {
+		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", name)
+		test(desc)
+	}
+
+	// Resume pending statement execution.
+	waitBeforeContinuing <- struct{}{}
+	wg.Wait()
 }
