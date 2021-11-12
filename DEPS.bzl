@@ -1255,6 +1255,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_cockroachdb_tools",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/cockroachdb/tools",
+        sha256 = "37a3737dd23768b4997b2f0341d625658f5862cdbf808f7fbf3a7f9fd25913a7",
+        strip_prefix = "github.com/cockroachdb/tools@v0.0.0-20211112185054-642e51449b40",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/tools/com_github_cockroachdb_tools-v0.0.0-20211112185054-642e51449b40.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_cockroachdb_ttycolor",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/ttycolor",
