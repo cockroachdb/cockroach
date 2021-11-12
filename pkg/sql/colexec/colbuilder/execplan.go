@@ -608,6 +608,12 @@ func MaybeRemoveRootColumnarizer(r colexecargs.OpWithMetaInfo) execinfra.RowSour
 	return c.Input()
 }
 
+func getStreamingAllocator(
+	ctx context.Context, args *colexecargs.NewColOperatorArgs,
+) *colmem.Allocator {
+	return colmem.NewAllocator(ctx, args.StreamingMemAccount, args.Factory)
+}
+
 // NOTE: throughout this file we do not append an output type of a projecting
 // operator to the passed-in type schema - we, instead, always allocate a new
 // type slice and copy over the old schema and set the output column of a
@@ -641,13 +647,11 @@ func NewColOperator(
 	r := result.NewColOperatorResult
 	spec := args.Spec
 	inputs := args.Inputs
-	factory := args.Factory
-	if factory == nil {
+	if args.Factory == nil {
 		// This code path is only used in tests.
-		factory = coldataext.NewExtendedColumnFactory(flowCtx.EvalCtx)
+		args.Factory = coldataext.NewExtendedColumnFactory(flowCtx.EvalCtx)
 	}
-	streamingMemAccount := args.StreamingMemAccount
-	streamingAllocator := colmem.NewAllocator(ctx, streamingMemAccount, factory)
+	factory := args.Factory
 	if args.ExprHelper == nil {
 		args.ExprHelper = colexecargs.NewExprHelper()
 		args.ExprHelper.SemaCtx = flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.Txn)
@@ -689,9 +693,11 @@ func NewColOperator(
 			if core.Values.NumRows == 0 || len(core.Values.Columns) == 0 {
 				// To simplify valuesOp we handle some special cases with
 				// fixedNumTuplesNoInputOp.
-				result.Root = colexecutils.NewFixedNumTuplesNoInputOp(streamingAllocator, int(core.Values.NumRows), nil /* opToInitialize */)
+				result.Root = colexecutils.NewFixedNumTuplesNoInputOp(
+					getStreamingAllocator(ctx, args), int(core.Values.NumRows), nil, /* opToInitialize */
+				)
 			} else {
-				result.Root = colexec.NewValuesOp(streamingAllocator, core.Values)
+				result.Root = colexec.NewValuesOp(getStreamingAllocator(ctx, args), core.Values)
 			}
 			result.ColumnTypes = make([]*types.T, len(core.Values.Columns))
 			for i, col := range core.Values.Columns {
@@ -742,7 +748,7 @@ func NewColOperator(
 			inputTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(inputTypes, spec.Input[0].ColumnTypes)
 			indexJoinOp, err := colfetcher.NewColIndexJoin(
-				ctx, streamingAllocator, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
+				ctx, getStreamingAllocator(ctx, args), colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
 				flowCtx, args.ExprHelper, inputs[0].Root, core.JoinReader, post, inputTypes,
 			)
 			if err != nil {
@@ -780,14 +786,16 @@ func NewColOperator(
 				// TableReader, so we end up creating an orphaned colBatchScan.
 				// We should avoid that. Ideally the optimizer would not plan a
 				// scan in this unusual case.
-				result.Root, err = colexecutils.NewFixedNumTuplesNoInputOp(streamingAllocator, 1 /* numTuples */, inputs[0].Root), nil
+				result.Root, err = colexecutils.NewFixedNumTuplesNoInputOp(
+					getStreamingAllocator(ctx, args), 1 /* numTuples */, inputs[0].Root,
+				), nil
 				// We make ColumnTypes non-nil so that sanity check doesn't
 				// panic.
 				result.ColumnTypes = []*types.T{}
 				break
 			}
 			if aggSpec.IsRowCount() {
-				result.Root, err = colexec.NewCountOp(streamingAllocator, inputs[0].Root), nil
+				result.Root, err = colexec.NewCountOp(getStreamingAllocator(ctx, args), inputs[0].Root), nil
 				result.ColumnTypes = []*types.T{types.Int}
 				break
 			}
@@ -919,9 +927,9 @@ func NewColOperator(
 					)
 				}
 			} else {
-				evalCtx.SingleDatumAggMemAccount = streamingMemAccount
-				newAggArgs.Allocator = streamingAllocator
-				newAggArgs.MemAccount = streamingMemAccount
+				evalCtx.SingleDatumAggMemAccount = args.StreamingMemAccount
+				newAggArgs.Allocator = getStreamingAllocator(ctx, args)
+				newAggArgs.MemAccount = args.StreamingMemAccount
 				result.Root = colexec.NewOrderedAggregator(newAggArgs)
 			}
 			result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
@@ -984,7 +992,9 @@ func NewColOperator(
 				return r, err
 			}
 			outputIdx := len(spec.Input[0].ColumnTypes)
-			result.Root = colexecbase.NewOrdinalityOp(streamingAllocator, inputs[0].Root, outputIdx)
+			result.Root = colexecbase.NewOrdinalityOp(
+				getStreamingAllocator(ctx, args), inputs[0].Root, outputIdx,
+			)
 			result.ColumnTypes = appendOneType(spec.Input[0].ColumnTypes, types.Int)
 
 		case core.HashJoiner != nil:
@@ -1173,7 +1183,8 @@ func NewColOperator(
 						// We must cast to the expected argument type.
 						castIdx := len(typs)
 						input, err = colexecbase.GetCastOperator(
-							streamingAllocator, input, int(idx), castIdx, typs[idx], expectedType, flowCtx.EvalCtx,
+							getStreamingAllocator(ctx, args), input, int(idx),
+							castIdx, typs[idx], expectedType, flowCtx.EvalCtx,
 						)
 						if err != nil {
 							colexecerror.InternalError(errors.AssertionFailedf(
@@ -1196,7 +1207,7 @@ func NewColOperator(
 					// to use should come from the optimizer.
 					partitionColIdx = int(wf.OutputColIdx + tempColOffset)
 					input = colexecwindow.NewWindowSortingPartitioner(
-						streamingAllocator, input, typs,
+						getStreamingAllocator(ctx, args), input, typs,
 						core.Windower.PartitionBy, wf.Ordering.Columns, partitionColIdx,
 						func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) colexecop.Operator {
 							return result.createDiskBackedSort(
@@ -1222,8 +1233,8 @@ func NewColOperator(
 				if colexecwindow.WindowFnNeedsPeersInfo(&wf) {
 					peersColIdx = int(wf.OutputColIdx + tempColOffset)
 					input = colexecwindow.NewWindowPeerGrouper(
-						streamingAllocator, input, typs, wf.Ordering.Columns,
-						partitionColIdx, peersColIdx,
+						getStreamingAllocator(ctx, args), input, typs,
+						wf.Ordering.Columns, partitionColIdx, peersColIdx,
 					)
 					// Window peer grouper will append a boolean column.
 					tempColOffset++
@@ -1253,10 +1264,10 @@ func NewColOperator(
 					// will fall back to disk if necessary.
 					switch windowFn {
 					case execinfrapb.WindowerSpec_ROW_NUMBER:
-						windowArgs.MainAllocator = streamingAllocator
+						windowArgs.MainAllocator = getStreamingAllocator(ctx, args)
 						result.Root = colexecwindow.NewRowNumberOperator(windowArgs)
 					case execinfrapb.WindowerSpec_RANK, execinfrapb.WindowerSpec_DENSE_RANK:
-						windowArgs.MainAllocator = streamingAllocator
+						windowArgs.MainAllocator = getStreamingAllocator(ctx, args)
 						result.Root, err = colexecwindow.NewRankOperator(windowArgs, windowFn, wf.Ordering.Columns)
 					case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
 						opName := opNamePrefix + "relative-rank"
@@ -1472,7 +1483,8 @@ func NewColOperator(
 			if !actual.Identical(expected) {
 				castedIdx := len(typesWithCasts)
 				r.Root, err = colexecbase.GetCastOperator(
-					streamingAllocator, r.Root, i, castedIdx, actual, expected, flowCtx.EvalCtx,
+					getStreamingAllocator(ctx, args), r.Root, i, castedIdx,
+					actual, expected, flowCtx.EvalCtx,
 				)
 				if err != nil {
 					return r, errors.NewAssertionErrorWithWrappedErrf(err, "unexpectedly couldn't plan a cast although IsCastSupported returned true")
