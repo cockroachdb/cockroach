@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,18 +26,14 @@ func TestAnnotateCtxTags(t *testing.T) {
 	ac.AddLogTag("b", 2)
 
 	ctx := ac.AnnotateCtx(context.Background())
-	if exp, val := "[a1,b2] test", FormatWithContextTags(ctx, "test"); val != exp {
-		t.Errorf("expected '%s', got '%s'", exp, val)
-	}
+	assert.Equal(t, "[a1,b2] test", FormatWithContextTags(ctx, "test"))
 
 	ctx = context.Background()
 	ctx = logtags.AddTag(ctx, "a", 10)
 	ctx = logtags.AddTag(ctx, "aa", nil)
 	ctx = ac.AnnotateCtx(ctx)
 
-	if exp, val := "[a1,aa,b2] test", FormatWithContextTags(ctx, "test"); val != exp {
-		t.Errorf("expected '%s', got '%s'", exp, val)
-	}
+	assert.Equal(t, "[a1,aa,b2] test", FormatWithContextTags(ctx, "test"))
 }
 
 func TestAnnotateCtxSpan(t *testing.T) {
@@ -58,7 +55,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	sp2.Finish()
 	sp1.Finish()
 
-	if err := tracing.CheckRecordedSpans(sp1.GetRecording(tracing.RecordingVerbose), `
+	require.NoError(t, tracing.CheckRecordedSpans(sp1.GetRecording(tracing.RecordingVerbose), `
 		span: root
 			tags: _verbose=1
 			event: a
@@ -66,9 +63,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 			span: child
 				tags: _verbose=1 ambient=
 				event: [ambient] b
-	`); err != nil {
-		t.Fatal(err)
-	}
+	`))
 
 	// Annotate a context that has no span. The tracer will create a non-recordable
 	// span. We just check here that AnnotateCtxWithSpan properly returns it to the
@@ -94,12 +89,8 @@ func TestAnnotateCtxNodeStoreReplica(t *testing.T) {
 	ctx := n.AnnotateCtx(context.Background())
 	ctx = s.AnnotateCtx(ctx)
 	ctx = r.AnnotateCtx(ctx)
-	if exp, val := "[n1,s2,r3] test", FormatWithContextTags(ctx, "test"); val != exp {
-		t.Errorf("expected '%s', got '%s'", exp, val)
-	}
-	if tags := logtags.FromContext(ctx); tags != r.tags {
-		t.Errorf("expected %p, got %p", r.tags, tags)
-	}
+	assert.Equal(t, "[n1,s2,r3] test", FormatWithContextTags(ctx, "test"))
+	require.Equal(t, r.privateTags, logtags.FromContext(ctx))
 }
 
 func TestResetAndAnnotateCtx(t *testing.T) {
@@ -109,7 +100,5 @@ func TestResetAndAnnotateCtx(t *testing.T) {
 	ctx := context.Background()
 	ctx = logtags.AddTag(ctx, "b", 2)
 	ctx = ac.ResetAndAnnotateCtx(ctx)
-	if exp, val := "[a1] test", FormatWithContextTags(ctx, "test"); val != exp {
-		t.Errorf("expected '%s', got '%s'", exp, val)
-	}
+	assert.Equal(t, "[a1] test", FormatWithContextTags(ctx, "test"))
 }
