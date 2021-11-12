@@ -190,6 +190,30 @@ func (d *dev) stageArtifacts(
 	}
 
 	if hoistGeneratedCode {
+		// Clean up ignored .go files. Do this by listing all the
+		// ignored files and filtering out irrelevant ones.
+		// We do this to get rid of stale generated files that might
+		// confuse IDE's, especially if you switch between branches that
+		// have different generated code.
+		lines, err := d.exec.CommandContextSilent(ctx, "git", "status", "--ignored", "--short", filepath.Join(workspace, "pkg"))
+		if err != nil {
+			return err
+		}
+		for _, line := range strings.Split(string(lines), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || !strings.HasPrefix(line, "!! ") {
+				continue
+			}
+			filename := strings.TrimPrefix(line, "!! ")
+			if !strings.HasSuffix(filename, ".go") || strings.Contains(filename, "zcgo_flags") {
+				continue
+			}
+			if err := d.os.Remove(filename); err != nil {
+				return err
+			}
+		}
+		// Enumerate generated .go files in the sandbox so we can hoist
+		// them out.
 		goFiles, err := d.os.ListFilesWithSuffix(filepath.Join(bazelBin, "pkg"), ".go")
 		if err != nil {
 			return err
