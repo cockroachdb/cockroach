@@ -498,7 +498,8 @@ func (s *OutgoingSnapshot) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (s *OutgoingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("%s snapshot %s at applied index %d", s.snapType, s.SnapUUID.Short(), s.State.RaftAppliedIndex)
+	w.Printf("%s snapshot %s at applied index %d",
+		s.snapType, redact.Safe(s.SnapUUID.Short()), s.State.RaftAppliedIndex)
 }
 
 // Close releases the resources associated with the snapshot.
@@ -515,6 +516,7 @@ type IncomingSnapshot struct {
 	SnapUUID uuid.UUID
 	// The storage interface for the underlying SSTs.
 	SSTStorageScratch *SSTSnapshotStorageScratch
+	FromReplica       roachpb.ReplicaDescriptor
 	// The descriptor in the snapshot, never nil.
 	Desc             *roachpb.RangeDescriptor
 	snapType         SnapshotRequest_Type
@@ -528,7 +530,8 @@ func (s *IncomingSnapshot) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (s *IncomingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("%s snapshot %s at applied index %d", s.snapType, s.SnapUUID.Short(), s.raftAppliedIndex)
+	w.Printf("%s snapshot %s from %s at applied index %d",
+		s.snapType, redact.Safe(s.SnapUUID.Short()), s.FromReplica, s.raftAppliedIndex)
 }
 
 // snapshot creates an OutgoingSnapshot containing a pebble snapshot for the
@@ -809,31 +812,25 @@ func (r *Replica) applySnapshot(
 		// Time to ingest SSTs.
 		ingestion time.Time
 	}
-	log.Infof(ctx, "applying snapshot of type %s [id=%s index=%d]", inSnap.snapType,
-		inSnap.SnapUUID.Short(), nonemptySnap.Metadata.Index)
+	log.Infof(ctx, "applying snapshot of type %s [id=%s from=%s index=%d]", inSnap.snapType,
+		redact.Safe(inSnap.SnapUUID.Short()), inSnap.FromReplica, nonemptySnap.Metadata.Index)
 	defer func(start time.Time) {
 		now := timeutil.Now()
-		totalLog := fmt.Sprintf(
-			"total=%0.0fms ",
-			now.Sub(start).Seconds()*1000,
-		)
-		var subsumedReplicasLog string
+		totalLog := redact.Sprintf(" total=%0.0fms", now.Sub(start).Seconds()*1000)
+		var subsumedReplicasLog redact.RedactableString
 		if len(subsumedRepls) > 0 {
-			subsumedReplicasLog = fmt.Sprintf(
-				"subsumedReplicas=%d@%0.0fms ",
+			subsumedReplicasLog = redact.Sprintf(
+				" subsumedReplicas=%d@%0.0fms",
 				len(subsumedRepls),
-				stats.subsumedReplicas.Sub(start).Seconds()*1000,
-			)
+				stats.subsumedReplicas.Sub(start).Seconds()*1000)
 		}
-		ingestionLog := fmt.Sprintf(
-			"ingestion=%d@%0.0fms ",
+		ingestionLog := redact.Sprintf(
+			" ingestion=%d@%0.0fms",
 			len(inSnap.SSTStorageScratch.SSTs()),
-			stats.ingestion.Sub(stats.subsumedReplicas).Seconds()*1000,
-		)
-		log.Infof(
-			ctx, "applied snapshot of type %s [%s%s%sid=%s index=%d]", inSnap.snapType, totalLog,
-			subsumedReplicasLog, ingestionLog, inSnap.SnapUUID.Short(), nonemptySnap.Metadata.Index,
-		)
+			stats.ingestion.Sub(stats.subsumedReplicas).Seconds()*1000)
+		log.Infof(ctx, "applied snapshot of type %s [id=%s from=%s index=%d%s%s%s]", inSnap.snapType,
+			redact.Safe(inSnap.SnapUUID.Short()), inSnap.FromReplica, nonemptySnap.Metadata.Index,
+			totalLog, subsumedReplicasLog, ingestionLog)
 	}(timeutil.Now())
 
 	unreplicatedSSTFile := &storage.MemFile{}
