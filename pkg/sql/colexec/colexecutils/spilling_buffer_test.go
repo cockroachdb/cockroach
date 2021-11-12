@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -107,8 +106,6 @@ func TestSpillingBuffer(t *testing.T) {
 		})
 		op.Init(ctx)
 
-		queueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
-		queueCfg.SetDefaultBufferSizeBytesForCacheMode()
 		queueCfg.TestingKnobs.AlwaysCompress = alwaysCompress
 
 		// We need to create a separate unlimited allocator for the spilling

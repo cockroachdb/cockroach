@@ -507,8 +507,6 @@ func newMergeJoinBase(
 		rDirections[i] = c.Direction
 	}
 
-	diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
-	diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
 	base := &mergeJoinBase{
 		joinHelper:         newJoinHelper(left, right),
 		unlimitedAllocator: unlimitedAllocator,

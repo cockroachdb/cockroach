@@ -223,12 +223,6 @@ func newHashBasedPartitioner(
 	diskAcc *mon.BoundAccount,
 	numRequiredActivePartitions int,
 ) *hashBasedPartitioner {
-	// Make a copy of the DiskQueueCfg and set defaults for the partitioning
-	// operators. The cache mode is chosen to automatically close the cache
-	// belonging to partitions at a parent level when repartitioning.
-	diskQueueCfg := args.DiskQueueCfg
-	diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
-	diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
 	partitionedDiskQueueSemaphore := args.FDSemaphore
 	if !args.TestingKnobs.DelegateFDAcquisitions {
 		// To avoid deadlocks with other disk queues, we manually attempt to
@@ -242,14 +236,14 @@ func newHashBasedPartitioner(
 	partitionedInputs := make([]*partitionerToOperator, numInputs)
 	for i := range inputs {
 		partitioners[i] = colcontainer.NewPartitionedQueue(
-			inputTypes[i], diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyDefault, diskAcc,
+			inputTypes[i], args.DiskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyDefault, diskAcc,
 		)
 		partitionedInputs[i] = newPartitionerToOperator(
 			unlimitedAllocator, inputTypes[i], partitioners[i],
 		)
 	}
 	maxNumberActivePartitions := calculateMaxNumberActivePartitions(flowCtx, args, numRequiredActivePartitions)
-	diskQueuesMemUsed := maxNumberActivePartitions * diskQueueCfg.BufferSizeBytes
+	diskQueuesMemUsed := maxNumberActivePartitions * args.DiskQueueCfg.BufferSizeBytes
 	memoryLimit := execinfra.GetWorkMemLimit(flowCtx)
 	if memoryLimit == 1 {
 		// If memory limit is 1, we're likely in a "force disk spill"
@@ -411,25 +405,11 @@ StateChanged:
 			}
 			if allZero {
 				// All inputs have been partitioned and spilled, so we
-				// transition to processing phase. Close all the open write file
-				// descriptors.
-				//
-				// TODO(yuzefovich): this will also clear the cache once the new
-				// PR is in. This means we will reallocate a cache whenever
-				// reading from the partitions. What I think we might want to do
-				// is not close the partitions here. Instead, we move on to
-				// joining, which will switch all of these reserved file
-				// descriptors to read in the best case (no repartitioning) and
-				// reuse the cache. Only if we need to repartition should we
-				// CloseAllOpenWriteFileDescriptors of both sides. It might also
-				// be more efficient to Dequeue from the partitions you'll read
-				// from before doing that to exempt them from releasing their
-				// FDs to the semaphore.
-				for i := range op.inputs {
-					if err := op.partitioners[i].CloseAllOpenWriteFileDescriptors(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
-					}
-				}
+				// transition to processing phase. No need to close any write
+				// file descriptors since they will become the read file
+				// descriptors if we don't need to recursively repartition, and
+				// in case we do, we'll close them in hbpRecursivePartitioning
+				// state.
 				op.inMemMainOp.Init(op.Ctx)
 				op.partitionIdxOffset += op.numBuckets
 				op.state = hbpProcessNewPartitionUsingMain
@@ -453,6 +433,14 @@ StateChanged:
 				log.VEventf(op.Ctx, 2,
 					"%s is performing %d'th repartition", op.name, op.numRepartitions,
 				)
+			}
+			// First, we need to make sure to release all open write file
+			// descriptors (after this call we will have 0 FDs open, so we can
+			// use our limit fully as we please).
+			for _, p := range op.partitioners {
+				if err := p.CloseAllOpenWriteFileDescriptors(op.Ctx); err != nil {
+					colexecerror.InternalError(err)
+				}
 			}
 			// In order to use a different hash function when repartitioning, we
 			// need to increase the seed value of the tuple distributor.
@@ -483,20 +471,6 @@ StateChanged:
 					// We're done reading from this partition, and it will never
 					// be read from again, so we can close it.
 					if err := partitioner.CloseInactiveReadPartitions(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
-					}
-					// We're done writing to the newly created partitions.
-					// TODO(yuzefovich): we should not release the descriptors
-					// here. The invariant should be: we're entering
-					// hbpRecursivePartitioning, at that stage we have at
-					// most numBuckets*2 file descriptors open. At the top of
-					// the state transition, close all open write file
-					// descriptors, which should reduce the open descriptors to
-					// 0. Now we open the two read' partitions for 2 file
-					// descriptors and whatever number of write partitions we
-					// want. This will allow us to remove the call to
-					// CloseAllOpen... in the first state as well.
-					if err := partitioner.CloseAllOpenWriteFileDescriptors(op.Ctx); err != nil {
 						colexecerror.InternalError(err)
 					}
 				}
