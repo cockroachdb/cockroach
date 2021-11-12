@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -95,7 +94,6 @@ func (a *cFetcherTableArgs) populateTypes(cols []catalog.Column) {
 func populateTableArgs(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	evalCtx *tree.EvalContext,
 	table catalog.TableDescriptor,
 	index catalog.Index,
 	invertedCol catalog.Column,
@@ -152,7 +150,7 @@ func populateTableArgs(
 			}
 			cols = cols[:colIdx]
 			if err := remapPostProcessSpec(
-				post, idxMap, helper, evalCtx, args.typs, flowCtx.PreserveFlowSpecs,
+				flowCtx, post, idxMap, helper, args.typs,
 			); err != nil {
 				return nil, nil, err
 			}
@@ -172,7 +170,7 @@ func populateTableArgs(
 	// make sure they are hydrated. In row execution engine it is done during
 	// the processor initialization, but neither ColBatchScan nor cFetcher are
 	// processors, so we need to do the hydration ourselves.
-	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
+	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.Txn)
 	return args, idxMap, resolver.HydrateTypeSlice(ctx, args.typs)
 }
 
@@ -186,16 +184,14 @@ func populateTableArgs(
 // If traceKV is true, then all columns are considered as needed, and
 // neededColumns is ignored.
 func keepOnlyNeededColumns(
-	evalCtx *tree.EvalContext,
+	flowCtx *execinfra.FlowCtx,
 	tableArgs *cFetcherTableArgs,
 	idxMap []int,
 	neededColumns []uint32,
 	post *execinfrapb.PostProcessSpec,
 	helper *colexecargs.ExprHelper,
-	traceKV bool,
-	preserveFlowSpecs bool,
 ) error {
-	if !traceKV && len(neededColumns) < len(tableArgs.cols) {
+	if !flowCtx.TraceKV && len(neededColumns) < len(tableArgs.cols) {
 		// If the tracing is not enabled and we don't need all of the available
 		// columns, we will prune all of the not needed columns away.
 
@@ -245,7 +241,7 @@ func keepOnlyNeededColumns(
 			neededColIdx++
 		}
 		if err := remapPostProcessSpec(
-			post, idxMap, helper, evalCtx, tableArgs.typs, preserveFlowSpecs,
+			flowCtx, post, idxMap, helper, tableArgs.typs,
 		); err != nil {
 			return err
 		}
@@ -291,16 +287,15 @@ func keepOnlyNeededColumns(
 // words, every node must have gotten the unmodified version of the spec and is
 // now free to modify it as it pleases.
 func remapPostProcessSpec(
+	flowCtx *execinfra.FlowCtx,
 	post *execinfrapb.PostProcessSpec,
 	idxMap []int,
 	helper *colexecargs.ExprHelper,
-	evalCtx *tree.EvalContext,
 	typsBeforeRemapping []*types.T,
-	preserveFlowSpecs bool,
 ) error {
 	if post.Projection {
 		outputColumns := post.OutputColumns
-		if preserveFlowSpecs && post.OriginalOutputColumns == nil {
+		if flowCtx.PreserveFlowSpecs && post.OriginalOutputColumns == nil {
 			// This is the first time we're modifying this PostProcessSpec, but
 			// we've been asked to preserve the specs, so we have to set the
 			// original output columns. We are also careful to allocate a new
@@ -313,7 +308,7 @@ func remapPostProcessSpec(
 		}
 	} else if post.RenderExprs != nil {
 		renderExprs := post.RenderExprs
-		if preserveFlowSpecs && post.OriginalRenderExprs == nil {
+		if flowCtx.PreserveFlowSpecs && post.OriginalRenderExprs == nil {
 			// This is the first time we're modifying this PostProcessSpec, but
 			// we've been asked to preserve the specs, so we have to set the
 			// original render expressions. We are also careful to allocate a
@@ -325,7 +320,10 @@ func remapPostProcessSpec(
 		for i := range renderExprs {
 			// Make sure that the render expression is deserialized if we
 			// are on the remote node.
-			post.RenderExprs[i].LocalExpr, err = helper.ProcessExpr(renderExprs[i], evalCtx, typsBeforeRemapping)
+			//
+			// It is ok to use the evalCtx of the flowCtx since it won't be
+			// mutated (we are not evaluating the expressions).
+			post.RenderExprs[i].LocalExpr, err = helper.ProcessExpr(renderExprs[i], flowCtx.EvalCtx, typsBeforeRemapping)
 			if err != nil {
 				return err
 			}
