@@ -752,6 +752,7 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	// Forbid timeutil.Now().Sub(t) in favor or timeutil.Since(t).
 	t.Run("TestNowSub", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
@@ -773,7 +774,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use 'timeutil.Since() or timeutil.Since()' instead "+
+			t.Errorf("\n%s <- forbidden; use 'timeutil.Since(t)' instead "+
 				"because they're more efficient", s)
 		}); err != nil {
 			t.Error(err)
