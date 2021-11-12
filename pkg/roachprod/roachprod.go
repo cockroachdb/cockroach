@@ -133,7 +133,9 @@ func sortedClusters() []string {
 // newCluster initializes a SyncedCluster for the given cluster name.
 //
 // The cluster name can include a node selector (e.g. "foo:1-3").
-func newCluster(name string, clusterOpts install.ClusterSettings) (*install.SyncedCluster, error) {
+func newCluster(
+	name string, clusterSettings install.ClusterSettings,
+) (*install.SyncedCluster, error) {
 	nodeNames := "all"
 	{
 		parts := strings.Split(name, ":")
@@ -161,7 +163,10 @@ Available clusters:
 		return nil, err
 	}
 
-	c.Prepare(clusterOpts)
+	err := c.Prepare(clusterSettings)
+	if err != nil {
+		return nil, err
+	}
 
 	nodes, err := install.ListNodes(nodeNames, len(c.VMs))
 	if err != nil {
@@ -407,13 +412,15 @@ func IP(name string, clusterOpts install.ClusterSettings, external bool) ([]stri
 			ips[i] = c.VMs[nodes[i]-1].PublicIP
 		}
 	} else {
-		c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
-			var err error
+		var err error
+		err = c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
 			ips[i], err = c.GetInternalIP(nodes[i])
 			return nil, err
 		})
+		if err != nil {
+			return nil, err
+		}
 	}
-
 	return ips, nil
 }
 
@@ -423,8 +430,7 @@ func Status(name string, clusterOpts install.ClusterSettings) error {
 	if err != nil {
 		return err
 	}
-	c.Status()
-	return nil
+	return c.Status()
 }
 
 // Stage stages release and edge binaries to the cluster.
@@ -577,8 +583,7 @@ func Start(
 	if err != nil {
 		return err
 	}
-	c.Start()
-	return nil
+	return c.Start()
 }
 
 // Monitor monitors the status of cockroach nodes in a cluster.
@@ -608,8 +613,7 @@ func Stop(name string, clusterOpts install.ClusterSettings, sig int, wait bool) 
 	if err != nil {
 		return err
 	}
-	c.Stop(sig, wait)
-	return nil
+	return c.Stop(sig, wait)
 }
 
 // Init initializes the cluster.
@@ -622,8 +626,7 @@ func Init(clusterName string, clusterOpts install.ClusterSettings, username stri
 	if err != nil {
 		return err
 	}
-	c.Init()
-	return nil
+	return c.Init()
 }
 
 // Wipe wipes the nodes in a cluster.
@@ -632,8 +635,7 @@ func Wipe(name string, clusterOpts install.ClusterSettings, wipePreserveCerts bo
 	if err != nil {
 		return err
 	}
-	c.Wipe(wipePreserveCerts)
-	return nil
+	return c.Wipe(wipePreserveCerts)
 }
 
 // Reformat reformats disks in a cluster to use the specified filesystem.
@@ -698,8 +700,7 @@ func DistributeCerts(name string, clusterOpts install.ClusterSettings) error {
 	if err != nil {
 		return err
 	}
-	c.DistributeCerts()
-	return nil
+	return c.DistributeCerts()
 }
 
 // Put copies a local file to the nodes in a cluster.
@@ -708,8 +709,7 @@ func Put(name string, clusterOpts install.ClusterSettings, src, dest string) err
 	if err != nil {
 		return err
 	}
-	c.Put(src, dest)
-	return nil
+	return c.Put(src, dest)
 }
 
 // Get copies a remote file from the nodes in a cluster.
@@ -720,8 +720,7 @@ func Get(name string, clusterOpts install.ClusterSettings, src, dest string) err
 	if err != nil {
 		return err
 	}
-	c.Get(src, dest)
-	return nil
+	return c.Get(src, dest)
 }
 
 // PgURL generates pgurls for the nodes in a cluster.
@@ -738,11 +737,14 @@ func PgURL(name string, clusterOpts install.ClusterSettings, external bool) erro
 			ips[i] = c.VMs[nodes[i]-1].PublicIP
 		}
 	} else {
-		c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
-			var err error
+		var err error
+		err = c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
 			ips[i], err = c.GetInternalIP(nodes[i])
 			return nil, err
 		})
+		if err != nil {
+			return err
+		}
 	}
 
 	var urls []string
@@ -1021,7 +1023,10 @@ func destroyLocalCluster(clusterName string) error {
 	if err != nil {
 		return err
 	}
-	c.Wipe(false)
+	err = c.Wipe(false)
+	if err != nil {
+		return err
+	}
 	return local.DeleteCluster(clusterName)
 }
 
