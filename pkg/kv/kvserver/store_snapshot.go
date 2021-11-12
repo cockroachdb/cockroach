@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
@@ -74,7 +75,7 @@ type snapshotStrategy interface {
 
 	// Status provides a status report on the work performed during the
 	// snapshot. Only valid if the strategy succeeded.
-	Status() string
+	Status() redact.SafeString
 
 	// Close cleans up any resources associated with the snapshot strategy.
 	Close(context.Context)
@@ -290,6 +291,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			inSnap := IncomingSnapshot{
 				SnapUUID:          snapUUID,
 				SSTStorageScratch: kvSS.scratch,
+				FromReplica:       header.RaftMessageRequest.FromReplica,
 				Desc:              header.State.Desc,
 				snapType:          header.Type,
 				raftAppliedIndex:  header.State.RaftAppliedIndex,
@@ -374,7 +376,9 @@ func (kvSS *kvBatchSnapshotStrategy) sendBatch(
 }
 
 // Status implements the snapshotStrategy interface.
-func (kvSS *kvBatchSnapshotStrategy) Status() string { return kvSS.status }
+func (kvSS *kvBatchSnapshotStrategy) Status() redact.SafeString {
+	return redact.SafeString(kvSS.status)
+}
 
 // Close implements the snapshotStrategy interface.
 func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
@@ -970,9 +974,9 @@ func sendSnapshot(
 		snap,
 		to,
 		durSent.Seconds(),
-		humanizeutil.IBytes(int64(float64(numBytesSent)/durSent.Seconds())),
+		redact.Safe(humanizeutil.IBytes(int64(float64(numBytesSent)/durSent.Seconds()))),
 		ss.Status(),
-		humanizeutil.IBytes(int64(targetRate)),
+		redact.Safe(humanizeutil.IBytes(int64(targetRate))),
 		durQueued.Seconds(),
 	)
 
