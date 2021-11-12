@@ -101,3 +101,85 @@ func TestResetAndAnnotateCtx(t *testing.T) {
 	ctx = ac.ResetAndAnnotateCtx(ctx)
 	assert.Equal(t, "[a1] test", FormatWithContextTags(ctx, "test"))
 }
+
+func TestSharedTags(t *testing.T) {
+	ac := AmbientContext{}
+
+	ac.AddSharedLogTag("a", 1)
+	ctx := ac.AnnotateCtx(context.Background())
+	assert.Equal(t, "[a1] test", FormatWithContextTags(ctx, "test"))
+
+	ac2 := ac
+	ctx = ac2.AnnotateCtx(context.Background())
+	assert.Equal(t, "[a1] test", FormatWithContextTags(ctx, "test"))
+
+	ac.AddSharedLogTag("b", 1)
+	ctx = ac.AnnotateCtx(context.Background())
+	assert.Equal(t, "[a1,b1] test", FormatWithContextTags(ctx, "test"))
+	ctx = ac2.AnnotateCtx(context.Background())
+	assert.Equal(t, "[a1,b1] test", FormatWithContextTags(ctx, "test"))
+
+	ac2.AddSharedLogTag("b", 2)
+	ctx = ac.AnnotateCtx(context.Background())
+	assert.Equal(t, "[a1,b2] test", FormatWithContextTags(ctx, "test"))
+	ctx = ac2.AnnotateCtx(context.Background())
+	assert.Equal(t, "[a1,b2] test", FormatWithContextTags(ctx, "test"))
+}
+
+func TestSharedTagsAfterInit(t *testing.T) {
+	ac := AmbientContext{}
+
+	ac.InitializeSharedLogTags()
+	ctx := ac.AnnotateCtx(context.Background())
+	assert.Equal(t, "test", FormatWithContextTags(ctx, "test"))
+
+	ac2 := ac
+	ctx = ac2.AnnotateCtx(context.Background())
+	assert.Equal(t, "test", FormatWithContextTags(ctx, "test"))
+
+	ac.AddSharedLogTag("b", 1)
+	ctx = ac.AnnotateCtx(context.Background())
+	assert.Equal(t, "[b1] test", FormatWithContextTags(ctx, "test"))
+	ctx = ac2.AnnotateCtx(context.Background())
+	assert.Equal(t, "[b1] test", FormatWithContextTags(ctx, "test"))
+
+	ac2.AddSharedLogTag("b", 2)
+	ctx = ac.AnnotateCtx(context.Background())
+	assert.Equal(t, "[b2] test", FormatWithContextTags(ctx, "test"))
+	ctx = ac2.AnnotateCtx(context.Background())
+	assert.Equal(t, "[b2] test", FormatWithContextTags(ctx, "test"))
+}
+
+// TestSharedTagsWithReset checks the combinations of private and
+// shared tags in ResetAndAnnotateCtx().
+func TestSharedTagsWithReset(t *testing.T) {
+	baseCtx := context.Background()
+	derivedCtx := logtags.AddTag(baseCtx, "derived", nil)
+
+	testCtxFn := func(t *testing.T, ctx context.Context) {
+		t.Run("no-private-tag", func(t *testing.T) {
+			ac := AmbientContext{}
+			ac.InitializeSharedLogTags()
+			ac2 := ac
+			ac.AddSharedLogTag("b", 1)
+			// We check here that reset replaces whatever tag were present
+			// in the context with the shared tags.
+			ctx2 := ac2.ResetAndAnnotateCtx(ctx)
+			assert.Equal(t, "[b1] test", FormatWithContextTags(ctx2, "test"))
+		})
+		t.Run("with-private-tag", func(t *testing.T) {
+			ac := AmbientContext{}
+			ac.InitializeSharedLogTags()
+			ac2 := ac
+			ac.AddSharedLogTag("b", 1)
+			ac2.AddLogTag("a", 1)
+			// We check here that reset replaces whatever tag were present
+			// in the context with the combination of private and shared
+			// tags.
+			ctx2 := ac2.ResetAndAnnotateCtx(ctx)
+			assert.Equal(t, "[a1,b1] test", FormatWithContextTags(ctx2, "test"))
+		})
+	}
+	t.Run("background-ctx", func(t *testing.T) { testCtxFn(t, baseCtx) })
+	t.Run("derived-ctx", func(t *testing.T) { testCtxFn(t, derivedCtx) })
+}

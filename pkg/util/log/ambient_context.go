@@ -58,12 +58,34 @@ type AmbientContext struct {
 	// log or an open span (if not nil).
 	eventLog *ctxEventLog
 
-	// The buffer.
+	// The log tag buffer specific to this ambient context.
 	//
 	// NB: this should not be returned to the caller, to avoid other mutations
 	// leaking in. If we return this to the caller, it should be in immutable
 	// form.
-	tags *logtags.Buffer
+	privateTags *logtags.Buffer
+
+	// The log tag buffer shared across ambient contexts, across all
+	// copies of ambient contexts from the first where shared tags were
+	// defined.
+	//
+	// NB: We are avoiding atomic.Value or syncutil.RWMutex here out of
+	// concern for performance. This is OK with regards to race
+	// conditions considering the following:
+	//
+	// 1. the initialization of the **logtags.Buffer pointer, from nil to non-nil.
+	// 2. the initialization/update of the tags stored as *logtags.Buffer.
+	// 3. accesses to the shared tags.
+	//
+	// Both initializations (1) and (2) are race free, under the
+	// assumption that calls to AddSharedLogTag() and
+	// InitializeSharedLogTags() are not performed concurrently on a
+	// given AmbientContext copy-family. This is true of server
+	// initialization inside CockroachDB.
+	//
+	// Accesses can be concurrent, which is safe: concurrent reads
+	// of a pointer are fine.
+	sharedTags **logtags.Buffer
 
 	// Cached annotated version of context.{TODO,Background}, to avoid annotating
 	// these contexts repeatedly.
@@ -71,8 +93,9 @@ type AmbientContext struct {
 }
 
 // AddLogTag adds a tag to the ambient context.
+// This tag is not shared with other AmbientContext instances.
 func (ac *AmbientContext) AddLogTag(name string, value interface{}) {
-	ac.tags = ac.tags.Add(name, value)
+	ac.privateTags = ac.privateTags.Add(name, value)
 	ac.refreshCache()
 }
 
@@ -109,12 +132,24 @@ func (ac *AmbientContext) AnnotateCtx(ctx context.Context) context.Context {
 		// NB: context.TODO and context.Background are identical except for their
 		// names.
 		if ac.backgroundCtx != nil {
-			return ac.backgroundCtx
+			// This is a cached background ctx with the private tags already
+			// embedded.
+			// Note that if there are private tags, ac.backgroundCtx is
+			// guaranteed non-nil because it was populated by AddLogTag().
+			ctx = ac.backgroundCtx
 		}
-		return ctx
 	default:
-		return ac.annotateCtxInternal(ctx)
+		// Add the tracing information and the private tags of any.
+		ctx = ac.annotateCtxInternal(ctx)
 	}
+
+	// Add the shared tags, if any.
+	// This can't be cached in ac.backgroundCtx since the shared
+	// tags might be updated in a different AmbientContext instance.
+	if ac.sharedTags != nil && *ac.sharedTags != nil {
+		ctx = logtags.AddTags(ctx, *ac.sharedTags)
+	}
+	return ctx
 }
 
 // ResetAndAnnotateCtx annotates a given context with the information in
@@ -126,26 +161,49 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 		// NB: context.TODO and context.Background are identical except for their
 		// names.
 		if ac.backgroundCtx != nil {
-			return ac.backgroundCtx
+			// This is a cached background ctx with the private tags already
+			// embedded.
+			// Note that if there are private tags, ac.backgroundCtx is
+			// guaranteed non-nil because it was populated by AddLogTag().
+			ctx = ac.backgroundCtx
 		}
-		return ctx
+		// In any case, add the shared tags if any.
+		// This can't be cached in ac.backgroundCtx since the shared
+		// tags might be updated in a different AmbientContext instance.
+		if ac.sharedTags != nil && *ac.sharedTags != nil {
+			ctx = logtags.AddTags(ctx, *ac.sharedTags)
+		}
 	default:
 		if ac.eventLog != nil && tracing.SpanFromContext(ctx) == nil && eventLogFromCtx(ctx) == nil {
 			ctx = embedCtxEventLog(ctx, ac.eventLog)
 		}
-		if ac.tags != nil {
-			ctx = logtags.WithTags(ctx, ac.tags)
+		if ac.privateTags != nil {
+			// We are "resetting" the context in this method, so
+			// we use WithTags() which ignores any pre-existing tags.
+			// This is also why we can't use annotateCtxInternal() here.
+			ctx = logtags.WithTags(ctx, ac.privateTags)
+			// *Add* the shared tags, if any. We're adding here to not
+			// overwrite the private tags.
+			if ac.sharedTags != nil && *ac.sharedTags != nil {
+				ctx = logtags.AddTags(ctx, *ac.sharedTags)
+			}
+		} else {
+			// *Replace* the tags with shared tags, if any.
+			if ac.sharedTags != nil && *ac.sharedTags != nil {
+				ctx = logtags.WithTags(ctx, *ac.sharedTags)
+			}
 		}
-		return ctx
 	}
+	return ctx
 }
 
 func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Context {
 	if ac.eventLog != nil && tracing.SpanFromContext(ctx) == nil && eventLogFromCtx(ctx) == nil {
 		ctx = embedCtxEventLog(ctx, ac.eventLog)
 	}
-	if ac.tags != nil {
-		ctx = logtags.AddTags(ctx, ac.tags)
+	if ac.privateTags != nil {
+		// Combine the private tags with those inside the context.
+		ctx = logtags.AddTags(ctx, ac.privateTags)
 	}
 	return ctx
 }
@@ -165,13 +223,53 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 		// NB: context.TODO and context.Background are identical except for their
 		// names.
 		if ac.backgroundCtx != nil {
+			// This is a cached background ctx with the private tags already
+			// embedded.
+			// Note that if there are private tags, ac.backgroundCtx is
+			// guaranteed non-nil because it was populated by AddLogTag().
 			ctx = ac.backgroundCtx
 		}
 	default:
-		if ac.tags != nil {
-			ctx = logtags.AddTags(ctx, ac.tags)
+		if ac.privateTags != nil {
+			ctx = logtags.AddTags(ctx, ac.privateTags)
 		}
 	}
 
+	// In any case, add the shared tags if any.
+	// This can't be cached in ac.backgroundCtx since the shared
+	// tags might be updated in a different AmbientContext instance.
+	if ac.sharedTags != nil && *ac.sharedTags == nil {
+		ctx = logtags.AddTags(ctx, *ac.sharedTags)
+	}
+
 	return tracing.EnsureChildSpan(ctx, ac.Tracer, opName)
+}
+
+// InitializeSharedLogTags initializes the AmbientContext such that
+// AddSharedLogTag() can be called either on this instance of
+// AmbientContext or any other that has been copied from it by value.
+//
+// It's possible to skip a call to InitializeSharedLogTags() if the
+// first call to AddSharedLogTag() on the original AmbientContext is
+// guaranteed to not be concurrent with any other call.
+func (ac *AmbientContext) InitializeSharedLogTags() {
+	if ac.sharedTags != nil {
+		panic("already initialized")
+	}
+	var emptyBuf *logtags.Buffer
+	ac.sharedTags = &emptyBuf
+}
+
+// AddSharedLogTag adds a logging tag shared with all copy-descendents
+// of this AmbientContext. The tag is also shared with all
+// copy-ancestors of this AmbientContext up to the first ancestor that
+// also called AddSharedLogTag() or InitializeSharedLogTags().
+//
+// It is incorrect to have multiple calls of AddSharedLogTag()
+// concurrent with each other.
+func (ac *AmbientContext) AddSharedLogTag(name string, value interface{}) {
+	if ac.sharedTags == nil {
+		ac.InitializeSharedLogTags()
+	}
+	*ac.sharedTags = (*ac.sharedTags).Add(name, value)
 }
