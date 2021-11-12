@@ -1,4 +1,4 @@
-# LogicTest: experimental-span-configs
+# cluster-opt: enable-span-configs
 
 statement ok
 SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.enabled = true;
