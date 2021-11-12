@@ -456,6 +456,7 @@ func (ds *ServerImpl) newFlowContext(
 		Cfg:            &ds.ServerConfig,
 		ID:             id,
 		EvalCtx:        evalCtx,
+		Txn:            evalCtx.Txn,
 		NodeID:         ds.ServerConfig.NodeID,
 		TraceKV:        traceKV,
 		CollectStats:   collectStats,

@@ -39,6 +39,8 @@ type ExprHelper struct {
 
 // ProcessExpr processes the given expression and returns a well-typed
 // expression. Note that SemaCtx must be already set on h.
+//
+// evalCtx will not be mutated.
 func (h *ExprHelper) ProcessExpr(
 	expr execinfrapb.Expression, evalCtx *tree.EvalContext, typs []*types.T,
 ) (tree.TypedExpr, error) {
