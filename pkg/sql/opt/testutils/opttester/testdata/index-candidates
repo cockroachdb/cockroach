@@ -1,0 +1,166 @@
+exec-ddl
+CREATE TABLE t1 (k INT, i INT, f FLOAT, s STRING)
+----
+
+exec-ddl
+CREATE TABLE t2 (k INT, i INT, s STRING)
+----
+
+exec-ddl
+CREATE TABLE t3 (k INT, i INT, f FLOAT)
+----
+
+# Basic tests for comparison operator, range, equality, join, order by, and
+# group by candidates.
+
+index-candidates
+SELECT * FROM t1 WHERE i >= 3
+----
+t1:
+(i)
+
+index-candidates
+SELECT f FROM t1 WHERE k < 3 AND i > 5
+----
+t1:
+(i)
+(k)
+
+index-candidates
+SELECT * FROM t1 WHERE f > 2 AND f < 8
+----
+t1:
+(f)
+
+index-candidates
+SELECT i, f FROM t1 WHERE k = 3
+----
+t1:
+(k)
+
+index-candidates
+SELECT * FROM t1 WHERE k = 1 AND i = 2
+----
+t1:
+(i)
+(k)
+
+index-candidates
+SELECT * FROM t1 JOIN t2 ON t1.k = t2.i
+----
+t1:
+(k)
+t2:
+(i)
+
+index-candidates
+SELECT * FROM t1 RIGHT JOIN t2 ON t1.s LIKE t2.s
+----
+t1:
+(s)
+t2:
+(s)
+
+index-candidates
+SELECT * FROM t1 ORDER BY i
+----
+t1:
+(i)
+
+index-candidates
+SELECT * FROM t1 ORDER BY k DESC, i ASC
+----
+t1:
+(k, i DESC)
+
+index-candidates
+SELECT count(*) FROM t1 GROUP BY k
+----
+t1:
+(k)
+
+index-candidates
+SELECT sum(k) FROM t1 GROUP BY i, f, k
+----
+t1:
+(k, i, f)
+
+# Test joins with more complicated predicates. See rule 3 and rule 4 in
+# indexrec.FindIndexCandidates.
+
+index-candidates
+SELECT *
+FROM t1 FULL JOIN t2
+ON t2.k IS NULL
+AND t1.f::STRING NOT LIKE t2.i::STRING
+----
+t1:
+(f)
+t2:
+(i)
+(i, k)
+(k)
+(k, i)
+
+index-candidates
+SELECT *
+FROM t1 LEFT JOIN t2
+ON t1.s LIKE t2.s
+AND t1.k IS NOT NULL
+AND t2.i IS NULL
+----
+t1:
+(k)
+(k, s)
+(s)
+t2:
+(i)
+(s)
+(s, i)
+
+# Test more complex queries. See rule 5 in indexrec.FindIndexCandidates.
+
+index-candidates
+SELECT *
+FROM t1 LEFT JOIN t2
+ON t1.k = t2.k
+WHERE EXISTS (SELECT * FROM t3 WHERE t3.f > t3.k)
+ORDER BY t1.k, t2.i, t1.i DESC
+----
+t1:
+(k)
+(k, i DESC)
+t2:
+(i)
+(k)
+t3:
+(f)
+(k)
+
+index-candidates
+SELECT count(*)
+FROM t1 LEFT JOIN t2
+ON t1.k = t2.k
+GROUP BY t2.s, t2.i
+UNION ALL
+SELECT count(*)
+FROM (
+  SELECT *
+  FROM t1
+  WHERE t1.f > t1.i
+  AND t1.s = 'NG'
+)
+----
+t1:
+(f)
+(i)
+(k)
+(k, f)
+(k, i)
+(k, s)
+(k, s, f)
+(k, s, i)
+(s)
+t2:
+(i, s)
+(k)
