@@ -177,6 +177,7 @@ func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 		DefaultZoneConfig: zonepb.DefaultZoneConfig(),
 		StorageEngine:     storage.DefaultStorageEngine,
 	}
+	baseCfg.AmbientCtx.InitializeSharedLogTags()
 	baseCfg.InitDefaults()
 	return baseCfg
 }

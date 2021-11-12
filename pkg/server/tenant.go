@@ -390,7 +390,7 @@ func makeTenantSQLServerArgs(
 	// We use the tag "sqli" instead of just "sql" because the latter is
 	// too generic and would be hard to search if someone was looking at
 	// a log message and wondering what it stands for.
-	baseCfg.AmbientCtx.AddLogTag("sqli", instanceIDContainer)
+	baseCfg.AmbientCtx.AddSharedLogTag("sqli", instanceIDContainer)
 	startupCtx = baseCfg.AmbientCtx.AnnotateCtx(startupCtx)
 
 	// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
