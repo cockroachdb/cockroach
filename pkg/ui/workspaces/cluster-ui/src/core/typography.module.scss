@@ -8,7 +8,6 @@
   }
 }
 
-@include font-face("Source Sans Pro");
 @include font-face("SourceSansPro-Bold");
 @include font-face("SourceSansPro-Regular");
 @include font-face("SourceSansPro-SemiBold");
@@ -20,7 +19,6 @@
 $font-family--base: SourceSansPro-Regular;
 $font-family--bold: SourceSansPro-Bold;
 $font-family--semi-bold: SourceSansPro-SemiBold;
-$font-family--sans-serif: "Source Sans Pro", sans-serif;
 $font-family--monospace: RobotoMono-Medium;
 $font-family--mono-regular: RobotoMono-Regular;
 $font-family--sf-mono: SFMono-Semibold;

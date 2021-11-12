@@ -9,12 +9,29 @@
 // licenses/APL.txt.
 
 import React from "react";
+import Helmet from "react-helmet";
+import "./notFound.styl";
+import NotFoundImg from "assets/not-found.svg";
 
 function NotFound() {
   return (
-    <div className="section">
-      <h1 className="base-heading">Page Not Found</h1>
-    </div>
+    <main className="not-found-page">
+      <Helmet title="Not Found" />
+      <div className="not-found-page__content">
+        <img
+          className="not-found-page__img"
+          src={NotFoundImg}
+          alt="404 Error"
+        />
+        <div className="not-found-page__body">
+          <div className="not-found-page__message">Whoops!</div>
+          <p>
+            We can&apos;t find the page you are looking for. You may have typed
+            the wrong address or found a broken link.
+          </p>
+        </div>
+      </div>
+    </main>
   );
 }
 
