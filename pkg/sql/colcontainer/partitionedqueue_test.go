@@ -106,7 +106,7 @@ func TestPartitionedDiskQueue(t *testing.T) {
 	queueCfg.FS = countingFS
 
 	t.Run("ReopenReadPartition", func(t *testing.T) {
-		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyDefault, testDiskAcc)
+		p := colcontainer.NewPartitionedQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyDefault, testDiskAcc)
 
 		countingFS.assertOpenFDs(t, sem, 0, 0)
 		require.NoError(t, p.Enqueue(ctx, 0, batch))
@@ -162,7 +162,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 	countingFS := &fdCountingFS{FS: queueCfg.FS}
 	queueCfg.FS = countingFS
 
-	// Sort simulates the use of a PartitionedDiskQueue during an external sort.
+	// Sort simulates the use of a partitionedDiskQueue during an external sort.
 	t.Run(fmt.Sprintf("Sort/maxPartitions=%d/numRepartitions=%d", maxPartitions, numRepartitions), func(t *testing.T) {
 		queueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
 		queueCfg.SetDefaultBufferSizeBytesForCacheMode()
@@ -171,7 +171,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 		// new partition being written to when closedForWrites from maxPartitions
 		// and writing the merged result to a single new partition.
 		sem := colexecop.NewTestingSemaphore(maxPartitions + 1)
-		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyCloseOnNewPartition, testDiskAcc)
+		p := colcontainer.NewPartitionedQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyCloseOnNewPartition, testDiskAcc)
 
 		// Define sortRepartition to be able to call this helper function
 		// recursively.
@@ -251,7 +251,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 		// number of partitions partitioned to and 2 represents the file descriptors
 		// for the left and right side in the case of a repartition.
 		sem := colexecop.NewTestingSemaphore(maxPartitions + 2)
-		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyDefault, testDiskAcc)
+		p := colcontainer.NewPartitionedQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyDefault, testDiskAcc)
 
 		// joinRepartition will perform the partitioning that happens during a hash
 		// join. expectedRepartitionReadFDs are the read file descriptors that are

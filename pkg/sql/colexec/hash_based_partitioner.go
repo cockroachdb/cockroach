@@ -135,7 +135,7 @@ type hashBasedPartitioner struct {
 		acquiredFDs int
 	}
 
-	partitioners      []*colcontainer.PartitionedDiskQueue
+	partitioners      []colcontainer.PartitionedQueue
 	partitionedInputs []*partitionerToOperator
 	tupleDistributor  *colexechash.TupleHashDistributor
 	// maxNumberActivePartitions determines the maximum number of active
@@ -238,10 +238,10 @@ func newHashBasedPartitioner(
 		partitionedDiskQueueSemaphore = nil
 	}
 	numInputs := len(inputs)
-	partitioners := make([]*colcontainer.PartitionedDiskQueue, numInputs)
+	partitioners := make([]colcontainer.PartitionedQueue, numInputs)
 	partitionedInputs := make([]*partitionerToOperator, numInputs)
 	for i := range inputs {
-		partitioners[i] = colcontainer.NewPartitionedDiskQueue(
+		partitioners[i] = colcontainer.NewPartitionedQueue(
 			inputTypes[i], diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyDefault, diskAcc,
 		)
 		partitionedInputs[i] = newPartitionerToOperator(
