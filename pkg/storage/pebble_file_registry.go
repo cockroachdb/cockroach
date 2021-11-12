@@ -19,9 +19,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -29,7 +27,6 @@ import (
 	"github.com/cockroachdb/pebble/record"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/pebble/vfs/atomicfs"
-	"github.com/gogo/protobuf/proto"
 )
 
 // CanRegistryElideFunc is a function that returns true for entries that can be
@@ -66,15 +63,11 @@ type PebbleFileRegistry struct {
 	ReadOnly bool
 
 	// Implementation.
-	// TODO(ayang): remove oldRegistryPath when we deprecate the old registry
-	oldRegistryPath string
 
 	mu struct {
 		syncutil.Mutex
-		// currProto stores the current state of the file registry.
-		// TODO(ayang): convert enginepb.FileRegistry to a regular struct
-		// when we deprecate the old registry and rename currProto
-		currProto *enginepb.FileRegistry
+		// entries stores the current state of the file registry.
+		entries map[string]*enginepb.FileEntry
 		// registryFile is the opened file for the records-based registry.
 		registryFile vfs.File
 		// registryWriter is a record.Writer for registryFile.
@@ -92,37 +85,13 @@ type PebbleFileRegistry struct {
 }
 
 const (
-	// TODO(ayang): mark COCKROACHDB_REGISTRY as deprecated so it isn't reused
-	registryFilename   = "COCKROACHDB_REGISTRY"
-	registryMarkerName = "registry"
+	registryFilenameBase = "COCKROACHDB_REGISTRY"
+	registryMarkerName   = "registry"
 )
 
 // CheckNoRegistryFile checks that no registry file currently exists.
 // CheckNoRegistryFile should be called if the file registry will not be used.
 func (r *PebbleFileRegistry) CheckNoRegistryFile() error {
-	if err := r.checkNoBaseRegistry(); err != nil {
-		return err
-	}
-	if err := r.checkNoRecordsRegistry(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *PebbleFileRegistry) checkNoBaseRegistry() error {
-	// NB: We do not assign r.oldRegistryPath if the registry will not be used.
-	oldRegistryPath := r.FS.PathJoin(r.DBDir, registryFilename)
-	_, err := r.FS.Stat(oldRegistryPath)
-	if err == nil {
-		return os.ErrExist
-	}
-	if !oserror.IsNotExist(err) {
-		return err
-	}
-	return nil
-}
-
-func (r *PebbleFileRegistry) checkNoRecordsRegistry() error {
 	filename, err := atomicfs.ReadMarker(r.FS, r.DBDir, registryMarkerName)
 	if oserror.IsNotExist(err) {
 		// ReadMarker may return oserror.IsNotExist if the data
@@ -145,8 +114,7 @@ func (r *PebbleFileRegistry) Load() error {
 	defer r.mu.Unlock()
 
 	// Initialize private fields needed when the file registry will be used.
-	r.oldRegistryPath = r.FS.PathJoin(r.DBDir, registryFilename)
-	r.mu.currProto = &enginepb.FileRegistry{}
+	r.mu.entries = make(map[string]*enginepb.FileEntry)
 
 	if err := r.loadRegistryFromFile(); err != nil {
 		return err
@@ -182,61 +150,13 @@ func (r *PebbleFileRegistry) loadRegistryFromFile() error {
 		}
 	}
 
-	// We treat the old registry file as the source of truth until the version
-	// is finalized. At that point, we upgrade to the new records-based registry
-	// file and delete the old registry file.
-	ok, err := r.maybeLoadOldBaseRegistry()
-	if err != nil {
+	if _, err := r.maybeLoadExistingRegistry(); err != nil {
 		return err
-	}
-	if ok {
-		return nil
-	}
-	ok, err = r.maybeLoadNewRecordsRegistry()
-	if err != nil {
-		return err
-	}
-	if ok {
-		return nil
-	}
-	// If encryption-at-rest was not previously enabled, we check the storage min
-	// version to determine whether we still need to create an old base registry.
-	target := clusterversion.ByKey(clusterversion.RecordsBasedRegistry)
-	ok, err = MinVersionIsAtLeastTargetVersion(r.FS, r.DBDir, target)
-	if err != nil {
-		return err
-	}
-	if ok {
-		r.mu.currProto.SetVersion(enginepb.RegistryVersion_Records)
 	}
 	return nil
 }
 
-func (r *PebbleFileRegistry) maybeLoadOldBaseRegistry() (bool, error) {
-	f, err := r.FS.Open(r.oldRegistryPath)
-	if oserror.IsNotExist(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	var b []byte
-	if b, err = ioutil.ReadAll(f); err != nil {
-		return false, errors.CombineErrors(err, f.Close())
-	}
-	if err := f.Close(); err != nil {
-		return false, err
-	}
-	if err := protoutil.Unmarshal(b, r.mu.currProto); err != nil {
-		return false, err
-	}
-	if r.mu.currProto.Version == enginepb.RegistryVersion_Records {
-		return false, errors.New("old encryption registry with version Records should not exist")
-	}
-	return true, nil
-}
-
-func (r *PebbleFileRegistry) maybeLoadNewRecordsRegistry() (bool, error) {
+func (r *PebbleFileRegistry) maybeLoadExistingRegistry() (bool, error) {
 	if r.mu.registryFilename == "" {
 		return false, nil
 	}
@@ -261,12 +181,11 @@ func (r *PebbleFileRegistry) maybeLoadNewRecordsRegistry() (bool, error) {
 	if err := protoutil.Unmarshal(registryHeaderBytes, registryHeader); err != nil {
 		return false, err
 	}
-	// Since we only load the new registry if the old registry does not exist,
-	// we should never load a new registry that has version Base.
+	// All registries of the base version should've been removed in 21.2 before
+	// upgrade finalization.
 	if registryHeader.Version == enginepb.RegistryVersion_Base {
 		return false, errors.New("new encryption registry with version Base should not exist")
 	}
-	r.mu.currProto.SetVersion(registryHeader.Version)
 	for {
 		rdr, err := rr.Next()
 		if err == io.EOF {
@@ -283,29 +202,12 @@ func (r *PebbleFileRegistry) maybeLoadNewRecordsRegistry() (bool, error) {
 		if err := protoutil.Unmarshal(b, batch); err != nil {
 			return false, err
 		}
-		r.mu.currProto.ProcessBatch(batch)
+		r.applyBatch(batch)
 	}
 	if err := records.Close(); err != nil {
 		return false, err
 	}
 	return true, nil
-}
-
-// StopUsingOldRegistry is called to signal that the old file registry
-// is no longer needed and can be safely deleted.
-// TODO(ayang): delete this function when we deprecate the old registry
-func (r *PebbleFileRegistry) StopUsingOldRegistry() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.upgradeToRecordsVersion()
-}
-
-// UpgradedToRecordsVersion returns whether the file registry has completed
-// its upgrade to the Records version of the file registry.
-func (r *PebbleFileRegistry) UpgradedToRecordsVersion() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.mu.currProto.Version == enginepb.RegistryVersion_Records
 }
 
 func (r *PebbleFileRegistry) maybeElideEntries() error {
@@ -321,15 +223,15 @@ func (r *PebbleFileRegistry) maybeElideEntries() error {
 	// recursively List each directory and walk two lists of sorted
 	// filenames. We should test a store with many files to see how much
 	// the current approach slows node start.
-	filenames := make([]string, 0, len(r.mu.currProto.Files))
-	for filename := range r.mu.currProto.Files {
+	filenames := make([]string, 0, len(r.mu.entries))
+	for filename := range r.mu.entries {
 		filenames = append(filenames, filename)
 	}
 	sort.Strings(filenames)
 
 	batch := &enginepb.RegistryUpdateBatch{}
 	for _, filename := range filenames {
-		entry := r.mu.currProto.Files[filename]
+		entry := r.mu.entries[filename]
 
 		// Some entries may be elided. This is used within
 		// ccl/storageccl/engineccl to elide plaintext file entries.
@@ -360,7 +262,7 @@ func (r *PebbleFileRegistry) GetFileEntry(filename string) *enginepb.FileEntry {
 	filename = r.tryMakeRelativePath(filename)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mu.currProto.Files[filename]
+	return r.mu.entries[filename]
 }
 
 // SetFileEntry sets filename => entry in the registry map and persists the registry.
@@ -387,7 +289,7 @@ func (r *PebbleFileRegistry) MaybeDeleteEntry(filename string) error {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.mu.currProto.Files[filename] == nil {
+	if r.mu.entries[filename] == nil {
 		return nil
 	}
 	batch := &enginepb.RegistryUpdateBatch{}
@@ -405,8 +307,8 @@ func (r *PebbleFileRegistry) MaybeCopyEntry(src, dst string) error {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	srcEntry := r.mu.currProto.Files[src]
-	if srcEntry == nil && r.mu.currProto.Files[dst] == nil {
+	srcEntry := r.mu.entries[src]
+	if srcEntry == nil && r.mu.entries[dst] == nil {
 		return nil
 	}
 	batch := &enginepb.RegistryUpdateBatch{}
@@ -426,14 +328,14 @@ func (r *PebbleFileRegistry) MaybeLinkEntry(src, dst string) error {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.mu.currProto.Files[src] == nil && r.mu.currProto.Files[dst] == nil {
+	if r.mu.entries[src] == nil && r.mu.entries[dst] == nil {
 		return nil
 	}
 	batch := &enginepb.RegistryUpdateBatch{}
-	if r.mu.currProto.Files[src] == nil {
+	if r.mu.entries[src] == nil {
 		batch.DeleteEntry(dst)
 	} else {
-		batch.PutEntry(dst, r.mu.currProto.Files[src])
+		batch.PutEntry(dst, r.mu.entries[src])
 	}
 	return r.processBatchLocked(batch)
 }
@@ -468,36 +370,6 @@ func (r *PebbleFileRegistry) tryMakeRelativePath(filename string) string {
 	return filename
 }
 
-// TODO(ayang): delete this function when we deprecate the old registry
-func (r *PebbleFileRegistry) upgradeToRecordsVersion() error {
-	if r.mu.currProto.Version == enginepb.RegistryVersion_Records {
-		return nil
-	}
-
-	dir, err := r.FS.OpenDir(r.DBDir)
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-
-	// Create a new registry file to record the upgraded version.
-	r.mu.currProto.SetVersion(enginepb.RegistryVersion_Records)
-	if err := r.createNewRegistryFile(); err != nil {
-		return err
-	}
-	if err := r.FS.Remove(r.oldRegistryPath); err != nil && !oserror.IsNotExist(err) {
-		return err
-	}
-	// We need to sync the removal of the old registry because the
-	// presence of the old registry will cause future starts to read
-	// from the old registry.
-	if err := dir.Sync(); err != nil {
-		// Fsync errors must be fatal.
-		panic(errors.Wrap(err, "syncing database directory"))
-	}
-	return nil
-}
-
 func (r *PebbleFileRegistry) processBatchLocked(batch *enginepb.RegistryUpdateBatch) error {
 	if r.ReadOnly {
 		return errors.New("cannot write file registry since db is read-only")
@@ -505,33 +377,25 @@ func (r *PebbleFileRegistry) processBatchLocked(batch *enginepb.RegistryUpdateBa
 	if batch.Empty() {
 		return nil
 	}
-	// For durability reasons, we persist the changes to disk first before we
-	// update the in-memory registry. Any error during persisting is fatal.
-	if r.mu.currProto.Version == enginepb.RegistryVersion_Base {
-		newProto := &enginepb.FileRegistry{}
-		proto.Merge(newProto, r.mu.currProto)
-		newProto.ProcessBatch(batch)
-		if err := r.rewriteOldRegistry(newProto); err != nil {
-			panic(err)
-		}
-	}
 	if err := r.writeToRegistryFile(batch); err != nil {
 		panic(err)
 	}
-	r.mu.currProto.ProcessBatch(batch)
+	r.applyBatch(batch)
 	return nil
 }
 
-// TODO(ayang): delete this function when we deprecate the old registry
-func (r *PebbleFileRegistry) rewriteOldRegistry(newProto *enginepb.FileRegistry) error {
-	b, err := protoutil.Marshal(newProto)
-	if err != nil {
-		return err
+// processBatch processes a batch of updates to the file registry.
+func (r *PebbleFileRegistry) applyBatch(batch *enginepb.RegistryUpdateBatch) {
+	for _, update := range batch.Updates {
+		if update.Entry == nil {
+			delete(r.mu.entries, update.Filename)
+		} else {
+			if r.mu.entries == nil {
+				r.mu.entries = make(map[string]*enginepb.FileEntry)
+			}
+			r.mu.entries[update.Filename] = update.Entry
+		}
 	}
-	if err := fs.SafeWriteToFile(r.FS, r.DBDir, r.oldRegistryPath, b); err != nil {
-		return err
-	}
-	return nil
 }
 
 func (r *PebbleFileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateBatch) error {
@@ -569,7 +433,7 @@ func (r *PebbleFileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateB
 }
 
 func makeRegistryFilename(iter uint64) string {
-	return fmt.Sprintf("%s_%06d", registryFilename, iter)
+	return fmt.Sprintf("%s_%06d", registryFilenameBase, iter)
 }
 
 func (r *PebbleFileRegistry) createNewRegistryFile() error {
@@ -595,7 +459,7 @@ func (r *PebbleFileRegistry) createNewRegistryFile() error {
 
 	// Write the registry header as the first record in the registry file.
 	registryHeader := &enginepb.RegistryHeader{
-		Version: r.mu.currProto.Version,
+		Version: enginepb.RegistryVersion_Records,
 	}
 	b, err := protoutil.Marshal(registryHeader)
 	if err != nil {
@@ -607,7 +471,7 @@ func (r *PebbleFileRegistry) createNewRegistryFile() error {
 
 	// Write a RegistryUpdateBatch containing the current state of the registry.
 	batch := &enginepb.RegistryUpdateBatch{}
-	for filename, entry := range r.mu.currProto.Files {
+	for filename, entry := range r.mu.entries {
 		batch.PutEntry(filename, entry)
 	}
 	b, err = protoutil.Marshal(batch)
@@ -651,15 +515,21 @@ func (r *PebbleFileRegistry) createNewRegistryFile() error {
 	r.mu.registryFile = f
 	r.mu.registryWriter = records
 	r.mu.registryFilename = filename
-
 	return err
 }
 
 func (r *PebbleFileRegistry) getRegistryCopy() *enginepb.FileRegistry {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	rv := &enginepb.FileRegistry{}
-	proto.Merge(rv, r.mu.currProto)
+	rv := &enginepb.FileRegistry{
+		Version: enginepb.RegistryVersion_Records,
+		Files:   make(map[string]*enginepb.FileEntry, len(r.mu.entries)),
+	}
+	for filename, entry := range r.mu.entries {
+		ev := &enginepb.FileEntry{}
+		*ev = *entry
+		rv.Files[filename] = ev
+	}
 	return rv
 }
 

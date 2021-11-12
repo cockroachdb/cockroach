@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/pebble/vfs/atomicfs"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
@@ -290,6 +291,10 @@ func TestDataKeyManager(t *testing.T) {
 						return err.Error()
 					}
 					writeToFile(t, memFS, memFS.PathJoin(data[0], keyRegistryFilename), b)
+					marker, _, err := atomicfs.LocateMarker(memFS, data[0], keysRegistryMarkerName)
+					require.NoError(t, err)
+					require.NoError(t, marker.Move(keyRegistryFilename))
+					require.NoError(t, marker.Close())
 				}
 				return ""
 			case "load":
@@ -445,9 +450,6 @@ func TestDataKeyManagerIO(t *testing.T) {
 				var id string
 				d.ScanArgs(t, "id", &id)
 				fmt.Fprintf(&buf, "%s", setActiveStoreKey(dkm, id, enginepbccl.EncryptionType_AES128_CTR))
-				return buf.String()
-			case "use-marker":
-				appendError(dkm.UseMarker())
 				return buf.String()
 			default:
 				return fmt.Sprintf("unknown command: %s\n", d.Cmd)

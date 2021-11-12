@@ -1,6 +1,5 @@
 check-no-registry-file
 ----
-stat("COCKROACHDB_REGISTRY")
 OK
 
 # Open and close a registry on an empty store. Nothing should be written
@@ -9,8 +8,6 @@ OK
 load
 ----
 open-dir("")
-open("COCKROACHDB_REGISTRY")
-open("STORAGE_MIN_VERSION")
 
 close
 ----
@@ -18,31 +15,25 @@ close("")
 
 check-no-registry-file
 ----
-stat("COCKROACHDB_REGISTRY")
 OK
 
-# Open an empty store and immediately upgrade to the records-based
-# registry. The new registry file should be written, and then a marker
-# file should be written alongside it.
+# Open an empty store and write to the registry. A new registry file should be
+# written, and a marker file should be written alongside it.
 
 load
 ----
 open-dir("")
-open("COCKROACHDB_REGISTRY")
-open("STORAGE_MIN_VERSION")
 
-upgrade-to-records
+set filename=foo settings=bar
 ----
-open-dir("")
 create("COCKROACHDB_REGISTRY_000001")
 write("COCKROACHDB_REGISTRY_000001", <...16 bytes...>)
 sync("COCKROACHDB_REGISTRY_000001")
 create("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
 close("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
 sync("")
-remove("COCKROACHDB_REGISTRY")
-sync("")
-close("")
+write("COCKROACHDB_REGISTRY_000001", <...23 bytes...>)
+sync("COCKROACHDB_REGISTRY_000001")
 
 close
 ----
@@ -52,24 +43,32 @@ close("")
 
 check-no-registry-file
 ----
-stat("COCKROACHDB_REGISTRY")
 Error: file already exists
 
-# Re-opening the store should check for the old-style monolithic
-# registry, see that it doesn't exist and open the incremental,
-# records-based registry indicated by the marker file.
-#
-# No registry rotation should occur because nothing is written.
+# Re-opening the store should observe the registry file. It should recognize
+# that the file foo does not exist and rotate the registry to elide it.
 
 load
 ----
 open-dir("")
-open("COCKROACHDB_REGISTRY")
 open("COCKROACHDB_REGISTRY_000001")
 close("COCKROACHDB_REGISTRY_000001")
+stat("foo")
+create("COCKROACHDB_REGISTRY_000002")
+write("COCKROACHDB_REGISTRY_000002", <...32 bytes...>)
+sync("COCKROACHDB_REGISTRY_000002")
+create("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+close("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+remove("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+sync("")
+remove("COCKROACHDB_REGISTRY_000001")
+write("COCKROACHDB_REGISTRY_000002", <...14 bytes...>)
+sync("COCKROACHDB_REGISTRY_000002")
 
 close
 ----
+write("COCKROACHDB_REGISTRY_000002", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000002")
 close("")
 
 # Re-opening the store and writing something to the file registry should
@@ -83,22 +82,21 @@ close("")
 load
 ----
 open-dir("")
-open("COCKROACHDB_REGISTRY")
-open("COCKROACHDB_REGISTRY_000001")
-close("COCKROACHDB_REGISTRY_000001")
+open("COCKROACHDB_REGISTRY_000002")
+close("COCKROACHDB_REGISTRY_000002")
 
 set filename=foo settings=bar
 ----
-create("COCKROACHDB_REGISTRY_000002")
-write("COCKROACHDB_REGISTRY_000002", <...16 bytes...>)
-sync("COCKROACHDB_REGISTRY_000002")
-create("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
-close("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
-remove("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+create("COCKROACHDB_REGISTRY_000003")
+write("COCKROACHDB_REGISTRY_000003", <...16 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
+create("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
+close("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
+remove("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
 sync("")
-remove("COCKROACHDB_REGISTRY_000001")
-write("COCKROACHDB_REGISTRY_000002", <...23 bytes...>)
-sync("COCKROACHDB_REGISTRY_000002")
+remove("COCKROACHDB_REGISTRY_000002")
+write("COCKROACHDB_REGISTRY_000003", <...23 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
 
 get filename=foo
 ----
@@ -106,8 +104,8 @@ bar
 
 set filename=foo settings=helloworld
 ----
-write("COCKROACHDB_REGISTRY_000002", <...30 bytes...>)
-sync("COCKROACHDB_REGISTRY_000002")
+write("COCKROACHDB_REGISTRY_000003", <...30 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
 
 get filename=foo
 ----
@@ -115,8 +113,8 @@ helloworld
 
 close
 ----
-write("COCKROACHDB_REGISTRY_000002", <...0 bytes...>)
-close("COCKROACHDB_REGISTRY_000002")
+write("COCKROACHDB_REGISTRY_000003", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000003")
 close("")
 
 # Re-opening the store again, while there are entries for files (`foo`)
@@ -126,59 +124,46 @@ close("")
 load
 ----
 open-dir("")
-open("COCKROACHDB_REGISTRY")
-open("COCKROACHDB_REGISTRY_000002")
-close("COCKROACHDB_REGISTRY_000002")
+open("COCKROACHDB_REGISTRY_000003")
+close("COCKROACHDB_REGISTRY_000003")
 stat("foo")
-create("COCKROACHDB_REGISTRY_000003")
-write("COCKROACHDB_REGISTRY_000003", <...39 bytes...>)
-sync("COCKROACHDB_REGISTRY_000003")
-create("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
-close("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
-remove("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+create("COCKROACHDB_REGISTRY_000004")
+write("COCKROACHDB_REGISTRY_000004", <...39 bytes...>)
+sync("COCKROACHDB_REGISTRY_000004")
+create("marker.registry.000004.COCKROACHDB_REGISTRY_000004")
+close("marker.registry.000004.COCKROACHDB_REGISTRY_000004")
+remove("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
 sync("")
-remove("COCKROACHDB_REGISTRY_000002")
-write("COCKROACHDB_REGISTRY_000003", <...14 bytes...>)
-sync("COCKROACHDB_REGISTRY_000003")
+remove("COCKROACHDB_REGISTRY_000003")
+write("COCKROACHDB_REGISTRY_000004", <...14 bytes...>)
+sync("COCKROACHDB_REGISTRY_000004")
 
 get filename=foo
 ----
 
 close
 ----
-write("COCKROACHDB_REGISTRY_000003", <...0 bytes...>)
-close("COCKROACHDB_REGISTRY_000003")
+write("COCKROACHDB_REGISTRY_000004", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000004")
 close("")
 
-# Reset the filesystem and start again. We should default to using both
-# the monolithic `COCKROACHDB_REGISTRY` file and the incremental file.
+# Reset the filesystem and start again.
 
 reset
 ----
 
 check-no-registry-file
 ----
-stat("COCKROACHDB_REGISTRY")
 OK
 
 load
 ----
 open-dir("")
-open("COCKROACHDB_REGISTRY")
-open("STORAGE_MIN_VERSION")
 
 set filename=foo settings=helloworld
 ----
-create("COCKROACHDB_REGISTRY.crdbtmp")
-write("COCKROACHDB_REGISTRY.crdbtmp", <...23 bytes...>)
-sync("COCKROACHDB_REGISTRY.crdbtmp")
-close("COCKROACHDB_REGISTRY.crdbtmp")
-rename("COCKROACHDB_REGISTRY.crdbtmp", "COCKROACHDB_REGISTRY")
-open-dir("")
-sync("")
-close("")
 create("COCKROACHDB_REGISTRY_000001")
-write("COCKROACHDB_REGISTRY_000001", <...14 bytes...>)
+write("COCKROACHDB_REGISTRY_000001", <...16 bytes...>)
 sync("COCKROACHDB_REGISTRY_000001")
 create("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
 close("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
@@ -186,20 +171,11 @@ sync("")
 write("COCKROACHDB_REGISTRY_000001", <...30 bytes...>)
 sync("COCKROACHDB_REGISTRY_000001")
 
-# A second write to the registry should again completely rewrite
-# `COCKROACHDB_REGISTRY`,  but only perform a single write and sync on
+# A second write to the registry should only perform a single write and sync on
 # the incremental registry.
 
 set filename=bar settings=hi
 ----
-create("COCKROACHDB_REGISTRY.crdbtmp")
-write("COCKROACHDB_REGISTRY.crdbtmp", <...38 bytes...>)
-sync("COCKROACHDB_REGISTRY.crdbtmp")
-close("COCKROACHDB_REGISTRY.crdbtmp")
-rename("COCKROACHDB_REGISTRY.crdbtmp", "COCKROACHDB_REGISTRY")
-open-dir("")
-sync("")
-close("")
 write("COCKROACHDB_REGISTRY_000001", <...22 bytes...>)
 sync("COCKROACHDB_REGISTRY_000001")
 
@@ -211,7 +187,6 @@ close("")
 
 check-no-registry-file
 ----
-stat("COCKROACHDB_REGISTRY")
 Error: file already exists
 
 # Re-opening the registry should read the state from the monolithic
@@ -229,8 +204,8 @@ close("bar")
 load
 ----
 open-dir("")
-open("COCKROACHDB_REGISTRY")
-close("COCKROACHDB_REGISTRY")
+open("COCKROACHDB_REGISTRY_000001")
+close("COCKROACHDB_REGISTRY_000001")
 stat("bar")
 stat("foo")
 
@@ -240,16 +215,8 @@ hi
 
 set filename=bax settings=hello
 ----
-create("COCKROACHDB_REGISTRY.crdbtmp")
-write("COCKROACHDB_REGISTRY.crdbtmp", <...56 bytes...>)
-sync("COCKROACHDB_REGISTRY.crdbtmp")
-close("COCKROACHDB_REGISTRY.crdbtmp")
-rename("COCKROACHDB_REGISTRY.crdbtmp", "COCKROACHDB_REGISTRY")
-open-dir("")
-sync("")
-close("")
 create("COCKROACHDB_REGISTRY_000002")
-write("COCKROACHDB_REGISTRY_000002", <...52 bytes...>)
+write("COCKROACHDB_REGISTRY_000002", <...54 bytes...>)
 sync("COCKROACHDB_REGISTRY_000002")
 create("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
 close("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
