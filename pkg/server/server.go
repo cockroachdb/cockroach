@@ -287,7 +287,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// is constructed. The node ID is set by the Store if this host was
 	// bootstrapped; otherwise a new one is allocated in Node.
 	nodeIDContainer := &base.NodeIDContainer{}
-	cfg.AmbientCtx.AddLogTag("n", nodeIDContainer)
+	cfg.AmbientCtx.AddSharedLogTag("n", nodeIDContainer)
 	const sqlInstanceID = base.SQLInstanceID(0)
 	idContainer := base.NewSQLIDContainer(sqlInstanceID, nodeIDContainer)
 
