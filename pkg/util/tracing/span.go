@@ -31,7 +31,9 @@ const (
 
 // !!! the default of true
 var ForceRealSpans = envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", true)
-var CrashOnUseAfterFinish = envutil.EnvOrDefaultBool("COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH", true)
+
+// !!! the default of true
+var panicOnUseAfterFinish = util.CrdbTestBuild || envutil.EnvOrDefaultBool("COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH", true)
 
 // DebugUseAfterFinish controls whether to debug uses of Span values after finishing.
 // FOR DEBUGGING ONLY. This will slow down the program.
@@ -64,13 +66,14 @@ var DebugUseAfterFinish = envutil.EnvOrDefaultBool("COCKROACH_DEBUG_SPAN_USE_AFT
 type Span struct {
 	// Span itself is a very thin wrapper around spanInner whose only job is
 	// to guard spanInner against use-after-Finish.
-	i               spanInner
-	numFinishCalled int32 // atomic
+	i spanInner
 	// noop, if set, allows this Span to be used even after finish. This allows a
 	// single Span instance to be shared for many operations. When set, i is set
 	// such that i.isNoop() also returns true - so all operations are
 	// short-circuited.
 	noop bool
+	// finished is set on Finish(). Used to detect use-after-Finish.
+	finished int32 // atomic
 	// finishStack is set if DebugUseAfterFinish is set. It represents the stack
 	// that called Finish(), in order to report it on further use.
 	finishStack string
@@ -90,10 +93,10 @@ func (sp *Span) done() bool {
 	if sp.noop {
 		return true
 	}
-	alreadyFinished := atomic.LoadInt32(&sp.numFinishCalled) != 0
+	alreadyFinished := atomic.LoadInt32(&sp.finished) != 0
 	// In test builds, we panic on span use after Finish. This is in preparation
 	// of span pooling, at which point use-after-Finish would become corruption.
-	if alreadyFinished && (util.CrdbTestBuild || CrashOnUseAfterFinish) {
+	if alreadyFinished && sp.Tracer().PanicOnUseAfterFinish() {
 		var finishStack string
 		if sp.finishStack == "" {
 			finishStack = "<stack not captured. Set DebugUseAfterFinish>"
@@ -126,9 +129,9 @@ func (sp *Span) Finish() {
 	if sp == nil || sp.IsNoop() || sp.done() {
 		return
 	}
-	atomic.StoreInt32(&sp.numFinishCalled, 1)
+	atomic.StoreInt32(&sp.finished, 1)
 	sp.i.Finish()
-	if DebugUseAfterFinish {
+	if sp.Tracer().DebugUseAfterFinish() {
 		sp.finishStack = string(debug.Stack())
 	}
 }

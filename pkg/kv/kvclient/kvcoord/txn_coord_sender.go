@@ -481,8 +481,6 @@ func (tc *TxnCoordSender) Send(
 
 	ctx, sp := tc.AnnotateCtxWithSpan(ctx, OpTxnCoordSender)
 	defer sp.Finish()
-	//sp.Finish() // !!!
-	//sp.Record("!!! after finish")
 
 	// Associate the txnID with the trace.
 	if tc.mu.txn.ID == (uuid.UUID{}) {
