@@ -620,13 +620,6 @@ type EncryptionEnv struct {
 	FS vfs.FS
 	// StatsHandler exposes encryption-at-rest state for observability.
 	StatsHandler EncryptionStatsHandler
-	// UpgradeVersion is a temporary field that allows Pebble to inform
-	// low-level encryption-at-rest machinery that the CockroachDB 21.2
-	// version has been finalized, and it's okay to begin writing in a
-	// backwards in-compatible format.
-	//
-	// TODO(jackson): Remove this in 22.1.
-	UpgradeVersion func() error
 }
 
 var _ Engine = &Pebble{}
@@ -1580,30 +1573,7 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 			return errors.Wrap(err, "ratcheting format major version")
 		}
 	}
-
-	if p.fileRegistry != nil {
-		if !version.Less(clusterversion.ByKey(clusterversion.TODOPreV21_2)) {
-			if err := p.fileRegistry.StopUsingOldRegistry(); err != nil {
-				return err
-			}
-		}
-	}
-	if p.encryption != nil {
-		if !version.Less(clusterversion.ByKey(clusterversion.TODOPreV21_2)) {
-			if err := p.encryption.UpgradeVersion(); err != nil {
-				return err
-			}
-		}
-	}
 	return nil
-}
-
-// UsingRecordsEncryptionRegistry implements the Engine interface.
-func (p *Pebble) UsingRecordsEncryptionRegistry() (bool, error) {
-	if p.fileRegistry != nil {
-		return p.fileRegistry.UpgradedToRecordsVersion(), nil
-	}
-	return true, nil
 }
 
 // MinVersionIsAtLeastTargetVersion implements the Engine interface.
