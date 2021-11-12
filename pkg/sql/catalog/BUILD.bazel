@@ -43,10 +43,12 @@ go_test(
     srcs = [
         "dep_test.go",
         "descriptor_test.go",
+        "table_col_map_test.go",
         "table_col_set_test.go",
     ],
     embed = [":catalog"],
     deps = [
+        "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemadesc",
@@ -54,6 +56,7 @@ go_test(
         "//pkg/testutils/buildutil",
         "//pkg/util",
         "//pkg/util/leaktest",
+        "//pkg/util/randutil",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
