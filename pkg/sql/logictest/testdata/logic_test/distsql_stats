@@ -1109,6 +1109,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
 ----
 [
     {
+        "avg_size": 1,
         "columns": [
             "k"
         ],
@@ -1128,6 +1129,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
         "row_count": 1
     },
     {
+        "avg_size": 0,
         "columns": [
             "c"
         ],
@@ -1158,6 +1160,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
 ----
 [
     {
+        "avg_size": 4,
         "columns": [
             "x"
         ],

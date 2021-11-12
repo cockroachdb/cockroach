@@ -105,6 +105,21 @@ func (ed EncDatum) Size() uintptr {
 	return size
 }
 
+// DiskSize returns the approximate size of the data without the EncDatum
+// overhead. If the data is encoded, it returns the number of encoded bytes.
+// If the data isn't encoded but has a valid Datum, it returns the size of the
+// Datum instead. Thus the data size is not double-counted, and the encoded
+// size is preferred.
+func (ed EncDatum) DiskSize() uintptr {
+	if ed.encoded != nil {
+		return uintptr(len(ed.encoded))
+	}
+	if ed.Datum != nil {
+		return ed.Datum.Size()
+	}
+	return uintptr(0)
+}
+
 // EncDatumFromEncoded initializes an EncDatum with the given encoded
 // value. The encoded value is stored as a shallow copy, so the caller must
 // make sure the slice is not modified for the lifetime of the EncDatum.

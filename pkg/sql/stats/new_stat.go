@@ -41,6 +41,7 @@ func InsertNewStats(
 			int64(statistic.RowCount),
 			int64(statistic.DistinctCount),
 			int64(statistic.NullCount),
+			int64(statistic.AvgSize),
 			statistic.HistogramData,
 		)
 		if err != nil {
@@ -61,7 +62,7 @@ func InsertNewStat(
 	tableID descpb.ID,
 	name string,
 	columnIDs []descpb.ColumnID,
-	rowCount, distinctCount, nullCount int64,
+	rowCount, distinctCount, nullCount, avgSize int64,
 	h *HistogramData,
 ) error {
 	// We must pass a nil interface{} if we want to insert a NULL.
@@ -93,14 +94,16 @@ func InsertNewStat(
 					"rowCount",
 					"distinctCount",
 					"nullCount",
+					"avgSize",
 					histogram
-				) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		tableID,
 		nameVal,
 		columnIDsVal,
 		rowCount,
 		distinctCount,
 		nullCount,
+		avgSize,
 		histogramVal,
 	)
 	return err

@@ -42,7 +42,7 @@ func (r *recordResolvedWriter) Drain(ctx context.Context) error {
 	return nil
 }
 
-func (r *recordResolvedWriter) Close(ctx context.Context) error {
+func (r *recordResolvedWriter) CloseWithReason(ctx context.Context, reason error) error {
 	return nil
 }
 

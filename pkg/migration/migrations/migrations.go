@@ -130,6 +130,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		ensureNoDrainingNames,
 	),
+	migration.NewTenantMigration(
+		"add column avgSize to table system.table_statistics",
+		toCV(clusterversion.AlterSystemTableStatisticsAddAvgSizeCol),
+		NoPrecondition,
+		alterSystemTableStatisticsAddAvgSize,
+	),
 }
 
 func init() {

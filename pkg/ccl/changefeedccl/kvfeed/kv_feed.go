@@ -114,7 +114,7 @@ func Run(ctx context.Context, cfg Config) error {
 	if !errors.As(err, &scErr) {
 		// Regardless of whether we exited KV feed with or without an error, that error
 		// is not a schema change; so, close the writer and return.
-		return errors.CombineErrors(err, f.writer.Close(ctx))
+		return errors.CombineErrors(err, f.writer.CloseWithReason(ctx, err))
 	}
 
 	log.Infof(ctx, "stopping kv feed due to schema change at %v", scErr.ts)
@@ -124,7 +124,7 @@ func Run(ctx context.Context, cfg Config) error {
 	// Regardless of whether drain succeeds, we must also close the buffer to release
 	// any resources, and to let the consumer (changeAggregator) know that no more writes
 	// are expected so that it can transition to a draining state.
-	err = errors.CombineErrors(f.writer.Drain(ctx), f.writer.Close(ctx))
+	err = errors.CombineErrors(f.writer.Drain(ctx), f.writer.CloseWithReason(ctx, kvevent.ErrNormalRestartReason))
 
 	if err == nil {
 		// This context is canceled by the change aggregator when it receives
@@ -350,7 +350,7 @@ func (f *kvFeed) runUntilTableEvent(
 
 	memBuf := f.bufferFactory()
 	defer func() {
-		err = errors.CombineErrors(err, memBuf.Close(ctx))
+		err = errors.CombineErrors(err, memBuf.CloseWithReason(ctx, err))
 	}()
 
 	g := ctxgroup.WithContext(ctx)

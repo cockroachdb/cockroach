@@ -957,6 +957,7 @@ func (r *importResumer) writeStubStatisticsForImportedTables(
 			// TODO(michae2): collect distinct and null counts during import.
 			distinctCount := uint64(float64(rowCount) * memo.UnknownDistinctCountRatio)
 			nullCount := uint64(float64(rowCount) * memo.UnknownNullCountRatio)
+			avgRowSize := uint64(memo.UnknownAvgRowSize)
 			// Because we don't yet have real distinct and null counts, only produce
 			// single-column stats to avoid the appearance of perfectly correlated
 			// columns.
@@ -967,6 +968,7 @@ func (r *importResumer) writeStubStatisticsForImportedTables(
 					statistic.RowCount = rowCount
 					statistic.DistinctCount = distinctCount
 					statistic.NullCount = nullCount
+					statistic.AvgSize = avgRowSize
 				}
 				// TODO(michae2): parallelize insertion of statistics.
 				err = stats.InsertNewStats(ctx, execCfg.InternalExecutor, nil /* txn */, statistics)

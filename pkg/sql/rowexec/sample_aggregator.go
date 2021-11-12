@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/axiomhq/hyperloglog"
@@ -63,6 +64,7 @@ type sampleAggregator struct {
 	sketchIdxCol int
 	numRowsCol   int
 	numNullsCol  int
+	sumSizeCol   int
 	sketchCol    int
 	invColIdxCol int
 	invIdxKeyCol int
@@ -109,7 +111,7 @@ func newSampleAggregator(
 	// The processor will disable histogram collection if this limit is not
 	// enough.
 	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx, "sample-aggregator-mem")
-	rankCol := len(input.OutputTypes()) - 7
+	rankCol := len(input.OutputTypes()) - 8
 	s := &sampleAggregator{
 		spec:         spec,
 		input:        input,
@@ -123,9 +125,10 @@ func newSampleAggregator(
 		sketchIdxCol: rankCol + 1,
 		numRowsCol:   rankCol + 2,
 		numNullsCol:  rankCol + 3,
-		sketchCol:    rankCol + 4,
-		invColIdxCol: rankCol + 5,
-		invIdxKeyCol: rankCol + 6,
+		sumSizeCol:   rankCol + 4,
+		sketchCol:    rankCol + 5,
+		invColIdxCol: rankCol + 6,
+		invIdxKeyCol: rankCol + 7,
 		invSr:        make(map[uint32]*stats.SampleReservoir, len(spec.InvertedSketches)),
 		invSketch:    make(map[uint32]*sketchInfo, len(spec.InvertedSketches)),
 	}
@@ -352,6 +355,12 @@ func (s *sampleAggregator) processSketchRow(
 	}
 	sketch.numNulls += numNulls
 
+	size, err := row[s.sumSizeCol].GetInt()
+	if err != nil {
+		return err
+	}
+	sketch.size += size
+
 	// Decode the sketch.
 	if err := row[s.sketchCol].EnsureDecoded(s.inTypes[s.sketchCol], da); err != nil {
 		return err
@@ -502,8 +511,8 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				si.numRows,
 				s.getDistinctCount(&si, true /* includeNulls */),
 				si.numNulls,
-				histogram,
-			); err != nil {
+				s.getAvgSize(&si),
+				histogram); err != nil {
 				return err
 			}
 
@@ -517,6 +526,15 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// getAvgSize returns the average number of bytes per row in the given
+// sketch.
+func (s *sampleAggregator) getAvgSize(si *sketchInfo) int64 {
+	if si.numRows == 0 {
+		return 0
+	}
+	return int64(math.Ceil(float64(si.size) / float64(si.numRows)))
 }
 
 // getDistinctCount returns the number of distinct values in the given sketch,
