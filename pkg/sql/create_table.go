@@ -1660,8 +1660,10 @@ func NewTableDesc(
 			// If the index is named, ensure that the name is unique. Unnamed
 			// indexes will be given a unique auto-generated name later on when
 			// AllocateIDs is called.
-			if d.Name != "" && desc.ValidateIndexNameIsUnique(d.Name.String()) != nil {
-				return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
+			if d.Name != "" {
+				if idx, _ := desc.FindIndexWithName(d.Name.String()); idx != nil {
+					return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
+				}
 			}
 			if err := validateColumnsAreAccessible(&desc, d.Columns); err != nil {
 				return nil, err
@@ -1778,8 +1780,10 @@ func NewTableDesc(
 			// If the index is named, ensure that the name is unique. Unnamed
 			// indexes will be given a unique auto-generated name later on when
 			// AllocateIDs is called.
-			if d.Name != "" && desc.ValidateIndexNameIsUnique(d.Name.String()) != nil {
-				return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
+			if d.Name != "" {
+				if idx, _ := desc.FindIndexWithName(d.Name.String()); idx != nil {
+					return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
+				}
 			}
 			if err := validateColumnsAreAccessible(&desc, d.Columns); err != nil {
 				return nil, err

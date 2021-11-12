@@ -189,9 +189,13 @@ func MakeIndexDescriptor(
 	}
 
 	// Ensure that the index name does not exist before trying to create the index.
-	if err := tableDesc.ValidateIndexNameIsUnique(string(n.Name)); err != nil {
-		return nil, err
+	if idx, _ := tableDesc.FindIndexWithName(n.Name.String()); idx != nil {
+		if idx.Dropped() {
+			return nil, pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists and is being dropped, try again later", n.Name)
+		}
+		return nil, pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name)
 	}
+
 	indexDesc := descpb.IndexDescriptor{
 		Name:              string(n.Name),
 		Unique:            n.Unique,
