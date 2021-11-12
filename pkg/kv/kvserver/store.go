@@ -2897,15 +2897,15 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (StoreKeyS
 // carrying out any changes, returning all trace messages collected along the way.
 // Intended to help power a debug endpoint.
 func (s *Store) AllocatorDryRun(ctx context.Context, repl *Replica) (tracing.Recording, error) {
-	ctx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, s.cfg.AmbientCtx.Tracer, "allocator dry run")
-	defer cancel()
+	ctx, collectAndFinish := tracing.ContextWithRecordingSpan(ctx, s.cfg.AmbientCtx.Tracer, "allocator dry run")
+	defer collectAndFinish()
 	canTransferLease := func(ctx context.Context, repl *Replica) bool { return true }
 	_, err := s.replicateQueue.processOneChange(
 		ctx, repl, canTransferLease, true /* dryRun */)
 	if err != nil {
 		log.Eventf(ctx, "error simulating allocator on replica %s: %s", repl, err)
 	}
-	return collect(), nil
+	return collectAndFinish(), nil
 }
 
 // ManuallyEnqueue runs the given replica through the requested queue,
@@ -2948,23 +2948,23 @@ func (s *Store) ManuallyEnqueue(
 		}
 	}
 
-	ctx, collect, cancel := tracing.ContextWithRecordingSpan(
+	ctx, collectAndFinish := tracing.ContextWithRecordingSpan(
 		ctx, s.cfg.AmbientCtx.Tracer, fmt.Sprintf("manual %s queue run", queueName))
-	defer cancel()
+	defer collectAndFinish()
 
 	if !skipShouldQueue {
 		log.Eventf(ctx, "running %s.shouldQueue", queueName)
 		shouldQueue, priority := queue.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, confReader)
 		log.Eventf(ctx, "shouldQueue=%v, priority=%f", shouldQueue, priority)
 		if !shouldQueue {
-			return collect(), nil, nil
+			return collectAndFinish(), nil, nil
 		}
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
 	processed, processErr := queue.process(ctx, repl, confReader)
 	log.Eventf(ctx, "processed: %t (err: %v)", processed, processErr)
-	return collect(), processErr, nil
+	return collectAndFinish(), processErr, nil
 }
 
 // PurgeOutdatedReplicas purges all replicas with a version less than the one

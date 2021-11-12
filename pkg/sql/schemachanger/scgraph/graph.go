@@ -11,11 +11,14 @@
 package scgraph
 
 import (
+	"container/list"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/errors"
+	"github.com/google/btree"
 )
 
 // Graph is a graph whose nodes are *scpb.Nodes. Graphs are constructed during
@@ -37,10 +40,15 @@ type Graph struct {
 	// from it. A Node may have at most one opEdge from it.
 	nodeOpEdgesFrom map[*scpb.Node]*OpEdge
 
-	// nodeDepEdges maps a Node to its dependencies.
+	// nodeDepEdgesFrom maps a Node from its dependencies.
 	// A Node dependency is another target node which must be
 	// reached before or concurrently with this node.
-	nodeDepEdges map[*scpb.Node][]*DepEdge
+	nodeDepEdgesFrom *btree.BTree
+
+	// nodeDepEdgesTo maps a Node to its dependencies.
+	// A Node dependency is another target node which must be
+	// reached before or concurrently with this node.
+	nodeDepEdgesTo *btree.BTree
 
 	// opToNode maps from an operation back to the
 	// opEdge that generated it as an index.
@@ -70,11 +78,12 @@ func New(initial scpb.State) (*Graph, error) {
 		return nil, err
 	}
 	g := Graph{
-		targetIdxMap:    map[*scpb.Target]int{},
-		nodeOpEdgesFrom: map[*scpb.Node]*OpEdge{},
-		nodeDepEdges:    map[*scpb.Node][]*DepEdge{},
-		opToNode:        map[scop.Op]*scpb.Node{},
-		entities:        db,
+		targetIdxMap:     map[*scpb.Target]int{},
+		nodeOpEdgesFrom:  map[*scpb.Node]*OpEdge{},
+		nodeDepEdgesFrom: btree.New(2),
+		nodeDepEdgesTo:   btree.New(2),
+		opToNode:         map[scop.Op]*scpb.Node{},
+		entities:         db,
 	}
 	for _, n := range initial {
 		if existing, ok := g.targetIdxMap[n.Target]; ok {
@@ -142,13 +151,6 @@ func (g *Graph) GetOpEdgeFrom(n *scpb.Node) (*OpEdge, bool) {
 	return oe, ok
 }
 
-// GetDepEdgesFrom returns the unique outgoing op edge from the specified node,
-// if one exists.
-func (g *Graph) GetDepEdgesFrom(n *scpb.Node) ([]*DepEdge, bool) {
-	de, ok := g.nodeDepEdges[n]
-	return de, ok
-}
-
 // AddOpEdges adds an op edges connecting the nodes for two statuses of a target.
 func (g *Graph) AddOpEdges(
 	t *scpb.Target, from, to scpb.Status, revertible bool, ops ...scop.Op,
@@ -181,6 +183,8 @@ func (g *Graph) GetNodeFromOp(op scop.Op) *scpb.Node {
 	return g.opToNode[op]
 }
 
+var _ = (*Graph)(nil).GetNodeFromOp
+
 // AddDepEdge adds a dep edge connecting two nodes (specified by their targets
 // and statuses).
 func (g *Graph) AddDepEdge(
@@ -198,7 +202,16 @@ func (g *Graph) AddDepEdge(
 		return err
 	}
 	g.edges = append(g.edges, de)
-	g.nodeDepEdges[de.from] = append(g.nodeDepEdges[de.from], de)
+	g.nodeDepEdgesFrom.ReplaceOrInsert(&edgeTreeEntry{
+		g:     g,
+		edge:  de,
+		order: fromTo,
+	})
+	g.nodeDepEdgesTo.ReplaceOrInsert(&edgeTreeEntry{
+		g:     g,
+		edge:  de,
+		order: toFrom,
+	})
 	return nil
 }
 
@@ -249,3 +262,110 @@ func (de *DepEdge) To() *scpb.Node { return de.to }
 
 // Name returns the name of the rule which generated this edge.
 func (de *DepEdge) Name() string { return de.rule }
+
+// GetNodeRanks fetches ranks of nodes in topological order.
+func (g *Graph) GetNodeRanks() (nodeRanks map[*scpb.Node]int, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			rAsErr, ok := r.(error)
+			if !ok {
+				rAsErr = errors.Errorf("panic during GetNodeRanks: %v", r)
+			}
+			err = rAsErr
+		}
+	}()
+	backCycleExists := func(n *scpb.Node, de *DepEdge) bool {
+		var foundBack bool
+		_ = g.ForEachDepEdgeFrom(de.To(), func(maybeBack *DepEdge) error {
+			foundBack = foundBack || maybeBack.To() == n
+			return nil
+		})
+		return foundBack
+	}
+	l := list.New()
+	marks := make(map[*scpb.Node]bool)
+	var visit func(n *scpb.Node)
+	visit = func(n *scpb.Node) {
+		permanent, marked := marks[n]
+		if marked && !permanent {
+			panic(errors.AssertionFailedf("graph is not a dag"))
+		}
+		if marked && permanent {
+			return
+		}
+		marks[n] = false
+		_ = g.ForEachDepEdgeFrom(n, func(de *DepEdge) error {
+			// We want to eliminate cycles caused by swaps. In that
+			// case, we want to pretend that there is no edge from the
+			// add to the drop, and, in that way, the drop is ordered first.
+			if n.Direction == scpb.Target_ADD || !backCycleExists(n, de) {
+				visit(de.To())
+			}
+			return nil
+		})
+		marks[n] = true
+		l.PushFront(n)
+	}
+
+	_ = g.ForEachNode(func(n *scpb.Node) error {
+		visit(n)
+		return nil
+	})
+	rank := make(map[*scpb.Node]int, l.Len())
+	for i, cur := 0, l.Front(); i < l.Len(); i++ {
+		rank[cur.Value.(*scpb.Node)] = i
+		cur = cur.Next()
+	}
+	return rank, nil
+}
+
+// edgeTreeOrder order in which the edge tree is sorted,
+// either based on from/to node indexes.
+type edgeTreeOrder bool
+
+const (
+	fromTo edgeTreeOrder = true
+	toFrom edgeTreeOrder = false
+)
+
+// edgeTreeEntry BTree items for tracking edges
+// in an ordered manner.
+type edgeTreeEntry struct {
+	g     *Graph
+	edge  Edge
+	order edgeTreeOrder
+}
+
+// Less implements btree.Item
+func (e *edgeTreeEntry) Less(other btree.Item) bool {
+	o := other.(*edgeTreeEntry)
+	var a1, b1, a2, b2 *scpb.Node
+	switch e.order {
+	case fromTo:
+		a1, b1, a2, b2 = e.edge.From(), o.edge.From(), e.edge.To(), o.edge.To()
+	case toFrom:
+		a1, b1, a2, b2 = e.edge.To(), o.edge.To(), e.edge.From(), o.edge.From()
+	}
+	less, eq := compareNodes(e.g, a1, b1)
+	if eq {
+		less, _ = compareNodes(e.g, a2, b2)
+	}
+	return less
+}
+
+// compareNodes compares two nodes in a graph. A nil nodes is the minimum value.
+func compareNodes(g *Graph, a, b *scpb.Node) (less, eq bool) {
+	switch {
+	case a == b:
+		return false, true
+	case a == nil:
+		return true, false
+	case b == nil:
+		return false, false
+	case a.Target == b.Target:
+		return a.Status < b.Status, a.Status == b.Status
+	default:
+		aIdx, bIdx := g.targetIdxMap[a.Target], g.targetIdxMap[b.Target]
+		return aIdx < bIdx, aIdx == bIdx
+	}
+}

@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -112,8 +113,11 @@ type backupDataProcessor struct {
 	spec    execinfrapb.BackupDataSpec
 	output  execinfra.RowReceiver
 
-	progCh    chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-	backupErr error
+	// cancelAndWaitForWorker cancels the producer goroutine and waits for it to
+	// finish. It can be called multiple times.
+	cancelAndWaitForWorker func()
+	progCh                 chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+	backupErr              error
 }
 
 var _ execinfra.Processor = &backupDataProcessor{}
@@ -136,6 +140,10 @@ func newBackupDataProcessor(
 		execinfra.ProcStateOpts{
 			// This processor doesn't have any inputs to drain.
 			InputsToDrain: nil,
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				bp.close()
+				return nil
+			},
 		}); err != nil {
 		return nil, err
 	}
@@ -145,10 +153,25 @@ func newBackupDataProcessor(
 // Start is part of the RowSource interface.
 func (bp *backupDataProcessor) Start(ctx context.Context) {
 	ctx = bp.StartInternal(ctx, backupProcessorName)
-	go func() {
-		defer close(bp.progCh)
+	ctx, cancel := context.WithCancel(ctx)
+	bp.cancelAndWaitForWorker = func() {
+		cancel()
+		for range bp.progCh {
+		}
+	}
+	if err := bp.flowCtx.Stopper().RunAsyncTaskEx(ctx, stop.TaskOpts{
+		TaskName: "backup-worker",
+		SpanOpt:  stop.ChildSpan,
+	}, func(ctx context.Context) {
 		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh)
-	}()
+		cancel()
+		close(bp.progCh)
+	}); err != nil {
+		// The closure above hasn't run, so we have to do the cleanup.
+		bp.backupErr = err
+		cancel()
+		close(bp.progCh)
+	}
 }
 
 // Next is part of the RowSource interface.
@@ -171,6 +194,17 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 
 	bp.MoveToDraining(nil /* error */)
 	return nil, bp.DrainHelper()
+}
+
+func (bp *backupDataProcessor) close() {
+	bp.cancelAndWaitForWorker()
+	bp.ProcessorBase.InternalClose()
+}
+
+// ConsumerClosed is part of the RowSource interface. We have to override the
+// implementation provided by ProcessorBase.
+func (bp *backupDataProcessor) ConsumerClosed() {
+	bp.close()
 }
 
 type spanAndTime struct {

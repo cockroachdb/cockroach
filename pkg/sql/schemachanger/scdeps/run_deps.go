@@ -76,6 +76,8 @@ func NewJobExecutionDependencies(
 	job *jobs.Job,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
+	indexValidator scexec.IndexValidator,
+	cclCallbacks scexec.Partitioner,
 	testingKnobs *scexec.NewSchemaChangerTestingKnobs,
 	statements []string,
 ) scrun.SchemaChangeJobExecutionDependencies {
@@ -90,6 +92,8 @@ func NewJobExecutionDependencies(
 		settings:          settings,
 		testingKnobs:      testingKnobs,
 		statements:        statements,
+		indexValidator:    indexValidator,
+		partitioner:       cclCallbacks,
 	}
 }
 
@@ -100,6 +104,9 @@ type jobExecutionDeps struct {
 	indexBackfiller   scexec.IndexBackfiller
 	jobRegistry       *jobs.Registry
 	job               *jobs.Job
+
+	indexValidator scexec.IndexValidator
+	partitioner    scexec.Partitioner
 
 	codec        keys.SQLCodec
 	settings     *cluster.Settings
@@ -129,6 +136,8 @@ func (d *jobExecutionDeps) WithTxnInJob(
 				codec:           d.codec,
 				descsCollection: descriptors,
 				jobRegistry:     d.jobRegistry,
+				indexValidator:  d.indexValidator,
+				partitioner:     d.partitioner,
 			},
 		})
 	})
@@ -162,6 +171,7 @@ func (d *jobExecutionTxnDeps) ExecutorDependencies() scexec.Dependencies {
 		indexBackfiller: d.indexBackfiller,
 		testingKnobs:    d.testingKnobs,
 		statements:      d.statements,
-		phase:           scop.PostCommitPhase,
+
+		phase: scop.PostCommitPhase,
 	}
 }

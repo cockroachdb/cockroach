@@ -13,6 +13,7 @@ package scgraph
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/google/btree"
 )
 
 // NodeIterator is used to iterate nodes. Return iterutil.StopIteration to
@@ -58,15 +59,30 @@ func (g *Graph) ForEachEdge(it EdgeIterator) error {
 type DepEdgeIterator func(de *DepEdge) error
 
 // ForEachDepEdgeFrom iterates the dep edges in the graph.
-func (g *Graph) ForEachDepEdgeFrom(n *scpb.Node, it DepEdgeIterator) error {
-	edges := g.nodeDepEdges[n]
-	for _, e := range edges {
-		if err := it(e); err != nil {
-			if iterutil.Done(err) {
-				err = nil
+func (g *Graph) ForEachDepEdgeFrom(n *scpb.Node, it DepEdgeIterator) (err error) {
+	g.nodeDepEdgesFrom.AscendGreaterOrEqual(&edgeTreeEntry{
+		g: g,
+		edge: &DepEdge{
+			from: n,
+			to:   nil,
+			rule: "",
+		},
+		order: fromTo,
+	},
+		func(i btree.Item) bool {
+			e := i.(*edgeTreeEntry)
+			// End the iteration once the from nodes
+			// stop matching.
+			if e.edge.From() != n {
+				return false
 			}
-			return err
-		}
-	}
-	return nil
+			if err = it(e.edge.(*DepEdge)); err != nil {
+				if iterutil.Done(err) {
+					err = nil
+				}
+				return false
+			}
+			return true
+		})
+	return err
 }

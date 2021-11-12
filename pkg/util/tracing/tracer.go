@@ -1092,28 +1092,28 @@ func StartVerboseTrace(ctx context.Context, tr *Tracer, opName string) (context.
 	return ctx, sp
 }
 
-// ContextWithRecordingSpan returns a context with an embedded trace Span.
-// The Span is derived from the provided Tracer. The Span returns its contents
-// when `getRecording` is called, and must be stopped using `cancel`, when done
-// with the context (`getRecording` needs to be called before `cancel`).
+// ContextWithRecordingSpan returns a context with an embedded trace Span. The
+// Span is derived from the provided Tracer. The recording is collected and the
+// span is Finish()ed through the returned callback.
+//
+// The returned callback can be called multiple times.
 //
 // Note that to convert the recorded spans into text, you can use
 // Recording.String(). Tests can also use FindMsgInRecording().
 func ContextWithRecordingSpan(
 	ctx context.Context, tr *Tracer, opName string,
-) (_ context.Context, getRecording func() Recording, cancel func()) {
+) (_ context.Context, finishAndGetRecording func() Recording) {
 	ctx, sp := tr.StartSpanCtx(ctx, opName, WithRecording(RecordingVerbose))
-	ctx, cancelCtx := context.WithCancel(ctx)
-
-	cancel = func() {
-		cancelCtx()
-		sp.Finish()
-	}
+	var rec Recording
 	return ctx,
 		func() Recording {
-			return sp.GetRecording(RecordingVerbose)
-		},
-		cancel
+			if rec != nil {
+				return rec
+			}
+			sp.Finish()
+			rec = sp.GetRecording(RecordingVerbose)
+			return rec
+		}
 }
 
 // makeOtelSpan creates an OpenTelemetry span. If either of localParent or

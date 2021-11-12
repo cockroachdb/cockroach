@@ -207,10 +207,10 @@ func TestRangefeedIsRoutedToNonVoter(t *testing.T) {
 
 	startTS := db.Clock().Now()
 	rangefeedCtx, rangefeedCancel := context.WithCancel(ctx)
-	rangefeedCtx, getRec, cancel := tracing.ContextWithRecordingSpan(rangefeedCtx,
+	rangefeedCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(rangefeedCtx,
 		tracing.NewTracer(),
 		"rangefeed over non-voter")
-	defer cancel()
+	defer getRecAndFinish()
 
 	// Do a read on the range to make sure that the dist sender learns about the
 	// latest state of the range (with the new non-voter).
@@ -239,5 +239,5 @@ func TestRangefeedIsRoutedToNonVoter(t *testing.T) {
 	}
 	rangefeedCancel()
 	require.Regexp(t, "context canceled", <-rangefeedErrChan)
-	require.Regexp(t, "attempting to create a RangeFeed over replica.*2NON_VOTER", getRec().String())
+	require.Regexp(t, "attempting to create a RangeFeed over replica.*2NON_VOTER", getRecAndFinish().String())
 }

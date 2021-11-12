@@ -144,6 +144,7 @@ go_library(
         "//pkg/sql/roleoption",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scjob",
+        "//pkg/sql/schemachanger/scsqldeps",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",

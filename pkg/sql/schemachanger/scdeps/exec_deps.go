@@ -23,8 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -37,6 +39,8 @@ func NewExecutorDependencies(
 	descsCollection *descs.Collection,
 	jobRegistry *jobs.Registry,
 	indexBackfiller scexec.IndexBackfiller,
+	indexValidator scexec.IndexValidator,
+	cclCallbacks scexec.Partitioner,
 	testingKnobs *scexec.NewSchemaChangerTestingKnobs,
 	statements []string,
 	phase scop.Phase,
@@ -47,6 +51,8 @@ func NewExecutorDependencies(
 			codec:           codec,
 			descsCollection: descsCollection,
 			jobRegistry:     jobRegistry,
+			indexValidator:  indexValidator,
+			partitioner:     cclCallbacks,
 		},
 		indexBackfiller: indexBackfiller,
 		testingKnobs:    testingKnobs,
@@ -60,6 +66,8 @@ type txnDeps struct {
 	codec           keys.SQLCodec
 	descsCollection *descs.Collection
 	jobRegistry     *jobs.Registry
+	indexValidator  scexec.IndexValidator
+	partitioner     scexec.Partitioner
 }
 
 var _ scexec.Catalog = (*txnDeps)(nil)
@@ -86,6 +94,28 @@ func (d *txnDeps) AddSyntheticDescriptor(desc catalog.Descriptor) {
 // RemoveSyntheticDescriptor implements the scmutationexec.CatalogReader interface.
 func (d *txnDeps) RemoveSyntheticDescriptor(id descpb.ID) {
 	d.descsCollection.RemoveSyntheticDescriptor(id)
+}
+
+// AddPartitioning implements the  scmutationexec.CatalogReader interface.
+func (d *txnDeps) AddPartitioning(
+	tableDesc *tabledesc.Mutable,
+	indexDesc *descpb.IndexDescriptor,
+	partitionFields []string,
+	listPartition []*scpb.ListPartition,
+	rangePartition []*scpb.RangePartitions,
+	allowedNewColumnNames []tree.Name,
+	allowImplicitPartitioning bool,
+) error {
+	ctx := context.Background()
+
+	return d.partitioner.AddPartitioning(ctx,
+		tableDesc,
+		indexDesc,
+		partitionFields,
+		listPartition,
+		rangePartition,
+		allowedNewColumnNames,
+		allowImplicitPartitioning)
 }
 
 // MustReadMutableDescriptor implements the scexec.Catalog interface.
@@ -210,6 +240,10 @@ func (d *execDeps) Catalog() scexec.Catalog {
 // IndexBackfiller implements the scexec.Dependencies interface.
 func (d *execDeps) IndexBackfiller() scexec.IndexBackfiller {
 	return d.indexBackfiller
+}
+
+func (d *execDeps) IndexValidator() scexec.IndexValidator {
+	return d.indexValidator
 }
 
 // IndexSpanSplitter implements the scexec.Dependencies interface.
