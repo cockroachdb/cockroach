@@ -144,7 +144,7 @@ user root
 statement ok
 CREATE INDEX foo ON t (b)
 
-statement error relation \"foo\" already exists
+statement error index with name \"foo\" already exists
 CREATE INDEX foo ON t (a)
 
 statement error column "c" does not exist

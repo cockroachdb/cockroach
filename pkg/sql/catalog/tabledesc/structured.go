@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -983,16 +982,6 @@ func (desc *Mutable) OriginalID() descpb.ID {
 // OriginalVersion implements the MutableDescriptor interface.
 func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 	return desc.ClusterVersion.Version
-}
-
-// ValidateIndexNameIsUnique validates that the index name does not exist.
-func (desc *wrapper) ValidateIndexNameIsUnique(indexName string) error {
-	if catalog.FindNonDropIndex(desc, func(idx catalog.Index) bool {
-		return idx.GetName() == indexName
-	}) != nil {
-		return sqlerrors.NewRelationAlreadyExistsError(indexName)
-	}
-	return nil
 }
 
 // FamilyHeuristicTargetBytes is the target total byte size of columns that the

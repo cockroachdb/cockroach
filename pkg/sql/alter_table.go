@@ -194,6 +194,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 		case *tree.AlterTableAddConstraint:
+			if skip, err := validateConstraintNameIsNotUsed(n.tableDesc, t); err != nil {
+				return err
+			} else if skip {
+				continue
+			}
 			switch d := t.ConstraintDef.(type) {
 			case *tree.UniqueConstraintTableDef:
 				if d.WithoutIndex {
@@ -214,15 +219,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 				if d.PrimaryKey {
-					// We only support "adding" a primary key when we are using the
-					// default rowid primary index or if a DROP PRIMARY KEY statement
-					// was processed before this statement. If a DROP PRIMARY KEY
-					// statement was processed, then n.tableDesc.HasPrimaryKey() = false.
-					if n.tableDesc.HasPrimaryKey() && !n.tableDesc.IsPrimaryIndexDefaultRowID() {
-						return pgerror.Newf(pgcode.InvalidTableDefinition,
-							"multiple primary keys for table %q are not allowed", n.tableDesc.Name)
-					}
-
 					// Translate this operation into an ALTER PRIMARY KEY command.
 					alterPK := &tree.AlterTableAlterPrimaryKey{
 						Columns: d.Columns,
@@ -275,11 +271,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 					if err != nil {
 						return err
 					}
-				}
-				// If the index is named, ensure that the name is unique.
-				// Unnamed indexes will be given a unique auto-generated name later on.
-				if d.Name != "" && n.tableDesc.ValidateIndexNameIsUnique(d.Name.String()) != nil {
-					return pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 				}
 				idx := descpb.IndexDescriptor{
 					Name:             string(d.Name),
@@ -1559,6 +1550,82 @@ func (p *planner) removeColumnComment(
 		columnID)
 
 	return err
+}
+
+// validateConstraintNameIsNotUsed checks that the name of the constraint we're
+// trying to add isn't already used, and, if it is, whether the constraint
+// addition should be skipped:
+// - if the name is free to use, it returns false;
+// - if it's already used but IF NOT EXISTS was specified, it returns true;
+// - otherwise, it returns an error.
+func validateConstraintNameIsNotUsed(
+	tableDesc *tabledesc.Mutable, cmd *tree.AlterTableAddConstraint,
+) (skipAddConstraint bool, _ error) {
+	var name tree.Name
+	var hasIfNotExists bool
+	switch d := cmd.ConstraintDef.(type) {
+	case *tree.CheckConstraintTableDef:
+		name = d.Name
+		hasIfNotExists = d.IfNotExists
+	case *tree.ForeignKeyConstraintTableDef:
+		name = d.Name
+		hasIfNotExists = d.IfNotExists
+	case *tree.UniqueConstraintTableDef:
+		name = d.Name
+		hasIfNotExists = d.IfNotExists
+		if d.WithoutIndex {
+			break
+		}
+		// Handle edge cases specific to unique constraints with indexes.
+		if d.PrimaryKey {
+			// We only support "adding" a primary key when we are using the
+			// default rowid primary index or if a DROP PRIMARY KEY statement
+			// was processed before this statement. If a DROP PRIMARY KEY
+			// statement was processed, then n.tableDesc.HasPrimaryKey() = false.
+			if tableDesc.HasPrimaryKey() && !tableDesc.IsPrimaryIndexDefaultRowID() {
+				if d.IfNotExists {
+					return true, nil
+				}
+				return false, pgerror.Newf(pgcode.InvalidTableDefinition,
+					"multiple primary keys for table %q are not allowed", tableDesc.Name)
+			}
+		}
+		if name == "" {
+			return false, nil
+		}
+		idx, _ := tableDesc.FindIndexWithName(name.String())
+		if idx == nil {
+			return false, nil
+		}
+		if d.IfNotExists {
+			return true, nil
+		}
+		if idx.Dropped() {
+			return false, pgerror.Newf(pgcode.DuplicateObject, "constraint with name %q already exists and is being dropped, try again later", name)
+		}
+		return false, pgerror.Newf(pgcode.DuplicateObject, "constraint with name %q already exists", name)
+
+	default:
+		return false, errors.AssertionFailedf(
+			"unsupported constraint: %T", cmd.ConstraintDef)
+	}
+
+	if name == "" {
+		return false, nil
+	}
+	info, err := tableDesc.GetConstraintInfo()
+	if err != nil {
+		// Unexpected error: table descriptor should be valid at this point.
+		return false, errors.WithAssertionFailure(err)
+	}
+	if _, isInUse := info[name.String()]; !isInUse {
+		return false, nil
+	}
+	if hasIfNotExists {
+		return true, nil
+	}
+	return false, pgerror.Newf(pgcode.DuplicateObject,
+		"duplicate constraint name: %q", name)
 }
 
 // updateFKBackReferenceName updates the name of a foreign key reference on
