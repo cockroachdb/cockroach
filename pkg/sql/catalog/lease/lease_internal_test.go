@@ -1082,11 +1082,12 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 	tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 'foo'").Scan(&tableID)
 
 	manager := s.LeaseManager().(*Manager)
-	const N = 5
-	descs := make([]catalog.Descriptor, N+1)
+	const numHistoricalVersions = 5
+	const maxVersion = numHistoricalVersions + 1
+	descs := make([]catalog.Descriptor, maxVersion)
 
-	// Create N versions of table descriptor
-	for i := 0; i < N; i++ {
+	// Create numHistoricalVersions versions of table descriptor
+	for i := 0; i < numHistoricalVersions; i++ {
 		_, err := manager.Publish(ctx, tableID, func(desc catalog.MutableDescriptor) error {
 			descs[i] = desc.ImmutableCopy()
 			return nil
@@ -1096,7 +1097,7 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 	{
 		last, err := manager.Acquire(ctx, s.Clock().Now(), tableID)
 		require.NoError(t, err)
-		descs[N] = last.Underlying()
+		descs[numHistoricalVersions] = last.Underlying()
 		last.Release(ctx)
 	}
 
@@ -1126,7 +1127,11 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 				Descriptor: versionDesc(v),
 			}
 			addedDescVState.mu.Lock()
-			addedDescVState.mu.expiration = hlc.MaxTimestamp
+			if v < maxVersion {
+				addedDescVState.mu.expiration = versionTS(v + 1)
+			} else {
+				addedDescVState.mu.expiration = hlc.MaxTimestamp
+			}
 			addedDescVState.mu.Unlock()
 			descStates[tableID].mu.active.insert(addedDescVState)
 		}
@@ -1136,30 +1141,46 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 	// expected data.
 	// [v1 ---)[v2 --)[v3 ---)[v4 ----)[v5 -----)[v6 ------)
 	for _, tc := range []testCase{
+
+		// The following cases represent having no existing descriptor state, or
+		// as importantly, having some descriptor state but searching for a
+		// timestamp after the known state. The code, as stands, assumes that
+		// when this happens, we'll rely on an existing lease to provide the end
+		// timestamp, and when no such lease exists, we'll go get one. If the
+		// attempt to get a lease fails, then we'll propagate that error up. This
+		// fact is the source of the known limitation described on
+		// Acquire and AcquireByName.
 		{
 			before:   []version{},
 			ts:       versionTS(1),
 			tsStr:    "ts1",
-			expected: []version{1, 2, 3, 4, 5, 6},
+			expected: []version{},
 		},
 		{
 			before:   []version{},
 			ts:       versionTS(4),
 			tsStr:    "ts4",
-			expected: []version{4, 5, 6},
+			expected: []version{},
 		},
 		{
 			before:   []version{},
 			ts:       versionTS(6),
 			tsStr:    "ts6",
-			expected: []version{6},
+			expected: []version{},
+		},
+		{
+			before:   []version{1, 2, 3},
+			ts:       versionTS(4).Next(),
+			tsStr:    "ts4.Next",
+			expected: []version{},
 		},
 		{
 			before:   []version{},
 			ts:       versionTS(6).Prev(),
 			tsStr:    "ts6.Prev",
-			expected: []version{5, 6},
+			expected: []version{},
 		},
+
 		{
 			before:   []version{6},
 			ts:       versionTS(4).Prev(),
@@ -1182,6 +1203,30 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 			before:   []version{1, 2, 3, 4, 5, 6},
 			ts:       versionTS(4),
 			tsStr:    "ts4",
+			expected: []version{},
+		},
+		{
+			before:   []version{1, 4, 5, 6},
+			ts:       versionTS(4).Prev(),
+			tsStr:    "ts4.Prev",
+			expected: []version{3},
+		},
+		{
+			before:   []version{1, 4, 5, 6},
+			ts:       versionTS(3).Prev(),
+			tsStr:    "ts3.Prev",
+			expected: []version{2, 3},
+		},
+		{
+			before:   []version{1, 4, 5, 6},
+			ts:       versionTS(2),
+			tsStr:    "ts2",
+			expected: []version{2, 3},
+		},
+		{
+			before:   []version{1, 4, 5, 6},
+			ts:       versionTS(2).Prev(),
+			tsStr:    "ts2.Prev",
 			expected: []version{},
 		},
 	} {
