@@ -724,8 +724,6 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!**/embedded.go",
-			":!util/timeutil/now_unix.go",
-			":!util/timeutil/now_windows.go",
 			":!util/timeutil/time.go",
 			":!util/timeutil/zoneinfo.go",
 			":!util/tracing/span.go",
@@ -743,6 +741,40 @@ func TestLint(t *testing.T) {
 
 		if err := stream.ForEach(filter, func(s string) {
 			t.Errorf("\n%s <- forbidden; use 'timeutil' instead", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
+	t.Run("TestNowSub", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`\btime(util)?\.Now\(\)\.Sub\(`,
+			"--",
+			"*.go",
+			":!cmd/dev/**",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; use 'timeutil.Since() or timeutil.Since()' instead "+
+				"because they're more efficient", s)
 		}); err != nil {
 			t.Error(err)
 		}

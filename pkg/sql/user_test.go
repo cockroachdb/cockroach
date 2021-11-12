@@ -178,7 +178,7 @@ GRANT admin TO foo`); err != nil {
 			if !testutils.IsError(err, "internal error while retrieving user account") {
 				t.Fatalf("expected error during connection, got %v", err)
 			}
-			timeoutDur := timeutil.Now().Sub(start)
+			timeoutDur := timeutil.Since(start)
 			if timeoutDur > 5*time.Second {
 				t.Fatalf("timeout lasted for more than 5 second (%s)", timeoutDur)
 			}
@@ -226,7 +226,7 @@ GRANT admin TO foo`); err != nil {
 			if !testutils.IsError(err, "internal error while retrieving user account memberships") {
 				t.Fatalf("expected error during connection, got %v", err)
 			}
-			timeoutDur := timeutil.Now().Sub(start)
+			timeoutDur := timeutil.Since(start)
 			if timeoutDur > 5*time.Second {
 				t.Fatalf("timeout lasted for more than 5 second (%s)", timeoutDur)
 			}

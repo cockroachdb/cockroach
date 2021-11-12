@@ -198,7 +198,7 @@ func (u *UpdateChecker) buildUpdatesURL(ctx context.Context) *url.URL {
 
 	sqlInfo := diagnosticspb.SQLInstanceInfo{
 		SQLInstanceID: u.SQLInstanceID(),
-		Uptime:        int64(timeutil.Now().Sub(u.StartTime).Seconds()),
+		Uptime:        int64(timeutil.Since(u.StartTime).Seconds()),
 	}
 
 	url := updatesURL

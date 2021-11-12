@@ -158,7 +158,7 @@ func (sqlExecCtx *Context) maybeShowTimes(
 
 	defer func() {
 		// If there was noticeable overhead, let the user know.
-		renderDelay := timeutil.Now().Sub(queryCompleteTime)
+		renderDelay := timeutil.Since(queryCompleteTime)
 		if renderDelay >= 1*time.Second && sqlExecCtx.IsInteractive() {
 			fmt.Fprintf(ew,
 				"\nNote: an additional delay of %s was spent formatting the results.\n"+
