@@ -133,11 +133,12 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/russross/blackfriday v1.6.0 // indirect
 	github.com/sasha-s/go-deadlock v0.3.1
-	github.com/shirou/gopsutil v2.20.9+incompatible
+	github.com/shirou/gopsutil v3.21.10+incompatible
 	github.com/slack-go/slack v0.9.5
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0
+	github.com/tklauser/go-sysconf v0.3.9 // indirect
 	github.com/twpayne/go-geom v1.4.1
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	github.com/xdg/scram v1.0.3
