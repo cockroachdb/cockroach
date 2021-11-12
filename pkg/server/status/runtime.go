@@ -534,7 +534,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 
 	// Log summary of statistics to console.
 	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
-	goStatsStaleness := float32(timeutil.Now().Sub(ms.Collected)) / float32(time.Second)
+	goStatsStaleness := float32(timeutil.Since(ms.Collected)) / float32(time.Second)
 	goTotal := ms.Sys - ms.HeapReleased
 
 	stats := &eventpb.RuntimeStats{

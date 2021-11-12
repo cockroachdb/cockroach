@@ -292,7 +292,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 						)
 					}
 
-					elapsed := timeutil.Now().Sub(lastWakeupTime)
+					elapsed := timeutil.Since(lastWakeupTime)
 					// Throttle the processor according to fractionIdle.
 					// Wait time is calculated as follows:
 					//
