@@ -387,6 +387,7 @@ bin/.bootstrap: $(GITHOOKS) vendor/modules.txt | bin/.submodules-initialized
 		github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
 		github.com/golang/mock/mockgen \
 		github.com/cockroachdb/stress \
+		github.com/cockroachdb/tools/cmd/stringer \
 		github.com/goware/modvendor \
 		github.com/go-swagger/go-swagger/cmd/swagger \
 		github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
@@ -400,7 +401,6 @@ bin/.bootstrap: $(GITHOOKS) vendor/modules.txt | bin/.submodules-initialized
 		golang.org/x/lint/golint \
 		golang.org/x/perf/cmd/benchstat \
 		golang.org/x/tools/cmd/goyacc \
-		golang.org/x/tools/cmd/stringer \
 		golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow \
 		honnef.co/go/tools/cmd/staticcheck \
 		github.com/bufbuild/buf/cmd/buf
