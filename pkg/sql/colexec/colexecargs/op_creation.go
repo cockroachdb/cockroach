@@ -74,14 +74,6 @@ type NewColOperatorArgs struct {
 		// partitions; for sorter it is merging already created partitions into
 		// new one before proceeding to the next partition from the input).
 		NumForcedRepartitions int
-		// UseStreamingMemAccountForBuffering specifies whether to use
-		// StreamingMemAccount when creating buffering operators and should only
-		// be set to 'true' in tests. The idea behind this flag is reducing the
-		// number of memory accounts and monitors we need to close, so we
-		// plumbed it into the planning code so that it doesn't create extra
-		// memory monitoring infrastructure (and so that we could use
-		// testMemAccount defined in main_test.go).
-		UseStreamingMemAccountForBuffering bool
 		// DiskSpillingDisabled specifies whether only in-memory operators
 		// should be created.
 		DiskSpillingDisabled bool
