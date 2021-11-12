@@ -362,13 +362,12 @@ func (s *Server) Metrics() (res []interface{}) {
 		&s.SQLServer.Metrics.StartedStatementCounters,
 		&s.SQLServer.Metrics.ExecutedStatementCounters,
 		&s.SQLServer.Metrics.EngineMetrics,
-		&s.SQLServer.Metrics.StatsMetrics,
 		&s.SQLServer.Metrics.GuardrailMetrics,
 		&s.SQLServer.InternalMetrics.StartedStatementCounters,
 		&s.SQLServer.InternalMetrics.ExecutedStatementCounters,
 		&s.SQLServer.InternalMetrics.EngineMetrics,
-		&s.SQLServer.InternalMetrics.StatsMetrics,
 		&s.SQLServer.InternalMetrics.GuardrailMetrics,
+		&s.SQLServer.ServerMetrics.StatsMetrics,
 	}
 }
 
