@@ -212,7 +212,7 @@ func (ex *connExecutor) recordStatementSummary(
 		if log.V(1) {
 			log.Warningf(ctx, "failed to record statement: %s", err)
 		}
-		ex.metrics.StatsMetrics.DiscardedStatsCount.Inc(1)
+		ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
 	}
 
 	// Do some transaction level accounting for the transaction this statement is
