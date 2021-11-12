@@ -176,9 +176,8 @@ func fauxNewEncryptedEnvFunc(
 	fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte,
 ) (*EncryptionEnv, error) {
 	return &EncryptionEnv{
-		Closer:         nopCloser{},
-		FS:             fauxEncryptedFS{FS: fs},
-		UpgradeVersion: func() error { return nil },
+		Closer: nopCloser{},
+		FS:     fauxEncryptedFS{FS: fs},
 	}, nil
 }
 
