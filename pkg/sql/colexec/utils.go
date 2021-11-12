@@ -25,7 +25,7 @@ import (
 var zeroIntColumn = make([]int, coldata.MaxBatchSize)
 
 func newPartitionerToOperator(
-	allocator *colmem.Allocator, types []*types.T, partitioner colcontainer.PartitionedQueue,
+	allocator *colmem.Allocator, types []*types.T, partitioner *colcontainer.PartitionedDiskQueue,
 ) *partitionerToOperator {
 	return &partitionerToOperator{
 		allocator:   allocator,
@@ -44,7 +44,7 @@ type partitionerToOperator struct {
 
 	allocator    *colmem.Allocator
 	types        []*types.T
-	partitioner  colcontainer.PartitionedQueue
+	partitioner  *colcontainer.PartitionedDiskQueue
 	partitionIdx int
 	batch        coldata.Batch
 }

@@ -137,8 +137,8 @@ type externalSorter struct {
 	columnOrdering     colinfo.ColumnOrdering
 	inMemSorter        colexecop.ResettableOperator
 	inMemSorterInput   *inputPartitioningOperator
-	partitioner        colcontainer.PartitionedQueue
-	partitionerCreator func() colcontainer.PartitionedQueue
+	partitioner        *colcontainer.PartitionedDiskQueue
+	partitionerCreator func() *colcontainer.PartitionedDiskQueue
 	// partitionerToOperators stores all partitionerToOperator instances that we
 	// have created when merging partitions. This allows for reusing them in
 	// case we need to perform repeated merging (namely, we'll be able to reuse
@@ -291,8 +291,8 @@ func NewExternalSorter(
 		mergeMemoryLimit:         mergeMemoryLimit,
 		inMemSorter:              inMemSorter,
 		inMemSorterInput:         inputPartitioner.(*inputPartitioningOperator),
-		partitionerCreator: func() colcontainer.PartitionedQueue {
-			return colcontainer.NewPartitionedQueue(inputTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition, diskAcc)
+		partitionerCreator: func() *colcontainer.PartitionedDiskQueue {
+			return colcontainer.NewPartitionedDiskQueue(inputTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition, diskAcc)
 		},
 		inputTypes:           inputTypes,
 		ordering:             ordering,
