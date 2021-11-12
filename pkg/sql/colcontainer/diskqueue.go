@@ -587,11 +587,9 @@ func (d *diskQueue) Enqueue(ctx context.Context, b coldata.Batch) error {
 		d.serializer = nil
 		d.done = true
 		if d.cfg.CacheMode == DiskQueueCacheModeDefault {
-			// From this point on only Dequeues are allowed. Reuse the write
-			// side of the cache for reads.
-			d.writer.buffer.Reset()
-			d.scratchDecompressedReadBytes = d.writer.buffer.Bytes()
+			d.scratchDecompressedReadBytes = nil
 			d.writer.buffer = bytes.Buffer{}
+			d.writer.scratch.compressedBuf = nil
 		}
 		return nil
 	}
