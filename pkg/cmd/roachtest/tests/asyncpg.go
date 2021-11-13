@@ -12,13 +12,22 @@ package tests
 
 import (
 	"context"
-	"fmt"
+	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
+
+const asyncpgRunTestCmd = `
+cd /mnt/data1/asyncpg && 
+PGPORT=26257 PGHOST=localhost PGUSER=root PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
+`
+
+var asyncpgReleaseTagRegex = regexp.MustCompile(`^(?P<major>v\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+
+var asyncpgSupportedTag = "v0.24.0"
 
 func registerAsyncpg(r registry.Registry) {
 	runAsyncpg := func(
@@ -45,13 +54,23 @@ func registerAsyncpg(r registry.Registry) {
 
 		t.Status("cloning asyncpg and installing prerequisites")
 
+		latestTag, err := repeatGetLatestTag(
+			ctx, t, "MagicStack", "asyncpg", asyncpgReleaseTagRegex,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.L().Printf("Latest asyncpg release is %s.", latestTag)
+		t.L().Printf("Supported asyncpg release is %s.", latestTag)
+
 		if err := gitCloneWithRecurseSubmodules(
 			ctx,
 			c,
 			t.L(),
 			"https://github.com/MagicStack/asyncpg.git",
 			"/mnt/data1/asyncpg",
-			"master",
+			asyncpgSupportedTag,
 			node,
 		); err != nil {
 			t.Fatal(err)
@@ -68,20 +87,6 @@ func registerAsyncpg(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		// Install postgresql for asyncpg requires pg_ctl and postgres executable to setup.
-		// See asyncpg's code here:
-		// https://github.com/MagicStack/asyncpg/blob/383c711eb68bc6a042c121e1fddfde0cdefb8068/asyncpg/cluster.py#L407-L419
-		if err := repeatRunE(
-			ctx,
-			t,
-			c,
-			node,
-			"install postgresql",
-			`sudo apt-get -y install postgresql`,
-		); err != nil {
-			t.Fatal(err)
-		}
-
 		if err := repeatRunE(
 			ctx,
 			t,
@@ -92,17 +97,37 @@ func registerAsyncpg(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		const cockroachPort = 26257
-		if err := repeatRunE(
-			ctx,
-			t,
-			c,
-			node,
-			"run setup.py test for asyncpg",
-			fmt.Sprintf("cd /mnt/data1/asyncpg && PGPORT=%d python3 setup.py test", cockroachPort),
+		blocklistName, expectedFailureList, ignoredlistName, ignoredlist := asyncpgBlocklists.getLists(version)
+		if expectedFailureList == nil {
+			t.Fatalf("No asyncpg blocklist defined for cockroach version %s", version)
+		}
+		if ignoredlist == nil {
+			t.Fatalf("No asyncpg ignorelist defined for cockroach version %s", version)
+		}
+		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
+			version, blocklistName, ignoredlistName)
+
+		t.Status("Running asyncpg tests ")
+		rawResults, err := c.RunWithBuffer(
+			ctx, t.L(), node, asyncpgRunTestCmd)
+		if err != nil {
+			t.L().Printf("error during asyncpg run (may be ok): %v\n", err)
+		}
+		t.L().Printf("Test results for asyncpg: %s", rawResults)
+		t.L().Printf("Test stdout for asyncpg")
+		if err := c.RunL(
+			ctx, t.L(), node, "cd /mnt/data1/asyncpg && cat asyncpg.stdout",
 		); err != nil {
 			t.Fatal(err)
 		}
+
+		t.Status("collating test results")
+
+		results := newORMTestsResults()
+		results.parsePythonUnitTestOutput(rawResults, expectedFailureList, ignoredlist)
+		results.summarizeAll(
+			t, "asyncpg" /* ormName */, blocklistName, expectedFailureList, version, asyncpgSupportedTag,
+		)
 	}
 
 	r.Add(registry.TestSpec{
