@@ -203,33 +203,13 @@ func Version() string {
 	return info.Long()
 }
 
-// CachedHosts returns a list of all roachprod clsuters from local cache.
-func CachedHosts(cachedHostsCluster string) ([]string, error) {
-	if err := LoadClusters(); err != nil {
-		return nil, err
-	}
-
-	names := make([]string, 0, len(install.Clusters))
-	for name := range install.Clusters {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	var retLines []string
-	for _, name := range names {
+// CachedClusters iterates over all roachprod clusters from the local cache, in
+// alphabetical order.
+func CachedClusters(fn func(clusterName string, numVMs int)) {
+	for _, name := range sortedClusters() {
 		c := install.Clusters[name]
-		newLine := c.Name
-		// when invokved by bash-completion, cachedHostsCluster is what the user
-		// has currently typed -- if this cluster matches that, expand its hosts.
-		if strings.HasPrefix(cachedHostsCluster, c.Name) {
-			for i := range c.VMs {
-				newLine += fmt.Sprintf(" %s:%d", c.Name, i+1)
-			}
-		}
-		retLines = append(retLines, newLine)
-
+		fn(c.Name, len(c.VMs))
 	}
-	return retLines, nil
 }
 
 // Sync grabs an exclusive lock on the roachprod state and then proceeds to
