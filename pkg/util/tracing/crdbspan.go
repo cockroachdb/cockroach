@@ -178,16 +178,13 @@ func (s *crdbSpan) finish() bool {
 		parent.childFinished(s)
 	}
 
+	// Deal with the orphaned children - make them roots.
 	for _, c := range children {
 		c.parentFinished()
 	}
-
 	// Atomically replace s in the registry with all of its still-open children.
 	s.tracer.activeSpansRegistry.swap(s.spanID, children)
 
-	// TODO(andrei): All the children that are still open are getting orphaned by
-	// the finishing of this parent. We should make them all root spans and
-	// register them with the active spans registry.
 	return true
 }
 
