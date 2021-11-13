@@ -227,8 +227,7 @@ func newHashBasedPartitioner(
 	// operators. The cache mode is chosen to automatically close the cache
 	// belonging to partitions at a parent level when repartitioning.
 	diskQueueCfg := args.DiskQueueCfg
-	diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
-	diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
+	diskQueueCfg.SetCacheMode(colcontainer.DiskQueueCacheModeClearAndReuseCache)
 	partitionedDiskQueueSemaphore := args.FDSemaphore
 	if !args.TestingKnobs.DelegateFDAcquisitions {
 		// To avoid deadlocks with other disk queues, we manually attempt to

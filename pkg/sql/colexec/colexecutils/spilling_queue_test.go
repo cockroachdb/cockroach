@@ -46,7 +46,7 @@ func TestSpillingQueue(t *testing.T) {
 			1 << 30,                         /* 1 GiB */
 		} {
 			alwaysCompress := rng.Float64() < 0.5
-			diskQueueCacheMode := colcontainer.DiskQueueCacheModeDefault
+			diskQueueCacheMode := colcontainer.DiskQueueCacheModeIntertwinedCalls
 			var dequeuedProbabilityBeforeAllEnqueuesAreDone float64
 			// testReuseCache will test the reuse cache modes.
 			testReuseCache := rng.Float64() < 0.5
@@ -106,8 +106,7 @@ func TestSpillingQueue(t *testing.T) {
 			op.Init(ctx)
 			typs := op.Typs()
 
-			queueCfg.CacheMode = diskQueueCacheMode
-			queueCfg.SetDefaultBufferSizeBytesForCacheMode()
+			queueCfg.SetCacheMode(diskQueueCacheMode)
 			queueCfg.TestingKnobs.AlwaysCompress = alwaysCompress
 
 			// We need to create a separate unlimited allocator for the spilling
@@ -258,7 +257,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
-	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeDefault
+	queueCfg.SetCacheMode(colcontainer.DiskQueueCacheModeIntertwinedCalls)
 
 	rng, _ := randutil.NewTestRand()
 	numBatches := int(spillingQueueInitialItemsLen)*(1+rng.Intn(4)) + rng.Intn(int(spillingQueueInitialItemsLen))

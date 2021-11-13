@@ -232,10 +232,6 @@ func NewExternalSorter(
 	fdSemaphore semaphore.Semaphore,
 	diskAcc *mon.BoundAccount,
 ) colexecop.Operator {
-	// The cache mode is chosen to reuse the cache to have a smaller cache per
-	// partition without affecting performance.
-	diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
-	diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
 	if diskQueueCfg.BufferSizeBytes > 0 && maxNumberPartitions == 0 {
 		// With the default limit of 256 file descriptors, this results in 16
 		// partitions. This is a hard maximum of partitions that will be used by
