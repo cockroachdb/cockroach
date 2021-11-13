@@ -304,6 +304,11 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.PriorReadSummary = nil
 
+	if p.Replicated.DisconnectRangeFeed == nil {
+		p.Replicated.DisconnectRangeFeed = q.Replicated.DisconnectRangeFeed
+	}
+	q.Replicated.DisconnectRangeFeed = nil
+
 	if p.Local.EncounteredIntents == nil {
 		p.Local.EncounteredIntents = q.Local.EncounteredIntents
 	} else {

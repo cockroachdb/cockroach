@@ -775,6 +775,14 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		}
 	}
 
+	// Disconnect rangefeed processors if requested. We do this here, to avoid
+	// emitting any logical ops below, since the consumer will have to restart and
+	// do a catchup scan anyway.
+	if res.DisconnectRangeFeed != nil {
+		b.r.disconnectRangefeedWithReason(res.DisconnectRangeFeed.Reason)
+		res.DisconnectRangeFeed = nil
+	}
+
 	// Provide the command's corresponding logical operations to the Replica's
 	// rangefeed. Only do so if the WriteBatch is non-nil, in which case the
 	// rangefeed requires there to be a corresponding logical operation log or
