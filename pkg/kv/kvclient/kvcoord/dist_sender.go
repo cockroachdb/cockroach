@@ -1266,7 +1266,8 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 	}()
 
-	canParallelize := ba.Header.MaxSpanRequestKeys == 0 && ba.Header.TargetBytes == 0
+	canParallelize := ba.Header.MaxSpanRequestKeys == 0 && ba.Header.TargetBytes == 0 &&
+		!ba.Header.ReturnOnRangeBoundary
 	if ba.IsSingleCheckConsistencyRequest() {
 		// Don't parallelize full checksum requests as they have to touch the
 		// entirety of each replica of each range they touch.
@@ -1342,7 +1343,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				ba.UpdateTxn(resp.reply.Txn)
 			}
 
-			mightStopEarly := ba.MaxSpanRequestKeys > 0 || ba.TargetBytes > 0
+			mightStopEarly := ba.MaxSpanRequestKeys > 0 || ba.TargetBytes > 0 || ba.ReturnOnRangeBoundary
 			// Check whether we've received enough responses to exit query loop.
 			if mightStopEarly {
 				var replyKeys int64
@@ -1365,7 +1366,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 						log.Fatalf(ctx, "received %d results, limit was %d", replyKeys, ba.MaxSpanRequestKeys)
 					}
 					ba.MaxSpanRequestKeys -= replyKeys
-					// Exiting; any missing responses will be filled in via defer().
 					if ba.MaxSpanRequestKeys == 0 {
 						couldHaveSkippedResponses = true
 						resumeReason = roachpb.RESUME_KEY_LIMIT
@@ -1379,6 +1379,13 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 						resumeReason = roachpb.RESUME_BYTE_LIMIT
 						return
 					}
+				}
+				// If we hit a range boundary, return a partial result if requested. We
+				// do this after checking the limits, so that they take precedence.
+				if ba.Header.ReturnOnRangeBoundary && replyKeys > 0 && !lastRange {
+					couldHaveSkippedResponses = true
+					resumeReason = roachpb.RESUME_RANGE_BOUNDARY
+					return
 				}
 			}
 		}
