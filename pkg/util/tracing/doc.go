@@ -94,7 +94,7 @@
 // [6]: `crdbSpan`
 // [7]: `Span.SetVerbose`. To understand the specifics of what exactly is
 //      captured in Span recording, when Spans have children that may be either
-//      local or remote, look towards `WithParentAnd{Auto,Manual}Collection`
+//      local or remote, look towards `WithParent` and `WithDetachedRecording`.
 // [8]: `Tracer.{InjectMetaInto,ExtractMetaFrom}`
 // [9]: `SpanMeta`
 // [10]: `{Client,Server}Interceptor`

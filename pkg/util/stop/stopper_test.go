@@ -733,7 +733,7 @@ func TestStopperRunAsyncTaskTracing(t *testing.T) {
 					errC <- errors.Errorf("missing span")
 					return
 				}
-				sp = tr.StartSpan("child", tracing.WithParentAndAutoCollection(sp))
+				sp = tr.StartSpan("child", tracing.WithParent(sp))
 				if sp.TraceID() == traceID {
 					errC <- errors.Errorf("expected different trace")
 				}

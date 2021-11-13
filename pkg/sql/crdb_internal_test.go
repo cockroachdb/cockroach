@@ -700,13 +700,13 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 //
 // Traces on node1:
 // -------------
-// root													<-- traceID1
-// 		root.child								<-- traceID1
-// root.child.remotechild 			<-- traceID1
+// root                            <-- traceID1
+//   root.child                    <-- traceID1
+//     root.child.detached_child   <-- traceID1
 //
 // Traces on node2:
 // -------------
-// root.child.remotechild2			<-- traceID1
+// root.child.remotechild			<-- traceID1
 // root.child.remotechilddone		<-- traceID1
 // root2												<-- traceID2
 // 		root2.child								<-- traceID2
@@ -717,22 +717,22 @@ func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, func()) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Start a child span on "node 1".
-	child := t1.StartSpan("root.child", tracing.WithParentAndAutoCollection(root))
+	child := t1.StartSpan("root.child", tracing.WithParent(root))
 
 	// Sleep a bit so that everything that comes afterwards has higher timestamps
 	// than the one we just assigned. Otherwise the sorting is not deterministic.
 	time.Sleep(10 * time.Millisecond)
 
 	// Start a forked child span on "node 1".
-	childRemoteChild := t1.StartSpan("root.child.remotechild", tracing.WithParentAndManualCollection(child.Meta()))
+	childDetachedChild := t1.StartSpan("root.child.detached_child", tracing.WithParent(child), tracing.WithDetachedRecording())
 
 	// Start a remote child span on "node 2".
-	childRemoteChild2 := t2.StartSpan("root.child.remotechild2", tracing.WithParentAndManualCollection(child.Meta()))
+	childRemoteChild := t2.StartSpan("root.child.remotechild", tracing.WithRemoteParent(child.Meta()))
 
 	time.Sleep(10 * time.Millisecond)
 
 	// Start another remote child span on "node 2" that we finish.
-	childRemoteChildFinished := t2.StartSpan("root.child.remotechilddone", tracing.WithParentAndManualCollection(child.Meta()))
+	childRemoteChildFinished := t2.StartSpan("root.child.remotechilddone", tracing.WithRemoteParent(child.Meta()))
 	child.ImportRemoteSpans(childRemoteChildFinished.FinishAndGetRecording(tracing.RecordingVerbose))
 
 	// Start another remote child span on "node 2" that we finish. This will have
@@ -740,10 +740,10 @@ func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, func()) {
 	root2 := t2.StartSpan("root2", tracing.WithRecording(tracing.RecordingVerbose))
 
 	// Start a child span on "node 2".
-	child2 := t2.StartSpan("root2.child", tracing.WithParentAndAutoCollection(root2))
+	child2 := t2.StartSpan("root2.child", tracing.WithParent(root2))
 	return root.TraceID(), func() {
-		for _, span := range []*tracing.Span{root, child, childRemoteChild,
-			childRemoteChild2, root2, child2} {
+		for _, span := range []*tracing.Span{root, child, childDetachedChild,
+			childRemoteChild, root2, child2} {
 			span.Finish()
 		}
 	}
@@ -766,21 +766,20 @@ func TestClusterInflightTracesVirtualTable(t *testing.T) {
 	traceID, cleanup := setupTraces(node1Tracer, node2Tracer)
 	defer cleanup()
 
+	// The cluster_inflight_traces table is magic and only returns results when
+	// the query contains an index constraint.
+
 	t.Run("no-index-constraint", func(t *testing.T) {
 		sqlDB.CheckQueryResults(t, `SELECT * from crdb_internal.cluster_inflight_traces`, [][]string{})
 	})
 
 	t.Run("with-index-constraint", func(t *testing.T) {
 		// We expect there to be 3 tracing.Recordings rooted at
-		// root, root.child.remotechild, root.child.remotechild2.
+		// root and root.child.remotechild.
 		expectedRows := []struct {
 			traceID int
 			nodeID  int
 		}{
-			{
-				traceID: int(traceID),
-				nodeID:  1,
-			},
 			{
 				traceID: int(traceID),
 				nodeID:  1,
@@ -799,8 +798,8 @@ func TestClusterInflightTracesVirtualTable(t *testing.T) {
 			require.NoError(t, rows.Scan(&traceID, &nodeID, &traceStr, &jaegarJSON))
 			require.Less(t, rowIdx, len(expectedRows))
 			expected := expectedRows[rowIdx]
-			require.Equal(t, expected.nodeID, nodeID)
 			require.Equal(t, expected.traceID, traceID)
+			require.Equal(t, expected.nodeID, nodeID)
 			require.NotEmpty(t, traceStr)
 			require.NotEmpty(t, jaegarJSON)
 			rowIdx++
