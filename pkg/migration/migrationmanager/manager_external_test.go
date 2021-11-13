@@ -161,15 +161,13 @@ RETURNING id;`).Scan(&secondID))
 	}()
 
 	testutils.SucceedsSoon(t, func() error {
-		// TODO(yuzefovich): this check is quite unfortunate since it relies on
-		// the assumption that all recordings from the child spans are imported
-		// into the tracer. However, this is not the case for the DistSQL
-		// processors where child spans are created with
-		// WithParentAndManualCollection option which requires explicitly
-		// importing the recordings from the children. This only happens when
-		// the execution flow is drained which cannot happen until we close
-		// the 'unblock' channel, and this we cannot do until we see the
-		// expected message in the trace.
+		// TODO(yuzefovich): this check is quite unfortunate since it relies on the
+		// assumption that all recordings from the child spans are imported into the
+		// tracer. However, this is not the case for the DistSQL processors whose
+		// recordings require explicit importing. This only happens when the
+		// execution flow is drained which cannot happen until we close the
+		// 'unblock' channel, and this we cannot do until we see the expected
+		// message in the trace.
 		//
 		// At the moment it works in a very fragile manner (by making sure that
 		// no processors actually create their own spans). Instead, a different

@@ -1816,7 +1816,7 @@ func (p *payloadsForSpanGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	// managing the iterator's position needs to start at -1 instead of 0.
 	p.payloadIndex = -1
 
-	rec := p.span.GetRecording(tracing.RecordingStructured)
+	rec := p.span.GetFullRecording(tracing.RecordingStructured)
 	if rec == nil {
 		// No structured records.
 		return nil
