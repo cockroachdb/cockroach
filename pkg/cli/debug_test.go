@@ -13,6 +13,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func createStore(t *testing.T, path string) {
@@ -452,4 +454,74 @@ func TestParsePositiveDuration(t *testing.T) {
 	if err == nil {
 		t.Errorf("Expected to fail parsing negative duration -5m")
 	}
+}
+
+func TestSendKVBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This sets the key "foo" to the value "bar", and reads back the result.
+	reqJSON := `
+	{"requests": [
+		{"put": {
+			"header": {"key": "Zm9v"},
+			"value": {"raw_bytes": "DMEB5ANiYXI="}
+		}},
+		{"get": {
+			"header": {"key": "Zm9v"}
+		}}
+	]}`
+
+	// This is the expected response. We zero out any HLC timestamps before comparing.
+	respJSON := `
+	{
+		"header": {
+			"Timestamp": {},
+			"now": {}
+		},
+		"responses": [
+			{"put": {
+				"header": {}
+			}},
+			{"get": {
+				"header": {"numKeys": "1", "numBytes": "8"},
+				"value": {"rawBytes": "DMEB5ANiYXI=", "timestamp": {}}
+			}}
+		]
+	}`
+
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
+
+	cleanOutput := func(output string) string {
+		// Remove first line containing the input command.
+		output = strings.SplitN(output, "\n", 2)[1]
+		// Zero out all HLC timestamp objects.
+		output = regexp.MustCompile(`(?s)\{\s*"wallTime":.*?\}`).ReplaceAllString(output, "{}")
+		return output
+	}
+
+	// Input from a file should work and return the expected BatchResponse.
+	reqPath := filepath.Join(t.TempDir(), "batch.json")
+	require.NoError(t, ioutil.WriteFile(reqPath, []byte(reqJSON), 0644))
+	output, err := c.RunWithCapture("debug send-kv-batch " + reqPath)
+	require.NoError(t, err)
+	require.JSONEq(t, respJSON, cleanOutput(output))
+
+	// Insecure connection should error.
+	output, err = c.RunWithCapture("debug send-kv-batch --insecure " + reqPath)
+	require.NoError(t, err)
+	require.Contains(t, output, "ERROR: failed to connect")
+
+	// Invalid JSON should error.
+	require.NoError(t, ioutil.WriteFile(reqPath, []byte("{invalid"), 0644))
+	output, err = c.RunWithCapture("debug send-kv-batch " + reqPath)
+	require.NoError(t, err)
+	require.Contains(t, output, "ERROR: invalid JSON")
+
+	// Unknown JSON field should error
+	require.NoError(t, ioutil.WriteFile(reqPath, []byte(`{"unknown": null}`), 0644))
+	output, err = c.RunWithCapture("debug send-kv-batch " + reqPath)
+	require.NoError(t, err)
+	require.Contains(t, output, "ERROR: invalid JSON")
 }

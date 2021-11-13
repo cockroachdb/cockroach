@@ -58,6 +58,7 @@ proto_library(
     srcs = [
         "cluster_events.proto",
         "ddl_events.proto",
+        "debug_events.proto",
         "events.proto",
         "health_events.proto",
         "job_events.proto",
