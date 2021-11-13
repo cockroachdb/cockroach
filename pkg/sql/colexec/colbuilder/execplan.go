@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
@@ -883,9 +882,6 @@ func NewColOperator(
 					spillingQueueMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(
 						ctx, flowCtx, spillingQueueMemMonitorName, spec.ProcessorID,
 					)
-					spillingQueueCfg := args.DiskQueueCfg
-					spillingQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
-					spillingQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
 					newAggArgs.Allocator = colmem.NewAllocator(ctx, hashAggregatorMemAccount, factory)
 					newAggArgs.MemAccount = hashAggregatorMemAccount
 					inMemoryHashAggregator := colexec.NewHashAggregator(
@@ -894,7 +890,7 @@ func NewColOperator(
 							UnlimitedAllocator: colmem.NewAllocator(ctx, spillingQueueMemAccount, factory),
 							Types:              inputTypes,
 							MemoryLimit:        totalMemLimit / 2,
-							DiskQueueCfg:       spillingQueueCfg,
+							DiskQueueCfg:       args.DiskQueueCfg,
 							FDSemaphore:        args.FDSemaphore,
 							DiskAcc:            args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, spillingQueueMemMonitorName, spec.ProcessorID),
 						},

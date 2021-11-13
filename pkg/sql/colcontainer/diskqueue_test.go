@@ -44,7 +44,7 @@ func TestDiskQueue(t *testing.T) {
 		for _, bufferSizeBytes := range []int{0, 16<<10 + rng.Intn(1<<20) /* 16 KiB up to 1 MiB */} {
 			for _, maxFileSizeBytes := range []int{10 << 10 /* 10 KiB */, 1<<20 + rng.Intn(64<<20) /* 1 MiB up to 64 MiB */} {
 				alwaysCompress := rng.Float64() < 0.5
-				diskQueueCacheMode := colcontainer.DiskQueueCacheModeDefault
+				diskQueueCacheMode := colcontainer.DiskQueueCacheModeIntertwinedCalls
 				// testReuseCache will test the reuse cache modes.
 				testReuseCache := rng.Float64() < 0.5
 				dequeuedProbabilityBeforeAllEnqueuesAreDone := 0.5
@@ -79,8 +79,7 @@ func TestDiskQueue(t *testing.T) {
 					op.Init(ctx)
 					typs := op.Typs()
 
-					queueCfg.CacheMode = diskQueueCacheMode
-					queueCfg.SetDefaultBufferSizeBytesForCacheMode()
+					queueCfg.SetCacheMode(diskQueueCacheMode)
 					if !rewindable {
 						if !testReuseCache {
 							queueCfg.BufferSizeBytes = bufferSizeBytes
