@@ -93,10 +93,10 @@ Create a ballast file to fill the store directory up to a given amount
 	RunE: runDebugBallast,
 }
 
-// PopulateRocksDBConfigHook is a callback set by CCL code.
-// It populates any needed fields in the RocksDBConfig.
+// PopulateStorageConfigHook is a callback set by CCL code.
+// It populates any needed fields in the StorageConfig.
 // It must do nothing in OSS code.
-var PopulateRocksDBConfigHook func(*base.StorageConfig) error
+var PopulateStorageConfigHook func(*base.StorageConfig) error
 
 func parsePositiveInt(arg string) (int64, error) {
 	i, err := strconv.ParseInt(arg, 10, 64)
@@ -145,7 +145,7 @@ func (opts OpenEngineOptions) configOptions() []storage.ConfigOption {
 	return cfgOpts
 }
 
-// OpenExistingStore opens the rocksdb engine rooted at 'dir'.
+// OpenExistingStore opens the Pebble engine rooted at 'dir'.
 // If 'readOnly' is true, opens the store in read-only mode.
 func OpenExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (storage.Engine, error) {
 	return OpenEngine(dir, stopper, OpenEngineOptions{ReadOnly: readOnly, MustExist: true})
@@ -163,7 +163,7 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (stor
 		storage.MaxOpenFiles(int(maxOpenFiles)),
 		storage.CacheSize(server.DefaultCacheSize),
 		storage.Settings(serverCfg.Settings),
-		storage.Hook(PopulateRocksDBConfigHook),
+		storage.Hook(PopulateStorageConfigHook),
 		storage.CombineOptions(opts.configOptions()...))
 	if err != nil {
 		return nil, err
@@ -1501,10 +1501,10 @@ func runDebugIntentCount(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// DebugCmdsForRocksDB lists debug commands that access rocksdb through the engine
+// DebugCmdsForPebble lists debug commands that access Pebble through the engine
 // and need encryption flags (injected by CCL code).
-// Note: do NOT include commands that just call rocksdb code without setting up an engine.
-var DebugCmdsForRocksDB = []*cobra.Command{
+// Note: do NOT include commands that just call Pebble code without setting up an engine.
+var DebugCmdsForPebble = []*cobra.Command{
 	debugCheckStoreCmd,
 	debugCompactCmd,
 	debugGCCmd,
@@ -1517,7 +1517,7 @@ var DebugCmdsForRocksDB = []*cobra.Command{
 }
 
 // All other debug commands go here.
-var debugCmds = append(DebugCmdsForRocksDB,
+var debugCmds = append(DebugCmdsForPebble,
 	debugBallastCmd,
 	debugCheckLogConfigCmd,
 	debugDecodeKeyCmd,
@@ -1597,7 +1597,7 @@ func init() {
 		return lockValueFormatter{value: value}
 	}
 
-	// To be able to read Cockroach-written RocksDB manifests/SSTables, comparator
+	// To be able to read Cockroach-written Pebble manifests/SSTables, comparator
 	// and merger functions must be specified to pebble that match the ones used
 	// to write those files.
 	pebbleTool := tool.New(tool.Mergers(storage.MVCCMerger),
@@ -1690,8 +1690,8 @@ func pebbleCryptoInitializer() error {
 		Dir:      serverCfg.Stores.Specs[0].Path,
 	}
 
-	if PopulateRocksDBConfigHook != nil {
-		if err := PopulateRocksDBConfigHook(&storageConfig); err != nil {
+	if PopulateStorageConfigHook != nil {
+		if err := PopulateStorageConfigHook(&storageConfig); err != nil {
 			return err
 		}
 	}
