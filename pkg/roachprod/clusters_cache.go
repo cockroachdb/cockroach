@@ -118,8 +118,6 @@ func LoadClusters() error {
 		return err
 	}
 
-	debugDir := os.ExpandEnv(config.DefaultDebugDir)
-
 	for _, name := range clusterNames {
 		c, err := loadCluster(name)
 		if err != nil {
@@ -134,8 +132,7 @@ func LoadClusters() error {
 		}
 
 		sc := &install.SyncedCluster{
-			Cluster:  *c,
-			DebugDir: debugDir,
+			Cluster: *c,
 		}
 
 		for _, vm := range c.VMs {

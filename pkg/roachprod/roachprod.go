@@ -163,6 +163,7 @@ Available clusters:
 
 	c.Prepare(clusterOpts)
 
+	c.DebugDir = os.ExpandEnv(config.DefaultDebugDir)
 	nodes, err := install.ListNodes(nodeNames, len(c.VMs))
 	if err != nil {
 		return nil, err
