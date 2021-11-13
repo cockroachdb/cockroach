@@ -152,9 +152,9 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 				cmd.ctx, cmd.sp = d.r.AmbientContext.Tracer.StartSpanCtx(
 					ctx,
 					opName,
-					// NB: we are lying here - we are not actually going to propagate
-					// the recording towards the root. That seems ok.
-					tracing.WithParentAndManualCollection(spanMeta),
+					// NB: Nobody is collecting the recording of this span; we have no
+					// mechanism for it.
+					tracing.WithRemoteParent(spanMeta),
 					tracing.WithFollowsFrom(),
 				)
 			}

@@ -30,21 +30,20 @@ func TestTracingServiceGetSpanRecordings(t *testing.T) {
 	setupTraces := func() (tracingpb.TraceID, func()) {
 		// Start a root span.
 		root1 := tracer1.StartSpan("root1", tracing.WithRecording(tracing.RecordingVerbose))
-
-		child1 := tracer1.StartSpan("root1.child", tracing.WithParentAndAutoCollection(root1))
-
-		time.Sleep(10 * time.Millisecond)
-
+		child1 := tracer1.StartSpan("root1.child", tracing.WithParent(root1))
+		child2 := tracer1.StartSpan("root1.child.detached", tracing.WithParent(child1), tracing.WithDetachedRecording())
 		// Create a span that will be added to the tracers' active span map, but
 		// will share the same traceID as root.
-		fork1 := tracer1.StartSpan("fork1", tracing.WithParentAndManualCollection(root1.Meta()))
+		child3 := tracer1.StartSpan("root1.remote_child", tracing.WithRemoteParent(child2.Meta()))
+
+		time.Sleep(10 * time.Millisecond)
 
 		// Start span with different trace ID.
 		root2 := tracer1.StartSpan("root2", tracing.WithRecording(tracing.RecordingVerbose))
 		root2.Record("root2")
 
 		return root1.TraceID(), func() {
-			for _, span := range []*tracing.Span{root1, child1, fork1, root2} {
+			for _, span := range []*tracing.Span{root1, child1, child2, child3, root2} {
 				span.Finish()
 			}
 		}
@@ -71,9 +70,11 @@ func TestTracingServiceGetSpanRecordings(t *testing.T) {
 				tags: _unfinished=1 _verbose=1
 				span: root1.child
 					tags: _unfinished=1 _verbose=1
+					span: root1.child.detached
+						tags: _unfinished=1 _verbose=1
 `))
 	require.NoError(t, tracing.CheckRecordedSpans(resp.Recordings[1].RecordedSpans, `
-			span: fork1
+			span: root1.remote_child
 				tags: _unfinished=1 _verbose=1
 `))
 }

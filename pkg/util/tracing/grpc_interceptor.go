@@ -118,7 +118,7 @@ func ServerInterceptor(tracer *Tracer) grpc.UnaryServerInterceptor {
 		ctx, serverSpan := tracer.StartSpanCtx(
 			ctx,
 			info.FullMethod,
-			WithParentAndManualCollection(spanMeta),
+			WithRemoteParent(spanMeta),
 			WithServerSpanKind,
 		)
 		defer serverSpan.Finish()
@@ -161,7 +161,7 @@ func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 		ctx, serverSpan := tracer.StartSpanCtx(
 			ss.Context(),
 			info.FullMethod,
-			WithParentAndManualCollection(spanMeta),
+			WithRemoteParent(spanMeta),
 			WithServerSpanKind,
 		)
 		defer serverSpan.Finish()
@@ -243,7 +243,7 @@ func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterce
 		}
 		clientSpan := tracer.StartSpan(
 			method,
-			WithParentAndAutoCollection(parent),
+			WithParent(parent),
 			WithClientSpanKind,
 		)
 		init(clientSpan)
@@ -292,7 +292,7 @@ func StreamClientInterceptor(tracer *Tracer, init func(*Span)) grpc.StreamClient
 
 		clientSpan := tracer.StartSpan(
 			method,
-			WithParentAndAutoCollection(parent),
+			WithParent(parent),
 			WithClientSpanKind,
 		)
 		init(clientSpan)
