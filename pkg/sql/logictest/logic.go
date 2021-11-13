@@ -111,6 +111,11 @@ import (
 // of the expected output. A test can also check for expected column
 // names for query results, or expected errors.
 //
+//
+// ###########################################
+//           TEST CONFIGURATION DIRECTIVES
+// ###########################################
+//
 // Logic tests can start with a directive as follows:
 //
 //   # LogicTest: local fakedist
@@ -142,6 +147,29 @@ import (
 // There is a special blocklist directive '!metamorphic' that skips the whole
 // test when TAGS=metamorphic is specified for the logic test invocation.
 // NOTE: metamorphic directive takes precedence over all other directives.
+//
+//
+// ###########################################
+//           CLUSTER OPTION DIRECTIVES
+// ###########################################
+//
+// Besides test configuration directives, test files can also contain cluster
+// option directives around the beginning of the file (these directive can
+// before or appear after the configuration ones). These directives affect the
+// settings of the cluster created for the test, across all the configurations
+// that the test will run under.
+//
+// The directives line looks like:
+// # cluster-opt: opt1 opt2
+//
+// The options are:
+// - enable-span-config: If specified, the span configs infrastructure will be
+//   enabled. This is equivalent to setting COCKROACH_EXPERIMENTAL_SPAN_CONFIGS.
+//
+//
+// ###########################################
+//           LogicTest language
+// ###########################################
 //
 // The Test-Script language is extended here for use with CockroachDB. The
 // supported directives are:
@@ -461,9 +489,6 @@ type testClusterConfig struct {
 	// If true, a sql tenant server will be started and pointed at a node in the
 	// cluster. Connections on behalf of the logic test will go to that tenant.
 	useTenant bool
-	// If set, the span configs infrastructure will be enabled. This is
-	// equivalent to setting COCKROACH_EXPERIMENTAL_SPAN_CONFIGS.
-	enableSpanConfigs bool
 	// isCCLConfig should be true for any config that can only be run with a CCL
 	// binary.
 	isCCLConfig bool
@@ -728,11 +753,6 @@ var logicTestConfigs = []testClusterConfig{
 		overrideAutoStats: "false",
 		localities:        multiregion9node3region3azsLocalities,
 		overrideVectorize: "off",
-	},
-	{
-		name:              "experimental-span-configs",
-		numNodes:          1,
-		enableSpanConfigs: true,
 	},
 }
 
@@ -1346,7 +1366,7 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 // server args are configured. That is, either during setup() when creating the
 // initial cluster to be used in a test, or when creating additional test
 // clusters, after logicTest.setup() has been called.
-func (t *logicTest) newCluster(serverArgs TestServerArgs) {
+func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
 	// it installs detects a transaction that doesn't have
 	// modifiedSystemConfigSpan set even though it should, for
@@ -1396,9 +1416,6 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 	}
 
 	cfg := t.cfg
-	if cfg.enableSpanConfigs {
-		params.ServerArgs.EnableSpanConfigs = true
-	}
 	distSQLKnobs := &execinfra.TestingKnobs{
 		MetadataTestLevel: execinfra.Off,
 	}
@@ -1420,6 +1437,9 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
 		}
 		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade = 1
+	}
+	for _, opt := range opts {
+		opt.apply(&params.ServerArgs)
 	}
 
 	paramsPerNode := map[int]base.TestServerArgs{}
@@ -1658,10 +1678,10 @@ func (t *logicTest) shutdownCluster() {
 }
 
 // setup creates the initial cluster for the logic test and populates the
-// relevant fields on logicTest. It is expected to be called only once, and
-// before processing any test files - unless a mock logicTest is created (see
-// parallelTest.processTestFile).
-func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
+// relevant fields on logicTest. It is expected to be called only once (per test
+// file), and before processing any test files - unless a mock logicTest is
+// created (see parallelTest.processTestFile).
+func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs, opts []clusterOpt) {
 	t.cfg = cfg
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
@@ -1669,7 +1689,7 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 	t.sharedIODir = tempExternalIODir
 	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
 
-	t.newCluster(serverArgs)
+	t.newCluster(serverArgs, opts)
 
 	// Only create the test database on the initial cluster, since cluster restore
 	// expects an empty cluster.
@@ -1823,6 +1843,69 @@ func readTestFileConfigs(
 	}
 	// No directive found, return the default config.
 	return defaults, false
+}
+
+// clusterOpt is implemented by options for configuring the test cluster under
+// which a test will run.
+type clusterOpt interface {
+	apply(args *base.TestServerArgs)
+}
+
+// clusterOptSpanConfigs corresponds to the enable-span-configs directive.
+type clusterOptSpanConfigs struct{}
+
+var _ clusterOpt = clusterOptSpanConfigs{}
+
+// apply implements the clusterOpt interface.
+func (c clusterOptSpanConfigs) apply(args *base.TestServerArgs) {
+	args.EnableSpanConfigs = true
+}
+
+// readClusterOptions looks around the beginning of the file for a line looking like:
+// # cluster-opt: opt1 opt2 ...
+// and parses that line into a set of clusterOpts that need to be applied to the
+// TestServerArgs before the cluster is started for the respective test file.
+func readClusterOptions(t *testing.T, path string) []clusterOpt {
+	file, err := os.Open(path)
+	require.NoError(t, err)
+	defer file.Close()
+
+	var res []clusterOpt
+
+	beginningOfFile := true
+	directiveFound := false
+
+	s := newLineScanner(file)
+	for s.Scan() {
+		fields := strings.Fields(s.Text())
+		if len(fields) == 0 {
+			continue
+		}
+		cmd := fields[0]
+		if !strings.HasPrefix(cmd, "#") {
+			// Further directives are not allowed.
+			beginningOfFile = false
+		}
+		// Cluster config directive lines are of the form:
+		// # cluster-opt: opt1 opt2 ...
+		if len(fields) > 1 && cmd == "#" && fields[1] == "cluster-opt:" {
+			require.True(t, beginningOfFile, "cluster-opt directive needs to be at the beginning of file")
+			require.False(t, directiveFound, "only one cluster-opt directive allowed per file; second one found: %s", s.Text())
+			directiveFound = true
+			if len(fields) == 2 {
+				t.Fatalf("%s: empty LogicTest directive", path)
+			}
+			for _, opt := range fields[2:] {
+				switch opt {
+				case "enable-span-configs":
+					res = append(res, clusterOptSpanConfigs{})
+				default:
+					t.Fatalf("unrecognized cluster option: %s", opt)
+				}
+			}
+		}
+	}
+	return res
 }
 
 type subtestDetails struct {
@@ -3402,7 +3485,7 @@ func RunLogicTestWithDefaultConfig(
 						defer lt.printErrorSummary()
 					}
 					serverArgs.forceProductionBatchSizes = onlyNonMetamorphic
-					lt.setup(cfg, serverArgs)
+					lt.setup(cfg, serverArgs, readClusterOptions(t, path))
 					lt.runFile(path, cfg)
 
 					progress.Lock()
