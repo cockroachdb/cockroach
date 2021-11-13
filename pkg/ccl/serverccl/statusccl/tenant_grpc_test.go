@@ -46,13 +46,14 @@ func TestTenantGRPCServices(t *testing.T) {
 	server := testCluster.Server(0)
 
 	tenantID := serverutils.TestTenantID()
-	tenant, connTenant := serverutils.StartTenant(t, server, base.TestTenantArgs{
-		TenantID: tenantID,
-		TestingKnobs: base.TestingKnobs{
-			SQLStatsKnobs: &sqlstats.TestingKnobs{
-				AOSTClause: "AS OF SYSTEM TIME '-1us'",
-			},
+	testingKnobs := base.TestingKnobs{
+		SQLStatsKnobs: &sqlstats.TestingKnobs{
+			AOSTClause: "AS OF SYSTEM TIME '-1us'",
 		},
+	}
+	tenant, connTenant := serverutils.StartTenant(t, server, base.TestTenantArgs{
+		TenantID:     tenantID,
+		TestingKnobs: testingKnobs,
 	})
 	defer connTenant.Close()
 
@@ -92,8 +93,9 @@ func TestTenantGRPCServices(t *testing.T) {
 
 	log.TestingClearServerIdentifiers()
 	tenant2, connTenant2 := serverutils.StartTenant(t, server, base.TestTenantArgs{
-		TenantID: tenantID,
-		Existing: true,
+		TenantID:     tenantID,
+		Existing:     true,
+		TestingKnobs: testingKnobs,
 	})
 	defer connTenant2.Close()
 
@@ -110,7 +112,8 @@ func TestTenantGRPCServices(t *testing.T) {
 
 	log.TestingClearServerIdentifiers()
 	tenant3, connTenant3 := serverutils.StartTenant(t, server, base.TestTenantArgs{
-		TenantID: roachpb.MakeTenantID(11),
+		TenantID:     roachpb.MakeTenantID(11),
+		TestingKnobs: testingKnobs,
 	})
 	defer connTenant3.Close()
 
