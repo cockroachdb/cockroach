@@ -166,14 +166,6 @@ func (sp *Span) SetVerbose(to bool) {
 	sp.i.SetVerbose(to)
 }
 
-// ResetRecording clears any previously recorded information. This doesn't
-// affect any auxiliary trace sinks such as net/trace or zipkin.
-//
-// TODO(irfansharif): Remove this, it's no longer used.
-func (sp *Span) ResetRecording() {
-	sp.i.ResetRecording()
-}
-
 // RecordingType returns the range's current recording mode.
 func (sp *Span) RecordingType() RecordingType {
 	return sp.i.RecordingType()
