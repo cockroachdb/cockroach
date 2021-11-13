@@ -738,6 +738,83 @@ func TestEvalAddSSTable(t *testing.T) {
 	})
 }
 
+// TestEvalAddSSTableRangefeed tests EvalAddSSTable rangefeed-related
+// behavior.
+func TestEvalAddSSTableRangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testcases := map[string]struct {
+		sst              []mvccKV
+		atReqTS          bool // WriteAtRequestTimestamp
+		asWrites         bool // IngestAsWrites
+		expectDisconnect bool
+		expectLogicalOps []enginepb.MVCCLogicalOp
+	}{
+		"Default does not affect rangefeed": {
+			sst:              []mvccKV{{"a", 1, "a1"}},
+			expectDisconnect: false,
+			expectLogicalOps: nil,
+		},
+		"WriteAtRequestTimestamp disconnects rangefeed": {
+			sst:              []mvccKV{{"a", 1, "a1"}},
+			atReqTS:          true,
+			expectDisconnect: true,
+		},
+		"IngestAsWrites alone does not affect rangefeed": {
+			sst:              []mvccKV{{"a", 1, "a1"}},
+			asWrites:         true,
+			expectDisconnect: false,
+			expectLogicalOps: nil,
+		},
+		"IngestAsWrites and WriteAtRequestTimestamp disconnects rangefeed without logical ops": {
+			sst:              []mvccKV{{"a", 1, "a1"}},
+			asWrites:         true,
+			atReqTS:          true,
+			expectDisconnect: true,
+			expectLogicalOps: nil,
+		},
+	}
+
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettings()
+			ctx := context.Background()
+
+			engine := storage.NewDefaultInMemForTesting()
+			defer engine.Close()
+			opLogger := storage.NewOpLoggerBatch(engine.NewBatch())
+
+			// Build and add SST.
+			sst, start, end := makeSST(t, tc.sst)
+			result, err := batcheval.EvalAddSSTable(ctx, opLogger, batcheval.CommandArgs{
+				EvalCtx: (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext(),
+				Header: roachpb.Header{
+					Timestamp: hlc.Timestamp{WallTime: 10},
+				},
+				Stats: &enginepb.MVCCStats{},
+				Args: &roachpb.AddSSTableRequest{
+					RequestHeader:           roachpb.RequestHeader{Key: start, EndKey: end},
+					Data:                    sst,
+					MVCCStats:               sstStats(t, sst),
+					WriteAtRequestTimestamp: tc.atReqTS,
+					IngestAsWrites:          tc.asWrites,
+				},
+			}, &roachpb.AddSSTableResponse{})
+			require.NoError(t, err)
+
+			if tc.expectDisconnect {
+				require.NotNil(t, result.Replicated.DisconnectRangeFeed)
+				require.Equal(t, roachpb.RangeFeedRetryError_REASON_ADDSSTABLE, result.Replicated.DisconnectRangeFeed.Reason)
+			} else if result.Replicated.AddSSTable != nil {
+				require.Nil(t, result.Replicated.DisconnectRangeFeed)
+			}
+
+			require.Equal(t, tc.expectLogicalOps, opLogger.LogicalOps())
+		})
+	}
+}
+
 // TestDBAddSSTable tests application of an SST to a database, both in-memory
 // and on disk.
 func TestDBAddSSTable(t *testing.T) {

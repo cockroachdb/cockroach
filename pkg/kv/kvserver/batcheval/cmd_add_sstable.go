@@ -216,6 +216,17 @@ func EvalAddSSTable(
 
 	ms.Add(stats)
 
+	// With WriteAtRequestTimestamp, we respect the closed timestamp, so we
+	// disconnect the rangefeed to allow consumers to run a catchup scan covering
+	// the new entries. We don't do this otherwise, since the consumer wouldn't
+	// see any writes below the closed timestamp anyway.
+	var rangeFeedErr *roachpb.RangeFeedRetryError
+	if args.WriteAtRequestTimestamp {
+		rangeFeedErr = &roachpb.RangeFeedRetryError{
+			Reason: roachpb.RangeFeedRetryError_REASON_ADDSSTABLE,
+		}
+	}
+
 	if args.IngestAsWrites {
 		span.RecordStructured(&types.StringValue{Value: fmt.Sprintf("ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(sst))})
 		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(sst))
@@ -242,7 +253,17 @@ func EvalAddSSTable(
 			}
 			sstIter.Next()
 		}
-		return result.Result{}, nil
+		// We could emit logical ops for the rangefeed here. However, that would
+		// require using MVCCful storage.MVCCPut() operations above, which change
+		// the semantics and performance of IngestAsWrites to check for and respect
+		// key conflicts (i.e. don't write below existing keys). Since we want
+		// identical behavior as a regular AddSSTable, including blind writes, we
+		// extend that to disconnecting the rangefeed as well.
+		return result.Result{
+			Replicated: kvserverpb.ReplicatedEvalResult{
+				DisconnectRangeFeed: rangeFeedErr,
+			},
+		}, nil
 	}
 
 	return result.Result{
@@ -251,6 +272,7 @@ func EvalAddSSTable(
 				Data:  sst,
 				CRC32: util.CRC32(sst),
 			},
+			DisconnectRangeFeed: rangeFeedErr,
 		},
 	}, nil
 }

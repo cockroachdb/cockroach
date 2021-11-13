@@ -505,6 +505,8 @@ message RangeFeedRetryError {
     REASON_SLOW_CONSUMER = 5;
     // No leaseholder exists or could be created, so closed timestamps won't be emitted.
     REASON_NO_LEASEHOLDER = 6;
+    // An AddSSTable was applied, so the consumer must run a catchup scan to see changes.
+    REASON_ADDSSTABLE = 7;
   }
   optional Reason reason = 1 [(gogoproto.nullable) = false];
 }

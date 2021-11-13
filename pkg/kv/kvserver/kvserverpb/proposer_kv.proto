@@ -14,6 +14,7 @@ option go_package = "kvserverpb";
 
 import "roachpb/api.proto";
 import "roachpb/data.proto";
+import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
@@ -189,6 +190,17 @@ message ReplicatedEvalResult {
   // application while ensuring correctness in the case where the lease transfer
   // is applied on the new leaseholder through a Raft snapshot.
   kv.kvserver.readsummary.ReadSummary prior_read_summary = 22;
+
+  // disconnect_rangefeed, if set, will disconnect range feeds with the
+  // given retry error.
+  //
+  // FIXME(erikgrinaker): This field should really take a
+  // RangeFeedRetryError.Reason, but errors.proto uses proto2 while this file
+  // uses proto3, and proto2 enums cannot be referenced from proto3.
+  //
+  // This field is added in 22.1, and must only be used for behavior that is
+  // guarded by a 22.1 version gate.
+  cockroach.kv.kvpb.RangeFeedRetryError disconnect_rangefeed = 23 [(gogoproto.customname) = "DisconnectRangeFeed"];
 
   reserved 1, 5, 7, 9, 14, 15, 16, 19, 10001 to 10013;
 }
