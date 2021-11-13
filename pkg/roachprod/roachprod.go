@@ -123,7 +123,7 @@ func verifyClusterName(clusterName, username string) error {
 
 func sortedClusters() []string {
 	var r []string
-	for n := range install.Clusters {
+	for n := range syncedClusters {
 		r = append(r, n)
 	}
 	sort.Strings(r)
@@ -150,18 +150,15 @@ func newCluster(name string, clusterOpts install.ClusterSettings) (*install.Sync
 		}
 	}
 
-	c, ok := install.Clusters[name]
+	metadata, ok := syncedClusters[name]
 	if !ok {
 		err := errors.Newf(`unknown cluster: %s`, name)
-		err = errors.WithHintf(err, `
-Available clusters:
-  %s
-`, strings.Join(sortedClusters(), "\n  "))
+		err = errors.WithHintf(err, "\nAvailable clusters:\n  %s\n", strings.Join(sortedClusters(), "\n  "))
 		err = errors.WithHint(err, `Use "roachprod sync" to update the list of available clusters.`)
 		return nil, err
 	}
 
-	c.Prepare(clusterOpts)
+	c := install.NewSyncedCluster(metadata, clusterOpts)
 
 	c.DebugDir = os.ExpandEnv(config.DefaultDebugDir)
 	nodes, err := install.ListNodes(nodeNames, len(c.VMs))
@@ -207,7 +204,7 @@ func Version() string {
 // alphabetical order.
 func CachedClusters(fn func(clusterName string, numVMs int)) {
 	for _, name := range sortedClusters() {
-		c := install.Clusters[name]
+		c := syncedClusters[name]
 		fn(c.Name, len(c.VMs))
 	}
 }
@@ -491,7 +488,6 @@ func SetupSSH(clusterName string, clusterOpts install.ClusterSettings, username 
 	}
 
 	// Wait for the nodes in the cluster to start.
-	install.Clusters = map[string]*install.SyncedCluster{}
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -967,7 +963,7 @@ func Destroy(
 		func(ctx context.Context, idx int) error {
 			name := clusterNames[idx]
 			if config.IsLocalClusterName(name) {
-				return destroyLocalCluster(name)
+				return destroyLocalCluster(name, clusterOpts)
 			}
 			if cld == nil {
 				var err error
@@ -993,12 +989,11 @@ func destroyCluster(cld *cloud.Cloud, clusterName string) error {
 	return cloud.DestroyCluster(c)
 }
 
-func destroyLocalCluster(clusterName string) error {
-	cluster, ok := install.Clusters[clusterName]
-	if !ok {
+func destroyLocalCluster(clusterName string, clusterOpts install.ClusterSettings) error {
+	if _, ok := syncedClusters[clusterName]; !ok {
 		return fmt.Errorf("cluster %s does not exist", clusterName)
 	}
-	c, err := newCluster(clusterName, cluster.ClusterSettings)
+	c, err := newCluster(clusterName, clusterOpts)
 	if err != nil {
 		return err
 	}
@@ -1074,7 +1069,7 @@ func Create(
 			return newClusterAlreadyExistsError(clusterName)
 		}
 	} else {
-		if _, ok := install.Clusters[clusterName]; ok {
+		if _, ok := syncedClusters[clusterName]; ok {
 			return newClusterAlreadyExistsError(clusterName)
 		}
 
