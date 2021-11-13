@@ -6,6 +6,7 @@
 # Add new .proto files to this list. Order matters. Keep in sync with the `Makefile`.
 EVENTPB_PROTOS = [
     "events.proto",
+    "debug_events.proto",
     "ddl_events.proto",
     "misc_sql_events.proto",
     "privilege_events.proto",
