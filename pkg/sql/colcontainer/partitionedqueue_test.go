@@ -97,7 +97,14 @@ func TestPartitionedDiskQueue(t *testing.T) {
 		batch = testAllocator.NewMemBatchWithMaxCapacity(typs)
 		sem   = &colexecop.TestingSemaphore{}
 	)
-	batch.SetLength(coldata.BatchSize())
+	batchSize := coldata.BatchSize()
+	if batchSize > 1024 {
+		// Use batch size not larger than the default production value (with
+		// larger batch sizes different enqueues below will be written into
+		// separate files).
+		batchSize = 1024
+	}
+	batch.SetLength(batchSize)
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
@@ -164,8 +171,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 
 	// Sort simulates the use of a PartitionedDiskQueue during an external sort.
 	t.Run(fmt.Sprintf("Sort/maxPartitions=%d/numRepartitions=%d", maxPartitions, numRepartitions), func(t *testing.T) {
-		queueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
-		queueCfg.SetDefaultBufferSizeBytesForCacheMode()
+		queueCfg.SetCacheMode(colcontainer.DiskQueueCacheModeReuseCache)
 		// Creating a new testing semaphore will assert that no more than
 		// maxPartitions+1 are created. The +1 is the file descriptor of the
 		// new partition being written to when closedForWrites from maxPartitions
@@ -240,8 +246,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 	})
 
 	t.Run(fmt.Sprintf("HashJoin/maxPartitions=%d/numRepartitions=%d", maxPartitions, numRepartitions), func(t *testing.T) {
-		queueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
-		queueCfg.SetDefaultBufferSizeBytesForCacheMode()
+		queueCfg.SetCacheMode(colcontainer.DiskQueueCacheModeClearAndReuseCache)
 		// Double maxPartitions to get an even number, half for the left input, half
 		// for the right input. We'll consider the even index the left side and the
 		// next partition index the right side.
