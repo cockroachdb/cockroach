@@ -35,10 +35,10 @@ func TestStartSpanAlwaysTrace(t *testing.T) {
 	require.True(t, tr.AlwaysTrace())
 	nilMeta := tr.noopSpan.Meta()
 	require.True(t, nilMeta.Empty())
-	sp := tr.StartSpan("foo", WithParentAndManualCollection(nilMeta))
+	sp := tr.StartSpan("foo", WithRemoteParent(nilMeta))
 	require.False(t, sp.IsVerbose()) // parent was not verbose, so neither is sp
 	require.False(t, sp.IsNoop())
-	sp = tr.StartSpan("foo", WithParentAndAutoCollection(tr.noopSpan))
+	sp = tr.StartSpan("foo", WithParent(tr.noopSpan))
 	require.False(t, sp.IsVerbose()) // parent was not verbose
 	require.False(t, sp.IsNoop())
 }
@@ -55,7 +55,7 @@ func TestTracerRecording(t *testing.T) {
 	// Noop span returns empty recording.
 	require.Equal(t, Recording(nil), noop1.GetRecording(RecordingVerbose))
 
-	noop2 := tr.StartSpan("noop2", WithParentAndManualCollection(noop1.Meta()))
+	noop2 := tr.StartSpan("noop2", WithParent(noop1), WithDetachedRecording())
 	if !noop2.IsNoop() {
 		t.Error("expected noop child Span")
 	}
@@ -91,7 +91,7 @@ func TestTracerRecording(t *testing.T) {
 	s1.SetVerbose(false)
 
 	// Real parent --> real child.
-	real3 := tr.StartSpan("noop3", WithParentAndManualCollection(s1.Meta()))
+	real3 := tr.StartSpan("noop3", WithRemoteParent(s1.Meta()))
 	if real3.IsNoop() {
 		t.Error("expected real child Span")
 	}
@@ -100,7 +100,7 @@ func TestTracerRecording(t *testing.T) {
 	s1.Recordf("x=%d", 1)
 	s1.SetVerbose(true)
 	s1.Recordf("x=%d", 2)
-	s2 := tr.StartSpan("b", WithParentAndAutoCollection(s1))
+	s2 := tr.StartSpan("b", WithParent(s1))
 	if !s2.IsVerbose() {
 		t.Error("recording Span should be verbose")
 	}
@@ -125,7 +125,7 @@ func TestTracerRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s3 := tr.StartSpan("c", WithParentAndAutoCollection(s2))
+	s3 := tr.StartSpan("c", WithParent(s2))
 	s3.Recordf("x=%d", 4)
 	s3.SetTag("tag", attribute.StringValue("val"))
 
@@ -172,7 +172,7 @@ func TestTracerRecording(t *testing.T) {
 func TestStartChildSpan(t *testing.T) {
 	tr := NewTracer()
 	sp1 := tr.StartSpan("parent", WithRecording(RecordingVerbose))
-	sp2 := tr.StartSpan("child", WithParentAndAutoCollection(sp1))
+	sp2 := tr.StartSpan("child", WithParent(sp1))
 	sp2.Finish()
 
 	if err := CheckRecordedSpans(sp1.FinishAndGetRecording(RecordingVerbose), `
@@ -185,7 +185,7 @@ func TestStartChildSpan(t *testing.T) {
 	}
 
 	sp1 = tr.StartSpan("parent", WithRecording(RecordingVerbose))
-	sp2 = tr.StartSpan("child", WithParentAndManualCollection(sp1.Meta()))
+	sp2 = tr.StartSpan("child", WithParent(sp1), WithDetachedRecording())
 	if err := CheckRecordedSpans(sp2.FinishAndGetRecording(RecordingVerbose), `
 		span: child
 			tags: _verbose=1
@@ -200,7 +200,7 @@ func TestStartChildSpan(t *testing.T) {
 	}
 
 	sp1 = tr.StartSpan("parent", WithRecording(RecordingVerbose))
-	sp2 = tr.StartSpan("child", WithParentAndAutoCollection(sp1),
+	sp2 = tr.StartSpan("child", WithParent(sp1),
 		WithLogTags(logtags.SingleTagBuffer("key", "val")))
 	sp2.Finish()
 	if err := CheckRecordedSpans(sp1.FinishAndGetRecording(RecordingVerbose), `
@@ -220,12 +220,12 @@ func TestSterileSpan(t *testing.T) {
 	// Make the span verbose so that we can use its recording below to assert that
 	// there were no children.
 	sp1 := tr.StartSpan("parent", WithSterile(), WithRecording(RecordingVerbose))
-	sp2 := tr.StartSpan("child", WithParentAndAutoCollection(sp1))
+	sp2 := tr.StartSpan("child", WithParent(sp1))
 	require.Zero(t, sp2.i.crdb.parentSpanID)
 
 	require.True(t, sp1.Meta().sterile)
 	require.False(t, sp2.Meta().sterile)
-	sp3 := tr.StartSpan("child", WithParentAndManualCollection(sp1.Meta()))
+	sp3 := tr.StartSpan("child", WithParent(sp1), WithDetachedRecording())
 	require.Zero(t, sp3.i.crdb.parentSpanID)
 
 	sp2.Finish()
@@ -264,7 +264,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	if !wireSpanMeta.Empty() {
 		t.Errorf("expected no-op span meta: %v", wireSpanMeta)
 	}
-	noop2 := tr2.StartSpan("remote op", WithParentAndManualCollection(wireSpanMeta))
+	noop2 := tr2.StartSpan("remote op", WithRemoteParent(wireSpanMeta))
 	if !noop2.IsNoop() {
 		t.Fatalf("expected noop Span: %+v", noop2)
 	}
@@ -283,7 +283,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s2 := tr2.StartSpan("remote op", WithParentAndManualCollection(wireSpanMeta))
+	s2 := tr2.StartSpan("remote op", WithRemoteParent(wireSpanMeta))
 
 	// Compare TraceIDs
 	trace1 := s1.Meta().traceID
@@ -338,7 +338,7 @@ func TestTracer_PropagateNonRecordingRealSpanAcrossRPCBoundaries(t *testing.T) {
 	meta, err := tr2.ExtractMetaFrom(carrier)
 	require.NoError(t, err)
 	require.True(t, spanInclusionFuncForServer(tr2, meta))
-	sp2 := tr2.StartSpan("tr2.child", WithParentAndManualCollection(meta))
+	sp2 := tr2.StartSpan("tr2.child", WithRemoteParent(meta))
 	defer sp2.Finish()
 	require.NotZero(t, sp2.i.crdb.spanID)
 }
@@ -370,7 +370,7 @@ func TestOtelTracer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tr.StartSpan("child", WithParentAndManualCollection(wireSpanMeta))
+	tr.StartSpan("child", WithRemoteParent(wireSpanMeta))
 
 	rs := sr.Started()
 	require.Len(t, rs, 2)
@@ -400,10 +400,10 @@ func TestActiveSpanVisitorErrors(t *testing.T) {
 	root := tr.StartSpan("root", WithForceRealSpan())
 	defer root.Finish()
 
-	child := tr.StartSpan("root.child", WithParentAndAutoCollection(root))
+	child := tr.StartSpan("root.child", WithParent(root))
 	defer child.Finish()
 
-	remoteChild := tr.StartSpan("root.remotechild", WithParentAndManualCollection(child.Meta()))
+	remoteChild := tr.StartSpan("root.remotechild", WithParent(child), WithDetachedRecording())
 	defer remoteChild.Finish()
 
 	var numVisited int
@@ -426,7 +426,7 @@ func getSpanOpsWithFinished(t *testing.T, tr *Tracer) map[string]bool {
 	spanOpsWithFinished := make(map[string]bool)
 
 	require.NoError(t, tr.VisitSpans(func(sp RegistrySpan) error {
-		for _, rec := range sp.GetRecording(RecordingVerbose) {
+		for _, rec := range sp.GetFullRecording(RecordingVerbose) {
 			spanOpsWithFinished[rec.Operation] = rec.Finished
 		}
 		return nil
@@ -443,7 +443,7 @@ func getSortedSpanOps(t *testing.T, tr *Tracer) []string {
 	var spanOps []string
 
 	require.NoError(t, tr.VisitSpans(func(sp RegistrySpan) error {
-		for _, rec := range sp.GetRecording(RecordingVerbose) {
+		for _, rec := range sp.GetFullRecording(RecordingVerbose) {
 			spanOps = append(spanOps, rec.Operation)
 		}
 		return nil
@@ -460,11 +460,11 @@ func TestTracer_VisitSpans(t *testing.T) {
 	tr2 := NewTracer()
 
 	root := tr1.StartSpan("root", WithRecording(RecordingVerbose))
-	child := tr1.StartSpan("root.child", WithParentAndAutoCollection(root))
+	child := tr1.StartSpan("root.child", WithParent(root))
 	require.Len(t, tr1.activeSpansRegistry.mu.m, 1)
 
-	childChild := tr2.StartSpan("root.child.remotechild", WithParentAndManualCollection(child.Meta()))
-	childChildFinished := tr2.StartSpan("root.child.remotechilddone", WithParentAndManualCollection(child.Meta()))
+	childChild := tr2.StartSpan("root.child.remotechild", WithRemoteParent(child.Meta()))
+	childChildFinished := tr2.StartSpan("root.child.remotechilddone", WithRemoteParent(child.Meta()))
 	require.Len(t, tr2.activeSpansRegistry.mu.m, 2)
 
 	child.ImportRemoteSpans(childChildFinished.GetRecording(RecordingVerbose))
@@ -495,11 +495,11 @@ func TestSpanRecordingFinished(t *testing.T) {
 	tr1 := NewTracer()
 	root := tr1.StartSpan("root", WithRecording(RecordingVerbose))
 
-	child := tr1.StartSpan("root.child", WithParentAndAutoCollection(root))
-	childChild := tr1.StartSpan("root.child.child", WithParentAndAutoCollection(child))
+	child := tr1.StartSpan("root.child", WithParent(root))
+	childChild := tr1.StartSpan("root.child.child", WithParent(child))
 
 	tr2 := NewTracer()
-	remoteChildChild := tr2.StartSpan("root.child.remotechild", WithParentAndManualCollection(child.Meta()))
+	remoteChildChild := tr2.StartSpan("root.child.remotechild", WithRemoteParent(child.Meta()))
 	child.ImportRemoteSpans(remoteChildChild.GetRecording(RecordingVerbose))
 	remoteChildChild.Finish()
 
@@ -560,7 +560,7 @@ func TestSpanWithNoopParentIsInActiveSpans(t *testing.T) {
 	tr := NewTracer()
 	noop := tr.StartSpan("noop")
 	require.True(t, noop.IsNoop())
-	root := tr.StartSpan("foo", WithParentAndAutoCollection(noop), WithForceRealSpan())
+	root := tr.StartSpan("foo", WithParent(noop), WithForceRealSpan())
 	require.Len(t, tr.activeSpansRegistry.mu.m, 1)
 	visitor := func(sp RegistrySpan) error {
 		require.Equal(t, root.i.crdb, sp)
@@ -580,7 +580,7 @@ func TestConcurrentChildAndRecording(t *testing.T) {
 			defer wg.Done()
 			sp := tr.StartSpan(
 				"child",
-				WithParentAndAutoCollection(rootSp),      // links sp to rootSp
+				WithParent(rootSp),                       // links sp to rootSp
 				WithSpanKind(oteltrace.SpanKindConsumer)) // causes a tag to be set
 			sp.Finish()
 		}()
@@ -595,8 +595,8 @@ func TestConcurrentChildAndRecording(t *testing.T) {
 func TestFinishedSpanInRecording(t *testing.T) {
 	tr := NewTracer()
 	s1 := tr.StartSpan("a", WithRecording(RecordingVerbose))
-	s2 := tr.StartSpan("b", WithParentAndAutoCollection(s1))
-	s3 := tr.StartSpan("c", WithParentAndAutoCollection(s2))
+	s2 := tr.StartSpan("b", WithParent(s1))
+	s3 := tr.StartSpan("c", WithParent(s2))
 
 	// Check that s2 is included in the recording both before and after it's
 	// finished.
@@ -629,8 +629,8 @@ span: a
 
 	// Now the same thing, but finish s2 first.
 	s1 = tr.StartSpan("a", WithRecording(RecordingVerbose))
-	s2 = tr.StartSpan("b", WithParentAndAutoCollection(s1))
-	tr.StartSpan("c", WithParentAndAutoCollection(s2))
+	s2 = tr.StartSpan("b", WithParent(s1))
+	tr.StartSpan("c", WithParent(s2))
 
 	s2.Finish()
 	require.NoError(t, CheckRecordedSpans(s1.FinishAndGetRecording(RecordingVerbose), `
@@ -651,8 +651,8 @@ func TestRegistryOrphanSpansBecomeRoots(t *testing.T) {
 	// s1 must be recording because, otherwise, the child spans are not linked to
 	// it.
 	s1 := tr.StartSpan("parent", WithRecording(RecordingStructured))
-	s2 := tr.StartSpan("child1", WithParentAndAutoCollection(s1))
-	s3 := tr.StartSpan("child2", WithParentAndAutoCollection(s1))
+	s2 := tr.StartSpan("child1", WithParent(s1))
+	s3 := tr.StartSpan("child2", WithParent(s1))
 	require.Equal(t, []*crdbSpan{s1.i.crdb}, tr.activeSpansRegistry.testingAll())
 	s1.Finish()
 	require.ElementsMatch(t, []*crdbSpan{s2.i.crdb, s3.i.crdb}, tr.activeSpansRegistry.testingAll())
