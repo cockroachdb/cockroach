@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -778,6 +779,57 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		// Check the error.
 		pErr := <-streamErrC
 		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING)
+	})
+	t.Run(roachpb.RangeFeedRetryError_REASON_ADDSSTABLE.String(), func(t *testing.T) {
+		tc, rangeID := setup(t)
+		defer tc.Stopper().Stop(ctx)
+
+		// Establish a rangefeed on the replica we ingest into.
+		stream := newTestStream()
+		streamErrC := make(chan *roachpb.Error, 1)
+		rangefeedSpan := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
+		ts := tc.Servers[0]
+		store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		require.NoError(t, err)
+		go func() {
+			req := roachpb.RangeFeedRequest{
+				Header: roachpb.Header{
+					RangeID: rangeID,
+				},
+				Span: rangefeedSpan,
+			}
+			streamErrC <- store.RangeFeed(&req, stream)
+		}()
+
+		// Wait for the first checkpoint event.
+		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
+
+		// Ingest an SST.
+		sstFile := &storage.MemFile{}
+		writer := storage.MakeBackupSSTWriter(sstFile)
+		defer writer.Close()
+
+		require.NoError(t, writer.PutMVCC(storage.MVCCKey{
+			Key:       roachpb.Key("foo"),
+			Timestamp: hlc.Timestamp{WallTime: 1},
+		}, roachpb.MakeValueFromString("bar").RawBytes))
+		require.NoError(t, writer.Finish())
+		writer.Close()
+
+		req := &roachpb.AddSSTableRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    roachpb.Key("f"),
+				EndKey: roachpb.Key("g"),
+			},
+			Data:                    sstFile.Bytes(),
+			WriteAtRequestTimestamp: true,
+		}
+		_, pErr := kv.SendWrapped(ctx, store.TestSender(), req)
+		require.Nil(t, pErr)
+
+		// Check the error.
+		pErr = <-streamErrC
+		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_ADDSSTABLE)
 	})
 }
 

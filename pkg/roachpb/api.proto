@@ -1617,6 +1617,11 @@ message AddSSTableRequest {
   // request timestamp, even if the request gets pushed. This ensures the writes
   // comply with the timestamp cache and closed timestamp.
   //
+  // This will also cause any running rangefeeds to be disconnected with
+  // RangeFeedRetryError (REASON_ADDSSTABLE), allowing them to run a catchup
+  // scan covering the new entries. This is only done when this parameter is
+  // enabled, since the closed timestamp is otherwise not respected.
+  //
   // Callers should always set this, except in very special circumstances when
   // the timestamp cache and closed timestamp can safely be ignored (e.g.
   // streaming replication into an offline tenant).
