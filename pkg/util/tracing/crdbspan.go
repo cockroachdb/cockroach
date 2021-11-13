@@ -89,9 +89,10 @@ type crdbSpanMu struct {
 		// annotate recordings with the _dropped tag, when applicable.
 		dropped bool
 
-		// openChildren contains the list of local child spans started after this
-		// Span started recording, that haven't been Finish()ed yet. After Finish(),
-		// the respective child moves to finishedChildren.
+		// openChildren contains the list of local child spans that haven't been
+		// Finish()ed yet. When a child is finished, it is removed from
+		// openChildredn and, if this parent is recording at the point, it moves to
+		// finishedChildren.
 		//
 		// The spans are not maintained in a particular order.
 		openChildren []*crdbSpan
@@ -590,12 +591,6 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 func (s *crdbSpan) addChild(child *crdbSpan) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.recordingType() == RecordingOff {
-		// We're not recording; there's nothing to do. The caller also checks the
-		// recording status, but we want to also check it here under the lock
-		// (double-checked locking).
-		return
-	}
 
 	if len(s.mu.recording.openChildren) < maxChildrenPerSpan {
 		s.mu.recording.openChildren = append(s.mu.recording.openChildren, child)

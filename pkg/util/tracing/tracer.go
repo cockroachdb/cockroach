@@ -776,9 +776,7 @@ func (t *Tracer) startSpanGeneric(
 	s := &helper.span
 
 	{
-		// If a parent is specified and the parent is recording, link the newly
-		// created Span to the parent so that the parent will later be able to
-		// collect the child's recording.
+		// If there's a local parent, link the newly created Span to the parent.
 		if opts.Parent != nil && opts.Parent.i.crdb != nil {
 			if opts.Parent.i.crdb.recordingType() != RecordingOff {
 				s.i.crdb.mu.parent = opts.Parent.i.crdb
@@ -789,17 +787,11 @@ func (t *Tracer) startSpanGeneric(
 	}
 
 	// If the span is a local root, put it into the registry of active local root
-	// spans. Span.Finish will take care of removing it.
+	// spans. Span.Finish will take care of removing it. Non-root spans are
+	// indirectly part of the registry through their parent.
 	//
 	// NB: (opts.Parent != nil && opts.Parent.i.crdb == nil) is not possible at
 	// the moment, but let's not rely on that.
-	//
-	// TODO(andrei): We should be adding to the registry also if the span has a
-	// local parent but the parent is not recording, since in that case we haven't
-	// linked the span to the parent above. But I don't want to do that before
-	// optimizing the registry code. For now, not adding the span to the registry
-	// in this case doesn't really matter, since the only cases where we're
-	// creating spans is when the parent is recording.
 	if opts.Parent == nil || opts.Parent.i.crdb == nil {
 		t.activeSpansRegistry.addSpan(s.i.crdb)
 	}
