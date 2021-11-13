@@ -286,15 +286,18 @@ func TestSpanRecordLimit(t *testing.T) {
 	clock := &timeutil.ManualTime{}
 	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{Clock: clock}))
 
-	sp := tr.StartSpan("root", WithRecording(RecordingVerbose))
-	defer sp.Finish()
-
 	msg := func(i int) string { return fmt.Sprintf("msg: %10d", i) }
 
 	// Determine the size of a log record by actually recording once.
-	sp.Recordf("%s", msg(42))
-	logSize := sp.GetRecording(RecordingVerbose)[0].Logs[0].MemorySize()
-	sp.ResetRecording()
+	logSize := func() int {
+		sp := tr.StartSpan("dummy", WithRecording(RecordingVerbose))
+		defer sp.Finish()
+		sp.Recordf("%s", msg(42))
+		return sp.GetRecording(RecordingVerbose)[0].Logs[0].MemorySize()
+	}()
+
+	sp := tr.StartSpan("root", WithRecording(RecordingVerbose))
+	defer sp.Finish()
 
 	numLogs := maxLogBytesPerSpan / logSize
 	const extra = 10
@@ -312,100 +315,6 @@ func TestSpanRecordLimit(t *testing.T) {
 
 	require.Equal(t, first.Msg().StripMarkers(), msg(extra+1))
 	require.Equal(t, last.Msg().StripMarkers(), msg(numLogs+extra))
-}
-
-// testStructuredImpl is a testing implementation of Structured event.
-type testStructuredImpl struct {
-	*types.Int32Value
-}
-
-var _ Structured = &testStructuredImpl{}
-
-func (t *testStructuredImpl) String() string {
-	return fmt.Sprintf("structured=%d", t.Value)
-}
-
-func newTestStructured(i int) *testStructuredImpl {
-	return &testStructuredImpl{
-		&types.Int32Value{Value: int32(i)},
-	}
-}
-
-// TestSpanReset checks that resetting a span clears out existing recordings.
-func TestSpanReset(t *testing.T) {
-	// Logs include the timestamp, and we want to fix them so they're not
-	// variably sized (needed for the test below).
-	clock := &timeutil.ManualTime{}
-	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{Clock: clock}))
-
-	sp := tr.StartSpan("root", WithRecording(RecordingVerbose))
-	defer sp.Finish()
-
-	for i := 1; i <= 10; i++ {
-		if i%2 == 0 {
-			sp.RecordStructured(newTestStructured(i))
-		} else {
-			sp.Recordf("%d", i)
-		}
-	}
-
-	require.NoError(t, CheckRecordedSpans(sp.GetRecording(RecordingVerbose), `
-		span: root
-			tags: _unfinished=1 _verbose=1
-			event: 1
-			event: structured=2
-			event: 3
-			event: structured=4
-			event: 5
-			event: structured=6
-			event: 7
-			event: structured=8
-			event: 9
-			event: structured=10
-		`))
-	require.NoError(t, CheckRecording(sp.GetRecording(RecordingVerbose), `
-		=== operation:root _unfinished:1 _verbose:1
-		event:1
-		event:structured=2
-		event:3
-		event:structured=4
-		event:5
-		event:structured=6
-		event:7
-		event:structured=8
-		event:9
-		event:structured=10
-		structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":2}
-		structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
-		structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":6}
-		structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":8}
-		structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":10}
-	`))
-
-	sp.ResetRecording()
-
-	require.NoError(t, CheckRecordedSpans(sp.GetRecording(RecordingVerbose), `
-		span: root
-			tags: _unfinished=1 _verbose=1
-		`))
-	require.NoError(t, CheckRecording(sp.GetRecording(RecordingVerbose), `
-		=== operation:root _unfinished:1 _verbose:1
-	`))
-
-	msg := func(i int) string { return fmt.Sprintf("msg: %010d", i) }
-	sp.Record(msg(42))
-	logSize := sp.GetRecording(RecordingVerbose)[0].Logs[0].MemorySize()
-	numLogs := maxLogBytesPerSpan / logSize
-	const extra = 10
-
-	for i := 1; i <= numLogs+extra; i++ {
-		sp.Record(msg(i))
-	}
-
-	require.Equal(t, sp.GetRecording(RecordingVerbose)[0].Tags["_dropped"], "1")
-	sp.ResetRecording()
-	_, found := sp.GetRecording(RecordingVerbose)[0].Tags["_dropped"]
-	require.False(t, found)
 }
 
 func TestChildSpanRegisteredWithRecordingParent(t *testing.T) {

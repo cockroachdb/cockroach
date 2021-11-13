@@ -215,22 +215,6 @@ func (s *crdbSpan) enableRecording(recType RecordingType) {
 	s.mu.recording.recordingType.swap(recType)
 }
 
-// resetRecording clears any previously recorded info.
-//
-// NB: This is needed by SQL SessionTracing, who likes to start and stop
-// recording repeatedly on the same Span, and collect the (separate) recordings
-// every time.
-func (s *crdbSpan) resetRecording() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.mu.recording.logs.Reset()
-	s.mu.recording.structured.Reset()
-	s.mu.recording.dropped = false
-	s.mu.recording.openChildren = s.mu.recording.openChildren[:0]
-	s.mu.recording.finishedChildren = s.mu.recording.finishedChildren[:0]
-}
-
 func (s *crdbSpan) disableRecording() {
 	if s.recordingType() == RecordingOff {
 		return
