@@ -177,6 +177,9 @@ func (t *tenantStatusServer) CancelQuery(
 	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(request.QueryID)); err != nil {
 		return nil, err
 	}
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
 
 	response := serverpb.CancelQueryResponse{}
 	distinctErrorMessages := map[string]struct{}{}
@@ -243,6 +246,10 @@ func (t *tenantStatusServer) CancelSession(
 		return nil, err
 	}
 
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
 	response := serverpb.CancelSessionResponse{}
 	distinctErrorMessages := map[string]struct{}{}
 
@@ -299,6 +306,10 @@ func (t *tenantStatusServer) ListContentionEvents(
 		return nil, err
 	}
 
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
 	var response serverpb.ListContentionEventsResponse
 
 	podFn := func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
@@ -348,6 +359,10 @@ func (t *tenantStatusServer) ResetSQLStats(
 
 	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
+	}
+
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
 	}
 
 	response := &serverpb.ResetSQLStatsResponse{}
@@ -658,6 +673,10 @@ func (t *tenantStatusServer) iteratePods(
 func (t *tenantStatusServer) ListDistSQLFlows(
 	ctx context.Context, request *serverpb.ListDistSQLFlowsRequest,
 ) (*serverpb.ListDistSQLFlowsResponse, error) {
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
 	return t.ListLocalDistSQLFlows(ctx, request)
 }
 
@@ -670,6 +689,10 @@ func (t *tenantStatusServer) Profile(
 ) (*serverpb.JSONResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = t.AnnotateCtx(ctx)
+
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
 
 	if request.NodeId != "local" {
 		return nil, status.Errorf(codes.Unimplemented, "profiling arbitrary tenants is unsupported")
@@ -685,6 +708,10 @@ func (t *tenantStatusServer) IndexUsageStatistics(
 
 	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
 		return nil, err
+	}
+
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
 	}
 
 	localReq := &serverpb.IndexUsageStatisticsRequest{
@@ -755,6 +782,10 @@ func (t *tenantStatusServer) ResetIndexUsageStats(
 
 	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
+	}
+
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
 	}
 
 	localReq := &serverpb.ResetIndexUsageStatsRequest{
