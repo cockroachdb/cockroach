@@ -375,6 +375,7 @@ func (c *transientCluster) Start(
 				Stopper:       c.stopper,
 				ForceInsecure: c.demoCtx.Insecure,
 				SSLCertsDir:   c.demoDir,
+				Locality:      c.demoCtx.Localities[i],
 				TestingKnobs: base.TestingKnobs{
 					TenantTestingKnobs: &sql.TenantTestingKnobs{DisableLogTags: true},
 				},
