@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
-// delegateShowRanges implements the SHOW REGIONS statement.
+// delegateShowSurvivalGoal implements the SHOW REGIONS statement.
 func (d *delegator) delegateShowSurvivalGoal(n *tree.ShowSurvivalGoal) (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.SurvivalGoal)
 	dbName := string(n.DatabaseName)
