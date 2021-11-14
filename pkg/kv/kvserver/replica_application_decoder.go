@@ -159,7 +159,7 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 				)
 			}
 		} else {
-			cmd.ctx, cmd.sp = tracing.ForkSpan(ctx, opName)
+			cmd.ctx, cmd.sp = tracing.ChildSpan(ctx, opName)
 		}
 	}
 }
