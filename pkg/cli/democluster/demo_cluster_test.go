@@ -265,6 +265,11 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	// Set up an empty 3-node cluster with tenants on each node.
 	demoCtx.NumNodes = 3
 	demoCtx.Multitenant = true
+	demoCtx.Localities = []roachpb.Locality{
+		{Tiers: []roachpb.Tier{{Key: "prize-winner", Value: "otan"}}},
+		{Tiers: []roachpb.Tier{{Key: "prize-winner", Value: "otan"}}},
+		{Tiers: []roachpb.Tier{{Key: "prize-winner", Value: "otan"}}},
+	}
 
 	security.ResetAssetLoader()
 	certsDir, err := ioutil.TempDir("", "cli-demo-mt-test")
