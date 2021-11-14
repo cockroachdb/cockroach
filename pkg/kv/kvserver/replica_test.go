@@ -8359,7 +8359,6 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	r.mu.Unlock()
 
 	tr := tc.store.cfg.AmbientCtx.Tracer
-	tr.TestingRecordAsyncSpans() // we assert on async span traces in this test
 	opCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 	defer getRecAndFinish()
 
