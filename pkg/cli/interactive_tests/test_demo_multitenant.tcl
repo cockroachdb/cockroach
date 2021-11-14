@@ -20,6 +20,11 @@ eexpect "tenant 3"
 # Ensure db is defaultdb.
 eexpect "defaultdb>"
 
+# Ensure the gateway_region is set.
+send "SELECT gateway_region();\n"
+eexpect "us-east1"
+eexpect "defaultdb>"
+
 interrupt
 eexpect eof
 end_test
