@@ -118,7 +118,10 @@ func EvalAddSSTable(
 	var skippedKVStats enginepb.MVCCStats
 	var err error
 	if args.DisallowShadowing {
-		if skippedKVStats, err = checkForKeyCollisions(ctx, readWriter, mvccStartKey, mvccEndKey, args.Data); err != nil {
+		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+		skippedKVStats, err = checkForKeyCollisions(
+			ctx, readWriter, mvccStartKey, mvccEndKey, args.Data, maxIntents)
+		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
 		}
 	}
@@ -290,6 +293,7 @@ func checkForKeyCollisions(
 	mvccStartKey storage.MVCCKey,
 	mvccEndKey storage.MVCCKey,
 	data []byte,
+	maxIntents int64,
 ) (enginepb.MVCCStats, error) {
 	// We could get a spansetBatch so fetch the underlying db engine as
 	// we need access to the underlying C.DBIterator later, and the
@@ -309,5 +313,5 @@ func checkForKeyCollisions(
 		return emptyMVCCStats, nil
 	}
 
-	return existingDataIter.CheckForKeyCollisions(data, mvccStartKey.Key, mvccEndKey.Key)
+	return existingDataIter.CheckForKeyCollisions(data, mvccStartKey.Key, mvccEndKey.Key, maxIntents)
 }

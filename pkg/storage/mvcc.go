@@ -3808,9 +3808,10 @@ func computeCapacity(path string, maxSizeBytes int64) (roachpb.StoreCapacity, er
 // is not considered a collision and we continue iteration from the next key in
 // the existing data.
 func checkForKeyCollisionsGo(
-	existingIter MVCCIterator, sstData []byte, start, end roachpb.Key,
+	existingIter MVCCIterator, sstData []byte, start, end roachpb.Key, maxIntents int64,
 ) (enginepb.MVCCStats, error) {
 	var skippedKVStats enginepb.MVCCStats
+	var intents []roachpb.Intent
 	sstIter, err := NewMemSSTIterator(sstData, false)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
@@ -3844,20 +3845,17 @@ func checkForKeyCollisionsGo(
 			if len(mvccMeta.RawBytes) > 0 {
 				return enginepb.MVCCStats{}, errors.Errorf("inline values are unsupported when checking for key collisions")
 			} else if mvccMeta.Txn != nil {
-				// Check for a write intent.
-				//
-				// TODO(adityamaru): Currently, we raise a WriteIntentError on
-				// encountering all intents. This is because, we do not expect to
-				// encounter many intents during IMPORT INTO as we lock the key space we
-				// are importing into. Older write intents could however be found in the
-				// target key space, which will require appropriate resolution logic.
-				writeIntentErr := roachpb.WriteIntentError{
-					Intents: []roachpb.Intent{
-						roachpb.MakeIntent(mvccMeta.Txn, existingIter.Key().Key),
-					},
+				// Check for a write intent. We keep looking for additional intents to
+				// return a large batch for intent resolution. The caller will likely
+				// resolve the returned intents and retry the call, which would be
+				// quadratic, so this significantly reduces the overall number of scans.
+				intents = append(intents, roachpb.MakeIntent(mvccMeta.Txn, existingIter.Key().Key))
+				if int64(len(intents)) >= maxIntents {
+					return enginepb.MVCCStats{}, &roachpb.WriteIntentError{Intents: intents}
 				}
-
-				return enginepb.MVCCStats{}, &writeIntentErr
+				existingIter.NextKey()
+				ok, extErr = existingIter.Valid()
+				continue
 			} else {
 				return enginepb.MVCCStats{}, errors.Errorf("intent without transaction")
 			}
@@ -3933,6 +3931,9 @@ func checkForKeyCollisionsGo(
 	}
 	if sstErr != nil {
 		return enginepb.MVCCStats{}, sstErr
+	}
+	if len(intents) > 0 {
+		return enginepb.MVCCStats{}, &roachpb.WriteIntentError{Intents: intents}
 	}
 
 	return skippedKVStats, nil

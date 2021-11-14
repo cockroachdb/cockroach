@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -500,6 +501,9 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 			e := engineImpl.create()
 			defer e.Close()
 
+			st := cluster.MakeTestingClusterSettings()
+			evalCtx := (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext()
+
 			for _, kv := range mvccKVsFromStrs([]strKv{
 				{"a", 2, "aa"},
 				{"b", 1, "bb"},
@@ -555,6 +559,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				sstBytes := getSSTBytes(sstKVs)
 				stats := getStats(roachpb.Key("a"), roachpb.Key("b"), sstBytes)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -582,6 +587,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -611,6 +617,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -638,6 +645,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				sstBytes := getSSTBytes(sstKVs)
 				stats := getStats(roachpb.Key("c"), roachpb.Key("i"), sstBytes)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -670,6 +678,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -698,6 +707,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -727,6 +737,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -744,16 +755,16 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 			}
 
-			// Test key collision when ingesting a key which has a write intent in the
+			// Test key collision when ingesting keys which have write intents in the
 			// existing data.
 			{
 				sstKVs := mvccKVsFromStrs([]strKv{
 					{"f", 2, "ff"},
-					{"q", 4, "qq"},
-					{"t", 3, "ttt"}, // has a write intent in the existing data.
+					{"q", 4, "qq"},  // has a write intent in the existing data
+					{"t", 3, "ttt"}, // has a write intent in the existing data
 				})
 
-				// Add in a write intent.
+				// Add in two write intents.
 				ts := hlc.Timestamp{WallTime: 7}
 				txn := roachpb.MakeTransaction(
 					"test",
@@ -763,17 +774,23 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					base.DefaultMaxClockOffset.Nanoseconds(),
 				)
 				if err := storage.MVCCPut(
+					ctx, e, nil, []byte("q"), ts,
+					roachpb.MakeValueFromBytes([]byte("q")),
+					&txn,
+				); err != nil {
+					t.Fatalf("%+v", err)
+				}
+				if err := storage.MVCCPut(
 					ctx, e, nil, []byte("t"), ts,
 					roachpb.MakeValueFromBytes([]byte("tt")),
 					&txn,
 				); err != nil {
-					if !errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
-						t.Fatalf("%+v", err)
-					}
+					t.Fatalf("%+v", err)
 				}
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -786,7 +803,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 
 				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-				if !testutils.IsError(err, "conflicting intents on \"t") {
+				if !testutils.IsError(err, "conflicting intents on \"q\", \"t\"") {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -812,6 +829,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -841,6 +859,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				sstBytes := getSSTBytes(sstKVs)
 				stats := getStats(roachpb.Key("e"), roachpb.Key("zz"), sstBytes)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -870,6 +889,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -898,6 +918,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -926,6 +947,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				sstBytes := getSSTBytes(sstKVs)
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
@@ -965,6 +987,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				commandStats := enginepb.MVCCStats{}
 
 				cArgs := batcheval.CommandArgs{
+					EvalCtx: evalCtx,
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
 					},
