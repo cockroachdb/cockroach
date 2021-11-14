@@ -65,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -2977,6 +2978,12 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.ranges_no_leases"); err != nil {
 			return nil, nil, err
+		}
+		if !p.ExecCfg().Codec.ForSystemTenant() {
+			return nil, nil, unimplemented.NewWithIssue(
+				72736,
+				"tenant access to crdb_internal.ranges and crdb_internal.ranges_no_leases not yet implemented",
+			)
 		}
 		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 		if err != nil {

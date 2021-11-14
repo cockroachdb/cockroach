@@ -301,10 +301,10 @@ SELECT * FROM crdb_internal.node_inflight_trace_spans WHERE span_id < 0
 ----
 trace_id  parent_span_id  span_id  goroutine_id  finished  start_time  duration  operation
 
-statement error not fully contained in tenant keyspace
+statement error pgcode 0A000 tenant access to crdb_internal.ranges and crdb_internal.ranges_no_leases not yet implemented
 SELECT * FROM crdb_internal.ranges WHERE range_id < 0
 
-statement error not fully contained in tenant keyspace
+statement error pgcode 0A000 tenant access to crdb_internal.ranges and crdb_internal.ranges_no_leases not yet implemented
 SELECT * FROM crdb_internal.ranges_no_leases WHERE range_id < 0
 
 query IT
