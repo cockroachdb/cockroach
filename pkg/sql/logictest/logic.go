@@ -1932,7 +1932,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 		// If subtest has no name, then it is not a subtest, so just run the lines
 		// in the overall test. Note that this can only happen in the first subtest.
 		if len(subtest.name) == 0 {
-			if err := t.processSubtest(subtest, path, config); err != nil {
+			if err := t.processSubtest(subtest, path); err != nil {
 				return err
 			}
 		} else {
@@ -1942,7 +1942,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 				defer func() {
 					t.subtestT = nil
 				}()
-				if err := t.processSubtest(subtest, path, config); err != nil {
+				if err := t.processSubtest(subtest, path); err != nil {
 					t.Error(err)
 				}
 			})
@@ -2016,9 +2016,7 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 	return subtests, nil
 }
 
-func (t *logicTest) processSubtest(
-	subtest subtestDetails, path string, config testClusterConfig,
-) error {
+func (t *logicTest) processSubtest(subtest subtestDetails, path string) error {
 	defer t.traceStop()
 
 	s := newLineScanner(subtest.buffer)
