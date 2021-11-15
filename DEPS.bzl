@@ -6624,10 +6624,10 @@ def go_deps():
         name = "com_github_shirou_gopsutil",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/shirou/gopsutil",
-        sha256 = "eee96000f594b16a472f0ccdfb531736a558b8475da245af8bf9b180d7961090",
-        strip_prefix = "github.com/shirou/gopsutil@v2.20.9+incompatible",
+        sha256 = "1a946c349d77f3c64a6d61fc73e6afa1702e977b1c5805135a1aeaa0c9c34bef",
+        strip_prefix = "github.com/shirou/gopsutil@v3.21.10+incompatible",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/shirou/gopsutil/com_github_shirou_gopsutil-v2.20.9+incompatible.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/shirou/gopsutil/com_github_shirou_gopsutil-v3.21.10+incompatible.zip",
         ],
     )
     go_repository(
@@ -7008,6 +7008,26 @@ def go_deps():
         strip_prefix = "github.com/tinylib/msgp@v1.1.1",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/tinylib/msgp/com_github_tinylib_msgp-v1.1.1.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_tklauser_go_sysconf",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/tklauser/go-sysconf",
+        sha256 = "2233c2cf18d4d37354eb333ec8a2dca63c24a09cfbc3b90cd06a8b3afe70893f",
+        strip_prefix = "github.com/tklauser/go-sysconf@v0.3.9",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/tklauser/go-sysconf/com_github_tklauser_go_sysconf-v0.3.9.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_tklauser_numcpus",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/tklauser/numcpus",
+        sha256 = "a5569abed62bb2d5f5f322f23fe8cae888fe98704442d59ed9e7aabfed423899",
+        strip_prefix = "github.com/tklauser/numcpus@v0.3.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/tklauser/numcpus/com_github_tklauser_numcpus-v0.3.0.zip",
         ],
     )
     go_repository(
