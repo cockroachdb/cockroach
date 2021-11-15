@@ -207,6 +207,7 @@ func (t *innerTxnStats) jsonFields() jsonFields {
 		{"commitLat", (*numericStats)(&t.CommitLat)},
 		{"bytesRead", (*numericStats)(&t.BytesRead)},
 		{"rowsRead", (*numericStats)(&t.RowsRead)},
+		{"rowsWritten", (*numericStats)(&t.RowsWritten)},
 	}
 }
 
@@ -234,6 +235,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"ovhLat", (*numericStats)(&s.OverheadLat)},
 		{"bytesRead", (*numericStats)(&s.BytesRead)},
 		{"rowsRead", (*numericStats)(&s.RowsRead)},
+		{"rowsWritten", (*numericStats)(&s.RowsWritten)},
 		{"nodes", (*int64Array)(&s.Nodes)},
 	}
 }

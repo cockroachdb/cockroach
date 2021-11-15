@@ -170,6 +170,7 @@ func (ex *connExecutor) recordStatementSummary(
 		OverheadLatency: execOverhead,
 		BytesRead:       stats.bytesRead,
 		RowsRead:        stats.rowsRead,
+		RowsWritten:     stats.rowsWritten,
 		Nodes:           getNodesFromPlanner(planner),
 		StatementType:   stmt.AST.StatementType(),
 		Plan:            planner.instrumentation.PlanForStats(ctx),
