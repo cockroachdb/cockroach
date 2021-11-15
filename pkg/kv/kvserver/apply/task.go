@@ -52,7 +52,7 @@ type StateMachine interface {
 	// an untimely crash. This means that applying these side-effects will
 	// typically update the in-memory representation of the state machine
 	// to the same state that it would be in if the process restarted.
-	ApplySideEffects(CheckedCommand) (AppliedCommand, error)
+	ApplySideEffects(context.Context, CheckedCommand) (AppliedCommand, error)
 }
 
 // ErrRemoved can be returned from ApplySideEffects which will stop the task
@@ -67,7 +67,7 @@ var ErrRemoved = errors.New("replica removed")
 type Batch interface {
 	// Stage inserts a Command into the Batch. In doing so, the Command is
 	// checked for rejection and a CheckedCommand is returned.
-	Stage(Command) (CheckedCommand, error)
+	Stage(context.Context, Command) (CheckedCommand, error)
 	// ApplyToStateMachine applies the persistent state transitions staged
 	// in the Batch to the StateMachine, atomically.
 	ApplyToStateMachine(context.Context) error
@@ -225,7 +225,7 @@ func (t *Task) AckCommittedEntriesBeforeApplication(ctx context.Context, maxInde
 	// want to retry the command instead of returning the error to the client.
 	return forEachCheckedCmdIter(ctx, stagedIter, func(cmd CheckedCommand, ctx context.Context) error {
 		if !cmd.Rejected() && cmd.IsLocal() && cmd.CanAckBeforeApplication() {
-			return cmd.AckSuccess(ctx)
+			return cmd.AckSuccess(cmd.Ctx())
 		}
 		return nil
 	})
