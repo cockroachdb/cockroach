@@ -28,24 +28,18 @@ import {
 } from "../sortedtable";
 import { Pagination } from "../pagination";
 import { TableStatistics } from "../tableStatistics";
-import {
-  baseHeadingClasses,
-  statisticsClasses,
-} from "./transactionsPageClasses";
+import { statisticsClasses } from "./transactionsPageClasses";
 import {
   aggregateAcrossNodeIDs,
   generateRegionNode,
   getTrxAppFilterOptions,
   statementFingerprintIdsToText,
-} from "./utils";
-import {
   searchTransactionsData,
   filterTransactions,
   getStatementsByFingerprintIdAndTime,
 } from "./utils";
-import { forIn } from "lodash";
 import Long from "long";
-import { getSearchParams, unique } from "src/util";
+import { getSearchParams, unique, syncHistory } from "src/util";
 import { EmptyTransactionsPlaceholder } from "./emptyTransactionsPlaceholder";
 import { Loading } from "../loading";
 import { PageConfig, PageConfigItem } from "../pageConfig";
@@ -64,6 +58,8 @@ import {
   getLabel,
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
+import ClearStats from "../sqlActivity/clearStats";
+import { commonStyles } from "../common";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
@@ -153,30 +149,17 @@ export class TransactionsPage extends React.Component<
     this.refreshData();
   }
 
-  syncHistory = (params: Record<string, string | undefined>) => {
-    const { history } = this.props;
-    const currentSearchParams = new URLSearchParams(history.location.search);
-
-    forIn(params, (value, key) => {
-      if (!value) {
-        currentSearchParams.delete(key);
-      } else {
-        currentSearchParams.set(key, value);
-      }
-    });
-
-    history.location.search = currentSearchParams.toString();
-    history.replace(history.location);
-  };
-
   onChangeSortSetting = (ss: SortSetting): void => {
     this.setState({
       sortSetting: ss,
     });
-    this.syncHistory({
-      ascending: ss.ascending.toString(),
-      columnTitle: ss.columnTitle,
-    });
+    syncHistory(
+      {
+        ascending: ss.ascending.toString(),
+        columnTitle: ss.columnTitle,
+      },
+      this.props.history,
+    );
   };
 
   onChangePage = (current: number): void => {
@@ -197,17 +180,23 @@ export class TransactionsPage extends React.Component<
 
   onClearSearchField = (): void => {
     this.setState({ search: "" });
-    this.syncHistory({
-      q: undefined,
-    });
+    syncHistory(
+      {
+        q: undefined,
+      },
+      this.props.history,
+    );
   };
 
   onSubmitSearchField = (search: string): void => {
     this.setState({ search });
     this.resetPagination();
-    this.syncHistory({
-      q: search,
-    });
+    syncHistory(
+      {
+        q: search,
+      },
+      this.props.history,
+    );
   };
 
   onSubmitFilters = (filters: Filters): void => {
@@ -218,13 +207,16 @@ export class TransactionsPage extends React.Component<
       },
     });
     this.resetPagination();
-    this.syncHistory({
-      app: filters.app,
-      timeNumber: filters.timeNumber,
-      timeUnit: filters.timeUnit,
-      regions: filters.regions,
-      nodes: filters.nodes,
-    });
+    syncHistory(
+      {
+        app: filters.app,
+        timeNumber: filters.timeNumber,
+        timeUnit: filters.timeUnit,
+        regions: filters.regions,
+        nodes: filters.nodes,
+      },
+      this.props.history,
+    );
   };
 
   onClearFilters = (): void => {
@@ -234,13 +226,16 @@ export class TransactionsPage extends React.Component<
       },
     });
     this.resetPagination();
-    this.syncHistory({
-      app: undefined,
-      timeNumber: undefined,
-      timeUnit: undefined,
-      regions: undefined,
-      nodes: undefined,
-    });
+    syncHistory(
+      {
+        app: undefined,
+        timeNumber: undefined,
+        timeUnit: undefined,
+        regions: undefined,
+        nodes: undefined,
+      },
+      this.props.history,
+    );
   };
 
   handleDetails = (transaction?: TransactionInfo): void => {
@@ -270,10 +265,9 @@ export class TransactionsPage extends React.Component<
     );
   };
 
-  renderTransactionsList() {
+  renderTransactionsList(): React.ReactElement {
     return (
       <div className={cx("table-area")}>
-        <h3 className={baseHeadingClasses.tableName}>Transactions</h3>
         <Loading
           loading={!this.props?.data}
           error={this.props?.error}
@@ -413,6 +407,12 @@ export class TransactionsPage extends React.Component<
                       reset time
                     </button>
                   </PageConfigItem>
+                  <PageConfigItem className={commonStyles("separator")}>
+                    <ClearStats
+                      resetSQLStats={resetSQLStats}
+                      tooltipType="transaction"
+                    />
+                  </PageConfigItem>
                 </PageConfig>
                 <section className={statisticsClasses.tableContainerClass}>
                   <ColumnsSelector
@@ -421,14 +421,11 @@ export class TransactionsPage extends React.Component<
                   />
                   <TableStatistics
                     pagination={pagination}
-                    lastReset={this.lastReset()}
                     search={search}
                     totalCount={transactionsToDisplay.length}
                     arrayItemName="transactions"
-                    tooltipType="transaction"
                     activeFilters={activeFilters}
                     onClearFilters={this.onClearFilters}
-                    resetSQLStats={resetSQLStats}
                   />
                   <TransactionsTable
                     columns={displayColumns}
@@ -457,7 +454,7 @@ export class TransactionsPage extends React.Component<
     );
   }
 
-  renderTransactionDetails() {
+  renderTransactionDetails(): React.ReactElement {
     const { statements } = this.props.data;
     const {
       aggregatedTs,
@@ -490,7 +487,7 @@ export class TransactionsPage extends React.Component<
     );
   }
 
-  render() {
+  render(): React.ReactElement {
     const { statementFingerprintIds } = this.state;
     const renderTxDetailsView = !!statementFingerprintIds;
     return renderTxDetailsView
