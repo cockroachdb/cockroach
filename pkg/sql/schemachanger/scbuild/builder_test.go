@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -138,7 +139,7 @@ func run(
 			require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
 
 			_, err = scbuild.Build(ctx, deps, scpb.State{}, alter)
-			require.Truef(t, scbuild.HasNotImplemented(err), "expected unimplemented, got %v", err)
+			require.Truef(t, scerrors.HasNotImplemented(err), "expected unimplemented, got %v", err)
 		})
 		return ""
 

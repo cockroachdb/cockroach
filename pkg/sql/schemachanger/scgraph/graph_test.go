@@ -33,7 +33,6 @@ func runRankTestForGraph(
 	state := scpb.State{
 		Nodes: make([]*scpb.Node, 0, len(addNode)),
 	}
-	dummyMetadata := &scpb.TargetMetadata{}
 	for idx := range addNode {
 		if addNode[idx] {
 			state.Nodes = append(state.Nodes, &scpb.Node{
@@ -41,7 +40,7 @@ func runRankTestForGraph(
 					&scpb.Table{
 						TableID: descpb.ID(idx),
 					},
-					dummyMetadata),
+					nil /* metadata */),
 				Status: scpb.Status_ABSENT,
 			})
 		} else {
@@ -50,7 +49,7 @@ func runRankTestForGraph(
 					&scpb.Table{
 						TableID: descpb.ID(idx),
 					},
-					dummyMetadata),
+					nil /* metadata */),
 				Status: scpb.Status_PUBLIC,
 			})
 		}

@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "scerrors",
+    srcs = ["errors.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

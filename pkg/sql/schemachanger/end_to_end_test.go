@@ -111,7 +111,7 @@ func TestSchemaChangerSideEffects(t *testing.T) {
 func execStatementWithTestDeps(
 	ctx context.Context, t *testing.T, deps *sctestdeps.TestState, stmt parser.Statement,
 ) {
-	state, err := scbuild.Build(ctx, deps, scpb.State{} /* initial */, stmt.AST)
+	state, err := scbuild.Build(ctx, deps, scpb.State{}, stmt.AST)
 	require.NoError(t, err, "error in builder")
 
 	var jobID jobspb.JobID
