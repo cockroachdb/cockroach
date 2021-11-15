@@ -232,6 +232,13 @@ func alterColumnTypeGeneral(
 				return colInIndexNotSupportedErr
 			}
 		}
+		if !idx.Primary() {
+			for i := 0; i < idx.NumSecondaryStoredColumns(); i++ {
+				if idx.GetStoredColumnID(i) == col.GetID() {
+					return colInIndexNotSupportedErr
+				}
+			}
+		}
 	}
 
 	// Disallow ALTER COLUMN TYPE general inside an explicit transaction.
