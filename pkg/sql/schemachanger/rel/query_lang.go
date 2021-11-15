@@ -20,8 +20,8 @@ type Clause interface {
 	clause()
 }
 
-// newTriples declares that an attribute of the entity represented by this var
-// should have the provided  value. Note that this introduces the var as an
+// newTriple declares that an attribute of the entity represented by this var
+// should have the provided value. Note that this introduces the var as an
 // entity into the query if it is not already one.
 func newTriple(entity Var, a Attr, value expr) Clause {
 	return &tripleDecl{
@@ -49,14 +49,12 @@ func (v Var) AttrEqVar(a Attr, value Var) Clause {
 	return newTriple(v, a, value)
 }
 
-// Eq return a clause enforcing that the var is the value
-// provided.
+// Eq returns a clause enforcing that the var is the value provided.
 func (v Var) Eq(value interface{}) Clause {
 	return &eqDecl{v, valueExpr{value: value}}
 }
 
-// In return a clause enforcing that the var is one of the value
-// provided.
+// In returns a clause enforcing that the var is one of the value provided.
 func (v Var) In(disjuncts ...interface{}) Clause {
 	return &eqDecl{v, (anyExpr)(disjuncts)}
 }
@@ -78,7 +76,7 @@ func (v Var) Type(valueForTypeOf interface{}, moreValuesForTypeOf ...interface{}
 	return v.AttrIn(Type, types...)
 }
 
-// Entities is a shorthand for defining all the entities as having this
+// Entities is shorthand for defining all the entities as having this
 // variable as their value for this attribute.
 //
 // TODO(ajwerner): Better name.

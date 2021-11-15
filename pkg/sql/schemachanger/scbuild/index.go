@@ -131,7 +131,7 @@ func (b *buildContext) maybeCreateAndAddShardCol(
 			// Replace the primary index
 			oldPrimaryIndex := primaryIndexElemFromDescriptor(desc.GetPrimaryIndex().IndexDesc(), desc)
 			newPrimaryIndex := primaryIndexElemFromDescriptor(desc.GetPrimaryIndex().IndexDesc(), desc)
-			newPrimaryIndex.IndexId = b.nextIndexID(desc)
+			newPrimaryIndex.IndexID = b.nextIndexID(desc)
 			newPrimaryIndex.IndexName = tabledesc.GenerateUniqueName(
 				"new_primary_key",
 				func(name string) bool {
@@ -311,7 +311,7 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 	}
 	// Assign the ID here, since we may have added columns
 	// and made a new primary key above.
-	secondaryIndex.IndexId = b.nextIndexID(table)
+	secondaryIndex.IndexID = b.nextIndexID(table)
 	// Convert partitioning information for the execution
 	// side of things.
 	if n.PartitionByIndex.ContainsPartitions() {
@@ -354,7 +354,7 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 		}
 		partitioning := &scpb.Partitioning{
 			TableID:         table.GetID(),
-			IndexId:         secondaryIndex.IndexId,
+			IndexID:         secondaryIndex.IndexID,
 			Fields:          fields,
 			ListPartitions:  listPartitions,
 			RangePartitions: rangePartitions,
