@@ -138,6 +138,11 @@ type TestServerArgs struct {
 	// If set, the span configs infrastructure will be enabled. This is
 	// equivalent to setting COCKROACH_EXPERIMENTAL_SPAN_CONFIGS.
 	EnableSpanConfigs bool
+
+	// TestServer will automatically start a single secondary tenant on each
+	// node for multi-tenant testing, and default all connections to that
+	// tenant. Use this flag to disable that behavior.
+	DisableDefaultTenant bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
@@ -235,10 +240,6 @@ const (
 type TestTenantArgs struct {
 	TenantID roachpb.TenantID
 
-	// Existing, if true, indicates an existing tenant, rather than a new tenant
-	// to be created by StartTenant.
-	Existing bool
-
 	// Settings allows the caller to control the settings object used for the
 	// tenant cluster.
 	Settings *cluster.Settings
@@ -278,9 +279,6 @@ type TestTenantArgs struct {
 	// automatically open a connection to the server. That's equivalent to running
 	// SET DATABASE=foo, which works even if the database doesn't (yet) exist.
 	UseDatabase string
-
-	// Skip check for tenant existence when running the test.
-	SkipTenantCheck bool
 
 	// Locality is used to initialize the same-named field on the server.Config
 	// struct.

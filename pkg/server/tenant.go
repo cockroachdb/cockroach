@@ -176,7 +176,8 @@ func StartTenant(
 	//
 	// TODO(knz): find a way to share common logging tags between
 	// multiple AmbientContext instances.
-	tenantStatusServer.AmbientContext.AddLogTag("sqli", s.sqlIDContainer)
+	// TODO(ajstorm): Figure out why this is causing problems and re-enable.
+	//	tenantStatusServer.AmbientContext.AddLogTag("sqli", s.sqlIDContainer)
 
 	if err != nil {
 		return nil, "", "", err
