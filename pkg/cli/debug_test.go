@@ -12,6 +12,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
@@ -472,8 +473,60 @@ func TestSendKVBatch(t *testing.T) {
 		}}
 	]}`
 
-	// This is the expected response. We zero out any HLC timestamps before comparing.
-	respJSON := `
+	// Alternative way, starting with a BatchRequest and marshalling it.
+	// This might be the preferable way to arrive at the JSON when dealing
+	// with more complex requests.
+	var ba roachpb.BatchRequest
+	foo := roachpb.Key("foo")
+	ba.Add(roachpb.NewPut(foo, roachpb.MakeValueFromString("bar")))
+	ba.Add(roachpb.NewGet(foo, false /* forUpdate */))
+	b, err := json.Marshal(&ba)
+	require.NoError(t, err)
+	t.Log(string(b))
+
+	// Can't actually unmarshal the JSON back. This isn't good or desired;
+	// this test merely documents this. Ideally this would work; would probably
+	// require some custom JSON marshalling code.
+	var ba2 roachpb.BatchRequest
+	expErr := &json.UnmarshalTypeError{}
+	require.ErrorAs(t, json.Unmarshal(b, &ba2), &expErr)
+	t.Logf("round-trip marshal error: %s", expErr)
+
+	fromJSONPath := filepath.Join(t.TempDir(), "fromjson.json")
+	require.NoError(t, ioutil.WriteFile(fromJSONPath, []byte(reqJSON), 0644))
+	fromProtoPath := filepath.Join(t.TempDir(), "frompb.json")
+	require.NoError(t, ioutil.WriteFile(fromProtoPath, b, 0644))
+
+	t.Run("error-cases", func(t *testing.T) {
+		c := NewCLITest(TestCLIParams{T: t})
+		defer c.Cleanup()
+		// Insecure connection should error.
+		output, err := c.RunWithCapture("debug send-kv-batch --insecure " + fromJSONPath)
+		require.NoError(t, err)
+		require.Contains(t, output, "ERROR: failed to connect")
+
+		// Invalid JSON should error.
+		reqPath := filepath.Join(t.TempDir(), "invalid.json")
+		require.NoError(t, ioutil.WriteFile(reqPath, []byte("{invalid"), 0644))
+		output, err = c.RunWithCapture("debug send-kv-batch " + reqPath)
+		require.NoError(t, err)
+		require.Contains(t, output, "ERROR: invalid JSON")
+
+		// Unknown JSON field should error
+		require.NoError(t, ioutil.WriteFile(reqPath, []byte(`{"unknown": null}`), 0644))
+		output, err = c.RunWithCapture("debug send-kv-batch " + reqPath)
+		require.NoError(t, err)
+		require.Contains(t, output, "ERROR: invalid JSON")
+	})
+
+	testutils.RunTrueAndFalse(t, "fromProto", func(t *testing.T, fromProto bool) {
+		reqPath := fromJSONPath
+		if fromProto {
+			reqPath = fromProtoPath
+		}
+
+		// This is the expected response. We zero out any HLC timestamps before comparing.
+		respJSON := `
 	{
 		"header": {
 			"Timestamp": {},
@@ -490,38 +543,22 @@ func TestSendKVBatch(t *testing.T) {
 		]
 	}`
 
-	c := NewCLITest(TestCLIParams{T: t})
-	defer c.Cleanup()
+		c := NewCLITest(TestCLIParams{T: t})
+		defer c.Cleanup()
 
-	cleanOutput := func(output string) string {
-		// Remove first line containing the input command.
-		output = strings.SplitN(output, "\n", 2)[1]
-		// Zero out all HLC timestamp objects.
-		output = regexp.MustCompile(`(?s)\{\s*"wallTime":.*?\}`).ReplaceAllString(output, "{}")
-		return output
-	}
+		cleanOutput := func(output string) string {
+			// Remove first line containing the input command.
+			output = strings.SplitN(output, "\n", 2)[1]
+			// Zero out all HLC timestamp objects.
+			output = regexp.MustCompile(`(?s)\{\s*"wallTime":.*?\}`).ReplaceAllString(output, "{}")
+			return output
+		}
 
-	// Input from a file should work and return the expected BatchResponse.
-	reqPath := filepath.Join(t.TempDir(), "batch.json")
-	require.NoError(t, ioutil.WriteFile(reqPath, []byte(reqJSON), 0644))
-	output, err := c.RunWithCapture("debug send-kv-batch " + reqPath)
-	require.NoError(t, err)
-	require.JSONEq(t, respJSON, cleanOutput(output))
+		// Input from a file should work and return the expected BatchResponse.
+		require.NoError(t, ioutil.WriteFile(reqPath, []byte(reqJSON), 0644))
+		output, err := c.RunWithCapture("debug send-kv-batch " + reqPath)
+		require.NoError(t, err)
+		require.JSONEq(t, respJSON, cleanOutput(output))
+	})
 
-	// Insecure connection should error.
-	output, err = c.RunWithCapture("debug send-kv-batch --insecure " + reqPath)
-	require.NoError(t, err)
-	require.Contains(t, output, "ERROR: failed to connect")
-
-	// Invalid JSON should error.
-	require.NoError(t, ioutil.WriteFile(reqPath, []byte("{invalid"), 0644))
-	output, err = c.RunWithCapture("debug send-kv-batch " + reqPath)
-	require.NoError(t, err)
-	require.Contains(t, output, "ERROR: invalid JSON")
-
-	// Unknown JSON field should error
-	require.NoError(t, ioutil.WriteFile(reqPath, []byte(`{"unknown": null}`), 0644))
-	output, err = c.RunWithCapture("debug send-kv-batch " + reqPath)
-	require.NoError(t, err)
-	require.Contains(t, output, "ERROR: invalid JSON")
 }
