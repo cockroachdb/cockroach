@@ -1,0 +1,163 @@
+setup
+CREATE TABLE t (k INT PRIMARY KEY, v STRING NOT NULL);
+----
+...
++object {50 29 t} -> 52
+
+test
+CREATE INDEX idx1 ON t (v);
+----
+begin transaction #1
+# begin StatementPhase
+# end StatementPhase
+# begin PreCommitPhase
+## stage 1 in PreCommitPhase: 1 MutationType ops
+upsert descriptor #52
+  ...
+     id: 52
+     modificationTime: {}
+  +  mutations:
+  +  - direction: ADD
+  +    index:
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 2
+  +      keyColumnNames:
+  +      - v
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: idx1
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnIds: []
+  +      storeColumnNames: []
+  +      version: 3
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: t
+     nextColumnId: 3
+     nextFamilyId: 1
+  -  nextIndexId: 2
+  -  nextMutationId: 1
+  +  nextIndexId: 3
+  +  nextMutationId: 2
+     parentId: 50
+     primaryIndex:
+  ...
+       time: {}
+     unexposedParentSchemaId: 29
+  -  version: "1"
+  +  version: "2"
+create job #1: "Schema change job"
+  descriptor IDs: [52]
+upsert descriptor #52
+  ...
+       state: DELETE_ONLY
+     name: t
+  +  newSchemaChangeJobId: "1"
+     nextColumnId: 3
+     nextFamilyId: 1
+  ...
+# end PreCommitPhase
+commit transaction #1
+# begin PostCommitPhase
+begin transaction #2
+## stage 1 in PostCommitPhase: 1 MutationType ops
+upsert descriptor #52
+  ...
+         version: 3
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: DELETE_AND_WRITE_ONLY
+     name: t
+     newSchemaChangeJobId: "1"
+  ...
+       time: {}
+     unexposedParentSchemaId: 29
+  -  version: "2"
+  +  version: "3"
+update progress of schema change job #1
+commit transaction #2
+begin transaction #3
+## stage 2 in PostCommitPhase: 1 BackfillType ops
+update progress of schema change job #1
+commit transaction #3
+begin transaction #4
+## stage 3 in PostCommitPhase: 1 ValidationType ops
+update progress of schema change job #1
+commit transaction #4
+begin transaction #5
+## stage 4 in PostCommitPhase: 1 MutationType ops
+upsert descriptor #52
+  ...
+     formatVersion: 3
+     id: 52
+  +  indexes:
+  +  - createdExplicitly: true
+  +    foreignKey: {}
+  +    geoConfig: {}
+  +    id: 2
+  +    interleave: {}
+  +    keyColumnDirections:
+  +    - ASC
+  +    keyColumnIds:
+  +    - 2
+  +    keyColumnNames:
+  +    - v
+  +    keySuffixColumnIds:
+  +    - 1
+  +    name: idx1
+  +    partitioning: {}
+  +    sharded: {}
+  +    storeColumnIds: []
+  +    storeColumnNames: []
+  +    version: 3
+     modificationTime: {}
+  -  mutations:
+  -  - direction: ADD
+  -    index:
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 2
+  -      keyColumnNames:
+  -      - v
+  -      keySuffixColumnIds:
+  -      - 1
+  -      name: idx1
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnIds: []
+  -      storeColumnNames: []
+  -      version: 3
+  -    mutationId: 1
+  -    state: DELETE_AND_WRITE_ONLY
+     name: t
+     newSchemaChangeJobId: "1"
+  ...
+       time: {}
+     unexposedParentSchemaId: 29
+  -  version: "3"
+  +  version: "4"
+update progress of schema change job #1
+upsert descriptor #52
+  ...
+     modificationTime: {}
+     name: t
+  -  newSchemaChangeJobId: "1"
+     nextColumnId: 3
+     nextFamilyId: 1
+  ...
+commit transaction #5
+# end PostCommitPhase
