@@ -776,35 +776,46 @@ INSERT INTO c VALUES (1,1), (2,2)
 insert c
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:5 => c:1
- │    └── column2:6 => c.p:2
+ │    ├── column1:7 => c:1
+ │    └── column2:8 => c.p:2
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- ├── cost: 12.12
- ├── values
- │    ├── columns: column1:5!null column2:6!null
+ ├── cost: 12.19
+ ├── project
+ │    ├── columns: column1:7!null column2:8!null
  │    ├── cardinality: [2 - 2]
- │    ├── stats: [rows=2, distinct(6)=2, null(6)=0]
- │    ├── cost: 0.03
- │    ├── (1, 1)
- │    └── (2, 2)
+ │    ├── immutable
+ │    ├── stats: [rows=2, distinct(8)=2, null(8)=0]
+ │    ├── cost: 0.1
+ │    ├── values
+ │    │    ├── columns: column1:5!null column2:6!null
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── stats: [rows=2, distinct(6)=2, null(6)=0]
+ │    │    ├── cost: 0.03
+ │    │    ├── (1, 1)
+ │    │    └── (2, 2)
+ │    └── projections
+ │         ├── assignment-cast: INT8 [as=column1:7, outer=(5), immutable]
+ │         │    └── column1:5
+ │         └── assignment-cast: INT8 [as=column2:8, outer=(6), immutable]
+ │              └── column2:6
  └── f-k-checks
       └── f-k-checks-item: c(p) -> p(p)
            └── anti-join (lookup p)
-                ├── columns: p:7!null
-                ├── key columns: [7] = [8]
+                ├── columns: p:9!null
+                ├── key columns: [9] = [10]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 2]
                 ├── stats: [rows=1e-10]
                 ├── cost: 12.08
                 ├── with-scan &1
-                │    ├── columns: p:7!null
+                │    ├── columns: p:9!null
                 │    ├── mapping:
-                │    │    └──  column2:6 => p:7
+                │    │    └──  column2:8 => p:9
                 │    ├── cardinality: [2 - 2]
-                │    ├── stats: [rows=2, distinct(7)=2, null(7)=0]
+                │    ├── stats: [rows=2, distinct(9)=2, null(9)=0]
                 │    └── cost: 0.01
                 └── filters (true)
 
@@ -815,36 +826,47 @@ INSERT INTO c VALUES (1,1), (2,2)
 insert c
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:5 => c:1
- │    └── column2:6 => c.p:2
+ │    ├── column1:7 => c:1
+ │    └── column2:8 => c.p:2
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- ├── cost: 0.06001206
- ├── values
- │    ├── columns: column1:5!null column2:6!null
+ ├── cost: 0.13001206
+ ├── project
+ │    ├── columns: column1:7!null column2:8!null
  │    ├── cardinality: [2 - 2]
- │    ├── stats: [rows=2, distinct(6)=2, null(6)=0]
- │    ├── cost: 0.03
- │    ├── (1, 1)
- │    └── (2, 2)
+ │    ├── immutable
+ │    ├── stats: [rows=2, distinct(8)=2, null(8)=0]
+ │    ├── cost: 0.1
+ │    ├── values
+ │    │    ├── columns: column1:5!null column2:6!null
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── stats: [rows=2, distinct(6)=2, null(6)=0]
+ │    │    ├── cost: 0.03
+ │    │    ├── (1, 1)
+ │    │    └── (2, 2)
+ │    └── projections
+ │         ├── assignment-cast: INT8 [as=column1:7, outer=(5), immutable]
+ │         │    └── column1:5
+ │         └── assignment-cast: INT8 [as=column2:8, outer=(6), immutable]
+ │              └── column2:6
  └── f-k-checks
       └── f-k-checks-item: c(p) -> p(p)
            └── anti-join (lookup p)
-                ├── columns: p:7!null
+                ├── columns: p:9!null
                 ├── flags: prefer lookup join (into right side)
-                ├── key columns: [7] = [8]
+                ├── key columns: [9] = [10]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 2]
                 ├── stats: [rows=1e-10]
                 ├── cost: 0.02001206
                 ├── with-scan &1
-                │    ├── columns: p:7!null
+                │    ├── columns: p:9!null
                 │    ├── mapping:
-                │    │    └──  column2:6 => p:7
+                │    │    └──  column2:8 => p:9
                 │    ├── cardinality: [2 - 2]
-                │    ├── stats: [rows=2, distinct(7)=2, null(7)=0]
+                │    ├── stats: [rows=2, distinct(9)=2, null(9)=0]
                 │    └── cost: 0.01
                 └── filters (true)
 
@@ -867,41 +889,55 @@ INSERT INTO c VALUES (1, 1)
 insert c
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:5 => c:1
- │    └── column2:6 => c.p:2
+ │    ├── column1:7 => c:1
+ │    └── column2:8 => c.p:2
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- ├── cost: 6.08
+ ├── cost: 6.11
  ├── values
- │    ├── columns: column1:5!null column2:6!null
+ │    ├── columns: column1:7 column2:8
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1, distinct(6)=1, null(6)=0]
+ │    ├── immutable
+ │    ├── stats: [rows=1, distinct(8)=1, null(8)=0]
  │    ├── cost: 0.02
  │    ├── key: ()
- │    ├── fd: ()-->(5,6)
- │    └── (1, 1)
+ │    ├── fd: ()-->(7,8)
+ │    └── tuple
+ │         ├── assignment-cast: INT8
+ │         │    └── 1
+ │         └── assignment-cast: INT8
+ │              └── 1
  └── f-k-checks
       └── f-k-checks-item: c(p) -> p(p)
            └── anti-join (lookup p)
-                ├── columns: p:7!null
-                ├── key columns: [7] = [8]
+                ├── columns: p:9!null
+                ├── key columns: [9] = [10]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── stats: [rows=1e-10]
-                ├── cost: 6.05
+                ├── cost: 6.08
                 ├── key: ()
-                ├── fd: ()-->(7)
-                ├── with-scan &1
-                │    ├── columns: p:7!null
-                │    ├── mapping:
-                │    │    └──  column2:6 => p:7
-                │    ├── cardinality: [1 - 1]
-                │    ├── stats: [rows=1, distinct(7)=1, null(7)=0]
-                │    ├── cost: 0.01
+                ├── fd: ()-->(9)
+                ├── select
+                │    ├── columns: p:9!null
+                │    ├── cardinality: [0 - 1]
+                │    ├── stats: [rows=1, distinct(9)=1, null(9)=0]
+                │    ├── cost: 0.04
                 │    ├── key: ()
-                │    └── fd: ()-->(7)
+                │    ├── fd: ()-->(9)
+                │    ├── with-scan &1
+                │    │    ├── columns: p:9
+                │    │    ├── mapping:
+                │    │    │    └──  column2:8 => p:9
+                │    │    ├── cardinality: [1 - 1]
+                │    │    ├── stats: [rows=1, distinct(9)=1, null(9)=0]
+                │    │    ├── cost: 0.01
+                │    │    ├── key: ()
+                │    │    └── fd: ()-->(9)
+                │    └── filters
+                │         └── p:9 IS NOT NULL [outer=(9), constraints=(/9: (/NULL - ]; tight)]
                 └── filters (true)
 
 # Avoid performing a lookup join with virtual tables if the filter is

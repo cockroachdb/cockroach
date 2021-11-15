@@ -205,8 +205,14 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • values
-│             size: 11 columns, 1 row
+│       └── • render
+│           │ estimated row count: 1
+│           │
+│           └── • render
+│               │ estimated row count: 1
+│               │
+│               └── • values
+│                     size: 9 columns, 1 row
 │
 ├── • constraint-check
 │   │

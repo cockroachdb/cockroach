@@ -888,7 +888,7 @@ func ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
 		}
 		return ExprIsNeverNull(t.Input, notNullCols) && ExprIsNeverNull(t.OrElse, notNullCols)
 
-	case *CastExpr, *NotExpr, *RangeExpr:
+	case *CastExpr, *AssignmentCastExpr, *NotExpr, *RangeExpr:
 		return ExprIsNeverNull(t.Child(0).(opt.ScalarExpr), notNullCols)
 
 	case *AndExpr, *OrExpr, *GeExpr, *GtExpr, *NeExpr, *EqExpr, *LeExpr, *LtExpr, *LikeExpr,
