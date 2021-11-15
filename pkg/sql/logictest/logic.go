@@ -1313,7 +1313,10 @@ func (t *logicTest) setUser(user string) func() {
 	if t.clients == nil {
 		t.clients = map[string]*gosql.DB{}
 	}
+
 	if db, ok := t.clients[user]; ok {
+		// TODO(ajstorm): Investigate when we get into this branch.  I think
+		//  it may not work for tenants.
 		t.db = db
 		t.user = user
 
@@ -1523,7 +1526,6 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
 				TempStorageConfig: &params.ServerArgs.TempStorageConfig,
 				Locality:          paramsPerNode[i].Locality,
-				Existing:          i > 0,
 			}
 
 			// Prevent a logging assertion that the server ID is initialized multiple times.

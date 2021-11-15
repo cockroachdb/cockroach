@@ -1,0 +1,2 @@
+statement error unimplemented: operation is unsupported in multi-tenancy mode
+SELECT * FROM crdb_internal.kv_node_status
