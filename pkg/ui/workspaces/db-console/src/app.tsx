@@ -66,6 +66,7 @@ import SessionDetails from "src/views/sessions/sessionDetails";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
 import "styl/app.styl";
+import { RangeVizConnected } from "oss/src/views/reports/containers/range/visualization";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -249,6 +250,8 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                 <Route exact path="/debug" component={Debug} />
                 <Route exact path="/debug/redux" component={ReduxDebug} />
                 <Route exact path="/debug/chart" component={CustomChart} />
+                <Route exact path="/debug/rangeviz" component={RangeVizConnected} />
+
                 <Route
                   exact
                   path="/debug/enqueue_range"
