@@ -372,3 +372,11 @@ query I
 SELECT * FROM tab_from_seq
 ----
 2
+
+# Regression test for #69867
+statement error pgcode 23502 null value in column "x" violates not-null constraint
+BEGIN;
+CREATE TABLE foo69867 (x PRIMARY KEY) AS VALUES (1), (NULL);
+
+statement ok
+ROLLBACK
