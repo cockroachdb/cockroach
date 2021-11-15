@@ -201,6 +201,7 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_timestamp:    {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_timestamptz:  {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_timetz:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
+		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_bytea: {
@@ -249,6 +250,7 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_timestamp:    {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_timestamptz:  {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_timetz:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
+		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_date: {
@@ -450,6 +452,7 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_timestamp:    {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_timestamptz:  {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_timetz:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
+		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_numeric: {
@@ -591,6 +594,7 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_timestamp:    {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_timestamptz:  {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_timetz:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
+		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_time: {
@@ -676,6 +680,15 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_varbit:       {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
 		oid.T_varchar:      {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
 	},
+	oid.T_uuid: {
+		oid.T_uuid: {maxContext: CastContextImplicit, origin: contextOriginSameType},
+		// Automatic I/O conversions to string types.
+		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
+		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
+		oid.T_name:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
+		oid.T_text:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
+		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
+	},
 	oid.T_varbit: {
 		oid.T_bit:    {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_varbit: {maxContext: CastContextImplicit, origin: contextOriginPgCast},
@@ -720,6 +733,7 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_timestamp:    {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_timestamptz:  {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_timetz:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
+		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 	},
 }
