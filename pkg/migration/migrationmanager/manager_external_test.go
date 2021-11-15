@@ -13,6 +13,7 @@ package migrationmanager_test
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"sort"
 	"sync/atomic"
 	"testing"
@@ -473,6 +474,12 @@ SELECT id
 		t.Fatalf("did not expect the job to run again")
 	case <-time.After(10 * time.Millisecond):
 	}
+	// Wait for the job to actually be paused as opposed to waiting in
+	// pause-requested. There's a separate issue to make PAUSE wait for
+	// the job to be paused, but that's a behavior change is better than nothing.
+	tdb.CheckQueryResultsRetry(t, fmt.Sprintf(
+		`SELECT status FROM crdb_internal.jobs WHERE job_id = %d`, id,
+	), [][]string{{"paused"}})
 	tdb.Exec(t, "RESUME JOB $1", id)
 	ev = <-ch
 	close(ev.unblock)
