@@ -20,9 +20,9 @@ type expr interface {
 
 // Var is a variable name. Everything is convention, but, when you create
 // clauses and use variable names which are not part of the defined scope of
-// the rule, the new variableSlots which will be created will have a scope prefix
-// to try to ensure that they are unique. Given that, don't put `:` in your
-// variable names.
+// the rule, the new variableSlots which will be created will have a scope
+// prefix to try to ensure that they are unique. Given that, don't put `:` in
+// your variable names.
 type Var string
 
 // Var is an expr.
