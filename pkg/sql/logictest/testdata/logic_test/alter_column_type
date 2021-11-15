@@ -593,3 +593,16 @@ INSERT INTO regression_54844 VALUES (-9223372036854775807)
 
 statement error integer out of range for type int2
 ALTER TABLE regression_54844 ALTER COLUMN i TYPE int2
+
+# Due to the column swap being down using a computed column both default and on update
+# clauses should return an error
+
+statement ok
+CREATE TABLE checkExpr (x INT DEFAULT 5, y INT ON UPDATE 0)
+
+statement error pq: relation .*: computed column .* cannot also have a DEFAULT expression
+ALTER TABLE checkExpr ALTER COLUMN x TYPE STRING
+
+statement error pq: relation .*: computed column .* cannot also have an ON UPDATE expression
+ALTER TABLE checkExpr ALTER COLUMN y TYPE STRING
+

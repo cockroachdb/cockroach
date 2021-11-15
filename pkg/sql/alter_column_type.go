@@ -387,9 +387,10 @@ func alterColumnTypeGeneral(
 		Name:            shadowColName,
 		Type:            toType,
 		Nullable:        col.IsNullable(),
-		DefaultExpr:     col.ColumnDesc().DefaultExpr,
 		UsesSequenceIds: col.ColumnDesc().UsesSequenceIds,
 		OwnsSequenceIds: col.ColumnDesc().OwnsSequenceIds,
+		DefaultExpr:     col.ColumnDesc().DefaultExpr,
+		OnUpdateExpr:    col.ColumnDesc().OnUpdateExpr,
 		ComputeExpr:     newColComputeExpr,
 	}
 	// Ensure new column is created in the same column family as the original
