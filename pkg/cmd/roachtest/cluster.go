@@ -1028,7 +1028,8 @@ func (c *clusterImpl) validate(
 ) error {
 	// Perform validation on the existing cluster.
 	c.status("checking that existing cluster matches spec")
-	sargs := []string{roachprod, "list", c.name, "--json", "--quiet"}
+	pattern := "^" + regexp.QuoteMeta(c.name) + "$"
+	sargs := []string{roachprod, "list", "--pattern", pattern, "--json", "--quiet"}
 	out, err := execCmdWithBuffer(ctx, l, sargs...)
 	if err != nil {
 		return err

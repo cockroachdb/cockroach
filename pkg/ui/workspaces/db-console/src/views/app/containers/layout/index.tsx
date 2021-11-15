@@ -14,6 +14,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 
 import NavigationBar from "src/views/app/components/layoutSidebar";
+import ErrorBoundary from "src/views/app/components/errorMessage/errorBoundary";
 import TimeWindowManager from "src/views/app/containers/timewindow";
 import AlertBanner from "src/views/app/containers/alertBanner";
 import RequireLogin from "src/views/login/requireLogin";
@@ -99,7 +100,7 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
               <NavigationBar />
             </div>
             <div ref={this.contentRef} className="layout-panel__content">
-              {this.props.children}
+              <ErrorBoundary>{this.props.children}</ErrorBoundary>
             </div>
           </div>
         </div>

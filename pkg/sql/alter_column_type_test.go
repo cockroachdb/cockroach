@@ -332,7 +332,7 @@ func TestSchemaChangeBeforeAlterColumnType(t *testing.T) {
 			},
 		},
 	}
-
+	defer close(waitBeforeContinuing)
 	s, db, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	defer s.Stopper().Stop(ctx)
@@ -353,7 +353,8 @@ ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (x);
 
 	<-swapNotification
 
-	expected := "pq: unimplemented: table test is currently undergoing a schema change"
+	expected := "pq: unimplemented: ALTER COLUMN TYPE requiring rewrite of on-disk data is currently not " +
+		"supported for columns that are part of an index"
 	sqlDB.ExpectErr(t, expected, `
 SET enable_experimental_alter_column_type_general = true;
 ALTER TABLE t.test ALTER COLUMN y TYPE STRING;`)

@@ -150,12 +150,10 @@ func (c tenantCluster) tenantConn(idx int) *sqlutils.SQLRunner {
 	return c[idx].tenantDB
 }
 
-func (c tenantCluster) tenantHTTPJSONClient(idx int) (*httpJSONClient, error) {
+func (c tenantCluster) tenantHTTPClient(t *testing.T, idx int) *httpClient {
 	client, err := c[idx].tenant.RPCContext().GetHTTPClient()
-	if err != nil {
-		return nil, err
-	}
-	return &httpJSONClient{client: client, baseURL: "https://" + c[idx].tenant.HTTPAddr()}, nil
+	require.NoError(t, err)
+	return &httpClient{t: t, client: client, baseURL: "https://" + c[idx].tenant.HTTPAddr()}
 }
 
 func (c tenantCluster) tenantSQLStats(idx int) *persistedsqlstats.PersistedSQLStats {
@@ -172,21 +170,22 @@ func (c tenantCluster) cleanup(t *testing.T) {
 	}
 }
 
-type httpJSONClient struct {
+type httpClient struct {
+	t       *testing.T
 	client  http.Client
 	baseURL string
 }
 
-func (c *httpJSONClient) GetJSON(path string, response protoutil.Message) error {
-	return httputil.GetJSON(c.client, c.baseURL+path, response)
+func (c *httpClient) GetJSON(path string, response protoutil.Message) {
+	err := httputil.GetJSON(c.client, c.baseURL+path, response)
+	require.NoError(c.t, err)
 }
 
-func (c *httpJSONClient) PostJSON(
-	path string, request protoutil.Message, response protoutil.Message,
-) error {
-	return httputil.PostJSON(c.client, c.baseURL+path, request, response)
+func (c *httpClient) PostJSON(path string, request protoutil.Message, response protoutil.Message) {
+	err := httputil.PostJSON(c.client, c.baseURL+path, request, response)
+	require.NoError(c.t, err)
 }
 
-func (c *httpJSONClient) Close() {
+func (c *httpClient) Close() {
 	c.client.CloseIdleConnections()
 }
