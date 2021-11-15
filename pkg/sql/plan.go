@@ -589,8 +589,8 @@ const (
 	planFlagContainsFullTableScan
 
 	// planFlagContainsFullIndexScan is set if the plan involves an unconstrained
-	// secondary index scan. This could be an unconstrainted scan of any
-	// cardinality.
+	// non-partial secondary index scan. This could be an unconstrainted scan of
+	// any cardinality.
 	planFlagContainsFullIndexScan
 
 	// planFlagContainsLargeFullTableScan is set if the plan involves an
@@ -599,7 +599,7 @@ const (
 	planFlagContainsLargeFullTableScan
 
 	// planFlagContainsLargeFullIndexScan is set if the plan involves an
-	// unconstrained secondary index scan estimated to read more than
+	// unconstrained non-partial secondary index scan estimated to read more than
 	// large_full_scan_rows (or without available stats).
 	planFlagContainsLargeFullIndexScan
 

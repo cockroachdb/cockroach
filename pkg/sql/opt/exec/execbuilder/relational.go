@@ -534,8 +534,13 @@ func (b *Builder) scanParams(
 				idx.Name(),
 			)
 		default:
-			// This should never happen.
 			err = fmt.Errorf("index \"%s\" cannot be used for this query", idx.Name())
+			if b.evalCtx.SessionData().DisallowFullTableScans &&
+				(b.ContainsLargeFullTableScan || b.ContainsLargeFullIndexScan) {
+				err = errors.WithHint(err,
+					"try overriding the `disallow_full_table_scans` or increasing the `large_full_scan_rows` cluster/session settings",
+				)
+			}
 		}
 
 		return exec.ScanParams{}, opt.ColMap{}, err
@@ -645,6 +650,31 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		telemetry.Inc(sqltelemetry.PartialIndexScanUseCounter)
 	}
 
+	isUnfiltered := scan.IsUnfiltered(md)
+	if scan.Flags.NoFullScan {
+		// Normally a full scan of a partial index would be allowed with the
+		// NO_FULL_SCAN hint (isUnfiltered is false for partial indexes), but if the
+		// user has explicitly forced the partial index *and* used NO_FULL_SCAN, we
+		// disallow the full index scan.
+		if isUnfiltered || (scan.Flags.ForceIndex && scan.IsFullIndexScan(md)) {
+			return execPlan{}, fmt.Errorf("could not produce a query plan conforming to the NO_FULL_SCAN hint")
+		}
+	}
+
+	// Save if we planned a full table/index scan on the builder so that the
+	// planner can be made aware later. We only do this for non-virtual tables.
+	if !tab.IsVirtualTable() && isUnfiltered {
+		stats := scan.Relational().Stats
+		large := !stats.Available || stats.RowCount > b.evalCtx.SessionData().LargeFullScanRows
+		if scan.Index == cat.PrimaryIndex {
+			b.ContainsFullTableScan = true
+			b.ContainsLargeFullTableScan = b.ContainsLargeFullTableScan || large
+		} else {
+			b.ContainsFullIndexScan = true
+			b.ContainsLargeFullIndexScan = b.ContainsLargeFullIndexScan || large
+		}
+	}
+
 	params, outputCols, err := b.scanParams(tab, &scan.ScanPrivate, scan.Relational(), scan.RequiredPhysical())
 	if err != nil {
 		return execPlan{}, err
@@ -658,20 +688,6 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	)
 	if err != nil {
 		return execPlan{}, err
-	}
-
-	// Save if we planned a full table/index scan on the builder so that the
-	// planner can be made aware later. We only do this for non-virtual tables.
-	if !tab.IsVirtualTable() && scan.Constraint == nil && scan.InvertedConstraint == nil && !scan.HardLimit.IsSet() {
-		stats := scan.Relational().Stats
-		large := !stats.Available || stats.RowCount > b.evalCtx.SessionData().LargeFullScanRows
-		if scan.Index == cat.PrimaryIndex {
-			b.ContainsFullTableScan = true
-			b.ContainsLargeFullTableScan = b.ContainsLargeFullTableScan || large
-		} else {
-			b.ContainsFullIndexScan = true
-			b.ContainsLargeFullIndexScan = b.ContainsLargeFullIndexScan || large
-		}
 	}
 
 	res.root = root
