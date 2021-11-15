@@ -37,7 +37,7 @@ func PredecessorVersion(buildVersion version.Version) (string, error) {
 	// fixture (see runVersionUpgrade).
 	verMap := map[string]string{
 		"22.1": "21.2.0-beta.2",
-		"21.2": "21.1.9",
+		"21.2": "21.1.12",
 		"21.1": "20.2.12",
 		"20.2": "20.1.16",
 		"20.1": "19.2.11",
