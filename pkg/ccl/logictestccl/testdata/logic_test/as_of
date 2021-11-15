@@ -268,10 +268,10 @@ SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', false) WHERE i = 2
 statement ok
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms', false) WHERE i = 2
 
-statement error pgcode CDB00 bounded staleness read with minimum timestamp bound.*could not be satisfied by a local resolved timestamp
+statement error pgcode XCUBS bounded staleness read with minimum timestamp bound.*could not be satisfied by a local resolved timestamp
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', true) WHERE i = 2
 
-statement error pgcode CDB00 bounded staleness read with minimum timestamp bound.*could not be satisfied by a local resolved timestamp
+statement error pgcode XCUBS bounded staleness read with minimum timestamp bound.*could not be satisfied by a local resolved timestamp
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms', true) WHERE i = 2
 
 #
