@@ -14,6 +14,7 @@ package lease
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -589,8 +591,9 @@ type Manager struct {
 	storage          storage
 	mu               struct {
 		syncutil.Mutex
-		//TODO(james): Track size of leased descriptors in memory.
-		descriptors map[descpb.ID]*descriptorState
+		descriptors     map[descpb.ID]*descriptorState
+		leaseMemMonitor *mon.BytesMonitor
+		leaseMemAcc     mon.BoundAccount
 
 		// updatesResolvedTimestamp keeps track of a timestamp before which all
 		// descriptor updates have already been seen.
@@ -659,7 +662,66 @@ func NewLeaseManager(
 	lm.mu.updatesResolvedTimestamp = db.Clock().Now()
 
 	lm.draining.Store(false)
+
+	// Set up memory monitoring for the manager's leases.
+	opt := leaseMonitorOptions{
+		memoryPoolSize:          6000,
+		histogramWindowInterval: time.Hour,
+		settings:                settings,
+	}
+	lm.mu.leaseMemMonitor = newManagerMonitor(opt)
+	lm.mu.leaseMemAcc = lm.mu.leaseMemMonitor.MakeBoundAccount()
+
 	return lm
+}
+
+type leaseMonitorOptions struct {
+	memoryPoolSize          int64
+	histogramWindowInterval time.Duration
+	settings                *cluster.Settings
+}
+
+// growBoundAccount grows the mutex protected bound account backing the
+// Manager.
+func (m *Manager) growBoundAccount(ctx context.Context, growBy int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	err := m.mu.leaseMemAcc.Grow(ctx, growBy)
+	return err
+}
+
+// shrinkBoundAccount shrinks the mutex protected bound account backing the
+// Manager.
+func (m *Manager) shrinkBoundAccount(ctx context.Context, shrinkBy int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mu.leaseMemAcc.Shrink(ctx, shrinkBy)
+}
+
+// newManagerMonitor returns a BytesMonitor configured with given options.
+func newManagerMonitor(options leaseMonitorOptions) *mon.BytesMonitor {
+	metadata := metric.Metadata{
+		Name: "manager.lease.monitor.memory-consumption",
+		Help: "The in memory consumption of all the leases acquired during " +
+			"transactions by the LeaseManager specified as maintaining this metric",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+
+	gauge := metric.NewGauge(metadata)
+	histogram := metric.NewHistogram(metadata, options.histogramWindowInterval, math.MaxInt64, 1)
+	monitor := mon.NewMonitor(
+		"Manager Memory Monitor",
+		mon.MemoryResource,
+		gauge,
+		histogram,
+		0, /* default increment */
+		0, /* noteworthy */
+		options.settings,
+	)
+
+	monitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(options.memoryPoolSize))
+	return monitor
 }
 
 // NameMatchesDescriptor returns true if the provided name and IDs match this
