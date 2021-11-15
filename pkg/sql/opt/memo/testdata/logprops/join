@@ -1711,49 +1711,51 @@ SELECT (SELECT m FROM
 ) FROM uv
 ----
 with &1
- ├── columns: m:29(int)
+ ├── columns: m:31(int)
  ├── volatile, mutations
- ├── prune: (29)
+ ├── prune: (31)
  ├── project
- │    ├── columns: uv.u:6(int!null) uv.v:7(int!null)
+ │    ├── columns: uv.u:6(int) uv.v:7(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
  │    ├── key: ()
  │    ├── fd: ()-->(6,7)
  │    ├── prune: (6,7)
  │    └── insert uv
- │         ├── columns: uv.u:6(int!null) uv.v:7(int!null) rowid:8(int!null)
+ │         ├── columns: uv.u:6(int) uv.v:7(int!null) rowid:8(int!null)
  │         ├── insert-mapping:
- │         │    ├── column1:11 => uv.u:6
- │         │    ├── column2:12 => uv.v:7
- │         │    └── rowid_default:13 => rowid:8
+ │         │    ├── column1:13 => uv.u:6
+ │         │    ├── column2:14 => uv.v:7
+ │         │    └── rowid_default:15 => rowid:8
  │         ├── cardinality: [1 - 1]
  │         ├── volatile, mutations
  │         ├── key: ()
  │         ├── fd: ()-->(6-8)
  │         └── values
- │              ├── columns: column1:11(int!null) column2:12(int!null) rowid_default:13(int)
+ │              ├── columns: column1:13(int) column2:14(int) rowid_default:15(int)
  │              ├── cardinality: [1 - 1]
  │              ├── volatile
  │              ├── key: ()
- │              ├── fd: ()-->(11-13)
- │              ├── prune: (11-13)
+ │              ├── fd: ()-->(13-15)
+ │              ├── prune: (13-15)
  │              └── tuple [type=tuple{int, int, int}]
- │                   ├── const: 1 [type=int]
- │                   ├── const: 2 [type=int]
+ │                   ├── assignment-cast: INT8 [type=int]
+ │                   │    └── const: 1 [type=int]
+ │                   ├── assignment-cast: INT8 [type=int]
+ │                   │    └── const: 2 [type=int]
  │                   └── function: unique_rowid [type=int]
  └── project
-      ├── columns: m:29(int)
-      ├── prune: (29)
+      ├── columns: m:31(int)
+      ├── prune: (31)
       ├── scan uv
       └── projections
-           └── subquery [as=m:29, type=int, subquery]
+           └── subquery [as=m:31, type=int, subquery]
                 └── values
-                     ├── columns: mn.m:21(int!null)
+                     ├── columns: mn.m:23(int!null)
                      ├── cardinality: [0 - 0]
                      ├── key: ()
-                     ├── fd: ()-->(21)
-                     └── prune: (21)
+                     ├── fd: ()-->(23)
+                     └── prune: (23)
 
 # Regression test #40456.
 opt

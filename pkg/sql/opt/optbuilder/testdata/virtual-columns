@@ -95,16 +95,23 @@ INSERT INTO t VALUES (1, 1)
 insert t
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:6 => a:1
- │    ├── column2:7 => b:2
- │    └── v_comp:8 => v:3
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    └── v_comp:10 => v:3
  └── project
-      ├── columns: v_comp:8!null column1:6!null column2:7!null
-      ├── values
-      │    ├── columns: column1:6!null column2:7!null
-      │    └── (1, 1)
+      ├── columns: v_comp:10!null column1:8!null column2:9!null
+      ├── project
+      │    ├── columns: column1:8!null column2:9!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null column2:7!null
+      │    │    └── (1, 1)
+      │    └── projections
+      │         ├── assignment-cast: INT8 [as=column1:8]
+      │         │    └── column1:6
+      │         └── assignment-cast: INT8 [as=column2:9]
+      │              └── column2:7
       └── projections
-           └── column1:6 + column2:7 [as=v_comp:8]
+           └── column1:8 + column2:9 [as=v_comp:10]
 
 build
 INSERT INTO t(a) VALUES (1)
@@ -112,20 +119,25 @@ INSERT INTO t(a) VALUES (1)
 insert t
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:6 => a:1
- │    ├── b_default:7 => b:2
- │    └── v_comp:8 => v:3
+ │    ├── column1:7 => a:1
+ │    ├── b_default:8 => b:2
+ │    └── v_comp:9 => v:3
  └── project
-      ├── columns: v_comp:8 column1:6!null b_default:7
+      ├── columns: v_comp:9 column1:7!null b_default:8
       ├── project
-      │    ├── columns: b_default:7 column1:6!null
-      │    ├── values
-      │    │    ├── columns: column1:6!null
-      │    │    └── (1,)
+      │    ├── columns: b_default:8 column1:7!null
+      │    ├── project
+      │    │    ├── columns: column1:7!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:6!null
+      │    │    │    └── (1,)
+      │    │    └── projections
+      │    │         └── assignment-cast: INT8 [as=column1:7]
+      │    │              └── column1:6
       │    └── projections
-      │         └── NULL::INT8 [as=b_default:7]
+      │         └── NULL::INT8 [as=b_default:8]
       └── projections
-           └── column1:6 + b_default:7 [as=v_comp:8]
+           └── column1:7 + b_default:8 [as=v_comp:9]
 
 build
 INSERT INTO t(a, b, v) VALUES (1, 1, 1)
@@ -140,16 +152,23 @@ project
  └── insert t
       ├── columns: a:1!null b:2!null v:3!null
       ├── insert-mapping:
-      │    ├── column1:6 => a:1
-      │    ├── column2:7 => b:2
-      │    └── v_comp:8 => v:3
+      │    ├── column1:8 => a:1
+      │    ├── column2:9 => b:2
+      │    └── v_comp:10 => v:3
       └── project
-           ├── columns: v_comp:8!null column1:6!null column2:7!null
-           ├── values
-           │    ├── columns: column1:6!null column2:7!null
-           │    └── (1, 1)
+           ├── columns: v_comp:10!null column1:8!null column2:9!null
+           ├── project
+           │    ├── columns: column1:8!null column2:9!null
+           │    ├── values
+           │    │    ├── columns: column1:6!null column2:7!null
+           │    │    └── (1, 1)
+           │    └── projections
+           │         ├── assignment-cast: INT8 [as=column1:8]
+           │         │    └── column1:6
+           │         └── assignment-cast: INT8 [as=column2:9]
+           │              └── column2:7
            └── projections
-                └── column1:6 + column2:7 [as=v_comp:8]
+                └── column1:8 + column2:9 [as=v_comp:10]
 
 build
 INSERT INTO t_idx VALUES (1, 1)
@@ -157,16 +176,23 @@ INSERT INTO t_idx VALUES (1, 1)
 insert t_idx
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:6 => a:1
- │    ├── column2:7 => b:2
- │    └── v_comp:8 => v:3
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    └── v_comp:10 => v:3
  └── project
-      ├── columns: v_comp:8!null column1:6!null column2:7!null
-      ├── values
-      │    ├── columns: column1:6!null column2:7!null
-      │    └── (1, 1)
+      ├── columns: v_comp:10!null column1:8!null column2:9!null
+      ├── project
+      │    ├── columns: column1:8!null column2:9!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null column2:7!null
+      │    │    └── (1, 1)
+      │    └── projections
+      │         ├── assignment-cast: INT8 [as=column1:8]
+      │         │    └── column1:6
+      │         └── assignment-cast: INT8 [as=column2:9]
+      │              └── column2:7
       └── projections
-           └── column1:6 + column2:7 [as=v_comp:8]
+           └── column1:8 + column2:9 [as=v_comp:10]
 
 build
 INSERT INTO t_check VALUES (1, 1)
@@ -174,24 +200,31 @@ INSERT INTO t_check VALUES (1, 1)
 insert t_check
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:7 => a:1
- │    ├── column2:8 => b:2
- │    ├── v_comp:9 => v:3
- │    └── w_comp:10 => w:4
- ├── check columns: check1:11 check2:12
+ │    ├── column1:9 => a:1
+ │    ├── column2:10 => b:2
+ │    ├── v_comp:11 => v:3
+ │    └── w_comp:12 => w:4
+ ├── check columns: check1:13 check2:14
  └── project
-      ├── columns: check1:11!null check2:12!null column1:7!null column2:8!null v_comp:9!null w_comp:10!null
+      ├── columns: check1:13!null check2:14!null column1:9!null column2:10!null v_comp:11!null w_comp:12!null
       ├── project
-      │    ├── columns: v_comp:9!null w_comp:10!null column1:7!null column2:8!null
-      │    ├── values
-      │    │    ├── columns: column1:7!null column2:8!null
-      │    │    └── (1, 1)
+      │    ├── columns: v_comp:11!null w_comp:12!null column1:9!null column2:10!null
+      │    ├── project
+      │    │    ├── columns: column1:9!null column2:10!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:7!null column2:8!null
+      │    │    │    └── (1, 1)
+      │    │    └── projections
+      │    │         ├── assignment-cast: INT8 [as=column1:9]
+      │    │         │    └── column1:7
+      │    │         └── assignment-cast: INT8 [as=column2:10]
+      │    │              └── column2:8
       │    └── projections
-      │         ├── column1:7 + column2:8 [as=v_comp:9]
-      │         └── column1:7 * column2:8 [as=w_comp:10]
+      │         ├── column1:9 + column2:10 [as=v_comp:11]
+      │         └── column1:9 * column2:10 [as=w_comp:12]
       └── projections
-           ├── v_comp:9 < w_comp:10 [as=check1:11]
-           └── v_comp:9 >= 10 [as=check2:12]
+           ├── v_comp:11 < w_comp:12 [as=check1:13]
+           └── v_comp:11 >= 10 [as=check2:14]
 
 # -- DELETE tests --
 
@@ -822,37 +855,44 @@ project
       ├── columns: a:1!null b:2!null v:3!null
       ├── arbiter indexes: t_pkey
       ├── insert-mapping:
-      │    ├── column1:6 => a:1
-      │    ├── column2:7 => b:2
-      │    └── v_comp:8 => v:3
+      │    ├── column1:8 => a:1
+      │    ├── column2:9 => b:2
+      │    └── v_comp:10 => v:3
       └── upsert-distinct-on
-           ├── columns: column1:6!null column2:7!null v_comp:8!null
-           ├── grouping columns: column1:6!null
+           ├── columns: column1:8!null column2:9!null v_comp:10!null
+           ├── grouping columns: column1:8!null
            ├── anti-join (hash)
-           │    ├── columns: column1:6!null column2:7!null v_comp:8!null
+           │    ├── columns: column1:8!null column2:9!null v_comp:10!null
            │    ├── project
-           │    │    ├── columns: v_comp:8!null column1:6!null column2:7!null
-           │    │    ├── values
-           │    │    │    ├── columns: column1:6!null column2:7!null
-           │    │    │    └── (1, 1)
+           │    │    ├── columns: v_comp:10!null column1:8!null column2:9!null
+           │    │    ├── project
+           │    │    │    ├── columns: column1:8!null column2:9!null
+           │    │    │    ├── values
+           │    │    │    │    ├── columns: column1:6!null column2:7!null
+           │    │    │    │    └── (1, 1)
+           │    │    │    └── projections
+           │    │    │         ├── assignment-cast: INT8 [as=column1:8]
+           │    │    │         │    └── column1:6
+           │    │    │         └── assignment-cast: INT8 [as=column2:9]
+           │    │    │              └── column2:7
            │    │    └── projections
-           │    │         └── column1:6 + column2:7 [as=v_comp:8]
+           │    │         └── column1:8 + column2:9 [as=v_comp:10]
            │    ├── project
-           │    │    ├── columns: v:11 a:9!null b:10
+           │    │    ├── columns: v:13 a:11!null b:12
            │    │    ├── scan t
-           │    │    │    ├── columns: a:9!null b:10
+           │    │    │    ├── columns: a:11!null b:12
            │    │    │    └── computed column expressions
-           │    │    │         └── v:11
-           │    │    │              └── a:9 + b:10
+           │    │    │         └── v:13
+           │    │    │              └── a:11 + b:12
            │    │    └── projections
-           │    │         └── a:9 + b:10 [as=v:11]
+           │    │         └── a:11 + b:12 [as=v:13]
            │    └── filters
-           │         └── column1:6 = a:9
+           │         └── column1:8 = a:11
            └── aggregations
-                ├── first-agg [as=column2:7]
-                │    └── column2:7
-                └── first-agg [as=v_comp:8]
-                     └── v_comp:8
+                ├── first-agg [as=column2:9]
+                │    └── column2:9
+                └── first-agg [as=v_comp:10]
+                     └── v_comp:10
 
 build
 INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO NOTHING
@@ -861,47 +901,56 @@ insert t_idx2
  ├── columns: <none>
  ├── arbiter indexes: t_idx2_w_key
  ├── insert-mapping:
- │    ├── column1:8 => a:1
- │    ├── column2:9 => b:2
- │    ├── column3:10 => c:3
- │    ├── v_comp:11 => v:4
- │    └── w_comp:12 => w:5
+ │    ├── column1:11 => a:1
+ │    ├── column2:12 => b:2
+ │    ├── column3:13 => c:3
+ │    ├── v_comp:14 => v:4
+ │    └── w_comp:15 => w:5
  └── upsert-distinct-on
-      ├── columns: column1:8!null column2:9!null column3:10!null v_comp:11!null w_comp:12!null
-      ├── grouping columns: w_comp:12!null
+      ├── columns: column1:11!null column2:12!null column3:13!null v_comp:14!null w_comp:15!null
+      ├── grouping columns: w_comp:15!null
       ├── anti-join (hash)
-      │    ├── columns: column1:8!null column2:9!null column3:10!null v_comp:11!null w_comp:12!null
+      │    ├── columns: column1:11!null column2:12!null column3:13!null v_comp:14!null w_comp:15!null
       │    ├── project
-      │    │    ├── columns: v_comp:11!null w_comp:12!null column1:8!null column2:9!null column3:10!null
-      │    │    ├── values
-      │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │    │    └── (1, 1, 1)
+      │    │    ├── columns: v_comp:14!null w_comp:15!null column1:11!null column2:12!null column3:13!null
+      │    │    ├── project
+      │    │    │    ├── columns: column1:11!null column2:12!null column3:13!null
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
+      │    │    │    │    └── (1, 1, 1)
+      │    │    │    └── projections
+      │    │    │         ├── assignment-cast: INT8 [as=column1:11]
+      │    │    │         │    └── column1:8
+      │    │    │         ├── assignment-cast: INT8 [as=column2:12]
+      │    │    │         │    └── column2:9
+      │    │    │         └── assignment-cast: INT8 [as=column3:13]
+      │    │    │              └── column3:10
       │    │    └── projections
-      │    │         ├── column1:8 + column2:9 [as=v_comp:11]
-      │    │         └── column3:10 + 1 [as=w_comp:12]
+      │    │         ├── column1:11 + column2:12 [as=v_comp:14]
+      │    │         └── column3:13 + 1 [as=w_comp:15]
       │    ├── project
-      │    │    ├── columns: v:16 w:17 a:13!null b:14 c:15
+      │    │    ├── columns: v:19 w:20 a:16!null b:17 c:18
       │    │    ├── scan t_idx2
-      │    │    │    ├── columns: a:13!null b:14 c:15
+      │    │    │    ├── columns: a:16!null b:17 c:18
       │    │    │    └── computed column expressions
-      │    │    │         ├── v:16
-      │    │    │         │    └── a:13 + b:14
-      │    │    │         └── w:17
-      │    │    │              └── c:15 + 1
+      │    │    │         ├── v:19
+      │    │    │         │    └── a:16 + b:17
+      │    │    │         └── w:20
+      │    │    │              └── c:18 + 1
       │    │    └── projections
-      │    │         ├── a:13 + b:14 [as=v:16]
-      │    │         └── c:15 + 1 [as=w:17]
+      │    │         ├── a:16 + b:17 [as=v:19]
+      │    │         └── c:18 + 1 [as=w:20]
       │    └── filters
-      │         └── w_comp:12 = w:17
+      │         └── w_comp:15 = w:20
       └── aggregations
-           ├── first-agg [as=column1:8]
-           │    └── column1:8
-           ├── first-agg [as=column2:9]
-           │    └── column2:9
-           ├── first-agg [as=column3:10]
-           │    └── column3:10
-           └── first-agg [as=v_comp:11]
-                └── v_comp:11
+           ├── first-agg [as=column1:11]
+           │    └── column1:11
+           ├── first-agg [as=column2:12]
+           │    └── column2:12
+           ├── first-agg [as=column3:13]
+           │    └── column3:13
+           └── first-agg [as=v_comp:14]
+                └── v_comp:14
 
 build
 INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT DO NOTHING
@@ -910,75 +959,84 @@ insert t_idx2
  ├── columns: <none>
  ├── arbiter indexes: t_idx2_pkey t_idx2_w_key
  ├── insert-mapping:
- │    ├── column1:8 => a:1
- │    ├── column2:9 => b:2
- │    ├── column3:10 => c:3
- │    ├── v_comp:11 => v:4
- │    └── w_comp:12 => w:5
+ │    ├── column1:11 => a:1
+ │    ├── column2:12 => b:2
+ │    ├── column3:13 => c:3
+ │    ├── v_comp:14 => v:4
+ │    └── w_comp:15 => w:5
  └── upsert-distinct-on
-      ├── columns: column1:8!null column2:9!null column3:10!null v_comp:11!null w_comp:12!null
-      ├── grouping columns: w_comp:12!null
+      ├── columns: column1:11!null column2:12!null column3:13!null v_comp:14!null w_comp:15!null
+      ├── grouping columns: w_comp:15!null
       ├── upsert-distinct-on
-      │    ├── columns: column1:8!null column2:9!null column3:10!null v_comp:11!null w_comp:12!null
-      │    ├── grouping columns: column1:8!null
+      │    ├── columns: column1:11!null column2:12!null column3:13!null v_comp:14!null w_comp:15!null
+      │    ├── grouping columns: column1:11!null
       │    ├── anti-join (hash)
-      │    │    ├── columns: column1:8!null column2:9!null column3:10!null v_comp:11!null w_comp:12!null
+      │    │    ├── columns: column1:11!null column2:12!null column3:13!null v_comp:14!null w_comp:15!null
       │    │    ├── anti-join (hash)
-      │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null v_comp:11!null w_comp:12!null
+      │    │    │    ├── columns: column1:11!null column2:12!null column3:13!null v_comp:14!null w_comp:15!null
       │    │    │    ├── project
-      │    │    │    │    ├── columns: v_comp:11!null w_comp:12!null column1:8!null column2:9!null column3:10!null
-      │    │    │    │    ├── values
-      │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │    │    │    │    └── (1, 1, 1)
+      │    │    │    │    ├── columns: v_comp:14!null w_comp:15!null column1:11!null column2:12!null column3:13!null
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: column1:11!null column2:12!null column3:13!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
+      │    │    │    │    │    │    └── (1, 1, 1)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         ├── assignment-cast: INT8 [as=column1:11]
+      │    │    │    │    │         │    └── column1:8
+      │    │    │    │    │         ├── assignment-cast: INT8 [as=column2:12]
+      │    │    │    │    │         │    └── column2:9
+      │    │    │    │    │         └── assignment-cast: INT8 [as=column3:13]
+      │    │    │    │    │              └── column3:10
       │    │    │    │    └── projections
-      │    │    │    │         ├── column1:8 + column2:9 [as=v_comp:11]
-      │    │    │    │         └── column3:10 + 1 [as=w_comp:12]
+      │    │    │    │         ├── column1:11 + column2:12 [as=v_comp:14]
+      │    │    │    │         └── column3:13 + 1 [as=w_comp:15]
       │    │    │    ├── project
-      │    │    │    │    ├── columns: v:16 w:17 a:13!null b:14 c:15
+      │    │    │    │    ├── columns: v:19 w:20 a:16!null b:17 c:18
       │    │    │    │    ├── scan t_idx2
-      │    │    │    │    │    ├── columns: a:13!null b:14 c:15
+      │    │    │    │    │    ├── columns: a:16!null b:17 c:18
       │    │    │    │    │    └── computed column expressions
-      │    │    │    │    │         ├── v:16
-      │    │    │    │    │         │    └── a:13 + b:14
-      │    │    │    │    │         └── w:17
-      │    │    │    │    │              └── c:15 + 1
+      │    │    │    │    │         ├── v:19
+      │    │    │    │    │         │    └── a:16 + b:17
+      │    │    │    │    │         └── w:20
+      │    │    │    │    │              └── c:18 + 1
       │    │    │    │    └── projections
-      │    │    │    │         ├── a:13 + b:14 [as=v:16]
-      │    │    │    │         └── c:15 + 1 [as=w:17]
+      │    │    │    │         ├── a:16 + b:17 [as=v:19]
+      │    │    │    │         └── c:18 + 1 [as=w:20]
       │    │    │    └── filters
-      │    │    │         └── column1:8 = a:13
+      │    │    │         └── column1:11 = a:16
       │    │    ├── project
-      │    │    │    ├── columns: v:23 w:24 a:20!null b:21 c:22
+      │    │    │    ├── columns: v:26 w:27 a:23!null b:24 c:25
       │    │    │    ├── scan t_idx2
-      │    │    │    │    ├── columns: a:20!null b:21 c:22
+      │    │    │    │    ├── columns: a:23!null b:24 c:25
       │    │    │    │    └── computed column expressions
-      │    │    │    │         ├── v:23
-      │    │    │    │         │    └── a:20 + b:21
-      │    │    │    │         └── w:24
-      │    │    │    │              └── c:22 + 1
+      │    │    │    │         ├── v:26
+      │    │    │    │         │    └── a:23 + b:24
+      │    │    │    │         └── w:27
+      │    │    │    │              └── c:25 + 1
       │    │    │    └── projections
-      │    │    │         ├── a:20 + b:21 [as=v:23]
-      │    │    │         └── c:22 + 1 [as=w:24]
+      │    │    │         ├── a:23 + b:24 [as=v:26]
+      │    │    │         └── c:25 + 1 [as=w:27]
       │    │    └── filters
-      │    │         └── w_comp:12 = w:24
+      │    │         └── w_comp:15 = w:27
       │    └── aggregations
-      │         ├── first-agg [as=column2:9]
-      │         │    └── column2:9
-      │         ├── first-agg [as=column3:10]
-      │         │    └── column3:10
-      │         ├── first-agg [as=v_comp:11]
-      │         │    └── v_comp:11
-      │         └── first-agg [as=w_comp:12]
-      │              └── w_comp:12
+      │         ├── first-agg [as=column2:12]
+      │         │    └── column2:12
+      │         ├── first-agg [as=column3:13]
+      │         │    └── column3:13
+      │         ├── first-agg [as=v_comp:14]
+      │         │    └── v_comp:14
+      │         └── first-agg [as=w_comp:15]
+      │              └── w_comp:15
       └── aggregations
-           ├── first-agg [as=column1:8]
-           │    └── column1:8
-           ├── first-agg [as=column2:9]
-           │    └── column2:9
-           ├── first-agg [as=column3:10]
-           │    └── column3:10
-           └── first-agg [as=v_comp:11]
-                └── v_comp:11
+           ├── first-agg [as=column1:11]
+           │    └── column1:11
+           ├── first-agg [as=column2:12]
+           │    └── column2:12
+           ├── first-agg [as=column3:13]
+           │    └── column3:13
+           └── first-agg [as=v_comp:14]
+                └── v_comp:14
 
 build
 INSERT INTO t VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET a=t.v+1

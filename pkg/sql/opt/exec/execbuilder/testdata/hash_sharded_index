@@ -31,11 +31,16 @@ vectorized: true
         │ render crdb_internal_a_shard_11_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 11)::INT4
         │ render column1: column1
         │
-        └── • values
-              columns: (column1)
-              size: 1 column, 2 rows
-              row 0, expr 0: 1
-              row 1, expr 0: 2
+        └── • render
+            │ columns: (column1)
+            │ estimated row count: 2
+            │ render column1: crdb_internal.assignment_cast(column1, NULL::INT8)
+            │
+            └── • values
+                  columns: (column1)
+                  size: 1 column, 2 rows
+                  row 0, expr 0: 1
+                  row 1, expr 0: 2
 
 statement ok
 CREATE TABLE sharded_secondary (a INT8, INDEX (a) USING HASH WITH BUCKET_COUNT=12)
@@ -61,17 +66,23 @@ vectorized: true
     │ render crdb_internal_a_shard_12_comp: crdb_internal_a_shard_12_comp
     │
     └── • render
-        │ columns: (crdb_internal_a_shard_12_comp, rowid_default, column1)
+        │ columns: (crdb_internal_a_shard_12_comp, column1, rowid_default)
         │ estimated row count: 2
         │ render crdb_internal_a_shard_12_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 12)::INT4
-        │ render rowid_default: unique_rowid()
         │ render column1: column1
+        │ render rowid_default: rowid_default
         │
-        └── • values
-              columns: (column1)
-              size: 1 column, 2 rows
-              row 0, expr 0: 1
-              row 1, expr 0: 2
+        └── • render
+            │ columns: (rowid_default, column1)
+            │ estimated row count: 2
+            │ render rowid_default: unique_rowid()
+            │ render column1: crdb_internal.assignment_cast(column1, NULL::INT8)
+            │
+            └── • values
+                  columns: (column1)
+                  size: 1 column, 2 rows
+                  row 0, expr 0: 1
+                  row 1, expr 0: 2
 
 
 statement ok
