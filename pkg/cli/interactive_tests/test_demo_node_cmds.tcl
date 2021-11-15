@@ -11,7 +11,7 @@ eexpect "movr>"
 
 # Wrong number of args
 send "\\demo node\r"
-eexpect "\\demo expects 2 parameters"
+eexpect "invalid syntax: \\\\demo node. Try \\\\? for help."
 
 # Cannot shutdown node 1
 send "\\demo shutdown 1\r"
