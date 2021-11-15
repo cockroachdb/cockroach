@@ -38,7 +38,7 @@ import { EnqueueRange } from "src/views/reports/containers/enqueueRange";
 import { RangesMain } from "src/views/devtools/containers/raftRanges";
 import { RaftMessages } from "src/views/devtools/containers/raftMessages";
 import Raft from "src/views/devtools/containers/raft";
-import NotFound from "src/views/app/components/NotFound";
+import NotFound from "src/views/app/components/errorMessage/notFound";
 import { ProblemRanges } from "src/views/reports/containers/problemRanges";
 import { Localities } from "src/views/reports/containers/localities";
 import { Nodes } from "src/views/reports/containers/nodes";
@@ -580,7 +580,7 @@ describe("Routing to", () => {
   });
 
   describe("'/unknown-url' path", () => {
-    it("routes to <NotFound> component", () => {
+    it("routes to <errorMessage> component", () => {
       navigateToPath("/some-random-ulr");
       assert.lengthOf(appWrapper.find(NotFound), 1);
     });
