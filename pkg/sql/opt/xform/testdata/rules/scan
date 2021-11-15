@@ -395,33 +395,33 @@ INSERT INTO fk_b (b,a) VALUES (1,1)
 insert fk_b
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:5 => b:1
- │    └── column2:6 => fk_b.a:2
+ │    ├── column1:7 => b:1
+ │    └── column2:8 => fk_b.a:2
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:5!null column2:6!null
+ │    ├── columns: column1:7!null column2:8!null
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(5,6)
+ │    ├── fd: ()-->(7,8)
  │    └── (1, 1)
  └── f-k-checks
       └── f-k-checks-item: fk_b(a) -> fk_a(a)
            └── anti-join (lookup fk_a)
-                ├── columns: a:7!null
-                ├── key columns: [7] = [8]
+                ├── columns: a:9!null
+                ├── key columns: [9] = [10]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
-                ├── fd: ()-->(7)
+                ├── fd: ()-->(9)
                 ├── with-scan &1
-                │    ├── columns: a:7!null
+                │    ├── columns: a:9!null
                 │    ├── mapping:
-                │    │    └──  column2:6 => a:7
+                │    │    └──  column2:8 => a:9
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(7)
+                │    └── fd: ()-->(9)
                 └── filters (true)
 
 # --------------------------------------------------

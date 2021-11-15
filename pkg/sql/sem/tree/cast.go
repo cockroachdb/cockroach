@@ -1369,11 +1369,15 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 }
 
 // PerformAssignmentCast performs an assignment cast from the provided Datum to
-// the specified type. It is similar to PerformCast, but differs because it
-// errors if the datum's width is too wide for the given type rather than
-// silently truncating. The one exception is casts to the special "char" type
-// which are truncated.
+// the specified type. The original datum is returned if its type is identical
+// to the specified type. It is similar to PerformCast, but differs because it
+// errors in more cases than PerformCast if the datum's width is too wide for
+// the given type rather than silently truncating. The one exception is casts to
+// the special "char" type which are truncated.
 func PerformAssignmentCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
+	if d.ResolvedType().Identical(t) {
+		return d, nil
+	}
 	if !ValidCast(d.ResolvedType(), t, CastContextAssignment) {
 		return nil, pgerror.Newf(
 			pgcode.CannotCoerce,
