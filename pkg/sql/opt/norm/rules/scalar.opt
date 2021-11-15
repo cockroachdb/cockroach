@@ -64,7 +64,10 @@ $item
 # Note that CastExpr removes unnecessary casts during type-checking; this rule
 # can still be helpful if some other rule creates an unnecessary CastExpr.
 [EliminateCast, Normalize]
-(Cast $input:* $targetTyp:* & (HasColType $input $targetTyp))
+(Cast | AssignmentCast
+    $input:*
+    $targetTyp:* & (HasColType $input $targetTyp)
+)
 =>
 $input
 
