@@ -644,33 +644,37 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate that there are no column with both a foreign key ON UPDATE and an
 	// ON UPDATE expression. This check is made to ensure that we know which ON
 	// UPDATE action to perform when a FK UPDATE happens.
-	if err := ValidateOnUpdate(desc.AllColumns(), desc.GetOutboundFKs()); err != nil {
+	if err := ValidateOnUpdate(desc); err != nil {
 		vea.Report(err)
 	}
 }
 
 // ValidateOnUpdate returns an error if there is a column with both a foreign
 // key constraint and an ON UPDATE expression, nil otherwise.
-func ValidateOnUpdate(cols []catalog.Column, outboundFks []descpb.ForeignKeyConstraint) error {
+func ValidateOnUpdate(desc catalog.TableDescriptor) error {
 	var onUpdateCols catalog.TableColSet
-	for _, col := range cols {
+	for _, col := range desc.AllColumns() {
 		if col.HasOnUpdate() {
 			onUpdateCols.Add(col.GetID())
 		}
 	}
 
 	var foundErrors []error
-	for _, fk := range outboundFks {
+	for _, fk := range desc.GetOutboundFKs() {
 		if fk.OnUpdate == descpb.ForeignKeyReference_NO_ACTION ||
 			fk.OnUpdate == descpb.ForeignKeyReference_RESTRICT {
 			continue
 		}
 		for _, fkCol := range fk.OriginColumnIDs {
 			if onUpdateCols.Contains(fkCol) {
+				col, err := desc.FindColumnWithID(fkCol)
+				if err != nil {
+					return err
+				}
 				foundErrors = append(foundErrors, pgerror.Newf(pgcode.InvalidTableDefinition,
 					"cannot specify both ON UPDATE expression and a foreign key"+
-						" ON UPDATE action for column with ID %d",
-					fkCol,
+						" ON UPDATE action for column %q",
+					col.ColName(),
 				))
 			}
 		}

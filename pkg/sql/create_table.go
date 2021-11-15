@@ -2227,7 +2227,7 @@ func NewTableDesc(
 	// constructing the table descriptor so that we can check all foreign key
 	// constraints in on place as opposed to traversing the input and finding all
 	// inline/explicit foreign key constraints.
-	if err := tabledesc.ValidateOnUpdate(desc.AllColumns(), desc.GetOutboundFKs()); err != nil {
+	if err := tabledesc.ValidateOnUpdate(&desc); err != nil {
 		return nil, err
 	}
 
