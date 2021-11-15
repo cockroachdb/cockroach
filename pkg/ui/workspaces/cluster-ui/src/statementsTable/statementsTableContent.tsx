@@ -45,7 +45,7 @@ export const StatementTableCell = {
     search?: string,
     selectedApp?: string,
     onStatementClick?: (statement: string) => void,
-  ) => (stmt: any) => (
+  ) => (stmt: AggregateStatistics): React.ReactElement => (
     <StatementLink
       statement={stmt.label}
       aggregatedTs={stmt.aggregatedTs}
@@ -59,7 +59,7 @@ export const StatementTableCell = {
   diagnostics: (
     activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>,
     onDiagnosticsDownload: (report: IStatementDiagnosticsReport) => void = noop,
-  ) => (stmt: AggregateStatistics) => {
+  ) => (stmt: AggregateStatistics): React.ReactElement => {
     /*
      * Diagnostics cell might display different components depending
      * on following states:
@@ -124,7 +124,9 @@ export const StatementTableCell = {
       </div>
     );
   },
-  nodeLink: (nodeNames: NodeNames) => (stmt: any) => (
+  nodeLink: (nodeNames: NodeNames) => (
+    stmt: AggregateStatistics,
+  ): React.ReactElement => (
     <NodeLink nodeId={stmt.label} nodeNames={nodeNames} />
   ),
 };
@@ -217,7 +219,10 @@ export const StatementLink = ({
   );
 };
 
-export const NodeLink = (props: { nodeId: string; nodeNames?: NodeNames }) => (
+export const NodeLink = (props: {
+  nodeId: string;
+  nodeNames?: NodeNames;
+}): React.ReactElement => (
   <Link to={`/node/${props.nodeId}`}>
     <div className={cx("node-name-tooltip__info-icon")}>
       {props.nodeNames ? props.nodeNames[props.nodeId] : "N" + props.nodeId}

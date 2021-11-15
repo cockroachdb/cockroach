@@ -14,7 +14,7 @@ import {
   getStatementsByFingerprintIdAndTime,
   statementFingerprintIdsToText,
 } from "./utils";
-import { Filters } from "../queryFilter/filter";
+import { Filters } from "../queryFilter";
 import { data, nodeRegions, timestamp } from "./transactions.fixture";
 import Long from "long";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
@@ -44,9 +44,9 @@ describe("getStatementsByFingerprintIdAndTime", () => {
 const txData = (data.transactions as any) as Transaction[];
 
 describe("Filter transactions", () => {
-  it("show all if no filters applied", () => {
+  it("show non internal if no filters applied", () => {
     const filter: Filters = {
-      app: "All",
+      app: "",
       timeNumber: "0",
       timeUnit: "seconds",
       nodes: "",
@@ -61,7 +61,7 @@ describe("Filter transactions", () => {
         nodeRegions,
         false,
       ).transactions.length,
-      11,
+      4,
     );
   });
 
@@ -107,6 +107,27 @@ describe("Filter transactions", () => {
     );
   });
 
+  it("filters by 2 apps", () => {
+    const filter: Filters = {
+      app: "$ TEST EXACT,$ TEST",
+      timeNumber: "0",
+      timeUnit: "seconds",
+      nodes: "",
+      regions: "",
+    };
+    assert.equal(
+      filterTransactions(
+        txData,
+        filter,
+        "$ internal",
+        data.statements,
+        nodeRegions,
+        false,
+      ).transactions.length,
+      4,
+    );
+  });
+
   it("filters by internal prefix", () => {
     const filter: Filters = {
       app: data.internal_app_name_prefix,
@@ -130,7 +151,7 @@ describe("Filter transactions", () => {
 
   it("filters by time", () => {
     const filter: Filters = {
-      app: "All",
+      app: "$ internal,$ TEST",
       timeNumber: "40",
       timeUnit: "miliseconds",
       nodes: "",
@@ -151,7 +172,7 @@ describe("Filter transactions", () => {
 
   it("filters by one node", () => {
     const filter: Filters = {
-      app: "All",
+      app: "$ internal,$ TEST",
       timeNumber: "0",
       timeUnit: "seconds",
       nodes: "n1",
@@ -172,7 +193,7 @@ describe("Filter transactions", () => {
 
   it("filters by multiple nodes", () => {
     const filter: Filters = {
-      app: "All",
+      app: "$ internal,$ TEST,$ TEST EXACT",
       timeNumber: "0",
       timeUnit: "seconds",
       nodes: "n2,n4",
@@ -193,7 +214,7 @@ describe("Filter transactions", () => {
 
   it("filters by one region", () => {
     const filter: Filters = {
-      app: "All",
+      app: "$ internal,$ TEST",
       timeNumber: "0",
       timeUnit: "seconds",
       nodes: "",
@@ -214,7 +235,7 @@ describe("Filter transactions", () => {
 
   it("filters by multiple regions", () => {
     const filter: Filters = {
-      app: "All",
+      app: "$ internal,$ TEST,$ TEST EXACT",
       timeNumber: "0",
       timeUnit: "seconds",
       nodes: "",

@@ -629,7 +629,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   ],
   statementsError: null,
   dateRange: [moment.utc("2021.08.08"), moment.utc("2021.08.12")],
-  apps: ["(internal)", "movr", "$ cockroach demo"],
+  apps: ["$ internal", "movr", "$ cockroach demo"],
   totalFingerprints: 95,
   lastReset: "2020-04-13 07:22:23",
   columns: null,
