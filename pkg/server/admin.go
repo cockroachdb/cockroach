@@ -2412,7 +2412,14 @@ func (s *adminServer) DataDistribution(
 				return err
 			}
 
-			_, tableID, err := keys.TODOSQLCodec.DecodeTablePrefix(rangeDesc.StartKey.AsRawKey())
+			// TODO(embrown): Not sure if it's necessary to have this step
+			// in this loop, especially if in this case all tables
+			// have the same id.
+			_, tenID, err := keys.DecodeTenantPrefix(rangeDesc.StartKey.AsRawKey())
+			if err != nil {
+				return err
+			}
+			_, tableID, err := keys.MakeSQLCodec(tenID).DecodeTablePrefix(rangeDesc.StartKey.AsRawKey())
 			if err != nil {
 				return err
 			}
