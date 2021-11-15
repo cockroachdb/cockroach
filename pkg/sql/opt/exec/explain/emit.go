@@ -378,22 +378,22 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			}
 		}
 		if s.KVTime.HasValue() {
-			e.ob.AddField("KV time", humanizeutil.Duration(s.KVTime.Value()))
+			e.ob.AddField("KV time", string(humanizeutil.Duration(s.KVTime.Value())))
 		}
 		if s.KVContentionTime.HasValue() {
-			e.ob.AddField("KV contention time", humanizeutil.Duration(s.KVContentionTime.Value()))
+			e.ob.AddField("KV contention time", string(humanizeutil.Duration(s.KVContentionTime.Value())))
 		}
 		if s.KVRowsRead.HasValue() {
-			e.ob.AddField("KV rows read", humanizeutil.Count(s.KVRowsRead.Value()))
+			e.ob.AddField("KV rows read", string(humanizeutil.Count(s.KVRowsRead.Value())))
 		}
 		if s.KVBytesRead.HasValue() {
-			e.ob.AddField("KV bytes read", humanize.IBytes(s.KVBytesRead.Value()))
+			e.ob.AddField("KV bytes read", string(humanize.IBytes(s.KVBytesRead.Value())))
 		}
 		if s.MaxAllocatedMem.HasValue() {
-			e.ob.AddField("estimated max memory allocated", humanize.IBytes(s.MaxAllocatedMem.Value()))
+			e.ob.AddField("estimated max memory allocated", string(humanize.IBytes(s.MaxAllocatedMem.Value())))
 		}
 		if s.MaxAllocatedDisk.HasValue() {
-			e.ob.AddField("estimated max sql temp disk usage", humanize.IBytes(s.MaxAllocatedDisk.Value()))
+			e.ob.AddField("estimated max sql temp disk usage", string(humanize.IBytes(s.MaxAllocatedDisk.Value())))
 		}
 		if e.ob.flags.Verbose {
 			if s.StepCount.HasValue() {
@@ -449,7 +449,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 						if timeSinceStats < 0 {
 							timeSinceStats = 0
 						}
-						duration = humanizeutil.LongDuration(timeSinceStats)
+						duration = string(humanizeutil.LongDuration(timeSinceStats))
 					}
 					e.ob.AddField("estimated row count", fmt.Sprintf(
 						"%s (%s%% of the table; stats collected %s ago)",

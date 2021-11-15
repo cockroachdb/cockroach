@@ -508,10 +508,10 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
-			return humanizeutil.IBytes(evalCtx.SessionData().WorkMemLimit), nil
+			return string(humanizeutil.IBytes(evalCtx.SessionData().WorkMemLimit)), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return humanizeutil.IBytes(settingWorkMemBytes.Get(sv))
+			return string(humanizeutil.IBytes(settingWorkMemBytes.Get(sv)))
 		},
 	},
 
