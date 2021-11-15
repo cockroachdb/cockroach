@@ -114,6 +114,11 @@ func (c *replicatedCmd) IsLocal() bool {
 	return c.proposal != nil
 }
 
+// Ctx implements the apply.Command interface.
+func (c *replicatedCmd) Ctx() context.Context {
+	return c.ctx
+}
+
 // AckErrAndFinish implements the apply.Command interface.
 func (c *replicatedCmd) AckErrAndFinish(ctx context.Context, err error) error {
 	if c.IsLocal() {
@@ -143,7 +148,7 @@ func (c *replicatedCmd) CanAckBeforeApplication() bool {
 }
 
 // AckSuccess implements the apply.CheckedCommand interface.
-func (c *replicatedCmd) AckSuccess(_ context.Context) error {
+func (c *replicatedCmd) AckSuccess(ctx context.Context) error {
 	if !c.IsLocal() {
 		return nil
 	}
@@ -158,6 +163,7 @@ func (c *replicatedCmd) AckSuccess(_ context.Context) error {
 	resp.Reply = &reply
 	resp.EncounteredIntents = c.proposal.Local.DetachEncounteredIntents()
 	resp.EndTxns = c.proposal.Local.DetachEndTxns(false /* alwaysOnly */)
+	log.Event(ctx, "ack-ing replication success to the client; application will continue async w.r.t. the client")
 	c.proposal.signalProposalResult(resp)
 	return nil
 }
