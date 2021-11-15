@@ -2842,6 +2842,7 @@ func TestPrimaryKeyChangeKVOps(t *testing.T) {
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
+	defer close(waitBeforeContinuing)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
