@@ -1029,7 +1029,7 @@ vectorized: true
   columns: (f float)
   estimated row count: 1 (missing stats)
   table: flt@flt_f_key
-  spans: /NaN-/NaN/PrefixEnd
+  spans: /NaN/0
 
 query T
 EXPLAIN (TYPES) SELECT * FROM flt WHERE f = 'NaN'
@@ -1041,7 +1041,7 @@ vectorized: true
   columns: (f float)
   estimated row count: 1 (missing stats)
   table: flt@flt_f_key
-  spans: /NaN-/NaN/PrefixEnd
+  spans: /NaN/0
 
 query T
 EXPLAIN (TYPES) SELECT * FROM flt WHERE isnan(f)
@@ -1090,7 +1090,7 @@ vectorized: true
   columns: (i int)
   estimated row count: 1 (missing stats)
   table: num@num_i_key
-  spans: /-1-/0
+  spans: /-1/0
 
 query T
 EXPLAIN (TYPES) SELECT f FROM num WHERE f = -1:::FLOAT
@@ -1102,7 +1102,7 @@ vectorized: true
   columns: (f float)
   estimated row count: 1 (missing stats)
   table: num@num_f_key
-  spans: /-1-/-1/PrefixEnd
+  spans: /-1/0
 
 query T
 EXPLAIN (TYPES) SELECT d FROM num WHERE d = -1:::DECIMAL
@@ -1114,7 +1114,7 @@ vectorized: true
   columns: (d decimal)
   estimated row count: 1 (missing stats)
   table: num@num_d_key
-  spans: /-1-/-1/PrefixEnd
+  spans: /-1/0
 
 query T
 EXPLAIN (TYPES) SELECT n FROM num WHERE n = -'1h':::INTERVAL
@@ -1126,7 +1126,7 @@ vectorized: true
   columns: (n interval)
   estimated row count: 1 (missing stats)
   table: num@num_n_key
-  spans: /-01:00:00-/1 day -25:00:00
+  spans: /-01:00:00/0
 
 statement ok
 DROP TABLE num
