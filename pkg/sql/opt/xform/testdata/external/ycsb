@@ -94,37 +94,47 @@ insert usertable
  ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:25 => ycsb_key:1
- │    ├── column2:15 => field0:2
- │    ├── column3:16 => field1:3
- │    ├── column4:17 => field2:4
- │    ├── column5:18 => field3:5
- │    ├── column6:19 => field4:6
- │    ├── column7:20 => field5:7
- │    ├── column8:21 => field6:8
- │    ├── column9:22 => field7:9
- │    ├── column10:23 => field8:10
- │    └── column11:24 => field9:11
+ │    ├── column2:26 => field0:2
+ │    ├── column3:27 => field1:3
+ │    ├── column4:28 => field2:4
+ │    ├── column5:29 => field3:5
+ │    ├── column6:30 => field4:6
+ │    ├── column7:31 => field5:7
+ │    ├── column8:32 => field6:8
+ │    ├── column9:33 => field7:9
+ │    ├── column10:34 => field8:10
+ │    └── column11:35 => field9:11
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column2:15!null column3:16!null column4:17!null column5:18!null column6:19!null column7:20!null column8:21!null column9:22!null column10:23!null column11:24!null column1:25
+      ├── columns: column1:25 column2:26 column3:27 column4:28 column5:29 column6:30 column7:31 column8:32 column9:33 column10:34 column11:35
       ├── cardinality: [1 - 1]
       ├── immutable
       ├── key: ()
-      ├── fd: ()-->(15-25)
+      ├── fd: ()-->(25-35)
       └── tuple
-           ├── 'field0data'
-           ├── 'field1data'
-           ├── 'field2data'
-           ├── 'field3data'
-           ├── 'field4data'
-           ├── 'field5data'
-           ├── 'field6data'
-           ├── 'field7data'
-           ├── 'field8data'
-           ├── 'field9data'
-           └── assignment-cast: VARCHAR(255)
-                └── 'user123'
+           ├── assignment-cast: VARCHAR(255)
+           │    └── 'user123'
+           ├── assignment-cast: STRING
+           │    └── 'field0data'
+           ├── assignment-cast: STRING
+           │    └── 'field1data'
+           ├── assignment-cast: STRING
+           │    └── 'field2data'
+           ├── assignment-cast: STRING
+           │    └── 'field3data'
+           ├── assignment-cast: STRING
+           │    └── 'field4data'
+           ├── assignment-cast: STRING
+           │    └── 'field5data'
+           ├── assignment-cast: STRING
+           │    └── 'field6data'
+           ├── assignment-cast: STRING
+           │    └── 'field7data'
+           ├── assignment-cast: STRING
+           │    └── 'field8data'
+           └── assignment-cast: STRING
+                └── 'field9data'
 
 # --------------------------------------------------
 # Workload E: Short ranges

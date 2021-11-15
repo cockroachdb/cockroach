@@ -318,8 +318,8 @@ vectorized: true
     │ columns: (x, v, rowid_default)
     │ estimated row count: 10 (missing stats)
     │ render rowid_default: unique_rowid()
-    │ render x: x
-    │ render v: v
+    │ render x: crdb_internal.assignment_cast(x, NULL::INT8)
+    │ render v: crdb_internal.assignment_cast(v, NULL::INT8)
     │
     └── • top-k
         │ columns: (x, v)
@@ -351,8 +351,8 @@ vectorized: true
     │ columns: (x, v, rowid_default)
     │ estimated row count: 1 (missing stats)
     │ render rowid_default: unique_rowid()
-    │ render x: x
-    │ render v: v
+    │ render x: crdb_internal.assignment_cast(x, NULL::INT8)
+    │ render v: crdb_internal.assignment_cast(v, NULL::INT8)
     │
     └── • scan
           columns: (x, v)
@@ -467,8 +467,8 @@ vectorized: true
         │ columns: (length, "?column?", rowid_default)
         │ estimated row count: 10 (missing stats)
         │ render rowid_default: unique_rowid()
-        │ render length: length
-        │ render ?column?: "?column?"
+        │ render length: crdb_internal.assignment_cast(length, NULL::INT8)
+        │ render ?column?: crdb_internal.assignment_cast("?column?", NULL::INT8)
         │
         └── • top-k
             │ columns: (length, "?column?", column12)
@@ -516,7 +516,7 @@ vectorized: true
       estimated row count: 1
       into: mutation(x, rowid, y)
       size: 3 columns, 1 row
-      row 0, expr 0: 2
+      row 0, expr 0: crdb_internal.assignment_cast(2, NULL::INT8)
       row 0, expr 1: unique_rowid()
       row 0, expr 2: 10
 
@@ -538,8 +538,8 @@ vectorized: true
   estimated row count: 0 (missing stats)
   into: mutation(x, y, rowid)
   size: 3 columns, 1 row
-  row 0, expr 0: 2
-  row 0, expr 1: 2
+  row 0, expr 0: crdb_internal.assignment_cast(2, NULL::INT8)
+  row 0, expr 1: crdb_internal.assignment_cast(2, NULL::INT8)
   row 0, expr 2: unique_rowid()
 
 statement ok
@@ -596,9 +596,9 @@ vectorized: true
                     │ columns: (a, b, c, rowid_default)
                     │ estimated row count: 1,000 (missing stats)
                     │ render rowid_default: unique_rowid()
-                    │ render a: a
-                    │ render b: b
-                    │ render c: c
+                    │ render a: crdb_internal.assignment_cast(a, NULL::INT8)
+                    │ render b: crdb_internal.assignment_cast(b, NULL::INT8)
+                    │ render c: crdb_internal.assignment_cast(c, NULL::INT8)
                     │
                     └── • scan
                           columns: (a, b, c)
@@ -644,5 +644,5 @@ vectorized: true
   FK check: t62270_parent@t62270_parent_pkey
   size: 3 columns, 1 row
   row 0, expr 0: gen_random_uuid()
-  row 0, expr 1: 1
+  row 0, expr 1: crdb_internal.assignment_cast(1, NULL::INT8)
   row 0, expr 2: unique_rowid()

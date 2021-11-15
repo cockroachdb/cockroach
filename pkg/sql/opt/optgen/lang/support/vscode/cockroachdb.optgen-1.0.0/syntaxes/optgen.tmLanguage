@@ -175,6 +175,7 @@
                         UnaryMinus |
                         UnaryComplement |
                         Cast |
+                        AssignmentCast |
                         Case |
                         When |
                         Array |

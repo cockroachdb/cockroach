@@ -26,8 +26,11 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • values
-│             size: 2 columns, 2 rows
+│       └── • render
+│           │ estimated row count: 2
+│           │
+│           └── • values
+│                 size: 2 columns, 2 rows
 │
 └── • constraint-check
     │
@@ -59,10 +62,12 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • scan
-│             missing stats
-│             table: xy@xy_pkey
-│             spans: FULL SCAN
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: xy@xy_pkey
+│                 spans: FULL SCAN
 │
 └── • constraint-check
     │
@@ -99,8 +104,11 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • values
-│             size: 2 columns, 2 rows
+│       └── • render
+│           │ estimated row count: 2
+│           │
+│           └── • values
+│                 size: 2 columns, 2 rows
 │
 └── • constraint-check
     │
@@ -112,7 +120,7 @@ vectorized: true
             │ equality cols are key
             │
             └── • filter
-                │ estimated row count: 1
+                │ estimated row count: 2
                 │ filter: column2 IS NOT NULL
                 │
                 └── • scan buffer
@@ -144,8 +152,11 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • values
-│             size: 4 columns, 2 rows
+│       └── • render
+│           │ estimated row count: 2
+│           │
+│           └── • values
+│                 size: 4 columns, 2 rows
 │
 └── • constraint-check
     │
@@ -157,7 +168,7 @@ vectorized: true
             │ equality cols are key
             │
             └── • filter
-                │ estimated row count: 1
+                │ estimated row count: 2
                 │ filter: (column2 IS NOT NULL) AND (column3 IS NOT NULL)
                 │
                 └── • scan buffer
@@ -193,8 +204,61 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
+│       └── • render
+│           │ estimated row count: 2
+│           │
+│           └── • values
+│                 size: 4 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (anti)
+│           │ table: multi_ref_parent_a@multi_ref_parent_a_pkey
+│           │ equality: (column2) = (a)
+│           │ equality cols are key
+│           │
+│           └── • filter
+│               │ estimated row count: 2
+│               │ filter: column2 IS NOT NULL
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: multi_ref_parent_bc@multi_ref_parent_bc_pkey
+            │ equality: (column3, column4) = (b,c)
+            │ equality cols are key
+            │
+            └── • filter
+                │ estimated row count: 2
+                │ filter: (column3 IS NOT NULL) AND (column4 IS NOT NULL)
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+# FK check can be omitted when we are inserting only NULLs.
+query T
+EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: multi_ref_child(k, a, b, c)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
 │       └── • values
-│             size: 4 columns, 2 rows
+│             size: 4 columns, 1 row
 │
 ├── • constraint-check
 │   │
@@ -227,20 +291,6 @@ vectorized: true
                 │
                 └── • scan buffer
                       label: buffer 1
-
-# FK check can be omitted when we are inserting only NULLs.
-query T
-EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL)
-----
-distribution: local
-vectorized: true
-·
-• insert
-│ into: multi_ref_child(k, a, b, c)
-│ auto commit
-│
-└── • values
-      size: 4 columns, 1 row
 
 # -- Tests with DELETE --
 
@@ -918,26 +968,62 @@ statement ok
 SET enable_insert_fast_path = true
 
 # Simple insert with VALUES should use the fast path.
+# TODO(mgartner): Assignment casts should not prevent the fast path from being
+# used.
 query T
 EXPLAIN (VERBOSE) INSERT INTO child VALUES (1,1), (2,2)
 ----
 distribution: local
 vectorized: true
 ·
-• insert fast path
-  columns: ()
-  estimated row count: 0 (missing stats)
-  into: child(c, p)
-  auto commit
-  FK check: parent@parent_pkey
-  size: 2 columns, 2 rows
-  row 0, expr 0: 1
-  row 0, expr 1: 1
-  row 1, expr 0: 2
-  row 1, expr 1: 2
+• root
+│ columns: ()
+│
+├── • insert
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ into: child(c, p)
+│   │
+│   └── • buffer
+│       │ columns: (column1, column2)
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │ columns: (column1, column2)
+│           │ estimated row count: 2
+│           │ render column1: crdb_internal.assignment_cast(column1, NULL::INT8)
+│           │ render column2: crdb_internal.assignment_cast(column2, NULL::INT8)
+│           │
+│           └── • values
+│                 columns: (column1, column2)
+│                 size: 2 columns, 2 rows
+│                 row 0, expr 0: 1
+│                 row 0, expr 1: 1
+│                 row 1, expr 0: 2
+│                 row 1, expr 1: 2
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • lookup join (anti)
+            │ columns: (column2)
+            │ estimated row count: 0 (missing stats)
+            │ table: parent@parent_pkey
+            │ equality: (column2) = (p)
+            │ equality cols are key
+            │
+            └── • project
+                │ columns: (column2)
+                │ estimated row count: 2
+                │
+                └── • scan buffer
+                      columns: (column1, column2)
+                      label: buffer 1
 
 # We shouldn't use the fast path if the VALUES columns are not in order.
-query B 
+query B
 SELECT count(*) > 0 FROM [
   EXPLAIN INSERT INTO child (SELECT b, a FROM (VALUES (1,2)) AS v(a,b))
 ] WHERE info LIKE '%insert-fast-path'
@@ -1197,11 +1283,32 @@ EXPLAIN INSERT INTO c VALUES (1,1), (2,2)
 distribution: local
 vectorized: true
 ·
-• insert fast path
-  into: c(c, p)
-  auto commit
-  FK check: p@p_pkey
-  size: 2 columns, 2 rows
+• root
+│
+├── • insert
+│   │ into: c(c, p)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │ estimated row count: 2
+│           │
+│           └── • values
+│                 size: 2 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ estimated row count: 1
+            │ table: p@p_pkey
+            │ equality: (column2) = (p)
+            │ equality cols are key
+            │
+            └── • scan buffer
+                  label: buffer 1
 
 # These queries should not be using lookup joins (we're inserting more rows
 # than exist in the tables).
@@ -1219,8 +1326,11 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • values
-│             size: 2 columns, 10 rows
+│       └── • render
+│           │ estimated row count: 10
+│           │
+│           └── • values
+│                 size: 2 columns, 10 rows
 │
 └── • constraint-check
     │
@@ -1327,11 +1437,32 @@ EXPLAIN INSERT INTO c VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8
 distribution: local
 vectorized: true
 ·
-• insert fast path
-  into: c(c, p)
-  auto commit
-  FK check: p@p_pkey
-  size: 2 columns, 10 rows
+• root
+│
+├── • insert
+│   │ into: c(c, p)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │ estimated row count: 10
+│           │
+│           └── • values
+│                 size: 2 columns, 10 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ estimated row count: 9
+            │ table: p@p_pkey
+            │ equality: (column2) = (p)
+            │ equality cols are key
+            │
+            └── • scan buffer
+                  label: buffer 1
 
 query T
 EXPLAIN UPDATE c SET p=p+c WHERE c > 0
