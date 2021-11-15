@@ -163,30 +163,29 @@ func newChangeAggregatorProcessor(
 		return nil, err
 	}
 
-	// If the resolved timestamp frequency is specified, use it as a rough
-	// approximation of how latency-sensitive the changefeed user is. If it's
-	// not, fall back to a default of 5s
+	// MinCheckpointFrequency controls how frequently the changeAggregator flushes the sink
+	// and checkpoints the local frontier to changeFrontier. It is used as a rough
+	// approximation of how latency-sensitive the changefeed user is. For a high latency
+	// user, such as cloud storage sink where flushes can take much longer, it is often set
+	// as the sink's flush frequency so as not to negate the sink's batch config.
 	//
-	// With timeBetweenFlushes and changefeedPollInterval both set to 1s, TPCC
-	// was seeing about 100x more time spent emitting than flushing when tested
-	// with low-latency sinks like Kafka. However when using cloud-storage
-	// sinks, flushes can take much longer and trying to flush too often can
-	// thus end up spending too much time flushing and not enough in emitting to
-	// keep up with the feed. If a user does not specify a 'resolved' time, we
-	// instead default to 5s, which is hopefully long enough to account for most
-	// possible sink latencies we could see without falling behind.
+	// If a user does not specify a 'min_checkpoint_frequency' duration, we instead default
+	// to 30s, which is hopefully long enough to account for most possible sink latencies we
+	// could see without falling too behind.
 	//
 	// NB: As long as we periodically get new span-level resolved timestamps
 	// from the poller (which should always happen, even if the watched data is
 	// not changing), then this is sufficient and we don't have to do anything
 	// fancy with timers.
-	if r, ok := ca.spec.Feed.Opts[changefeedbase.OptResolvedTimestamps]; ok && r != `` {
+	if r, ok := ca.spec.Feed.Opts[changefeedbase.OptMinCheckpointFrequency]; ok && r != `` {
 		ca.flushFrequency, err = time.ParseDuration(r)
 		if err != nil {
 			return nil, err
 		}
+	} else if r == `` {
+		ca.flushFrequency = 0
 	} else {
-		ca.flushFrequency = changefeedbase.DefaultFlushFrequency
+		ca.flushFrequency = changefeedbase.DefaultMinCheckpointFrequency
 	}
 	return ca, nil
 }
