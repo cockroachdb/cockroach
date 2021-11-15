@@ -32,7 +32,7 @@ import {
   tabAttr,
   tableNameAttr,
 } from "src/util/constants";
-import NotFound from "src/views/app/components/NotFound";
+import NotFound from "src/views/app/components/errorMessage/notFound";
 import Layout from "src/views/app/containers/layout";
 import DataDistributionPage from "src/views/cluster/containers/dataDistribution";
 import { EventPage } from "src/views/cluster/containers/events";
