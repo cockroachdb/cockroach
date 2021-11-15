@@ -218,6 +218,10 @@ func (ud *uncommittedDescriptors) getByName(
 	if got := ud.descs.GetByName(dbID, schemaID, name); got != nil {
 		return false, got.(*uncommittedDescriptor).immutable
 	}
+	// Check whether the set is empty to avoid allocating the NameInfo.
+	if ud.descNames.Empty() {
+		return false, nil
+	}
 	return ud.descNames.Contains(descpb.NameInfo{
 		ParentID:       dbID,
 		ParentSchemaID: schemaID,

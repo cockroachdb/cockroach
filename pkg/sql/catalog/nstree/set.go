@@ -47,6 +47,11 @@ func (s *Set) Clear() {
 	*s = Set{}
 }
 
+// Empty returns true if the set has no entries.
+func (s *Set) Empty() bool {
+	return !s.initialized() || s.t.Len() == 0
+}
+
 func (s *Set) maybeInitialize() {
 	if s.initialized() {
 		return
