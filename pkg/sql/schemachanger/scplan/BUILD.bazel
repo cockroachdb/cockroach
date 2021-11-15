@@ -34,6 +34,7 @@ go_test(
         "//pkg/sql/parser",
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scdeps/sctestutils",
+        "//pkg/sql/schemachanger/scerrors",
         "//pkg/sql/schemachanger/scgraph",
         "//pkg/sql/schemachanger/scgraphviz",
         "//pkg/sql/schemachanger/scop",

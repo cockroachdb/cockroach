@@ -55,13 +55,11 @@ func (e *ElementProto) Element() Element {
 // NewTarget constructs a new Target. The passed elem must be one of the oneOf
 // members of Element. If not, this call will panic.
 func NewTarget(dir Target_Direction, elem Element, metadata *TargetMetadata) *Target {
-	// Populate dummy metadata otherwise
-	if metadata == nil {
-		metadata = &TargetMetadata{}
-	}
 	t := Target{
 		Direction: dir,
-		Metadata:  *metadata,
+	}
+	if metadata != nil {
+		t.Metadata = *protoutil.Clone(metadata).(*TargetMetadata)
 	}
 	if !t.SetValue(elem) {
 		panic(errors.Errorf("unknown element type %T", elem))

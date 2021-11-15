@@ -349,6 +349,7 @@ go_library(
         "//pkg/sql/schemachange",
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scdeps",
+        "//pkg/sql/schemachanger/scerrors",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scgraphviz",
         "//pkg/sql/schemachanger/scop",
