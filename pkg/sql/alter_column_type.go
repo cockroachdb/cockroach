@@ -357,6 +357,7 @@ func alterColumnTypeGeneral(
 	// Create the default expression for the new column.
 	hasDefault := col.HasDefault()
 	hasUpdate := col.HasOnUpdate()
+	var newCol descpb.ColumnDescriptor
 	if hasDefault {
 		if validCast := tree.ValidCast(col.GetType(), toType, tree.CastContextAssignment); !validCast {
 			return pgerror.Newf(
@@ -365,6 +366,15 @@ func alterColumnTypeGeneral(
 				col.GetName(),
 				toType.SQLString(),
 			)
+		}
+		newCol = descpb.ColumnDescriptor{
+			Name:            shadowColName,
+			Type:            toType,
+			Nullable:        col.IsNullable(),
+			DefaultExpr:     col.ColumnDesc().DefaultExpr,
+			UsesSequenceIds: col.ColumnDesc().UsesSequenceIds,
+			OwnsSequenceIds: col.ColumnDesc().OwnsSequenceIds,
+			ComputeExpr:     newColComputeExpr,
 		}
 	}
 	if hasUpdate {
@@ -376,17 +386,16 @@ func alterColumnTypeGeneral(
 				toType.SQLString(),
 			)
 		}
+		newCol = descpb.ColumnDescriptor{
+			Name:            shadowColName,
+			Type:            toType,
+			Nullable:        col.IsNullable(),
+			OnUpdateExpr:    col.ColumnDesc().OnUpdateExpr,
+			UsesSequenceIds: col.ColumnDesc().UsesSequenceIds,
+			OwnsSequenceIds: col.ColumnDesc().OwnsSequenceIds,
+		}
 	}
 
-	newCol := descpb.ColumnDescriptor{
-		Name:            shadowColName,
-		Type:            toType,
-		Nullable:        col.IsNullable(),
-		DefaultExpr:     col.ColumnDesc().DefaultExpr,
-		UsesSequenceIds: col.ColumnDesc().UsesSequenceIds,
-		OwnsSequenceIds: col.ColumnDesc().OwnsSequenceIds,
-		ComputeExpr:     newColComputeExpr,
-	}
 	// Ensure new column is created in the same column family as the original
 	// so backfiller writes to the same column family.
 	family, err := tableDesc.GetFamilyOfColumn(col.GetID())
