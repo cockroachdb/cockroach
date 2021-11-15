@@ -81,4 +81,3 @@ SELECT *
        )
  WHERE r < .01
  LIMIT 1
-
