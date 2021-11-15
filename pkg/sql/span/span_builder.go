@@ -228,7 +228,7 @@ func (s *Builder) SpanToPointSpan(span roachpb.Span, family descpb.FamilyID) roa
 func (s *Builder) MaybeSplitSpanIntoSeparateFamilies(
 	appendTo roachpb.Spans, span roachpb.Span, prefixLen int, containsNull bool,
 ) roachpb.Spans {
-	if s.neededFamilies != nil && s.CanSplitSpanIntoFamilySpans(len(s.neededFamilies), prefixLen, containsNull) {
+	if s.neededFamilies != nil && s.CanSplitSpanIntoFamilySpans(s.neededFamilies, prefixLen, containsNull) {
 		return rowenc.SplitRowKeyIntoFamilySpans(appendTo, span.Key, s.neededFamilies)
 	}
 	return append(appendTo, span)
@@ -237,7 +237,7 @@ func (s *Builder) MaybeSplitSpanIntoSeparateFamilies(
 // CanSplitSpanIntoFamilySpans returns whether a span encoded with prefixLen keys and numNeededFamilies
 // needed families can be safely split into 1 or more family specific spans.
 func (s *Builder) CanSplitSpanIntoFamilySpans(
-	numNeededFamilies, prefixLen int, containsNull bool,
+	neededFamilies []descpb.FamilyID, prefixLen int, containsNull bool,
 ) bool {
 	// We can only split a span into separate family specific point lookups if:
 
@@ -262,7 +262,7 @@ func (s *Builder) CanSplitSpanIntoFamilySpans(
 	//   need fewer than every column family in the table (otherwise we'd just
 	//   make a big ScanRequest).
 	numFamilies := len(s.table.GetFamilies())
-	if numFamilies > 1 && numNeededFamilies == numFamilies {
+	if numFamilies > 1 && len(neededFamilies) == numFamilies {
 		return false
 	}
 
@@ -278,15 +278,12 @@ func (s *Builder) CanSplitSpanIntoFamilySpans(
 			return false
 		}
 
-		// * The index must store some columns.
-		if s.index.NumSecondaryStoredColumns() == 0 {
-			return false
-		}
-
 		// * The index is a new enough version.
 		if s.index.GetVersion() < descpb.SecondaryIndexFamilyFormatVersion {
 			return false
 		}
+
+		// TODO: add more checking here?
 	}
 
 	// We've passed all the conditions, and should be able to safely split this
@@ -370,7 +367,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 
 	if needed.Len() > 0 && span.Key.Equal(span.EndKey) && !forDelete {
 		neededFamilyIDs := rowenc.NeededColumnFamilyIDs(needed, s.table, s.index)
-		if s.CanSplitSpanIntoFamilySpans(len(neededFamilyIDs), cs.StartKey().Length(), containsNull) {
+		if s.CanSplitSpanIntoFamilySpans(neededFamilyIDs, cs.StartKey().Length(), containsNull) {
 			return rowenc.SplitRowKeyIntoFamilySpans(appendTo, span.Key, neededFamilyIDs), nil
 		}
 	}

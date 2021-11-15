@@ -13,6 +13,7 @@ package row
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 )
@@ -28,7 +29,7 @@ func FKCheckSpan(
 	}
 	// If it is safe to split this lookup into multiple families, generate a point lookup for
 	// family 0. Because we are just checking for existence, we only need family 0.
-	if s.CanSplitSpanIntoFamilySpans(1 /* numNeededFamilies */, numCols, containsNull) {
+	if s.CanSplitSpanIntoFamilySpans([]descpb.FamilyID{0}, numCols, containsNull) {
 		return s.SpanToPointSpan(span, 0), nil
 	}
 	return span, nil

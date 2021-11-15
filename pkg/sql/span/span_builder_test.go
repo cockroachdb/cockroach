@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -25,8 +26,7 @@ func TestSpanBuilderDoesNotSplitSystemTableFamilySpans(t *testing.T) {
 	builder := MakeBuilder(&evalCtx, keys.SystemSQLCodec, systemschema.DescriptorTable,
 		systemschema.DescriptorTable.GetPrimaryIndex())
 
-	if res := builder.CanSplitSpanIntoFamilySpans(
-		1, 1, false); res {
+	if res := builder.CanSplitSpanIntoFamilySpans([]descpb.FamilyID{0}, 1, false); res {
 		t.Errorf("expected the system table to not be splittable")
 	}
 }

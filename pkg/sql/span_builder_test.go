@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -38,56 +39,56 @@ func TestSpanBuilderCanSplitSpan(t *testing.T) {
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	evalCtx := tree.NewTestingEvalContext(s.ClusterSettings())
 	tcs := []struct {
-		sql               string
-		index             string
-		prefixLen         int
-		numNeededFamilies int
-		containsNull      bool
-		canSplit          bool
+		sql            string
+		index          string
+		prefixLen      int
+		neededFamilies []descpb.FamilyID
+		containsNull   bool
+		canSplit       bool
 	}{
 		{
-			sql:               "a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), FAMILY (a, b, c), FAMILY (d)",
-			index:             "t_pkey",
-			prefixLen:         2,
-			numNeededFamilies: 1,
-			canSplit:          true,
+			sql:            "a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), FAMILY (a, b, c), FAMILY (d)",
+			index:          "t_pkey",
+			prefixLen:      2,
+			neededFamilies: []descpb.FamilyID{0},
+			canSplit:       true,
 		},
 		{
-			sql:               "a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), FAMILY (a, b, c), FAMILY (d)",
-			index:             "t_pkey",
-			prefixLen:         1,
-			numNeededFamilies: 1,
-			canSplit:          false,
+			sql:            "a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), FAMILY (a, b, c), FAMILY (d)",
+			index:          "t_pkey",
+			prefixLen:      1,
+			neededFamilies: []descpb.FamilyID{0},
+			canSplit:       false,
 		},
 		{
-			sql:               "a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), FAMILY (a, b, c, d)",
-			index:             "t_pkey",
-			prefixLen:         2,
-			numNeededFamilies: 1,
-			canSplit:          true,
+			sql:            "a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), FAMILY (a, b, c, d)",
+			index:          "t_pkey",
+			prefixLen:      2,
+			neededFamilies: []descpb.FamilyID{0},
+			canSplit:       true,
 		},
 		{
-			sql:               "a INT, b INT, c INT, INDEX i (b) STORING (a, c), FAMILY (a), FAMILY (b), FAMILY (c)",
-			index:             "i",
-			prefixLen:         1,
-			numNeededFamilies: 1,
-			canSplit:          false,
+			sql:            "a INT, b INT, c INT, INDEX i (b) STORING (a, c), FAMILY (a), FAMILY (b), FAMILY (c)",
+			index:          "i",
+			prefixLen:      1,
+			neededFamilies: []descpb.FamilyID{0},
+			canSplit:       false,
 		},
 		{
-			sql:               "a INT, b INT, c INT, UNIQUE INDEX i (b) STORING (a, c), FAMILY (a), FAMILY (b), FAMILY (c)",
-			index:             "i",
-			prefixLen:         1,
-			numNeededFamilies: 1,
-			containsNull:      true,
-			canSplit:          false,
+			sql:            "a INT, b INT, c INT, UNIQUE INDEX i (b) STORING (a, c), FAMILY (a), FAMILY (b), FAMILY (c)",
+			index:          "i",
+			prefixLen:      1,
+			neededFamilies: []descpb.FamilyID{0},
+			containsNull:   true,
+			canSplit:       false,
 		},
 		{
-			sql:               "a INT, b INT, c INT, UNIQUE INDEX i (b) STORING (a, c), FAMILY (a), FAMILY (b), FAMILY (c)",
-			index:             "i",
-			prefixLen:         1,
-			numNeededFamilies: 1,
-			containsNull:      false,
-			canSplit:          true,
+			sql:            "a INT, b INT, c INT, UNIQUE INDEX i (b) STORING (a, c), FAMILY (a), FAMILY (b), FAMILY (c)",
+			index:          "i",
+			prefixLen:      1,
+			neededFamilies: []descpb.FamilyID{0},
+			containsNull:   false,
+			canSplit:       true,
 		},
 	}
 	if _, err := sqlDB.Exec("CREATE DATABASE t"); err != nil {
@@ -109,7 +110,7 @@ func TestSpanBuilderCanSplitSpan(t *testing.T) {
 			}
 			builder := span.MakeBuilder(evalCtx, execCfg.Codec, desc, idx)
 			if res := builder.CanSplitSpanIntoFamilySpans(
-				tc.numNeededFamilies, tc.prefixLen, tc.containsNull); res != tc.canSplit {
+				tc.neededFamilies, tc.prefixLen, tc.containsNull); res != tc.canSplit {
 				t.Errorf("expected result to be %v, but found %v", tc.canSplit, res)
 			}
 		})
