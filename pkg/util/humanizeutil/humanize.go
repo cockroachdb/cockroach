@@ -17,22 +17,24 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/pflag"
 )
 
 // IBytes is an int64 version of go-humanize's IBytes.
-func IBytes(value int64) string {
+func IBytes(value int64) redact.SafeString {
 	if value < 0 {
-		return fmt.Sprintf("-%s", humanize.IBytes(uint64(-value)))
+		return redact.SafeString("-" + humanize.IBytes(uint64(-value)))
 	}
-	return humanize.IBytes(uint64(value))
+	return redact.SafeString(humanize.IBytes(uint64(value)))
 }
 
 // ParseBytes is an int64 version of go-humanize's ParseBytes.
 func ParseBytes(s string) (int64, error) {
 	if len(s) == 0 {
-		return 0, fmt.Errorf("parsing \"\": invalid syntax")
+		return 0, errors.New("parsing \"\": invalid syntax")
 	}
 	var startIndex int
 	var negative bool
@@ -45,7 +47,7 @@ func ParseBytes(s string) (int64, error) {
 		return 0, err
 	}
 	if value > math.MaxInt64 {
-		return 0, fmt.Errorf("too large: %s", s)
+		return 0, errors.Errorf("too large: %s", s)
 	}
 	if negative {
 		return -int64(value), nil
@@ -96,18 +98,24 @@ func (b *BytesValue) Type() string {
 
 // String implements the flag.Value and pflag.Value interfaces.
 func (b *BytesValue) String() string {
+	return redact.StringWithoutMarkers(b)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (b *BytesValue) SafeFormat(w redact.SafePrinter, _ rune) {
 	// When b.val is nil, the real value of the flag will only be known after a
 	// Resolve() call. We do not want our flag package to report an erroneous
 	// default value for this flag. So the value we return here must cause
 	// defaultIsZeroValue to return true:
 	// https://github.com/spf13/pflag/blob/v1.0.5/flag.go#L724
 	if b.val == nil {
-		return "<nil>"
+		w.SafeString("<nil>")
+		return
 	}
 	// This uses the MiB, GiB, etc suffixes. If we use humanize.Bytes() we get
 	// the MB, GB, etc suffixes, but the conversion is done in multiples of 1000
 	// vs 1024.
-	return IBytes(atomic.LoadInt64(b.val))
+	w.Print(IBytes(atomic.LoadInt64(b.val)))
 }
 
 // IsSet returns true iff Set has successfully been called.
@@ -116,12 +124,13 @@ func (b *BytesValue) IsSet() bool {
 }
 
 // DataRate formats the passed byte count over duration as "x MiB/s".
-func DataRate(bytes int64, elapsed time.Duration) string {
+func DataRate(bytes int64, elapsed time.Duration) redact.SafeString {
 	if bytes == 0 {
 		return "0"
 	}
 	if elapsed == 0 {
 		return "inf"
 	}
-	return fmt.Sprintf("%0.2f MiB/s", (float64(bytes)/elapsed.Seconds())/float64(1<<20))
+	return redact.SafeString(fmt.Sprintf("%0.2f MiB/s",
+		(float64(bytes)/elapsed.Seconds())/float64(1<<20)))
 }

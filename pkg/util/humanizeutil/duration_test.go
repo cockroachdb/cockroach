@@ -13,12 +13,14 @@ package humanizeutil
 import (
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/redact"
 )
 
 func TestDuration(t *testing.T) {
 	testCases := []struct {
 		val time.Duration
-		exp string
+		exp redact.SafeString
 	}{
 		{val: 0, exp: "0µs"},
 		{val: 12, exp: "0µs"},
@@ -56,7 +58,7 @@ func TestDuration(t *testing.T) {
 func TestLongDuration(t *testing.T) {
 	testCases := []struct {
 		val time.Duration
-		exp string
+		exp redact.SafeString
 	}{
 		{val: 0, exp: "0 seconds"},
 		{val: time.Second, exp: "1 second"},
