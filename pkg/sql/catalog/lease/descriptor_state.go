@@ -94,6 +94,7 @@ type descriptorState struct {
 func (t *descriptorState) findForTimestamp(
 	ctx context.Context, timestamp hlc.Timestamp,
 ) (*descriptorVersionState, bool, error) {
+	expensiveLogEnabled := log.ExpensiveLogEnabled(ctx, 2)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -109,7 +110,7 @@ func (t *descriptorState) findForTimestamp(
 			latest := i+1 == len(t.mu.active.data)
 			if !desc.hasExpired(timestamp) {
 				// Existing valid descriptor version.
-				desc.incRefCount(ctx)
+				desc.incRefCount(ctx, expensiveLogEnabled)
 				return desc, latest, nil
 			}
 
@@ -220,29 +221,37 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 
 	// Decrements the refcount and returns true if the lease has to be removed
 	// from the store.
-	decRefcount := func(s *descriptorVersionState) *storedLease {
-		// Figure out if we'd like to remove the lease from the store asap (i.e.
-		// when the refcount drops to 0). If so, we'll need to mark the lease as
-		// invalid.
-		removeOnceDereferenced := t.m.removeOnceDereferenced() ||
-			// Release from the store if the descriptor has been dropped or taken
-			// offline.
-			t.mu.takenOffline ||
-			// Release from the store if the lease is not for the latest
-			// version; only leases for the latest version can be acquired.
-			s != t.mu.active.findNewest() ||
-			s.GetVersion() < t.mu.maxVersionSeen
-
+	expensiveLoggingEnabled := log.ExpensiveLogEnabled(ctx, 2)
+	decRefCount := func(s *descriptorVersionState) (shouldRemove bool) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.mu.refcount--
-		if log.ExpensiveLogEnabled(ctx, 2) {
+		if expensiveLoggingEnabled {
 			log.Infof(ctx, "release: %s", s.stringLocked())
 		}
+		return s.mu.refcount == 0
+	}
+	maybeMarkRemoveStoredLease := func(s *descriptorVersionState) *storedLease {
+		// Figure out if we'd like to remove the lease from the store asap (i.e.
+		// when the refcount drops to 0). If so, we'll need to mark the lease as
+		// invalid.
+		removeOnceDereferenced :=
+			// Release from the store if the descriptor has been dropped or taken
+			// offline.
+			t.mu.takenOffline ||
+				// Release from the store if the lease is not for the latest
+				// version; only leases for the latest version can be acquired.
+				s != t.mu.active.findNewest() ||
+				s.GetVersion() < t.mu.maxVersionSeen ||
+				t.m.removeOnceDereferenced()
+		if !removeOnceDereferenced {
+			return nil
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
 		if s.mu.refcount < 0 {
 			panic(errors.AssertionFailedf("negative ref count: %s", s))
 		}
-
 		if s.mu.refcount == 0 && s.mu.lease != nil && removeOnceDereferenced {
 			l := s.mu.lease
 			s.mu.lease = nil
@@ -251,9 +260,12 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 		return nil
 	}
 	maybeRemoveLease := func() *storedLease {
+		if shouldRemove := decRefCount(s); !shouldRemove {
+			return nil
+		}
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		if l := decRefcount(s); l != nil {
+		if l := maybeMarkRemoveStoredLease(s); l != nil {
 			t.mu.active.remove(s)
 			return l
 		}
