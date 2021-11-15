@@ -974,9 +974,9 @@ func sendSnapshot(
 		snap,
 		to,
 		durSent.Seconds(),
-		redact.Safe(humanizeutil.IBytes(int64(float64(numBytesSent)/durSent.Seconds()))),
+		humanizeutil.IBytes(int64(float64(numBytesSent)/durSent.Seconds())),
 		ss.Status(),
-		redact.Safe(humanizeutil.IBytes(int64(targetRate))),
+		humanizeutil.IBytes(int64(targetRate)),
 		durQueued.Seconds(),
 	)
 

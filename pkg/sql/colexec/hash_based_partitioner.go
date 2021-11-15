@@ -537,7 +537,7 @@ StateChanged:
 				if partitionInfo.memSize <= op.maxPartitionSizeToProcessUsingMain {
 					log.VEventf(op.Ctx, 2,
 						`%s processes partition with idx %d of size %s using the "main" strategy`,
-						op.name, partitionIdx, redact.SafeString(humanizeutil.IBytes(partitionInfo.memSize)),
+						op.name, partitionIdx, humanizeutil.IBytes(partitionInfo.memSize),
 					)
 					for i := range op.partitionedInputs {
 						op.partitionedInputs[i].partitionIdx = partitionIdx
