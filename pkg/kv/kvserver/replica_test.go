@@ -3773,14 +3773,14 @@ func TestEndTxnDeadline(t *testing.T) {
 		case 1:
 			// Past deadline.
 			ts := txn.WriteTimestamp.Prev()
-			etArgs.Deadline = &ts
+			etArgs.Deadline = ts
 		case 2:
 			// Equal deadline.
-			etArgs.Deadline = &txn.WriteTimestamp
+			etArgs.Deadline = txn.WriteTimestamp
 		case 3:
 			// Future deadline.
 			ts := txn.WriteTimestamp.Next()
-			etArgs.Deadline = &ts
+			etArgs.Deadline = ts
 		}
 
 		{
@@ -3843,7 +3843,7 @@ func TestSerializableDeadline(t *testing.T) {
 	etArgs, etHeader := endTxnArgs(txn, true /* commit */)
 	deadline := updatedPushee.WriteTimestamp
 	deadline.Logical--
-	etArgs.Deadline = &deadline
+	etArgs.Deadline = deadline
 	_, pErr = tc.SendWrappedWith(etHeader, &etArgs)
 	const expectedErrMsg = "TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE\\)"
 	if pErr == nil {
@@ -3976,7 +3976,7 @@ func TestEndTxnDeadline_1PC(t *testing.T) {
 	et, etH := endTxnArgs(txn, true)
 	// Past deadline.
 	ts := txn.WriteTimestamp.Prev()
-	et.Deadline = &ts
+	et.Deadline = ts
 
 	var ba roachpb.BatchRequest
 	ba.Header = etH

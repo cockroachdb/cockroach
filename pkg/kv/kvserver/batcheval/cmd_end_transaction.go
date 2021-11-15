@@ -391,7 +391,7 @@ func EndTxn(
 // IsEndTxnExceedingDeadline returns true if the transaction exceeded its
 // deadline.
 func IsEndTxnExceedingDeadline(t hlc.Timestamp, args *roachpb.EndTxnRequest) bool {
-	return args.Deadline != nil && args.Deadline.LessEq(t)
+	return !args.Deadline.IsEmpty() && args.Deadline.LessEq(t)
 }
 
 // IsEndTxnTriggeringRetryError returns true if the EndTxnRequest cannot be

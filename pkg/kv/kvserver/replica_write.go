@@ -458,7 +458,7 @@ func (r *Replica) evaluateWriteBatch(
 	ms := new(enginepb.MVCCStats)
 	rec := NewReplicaEvalContext(r, latchSpans)
 	batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
-		ctx, idKey, rec, ms, ba, lul, latchSpans, nil /* deadline */)
+		ctx, idKey, rec, ms, ba, lul, latchSpans, hlc.Timestamp{} /* deadline */)
 	return batch, *ms, br, res, pErr
 }
 
@@ -620,7 +620,7 @@ func (r *Replica) evaluate1PC(
 //
 // deadline, if not nil, specifies the highest timestamp (exclusive) at which
 // the request can be evaluated. If ba is a transactional request, then dealine
-// cannot be specified; a transaction's deadline comes from it's EndTxn request.
+// must be empty; a transaction's deadline comes from it's EndTxn request.
 func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
@@ -629,7 +629,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	ba *roachpb.BatchRequest,
 	lul hlc.Timestamp,
 	latchSpans *spanset.SpanSet,
-	deadline *hlc.Timestamp,
+	deadline hlc.Timestamp,
 ) (batch storage.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	goldenMS := *ms
 	for retries := 0; ; retries++ {
