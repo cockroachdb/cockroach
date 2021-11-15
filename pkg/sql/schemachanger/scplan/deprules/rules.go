@@ -235,7 +235,7 @@ func init() {
 		rel.Filter(
 			"referenceEachOther", addIdx, dropIdx,
 		)(func(add, drop *scpb.PrimaryIndex) bool {
-			return add.IndexId != drop.IndexId
+			return add.IndexID != drop.IndexID
 		}),
 
 		joinTargetNode(addIdx, addTarget, addNode,
