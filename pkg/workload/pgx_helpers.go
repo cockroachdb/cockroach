@@ -12,6 +12,7 @@ package workload
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -58,6 +59,16 @@ var _ pgx.Logger = pgxLogger{}
 func (p pgxLogger) Log(
 	ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{},
 ) {
+	if ctx.Err() != nil {
+		// Don't log anything from pgx if the context was canceled by the workload
+		// runner. It would result in spam at the end of every workload.
+		return
+	}
+	if strings.Contains(msg, "restart transaction") {
+		// Our workloads have a lot of contention, so "restart transaction" messages
+		// are expected and noisy.
+		return
+	}
 	log.Infof(ctx, "pgx logger [%s]: %s logParams=%v", level.String(), msg, data)
 }
 
