@@ -11,6 +11,7 @@ go_library(
         "default_exprs.go",
         "doc.go",
         "expr.go",
+        "hash_sharded_compute_expr.go",
         "partial_index.go",
         "select_name_resolution.go",
         "unique_contraint.go",
