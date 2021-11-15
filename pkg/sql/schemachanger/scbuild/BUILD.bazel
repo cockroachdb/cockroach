@@ -74,8 +74,6 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
-        "@com_github_gogo_protobuf//jsonpb",
         "@com_github_stretchr_testify//require",
-        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

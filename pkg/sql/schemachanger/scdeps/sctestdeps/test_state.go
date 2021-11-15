@@ -13,14 +13,21 @@ package sctestdeps
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -50,6 +57,8 @@ type TestState struct {
 	statements                        []string
 	testingKnobs                      *scexec.NewSchemaChangerTestingKnobs
 	jobs                              []jobs.Record
+	txnCounter                        int
+	sideEffectLogBuffer               strings.Builder
 }
 
 // NewTestDependencies returns a TestState populated with the catalog state of
@@ -63,11 +72,9 @@ func NewTestDependencies(
 ) *TestState {
 
 	s := &TestState{
-		currentDatabase: "defaultdb",
-		namespace:       make(map[descpb.NameInfo]descpb.ID),
-		phase:           scop.StatementPhase,
-		statements:      statements,
-		testingKnobs:    testingKnobs,
+		namespace:    make(map[descpb.NameInfo]descpb.ID),
+		statements:   statements,
+		testingKnobs: testingKnobs,
 	}
 	// Wait for schema changes to complete.
 	tdb.CheckQueryResultsRetry(t, `
@@ -106,6 +113,26 @@ ORDER BY id`)
 			if desc.GetID() == keys.SystemDatabaseID || desc.GetParentID() == keys.SystemDatabaseID {
 				continue
 			}
+
+			// Redact time-dependent fields.
+			switch t := desc.(type) {
+			case *dbdesc.Mutable:
+				t.ModificationTime = hlc.Timestamp{}
+				t.DefaultPrivileges = nil
+			case *schemadesc.Mutable:
+				t.ModificationTime = hlc.Timestamp{}
+			case *tabledesc.Mutable:
+				t.TableDescriptor.ModificationTime = hlc.Timestamp{}
+				if t.TableDescriptor.CreateAsOfTime != (hlc.Timestamp{}) {
+					t.TableDescriptor.CreateAsOfTime = hlc.Timestamp{WallTime: 1}
+				}
+				if t.TableDescriptor.DropTime != 0 {
+					t.TableDescriptor.DropTime = 1
+				}
+			case *typedesc.Mutable:
+				t.TypeDescriptor.ModificationTime = hlc.Timestamp{}
+			}
+
 			s.descriptors.Upsert(desc)
 		}
 	}
@@ -177,8 +204,39 @@ ORDER BY id`)
 	return s
 }
 
+// LogSideEffectf writes an entry to the side effect log, to keep track of any
+// state changes which would have occurred in real dependencies.
+func (s *TestState) LogSideEffectf(fmtstr string, args ...interface{}) {
+	s.sideEffectLogBuffer.WriteString(fmt.Sprintf(fmtstr, args...))
+	s.sideEffectLogBuffer.WriteRune('\n')
+}
+
+// SideEffectLog returns the contents of the side effect log.
+// See LogSideEffectf for details.
+func (s *TestState) SideEffectLog() string {
+	return s.sideEffectLogBuffer.String()
+}
+
 // WithTxn simulates the execution of a transaction.
 func (s *TestState) WithTxn(fn func(s *TestState)) {
+	s.txnCounter++
 	defer s.syntheticDescriptors.Clear()
+	defer s.LogSideEffectf("commit transaction #%d", s.txnCounter)
+	s.LogSideEffectf("begin transaction #%d", s.txnCounter)
 	fn(s)
+}
+
+// IncrementPhase sets the state to the next phase.
+func (s *TestState) IncrementPhase() {
+	s.phase++
+}
+
+// JobRecord returns the job record in the fake job registry for the given job
+// ID, if it exists, nil otherwise.
+func (s *TestState) JobRecord(jobID jobspb.JobID) *jobs.Record {
+	idx := int(jobID) - 1
+	if idx < 0 || idx >= len(s.jobs) {
+		return nil
+	}
+	return &s.jobs[idx]
 }

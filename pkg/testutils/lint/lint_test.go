@@ -1069,7 +1069,6 @@ func TestLint(t *testing.T) {
 			":!rpc/codec_test.go",
 			":!settings/settings_test.go",
 			":!sql/types/types_jsonpb.go",
-			":!sql/schemachanger/scbuild/builder_test.go",
 			":!sql/schemachanger/scgraphviz/graphviz.go",
 		)
 		if err != nil {
