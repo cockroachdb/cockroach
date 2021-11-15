@@ -469,6 +469,10 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 	// Acquire the split or merge lock, if necessary. If a split or merge
 	// command was rejected with a below-Raft forced error then its replicated
 	// result was just cleared and this will be a no-op.
+	//
+	// TODO(tbg): can't this happen in splitPreApply which is called from
+	// b.runPreApplyTriggersAfterStagingWriteBatch and similar for merges? That
+	// way, it would become less of a one-off.
 	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.raftCmd); err != nil {
 		var err error
 		if cmd.raftCmd.ReplicatedEvalResult.Split != nil {
@@ -1259,6 +1263,47 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 			return nil
 		}
 		return sm.r.withRaftGroup(true, func(rn *raft.RawNode) (bool, error) {
+			// NB: `etcd/raft` configuration changes diverge from the official Raft way
+			// in that a configuration change becomes active when the corresponding log
+			// entry is applied (rather than appended). This ultimately enables the way
+			// we do things where the state machine's view of the range descriptor always
+			// dictates the active replication config but it is much trickier to prove
+			// correct. See:
+			//
+			// https://github.com/etcd-io/etcd/issues/7625#issuecomment-489232411
+			//
+			// INVARIANT: a leader will not append a config change to its logs when it
+			// hasn't applied all previous config changes in its logs.
+			//
+			// INVARIANT: a node will not campaign until it has applied any
+			// configuration changes with indexes less than or equal to its committed
+			// index.
+			//
+			// INVARIANT: appending a config change to the log (at leader or follower)
+			// implies that any previous config changes are durably known to be
+			// committed. That is, a commit index is persisted (and synced) that
+			// encompasses any earlier config changes before a new config change is
+			// appended.
+			//
+			// Together, these invariants ensure that a follower that is behind by
+			// multiple configuration changes will be using one of the two most recent
+			// configuration changes "by the time it matters", which is what is
+			// required for correctness (configuration changes are sequenced so that
+			// neighboring configurations are mutually compatible, i.e. don't cause
+			// split brain). To see this, consider a follower that is behind by
+			// multiple configuration changes. This is fine unless this follower
+			// becomes the leader (as it would then make quorum determinations based
+			// on its active config). To become leader, it needs to campaign, and
+			// thanks to the second invariant, it will only do so once it has applied
+			// all the configuration changes in its committed log. If it is to win the
+			// election, it will also have all committed configuration changes in its
+			// log (though not necessarily knowing that they are all committed). But
+			// the third invariant implies that when the follower received the most
+			// recent configuration change into its log, the one preceding it was
+			// durably marked as committed on the follower. In summary, we now know
+			// that it will apply all the way up to and including the second most
+			// recent configuration change, which is compatible with the most recent
+			// one.
 			rn.ApplyConfChange(cmd.confChange.ConfChangeI)
 			return true, nil
 		})
