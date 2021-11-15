@@ -2793,6 +2793,9 @@ func incTelemetryForNewColumn(def *tree.ColumnTableDef, desc *descpb.ColumnDescr
 			telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("unique"))
 		}
 	}
+	if desc.HasOnUpdate() {
+		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("on_update"))
+	}
 }
 
 func regionalByRowRegionDefaultExpr(oid oid.Oid, region tree.Name) tree.Expr {
