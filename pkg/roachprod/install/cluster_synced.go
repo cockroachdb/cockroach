@@ -89,15 +89,9 @@ func DefaultClusterSettings() ClusterSettings {
 
 var _ = DefaultClusterSettings
 
-// A SyncedCluster is created from the information in the synced hosts file
-// and is used as the target for installing and managing various software
+// A SyncedCluster is created from the cluster metadata in the synced clusters
+// cache and is used as the target for installing and managing various software
 // components.
-//
-// TODO(radu): SyncedCluster is currently used in two "modes": it can be just a
-// metadata holder (only Cluster and DebugDir initialized) or it can be a usable
-// object (once Prepare() is called). This makes things harder to follow,
-// especially when we modify entries in the Clusters map in place. We should
-// separate the metadata.
 type SyncedCluster struct {
 	// Cluster metadata, obtained from the respective cloud provider.
 	cloud.Cluster
@@ -106,6 +100,9 @@ type SyncedCluster struct {
 	DebugDir string
 
 	// Nodes is used by various commands like Start.
+	// TODO(radu): this is set externally; it does not belong as a field. Instead,
+	// it should be passed separately to whatever operations require a list of
+	// nodes.
 	Nodes []int
 
 	ClusterSettings
@@ -118,10 +115,14 @@ type SyncedCluster struct {
 	AuthorizedKeys []byte
 }
 
-// Prepare the SyncedCluster object for use, applying any ClusterSettings.
-func (c *SyncedCluster) Prepare(settings ClusterSettings) {
-	c.Impl = Cockroach{}
-	c.ClusterSettings = settings
+// NewSyncedCluster creates a SyncedCluster, given the cluster metadata and
+// settings.
+func NewSyncedCluster(metadata *cloud.Cluster, settings ClusterSettings) *SyncedCluster {
+	c := &SyncedCluster{
+		Cluster:         *metadata,
+		ClusterSettings: settings,
+		Impl:            Cockroach{},
+	}
 	c.Localities = make([]string, len(c.VMs))
 	for i := range c.VMs {
 		c.Localities[i] = c.VMs[i].Locality()
@@ -133,6 +134,7 @@ func (c *SyncedCluster) Prepare(settings ClusterSettings) {
 			c.Localities[i] += rack
 		}
 	}
+	return c
 }
 
 func (c *SyncedCluster) host(index int) string {

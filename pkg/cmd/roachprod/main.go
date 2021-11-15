@@ -244,16 +244,20 @@ var cachedHostsCmd = &cobra.Command{
 	Short: "list all clusters (and optionally their host numbers) from local cache",
 	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		cachedHosts, err := roachprod.CachedHosts(cachedHostsCluster)
-		if err != nil {
-			return err
-		}
-		for _, host := range cachedHosts {
-			if strings.HasPrefix(host, "teamcity") {
-				continue
+		roachprod.CachedClusters(func(clusterName string, numVMs int) {
+			if strings.HasPrefix(clusterName, "teamcity") {
+				return
 			}
-			fmt.Println(host)
-		}
+			fmt.Printf("%s", clusterName)
+			// When invoked by bash-completion, cachedHostsCluster is what the user
+			// has currently typed -- if this cluster matches that, expand its hosts.
+			if strings.HasPrefix(cachedHostsCluster, clusterName) {
+				for i := 1; i <= numVMs; i++ {
+					fmt.Printf(" %s:%d", clusterName, i)
+				}
+			}
+			fmt.Printf("\n")
+		})
 		return nil
 	}),
 }
