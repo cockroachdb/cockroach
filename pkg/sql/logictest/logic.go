@@ -3378,7 +3378,7 @@ func RunLogicTestWithDefaultConfig(
 						!*rewriteSQL &&
 						!util.RaceEnabled &&
 						!cfg.useTenant &&
-						cfg.numNodes <= 3 {
+						cfg.numNodes <= 5 {
 						// Skip parallelizing tests that use the kv-batch-size directive since
 						// the batch size is a global variable.
 						//
