@@ -38,7 +38,7 @@ func TestEncryptDecrypt(t *testing.T) {
 				for _, chunkSize := range []int{1, 7, 64, 1 << 10, 1 << 20} {
 					encryptionChunkSizeV2 = chunkSize
 
-					t.Run("chunk="+humanizeutil.IBytes(int64(chunkSize)), func(t *testing.T) {
+					t.Run("chunk="+string(humanizeutil.IBytes(int64(chunkSize))), func(t *testing.T) {
 						ciphertext, err := EncryptFile(plaintext, key)
 						require.NoError(t, err)
 						require.True(t, AppearsEncrypted(ciphertext), "cipher text should appear encrypted")
@@ -225,10 +225,10 @@ func BenchmarkEncryption(b *testing.B) {
 
 	b.Run("EncryptFile", func(b *testing.B) {
 		for _, plaintext := range [][]byte{plaintext1KB, plaintext100KB, plaintext1MB, plaintext64MB} {
-			b.Run(humanizeutil.IBytes(int64(len(plaintext))), func(b *testing.B) {
+			b.Run(string(humanizeutil.IBytes(int64(len(plaintext)))), func(b *testing.B) {
 				for _, chunkSize := range chunkSizes {
 					encryptionChunkSizeV2 = chunkSize
-					b.Run("chunk="+humanizeutil.IBytes(int64(chunkSize)), func(b *testing.B) {
+					b.Run("chunk="+string(humanizeutil.IBytes(int64(chunkSize))), func(b *testing.B) {
 						for i := 0; i < b.N; i++ {
 							_, err := EncryptFile(plaintext, key)
 							if err != nil {
@@ -258,11 +258,11 @@ func BenchmarkEncryption(b *testing.B) {
 	b.Run("DecryptFile", func(b *testing.B) {
 		for _, ciphertextOriginal := range [][][]byte{ciphertext1KB, ciphertext100KB, ciphertext1MB, ciphertext64MB} {
 			// Decrypt reuses/clobbers the original ciphertext slice.
-			b.Run(humanizeutil.IBytes(int64(len(ciphertextOriginal[0]))), func(b *testing.B) {
+			b.Run(string(humanizeutil.IBytes(int64(len(ciphertextOriginal[0])))), func(b *testing.B) {
 				for chunkSizeNum, chunkSize := range chunkSizes {
 					encryptionChunkSizeV2 = chunkSize
 
-					b.Run("chunk="+humanizeutil.IBytes(int64(chunkSize)), func(b *testing.B) {
+					b.Run("chunk="+string(humanizeutil.IBytes(int64(chunkSize))), func(b *testing.B) {
 						ciphertext := bytes.NewReader(ciphertextOriginal[chunkSizeNum])
 						for i := 0; i < b.N; i++ {
 							ciphertext.Reset(ciphertextOriginal[chunkSizeNum])

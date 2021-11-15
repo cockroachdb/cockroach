@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var (
@@ -41,7 +42,12 @@ var (
 type sz int64
 
 func (b sz) String() string {
-	return humanizeutil.IBytes(int64(b))
+	return redact.StringWithoutMarkers(b)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (b sz) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Print(humanizeutil.IBytes(int64(b)))
 }
 
 // SSTBatcher is a helper for bulk-adding many KVs in chunks via AddSSTable. An
