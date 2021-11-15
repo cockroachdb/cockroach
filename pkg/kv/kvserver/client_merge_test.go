@@ -5019,7 +5019,7 @@ func setupClusterWithSubsumedRange(
 			newDesc, err = tc.AddVoters(desc.StartKey.AsRawKey(), tc.Target(1))
 			if kv.IsExpectedRelocateError(err) {
 				// Retry.
-				return errors.Newf("ChangeReplicas: received error %s", err)
+				return errors.Wrap(err, "ChangeReplicas received error")
 			}
 			return nil
 		})

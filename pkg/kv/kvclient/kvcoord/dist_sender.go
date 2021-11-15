@@ -2205,7 +2205,7 @@ func skipStaleReplicas(
 	if !routing.Valid() {
 		return noMoreReplicasErr(
 			ambiguousError,
-			errors.Newf("routing information detected to be stale; lastErr: %s", lastErr))
+			errors.Wrap(lastErr, "routing information detected to be stale"))
 	}
 
 	for {

@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFastIntMap(t *testing.T) {
@@ -43,6 +44,9 @@ func TestFastIntMap(t *testing.T) {
 							"incorrect result for key %d: (%d, %t), expected (%d, %t)",
 							k, v, ok, expV, expOk,
 						)
+					}
+					if !ok {
+						require.Equal(t, -1, v)
 					}
 				}
 
