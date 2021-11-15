@@ -115,6 +115,9 @@ func parseGeoJSON(
 	if err := geojson.Unmarshal(b, &t); err != nil {
 		return geopb.SpatialObject{}, err
 	}
+	if t == nil {
+		return geopb.SpatialObject{}, errors.Newf("invalid GeoJSON input")
+	}
 	if defaultSRID != 0 && t.SRID() == 0 {
 		AdjustGeomTSRID(t, defaultSRID)
 	}
