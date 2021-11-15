@@ -666,9 +666,9 @@ func NewLeaseManager(
 func NameMatchesDescriptor(
 	desc catalog.Descriptor, parentID descpb.ID, parentSchemaID descpb.ID, name string,
 ) bool {
-	return desc.GetParentID() == parentID &&
-		desc.GetParentSchemaID() == parentSchemaID &&
-		desc.GetName() == name
+	return desc.GetName() == name &&
+		desc.GetParentID() == parentID &&
+		desc.GetParentSchemaID() == parentSchemaID
 }
 
 // findNewest returns the newest descriptor version state for the ID.
