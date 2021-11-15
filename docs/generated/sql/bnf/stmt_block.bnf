@@ -1529,6 +1529,8 @@ session_var ::=
 	| 'NAMES'
 	| 'ROLE'
 	| 'SESSION_USER'
+	| 'LC_COLLATE'
+	| 'LC_CTYPE'
 	| 'TIME' 'ZONE'
 
 var_name ::=

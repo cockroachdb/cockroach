@@ -560,3 +560,63 @@ SET cluster setting sql.trace.txn.enable_threshold='1s'
 
 statement ok
 SET cluster setting sql.trace.txn.enable_threshold='0s'
+
+query T
+SHOW LC_COLLATE
+----
+C.UTF-8
+
+query T
+SHOW LC_CTYPE
+----
+C.UTF-8
+
+query T
+SHOW LC_MESSAGES
+----
+C.UTF-8
+
+query T
+SHOW LC_MONETARY
+----
+C.UTF-8
+
+query T
+SHOW LC_NUMERIC
+----
+C.UTF-8
+
+query T
+SHOW LC_TIME
+----
+C.UTF-8
+
+statement error parameter "lc_collate" cannot be changed
+SET LC_COLLATE = 'C.UTF-8'
+
+statement error parameter "lc_ctype" cannot be changed
+SET LC_CTYPE = 'C.UTF-8'
+
+statement ok
+SET LC_MESSAGES = 'C.UTF-8'
+
+statement ok
+SET LC_MONETARY = 'C.UTF-8'
+
+statement ok
+SET LC_NUMERIC = 'C.UTF-8'
+
+statement ok
+SET LC_TIME = 'C.UTF-8'
+
+statement error invalid value for parameter "lc_messages": "en_US.UTF-8"
+SET LC_MESSAGES = 'en_US.UTF-8'
+
+statement error invalid value for parameter "lc_monetary": "en_US.UTF-8"
+SET LC_MONETARY = 'en_US.UTF-8'
+
+statement error invalid value for parameter "lc_numeric": "en_US.UTF-8"
+SET LC_NUMERIC = 'en_US.UTF-8'
+
+statement error invalid value for parameter "lc_time": "en_US.UTF-8"
+SET LC_TIME = 'en_US.UTF-8'

@@ -3957,6 +3957,12 @@ intervalstyle                                          postgres            NULL 
 intervalstyle_enabled                                  off                 NULL      NULL        NULL        string
 is_superuser                                           on                  NULL      NULL        NULL        string
 large_full_scan_rows                                   1000                NULL      NULL        NULL        string
+lc_collate                                             C.UTF-8             NULL      NULL        NULL        string
+lc_ctype                                               C.UTF-8             NULL      NULL        NULL        string
+lc_messages                                            C.UTF-8             NULL      NULL        NULL        string
+lc_monetary                                            C.UTF-8             NULL      NULL        NULL        string
+lc_numeric                                             C.UTF-8             NULL      NULL        NULL        string
+lc_time                                                C.UTF-8             NULL      NULL        NULL        string
 locality                                               region=test,dc=dc1  NULL      NULL        NULL        string
 locality_optimized_partitioned_index_scan              on                  NULL      NULL        NULL        string
 lock_timeout                                           0                   NULL      NULL        NULL        string
@@ -4053,6 +4059,12 @@ intervalstyle                                          postgres            NULL 
 intervalstyle_enabled                                  off                 NULL  user     NULL      off                 off
 is_superuser                                           on                  NULL  user     NULL      on                  on
 large_full_scan_rows                                   1000                NULL  user     NULL      1000                1000
+lc_collate                                             C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
+lc_ctype                                               C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
+lc_messages                                            C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
+lc_monetary                                            C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
+lc_numeric                                             C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
+lc_time                                                C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
 locality                                               region=test,dc=dc1  NULL  user     NULL      region=test,dc=dc1  region=test,dc=dc1
 locality_optimized_partitioned_index_scan              on                  NULL  user     NULL      on                  on
 lock_timeout                                           0                   NULL  user     NULL      0s                  0s
@@ -4145,6 +4157,12 @@ intervalstyle                                          NULL    NULL     NULL    
 intervalstyle_enabled                                  NULL    NULL     NULL     NULL        NULL
 is_superuser                                           NULL    NULL     NULL     NULL        NULL
 large_full_scan_rows                                   NULL    NULL     NULL     NULL        NULL
+lc_collate                                             NULL    NULL     NULL     NULL        NULL
+lc_ctype                                               NULL    NULL     NULL     NULL        NULL
+lc_messages                                            NULL    NULL     NULL     NULL        NULL
+lc_monetary                                            NULL    NULL     NULL     NULL        NULL
+lc_numeric                                             NULL    NULL     NULL     NULL        NULL
+lc_time                                                NULL    NULL     NULL     NULL        NULL
 locality                                               NULL    NULL     NULL     NULL        NULL
 locality_optimized_partitioned_index_scan              NULL    NULL     NULL     NULL        NULL
 lock_timeout                                           NULL    NULL     NULL     NULL        NULL

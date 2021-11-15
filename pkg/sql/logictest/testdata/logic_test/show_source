@@ -71,6 +71,12 @@ intervalstyle                                          postgres
 intervalstyle_enabled                                  off
 is_superuser                                           on
 large_full_scan_rows                                   1000
+lc_collate                                             C.UTF-8
+lc_ctype                                               C.UTF-8
+lc_messages                                            C.UTF-8
+lc_monetary                                            C.UTF-8
+lc_numeric                                             C.UTF-8
+lc_time                                                C.UTF-8
 locality                                               region=test,dc=dc1
 locality_optimized_partitioned_index_scan              on
 lock_timeout                                           0
