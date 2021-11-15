@@ -469,6 +469,10 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 	// Acquire the split or merge lock, if necessary. If a split or merge
 	// command was rejected with a below-Raft forced error then its replicated
 	// result was just cleared and this will be a no-op.
+	//
+	// TODO(tbg): can't this happen in splitPreApply which is called from
+	// b.runPreApplyTriggersAfterStagingWriteBatch and similar for merges? That
+	// way, it would become less of a one-off.
 	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.raftCmd); err != nil {
 		var err error
 		if cmd.raftCmd.ReplicatedEvalResult.Split != nil {
