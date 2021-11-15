@@ -377,10 +377,18 @@ query T
 SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] OFFSET 2
 ----
 ·
-• insert fast path
-  into: t(x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10)
-  auto commit
-  size: 7 columns, 1 row
+• insert
+│ into: t(x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10)
+│ auto commit
+│
+└── • render
+    │ estimated row count: 1
+    │
+    └── • render
+        │ estimated row count: 1
+        │
+        └── • values
+              size: 3 columns, 1 row
 
 # Ensure that all of the indexes have been rewritten.
 query IT

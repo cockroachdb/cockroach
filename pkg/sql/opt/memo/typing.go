@@ -19,9 +19,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// InferType derives the type of the given scalar expression and stores it in
-// the expression's Type field. Depending upon the operator, the type may be
-// fixed, or it may be dependent upon the expression children.
+// InferType derives the type of the given scalar expression. The result is
+// stored in the expression's Type field by Memoize[Expr] functions. Depending
+// upon the operator, the type may be fixed, or it may be dependent upon the
+// expression children.
 func InferType(mem *Memo, e opt.ScalarExpr) *types.T {
 	// Special-case Variable, since it's the only expression that needs the memo.
 	if e.Op() == opt.VariableOp {

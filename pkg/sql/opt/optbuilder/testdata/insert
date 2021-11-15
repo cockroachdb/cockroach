@@ -93,23 +93,32 @@ INSERT INTO abcde VALUES (1, 2, 3)
 insert abcde
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => a:1
- │    ├── column2:10 => b:2
- │    ├── column3:11 => c:3
- │    ├── d_comp:13 => d:4
- │    ├── column1:9 => e:5
- │    └── rowid_default:12 => rowid:6
+ │    ├── column1:12 => a:1
+ │    ├── column2:13 => b:2
+ │    ├── column3:14 => c:3
+ │    ├── d_comp:16 => d:4
+ │    ├── column1:12 => e:5
+ │    └── rowid_default:15 => rowid:6
  └── project
-      ├── columns: d_comp:13!null column1:9!null column2:10!null column3:11!null rowid_default:12
+      ├── columns: d_comp:16!null column1:12!null column2:13!null column3:14!null rowid_default:15
       ├── project
-      │    ├── columns: rowid_default:12 column1:9!null column2:10!null column3:11!null
-      │    ├── values
-      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    └── (1, 2, 3)
+      │    ├── columns: rowid_default:15 column1:12!null column2:13!null column3:14!null
+      │    ├── project
+      │    │    ├── columns: column1:12!null column2:13!null column3:14!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    └── (1, 2, 3)
+      │    │    └── projections
+      │    │         ├── assignment-cast: INT8 [as=column1:12]
+      │    │         │    └── column1:9
+      │    │         ├── assignment-cast: INT8 [as=column2:13]
+      │    │         │    └── column2:10
+      │    │         └── assignment-cast: INT8 [as=column3:14]
+      │    │              └── column3:11
       │    └── projections
-      │         └── unique_rowid() [as=rowid_default:12]
+      │         └── unique_rowid() [as=rowid_default:15]
       └── projections
-           └── (column2:10 + column3:11) + 1 [as=d_comp:13]
+           └── (column2:13 + column3:14) + 1 [as=d_comp:16]
 
 # Don't specify values for null or default columns.
 build
@@ -118,25 +127,30 @@ INSERT INTO abcde VALUES (1)
 insert abcde
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => a:1
- │    ├── b_default:10 => b:2
- │    ├── c_default:11 => c:3
- │    ├── d_comp:13 => d:4
- │    ├── column1:9 => e:5
- │    └── rowid_default:12 => rowid:6
+ │    ├── column1:10 => a:1
+ │    ├── b_default:11 => b:2
+ │    ├── c_default:12 => c:3
+ │    ├── d_comp:14 => d:4
+ │    ├── column1:10 => e:5
+ │    └── rowid_default:13 => rowid:6
  └── project
-      ├── columns: d_comp:13 column1:9!null b_default:10 c_default:11!null rowid_default:12
+      ├── columns: d_comp:14 column1:10!null b_default:11 c_default:12!null rowid_default:13
       ├── project
-      │    ├── columns: b_default:10 c_default:11!null rowid_default:12 column1:9!null
-      │    ├── values
-      │    │    ├── columns: column1:9!null
-      │    │    └── (1,)
+      │    ├── columns: b_default:11 c_default:12!null rowid_default:13 column1:10!null
+      │    ├── project
+      │    │    ├── columns: column1:10!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:9!null
+      │    │    │    └── (1,)
+      │    │    └── projections
+      │    │         └── assignment-cast: INT8 [as=column1:10]
+      │    │              └── column1:9
       │    └── projections
-      │         ├── NULL::INT8 [as=b_default:10]
-      │         ├── 10 [as=c_default:11]
-      │         └── unique_rowid() [as=rowid_default:12]
+      │         ├── NULL::INT8 [as=b_default:11]
+      │         ├── 10 [as=c_default:12]
+      │         └── unique_rowid() [as=rowid_default:13]
       └── projections
-           └── (b_default:10 + c_default:11) + 1 [as=d_comp:13]
+           └── (b_default:11 + c_default:12) + 1 [as=d_comp:14]
 
 # Ordered input.
 build
@@ -145,34 +159,39 @@ INSERT INTO abcde SELECT y FROM xyz ORDER BY y, z LIMIT 10
 insert abcde
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── y:10 => a:1
- │    ├── b_default:14 => b:2
- │    ├── c_default:15 => c:3
- │    ├── d_comp:17 => d:4
- │    ├── y:10 => e:5
- │    └── rowid_default:16 => rowid:6
+ │    ├── y:14 => a:1
+ │    ├── b_default:15 => b:2
+ │    ├── c_default:16 => c:3
+ │    ├── d_comp:18 => d:4
+ │    ├── y:14 => e:5
+ │    └── rowid_default:17 => rowid:6
  └── project
-      ├── columns: d_comp:17 y:10 b_default:14 c_default:15!null rowid_default:16
+      ├── columns: d_comp:18 y:14 b_default:15 c_default:16!null rowid_default:17
       ├── project
-      │    ├── columns: b_default:14 c_default:15!null rowid_default:16 y:10
-      │    ├── limit
-      │    │    ├── columns: y:10 z:11
-      │    │    ├── internal-ordering: +10,+11
-      │    │    ├── sort
-      │    │    │    ├── columns: y:10 z:11
-      │    │    │    ├── ordering: +10,+11
-      │    │    │    ├── limit hint: 10.00
-      │    │    │    └── project
-      │    │    │         ├── columns: y:10 z:11
-      │    │    │         └── scan xyz
-      │    │    │              └── columns: x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
-      │    │    └── 10
+      │    ├── columns: b_default:15 c_default:16!null rowid_default:17 y:14
+      │    ├── project
+      │    │    ├── columns: y:14
+      │    │    ├── limit
+      │    │    │    ├── columns: xyz.y:10 z:11
+      │    │    │    ├── internal-ordering: +10,+11
+      │    │    │    ├── sort
+      │    │    │    │    ├── columns: xyz.y:10 z:11
+      │    │    │    │    ├── ordering: +10,+11
+      │    │    │    │    ├── limit hint: 10.00
+      │    │    │    │    └── project
+      │    │    │    │         ├── columns: xyz.y:10 z:11
+      │    │    │    │         └── scan xyz
+      │    │    │    │              └── columns: x:9!null xyz.y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
+      │    │    │    └── 10
+      │    │    └── projections
+      │    │         └── assignment-cast: INT8 [as=y:14]
+      │    │              └── xyz.y:10
       │    └── projections
-      │         ├── NULL::INT8 [as=b_default:14]
-      │         ├── 10 [as=c_default:15]
-      │         └── unique_rowid() [as=rowid_default:16]
+      │         ├── NULL::INT8 [as=b_default:15]
+      │         ├── 10 [as=c_default:16]
+      │         └── unique_rowid() [as=rowid_default:17]
       └── projections
-           └── (b_default:14 + c_default:15) + 1 [as=d_comp:17]
+           └── (b_default:15 + c_default:16) + 1 [as=d_comp:18]
 
 # Ignore ORDER BY without LIMIT.
 build
@@ -181,26 +200,31 @@ INSERT INTO abcde SELECT y FROM xyz ORDER BY y, z
 insert abcde
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── y:10 => a:1
- │    ├── b_default:14 => b:2
- │    ├── c_default:15 => c:3
- │    ├── d_comp:17 => d:4
- │    ├── y:10 => e:5
- │    └── rowid_default:16 => rowid:6
+ │    ├── y:14 => a:1
+ │    ├── b_default:15 => b:2
+ │    ├── c_default:16 => c:3
+ │    ├── d_comp:18 => d:4
+ │    ├── y:14 => e:5
+ │    └── rowid_default:17 => rowid:6
  └── project
-      ├── columns: d_comp:17 y:10 b_default:14 c_default:15!null rowid_default:16
+      ├── columns: d_comp:18 y:14 b_default:15 c_default:16!null rowid_default:17
       ├── project
-      │    ├── columns: b_default:14 c_default:15!null rowid_default:16 y:10
+      │    ├── columns: b_default:15 c_default:16!null rowid_default:17 y:14
       │    ├── project
-      │    │    ├── columns: y:10 z:11
-      │    │    └── scan xyz
-      │    │         └── columns: x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
+      │    │    ├── columns: y:14
+      │    │    ├── project
+      │    │    │    ├── columns: xyz.y:10 z:11
+      │    │    │    └── scan xyz
+      │    │    │         └── columns: x:9!null xyz.y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
+      │    │    └── projections
+      │    │         └── assignment-cast: INT8 [as=y:14]
+      │    │              └── xyz.y:10
       │    └── projections
-      │         ├── NULL::INT8 [as=b_default:14]
-      │         ├── 10 [as=c_default:15]
-      │         └── unique_rowid() [as=rowid_default:16]
+      │         ├── NULL::INT8 [as=b_default:15]
+      │         ├── 10 [as=c_default:16]
+      │         └── unique_rowid() [as=rowid_default:17]
       └── projections
-           └── (b_default:14 + c_default:15) + 1 [as=d_comp:17]
+           └── (b_default:15 + c_default:16) + 1 [as=d_comp:18]
 
 # Use placeholders.
 build
@@ -209,12 +233,21 @@ INSERT INTO xyz VALUES ($1, $2, $3)
 insert xyz
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:6 => x:1
- │    ├── column2:7 => y:2
- │    └── column3:8 => z:3
- └── values
-      ├── columns: column1:6 column2:7 column3:8
-      └── ($1, $2, $3)
+ │    ├── column1:9 => x:1
+ │    ├── column2:10 => y:2
+ │    └── column3:11 => z:3
+ └── project
+      ├── columns: column1:9 column2:10 column3:11
+      ├── values
+      │    ├── columns: column1:6 column2:7 column3:8
+      │    └── ($1, $2, $3)
+      └── projections
+           ├── assignment-cast: STRING [as=column1:9]
+           │    └── column1:6
+           ├── assignment-cast: INT8 [as=column2:10]
+           │    └── column2:7
+           └── assignment-cast: FLOAT8 [as=column3:11]
+                └── column3:8
 
 # Null expressions.
 build
@@ -223,23 +256,32 @@ INSERT INTO abcde VALUES (2, null, null)
 insert abcde
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => a:1
- │    ├── column2:10 => b:2
- │    ├── column3:11 => c:3
- │    ├── d_comp:13 => d:4
- │    ├── column1:9 => e:5
- │    └── rowid_default:12 => rowid:6
+ │    ├── column1:12 => a:1
+ │    ├── column2:13 => b:2
+ │    ├── column3:14 => c:3
+ │    ├── d_comp:16 => d:4
+ │    ├── column1:12 => e:5
+ │    └── rowid_default:15 => rowid:6
  └── project
-      ├── columns: d_comp:13 column1:9!null column2:10 column3:11 rowid_default:12
+      ├── columns: d_comp:16 column1:12!null column2:13 column3:14 rowid_default:15
       ├── project
-      │    ├── columns: rowid_default:12 column1:9!null column2:10 column3:11
-      │    ├── values
-      │    │    ├── columns: column1:9!null column2:10 column3:11
-      │    │    └── (2, NULL::INT8, NULL::INT8)
+      │    ├── columns: rowid_default:15 column1:12!null column2:13 column3:14
+      │    ├── project
+      │    │    ├── columns: column1:12!null column2:13 column3:14
+      │    │    ├── values
+      │    │    │    ├── columns: column1:9!null column2:10 column3:11
+      │    │    │    └── (2, NULL::INT8, NULL::INT8)
+      │    │    └── projections
+      │    │         ├── assignment-cast: INT8 [as=column1:12]
+      │    │         │    └── column1:9
+      │    │         ├── assignment-cast: INT8 [as=column2:13]
+      │    │         │    └── column2:10
+      │    │         └── assignment-cast: INT8 [as=column3:14]
+      │    │              └── column3:11
       │    └── projections
-      │         └── unique_rowid() [as=rowid_default:12]
+      │         └── unique_rowid() [as=rowid_default:15]
       └── projections
-           └── (column2:10 + column3:11) + 1 [as=d_comp:13]
+           └── (column2:13 + column3:14) + 1 [as=d_comp:16]
 
 # Duplicate expressions.
 build
@@ -248,27 +290,36 @@ INSERT INTO abcde SELECT 2, $1 + 1, $1 + 1
 insert abcde
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── "?column?":9 => a:1
- │    ├── "?column?":10 => b:2
- │    ├── "?column?":10 => c:3
- │    ├── d_comp:12 => d:4
- │    ├── "?column?":9 => e:5
- │    └── rowid_default:11 => rowid:6
+ │    ├── "?column?":11 => a:1
+ │    ├── "?column?":12 => b:2
+ │    ├── "?column?":13 => c:3
+ │    ├── d_comp:15 => d:4
+ │    ├── "?column?":11 => e:5
+ │    └── rowid_default:14 => rowid:6
  └── project
-      ├── columns: d_comp:12 "?column?":9!null "?column?":10 rowid_default:11
+      ├── columns: d_comp:15 "?column?":11!null "?column?":12 "?column?":13 rowid_default:14
       ├── project
-      │    ├── columns: rowid_default:11 "?column?":9!null "?column?":10
+      │    ├── columns: rowid_default:14 "?column?":11!null "?column?":12 "?column?":13
       │    ├── project
-      │    │    ├── columns: "?column?":9!null "?column?":10
-      │    │    ├── values
-      │    │    │    └── ()
+      │    │    ├── columns: "?column?":11!null "?column?":12 "?column?":13
+      │    │    ├── project
+      │    │    │    ├── columns: "?column?":9!null "?column?":10
+      │    │    │    ├── values
+      │    │    │    │    └── ()
+      │    │    │    └── projections
+      │    │    │         ├── 2 [as="?column?":9]
+      │    │    │         └── $1 + 1 [as="?column?":10]
       │    │    └── projections
-      │    │         ├── 2 [as="?column?":9]
-      │    │         └── $1 + 1 [as="?column?":10]
+      │    │         ├── assignment-cast: INT8 [as="?column?":11]
+      │    │         │    └── "?column?":9
+      │    │         ├── assignment-cast: INT8 [as="?column?":12]
+      │    │         │    └── "?column?":10
+      │    │         └── assignment-cast: INT8 [as="?column?":13]
+      │    │              └── "?column?":10
       │    └── projections
-      │         └── unique_rowid() [as=rowid_default:11]
+      │         └── unique_rowid() [as=rowid_default:14]
       └── projections
-           └── ("?column?":10 + "?column?":10) + 1 [as=d_comp:12]
+           └── ("?column?":12 + "?column?":13) + 1 [as=d_comp:15]
 
 # Use DEFAULT VALUES.
 build
@@ -296,26 +347,35 @@ INSERT INTO abcde ((VALUES (1, DEFAULT, 2), (2, 3, 4), (3, 2, DEFAULT), (4, DEFA
 insert abcde
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => a:1
- │    ├── column2:10 => b:2
- │    ├── column3:11 => c:3
- │    ├── d_comp:13 => d:4
- │    ├── column1:9 => e:5
- │    └── rowid_default:12 => rowid:6
+ │    ├── column1:12 => a:1
+ │    ├── column2:13 => b:2
+ │    ├── column3:14 => c:3
+ │    ├── d_comp:16 => d:4
+ │    ├── column1:12 => e:5
+ │    └── rowid_default:15 => rowid:6
  └── project
-      ├── columns: d_comp:13 column1:9!null column2:10 column3:11!null rowid_default:12
+      ├── columns: d_comp:16 column1:12!null column2:13 column3:14!null rowid_default:15
       ├── project
-      │    ├── columns: rowid_default:12 column1:9!null column2:10 column3:11!null
-      │    ├── values
-      │    │    ├── columns: column1:9!null column2:10 column3:11!null
-      │    │    ├── (1, NULL::INT8, 2)
-      │    │    ├── (2, 3, 4)
-      │    │    ├── (3, 2, 10)
-      │    │    └── (4, NULL::INT8, 10)
+      │    ├── columns: rowid_default:15 column1:12!null column2:13 column3:14!null
+      │    ├── project
+      │    │    ├── columns: column1:12!null column2:13 column3:14!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:9!null column2:10 column3:11!null
+      │    │    │    ├── (1, NULL::INT8, 2)
+      │    │    │    ├── (2, 3, 4)
+      │    │    │    ├── (3, 2, 10)
+      │    │    │    └── (4, NULL::INT8, 10)
+      │    │    └── projections
+      │    │         ├── assignment-cast: INT8 [as=column1:12]
+      │    │         │    └── column1:9
+      │    │         ├── assignment-cast: INT8 [as=column2:13]
+      │    │         │    └── column2:10
+      │    │         └── assignment-cast: INT8 [as=column3:14]
+      │    │              └── column3:11
       │    └── projections
-      │         └── unique_rowid() [as=rowid_default:12]
+      │         └── unique_rowid() [as=rowid_default:15]
       └── projections
-           └── (column2:10 + column3:11) + 1 [as=d_comp:13]
+           └── (column2:13 + column3:14) + 1 [as=d_comp:16]
 
 # Use DEFAULT expressions in VALUES expression wrapped by WITH clause (error).
 build
@@ -338,102 +398,117 @@ project
  └── insert abcde
       ├── columns: a:1!null b:2 c:3!null d:4 e:5!null rowid:6!null
       ├── insert-mapping:
-      │    ├── "?column?":9 => a:1
-      │    ├── b_default:10 => b:2
-      │    ├── c_default:11 => c:3
-      │    ├── d_comp:13 => d:4
-      │    ├── "?column?":9 => e:5
-      │    └── rowid_default:12 => rowid:6
+      │    ├── "?column?":10 => a:1
+      │    ├── b_default:11 => b:2
+      │    ├── c_default:12 => c:3
+      │    ├── d_comp:14 => d:4
+      │    ├── "?column?":10 => e:5
+      │    └── rowid_default:13 => rowid:6
       └── project
-           ├── columns: d_comp:13 "?column?":9!null b_default:10 c_default:11!null rowid_default:12
+           ├── columns: d_comp:14 "?column?":10!null b_default:11 c_default:12!null rowid_default:13
            ├── project
-           │    ├── columns: b_default:10 c_default:11!null rowid_default:12 "?column?":9!null
+           │    ├── columns: b_default:11 c_default:12!null rowid_default:13 "?column?":10!null
            │    ├── project
-           │    │    ├── columns: "?column?":9!null
-           │    │    ├── values
-           │    │    │    └── ()
+           │    │    ├── columns: "?column?":10!null
+           │    │    ├── project
+           │    │    │    ├── columns: "?column?":9!null
+           │    │    │    ├── values
+           │    │    │    │    └── ()
+           │    │    │    └── projections
+           │    │    │         └── 1 [as="?column?":9]
            │    │    └── projections
-           │    │         └── 1 [as="?column?":9]
+           │    │         └── assignment-cast: INT8 [as="?column?":10]
+           │    │              └── "?column?":9
            │    └── projections
-           │         ├── NULL::INT8 [as=b_default:10]
-           │         ├── 10 [as=c_default:11]
-           │         └── unique_rowid() [as=rowid_default:12]
+           │         ├── NULL::INT8 [as=b_default:11]
+           │         ├── 10 [as=c_default:12]
+           │         └── unique_rowid() [as=rowid_default:13]
            └── projections
-                └── (b_default:10 + c_default:11) + 1 [as=d_comp:13]
+                └── (b_default:11 + c_default:12) + 1 [as=d_comp:14]
 
 # Return values from aliased table.
 build
 INSERT INTO abcde AS foo SELECT 1 RETURNING foo.a + 1, foo.b * foo.c
 ----
 project
- ├── columns: "?column?":14!null "?column?":15
+ ├── columns: "?column?":15!null "?column?":16
  ├── insert abcde [as=foo]
  │    ├── columns: a:1!null b:2 c:3!null d:4 e:5!null rowid:6!null
  │    ├── insert-mapping:
- │    │    ├── "?column?":9 => a:1
- │    │    ├── b_default:10 => b:2
- │    │    ├── c_default:11 => c:3
- │    │    ├── d_comp:13 => d:4
- │    │    ├── "?column?":9 => e:5
- │    │    └── rowid_default:12 => rowid:6
+ │    │    ├── "?column?":10 => a:1
+ │    │    ├── b_default:11 => b:2
+ │    │    ├── c_default:12 => c:3
+ │    │    ├── d_comp:14 => d:4
+ │    │    ├── "?column?":10 => e:5
+ │    │    └── rowid_default:13 => rowid:6
  │    └── project
- │         ├── columns: d_comp:13 "?column?":9!null b_default:10 c_default:11!null rowid_default:12
+ │         ├── columns: d_comp:14 "?column?":10!null b_default:11 c_default:12!null rowid_default:13
  │         ├── project
- │         │    ├── columns: b_default:10 c_default:11!null rowid_default:12 "?column?":9!null
+ │         │    ├── columns: b_default:11 c_default:12!null rowid_default:13 "?column?":10!null
  │         │    ├── project
- │         │    │    ├── columns: "?column?":9!null
- │         │    │    ├── values
- │         │    │    │    └── ()
+ │         │    │    ├── columns: "?column?":10!null
+ │         │    │    ├── project
+ │         │    │    │    ├── columns: "?column?":9!null
+ │         │    │    │    ├── values
+ │         │    │    │    │    └── ()
+ │         │    │    │    └── projections
+ │         │    │    │         └── 1 [as="?column?":9]
  │         │    │    └── projections
- │         │    │         └── 1 [as="?column?":9]
+ │         │    │         └── assignment-cast: INT8 [as="?column?":10]
+ │         │    │              └── "?column?":9
  │         │    └── projections
- │         │         ├── NULL::INT8 [as=b_default:10]
- │         │         ├── 10 [as=c_default:11]
- │         │         └── unique_rowid() [as=rowid_default:12]
+ │         │         ├── NULL::INT8 [as=b_default:11]
+ │         │         ├── 10 [as=c_default:12]
+ │         │         └── unique_rowid() [as=rowid_default:13]
  │         └── projections
- │              └── (b_default:10 + c_default:11) + 1 [as=d_comp:13]
+ │              └── (b_default:11 + c_default:12) + 1 [as=d_comp:14]
  └── projections
-      ├── a:1 + 1 [as="?column?":14]
-      └── b:2 * c:3 [as="?column?":15]
+      ├── a:1 + 1 [as="?column?":15]
+      └── b:2 * c:3 [as="?column?":16]
 
 # Use returning INSERT as a FROM expression.
 build
 SELECT * FROM [INSERT INTO abcde VALUES (1) RETURNING *]
 ----
 with &1
- ├── columns: a:14!null b:15 c:16!null d:17 e:18!null
+ ├── columns: a:15!null b:16 c:17!null d:18 e:19!null
  ├── project
  │    ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3!null abcde.d:4 abcde.e:5!null
  │    └── insert abcde
  │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3!null abcde.d:4 abcde.e:5!null rowid:6!null
  │         ├── insert-mapping:
- │         │    ├── column1:9 => abcde.a:1
- │         │    ├── b_default:10 => abcde.b:2
- │         │    ├── c_default:11 => abcde.c:3
- │         │    ├── d_comp:13 => abcde.d:4
- │         │    ├── column1:9 => abcde.e:5
- │         │    └── rowid_default:12 => rowid:6
+ │         │    ├── column1:10 => abcde.a:1
+ │         │    ├── b_default:11 => abcde.b:2
+ │         │    ├── c_default:12 => abcde.c:3
+ │         │    ├── d_comp:14 => abcde.d:4
+ │         │    ├── column1:10 => abcde.e:5
+ │         │    └── rowid_default:13 => rowid:6
  │         └── project
- │              ├── columns: d_comp:13 column1:9!null b_default:10 c_default:11!null rowid_default:12
+ │              ├── columns: d_comp:14 column1:10!null b_default:11 c_default:12!null rowid_default:13
  │              ├── project
- │              │    ├── columns: b_default:10 c_default:11!null rowid_default:12 column1:9!null
- │              │    ├── values
- │              │    │    ├── columns: column1:9!null
- │              │    │    └── (1,)
+ │              │    ├── columns: b_default:11 c_default:12!null rowid_default:13 column1:10!null
+ │              │    ├── project
+ │              │    │    ├── columns: column1:10!null
+ │              │    │    ├── values
+ │              │    │    │    ├── columns: column1:9!null
+ │              │    │    │    └── (1,)
+ │              │    │    └── projections
+ │              │    │         └── assignment-cast: INT8 [as=column1:10]
+ │              │    │              └── column1:9
  │              │    └── projections
- │              │         ├── NULL::INT8 [as=b_default:10]
- │              │         ├── 10 [as=c_default:11]
- │              │         └── unique_rowid() [as=rowid_default:12]
+ │              │         ├── NULL::INT8 [as=b_default:11]
+ │              │         ├── 10 [as=c_default:12]
+ │              │         └── unique_rowid() [as=rowid_default:13]
  │              └── projections
- │                   └── (b_default:10 + c_default:11) + 1 [as=d_comp:13]
+ │                   └── (b_default:11 + c_default:12) + 1 [as=d_comp:14]
  └── with-scan &1
-      ├── columns: a:14!null b:15 c:16!null d:17 e:18!null
+      ├── columns: a:15!null b:16 c:17!null d:18 e:19!null
       └── mapping:
-           ├──  abcde.a:1 => a:14
-           ├──  abcde.b:2 => b:15
-           ├──  abcde.c:3 => c:16
-           ├──  abcde.d:4 => d:17
-           └──  abcde.e:5 => e:18
+           ├──  abcde.a:1 => a:15
+           ├──  abcde.b:2 => b:16
+           ├──  abcde.c:3 => c:17
+           ├──  abcde.d:4 => d:18
+           └──  abcde.e:5 => e:19
 
 # Try to use aggregate function in RETURNING clause.
 build
@@ -467,26 +542,33 @@ with &1 (a)
  └── insert abcde
       ├── columns: <none>
       ├── insert-mapping:
-      │    ├── y:15 => a:7
-      │    ├── "?column?":16 => b:8
-      │    ├── c_default:17 => c:9
-      │    ├── d_comp:19 => d:10
-      │    ├── y:15 => e:11
-      │    └── rowid_default:18 => rowid:12
+      │    ├── y:17 => a:7
+      │    ├── "?column?":18 => b:8
+      │    ├── c_default:19 => c:9
+      │    ├── d_comp:21 => d:10
+      │    ├── y:17 => e:11
+      │    └── rowid_default:20 => rowid:12
       └── project
-           ├── columns: d_comp:19 y:15 "?column?":16 c_default:17!null rowid_default:18
+           ├── columns: d_comp:21 y:17 "?column?":18 c_default:19!null rowid_default:20
            ├── project
-           │    ├── columns: c_default:17!null rowid_default:18 y:15 "?column?":16
-           │    ├── with-scan &1 (a)
-           │    │    ├── columns: y:15 "?column?":16
-           │    │    └── mapping:
-           │    │         ├──  xyz.y:2 => y:15
-           │    │         └──  "?column?":6 => "?column?":16
+           │    ├── columns: c_default:19!null rowid_default:20 y:17 "?column?":18
+           │    ├── project
+           │    │    ├── columns: y:17 "?column?":18
+           │    │    ├── with-scan &1 (a)
+           │    │    │    ├── columns: y:15 "?column?":16
+           │    │    │    └── mapping:
+           │    │    │         ├──  xyz.y:2 => y:15
+           │    │    │         └──  "?column?":6 => "?column?":16
+           │    │    └── projections
+           │    │         ├── assignment-cast: INT8 [as=y:17]
+           │    │         │    └── y:15
+           │    │         └── assignment-cast: INT8 [as="?column?":18]
+           │    │              └── "?column?":16
            │    └── projections
-           │         ├── 10 [as=c_default:17]
-           │         └── unique_rowid() [as=rowid_default:18]
+           │         ├── 10 [as=c_default:19]
+           │         └── unique_rowid() [as=rowid_default:20]
            └── projections
-                └── ("?column?":16 + c_default:17) + 1 [as=d_comp:19]
+                └── ("?column?":18 + c_default:19) + 1 [as=d_comp:21]
 
 # Use CTE with multiple variables.
 build
@@ -510,35 +592,42 @@ with &1 (a)
       └── insert abcde
            ├── columns: <none>
            ├── insert-mapping:
-           │    ├── y:25 => a:13
-           │    ├── "?column?":26 => b:14
-           │    ├── c_default:27 => c:15
-           │    ├── d_comp:29 => d:16
-           │    ├── y:25 => e:17
-           │    └── rowid_default:28 => rowid:18
+           │    ├── y:27 => a:13
+           │    ├── "?column?":28 => b:14
+           │    ├── c_default:29 => c:15
+           │    ├── d_comp:31 => d:16
+           │    ├── y:27 => e:17
+           │    └── rowid_default:30 => rowid:18
            └── project
-                ├── columns: d_comp:29 y:25 "?column?":26 c_default:27!null rowid_default:28
+                ├── columns: d_comp:31 y:27 "?column?":28 c_default:29!null rowid_default:30
                 ├── project
-                │    ├── columns: c_default:27!null rowid_default:28 y:25 "?column?":26
-                │    ├── union
-                │    │    ├── columns: y:25 "?column?":26
-                │    │    ├── left columns: y:21 "?column?":22
-                │    │    ├── right columns: "?column?":23 y:24
-                │    │    ├── with-scan &1 (a)
-                │    │    │    ├── columns: y:21 "?column?":22
-                │    │    │    └── mapping:
-                │    │    │         ├──  xyz.y:2 => y:21
-                │    │    │         └──  "?column?":6 => "?column?":22
-                │    │    └── with-scan &2 (b)
-                │    │         ├── columns: "?column?":23 y:24
-                │    │         └── mapping:
-                │    │              ├──  "?column?":12 => "?column?":23
-                │    │              └──  xyz.y:8 => y:24
+                │    ├── columns: c_default:29!null rowid_default:30 y:27 "?column?":28
+                │    ├── project
+                │    │    ├── columns: y:27 "?column?":28
+                │    │    ├── union
+                │    │    │    ├── columns: y:25 "?column?":26
+                │    │    │    ├── left columns: y:21 "?column?":22
+                │    │    │    ├── right columns: "?column?":23 y:24
+                │    │    │    ├── with-scan &1 (a)
+                │    │    │    │    ├── columns: y:21 "?column?":22
+                │    │    │    │    └── mapping:
+                │    │    │    │         ├──  xyz.y:2 => y:21
+                │    │    │    │         └──  "?column?":6 => "?column?":22
+                │    │    │    └── with-scan &2 (b)
+                │    │    │         ├── columns: "?column?":23 y:24
+                │    │    │         └── mapping:
+                │    │    │              ├──  "?column?":12 => "?column?":23
+                │    │    │              └──  xyz.y:8 => y:24
+                │    │    └── projections
+                │    │         ├── assignment-cast: INT8 [as=y:27]
+                │    │         │    └── y:25
+                │    │         └── assignment-cast: INT8 [as="?column?":28]
+                │    │              └── "?column?":26
                 │    └── projections
-                │         ├── 10 [as=c_default:27]
-                │         └── unique_rowid() [as=rowid_default:28]
+                │         ├── 10 [as=c_default:29]
+                │         └── unique_rowid() [as=rowid_default:30]
                 └── projections
-                     └── ("?column?":26 + c_default:27) + 1 [as=d_comp:29]
+                     └── ("?column?":28 + c_default:29) + 1 [as=d_comp:31]
 
 # Non-referenced CTE with mutation.
 build
@@ -550,58 +639,68 @@ with &1
  │    └── insert abcde
  │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3!null abcde.d:4 abcde.e:5!null rowid:6!null
  │         ├── insert-mapping:
- │         │    ├── column1:9 => abcde.a:1
- │         │    ├── b_default:10 => abcde.b:2
- │         │    ├── c_default:11 => abcde.c:3
- │         │    ├── d_comp:13 => abcde.d:4
- │         │    ├── column1:9 => abcde.e:5
- │         │    └── rowid_default:12 => rowid:6
+ │         │    ├── column1:10 => abcde.a:1
+ │         │    ├── b_default:11 => abcde.b:2
+ │         │    ├── c_default:12 => abcde.c:3
+ │         │    ├── d_comp:14 => abcde.d:4
+ │         │    ├── column1:10 => abcde.e:5
+ │         │    └── rowid_default:13 => rowid:6
  │         └── project
- │              ├── columns: d_comp:13 column1:9!null b_default:10 c_default:11!null rowid_default:12
+ │              ├── columns: d_comp:14 column1:10!null b_default:11 c_default:12!null rowid_default:13
  │              ├── project
- │              │    ├── columns: b_default:10 c_default:11!null rowid_default:12 column1:9!null
- │              │    ├── values
- │              │    │    ├── columns: column1:9!null
- │              │    │    └── (1,)
+ │              │    ├── columns: b_default:11 c_default:12!null rowid_default:13 column1:10!null
+ │              │    ├── project
+ │              │    │    ├── columns: column1:10!null
+ │              │    │    ├── values
+ │              │    │    │    ├── columns: column1:9!null
+ │              │    │    │    └── (1,)
+ │              │    │    └── projections
+ │              │    │         └── assignment-cast: INT8 [as=column1:10]
+ │              │    │              └── column1:9
  │              │    └── projections
- │              │         ├── NULL::INT8 [as=b_default:10]
- │              │         ├── 10 [as=c_default:11]
- │              │         └── unique_rowid() [as=rowid_default:12]
+ │              │         ├── NULL::INT8 [as=b_default:11]
+ │              │         ├── 10 [as=c_default:12]
+ │              │         └── unique_rowid() [as=rowid_default:13]
  │              └── projections
- │                   └── (b_default:10 + c_default:11) + 1 [as=d_comp:13]
+ │                   └── (b_default:11 + c_default:12) + 1 [as=d_comp:14]
  └── with &2 (cte)
       ├── project
-      │    ├── columns: b:15
+      │    ├── columns: b:16
       │    └── with-scan &1
-      │         ├── columns: a:14!null b:15 c:16!null d:17 e:18!null
+      │         ├── columns: a:15!null b:16 c:17!null d:18 e:19!null
       │         └── mapping:
-      │              ├──  abcde.a:1 => a:14
-      │              ├──  abcde.b:2 => b:15
-      │              ├──  abcde.c:3 => c:16
-      │              ├──  abcde.d:4 => d:17
-      │              └──  abcde.e:5 => e:18
+      │              ├──  abcde.a:1 => a:15
+      │              ├──  abcde.b:2 => b:16
+      │              ├──  abcde.c:3 => c:17
+      │              ├──  abcde.d:4 => d:18
+      │              └──  abcde.e:5 => e:19
       └── insert abcde
            ├── columns: <none>
            ├── insert-mapping:
-           │    ├── column1:27 => abcde.a:19
-           │    ├── b_default:28 => abcde.b:20
-           │    ├── c_default:29 => abcde.c:21
-           │    ├── d_comp:31 => abcde.d:22
-           │    ├── column1:27 => abcde.e:23
-           │    └── rowid_default:30 => rowid:24
+           │    ├── column1:29 => abcde.a:20
+           │    ├── b_default:30 => abcde.b:21
+           │    ├── c_default:31 => abcde.c:22
+           │    ├── d_comp:33 => abcde.d:23
+           │    ├── column1:29 => abcde.e:24
+           │    └── rowid_default:32 => rowid:25
            └── project
-                ├── columns: d_comp:31 column1:27!null b_default:28 c_default:29!null rowid_default:30
+                ├── columns: d_comp:33 column1:29!null b_default:30 c_default:31!null rowid_default:32
                 ├── project
-                │    ├── columns: b_default:28 c_default:29!null rowid_default:30 column1:27!null
-                │    ├── values
-                │    │    ├── columns: column1:27!null
-                │    │    └── (1,)
+                │    ├── columns: b_default:30 c_default:31!null rowid_default:32 column1:29!null
+                │    ├── project
+                │    │    ├── columns: column1:29!null
+                │    │    ├── values
+                │    │    │    ├── columns: column1:28!null
+                │    │    │    └── (1,)
+                │    │    └── projections
+                │    │         └── assignment-cast: INT8 [as=column1:29]
+                │    │              └── column1:28
                 │    └── projections
-                │         ├── NULL::INT8 [as=b_default:28]
-                │         ├── 10 [as=c_default:29]
-                │         └── unique_rowid() [as=rowid_default:30]
+                │         ├── NULL::INT8 [as=b_default:30]
+                │         ├── 10 [as=c_default:31]
+                │         └── unique_rowid() [as=rowid_default:32]
                 └── projections
-                     └── (b_default:28 + c_default:29) + 1 [as=d_comp:31]
+                     └── (b_default:30 + c_default:31) + 1 [as=d_comp:33]
 
 # Insert CTE that returns no columns.
 build
@@ -626,23 +725,32 @@ INSERT INTO abcde (c, b, a) VALUES (1, 2, 3)
 insert abcde
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column3:11 => a:1
- │    ├── column2:10 => b:2
- │    ├── column1:9 => c:3
- │    ├── d_comp:13 => d:4
- │    ├── column3:11 => e:5
- │    └── rowid_default:12 => rowid:6
+ │    ├── column3:14 => a:1
+ │    ├── column2:13 => b:2
+ │    ├── column1:12 => c:3
+ │    ├── d_comp:16 => d:4
+ │    ├── column3:14 => e:5
+ │    └── rowid_default:15 => rowid:6
  └── project
-      ├── columns: d_comp:13!null column1:9!null column2:10!null column3:11!null rowid_default:12
+      ├── columns: d_comp:16!null column1:12!null column2:13!null column3:14!null rowid_default:15
       ├── project
-      │    ├── columns: rowid_default:12 column1:9!null column2:10!null column3:11!null
-      │    ├── values
-      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    └── (1, 2, 3)
+      │    ├── columns: rowid_default:15 column1:12!null column2:13!null column3:14!null
+      │    ├── project
+      │    │    ├── columns: column1:12!null column2:13!null column3:14!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    └── (1, 2, 3)
+      │    │    └── projections
+      │    │         ├── assignment-cast: INT8 [as=column1:12]
+      │    │         │    └── column1:9
+      │    │         ├── assignment-cast: INT8 [as=column2:13]
+      │    │         │    └── column2:10
+      │    │         └── assignment-cast: INT8 [as=column3:14]
+      │    │              └── column3:11
       │    └── projections
-      │         └── unique_rowid() [as=rowid_default:12]
+      │         └── unique_rowid() [as=rowid_default:15]
       └── projections
-           └── (column2:10 + column1:9) + 1 [as=d_comp:13]
+           └── (column2:13 + column1:12) + 1 [as=d_comp:16]
 
 # Don't specify values for null or default columns.
 build
@@ -651,25 +759,30 @@ INSERT INTO abcde (a) VALUES (1)
 insert abcde
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => a:1
- │    ├── b_default:10 => b:2
- │    ├── c_default:11 => c:3
- │    ├── d_comp:13 => d:4
- │    ├── column1:9 => e:5
- │    └── rowid_default:12 => rowid:6
+ │    ├── column1:10 => a:1
+ │    ├── b_default:11 => b:2
+ │    ├── c_default:12 => c:3
+ │    ├── d_comp:14 => d:4
+ │    ├── column1:10 => e:5
+ │    └── rowid_default:13 => rowid:6
  └── project
-      ├── columns: d_comp:13 column1:9!null b_default:10 c_default:11!null rowid_default:12
+      ├── columns: d_comp:14 column1:10!null b_default:11 c_default:12!null rowid_default:13
       ├── project
-      │    ├── columns: b_default:10 c_default:11!null rowid_default:12 column1:9!null
-      │    ├── values
-      │    │    ├── columns: column1:9!null
-      │    │    └── (1,)
+      │    ├── columns: b_default:11 c_default:12!null rowid_default:13 column1:10!null
+      │    ├── project
+      │    │    ├── columns: column1:10!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:9!null
+      │    │    │    └── (1,)
+      │    │    └── projections
+      │    │         └── assignment-cast: INT8 [as=column1:10]
+      │    │              └── column1:9
       │    └── projections
-      │         ├── NULL::INT8 [as=b_default:10]
-      │         ├── 10 [as=c_default:11]
-      │         └── unique_rowid() [as=rowid_default:12]
+      │         ├── NULL::INT8 [as=b_default:11]
+      │         ├── 10 [as=c_default:12]
+      │         └── unique_rowid() [as=rowid_default:13]
       └── projections
-           └── (b_default:10 + c_default:11) + 1 [as=d_comp:13]
+           └── (b_default:11 + c_default:12) + 1 [as=d_comp:14]
 
 # Insert value into hidden rowid column.
 build
@@ -680,24 +793,31 @@ project
  └── insert abcde
       ├── columns: a:1!null b:2 c:3!null d:4 e:5!null rowid:6!null
       ├── insert-mapping:
-      │    ├── column1:9 => a:1
-      │    ├── b_default:11 => b:2
-      │    ├── c_default:12 => c:3
-      │    ├── d_comp:13 => d:4
-      │    ├── column1:9 => e:5
-      │    └── column2:10 => rowid:6
+      │    ├── column1:11 => a:1
+      │    ├── b_default:13 => b:2
+      │    ├── c_default:14 => c:3
+      │    ├── d_comp:15 => d:4
+      │    ├── column1:11 => e:5
+      │    └── column2:12 => rowid:6
       └── project
-           ├── columns: d_comp:13 column1:9!null column2:10!null b_default:11 c_default:12!null
+           ├── columns: d_comp:15 column1:11!null column2:12!null b_default:13 c_default:14!null
            ├── project
-           │    ├── columns: b_default:11 c_default:12!null column1:9!null column2:10!null
-           │    ├── values
-           │    │    ├── columns: column1:9!null column2:10!null
-           │    │    └── (1, 2)
+           │    ├── columns: b_default:13 c_default:14!null column1:11!null column2:12!null
+           │    ├── project
+           │    │    ├── columns: column1:11!null column2:12!null
+           │    │    ├── values
+           │    │    │    ├── columns: column1:9!null column2:10!null
+           │    │    │    └── (1, 2)
+           │    │    └── projections
+           │    │         ├── assignment-cast: INT8 [as=column1:11]
+           │    │         │    └── column1:9
+           │    │         └── assignment-cast: INT8 [as=column2:12]
+           │    │              └── column2:10
            │    └── projections
-           │         ├── NULL::INT8 [as=b_default:11]
-           │         └── 10 [as=c_default:12]
+           │         ├── NULL::INT8 [as=b_default:13]
+           │         └── 10 [as=c_default:14]
            └── projections
-                └── (b_default:11 + c_default:12) + 1 [as=d_comp:13]
+                └── (b_default:13 + c_default:14) + 1 [as=d_comp:15]
 
 # Use DEFAULT expressions in VALUES expression.
 build
@@ -708,21 +828,32 @@ RETURNING *, rowid
 insert abcde
  ├── columns: a:1!null b:2 c:3!null d:4 e:5!null rowid:6!null
  ├── insert-mapping:
- │    ├── column3:11 => a:1
- │    ├── column2:10 => b:2
- │    ├── column1:9 => c:3
- │    ├── d_comp:13 => d:4
- │    ├── column3:11 => e:5
- │    └── column4:12 => rowid:6
+ │    ├── column3:15 => a:1
+ │    ├── column2:14 => b:2
+ │    ├── column1:13 => c:3
+ │    ├── d_comp:17 => d:4
+ │    ├── column3:15 => e:5
+ │    └── column4:16 => rowid:6
  └── project
-      ├── columns: d_comp:13 column1:9!null column2:10 column3:11!null column4:12
-      ├── values
-      │    ├── columns: column1:9!null column2:10 column3:11!null column4:12
-      │    ├── (10, NULL::INT8, 1, unique_rowid())
-      │    ├── (3, 2, 1, unique_rowid())
-      │    └── (10, NULL::INT8, 2, 100)
+      ├── columns: d_comp:17 column1:13!null column2:14 column3:15!null column4:16
+      ├── project
+      │    ├── columns: column1:13!null column2:14 column3:15!null column4:16
+      │    ├── values
+      │    │    ├── columns: column1:9!null column2:10 column3:11!null column4:12
+      │    │    ├── (10, NULL::INT8, 1, unique_rowid())
+      │    │    ├── (3, 2, 1, unique_rowid())
+      │    │    └── (10, NULL::INT8, 2, 100)
+      │    └── projections
+      │         ├── assignment-cast: INT8 [as=column1:13]
+      │         │    └── column1:9
+      │         ├── assignment-cast: INT8 [as=column2:14]
+      │         │    └── column2:10
+      │         ├── assignment-cast: INT8 [as=column3:15]
+      │         │    └── column3:11
+      │         └── assignment-cast: INT8 [as=column4:16]
+      │              └── column4:12
       └── projections
-           └── (column2:10 + column1:9) + 1 [as=d_comp:13]
+           └── (column2:14 + column1:13) + 1 [as=d_comp:17]
 
 # Verify that there is no compile-time error when trying to insert a NULL
 # DEFAULT value into a not-null column (it will fail at runtime).
@@ -732,25 +863,30 @@ INSERT INTO abcde (a) VALUES (DEFAULT)
 insert abcde
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => a:1
- │    ├── b_default:10 => b:2
- │    ├── c_default:11 => c:3
- │    ├── d_comp:13 => d:4
- │    ├── column1:9 => e:5
- │    └── rowid_default:12 => rowid:6
+ │    ├── column1:10 => a:1
+ │    ├── b_default:11 => b:2
+ │    ├── c_default:12 => c:3
+ │    ├── d_comp:14 => d:4
+ │    ├── column1:10 => e:5
+ │    └── rowid_default:13 => rowid:6
  └── project
-      ├── columns: d_comp:13 column1:9 b_default:10 c_default:11!null rowid_default:12
+      ├── columns: d_comp:14 column1:10 b_default:11 c_default:12!null rowid_default:13
       ├── project
-      │    ├── columns: b_default:10 c_default:11!null rowid_default:12 column1:9
-      │    ├── values
-      │    │    ├── columns: column1:9
-      │    │    └── (NULL::INT8,)
+      │    ├── columns: b_default:11 c_default:12!null rowid_default:13 column1:10
+      │    ├── project
+      │    │    ├── columns: column1:10
+      │    │    ├── values
+      │    │    │    ├── columns: column1:9
+      │    │    │    └── (NULL::INT8,)
+      │    │    └── projections
+      │    │         └── assignment-cast: INT8 [as=column1:10]
+      │    │              └── column1:9
       │    └── projections
-      │         ├── NULL::INT8 [as=b_default:10]
-      │         ├── 10 [as=c_default:11]
-      │         └── unique_rowid() [as=rowid_default:12]
+      │         ├── NULL::INT8 [as=b_default:11]
+      │         ├── 10 [as=c_default:12]
+      │         └── unique_rowid() [as=rowid_default:13]
       └── projections
-           └── (b_default:10 + c_default:11) + 1 [as=d_comp:13]
+           └── (b_default:11 + c_default:12) + 1 [as=d_comp:14]
 
 # Mismatched type.
 build
@@ -763,9 +899,9 @@ insert xyz
  │    ├── y_default:8 => y:2
  │    └── z_default:9 => z:3
  └── project
-      ├── columns: y_default:8 z_default:9 column1:7
+      ├── columns: y_default:8 z_default:9 column1:7!null
       ├── project
-      │    ├── columns: column1:7
+      │    ├── columns: column1:7!null
       │    ├── values
       │    │    ├── columns: column1:6!null
       │    │    └── (10,)
@@ -821,27 +957,34 @@ project
  └── insert abcde
       ├── columns: a:1!null b:2!null c:3!null d:4!null e:5 rowid:6!null
       ├── insert-mapping:
-      │    ├── y:10 => a:1
-      │    ├── x:14 => b:2
-      │    ├── c_default:15 => c:3
-      │    ├── d_comp:17 => d:4
-      │    ├── y:10 => e:5
-      │    └── rowid_default:16 => rowid:6
+      │    ├── y:16 => a:1
+      │    ├── x:15 => b:2
+      │    ├── c_default:17 => c:3
+      │    ├── d_comp:19 => d:4
+      │    ├── y:16 => e:5
+      │    └── rowid_default:18 => rowid:6
       └── project
-           ├── columns: d_comp:17!null y:10 x:14!null c_default:15!null rowid_default:16
+           ├── columns: d_comp:19!null x:15!null y:16 c_default:17!null rowid_default:18
            ├── project
-           │    ├── columns: c_default:15!null rowid_default:16 y:10 x:14!null
+           │    ├── columns: c_default:17!null rowid_default:18 x:15!null y:16
            │    ├── project
-           │    │    ├── columns: x:14!null y:10
-           │    │    ├── scan xyz
-           │    │    │    └── columns: xyz.x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
+           │    │    ├── columns: x:15!null y:16
+           │    │    ├── project
+           │    │    │    ├── columns: x:14!null xyz.y:10
+           │    │    │    ├── scan xyz
+           │    │    │    │    └── columns: xyz.x:9!null xyz.y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
+           │    │    │    └── projections
+           │    │    │         └── xyz.x:9::INT8 [as=x:14]
            │    │    └── projections
-           │    │         └── xyz.x:9::INT8 [as=x:14]
+           │    │         ├── assignment-cast: INT8 [as=x:15]
+           │    │         │    └── x:14
+           │    │         └── assignment-cast: INT8 [as=y:16]
+           │    │              └── xyz.y:10
            │    └── projections
-           │         ├── 10 [as=c_default:15]
-           │         └── unique_rowid() [as=rowid_default:16]
+           │         ├── 10 [as=c_default:17]
+           │         └── unique_rowid() [as=rowid_default:18]
            └── projections
-                └── (x:14 + c_default:15) + 1 [as=d_comp:17]
+                └── (x:15 + c_default:17) + 1 [as=d_comp:19]
 
 # Return hidden column.
 build
@@ -850,65 +993,79 @@ INSERT INTO abcde (rowid, a) VALUES (1, 2) RETURNING *, rowid
 insert abcde
  ├── columns: a:1!null b:2 c:3!null d:4 e:5!null rowid:6!null
  ├── insert-mapping:
- │    ├── column2:10 => a:1
- │    ├── b_default:11 => b:2
- │    ├── c_default:12 => c:3
- │    ├── d_comp:13 => d:4
- │    ├── column2:10 => e:5
- │    └── column1:9 => rowid:6
+ │    ├── column2:12 => a:1
+ │    ├── b_default:13 => b:2
+ │    ├── c_default:14 => c:3
+ │    ├── d_comp:15 => d:4
+ │    ├── column2:12 => e:5
+ │    └── column1:11 => rowid:6
  └── project
-      ├── columns: d_comp:13 column1:9!null column2:10!null b_default:11 c_default:12!null
+      ├── columns: d_comp:15 column1:11!null column2:12!null b_default:13 c_default:14!null
       ├── project
-      │    ├── columns: b_default:11 c_default:12!null column1:9!null column2:10!null
-      │    ├── values
-      │    │    ├── columns: column1:9!null column2:10!null
-      │    │    └── (1, 2)
+      │    ├── columns: b_default:13 c_default:14!null column1:11!null column2:12!null
+      │    ├── project
+      │    │    ├── columns: column1:11!null column2:12!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:9!null column2:10!null
+      │    │    │    └── (1, 2)
+      │    │    └── projections
+      │    │         ├── assignment-cast: INT8 [as=column1:11]
+      │    │         │    └── column1:9
+      │    │         └── assignment-cast: INT8 [as=column2:12]
+      │    │              └── column2:10
       │    └── projections
-      │         ├── NULL::INT8 [as=b_default:11]
-      │         └── 10 [as=c_default:12]
+      │         ├── NULL::INT8 [as=b_default:13]
+      │         └── 10 [as=c_default:14]
       └── projections
-           └── (b_default:11 + c_default:12) + 1 [as=d_comp:13]
+           └── (b_default:13 + c_default:14) + 1 [as=d_comp:15]
 
 # Use returning INSERT as a FROM expression.
 build
 SELECT * FROM [INSERT INTO abcde (a, b) SELECT y+1, y FROM xyz RETURNING *]
 ----
 with &1
- ├── columns: a:18!null b:19 c:20!null d:21 e:22
+ ├── columns: a:20!null b:21 c:22!null d:23 e:24
  ├── project
  │    ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3!null abcde.d:4 abcde.e:5
  │    └── insert abcde
  │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3!null abcde.d:4 abcde.e:5 rowid:6!null
  │         ├── insert-mapping:
- │         │    ├── "?column?":14 => abcde.a:1
- │         │    ├── y:10 => abcde.b:2
- │         │    ├── c_default:15 => abcde.c:3
- │         │    ├── d_comp:17 => abcde.d:4
- │         │    ├── "?column?":14 => abcde.e:5
- │         │    └── rowid_default:16 => rowid:6
+ │         │    ├── "?column?":15 => abcde.a:1
+ │         │    ├── y:16 => abcde.b:2
+ │         │    ├── c_default:17 => abcde.c:3
+ │         │    ├── d_comp:19 => abcde.d:4
+ │         │    ├── "?column?":15 => abcde.e:5
+ │         │    └── rowid_default:18 => rowid:6
  │         └── project
- │              ├── columns: d_comp:17 y:10 "?column?":14 c_default:15!null rowid_default:16
+ │              ├── columns: d_comp:19 "?column?":15 y:16 c_default:17!null rowid_default:18
  │              ├── project
- │              │    ├── columns: c_default:15!null rowid_default:16 y:10 "?column?":14
+ │              │    ├── columns: c_default:17!null rowid_default:18 "?column?":15 y:16
  │              │    ├── project
- │              │    │    ├── columns: "?column?":14 y:10
- │              │    │    ├── scan xyz
- │              │    │    │    └── columns: x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
+ │              │    │    ├── columns: "?column?":15 y:16
+ │              │    │    ├── project
+ │              │    │    │    ├── columns: "?column?":14 xyz.y:10
+ │              │    │    │    ├── scan xyz
+ │              │    │    │    │    └── columns: x:9!null xyz.y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
+ │              │    │    │    └── projections
+ │              │    │    │         └── xyz.y:10 + 1 [as="?column?":14]
  │              │    │    └── projections
- │              │    │         └── y:10 + 1 [as="?column?":14]
+ │              │    │         ├── assignment-cast: INT8 [as="?column?":15]
+ │              │    │         │    └── "?column?":14
+ │              │    │         └── assignment-cast: INT8 [as=y:16]
+ │              │    │              └── xyz.y:10
  │              │    └── projections
- │              │         ├── 10 [as=c_default:15]
- │              │         └── unique_rowid() [as=rowid_default:16]
+ │              │         ├── 10 [as=c_default:17]
+ │              │         └── unique_rowid() [as=rowid_default:18]
  │              └── projections
- │                   └── (y:10 + c_default:15) + 1 [as=d_comp:17]
+ │                   └── (y:16 + c_default:17) + 1 [as=d_comp:19]
  └── with-scan &1
-      ├── columns: a:18!null b:19 c:20!null d:21 e:22
+      ├── columns: a:20!null b:21 c:22!null d:23 e:24
       └── mapping:
-           ├──  abcde.a:1 => a:18
-           ├──  abcde.b:2 => b:19
-           ├──  abcde.c:3 => c:20
-           ├──  abcde.d:4 => d:21
-           └──  abcde.e:5 => e:22
+           ├──  abcde.a:1 => a:20
+           ├──  abcde.b:2 => b:21
+           ├──  abcde.c:3 => c:22
+           ├──  abcde.d:4 => d:23
+           └──  abcde.e:5 => e:24
 
 # ------------------------------------------------------------------------------
 # Propagate desired INSERT types.
@@ -921,12 +1078,21 @@ INSERT INTO xyz VALUES ($1, $2 + 1, $3 + 1)
 insert xyz
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:6 => x:1
- │    ├── column2:7 => y:2
- │    └── column3:8 => z:3
- └── values
-      ├── columns: column1:6 column2:7 column3:8
-      └── ($1, $2 + 1, $3 + 1.0)
+ │    ├── column1:9 => x:1
+ │    ├── column2:10 => y:2
+ │    └── column3:11 => z:3
+ └── project
+      ├── columns: column1:9 column2:10 column3:11
+      ├── values
+      │    ├── columns: column1:6 column2:7 column3:8
+      │    └── ($1, $2 + 1, $3 + 1.0)
+      └── projections
+           ├── assignment-cast: STRING [as=column1:9]
+           │    └── column1:6
+           ├── assignment-cast: INT8 [as=column2:10]
+           │    └── column2:7
+           └── assignment-cast: FLOAT8 [as=column3:11]
+                └── column3:8
 
 # Propagate types to VALUES (named columns).
 build
@@ -935,12 +1101,21 @@ INSERT INTO xyz (z, y, x) VALUES ($1 + 1, $2 + 1, $3)
 insert xyz
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column3:8 => x:1
- │    ├── column2:7 => y:2
- │    └── column1:6 => z:3
- └── values
-      ├── columns: column1:6 column2:7 column3:8
-      └── ($1 + 1.0, $2 + 1, $3)
+ │    ├── column3:11 => x:1
+ │    ├── column2:10 => y:2
+ │    └── column1:9 => z:3
+ └── project
+      ├── columns: column1:9 column2:10 column3:11
+      ├── values
+      │    ├── columns: column1:6 column2:7 column3:8
+      │    └── ($1 + 1.0, $2 + 1, $3)
+      └── projections
+           ├── assignment-cast: FLOAT8 [as=column1:9]
+           │    └── column1:6
+           ├── assignment-cast: INT8 [as=column2:10]
+           │    └── column2:7
+           └── assignment-cast: STRING [as=column3:11]
+                └── column3:8
 
 # Propagate types to projection list.
 build
@@ -949,51 +1124,11 @@ INSERT INTO xyz ((SELECT $1, $2 + 1, $3 + 1))
 insert xyz
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── "?column?":6 => x:1
- │    ├── "?column?":7 => y:2
- │    └── "?column?":8 => z:3
+ │    ├── "?column?":9 => x:1
+ │    ├── "?column?":10 => y:2
+ │    └── "?column?":11 => z:3
  └── project
-      ├── columns: "?column?":6 "?column?":7 "?column?":8
-      ├── values
-      │    └── ()
-      └── projections
-           ├── $1 [as="?column?":6]
-           ├── $2 + 1 [as="?column?":7]
-           └── $3 + 1.0 [as="?column?":8]
-
-# Propagate types to projection list (named columns).
-build
-INSERT INTO xyz (x, y, z) SELECT $1, $2 + 1, $3 + 1
-----
-insert xyz
- ├── columns: <none>
- ├── insert-mapping:
- │    ├── "?column?":6 => x:1
- │    ├── "?column?":7 => y:2
- │    └── "?column?":8 => z:3
- └── project
-      ├── columns: "?column?":6 "?column?":7 "?column?":8
-      ├── values
-      │    └── ()
-      └── projections
-           ├── $1 [as="?column?":6]
-           ├── $2 + 1 [as="?column?":7]
-           └── $3 + 1.0 [as="?column?":8]
-
-# Propagate types to UNION.
-build
-INSERT INTO xyz (SELECT $1, $2 + 1, $3 + 1) UNION ALL (SELECT $1, $2 + 1, $3 + 1)
-----
-insert xyz
- ├── columns: <none>
- ├── insert-mapping:
- │    ├── "?column?":12 => x:1
- │    ├── "?column?":13 => y:2
- │    └── "?column?":14 => z:3
- └── union-all
-      ├── columns: "?column?":12 "?column?":13 "?column?":14
-      ├── left columns: "?column?":6 "?column?":7 "?column?":8
-      ├── right columns: "?column?":9 "?column?":10 "?column?":11
+      ├── columns: "?column?":9 "?column?":10 "?column?":11
       ├── project
       │    ├── columns: "?column?":6 "?column?":7 "?column?":8
       │    ├── values
@@ -1002,14 +1137,81 @@ insert xyz
       │         ├── $1 [as="?column?":6]
       │         ├── $2 + 1 [as="?column?":7]
       │         └── $3 + 1.0 [as="?column?":8]
-      └── project
-           ├── columns: "?column?":9 "?column?":10 "?column?":11
-           ├── values
-           │    └── ()
-           └── projections
-                ├── $1 [as="?column?":9]
-                ├── $2 + 1 [as="?column?":10]
-                └── $3 + 1.0 [as="?column?":11]
+      └── projections
+           ├── assignment-cast: STRING [as="?column?":9]
+           │    └── "?column?":6
+           ├── assignment-cast: INT8 [as="?column?":10]
+           │    └── "?column?":7
+           └── assignment-cast: FLOAT8 [as="?column?":11]
+                └── "?column?":8
+
+# Propagate types to projection list (named columns).
+build
+INSERT INTO xyz (x, y, z) SELECT $1, $2 + 1, $3 + 1
+----
+insert xyz
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── "?column?":9 => x:1
+ │    ├── "?column?":10 => y:2
+ │    └── "?column?":11 => z:3
+ └── project
+      ├── columns: "?column?":9 "?column?":10 "?column?":11
+      ├── project
+      │    ├── columns: "?column?":6 "?column?":7 "?column?":8
+      │    ├── values
+      │    │    └── ()
+      │    └── projections
+      │         ├── $1 [as="?column?":6]
+      │         ├── $2 + 1 [as="?column?":7]
+      │         └── $3 + 1.0 [as="?column?":8]
+      └── projections
+           ├── assignment-cast: STRING [as="?column?":9]
+           │    └── "?column?":6
+           ├── assignment-cast: INT8 [as="?column?":10]
+           │    └── "?column?":7
+           └── assignment-cast: FLOAT8 [as="?column?":11]
+                └── "?column?":8
+
+# Propagate types to UNION.
+build
+INSERT INTO xyz (SELECT $1, $2 + 1, $3 + 1) UNION ALL (SELECT $1, $2 + 1, $3 + 1)
+----
+insert xyz
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── "?column?":15 => x:1
+ │    ├── "?column?":16 => y:2
+ │    └── "?column?":17 => z:3
+ └── project
+      ├── columns: "?column?":15 "?column?":16 "?column?":17
+      ├── union-all
+      │    ├── columns: "?column?":12 "?column?":13 "?column?":14
+      │    ├── left columns: "?column?":6 "?column?":7 "?column?":8
+      │    ├── right columns: "?column?":9 "?column?":10 "?column?":11
+      │    ├── project
+      │    │    ├── columns: "?column?":6 "?column?":7 "?column?":8
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── projections
+      │    │         ├── $1 [as="?column?":6]
+      │    │         ├── $2 + 1 [as="?column?":7]
+      │    │         └── $3 + 1.0 [as="?column?":8]
+      │    └── project
+      │         ├── columns: "?column?":9 "?column?":10 "?column?":11
+      │         ├── values
+      │         │    └── ()
+      │         └── projections
+      │              ├── $1 [as="?column?":9]
+      │              ├── $2 + 1 [as="?column?":10]
+      │              └── $3 + 1.0 [as="?column?":11]
+      └── projections
+           ├── assignment-cast: STRING [as="?column?":15]
+           │    └── "?column?":12
+           ├── assignment-cast: INT8 [as="?column?":16]
+           │    └── "?column?":13
+           └── assignment-cast: FLOAT8 [as="?column?":17]
+                └── "?column?":14
 
 # Propagate types to UNION (named columns).
 build
@@ -1018,29 +1220,38 @@ INSERT INTO xyz (x, z, y) SELECT $1, $2 + 1, $3 + 1 UNION ALL SELECT $1, $2 + 1,
 insert xyz
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── "?column?":12 => x:1
- │    ├── "?column?":14 => y:2
- │    └── "?column?":13 => z:3
- └── union-all
-      ├── columns: "?column?":12 "?column?":13 "?column?":14
-      ├── left columns: "?column?":6 "?column?":7 "?column?":8
-      ├── right columns: "?column?":9 "?column?":10 "?column?":11
-      ├── project
-      │    ├── columns: "?column?":6 "?column?":7 "?column?":8
-      │    ├── values
-      │    │    └── ()
-      │    └── projections
-      │         ├── $1 [as="?column?":6]
-      │         ├── $2 + 1.0 [as="?column?":7]
-      │         └── $3 + 1 [as="?column?":8]
-      └── project
-           ├── columns: "?column?":9 "?column?":10 "?column?":11
-           ├── values
-           │    └── ()
-           └── projections
-                ├── $1 [as="?column?":9]
-                ├── $2 + 1.0 [as="?column?":10]
-                └── $3 + 1 [as="?column?":11]
+ │    ├── "?column?":15 => x:1
+ │    ├── "?column?":17 => y:2
+ │    └── "?column?":16 => z:3
+ └── project
+      ├── columns: "?column?":15 "?column?":16 "?column?":17
+      ├── union-all
+      │    ├── columns: "?column?":12 "?column?":13 "?column?":14
+      │    ├── left columns: "?column?":6 "?column?":7 "?column?":8
+      │    ├── right columns: "?column?":9 "?column?":10 "?column?":11
+      │    ├── project
+      │    │    ├── columns: "?column?":6 "?column?":7 "?column?":8
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── projections
+      │    │         ├── $1 [as="?column?":6]
+      │    │         ├── $2 + 1.0 [as="?column?":7]
+      │    │         └── $3 + 1 [as="?column?":8]
+      │    └── project
+      │         ├── columns: "?column?":9 "?column?":10 "?column?":11
+      │         ├── values
+      │         │    └── ()
+      │         └── projections
+      │              ├── $1 [as="?column?":9]
+      │              ├── $2 + 1.0 [as="?column?":10]
+      │              └── $3 + 1 [as="?column?":11]
+      └── projections
+           ├── assignment-cast: STRING [as="?column?":15]
+           │    └── "?column?":12
+           ├── assignment-cast: FLOAT8 [as="?column?":16]
+           │    └── "?column?":13
+           └── assignment-cast: INT8 [as="?column?":17]
+                └── "?column?":14
 
 # ------------------------------------------------------------------------------
 # Tests with mutation columns.
@@ -1053,26 +1264,33 @@ INSERT INTO mutation (m, n) VALUES (1, 2)
 insert mutation
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:8 => m:1
- │    ├── column2:9 => n:2
- │    ├── o_default:10 => o:3
- │    └── p_comp:11 => p:4
- ├── check columns: check1:12
+ │    ├── column1:10 => m:1
+ │    ├── column2:11 => n:2
+ │    ├── o_default:12 => o:3
+ │    └── p_comp:13 => p:4
+ ├── check columns: check1:14
  └── project
-      ├── columns: check1:12!null column1:8!null column2:9!null o_default:10!null p_comp:11!null
+      ├── columns: check1:14!null column1:10!null column2:11!null o_default:12!null p_comp:13!null
       ├── project
-      │    ├── columns: p_comp:11!null column1:8!null column2:9!null o_default:10!null
+      │    ├── columns: p_comp:13!null column1:10!null column2:11!null o_default:12!null
       │    ├── project
-      │    │    ├── columns: o_default:10!null column1:8!null column2:9!null
-      │    │    ├── values
-      │    │    │    ├── columns: column1:8!null column2:9!null
-      │    │    │    └── (1, 2)
+      │    │    ├── columns: o_default:12!null column1:10!null column2:11!null
+      │    │    ├── project
+      │    │    │    ├── columns: column1:10!null column2:11!null
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:8!null column2:9!null
+      │    │    │    │    └── (1, 2)
+      │    │    │    └── projections
+      │    │    │         ├── assignment-cast: INT8 [as=column1:10]
+      │    │    │         │    └── column1:8
+      │    │    │         └── assignment-cast: INT8 [as=column2:11]
+      │    │    │              └── column2:9
       │    │    └── projections
-      │    │         └── 10 [as=o_default:10]
+      │    │         └── 10 [as=o_default:12]
       │    └── projections
-      │         └── o_default:10 + column2:9 [as=p_comp:11]
+      │         └── o_default:12 + column2:11 [as=p_comp:13]
       └── projections
-           └── column1:8 > 0 [as=check1:12]
+           └── column1:10 > 0 [as=check1:14]
 
 # Use RETURNING clause and ensure that mutation columns aren't projected.
 build
@@ -1081,26 +1299,33 @@ INSERT INTO mutation (m, n) VALUES (1, 2) RETURNING *
 insert mutation
  ├── columns: m:1!null n:2!null
  ├── insert-mapping:
- │    ├── column1:8 => m:1
- │    ├── column2:9 => n:2
- │    ├── o_default:10 => o:3
- │    └── p_comp:11 => p:4
- ├── check columns: check1:12
+ │    ├── column1:10 => m:1
+ │    ├── column2:11 => n:2
+ │    ├── o_default:12 => o:3
+ │    └── p_comp:13 => p:4
+ ├── check columns: check1:14
  └── project
-      ├── columns: check1:12!null column1:8!null column2:9!null o_default:10!null p_comp:11!null
+      ├── columns: check1:14!null column1:10!null column2:11!null o_default:12!null p_comp:13!null
       ├── project
-      │    ├── columns: p_comp:11!null column1:8!null column2:9!null o_default:10!null
+      │    ├── columns: p_comp:13!null column1:10!null column2:11!null o_default:12!null
       │    ├── project
-      │    │    ├── columns: o_default:10!null column1:8!null column2:9!null
-      │    │    ├── values
-      │    │    │    ├── columns: column1:8!null column2:9!null
-      │    │    │    └── (1, 2)
+      │    │    ├── columns: o_default:12!null column1:10!null column2:11!null
+      │    │    ├── project
+      │    │    │    ├── columns: column1:10!null column2:11!null
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:8!null column2:9!null
+      │    │    │    │    └── (1, 2)
+      │    │    │    └── projections
+      │    │    │         ├── assignment-cast: INT8 [as=column1:10]
+      │    │    │         │    └── column1:8
+      │    │    │         └── assignment-cast: INT8 [as=column2:11]
+      │    │    │              └── column2:9
       │    │    └── projections
-      │    │         └── 10 [as=o_default:10]
+      │    │         └── 10 [as=o_default:12]
       │    └── projections
-      │         └── o_default:10 + column2:9 [as=p_comp:11]
+      │         └── o_default:12 + column2:11 [as=p_comp:13]
       └── projections
-           └── column1:8 > 0 [as=check1:12]
+           └── column1:10 > 0 [as=check1:14]
 
 # Try to reference write-only mutation column in RETURNING clause.
 build
@@ -1131,23 +1356,32 @@ INSERT INTO checks (a, b, c) VALUES (1, 2, 3)
 insert checks
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:7 => a:1
- │    ├── column2:8 => b:2
- │    ├── column3:9 => c:3
- │    └── d_comp:10 => d:4
- ├── check columns: check1:11 check2:12
+ │    ├── column1:10 => a:1
+ │    ├── column2:11 => b:2
+ │    ├── column3:12 => c:3
+ │    └── d_comp:13 => d:4
+ ├── check columns: check1:14 check2:15
  └── project
-      ├── columns: check1:11!null check2:12!null column1:7!null column2:8!null column3:9!null d_comp:10!null
+      ├── columns: check1:14!null check2:15!null column1:10!null column2:11!null column3:12!null d_comp:13!null
       ├── project
-      │    ├── columns: d_comp:10!null column1:7!null column2:8!null column3:9!null
-      │    ├── values
-      │    │    ├── columns: column1:7!null column2:8!null column3:9!null
-      │    │    └── (1, 2, 3)
+      │    ├── columns: d_comp:13!null column1:10!null column2:11!null column3:12!null
+      │    ├── project
+      │    │    ├── columns: column1:10!null column2:11!null column3:12!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
+      │    │    │    └── (1, 2, 3)
+      │    │    └── projections
+      │    │         ├── assignment-cast: INT8 [as=column1:10]
+      │    │         │    └── column1:7
+      │    │         ├── assignment-cast: INT8 [as=column2:11]
+      │    │         │    └── column2:8
+      │    │         └── assignment-cast: INT8 [as=column3:12]
+      │    │              └── column3:9
       │    └── projections
-      │         └── column3:9 + 1 [as=d_comp:10]
+      │         └── column3:12 + 1 [as=d_comp:13]
       └── projections
-           ├── column2:8 < d_comp:10 [as=check1:11]
-           └── column1:7 > 0 [as=check2:12]
+           ├── column2:11 < d_comp:13 [as=check1:14]
+           └── column1:10 > 0 [as=check2:15]
 
 # Insert results of SELECT.
 build
@@ -1156,29 +1390,38 @@ INSERT INTO checks SELECT a, b, c FROM abcde
 insert checks
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── abcde.a:7 => checks.a:1
- │    ├── abcde.b:8 => checks.b:2
- │    ├── abcde.c:9 => checks.c:3
- │    └── d_comp:15 => checks.d:4
- ├── check columns: check1:16 check2:17
+ │    ├── a:15 => checks.a:1
+ │    ├── b:16 => checks.b:2
+ │    ├── c:17 => checks.c:3
+ │    └── d_comp:18 => checks.d:4
+ ├── check columns: check1:19 check2:20
  └── project
-      ├── columns: check1:16 check2:17!null abcde.a:7!null abcde.b:8 abcde.c:9 d_comp:15
+      ├── columns: check1:19 check2:20!null a:15!null b:16 c:17 d_comp:18
       ├── project
-      │    ├── columns: d_comp:15 abcde.a:7!null abcde.b:8 abcde.c:9
+      │    ├── columns: d_comp:18 a:15!null b:16 c:17
       │    ├── project
-      │    │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9
-      │    │    └── scan abcde
-      │    │         ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 e:11 rowid:12!null abcde.crdb_internal_mvcc_timestamp:13 abcde.tableoid:14
-      │    │         └── computed column expressions
-      │    │              ├── abcde.d:10
-      │    │              │    └── (abcde.b:8 + abcde.c:9) + 1
-      │    │              └── e:11
-      │    │                   └── abcde.a:7
+      │    │    ├── columns: a:15!null b:16 c:17
+      │    │    ├── project
+      │    │    │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9
+      │    │    │    └── scan abcde
+      │    │    │         ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 e:11 rowid:12!null abcde.crdb_internal_mvcc_timestamp:13 abcde.tableoid:14
+      │    │    │         └── computed column expressions
+      │    │    │              ├── abcde.d:10
+      │    │    │              │    └── (abcde.b:8 + abcde.c:9) + 1
+      │    │    │              └── e:11
+      │    │    │                   └── abcde.a:7
+      │    │    └── projections
+      │    │         ├── assignment-cast: INT8 [as=a:15]
+      │    │         │    └── abcde.a:7
+      │    │         ├── assignment-cast: INT8 [as=b:16]
+      │    │         │    └── abcde.b:8
+      │    │         └── assignment-cast: INT8 [as=c:17]
+      │    │              └── abcde.c:9
       │    └── projections
-      │         └── abcde.c:9 + 1 [as=d_comp:15]
+      │         └── c:17 + 1 [as=d_comp:18]
       └── projections
-           ├── abcde.b:8 < d_comp:15 [as=check1:16]
-           └── abcde.a:7 > 0 [as=check2:17]
+           ├── b:16 < d_comp:18 [as=check1:19]
+           └── a:15 > 0 [as=check2:20]
 
 # ------------------------------------------------------------------------------
 # Test assignment casts.
@@ -1191,31 +1434,33 @@ insert decimals
  ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:9 => a:1
- │    ├── column2:8 => b:2
- │    ├── c_default:10 => c:3
- │    └── d_comp:11 => d:4
- ├── check columns: check1:12 check2:13
+ │    ├── column2:10 => b:2
+ │    ├── c_default:11 => c:3
+ │    └── d_comp:12 => d:4
+ ├── check columns: check1:13 check2:14
  └── project
-      ├── columns: check1:12 check2:13 column2:8 column1:9 c_default:10!null d_comp:11
+      ├── columns: check1:13 check2:14 column1:9!null column2:10 c_default:11!null d_comp:12!null
       ├── project
-      │    ├── columns: d_comp:11 column2:8 column1:9 c_default:10!null
+      │    ├── columns: d_comp:12!null column1:9!null column2:10 c_default:11!null
       │    ├── project
-      │    │    ├── columns: c_default:10!null column2:8 column1:9
+      │    │    ├── columns: c_default:11!null column1:9!null column2:10
       │    │    ├── project
-      │    │    │    ├── columns: column1:9 column2:8
+      │    │    │    ├── columns: column1:9!null column2:10
       │    │    │    ├── values
       │    │    │    │    ├── columns: column1:7!null column2:8
       │    │    │    │    └── (1.1, ARRAY[0.95,NULL,15])
       │    │    │    └── projections
-      │    │    │         └── assignment-cast: DECIMAL(10) [as=column1:9]
-      │    │    │              └── column1:7
+      │    │    │         ├── assignment-cast: DECIMAL(10) [as=column1:9]
+      │    │    │         │    └── column1:7
+      │    │    │         └── assignment-cast: DECIMAL(5,1)[] [as=column2:10]
+      │    │    │              └── column2:8
       │    │    └── projections
-      │    │         └── 1.23::DECIMAL(10,1) [as=c_default:10]
+      │    │         └── 1.23::DECIMAL(10,1) [as=c_default:11]
       │    └── projections
-      │         └── (column1:9::DECIMAL + c_default:10::DECIMAL)::DECIMAL(10,1) [as=d_comp:11]
+      │         └── (column1:9::DECIMAL + c_default:11::DECIMAL)::DECIMAL(10,1) [as=d_comp:12]
       └── projections
-           ├── round(column1:9) = column1:9 [as=check1:12]
-           └── column2:8[0] > 1 [as=check2:13]
+           ├── round(column1:9) = column1:9 [as=check1:13]
+           └── column2:10[0] > 1 [as=check2:14]
 
 assign-placeholders-norm query-args=(1.1, (ARRAY[0.95, NULL, 15]))
 INSERT INTO decimals (a, b) VALUES ($1, $2)
@@ -1251,25 +1496,27 @@ insert assn_cast
  ├── insert-mapping:
  │    ├── column1:12 => c:1
  │    ├── column2:13 => qc:2
- │    ├── column3:10 => i:3
- │    ├── column4:14 => s:4
- │    └── rowid_default:15 => rowid:5
+ │    ├── column3:14 => i:3
+ │    ├── column4:15 => s:4
+ │    └── rowid_default:16 => rowid:5
  └── project
-      ├── columns: rowid_default:15 column3:10!null column1:12 column2:13 column4:14
+      ├── columns: rowid_default:16 column1:12!null column2:13!null column3:14!null column4:15!null
       ├── project
-      │    ├── columns: column1:12 column2:13 column4:14 column3:10!null
+      │    ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null
       │    ├── values
       │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null
-      │    │    └── ('', 'f', 1, 2)
+      │    │    └── (' ', 'foo', 1, 2)
       │    └── projections
       │         ├── assignment-cast: CHAR [as=column1:12]
       │         │    └── column1:8
       │         ├── assignment-cast: "char" [as=column2:13]
       │         │    └── column2:9
-      │         └── assignment-cast: STRING [as=column4:14]
+      │         ├── assignment-cast: INT8 [as=column3:14]
+      │         │    └── column3:10
+      │         └── assignment-cast: STRING [as=column4:15]
       │              └── column4:11
       └── projections
-           └── unique_rowid() [as=rowid_default:15]
+           └── unique_rowid() [as=rowid_default:16]
 
 assign-placeholders-norm query-args=(' ', 'foo', '1')
 INSERT INTO assn_cast (c, qc, i) VALUES ($1, $2, $3)
@@ -1279,19 +1526,20 @@ insert assn_cast
  ├── insert-mapping:
  │    ├── column1:11 => c:1
  │    ├── column2:12 => qc:2
- │    ├── column3:10 => i:3
- │    ├── s_default:13 => s:4
- │    └── rowid_default:14 => rowid:5
+ │    ├── column3:13 => i:3
+ │    ├── s_default:14 => s:4
+ │    └── rowid_default:15 => rowid:5
  └── values
-      ├── columns: column3:10!null s_default:13 rowid_default:14 column1:11 column2:12
+      ├── columns: s_default:14 rowid_default:15 column1:11 column2:12 column3:13
       └── tuple
-           ├── 1
            ├── CAST(NULL AS STRING)
            ├── unique_rowid()
            ├── assignment-cast: CHAR
            │    └── ' '
-           └── assignment-cast: "char"
-                └── 'foo'
+           ├── assignment-cast: "char"
+           │    └── 'foo'
+           └── assignment-cast: INT8
+                └── 1
 
 # Regression test for #38293; the default values should be separate projections.
 exec-ddl
@@ -1308,17 +1556,22 @@ INSERT INTO defvals(id) VALUES (1)
 insert defvals
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:6 => id:1
- │    ├── arr1_default:7 => arr1:2
- │    └── arr2_default:8 => arr2:3
+ │    ├── column1:7 => id:1
+ │    ├── arr1_default:8 => arr1:2
+ │    └── arr2_default:9 => arr2:3
  └── project
-      ├── columns: arr1_default:7!null arr2_default:8!null column1:6!null
-      ├── values
-      │    ├── columns: column1:6!null
-      │    └── (1,)
+      ├── columns: arr1_default:8!null arr2_default:9!null column1:7!null
+      ├── project
+      │    ├── columns: column1:7!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null
+      │    │    └── (1,)
+      │    └── projections
+      │         └── assignment-cast: INT8 [as=column1:7]
+      │              └── column1:6
       └── projections
-           ├── ARRAY[] [as=arr1_default:7]
-           └── ARRAY[] [as=arr2_default:8]
+           ├── ARRAY[] [as=arr1_default:8]
+           └── ARRAY[] [as=arr2_default:9]
 
 exec-ddl
 CREATE TABLE defvals2 (
@@ -1334,17 +1587,22 @@ INSERT INTO defvals2(id) VALUES (1)
 insert defvals2
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:6 => id:1
- │    ├── arr1_default:7 => arr1:2
- │    └── arr2_default:8 => arr2:3
+ │    ├── column1:7 => id:1
+ │    ├── arr1_default:8 => arr1:2
+ │    └── arr2_default:9 => arr2:3
  └── project
-      ├── columns: arr1_default:7 arr2_default:8 column1:6!null
-      ├── values
-      │    ├── columns: column1:6!null
-      │    └── (1,)
+      ├── columns: arr1_default:8 arr2_default:9 column1:7!null
+      ├── project
+      │    ├── columns: column1:7!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null
+      │    │    └── (1,)
+      │    └── projections
+      │         └── assignment-cast: INT8 [as=column1:7]
+      │              └── column1:6
       └── projections
-           ├── ARRAY[NULL] [as=arr1_default:7]
-           └── ARRAY[NULL] [as=arr2_default:8]
+           ├── ARRAY[NULL] [as=arr1_default:8]
+           └── ARRAY[NULL] [as=arr2_default:9]
 
 # Regression test for #67100. Do not prune check columns for INSERTs even if the
 # expression does not reference any mutating columns.
@@ -1364,22 +1622,27 @@ INSERT INTO t67100 VALUES (1)
 insert t67100
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:5 => a:1
- │    └── rowid_default:6 => rowid:2
- ├── check columns: check1:7 check2:8 check3:9
+ │    ├── column1:6 => a:1
+ │    └── rowid_default:7 => rowid:2
+ ├── check columns: check1:8 check2:9 check3:10
  └── project
-      ├── columns: check1:7!null check2:8!null check3:9!null column1:5!null rowid_default:6
+      ├── columns: check1:8!null check2:9!null check3:10!null column1:6!null rowid_default:7
       ├── project
-      │    ├── columns: rowid_default:6 column1:5!null
-      │    ├── values
-      │    │    ├── columns: column1:5!null
-      │    │    └── (1,)
+      │    ├── columns: rowid_default:7 column1:6!null
+      │    ├── project
+      │    │    ├── columns: column1:6!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:5!null
+      │    │    │    └── (1,)
+      │    │    └── projections
+      │    │         └── assignment-cast: INT8 [as=column1:6]
+      │    │              └── column1:5
       │    └── projections
-      │         └── unique_rowid() [as=rowid_default:6]
+      │         └── unique_rowid() [as=rowid_default:7]
       └── projections
-           ├── false [as=check1:7]
-           ├── 0 > 1 [as=check2:8]
-           └── true AND (0 > 1) [as=check3:9]
+           ├── false [as=check1:8]
+           ├── 0 > 1 [as=check2:9]
+           └── true AND (0 > 1) [as=check3:10]
 
 # ------------------------------------------------------------------------------
 # ON UPDATE tests.
@@ -1391,16 +1654,23 @@ INSERT INTO on_update_bare VALUES (1, 2)
 insert on_update_bare
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:6 => a:1
- │    ├── column2:7 => v:2
- │    └── rowid_default:8 => rowid:3
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => v:2
+ │    └── rowid_default:10 => rowid:3
  └── project
-      ├── columns: rowid_default:8 column1:6!null column2:7!null
-      ├── values
-      │    ├── columns: column1:6!null column2:7!null
-      │    └── (1, 2)
+      ├── columns: rowid_default:10 column1:8!null column2:9!null
+      ├── project
+      │    ├── columns: column1:8!null column2:9!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null column2:7!null
+      │    │    └── (1, 2)
+      │    └── projections
+      │         ├── assignment-cast: INT8 [as=column1:8]
+      │         │    └── column1:6
+      │         └── assignment-cast: INT8 [as=column2:9]
+      │              └── column2:7
       └── projections
-           └── unique_rowid() [as=rowid_default:8]
+           └── unique_rowid() [as=rowid_default:10]
 
 build
 INSERT INTO on_update_bare VALUES (1)
@@ -1408,17 +1678,22 @@ INSERT INTO on_update_bare VALUES (1)
 insert on_update_bare
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:6 => a:1
- │    ├── v_default:7 => v:2
- │    └── rowid_default:8 => rowid:3
+ │    ├── column1:7 => a:1
+ │    ├── v_default:8 => v:2
+ │    └── rowid_default:9 => rowid:3
  └── project
-      ├── columns: v_default:7 rowid_default:8 column1:6!null
-      ├── values
-      │    ├── columns: column1:6!null
-      │    └── (1,)
+      ├── columns: v_default:8 rowid_default:9 column1:7!null
+      ├── project
+      │    ├── columns: column1:7!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null
+      │    │    └── (1,)
+      │    └── projections
+      │         └── assignment-cast: INT8 [as=column1:7]
+      │              └── column1:6
       └── projections
-           ├── NULL::INT8 [as=v_default:7]
-           └── unique_rowid() [as=rowid_default:8]
+           ├── NULL::INT8 [as=v_default:8]
+           └── unique_rowid() [as=rowid_default:9]
 
 
 build
@@ -1427,16 +1702,23 @@ INSERT INTO on_update_with_default VALUES (1, 2)
 insert on_update_with_default
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:6 => a:1
- │    ├── column2:7 => v:2
- │    └── rowid_default:8 => rowid:3
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => v:2
+ │    └── rowid_default:10 => rowid:3
  └── project
-      ├── columns: rowid_default:8 column1:6!null column2:7!null
-      ├── values
-      │    ├── columns: column1:6!null column2:7!null
-      │    └── (1, 2)
+      ├── columns: rowid_default:10 column1:8!null column2:9!null
+      ├── project
+      │    ├── columns: column1:8!null column2:9!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null column2:7!null
+      │    │    └── (1, 2)
+      │    └── projections
+      │         ├── assignment-cast: INT8 [as=column1:8]
+      │         │    └── column1:6
+      │         └── assignment-cast: INT8 [as=column2:9]
+      │              └── column2:7
       └── projections
-           └── unique_rowid() [as=rowid_default:8]
+           └── unique_rowid() [as=rowid_default:10]
 
 
 build
@@ -1445,17 +1727,22 @@ INSERT INTO on_update_with_default VALUES (1)
 insert on_update_with_default
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:6 => a:1
- │    ├── v_default:7 => v:2
- │    └── rowid_default:8 => rowid:3
+ │    ├── column1:7 => a:1
+ │    ├── v_default:8 => v:2
+ │    └── rowid_default:9 => rowid:3
  └── project
-      ├── columns: v_default:7!null rowid_default:8 column1:6!null
-      ├── values
-      │    ├── columns: column1:6!null
-      │    └── (1,)
+      ├── columns: v_default:8!null rowid_default:9 column1:7!null
+      ├── project
+      │    ├── columns: column1:7!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null
+      │    │    └── (1,)
+      │    └── projections
+      │         └── assignment-cast: INT8 [as=column1:7]
+      │              └── column1:6
       └── projections
-           ├── 3 [as=v_default:7]
-           └── unique_rowid() [as=rowid_default:8]
+           ├── 3 [as=v_default:8]
+           └── unique_rowid() [as=rowid_default:9]
 
 # With GENERATED AS IDENTITY syntax
 exec-ddl
@@ -1488,18 +1775,25 @@ INSERT INTO generated_as_identity (a, c) VALUES (1, 10)
 insert generated_as_identity
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:7 => a:1
- │    ├── b_default:9 => b:2
- │    ├── column2:8 => c:3
- │    └── rowid_default:10 => rowid:4
+ │    ├── column1:9 => a:1
+ │    ├── b_default:11 => b:2
+ │    ├── column2:10 => c:3
+ │    └── rowid_default:12 => rowid:4
  └── project
-      ├── columns: b_default:9 rowid_default:10 column1:7!null column2:8!null
-      ├── values
-      │    ├── columns: column1:7!null column2:8!null
-      │    └── (1, 10)
+      ├── columns: b_default:11 rowid_default:12 column1:9!null column2:10!null
+      ├── project
+      │    ├── columns: column1:9!null column2:10!null
+      │    ├── values
+      │    │    ├── columns: column1:7!null column2:8!null
+      │    │    └── (1, 10)
+      │    └── projections
+      │         ├── assignment-cast: INT8 [as=column1:9]
+      │         │    └── column1:7
+      │         └── assignment-cast: INT8 [as=column2:10]
+      │              └── column2:8
       └── projections
-           ├── nextval('t.public.generated_as_identity_b_seq') [as=b_default:9]
-           └── unique_rowid() [as=rowid_default:10]
+           ├── nextval('t.public.generated_as_identity_b_seq') [as=b_default:11]
+           └── unique_rowid() [as=rowid_default:12]
 
 build
 INSERT INTO generated_as_identity (a) VALUES (2)
@@ -1507,19 +1801,24 @@ INSERT INTO generated_as_identity (a) VALUES (2)
 insert generated_as_identity
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:7 => a:1
- │    ├── b_default:8 => b:2
- │    ├── c_default:9 => c:3
- │    └── rowid_default:10 => rowid:4
+ │    ├── column1:8 => a:1
+ │    ├── b_default:9 => b:2
+ │    ├── c_default:10 => c:3
+ │    └── rowid_default:11 => rowid:4
  └── project
-      ├── columns: b_default:8 c_default:9 rowid_default:10 column1:7!null
-      ├── values
-      │    ├── columns: column1:7!null
-      │    └── (2,)
+      ├── columns: b_default:9 c_default:10 rowid_default:11 column1:8!null
+      ├── project
+      │    ├── columns: column1:8!null
+      │    ├── values
+      │    │    ├── columns: column1:7!null
+      │    │    └── (2,)
+      │    └── projections
+      │         └── assignment-cast: INT8 [as=column1:8]
+      │              └── column1:7
       └── projections
-           ├── nextval('t.public.generated_as_identity_b_seq') [as=b_default:8]
-           ├── nextval('t.public.generated_as_identity_c_seq') [as=c_default:9]
-           └── unique_rowid() [as=rowid_default:10]
+           ├── nextval('t.public.generated_as_identity_b_seq') [as=b_default:9]
+           ├── nextval('t.public.generated_as_identity_c_seq') [as=c_default:10]
+           └── unique_rowid() [as=rowid_default:11]
 
 # With SERIAL syntax
 exec-ddl
@@ -1535,14 +1834,19 @@ INSERT INTO serial_t (b) VALUES (2)
 insert serial_t
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── a_default:7 => a:1
- │    ├── column1:6 => b:2
- │    └── rowid_default:8 => rowid:3
+ │    ├── a_default:8 => a:1
+ │    ├── column1:7 => b:2
+ │    └── rowid_default:9 => rowid:3
  └── project
-      ├── columns: a_default:7 rowid_default:8 column1:6!null
-      ├── values
-      │    ├── columns: column1:6!null
-      │    └── (2,)
+      ├── columns: a_default:8 rowid_default:9 column1:7!null
+      ├── project
+      │    ├── columns: column1:7!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null
+      │    │    └── (2,)
+      │    └── projections
+      │         └── assignment-cast: INT8 [as=column1:7]
+      │              └── column1:6
       └── projections
-           ├── unique_rowid() [as=a_default:7]
-           └── unique_rowid() [as=rowid_default:8]
+           ├── unique_rowid() [as=a_default:8]
+           └── unique_rowid() [as=rowid_default:9]

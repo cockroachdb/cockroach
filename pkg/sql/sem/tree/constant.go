@@ -558,7 +558,7 @@ func (expr *StrVal) ResolveAsType(
 		case types.UuidFamily:
 			return ParseDUuidFromBytes([]byte(expr.s))
 		case types.StringFamily:
-			expr.resString = DString(adjustStringValueToType(typ, expr.s))
+			expr.resString = DString(expr.s)
 			return &expr.resString, nil
 		}
 		return nil, errors.AssertionFailedf("attempt to type byte array literal to %T", typ)
@@ -571,7 +571,7 @@ func (expr *StrVal) ResolveAsType(
 			expr.resString = DString(expr.s)
 			return NewDNameFromDString(&expr.resString), nil
 		}
-		expr.resString = DString(adjustStringValueToType(typ, expr.s))
+		expr.resString = DString(expr.s)
 		return &expr.resString, nil
 
 	case types.BytesFamily:

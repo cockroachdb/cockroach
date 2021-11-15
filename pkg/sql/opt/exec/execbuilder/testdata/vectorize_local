@@ -398,9 +398,9 @@ EXPLAIN (VEC) INSERT INTO t66568 VALUES (1) ON CONFLICT DO NOTHING
 │
 └ Node 1
   └ *sql.planNodeToRowSource
-    └ *colexecjoin.crossJoiner
-      ├ *sql.planNodeToRowSource
-      └ *colfetcher.ColBatchScan
+    └ *colexec.unorderedDistinct
+      └ *rowexec.joinReader
+        └ *sql.planNodeToRowSource
 
 statement ok
 CREATE TABLE t_string (a STRING);

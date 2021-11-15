@@ -200,15 +200,24 @@ EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 1)
 distribution: local
 vectorized: true
 ·
-• insert fast path
-  columns: ()
-  estimated row count: 0 (missing stats)
-  into: t(a, b, v)
-  auto commit
-  size: 3 columns, 1 row
-  row 0, expr 0: 1
-  row 0, expr 1: 1
-  row 0, expr 2: 2
+• insert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t(a, b, v)
+│ auto commit
+│
+└── • render
+    │ columns: (column1, column2, v_comp)
+    │ estimated row count: 1
+    │ render v_comp: column1 + column2
+    │ render column1: column1
+    │ render column2: column2
+    │
+    └── • values
+          columns: (column1, column2)
+          size: 2 columns, 1 row
+          row 0, expr 0: crdb_internal.assignment_cast(1, NULL::INT8)
+          row 0, expr 1: crdb_internal.assignment_cast(1, NULL::INT8)
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 1) RETURNING v
@@ -220,15 +229,24 @@ vectorized: true
 │ columns: (v)
 │ estimated row count: 1
 │
-└── • insert fast path
-      columns: (a, v)
-      estimated row count: 1
-      into: t(a, b, v)
-      auto commit
-      size: 3 columns, 1 row
-      row 0, expr 0: 1
-      row 0, expr 1: 1
-      row 0, expr 2: 2
+└── • insert
+    │ columns: (a, v)
+    │ estimated row count: 1
+    │ into: t(a, b, v)
+    │ auto commit
+    │
+    └── • render
+        │ columns: (column1, column2, v_comp)
+        │ estimated row count: 1
+        │ render v_comp: column1 + column2
+        │ render column1: column1
+        │ render column2: column2
+        │
+        └── • values
+              columns: (column1, column2)
+              size: 2 columns, 1 row
+              row 0, expr 0: crdb_internal.assignment_cast(1, NULL::INT8)
+              row 0, expr 1: crdb_internal.assignment_cast(1, NULL::INT8)
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (1, 1, 1)
@@ -236,17 +254,27 @@ EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (1, 1, 1)
 distribution: local
 vectorized: true
 ·
-• insert fast path
-  columns: ()
-  estimated row count: 0 (missing stats)
-  into: t_idx(a, b, c, v, w)
-  auto commit
-  size: 5 columns, 1 row
-  row 0, expr 0: 1
-  row 0, expr 1: 1
-  row 0, expr 2: 1
-  row 0, expr 3: 2
-  row 0, expr 4: 2
+• insert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t_idx(a, b, c, v, w)
+│ auto commit
+│
+└── • render
+    │ columns: (column1, column2, column3, v_comp, w_comp)
+    │ estimated row count: 1
+    │ render v_comp: column1 + column2
+    │ render w_comp: column3 + 1
+    │ render column1: column1
+    │ render column2: column2
+    │ render column3: column3
+    │
+    └── • values
+          columns: (column1, column2, column3)
+          size: 3 columns, 1 row
+          row 0, expr 0: crdb_internal.assignment_cast(1, NULL::INT8)
+          row 0, expr 1: crdb_internal.assignment_cast(1, NULL::INT8)
+          row 0, expr 2: crdb_internal.assignment_cast(1, NULL::INT8)
 
 subtest Delete
 
@@ -812,27 +840,39 @@ vectorized: true
     │ auto commit
     │ arbiter indexes: t_pkey
     │
-    └── • lookup join (anti)
+    └── • distinct
         │ columns: (column1, column2, v_comp)
         │ estimated row count: 0 (missing stats)
-        │ table: t@t_pkey
-        │ equality: (column1) = (a)
-        │ equality cols are key
+        │ distinct on: column1
+        │ nulls are distinct
         │
-        └── • render
+        └── • lookup join (anti)
             │ columns: (v_comp, column1, column2)
-            │ estimated row count: 2
-            │ render v_comp: column1 + column2
-            │ render column1: column1
-            │ render column2: column2
+            │ estimated row count: 0 (missing stats)
+            │ table: t@t_pkey
+            │ equality: (column1) = (a)
+            │ equality cols are key
             │
-            └── • values
-                  columns: (column1, column2)
-                  size: 2 columns, 2 rows
-                  row 0, expr 0: 5
-                  row 0, expr 1: 51
-                  row 1, expr 0: 6
-                  row 1, expr 1: 60
+            └── • render
+                │ columns: (v_comp, column1, column2)
+                │ estimated row count: 2
+                │ render v_comp: column1 + column2
+                │ render column1: column1
+                │ render column2: column2
+                │
+                └── • render
+                    │ columns: (column1, column2)
+                    │ estimated row count: 2
+                    │ render column1: crdb_internal.assignment_cast(column1, NULL::INT8)
+                    │ render column2: crdb_internal.assignment_cast(column2, NULL::INT8)
+                    │
+                    └── • values
+                          columns: (column1, column2)
+                          size: 2 columns, 2 rows
+                          row 0, expr 0: 5
+                          row 0, expr 1: 51
+                          row 1, expr 0: 6
+                          row 1, expr 1: 60
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (4, 100), (6, 100), (7, 100) ON CONFLICT (a) DO UPDATE SET b = t.v
@@ -1118,50 +1158,63 @@ vectorized: true
         │ distinct on: w_comp
         │ nulls are distinct
         │
-        └── • lookup join (anti)
+        └── • distinct
             │ columns: (v_comp, w_comp, column1, column2, column3)
             │ estimated row count: 0 (missing stats)
-            │ table: t_idx@t_idx_pkey
-            │ equality: (column1) = (a)
-            │ equality cols are key
+            │ distinct on: column1
+            │ nulls are distinct
             │
-            └── • hash join (right anti)
+            └── • lookup join (anti)
                 │ columns: (v_comp, w_comp, column1, column2, column3)
                 │ estimated row count: 0 (missing stats)
-                │ equality: (w) = (w_comp)
+                │ table: t_idx@t_idx_pkey
+                │ equality: (column1) = (a)
+                │ equality cols are key
                 │
-                ├── • render
-                │   │ columns: (w)
-                │   │ estimated row count: 1,000 (missing stats)
-                │   │ render w: c + 1
-                │   │
-                │   └── • scan
-                │         columns: (c)
-                │         estimated row count: 1,000 (missing stats)
-                │         table: t_idx@t_idx_pkey
-                │         spans: FULL SCAN
-                │
-                └── • render
+                └── • hash join (right anti)
                     │ columns: (v_comp, w_comp, column1, column2, column3)
-                    │ estimated row count: 3
-                    │ render v_comp: column1 + column2
-                    │ render w_comp: column3 + 1
-                    │ render column1: column1
-                    │ render column2: column2
-                    │ render column3: column3
+                    │ estimated row count: 0 (missing stats)
+                    │ equality: (w) = (w_comp)
                     │
-                    └── • values
-                          columns: (column1, column2, column3)
-                          size: 3 columns, 3 rows
-                          row 0, expr 0: 4
-                          row 0, expr 1: 41
-                          row 0, expr 2: 301
-                          row 1, expr 0: 6
-                          row 1, expr 1: 60
-                          row 1, expr 2: 600
-                          row 2, expr 0: 7
-                          row 2, expr 1: 70
-                          row 2, expr 2: 100
+                    ├── • render
+                    │   │ columns: (w)
+                    │   │ estimated row count: 1,000 (missing stats)
+                    │   │ render w: c + 1
+                    │   │
+                    │   └── • scan
+                    │         columns: (c)
+                    │         estimated row count: 1,000 (missing stats)
+                    │         table: t_idx@t_idx_pkey
+                    │         spans: FULL SCAN
+                    │
+                    └── • render
+                        │ columns: (v_comp, w_comp, column1, column2, column3)
+                        │ estimated row count: 3
+                        │ render v_comp: column1 + column2
+                        │ render w_comp: column3 + 1
+                        │ render column1: column1
+                        │ render column2: column2
+                        │ render column3: column3
+                        │
+                        └── • render
+                            │ columns: (column1, column2, column3)
+                            │ estimated row count: 3
+                            │ render column1: crdb_internal.assignment_cast(column1, NULL::INT8)
+                            │ render column2: crdb_internal.assignment_cast(column2, NULL::INT8)
+                            │ render column3: crdb_internal.assignment_cast(column3, NULL::INT8)
+                            │
+                            └── • values
+                                  columns: (column1, column2, column3)
+                                  size: 3 columns, 3 rows
+                                  row 0, expr 0: 4
+                                  row 0, expr 1: 41
+                                  row 0, expr 2: 301
+                                  row 1, expr 0: 6
+                                  row 1, expr 1: 60
+                                  row 1, expr 2: 600
+                                  row 2, expr 0: 7
+                                  row 2, expr 1: 70
+                                  row 2, expr 2: 100
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 10, 100), (6, 10, 100), (7, 70, 700) ON CONFLICT (a) DO UPDATE SET c = 0
