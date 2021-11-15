@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package scbuild
+package scbuildctx
 
 import (
 	"context"
@@ -17,13 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
-// Dependencies contains all the dependencies required by the builder.
+// Dependencies contains all the dependencies isExistenceOptional by the builder.
 type Dependencies interface {
 	CatalogReader() CatalogReader
 	AuthorizationAccessor() AuthorizationAccessor
@@ -89,63 +88,4 @@ type AuthorizationAccessor interface {
 	// HasOwnership returns true iff the role, or any role the role is a member
 	// of, has ownership privilege of the desc.
 	HasOwnership(ctx context.Context, descriptor catalog.Descriptor) (bool, error)
-}
-
-func mustReadDatabase(
-	ctx context.Context, d Dependencies, id descpb.ID,
-) catalog.DatabaseDescriptor {
-	desc := d.CatalogReader().MustReadDescriptor(ctx, id)
-	db, err := catalog.AsDatabaseDescriptor(desc)
-	onErrPanic(err)
-	return db
-}
-
-func mustReadSchema(ctx context.Context, d Dependencies, id descpb.ID) catalog.SchemaDescriptor {
-	desc := d.CatalogReader().MustReadDescriptor(ctx, id)
-	schema, err := catalog.AsSchemaDescriptor(desc)
-	onErrPanic(err)
-	return schema
-}
-
-func mustReadTable(ctx context.Context, d Dependencies, id descpb.ID) catalog.TableDescriptor {
-	desc := d.CatalogReader().MustReadDescriptor(ctx, id)
-	table, err := catalog.AsTableDescriptor(desc)
-	onErrPanic(err)
-	return table
-}
-
-func mustReadType(ctx context.Context, d Dependencies, id descpb.ID) catalog.TypeDescriptor {
-	desc := d.CatalogReader().MustReadDescriptor(ctx, id)
-	typ, err := catalog.AsTypeDescriptor(desc)
-	onErrPanic(err)
-	return typ
-}
-
-func semaCtx(d Dependencies) *tree.SemaContext {
-	semaCtx := tree.MakeSemaContext()
-	semaCtx.Annotations = nil
-	semaCtx.SearchPath = d.SessionData().SearchPath
-	semaCtx.IntervalStyleEnabled = d.SessionData().IntervalStyleEnabled
-	semaCtx.DateStyleEnabled = d.SessionData().DateStyleEnabled
-	semaCtx.TypeResolver = d.CatalogReader()
-	semaCtx.TableNameResolver = d.CatalogReader()
-	semaCtx.DateStyle = d.SessionData().GetDateStyle()
-	semaCtx.IntervalStyle = d.SessionData().GetIntervalStyle()
-	return &semaCtx
-}
-
-func evalCtx(ctx context.Context, d Dependencies) *tree.EvalContext {
-	return &tree.EvalContext{
-		SessionDataStack:   sessiondata.NewStack(d.SessionData()),
-		Context:            ctx,
-		Planner:            &faketreeeval.DummyEvalPlanner{},
-		PrivilegedAccessor: &faketreeeval.DummyPrivilegedAccessor{},
-		SessionAccessor:    &faketreeeval.DummySessionAccessor{},
-		ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
-		Sequence:           &faketreeeval.DummySequenceOperators{},
-		Tenant:             &faketreeeval.DummyTenantOperator{},
-		Regions:            &faketreeeval.DummyRegionOperator{},
-		Settings:           d.ClusterSettings(),
-		Codec:              d.Codec(),
-	}
 }

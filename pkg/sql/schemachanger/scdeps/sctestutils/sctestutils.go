@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/scbuildctx"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -37,7 +37,7 @@ import (
 // scbuild.Dependencies object built using the test server interface and which
 // it passes to the callback.
 func WithBuilderDependenciesFromTestServer(
-	s serverutils.TestServerInterface, fn func(scbuild.Dependencies),
+	s serverutils.TestServerInterface, fn func(scbuildctx.Dependencies),
 ) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	ip, cleanup := sql.NewInternalPlanner(
@@ -56,7 +56,7 @@ func WithBuilderDependenciesFromTestServer(
 		Descriptors() *descs.Collection
 		SessionData() *sessiondata.SessionData
 		resolver.SchemaResolver
-		scbuild.AuthorizationAccessor
+		scbuildctx.AuthorizationAccessor
 	})
 	fn(scdeps.NewBuilderDependencies(
 		execCfg.Codec,

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/scbuildctx"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
@@ -89,7 +90,7 @@ func TestPlanAlterTable(t *testing.T) {
 				return ""
 			case "ops", "deps":
 				var plan scplan.Plan
-				sctestutils.WithBuilderDependenciesFromTestServer(s, func(deps scbuild.Dependencies) {
+				sctestutils.WithBuilderDependenciesFromTestServer(s, func(deps scbuildctx.Dependencies) {
 					stmts, err := parser.Parse(d.Input)
 					require.NoError(t, err)
 					var outputNodes scpb.State
@@ -110,7 +111,7 @@ func TestPlanAlterTable(t *testing.T) {
 				}
 				return marshalDeps(t, &plan)
 			case "unimplemented":
-				sctestutils.WithBuilderDependenciesFromTestServer(s, func(deps scbuild.Dependencies) {
+				sctestutils.WithBuilderDependenciesFromTestServer(s, func(deps scbuildctx.Dependencies) {
 					stmts, err := parser.Parse(d.Input)
 					require.NoError(t, err)
 					require.Len(t, stmts, 1)
@@ -119,7 +120,7 @@ func TestPlanAlterTable(t *testing.T) {
 					alter, ok := stmt.AST.(*tree.AlterTable)
 					require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
 					_, err = scbuild.Build(ctx, deps, scpb.State{}, alter)
-					require.Truef(t, scbuild.HasNotImplemented(err), "expected unimplemented, got %v", err)
+					require.Truef(t, scbuildctx.HasNotImplemented(err), "expected unimplemented, got %v", err)
 				})
 				return ""
 

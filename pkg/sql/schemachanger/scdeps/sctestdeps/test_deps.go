@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/scbuildctx"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
@@ -45,15 +45,15 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-var _ scbuild.Dependencies = (*TestState)(nil)
+var _ scbuildctx.Dependencies = (*TestState)(nil)
 
 // AuthorizationAccessor implements the scbuild.Dependencies interface.
-func (s *TestState) AuthorizationAccessor() scbuild.AuthorizationAccessor {
+func (s *TestState) AuthorizationAccessor() scbuildctx.AuthorizationAccessor {
 	return s
 }
 
 // CatalogReader implements the scbuild.Dependencies interface.
-func (s *TestState) CatalogReader() scbuild.CatalogReader {
+func (s *TestState) CatalogReader() scbuildctx.CatalogReader {
 	return s
 }
 
@@ -77,7 +77,7 @@ func (s *TestState) Statements() []string {
 	return s.statements
 }
 
-var _ scbuild.AuthorizationAccessor = (*TestState)(nil)
+var _ scbuildctx.AuthorizationAccessor = (*TestState)(nil)
 
 // CheckPrivilege implements the scbuild.AuthorizationAccessor interface.
 func (s *TestState) CheckPrivilege(
@@ -96,7 +96,7 @@ func (s *TestState) HasOwnership(ctx context.Context, descriptor catalog.Descrip
 	return true, nil
 }
 
-var _ scbuild.CatalogReader = (*TestState)(nil)
+var _ scbuildctx.CatalogReader = (*TestState)(nil)
 
 // MayResolveDatabase implements the scbuild.CatalogReader interface.
 func (s *TestState) MayResolveDatabase(

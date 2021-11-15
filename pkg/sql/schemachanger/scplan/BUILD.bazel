@@ -33,6 +33,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
         "//pkg/sql/schemachanger/scbuild",
+        "//pkg/sql/schemachanger/scbuild/scbuildctx",
         "//pkg/sql/schemachanger/scdeps/sctestutils",
         "//pkg/sql/schemachanger/scgraph",
         "//pkg/sql/schemachanger/scgraphviz",

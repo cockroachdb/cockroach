@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/scbuildctx"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,11 +34,11 @@ func NewBuilderDependencies(
 	txn *kv.Txn,
 	descsCollection *descs.Collection,
 	schemaResolver resolver.SchemaResolver,
-	authAccessor scbuild.AuthorizationAccessor,
+	authAccessor scbuildctx.AuthorizationAccessor,
 	sessionData *sessiondata.SessionData,
 	settings *cluster.Settings,
 	statements []string,
-) scbuild.Dependencies {
+) scbuildctx.Dependencies {
 	return &buildDeps{
 		codec:           codec,
 		txn:             txn,
@@ -56,13 +56,13 @@ type buildDeps struct {
 	txn             *kv.Txn
 	descsCollection *descs.Collection
 	schemaResolver  resolver.SchemaResolver
-	authAccessor    scbuild.AuthorizationAccessor
+	authAccessor    scbuildctx.AuthorizationAccessor
 	sessionData     *sessiondata.SessionData
 	settings        *cluster.Settings
 	statements      []string
 }
 
-var _ scbuild.CatalogReader = (*buildDeps)(nil)
+var _ scbuildctx.CatalogReader = (*buildDeps)(nil)
 
 // MayResolveDatabase implements the scbuild.CatalogReader interface.
 func (d *buildDeps) MayResolveDatabase(
@@ -192,15 +192,15 @@ func (d *buildDeps) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 	return desc
 }
 
-var _ scbuild.Dependencies = (*buildDeps)(nil)
+var _ scbuildctx.Dependencies = (*buildDeps)(nil)
 
 // AuthorizationAccessor implements the scbuild.Dependencies interface.
-func (d *buildDeps) AuthorizationAccessor() scbuild.AuthorizationAccessor {
+func (d *buildDeps) AuthorizationAccessor() scbuildctx.AuthorizationAccessor {
 	return d.authAccessor
 }
 
 // CatalogReader implements the scbuild.Dependencies interface.
-func (d *buildDeps) CatalogReader() scbuild.CatalogReader {
+func (d *buildDeps) CatalogReader() scbuildctx.CatalogReader {
 	return d
 }
 

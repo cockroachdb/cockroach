@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/scbuildctx"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/errors"
 )
 
 // SchemaChange provides the planNode for the new schema changer.
@@ -56,13 +56,13 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		scs.stmts,
 	)
 	outputNodes, err := scbuild.Build(ctx, deps, scs.state, stmt)
-	if scbuild.HasNotImplemented(err) && mode == sessiondatapb.UseNewSchemaChangerOn {
+	if scbuildctx.HasNotImplemented(err) && mode == sessiondatapb.UseNewSchemaChangerOn {
 		return nil, false, nil
 	}
 	if err != nil {
 		// If we need to wait for a concurrent schema change to finish, release our
 		// leases, and then return the error to wait and retry.
-		if cscErr := (*scbuild.ConcurrentSchemaChangeError)(nil); errors.As(err, &cscErr) {
+		if scbuildctx.ConcurrentSchemaChangeDescID(err) != descpb.InvalidID {
 			p.Descriptors().ReleaseLeases(ctx)
 		}
 		return nil, false, err
@@ -106,7 +106,7 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 				if err != nil {
 					return err
 				}
-				blocked = scbuild.HasConcurrentSchemaChanges(table)
+				blocked = scbuildctx.HasConcurrentSchemaChanges(table)
 				return nil
 			}); err != nil {
 			return err

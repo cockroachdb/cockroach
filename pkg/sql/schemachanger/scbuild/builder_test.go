@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/scbuildctx"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -44,17 +45,17 @@ func TestBuilderAlterTable(t *testing.T) {
 	datadriven.Walk(t, filepath.Join("testdata"), func(t *testing.T, path string) {
 		for _, depsType := range []struct {
 			name                string
-			dependenciesWrapper func(*testing.T, serverutils.TestServerInterface, *sqlutils.SQLRunner, func(scbuild.Dependencies))
+			dependenciesWrapper func(*testing.T, serverutils.TestServerInterface, *sqlutils.SQLRunner, func(scbuildctx.Dependencies))
 		}{
 			{
 				"sql_dependencies",
-				func(t *testing.T, s serverutils.TestServerInterface, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
+				func(t *testing.T, s serverutils.TestServerInterface, tdb *sqlutils.SQLRunner, fn func(scbuildctx.Dependencies)) {
 					sctestutils.WithBuilderDependenciesFromTestServer(s, fn)
 				},
 			},
 			{
 				"test_dependencies",
-				func(t *testing.T, s serverutils.TestServerInterface, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
+				func(t *testing.T, s serverutils.TestServerInterface, tdb *sqlutils.SQLRunner, fn func(scbuildctx.Dependencies)) {
 					fn(sctestdeps.NewTestDependencies(ctx, t, tdb, nil /* testingKnobs */, nil /* statements */))
 				},
 			},
@@ -79,7 +80,7 @@ func run(
 	d *datadriven.TestData,
 	s serverutils.TestServerInterface,
 	tdb *sqlutils.SQLRunner,
-	withDependencies func(*testing.T, serverutils.TestServerInterface, *sqlutils.SQLRunner, func(scbuild.Dependencies)),
+	withDependencies func(*testing.T, serverutils.TestServerInterface, *sqlutils.SQLRunner, func(scbuildctx.Dependencies)),
 ) string {
 	switch d.Cmd {
 	case "create-table", "create-view", "create-type", "create-sequence", "create-schema", "create-database":
@@ -117,7 +118,7 @@ func run(
 		return ""
 	case "build":
 		var outputNodes scpb.State
-		withDependencies(t, s, tdb, func(deps scbuild.Dependencies) {
+		withDependencies(t, s, tdb, func(deps scbuildctx.Dependencies) {
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
 			for i := range stmts {
@@ -128,7 +129,7 @@ func run(
 		return marshalNodes(t, outputNodes)
 
 	case "unimplemented":
-		withDependencies(t, s, tdb, func(deps scbuild.Dependencies) {
+		withDependencies(t, s, tdb, func(deps scbuildctx.Dependencies) {
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
 			require.Len(t, stmts, 1)
@@ -138,7 +139,7 @@ func run(
 			require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
 
 			_, err = scbuild.Build(ctx, deps, scpb.State{}, alter)
-			require.Truef(t, scbuild.HasNotImplemented(err), "expected unimplemented, got %v", err)
+			require.Truef(t, scbuildctx.HasNotImplemented(err), "expected unimplemented, got %v", err)
 		})
 		return ""
 

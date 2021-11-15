@@ -12,7 +12,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/protoreflect",
-        "//pkg/sql/schemachanger/scbuild",
+        "//pkg/sql/schemachanger/scbuild/scbuildctx",
         "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
