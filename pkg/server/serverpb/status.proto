@@ -1431,6 +1431,14 @@ service Status {
     };
   }
 
+  // CancelLocalQuery cancels a SQL query running on this node given its ID.
+  rpc CancelLocalQuery(CancelQueryRequest) returns (CancelQueryResponse) {
+    option (google.api.http) = {
+      post : "/_status/cancel_local_query"
+      body: "*"
+    };
+  }
+
   // ListContentionEvents retrieves the contention events across the entire
   // cluster.
   //
@@ -1508,6 +1516,14 @@ service Status {
     option (google.api.http) = {
       post : "/_status/cancel_session/{node_id}"
 			body: "*"
+    };
+  }
+
+  // CancelLocalSession forcefully terminates a SQL session running on this node given its ID.
+  rpc CancelLocalSession(CancelSessionRequest) returns (CancelSessionResponse) {
+    option (google.api.http) = {
+      post : "/_status/cancel_local_session"
+      body: "*"
     };
   }
 
