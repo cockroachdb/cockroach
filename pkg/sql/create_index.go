@@ -639,7 +639,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
 	}
 
-	indexDesc.Version = descpb.StrictIndexColumnIDGuaranteesVersion
+	indexDesc.Version = descpb.LatestNonPrimaryIndexDescriptorVersion
 
 	if n.n.PartitionByIndex != nil && n.tableDesc.GetLocalityConfig() != nil {
 		return pgerror.New(

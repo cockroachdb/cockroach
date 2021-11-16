@@ -685,7 +685,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 }
 
 func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
-	return tt.addIndexWithVersion(def, typ, descpb.StrictIndexColumnIDGuaranteesVersion)
+	return tt.addIndexWithVersion(def, typ, descpb.LatestNonPrimaryIndexDescriptorVersion)
 }
 
 func (tt *Table) addIndexWithVersion(

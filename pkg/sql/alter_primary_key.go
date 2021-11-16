@@ -165,7 +165,7 @@ func (p *planner) AlterPrimaryKey(
 		CreatedExplicitly: true,
 		EncodingType:      descpb.PrimaryIndexEncoding,
 		Type:              descpb.IndexDescriptor_FORWARD,
-		Version:           descpb.StrictIndexColumnIDGuaranteesVersion,
+		Version:           descpb.LatestNonPrimaryIndexDescriptorVersion,
 	}
 
 	// If the new index is requested to be sharded, set up the index descriptor
@@ -339,7 +339,7 @@ func (p *planner) AlterPrimaryKey(
 		newUniqueIdx.CompositeColumnIDs = nil
 		newUniqueIdx.KeyColumnIDs = nil
 		// Set correct version and encoding type.
-		newUniqueIdx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
+		newUniqueIdx.Version = descpb.LatestNonPrimaryIndexDescriptorVersion
 		newUniqueIdx.EncodingType = descpb.SecondaryIndexEncoding
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newUniqueIdx, newPrimaryIndexDesc); err != nil {
 			return err
@@ -447,7 +447,7 @@ func (p *planner) AlterPrimaryKey(
 		}
 
 		newIndex.Name = tabledesc.GenerateUniqueName(basename, nameExists)
-		newIndex.Version = descpb.StrictIndexColumnIDGuaranteesVersion
+		newIndex.Version = descpb.LatestNonPrimaryIndexDescriptorVersion
 		newIndex.EncodingType = descpb.SecondaryIndexEncoding
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newIndex, newPrimaryIndexDesc); err != nil {
 			return err

@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -197,7 +196,7 @@ func (hi *hypotheticalIndex) GeoConfig() *geoindex.Config {
 func (hi *hypotheticalIndex) Version() descpb.IndexDescriptorVersion {
 	// Return the latest version for non-primary indexes, since hypothetical
 	// indexes are not primary indexes.
-	return tabledesc.LatestNonPrimaryIndexDescriptorVersion
+	return descpb.LatestNonPrimaryIndexDescriptorVersion
 }
 
 // PartitionCount is part of the cat.Index interface.
