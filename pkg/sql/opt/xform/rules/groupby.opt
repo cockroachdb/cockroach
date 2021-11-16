@@ -275,7 +275,7 @@
 # projections instead of using an IndexJoin. The Project can be eliminated for
 # the same reasons as the IndexJoin.
 [EliminateIndexJoinOrProjectInsideGroupBy, Explore]
-(GroupBy | DistinctOn | EnsureUpsertDistinctOn
+(GroupBy | ScalarGroupBy | DistinctOn | EnsureUpsertDistinctOn
     (IndexJoin | Project $input:*)
     $aggs:*
     $private:* &

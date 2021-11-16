@@ -146,3 +146,28 @@ PREPARE q66465_b AS SELECT k FROM t66465@idx WHERE k + i > 0 AND t > now()
 
 statement ok
 EXECUTE q66465_b
+
+# Regression test for #70116. Partial index validation queries performed during
+# a backfill should be efficient.
+
+statement ok
+CREATE TABLE t70116 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX a_idx (a) WHERE b > 0
+)
+
+# This query mimics a partial index validation query.
+query T
+EXPLAIN SELECT count(1) FROM t70116@a_idx WHERE b > 0
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: t70116@a_idx (partial index)
+      spans: FULL SCAN

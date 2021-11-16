@@ -8074,46 +8074,44 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(7)
- ├── project
- │    ├── columns: u:2 v:3
- │    └── distinct-on
- │         ├── columns: k:1!null u:2 v:3
- │         ├── grouping columns: k:1!null
- │         ├── internal-ordering: +1
- │         ├── key: (1)
- │         ├── fd: (1)-->(2,3)
- │         ├── union-all
- │         │    ├── columns: k:1!null u:2 v:3
- │         │    ├── left columns: k:8 u:9 v:10
- │         │    ├── right columns: k:14 u:15 v:16
- │         │    ├── ordering: +1
- │         │    ├── index-join d
- │         │    │    ├── columns: k:8!null u:9!null v:10
- │         │    │    ├── key: (8)
- │         │    │    ├── fd: ()-->(9), (8)-->(10)
- │         │    │    ├── ordering: +8 opt(9) [actual: +8]
- │         │    │    └── scan d@u
- │         │    │         ├── columns: k:8!null u:9!null
- │         │    │         ├── constraint: /9/8: [/1 - /1]
- │         │    │         ├── key: (8)
- │         │    │         ├── fd: ()-->(9)
- │         │    │         └── ordering: +8 opt(9) [actual: +8]
- │         │    └── index-join d
- │         │         ├── columns: k:14!null u:15 v:16!null
- │         │         ├── key: (14)
- │         │         ├── fd: ()-->(16), (14)-->(15)
- │         │         ├── ordering: +14 opt(16) [actual: +14]
- │         │         └── scan d@v
- │         │              ├── columns: k:14!null v:16!null
- │         │              ├── constraint: /16/14: [/1 - /1]
- │         │              ├── key: (14)
- │         │              ├── fd: ()-->(16)
- │         │              └── ordering: +14 opt(16) [actual: +14]
- │         └── aggregations
- │              ├── const-agg [as=u:2, outer=(2)]
- │              │    └── u:2
- │              └── const-agg [as=v:3, outer=(3)]
- │                   └── v:3
+ ├── distinct-on
+ │    ├── columns: k:1!null u:2 v:3
+ │    ├── grouping columns: k:1!null
+ │    ├── internal-ordering: +1
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── union-all
+ │    │    ├── columns: k:1!null u:2 v:3
+ │    │    ├── left columns: k:8 u:9 v:10
+ │    │    ├── right columns: k:14 u:15 v:16
+ │    │    ├── ordering: +1
+ │    │    ├── index-join d
+ │    │    │    ├── columns: k:8!null u:9!null v:10
+ │    │    │    ├── key: (8)
+ │    │    │    ├── fd: ()-->(9), (8)-->(10)
+ │    │    │    ├── ordering: +8 opt(9) [actual: +8]
+ │    │    │    └── scan d@u
+ │    │    │         ├── columns: k:8!null u:9!null
+ │    │    │         ├── constraint: /9/8: [/1 - /1]
+ │    │    │         ├── key: (8)
+ │    │    │         ├── fd: ()-->(9)
+ │    │    │         └── ordering: +8 opt(9) [actual: +8]
+ │    │    └── index-join d
+ │    │         ├── columns: k:14!null u:15 v:16!null
+ │    │         ├── key: (14)
+ │    │         ├── fd: ()-->(16), (14)-->(15)
+ │    │         ├── ordering: +14 opt(16) [actual: +14]
+ │    │         └── scan d@v
+ │    │              ├── columns: k:14!null v:16!null
+ │    │              ├── constraint: /16/14: [/1 - /1]
+ │    │              ├── key: (14)
+ │    │              ├── fd: ()-->(16)
+ │    │              └── ordering: +14 opt(16) [actual: +14]
+ │    └── aggregations
+ │         ├── const-agg [as=u:2, outer=(2)]
+ │         │    └── u:2
+ │         └── const-agg [as=v:3, outer=(3)]
+ │              └── v:3
  └── aggregations
       └── count-rows [as=count_rows:7]
 
