@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -141,21 +142,21 @@ func TestFailedConnection(t *testing.T) {
 		// TenantID rejected as malformed.
 		te.TestConnectErr(
 			ctx, t, u+"?options=--cluster=dimdog&sslmode="+sslmode,
-			codeParamsRoutingFailed, "invalid cluster name 'dimdog'",
+			codeParamsRoutingFailed, "invalid cluster identifier 'dimdog'",
 		)
 		require.Equal(t, int64(1+(i*3)), s.metrics.RoutingErrCount.Count())
 
 		// No cluster name and TenantID.
 		te.TestConnectErr(
 			ctx, t, u+"?sslmode="+sslmode,
-			codeParamsRoutingFailed, "missing cluster name in connection string",
+			codeParamsRoutingFailed, "missing cluster identifier",
 		)
 		require.Equal(t, int64(2+(i*3)), s.metrics.RoutingErrCount.Count())
 
 		// Bad TenantID. Ensure that we don't leak any parsing errors.
 		te.TestConnectErr(
 			ctx, t, u+"?options=--cluster=dim-dog-foo3&sslmode="+sslmode,
-			codeParamsRoutingFailed, "invalid cluster name 'dim-dog-foo3'",
+			codeParamsRoutingFailed, "invalid cluster identifier 'dim-dog-foo3'",
 		)
 		require.Equal(t, int64(3+(i*3)), s.metrics.RoutingErrCount.Count())
 	}
@@ -740,51 +741,50 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 		expectedTenantID    uint64
 		expectedParams      map[string]string
 		expectedError       string
+		expectedHint        string
 	}{
 		{
 			name:          "empty params",
 			params:        map[string]string{},
-			expectedError: "missing cluster name in connection string",
+			expectedError: "missing cluster identifier",
+			expectedHint:  clusterIdentifierHint,
 		},
 		{
-			name: "cluster name is not provided",
+			name: "cluster identifier is not provided",
 			params: map[string]string{
 				"database": "defaultdb",
 				"options":  "--foo=bar",
 			},
-			expectedError: "missing cluster name in connection string",
+			expectedError: "missing cluster identifier",
+			expectedHint:  clusterIdentifierHint,
 		},
 		{
-			name: "multiple similar cluster names",
-			params: map[string]string{
-				"database": "happy-koala-7.defaultdb",
-				"options":  "--cluster=happy-koala",
-			},
-			expectedError: "multiple cluster names provided",
-		},
-		{
-			name: "multiple different cluster names",
+			name: "multiple different cluster identifiers",
 			params: map[string]string{
 				"database": "happy-koala-7.defaultdb",
 				"options":  "--cluster=happy-tiger",
 			},
-			expectedError: "multiple cluster names provided",
+			expectedError: "multiple different cluster identifiers provided",
+			expectedHint: "Is 'happy-koala-7' or 'happy-tiger' the identifier for the cluster that you're connecting to?\n--\n" +
+				clusterIdentifierHint,
 		},
 		{
-			name: "invalid cluster name in database param",
+			name: "invalid cluster identifier in database param",
 			params: map[string]string{
 				// Cluster names need to be between 6 to 20 alphanumeric characters.
 				"database": "short-0.defaultdb",
 			},
-			expectedError: "invalid cluster name 'short-0'",
+			expectedError: "invalid cluster identifier 'short-0'",
+			expectedHint:  "Is 'short' a valid cluster name?\n--\n" + clusterNameFormHint,
 		},
 		{
-			name: "invalid cluster name in options param",
+			name: "invalid cluster identifier in options param",
 			params: map[string]string{
 				// Cluster names need to be between 6 to 20 alphanumeric characters.
 				"options": "--cluster=cockroachlabsdotcomfoobarbaz-0",
 			},
-			expectedError: "invalid cluster name 'cockroachlabsdotcomfoobarbaz-0'",
+			expectedError: "invalid cluster identifier 'cockroachlabsdotcomfoobarbaz-0'",
+			expectedHint:  "Is 'cockroachlabsdotcomfoobarbaz' a valid cluster name?\n--\n" + clusterNameFormHint,
 		},
 		{
 			name:          "invalid database param (1)",
@@ -825,30 +825,45 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 		{
 			name:          "no tenant id",
 			params:        map[string]string{"database": "happy2koala.defaultdb"},
-			expectedError: "invalid cluster name 'happy2koala'",
+			expectedError: "invalid cluster identifier 'happy2koala'",
+			expectedHint:  missingTenantIDHint + "\n--\n" + clusterNameFormHint,
 		},
 		{
 			name:          "missing tenant id",
 			params:        map[string]string{"database": "happy2koala-.defaultdb"},
-			expectedError: "invalid cluster name 'happy2koala-'",
+			expectedError: "invalid cluster identifier 'happy2koala-'",
+			expectedHint:  missingTenantIDHint + "\n--\n" + clusterNameFormHint,
 		},
 		{
 			name:          "missing cluster name",
 			params:        map[string]string{"database": "-7.defaultdb"},
-			expectedError: "invalid cluster name '-7'",
+			expectedError: "invalid cluster identifier '-7'",
+			expectedHint:  "Is '' a valid cluster name?\n--\n" + clusterNameFormHint,
 		},
 		{
 			name:          "bad tenant id",
 			params:        map[string]string{"database": "happy-koala-0-7a.defaultdb"},
-			expectedError: "invalid cluster name 'happy-koala-0-7a'",
+			expectedError: "invalid cluster identifier 'happy-koala-0-7a'",
+			expectedHint:  "Is '7a' a valid tenant ID?\n--\n" + clusterNameFormHint,
 		},
 		{
 			name:          "zero tenant id",
 			params:        map[string]string{"database": "happy-koala-0.defaultdb"},
-			expectedError: "invalid cluster name 'happy-koala-0'",
+			expectedError: "invalid cluster identifier 'happy-koala-0'",
+			expectedHint:  "Tenant ID 0 is invalid.",
 		},
 		{
-			name: "cluster name in database param",
+			name: "multiple similar cluster identifiers",
+			params: map[string]string{
+				"database": "happy-koala-7.defaultdb",
+				"options":  "--cluster=happy-koala-7",
+			},
+			expectedClusterName: "happy-koala",
+			expectedTenantID:    7,
+			expectedParams:      map[string]string{"database": "defaultdb"},
+		},
+		{
+			name: "cluster identifier in database param",
 			params: map[string]string{
 				"database": "happy-koala-7.defaultdb",
 				"foo":      "bar",
@@ -858,7 +873,7 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedParams:      map[string]string{"database": "defaultdb", "foo": "bar"},
 		},
 		{
-			name: "valid cluster name with invalid arrangements",
+			name: "valid cluster identifier with invalid arrangements",
 			params: map[string]string{
 				"database": "defaultdb",
 				"options":  "-c --cluster=happy-koala-7 -c -c -c",
@@ -871,7 +886,7 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			},
 		},
 		{
-			name: "short option: cluster name in options param",
+			name: "short option: cluster identifier in options param",
 			params: map[string]string{
 				"database": "defaultdb",
 				"options":  "-ccluster=happy-koala-7",
@@ -881,7 +896,7 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedParams:      map[string]string{"database": "defaultdb"},
 		},
 		{
-			name: "short option with spaces: cluster name in options param",
+			name: "short option with spaces: cluster identifier in options param",
 			params: map[string]string{
 				"database": "defaultdb",
 				"options":  "-c   cluster=happy-koala-7",
@@ -891,7 +906,7 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedParams:      map[string]string{"database": "defaultdb"},
 		},
 		{
-			name: "long option: cluster name in options param",
+			name: "long option: cluster identifier in options param",
 			params: map[string]string{
 				"database": "defaultdb",
 				"options":  "--cluster=happy-koala-7\t--foo=test",
@@ -904,7 +919,7 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			},
 		},
 		{
-			name: "long option: cluster name in options param with other options",
+			name: "long option: cluster identifier in options param with other options",
 			params: map[string]string{
 				"database": "defaultdb",
 				"options":  "-csearch_path=public --cluster=happy-koala-7\t--foo=test",
@@ -944,6 +959,9 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				require.Equal(t, tc.expectedParams, outMsg.Parameters)
 			} else {
 				require.EqualErrorf(t, err, tc.expectedError, "failed test case\n%+v", tc)
+
+				pgerr := pgerror.Flatten(err)
+				require.Equal(t, tc.expectedHint, pgerr.Hint)
 			}
 
 			// Check that the original parameters were not modified.
