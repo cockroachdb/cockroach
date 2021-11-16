@@ -883,3 +883,28 @@ INSERT INTO uniq VALUES (3, 1, 109) ON CONFLICT ((a + b)) DO NOTHING
 # See https://github.com/cockroachdb/cockroach/issues/67893.
 statement error syntax error
 INSERT INTO uniq VALUES (4, 1, 219) ON CONFLICT ((a + b)) DO UPDATE SET b = 90
+
+# Regression test for #72012. CHECK CONSTRAINT should not check inaccessible columns.
+
+statement ok
+CREATE TABLE t72012 (col integer);
+CREATE INDEX t72012_idx ON t72012 ((abs(col)));
+ALTER TABLE t72012 ALTER COLUMN col SET NOT NULL
+
+query TT
+SHOW CREATE TABLE t72012
+----
+t72012  CREATE TABLE public.t72012 (
+        col INT8 NOT NULL,
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+        INDEX t72012_idx (abs(col) ASC),
+        FAMILY "primary" (col, rowid)
+)
+
+statement ok
+ALTER TABLE t72012 ALTER COLUMN col DROP NOT NULL;
+INSERT INTO t72012 VALUES (NULL)
+
+statement error validation of NOT NULL constraint failed: validation of CHECK "col IS NOT NULL" failed on row: col=NULL, rowid=\d+
+ALTER TABLE t72012 ALTER COLUMN col SET NOT NULL
