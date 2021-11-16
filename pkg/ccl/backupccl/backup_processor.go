@@ -423,7 +423,7 @@ func runBackupProcessor(
 						// TimeoutError improves the opaque `context deadline exceeded` error
 						// message so use that instead.
 						if errors.HasType(exportRequestErr, (*contextutil.TimeoutError)(nil)) {
-							return errors.Wrapf(exportRequestErr, "timeout: %s", exportRequestErr.Error())
+							return errors.Wrap(exportRequestErr, "export request timeout")
 						}
 						return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
 					}

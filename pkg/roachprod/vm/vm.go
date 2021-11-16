@@ -11,7 +11,6 @@
 package vm
 
 import (
-	"context"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -20,7 +19,6 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
@@ -113,16 +111,16 @@ func (vm *VM) IsLocal() bool {
 
 // Locality returns the cloud, region, and zone for the VM.  We want to include the cloud, since
 // GCE and AWS use similarly-named regions (e.g. us-east-1)
-func (vm *VM) Locality() string {
+func (vm *VM) Locality() (string, error) {
 	var region string
 	if vm.IsLocal() {
 		region = vm.Zone
 	} else if match := regionRE.FindStringSubmatch(vm.Zone); len(match) == 2 {
 		region = match[1]
 	} else {
-		log.Fatalf(context.Background(), "unable to parse region from zone %q", vm.Zone)
+		return "", errors.Newf("unable to parse region from zone %q", vm.Zone)
 	}
-	return fmt.Sprintf("cloud=%s,region=%s,zone=%s", vm.Provider, region, vm.Zone)
+	return fmt.Sprintf("cloud=%s,region=%s,zone=%s", vm.Provider, region, vm.Zone), nil
 }
 
 // ZoneEntry returns a line representing the VMs DNS zone entry
