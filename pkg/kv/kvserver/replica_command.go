@@ -1798,7 +1798,10 @@ func (r *Replica) tryRollbackRaftLearner(
 			})
 		return err
 	}
-	rollbackCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	rollbackCtx := r.AnnotateCtx(context.Background())
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	rollbackCtx = logtags.AddTags(rollbackCtx, logtags.FromContext(ctx))
 	if err := contextutil.RunWithTimeout(
 		rollbackCtx, "learner rollback", rollbackTimeout, rollbackFn,
 	); err != nil {
