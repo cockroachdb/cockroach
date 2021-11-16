@@ -11,8 +11,10 @@ package backupccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -20,7 +22,23 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const tenantMetadataQuery = `
+// tenantMetadataQuery returns a query used to retrieve the tenant metadata.
+//
+// If filterByID is true, the query contains a `WHERE id = $1` clause.
+func tenantMetadataQuery(ctx context.Context, settings *cluster.Settings, filterByID bool) string {
+	query := tenantMetadataQueryWithTenantUsageTable
+	if !settings.Version.IsActive(ctx, clusterversion.TenantUsageTable) ||
+		!settings.Version.IsActive(ctx, clusterversion.TenantUsageSingleConsumptionColumn) {
+		// This variant is necessary during upgrade from 21.1 to 21.2.
+		query = tenantMetadataQueryNoTenantUsageTable
+	}
+	if filterByID {
+		query += ` WHERE id = $1`
+	}
+	return query
+}
+
+const tenantMetadataQueryWithTenantUsageTable = `
 SELECT
   tenants.id,                        /* 0 */
   tenants.active,                    /* 1 */
@@ -33,6 +51,18 @@ FROM
   system.tenants
   LEFT JOIN system.tenant_usage ON
 	  tenants.id = tenant_usage.tenant_id AND tenant_usage.instance_id = 0`
+
+const tenantMetadataQueryNoTenantUsageTable = `
+SELECT
+  tenants.id,       /* 0 */
+  tenants.active,   /* 1 */
+  tenants.info,     /* 2 */
+  NULL,             /* 3 */
+  NULL,             /* 4 */
+  NULL,             /* 5 */
+  NULL              /* 6 */
+FROM
+  system.tenants`
 
 func tenantMetadataFromRow(row tree.Datums) (descpb.TenantInfoWithUsage, error) {
 	if len(row) != 7 {
@@ -76,11 +106,16 @@ func tenantMetadataFromRow(row tree.Datums) (descpb.TenantInfoWithUsage, error) 
 }
 
 func retrieveSingleTenantMetadata(
-	ctx context.Context, ie *sql.InternalExecutor, txn *kv.Txn, tenantID roachpb.TenantID,
+	ctx context.Context,
+	settings *cluster.Settings,
+	ie *sql.InternalExecutor,
+	txn *kv.Txn,
+	tenantID roachpb.TenantID,
 ) (descpb.TenantInfoWithUsage, error) {
 	row, err := ie.QueryRow(
 		ctx, "backup-lookup-tenant", txn,
-		tenantMetadataQuery+` WHERE id = $1`, tenantID.ToUint64(),
+		tenantMetadataQuery(ctx, settings, true /* filterByID */),
+		tenantID.ToUint64(),
 	)
 	if err != nil {
 		return descpb.TenantInfoWithUsage{}, err
@@ -96,13 +131,13 @@ func retrieveSingleTenantMetadata(
 }
 
 func retrieveAllTenantsMetadata(
-	ctx context.Context, ie *sql.InternalExecutor, txn *kv.Txn,
+	ctx context.Context, settings *cluster.Settings, ie *sql.InternalExecutor, txn *kv.Txn,
 ) ([]descpb.TenantInfoWithUsage, error) {
 	rows, err := ie.QueryBuffered(
 		ctx, "backup-lookup-tenants", txn,
 		// XXX Should we add a `WHERE active`? We require the tenant to be active
 		// when it is specified..
-		tenantMetadataQuery,
+		tenantMetadataQuery(ctx, settings, false /* filterByID */),
 	)
 	if err != nil {
 		return nil, err
