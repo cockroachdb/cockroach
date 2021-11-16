@@ -88,7 +88,7 @@ func primaryIndexElemFromDescriptor(
 		}
 	}
 	return &scpb.PrimaryIndex{TableID: tableDesc.GetID(),
-		IndexId:             indexDesc.ID,
+		IndexID:             indexDesc.ID,
 		IndexName:           indexDesc.Name,
 		Unique:              indexDesc.Unique,
 		KeyColumnIDs:        indexDesc.KeyColumnIDs,
@@ -119,7 +119,7 @@ func secondaryIndexElemFromDescriptor(
 		}
 	}
 	return &scpb.SecondaryIndex{TableID: tableDesc.GetID(),
-		IndexId:             indexDesc.ID,
+		IndexID:             indexDesc.ID,
 		IndexName:           indexDesc.Name,
 		Unique:              indexDesc.Unique,
 		KeyColumnIDs:        indexDesc.KeyColumnIDs,
@@ -457,7 +457,7 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForAddColumn(
 			b.output.Nodes[i].Target.Direction == scpb.Target_ADD &&
 			t.TableID == table.GetID() {
 			t.StoringColumnIDs = append(t.StoringColumnIDs, colID)
-			return t.IndexId
+			return t.IndexID
 		}
 	}
 
@@ -502,7 +502,7 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForDropColumn(
 			for j := range t.StoringColumnIDs {
 				if t.StoringColumnIDs[j] == colID {
 					t.StoringColumnIDs = append(t.StoringColumnIDs[:j], t.StoringColumnIDs[j+1:]...)
-					return t.IndexId
+					return t.IndexID
 				}
 
 				panic("index not found")
@@ -577,12 +577,12 @@ func (b *buildContext) nextIndexID(table catalog.TableDescriptor) descpb.IndexID
 			continue
 		}
 		if ai, ok := n.Element().(*scpb.SecondaryIndex); ok {
-			if ai.IndexId > maxIdxID {
-				maxIdxID = ai.IndexId
+			if ai.IndexID > maxIdxID {
+				maxIdxID = ai.IndexID
 			}
 		} else if ai, ok := n.Element().(*scpb.PrimaryIndex); ok {
-			if ai.IndexId > maxIdxID {
-				maxIdxID = ai.IndexId
+			if ai.IndexID > maxIdxID {
+				maxIdxID = ai.IndexID
 			}
 		}
 	}

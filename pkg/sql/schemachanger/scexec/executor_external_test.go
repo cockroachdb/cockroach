@@ -269,7 +269,7 @@ func TestSchemaChanger(t *testing.T) {
 				scpb.NewTarget(scpb.Target_ADD, &scpb.PrimaryIndex{
 					TableID:             fooTable.GetID(),
 					IndexName:           "new_primary_key",
-					IndexId:             2,
+					IndexID:             2,
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
 					StoringColumnIDs:    []descpb.ColumnID{2},
@@ -293,7 +293,7 @@ func TestSchemaChanger(t *testing.T) {
 				scpb.NewTarget(scpb.Target_DROP, &scpb.PrimaryIndex{
 					TableID:             fooTable.GetID(),
 					IndexName:           "primary",
-					IndexId:             1,
+					IndexID:             1,
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
 					Unique:              true,

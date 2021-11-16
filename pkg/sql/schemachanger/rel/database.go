@@ -22,14 +22,14 @@ import (
 type Database struct {
 	schema *Schema
 
-	// indexes are store the entities, ordered by a specified set of attributes.
+	// indexes store the entities, ordered by a specified set of attributes.
 	// When an entity is inserted, it is inserted into each of the indexes. The
 	// first entry in the list is the "primary index" which compares entities
 	// based on all attributes.
 	//
 	// Note that the use of btree-tree backed indexes is far from fundamental.
 	// One could easily envision a map-backed indexing structure which may well
-	// perform much better given the general lack of
+	// perform much better.
 	indexes []index
 	// entities stores all the entities keyed on its pointer value.
 	entities map[interface{}]*entity
@@ -40,7 +40,7 @@ func (t *Database) Schema() *Schema {
 	return t.schema
 }
 
-// NewDatabase constructs A new Database with the specified indexes.
+// NewDatabase constructs a new Database with the specified indexes.
 // Note that the schema must not contain more than 64 attributes.
 func NewDatabase(sc *Schema, indexes [][]Attr) (*Database, error) {
 	t := &Database{
@@ -180,8 +180,8 @@ func (t *Database) iterate(where *valuesMap, f entityIterator) (err error) {
 // attributes which overlap with m. It also returns the ordinals of the
 // attributes which are not covered by the index prefix.
 //
-// TODO(ajwerner): Consider something about selectivity by tracking
-// the number of entries under each index (i.variable. which have non-NULL valuesMap)
+// TODO(ajwerner): Consider something about selectivity by tracking the number
+// of entries under each index (i.variable. which have non-NULL valuesMap)
 // for the given dimension.
 func (t *Database) chooseIndex(m ordinalSet) (_ *index, toCheck ordinalSet) {
 	// Default to the "primary" index.

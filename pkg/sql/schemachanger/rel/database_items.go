@@ -79,8 +79,7 @@ func (c *containerItem) Less(than btree.Item) bool {
 	return compareItems(c, than.(item))
 }
 
-// valuesItem is used to construct query bounds from the
-// tree.
+// valuesItem is used to construct query bounds from the tree.
 type valuesItem struct {
 	*indexSpec
 	*valuesMap
