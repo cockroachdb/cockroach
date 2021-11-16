@@ -450,7 +450,9 @@ func TestResolveTablePatternOrName(t *testing.T) {
 					ctPrefix = tpv.Catalog()
 				case *tree.TableName:
 					if tc.expected {
-						flags := tree.ObjectLookupFlags{}
+						flags := tree.ObjectLookupFlags{
+							DesiredObjectKind: tree.TableObject,
+						}
 						// TODO: As part of work for #34240, we should be operating on
 						//  UnresolvedObjectNames here, rather than TableNames.
 						un := tpv.ToUnresolvedObjectName()

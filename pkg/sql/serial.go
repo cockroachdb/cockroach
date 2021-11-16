@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -78,8 +79,8 @@ func (p *planner) generateSequenceForSerial(
 	// Here and below we skip the cache because name resolution using
 	// the cache does not work (well) if the txn retries and the
 	// descriptor was written already in an early txn attempt.
-	un := seqName.ToUnresolvedObjectName()
-	dbDesc, schemaDesc, prefix, err := p.ResolveTargetObject(ctx, un)
+	dbDesc, schemaDesc, prefix, err := p.ResolveTargetObject(ctx,
+		seqName.ToUnresolvedObjectName())
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -87,11 +88,23 @@ func (p *planner) generateSequenceForSerial(
 
 	// Now skip over all names that are already taken.
 	nameBase := seqName.ObjectName
+	flags := tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{
+			Required:       false,
+			RequireMutable: false,
+			AvoidCached:    true,
+			IncludeOffline: true,
+			IncludeDropped: true,
+			AvoidSynthetic: false,
+		},
+		DesiredObjectKind: tree.AnyObject,
+	}
 	for i := 0; ; i++ {
 		if i > 0 {
 			seqName.ObjectName = tree.Name(fmt.Sprintf("%s%d", nameBase, i))
 		}
-		res, err := p.resolveUncachedTableDescriptor(ctx, seqName, false /*required*/, tree.ResolveAnyTableKind)
+		res, _, err := resolver.ResolveExistingObject(
+			ctx, p, seqName.ToUnresolvedObjectName(), flags)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}

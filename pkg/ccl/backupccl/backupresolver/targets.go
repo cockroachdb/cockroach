@@ -407,7 +407,13 @@ func DescriptorsMatchingTargets(
 		switch p := pattern.(type) {
 		case *tree.TableName:
 			un := p.ToUnresolvedObjectName()
-			found, prefix, descI, err := resolver.ResolveExisting(ctx, un, r, tree.ObjectLookupFlags{}, currentDatabase, searchPath)
+			found, prefix, descI, err := resolver.ResolveExisting(ctx, un, r, tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					AvoidCached: true,
+					Required:    true,
+				},
+				DesiredObjectKind: tree.TableObject,
+			}, currentDatabase, searchPath)
 			if err != nil {
 				return ret, err
 			}

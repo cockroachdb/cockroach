@@ -382,7 +382,9 @@ func GetSystemTableIDsToExcludeFromClusterBackup(
 		if backupConfig.shouldIncludeInClusterBackup == optOutOfClusterBackup {
 			err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
 				tn := tree.MakeTableNameWithSchema("system", tree.PublicSchemaName, tree.Name(systemTableName))
-				found, desc, err := col.GetMutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{})
+				found, desc, err := col.GetMutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{
+					DesiredObjectKind: tree.TableObject,
+				})
 				if err != nil {
 					return err
 				}
