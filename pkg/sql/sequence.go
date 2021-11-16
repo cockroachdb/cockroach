@@ -363,51 +363,74 @@ func readOnlyError(s string) error {
 		"cannot execute %s in a read-only transaction", s)
 }
 
+func getSequenceIntegerBounds(
+	integerType *types.T,
+) (lowerIntBound int64, upperIntBound int64, err error) {
+	switch integerType {
+	case types.Int2:
+		return math.MinInt16, math.MaxInt16, nil
+	case types.Int4:
+		return math.MinInt32, math.MaxInt32, nil
+	case types.Int:
+		return math.MinInt64, math.MaxInt64, nil
+	}
+
+	return 0, 0, pgerror.Newf(
+		pgcode.InvalidParameterValue,
+		"CREATE SEQUENCE option AS received type %s, must be integer",
+		integerType,
+	)
+}
+
 func setSequenceIntegerBounds(
 	opts *descpb.TableDescriptor_SequenceOpts,
 	integerType *types.T,
 	isAscending bool,
-	lowerIntBound *int64,
-	upperIntBound *int64,
+	setMinValue bool,
+	setMaxValue bool,
 ) error {
-	opts.MinValue = math.MinInt64
-	opts.MaxValue = math.MaxInt64
+	var minValue int64 = math.MinInt64
+	var maxValue int64 = math.MaxInt64
 
 	if isAscending {
-		opts.MinValue = 1
+		minValue = 1
 
 		switch integerType {
 		case types.Int2:
-			opts.MaxValue = math.MaxInt16
-			*upperIntBound = math.MaxInt16
-			*lowerIntBound = math.MinInt16
+			maxValue = math.MaxInt16
 		case types.Int4:
-			opts.MaxValue = math.MaxInt32
-			*upperIntBound = math.MaxInt32
-			*lowerIntBound = math.MinInt32
+			maxValue = math.MaxInt32
 		case types.Int:
 			// Do nothing, it's the default.
 		default:
-			return pgerror.Newf(pgcode.InvalidParameterValue,
-				"CREATE SEQUENCE option AS received type %s, must be integer", integerType)
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"CREATE SEQUENCE option AS received type %s, must be integer",
+				integerType,
+			)
 		}
 	} else {
-		opts.MaxValue = -1
+		maxValue = -1
 		switch integerType {
 		case types.Int2:
-			opts.MinValue = math.MinInt16
-			*upperIntBound = math.MaxInt16
-			*lowerIntBound = math.MinInt16
+			minValue = math.MinInt16
 		case types.Int4:
-			opts.MinValue = math.MinInt32
-			*upperIntBound = math.MaxInt32
-			*lowerIntBound = math.MinInt32
+			minValue = math.MinInt32
 		case types.Int:
 			// Do nothing, it's the default.
 		default:
-			return pgerror.Newf(pgcode.InvalidParameterValue,
-				"CREATE SEQUENCE option AS received type %s, must be integer", integerType)
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"CREATE SEQUENCE option AS received type %s, must be integer",
+				integerType,
+			)
 		}
+	}
+	if setMinValue {
+		opts.MinValue = minValue
+	}
+	if setMaxValue {
+		opts.MaxValue = maxValue
 	}
 	return nil
 }
@@ -421,13 +444,13 @@ func assignSequenceOptions(
 	params *runParams,
 	sequenceID descpb.ID,
 	sequenceParentID descpb.ID,
+	existingType *types.T,
 ) error {
+
+	wasAscending := opts.Increment > 0
 
 	// Set the default integer type of a sequence.
 	var integerType = types.Int
-	var upperIntBound = int64(math.MaxInt64)
-	var lowerIntBound = int64(math.MinInt64)
-
 	// All other defaults are dependent on the value of increment
 	// and the AS integerType. (i.e. whether the sequence is ascending
 	// or descending, bigint vs. smallint)
@@ -460,9 +483,36 @@ func assignSequenceOptions(
 		opts.CacheSize = 1
 	}
 
+	lowerIntBound, upperIntBound, err := getSequenceIntegerBounds(integerType)
+	if err != nil {
+		return err
+	}
+
 	// Set default MINVALUE and MAXVALUE if AS option value for integer type is specified.
 	if opts.AsIntegerType != "" {
-		if err := setSequenceIntegerBounds(opts, integerType, isAscending, &lowerIntBound, &upperIntBound); err != nil {
+		// We change MINVALUE and MAXVALUE if it is the originally set to the default during ALTER.
+		setMinValue := setDefaults
+		setMaxValue := setDefaults
+		if !setDefaults && existingType != nil {
+			existingLowerIntBound, existingUpperIntBound, err := getSequenceIntegerBounds(existingType)
+			if err != nil {
+				return err
+			}
+			if (wasAscending && opts.MinValue == 1) || (!wasAscending && opts.MinValue == existingLowerIntBound) {
+				setMinValue = true
+			}
+			if (wasAscending && opts.MaxValue == existingUpperIntBound) || (!wasAscending && opts.MaxValue == -1) {
+				setMaxValue = true
+			}
+		}
+
+		if err := setSequenceIntegerBounds(
+			opts,
+			integerType,
+			isAscending,
+			setMinValue,
+			setMaxValue,
+		); err != nil {
 			return err
 		}
 	}
@@ -496,21 +546,11 @@ func assignSequenceOptions(
 			// A value of nil represents the user explicitly saying `NO MINVALUE`.
 			if option.IntVal != nil {
 				opts.MinValue = *option.IntVal
-				if *option.IntVal < lowerIntBound {
-					return pgerror.Newf(pgcode.InvalidParameterValue,
-						"MINVALUE (%d) must be greater than (%d) for type %s",
-						*option.IntVal, lowerIntBound, integerType.SQLString())
-				}
 			}
 		case tree.SeqOptMaxValue:
 			// A value of nil represents the user explicitly saying `NO MAXVALUE`.
 			if option.IntVal != nil {
 				opts.MaxValue = *option.IntVal
-				if *option.IntVal > upperIntBound {
-					return pgerror.Newf(pgcode.InvalidParameterValue,
-						"MAXVALUE (%d) must be less than (%d) for type %s",
-						*option.IntVal, upperIntBound, integerType.SQLString())
-				}
 			}
 		case tree.SeqOptStart:
 			opts.Start = *option.IntVal
@@ -559,25 +599,71 @@ func assignSequenceOptions(
 		}
 	}
 
-	// If start option not specified, set it to MinValue (for ascending sequences)
-	// or MaxValue (for descending sequences).
-	if _, startSeen := optionsSeen[tree.SeqOptStart]; !startSeen {
-		if opts.Increment > 0 {
-			opts.Start = opts.MinValue
-		} else {
-			opts.Start = opts.MaxValue
+	if setDefaults || (wasAscending && opts.Start == 1) || (!wasAscending && opts.Start == -1) {
+		// If start option not specified, set it to MinValue (for ascending sequences)
+		// or MaxValue (for descending sequences).
+		// We only do this if we're setting it for the first time, or the sequence was
+		// ALTERed with the default original values.
+		if _, startSeen := optionsSeen[tree.SeqOptStart]; !startSeen {
+			if opts.Increment > 0 {
+				opts.Start = opts.MinValue
+			} else {
+				opts.Start = opts.MaxValue
+			}
 		}
 	}
 
+	if opts.MinValue < lowerIntBound {
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"MINVALUE (%d) must be greater than (%d) for type %s",
+			opts.MinValue,
+			lowerIntBound,
+			integerType.SQLString(),
+		)
+	}
+	if opts.MaxValue < lowerIntBound {
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"MAXVALUE (%d) must be greater than (%d) for type %s",
+			opts.MaxValue,
+			lowerIntBound,
+			integerType.SQLString(),
+		)
+	}
+	if opts.MinValue > upperIntBound {
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"MINVALUE (%d) must be less than (%d) for type %s",
+			opts.MinValue,
+			upperIntBound,
+			integerType.SQLString(),
+		)
+	}
+	if opts.MaxValue > upperIntBound {
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"MAXVALUE (%d) must be less than (%d) for type %s",
+			opts.MaxValue,
+			upperIntBound,
+			integerType.SQLString(),
+		)
+	}
 	if opts.Start > opts.MaxValue {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
-			"START value (%d) cannot be greater than MAXVALUE (%d)", opts.Start, opts.MaxValue)
+			"START value (%d) cannot be greater than MAXVALUE (%d)",
+			opts.Start,
+			opts.MaxValue,
+		)
 	}
 	if opts.Start < opts.MinValue {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
-			"START value (%d) cannot be less than MINVALUE (%d)", opts.Start, opts.MinValue)
+			"START value (%d) cannot be less than MINVALUE (%d)",
+			opts.Start,
+			opts.MinValue,
+		)
 	}
 
 	return nil
