@@ -25,7 +25,7 @@ func init() {
 			emit(func(this *scpb.Partitioning) scop.Op {
 				return &scop.AddIndexPartitionInfo{
 					TableID:         this.TableID,
-					IndexID:         this.IndexId,
+					IndexID:         this.IndexID,
 					PartitionFields: this.Fields,
 					ListPartitions:  this.ListPartitions,
 					RangePartitions: this.RangePartitions,

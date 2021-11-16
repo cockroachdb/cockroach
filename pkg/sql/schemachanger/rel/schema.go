@@ -257,7 +257,7 @@ func (sb *schemaBuilder) addTypeAttrMapping(a Attr, t reflect.Type, sel string) 
 	return f
 }
 
-// getOffsetAndTypeForSelector takes an entity (struct pointer) type and a
+// getOffsetAndTypeFromSelector takes an entity (struct pointer) type and a
 // selector string and finds its offset within the struct. Note that this
 // allows one to select fields in struct members of the current struct but
 // not in referenced structs.
