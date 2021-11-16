@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -295,6 +296,10 @@ func init() {
 			return extraServerFlagInit(cmd)
 		})
 	}
+
+	AddPersistentPreRunE(mtStartSQLCmd, func(cmd *cobra.Command, _ []string) error {
+		return mtStartSQLFlagsInit(cmd)
+	})
 
 	// Map any flags registered in the standard "flag" package into the
 	// top-level cockroach command.
@@ -1224,6 +1229,17 @@ func extraClientFlagInit() error {
 	// sent.
 	if sqlConnCtx.DebugMode {
 		sqlConnCtx.Echo = true
+	}
+	return nil
+}
+
+func mtStartSQLFlagsInit(cmd *cobra.Command) error {
+	// Override default store for mt to use a per tenant store directory.
+	f := cmd.Flag(cliflags.Store.Name)
+	if !f.Changed {
+		// We assume that we only need to change top level store as temp dir configs are
+		// initialized when start is executed.
+		serverCfg.Stores.Specs[0].Path = server.DefaultSQLNodeStorePathPrefix + cmd.Flag(cliflags.TenantID.Name).Value.String()
 	}
 	return nil
 }
