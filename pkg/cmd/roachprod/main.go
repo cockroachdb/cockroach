@@ -89,7 +89,6 @@ func clusterOpts() install.ClusterSettings {
 		Secure:         secure,
 		Quiet:          quiet || !term.IsTerminal(int(os.Stdout.Fd())),
 		UseTreeDist:    useTreeDist,
-		Args:           nodeArgs,
 		Env:            nodeEnv,
 		NumRacks:       numRacks,
 		MaxConcurrency: maxConcurrency,

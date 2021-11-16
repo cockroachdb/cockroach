@@ -47,7 +47,7 @@ import (
 
 // ClusterImpl TODO(peter): document
 type ClusterImpl interface {
-	Start(c *SyncedCluster, extraArgs []string) error
+	Start(c *SyncedCluster, opts StartOpts) error
 	CertsDir(c *SyncedCluster, index int) string
 	NodeDir(c *SyncedCluster, index, storeIndex int) string
 	LogDir(c *SyncedCluster, index int) string
@@ -61,7 +61,6 @@ type ClusterSettings struct {
 	Secure         bool
 	CertsDir       string
 	Env            []string
-	Args           []string
 	Tag            string
 	UseTreeDist    bool
 	Quiet          bool
@@ -79,7 +78,6 @@ func DefaultClusterSettings() ClusterSettings {
 		Secure:      false,
 		Quiet:       false,
 		UseTreeDist: true,
-		Args:        nil,
 		Env: []string{
 			"COCKROACH_ENABLE_RPC_COMPRESSION=false",
 			"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
@@ -255,9 +253,18 @@ func (c *SyncedCluster) roachprodEnvRegex(node int) string {
 	return fmt.Sprintf(`ROACHPROD=%s[ \/]`, escaped)
 }
 
+// StartOpts houses the options needed by Start().
+type StartOpts struct {
+	Encrypt    bool
+	Sequential bool
+	SkipInit   bool
+	StoreCount int
+	ExtraArgs  []string
+}
+
 // Start TODO(peter): document
-func (c *SyncedCluster) Start() error {
-	return c.Impl.Start(c, c.Args)
+func (c *SyncedCluster) Start(startOpts StartOpts) error {
+	return c.Impl.Start(c, startOpts)
 }
 
 func (c *SyncedCluster) newSession(i int) (session, error) {

@@ -549,15 +549,12 @@ func Extend(clusterName string, clusterOpts install.ClusterSettings, lifetime ti
 }
 
 // Start starts nodes on a cluster.
-func Start(
-	name string, clusterOpts install.ClusterSettings, startOpts install.StartOptsType,
-) error {
-	install.StartOpts = startOpts
+func Start(name string, clusterOpts install.ClusterSettings, startOpts install.StartOpts) error {
 	c, err := newCluster(name, clusterOpts)
 	if err != nil {
 		return err
 	}
-	return c.Start()
+	return c.Start(startOpts)
 }
 
 // Monitor monitors the status of cockroach nodes in a cluster.

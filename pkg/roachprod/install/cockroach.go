@@ -33,17 +33,6 @@ import (
 //go:embed scripts/start.sh
 var startScript string
 
-// StartOptsType houses the options needed by Start()
-type StartOptsType struct {
-	Encrypt    bool
-	Sequential bool
-	SkipInit   bool
-	StoreCount int
-}
-
-// StartOpts is exported to be updated before calling Start()
-var StartOpts StartOptsType
-
 // Cockroach TODO(peter): document
 type Cockroach struct{}
 
@@ -141,7 +130,7 @@ func argExists(args []string, target string) int {
 // "first" node (node 1, as understood by SyncedCluster.ServerNodes), we use
 // `start-single-node` (this was written to provide a short hand to start a
 // single node cluster with a replication factor of one).
-func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) error {
+func (r Cockroach) Start(c *SyncedCluster, startOpts StartOpts) error {
 	h := &crdbInstallHelper{c: c, r: r}
 	if err := h.distributeCerts(); err != nil {
 		return err
@@ -149,7 +138,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) error {
 
 	nodes := c.ServerNodes()
 	var parallelism = 0
-	if StartOpts.Sequential {
+	if startOpts.Sequential {
 		parallelism = 1
 	}
 
@@ -162,7 +151,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) error {
 
 		// NB: if cockroach started successfully, we ignore the output as it is
 		// some harmless start messaging.
-		if _, err := h.startNode(nodeIdx, extraArgs, vers); err != nil {
+		if _, err := h.startNode(nodeIdx, startOpts, vers); err != nil {
 			return nil, err
 		}
 
@@ -182,7 +171,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) error {
 		//   `generateStartArgs`),which prompts CRDB to auto-initialize. For
 		//    nodes running >=20.1, we need to explicitly initialize.
 
-		if StartOpts.SkipInit {
+		if startOpts.SkipInit {
 			return nil, nil
 		}
 
@@ -360,9 +349,9 @@ type crdbInstallHelper struct {
 }
 
 func (h *crdbInstallHelper) startNode(
-	nodeIdx int, extraArgs []string, vers *version.Version,
+	nodeIdx int, startOpts StartOpts, vers *version.Version,
 ) (string, error) {
-	startCmd, err := h.generateStartCmd(nodeIdx, extraArgs, vers)
+	startCmd, err := h.generateStartCmd(nodeIdx, startOpts, vers)
 	if err != nil {
 		return "", err
 	}
@@ -409,10 +398,10 @@ func (h *crdbInstallHelper) startNode(
 }
 
 func (h *crdbInstallHelper) generateStartCmd(
-	nodeIdx int, extraArgs []string, vers *version.Version,
+	nodeIdx int, startOpts StartOpts, vers *version.Version,
 ) (string, error) {
 
-	args, advertiseFirstIP, err := h.generateStartArgs(nodeIdx, extraArgs, vers)
+	args, advertiseFirstIP, err := h.generateStartArgs(nodeIdx, startOpts, vers)
 	if err != nil {
 		return "", err
 	}
@@ -428,7 +417,7 @@ func (h *crdbInstallHelper) generateStartCmd(
 	nodes := h.c.ServerNodes()
 	return execStartTemplate(startTemplateData{
 		LogDir: h.c.Impl.LogDir(h.c, nodes[nodeIdx]),
-		KeyCmd: h.generateKeyCmd(nodeIdx, extraArgs),
+		KeyCmd: h.generateKeyCmd(nodeIdx, startOpts),
 		EnvVars: append(append([]string{
 			fmt.Sprintf("ROACHPROD=%s", h.c.roachprodEnvValue(nodes[nodeIdx])),
 			"GOTRACEBACK=crash",
@@ -473,7 +462,7 @@ func execStartTemplate(data startTemplateData) (string, error) {
 }
 
 func (h *crdbInstallHelper) generateStartArgs(
-	nodeIdx int, extraArgs []string, vers *version.Version,
+	nodeIdx int, startOpts StartOpts, vers *version.Version,
 ) (_ []string, _advertiseFirstIP bool, _ error) {
 	var args []string
 	nodes := h.c.ServerNodes()
@@ -485,8 +474,8 @@ func (h *crdbInstallHelper) generateStartArgs(
 	}
 
 	var storeDirs []string
-	if idx := argExists(extraArgs, "--store"); idx == -1 {
-		for i := 1; i <= StartOpts.StoreCount; i++ {
+	if idx := argExists(startOpts.ExtraArgs, "--store"); idx == -1 {
+		for i := 1; i <= startOpts.StoreCount; i++ {
 			storeDir := h.c.Impl.NodeDir(h.c, nodes[nodeIdx], i)
 			storeDirs = append(storeDirs, storeDir)
 			// Place a store{i} attribute on each store to allow for zone configs
@@ -495,11 +484,11 @@ func (h *crdbInstallHelper) generateStartArgs(
 				`path=`+storeDir+`,attrs=`+fmt.Sprintf("store%d", i))
 		}
 	} else {
-		storeDir := strings.TrimPrefix(extraArgs[idx], "--store=")
+		storeDir := strings.TrimPrefix(startOpts.ExtraArgs[idx], "--store=")
 		storeDirs = append(storeDirs, storeDir)
 	}
 
-	if StartOpts.Encrypt {
+	if startOpts.Encrypt {
 		// Encryption at rest is turned on for the cluster.
 		for _, storeDir := range storeDirs {
 			// TODO(windchan7): allow key size to be specified through flags.
@@ -542,7 +531,7 @@ func (h *crdbInstallHelper) generateStartArgs(
 		fmt.Sprintf("--http-port=%d", h.r.NodeUIPort(h.c, nodes[nodeIdx])),
 	)
 	if locality := h.c.locality(nodes[nodeIdx]); locality != "" {
-		if idx := argExists(extraArgs, "--locality"); idx == -1 {
+		if idx := argExists(startOpts.ExtraArgs, "--locality"); idx == -1 {
 			args = append(args, "--locality="+locality)
 		}
 	}
@@ -576,7 +565,7 @@ func (h *crdbInstallHelper) generateStartArgs(
 	e := expander{
 		node: nodes[nodeIdx],
 	}
-	for _, arg := range extraArgs {
+	for _, arg := range startOpts.ExtraArgs {
 		expandedArg, err := e.expand(h.c, arg)
 		if err != nil {
 			return nil, false, err
@@ -669,20 +658,20 @@ func (h *crdbInstallHelper) generateInitCmd(nodeIdx int) string {
 	return initCmd
 }
 
-func (h *crdbInstallHelper) generateKeyCmd(nodeIdx int, extraArgs []string) string {
-	if !StartOpts.Encrypt {
+func (h *crdbInstallHelper) generateKeyCmd(nodeIdx int, startOpts StartOpts) string {
+	if !startOpts.Encrypt {
 		return ""
 	}
 
 	nodes := h.c.ServerNodes()
 	var storeDirs []string
-	if idx := argExists(extraArgs, "--store"); idx == -1 {
-		for i := 1; i <= StartOpts.StoreCount; i++ {
+	if idx := argExists(startOpts.ExtraArgs, "--store"); idx == -1 {
+		for i := 1; i <= startOpts.StoreCount; i++ {
 			storeDir := h.c.Impl.NodeDir(h.c, nodes[nodeIdx], i)
 			storeDirs = append(storeDirs, storeDir)
 		}
 	} else {
-		storeDir := strings.TrimPrefix(extraArgs[idx], "--store=")
+		storeDir := strings.TrimPrefix(startOpts.ExtraArgs[idx], "--store=")
 		storeDirs = append(storeDirs, storeDir)
 	}
 
