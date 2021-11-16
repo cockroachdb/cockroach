@@ -15,7 +15,6 @@ go_library(
         "//pkg/geo/geoindex",
         "//pkg/roachpb:with-mocks",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",

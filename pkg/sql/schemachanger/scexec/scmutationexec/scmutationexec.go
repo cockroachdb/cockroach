@@ -778,10 +778,10 @@ func (m *visitor) MakeAddedIndexDeleteOnly(
 	}
 	// Set up the encoding type.
 	encodingType := descpb.PrimaryIndexEncoding
-	indexVersion := descpb.PrimaryIndexWithStoredColumnsVersion
+	indexVersion := descpb.LatestPrimaryIndexDescriptorVersion
 	if op.SecondaryIndex {
 		encodingType = descpb.SecondaryIndexEncoding
-		indexVersion = descpb.StrictIndexColumnIDGuaranteesVersion
+		indexVersion = descpb.LatestNonPrimaryIndexDescriptorVersion
 	}
 	// Create an index descriptor from the operation.
 	idx := &descpb.IndexDescriptor{
