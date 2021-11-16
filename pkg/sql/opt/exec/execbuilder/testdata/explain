@@ -1594,7 +1594,7 @@ regions: <hidden>
 query T
 EXPLAIN (OPT, MEMO) SELECT * FROM tc JOIN t ON k=a
 ----
-memo (optimized, ~14KB, required=[presentation: info:10])
+memo (optimized, ~16KB, required=[presentation: info:10])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:6,v:7])
  │    └── [presentation: info:10]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:6,v:7]" [presentation: a:1,b:2,k:6,v:7])
@@ -1653,7 +1653,7 @@ TABLE t
  ├── tableoid oid [hidden] [system]
  └── PRIMARY INDEX t_pkey
       └── k int not null
-memo (optimized, ~14KB, required=[presentation: info:10])
+memo (optimized, ~16KB, required=[presentation: info:10])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:6,v:7])
  │    └── [presentation: info:10]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:6,v:7]" [presentation: a:1,b:2,k:6,v:7])
