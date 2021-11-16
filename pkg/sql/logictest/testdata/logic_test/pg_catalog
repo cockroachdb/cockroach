@@ -1025,7 +1025,20 @@ WHERE indnkeyatts = 2
 indexrelid  indrelid  indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs  indpred
 450499961   55        true       false           3 4     0 0           0 0       2 2        NULL      NULL
 3660126516  59        true       false           1 2 3   0 0           0 0       2 1        NULL      NULL
-2574785777  63        true       false           6 7     3403232968 0  0 0       2 2        NULL      NULL
+2574785777  63        true       false           0 0     3403232968 0  0 0       2 2        NULL      NULL
+
+# indkey should be 0 for expression elements an index.
+# TODO: In Postgres indexprs are values that represent the expression. Matching
+# this representation may be difficult and unnecessary.
+query TTT colnames
+SELECT c.relname, i.indkey, i.indexprs
+FROM pg_catalog.pg_index i
+JOIN pg_catalog.pg_class c ON i.indexrelid = c.oid
+WHERE c.relname IN ('t6_expr_idx', 't6_expr_expr1_idx')
+----
+relname            indkey  indexprs
+t6_expr_idx        0       NULL
+t6_expr_expr1_idx  0 0     NULL
 
 statement ok
 SET DATABASE = system
