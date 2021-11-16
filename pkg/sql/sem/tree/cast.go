@@ -79,11 +79,6 @@ const (
 	// contextOriginPgCast specifies that a cast's maximum context is based on
 	// information in Postgres's pg_cast table.
 	contextOriginPgCast
-	// contextOriginSameType specifies that a cast's maximum context is not
-	// included in Postgres's pg_cast table. This is only used for casts where
-	// the source and target are the same. Such casts have a maximum context of
-	// implicit.
-	contextOriginSameType
 	// contextOriginAutomaticIOConversion specifies that a cast's maximum
 	// context is not included in Postgres's pg_cast table. In Postgres's
 	// internals, these casts are evaluated by each data type's input and output
@@ -148,7 +143,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_bool: {
-		oid.T_bool:    {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginPgCast},
 		oid.T_int4:    {maxContext: CastContextExplicit, origin: contextOriginPgCast},
 		oid.T_text:    {maxContext: CastContextAssignment, origin: contextOriginPgCast},
@@ -158,7 +152,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_name: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 	},
 	oidext.T_box2d: {
-		oidext.T_box2d:    {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		oidext.T_geometry: {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
@@ -205,7 +198,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_bytea: {
-		oid.T_bytea:        {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		oidext.T_geography: {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oidext.T_geometry:  {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		// Automatic I/O conversions to string types.
@@ -217,7 +209,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 	},
 	oid.T_char: {
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_char:    {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		oid.T_int4:    {maxContext: CastContextExplicit, origin: contextOriginPgCast},
 		oid.T_text:    {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginPgCast},
@@ -254,7 +245,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_date: {
-		oid.T_date:        {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		oid.T_timestamp:   {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_timestamptz: {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		// Automatic I/O conversions to string types.
@@ -265,7 +255,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_float4: {
-		oid.T_float4:  {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		oid.T_float8:  {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_int2:    {maxContext: CastContextAssignment, origin: contextOriginPgCast},
 		oid.T_int4:    {maxContext: CastContextAssignment, origin: contextOriginPgCast},
@@ -280,7 +269,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 	},
 	oid.T_float8: {
 		oid.T_float4:  {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_float8:  {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		oid.T_int2:    {maxContext: CastContextAssignment, origin: contextOriginPgCast},
 		oid.T_int4:    {maxContext: CastContextAssignment, origin: contextOriginPgCast},
 		oid.T_int8:    {maxContext: CastContextAssignment, origin: contextOriginPgCast},
@@ -318,7 +306,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 	},
 	oid.T_inet: {
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_inet:    {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		oid.T_text:    {maxContext: CastContextAssignment, origin: contextOriginPgCast},
 		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginPgCast},
 		// Automatic I/O conversions to string types.
@@ -328,7 +315,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 	oid.T_int2: {
 		oid.T_float4:       {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_float8:       {maxContext: CastContextImplicit, origin: contextOriginPgCast},
-		oid.T_int2:         {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		oid.T_int4:         {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_int8:         {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_numeric:      {maxContext: CastContextImplicit, origin: contextOriginPgCast},
@@ -353,7 +339,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_float4:       {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_float8:       {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_int2:         {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_int4:         {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		oid.T_int8:         {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_numeric:      {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_oid:          {maxContext: CastContextImplicit, origin: contextOriginPgCast},
@@ -375,7 +360,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_float8:       {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_int2:         {maxContext: CastContextAssignment, origin: contextOriginPgCast},
 		oid.T_int4:         {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_int8:         {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		oid.T_numeric:      {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_oid:          {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_regclass:     {maxContext: CastContextImplicit, origin: contextOriginPgCast},
@@ -408,7 +392,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_int2:    {maxContext: CastContextExplicit, origin: contextOriginPgCast},
 		oid.T_int4:    {maxContext: CastContextExplicit, origin: contextOriginPgCast},
 		oid.T_int8:    {maxContext: CastContextExplicit, origin: contextOriginPgCast},
-		oid.T_jsonb:   {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		oid.T_numeric: {maxContext: CastContextExplicit, origin: contextOriginPgCast},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
@@ -419,7 +402,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 	},
 	oid.T_name: {
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_name:    {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		oid.T_text:    {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginPgCast},
 		// Automatic I/O conversions to string types.
@@ -472,7 +454,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 	oid.T_oid: {
 		oid.T_int4:         {maxContext: CastContextAssignment, origin: contextOriginPgCast},
 		oid.T_int8:         {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_oid:          {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		oid.T_regclass:     {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_regnamespace: {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_regproc:      {maxContext: CastContextImplicit, origin: contextOriginPgCast},
@@ -487,10 +468,9 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_regclass: {
-		oid.T_int4:     {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_int8:     {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_oid:      {maxContext: CastContextImplicit, origin: contextOriginPgCast},
-		oid.T_regclass: {maxContext: CastContextImplicit, origin: contextOriginSameType},
+		oid.T_int4: {maxContext: CastContextAssignment, origin: contextOriginPgCast},
+		oid.T_int8: {maxContext: CastContextAssignment, origin: contextOriginPgCast},
+		oid.T_oid:  {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
@@ -499,10 +479,9 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_regnamespace: {
-		oid.T_int4:         {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_int8:         {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_oid:          {maxContext: CastContextImplicit, origin: contextOriginPgCast},
-		oid.T_regnamespace: {maxContext: CastContextImplicit, origin: contextOriginSameType},
+		oid.T_int4: {maxContext: CastContextAssignment, origin: contextOriginPgCast},
+		oid.T_int8: {maxContext: CastContextAssignment, origin: contextOriginPgCast},
+		oid.T_oid:  {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
@@ -514,7 +493,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_int4:         {maxContext: CastContextAssignment, origin: contextOriginPgCast},
 		oid.T_int8:         {maxContext: CastContextAssignment, origin: contextOriginPgCast},
 		oid.T_oid:          {maxContext: CastContextImplicit, origin: contextOriginPgCast},
-		oid.T_regproc:      {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		oid.T_regprocedure: {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
@@ -524,11 +502,10 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_regprocedure: {
-		oid.T_int4:         {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_int8:         {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_oid:          {maxContext: CastContextImplicit, origin: contextOriginPgCast},
-		oid.T_regproc:      {maxContext: CastContextImplicit, origin: contextOriginPgCast},
-		oid.T_regprocedure: {maxContext: CastContextImplicit, origin: contextOriginSameType},
+		oid.T_int4:    {maxContext: CastContextAssignment, origin: contextOriginPgCast},
+		oid.T_int8:    {maxContext: CastContextAssignment, origin: contextOriginPgCast},
+		oid.T_oid:     {maxContext: CastContextImplicit, origin: contextOriginPgCast},
+		oid.T_regproc: {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
@@ -537,10 +514,9 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_regrole: {
-		oid.T_int4:    {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_int8:    {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_oid:     {maxContext: CastContextImplicit, origin: contextOriginPgCast},
-		oid.T_regrole: {maxContext: CastContextImplicit, origin: contextOriginSameType},
+		oid.T_int4: {maxContext: CastContextAssignment, origin: contextOriginPgCast},
+		oid.T_int8: {maxContext: CastContextAssignment, origin: contextOriginPgCast},
+		oid.T_oid:  {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
@@ -549,10 +525,9 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_regtype: {
-		oid.T_int4:    {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_int8:    {maxContext: CastContextAssignment, origin: contextOriginPgCast},
-		oid.T_oid:     {maxContext: CastContextImplicit, origin: contextOriginPgCast},
-		oid.T_regtype: {maxContext: CastContextImplicit, origin: contextOriginSameType},
+		oid.T_int4: {maxContext: CastContextAssignment, origin: contextOriginPgCast},
+		oid.T_int8: {maxContext: CastContextAssignment, origin: contextOriginPgCast},
+		oid.T_oid:  {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
@@ -567,7 +542,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_name:        {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_regclass:    {maxContext: CastContextImplicit, origin: contextOriginPgCast},
 		oid.T_varchar:     {maxContext: CastContextImplicit, origin: contextOriginPgCast},
-		oid.T_text:        {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		// Automatic I/O conversions from TEXT to other types.
 		oid.T_bit:          {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_bool:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
@@ -681,7 +655,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_varchar:      {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
 	},
 	oid.T_uuid: {
-		oid.T_uuid: {maxContext: CastContextImplicit, origin: contextOriginSameType},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
@@ -759,6 +732,9 @@ func init() {
 	// Assert that there is a cast to and from every string type.
 	for _, strType := range stringTypes {
 		for otherType := range castMap {
+			if strType == otherType {
+				continue
+			}
 			strTypeName := oid.TypeName[strType]
 			otherTypeName := oid.TypeName[otherType]
 			if _, from := castMap[strType][otherType]; !from && otherType != oid.T_unknown {
@@ -850,6 +826,11 @@ func ForEachCast(fn func(src, tgt oid.Oid)) {
 // ValidCast returns true if a valid cast exists from src to tgt in the given
 // context.
 func ValidCast(src, tgt *types.T, ctx CastContext) bool {
+	// If src and tgt are identical, a cast is valid in any context.
+	if src.Identical(tgt) {
+		return true
+	}
+
 	srcFamily := src.Family()
 	tgtFamily := tgt.Family()
 
@@ -1359,8 +1340,12 @@ func LookupCastVolatility(from, to *types.T, sd *sessiondata.SessionData) (_ Vol
 }
 
 // PerformCast performs a cast from the provided Datum to the specified
-// types.T.
+// types.T. The original datum is returned if its type is identical
+// to the specified type.
 func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
+	if d.ResolvedType().Identical(t) {
+		return d, nil
+	}
 	ret, err := performCastWithoutPrecisionTruncation(ctx, d, t, true /* truncateWidth */)
 	if err != nil {
 		return nil, err
@@ -1369,11 +1354,15 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 }
 
 // PerformAssignmentCast performs an assignment cast from the provided Datum to
-// the specified type. It is similar to PerformCast, but differs because it
-// errors if the datum's width is too wide for the given type rather than
-// silently truncating. The one exception is casts to the special "char" type
-// which are truncated.
+// the specified type. The original datum is returned if its type is identical
+// to the specified type. It is similar to PerformCast, but differs because it
+// errors in more cases than PerformCast if the datum's width is too wide for
+// the given type rather than silently truncating. The one exception is casts to
+// the special "char" type which are truncated.
 func PerformAssignmentCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
+	if d.ResolvedType().Identical(t) {
+		return d, nil
+	}
 	if !ValidCast(d.ResolvedType(), t, CastContextAssignment) {
 		return nil, pgerror.Newf(
 			pgcode.CannotCoerce,
