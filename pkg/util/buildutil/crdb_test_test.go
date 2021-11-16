@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2021 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,13 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-//go:build !crdb_test
-// +build !crdb_test
+package buildutil
 
-package memo
+import (
+	"testing"
 
-import "github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/stretchr/testify/require"
+)
 
-// CheckExpr is a no-op in non-test builds.
-func (m *Memo) CheckExpr(e opt.Expr) {
+func TestCrdbTestOn(t *testing.T) {
+	// Sanity-check: make sure CrdbTestBuild is set. This should be true for
+	// any test.
+	require.True(t, CrdbTestBuild)
 }

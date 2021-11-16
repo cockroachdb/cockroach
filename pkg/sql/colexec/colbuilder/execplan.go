@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -589,7 +590,7 @@ func (r opResult) createAndWrapRowSource(
 	}
 	r.Root = c
 	r.Columnarizer = c
-	if util.CrdbTestBuild {
+	if buildutil.CrdbTestBuild {
 		r.Root = colexec.NewInvariantsChecker(r.Root)
 	}
 	takeOverMetaInfo(&r.OpWithMetaInfo, inputs)
@@ -606,7 +607,7 @@ func (r opResult) createAndWrapRowSource(
 // nil is returned.
 func MaybeRemoveRootColumnarizer(r colexecargs.OpWithMetaInfo) execinfra.RowSource {
 	root := r.Root
-	if util.CrdbTestBuild {
+	if buildutil.CrdbTestBuild {
 		// We might have an invariants checker as the root right now, we gotta
 		// peek inside of it if so.
 		root = colexec.MaybeUnwrapInvariantsChecker(root)
@@ -1515,7 +1516,7 @@ func NewColOperator(
 	}
 
 	takeOverMetaInfo(&result.OpWithMetaInfo, inputs)
-	if util.CrdbTestBuild {
+	if buildutil.CrdbTestBuild {
 		// Plan an invariants checker if it isn't already the root of the
 		// tree.
 		if i := colexec.MaybeUnwrapInvariantsChecker(r.Root); i == r.Root {
@@ -1674,7 +1675,7 @@ func (r opResult) finishBufferedWindowerArgs(
 
 func (r opResult) finishScanPlanning(op colfetcher.ScanOperator, resultTypes []*types.T) {
 	r.Root = op
-	if util.CrdbTestBuild {
+	if buildutil.CrdbTestBuild {
 		r.Root = colexec.NewInvariantsChecker(r.Root)
 	}
 	r.KVReader = op
