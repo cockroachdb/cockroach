@@ -214,20 +214,31 @@ func (txn *Txn) Epoch() enginepb.TxnEpoch {
 	return txn.mu.sender.Epoch()
 }
 
-// status returns the txn proto status field.
-func (txn *Txn) status() roachpb.TransactionStatus {
+// statusLocked returns the txn proto status field.
+func (txn *Txn) statusLocked() roachpb.TransactionStatus {
 	return txn.mu.sender.TxnStatus()
 }
 
 // IsCommitted returns true iff the transaction has the committed status.
 func (txn *Txn) IsCommitted() bool {
-	return txn.status() == roachpb.COMMITTED
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.statusLocked() == roachpb.COMMITTED
+}
+
+// IsAborted returns true iff the transaction has the aborted status.
+func (txn *Txn) IsAborted() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.statusLocked() == roachpb.ABORTED
 }
 
 // IsOpen returns true iff the transaction is in the open state where
 // it can accept further commands.
 func (txn *Txn) IsOpen() bool {
-	return txn.status() == roachpb.PENDING
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.statusLocked() == roachpb.PENDING
 }
 
 // SetUserPriority sets the transaction's user priority. Transactions default to
@@ -670,7 +681,7 @@ func (txn *Txn) CleanupOnError(ctx context.Context, err error) {
 		panic(errors.WithContextTags(errors.AssertionFailedf("CleanupOnError() called with nil error"), ctx))
 	}
 	if replyErr := txn.rollback(ctx); replyErr != nil {
-		if _, ok := replyErr.GetDetail().(*roachpb.TransactionStatusError); ok || txn.status() == roachpb.ABORTED {
+		if _, ok := replyErr.GetDetail().(*roachpb.TransactionStatusError); ok || txn.IsAborted() {
 			log.Eventf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 		} else {
 			log.Warningf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
@@ -881,7 +892,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		// Commit on success, unless the txn has already been committed by the
 		// closure. We allow that, as closure might want to run 1PC transactions.
 		if err == nil {
-			if txn.status() != roachpb.COMMITTED {
+			if !txn.IsCommitted() {
 				err = txn.Commit(ctx)
 				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v\n", err)
 				if err != nil {
