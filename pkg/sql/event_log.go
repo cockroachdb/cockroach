@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -237,6 +238,17 @@ func logEventInternalForSchemaChanges(
 	)
 }
 
+// makeCommonSQLEventDetails creates a common exec event
+// payload.
+func makeCommonSQLEventDetails(
+	userName string, stmt string, appName string,
+) *eventpb.CommonSQLEventDetails {
+
+	return &eventpb.CommonSQLEventDetails{ApplicationName: appName,
+		User:      userName,
+		Statement: redact.RedactableString(stmt)}
+}
+
 // logEventInternalForSQLStatements emits a cluster event on behalf of
 // a SQL statement, when the point where the event is emitted does not
 // have access to a (*planner) and the current statement metadata.
@@ -281,6 +293,29 @@ func logEventInternalForSQLStatements(
 		opts,                                  /* eventLogOptions */
 		entries...,                            /* ...eventLogEntry */
 	)
+}
+
+// LogEventForSchemaChanger allows then declarative schema changer
+// to generate event log entries with context information available
+// inside that package.
+func LogEventForSchemaChanger(
+	ctx context.Context,
+	execCfg interface{},
+	txn *kv.Txn,
+	depth int,
+	descID descpb.ID,
+	metadata scpb.ElementMetadata,
+	event eventpb.EventPayload,
+) error {
+	entry := eventLogEntry{targetID: int32(descID), event: event}
+	commonPayload := makeCommonSQLEventDetails(metadata.Username, metadata.Statement, metadata.AppName)
+	return logEventInternalForSQLStatements(ctx,
+		execCfg.(*ExecutorConfig),
+		txn,
+		depth,
+		eventLogOptions{dst: LogEverywhere},
+		*commonPayload,
+		entry)
 }
 
 // LogEventForJobs emits a cluster event in the context of a job.

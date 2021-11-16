@@ -30,22 +30,27 @@ func runRankTestForGraph(
 	t *testing.T, addNode []bool, depEdges []depEdge, expectedOrder []int, expectedRankErr string,
 ) {
 	// Setup a state based on if it is a add or drop.
-	state := make(scpb.State, 0, len(addNode))
+	state := scpb.State{
+		Nodes: make([]*scpb.Node, 0, len(addNode)),
+	}
+	dummyMetadata := &scpb.TargetMetadata{}
 	for idx := range addNode {
 		if addNode[idx] {
-			state = append(state, &scpb.Node{
+			state.Nodes = append(state.Nodes, &scpb.Node{
 				Target: scpb.NewTarget(scpb.Target_ADD,
 					&scpb.Table{
 						TableID: descpb.ID(idx),
-					}),
+					},
+					dummyMetadata),
 				Status: scpb.Status_ABSENT,
 			})
 		} else {
-			state = append(state, &scpb.Node{
+			state.Nodes = append(state.Nodes, &scpb.Node{
 				Target: scpb.NewTarget(scpb.Target_DROP,
 					&scpb.Table{
 						TableID: descpb.ID(idx),
-					}),
+					},
+					dummyMetadata),
 				Status: scpb.Status_PUBLIC,
 			})
 		}
@@ -56,13 +61,13 @@ func runRankTestForGraph(
 	// Setup op edges for all the nodes.
 	for idx := range addNode {
 		if addNode[idx] {
-			require.NoError(t, graph.AddOpEdges(state[idx].Target,
+			require.NoError(t, graph.AddOpEdges(state.Nodes[idx].Target,
 				scpb.Status_ABSENT,
 				scpb.Status_PUBLIC,
 				true,
 				&scop.MakeColumnAbsent{}))
 		} else {
-			require.NoError(t, graph.AddOpEdges(state[idx].Target,
+			require.NoError(t, graph.AddOpEdges(state.Nodes[idx].Target,
 				scpb.Status_PUBLIC,
 				scpb.Status_ABSENT,
 				true,
@@ -73,9 +78,9 @@ func runRankTestForGraph(
 	for _, edge := range depEdges {
 		require.NoError(t, graph.AddDepEdge(
 			fmt.Sprintf("%d to %d", edge.from, edge.to),
-			state[edge.from].Target,
+			state.Nodes[edge.from].Target,
 			scpb.Status_PUBLIC,
-			state[edge.to].Target,
+			state.Nodes[edge.to].Target,
 			scpb.Status_PUBLIC,
 		))
 	}
@@ -89,8 +94,8 @@ func runRankTestForGraph(
 		} else {
 			require.NoError(t, err)
 		}
-		unsortedNodes := make([]*scpb.Node, 0, len(state))
-		for _, node := range state {
+		unsortedNodes := make([]*scpb.Node, 0, len(state.Nodes))
+		for _, node := range state.Nodes {
 			publicNode, ok := graph.GetNode(node.Target, scpb.Status_PUBLIC)
 			require.Truef(t, ok, "public node doesn't exist")
 			unsortedNodes = append(unsortedNodes, publicNode)

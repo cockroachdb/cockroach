@@ -30,6 +30,12 @@ type Graph struct {
 	// Targets is an interned slice of targets.
 	targets []*scpb.Target
 
+	// Statement metadata for targets.
+	statements []*scpb.Statement
+
+	// Authorization information used by the targers.
+	authorization scpb.Authorization
+
 	// Interns the Node so that pointer equality can be used.
 	targetNodes []map[scpb.Status]*scpb.Node
 
@@ -84,10 +90,12 @@ func New(initial scpb.State) (*Graph, error) {
 		nodeDepEdgesTo:   btree.New(2),
 		opToNode:         map[scop.Op]*scpb.Node{},
 		entities:         db,
+		statements:       initial.Statements,
+		authorization:    initial.Authorization,
 	}
-	for _, n := range initial {
+	for _, n := range initial.Nodes {
 		if existing, ok := g.targetIdxMap[n.Target]; ok {
-			return nil, errors.Errorf("invalid initial state contains duplicate target: %v and %v", n, initial[existing])
+			return nil, errors.Errorf("invalid initial state contains duplicate target: %v and %v", n, initial.Nodes[existing])
 		}
 		idx := len(g.targets)
 		g.targetIdxMap[n.Target] = idx
@@ -213,6 +221,20 @@ func (g *Graph) AddDepEdge(
 		order: toFrom,
 	})
 	return nil
+}
+
+// GetMetadataFromTarget returns the metadata for a given target node.
+func (g *Graph) GetMetadataFromTarget(target *scpb.Target) scpb.ElementMetadata {
+	return scpb.ElementMetadata{
+		TargetMetadata: scpb.TargetMetadata{
+			SourceElementID: target.Metadata.SourceElementID,
+			SubWorkID:       target.Metadata.SubWorkID,
+			StatementID:     target.Metadata.StatementID,
+		},
+		Statement: g.statements[target.Metadata.StatementID].Statement,
+		Username:  g.authorization.Username,
+		AppName:   g.authorization.AppName,
+	}
 }
 
 // Edge represents a relationship between two Nodes.

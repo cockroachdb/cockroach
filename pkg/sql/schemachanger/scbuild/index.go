@@ -248,7 +248,7 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 			// Add a new column element
 			b.alterTableAddColumn(ctx, table, addCol, &n.Table)
 			var addColumn *scpb.Column = nil
-			for _, node := range b.output {
+			for _, node := range b.output.Nodes {
 				if node.Target.Column != nil &&
 					node.Target.Column.TableID == table.GetID() &&
 					node.Target.Column.Column.Name == colName {

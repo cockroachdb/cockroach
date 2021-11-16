@@ -16,8 +16,15 @@ import (
 )
 
 // State represents a current or potential future state of the
-// schema change system.
-type State []*Node
+// schema change system. Additionally, it tracks any metadata
+// for the schema change such as the Statements and Authorization
+// information. Nodes may refer to this information for different
+// purposes.
+type State struct {
+	Nodes         []*Node
+	Statements    []*Statement
+	Authorization Authorization
+}
 
 // NumStatus is the number of values which Status may take on.
 var NumStatus = len(Status_name)
@@ -47,9 +54,14 @@ func (e *ElementProto) Element() Element {
 
 // NewTarget constructs a new Target. The passed elem must be one of the oneOf
 // members of Element. If not, this call will panic.
-func NewTarget(dir Target_Direction, elem Element) *Target {
+func NewTarget(dir Target_Direction, elem Element, metadata *TargetMetadata) *Target {
+	// Populate dummy metadata otherwise
+	if metadata == nil {
+		metadata = &TargetMetadata{}
+	}
 	t := Target{
 		Direction: dir,
+		Metadata:  *metadata,
 	}
 	if !t.SetValue(elem) {
 		panic(errors.Errorf("unknown element type %T", elem))

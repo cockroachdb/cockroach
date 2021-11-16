@@ -28,7 +28,7 @@ import (
 
 func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []scop.Op) error {
 	mvs := newMutationVisitorState(deps.Catalog())
-	v := scmutationexec.NewMutationVisitor(deps.Catalog(), mvs)
+	v := scmutationexec.NewMutationVisitor(deps.Catalog(), mvs, deps.EventLogger())
 	for _, op := range ops {
 		if err := op.(scop.MutationOp).Visit(ctx, v); err != nil {
 			return err
@@ -61,6 +61,9 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		if _, err := deps.TransactionalJobCreator().CreateJob(ctx, record); err != nil {
 			return err
 		}
+	}
+	if err := deps.EventLogger().ProcessAndSubmitEvents(ctx); err != nil {
+		return err
 	}
 	return b.ValidateAndRun(ctx)
 }

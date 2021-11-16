@@ -88,5 +88,6 @@ func (b *buildContext) dropSequence(ctx context.Context, n *tree.DropSequence) {
 		}
 		onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, table, privilege.DROP))
 		b.dropSequenceDesc(ctx, table, n.DropBehavior)
+		b.incrementSubWorkID()
 	}
 }
