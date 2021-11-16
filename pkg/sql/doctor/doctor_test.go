@@ -53,7 +53,7 @@ var validTableDesc = &descpb.Descriptor{
 				KeyColumnNames:      []string{"col"},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1},
-				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+				Version:             tabledesc.LatestPrimaryIndexDescriptorVersion,
 				EncodingType:        descpb.PrimaryIndexEncoding,
 			},
 			NextIndexID: 2,

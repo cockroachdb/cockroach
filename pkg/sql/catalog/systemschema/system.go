@@ -1146,7 +1146,7 @@ var (
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{2, 3},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "jobs_created_by_type_created_by_id_idx",
@@ -1158,7 +1158,7 @@ var (
 				StoreColumnIDs:      []descpb.ColumnID{2},
 				StoreColumnNames:    []string{"status"},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "jobs_run_stats_idx",
@@ -1170,7 +1170,7 @@ var (
 				StoreColumnNames:    []string{"last_run", "num_runs", "claim_instance_id"},
 				StoreColumnIDs:      []descpb.ColumnID{11, 10, 9},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 				Predicate:           JobsRunStatsIdxPredicate,
 			},
 		))
@@ -1217,7 +1217,7 @@ var (
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{5},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "web_sessions_createdAt_idx",
@@ -1227,7 +1227,7 @@ var (
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{4},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "web_sessions_revokedAt_idx",
@@ -1237,7 +1237,7 @@ var (
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{6},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "web_sessions_lastUsedAt_idx",
@@ -1247,7 +1247,7 @@ var (
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{7},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 			},
 		))
 
@@ -1372,7 +1372,7 @@ var (
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				KeySuffixColumnIDs:  []descpb.ColumnID{2},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "role_members_member_idx",
@@ -1382,7 +1382,7 @@ var (
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 			},
 		))
 
@@ -1742,7 +1742,7 @@ var (
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				StoreColumnIDs:      []descpb.ColumnID{3},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 			},
 		))
 
@@ -1818,7 +1818,7 @@ var (
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{5},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 			},
 		))
 
@@ -1978,7 +1978,7 @@ var (
 					descpb.IndexDescriptor_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6},
-				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:      tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 				Sharded: descpb.ShardedDescriptor{
 					IsSharded:    true,
 					Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
@@ -2007,7 +2007,7 @@ var (
 				},
 				KeyColumnIDs:       []descpb.ColumnID{2, 3},
 				KeySuffixColumnIDs: []descpb.ColumnID{11, 1, 4, 5, 6},
-				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:            tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {
@@ -2078,7 +2078,7 @@ var (
 					descpb.IndexDescriptor_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{8, 1, 2, 3, 4},
-				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:      tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 				Sharded: descpb.ShardedDescriptor{
 					IsSharded:    true,
 					Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
@@ -2103,7 +2103,7 @@ var (
 				},
 				KeyColumnIDs:       []descpb.ColumnID{2},
 				KeySuffixColumnIDs: []descpb.ColumnID{8, 1, 3, 4},
-				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:            tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {
@@ -2203,7 +2203,7 @@ var (
 					descpb.IndexDescriptor_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{1, 2},
-				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:      tabledesc.LatestNonPrimaryIndexDescriptorVersion,
 			},
 		))
 

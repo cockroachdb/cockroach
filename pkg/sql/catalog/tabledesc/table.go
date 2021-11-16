@@ -582,11 +582,11 @@ const (
 	// value for primary indexes, and so will be found in all newly-created
 	// primary indexes.
 	// This property is tested by TestLatestIndexDescriptorVersionValues.
-	LatestPrimaryIndexDescriptorVersion descpb.IndexDescriptorVersion = descpb.PrimaryIndexWithStoredColumnsVersion
+	LatestPrimaryIndexDescriptorVersion = descpb.PrimaryIndexWithStoredColumnsVersion
 
 	// LatestNonPrimaryIndexDescriptorVersion is the latest index descriptor
 	// version value for non-primary indexes, and so will be found in all
 	// newly-created secondary indexes, as well as index mutations.
 	// This property is tested by TestLatestIndexDescriptorVersionValues.
-	LatestNonPrimaryIndexDescriptorVersion descpb.IndexDescriptorVersion = descpb.StrictIndexColumnIDGuaranteesVersion
+	LatestNonPrimaryIndexDescriptorVersion = descpb.StrictIndexColumnIDGuaranteesVersion
 )
