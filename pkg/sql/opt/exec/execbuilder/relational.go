@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -351,7 +352,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	// In test builds, assert that the exec plan output columns match the opt
 	// plan output columns.
-	if util.CrdbTestBuild {
+	if buildutil.CrdbTestBuild {
 		optCols := e.Relational().OutputCols
 		var execCols opt.ColSet
 		ep.outputCols.ForEach(func(key, val int) {

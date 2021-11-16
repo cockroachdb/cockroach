@@ -6,8 +6,6 @@ go_library(
     name = "util",
     srcs = [
         "constants.go",
-        "crdb_test_off.go",
-        "crdb_test_on.go",  # keep
         "every_n.go",
         "fast_int_map.go",
         "fast_int_set.go",  # keep
@@ -33,6 +31,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/buildutil",
         "//pkg/util/envutil",
         "//pkg/util/netutil/addr",
         "//pkg/util/randutil",
