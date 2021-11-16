@@ -19,16 +19,18 @@ interface RangeVizProps {
   raftData: RaftDebugResponseMessage;
 }
 
+
+type RaftUpdates = {rangeId: number, qps: number}[];
 interface RangeVizCanvasProps {
-  raftData: RaftDebugResponseMessage;
+  raftData: RaftUpdates;
 }
 
 
-const CanvasWidth = 800;
-const CanvasHeight = 300;
+const CanvasWidth = 1200;
+const CanvasHeight = 800;
 const HotColor = [4, 242, 235];
 const ColdColor = [13, 6, 34];
-const MaxTimestepsShown = 10;
+const MaxTimestepsShown = 20;
 class Canvas extends React.Component<{
   canvasRef: React.RefObject<HTMLCanvasElement>;
 }> {
@@ -50,24 +52,26 @@ function lerpColor(c1: number[], c2: number[], t: number) {
 }
 
 
-function newFakeRanges() {
-  const nRanges = 12;
-  const ranges = [];
-  for (let rangeIdx = 0; rangeIdx < nRanges; rangeIdx++) {
-    ranges.push({rangeId: 0, qps: Math.random()})
-  }
-  return ranges;
-}
+// function newFakeRanges() {
+//   const nRanges = 100;
+//   const ranges = [];
+//   for (let rangeIdx = 0; rangeIdx < nRanges; rangeIdx++) {
+//     ranges.push({rangeId: 0, qps: Math.random()})
+//   }
+//   return ranges;
+// }
 
 class RangeVizCanvas extends React.Component<RangeVizCanvasProps> {
   canvasRef: React.RefObject<HTMLCanvasElement>;
   drawContext: CanvasRenderingContext2D;
-  rangeUpdates: {rangeId: number, qps: number}[][];
+  rangeUpdates: RaftUpdates[];
+  highestQPS: number;
   
   constructor(props: RangeVizCanvasProps) {
     super(props);
     this.canvasRef = createRef();
     this.rangeUpdates = [];
+    this.highestQPS = 0;
   }
 
   drawHeatMap() {
@@ -78,19 +82,28 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps> {
     this.drawContext.fillStyle = `rgb(${ColdColor[0]}, ${ColdColor[1]}, ${ColdColor[2]})`;
     this.drawContext.fillRect(0, 0, CanvasWidth, CanvasHeight);
 
+    console.log(this.highestQPS)
+
+    if (this.rangeUpdates.length === 0) {
+      return;
+    }
+
     // fake data for now
     const rangesOverTime = this.rangeUpdates;
     const cellHeight = CanvasHeight / rangesOverTime[0].length;
     const cellWidth = CanvasWidth / MaxTimestepsShown;
     
-    const highestQPS = Math.max(...rangesOverTime.flatMap(ranges => ranges.map(r => r.qps)));
+    this.highestQPS = Math.max(
+      ...rangesOverTime.flatMap((ranges) => ranges.map((r) => r.qps)),
+      // this.highestQPS
+    );
 
     for (let timeIdx = 0; timeIdx < rangesOverTime.length; timeIdx++) {
       for (let rangeIdx = 0; rangeIdx < rangesOverTime[timeIdx].length; rangeIdx++) {
         
         // compute cell color by considering this range's QPS relative 
         // to the max QPS found across all ranges.
-        const t = rangesOverTime[timeIdx][rangeIdx].qps / highestQPS;
+        const t = rangesOverTime[timeIdx][rangeIdx].qps / this.highestQPS;
         const [r, g, b] = lerpColor(ColdColor, HotColor, t);
 
         // draw cell
@@ -107,7 +120,6 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps> {
 
   componentDidMount() {
     this.drawContext = this.canvasRef.current.getContext("2d");
-    this.rangeUpdates.push(newFakeRanges());
     this.drawHeatMap();
     // TODO(zachlite):
     // 1) convert real data from props into {rangeId, qps}[][], as mocked by `fakeRangesOverTime`
@@ -125,17 +137,17 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps> {
       this.rangeUpdates.shift();
     }
 
-    // create a new fake time range. 
-    this.rangeUpdates.push(newFakeRanges());
+    // save this new time range. 
+    this.rangeUpdates.push(this.props.raftData);
 
     // re-draw heatmap
     this.drawHeatMap();
   }
 
   render() {
-    console.log(this.props.raftData)
+    // console.log(this.props.raftData)
     return <div>
-      <div>{this.props.raftData ? Object.keys(this.props.raftData?.ranges) : "nothing here yet..."}</div>
+      {/* <div>{this.props.raftData ? Object.keys(this.props.raftData?.ranges) : "nothing here yet..."}</div> */}
       <Canvas canvasRef={this.canvasRef}></Canvas>
     </div>;
   }
@@ -143,17 +155,23 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps> {
 
 const RangeViz: React.FC<RangeVizProps> = props => {
   useEffect(() => {
-    console.log("installing interval")
-    const refreshInterval = setInterval(() => props.refreshRaft(), 1000);
+    const refreshInterval = setInterval(() => props.refreshRaft(), 3000);
     return () => {
-      console.log("clearing interval")
       clearInterval(refreshInterval)
     }
   }, []);
 
+
+  const raftUpdates: RaftUpdates = props.raftData ? Object.values(props.raftData.ranges).map(d => {
+    return {
+      rangeId: d.range_id.toInt(),
+      qps: d.nodes[0].range.stats.queries_per_second
+    }
+  }) : [];
+
   return (
     <div>
-      <RangeVizCanvas raftData={props.raftData} />
+      <RangeVizCanvas raftData={raftUpdates} />
     </div>
   );
 };
