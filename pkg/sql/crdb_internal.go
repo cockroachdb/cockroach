@@ -1287,6 +1287,11 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
 				"unexpected type %T for trace_id column in virtual table crdb_internal.cluster_inflight_traces", d)
 		}
 
+		if !p.ExecCfg().Codec.ForSystemTenant() {
+			// Tenant nodes doesn't have trace collector so can't serve this table.
+			return false, pgerror.New(pgcode.FeatureNotSupported,
+				"table crdb_internal.cluster_inflight_traces is not implemented on tenants")
+		}
 		traceCollector := p.ExecCfg().TraceCollector
 		var iter *collector.Iterator
 		for iter, err = traceCollector.StartIter(ctx, traceID); err == nil && iter.Valid(); iter.Next() {
