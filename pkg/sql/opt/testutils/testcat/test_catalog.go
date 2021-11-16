@@ -749,6 +749,12 @@ func (tt *Table) Unique(i cat.UniqueOrdinal) cat.UniqueConstraint {
 	return &tt.uniqueConstraints[i]
 }
 
+// Zone is part of the cat.Table interface.
+func (tt *Table) Zone() cat.Zone {
+	zone := zonepb.DefaultZoneConfig()
+	return &zone
+}
+
 // FindOrdinal returns the ordinal of the column with the given name.
 func (tt *Table) FindOrdinal(name string) int {
 	for i, col := range tt.Columns {
