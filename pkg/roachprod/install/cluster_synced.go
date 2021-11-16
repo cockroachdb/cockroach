@@ -98,10 +98,8 @@ type SyncedCluster struct {
 	// Cluster metadata, obtained from the respective cloud provider.
 	cloud.Cluster
 
-	// Nodes is used by various commands like Start.
-	// TODO(radu): this is set externally; it does not belong as a field. Instead,
-	// it should be passed separately to whatever operations require a list of
-	// nodes.
+	// Nodes is used by most commands (e.g. Start, Stop, Monitor). It describes
+	// the list of nodes the operation pertains to.
 	Nodes []int
 
 	ClusterSettings
@@ -114,9 +112,13 @@ type SyncedCluster struct {
 	AuthorizedKeys []byte
 }
 
-// NewSyncedCluster creates a SyncedCluster, given the cluster metadata and
-// settings.
-func NewSyncedCluster(metadata *cloud.Cluster, settings ClusterSettings) (*SyncedCluster, error) {
+// NewSyncedCluster creates a SyncedCluster, given the cluster metadata, node
+// selector string, and settings.
+//
+// See ListNodes for a description of the node selector string.
+func NewSyncedCluster(
+	metadata *cloud.Cluster, nodeSelector string, settings ClusterSettings,
+) (*SyncedCluster, error) {
 	c := &SyncedCluster{
 		Cluster:         *metadata,
 		ClusterSettings: settings,
@@ -124,19 +126,24 @@ func NewSyncedCluster(metadata *cloud.Cluster, settings ClusterSettings) (*Synce
 	}
 	c.Localities = make([]string, len(c.VMs))
 	for i := range c.VMs {
-		var err error
-		c.Localities[i], err = c.VMs[i].Locality()
+		locality, err := c.VMs[i].Locality()
 		if err != nil {
 			return nil, err
 		}
 		if c.NumRacks > 0 {
-			rack := fmt.Sprintf("rack=%d", i%c.NumRacks)
-			if c.Localities[i] != "" {
-				rack = "," + rack
+			if locality != "" {
+				locality += ","
 			}
-			c.Localities[i] += rack
+			locality += fmt.Sprintf("rack=%d", i%c.NumRacks)
 		}
+		c.Localities[i] = locality
 	}
+
+	nodes, err := ListNodes(nodeSelector, len(c.VMs))
+	if err != nil {
+		return nil, err
+	}
+	c.Nodes = nodes
 	return c, nil
 }
 

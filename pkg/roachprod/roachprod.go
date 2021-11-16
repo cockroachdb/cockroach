@@ -136,12 +136,12 @@ func sortedClusters() []string {
 func newCluster(
 	name string, clusterSettings install.ClusterSettings,
 ) (*install.SyncedCluster, error) {
-	nodeNames := "all"
+	nodeSelector := "all"
 	{
 		parts := strings.Split(name, ":")
 		switch len(parts) {
 		case 2:
-			nodeNames = parts[1]
+			nodeSelector = parts[1]
 			fallthrough
 		case 1:
 			name = parts[0]
@@ -164,16 +164,11 @@ func newCluster(
 		clusterSettings.DebugDir = os.ExpandEnv(config.DefaultDebugDir)
 	}
 
-	c, err := install.NewSyncedCluster(metadata, clusterSettings)
+	c, err := install.NewSyncedCluster(metadata, nodeSelector, clusterSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	nodes, err := install.ListNodes(nodeNames, len(c.VMs))
-	if err != nil {
-		return nil, err
-	}
-	c.Nodes = nodes
 	return c, nil
 }
 
