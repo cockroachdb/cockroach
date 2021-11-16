@@ -24,7 +24,7 @@ import "golang.org/x/tools/container/intsets"
 // allocations when the values are small. It is not thread-safe.
 type FastIntSet struct {
 	// Used to keep the size of the struct the same.
-	_ uint64
+	_ [2]uint64
 	s *intsets.Sparse
 }
 
