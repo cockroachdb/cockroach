@@ -27,9 +27,18 @@ go_library(
 
 go_test(
     name = "resolver_test",
-    srcs = ["resolver_test.go"],
+    srcs = [
+        "main_test.go",
+        "resolver_bench_test.go",
+        "resolver_test.go",
+    ],
     deps = [
         ":resolver",
+        "//pkg/base",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/dbdesc",
@@ -39,8 +48,15 @@ go_test(
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
         "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
     ],
 )
