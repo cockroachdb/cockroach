@@ -30,7 +30,7 @@ func (*ByteSizeSetting) Typ() string {
 }
 
 func (b *ByteSizeSetting) String(sv *Values) string {
-	return humanizeutil.IBytes(b.Get(sv))
+	return string(humanizeutil.IBytes(b.Get(sv)))
 }
 
 // WithPublic sets public visibility and can be chained.

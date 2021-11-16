@@ -177,6 +177,7 @@ func newChangeAggregatorProcessor(
 	// from the poller (which should always happen, even if the watched data is
 	// not changing), then this is sufficient and we don't have to do anything
 	// fancy with timers.
+	// // TODO(casper): add test for OptMinCheckpointFrequency.
 	if r, ok := ca.spec.Feed.Opts[changefeedbase.OptMinCheckpointFrequency]; ok && r != `` {
 		ca.flushFrequency, err = time.ParseDuration(r)
 		if err != nil {
