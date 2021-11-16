@@ -192,7 +192,7 @@ var tpccMeta = workload.Meta{
 		g.flags.StringVar(&g.dbOverride, `db`, ``,
 			`Override for the SQL database to use. If empty, defaults to the generator name`)
 		g.flags.IntVar(&g.workers, `workers`, 0, fmt.Sprintf(
-			`Number of concurrent workers. Defaults to --warehouses * %d`, numWorkersPerWarehouse,
+			`Number of concurrent workers. Defaults to --warehouses * %d`, NumWorkersPerWarehouse,
 		))
 		g.flags.IntVar(&g.numConns, `conns`, 0, fmt.Sprintf(
 			`Number of connections. Defaults to --warehouses * %d (except in nowait mode, where it defaults to --workers`,
@@ -319,7 +319,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 			w.initNonUniformRandomConstants()
 
 			if w.workers == 0 {
-				w.workers = w.activeWarehouses * numWorkersPerWarehouse
+				w.workers = w.activeWarehouses * NumWorkersPerWarehouse
 			}
 
 			if w.numConns == 0 {
@@ -334,9 +334,9 @@ func (w *tpcc) Hooks() workload.Hooks {
 				}
 			}
 
-			if w.waitFraction > 0 && w.workers != w.activeWarehouses*numWorkersPerWarehouse {
+			if w.waitFraction > 0 && w.workers != w.activeWarehouses*NumWorkersPerWarehouse {
 				return errors.Errorf(`--wait > 0 and --warehouses=%d requires --workers=%d`,
-					w.activeWarehouses, w.warehouses*numWorkersPerWarehouse)
+					w.activeWarehouses, w.warehouses*NumWorkersPerWarehouse)
 			}
 
 			if w.serializable {
