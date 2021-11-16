@@ -59,6 +59,10 @@ const (
 	defaultScanMaxIdleTime   = 1 * time.Second
 
 	DefaultStorePath = "cockroach-data"
+	// DefaultSQLNodeStorePathPrefix is path prefix that is used by default
+	// on tenant sql nodes to separate from server node if running on the
+	// same server without explicit --store location.
+	DefaultSQLNodeStorePathPrefix = "cockroach-data-tenant-"
 	// TempDirPrefix is the filename prefix of any temporary subdirectory
 	// created.
 	TempDirPrefix = "cockroach-temp"
