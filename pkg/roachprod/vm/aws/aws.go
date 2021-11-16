@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
@@ -428,6 +429,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 			zones[i] = expandedZones[z]
 		}
 	}
+
 	var g errgroup.Group
 	limiter := rate.NewLimiter(rate.Limit(p.opts.CreateRateLimit), 2 /* buckets */)
 	for i := range names {
@@ -767,6 +769,7 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 				Name:        tagMap["Name"],
 				Errors:      errs,
 				Lifetime:    lifetime,
+				Labels:      tagMap,
 				PrivateIP:   in.PrivateIPAddress,
 				Provider:    ProviderName,
 				ProviderID:  in.InstanceID,
@@ -828,13 +831,34 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 	cpuOptions := p.opts.CPUOptions
 
 	// We avoid the need to make a second call to set the tags by jamming
-	// all of our metadata into the TagSpec.
-	tagSpecs := fmt.Sprintf(
-		"ResourceType=instance,Tags=["+
-			"{Key=Lifetime,Value=%s},"+
-			"{Key=Name,Value=%s},"+
-			"{Key=Roachprod,Value=true},"+
-			"]", opts.Lifetime, name)
+	// all of our metadata into the tagSpec.
+	m := vm.GetDefaultLabelMap(opts)
+	m[vm.TagCreated] = timeutil.Now().Format(time.RFC3339)
+	m["Name"] = name
+	var awsLabelsNameMap = map[string]string{
+		vm.TagCluster:   "Cluster",
+		vm.TagCreated:   "Created",
+		vm.TagLifetime:  "Lifetime",
+		vm.TagRoachprod: "Roachprod",
+	}
+
+	var sb strings.Builder
+	sb.WriteString("ResourceType=instance,Tags=[")
+	for key, value := range opts.CustomLabels {
+		_, ok := m[strings.ToLower(key)]
+		if ok {
+			return fmt.Errorf("duplicate label name defined: %s", key)
+		}
+		fmt.Fprintf(&sb, "{Key=%s,Value=%s},", key, value)
+	}
+	for key, value := range m {
+		if n, ok := awsLabelsNameMap[key]; ok {
+			key = n
+		}
+		fmt.Fprintf(&sb, "{Key=%s,Value=%s},", key, value)
+	}
+	s := sb.String()
+	tagSpecs := fmt.Sprintf("%s]", s[:len(s)-1])
 
 	var data struct {
 		Instances []struct {

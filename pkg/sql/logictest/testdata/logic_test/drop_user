@@ -173,4 +173,3 @@ INSERT INTO system.scheduled_jobs (schedule_name, owner, executor_type,execution
 
 statement error pq: cannot drop role/user user1; it owns 1 scheduled jobs.
 DROP USER user1
-
