@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/descriptorutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -35,6 +37,9 @@ import (
 type CatalogReader interface {
 	// MustReadImmutableDescriptor reads a descriptor from the catalog by ID.
 	MustReadImmutableDescriptor(ctx context.Context, id descpb.ID) (catalog.Descriptor, error)
+
+	// GetFullyQualifiedName gets the fully qualified name from a descriptor ID.
+	GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error)
 
 	// AddSyntheticDescriptor adds a synthetic descriptor to the reader state.
 	// Subsequent calls to MustReadImmutableDescriptor for this ID will return
@@ -70,17 +75,32 @@ type MutationVisitorStateUpdater interface {
 	AddNewGCJobForDescriptor(descriptor catalog.Descriptor)
 }
 
+// EventLogWriter encapsulates operations for generating
+// event log entries.
+type EventLogWriter interface {
+	AddDropEvent(
+		ctx context.Context,
+		descID descpb.ID,
+		metadata *scpb.ElementMetadata,
+		event eventpb.EventPayload,
+	) error
+}
+
 // NewMutationVisitor creates a new scop.MutationVisitor.
-func NewMutationVisitor(cr CatalogReader, s MutationVisitorStateUpdater) scop.MutationVisitor {
+func NewMutationVisitor(
+	cr CatalogReader, s MutationVisitorStateUpdater, ev EventLogWriter,
+) scop.MutationVisitor {
 	return &visitor{
 		cr: cr,
 		s:  s,
+		ev: ev,
 	}
 }
 
 type visitor struct {
 	cr CatalogReader
 	s  MutationVisitorStateUpdater
+	ev EventLogWriter
 }
 
 func (m *visitor) checkOutTable(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error) {
@@ -707,6 +727,71 @@ func (m *visitor) DropForeignKeyRef(ctx context.Context, op scop.DropForeignKeyR
 		tbl.TableDesc().OutboundFKs = newFks
 	} else {
 		tbl.TableDesc().InboundFKs = newFks
+	}
+	return nil
+}
+
+func (m *visitor) LogEvent(ctx context.Context, op scop.LogEvent) error {
+	descID := screl.GetDescID(op.Element.Element())
+	fullName, err := m.cr.GetFullyQualifiedName(ctx, descID)
+	if err != nil {
+		return err
+	}
+	if op.Direction == scpb.Target_DROP {
+		switch op.Element.GetValue().(type) {
+		case *scpb.Table:
+			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
+				&eventpb.DropTable{
+					TableName: fullName,
+				},
+			)
+		case *scpb.View:
+			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
+				&eventpb.DropView{
+					ViewName: fullName,
+				},
+			)
+		case *scpb.Sequence:
+			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
+				&eventpb.DropSequence{
+					SequenceName: fullName,
+				},
+			)
+		case *scpb.Database:
+			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
+				&eventpb.DropDatabase{
+					DatabaseName: fullName,
+				},
+			)
+		case *scpb.Schema:
+			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
+				&eventpb.DropSchema{
+					SchemaName: fullName,
+				},
+			)
+		default:
+			panic("unknown element type")
+		}
+	} else if op.Direction == scpb.Target_ADD {
+		switch element := op.Element.GetValue().(type) {
+		case *scpb.Column:
+			table, err := m.checkOutTable(ctx, op.DescID)
+			if err != nil {
+				return err
+			}
+			mutation, err := descriptorutils.FindMutation(table,
+				descriptorutils.MakeColumnIDMutationSelector(element.Column.ID))
+			if err != nil {
+				return err
+			}
+			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
+				&eventpb.AlterTable{
+					TableName:  fullName,
+					MutationID: uint32(mutation.MutationID()),
+				})
+		default:
+			panic("unknown element type")
+		}
 	}
 	return nil
 }

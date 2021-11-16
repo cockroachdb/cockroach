@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -110,7 +111,7 @@ func TestSchemaChangerSideEffects(t *testing.T) {
 func execStatementWithTestDeps(
 	ctx context.Context, t *testing.T, deps *sctestdeps.TestState, stmt parser.Statement,
 ) {
-	state, err := scbuild.Build(ctx, deps, nil /* initial */, stmt.AST)
+	state, err := scbuild.Build(ctx, deps, scpb.State{} /* initial */, stmt.AST)
 	require.NoError(t, err, "error in builder")
 
 	var jobID jobspb.JobID

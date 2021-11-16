@@ -46,7 +46,8 @@ message Target {
   }
 
   ElementProto element_proto = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
-  Direction direction = 2;
+  TargetMetadata metadata = 2  [(gogoproto.nullable) = false];
+  Direction direction = 4;
 }
 
 enum Status {
@@ -211,12 +212,42 @@ message Type {
 
 message Schema {
   uint32 schema_id = 1 [(gogoproto.customname) = "SchemaID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
-  repeated uint32 dependentObjects = 2  [(gogoproto.customname) = "DependentObjects", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  repeated uint32 dependentObjects = 3  [(gogoproto.customname) = "DependentObjects", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
 }
 
 message Database {
   uint32 database_id = 1 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
-  repeated uint32 dependentObjects = 2  [(gogoproto.customname) = "DependentObjects", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  repeated uint32 dependentObjects = 3  [(gogoproto.customname) = "DependentObjects", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+}
+
+message Authorization {
+  string username  = 1;
+  string appName = 2 [(gogoproto.customname) = "AppName"];
+}
+
+// Contains SQL statements for which a schema change is being executed.
+message Statement {
+  string statement = 1;
+}
+
+// TargetMetaData refers to the metadata for individual elements, where
+// some fields like statement_id are indexes into the the full declarative
+// schema changer State.
+message TargetMetadata {
+  // SubWorkID identifies the individual portions of a statement that this
+  // target belongs too. For example, if multiple objects such as tables or
+  // schemas are dropped in a single statement (i.e. such as DROP TABLE A, B)
+  //  then this counter will increment  for each of those objects.
+  uint32 sub_work_id =  1 [(gogoproto.customname) = "SubWorkID"];
+  // SourceElementID identifies the parent element responsible for generating
+  // an element, which will be used to track cascaded drops. For example
+  // if database is being dropped, then any schemas that are dropped will have
+  // this reference ID. Note: These ID's do not correspond to descriptor ID's
+  // and are incremented as new elements are added into the State.
+  uint32 source_element_id = 2 [(gogoproto.customname) = "SourceElementID", (gogoproto.casttype) = "SourceElementID"];
+  // StatementID refers to the statement that produced this element, where
+  // the ID indexes into the State structure.
+  uint32 statement_id = 3 [(gogoproto.customname) = "StatementID"];
 }
 
 message ListPartition {

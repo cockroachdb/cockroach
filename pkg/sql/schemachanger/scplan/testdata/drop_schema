@@ -148,11 +148,6 @@ Stage 1 (non-revertible)
     TableID: 54
   *scop.UpdateRelationDeps
     TableID: 54
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 3
-    TableID: 54
-  *scop.UpdateRelationDeps
-    TableID: 54
   *scop.MarkDescriptorAsDropped
     DescID: 53
   *scop.RemoveRelationDependedOnBy
@@ -202,16 +197,6 @@ Stage 1 (non-revertible)
   *scop.UpdateRelationDeps
     TableID: 54
   *scop.RemoveColumnDefaultExpression
-    ColumnID: 1
-    TableID: 54
-  *scop.UpdateRelationDeps
-    TableID: 54
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 2
-    TableID: 54
-  *scop.UpdateRelationDeps
-    TableID: 54
-  *scop.RemoveColumnDefaultExpression
     ColumnID: 2
     TableID: 54
   *scop.UpdateRelationDeps
@@ -221,58 +206,135 @@ Stage 1 (non-revertible)
 Stage 2 (non-revertible)
   *scop.DrainDescriptorName
     TableID: 53
-  *scop.CreateGcJobForDescriptor
+  *scop.LogEvent
     DescID: 53
-  *scop.DrainDescriptorName
-    TableID: 53
+    Direction: 2
+    Element:
+      sequence:
+        sequenceId: 53
+    Metadata:
+      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      TargetMetadata:
+        SourceElementID: 2
+        SubWorkID: 1
+      Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 53
   *scop.DrainDescriptorName
     TableID: 57
-  *scop.CreateGcJobForDescriptor
+  *scop.LogEvent
     DescID: 57
-  *scop.DrainDescriptorName
-    TableID: 57
+    Direction: 2
+    Element:
+      view:
+        dependedOnBy: []
+        dependsOn:
+        - 55
+        - 56
+        tableId: 57
+    Metadata:
+      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      TargetMetadata:
+        SourceElementID: 5
+        SubWorkID: 1
+      Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 57
   *scop.DrainDescriptorName
     TableID: 61
-  *scop.CreateGcJobForDescriptor
+  *scop.LogEvent
     DescID: 61
-  *scop.DrainDescriptorName
-    TableID: 61
+    Direction: 2
+    Element:
+      view:
+        dependedOnBy: []
+        dependsOn:
+        - 58
+        tableId: 61
+    Metadata:
+      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      TargetMetadata:
+        SourceElementID: 7
+        SubWorkID: 1
+      Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 61
   *scop.DrainDescriptorName
     TableID: 58
-  *scop.CreateGcJobForDescriptor
+  *scop.LogEvent
     DescID: 58
-  *scop.DrainDescriptorName
-    TableID: 58
+    Direction: 2
+    Element:
+      view:
+        dependedOnBy:
+        - 61
+        dependsOn:
+        - 56
+        tableId: 58
+    Metadata:
+      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      TargetMetadata:
+        SourceElementID: 5
+        SubWorkID: 1
+      Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 58
   *scop.DrainDescriptorName
     TableID: 56
-  *scop.CreateGcJobForDescriptor
+  *scop.LogEvent
     DescID: 56
-  *scop.DrainDescriptorName
-    TableID: 56
+    Direction: 2
+    Element:
+      view:
+        dependedOnBy:
+        - 57
+        - 58
+        dependsOn:
+        - 55
+        tableId: 56
+    Metadata:
+      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      TargetMetadata:
+        SourceElementID: 4
+        SubWorkID: 1
+      Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 56
   *scop.DrainDescriptorName
     TableID: 55
-  *scop.CreateGcJobForDescriptor
+  *scop.LogEvent
     DescID: 55
-  *scop.DrainDescriptorName
-    TableID: 55
+    Direction: 2
+    Element:
+      view:
+        dependedOnBy:
+        - 56
+        - 57
+        dependsOn:
+        - 54
+        tableId: 55
+    Metadata:
+      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      TargetMetadata:
+        SourceElementID: 3
+        SubWorkID: 1
+      Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 55
   *scop.DrainDescriptorName
     TableID: 54
-  *scop.CreateGcJobForDescriptor
+  *scop.LogEvent
     DescID: 54
-  *scop.DrainDescriptorName
-    TableID: 54
+    Direction: 2
+    Element:
+      table:
+        tableId: 54
+    Metadata:
+      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      TargetMetadata:
+        SourceElementID: 2
+        SubWorkID: 1
+      Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 54
   *scop.DrainDescriptorName
@@ -281,3 +343,25 @@ Stage 2 (non-revertible)
     TableID: 60
   *scop.DrainDescriptorName
     TableID: 52
+  *scop.LogEvent
+    DescID: 52
+    Direction: 2
+    Element:
+      schema:
+        dependentObjects:
+        - 53
+        - 54
+        - 55
+        - 56
+        - 57
+        - 58
+        - 59
+        - 60
+        - 61
+        schemaId: 52
+    Metadata:
+      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      Username: root

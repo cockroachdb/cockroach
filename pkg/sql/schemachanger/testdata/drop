@@ -22,7 +22,7 @@ upsert descriptor #53
   -  version: "1"
   +  state: DROP
   +  version: "2"
-## stage 2 in PreCommitPhase: 1 MutationType ops
+## stage 2 in PreCommitPhase: 2 MutationType ops
 delete schema namespace entry {52 0 sc} -> 53
 create job #1: "Schema change job"
   descriptor IDs: [53]
@@ -52,7 +52,7 @@ begin transaction #1
 ## stage 1 in StatementPhase: 1 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## stage 1 in PreCommitPhase: 13 MutationType ops
+## stage 1 in PreCommitPhase: 7 MutationType ops
 upsert descriptor #55
   ...
          family: StringFamily
@@ -75,9 +75,9 @@ upsert descriptor #55
      unexposedParentSchemaId: 54
   -  version: "1"
   +  version: "2"
-## stage 2 in PreCommitPhase: 4 MutationType ops
-create job #1: "GC for Dropping descriptors 55 55 "
-  descriptor IDs: [55 55]
+## stage 2 in PreCommitPhase: 3 MutationType ops
+create job #1: "GC for Dropping descriptors 55 "
+  descriptor IDs: [55]
 delete object namespace entry {52 54 t} -> 55
 create job #2: "Schema change job"
   descriptor IDs: [55]
@@ -134,7 +134,7 @@ upsert descriptor #57
   -  version: "1"
   +  state: DROP
   +  version: "2"
-## stage 2 in PreCommitPhase: 3 MutationType ops
+## stage 2 in PreCommitPhase: 4 MutationType ops
 delete schema namespace entry {52 0 sc} -> 54
 delete object namespace entry {52 54 e} -> 56
 delete object namespace entry {52 54 _e} -> 57
@@ -163,7 +163,7 @@ upsert descriptor #52
   -  version: "5"
   +  state: DROP
   +  version: "6"
-## stage 2 in PreCommitPhase: 1 MutationType ops
+## stage 2 in PreCommitPhase: 2 MutationType ops
 delete database namespace entry {0 0 db} -> 52
 create job #1: "Schema change job"
   descriptor IDs: [52]
@@ -211,7 +211,7 @@ begin transaction #1
 ## stage 1 in StatementPhase: 13 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## stage 1 in PreCommitPhase: 47 MutationType ops
+## stage 1 in PreCommitPhase: 35 MutationType ops
 upsert descriptor #58
   ...
        sc1:
@@ -419,9 +419,9 @@ upsert descriptor #70
   -  version: "1"
   +  version: "2"
      viewQuery: (SELECT 'a':::sc1.typ::STRING AS k, n2, n1 FROM db1.sc1.v4)
-## stage 2 in PreCommitPhase: 40 MutationType ops
-create job #1: "GC for Dropping descriptors 60 60 63 63 61 61 66 66 70 70 67 67 65 65 64 64 62 62 "
-  descriptor IDs: [60 60 63 63 61 61 66 66 70 70 67 67 65 65 64 64 62 62]
+## stage 2 in PreCommitPhase: 33 MutationType ops
+create job #1: "GC for Dropping descriptors 60 63 61 66 70 67 65 64 62 "
+  descriptor IDs: [60 63 61 66 70 67 65 64 62]
 delete database namespace entry {0 0 db1} -> 58
 delete schema namespace entry {58 0 sc1} -> 59
 delete object namespace entry {58 29 sq1} -> 60
