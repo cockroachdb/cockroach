@@ -70,7 +70,7 @@ export const refreshNodes = nodesReducerObj.refresh;
 const raftReducerObj = new CachedDataReducer(
   api.raftDebug,
   "raft",
-  moment.duration(10, "s"),
+  moment.duration(.5, "s"),
 );
 export const refreshRaft = raftReducerObj.refresh;
 

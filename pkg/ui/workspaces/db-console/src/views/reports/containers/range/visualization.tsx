@@ -49,28 +49,25 @@ function lerpColor(c1: number[], c2: number[], t: number) {
   return [lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t)];
 }
 
+
+function newFakeRanges() {
+  const nRanges = 12;
+  const ranges = [];
+  for (let rangeIdx = 0; rangeIdx < nRanges; rangeIdx++) {
+    ranges.push({rangeId: 0, qps: Math.random()})
+  }
+  return ranges;
+}
+
 class RangeVizCanvas extends React.Component<RangeVizCanvasProps> {
   canvasRef: React.RefObject<HTMLCanvasElement>;
   drawContext: CanvasRenderingContext2D;
+  rangeUpdates: {rangeId: number, qps: number}[][];
   
   constructor(props: RangeVizCanvasProps) {
     super(props);
     this.canvasRef = createRef();
-  }
-
-  fakeRangesOverTime() {
-    const rangesOverTime = [];
-    const nTimeRanges = 4;
-    const nRanges = 12;
-
-    for (let timeIdx = 0; timeIdx< nTimeRanges; timeIdx++) {
-      const ranges = [];
-      for (let rangeIdx = 0; rangeIdx < nRanges; rangeIdx++) {
-        ranges.push({rangeId: 0, qps: Math.random()})
-      }
-      rangesOverTime.push(ranges)
-    }
-    return rangesOverTime;
+    this.rangeUpdates = [];
   }
 
   drawHeatMap() {
@@ -82,7 +79,7 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps> {
     this.drawContext.fillRect(0, 0, CanvasWidth, CanvasHeight);
 
     // fake data for now
-    const rangesOverTime = this.fakeRangesOverTime();
+    const rangesOverTime = this.rangeUpdates;
     const cellHeight = CanvasHeight / rangesOverTime[0].length;
     const cellWidth = CanvasWidth / MaxTimestepsShown;
     
@@ -110,16 +107,30 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps> {
 
   componentDidMount() {
     this.drawContext = this.canvasRef.current.getContext("2d");
+    this.rangeUpdates.push(newFakeRanges());
     this.drawHeatMap();
     // TODO(zachlite):
     // 1) convert real data from props into {rangeId, qps}[][], as mocked by `fakeRangesOverTime`
-    // 2) in componentDidUpdate, save (append) latest range data
-    // 3) after receipt of > 10th range, throw away n - 10th range.
+    // 2) [DONE] in componentDidUpdate, save (append) latest range data
+    // 3) [DONE] after receipt of > 10th range, throw away n - 10th range.
     // 4) axis labels for timestamp and range id
     // 5) show range statistics on cell mouseover
   }
 
-  componentDidUpdate() {}
+  componentDidUpdate() {
+    console.log("update")
+    
+    // get rid of oldest update so heatmap appears to advance right over time.
+    if (this.rangeUpdates.length >= MaxTimestepsShown) {
+      this.rangeUpdates.shift();
+    }
+
+    // create a new fake time range. 
+    this.rangeUpdates.push(newFakeRanges());
+
+    // re-draw heatmap
+    this.drawHeatMap();
+  }
 
   render() {
     console.log(this.props.raftData)
@@ -132,7 +143,12 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps> {
 
 const RangeViz: React.FC<RangeVizProps> = props => {
   useEffect(() => {
-    props.refreshRaft();
+    console.log("installing interval")
+    const refreshInterval = setInterval(() => props.refreshRaft(), 1000);
+    return () => {
+      console.log("clearing interval")
+      clearInterval(refreshInterval)
+    }
   }, []);
 
   return (
