@@ -128,7 +128,7 @@ WHERE a.y>1 AND a.x::string=b.x
 ORDER BY y
 LIMIT 10
 ----
-memo (optimized, ~20KB, required=[presentation: y:2,x:5,c:10] [ordering: +2])
+memo (optimized, ~23KB, required=[presentation: y:2,x:5,c:10] [ordering: +2])
  ├── G1: (project G2 G3 y x)
  │    ├── [presentation: y:2,x:5,c:10] [ordering: +2]
  │    │    ├── best: (project G2="[ordering: +2]" G3 y x)
@@ -203,7 +203,7 @@ SELECT 1 AS a, 1+z AS b, left(x, 10)::TIMESTAMP AS c, left(x, 10)::TIMESTAMPTZ A
 FROM b
 WHERE z=1 AND concat(x, 'foo', x)=concat(x, 'foo', x)
 ----
-memo (optimized, ~6KB, required=[presentation: a:5,b:6,c:7,d:8])
+memo (optimized, ~7KB, required=[presentation: a:5,b:6,c:7,d:8])
  ├── G1: (project G2 G3)
  │    └── [presentation: a:5,b:6,c:7,d:8]
  │         ├── best: (project G2 G3)
@@ -238,7 +238,7 @@ memo (optimized, ~6KB, required=[presentation: a:5,b:6,c:7,d:8])
 memo
 SELECT x FROM a WHERE x = 1 AND x+y = 1
 ----
-memo (optimized, ~7KB, required=[presentation: x:1])
+memo (optimized, ~8KB, required=[presentation: x:1])
  ├── G1: (project G2 G3 x)
  │    └── [presentation: x:1]
  │         ├── best: (project G2 G3 x)
@@ -268,7 +268,7 @@ memo (optimized, ~7KB, required=[presentation: x:1])
 memo 
 SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a
 ----
-memo (optimized, ~7KB, required=[presentation: x:11,y:12])
+memo (optimized, ~8KB, required=[presentation: x:11,y:12])
  ├── G1: (union G2 G3) (union G2 G3 ordering=+11,+12)
  │    └── [presentation: x:11,y:12]
  │         ├── best: (union G2 G3)
@@ -301,7 +301,7 @@ memo (optimized, ~7KB, required=[presentation: x:11,y:12])
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a)
 ----
-memo (optimized, ~4KB, required=[presentation: array_agg:5])
+memo (optimized, ~5KB, required=[presentation: array_agg:5])
  ├── G1: (scalar-group-by G2 G3 cols=())
  │    └── [presentation: array_agg:5]
  │         ├── best: (scalar-group-by G2 G3 cols=())
@@ -317,7 +317,7 @@ memo (optimized, ~4KB, required=[presentation: array_agg:5])
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a) GROUP BY y
 ----
-memo (optimized, ~4KB, required=[presentation: array_agg:5])
+memo (optimized, ~5KB, required=[presentation: array_agg:5])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:5]
  │         ├── best: (project G2 G3 array_agg)
@@ -338,7 +338,7 @@ memo (optimized, ~4KB, required=[presentation: array_agg:5])
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a ORDER BY y)
 ----
-memo (optimized, ~3KB, required=[presentation: array_agg:5])
+memo (optimized, ~4KB, required=[presentation: array_agg:5])
  ├── G1: (scalar-group-by G2 G3 cols=(),ordering=+2)
  │    └── [presentation: array_agg:5]
  │         ├── best: (scalar-group-by G2="[ordering: +2]" G3 cols=(),ordering=+2)
@@ -357,7 +357,7 @@ memo (optimized, ~3KB, required=[presentation: array_agg:5])
 memo
 SELECT DISTINCT info FROM [EXPLAIN SELECT 123 AS k]
 ----
-memo (optimized, ~7KB, required=[presentation: info:3])
+memo (optimized, ~9KB, required=[presentation: info:3])
  ├── G1: (distinct-on G2 G3 cols=(3))
  │    └── [presentation: info:3]
  │         ├── best: (distinct-on G2 G3 cols=(3))
@@ -385,7 +385,7 @@ memo (optimized, ~7KB, required=[presentation: info:3])
 memo
 SELECT DISTINCT tag FROM [SHOW TRACE FOR SESSION]
 ----
-memo (optimized, ~6KB, required=[presentation: tag:11])
+memo (optimized, ~7KB, required=[presentation: tag:11])
  ├── G1: (distinct-on G2 G3 cols=(11))
  │    └── [presentation: tag:11]
  │         ├── best: (distinct-on G2 G3 cols=(11))
