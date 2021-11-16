@@ -73,7 +73,7 @@ for d in $(ls /dev/disk/by-id/google-local-* /dev/disk/by-id/google-persistent-d
   if ! mount | grep ${d}; then
 {{ end }}
     disks+=("${d}")
-    echo "Disk ${d} not mounted, creating..."
+    echo "Disk ${d} not mounted, need to mount..."
   else
     echo "Disk ${d} already mounted, skipping..."
   fi
@@ -90,7 +90,7 @@ elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
   do
     mountpoint="${mount_prefix}${disknum}"
     disknum=$((disknum + 1 ))
-    echo "Creating ${mountpoint}"
+    echo "Mounting ${disk} at ${mountpoint}"
     mkdir -p ${mountpoint}
 {{ if .Zfs }}
     zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disk}
@@ -98,7 +98,7 @@ elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
 {{ else }}
     mkfs.ext4 -q -F ${disk}
     mount -o ${mount_opts} ${disk} ${mountpoint}
-    echo "/dev/md0 ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+    echo "${d} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
 {{ end }}
     chmod 777 ${mountpoint}
   done
