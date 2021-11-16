@@ -23,8 +23,9 @@ import (
 )
 
 type commentOnColumnNode struct {
-	n         *tree.CommentOnColumn
-	tableDesc catalog.TableDescriptor
+	n                       *tree.CommentOnColumn
+	tableDesc               catalog.TableDescriptor
+	fullyQualifiedTableName tree.TableName
 }
 
 // CommentOnColumn add comment on a column.
@@ -42,7 +43,7 @@ func (p *planner) CommentOnColumn(ctx context.Context, n *tree.CommentOnColumn) 
 	if n.ColumnItem.TableName != nil {
 		tableName = n.ColumnItem.TableName.ToTableName()
 	}
-	tableDesc, err := p.resolveUncachedTableDescriptor(ctx, &tableName, true, tree.ResolveRequireTableDesc)
+	prefix, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true, tree.ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +52,13 @@ func (p *planner) CommentOnColumn(ctx context.Context, n *tree.CommentOnColumn) 
 		return nil, err
 	}
 
-	return &commentOnColumnNode{n: n, tableDesc: tableDesc}, nil
+	return &commentOnColumnNode{
+		n:         n,
+		tableDesc: tableDesc,
+		fullyQualifiedTableName: tree.MakeTableNameFromPrefix(
+			prefix.NamePrefix(), tree.Name(tableDesc.Name),
+		),
+	}, nil
 }
 
 func (n *commentOnColumnNode) startExec(params runParams) error {
@@ -94,15 +101,10 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 		comment = *n.n.Comment
 	}
 
-	tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
-	if err != nil {
-		return err
-	}
-
 	return params.p.logEvent(params.ctx,
 		n.tableDesc.GetID(),
 		&eventpb.CommentOnColumn{
-			TableName:   tn.FQString(),
+			TableName:   n.fullyQualifiedTableName.FQString(),
 			ColumnName:  string(n.n.ColumnItem.ColumnName),
 			Comment:     comment,
 			NullComment: n.n.Comment == nil,
