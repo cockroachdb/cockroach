@@ -1288,6 +1288,10 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
 		}
 
 		traceCollector := p.ExecCfg().TraceCollector
+		if traceCollector == nil {
+			// Tenant nodes doesn't have trace collector so can't serve this table.
+			return false, pgerror.New(pgcode.UndefinedTable, "table crdb_internal.cluster_inflight_traces does not exist")
+		}
 		var iter *collector.Iterator
 		for iter, err = traceCollector.StartIter(ctx, traceID); err == nil && iter.Valid(); iter.Next() {
 			nodeID, recording := iter.Value()
