@@ -67,6 +67,8 @@ type ClusterSettings struct {
 	Quiet          bool
 	NumRacks       int
 	MaxConcurrency int // used in Parallel
+	// DebugDir is used to stash debug information.
+	DebugDir string
 }
 
 // DefaultClusterSettings returns the default settings.
@@ -95,9 +97,6 @@ var _ = DefaultClusterSettings
 type SyncedCluster struct {
 	// Cluster metadata, obtained from the respective cloud provider.
 	cloud.Cluster
-
-	// Used to stash debug information.
-	DebugDir string
 
 	// Nodes is used by various commands like Start.
 	// TODO(radu): this is set externally; it does not belong as a field. Instead,
