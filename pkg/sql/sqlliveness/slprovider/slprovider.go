@@ -22,12 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // New constructs a new Provider.
 func New(
+	ambientCtx log.AmbientContext,
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
 	db *kv.DB,
@@ -35,7 +37,7 @@ func New(
 	settings *cluster.Settings,
 	testingKnobs *sqlliveness.TestingKnobs,
 ) sqlliveness.Provider {
-	storage := slstorage.NewStorage(stopper, clock, db, codec, settings)
+	storage := slstorage.NewStorage(ambientCtx, stopper, clock, db, codec, settings)
 	instance := slinstance.NewSQLInstance(stopper, clock, storage, settings, testingKnobs)
 	return &provider{
 		Storage:  storage,
