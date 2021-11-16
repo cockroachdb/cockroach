@@ -2029,3 +2029,20 @@ CREATE SEQUENCE seqas_error
   INCREMENT BY 1
   MAXVALUE 123456
   CACHE 1
+
+subtest serial_normalization_type_name_conflict
+
+statement ok
+set serial_normalization = 'sql_sequence';
+set default_int_size=8;
+create type t72820_i_seq AS enum ('a');
+create table t72820 (i SERIAL PRIMARY KEY)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t72820]
+----
+CREATE TABLE public.t72820 (
+   i INT8 NOT NULL DEFAULT nextval('public.t72820_i_seq1'::REGCLASS),
+   CONSTRAINT t72820_pkey PRIMARY KEY (i ASC),
+   FAMILY "primary" (i)
+)

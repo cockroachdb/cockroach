@@ -255,10 +255,14 @@ type DatabaseListFlags struct {
 type DesiredObjectKind int
 
 const (
+	_ DesiredObjectKind = iota
 	// TableObject is used when a table-like object is desired from resolution.
-	TableObject DesiredObjectKind = iota
+	TableObject
 	// TypeObject is used when a type-like object is desired from resolution.
 	TypeObject
+	// AnyObject is used when any object is acceptable. This is primary used when
+	// looking for name conflicts.
+	AnyObject
 )
 
 // NewQualifiedObjectName returns an ObjectName of the corresponding kind.
@@ -272,6 +276,10 @@ func NewQualifiedObjectName(catalog, schema, object string, kind DesiredObjectKi
 	case TypeObject:
 		name := MakeQualifiedTypeName(catalog, schema, object)
 		return &name
+	case AnyObject:
+		return &UnspecifiedObjectName{
+			objName: makeQualifiedObjName(Name(catalog), Name(schema), Name(object)),
+		}
 	}
 	return nil
 }

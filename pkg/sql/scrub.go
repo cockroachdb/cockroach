@@ -178,11 +178,12 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 		tbNames = append(tbNames, toAppend...)
 	}
 
+	flags := p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/)
+	flags.DesiredObjectKind = tree.TableObject
 	for i := range tbNames {
 		tableName := &tbNames[i]
 		_, objDesc, err := p.Accessor().GetObjectDesc(
-			ctx, p.txn, tableName.Catalog(), tableName.Schema(), tableName.Table(),
-			p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/),
+			ctx, p.txn, tableName.Catalog(), tableName.Schema(), tableName.Table(), flags,
 		)
 		if err != nil {
 			return err

@@ -95,7 +95,7 @@ func (tc *Collection) getObjectByName(
 		// requested descriptor type, we return either the table descriptor itself,
 		// or the table descriptor's implicit record type.
 		switch flags.DesiredObjectKind {
-		case tree.TableObject, tree.TypeObject:
+		case tree.TableObject, tree.TypeObject, tree.AnyObject:
 		default:
 			return prefix, nil, nil
 		}
@@ -120,7 +120,9 @@ func (tc *Collection) getObjectByName(
 			}
 		}
 	case catalog.TypeDescriptor:
-		if flags.DesiredObjectKind != tree.TypeObject {
+		switch flags.DesiredObjectKind {
+		case tree.TypeObject, tree.AnyObject:
+		default:
 			return prefix, nil, nil
 		}
 	default:

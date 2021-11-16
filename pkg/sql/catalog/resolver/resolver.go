@@ -221,15 +221,21 @@ func ResolveExistingObject(
 	}
 
 	switch lookupFlags.DesiredObjectKind {
+	case tree.AnyObject:
+		return obj, prefix, nil
 	case tree.TypeObject:
 		typ, isType := obj.(catalog.TypeDescriptor)
 		if !isType {
+			// TODO(ajwerner): This probably should not return an error here if
+			// the required flag is not set.
 			return nil, prefix, sqlerrors.NewUndefinedTypeError(getResolvedTn())
 		}
 		return typ, prefix, nil
 	case tree.TableObject:
 		table, ok := obj.(catalog.TableDescriptor)
 		if !ok {
+			// TODO(ajwerner): This probably should not return an error here if
+			// the required flag is not set.
 			return nil, prefix, sqlerrors.NewUndefinedRelationError(getResolvedTn())
 		}
 		goodType := true

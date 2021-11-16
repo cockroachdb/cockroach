@@ -708,37 +708,24 @@ func fullyQualifyScheduledBackupTargetTables(
 				col *descs.Collection) error {
 				// Resolve the table.
 				un := tp.ToUnresolvedObjectName()
-				found, _, tableDesc, err := resolver.ResolveExisting(ctx, un, p, tree.ObjectLookupFlags{},
+				_, prefix, tableDesc, err := resolver.ResolveExisting(ctx, un, p, tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						Required:    true,
+						AvoidCached: true,
+					},
+					DesiredObjectKind: tree.TableObject,
+				},
 					p.CurrentDatabase(), p.CurrentSearchPath())
 				if err != nil {
 					return err
 				}
-				if !found {
-					return errors.Newf("target table %s could not be resolved", tp.String())
-				}
 
-				// Resolve the database.
-				found, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, tableDesc.GetParentID(),
-					tree.DatabaseLookupFlags{Required: true})
-				if err != nil {
-					return err
-				}
-				if !found {
-					return errors.Newf("database of target table %s could not be resolved", tp.String())
-				}
-
-				// Resolve the schema.
-				schemaDesc, err := col.GetImmutableSchemaByID(ctx, txn, tableDesc.GetParentSchemaID(),
-					tree.SchemaLookupFlags{Required: true})
-				if err != nil {
-					return err
-				}
-				tn := tree.NewTableNameWithSchema(
-					tree.Name(dbDesc.GetName()),
-					tree.Name(schemaDesc.GetName()),
-					tree.Name(tableDesc.GetName()),
+				// Set the prefix attributes to be explicitly displayed.
+				prefix.ExplicitDatabase, prefix.ExplicitSchema = true, true
+				tn := tree.MakeTableNameFromPrefix(
+					prefix.NamePrefix(), tree.Name(tableDesc.GetName()),
 				)
-				fqTablePatterns[i] = tn
+				fqTablePatterns[i] = &tn
 				return nil
 			}); err != nil {
 				return nil, err
