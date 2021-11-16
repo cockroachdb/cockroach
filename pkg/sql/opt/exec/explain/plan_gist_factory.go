@@ -39,11 +39,15 @@ func init() {
 	}
 }
 
-// version tracks major changes to how we encode plans or to the operator set.
-// It isn't necessary to increment it when adding a single operator but if we
-// remove an operator or change the operator set or decide to use a more
+// gistVersion tracks major changes to how we encode plans or to the operator
+// set. It isn't necessary to increment it when adding a single operator but if
+// we remove an operator or change the operator set or decide to use a more
 // efficient encoding version should be incremented.
-var version = 1
+//
+// Version history:
+//   1. Initial version.
+//   2. FastIntSet encoding changed.
+var gistVersion = 2
 
 // PlanGist is a compact representation of a logical plan meant to be used as
 // a key and log for different plans used to implement a particular query. A
@@ -117,7 +121,7 @@ func NewPlanGistFactory(wrappedFactory exec.Factory) *PlanGistFactory {
 	f := new(PlanGistFactory)
 	f.wrappedFactory = wrappedFactory
 	f.hash.Init()
-	f.encodeInt(version)
+	f.encodeInt(gistVersion)
 	return f
 }
 
@@ -186,8 +190,8 @@ func DecodePlanGistToPlan(s string, cat cat.Catalog) (plan *Plan, retErr error) 
 	}()
 
 	ver := f.decodeInt()
-	if ver != version {
-		return nil, errors.Errorf("unsupported old plan gist version %d", ver)
+	if ver != gistVersion {
+		return nil, errors.Errorf("unsupported gist version %d (expected %d)", ver, gistVersion)
 	}
 
 	for {

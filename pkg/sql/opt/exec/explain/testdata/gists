@@ -19,8 +19,8 @@ CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT)
 gist-explain-roundtrip
 SELECT * from foo LIMIT 1
 ----
-hash: 12007264394566425707
-plan-gist: AgFqAgAHAAACBgY=
+hash: 3862437846052724935
+plan-gist: BAFqAgAHAAAAAgYG
 explain(shape):
 • scan
   missing stats
@@ -37,8 +37,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * from foo WHERE a = 1
 ----
-hash: 16614037866652733243
-plan-gist: AgFqAgAHAgAABgY=
+hash: 8469211318139032471
+plan-gist: BAFqAgAHAAIAAAYG
 explain(shape):
 • scan
   missing stats
@@ -53,8 +53,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * from foo WHERE b @> ARRAY[1]
 ----
-hash: 6532565644912077743
-plan-gist: AgFqBAABAAIAE2oCBgY=
+hash: 5110607601896578161
+plan-gist: BAFqBAABAAACABNqAgYG
 explain(shape):
 • index join
 │ table: foo@foo_pkey
@@ -75,8 +75,8 @@ explain(gist):
 gist-explain-roundtrip
 select a,b from foo@c_idx where c = 'bar'
 ----
-hash: 10892661656543179042
-plan-gist: AgFqBgAFAgAAE2oCBQQGBA==
+hash: 6329883477835906592
+plan-gist: BAFqBgAFAAIAABNqAgUEBgQ=
 explain(shape):
 • index join
 │ table: foo@foo_pkey
@@ -97,8 +97,8 @@ explain(gist):
 gist-explain-roundtrip
 select a + 1 from foo
 ----
-hash: 17636707451215040371
-plan-gist: AgFqBgABAAAABwIGAg==
+hash: 16951747880842243841
+plan-gist: BAFqBgABAAAAAAcCBgI=
 explain(shape):
 • render
 │
@@ -117,8 +117,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
 ----
-hash: 2592820622583619685
-plan-gist: AgFuAgAHAAAACAQCBgY=
+hash: 4420372798255298833
+plan-gist: BAFuAgAHAAAAAAgEAgYG
 explain(shape):
 • apply join (semi)
 │ pred: column1 = a
@@ -138,8 +138,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM foo INNER HASH JOIN bar ON a = ba
 ----
-hash: 1156976949248385142
-plan-gist: AgFqAgAHAAAAAWwCAAEAAAAJAAICAQEGCA==
+hash: 6599296399176109584
+plan-gist: BAFqAgAHAAAAAAFsAgABAAAAAAkAAgIBAQYI
 explain(shape):
 • hash join
 │ equality: (a) = (ba)
@@ -173,8 +173,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM foo JOIN bar ON a = ba
 ----
-hash: 244718973694736415
-plan-gist: AgFqAgAHAAAAAWwCAAEAAAAKAAEBBgg=
+hash: 12921941710004006485
+plan-gist: BAFqAgAHAAAAAAFsAgABAAAAAAoAAQEGCA==
 explain(shape):
 • merge join
 │ equality: (a) = (ba)
@@ -205,8 +205,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT c, count(*) FROM foo, bar WHERE a = 1 GROUP BY c
 ----
-hash: 6889256940365688364
-plan-gist: AgFsAgAAAAAAAWoCAAUCAAAJAAAAAAEFAgsABgQ=
+hash: 1411954823131175618
+plan-gist: BAFsAgAAAAAAAAFqAgAFAAIAAAkAAAAAAQUCCwAGBA==
 explain(shape):
 • group (streaming)
 │
@@ -238,8 +238,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT sum(a),max(c) FROM foo
 ----
-hash: 4607100648356393974
-plan-gist: AgFqBgAFAAAADAYE
+hash: 1053538902551291500
+plan-gist: BAFqBgAFAAAAAAwGBA==
 explain(shape):
 • group (scalar)
 │
@@ -258,8 +258,8 @@ explain(gist):
 gist-explain-roundtrip
 INSERT INTO foo VALUES (1,ARRAY[1,2],'str')
 ----
-hash: 10922761883291699574
-plan-gist: AiACagE=
+hash: 3090620430318353484
+plan-gist: BCACagE=
 explain(shape):
 • insert fast path
   into: foo(a, b, c)
@@ -275,8 +275,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT DISTINCT ON (b,c) b,c from abc
 ----
-hash: 8133419258077586677
-plan-gist: AgFuAgAGAAAADQYE
+hash: 8263049173473862947
+plan-gist: BAFuAgAGAAAAAA0GBA==
 explain(shape):
 • distinct
 │ distinct on: b, c
@@ -297,8 +297,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM abc INTERSECT ALL SELECT * FROM abc
 ----
-hash: 10183959987953600009
-plan-gist: AgFuAgAHAAAAAW4CAAcAAAAPAQYG
+hash: 11770807816610947387
+plan-gist: BAFuAgAHAAAAAAFuAgAHAAAAAA8BBgY=
 explain(shape):
 • intersect all
 │
@@ -326,8 +326,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM abc UNION SELECT * FROM abc ORDER BY b,a
 ----
-hash: 15661179085895519156
-plan-gist: AgFuAgAHAAAAEQFuAgAHAAAAERANBgY=
+hash: 5204889425916003576
+plan-gist: BAFuAgAHAAAAABEBbgIABwAAAAAREA0GBg==
 explain(shape):
 • distinct
 │ distinct on: a
@@ -373,8 +373,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM abc UNION ALL SELECT * FROM abc
 ----
-hash: 13533026552697659671
-plan-gist: AgFuAgAHAAAAAW4CAAcAAAAQBgY=
+hash: 7706204303380109057
+plan-gist: BAFuAgAHAAAAAAFuAgAHAAAAABAGBg==
 explain(shape):
 • union all
 │
@@ -402,8 +402,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM abc WITH ORDINALITY
 ----
-hash: 5582638262284834071
-plan-gist: AgFuAgAHAAAAEgYI
+hash: 4012857883565752755
+plan-gist: BAFuAgAHAAAAABIGCA==
 explain(shape):
 • ordinality
 │
@@ -422,8 +422,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM foo INNER LOOKUP JOIN bar ON a = ba
 ----
-hash: 2902055674207466370
-plan-gist: AgFqAgAHAAAAFABsAgIBBgg=
+hash: 9923355519796991878
+plan-gist: BAFqAgAHAAAAABQAbAICAQYI
 explain(shape):
 • lookup join
 │ table: bar@bar_pkey
@@ -448,8 +448,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM foo JOIN bar ON b @> ARRAY[1,2]
 ----
-hash: 11584704012200057713
-plan-gist: AgFsAgABAAAAFmoEagQUAGoCAgEJAAAAAAAGCA==
+hash: 12759095371736027201
+plan-gist: BAFsAgABAAAAABZqBGoEFABqAgIBCQAAAAAABgg=
 explain(shape):
 • cross join
 │
@@ -493,8 +493,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM abc WHERE b = 2 AND c = 3
 ----
-hash: 8337208311400991564
-plan-gist: AhZuBG4GBgY=
+hash: 8074151782567838210
+plan-gist: BBZuBG4GBgY=
 explain(shape):
 • zigzag join
   pred: (b = _) AND (c = _)
@@ -515,8 +515,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT (SELECT a FROM abc FOR UPDATE)
 ----
-hash: 9076831683509001217
-plan-gist: AgFuBAABAAAAGQICAgYC
+hash: 17853431666615196459
+plan-gist: BAFuBAABAAAAABkCAgIGAg==
 explain(shape):
 • root
 │
@@ -556,8 +556,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM generate_series(1, 3)
 ----
-hash: 3230693242836472611
-plan-gist: AgICABoCBgI=
+hash: 1108730773033687541
+plan-gist: BAICABoCBgI=
 explain(shape):
 • project set
 │ estimated row count: 10
@@ -572,8 +572,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM (SELECT avg(a) OVER () FROM abc)
 ----
-hash: 4492463608196347762
-plan-gist: AgFuBAABAAAAGwUCBgI=
+hash: 13059145870822860404
+plan-gist: BAFuBAABAAAAABsFAgYC
 explain(shape):
 • window
 │
@@ -592,8 +592,8 @@ explain(gist):
 gist-explain-roundtrip
 EXPLAIN (OPT) SELECT 1
 ----
-hash: 4329787178175946759
-plan-gist: AhwGAg==
+hash: 3089096058207135633
+plan-gist: BBwGAg==
 explain(shape):
 • explain
 explain(gist):
@@ -603,8 +603,8 @@ explain(gist):
 gist-explain-roundtrip
 EXPLAIN SELECT 1
 ----
-hash: 4328817408920053882
-plan-gist: Ah0GAg==
+hash: 3088143881137294132
+plan-gist: BB0GAg==
 explain(shape):
 • explain
 explain(gist):
@@ -614,8 +614,8 @@ explain(gist):
 gist-explain-roundtrip
 SHOW TRACE FOR SESSION
 ----
-hash: 4327869629896725225
-plan-gist: Ah4GDg==
+hash: 3091013606486357183
+plan-gist: BB4GDg==
 explain(shape):
 • show trace
 explain(gist):
@@ -625,8 +625,8 @@ explain(gist):
 gist-explain-roundtrip
 INSERT INTO abc SELECT * from abc
 ----
-hash: 16772965416642504445
-plan-gist: AgFuAgAHAAAAH24B
+hash: 14433331891269346889
+plan-gist: BAFuAgAHAAAAAB9uAQ==
 explain(shape):
 • insert
 │ into: abc(a, b, c)
@@ -649,8 +649,8 @@ explain(gist):
 gist-explain-roundtrip
 UPDATE abc SET b = 2 WHERE a = 1
 ----
-hash: 5613817878279489287
-plan-gist: AgFuAgAHAgAABwgFCCFuAAE=
+hash: 15621265378531563699
+plan-gist: BAFuAgAHAAIAAAcIBQghbgAB
 explain(shape):
 • update
 │ table: abc
@@ -679,8 +679,8 @@ explain(gist):
 gist-explain-roundtrip
 UPSERT INTO abc (a,b,c) VALUES (1,2,3)
 ----
-hash: 11199340879865746945
-plan-gist: AgICBgFuAgAHAgAACQEAAAEBBRIibgE=
+hash: 17688244554824920077
+plan-gist: BAICBgFuAgAHAAIAAAkBAAABAQUSIm4B
 explain(shape):
 • upsert
 │ into: abc(a, b, c)
@@ -715,8 +715,8 @@ explain(gist):
 gist-explain-roundtrip
 DELETE FROM foo
 ----
-hash: 5369057709634423529
-plan-gist: AgFqAgAHAAAAI2oB
+hash: 3378728341796120245
+plan-gist: BAFqAgAHAAAAACNqAQ==
 explain(shape):
 • delete
 │ from: foo
@@ -739,8 +739,8 @@ explain(gist):
 gist-explain-roundtrip
 DELETE FROM foo WHERE a = 1
 ----
-hash: 7691685103096689151
-plan-gist: AgFqAgAHAgAAI2oB
+hash: 645339265709327771
+plan-gist: BAFqAgAHAAIAACNqAQ==
 explain(shape):
 • delete
 │ from: foo
@@ -763,8 +763,8 @@ explain(gist):
 gist-explain-roundtrip
 CREATE TABLE t1 (x int)
 ----
-hash: 15656307912119785284
-plan-gist: AiUC
+hash: 15654333189235896782
+plan-gist: BCUC
 explain(shape):
 • create table
 explain(gist):
@@ -774,8 +774,8 @@ explain(gist):
 gist-explain-roundtrip
 CREATE TABLE t2 AS SELECT * FROM abc
 ----
-hash: 12916714787348577326
-plan-gist: AgFuAgAHAAAABwgGCCYC
+hash: 1312314678455054914
+plan-gist: BAFuAgAHAAAAAAcIBggmAg==
 explain(shape):
 • create table as
 │
@@ -798,8 +798,8 @@ explain(gist):
 gist-explain-roundtrip
 CREATE VIEW v AS SELECT 1
 ----
-hash: 4334565655711205636
-plan-gist: AicCAg==
+hash: 3036488824854159506
+plan-gist: BCcCAg==
 explain(shape):
 • create view
 explain(gist):
@@ -813,8 +813,8 @@ CREATE SEQUENCE select_test
 gist-explain-roundtrip
 SELECT * FROM xyz ORDER BY y LIMIT 10
 ----
-hash: 944221815887888565
-plan-gist: AgFwAgAHAAAAGAYG
+hash: 5039295229691556485
+plan-gist: BAFwAgAHAAAAABgGBg==
 explain(shape):
 • top-k
 │ order: +y
@@ -837,8 +837,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM select_test
 ----
-hash: 4348909884410007975
-plan-gist: AigGBg==
+hash: 3039362948249735377
+plan-gist: BCgGBg==
 explain(shape):
 • sequence select
   estimated row count: 1
@@ -854,8 +854,8 @@ explain(gist):
 gist-explain-roundtrip
 ALTER TABLE foo SPLIT AT VALUES(1)
 ----
-hash: 12193483658718214527
-plan-gist: AgICAgYCLGoCBgY=
+hash: 16064523721676562109
+plan-gist: BAICAgYCLGoCBgY=
 explain(shape):
 • split
 │
@@ -871,8 +871,8 @@ explain(gist):
 gist-explain-roundtrip
 ALTER TABLE foo UNSPLIT AT VALUES(1)
 ----
-hash: 8861506885543083786
-plan-gist: AgICAgYCLWoCBgQ=
+hash: 4271961537048207324
+plan-gist: BAICAgYCLWoCBgQ=
 explain(shape):
 • unsplit
 │
@@ -889,8 +889,8 @@ explain(gist):
 gist-explain-roundtrip
 ALTER TABLE foo UNSPLIT ALL
 ----
-hash: 16533768908468588919
-plan-gist: Ai5qAgYE
+hash: 17345668356113436661
+plan-gist: BC5qAgYE
 explain(shape):
 • unsplit all
 explain(gist):
@@ -900,8 +900,8 @@ explain(gist):
 gist-explain-roundtrip
 ALTER TABLE abc EXPERIMENTAL_RELOCATE VALUES (ARRAY[1],1)
 ----
-hash: 8656743312841134920
-plan-gist: AgICBAYEL24CBgQ=
+hash: 13190728670006073678
+plan-gist: BAICBAYEL24CBgQ=
 explain(shape):
 • relocate
 │
@@ -917,8 +917,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM [INSERT INTO abc SELECT a, b, c FROM abc RETURNING a] ORDER BY a
 ----
-hash: 15302623232936960462
-plan-gist: AgFuAgAHAAAAH24AMDERBgI=
+hash: 18313926946376313530
+plan-gist: BAFuAgAHAAAAAB9uADAxEQYC
 explain(shape):
 • root
 │
@@ -970,8 +970,8 @@ explain(gist):
 gist-explain-roundtrip
 WITH RECURSIVE cte(x) AS (VALUES (1) UNION ALL SELECT x+1 FROM cte WHERE x < 10) SELECT * FROM cte
 ----
-hash: 14841964197367358450
-plan-gist: AgICAjIHAgYC
+hash: 3616853926059870096
+plan-gist: BAICAjIHAgYC
 explain(shape):
 • render
 │
@@ -991,8 +991,8 @@ explain(gist):
 gist-explain-roundtrip
 PAUSE SCHEDULE 123
 ----
-hash: 10623204031984216363
-plan-gist: AgICAjQ=
+hash: 8515009161697345069
+plan-gist: BAICAjQ=
 explain(shape):
 • control schedules
 │
@@ -1008,8 +1008,8 @@ explain(gist):
 gist-explain-roundtrip
 CANCEL JOBS SELECT 1
 ----
-hash: 6026897435584380072
-plan-gist: AgICAgYCMw==
+hash: 8064825081520190318
+plan-gist: BAICAgYCMw==
 explain(shape):
 • control jobs
 │
@@ -1025,8 +1025,8 @@ explain(gist):
 gist-explain-roundtrip
 CANCEL QUERIES SELECT '1'
 ----
-hash: 6026897435584380078
-plan-gist: AgICAgYCNQ==
+hash: 8064825081520190312
+plan-gist: BAICAgYCNQ==
 explain(shape):
 • cancel queries
 │
@@ -1042,8 +1042,8 @@ explain(gist):
 gist-explain-roundtrip
 CANCEL SESSIONS SELECT '1'
 ----
-hash: 6026897435584380077
-plan-gist: AgICAgYCNg==
+hash: 8064825081520190315
+plan-gist: BAICAgYCNg==
 explain(shape):
 • cancel sessions
 │
@@ -1059,8 +1059,8 @@ explain(gist):
 gist-explain-roundtrip
 CREATE STATISTICS s1 FROM foo
 ----
-hash: 590681868797177008
-plan-gist: Ajc=
+hash: 590679669773920534
+plan-gist: BDc=
 explain(shape):
 • create statistics
 explain(gist):
@@ -1070,8 +1070,8 @@ explain(gist):
 gist-explain-roundtrip
 EXPORT INTO CSV "tmp" FROM SELECT * FROM foo
 ----
-hash: 4828533627625221211
-plan-gist: AgFqAgAHAAAABgY4BgY=
+hash: 3704669606492597023
+plan-gist: BAFqAgAHAAAAAAYGOAYG
 explain(shape):
 • export
 │
@@ -1090,8 +1090,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT 1
 ----
-hash: 7870065175766586745
-plan-gist: AgICAgYC
+hash: 17760103876463234735
+plan-gist: BAICAgYC
 explain(shape):
 • values
   size: 1 column, 1 row
@@ -1104,8 +1104,8 @@ explain(gist):
 gist-explain-roundtrip
 EXPLAIN SELECT * from foo LIMIT 1
 ----
-hash: 4328817408920053882
-plan-gist: Ah0GAg==
+hash: 3088143881137294132
+plan-gist: BB0GAg==
 explain(shape):
 • explain
 explain(gist):

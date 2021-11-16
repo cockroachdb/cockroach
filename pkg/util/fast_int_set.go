@@ -25,13 +25,22 @@ import (
 // FastIntSet keeps track of a set of integers. It does not perform any
 // allocations when the values are small. It is not thread-safe.
 type FastIntSet struct {
-	// We use a uint64 as long as all elements are between 0 and 63. If we add an
-	// element outside of this range, we use both the uint64 and the Sparse; the
-	// Sparse then holds all elements of the set and the uint64 provides a fast
-	// path in certain cases. We don't just use the latter directly because it's
-	// larger and can't be passed around by value.
-	small uint64
+	small bitmap
 	large *intsets.Sparse
+}
+
+// We maintain a bitmap for small element values (specifically 0 to
+// smallCutoff-1). When this bitmap is sufficient, we avoid allocating the
+// `Sparse` set.  Even when we have to allocate the `Sparse` set, we still
+// maintain the bitmap as it can provide a fast path for certain operations.
+// Note: this can be set to a smaller value, e.g. for testing.
+const smallCutoff = 128
+
+// bitmap implements a bitmap of size smallCutoff.
+type bitmap struct {
+	// We don't use an array because that makes Go always keep the struct on the
+	// stack (see https://github.com/golang/go/issues/24416).
+	lo, hi uint64
 }
 
 // MakeFastIntSet returns a set initialized with the given values.
@@ -42,10 +51,6 @@ func MakeFastIntSet(vals ...int) FastIntSet {
 	}
 	return res
 }
-
-// We store bits for values smaller than this cutoff.
-// Note: this can be set to a smaller value, e.g. for testing.
-const smallCutoff = 64
 
 func (s *FastIntSet) toLarge() *intsets.Sparse {
 	if s.large != nil {
@@ -75,7 +80,7 @@ func (s *FastIntSet) fitsInSmall() bool {
 func (s *FastIntSet) Add(i int) {
 	withinSmallBounds := i >= 0 && i < smallCutoff
 	if withinSmallBounds {
-		s.small |= (1 << uint64(i))
+		s.small.Set(i)
 	}
 	if !withinSmallBounds && s.large == nil {
 		s.large = s.toLarge()
@@ -94,10 +99,8 @@ func (s *FastIntSet) AddRange(from, to int) {
 		panic("invalid range when adding range to FastIntSet")
 	}
 
-	withinSmallBounds := from >= 0 && to < smallCutoff
-	if withinSmallBounds && s.large == nil {
-		nValues := to - from + 1
-		s.small |= (1<<uint64(nValues) - 1) << uint64(from)
+	if s.large == nil && from >= 0 && to < smallCutoff {
+		s.small.SetRange(from, to)
 	} else {
 		for i := from; i <= to; i++ {
 			s.Add(i)
@@ -108,7 +111,7 @@ func (s *FastIntSet) AddRange(from, to int) {
 // Remove removes a value from the set. No-op if the value is not in the set.
 func (s *FastIntSet) Remove(i int) {
 	if i >= 0 && i < smallCutoff {
-		s.small &= ^(1 << uint64(i))
+		s.small.Unset(i)
 	}
 	if s.large != nil {
 		s.large.Remove(i)
@@ -118,7 +121,7 @@ func (s *FastIntSet) Remove(i int) {
 // Contains returns true if the set contains the value.
 func (s FastIntSet) Contains(i int) bool {
 	if i >= 0 && i < smallCutoff {
-		return (s.small & (1 << uint64(i))) != 0
+		return s.small.IsSet(i)
 	}
 	if s.large != nil {
 		return s.large.Has(i)
@@ -128,13 +131,13 @@ func (s FastIntSet) Contains(i int) bool {
 
 // Empty returns true if the set is empty.
 func (s FastIntSet) Empty() bool {
-	return s.small == 0 && (s.large == nil || s.large.IsEmpty())
+	return s.small == bitmap{} && (s.large == nil || s.large.IsEmpty())
 }
 
 // Len returns the number of the elements in the set.
 func (s FastIntSet) Len() int {
 	if s.large == nil {
-		return bits.OnesCount64(s.small)
+		return s.small.OnesCount()
 	}
 	return s.large.Len()
 }
@@ -146,8 +149,8 @@ func (s FastIntSet) Next(startVal int) (int, bool) {
 		startVal = 0
 	}
 	if startVal >= 0 && startVal < smallCutoff {
-		if ntz := bits.TrailingZeros64(s.small >> uint64(startVal)); ntz < 64 {
-			return startVal + ntz, true
+		if nextVal, ok := s.small.Next(startVal); ok {
+			return nextVal, true
 		}
 	}
 	if s.large != nil {
@@ -159,15 +162,20 @@ func (s FastIntSet) Next(startVal int) (int, bool) {
 
 // ForEach calls a function for each value in the set (in increasing order).
 func (s FastIntSet) ForEach(f func(i int)) {
-	if s.large != nil {
+	if !s.fitsInSmall() {
 		for x := s.large.Min(); x != intsets.MaxInt; x = s.large.LowerBound(x + 1) {
 			f(x)
 		}
 		return
 	}
-	for v := s.small; v != 0; {
+	for v := s.small.lo; v != 0; {
 		i := bits.TrailingZeros64(v)
 		f(i)
+		v &^= 1 << uint(i)
+	}
+	for v := s.small.hi; v != 0; {
+		i := bits.TrailingZeros64(v)
+		f(64 + i)
 		v &^= 1 << uint(i)
 	}
 }
@@ -216,7 +224,7 @@ func (s *FastIntSet) CopyFrom(other FastIntSet) {
 
 // UnionWith adds all the elements from rhs to this set.
 func (s *FastIntSet) UnionWith(rhs FastIntSet) {
-	s.small |= rhs.small
+	s.small.UnionWith(rhs.small)
 	if s.large == nil && rhs.large == nil {
 		// Fast path.
 		return
@@ -243,7 +251,7 @@ func (s FastIntSet) Union(rhs FastIntSet) FastIntSet {
 
 // IntersectionWith removes any elements not in rhs from this set.
 func (s *FastIntSet) IntersectionWith(rhs FastIntSet) {
-	s.small &= rhs.small
+	s.small.IntersectionWith(rhs.small)
 	if rhs.large == nil {
 		s.large = nil
 	}
@@ -264,7 +272,7 @@ func (s FastIntSet) Intersection(rhs FastIntSet) FastIntSet {
 
 // Intersects returns true if s has any elements in common with rhs.
 func (s FastIntSet) Intersects(rhs FastIntSet) bool {
-	if (s.small & rhs.small) != 0 {
+	if s.small.Intersects(rhs.small) {
 		return true
 	}
 	if s.large == nil || rhs.large == nil {
@@ -275,7 +283,7 @@ func (s FastIntSet) Intersects(rhs FastIntSet) bool {
 
 // DifferenceWith removes any elements in rhs from this set.
 func (s *FastIntSet) DifferenceWith(rhs FastIntSet) {
-	s.small &^= rhs.small
+	s.small.DifferenceWith(rhs.small)
 	if s.large == nil {
 		// Fast path
 		return
@@ -304,13 +312,13 @@ func (s FastIntSet) Equals(rhs FastIntSet) bool {
 // SubsetOf returns true if rhs contains all the elements in s.
 func (s FastIntSet) SubsetOf(rhs FastIntSet) bool {
 	if s.fitsInSmall() {
-		return (s.small & rhs.small) == s.small
+		return s.small.SubsetOf(rhs.small)
 	}
-	if rhs.large != nil {
-		return s.large.SubsetOf(rhs.large)
+	if rhs.fitsInSmall() {
+		// s doesn't fit in small and rhs does.
+		return false
 	}
-	// s doesn't fit in small and rhs is "small".
-	return false
+	return s.large.SubsetOf(rhs.large)
 }
 
 // Encode the set to a Writer using binary.varint byte encoding.
@@ -319,6 +327,9 @@ func (s FastIntSet) SubsetOf(rhs FastIntSet) bool {
 //
 // If the set fits in s.small, we encode a 0 followed by the bitmap values.
 // Otherwise, we encode a length followed by each element.
+//
+// WARNING: this is used by plan gists, so if this encoding changes,
+// explain.gistVersion needs to be bumped.
 func (s *FastIntSet) Encode(wr io.Writer) error {
 	if s.large != nil && s.large.Min() < 0 {
 		return errors.AssertionFailedf("Encode used with negative elements")
@@ -331,12 +342,13 @@ func (s *FastIntSet) Encode(wr io.Writer) error {
 	}
 
 	if s.fitsInSmall() {
-		err := writeUint(0)
-		if err != nil {
+		if err := writeUint(0); err != nil {
 			return err
 		}
-		err = writeUint(s.small)
-		if err != nil {
+		if err := writeUint(s.small.lo); err != nil {
+			return err
+		}
+		if err := writeUint(s.small.hi); err != nil {
 			return err
 		}
 	} else {
@@ -361,18 +373,21 @@ func (s *FastIntSet) Decode(br io.ByteReader) error {
 	if err != nil {
 		return err
 	}
-	s.small = 0
+	s.small = bitmap{}
 	if s.large != nil {
 		s.large.Clear()
 	}
 
 	if length == 0 {
 		// Special case: the bitmap is encoded directly.
-		val, err := binary.ReadUvarint(br)
+		s.small.lo, err = binary.ReadUvarint(br)
+		if err == nil {
+			s.small.hi, err = binary.ReadUvarint(br)
+		}
 		if err != nil {
+			*s = FastIntSet{}
 			return err
 		}
-		s.small = val
 	} else {
 		for i := 0; i < int(length); i++ {
 			elem, err := binary.ReadUvarint(br)
@@ -384,4 +399,85 @@ func (s *FastIntSet) Decode(br io.ByteReader) error {
 		}
 	}
 	return nil
+}
+
+func (v bitmap) IsSet(i int) bool {
+	w := v.lo
+	if i >= 64 {
+		w = v.hi
+	}
+	return w&(1<<uint64(i&63)) != 0
+}
+
+func (v *bitmap) Set(i int) {
+	if i < 64 {
+		v.lo |= (1 << uint64(i))
+	} else {
+		v.hi |= (1 << uint64(i&63))
+	}
+}
+
+func (v *bitmap) Unset(i int) {
+	if i < 64 {
+		v.lo &= ^(1 << uint64(i))
+	} else {
+		v.hi &= ^(1 << uint64(i&63))
+	}
+}
+
+func (v *bitmap) SetRange(from, to int) {
+	mask := func(from, to int) uint64 {
+		return (1<<(to-from+1) - 1) << from
+	}
+	switch {
+	case to < 64:
+		v.lo |= mask(from, to)
+	case from >= 64:
+		v.hi |= mask(from&63, to&63)
+	default:
+		v.lo |= mask(from, 63)
+		v.hi |= mask(0, to&63)
+	}
+}
+
+func (v *bitmap) UnionWith(other bitmap) {
+	v.lo |= other.lo
+	v.hi |= other.hi
+}
+
+func (v *bitmap) IntersectionWith(other bitmap) {
+	v.lo &= other.lo
+	v.hi &= other.hi
+}
+
+func (v bitmap) Intersects(other bitmap) bool {
+	return ((v.lo & other.lo) | (v.hi & other.hi)) != 0
+}
+
+func (v *bitmap) DifferenceWith(other bitmap) {
+	v.lo &^= other.lo
+	v.hi &^= other.hi
+}
+
+func (v bitmap) SubsetOf(other bitmap) bool {
+	return (v.lo&other.lo == v.lo) && (v.hi&other.hi == v.hi)
+}
+
+func (v bitmap) OnesCount() int {
+	return bits.OnesCount64(v.lo) + bits.OnesCount64(v.hi)
+}
+
+func (v bitmap) Next(startVal int) (nextVal int, ok bool) {
+	if startVal < 64 {
+		if ntz := bits.TrailingZeros64(v.lo >> uint64(startVal)); ntz < 64 {
+			// Found next element in the low word.
+			return startVal + ntz, true
+		}
+		startVal = 64
+	}
+	// Check high word.
+	if ntz := bits.TrailingZeros64(v.hi >> uint64(startVal&63)); ntz < 64 {
+		return startVal + ntz, true
+	}
+	return -1, false
 }
