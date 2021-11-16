@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -309,7 +310,7 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// This cleans up all the memory and disk monitoring of the vectorized flow.
 	f.creator.cleanup(ctx)
 
-	if util.CrdbTestBuild && f.FlowBase.Started() {
+	if buildutil.CrdbTestBuild && f.FlowBase.Started() {
 		// Check that all closers have been closed. Note that we don't check
 		// this in case the flow was never started in the first place (it is ok
 		// to not check this since closers haven't allocated any resources in
@@ -746,7 +747,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 
 	foundLocalOutput := false
 	for i, op := range outputs {
-		if util.CrdbTestBuild {
+		if buildutil.CrdbTestBuild {
 			op = colexec.NewInvariantsChecker(op)
 		}
 		stream := &output.Streams[i]
@@ -855,7 +856,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			s.addStreamEndpoint(inputStream.StreamID, inbox, s.waitGroup)
 			op := colexecop.Operator(inbox)
 			ms := colexecop.MetadataSource(inbox)
-			if util.CrdbTestBuild {
+			if buildutil.CrdbTestBuild {
 				op = colexec.NewInvariantsChecker(op)
 				ms = op.(colexecop.MetadataSource)
 			}
@@ -914,7 +915,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			// instead.
 			statsInputs = nil
 		}
-		if util.CrdbTestBuild {
+		if buildutil.CrdbTestBuild {
 			opWithMetaInfo.Root = colexec.NewInvariantsChecker(opWithMetaInfo.Root)
 			opWithMetaInfo.MetadataSources[0] = opWithMetaInfo.Root.(colexecop.MetadataSource)
 		}
@@ -1000,7 +1001,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			// We need to use the row receiving output.
 			if input != nil {
 				// We successfully removed the columnarizer.
-				if util.CrdbTestBuild {
+				if buildutil.CrdbTestBuild {
 					// That columnarizer was added as a closer, so we need to
 					// decrement the number of expected closers.
 					s.numClosers--
@@ -1127,7 +1128,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			if flowCtx.EvalCtx.SessionData().TestingVectorizeInjectPanics {
 				result.Root = newPanicInjector(result.Root)
 			}
-			if util.CrdbTestBuild {
+			if buildutil.CrdbTestBuild {
 				toCloseCopy := append(colexecop.Closers{}, result.ToClose...)
 				for i := range toCloseCopy {
 					func(idx int) {

@@ -11,7 +11,7 @@
 //go:build crdb_test && !crdb_test_off
 // +build crdb_test,!crdb_test_off
 
-package util
+package buildutil
 
 // CrdbTestBuild is a flag that is set to true if the binary was compiled
 // with the 'crdb_test' build tag (which is the case for all test targets). This
