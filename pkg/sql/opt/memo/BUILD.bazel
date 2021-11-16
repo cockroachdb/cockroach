@@ -4,7 +4,6 @@ go_library(
     name = "memo",
     srcs = [
         "check_expr.go",
-        "check_expr_skip.go",  # keep
         "constraint_builder.go",
         "cost.go",
         "expr.go",
@@ -12,7 +11,6 @@ go_library(
         "expr_name_gen.go",
         "extract.go",
         "filters_expr_mutate_checker.go",
-        "filters_expr_mutate_checker_skip.go",  # keep
         "group.go",
         "interner.go",
         "logical_props_builder.go",
@@ -40,6 +38,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/json",

@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -439,7 +439,7 @@ func (h *sysTableHelper) maybeCleanupStaleInstances(
 // maybeCheckInvariants checks the invariants for the system table with a random
 // probability and only if this is a test build.
 func (h *sysTableHelper) maybeCheckInvariants() error {
-	if util.CrdbTestBuild && rand.Intn(10) == 0 {
+	if buildutil.CrdbTestBuild && rand.Intn(10) == 0 {
 		return h.checkInvariants()
 	}
 	return nil

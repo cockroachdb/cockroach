@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -193,7 +194,7 @@ func (ih *instrumentationHelper) Setup(
 			return ctx, ih.collectBundle
 		}
 	} else {
-		if util.CrdbTestBuild {
+		if buildutil.CrdbTestBuild {
 			panic(errors.AssertionFailedf("the context doesn't have a tracing span"))
 		}
 	}
@@ -276,7 +277,7 @@ func (ih *instrumentationHelper) Finish(
 	queryLevelStats, err := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplain, flowsMetadata)
 	if err != nil {
 		const msg = "error getting query level stats for statement: %s: %+v"
-		if util.CrdbTestBuild {
+		if buildutil.CrdbTestBuild {
 			panic(fmt.Sprintf(msg, ih.fingerprint, err))
 		}
 		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
