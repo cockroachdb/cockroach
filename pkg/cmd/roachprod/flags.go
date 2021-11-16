@@ -43,7 +43,6 @@ var (
 		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
 		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
 	}
-	nodeArgs     []string
 	tag          string
 	external     = false
 	certsDir     string
@@ -55,7 +54,7 @@ var (
 	sig          = 9
 	waitFlag     = false
 	createVMOpts = vm.DefaultCreateOpts()
-	startOpts    = install.StartOptsType{
+	startOpts    = install.StartOpts{
 		Encrypt:    false,
 		Sequential: true,
 		SkipInit:   false,
@@ -175,7 +174,7 @@ func initFlags() {
 		"racks", "r", 0, "the number of racks to partition the nodes into")
 	startCmd.Flags().BoolVar(&startOpts.Sequential,
 		"sequential", startOpts.Sequential, "start nodes sequentially so node IDs match hostnames")
-	startCmd.Flags().StringArrayVarP(&nodeArgs,
+	startCmd.Flags().StringArrayVarP(&startOpts.ExtraArgs,
 		"args", "a", nil, "node arguments")
 	startCmd.Flags().StringArrayVarP(&nodeEnv,
 		"env", "e", nodeEnv, "node environment variables")
