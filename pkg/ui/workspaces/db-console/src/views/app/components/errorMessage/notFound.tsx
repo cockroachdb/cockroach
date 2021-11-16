@@ -10,21 +10,21 @@
 
 import React from "react";
 import Helmet from "react-helmet";
-import "./notFound.styl";
+import "./errorMessage.styl";
 import NotFoundImg from "assets/not-found.svg";
 
 function NotFound() {
   return (
-    <main className="not-found-page">
+    <main className="error-message-page">
       <Helmet title="Not Found" />
-      <div className="not-found-page__content">
+      <div className="error-message-page__content">
         <img
-          className="not-found-page__img"
+          className="error-message-page__img"
           src={NotFoundImg}
           alt="404 Error"
         />
-        <div className="not-found-page__body">
-          <div className="not-found-page__message">Whoops!</div>
+        <div className="error-message-page__body">
+          <div className="error-message-page__message">Whoops!</div>
           <p>
             We can&apos;t find the page you are looking for. You may have typed
             the wrong address or found a broken link.
