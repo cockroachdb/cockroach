@@ -160,12 +160,15 @@ func newCluster(
 		return nil, err
 	}
 
+	if clusterSettings.DebugDir == "" {
+		clusterSettings.DebugDir = os.ExpandEnv(config.DefaultDebugDir)
+	}
+
 	c, err := install.NewSyncedCluster(metadata, clusterSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	c.DebugDir = os.ExpandEnv(config.DefaultDebugDir)
 	nodes, err := install.ListNodes(nodeNames, len(c.VMs))
 	if err != nil {
 		return nil, err
