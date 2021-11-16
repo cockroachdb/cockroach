@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -25,7 +25,7 @@ func CanProvide(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	if required.Any() {
 		return true
 	}
-	if util.CrdbTestBuild {
+	if buildutil.CrdbTestBuild {
 		checkRequired(expr, required)
 	}
 	return funcMap[expr.Op()].canProvideOrdering(expr, required)
@@ -38,7 +38,7 @@ func BuildChildRequired(
 	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
 ) props.OrderingChoice {
 	result := funcMap[parent.Op()].buildChildReqOrdering(parent, required, childIdx)
-	if util.CrdbTestBuild && !result.Any() {
+	if buildutil.CrdbTestBuild && !result.Any() {
 		checkRequired(parent.Child(childIdx).(memo.RelExpr), &result)
 	}
 	return result
@@ -65,7 +65,7 @@ func BuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Orderi
 	}
 	provided := funcMap[expr.Op()].buildProvidedOrdering(expr, required)
 
-	if util.CrdbTestBuild {
+	if buildutil.CrdbTestBuild {
 		checkProvided(expr, required, provided)
 	}
 

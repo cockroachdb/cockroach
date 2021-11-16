@@ -31,6 +31,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/log",
         "//pkg/util/mon",
         "@com_github_cockroachdb_errors//:errors",

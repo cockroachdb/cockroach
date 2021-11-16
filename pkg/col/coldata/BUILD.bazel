@@ -21,6 +21,7 @@ go_library(
         "//pkg/sql/memsize",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/duration",
         "//pkg/util/json",
         "//pkg/util/uuid",

@@ -382,6 +382,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/admission",
         "//pkg/util/bitarray",
+        "//pkg/util/buildutil",
         "//pkg/util/cancelchecker",
         "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",

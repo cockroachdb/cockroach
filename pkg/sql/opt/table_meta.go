@@ -13,7 +13,7 @@ package opt
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -52,7 +52,7 @@ func (t TableID) IndexColumnID(idx cat.Index, idxOrd int) ColumnID {
 // NOTE: This method cannot do complete bounds checking, so it's up to the
 //       caller to ensure that this column is really in the given base table.
 func (t TableID) ColumnOrdinal(id ColumnID) int {
-	if util.CrdbTestBuild && id < t.firstColID() {
+	if buildutil.CrdbTestBuild && id < t.firstColID() {
 		panic(errors.AssertionFailedf("ordinal cannot be negative"))
 	}
 	return int(id - t.firstColID())

@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -287,7 +287,7 @@ func (nvsc *networkVectorizedStatsCollectorImpl) GetStats() *execinfrapb.Compone
 // specified. See comment on statsInvariantChecker for the kind of invariants
 // checked.
 func maybeAddStatsInvariantChecker(op *colexecargs.OpWithMetaInfo) {
-	if util.CrdbTestBuild {
+	if buildutil.CrdbTestBuild {
 		c := &statsInvariantChecker{}
 		op.StatsCollectors = append(op.StatsCollectors, c)
 		op.MetadataSources = append(op.MetadataSources, c)
