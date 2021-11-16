@@ -976,7 +976,10 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 		panic(panicErr)
 	}
 	// Closing is not cancelable.
-	closeCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	closeCtx := ex.server.cfg.AmbientCtx.AnnotateCtx(context.Background())
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	closeCtx = logtags.AddTags(closeCtx, logtags.FromContext(ctx))
 	ex.close(closeCtx, normalClose)
 }
 
