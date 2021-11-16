@@ -473,7 +473,9 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 		// because of its use of `singleflight.Group`. See issue #41780 for how this has
 		// happened.
 		baseCtx := m.ambientCtx.AnnotateCtx(context.Background())
-		baseCtx = logtags.WithTags(baseCtx, logtags.FromContext(ctx))
+		// AddTags and not WithTags, so that we combine the tags with those
+		// filled by AnnotateCtx.
+		baseCtx = logtags.AddTags(baseCtx, logtags.FromContext(ctx))
 		newCtx, cancel := m.stopper.WithCancelOnQuiesce(baseCtx)
 		defer cancel()
 		if m.isDraining() {
@@ -526,7 +528,9 @@ func releaseLease(ctx context.Context, lease *storedLease, m *Manager) {
 
 	// Release to the store asynchronously, without the descriptorState lock.
 	newCtx := m.ambientCtx.AnnotateCtx(context.Background())
-	newCtx = logtags.WithTags(newCtx, logtags.FromContext(ctx))
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	newCtx = logtags.AddTags(newCtx, logtags.FromContext(ctx))
 	if err := m.stopper.RunAsyncTask(
 		newCtx, "sql.descriptorState: releasing descriptor lease",
 		func(ctx context.Context) {
@@ -1227,7 +1231,9 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 	// Run as async worker to prevent blocking the main server Start method.
 	// Exit after releasing all the orphaned leases.
 	newCtx := m.ambientCtx.AnnotateCtx(context.Background())
-	newCtx = logtags.WithTags(newCtx, logtags.FromContext(ctx))
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	newCtx = logtags.AddTags(newCtx, logtags.FromContext(ctx))
 	_ = m.stopper.RunAsyncTask(newCtx, "del-orphaned-leases", func(ctx context.Context) {
 		// This could have been implemented using DELETE WHERE, but DELETE WHERE
 		// doesn't implement AS OF SYSTEM TIME.
