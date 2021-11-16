@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, {createRef, useEffect} from "react";
+import React, {createRef, useEffect, useState} from "react";
 import { RaftDebugResponseMessage } from "src/util/api";
 import { refreshRaft } from "oss/src/redux/apiReducers";
 import { AdminUIState } from "oss/src/redux/state";
@@ -19,9 +19,10 @@ interface RangeVizProps {
   raftData: RaftDebugResponseMessage;
 }
 
-
-type RaftUpdates = {rangeId: number, qps: number}[];
+type RaftData = {rangeId: number, qps: number};
+type RaftUpdates = RaftData[];
 interface RangeVizCanvasProps {
+  handleRangeCellHover: (raftData: RaftData) => void;
   raftData: RaftUpdates;
 }
 
@@ -82,8 +83,6 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps> {
     this.drawContext.fillStyle = `rgb(${ColdColor[0]}, ${ColdColor[1]}, ${ColdColor[2]})`;
     this.drawContext.fillRect(0, 0, CanvasWidth, CanvasHeight);
 
-    console.log(this.highestQPS)
-
     if (this.rangeUpdates.length === 0) {
       return;
     }
@@ -120,13 +119,39 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps> {
 
   componentDidMount() {
     this.drawContext = this.canvasRef.current.getContext("2d");
+    this.installMouseHandler();
     this.drawHeatMap();
     // TODO(zachlite):
-    // 1) convert real data from props into {rangeId, qps}[][], as mocked by `fakeRangesOverTime`
+    // 1) [DONE] convert real data from props into {rangeId, qps}[][], as mocked by `fakeRangesOverTime`
     // 2) [DONE] in componentDidUpdate, save (append) latest range data
     // 3) [DONE] after receipt of > 10th range, throw away n - 10th range.
     // 4) axis labels for timestamp and range id
-    // 5) show range statistics on cell mouseover
+    // 5) [DONE] show range statistics on cell mouseover
+  }
+
+  installMouseHandler() {
+    // TODO: clean this listener up.
+    this.canvasRef.current.addEventListener("mousemove", (e) => {
+      if (this.rangeUpdates.length === 0) {
+        return;
+      }
+
+      const updateIdx = Math.floor(
+        Math.max(0, Math.min(CanvasWidth, e.offsetX)) /
+          (CanvasWidth / MaxTimestepsShown)
+      );
+
+      if (updateIdx > this.rangeUpdates.length - 1) {
+        return;
+      }
+
+      const rangeIdx = Math.floor(
+        Math.max(0, Math.min(CanvasHeight, e.offsetY)) /
+          (CanvasHeight / this.rangeUpdates[0].length)
+      );
+      
+      this.props.handleRangeCellHover(this.rangeUpdates[updateIdx][rangeIdx]);
+    });
   }
 
   componentDidUpdate() {
@@ -161,6 +186,7 @@ const RangeViz: React.FC<RangeVizProps> = props => {
     }
   }, []);
 
+  const [qps, updateQps] = useState(0);
 
   const raftUpdates: RaftUpdates = props.raftData ? Object.values(props.raftData.ranges).map(d => {
     return {
@@ -171,7 +197,13 @@ const RangeViz: React.FC<RangeVizProps> = props => {
 
   return (
     <div>
-      <RangeVizCanvas raftData={raftUpdates} />
+      <RangeVizCanvas
+        raftData={raftUpdates}
+        handleRangeCellHover={(raftData) => {
+          updateQps(raftData.qps);
+        }}
+      />
+      <div>{qps}</div>
     </div>
   );
 };
