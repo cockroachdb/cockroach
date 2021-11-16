@@ -104,7 +104,7 @@ func stripTsFromPayloads(payloads []cdctest.TestFeedMessage) ([]string, error) {
 		var value []byte
 		var message map[string]interface{}
 		if err := gojson.Unmarshal(m.Value, &message); err != nil {
-			return nil, errors.Newf(`unmarshal: %s: %s`, m.Value, err)
+			return nil, errors.Wrapf(err, `unmarshal: %s`, m.Value)
 		}
 		delete(message, "updated")
 		value, err := reformatJSON(message)
@@ -121,7 +121,7 @@ func extractUpdatedFromValue(value []byte) (float64, error) {
 		Updated string `json:"updated"`
 	}
 	if err := gojson.Unmarshal(value, &updatedRaw); err != nil {
-		return -1, errors.Newf(`unmarshal: %s: %s`, value, err)
+		return -1, errors.Wrapf(err, `unmarshal: %s`, value)
 	}
 	updatedVal, err := strconv.ParseFloat(updatedRaw.Updated, 64)
 	if err != nil {

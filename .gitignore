@@ -39,3 +39,6 @@ build/Railroad.jar
 
 # Per-user .bazelrc
 /.bazelrc.user
+
+# Local disk buffers for "roachprod logs" command
+/*.logs
