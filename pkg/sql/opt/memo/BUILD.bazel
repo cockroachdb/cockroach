@@ -1,18 +1,19 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
+# gazelle:exclude gen-check_expr.go
+# gazelle:exclude gen-check_expr_skip.go
+# gazelle:exclude gen-filters_expr_mutate_checker.go
+# gazelle:exclude gen-filters_expr_mutate_checker_skip.go
+
 go_library(
     name = "memo",
     srcs = [
-        "check_expr.go",
-        "check_expr_skip.go",  # keep
         "constraint_builder.go",
         "cost.go",
         "expr.go",
         "expr_format.go",
         "expr_name_gen.go",
         "extract.go",
-        "filters_expr_mutate_checker.go",
-        "filters_expr_mutate_checker_skip.go",  # keep
         "group.go",
         "interner.go",
         "logical_props_builder.go",
@@ -20,6 +21,7 @@ go_library(
         "multiplicity_builder.go",
         "statistics_builder.go",
         "typing.go",
+        ":additional-srcs",  # keep
         ":gen-expr",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/memo",
@@ -107,4 +109,44 @@ genrule(
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
     visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "additional-srcs",
+    srcs = select({
+        "//build/toolchains:crdb_test": [":crdb-test-srcs"],
+        "//conditions:default": [":crdb-test-off-srcs"],
+    }),
+)
+
+genrule(
+    name = "crdb-test-srcs",
+    srcs = [
+        "check_expr.go",
+        "filters_expr_mutate_checker.go",
+    ],
+    outs = [
+        "gen-check_expr.go",
+        "gen-filters_expr_mutate_checker.go",
+    ],
+    cmd = """
+        cat $(location check_expr.go) | grep -v '//go:build' | grep -v '// +build' > $(location gen-check_expr.go)
+        cat $(location filters_expr_mutate_checker.go) | grep -v '//go:build' | grep -v '// +build' > $(location gen-filters_expr_mutate_checker.go)
+    """,
+)
+
+genrule(
+    name = "crdb-test-off-srcs",
+    srcs = [
+        "check_expr_skip.go",
+        "filters_expr_mutate_checker_skip.go",
+    ],
+    outs = [
+        "gen-check_expr_skip.go",
+        "gen-filters_expr_mutate_checker_skip.go",
+    ],
+    cmd = """
+        cat $(location check_expr_skip.go) | grep -v '//go:build' | grep -v '// +build' > $(location gen-check_expr_skip.go)
+        cat $(location filters_expr_mutate_checker_skip.go) | grep -v '//go:build' | grep -v '// +build' > $(location gen-filters_expr_mutate_checker_skip.go)
+    """,
 )
