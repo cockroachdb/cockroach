@@ -90,9 +90,8 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			distSQLPlanner.finalizePlanWithRowCount(planCtx, physicalPlan, plan.mainRowCount)
 			ob.AddDistribution(physicalPlan.Distribution.String())
 			flows := physicalPlan.GenerateFlowSpecs()
-			flowCtx := newFlowCtxForExplainPurposes(planCtx, params.p)
 
-			ctxSessionData := flowCtx.EvalCtx.SessionData()
+			ctxSessionData := planCtx.EvalContext().SessionData()
 			var willVectorize bool
 			if ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOff {
 				willVectorize = false
