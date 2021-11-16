@@ -13,6 +13,7 @@ package randgen
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"math/rand"
 	"regexp"
 	"sort"
@@ -20,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -361,7 +361,7 @@ func encodeInvertedIndexHistogramUpperBounds(colType *types.T, val tree.Datum) (
 	case types.GeographyFamily:
 		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, nil, *geoindex.DefaultGeographyIndexConfig())
 	default:
-		keys, err = rowenc.EncodeInvertedIndexTableKeys(val, nil, descpb.StrictIndexColumnIDGuaranteesVersion)
+		keys, err = rowenc.EncodeInvertedIndexTableKeys(val, nil, descpb.LatestNonPrimaryIndexDescriptorVersion)
 	}
 
 	if err != nil {

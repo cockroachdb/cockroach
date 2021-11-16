@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -403,8 +402,8 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	const vp = tabledesc.LatestPrimaryIndexDescriptorVersion
-	const vnp = tabledesc.LatestNonPrimaryIndexDescriptorVersion
+	const vp = descpb.LatestPrimaryIndexDescriptorVersion
+	const vnp = descpb.LatestNonPrimaryIndexDescriptorVersion
 
 	// Create a test cluster that will be used to create all kinds of indexes.
 	// We make it hang while finalizing an ALTER PRIMARY KEY to cover the edge

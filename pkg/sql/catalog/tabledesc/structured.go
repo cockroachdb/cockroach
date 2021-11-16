@@ -1116,8 +1116,8 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 		idx.Name = PrimaryKeyIndexName(desc.Name)
 	}
 	idx.EncodingType = descpb.PrimaryIndexEncoding
-	if idx.Version < descpb.PrimaryIndexWithStoredColumnsVersion {
-		idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+	if idx.Version < descpb.LatestPrimaryIndexDescriptorVersion {
+		idx.Version = descpb.LatestPrimaryIndexDescriptorVersion
 		// Populate store columns.
 		names := make(map[string]struct{})
 		for _, name := range idx.KeyColumnNames {
@@ -1696,8 +1696,8 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 				} else {
 					primaryIndex.Name = args.NewPrimaryIndexName
 				}
-				if primaryIndex.Version == descpb.StrictIndexColumnIDGuaranteesVersion {
-					primaryIndex.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+				if primaryIndex.Version == descpb.LatestNonPrimaryIndexDescriptorVersion {
+					primaryIndex.Version = descpb.LatestPrimaryIndexDescriptorVersion
 				}
 				desc.SetPrimaryIndex(primaryIndex)
 			}
