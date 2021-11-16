@@ -617,7 +617,7 @@ func registerTPCC(r registry.Registry) {
 								// * ERROR: inbox communication error: rpc error: code = Canceled
 								//   desc = context canceled (SQLSTATE 58C01)
 								// Setting this allows some errors to occur.
-								maxErrorsDuringUptime: warehousesPerRegion * 5,
+								maxErrorsDuringUptime: warehousesPerRegion * tpcc.NumWorkersPerWarehouse,
 								// "delivery" does not trigger often.
 								allowZeroSuccessDuringUptime: true,
 							}, nil
