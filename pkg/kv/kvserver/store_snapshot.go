@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"time"
 
@@ -75,7 +74,7 @@ type snapshotStrategy interface {
 
 	// Status provides a status report on the work performed during the
 	// snapshot. Only valid if the strategy succeeded.
-	Status() redact.SafeString
+	Status() redact.RedactableString
 
 	// Close cleans up any resources associated with the snapshot strategy.
 	Close(context.Context)
@@ -106,7 +105,7 @@ func assertStrategy(
 // kvBatchSnapshotStrategy is an implementation of snapshotStrategy that streams
 // batches of KV pairs in the BatchRepr format.
 type kvBatchSnapshotStrategy struct {
-	status redact.SafeString
+	status redact.RedactableString
 
 	// The size of the batches of PUT operations to send to the receiver of the
 	// snapshot. Only used on the sender side.
@@ -297,7 +296,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				raftAppliedIndex:  header.State.RaftAppliedIndex,
 			}
 
-			kvSS.status = redact.SafeString(fmt.Sprintf("ssts: %d", len(kvSS.scratch.SSTs())))
+			kvSS.status = redact.Sprintf("ssts: %d", len(kvSS.scratch.SSTs()))
 			return inSnap, nil
 		}
 	}
@@ -362,7 +361,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		bytesSent += int64(b.Len())
 	}
 
-	kvSS.status = redact.SafeString(fmt.Sprintf("kv pairs: %d", kvs))
+	kvSS.status = redact.Sprintf("kv pairs: %d", kvs)
 	return bytesSent, nil
 }
 
@@ -376,7 +375,7 @@ func (kvSS *kvBatchSnapshotStrategy) sendBatch(
 }
 
 // Status implements the snapshotStrategy interface.
-func (kvSS *kvBatchSnapshotStrategy) Status() redact.SafeString {
+func (kvSS *kvBatchSnapshotStrategy) Status() redact.RedactableString {
 	return kvSS.status
 }
 
@@ -974,9 +973,9 @@ func sendSnapshot(
 		snap,
 		to,
 		durSent.Seconds(),
-		redact.Safe(humanizeutil.IBytes(int64(float64(numBytesSent)/durSent.Seconds()))),
+		humanizeutil.IBytes(int64(float64(numBytesSent)/durSent.Seconds())),
 		ss.Status(),
-		redact.Safe(humanizeutil.IBytes(int64(targetRate))),
+		humanizeutil.IBytes(int64(targetRate)),
 		durQueued.Seconds(),
 	)
 

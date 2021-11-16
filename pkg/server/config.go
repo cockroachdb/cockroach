@@ -484,7 +484,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		return Engines{}, errors.Errorf("engines already created")
 	}
 	cfg.enginesCreated = true
-	details := []redact.RedactableString{redact.Sprintf("Pebble cache size: %s", redact.SafeString(humanizeutil.IBytes(cfg.CacheSize)))}
+	details := []redact.RedactableString{redact.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize))}
 	pebbleCache := pebble.NewCache(cfg.CacheSize)
 	defer pebbleCache.Unref()
 
@@ -528,7 +528,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 					spec.Size.Percent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 			details = append(details, redact.Sprintf("store %d: in-memory, size %s",
-				i, redact.SafeString(humanizeutil.IBytes(sizeInBytes))))
+				i, humanizeutil.IBytes(sizeInBytes)))
 			if spec.StickyInMemoryEngineID != "" {
 				if cfg.TestingKnobs.Server == nil {
 					return Engines{}, errors.AssertionFailedf("Could not create a sticky " +
@@ -578,7 +578,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			}
 
 			details = append(details, redact.Sprintf("store %d: max size %s, max open file limit %d",
-				i, redact.SafeString(humanizeutil.IBytes(sizeInBytes)), openFileLimitPerStore))
+				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 
 			storageConfig := base.StorageConfig{
 				Attrs:                   spec.Attributes,
