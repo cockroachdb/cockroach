@@ -127,13 +127,15 @@ func TestTableReader(t *testing.T) {
 				ts := c.spec
 				ts.Table = *td.TableDesc()
 
-				evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+				st := s.ClusterSettings()
+				evalCtx := tree.MakeTestingEvalContext(st)
 				defer evalCtx.Stop(ctx)
 				flowCtx := execinfra.FlowCtx{
 					EvalCtx: &evalCtx,
 					Cfg: &execinfra.ServerConfig{
-						Settings:   s.ClusterSettings(),
-						RangeCache: rangecache.NewRangeCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, s.Stopper()),
+						Settings: st,
+						RangeCache: rangecache.NewRangeCache(s.ClusterSettings(), nil,
+							func() int64 { return 2 << 10 }, s.Stopper(), s.Tracer().(*tracing.Tracer)),
 					},
 					Txn:    kv.NewTxn(ctx, s.DB(), s.NodeID()),
 					NodeID: evalCtx.NodeID,
@@ -372,13 +374,15 @@ func TestLimitScans(t *testing.T) {
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
-	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+	st := s.ClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings:   s.ClusterSettings(),
-			RangeCache: rangecache.NewRangeCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, s.Stopper()),
+			Settings: st,
+			RangeCache: rangecache.NewRangeCache(s.ClusterSettings(), nil,
+				func() int64 { return 2 << 10 }, s.Stopper(), s.Tracer().(*tracing.Tracer)),
 		},
 		Txn:    kv.NewTxn(ctx, kvDB, s.NodeID()),
 		NodeID: evalCtx.NodeID,
@@ -476,7 +480,8 @@ func BenchmarkTableReader(b *testing.B) {
 	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+	st := s.ClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	const numCols = 2
@@ -492,8 +497,9 @@ func BenchmarkTableReader(b *testing.B) {
 		flowCtx := execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
 			Cfg: &execinfra.ServerConfig{
-				Settings:   s.ClusterSettings(),
-				RangeCache: rangecache.NewRangeCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, s.Stopper()),
+				Settings: st,
+				RangeCache: rangecache.NewRangeCache(s.ClusterSettings(), nil,
+					func() int64 { return 2 << 10 }, s.Stopper(), s.Tracer().(*tracing.Tracer)),
 			},
 			Txn:    kv.NewTxn(ctx, s.DB(), s.NodeID()),
 			NodeID: evalCtx.NodeID,
