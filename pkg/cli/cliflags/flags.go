@@ -880,7 +880,11 @@ memory that the store may consume, for example:
 </PRE>
 Commas are forbidden in all values, since they are used to separate fields.
 Also, if you use equal signs in the file path to a store, you must use the
-"path" field label.`,
+"path" field label.
+
+(default is cockroach-data in current directory for cockroach and 
+cockroach-data-tenant-X for tenant 'X' specific commands)
+`,
 	}
 
 	StorageEngine = FlagInfo{
