@@ -250,7 +250,12 @@ func (r *Registry) ID() base.SQLInstanceID {
 // cancel func.
 func (r *Registry) makeCtx() (context.Context, func()) {
 	ctx := r.ac.AnnotateCtx(context.Background())
-	ctx = logtags.WithTags(ctx, logtags.FromContext(r.serverCtx))
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	// TODO(knz): This may not be necessary if the AmbientContext had
+	// all the tags already.
+	// See: https://github.com/cockroachdb/cockroach/issues/72815
+	ctx = logtags.AddTags(ctx, logtags.FromContext(r.serverCtx))
 	return context.WithCancel(ctx)
 }
 

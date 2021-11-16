@@ -287,7 +287,9 @@ func (t *descriptorState) maybeQueueLeaseRenewal(
 
 	// Start the renewal. When it finishes, it will reset t.renewalInProgress.
 	newCtx := m.ambientCtx.AnnotateCtx(context.Background())
-	newCtx = logtags.WithTags(newCtx, logtags.FromContext(ctx))
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	newCtx = logtags.AddTags(newCtx, logtags.FromContext(ctx))
 	return t.stopper.RunAsyncTask(newCtx,
 		"lease renewal", func(ctx context.Context) {
 			t.startLeaseRenewal(ctx, m, id, name)
