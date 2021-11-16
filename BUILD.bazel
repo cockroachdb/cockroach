@@ -18,7 +18,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 #
 # gazelle:prefix github.com/cockroachdb/cockroach
 # gazelle:build_file_name BUILD.bazel
-# gazelle:build_tags bazel,crdb_test,crdb_test_off,fast_int_set_small,fast_int_set_large,gss
+# gazelle:build_tags bazel,fast_int_set_small,fast_int_set_large,gss
 
 # Enable protobuf generation.
 #
@@ -119,6 +119,9 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/sql/lexbase/keywords.go
 # gazelle:exclude pkg/sql/lexbase/tokens.go
 # gazelle:exclude pkg/sql/lexbase/reserved_keywords.go
+# gazelle:exclude pkg/sql/opt/memo/check_expr_skip.go
+# gazelle:exclude pkg/sql/opt/memo/filters_expr_mutate_checker_skip.go
+# gazelle:exclude pkg/sql/opt/props/empty.go
 # gazelle:exclude pkg/cmd/prereqs/testdata
 # gazelle:exclude pkg/testutils/**/testdata/**
 # gazelle:exclude pkg/security/securitytest/embedded.go
@@ -126,6 +129,8 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/**/*_string.go
 # gazelle:exclude pkg/ui/distccl/distccl_no_bazel.go
 # gazelle:exclude pkg/ui/distoss/distoss_no_bazel.go
+# gazelle:exclude pkg/util/crdb_test_off.go
+# gazelle:exclude pkg/util/crdb_test_on.go
 #
 # Generally useful references:
 #

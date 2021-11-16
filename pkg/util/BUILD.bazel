@@ -5,9 +5,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "util",
     srcs = [
+        "a_crdb_test_bazel.go",
         "constants.go",
-        "crdb_test_off.go",
-        "crdb_test_on.go",  # keep
         "every_n.go",
         "fast_int_map.go",
         "fast_int_set.go",  # keep
@@ -32,6 +31,10 @@ go_library(
     embed = [":util_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util",
     visibility = ["//visibility:public"],
+    x_defs = select({
+        "//build/toolchains:crdb_test": {"crdbTestString": "y"},
+        "//conditions:default": {},
+    }),
     deps = [
         "//pkg/util/envutil",
         "//pkg/util/netutil/addr",
@@ -46,6 +49,7 @@ go_test(
     name = "util_test",
     size = "small",
     srcs = [
+        "crdb_test_test.go",
         "every_n_test.go",
         "fast_int_map_test.go",
         "fast_int_set_test.go",

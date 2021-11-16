@@ -1,5 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
+# gazelle:exclude gen-verify.go
+
 go_library(
     name = "props",
     srcs = [
@@ -12,8 +14,8 @@ go_library(
         "ordering_choice.go",
         "selectivity.go",
         "statistics.go",
-        "verify.go",
         "volatility.go",
+        ":additional-srcs",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/props",
     visibility = ["//visibility:public"],
@@ -59,4 +61,19 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+filegroup(
+    name = "additional-srcs",
+    srcs = select({
+        "//build/toolchains:crdb_test": [":gen-verify-go"],
+        "//conditions:default": ["empty.go"],
+    }),
+)
+
+genrule(
+    name = "gen-verify-go",
+    srcs = ["verify.go"],
+    outs = ["gen-verify.go"],
+    cmd = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@",
 )

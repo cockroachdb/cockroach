@@ -87,6 +87,13 @@ platform(
 )
 
 config_setting(
+    name = "crdb_test",
+    define_values = {
+        "crdb_test": "y",
+    },
+)
+
+config_setting(
     name = "dev",
     define_values = {
         "cockroach_bazel_dev": "y",
