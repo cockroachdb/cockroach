@@ -180,9 +180,17 @@ func (ri *Inserter) InsertRow(
 	}
 
 	putFn = insertInvertedPutFn
-	for i := range secondaryIndexEntries {
-		e := &secondaryIndexEntries[i]
-		putFn(ctx, b, &e.Key, &e.Value, traceKV)
+
+	// For determinism, add the entries for the secondary indexes in the same
+	// order as they appear in the helper.
+	for idx := range ri.Helper.Indexes {
+		entries, ok := secondaryIndexEntries[ri.Helper.Indexes[idx]]
+		if ok {
+			for i := range entries {
+				e := &entries[i]
+				putFn(ctx, b, &e.Key, &e.Value, traceKV)
+			}
+		}
 	}
 
 	return nil

@@ -49,13 +49,13 @@ print-args-for-all
 24: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:1, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-1 --lifetime=12h0m0s
 25: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:32, SSDs:2, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
-  --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-32 --gce-local-ssd-count=2 --lifetime=12h0m0s
+  --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-32 --gce-local-ssd-count=2 --gce-enable-multiple-stores=true --lifetime=12h0m0s
 26: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:10, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-16 --lifetime=12h0m0s
 27: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-96 --lifetime=12h0m0s
 28: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:4, SSDs:1, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
-  --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --gce-local-ssd-count=1 --lifetime=12h0m0s
+  --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --gce-local-ssd-count=1 --gce-enable-multiple-stores=true --lifetime=12h0m0s
 29: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:2, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-8 --lifetime=12h0m0s
 30: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:8, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
