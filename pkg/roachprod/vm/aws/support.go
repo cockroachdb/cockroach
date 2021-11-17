@@ -52,7 +52,7 @@ mount_prefix="/mnt/data"
 for d in $(ls /dev/nvme?n1 /dev/xvdd); do
   if ! mount | grep ${d}; then
     disks+=("${d}")
-    echo "Disk ${d} not mounted, creating..."
+    echo "Disk ${d} not mounted, need to mount..."
   else
     echo "Disk ${d} already mounted, skipping..."
   fi
@@ -70,7 +70,7 @@ elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
   do
     mountpoint="${mount_prefix}${disknum}"
     disknum=$((disknum + 1 ))
-    echo "Creating ${mountpoint}"
+    echo "Mounting ${disk} at ${mountpoint}"
     mkdir -p ${mountpoint}
     mkfs.ext4 -F ${disk}
     mount -o ${mount_opts} ${disk} ${mountpoint}
