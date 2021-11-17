@@ -1889,7 +1889,7 @@ func indexDefFromDescriptor(
 		}
 		indexDef.Predicate = pred
 	}
-	fmtCtx := tree.NewFmtCtx(tree.FmtPGCatalog)
+	fmtCtx := tree.NewFmtCtx(tree.FmtPGCatalog, tree.FmtDataConversionConfig(p.SessionData().DataConversionConfig))
 	fmtCtx.FormatNode(&indexDef)
 	return fmtCtx.String(), nil
 }
