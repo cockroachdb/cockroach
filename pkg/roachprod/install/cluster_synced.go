@@ -47,7 +47,7 @@ import (
 
 // ClusterImpl TODO(peter): document
 type ClusterImpl interface {
-	Start(c *SyncedCluster, extraArgs []string) error
+	Start(c *SyncedCluster, opts StartOpts) error
 	CertsDir(c *SyncedCluster, index int) string
 	NodeDir(c *SyncedCluster, index, storeIndex int) string
 	LogDir(c *SyncedCluster, index int) string
@@ -61,12 +61,13 @@ type ClusterSettings struct {
 	Secure         bool
 	CertsDir       string
 	Env            []string
-	Args           []string
 	Tag            string
 	UseTreeDist    bool
 	Quiet          bool
 	NumRacks       int
 	MaxConcurrency int // used in Parallel
+	// DebugDir is used to stash debug information.
+	DebugDir string
 }
 
 // DefaultClusterSettings returns the default settings.
@@ -77,7 +78,6 @@ func DefaultClusterSettings() ClusterSettings {
 		Secure:      false,
 		Quiet:       false,
 		UseTreeDist: true,
-		Args:        nil,
 		Env: []string{
 			"COCKROACH_ENABLE_RPC_COMPRESSION=false",
 			"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
@@ -96,13 +96,8 @@ type SyncedCluster struct {
 	// Cluster metadata, obtained from the respective cloud provider.
 	cloud.Cluster
 
-	// Used to stash debug information.
-	DebugDir string
-
-	// Nodes is used by various commands like Start.
-	// TODO(radu): this is set externally; it does not belong as a field. Instead,
-	// it should be passed separately to whatever operations require a list of
-	// nodes.
+	// Nodes is used by most commands (e.g. Start, Stop, Monitor). It describes
+	// the list of nodes the operation pertains to.
 	Nodes []int
 
 	ClusterSettings
@@ -115,9 +110,13 @@ type SyncedCluster struct {
 	AuthorizedKeys []byte
 }
 
-// NewSyncedCluster creates a SyncedCluster, given the cluster metadata and
-// settings.
-func NewSyncedCluster(metadata *cloud.Cluster, settings ClusterSettings) (*SyncedCluster, error) {
+// NewSyncedCluster creates a SyncedCluster, given the cluster metadata, node
+// selector string, and settings.
+//
+// See ListNodes for a description of the node selector string.
+func NewSyncedCluster(
+	metadata *cloud.Cluster, nodeSelector string, settings ClusterSettings,
+) (*SyncedCluster, error) {
 	c := &SyncedCluster{
 		Cluster:         *metadata,
 		ClusterSettings: settings,
@@ -125,19 +124,24 @@ func NewSyncedCluster(metadata *cloud.Cluster, settings ClusterSettings) (*Synce
 	}
 	c.Localities = make([]string, len(c.VMs))
 	for i := range c.VMs {
-		var err error
-		c.Localities[i], err = c.VMs[i].Locality()
+		locality, err := c.VMs[i].Locality()
 		if err != nil {
 			return nil, err
 		}
 		if c.NumRacks > 0 {
-			rack := fmt.Sprintf("rack=%d", i%c.NumRacks)
-			if c.Localities[i] != "" {
-				rack = "," + rack
+			if locality != "" {
+				locality += ","
 			}
-			c.Localities[i] += rack
+			locality += fmt.Sprintf("rack=%d", i%c.NumRacks)
 		}
+		c.Localities[i] = locality
 	}
+
+	nodes, err := ListNodes(nodeSelector, len(c.VMs))
+	if err != nil {
+		return nil, err
+	}
+	c.Nodes = nodes
 	return c, nil
 }
 
@@ -249,9 +253,18 @@ func (c *SyncedCluster) roachprodEnvRegex(node int) string {
 	return fmt.Sprintf(`ROACHPROD=%s[ \/]`, escaped)
 }
 
+// StartOpts houses the options needed by Start().
+type StartOpts struct {
+	Encrypt    bool
+	Sequential bool
+	SkipInit   bool
+	StoreCount int
+	ExtraArgs  []string
+}
+
 // Start TODO(peter): document
-func (c *SyncedCluster) Start() error {
-	return c.Impl.Start(c, c.Args)
+func (c *SyncedCluster) Start(startOpts StartOpts) error {
+	return c.Impl.Start(c, startOpts)
 }
 
 func (c *SyncedCluster) newSession(i int) (session, error) {
