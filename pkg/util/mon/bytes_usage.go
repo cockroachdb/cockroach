@@ -381,8 +381,9 @@ func NewUnlimitedMonitor(
 	return m
 }
 
-// EmergencyStop completes a monitoring region, and disables checking
-// that all accounts have been closed.
+// EmergencyStop completes a monitoring region, and disables checking that all
+// accounts have been closed. This is useful when recovering from panics so that
+// we don't panic again.
 func (mm *BytesMonitor) EmergencyStop(ctx context.Context) {
 	mm.doStop(ctx, false)
 }
