@@ -69,7 +69,6 @@ type Timestamp = protos.google.protobuf.ITimestamp;
 const cx = classNames.bind(styles);
 
 interface TState {
-  sortSetting: SortSetting;
   pagination: ISortedTablePagination;
   search?: string;
   filters?: Filters;
@@ -87,6 +86,7 @@ export interface TransactionsPageStateProps {
   pageSize?: number;
   isTenant?: UIConfigState["isTenant"];
   columns: string[];
+  sortSetting: SortSetting;
 }
 
 export interface TransactionsPageDispatchProps {
@@ -94,6 +94,11 @@ export interface TransactionsPageDispatchProps {
   resetSQLStats: () => void;
   onDateRangeChange?: (start: Moment, end: Moment) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
+  onSortingChange?: (
+    name: string,
+    columnTitle: string,
+    ascending: boolean,
+  ) => void;
 }
 
 export type TransactionsPageProps = TransactionsPageStateProps &
@@ -113,31 +118,44 @@ export class TransactionsPage extends React.Component<
   TransactionsPageProps,
   TState
 > {
+  constructor(props: TransactionsPageProps) {
+    super(props);
+    const filters = getFiltersFromQueryString(
+      this.props.history.location.search,
+    );
+
+    const trxSearchParams = getSearchParams(this.props.history.location.search);
+    this.state = {
+      pagination: {
+        pageSize: this.props.pageSize || 20,
+        current: 1,
+      },
+      search: trxSearchParams("q", "").toString(),
+      filters: filters,
+      aggregatedTs: null,
+      statementFingerprintIds: null,
+      transactionStats: null,
+      transactionFingerprintId: null,
+    };
+
+    const ascending = trxSearchParams("ascending", false).toString() === "true";
+    const columnTitle = trxSearchParams("columnTitle", undefined);
+    if (
+      this.props.onSortingChange &&
+      columnTitle &&
+      (this.props.sortSetting.columnTitle != columnTitle ||
+        this.props.sortSetting.ascending != ascending)
+    ) {
+      this.props.onSortingChange(
+        "Transactions",
+        columnTitle.toString(),
+        ascending,
+      );
+    }
+  }
+
   static defaultProps: Partial<TransactionsPageProps> = {
     isTenant: false,
-  };
-
-  trxSearchParams = getSearchParams(this.props.history.location.search);
-  filters = getFiltersFromQueryString(this.props.history.location.search);
-  state: TState = {
-    sortSetting: {
-      // Sort by Execution Count column as default option.
-      ascending: this.trxSearchParams("ascending", false).toString() === "true",
-      columnTitle: this.trxSearchParams(
-        "columnTitle",
-        "execution count",
-      ).toString(),
-    },
-    pagination: {
-      pageSize: this.props.pageSize || 20,
-      current: 1,
-    },
-    search: this.trxSearchParams("q", "").toString(),
-    filters: this.filters,
-    aggregatedTs: null,
-    statementFingerprintIds: null,
-    transactionStats: null,
-    transactionFingerprintId: null,
   };
 
   refreshData = (): void => {
@@ -153,9 +171,6 @@ export class TransactionsPage extends React.Component<
   }
 
   onChangeSortSetting = (ss: SortSetting): void => {
-    this.setState({
-      sortSetting: ss,
-    });
     syncHistory(
       {
         ascending: ss.ascending.toString(),
@@ -163,6 +178,9 @@ export class TransactionsPage extends React.Component<
       },
       this.props.history,
     );
+    if (this.props.onSortingChange) {
+      this.props.onSortingChange("Transactions", ss.columnTitle, ss.ascending);
+    }
   };
 
   onChangePage = (current: number): void => {
@@ -284,6 +302,7 @@ export class TransactionsPage extends React.Component<
               isTenant,
               onColumnsChange,
               columns: userSelectedColumnsToShow,
+              sortSetting,
             } = this.props;
             const { pagination, search, filters } = this.state;
             const { statements, internal_app_name_prefix } = data;
@@ -435,7 +454,7 @@ export class TransactionsPage extends React.Component<
                   <TransactionsTable
                     columns={displayColumns}
                     transactions={transactionsToDisplay}
-                    sortSetting={this.state.sortSetting}
+                    sortSetting={sortSetting}
                     onChangeSortSetting={this.onChangeSortSetting}
                     pagination={pagination}
                     renderNoResult={
