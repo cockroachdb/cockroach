@@ -248,6 +248,14 @@ export const adjustTimeScale = (
       ...curTimeScale,
     },
   };
+  if (
+    !resolution30mStorageTTL ||
+    !resolution10sStorageTTL ||
+    !curTimeScale ||
+    !timeWindow
+  ) {
+    return result;
+  }
   const now = moment().utc();
   const ttl10secDate = now.subtract(resolution10sStorageTTL);
   const isOutsideOf10sResolution = timeWindow.start.isBefore(ttl10secDate);
