@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "local",
+    srcs = ["local.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm/local",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/cloud",
+        "//pkg/roachprod/config",
+        "//pkg/roachprod/vm",
+        "//pkg/util",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)

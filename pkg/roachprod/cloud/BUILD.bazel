@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cloud",
+    srcs = [
+        "cluster_cloud.go",
+        "gc.go",
+        "gc_aws_keypairs.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/cloud",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/config",
+        "//pkg/roachprod/vm",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_aws_aws_sdk_go_v2_config//:config",
+        "@com_github_aws_aws_sdk_go_v2_service_ec2//:ec2",
+        "@com_github_aws_aws_sdk_go_v2_service_ec2//types",
+        "@com_github_aws_aws_sdk_go_v2_service_iam//:iam",
+        "@com_github_aws_aws_sdk_go_v2_service_iam//types",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_nlopes_slack//:slack",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+go_test(
+    name = "cloud_test",
+    srcs = ["cloud_test.go"],
+    embed = [":cloud"],
+    deps = [
+        "@com_github_aws_aws_sdk_go_v2_service_ec2//types",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

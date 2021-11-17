@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "roachprod",
+    srcs = [
+        "clusters_cache.go",
+        "roachprod.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//pkg/cli/exit",
+        "//pkg/roachprod/cloud",
+        "//pkg/roachprod/config",
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/aws",
+        "//pkg/roachprod/vm/azure",
+        "//pkg/roachprod/vm/gce",
+        "//pkg/roachprod/vm/local",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/httputil",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@org_golang_x_sys//unix",
+    ],
+)

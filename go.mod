@@ -5,11 +5,11 @@ go 1.16
 require (
 	cloud.google.com/go v0.90.0 // indirect
 	cloud.google.com/go/storage v1.16.0
-	github.com/Azure/azure-sdk-for-go v33.4.0+incompatible
+	github.com/Azure/azure-sdk-for-go v57.1.0+incompatible
 	github.com/Azure/azure-storage-blob-go v0.14.0
-	github.com/Azure/go-autorest/autorest v0.11.1
+	github.com/Azure/go-autorest/autorest v0.11.20
 	github.com/Azure/go-autorest/autorest/azure/auth v0.4.2
-	github.com/Azure/go-autorest/autorest/to v0.3.0
+	github.com/Azure/go-autorest/autorest/to v0.4.0
 	github.com/Azure/go-autorest/autorest/validation v0.2.0 // indirect
 	github.com/BurntSushi/toml v0.3.1
 	github.com/DataDog/datadog-go v4.4.0+incompatible // indirect
@@ -28,6 +28,10 @@ require (
 	github.com/apache/thrift v0.0.0-20181211084444-2b7365c54f82 // indirect
 	github.com/armon/circbuf v0.0.0-20150827004946-bbbad097214e
 	github.com/aws/aws-sdk-go v1.38.69
+	github.com/aws/aws-sdk-go-v2 v1.9.1
+	github.com/aws/aws-sdk-go-v2/config v1.8.2
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.18.0
+	github.com/aws/aws-sdk-go-v2/service/iam v1.10.0
 	github.com/axiomhq/hyperloglog v0.0.0-20181223111420-4b99d0c2c99e
 	github.com/bazelbuild/rules_go v0.26.0
 	github.com/biogo/store v0.0.0-20160505134755-913427a1d5e8

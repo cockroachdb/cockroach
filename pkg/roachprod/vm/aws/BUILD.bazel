@@ -1,0 +1,54 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//extras:bindata.bzl", "bindata")
+
+go_library(
+    name = "aws",
+    srcs = [
+        "aws.go",
+        "config.go",
+        "keys.go",
+        "support.go",
+        ":embedded",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/config",
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/flagstub",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_sync//errgroup",
+        "@org_golang_x_time//rate",
+    ],
+)
+
+genrule(
+    name = "gen-main-tf",
+    outs = ["terraform/main.tf"],
+    cmd = """
+      $(location //pkg/roachprod/vm/aws/terraformgen) -o $@
+    """,
+    exec_tools = ["//pkg/roachprod/vm/aws/terraformgen"],
+)
+
+bindata(
+    name = "embedded",
+    srcs = [
+        "config.json",
+        "old.json",
+    ],
+    extra_args = [
+        "-mode",
+        "0600",
+        "-modtime",
+        "1400000000",
+    ],
+    metadata = True,
+    package = "aws",
+)
