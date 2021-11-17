@@ -160,7 +160,7 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	newSST := storage.MakeIngestionSSTWriter(newSSTFile)
 	msstw.currSST = newSST
 	if err := msstw.currSST.ClearRawRange(
-		msstw.keyRanges[msstw.currRange].Start.Key, msstw.keyRanges[msstw.currRange].End.Key); err != nil {
+		msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
 		msstw.currSST.Close()
 		return errors.Wrap(err, "failed to clear range on sst file writer")
 	}
@@ -178,7 +178,7 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context) error {
 }
 
 func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, value []byte) error {
-	for msstw.keyRanges[msstw.currRange].End.Key.Compare(key.Key) <= 0 {
+	for msstw.keyRanges[msstw.currRange].End.Compare(key.Key) <= 0 {
 		// Finish the current SST, write to the file, and move to the next key
 		// range.
 		if err := msstw.finalizeSST(ctx); err != nil {
@@ -188,7 +188,7 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, val
 			return err
 		}
 	}
-	if msstw.keyRanges[msstw.currRange].Start.Key.Compare(key.Key) > 0 {
+	if msstw.keyRanges[msstw.currRange].Start.Compare(key.Key) > 0 {
 		return errors.AssertionFailedf("client error: expected %s to fall in one of %s", key.Key, msstw.keyRanges)
 	}
 	if err := msstw.currSST.PutEngineKey(key, value); err != nil {

@@ -733,7 +733,7 @@ func clearRangeData(
 	}
 
 	for _, keyRange := range keyRanges {
-		if err := clearRangeFn(reader, writer, keyRange.Start.Key, keyRange.End.Key); err != nil {
+		if err := clearRangeFn(reader, writer, keyRange.Start, keyRange.End); err != nil {
 			return err
 		}
 	}
@@ -1067,10 +1067,10 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 		// Compute the total key space covered by the current replica and all
 		// subsumed replicas.
 		for i := range srKeyRanges {
-			if srKeyRanges[i].Start.Key.Compare(totalKeyRanges[i].Start.Key) < 0 {
+			if srKeyRanges[i].Start.Compare(totalKeyRanges[i].Start) < 0 {
 				totalKeyRanges[i].Start = srKeyRanges[i].Start
 			}
-			if srKeyRanges[i].End.Key.Compare(totalKeyRanges[i].End.Key) > 0 {
+			if srKeyRanges[i].End.Compare(totalKeyRanges[i].End) > 0 {
 				totalKeyRanges[i].End = srKeyRanges[i].End
 			}
 		}
@@ -1090,15 +1090,15 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	// before it completes. It is reasonable for a snapshot for r1 from S3 to
 	// subsume both r1 and r2 in S1.
 	for i := range keyRanges {
-		if totalKeyRanges[i].End.Key.Compare(keyRanges[i].End.Key) > 0 {
+		if totalKeyRanges[i].End.Compare(keyRanges[i].End) > 0 {
 			subsumedReplSSTFile := &storage.MemFile{}
 			subsumedReplSST := storage.MakeIngestionSSTWriter(subsumedReplSSTFile)
 			defer subsumedReplSST.Close()
 			if err := storage.ClearRangeWithHeuristic(
 				r.store.Engine(),
 				&subsumedReplSST,
-				keyRanges[i].End.Key,
-				totalKeyRanges[i].End.Key,
+				keyRanges[i].End,
+				totalKeyRanges[i].End,
 			); err != nil {
 				subsumedReplSST.Close()
 				return err
@@ -1120,7 +1120,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 		// Extending to the left implies that either we merged "to the left" (we
 		// don't), or that we're applying a snapshot for another range (we don't do
 		// that either). Something is severely wrong for this to happen.
-		if totalKeyRanges[i].Start.Key.Compare(keyRanges[i].Start.Key) < 0 {
+		if totalKeyRanges[i].Start.Compare(keyRanges[i].Start) < 0 {
 			log.Fatalf(ctx, "subsuming replica to our left; key range: %v; total key range %v",
 				keyRanges[i], totalKeyRanges[i])
 		}

@@ -3789,7 +3789,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		for _, r := range keyRanges {
 			sstFile := &storage.MemFile{}
 			sst := storage.MakeIngestionSSTWriter(sstFile)
-			if err := sst.ClearRawRange(r.Start.Key, r.End.Key); err != nil {
+			if err := sst.ClearRawRange(r.Start, r.End); err != nil {
 				return err
 			}
 
@@ -3800,7 +3800,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				if !valid || r.End.Key.Compare(it.UnsafeKey().Key) <= 0 {
+				if !valid || r.End.Compare(it.UnsafeKey().Key) <= 0 {
 					if err := sst.Finish(); err != nil {
 						return err
 					}
@@ -3828,7 +3828,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			sst := storage.MakeIngestionSSTWriter(sstFile)
 			defer sst.Close()
 			r := rditer.MakeRangeIDLocalKeyRange(rangeID, false /* replicatedOnly */)
-			if err := sst.ClearRawRange(r.Start.Key, r.End.Key); err != nil {
+			if err := sst.ClearRawRange(r.Start, r.End); err != nil {
 				return err
 			}
 			tombstoneKey := keys.RangeTombstoneKey(rangeID)
@@ -3852,7 +3852,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			EndKey:   roachpb.RKey(keyEnd),
 		}
 		r := rditer.MakeUserKeyRange(&desc)
-		if err := storage.ClearRangeWithHeuristic(receivingEng, &sst, r.Start.Key, r.End.Key); err != nil {
+		if err := storage.ClearRangeWithHeuristic(receivingEng, &sst, r.Start, r.End); err != nil {
 			return err
 		}
 		err := sst.Finish()

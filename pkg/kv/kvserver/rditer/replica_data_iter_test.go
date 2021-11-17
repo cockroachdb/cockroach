@@ -314,7 +314,7 @@ func TestReplicaDataIterator(t *testing.T) {
 
 func checkOrdering(t *testing.T, ranges []KeyRange) {
 	for i := 1; i < len(ranges); i++ {
-		if ranges[i].Start.Less(ranges[i-1].End) {
+		if ranges[i].Start.Compare(ranges[i-1].End) < 0 {
 			t.Fatalf("ranges need to be ordered and non-overlapping, but %s > %s",
 				ranges[i-1].End, ranges[i].Start)
 		}
