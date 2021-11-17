@@ -291,7 +291,29 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		// requesters to see if there is any queued work that can be granted
 		// admission.
 		q.mu.Lock()
-		tenant.used--
+		prevTenant := tenant
+		// The tenant could have been removed when using tokens. See the comment
+		// where the tenantInfo struct is declared.
+		tenant, ok = q.mu.tenants[tenantID]
+		if !q.usesTokens {
+			if !ok || prevTenant != tenant {
+				panic("prev tenantInfo no longer in map")
+			}
+			if tenant.used == 0 {
+				panic("tenant.used is already zero")
+			}
+			tenant.used--
+		} else {
+			if !ok {
+				tenant = newTenantInfo(tenantID)
+				q.mu.tenants[tenantID] = tenant
+			}
+			// Don't want to overflow tenant.used if it is already 0 because of
+			// being reset to 0 by the GC goroutine.
+			if tenant.used > 0 {
+				tenant.used--
+			}
+		}
 	}
 	// Check for cancellation.
 	startTime := timeutil.Now()
@@ -332,7 +354,14 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.mu.Lock()
 		if work.heapIndex == -1 {
 			// No longer in heap. Raced with token/slot grant.
-			tenant.used--
+			if !q.usesTokens {
+				if tenant.used == 0 {
+					panic("tenant.used is already zero")
+				}
+				tenant.used--
+			}
+			// Else, we don't decrement tenant.used since we don't want to race with
+			// the gc goroutine that will set used=0.
 			q.mu.Unlock()
 			q.granter.returnGrant()
 			// The channel is sent to after releasing mu, so we don't need to hold
@@ -490,6 +519,29 @@ type tenantInfo struct {
 	id uint64
 	// used can be the currently used slots, or the tokens granted within the last
 	// interval.
+	//
+	// tenantInfo will not be GC'd until both used==0 and
+	// len(waitingWorkHeap)==0.
+	//
+	// Note that used can be reset to 0 periodically, iff the WorkQueue is using
+	// tokens (not slots). This creates a risk since callers of Admit hold
+	// references to tenantInfo. We do not want a race condition where the
+	// tenantInfo held in Admit is returned to the sync.Pool. Note that this
+	// race is almost impossible to reproduce in practice since GC loop runs at
+	// 1s intervals and needs two iterations to GC a tenantInfo -- first to
+	// reset used=0 and then the next time to GC it. We fix this by being
+	// careful in the code of Admit by not reusing a reference to tenantInfo,
+	// and instead grab a new reference from the map.
+	//
+	// The above fix for the GC race condition is insufficient to prevent
+	// overflow of the used field if the reset to used=0 happens between used++
+	// and used-- within Admit. Properly fixing that would need to track the
+	// count of used==0 resets and gate the used-- on the count not having
+	// changed. This was considered unnecessarily complicated and instead we
+	// simply (a) do not do used-- for the tokens case, if used is already zero,
+	// or (b) do not do used-- for the tokens case if the request was canceled.
+	// This does imply some inaccuracy in token counting -- it can be fixed if
+	// needed.
 	used            uint64
 	waitingWorkHeap waitingWorkHeap
 

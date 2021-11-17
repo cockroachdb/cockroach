@@ -244,6 +244,85 @@ func scanTenantID(t *testing.T, d *datadriven.TestData) roachpb.TenantID {
 	return roachpb.MakeTenantID(uint64(id))
 }
 
+// TestWorkQueueTokenResetRace induces racing between tenantInfo.used
+// decrements and tenantInfo.used resets that used to fail until we eliminated
+// the code that decrements tenantInfo.used for tokens. It would also trigger
+// a used-after-free bug where the tenantInfo being used in Admit had been
+// returned to the sync.Pool because the used value was reset.
+func TestWorkQueueTokenResetRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var buf builderWithMu
+	tg := &testGranter{buf: &buf}
+	q := makeWorkQueue(SQLKVResponseWork, tg, nil,
+		makeWorkQueueOptions(SQLKVResponseWork)).(*WorkQueue)
+	tg.r = q
+	createTime := int64(0)
+	stopCh := make(chan struct{})
+	errCount, totalCount := 0, 0
+	var mu syncutil.Mutex
+	go func() {
+		ticker := time.NewTicker(time.Microsecond * 100)
+		done := false
+		var work *testWork
+		tenantID := uint64(1)
+		for !done {
+			select {
+			case <-ticker.C:
+				ctx, cancel := context.WithCancel(context.Background())
+				work2 := &testWork{tenantID: roachpb.MakeTenantID(tenantID), cancel: cancel}
+				tenantID++
+				go func(ctx context.Context, w *testWork, createTime int64) {
+					enabled, err := q.Admit(ctx, WorkInfo{
+						TenantID:   w.tenantID,
+						CreateTime: createTime,
+					})
+					require.Equal(t, true, enabled)
+					mu.Lock()
+					defer mu.Unlock()
+					totalCount++
+					if err != nil {
+						errCount++
+					}
+				}(ctx, work2, createTime)
+				createTime++
+				if work != nil {
+					tg.grant(1)
+					work.cancel()
+					buf.stringAndReset()
+				}
+				work = work2
+			case <-stopCh:
+				done = true
+			}
+			if work != nil {
+				work.cancel()
+				tg.grant(1)
+			}
+		}
+	}()
+	go func() {
+		for {
+			select {
+			case <-stopCh:
+				return
+			default:
+				// This hot loop with GC calls is able to trigger the previously buggy
+				// code by squeezing in multiple times between the token grant and
+				// cancellation.
+				q.gcTenantsAndResetTokens()
+			}
+		}
+	}()
+	time.Sleep(time.Second)
+	close(stopCh)
+	q.close()
+	mu.Lock()
+	t.Logf("total: %d, err: %d", totalCount, errCount)
+	mu.Unlock()
+}
+
 // TODO(sumeer):
 // - Test metrics
 // - Test race between grant and cancellation
