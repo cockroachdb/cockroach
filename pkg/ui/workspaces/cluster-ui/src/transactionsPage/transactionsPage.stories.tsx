@@ -17,6 +17,7 @@ import {
   nodeRegions,
   routeProps,
   dateRange,
+  sortSetting,
 } from "./transactions.fixture";
 
 import { TransactionsPage } from ".";
@@ -38,6 +39,8 @@ storiesOf("Transactions Page", module)
       nodeRegions={nodeRegions}
       refreshData={noop}
       resetSQLStats={noop}
+      sortSetting={sortSetting}
+      onSortingChange={noop}
     />
   ))
   .add("without data", () => {
@@ -49,6 +52,8 @@ storiesOf("Transactions Page", module)
         nodeRegions={nodeRegions}
         refreshData={noop}
         resetSQLStats={noop}
+        sortSetting={sortSetting}
+        onSortingChange={noop}
       />
     );
   })
@@ -68,6 +73,8 @@ storiesOf("Transactions Page", module)
         refreshData={noop}
         history={history}
         resetSQLStats={noop}
+        sortSetting={sortSetting}
+        onSortingChange={noop}
       />
     );
   })
@@ -80,6 +87,8 @@ storiesOf("Transactions Page", module)
         nodeRegions={nodeRegions}
         refreshData={noop}
         resetSQLStats={noop}
+        sortSetting={sortSetting}
+        onSortingChange={noop}
       />
     );
   })
@@ -99,6 +108,8 @@ storiesOf("Transactions Page", module)
         }
         refreshData={noop}
         resetSQLStats={noop}
+        sortSetting={sortSetting}
+        onSortingChange={noop}
       />
     );
   });

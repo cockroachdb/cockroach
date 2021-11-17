@@ -28,6 +28,7 @@ export type LocalStorageState = {
   "showColumns/TransactionPage": string;
   "dateRange/StatementsPage": StatementsDateRangeState;
   "sortSetting/StatementsPage": SortSetting;
+  "sortSetting/TransactionsPage": SortSetting;
 };
 
 type Payload = {
@@ -62,6 +63,9 @@ const initialState: LocalStorageState = {
     defaultDateRange,
   "sortSetting/StatementsPage":
     JSON.parse(localStorage.getItem("sortSetting/StatementsPage")) ||
+    defaultSortSetting,
+  "sortSetting/TransactionsPage":
+    JSON.parse(localStorage.getItem("sortSetting/TransactionsPage")) ||
     defaultSortSetting,
 };
 
