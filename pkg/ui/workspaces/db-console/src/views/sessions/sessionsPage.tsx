@@ -12,6 +12,7 @@ import { Pick } from "src/util/pick";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 import { AdminUIState } from "src/redux/state";
+import { LocalSetting } from "src/redux/localsettings";
 import { CachedDataReducerState, refreshSessions } from "src/redux/apiReducers";
 
 import { createSelector } from "reselect";
@@ -41,16 +42,32 @@ export const selectSessions = createSelector(
   },
 );
 
+export const sortSettingLocalSetting = new LocalSetting(
+  "sortSetting/SessionsPage",
+  (state: AdminUIState) => state.localSettings,
+  { ascending: false, columnTitle: "statementAge" },
+);
+
 const SessionsPageConnected = withRouter(
   connect(
     (state: AdminUIState, props: RouteComponentProps) => ({
       sessions: selectSessions(state, props),
       sessionsError: state.cachedData.sessions.lastError,
+      sortSetting: sortSettingLocalSetting.selector(state),
     }),
     {
       refreshSessions,
       cancelSession: terminateSessionAction,
       cancelQuery: terminateQueryAction,
+      onSortingChange: (
+        _tableName: string,
+        columnName: string,
+        ascending: boolean,
+      ) =>
+        sortSettingLocalSetting.set({
+          ascending: ascending,
+          columnTitle: columnName,
+        }),
     },
   )(SessionsPage),
 );
