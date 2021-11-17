@@ -1442,14 +1442,25 @@ type StoreMetrics struct {
 }
 
 type tenantMetricsRef struct {
+	// All fields are internal. Don't access them.
+
 	_tenantID roachpb.TenantID
 	_state    int32 // atomic; 0=usable 1=poisoned
-	stack     []byte
+
+	// _stack helps diagnose use-after-release when it occurs.
+	// This field is populated in releaseTenant and printed
+	// in assertions on failure.
+	_stack struct {
+		syncutil.Mutex
+		b []byte
+	}
 }
 
 func (ref *tenantMetricsRef) assert(ctx context.Context) {
 	if atomic.LoadInt32(&ref._state) != 0 {
-		log.Fatalf(ctx, "tenantMetricsRef already finalized in:\n%s", ref.stack)
+		ref._stack.Lock()
+		defer ref._stack.Unlock()
+		log.Fatalf(ctx, "tenantMetricsRef already finalized in:\n%s", ref._stack.b)
 	}
 }
 
@@ -1476,10 +1487,11 @@ type TenantsStorageMetrics struct {
 
 	// This struct is invisible to the metric package.
 	//
-	// TODO(tbg): seems bad that this uses int64 keys but tenantIDs can
-	// span uint64. Bad things will happen if we ever use tenantIDs in
-	// excess of math.MaxInt64.
-	tenants syncutil.IntMap // map[roachpb.TenantID]*tenantStorageMetrics
+	// NB: note that the int64 conversion in this map is lossless, so
+	// everything will work with tenantsIDs in excess of math.MaxInt64
+	// except that should one ever look at this map through a debugger
+	// the int64->uint64 conversion has to be done manually.
+	tenants syncutil.IntMap // map[int64(roachpb.TenantID)]*tenantStorageMetrics
 }
 
 var _ metric.Struct = (*TenantsStorageMetrics)(nil)
@@ -1555,9 +1567,13 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantMetricsRef) {
 	m := sm.getTenant(ctx, ref) // NB: asserts against use-after-release
 	if atomic.SwapInt32(&ref._state, 1) != 0 {
-		log.Fatalf(ctx, "metrics ref released twice")
+		ref._stack.Lock()
+		defer ref._stack.Unlock()
+		log.Fatalf(ctx, "metrics ref released twice, first time in: %s", ref._stack)
 	}
-	ref.stack = debug.Stack()
+	ref._stack.Lock()
+	ref._stack.b = debug.Stack()
+	ref._stack.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.refCount--
