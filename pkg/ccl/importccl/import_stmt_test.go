@@ -7286,3 +7286,56 @@ CREATE TABLE t (a INT, b greeting);
 		})
 	}
 }
+
+func TestImportIntoPartialIndexes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var data string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `
+CREATE TABLE a (
+    a INT,
+    b INT,
+    c INT,
+    INDEX idx_c_b_gt_1 (c) WHERE b > 1,
+    FAMILY (a),
+    FAMILY (b),
+    FAMILY (c)
+)`)
+	data = "1,2,1"
+	sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO a CSV DATA ('%s')`, srv.URL))
+	sqlDB.CheckQueryResults(t, `SELECT * FROM a@idx_c_b_gt_1 WHERE b > 1`, [][]string{
+		{"1", "2", "1"},
+	})
+	sqlDB.ExpectErr(t, "index \"idx_c_b_gt_1\" is a partial index that does not contain all the rows needed to execute this query",
+		`SELECT * FROM a@idx_c_b_gt_1 WHERE b = 0`)
+
+	// Return error if evaluating the predicate errs and do not import the row.
+	sqlDB.Exec(t, `CREATE TABLE b (a INT, b INT, INDEX (a) WHERE 1 / b = 1)`)
+	data = "1,0"
+	sqlDB.ExpectErr(t, "division by zero", fmt.Sprintf(`IMPORT INTO b CSV DATA ('%s')`, srv.URL))
+
+	// Update two rows where one is in a partial index and one is not.
+	sqlDB.Exec(t, `CREATE TABLE c (k INT PRIMARY KEY, i INT, INDEX i_0_100_idx (i) WHERE i > 0 AND i < 100`)
+	data = "3,30\n300,300"
+	sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO c CSV DATA ('%s')`, srv.URL))
+	// Run an update just to make sure it works as expected.
+	sqlDB.Exec(t, `UPDATE c SET i = i + 1`)
+	sqlDB.CheckQueryResults(t, `SELECT * FROM c@i_0_100_idx WHERE i > 0 AND i < 100`, [][]string{
+		{"3", "31"},
+	})
+}
