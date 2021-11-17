@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, {createRef, useEffect } from "react";
+import React, { createRef, useEffect } from "react";
 import { RaftDebugResponseMessage } from "src/util/api";
 import { refreshRaft } from "oss/src/redux/apiReducers";
 import { AdminUIState } from "oss/src/redux/state";
@@ -20,16 +20,20 @@ interface RangeVizProps {
   raftData: RaftDebugResponseMessage;
 }
 
-type RaftData = {rangeId: number, qps: number, startKey: string, endKey: string};
+type RaftData = {
+  rangeId: number;
+  qps: number;
+  startKey: string;
+  endKey: string;
+};
 type RaftUpdates = RaftData[];
 interface RangeVizCanvasProps {
   raftData: RaftUpdates;
 }
 
 interface RangeVizCanvasState {
-  hoverData: RaftData
+  hoverData: RaftData;
 }
-
 
 const CanvasWidth = 1200;
 const CanvasHeight = 800;
@@ -44,7 +48,13 @@ class Canvas extends React.Component<{
   }
 
   render() {
-    return <canvas ref={this.props.canvasRef} width={CanvasWidth} height={CanvasHeight}></canvas>;
+    return (
+      <canvas
+        ref={this.props.canvasRef}
+        width={CanvasWidth}
+        height={CanvasHeight}
+      ></canvas>
+    );
   }
 }
 
@@ -56,7 +66,6 @@ function lerpColor(c1: number[], c2: number[], t: number) {
   return [lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t)];
 }
 
-
 // function newFakeRanges() {
 //   const nRanges = 100;
 //   const ranges = [];
@@ -66,12 +75,15 @@ function lerpColor(c1: number[], c2: number[], t: number) {
 //   return ranges;
 // }
 
-class RangeVizCanvas extends React.Component<RangeVizCanvasProps, RangeVizCanvasState> {
+class RangeVizCanvas extends React.Component<
+  RangeVizCanvasProps,
+  RangeVizCanvasState
+> {
   canvasRef: React.RefObject<HTMLCanvasElement>;
   drawContext: CanvasRenderingContext2D;
   rangeUpdates: RaftUpdates[];
   highestQPS: number;
-  
+
   constructor(props: RangeVizCanvasProps) {
     super(props);
     this.canvasRef = createRef();
@@ -82,14 +94,15 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps, RangeVizCanvas
         qps: 0,
         startKey: "",
         endKey: "",
-        rangeId: 0
-      }};
+        rangeId: 0,
+      },
+    };
   }
 
   drawHeatMap() {
     // clear canvas
-    this.drawContext.clearRect(0,0, CanvasWidth, CanvasHeight);
-    
+    this.drawContext.clearRect(0, 0, CanvasWidth, CanvasHeight);
+
     // draw background
     this.drawContext.fillStyle = `rgb(${ColdColor[0]}, ${ColdColor[1]}, ${ColdColor[2]})`;
     this.drawContext.fillRect(0, 0, CanvasWidth, CanvasHeight);
@@ -102,16 +115,19 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps, RangeVizCanvas
     const rangesOverTime = this.rangeUpdates;
     const cellHeight = CanvasHeight / rangesOverTime[0].length;
     const cellWidth = CanvasWidth / MaxTimestepsShown;
-    
+
     this.highestQPS = Math.max(
-      ...rangesOverTime.flatMap((ranges) => ranges.map((r) => r.qps)),
+      ...rangesOverTime.flatMap(ranges => ranges.map(r => r.qps)),
       // this.highestQPS
     );
 
     for (let timeIdx = 0; timeIdx < rangesOverTime.length; timeIdx++) {
-      for (let rangeIdx = 0; rangeIdx < rangesOverTime[timeIdx].length; rangeIdx++) {
-        
-        // compute cell color by considering this range's QPS relative 
+      for (
+        let rangeIdx = 0;
+        rangeIdx < rangesOverTime[timeIdx].length;
+        rangeIdx++
+      ) {
+        // compute cell color by considering this range's QPS relative
         // to the max QPS found across all ranges.
         const t = rangesOverTime[timeIdx][rangeIdx].qps / this.highestQPS;
         const [r, g, b] = lerpColor(ColdColor, HotColor, t);
@@ -122,7 +138,7 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps, RangeVizCanvas
           cellWidth * timeIdx,
           rangeIdx * cellHeight,
           cellWidth,
-          cellHeight
+          cellHeight,
         );
       }
     }
@@ -142,14 +158,14 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps, RangeVizCanvas
 
   installMouseHandler() {
     // TODO: clean this listener up.
-    this.canvasRef.current.addEventListener("mousemove", (e) => {
+    this.canvasRef.current.addEventListener("mousemove", e => {
       if (this.rangeUpdates.length === 0) {
         return;
       }
 
       const updateIdx = Math.floor(
         Math.max(0, Math.min(CanvasWidth, e.offsetX)) /
-          (CanvasWidth / MaxTimestepsShown)
+          (CanvasWidth / MaxTimestepsShown),
       );
 
       if (updateIdx > this.rangeUpdates.length - 1) {
@@ -158,11 +174,11 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps, RangeVizCanvas
 
       const rangeIdx = Math.floor(
         Math.max(0, Math.min(CanvasHeight, e.offsetY)) /
-          (CanvasHeight / this.rangeUpdates[0].length)
+          (CanvasHeight / this.rangeUpdates[0].length),
       );
-        
+
       this.setState({
-        hoverData: this.rangeUpdates[updateIdx][rangeIdx]
+        hoverData: this.rangeUpdates[updateIdx][rangeIdx],
       });
     });
   }
@@ -173,14 +189,14 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps, RangeVizCanvas
       this.rangeUpdates.shift();
     }
 
-    // save this new time range. 
+    // save this new time range.
     this.rangeUpdates.push(this.props.raftData);
 
     // re-draw heatmap
     this.drawHeatMap();
   }
 
-  componentDidUpdate(prevProps:RangeVizCanvasProps) {
+  componentDidUpdate(prevProps: RangeVizCanvasProps) {
     // Only update the canvas when props change.
     // Internal state changes should cause a re-render,
     // but should not update the canvas.
@@ -191,17 +207,19 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps, RangeVizCanvas
   }
 
   render() {
-    return <>
-      <Canvas canvasRef={this.canvasRef}></Canvas>
-      <div>
-        <h3>Range Info:</h3>
-        <ul>
-          <li>QPS: {this.state.hoverData.qps}</li>
-          <li>Start Key: {this.state.hoverData.startKey}</li>
-          <li>End Key: {this.state.hoverData.endKey}</li>
-        </ul>
+    return (
+      <>
+        <Canvas canvasRef={this.canvasRef}></Canvas>
+        <div>
+          <h3>Range Info:</h3>
+          <ul>
+            <li>QPS: {this.state.hoverData.qps}</li>
+            <li>Start Key: {this.state.hoverData.startKey}</li>
+            <li>End Key: {this.state.hoverData.endKey}</li>
+          </ul>
         </div>
-    </>;
+      </>
+    );
   }
 }
 
@@ -209,24 +227,24 @@ const RangeViz: React.FC<RangeVizProps> = props => {
   useEffect(() => {
     const refreshInterval = setInterval(() => props.refreshRaft(), 3000);
     return () => {
-      clearInterval(refreshInterval)
-    }
+      clearInterval(refreshInterval);
+    };
   }, []);
 
-  const raftUpdates: RaftUpdates = props.raftData ? Object.values(props.raftData.ranges).map(d => {
-    return {
-      rangeId: d.range_id.toInt(),
-      qps: d.nodes[0].range.stats.queries_per_second,
-      startKey: d.nodes[0].range.span.start_key,
-      endKey: d.nodes[0].range.span.end_key,
-    }
-  }) : [];
+  const raftUpdates: RaftUpdates = props.raftData
+    ? Object.values(props.raftData.ranges).map(d => {
+        return {
+          rangeId: d.range_id.toInt(),
+          qps: d.nodes[0].range.stats.queries_per_second,
+          startKey: d.nodes[0].range.span.start_key,
+          endKey: d.nodes[0].range.span.end_key,
+        };
+      })
+    : [];
 
   return (
     <div>
-      <RangeVizCanvas
-        raftData={raftUpdates}
-      />
+      <RangeVizCanvas raftData={raftUpdates} />
     </div>
   );
 };
