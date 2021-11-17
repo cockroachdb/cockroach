@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -1287,3 +1288,48 @@ type DescSizeList []DescSize
 func (d DescSizeList) Len() int           { return len(d) }
 func (d DescSizeList) Less(i, j int) bool { return d[i].ByteSize < d[j].ByteSize }
 func (d DescSizeList) Swap(i, j int)      { d[i], d[j] = d[j], d[i] }
+
+func TestManagerLeaseMemoryMonitor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var stopper *stop.Stopper
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	stopper = s.Stopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	// Prevent non-explicit Acquire to leases for testing purposes.
+	tdb.Exec(t, "SET CLUSTER SETTING sql.tablecache.lease.refresh_limit = 0")
+	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+	var tableID descpb.ID
+	tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 'foo'").Scan(&tableID)
+
+	manager := s.LeaseManager().(*Manager)
+	const N = 5
+	descs := make([]catalog.Descriptor, N+1)
+
+	// Create N versions of table descriptor.
+	for i := 0; i < N; i++ {
+		_, err := manager.Publish(ctx, tableID, func(desc catalog.MutableDescriptor) error {
+			descs[i] = desc.ImmutableCopy()
+			return nil
+		}, nil)
+		require.NoError(t, err)
+	}
+	{
+		last, err := manager.Acquire(ctx, s.Clock().Now(), tableID)
+		require.NoError(t, err)
+		descs[N] = last.Underlying()
+		last.Release(ctx)
+	}
+
+	acquired, err := manager.Acquire(ctx, descs[0].GetModificationTime(), tableID)
+	if err != nil {
+		return
+	}
+
+	// Extract memory monitor information.
+	print(acquired.Underlying().GetModificationTime().String())
+	log.Infof(ctx, "number of bytes allocated: %d", manager.mu.leaseMemMonitor.AllocBytes())
+}
