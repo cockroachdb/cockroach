@@ -839,7 +839,7 @@ func backupPlanHook(
 			}
 			spans = append(spans, tableSpans...)
 
-			if p.ExecCfg().Codec.ForSystemTenant() {
+			if p.ExecCfg().Codec.ForSystemTenant() && backupStmt.Coverage() == tree.AllDescriptors {
 				// Include all tenants.
 				tenants, err = retrieveAllTenantsMetadata(
 					ctx, p.ExecCfg().InternalExecutor, p.ExtendedEvalContext().Txn,
