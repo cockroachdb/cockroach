@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, {createRef, useEffect, useState} from "react";
+import React, {createRef, useEffect } from "react";
 import { RaftDebugResponseMessage } from "src/util/api";
 import { refreshRaft } from "oss/src/redux/apiReducers";
 import { AdminUIState } from "oss/src/redux/state";
@@ -20,14 +20,14 @@ interface RangeVizProps {
   raftData: RaftDebugResponseMessage;
 }
 
-type RaftData = {rangeId: number, qps: number};
+type RaftData = {rangeId: number, qps: number, startKey: string, endKey: string};
 type RaftUpdates = RaftData[];
 interface RangeVizCanvasProps {
   raftData: RaftUpdates;
 }
 
 interface RangeVizCanvasState {
-  qps: number;
+  hoverData: RaftData
 }
 
 
@@ -77,7 +77,13 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps, RangeVizCanvas
     this.canvasRef = createRef();
     this.rangeUpdates = [];
     this.highestQPS = 0;
-    this.state = {qps: 0};
+    this.state = {
+      hoverData: {
+        qps: 0,
+        startKey: "",
+        endKey: "",
+        rangeId: 0
+      }};
   }
 
   drawHeatMap() {
@@ -155,7 +161,9 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps, RangeVizCanvas
           (CanvasHeight / this.rangeUpdates[0].length)
       );
         
-      this.setState({ qps: this.rangeUpdates[updateIdx][rangeIdx] }.qps);
+      this.setState({
+        hoverData: this.rangeUpdates[updateIdx][rangeIdx]
+      });
     });
   }
 
@@ -185,7 +193,14 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps, RangeVizCanvas
   render() {
     return <>
       <Canvas canvasRef={this.canvasRef}></Canvas>
-      <div>{this.state.qps}</div>
+      <div>
+        <h3>Range Info:</h3>
+        <ul>
+          <li>QPS: {this.state.hoverData.qps}</li>
+          <li>Start Key: {this.state.hoverData.startKey}</li>
+          <li>End Key: {this.state.hoverData.endKey}</li>
+        </ul>
+        </div>
     </>;
   }
 }
@@ -201,7 +216,9 @@ const RangeViz: React.FC<RangeVizProps> = props => {
   const raftUpdates: RaftUpdates = props.raftData ? Object.values(props.raftData.ranges).map(d => {
     return {
       rangeId: d.range_id.toInt(),
-      qps: d.nodes[0].range.stats.queries_per_second
+      qps: d.nodes[0].range.stats.queries_per_second,
+      startKey: d.nodes[0].range.span.start_key,
+      endKey: d.nodes[0].range.span.end_key,
     }
   }) : [];
 
