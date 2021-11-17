@@ -222,8 +222,15 @@ func NewSequenceTableDesc(
 	opts := &descpb.TableDescriptor_SequenceOpts{
 		Increment: 1,
 	}
-	err := assignSequenceOptions(opts, sequenceOptions, true /* setDefaults */, params, id, parentID)
-	if err != nil {
+	if err := assignSequenceOptions(
+		opts,
+		sequenceOptions,
+		true, /* setDefaults */
+		params,
+		id,
+		parentID,
+		nil, /* existingType */
+	); err != nil {
 		return nil, err
 	}
 	desc.SequenceOpts = opts
