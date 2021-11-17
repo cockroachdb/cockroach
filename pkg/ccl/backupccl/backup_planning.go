@@ -1003,7 +1003,8 @@ func backupPlanHook(
 			}
 
 			tenantInfo, err := retrieveSingleTenantMetadata(
-				ctx, p.ExecCfg().InternalExecutor, p.ExtendedEvalContext().Txn, backupStmt.Targets.Tenant,
+				ctx, p.ExecCfg().Settings, p.ExecCfg().InternalExecutor, p.ExtendedEvalContext().Txn,
+				backupStmt.Targets.Tenant,
 			)
 			if err != nil {
 				return err
@@ -1019,7 +1020,7 @@ func backupPlanHook(
 			if p.ExecCfg().Codec.ForSystemTenant() {
 				// Include all tenants.
 				tenants, err = retrieveAllTenantsMetadata(
-					ctx, p.ExecCfg().InternalExecutor, p.ExtendedEvalContext().Txn,
+					ctx, p.ExecCfg().Settings, p.ExecCfg().InternalExecutor, p.ExtendedEvalContext().Txn,
 				)
 				if err != nil {
 					return err
