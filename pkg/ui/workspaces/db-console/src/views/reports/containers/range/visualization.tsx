@@ -14,6 +14,7 @@ import { refreshRaft } from "oss/src/redux/apiReducers";
 import { AdminUIState } from "oss/src/redux/state";
 import { connect } from "react-redux";
 import _ from "lodash";
+import moment from "moment";
 
 interface RangeVizProps {
   refreshRaft: typeof refreshRaft;
@@ -27,13 +28,14 @@ type RaftData = {
   endKey: string;
   liveBytes: number;
 };
-type RaftUpdates = RaftData[];
+type RaftUpdates = {raftData: RaftData[], timestamp: string};
 interface RangeVizCanvasProps {
   raftData: RaftUpdates;
 }
 
 interface RangeVizCanvasState {
   hoverData: RaftData;
+  timestamps: string[]
 }
 
 const CanvasWidth = 1200;
@@ -76,6 +78,28 @@ function lerpColor(c1: number[], c2: number[], t: number) {
 //   return ranges;
 // }
 
+
+interface TimeAxisProps {
+  timestamps: string[];
+};
+
+class TimeAxis extends React.PureComponent<TimeAxisProps> {
+  render () {
+    return <div style={{display: "flex"}}>
+      {this.props.timestamps.map((timestamp, i) => {
+        return (
+          <div
+            style={{marginLeft: (CanvasWidth / MaxTimestepsShown) - 20, writingMode: "vertical-lr", textOrientation: "sideways" }}
+            key={i}
+          >
+            {timestamp}
+          </div>
+        );
+      })}
+    </div>
+  }
+}
+
 class RangeVizCanvas extends React.Component<
   RangeVizCanvasProps,
   RangeVizCanvasState
@@ -96,8 +120,9 @@ class RangeVizCanvas extends React.Component<
         startKey: "",
         endKey: "",
         rangeId: 0,
-        liveBytes: 0,
+        liveBytes: 0
       },
+      timestamps: []
     };
   }
 
@@ -115,23 +140,23 @@ class RangeVizCanvas extends React.Component<
 
     // fake data for now
     const rangesOverTime = this.rangeUpdates;
-    const cellHeight = CanvasHeight / rangesOverTime[0].length;
+    const cellHeight = CanvasHeight / rangesOverTime[0].raftData.length;
     const cellWidth = CanvasWidth / MaxTimestepsShown;
 
     this.highestQPS = Math.max(
-      ...rangesOverTime.flatMap(ranges => ranges.map(r => r.qps)),
+      ...rangesOverTime.flatMap(ranges => ranges.raftData.map(r => r.qps)),
       // this.highestQPS
     );
 
     for (let timeIdx = 0; timeIdx < rangesOverTime.length; timeIdx++) {
       for (
         let rangeIdx = 0;
-        rangeIdx < rangesOverTime[timeIdx].length;
+        rangeIdx < rangesOverTime[timeIdx].raftData.length;
         rangeIdx++
       ) {
         // compute cell color by considering this range's QPS relative
         // to the max QPS found across all ranges.
-        const t = rangesOverTime[timeIdx][rangeIdx].qps / this.highestQPS;
+        const t = rangesOverTime[timeIdx].raftData[rangeIdx].qps / this.highestQPS;
         const [r, g, b] = lerpColor(ColdColor, HotColor, t);
 
         // draw cell
@@ -154,8 +179,9 @@ class RangeVizCanvas extends React.Component<
     // 1) [DONE] convert real data from props into {rangeId, qps}[][], as mocked by `fakeRangesOverTime`
     // 2) [DONE] in componentDidUpdate, save (append) latest range data
     // 3) [DONE] after receipt of > 10th range, throw away n - 10th range.
-    // 4) axis labels for timestamp and range id
+    // 4) axis labels for timestamp and range start key
     // 5) [DONE] show range statistics on cell mouseover
+    // 6) make cell height proportional to total bytes
   }
 
   installMouseHandler() {
@@ -176,11 +202,11 @@ class RangeVizCanvas extends React.Component<
 
       const rangeIdx = Math.floor(
         Math.max(0, Math.min(CanvasHeight, e.offsetY)) /
-          (CanvasHeight / this.rangeUpdates[0].length),
+          (CanvasHeight / this.rangeUpdates[0].raftData.length),
       );
 
       this.setState({
-        hoverData: this.rangeUpdates[updateIdx][rangeIdx],
+        hoverData: this.rangeUpdates[updateIdx].raftData[rangeIdx],
       });
     });
   }
@@ -193,6 +219,8 @@ class RangeVizCanvas extends React.Component<
 
     // save this new time range.
     this.rangeUpdates.push(this.props.raftData);
+
+    this.setState({timestamps: this.rangeUpdates.map(update => update.timestamp)})
 
     // re-draw heatmap
     this.drawHeatMap();
@@ -212,13 +240,14 @@ class RangeVizCanvas extends React.Component<
     return (
       <>
         <Canvas canvasRef={this.canvasRef}></Canvas>
+        <TimeAxis timestamps={this.state.timestamps}/>
         <div>
           <h3>Range Info:</h3>
           <ul>
-            <li>QPS: {this.state.hoverData.qps}</li>
-            <li>Start Key: {this.state.hoverData.startKey}</li>
-            <li>End Key: {this.state.hoverData.endKey}</li>
-            <li>Live Bytes: {this.state.hoverData.liveBytes}</li>
+            <li>QPS: {this.state.hoverData?.qps}</li>
+            <li>Start Key: {this.state.hoverData?.startKey}</li>
+            <li>End Key: {this.state.hoverData?.endKey}</li>
+            <li>Live Bytes: {this.state.hoverData?.liveBytes}</li>
           </ul>
         </div>
       </>
@@ -235,16 +264,16 @@ const RangeViz: React.FC<RangeVizProps> = props => {
   }, []);
 
   const raftUpdates: RaftUpdates = props.raftData
-    ? Object.values(props.raftData.ranges).map(d => {
+    ? {raftData: Object.values(props.raftData.ranges).map(d => {
         return {
-          rangeId: d.range_id.toInt(),
-          qps: d.nodes[0].range.stats.queries_per_second,
-          startKey: d.nodes[0].range.span.start_key,
-          endKey: d.nodes[0].range.span.end_key,
-          liveBytes: d.nodes[0].range.state.state.stats.live_bytes.toInt(),
+            rangeId: d.range_id.toInt(),
+            qps: d.nodes[0].range.stats.queries_per_second,
+            startKey: d.nodes[0].range.span.start_key,
+            endKey: d.nodes[0].range.span.end_key,
+            liveBytes: d.nodes[0].range.state.state.stats.live_bytes.toInt(),
         };
-      })
-    : [];
+      }), timestamp: moment.utc().format("HH:mm:ss UTC")}
+    : {raftData: [], timestamp: undefined};
 
   return (
     <div>
