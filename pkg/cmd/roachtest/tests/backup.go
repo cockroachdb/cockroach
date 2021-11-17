@@ -167,10 +167,11 @@ func registerBackupMixedVersion(r registry.Registry) {
 			// `cockroach` will be used.
 			const mainVersion = ""
 			roachNodes := c.All()
+			newNode := 1
+			oldNode := 3
 			predV, err := PredecessorVersion(*t.BuildVersion())
 			require.NoError(t, err)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
-
 			loadBackupDataStep := func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 				rows := rows3GiB
 				if c.IsLocal() {
@@ -179,11 +180,20 @@ func registerBackupMixedVersion(r registry.Registry) {
 				runImportBankDataSplit(ctx, rows, 0 /* ranges */, t, u.c)
 			}
 			successfulBackupStep := func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-				backupQuery := fmt.Sprintf("BACKUP bank.bank TO 'nodelocal://1/%s'", destinationName(c))
-				gatewayDB := c.Conn(ctx, 1)
+				backupQuery := fmt.Sprintf("BACKUP bank.bank TO 'nodelocal://%d/%s'", newNode, destinationName(c))
+				gatewayDB := c.Conn(ctx, newNode)
 				defer gatewayDB.Close()
 				_, err = gatewayDB.ExecContext(ctx, backupQuery)
 				require.NoError(t, err)
+			}
+			backupFailsWithExpectedErrorStep := func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+				backupQuery := fmt.Sprintf("BACKUP bank.bank TO 'nodelocal://%d/%s'", oldNode, destinationName(c))
+				// We run the backup on an oldNode, which should result in an error message
+				gatewayDB := c.Conn(ctx, oldNode)
+				defer gatewayDB.Close()
+				_, err = gatewayDB.ExecContext(ctx, backupQuery)
+				require.Error(t, err)
+				require.True(t, strings.Contains(err.Error(), "ExportRequest was issued from a node running"))
 			}
 			u := newVersionUpgradeTest(c,
 				uploadAndStartFromCheckpointFixture(roachNodes, predV),
@@ -194,6 +204,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				binaryUpgradeStep(c.Node(1), mainVersion),
 				binaryUpgradeStep(c.Node(2), mainVersion),
 				successfulBackupStep,
+				backupFailsWithExpectedErrorStep,
 			)
 			u.run(ctx, t)
 		},
