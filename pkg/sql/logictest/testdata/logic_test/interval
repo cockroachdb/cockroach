@@ -618,3 +618,30 @@ SELECT i, i::INTERVAL FROM interval_parsing ORDER BY pk
 -10 years -22 months 1 day 01:02:03   -11-10 +1 +1:02:03
 -10 years 22 months -1 day 01:02:03   -8-2 -1 +1:02:03
 -10 years 22 months -1 day -01:02:03  -8-2 -1 -1:02:03
+
+# Test intervalstyle being respected in pg_indexes.
+
+statement ok
+CREATE TABLE intervalstyle_in_index (
+  a INT8 PRIMARY KEY, b INTERVAL,
+  INDEX idx (b) WHERE b > 'P3Y'
+)
+
+query TT
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'intervalstyle_in_index'
+AND indexname = 'idx'
+----
+idx  CREATE INDEX idx ON test.public.intervalstyle_in_index USING btree (b ASC) WHERE (b > '3-0'::INTERVAL)
+
+statement ok
+SET intervalstyle = 'iso_8601'
+
+query TT
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'intervalstyle_in_index'
+AND indexname = 'idx'
+----
+idx  CREATE INDEX idx ON test.public.intervalstyle_in_index USING btree (b ASC) WHERE (b > 'P3Y'::INTERVAL)
