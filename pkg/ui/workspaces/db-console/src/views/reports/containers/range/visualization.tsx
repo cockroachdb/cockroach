@@ -25,6 +25,7 @@ type RaftData = {
   qps: number;
   startKey: string;
   endKey: string;
+  liveBytes: number;
 };
 type RaftUpdates = RaftData[];
 interface RangeVizCanvasProps {
@@ -95,6 +96,7 @@ class RangeVizCanvas extends React.Component<
         startKey: "",
         endKey: "",
         rangeId: 0,
+        liveBytes: 0,
       },
     };
   }
@@ -216,6 +218,7 @@ class RangeVizCanvas extends React.Component<
             <li>QPS: {this.state.hoverData.qps}</li>
             <li>Start Key: {this.state.hoverData.startKey}</li>
             <li>End Key: {this.state.hoverData.endKey}</li>
+            <li>Live Bytes: {this.state.hoverData.liveBytes}</li>
           </ul>
         </div>
       </>
@@ -238,6 +241,7 @@ const RangeViz: React.FC<RangeVizProps> = props => {
           qps: d.nodes[0].range.stats.queries_per_second,
           startKey: d.nodes[0].range.span.start_key,
           endKey: d.nodes[0].range.span.end_key,
+          liveBytes: d.nodes[0].range.state.state.stats.live_bytes.toInt(),
         };
       })
     : [];
