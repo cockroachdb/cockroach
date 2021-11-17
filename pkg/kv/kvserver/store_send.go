@@ -120,23 +120,6 @@ func (s *Store) SendWithWriteBytes(
 				if br.Txn == nil {
 					br.Txn = ba.Txn
 				}
-				// Update our clock with the outgoing response txn timestamp
-				// (if timestamp has been forwarded).
-				if ba.Timestamp.Less(br.Txn.WriteTimestamp) {
-					if clockTS, ok := br.Txn.WriteTimestamp.TryToClockTimestamp(); ok {
-						s.cfg.Clock.Update(clockTS)
-					}
-				}
-			}
-		} else {
-			if pErr == nil {
-				// Update our clock with the outgoing response timestamp.
-				// (if timestamp has been forwarded).
-				if ba.Timestamp.Less(br.Timestamp) {
-					if clockTS, ok := br.Timestamp.TryToClockTimestamp(); ok {
-						s.cfg.Clock.Update(clockTS)
-					}
-				}
 			}
 		}
 
