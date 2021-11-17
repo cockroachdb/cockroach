@@ -20,6 +20,7 @@ func RegisterTests(r registry.Registry) {
 	registerAlterPK(r)
 	registerAutoUpgrade(r)
 	registerBackup(r)
+	registerBackupMixedVersion(r)
 	registerBackupNodeShutdown(r)
 	registerCancel(r)
 	registerCDC(r)
