@@ -43,18 +43,18 @@ var (
 		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
 		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
 	}
-	tag          string
-	external     = false
-	certsDir     string
-	adminurlOpen = false
-	adminurlPath = ""
-	adminurlIPs  = false
-	useTreeDist  = true
-	quiet        = false
-	sig          = 9
-	waitFlag     = false
-	createVMOpts = vm.DefaultCreateOpts()
-	startOpts    = install.StartOpts{
+	tag           string
+	external      = false
+	pgurlCertsDir string
+	adminurlOpen  = false
+	adminurlPath  = ""
+	adminurlIPs   = false
+	useTreeDist   = true
+	quiet         = false
+	sig           = 9
+	waitFlag      = false
+	createVMOpts  = vm.DefaultCreateOpts()
+	startOpts     = install.StartOpts{
 		Encrypt:    false,
 		Sequential: true,
 		SkipInit:   false,
@@ -152,7 +152,7 @@ func initFlags() {
 
 	pgurlCmd.Flags().BoolVar(&external,
 		"external", false, "return pgurls for external connections")
-	pgurlCmd.Flags().StringVar(&certsDir,
+	pgurlCmd.Flags().StringVar(&pgurlCertsDir,
 		"certs-dir", "./certs", "cert dir to use for secure connections")
 
 	pprofCmd.Flags().DurationVar(&pprofOptions.duration,
