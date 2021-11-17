@@ -60,3 +60,174 @@ query T
 SELECT create_statement FROM [SHOW CREATE SEQUENCE foo]
 ----
 CREATE SEQUENCE public.foo MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 5 START 1
+
+user root
+
+# Alter between sequences, check it is ok.
+statement ok
+CREATE SEQUENCE seq_as AS int2
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_as]
+----
+CREATE SEQUENCE public.seq_as AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1
+
+statement ok
+ALTER SEQUENCE seq_as AS int4
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_as]
+----
+CREATE SEQUENCE public.seq_as AS INT4 MINVALUE 1 MAXVALUE 2147483647 INCREMENT 1 START 1
+
+statement ok
+ALTER SEQUENCE seq_as AS int8
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_as]
+----
+CREATE SEQUENCE public.seq_as AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+
+statement ok
+ALTER SEQUENCE seq_as AS int4
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_as]
+----
+CREATE SEQUENCE public.seq_as AS INT4 MINVALUE 1 MAXVALUE 2147483647 INCREMENT 1 START 1
+
+statement ok
+ALTER SEQUENCE seq_as AS int2
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_as]
+----
+CREATE SEQUENCE public.seq_as AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1
+
+# Test ALTER SEQUENCE AS when downgrading sizes behaves appropriately if MINVALUE/MAXVALUE/START is set.
+
+statement ok
+CREATE SEQUENCE seq_int4_max_high AS int4 MAXVALUE 99999
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_int4_max_high]
+----
+CREATE SEQUENCE public.seq_int4_max_high AS INT4 MINVALUE 1 MAXVALUE 99999 INCREMENT 1 START 1
+
+statement error MAXVALUE \(99999\) must be less than \(32767\) for type INT2
+ALTER SEQUENCE seq_int4_max_high AS int2
+
+statement ok
+ALTER SEQUENCE seq_int4_max_high AS int8
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_int4_max_high]
+----
+CREATE SEQUENCE public.seq_int4_max_high AS INT8 MINVALUE 1 MAXVALUE 99999 INCREMENT 1 START 1
+
+statement ok
+CREATE SEQUENCE seq_int4_min_high AS int4 MINVALUE 99999
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_int4_min_high]
+----
+CREATE SEQUENCE public.seq_int4_min_high AS INT4 MINVALUE 99999 MAXVALUE 2147483647 INCREMENT 1 START 99999
+
+statement error MINVALUE \(99999\) must be less than \(32767\) for type INT2
+ALTER SEQUENCE seq_int4_min_high AS int2
+
+statement ok
+ALTER SEQUENCE seq_int4_min_high AS int8
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_int4_min_high]
+----
+CREATE SEQUENCE public.seq_int4_min_high AS INT8 MINVALUE 99999 MAXVALUE 9223372036854775807 INCREMENT 1 START 99999
+
+statement ok
+CREATE SEQUENCE seq_int4_start_high AS int4 START 99999
+
+statement error START value \(99999\) cannot be greater than MAXVALUE \(32767\)
+ALTER SEQUENCE seq_int4_start_high AS int2
+
+statement ok
+ALTER SEQUENCE seq_int4_start_high AS int8
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_int4_start_high]
+----
+CREATE SEQUENCE public.seq_int4_start_high AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 99999
+
+statement ok
+CREATE SEQUENCE seq_int4_min_low AS int4 MINVALUE -99999
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_int4_min_low]
+----
+CREATE SEQUENCE public.seq_int4_min_low AS INT4 MINVALUE -99999 MAXVALUE 2147483647 INCREMENT 1 START -99999
+
+statement error MINVALUE \(-99999\) must be greater than \(-32768\) for type INT2
+ALTER SEQUENCE seq_int4_min_low AS int2
+
+statement ok
+ALTER SEQUENCE seq_int4_min_low AS int8
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_int4_min_low]
+----
+CREATE SEQUENCE public.seq_int4_min_low AS INT8 MINVALUE -99999 MAXVALUE 9223372036854775807 INCREMENT 1 START -99999
+
+statement ok
+CREATE SEQUENCE seq_int4_max_high_desc AS int4 MAXVALUE 99999 INCREMENT -1
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_int4_max_high_desc]
+----
+CREATE SEQUENCE public.seq_int4_max_high_desc AS INT4 MINVALUE -2147483648 MAXVALUE 99999 INCREMENT -1 START 99999
+
+statement error MAXVALUE \(99999\) must be less than \(32767\) for type INT2
+ALTER SEQUENCE seq_int4_max_high_desc AS int2
+
+statement ok
+ALTER SEQUENCE seq_int4_max_high_desc AS int8
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_int4_max_high_desc]
+----
+CREATE SEQUENCE public.seq_int4_max_high_desc AS INT8 MINVALUE -9223372036854775808 MAXVALUE 99999 INCREMENT -1 START 99999
+
+statement ok
+CREATE SEQUENCE seq_int4_min_high_desc AS int4 MINVALUE -99999 INCREMENT -1
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_int4_min_high_desc]
+----
+CREATE SEQUENCE public.seq_int4_min_high_desc AS INT4 MINVALUE -99999 MAXVALUE -1 INCREMENT -1 START -1
+
+statement error MINVALUE \(-99999\) must be greater than \(-32768\) for type INT2
+ALTER SEQUENCE seq_int4_min_high_desc AS int2
+
+statement ok
+ALTER SEQUENCE seq_int4_min_high_desc AS int8
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seq_int4_min_high_desc]
+----
+CREATE SEQUENCE public.seq_int4_min_high_desc AS INT8 MINVALUE -99999 MAXVALUE -1 INCREMENT -1 START -1
+
+statement ok
+CREATE SEQUENCE reverse_direction_seqas AS integer;
+ALTER SEQUENCE reverse_direction_seqas AS smallint INCREMENT -1
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE reverse_direction_seqas]
+----
+CREATE SEQUENCE public.reverse_direction_seqas AS INT2 MINVALUE -32768 MAXVALUE -1 INCREMENT -1 START -1
+
+statement ok
+ALTER SEQUENCE reverse_direction_seqas AS int INCREMENT 1
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE reverse_direction_seqas]
+----
+CREATE SEQUENCE public.reverse_direction_seqas AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
