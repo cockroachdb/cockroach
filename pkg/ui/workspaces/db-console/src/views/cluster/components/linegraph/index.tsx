@@ -41,7 +41,7 @@ import Visualization from "src/views/cluster/components/visualization";
 import { MilliToSeconds, NanoToMilli } from "src/util/convert";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
-import { findClosestTimeScale, TimeWindow } from "src/redux/timewindow";
+import { findClosestTimeScale } from "src/redux/timewindow";
 import Long from "long";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
