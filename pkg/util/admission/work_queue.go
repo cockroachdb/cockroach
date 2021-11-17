@@ -442,8 +442,7 @@ func (q *WorkQueue) gcTenantsAndResetTokens() {
 		if info.used == 0 && len(info.waitingWorkHeap) == 0 {
 			delete(q.mu.tenants, id)
 			releaseTenantInfo(info)
-		}
-		if q.usesTokens {
+		} else if q.usesTokens {
 			info.used = 0
 			// All the heap members will reset used=0, so no need to change heap
 			// ordering.
