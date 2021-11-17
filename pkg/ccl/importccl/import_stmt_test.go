@@ -7286,3 +7286,102 @@ CREATE TABLE t (a INT, b greeting);
 		})
 	}
 }
+
+func TestImportIntoPartialIndexes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var data string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "avro")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	t.Run("simple-partial-index", func(t *testing.T) {
+		sqlDB.Exec(t, `
+CREATE TABLE a (
+    a INT,
+    b INT,
+    c INT,
+    INDEX idx_c_b_gt_1 (c) WHERE b > 1,
+    FAMILY (a),
+    FAMILY (b),
+    FAMILY (c)
+)`)
+		data = "1,2,1"
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO a CSV DATA ('%s')`, srv.URL))
+		sqlDB.CheckQueryResults(t, `SELECT * FROM a@idx_c_b_gt_1 WHERE b > 1`, [][]string{
+			{"1", "2", "1"},
+		})
+		sqlDB.ExpectErr(t, "index \"idx_c_b_gt_1\" is a partial index that does not contain all the rows needed to execute this query",
+			`SELECT * FROM a@idx_c_b_gt_1 WHERE b = 0`)
+
+		// Return error if evaluating the predicate errs and do not import the row.
+		sqlDB.Exec(t, `CREATE TABLE b (a INT, b INT, INDEX (a) WHERE 1 / b = 1)`)
+		data = "1,0"
+		sqlDB.ExpectErr(t, "division by zero", fmt.Sprintf(`IMPORT INTO b CSV DATA ('%s')`, srv.URL))
+
+		// Update two rows where one is in a partial index and one is not.
+		sqlDB.Exec(t, `CREATE TABLE c (k INT PRIMARY KEY, i INT, INDEX i_0_100_idx (i) WHERE i > 0 AND i < 100)`)
+		data = "3,30\n300,300"
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO c CSV DATA ('%s')`, srv.URL))
+		// Run an update just to make sure it works as expected.
+		sqlDB.Exec(t, `UPDATE c SET i = i + 1`)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM c@i_0_100_idx WHERE i > 0 AND i < 100`, [][]string{
+			{"3", "31"},
+		})
+	})
+
+	t.Run("computed-cols-partial-index", func(t *testing.T) {
+		sqlDB.Exec(t, `
+CREATE TABLE d (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT AS (B + 10) VIRTUAL,
+    INDEX idx (a) WHERE c = 10
+)`)
+		data = "1,0\n2,2\n3,0"
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO d (a,b) CSV DATA ('%s')`, srv.URL))
+		sqlDB.CheckQueryResults(t, `SELECT * FROM d@idx WHERE c = 10`, [][]string{
+			{"1", "0", "10"}, {"3", "0", "10"},
+		})
+	})
+
+	t.Run("unique-partial-index", func(t *testing.T) {
+		sqlDB.Exec(t, `
+CREATE TABLE e (
+    a INT,
+    b INT,
+    UNIQUE INDEX i (a) WHERE b > 0
+)
+`)
+		data = "1,0\n1,2"
+		sqlDB.ExpectErr(t, "duplicate key in primary index",
+			fmt.Sprintf(`IMPORT INTO d (a,b) CSV DATA ('%s')`, srv.URL))
+	})
+
+	t.Run("avro-partial-index", func(t *testing.T) {
+		simpleOcf := fmt.Sprintf("nodelocal://0/%s", "simple.ocf")
+		sqlDB.Exec(t, `
+CREATE TABLE simple (
+     i INT8 PRIMARY KEY,
+     s text,
+     b bytea,
+     INDEX idx (i) WHERE i < 0
+)`)
+		sqlDB.Exec(t, `IMPORT INTO simple AVRO DATA ($1)`, simpleOcf)
+		res := sqlDB.QueryStr(t, `SELECT i FROM simple WHERE i < 0`)
+		sqlDB.CheckQueryResults(t, `SELECT i FROM simple@idx WHERE i < 0`, res)
+	})
+}
