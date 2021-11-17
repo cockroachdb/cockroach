@@ -15,6 +15,7 @@ import { AdminUIState } from "oss/src/redux/state";
 import { connect } from "react-redux";
 import _ from "lodash";
 import moment from "moment";
+import * as d3Chromatic from "d3-scale-chromatic"
 
 interface RangeVizProps {
   refreshRaft: typeof refreshRaft;
@@ -36,12 +37,11 @@ interface RangeVizCanvasProps {
 interface RangeVizCanvasState {
   hoverData: RaftData;
   timestamps: string[]
+  ranges: {startKey: string, rangeHeightPx: number}[]
 }
 
 const CanvasWidth = 1200;
 const CanvasHeight = 800;
-const HotColor = [4, 242, 235];
-const ColdColor = [13, 6, 34];
 const MaxTimestepsShown = 20;
 class Canvas extends React.Component<{
   canvasRef: React.RefObject<HTMLCanvasElement>;
@@ -61,14 +61,6 @@ class Canvas extends React.Component<{
   }
 }
 
-function lerp(a: number, b: number, t: number) {
-  return (1 - t) * a + t * b;
-}
-
-function lerpColor(c1: number[], c2: number[], t: number) {
-  return [lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t)];
-}
-
 // function newFakeRanges() {
 //   const nRanges = 100;
 //   const ranges = [];
@@ -82,6 +74,20 @@ function lerpColor(c1: number[], c2: number[], t: number) {
 interface TimeAxisProps {
   timestamps: string[];
 };
+
+interface RangeAxisProps {
+  ranges: {startKey: string, rangeHeightPx: number}[];
+}
+
+class RangeAxis extends React.PureComponent<RangeAxisProps> {
+  render() {
+      return <div>
+        {this.props.ranges.map((range, i) => {
+          return <div style={{marginTop: range.rangeHeightPx}} key={i}>{range.startKey}</div>
+        })}
+      </div>
+  }
+}
 
 class TimeAxis extends React.PureComponent<TimeAxisProps> {
   render () {
@@ -122,7 +128,8 @@ class RangeVizCanvas extends React.Component<
         rangeId: 0,
         liveBytes: 0
       },
-      timestamps: []
+      timestamps: [],
+      ranges: []
     };
   }
 
@@ -130,8 +137,8 @@ class RangeVizCanvas extends React.Component<
     // clear canvas
     this.drawContext.clearRect(0, 0, CanvasWidth, CanvasHeight);
 
-    // draw background
-    this.drawContext.fillStyle = `rgb(${ColdColor[0]}, ${ColdColor[1]}, ${ColdColor[2]})`;
+    // // draw background
+    this.drawContext.fillStyle = '#000';
     this.drawContext.fillRect(0, 0, CanvasWidth, CanvasHeight);
 
     if (this.rangeUpdates.length === 0) {
@@ -140,8 +147,8 @@ class RangeVizCanvas extends React.Component<
 
     // fake data for now
     const rangesOverTime = this.rangeUpdates;
-    const cellHeight = CanvasHeight / rangesOverTime[0].raftData.length;
     const cellWidth = CanvasWidth / MaxTimestepsShown;
+    const cellHeight = CanvasHeight / this.rangeUpdates[0].raftData.length;
 
     this.highestQPS = Math.max(
       ...rangesOverTime.flatMap(ranges => ranges.raftData.map(r => r.qps)),
@@ -157,10 +164,10 @@ class RangeVizCanvas extends React.Component<
         // compute cell color by considering this range's QPS relative
         // to the max QPS found across all ranges.
         const t = rangesOverTime[timeIdx].raftData[rangeIdx].qps / this.highestQPS;
-        const [r, g, b] = lerpColor(ColdColor, HotColor, t);
+        const colorString = d3Chromatic.interpolateRdYlBu(1-t); 
 
         // draw cell
-        this.drawContext.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        this.drawContext.fillStyle = colorString;
         this.drawContext.fillRect(
           cellWidth * timeIdx,
           rangeIdx * cellHeight,
@@ -179,7 +186,7 @@ class RangeVizCanvas extends React.Component<
     // 1) [DONE] convert real data from props into {rangeId, qps}[][], as mocked by `fakeRangesOverTime`
     // 2) [DONE] in componentDidUpdate, save (append) latest range data
     // 3) [DONE] after receipt of > 10th range, throw away n - 10th range.
-    // 4) axis labels for timestamp and range start key
+    // 4) axis labels for timestamp [DONE] and range start key
     // 5) [DONE] show range statistics on cell mouseover
     // 6) make cell height proportional to total bytes
   }
@@ -220,7 +227,13 @@ class RangeVizCanvas extends React.Component<
     // save this new time range.
     this.rangeUpdates.push(this.props.raftData);
 
-    this.setState({timestamps: this.rangeUpdates.map(update => update.timestamp)})
+    this.setState({
+      timestamps: this.rangeUpdates.map((update) => update.timestamp),
+      ranges: this.rangeUpdates[0].raftData.map((range, i) => ({
+        startKey: range.startKey,
+        rangeHeightPx: 20,
+      })),
+    });
 
     // re-draw heatmap
     this.drawHeatMap();
@@ -239,6 +252,7 @@ class RangeVizCanvas extends React.Component<
   render() {
     return (
       <>
+        <RangeAxis ranges={this.state.ranges}/>
         <Canvas canvasRef={this.canvasRef}></Canvas>
         <TimeAxis timestamps={this.state.timestamps}/>
         <div>
