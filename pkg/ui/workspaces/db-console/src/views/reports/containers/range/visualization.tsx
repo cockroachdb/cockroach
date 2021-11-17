@@ -13,6 +13,7 @@ import { RaftDebugResponseMessage } from "src/util/api";
 import { refreshRaft } from "oss/src/redux/apiReducers";
 import { AdminUIState } from "oss/src/redux/state";
 import { connect } from "react-redux";
+import _ from "lodash";
 
 interface RangeVizProps {
   refreshRaft: typeof refreshRaft;
@@ -22,8 +23,11 @@ interface RangeVizProps {
 type RaftData = {rangeId: number, qps: number};
 type RaftUpdates = RaftData[];
 interface RangeVizCanvasProps {
-  handleRangeCellHover: (raftData: RaftData) => void;
   raftData: RaftUpdates;
+}
+
+interface RangeVizCanvasState {
+  qps: number;
 }
 
 
@@ -62,7 +66,7 @@ function lerpColor(c1: number[], c2: number[], t: number) {
 //   return ranges;
 // }
 
-class RangeVizCanvas extends React.Component<RangeVizCanvasProps> {
+class RangeVizCanvas extends React.Component<RangeVizCanvasProps, RangeVizCanvasState> {
   canvasRef: React.RefObject<HTMLCanvasElement>;
   drawContext: CanvasRenderingContext2D;
   rangeUpdates: RaftUpdates[];
@@ -73,6 +77,7 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps> {
     this.canvasRef = createRef();
     this.rangeUpdates = [];
     this.highestQPS = 0;
+    this.state = {qps: 0};
   }
 
   drawHeatMap() {
@@ -149,14 +154,12 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps> {
         Math.max(0, Math.min(CanvasHeight, e.offsetY)) /
           (CanvasHeight / this.rangeUpdates[0].length)
       );
-      
-      this.props.handleRangeCellHover(this.rangeUpdates[updateIdx][rangeIdx]);
+        
+      this.setState({ qps: this.rangeUpdates[updateIdx][rangeIdx] }.qps);
     });
   }
 
-  componentDidUpdate() {
-    console.log("update")
-    
+  updateHeatMap() {
     // get rid of oldest update so heatmap appears to advance right over time.
     if (this.rangeUpdates.length >= MaxTimestepsShown) {
       this.rangeUpdates.shift();
@@ -169,12 +172,21 @@ class RangeVizCanvas extends React.Component<RangeVizCanvasProps> {
     this.drawHeatMap();
   }
 
+  componentDidUpdate(prevProps:RangeVizCanvasProps) {
+    // Only update the canvas when props change.
+    // Internal state changes should cause a re-render,
+    // but should not update the canvas.
+    // TODO(zachlite): re-evaluate this component for proper separation of concerns.
+    if (!_.isEqual(prevProps.raftData, this.props.raftData)) {
+      this.updateHeatMap();
+    }
+  }
+
   render() {
-    // console.log(this.props.raftData)
-    return <div>
-      {/* <div>{this.props.raftData ? Object.keys(this.props.raftData?.ranges) : "nothing here yet..."}</div> */}
+    return <>
       <Canvas canvasRef={this.canvasRef}></Canvas>
-    </div>;
+      <div>{this.state.qps}</div>
+    </>;
   }
 }
 
@@ -185,8 +197,6 @@ const RangeViz: React.FC<RangeVizProps> = props => {
       clearInterval(refreshInterval)
     }
   }, []);
-
-  const [qps, updateQps] = useState(0);
 
   const raftUpdates: RaftUpdates = props.raftData ? Object.values(props.raftData.ranges).map(d => {
     return {
@@ -199,11 +209,7 @@ const RangeViz: React.FC<RangeVizProps> = props => {
     <div>
       <RangeVizCanvas
         raftData={raftUpdates}
-        handleRangeCellHover={(raftData) => {
-          updateQps(raftData.qps);
-        }}
       />
-      <div>{qps}</div>
     </div>
   );
 };
