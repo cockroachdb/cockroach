@@ -135,7 +135,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 		offset := len(r.insertCols) + r.checkOrds.Len()
 		partialIndexPutVals := rowVals[offset : offset+n]
 
-		err := pm.Init(partialIndexPutVals, tree.Datums{}, r.ti.tableDesc())
+		err := pm.Init(partialIndexPutVals, nil /* partialIndexDelVals */, r.ti.tableDesc())
 		if err != nil {
 			return err
 		}
