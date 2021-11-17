@@ -93,7 +93,17 @@ func evalExport(
 	evalExportSpan.RecordStructured(&evalExportTrace)
 
 	if !args.ReturnSST {
-		return result.Result{}, errors.New("ReturnSST is required")
+		// We may see an ExportRequest with ReturnSST set to
+		// false while the cluster contains a mix of versions
+		// -- for example, if a BACKUP is started from a 21.1
+		// node and that node sends ExportRequests to 21.2
+		// nodes. We return a verbose error message here to
+		// point users towards the possible remediations.
+		//
+		// See issue #72852 for more details.
+		returnSSTErr := errors.New(`ReturnSST is required. This error indicates an ExportRequest was issued from a node running version 21.1.
+Retrying this operation after all nodes have upgraded to 21.2+ should succeed. Please see https://www.cockroachlabs.com/docs/advisories/a72839 for more information`)
+		return result.Result{}, returnSSTErr
 	}
 
 	if args.Encryption != nil {
