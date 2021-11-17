@@ -5271,3 +5271,13 @@ datname     rolname   deptype
 sh_db       sh_owner  o
 sh_db       sh_role   a
 sh_db_root  sh_role   a
+
+# Test for pg_type virtual index query with non-existent ID.
+# It's a useful test since pg_type includes implicit types that cause the
+# lookup logic to be quite special.
+
+query O
+SELECT oid
+FROM pg_catalog.pg_type
+WHERE oid = 2000000
+----

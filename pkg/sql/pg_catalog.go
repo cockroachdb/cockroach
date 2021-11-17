@@ -2909,7 +2909,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				if typDesc == nil {
 					table, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
 					if err != nil {
-						if errors.Is(err, catalog.ErrDescriptorNotFound) || pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+						if errors.Is(err, catalog.ErrDescriptorNotFound) ||
+							pgerror.GetPGCode(err) == pgcode.UndefinedObject ||
+							pgerror.GetPGCode(err) == pgcode.UndefinedTable {
 							return false, nil
 						}
 						return false, err
