@@ -136,12 +136,12 @@ func sortedClusters() []string {
 func newCluster(
 	name string, clusterSettings install.ClusterSettings,
 ) (*install.SyncedCluster, error) {
-	nodeNames := "all"
+	nodeSelector := "all"
 	{
 		parts := strings.Split(name, ":")
 		switch len(parts) {
 		case 2:
-			nodeNames = parts[1]
+			nodeSelector = parts[1]
 			fallthrough
 		case 1:
 			name = parts[0]
@@ -160,17 +160,15 @@ func newCluster(
 		return nil, err
 	}
 
-	c, err := install.NewSyncedCluster(metadata, clusterSettings)
+	if clusterSettings.DebugDir == "" {
+		clusterSettings.DebugDir = os.ExpandEnv(config.DefaultDebugDir)
+	}
+
+	c, err := install.NewSyncedCluster(metadata, nodeSelector, clusterSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	c.DebugDir = os.ExpandEnv(config.DefaultDebugDir)
-	nodes, err := install.ListNodes(nodeNames, len(c.VMs))
-	if err != nil {
-		return nil, err
-	}
-	c.Nodes = nodes
 	return c, nil
 }
 
@@ -551,15 +549,12 @@ func Extend(clusterName string, clusterOpts install.ClusterSettings, lifetime ti
 }
 
 // Start starts nodes on a cluster.
-func Start(
-	name string, clusterOpts install.ClusterSettings, startOpts install.StartOptsType,
-) error {
-	install.StartOpts = startOpts
+func Start(name string, clusterOpts install.ClusterSettings, startOpts install.StartOpts) error {
 	c, err := newCluster(name, clusterOpts)
 	if err != nil {
 		return err
 	}
-	return c.Start()
+	return c.Start(startOpts)
 }
 
 // Monitor monitors the status of cockroach nodes in a cluster.
