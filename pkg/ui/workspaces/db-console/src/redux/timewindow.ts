@@ -214,3 +214,57 @@ export function setTimeScale(ts: TimeScale): PayloadAction<TimeScale> {
     payload: ts,
   };
 }
+
+export type AdjustTimeScaleReturnType = {
+  timeScale: TimeScale;
+  adjustmentReason?: "low_resolution_period" | "deleted_data_period";
+};
+
+/*
+ * Cluster stores metrics data for some defined period of time and then rolls up data into lower resolution
+ * and then removes it. Following shows possible cases when for some date ranges it isn't possible to request
+ * time series with 10s resolution.
+ *
+ *  (removed)  (stores data with 30min resolution)  (stores with 10s res)
+ * -----------X-----------------------------------X-----------------------X------>
+ * [resolution30mStorageTTL]           [resolution10sStorageTTL]        [now]
+ *
+ * - time series older than resolution30mStorageTTL duration is subject for deletion
+ * - time series before resolution30mStorageTTL and older than resolution10sStorageTTL is stored with
+ * 30 min resolution only. 10s resolution data is removed for this period.
+ * - time series before resolution10sStorageTTL is stored with 10s resolution
+ *
+ * adjustTimeScale function checks whether selected timeWindow and provided timeScale allow request data
+ * with described above restrictions.
+ */
+export const adjustTimeScale = (
+  curTimeScale: TimeScale,
+  timeWindow: TimeWindow,
+  resolution10sStorageTTL: moment.Duration,
+  resolution30mStorageTTL: moment.Duration,
+): AdjustTimeScaleReturnType => {
+  const result: AdjustTimeScaleReturnType = {
+    timeScale: {
+      ...curTimeScale,
+    },
+  };
+  const now = moment().utc();
+  const ttl10secDate = now.subtract(resolution10sStorageTTL);
+  const isOutsideOf10sResolution = timeWindow.start.isBefore(ttl10secDate);
+  const isSmallerSampleSize =
+    curTimeScale.sampleSize.asSeconds() <= moment.duration(30, "m").asSeconds();
+
+  if (isOutsideOf10sResolution && isSmallerSampleSize) {
+    result.timeScale.sampleSize = moment.duration(30, "minutes");
+    result.adjustmentReason = "low_resolution_period";
+  }
+
+  const resolution30minDate = now.subtract(resolution30mStorageTTL);
+  const isOutsideOf30minResolution = timeWindow.start.isBefore(
+    resolution30minDate,
+  );
+  if (isOutsideOf30minResolution) {
+    result.adjustmentReason = "deleted_data_period";
+  }
+  return result;
+};
