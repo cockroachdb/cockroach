@@ -586,7 +586,12 @@ func (c *transientCluster) startNodeAsync(
 	serv := c.servers[idx]
 	tag := fmt.Sprintf("start-n%d", idx+1)
 	return c.stopper.RunAsyncTask(ctx, tag, func(ctx context.Context) {
-		ctx = logtags.AddTag(ctx, tag, nil)
+		// We call Start() with context.Background() because we don't want the
+		// tracing span corresponding to the task started just above to leak into
+		// the new server. Server's have their own Tracers, different from the one
+		// used by this transientCluster, and so traces inside the Server can't be
+		// combined with traces from outside it.
+		ctx = logtags.AddTag(context.Background(), tag, nil)
 		err := serv.Start(ctx)
 		if err != nil {
 			c.warnLog(ctx, "server %d failed to start: %v", idx, err)
