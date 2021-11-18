@@ -742,9 +742,9 @@ func (r *Replica) executeAdminBatch(
 	}
 
 	args := ba.Requests[0].GetInner()
-	if sp := tracing.SpanFromContext(ctx); sp != nil {
-		sp.SetOperationName(reflect.TypeOf(args).String())
-	}
+
+	ctx, sp := tracing.EnsureChildSpan(ctx, r.AmbientContext.Tracer, reflect.TypeOf(args).String())
+	defer sp.Finish()
 
 	// Verify that the batch can be executed, which includes verifying that the
 	// current replica has the range lease.
