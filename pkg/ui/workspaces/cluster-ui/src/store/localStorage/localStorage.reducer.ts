@@ -11,6 +11,7 @@
 import moment from "moment";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
+import { defaultFilters, Filters } from "../../queryFilter";
 
 type StatementsDateRangeState = {
   start: number;
@@ -30,6 +31,7 @@ export type LocalStorageState = {
   "sortSetting/StatementsPage": SortSetting;
   "sortSetting/TransactionsPage": SortSetting;
   "sortSetting/SessionsPage": SortSetting;
+  "filters/StatementsPage": Filters;
 };
 
 type Payload = {
@@ -76,6 +78,9 @@ const initialState: LocalStorageState = {
   "sortSetting/SessionsPage":
     JSON.parse(localStorage.getItem("sortSetting/SessionsPage")) ||
     defaultSessionsSortSetting,
+  "filters/StatementsPage":
+    JSON.parse(localStorage.getItem("filters/StatementsPage")) ||
+    defaultFilters,
 };
 
 const localStorageSlice = createSlice({
