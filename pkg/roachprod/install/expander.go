@@ -153,7 +153,7 @@ func (e *expander) maybeExpandPgPort(c *SyncedCluster, s string) (string, bool, 
 	if e.pgPorts == nil {
 		e.pgPorts = make(map[int]string, len(c.VMs))
 		for _, i := range allNodes(len(c.VMs)) {
-			e.pgPorts[i] = fmt.Sprint(c.Impl.NodePort(c, i))
+			e.pgPorts[i] = fmt.Sprint(c.NodePort(i))
 		}
 	}
 
@@ -171,7 +171,7 @@ func (e *expander) maybeExpandUIPort(c *SyncedCluster, s string) (string, bool, 
 	if e.uiPorts == nil {
 		e.uiPorts = make(map[int]string, len(c.VMs))
 		for _, i := range allNodes(len(c.VMs)) {
-			e.uiPorts[i] = fmt.Sprint(c.Impl.NodeUIPort(c, i))
+			e.uiPorts[i] = fmt.Sprint(c.NodeUIPort(i))
 		}
 	}
 
@@ -184,7 +184,7 @@ func (e *expander) maybeExpandStoreDir(c *SyncedCluster, s string) (string, bool
 	if !storeDirRe.MatchString(s) {
 		return s, false, nil
 	}
-	return c.Impl.NodeDir(c, e.node, 1 /* storeIndex */), true, nil
+	return c.NodeDir(e.node, 1 /* storeIndex */), true, nil
 }
 
 // maybeExpandLogDir is an expanderFunc for "{log-dir}"
@@ -192,7 +192,7 @@ func (e *expander) maybeExpandLogDir(c *SyncedCluster, s string) (string, bool, 
 	if !logDirRe.MatchString(s) {
 		return s, false, nil
 	}
-	return c.Impl.LogDir(c, e.node), true, nil
+	return c.LogDir(e.node), true, nil
 }
 
 // maybeExpandCertsDir is an expanderFunc for "{certs-dir}"
@@ -200,5 +200,5 @@ func (e *expander) maybeExpandCertsDir(c *SyncedCluster, s string) (string, bool
 	if !certsDirRe.MatchString(s) {
 		return s, false, nil
 	}
-	return c.Impl.CertsDir(c, e.node), true, nil
+	return c.CertsDir(e.node), true, nil
 }

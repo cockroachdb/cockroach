@@ -45,21 +45,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// ClusterImpl TODO(peter): document
-type ClusterImpl interface {
-	Start(c *SyncedCluster, opts StartOpts) error
-	CertsDir(c *SyncedCluster, index int) string
-	NodeDir(c *SyncedCluster, index, storeIndex int) string
-	LogDir(c *SyncedCluster, index int) string
-	NodeURL(c *SyncedCluster, host string, port int) string
-	NodePort(c *SyncedCluster, index int) int
-	NodeUIPort(c *SyncedCluster, index int) int
-}
-
 // ClusterSettings contains various knobs that affect operations on a cluster.
 type ClusterSettings struct {
 	Secure         bool
-	CertsDir       string
+	PGUrlCertsDir  string
 	Env            []string
 	Tag            string
 	UseTreeDist    bool
@@ -73,11 +62,11 @@ type ClusterSettings struct {
 // DefaultClusterSettings returns the default settings.
 func DefaultClusterSettings() ClusterSettings {
 	return ClusterSettings{
-		Tag:         "",
-		CertsDir:    "./certs",
-		Secure:      false,
-		Quiet:       false,
-		UseTreeDist: true,
+		Tag:           "",
+		PGUrlCertsDir: "./certs",
+		Secure:        false,
+		Quiet:         false,
+		UseTreeDist:   true,
 		Env: []string{
 			"COCKROACH_ENABLE_RPC_COMPRESSION=false",
 			"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
@@ -102,8 +91,6 @@ type SyncedCluster struct {
 
 	ClusterSettings
 
-	Impl ClusterImpl
-
 	Localities []string
 
 	// AuthorizedKeys is used by SetupSSH to add additional authorized keys.
@@ -120,7 +107,6 @@ func NewSyncedCluster(
 	c := &SyncedCluster{
 		Cluster:         *metadata,
 		ClusterSettings: settings,
-		Impl:            Cockroach{},
 	}
 	c.Localities = make([]string, len(c.VMs))
 	for i := range c.VMs {
@@ -166,14 +152,14 @@ func (c *SyncedCluster) localVMDir(nodeIdx int) string {
 	return local.VMDir(c.Name, nodeIdx)
 }
 
-// ServerNodes is the fully expanded, ordered list of nodes that any given
+// TargetNodes is the fully expanded, ordered list of nodes that any given
 // roachprod command is intending to target.
 //
 //  $ roachprod create local -n 4
 //  $ roachprod start local          # [1, 2, 3, 4]
 //  $ roachprod start local:2-4      # [2, 3, 4]
 //  $ roachprod start local:2,1,4    # [1, 2, 4]
-func (c *SyncedCluster) ServerNodes() []int {
+func (c *SyncedCluster) TargetNodes() []int {
 	return append([]int{}, c.Nodes...)
 }
 
@@ -262,11 +248,6 @@ type StartOpts struct {
 	ExtraArgs  []string
 }
 
-// Start TODO(peter): document
-func (c *SyncedCluster) Start(startOpts StartOpts) error {
-	return c.Impl.Start(c, startOpts)
-}
-
 func (c *SyncedCluster) newSession(i int) (session, error) {
 	if c.IsLocal() {
 		return newLocalSession(), nil
@@ -306,7 +287,7 @@ func (c *SyncedCluster) Stop(sig int, wait bool) error {
     done
     echo "${pid}: dead" >> %[1]s/roachprod.log
   done`,
-				c.Impl.LogDir(c, c.Nodes[i]), // [1]
+				c.LogDir(c.Nodes[i]), // [1]
 			)
 		}
 
@@ -323,7 +304,7 @@ if [ -n "${pids}" ]; then
   kill -%[3]d ${pids}
 %[4]s
 fi`,
-			c.Impl.LogDir(c, c.Nodes[i]),    // [1]
+			c.LogDir(c.Nodes[i]),            // [1]
 			c.roachprodEnvRegex(c.Nodes[i]), // [2]
 			sig,                             // [3]
 			waitCmd,                         // [4]
@@ -442,7 +423,7 @@ type NodeMonitorInfo struct {
 // be emitted for them.
 func (c *SyncedCluster) Monitor(ignoreEmptyNodes bool, oneShot bool) chan NodeMonitorInfo {
 	ch := make(chan NodeMonitorInfo)
-	nodes := c.ServerNodes()
+	nodes := c.TargetNodes()
 	var wg sync.WaitGroup
 
 	for i := range nodes {
@@ -474,8 +455,8 @@ func (c *SyncedCluster) Monitor(ignoreEmptyNodes bool, oneShot bool) chan NodeMo
 			}{
 				OneShot:     oneShot,
 				IgnoreEmpty: ignoreEmptyNodes,
-				Store:       Cockroach{}.NodeDir(c, nodes[i], 1 /* storeIndex */),
-				Port:        Cockroach{}.NodePort(c, nodes[i]),
+				Store:       c.NodeDir(nodes[i], 1 /* storeIndex */),
+				Port:        c.NodePort(nodes[i]),
 				Local:       c.IsLocal(),
 			}
 
@@ -1377,7 +1358,7 @@ func (c *SyncedCluster) Logs(
 		if c.IsLocal() {
 			// This here is a bit of a hack to guess that the parent of the log dir is
 			// the "home" for the local node and that the srcBase is relative to that.
-			localHome := filepath.Dir(c.Impl.LogDir(c, idx))
+			localHome := filepath.Dir(c.LogDir(idx))
 			remote = filepath.Join(localHome, src) + "/"
 		} else {
 			logDir := src
@@ -1706,7 +1687,7 @@ func (c *SyncedCluster) pgurls(nodes []int) (map[int]string, error) {
 	}
 	m := make(map[int]string, len(hosts))
 	for node, host := range hosts {
-		m[node] = c.Impl.NodeURL(c, host, c.Impl.NodePort(c, node))
+		m[node] = c.NodeURL(host, c.NodePort(node))
 	}
 	return m, nil
 }
@@ -1942,19 +1923,16 @@ func (c *SyncedCluster) ParallelE(
 	return nil, nil
 }
 
-// Init initializes the cluster. It does it through node 1 (as per ServerNodes)
+// Init initializes the cluster. It does it through node 1 (as per TargetNodes)
 // to maintain parity with auto-init behavior of `roachprod start` (when
 // --skip-init) is not specified. The implementation should be kept in
-// sync with Cockroach.Start.
+// sync with Start().
 func (c *SyncedCluster) Init() error {
-	r := c.Impl.(Cockroach)
-	h := &crdbInstallHelper{c: c, r: r}
-
-	// See (Cockroach).Start. We reserve a few special operations for the first
-	// node, so we strive to maintain the same here for interoperability.
+	// See Start(). We reserve a few special operations for the first node, so we
+	// strive to maintain the same here for interoperability.
 	const firstNodeIdx = 0
 
-	vers, err := getCockroachVersion(c, c.ServerNodes()[firstNodeIdx])
+	vers, err := getCockroachVersion(c, c.TargetNodes()[firstNodeIdx])
 	if err != nil {
 		return errors.WithDetail(err, "install.Init() failed: unable to retrieve cockroach version.")
 	}
@@ -1963,8 +1941,8 @@ func (c *SyncedCluster) Init() error {
 		return errors.New("install.Init() failed: `roachprod init` only supported for v20.1 and beyond")
 	}
 
-	fmt.Printf("%s: initializing cluster\n", h.c.Name)
-	initOut, err := h.initializeCluster(firstNodeIdx)
+	fmt.Printf("%s: initializing cluster\n", c.Name)
+	initOut, err := c.initializeCluster(firstNodeIdx)
 	if err != nil {
 		return errors.WithDetail(err, "install.Init() failed: unable to initialize cluster.")
 	}
@@ -1972,8 +1950,8 @@ func (c *SyncedCluster) Init() error {
 		fmt.Println(initOut)
 	}
 
-	fmt.Printf("%s: setting cluster settings\n", h.c.Name)
-	clusterSettingsOut, err := h.setClusterSettings(firstNodeIdx)
+	fmt.Printf("%s: setting cluster settings\n", c.Name)
+	clusterSettingsOut, err := c.setClusterSettings(firstNodeIdx)
 	if err != nil {
 		return errors.WithDetail(err, "install.Init() failed: unable to set cluster settings.")
 	}

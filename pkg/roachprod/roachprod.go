@@ -366,11 +366,7 @@ func SQL(name string, clusterOpts install.ClusterSettings, cmdArray []string) er
 	if err != nil {
 		return err
 	}
-	cockroach, ok := c.Impl.(install.Cockroach)
-	if !ok {
-		return errors.New("sql is only valid on cockroach clusters")
-	}
-	return cockroach.SQL(c, cmdArray)
+	return c.SQL(cmdArray)
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
@@ -380,7 +376,7 @@ func IP(name string, clusterOpts install.ClusterSettings, external bool) ([]stri
 		return nil, err
 	}
 
-	nodes := c.ServerNodes()
+	nodes := c.TargetNodes()
 	ips := make([]string, len(nodes))
 
 	if external {
@@ -700,7 +696,7 @@ func PgURL(name string, clusterOpts install.ClusterSettings, external bool) erro
 	if err != nil {
 		return err
 	}
-	nodes := c.ServerNodes()
+	nodes := c.TargetNodes()
 	ips := make([]string, len(nodes))
 
 	if external {
@@ -722,7 +718,7 @@ func PgURL(name string, clusterOpts install.ClusterSettings, external bool) erro
 		if ip == "" {
 			return errors.Errorf("empty ip: %v", ips)
 		}
-		urls = append(urls, c.Impl.NodeURL(c, ip, c.Impl.NodePort(c, nodes[i])))
+		urls = append(urls, c.NodeURL(ip, c.NodePort(nodes[i])))
 	}
 	fmt.Println(strings.Join(urls, " "))
 	if len(urls) != len(nodes) {
@@ -743,7 +739,7 @@ func AdminURL(
 		return err
 	}
 
-	for i, node := range c.ServerNodes() {
+	for i, node := range c.TargetNodes() {
 		host := vm.Name(c.Name, node) + "." + gce.Subdomain
 
 		// verify DNS is working / fallback to IPs if not.
@@ -757,7 +753,7 @@ func AdminURL(
 		if adminurlIPs {
 			host = c.VMs[node-1].PublicIP
 		}
-		port := c.Impl.NodeUIPort(c, node)
+		port := c.NodeUIPort(node)
 		scheme := "http"
 		if c.Secure {
 			scheme = "https"
@@ -812,9 +808,9 @@ func Pprof(
 
 	httpClient := httputil.NewClientWithTimeout(timeout)
 	startTime := timeutil.Now().Unix()
-	failed, err := c.ParallelE(description, len(c.ServerNodes()), 0, func(i int) ([]byte, error) {
+	failed, err := c.ParallelE(description, len(c.TargetNodes()), 0, func(i int) ([]byte, error) {
 		host := c.VMs[i].PublicIP
-		port := c.Impl.NodeUIPort(c, i)
+		port := c.NodeUIPort(i)
 		scheme := "http"
 		if c.Secure {
 			scheme = "https"

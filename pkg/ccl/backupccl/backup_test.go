@@ -7011,6 +7011,9 @@ func TestBackupRestoreTenant(t *testing.T) {
 		return nil
 	})
 
+	systemDB.Exec(t, `BACKUP system.users TO 'nodelocal://1/users'`)
+	systemDB.CheckQueryResults(t, `SELECT manifest->>'tenants' FROM [SHOW BACKUP 'nodelocal://1/users' WITH as_json]`, [][]string{{"[]"}})
+
 	// Prevent a logging assertion that the server ID is initialized multiple times.
 	log.TestingClearServerIdentifiers()
 

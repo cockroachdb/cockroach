@@ -632,9 +632,9 @@ func (r *Replica) sha512(
 		// using MVCCKeyAndIntentsIterKind and consider all locks here.
 		for _, span := range rditer.MakeReplicatedKeyRangesExceptLockTable(&desc) {
 			iter := snap.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind,
-				storage.IterOptions{UpperBound: span.End.Key})
+				storage.IterOptions{UpperBound: span.End})
 			spanMS, err := storage.ComputeStatsForRange(
-				iter, span.Start.Key, span.End.Key, 0 /* nowNanos */, visitor,
+				iter, span.Start, span.End, 0 /* nowNanos */, visitor,
 			)
 			iter.Close()
 			if err != nil {
