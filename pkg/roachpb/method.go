@@ -169,6 +169,9 @@ const (
 	// this range before this command have finished by the time it returns. It
 	// does not block new operations that started after this command's evaluation.
 	Barrier
+	// Probe is a noop write request used to test the ability to make
+	// progress at the replication layer.
+	Probe
 	// NumMethods represents the total number of API methods.
 	NumMethods
 )
