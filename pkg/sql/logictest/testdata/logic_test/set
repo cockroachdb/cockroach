@@ -667,3 +667,9 @@ ijk
 
 statement error unrecognized configuration parameter "custom_option.does_not_yet_exist"
 SHOW custom_option.does_not_yet_exist
+
+statement error join_reader_ordering_strategy_batch_size can only be set to a positive value
+SET join_reader_ordering_strategy_batch_size = '-1B'
+
+statement ok
+SET join_reader_ordering_strategy_batch_size = '1B'
