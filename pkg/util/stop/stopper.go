@@ -158,7 +158,11 @@ type Stopper struct {
 	quiescer chan struct{}     // Closed when quiescing
 	stopped  chan struct{}     // Closed when stopped completely
 	onPanic  func(interface{}) // called with recover() on panic on any goroutine
-	tracer   *tracing.Tracer   // tracer used to create spans for tasks
+
+	// tracer is used to create spans for tasks. If not set, tasks don't get
+	// spans. It can be set at construction time through the WithTracer() option,
+	// or later (but before the Stopper is otherwise used) through SetTracer().
+	tracer *tracing.Tracer
 
 	mu struct {
 		syncutil.RWMutex
@@ -229,9 +233,6 @@ func NewStopper(options ...Option) *Stopper {
 
 	for _, opt := range options {
 		opt.apply(s)
-	}
-	if s.tracer == nil {
-		s.tracer = tracing.NewTracer()
 	}
 
 	register(s)
@@ -463,17 +464,19 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 		return ErrUnavailable
 	}
 
-	// If the caller has a span, the task gets a child span.
 	var sp *tracing.Span
-	switch opt.SpanOpt {
-	case FollowsFromSpan:
-		ctx, sp = tracing.EnsureForkSpan(ctx, s.tracer, opt.TaskName)
-	case ChildSpan:
-		ctx, sp = tracing.EnsureChildSpan(ctx, s.tracer, opt.TaskName)
-	case SterileRootSpan:
-		ctx, sp = s.tracer.StartSpanCtx(ctx, opt.TaskName, tracing.WithSterile())
-	default:
-		panic(fmt.Sprintf("unsupported SpanOption: %v", opt.SpanOpt))
+	if s.tracer != nil {
+		// If the caller has a span, the task gets a child span.
+		switch opt.SpanOpt {
+		case FollowsFromSpan:
+			ctx, sp = tracing.EnsureForkSpan(ctx, s.tracer, opt.TaskName)
+		case ChildSpan:
+			ctx, sp = tracing.EnsureChildSpan(ctx, s.tracer, opt.TaskName)
+		case SterileRootSpan:
+			ctx, sp = s.tracer.StartSpanCtx(ctx, opt.TaskName, tracing.WithSterile())
+		default:
+			panic(fmt.Sprintf("unsupported SpanOption: %v", opt.SpanOpt))
+		}
 	}
 
 	// Call f on another goroutine.
