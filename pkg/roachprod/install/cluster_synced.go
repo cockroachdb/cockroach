@@ -87,7 +87,7 @@ type SyncedCluster struct {
 
 	// Nodes is used by most commands (e.g. Start, Stop, Monitor). It describes
 	// the list of nodes the operation pertains to.
-	Nodes []int
+	Nodes Nodes
 
 	ClusterSettings
 
@@ -131,16 +131,17 @@ func NewSyncedCluster(
 	return c, nil
 }
 
-func (c *SyncedCluster) host(index int) string {
-	return c.VMs[index-1].PublicIP
+// Host returns the public IP of a node.
+func (c *SyncedCluster) Host(n Node) string {
+	return c.VMs[n-1].PublicIP
 }
 
-func (c *SyncedCluster) user(index int) string {
-	return c.VMs[index-1].RemoteUser
+func (c *SyncedCluster) user(n Node) string {
+	return c.VMs[n-1].RemoteUser
 }
 
-func (c *SyncedCluster) locality(index int) string {
-	return c.Localities[index-1]
+func (c *SyncedCluster) locality(n Node) string {
+	return c.Localities[n-1]
 }
 
 // IsLocal returns true if this is a local cluster (see vm/local).
@@ -148,8 +149,8 @@ func (c *SyncedCluster) IsLocal() bool {
 	return config.IsLocalClusterName(c.Name)
 }
 
-func (c *SyncedCluster) localVMDir(nodeIdx int) string {
-	return local.VMDir(c.Name, nodeIdx)
+func (c *SyncedCluster) localVMDir(n Node) string {
+	return local.VMDir(c.Name, int(n))
 }
 
 // TargetNodes is the fully expanded, ordered list of nodes that any given
@@ -159,19 +160,19 @@ func (c *SyncedCluster) localVMDir(nodeIdx int) string {
 //  $ roachprod start local          # [1, 2, 3, 4]
 //  $ roachprod start local:2-4      # [2, 3, 4]
 //  $ roachprod start local:2,1,4    # [1, 2, 4]
-func (c *SyncedCluster) TargetNodes() []int {
-	return append([]int{}, c.Nodes...)
+func (c *SyncedCluster) TargetNodes() Nodes {
+	return append(Nodes{}, c.Nodes...)
 }
 
 // GetInternalIP returns the internal IP address of the specified node.
-func (c *SyncedCluster) GetInternalIP(index int) (string, error) {
+func (c *SyncedCluster) GetInternalIP(n Node) (string, error) {
 	if c.IsLocal() {
-		return c.host(index), nil
+		return c.Host(n), nil
 	}
 
-	session, err := c.newSession(index)
+	session, err := c.newSession(n)
 	if err != nil {
-		return "", errors.Wrapf(err, "GetInternalIP: failed dial %s:%d", c.Name, index)
+		return "", errors.Wrapf(err, "GetInternalIP: failed dial %s:%d", c.Name, n)
 	}
 	defer session.Close()
 
@@ -182,7 +183,7 @@ func (c *SyncedCluster) GetInternalIP(index int) (string, error) {
 	if err := session.Run(cmd); err != nil {
 		return "", errors.Wrapf(err,
 			"GetInternalIP: failed to execute hostname on %s:%d:\n(stdout) %s\n(stderr) %s",
-			c.Name, index, stdout.String(), stderr.String())
+			c.Name, n, stdout.String(), stderr.String())
 	}
 	ip := strings.TrimSpace(stdout.String())
 	if ip == "" {
@@ -218,7 +219,7 @@ func (c *SyncedCluster) GetInternalIP(index int) (string, error) {
 //  - local cluster with tag bar:
 //      ROACHPROD=local-foo/1/bar
 //
-func (c *SyncedCluster) roachprodEnvValue(node int) string {
+func (c *SyncedCluster) roachprodEnvValue(node Node) string {
 	var parts []string
 	if c.IsLocal() {
 		parts = append(parts, c.Name)
@@ -232,7 +233,7 @@ func (c *SyncedCluster) roachprodEnvValue(node int) string {
 
 // roachprodEnvRegex returns a regexp that matches the ROACHPROD value for the
 // given node.
-func (c *SyncedCluster) roachprodEnvRegex(node int) string {
+func (c *SyncedCluster) roachprodEnvRegex(node Node) string {
 	escaped := strings.Replace(c.roachprodEnvValue(node), "/", "\\/", -1)
 	// We look for either a trailing space or a slash (in which case, we tolerate
 	// any remaining tag suffix).
@@ -248,11 +249,11 @@ type StartOpts struct {
 	ExtraArgs  []string
 }
 
-func (c *SyncedCluster) newSession(i int) (session, error) {
+func (c *SyncedCluster) newSession(node Node) (session, error) {
 	if c.IsLocal() {
 		return newLocalSession(), nil
 	}
-	return newRemoteSession(c.user(i), c.host(i), c.DebugDir)
+	return newRemoteSession(c.user(node), c.Host(node), c.DebugDir)
 }
 
 // Stop is used to stop cockroach on all nodes in the cluster.
@@ -397,7 +398,7 @@ fi
 // NodeMonitorInfo is a message describing a cockroach process' status.
 type NodeMonitorInfo struct {
 	// The index of the node (in a SyncedCluster) at which the message originated.
-	Index int
+	Node Node
 	// A message about the node. This is either a PID, "dead", "nc exited", or
 	// "skipped".
 	// Anything but a PID or "skipped" is an indication that there is some
@@ -432,7 +433,7 @@ func (c *SyncedCluster) Monitor(ignoreEmptyNodes bool, oneShot bool) chan NodeMo
 			defer wg.Done()
 			sess, err := c.newSession(nodes[i])
 			if err != nil {
-				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
+				ch <- NodeMonitorInfo{Node: nodes[i], Err: err}
 				wg.Done()
 				return
 			}
@@ -440,7 +441,7 @@ func (c *SyncedCluster) Monitor(ignoreEmptyNodes bool, oneShot bool) chan NodeMo
 
 			p, err := sess.StdoutPipe()
 			if err != nil {
-				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
+				ch <- NodeMonitorInfo{Node: nodes[i], Err: err}
 				wg.Done()
 				return
 			}
@@ -523,14 +524,14 @@ done
 			t := template.Must(template.New("script").Parse(snippet))
 			var buf bytes.Buffer
 			if err := t.Execute(&buf, data); err != nil {
-				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
+				ch <- NodeMonitorInfo{Node: nodes[i], Err: err}
 				return
 			}
 
 			// Request a PTY so that the script will receive a SIGPIPE when the
 			// session is closed.
 			if err := sess.RequestPty(); err != nil {
-				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
+				ch <- NodeMonitorInfo{Node: nodes[i], Err: err}
 				return
 			}
 
@@ -544,12 +545,12 @@ done
 					if err == io.EOF {
 						return
 					}
-					ch <- NodeMonitorInfo{Index: nodes[i], Msg: string(line)}
+					ch <- NodeMonitorInfo{Node: nodes[i], Msg: string(line)}
 				}
 			}(p)
 
 			if err := sess.Start(buf.String()); err != nil {
-				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
+				ch <- NodeMonitorInfo{Node: nodes[i], Err: err}
 				return
 			}
 
@@ -558,7 +559,7 @@ done
 			// pipe. Otherwise it can be closed under us, causing the reader to loop
 			// infinitely receiving a non-`io.EOF` error.
 			if err := sess.Wait(); err != nil {
-				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
+				ch <- NodeMonitorInfo{Node: nodes[i], Err: err}
 				return
 			}
 		}(i)
@@ -582,7 +583,7 @@ done
 // nodes: The cluster nodes where the command will be run.
 // title: A description of the command being run that is output to the logs.
 // cmd: The command to run.
-func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd string) error {
+func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes Nodes, title, cmd string) error {
 	// Stream output if we're running the command on only 1 node.
 	stream := len(nodes) == 1
 	var display string
@@ -800,7 +801,7 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 	}
 
 	for _, i := range c.Nodes {
-		ips = append(ips, c.host(i))
+		ips = append(ips, c.Host(i))
 	}
 	var knownHostsData []byte
 	if err := c.Parallel("scanning hosts", 1, 0, func(i int) ([]byte, error) {
@@ -1052,7 +1053,7 @@ tar cvf certs.tar certs
 		}()
 
 		if err := func() error {
-			return c.scp(fmt.Sprintf("%s@%s:certs.tar", c.user(1), c.host(1)), tmpfile.Name())
+			return c.scp(fmt.Sprintf("%s@%s:certs.tar", c.user(1), c.Host(1)), tmpfile.Name())
 		}(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			exit.WithCode(exit.UnspecifiedError())
@@ -1169,7 +1170,7 @@ func (c *SyncedCluster) Put(src, dest string) error {
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("%s@%s:%s", c.user(c.Nodes[i]), c.host(c.Nodes[i]), dest), nil
+		return fmt.Sprintf("%s@%s:%s", c.user(c.Nodes[i]), c.Host(c.Nodes[i]), dest), nil
 	}
 
 	for i := range c.Nodes {
@@ -1349,24 +1350,23 @@ func (c *SyncedCluster) Logs(
 	from, to time.Time,
 	out io.Writer,
 ) error {
-	rsyncNodeLogs := func(ctx context.Context, idx int) error {
-		base := fmt.Sprintf("%d.logs", c.Nodes[idx-1])
+	rsyncNodeLogs := func(ctx context.Context, node Node) error {
+		base := fmt.Sprintf("%d.logs", node)
 		local := filepath.Join(dest, base) + "/"
-		sshUser := c.user(c.Nodes[idx-1])
+		sshUser := c.user(node)
 		rsyncArgs := []string{"-az", "--size-only"}
 		var remote string
 		if c.IsLocal() {
 			// This here is a bit of a hack to guess that the parent of the log dir is
 			// the "home" for the local node and that the srcBase is relative to that.
-			localHome := filepath.Dir(c.LogDir(idx))
+			localHome := filepath.Dir(c.LogDir(node))
 			remote = filepath.Join(localHome, src) + "/"
 		} else {
 			logDir := src
 			if !filepath.IsAbs(logDir) && user != "" && user != sshUser {
 				logDir = "~" + user + "/" + logDir
 			}
-			remote = fmt.Sprintf("%s@%s:%s/", c.user(c.Nodes[idx-1]),
-				c.host(c.Nodes[idx-1]), logDir)
+			remote = fmt.Sprintf("%s@%s:%s/", c.user(node), c.Host(node), logDir)
 			// Use control master to mitigate SSH connection setup cost.
 			rsyncArgs = append(rsyncArgs, "--rsh", "ssh "+
 				"-o StrictHostKeyChecking=no "+
@@ -1398,9 +1398,9 @@ func (c *SyncedCluster) Logs(
 	rsyncLogs := func(ctx context.Context) error {
 		g, gctx := errgroup.WithContext(ctx)
 		for i := range c.Nodes {
-			idx := c.Nodes[i]
+			node := c.Nodes[i]
 			g.Go(func() error {
-				return rsyncNodeLogs(gctx, idx)
+				return rsyncNodeLogs(gctx, node)
 			})
 		}
 		return g.Wait()
@@ -1584,7 +1584,7 @@ func (c *SyncedCluster) Get(src, dest string) error {
 				return
 			}
 
-			err := c.scp(fmt.Sprintf("%s@%s:%s", c.user(c.Nodes[0]), c.host(c.Nodes[i]), src), dest)
+			err := c.scp(fmt.Sprintf("%s@%s:%s", c.user(c.Nodes[0]), c.Host(c.Nodes[i]), src), dest)
 			if err == nil {
 				// Make sure all created files and directories are world readable.
 				// The CRDB process intentionally sets a 0007 umask (resulting in
@@ -1680,19 +1680,21 @@ func (c *SyncedCluster) Get(src, dest string) error {
 	return nil
 }
 
-func (c *SyncedCluster) pgurls(nodes []int) (map[int]string, error) {
+// pgurls returns a map of PG URLs for the given nodes.
+func (c *SyncedCluster) pgurls(nodes Nodes) (map[Node]string, error) {
 	hosts, err := c.pghosts(nodes)
 	if err != nil {
 		return nil, err
 	}
-	m := make(map[int]string, len(hosts))
+	m := make(map[Node]string, len(hosts))
 	for node, host := range hosts {
 		m[node] = c.NodeURL(host, c.NodePort(node))
 	}
 	return m, nil
 }
 
-func (c *SyncedCluster) pghosts(nodes []int) (map[int]string, error) {
+// pghosts returns a map of IP addresses for the given nodes.
+func (c *SyncedCluster) pghosts(nodes Nodes) (map[Node]string, error) {
 	ips := make([]string, len(nodes))
 	if err := c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
 		var err error
@@ -1702,7 +1704,7 @@ func (c *SyncedCluster) pghosts(nodes []int) (map[int]string, error) {
 		return nil, err
 	}
 
-	m := make(map[int]string, len(ips))
+	m := make(map[Node]string, len(ips))
 	for i, ip := range ips {
 		m[nodes[i]] = ip
 	}
@@ -1750,7 +1752,7 @@ func (c *SyncedCluster) SSH(sshArgs, args []string) error {
 	} else {
 		allArgs = []string{
 			"ssh",
-			fmt.Sprintf("%s@%s", c.user(c.Nodes[0]), c.host(c.Nodes[0])),
+			fmt.Sprintf("%s@%s", c.user(c.Nodes[0]), c.Host(c.Nodes[0])),
 			"-o", "UserKnownHostsFile=/dev/null",
 			"-o", "StrictHostKeyChecking=no",
 		}

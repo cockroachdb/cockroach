@@ -19,7 +19,7 @@ import (
 func TestRoachprodEnv(t *testing.T) {
 	cases := []struct {
 		clusterName string
-		node        int
+		node        Node
 		tag         string
 		value       string
 		regex       string
