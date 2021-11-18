@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
@@ -842,9 +843,8 @@ If problems persist, please see %s.`
 			}
 			// Don't use shutdownCtx because this is in a goroutine that may
 			// still be running after shutdownCtx's span has been finished.
-			ac := log.AmbientContext{}
-			ac.AddLogTag("server drain process", nil)
-			drainCtx := ac.AnnotateCtx(context.Background())
+			drainCtx := s.AnnotateCtx(context.Background())
+			drainCtx = logtags.AddTag(drainCtx, "server drain process", nil)
 
 			// Perform a graceful drain. We keep retrying forever, in
 			// case there are many range leases or some unavailability
