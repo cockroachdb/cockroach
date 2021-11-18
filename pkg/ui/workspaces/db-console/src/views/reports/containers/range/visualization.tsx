@@ -165,31 +165,36 @@ class RangeVizCanvas extends React.Component<
     this.drawHeatMap();
   }
 
-  installMouseHandler() {
-    // TODO: clean this listener up.
-    this.canvasRef.current.addEventListener("mousemove", e => {
-      if (this.rangeUpdates.length === 0) {
-        return;
-      }
+  mouseHandler = (e: MouseEvent) => {
+    if (this.rangeUpdates.length === 0) {
+      return;
+    }
 
-      const updateIdx = Math.floor(
-        Math.max(0, Math.min(CanvasWidth, e.offsetX)) /
-          (CanvasWidth / MaxTimestepsShown),
-      );
+    const updateIdx = Math.floor(
+      Math.max(0, Math.min(CanvasWidth, e.offsetX)) /
+        (CanvasWidth / MaxTimestepsShown),
+    );
 
-      if (updateIdx > this.rangeUpdates.length - 1) {
-        return;
-      }
+    if (updateIdx > this.rangeUpdates.length - 1) {
+      return;
+    }
 
-      const rangeIdx = Math.floor(
-        Math.max(0, Math.min(CanvasHeight, e.offsetY)) /
-          (CanvasHeight / this.rangeUpdates[0].raftData.length),
-      );
+    const rangeIdx = Math.floor(
+      Math.max(0, Math.min(CanvasHeight, e.offsetY)) /
+        (CanvasHeight / this.rangeUpdates[0].raftData.length),
+    );
 
-      this.setState({
-        hoverData: this.rangeUpdates[updateIdx].raftData[rangeIdx],
-      });
+    this.setState({
+      hoverData: this.rangeUpdates[updateIdx].raftData[rangeIdx],
     });
+  }
+
+  installMouseHandler() {
+    this.canvasRef.current.addEventListener("mousemove", this.mouseHandler);
+  }
+
+  componentWillUnmount() {
+    this.canvasRef.current.removeEventListener("mousemove", this.mouseHandler);
   }
 
   drawRangeAxis() {
