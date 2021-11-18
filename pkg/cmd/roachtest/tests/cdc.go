@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/codahale/hdrhistogram"
@@ -1225,9 +1226,24 @@ func (k kafkaManager) install(ctx context.Context) {
 	k.c.Run(ctx, k.nodes, downloadScriptPath, folder)
 	if !k.c.IsLocal() {
 		k.c.Run(ctx, k.nodes, `mkdir -p logs`)
-		k.c.Run(ctx, k.nodes, `sudo apt-get -q update 2>&1 > logs/apt-get-update.log`)
-		k.c.Run(ctx, k.nodes, `yes | sudo apt-get -q install openssl default-jre 2>&1 > logs/apt-get-install.log`)
+		if err := k.installJRE(ctx); err != nil {
+			k.t.Fatal(err)
+		}
 	}
+}
+
+func (k kafkaManager) installJRE(ctx context.Context) error {
+	retryOpts := retry.Options{
+		InitialBackoff: 1 * time.Minute,
+		MaxBackoff:     5 * time.Minute,
+	}
+	return retry.WithMaxAttempts(ctx, retryOpts, 3, func() error {
+		err := k.c.RunE(ctx, k.nodes, `sudo apt-get -q update 2>&1 > logs/apt-get-update.log`)
+		if err != nil {
+			return err
+		}
+		return k.c.RunE(ctx, k.nodes, `sudo DEBIAN_FRONTEND=noninteractive apt-get -yq --no-install-recommends install openssl default-jre 2>&1 > logs/apt-get-install.log`)
+	})
 }
 
 func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
