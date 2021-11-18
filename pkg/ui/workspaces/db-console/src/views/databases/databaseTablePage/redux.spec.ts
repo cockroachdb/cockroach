@@ -25,6 +25,7 @@ import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
+import moment from "moment";
 
 function fakeRouteComponentProps(
   k1: string,
@@ -96,6 +97,10 @@ class TestDriver {
   async refreshTableStats() {
     return this.actions.refreshTableStats(this.database, this.table);
   }
+
+  async resetIndexUsageStats() {
+    return this.actions.resetIndexUsageStats();
+  }
 }
 
 describe("Database Table Page", function() {
@@ -132,6 +137,19 @@ describe("Database Table Page", function() {
         sizeInBytes: 0,
         rangeCount: 0,
         nodesByRegionString: "",
+      },
+      indexStats: {
+        loading: false,
+        loaded: false,
+        stats: [
+          {
+            totalReads: 0,
+            lastUsedTime: moment("2021-11-10T16:29:00Z"),
+            lastUsedString: "Nov 10, 2021 at 4:29 PM",
+            indexName: "primary",
+          },
+        ],
+        lastReset: "Nov 12, 2021 at 8:14 PM (UTC)",
       },
     });
   });
