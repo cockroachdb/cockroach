@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -30,7 +30,7 @@ import (
 )
 
 func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
-	ac := testutils.MakeAmbientCtx()
+	ac := log.MakeDummyAmbientContext(stopper.Tracer())
 	nc := &base.NodeIDContainer{}
 	ac.AddLogTag("n", nc)
 	return rpc.NewContext(rpc.ContextOptions{

@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -113,7 +112,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	ltc.Manual = manualClock
 	ltc.Clock = clock
 
-	ambient := log.AmbientContext{Tracer: tr}
+	ambient := cfg.AmbientCtx
 	nc := &base.NodeIDContainer{}
 	ambient.AddLogTag("n", nc)
 
@@ -131,6 +130,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		Clock:      ltc.Clock,
 		Stopper:    ltc.stopper,
 		Settings:   cfg.Settings,
+		NodeID:     nc,
 	})
 	cfg.RPCContext.NodeID.Set(ambient.AnnotateCtx(context.Background()), nodeID)
 	clusterID := cfg.RPCContext.ClusterID

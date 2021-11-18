@@ -193,3 +193,11 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 func MakeDummyAmbientContext(tracer *tracing.Tracer) AmbientContext {
 	return AmbientContext{Tracer: tracer}
 }
+
+// MakeServerAmbientContext creates an AmbientContext for use by
+// server processes.
+func MakeServerAmbientContext(
+	tracer *tracing.Tracer, idProvider ServerIdentificationPayload,
+) AmbientContext {
+	return AmbientContext{Tracer: tracer, ServerIDs: idProvider}
+}
