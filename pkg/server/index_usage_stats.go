@@ -215,7 +215,13 @@ func getTableIndexUsageStats(
 		return nil, err
 	}
 
-	tableID, err := getTableIDFromDatabaseAndTableName(ctx, req.Database, req.Table, ie, userName)
+	// Fully qualified table name is either database.table or database.schema.table
+	fqtName, err := getFullyQualifiedTableName(req.Database, req.Table)
+	if err != nil {
+		return nil, err
+	}
+
+	tableID, err := getTableIDFromDatabaseAndTableName(ctx, req.Database, ie, userName, fqtName)
 
 	if err != nil {
 		return nil, err
@@ -280,6 +286,12 @@ func getTableIndexUsageStats(
 			return nil, err
 		}
 
+		// get CREATE INDEX statement for the index on the specified table and database.
+		createStatement, err := getCreateIndexStatement(ctx, req.Database, string(indexName), ie, userName, fqtName)
+		if err != nil {
+			return nil, err
+		}
+
 		idxStatsRow := &serverpb.TableIndexStatsResponse_ExtendedCollectedIndexUsageStatistics{
 			Statistics: &roachpb.CollectedIndexUsageStatistics{
 				Key: roachpb.IndexUsageKey{
@@ -291,8 +303,9 @@ func getTableIndexUsageStats(
 					LastRead:       lastRead,
 				},
 			},
-			IndexName: string(indexName),
-			IndexType: string(indexType),
+			IndexName:       string(indexName),
+			IndexType:       string(indexType),
+			CreateStatement: createStatement,
 		}
 
 		idxUsageStats = append(idxUsageStats, idxStatsRow)
@@ -311,15 +324,10 @@ func getTableIndexUsageStats(
 func getTableIDFromDatabaseAndTableName(
 	ctx context.Context,
 	database string,
-	table string,
 	ie *sql.InternalExecutor,
 	userName security.SQLUsername,
+	fqtName string,
 ) (int, error) {
-	// Fully qualified table name is either database.table or database.schema.table
-	fqtName, err := getFullyQualifiedTableName(database, table)
-	if err != nil {
-		return 0, err
-	}
 	names := strings.Split(fqtName, ".")
 
 	q := makeSQLQuery()
@@ -352,4 +360,49 @@ func getTableIDFromDatabaseAndTableName(
 
 	tableID := int(tree.MustBeDInt(datums[0]))
 	return tableID, nil
+}
+
+func getCreateIndexStatement(
+	ctx context.Context,
+	database string,
+	index string,
+	ie *sql.InternalExecutor,
+	userName security.SQLUsername,
+	fqtName string,
+) (string, error) {
+	// TODO(#73361): Add SHOW CREATE statement for indexes and refactor to use that instead.
+	names := strings.Split(fqtName, ".")
+	q := makeSQLQuery()
+	q.Append(`SELECT indexdef FROM pg_catalog.pg_indexes WHERE indexname = $ `, index)
+
+	if len(names) == 2 {
+		q.Append(`AND tablename = $`, names[1])
+	} else if len(names) == 3 {
+		q.Append(`AND schemaname = $ AND tablename = $`, names[1], names[2])
+	} else {
+		return "", errors.Newf("expected array length 2 or 3, received %d", len(names))
+	}
+	if len(q.Errors()) > 0 {
+		return "", combineAllErrors(q.Errors())
+	}
+
+	datums, err := ie.QueryRowEx(ctx, "show-create-index", nil,
+		sessiondata.InternalExecutorOverride{
+			User:     userName,
+			Database: database,
+		}, q.String(), q.QueryArguments()...)
+
+	if err != nil {
+		return "", err
+	}
+	if datums == nil {
+		return "", errors.Newf("expected to find table ID for table %s, but found nothing", fqtName)
+	}
+	if len(datums) > 1 {
+		// Index names are unique for a table, so there should only be one result.
+		return "", errors.Newf("expected to find one CREATE INDEX statement for index %s on table %s, but found multiple", index, fqtName)
+	}
+
+	createStmt := string(tree.MustBeDString(datums[0]))
+	return createStmt, nil
 }
