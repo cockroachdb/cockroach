@@ -1,0 +1,72 @@
+statement ok
+CREATE TABLE vehicles();
+CREATE TABLE promo_codes();
+CREATE TABLE rides();
+CREATE TABLE user_promo_codes();
+CREATE TABLE users();
+CREATE TABLE vehicle_location_histories();
+
+query T
+show completions at offset 1 'select 1'
+----
+SELECT
+SET
+SHOW
+START
+
+query T
+show completions at offset 7 'select 1'
+----
+·
+
+query T
+show completions at offset 7 'select 2'
+----
+·
+
+query T
+show completions at offset 10 'select * fro'
+----
+FAILURE
+FALSE
+FAMILY
+FETCH
+FILES
+FILTER
+FIRST
+FLOAT
+FOLLOWING
+FOR
+FORCE
+FORCE_INDEX
+FORCE_ZIGZAG
+FOREIGN
+FROM
+FULL
+FUNCTION
+FUNCTIONS
+
+query T
+show completions at offset 11 'select * fro'
+----
+FROM
+
+query T
+show completions at offset 15 'select * from r';
+----
+rides
+
+query T
+show completions at offset 15 'select * from v';
+----
+vehicle_location_histories
+vehicles
+
+# This case doesn't really make sense - completing this as SELECT doesn't
+# really make sense but we'll need to add more complex logic to determine
+# whether our SQL token is a string const.
+# However we do want to test this so we can ensure we handle escaped strings.
+query T
+show completions at offset 4 e'\'se\'';
+----
+·

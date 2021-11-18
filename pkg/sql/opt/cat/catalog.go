@@ -161,4 +161,7 @@ type Catalog interface {
 
 	// RoleExists returns true if the role exists.
 	RoleExists(ctx context.Context, role security.SQLUsername) (bool, error)
+
+	// GetAllTableNames returns all the tables in a database in sorted order.
+	GetAllTableNames(ctx context.Context) ([]string, error)
 }

@@ -45,9 +45,10 @@ const (
 
 // Catalog implements the cat.Catalog interface for testing purposes.
 type Catalog struct {
-	testSchema Schema
-	counter    int
-	enumTypes  map[string]*types.T
+	testSchema     Schema
+	counter        int
+	enumTypes      map[string]*types.T
+	testTableNames []string
 }
 
 type dataSource interface {
@@ -218,6 +219,14 @@ func (tc *Catalog) RequireAdminRole(ctx context.Context, action string) error {
 // HasRoleOption is part of the cat.Catalog interface.
 func (tc *Catalog) HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error) {
 	return true, nil
+}
+
+func (tc *Catalog) SetAllTableNames(tableNames []string) {
+	tc.testTableNames = tableNames
+}
+
+func (tc *Catalog) GetAllTableNames(ctx context.Context) ([]string, error) {
+	return tc.testTableNames, nil
 }
 
 // FullyQualifiedName is part of the cat.Catalog interface.
