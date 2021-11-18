@@ -72,7 +72,7 @@ func NewNetwork(
 	}
 	n.RPCContext = rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx: log.MakeClientAmbientContext(tracing.NewTracer()),
 		Config:     &base.Config{Insecure: true},
 		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		Stopper:    n.Stopper,
