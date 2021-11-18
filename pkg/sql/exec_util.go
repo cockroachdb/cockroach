@@ -2942,6 +2942,10 @@ func (m *sessionDataMutator) SetInjectRetryErrorsEnabled(val bool) {
 	m.data.InjectRetryErrorsEnabled = val
 }
 
+func (m *sessionDataMutator) SetJoinReaderOrderingStrategyBatchSize(val int64) {
+	m.data.JoinReaderOrderingStrategyBatchSize = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
