@@ -865,11 +865,6 @@ var specs = []stmtSpec{
 	{
 		name:   "grant_stmt",
 		inline: []string{"privileges", "opt_privileges_clause"},
-		exclude: []*regexp.Regexp{
-			regexp.MustCompile("'TYPE' target_types"),
-			regexp.MustCompile("'SCHEMA' schema_name_list"),
-		},
-		unlink: []string{"targets"},
 	},
 	{
 		name: "foreign_key_column_level",
