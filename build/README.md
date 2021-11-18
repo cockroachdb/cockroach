@@ -169,7 +169,8 @@ file on your local branch, 2) push a commit containing this import to the `vendo
 8. Run `./dev generate bazel --mirror` to regenerate DEPS.bzl with the updated Go dependency information.
    Note that you need engineer permissions to mirror dependencies; if you want to get the Bazel build
    working locally without mirroring, `./dev generate bazel` will work, but you won't be able to check
-   your changes in.
+   your changes in. (Assuming that you do have engineer permissions, you can run
+   `gcloud auth application-default login` to authenticate if you get a credentials error.)
 9. Follow instructions for [pushing the dependency to the `vendored` submodule](#pushing-the-dependency-to-the-vendored-submodule)
 
 ### Updating a Dependency
