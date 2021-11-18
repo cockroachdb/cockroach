@@ -174,6 +174,8 @@ func (ru RequestUnion) GetInner() Request {
 		return t.ScanInterleavedIntents
 	case *RequestUnion_Barrier:
 		return t.Barrier
+	case *RequestUnion_Probe:
+		return t.Probe
 	default:
 		return nil
 	}
@@ -272,6 +274,8 @@ func (ru ResponseUnion) GetInner() Response {
 		return t.ScanInterleavedIntents
 	case *ResponseUnion_Barrier:
 		return t.Barrier
+	case *ResponseUnion_Probe:
+		return t.Probe
 	default:
 		return nil
 	}
@@ -447,6 +451,8 @@ func (ru *RequestUnion) MustSetInner(r Request) {
 		union = &RequestUnion_ScanInterleavedIntents{t}
 	case *BarrierRequest:
 		union = &RequestUnion_Barrier{t}
+	case *ProbeRequest:
+		union = &RequestUnion_Probe{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
@@ -548,13 +554,15 @@ func (ru *ResponseUnion) MustSetInner(r Response) {
 		union = &ResponseUnion_ScanInterleavedIntents{t}
 	case *BarrierResponse:
 		union = &ResponseUnion_Barrier{t}
+	case *ProbeResponse:
+		union = &ResponseUnion_Probe{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
 	ru.Value = union
 }
 
-type reqCounts [46]int32
+type reqCounts [47]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -654,6 +662,8 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[44]++
 		case *RequestUnion_Barrier:
 			counts[45]++
+		case *RequestUnion_Probe:
+			counts[46]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", ru))
 		}
@@ -708,6 +718,7 @@ var requestNames = []string{
 	"QueryResolvedTimestamp",
 	"ScanInterleavedIntents",
 	"Barrier",
+	"Probe",
 }
 
 // Summary prints a short summary of the requests in a batch.
@@ -923,6 +934,10 @@ type barrierResponseAlloc struct {
 	union ResponseUnion_Barrier
 	resp  BarrierResponse
 }
+type probeResponseAlloc struct {
+	union ResponseUnion_Probe
+	resp  ProbeResponse
+}
 
 // CreateReply creates replies for each of the contained requests, wrapped in a
 // BatchResponse. The response objects are batch allocated to minimize
@@ -979,6 +994,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf43 []queryResolvedTimestampResponseAlloc
 	var buf44 []scanInterleavedIntentsResponseAlloc
 	var buf45 []barrierResponseAlloc
+	var buf46 []probeResponseAlloc
 
 	for i, r := range ba.Requests {
 		switch r.GetValue().(type) {
@@ -1304,6 +1320,13 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			buf45[0].union.Barrier = &buf45[0].resp
 			br.Responses[i].Value = &buf45[0].union
 			buf45 = buf45[1:]
+		case *RequestUnion_Probe:
+			if buf46 == nil {
+				buf46 = make([]probeResponseAlloc, counts[46])
+			}
+			buf46[0].union.Probe = &buf46[0].resp
+			br.Responses[i].Value = &buf46[0].union
+			buf46 = buf46[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
@@ -1406,6 +1429,8 @@ func CreateRequest(method Method) Request {
 		return &ScanInterleavedIntentsRequest{}
 	case Barrier:
 		return &BarrierRequest{}
+	case Probe:
+		return &ProbeRequest{}
 	default:
 		panic(fmt.Sprintf("unsupported method: %+v", method))
 	}

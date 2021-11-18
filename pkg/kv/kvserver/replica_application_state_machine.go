@@ -136,20 +136,30 @@ func (r *Replica) shouldApplyCommand(
 	cmd.leaseIndex, cmd.proposalRetry, cmd.forcedErr = checkForcedErr(
 		ctx, cmd.idKey, &cmd.raftCmd, cmd.IsLocal(), replicaState,
 	)
-	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr == nil && filter != nil {
+	// Consider testing-only filters.
+	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr != nil || filter != nil {
 		args := kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.idKey,
 			ReplicatedEvalResult: *cmd.replicatedResult(),
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
+			ForcedError:          cmd.forcedErr,
 		}
-		if cmd.IsLocal() {
-			args.Req = cmd.proposal.Request
-		}
-		var newPropRetry int
-		newPropRetry, cmd.forcedErr = filter(args)
-		if cmd.proposalRetry == 0 {
-			cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
+		if cmd.forcedErr == nil {
+			if cmd.IsLocal() {
+				args.Req = cmd.proposal.Request
+			}
+			newPropRetry, newForcedErr := filter(args)
+			cmd.forcedErr = newForcedErr
+			if cmd.proposalRetry == 0 {
+				cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
+			}
+		} else if feFilter := r.store.cfg.TestingKnobs.TestingApplyForcedErrFilter; feFilter != nil {
+			newPropRetry, newForcedErr := filter(args)
+			cmd.forcedErr = newForcedErr
+			if cmd.proposalRetry == 0 {
+				cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
+			}
 		}
 	}
 	return cmd.forcedErr == nil
@@ -158,6 +168,13 @@ func (r *Replica) shouldApplyCommand(
 // noopOnEmptyRaftCommandErr is returned from checkForcedErr when an empty raft
 // command is received. See the comment near its use.
 var noopOnEmptyRaftCommandErr = roachpb.NewErrorf("no-op on empty Raft entry")
+
+// noopOnProbeCommandErr is returned from checkForcedErr when a raft command
+// corresponding to a ProbeRequest is handled.
+//
+// This error is used with `errors.Is`, so don't change it or mixed-version
+// issues will occur.
+var noopOnProbeCommandErr = roachpb.NewErrorf("no-op on ProbeRequest")
 
 // checkForcedErr determines whether or not a command should be applied to the
 // replicated state machine after it has been committed to the Raft log. This
@@ -184,6 +201,13 @@ func checkForcedErr(
 	isLocal bool,
 	replicaState *kvserverpb.ReplicaState,
 ) (uint64, proposalReevaluationReason, *roachpb.Error) {
+	if raftCmd.ReplicatedEvalResult.IsProbe {
+		// A Probe is handled by forcing an error during application (which
+		// avoids a separate "success" code path for this type of request)
+		// that we can special case as indicating success of the probe above
+		// raft.
+		return 0, proposalNoReevaluation, noopOnProbeCommandErr
+	}
 	leaseIndex := replicaState.LeaseAppliedIndex
 	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
 	var requestedLease roachpb.Lease
@@ -1249,8 +1273,11 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		rResult.ComputeChecksum = nil
 	}
 
+	// NB: we intentionally never zero out rResult.IsProbe because probes are
+	// implemented by always catching a forced error and thus never show up in
+	// this method.
 	if !rResult.IsZero() {
-		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, kvserverpb.ReplicatedEvalResult{}))
+		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, &kvserverpb.ReplicatedEvalResult{}))
 	}
 	return true, isRemoved
 }
