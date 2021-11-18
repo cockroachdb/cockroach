@@ -1060,11 +1060,6 @@ var specs = []stmtSpec{
 	{
 		name:   "revoke_stmt",
 		inline: []string{"privileges", "opt_privileges_clause"},
-		exclude: []*regexp.Regexp{
-			regexp.MustCompile("'TYPE' target_types"),
-			regexp.MustCompile("'SCHEMA' schema_name_list"),
-		},
-		unlink: []string{"targets"},
 	},
 	{
 		name:    "rollback_transaction",

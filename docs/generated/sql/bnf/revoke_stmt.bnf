@@ -4,3 +4,12 @@ revoke_stmt ::=
 	| 'REVOKE' privilege_list 'ON' targets 'FROM' role_spec_list
 	| 'REVOKE' privilege_list 'FROM' role_spec_list
 	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' role_spec_list
+	| 'REVOKE' 'ALL' 'PRIVILEGES' 'ON' 'TYPE' target_types 'FROM' role_spec_list
+	| 'REVOKE' 'ALL'  'ON' 'TYPE' target_types 'FROM' role_spec_list
+	| 'REVOKE' privilege_list 'ON' 'TYPE' target_types 'FROM' role_spec_list
+	| 'REVOKE' 'ALL' 'PRIVILEGES' 'ON' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' 'ALL'  'ON' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' privilege_list 'ON' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' 'ALL' 'PRIVILEGES' 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' 'ALL'  'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' privilege_list 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
