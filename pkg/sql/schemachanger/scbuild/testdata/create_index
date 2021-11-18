@@ -1,9 +1,9 @@
 create-table
-CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256), money int)
+CREATE TABLE defaultdb.t1 (id INT8 PRIMARY KEY, name VARCHAR(256), money INT8)
 ----
 
 build
-CREATE INDEX id1 on defaultdb.t1(id, name) storing (money)
+CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
 ----
 - ADD SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}
   state: ABSENT
@@ -21,14 +21,15 @@ CREATE INDEX id1 on defaultdb.t1(id, name) storing (money)
     tableId: 52
 
 build
-CREATE INVERTED INDEX concurrently id1 on defaultdb.t1(id, name) storing (money)
+CREATE INVERTED INDEX CONCURRENTLY id2
+	ON defaultdb.t1 (id, name) STORING (money)
 ----
-- ADD SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}
+- ADD SecondaryIndex:{DescID: 52, Name: id2, IndexID: 2}
   state: ABSENT
   details:
     concurrently: true
     indexId: 2
-    indexName: id1
+    indexName: id2
     inverted: true
     keyColumnDirection:
     - ASC
@@ -41,9 +42,10 @@ CREATE INVERTED INDEX concurrently id1 on defaultdb.t1(id, name) storing (money)
     tableId: 52
 
 build
-CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (id) (
-                                                              PARTITION p1 VALUES IN (1)
-                                                            )
+CREATE INDEX id3
+	ON defaultdb.t1 (id, name)
+	STORING (money)
+	PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
 ----
 - ADD Partitioning:{DescID: 52, IndexID: 2}
   state: ABSENT
@@ -57,11 +59,11 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (i
       name: p1
     rangePartitions: []
     tableId: 52
-- ADD SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}
+- ADD SecondaryIndex:{DescID: 52, Name: id3, IndexID: 2}
   state: ABSENT
   details:
     indexId: 2
-    indexName: id1
+    indexName: id3
     keyColumnDirection:
     - ASC
     - ASC
@@ -73,7 +75,8 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (i
     tableId: 52
 
 build
-CREATE INDEX id1 on  defaultdb.t1(id, name) USING HASH WITH BUCKET_COUNT=8  storing (money);
+CREATE INDEX id4
+	ON defaultdb.t1 (id, name) USING HASH WITH BUCKET_COUNT =  8 STORING (money)
 ----
 - ADD Column:{DescID: 52, ColumnID: 4, Name: crdb_internal_id_name_shard_8}
   state: ABSENT
@@ -105,11 +108,11 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) USING HASH WITH BUCKET_COUNT=8  stor
     - 4
     tableId: 52
     unique: true
-- ADD SecondaryIndex:{DescID: 52, Name: id1, IndexID: 3}
+- ADD SecondaryIndex:{DescID: 52, Name: id4, IndexID: 3}
   state: ABSENT
   details:
     indexId: 3
-    indexName: id1
+    indexName: id4
     keyColumnDirection:
     - ASC
     - ASC

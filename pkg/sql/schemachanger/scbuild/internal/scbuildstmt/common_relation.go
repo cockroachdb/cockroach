@@ -8,11 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package scbuild
+package scbuildstmt
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -22,30 +20,26 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-func (b *buildContext) removeTypeBackRefDeps(ctx context.Context, table catalog.TableDescriptor) {
-	// TODO(fqazi):  Consider cleaning up all references by getting them using table.GetReferencedDescIDs(),
-	// which would include all types of references inside a table descriptor. However, this would also need us
-	// to look up the type of descriptor.
-	db := mustReadDatabase(ctx, b, table.GetParentID())
+func removeTypeBackRefDeps(b BuildCtx, table catalog.TableDescriptor) {
+	// TODO(fqazi): Consider cleaning up refs using GetReferencedDescIDs(),
+	// which would include all types of references inside a table descriptor.
+	db := b.MustReadDatabase(table.GetParentID())
 	typeIDs, _, err := table.GetAllReferencedTypeIDs(db, func(id descpb.ID) (catalog.TypeDescriptor, error) {
-		return mustReadType(ctx, b, id), nil
+		return b.MustReadType(id), nil
 	})
 	onErrPanic(err)
 	// Drop all references to this table/view/sequence
 	for _, typeID := range typeIDs {
-		typeRef := &scpb.TypeReference{
+		b.EnqueueDropIfNotExists(&scpb.TypeReference{
 			TypeID: typeID,
 			DescID: table.GetID(),
-		}
-		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, typeRef); !exists {
-			b.addNode(scpb.Target_DROP, typeRef)
-		}
+		})
 	}
 }
 
 // removeColumnTypeBackRefs removes type back references for a given table
 // column from default expressions and comptued expressions.
-func (b *buildContext) removeColumnTypeBackRefs(table catalog.TableDescriptor, id descpb.ColumnID) {
+func removeColumnTypeBackRefs(b BuildCtx, table catalog.TableDescriptor, id descpb.ColumnID) {
 	visitor := &tree.TypeCollectorVisitor{
 		OIDs: make(map[oid.Oid]struct{}),
 	}
@@ -83,13 +77,10 @@ func (b *buildContext) removeColumnTypeBackRefs(table catalog.TableDescriptor, i
 		if _, ok := visitor.OIDs[oid]; !ok {
 			typeID, err := typedesc.UserDefinedTypeOIDToID(oid)
 			onErrPanic(err)
-			typeRef := &scpb.TypeReference{
+			b.EnqueueDropIfNotExists(&scpb.TypeReference{
 				TypeID: typeID,
 				DescID: table.GetID(),
-			}
-			if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, typeRef); !exists {
-				b.addNode(scpb.Target_DROP, typeRef)
-			}
+			})
 		}
 	}
 }
