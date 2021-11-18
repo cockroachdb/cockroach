@@ -305,6 +305,8 @@ type mergeJoinInput struct {
 // implements sort-merge join. It performs a merge on the left and right input
 // sources, based on the equality columns, assuming both inputs are in sorted
 // order.
+//
+// evalCtx will not be mutated.
 func NewMergeJoinOp(
 	unlimitedAllocator *colmem.Allocator,
 	memoryLimit int64,
@@ -507,8 +509,6 @@ func newMergeJoinBase(
 		rDirections[i] = c.Direction
 	}
 
-	diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
-	diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
 	base := &mergeJoinBase{
 		joinHelper:         newJoinHelper(left, right),
 		unlimitedAllocator: unlimitedAllocator,

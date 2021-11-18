@@ -122,6 +122,8 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 		DiskMonitor: testDiskMonitor,
 		EvalCtx:     &evalCtx,
 	}
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 
 	oneInput := []execinfrapb.InputSyncSpec{
 		{ColumnTypes: []*types.T{types.Int}},
@@ -222,17 +224,12 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					Inputs:              colexectestutils.MakeInputs(sources),
 					StreamingMemAccount: &acc,
 					FDSemaphore:         colexecop.NewTestingSemaphore(256),
+					MonitorRegistry:     &monitorRegistry,
 				}
-				// The disk spilling infrastructure relies on different memory
-				// accounts, so if the spilling is supported, we do *not* want to use
-				// streaming memory account.
-				args.TestingKnobs.UseStreamingMemAccountForBuffering = !tc.spillingSupported
 				var (
 					result *colexecargs.NewColOperatorResult
 					err    error
 				)
-				args.MonitorRegistry = &colexecargs.MonitorRegistry{}
-				defer args.MonitorRegistry.Close(ctx)
 				// The memory error can occur either during planning or during
 				// execution, and we want to actually execute the "query" only
 				// if there was no error during planning. That is why we have

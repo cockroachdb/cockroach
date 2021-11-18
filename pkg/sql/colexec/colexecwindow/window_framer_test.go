@@ -54,13 +54,14 @@ func TestWindowFramer(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
+	// The spilling buffer used by the window framers always uses
+	// colcontainer.DiskQueueCacheModeClearAndReuseCache mode.
+	queueCfg.SetCacheMode(colcontainer.DiskQueueCacheModeClearAndReuseCache)
 	memAcc := testMemMonitor.MakeBoundAccount()
 	defer memAcc.Close(evalCtx.Ctx())
 
 	factory := coldataext.NewExtendedColumnFactory(evalCtx)
 	allocator := colmem.NewAllocator(evalCtx.Ctx(), &memAcc, factory)
-	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
-	queueCfg.SetDefaultBufferSizeBytesForCacheMode()
 
 	var memLimits = []int64{1, 1 << 10, 1 << 20}
 

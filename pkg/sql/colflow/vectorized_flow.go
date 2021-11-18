@@ -1084,14 +1084,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 				return
 			}
 
-			var inputs []colexecargs.OpWithMetaInfo
+			inputs := make([]colexecargs.OpWithMetaInfo, len(pspec.Input))
 			for i := range pspec.Input {
-				input, localErr := s.setupInput(ctx, flowCtx, pspec.Input[i], opt, factory)
-				if localErr != nil {
-					err = localErr
+				inputs[i], err = s.setupInput(ctx, flowCtx, pspec.Input[i], opt, factory)
+				if err != nil {
 					return
 				}
-				inputs = append(inputs, input)
 			}
 
 			// Before we can safely use types we received over the wire in the

@@ -107,8 +107,7 @@ func TestSpillingBuffer(t *testing.T) {
 		})
 		op.Init(ctx)
 
-		queueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
-		queueCfg.SetDefaultBufferSizeBytesForCacheMode()
+		queueCfg.SetCacheMode(colcontainer.DiskQueueCacheModeClearAndReuseCache)
 		queueCfg.TestingKnobs.AlwaysCompress = alwaysCompress
 
 		// We need to create a separate unlimited allocator for the spilling

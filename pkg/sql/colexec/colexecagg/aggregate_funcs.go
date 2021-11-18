@@ -438,6 +438,8 @@ type aggAllocBase struct {
 
 // ProcessAggregations processes all aggregate functions specified in
 // aggregations.
+//
+// evalCtx will not be mutated.
 func ProcessAggregations(
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
