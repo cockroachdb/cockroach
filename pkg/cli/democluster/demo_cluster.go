@@ -386,11 +386,12 @@ func (c *transientCluster) Start(
 			for i := 0; i < c.demoCtx.NumNodes; i++ {
 				latencyMap := c.servers[i].Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
 				c.infoLog(ctx, "starting tenant node %d", i)
+				stopper := stop.NewStopper()
 				ts, err := c.servers[i].StartTenant(ctx, base.TestTenantArgs{
 					// We set the tenant ID to i+2, since tenant 0 is not a tenant, and
 					// tenant 1 is the system tenant.
 					TenantID:      roachpb.MakeTenantID(uint64(i + 2)),
-					Stopper:       c.stopper,
+					Stopper:       stopper,
 					ForceInsecure: c.demoCtx.Insecure,
 					SSLCertsDir:   c.demoDir,
 					Locality:      c.demoCtx.Localities[i],
@@ -403,6 +404,13 @@ func (c *transientCluster) Start(
 						},
 					},
 				})
+				c.stopper.AddCloser(stop.CloserFn(func() {
+					stopCtx := context.Background()
+					if ts != nil {
+						stopCtx = ts.AnnotateCtx(stopCtx)
+					}
+					stopper.Stop(stopCtx)
+				}))
 				if err != nil {
 					return err
 				}
