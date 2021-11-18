@@ -2478,7 +2478,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	}
 
 	transport := kvserver.NewRaftTransport(
-		log.AmbientContext{Tracer: tc.Servers[0].RaftTransport().Tracer},
+		tc.Servers[0].AmbientCtx(),
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(tc.Servers[0].RPCContext(), gossip.AddressResolver(tc.Servers[0].Gossip())),
 		nil, /* grpcServer */

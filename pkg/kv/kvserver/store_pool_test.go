@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -102,10 +101,10 @@ func createTestStorePool(
 	mc := hlc.NewManualClock(123)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	st := cluster.MakeTestingClusterSettings()
-	tr := tracing.NewTracer()
+	ambientCtx := log.MakeDummyAmbientContext(stopper.Tracer())
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tr},
+		AmbientCtx: ambientCtx,
 		Config:     &base.Config{Insecure: true},
 		Clock:      clock,
 		Stopper:    stopper,
@@ -117,7 +116,7 @@ func createTestStorePool(
 
 	TimeUntilStoreDead.Override(context.Background(), &st.SV, timeUntilStoreDeadValue)
 	storePool := NewStorePool(
-		log.AmbientContext{Tracer: tr},
+		ambientCtx,
 		st,
 		g,
 		clock,
