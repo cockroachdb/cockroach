@@ -29,6 +29,7 @@ import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses
 import moment, { Moment } from "moment";
 import { Search as IndexIcon } from "@cockroachlabs/icons";
 import { formatDate } from "antd/es/date-picker/utils";
+import { Link } from "react-router-dom";
 const cx = classNames.bind(styles);
 
 const { TabPane } = Tabs;
@@ -215,11 +216,11 @@ export class DatabaseTablePage extends React.Component<
       default:
         // TODO(lindseyjin): replace default case with create time after it's added to table_indexes
         if (lastReset.isSame(this.minDate)) {
-          return "Last reset: Never";
+          return "Last cleared: Never";
         } else {
           return formatDate(
             lastReset,
-            "[Last reset:] MMM DD, YYYY [at] h:mm A",
+            "[Last cleared:] MMM DD, YYYY [at] h:mm A",
           );
         }
     }
@@ -231,10 +232,13 @@ export class DatabaseTablePage extends React.Component<
       title: "Indexes",
       className: cx("index-stats-table__col-indexes"),
       cell: indexStat => (
-        <>
+        <Link
+          to={`${this.props.name}/index/${indexStat.indexName}`}
+          className={cx("icon__container")}
+        >
           <IndexIcon className={cx("icon--s", "icon--primary")} />
           {indexStat.indexName}
-        </>
+        </Link>
       ),
       sort: indexStat => indexStat.indexName,
     },
@@ -287,7 +291,7 @@ export class DatabaseTablePage extends React.Component<
               { link: `/database/${this.props.databaseName}`, name: "Tables" },
               {
                 link: `/database/${this.props.databaseName}/table/${this.props.name}`,
-                name: "Table Detail",
+                name: `Table: ${this.props.name}`,
               },
             ]}
             divider={
@@ -308,14 +312,14 @@ export class DatabaseTablePage extends React.Component<
         <section className={(baseHeadingClasses.wrapper, cx("tab-area"))}>
           <Tabs className={commonStyles("cockroach--tabs")}>
             <TabPane tab="Overview" key="overview">
-              <Row>
-                <Col>
+              <Row gutter={18}>
+                <Col className="gutter-row" span={18}>
                   <SqlBox value={this.props.details.createStatement} />
                 </Col>
               </Row>
 
-              <Row gutter={16}>
-                <Col span={10}>
+              <Row gutter={18}>
+                <Col className="gutter-row" span={8}>
                   <SummaryCard className={cx("summary-card")}>
                     <SummaryCardItem
                       label="Size"
@@ -332,7 +336,7 @@ export class DatabaseTablePage extends React.Component<
                   </SummaryCard>
                 </Col>
 
-                <Col span={14}>
+                <Col className="gutter-row" span={10}>
                   <SummaryCard className={cx("summary-card")}>
                     {this.props.showNodeRegionsSection && (
                       <SummaryCardItem
@@ -352,10 +356,10 @@ export class DatabaseTablePage extends React.Component<
                   </SummaryCard>
                 </Col>
               </Row>
-              <SummaryCard
-                className={cx("summary-card", "index-stats__summary-card")}
-              >
-                <Row>
+              <Row gutter={18}>
+                <SummaryCard
+                  className={cx("summary-card", "index-stats__summary-card")}
+                >
                   <div className={cx("index-stats__header")}>
                     <Heading type="h5">Index Stats</Heading>
                     <div className={cx("index-stats__clear-info")}>
@@ -399,8 +403,8 @@ export class DatabaseTablePage extends React.Component<
                     onChangeSortSetting={this.changeSortSetting.bind(this)}
                     loading={this.props.indexStats.loading}
                   />
-                </Row>
-              </SummaryCard>
+                </SummaryCard>
+              </Row>
             </TabPane>
             <TabPane tab="Grants" key="grants">
               <DatabaseTableGrantsTable

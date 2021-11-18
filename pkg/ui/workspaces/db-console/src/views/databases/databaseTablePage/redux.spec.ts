@@ -25,16 +25,9 @@ import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
-import * as protos from "oss/src/js";
 import moment from "moment";
-
-type Timestamp = protos.google.protobuf.ITimestamp;
-
-function makeTimestamp(date: string): Timestamp {
-  return new protos.google.protobuf.Timestamp({
-    seconds: new Long(Date.parse(date) * 1e-3),
-  });
-}
+import { TimestampToMoment } from "src/util/convert";
+import { makeTimestamp } from "src/views/databases/utils";
 
 function fakeRouteComponentProps(
   k1: string,
@@ -105,15 +98,19 @@ class TestDriver {
   }
 
   assertIndexStats(expected: DatabaseTablePageIndexStats) {
-    // Convert moments to long
-    this.properties().indexStats.stats[0].lastUsed.isSame(
-      expected.stats[0].lastUsed,
+    // Assert moments are equal.
+    assert(
+      this.properties().indexStats.stats[0].lastUsed.isSame(
+        expected.stats[0].lastUsed,
+      ),
     );
     delete this.properties().indexStats.stats[0].lastUsed;
     delete expected.stats[0].lastUsed;
-    this.properties().indexStats.lastReset.isSame(expected.lastReset);
+    assert(this.properties().indexStats.lastReset.isSame(expected.lastReset));
     delete this.properties().indexStats.lastReset;
     delete expected.lastReset;
+
+    // Assert objects without moments are equal.
     assert.deepStrictEqual(this.properties().indexStats, expected);
   }
 
@@ -258,11 +255,15 @@ describe("Database Table Page", function() {
         {
           indexName: "jobs_status_created_idx",
           totalReads: 2,
-          lastUsed: moment("2021-11-19T23:01:05.167627Z"),
+          lastUsed: TimestampToMoment(
+            makeTimestamp("2021-11-19T23:01:05.167627Z"),
+          ),
           lastUsedType: "read",
         },
       ],
-      lastReset: moment("2021-11-12T20:18:22.167627Z"),
+      lastReset: TimestampToMoment(
+        makeTimestamp("2021-11-12T20:18:22.167627Z"),
+      ),
     });
   });
 });
