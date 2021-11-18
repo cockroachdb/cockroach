@@ -167,10 +167,11 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 
 # awscli - roachtests
 # NB: we don't use apt-get because we need an up to date version of awscli
-RUN curl -fsSL "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip" && \
-  unzip awscli-bundle.zip && \
-  ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws && \
-  rm -rf awscli-bundle.zip awscli-bundle
+RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.0.30.zip" -o "awscliv2.zip" && \
+ echo "7ee475f22c1b35cc9e53affbf96a9ffce91706e154a9441d0d39cbf8366b718e  awscliv2.zip" | sha256sum -c - && \
+ unzip awscliv2.zip && \
+ ./aws/install && \
+ rm -rf aws awscliv2.zip
 
 # git - Upgrade to a more modern version
 RUN DEBIAN_FRONTEND=noninteractive apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
