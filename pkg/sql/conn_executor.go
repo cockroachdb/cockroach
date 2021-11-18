@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
@@ -1009,11 +1010,11 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		case stateCommitWait:
 			ex.state.finishSQLTxn()
 		default:
-			if util.CrdbTestBuild {
+			if buildutil.CrdbTestBuild {
 				panic(errors.AssertionFailedf("unexpected state in conn executor after ApplyWithPayload %T", t))
 			}
 		}
-		if util.CrdbTestBuild && ex.state.Ctx != nil {
+		if buildutil.CrdbTestBuild && ex.state.Ctx != nil {
 			panic(errors.AssertionFailedf("txn span not closed in state %s", ex.machine.CurState()))
 		}
 	} else if closeType == externalTxnClose {

@@ -87,6 +87,26 @@ platform(
 )
 
 config_setting(
+    name = "dbg_crdb_test",
+    define_values = {
+        "crdb_test": "y",
+    },
+    values = {
+        "compilation_mode": "dbg",
+    },
+)
+
+config_setting(
+    name = "fastbuild_crdb_test",
+    define_values = {
+        "crdb_test": "y",
+    },
+    values = {
+        "compilation_mode": "fastbuild",
+    },
+)
+
+config_setting(
     name = "dev",
     define_values = {
         "cockroach_bazel_dev": "y",
@@ -110,5 +130,22 @@ config_setting(
     ],
     define_values = {
         "cockroach_cross": "y",
+    },
+)
+
+config_setting(
+    name = "opt_crdb_test",
+    define_values = {
+        "crdb_test": "y",
+    },
+    values = {
+        "compilation_mode": "opt",
+    },
+)
+
+config_setting(
+    name = "opt",
+    values = {
+        "compilation_mode": "opt",
     },
 )

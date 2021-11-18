@@ -48,6 +48,12 @@ pkg/cmd/roachtest/BUILD.bazel
 pkg/cmd/teamcity-trigger/BUILD.bazel
 "
 
+EXISTING_CRDB_TEST_BUILD_CONSTRAINTS="
+pkg/util/buildutil/crdb_test_dyn.go://go:build bazel
+pkg/util/buildutil/crdb_test_off.go://go:build !crdb_test || crdb_test_off
+pkg/util/buildutil/crdb_test_on.go://go:build crdb_test && !crdb_test_off
+"
+
 git grep 'go:generate stringer' pkg | while read LINE; do
     dir=$(dirname $(echo $LINE | cut -d: -f1))
     type=$(echo $LINE | grep -o -- '-type[= ][^ ]*' | sed 's/-type[= ]//g' | awk '{print tolower($0)}')
@@ -84,5 +90,18 @@ git grep 'broken_in_bazel' pkg | grep BUILD.bazel: | grep -v pkg/BUILD.bazel | g
     fi
     echo "A new broken test in Bazel was added in $LINE"
     echo 'Ensure the test runs with Bazel, then remove the broken_in_bazel tag.'
+    exit 1
+done
+
+git grep '//go:build' pkg | grep crdb_test | while read LINE; do
+    if [[ "$EXISTING_CRDB_TEST_BUILD_CONSTRAINTS" == *"$LINE"* ]]; then
+        # Grandfathered.
+        continue
+    fi
+    echo "A new crdb_test/crdb_test_off build constraint was added in $LINE"
+    echo 'Make sure you port the conditional compilation logic to the Bazel build,'
+    echo 'which does not use the build tags in the same way.'
+    echo "Once you've done so, you can add the line to "
+    echo 'EXISTING_CRDB_TEST_BUILD_CONSTRAINTS in build/bazelutil/check.sh.'
     exit 1
 done

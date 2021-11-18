@@ -8,12 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-//go:build crdb_test
-// +build crdb_test
-
 package props
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -26,6 +24,9 @@ import (
 //   3. If Mutate is true, then VolatilitySet must contain Volatile.
 //
 func (s *Shared) Verify() {
+	if !buildutil.CrdbTestBuild {
+		return
+	}
 	if !s.Populated {
 		panic(errors.AssertionFailedf("properties are not populated"))
 	}
@@ -47,6 +48,10 @@ func (s *Shared) Verify() {
 //      one row, then the cardinality reflects that as well.
 //
 func (r *Relational) Verify() {
+	if !buildutil.CrdbTestBuild {
+		return
+	}
+
 	r.Shared.Verify()
 	r.FuncDeps.Verify()
 
@@ -76,6 +81,10 @@ func (r *Relational) Verify() {
 // Used for testing (e.g. to cross-check derived properties from expressions in
 // the same group).
 func (r *Relational) VerifyAgainst(other *Relational) {
+	if !buildutil.CrdbTestBuild {
+		return
+	}
+
 	if !r.OutputCols.Equals(other.OutputCols) {
 		panic(errors.AssertionFailedf("output cols mismatch: %s vs %s", log.Safe(r.OutputCols), log.Safe(other.OutputCols)))
 	}
@@ -96,6 +105,10 @@ func (r *Relational) VerifyAgainst(other *Relational) {
 //   1. Functional dependencies are internally consistent.
 //
 func (s *Scalar) Verify() {
+	if !buildutil.CrdbTestBuild {
+		return
+	}
+
 	s.Shared.Verify()
 	s.FuncDeps.Verify()
 }

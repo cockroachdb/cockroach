@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -126,7 +126,7 @@ func newColumnarizer(
 				// Close will call InternalClose(). Note that we don't return
 				// any trailing metadata here because the columnarizers
 				// propagate it in DrainMeta.
-				if err := c.Close(); util.CrdbTestBuild && err != nil {
+				if err := c.Close(); buildutil.CrdbTestBuild && err != nil {
 					// Close never returns an error.
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected error %v from Columnarizer.Close", err))
 				}
@@ -167,7 +167,7 @@ func (c *Columnarizer) Init(ctx context.Context) {
 
 // GetStats is part of the colexecop.VectorizedStatsCollector interface.
 func (c *Columnarizer) GetStats() *execinfrapb.ComponentStats {
-	if c.removedFromFlow && util.CrdbTestBuild {
+	if c.removedFromFlow && buildutil.CrdbTestBuild {
 		colexecerror.InternalError(errors.AssertionFailedf(
 			"unexpectedly the columnarizer was removed from the flow when stats are being collected",
 		))

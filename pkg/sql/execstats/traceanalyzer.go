@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
@@ -74,7 +75,7 @@ func NewFlowsMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowsMeta
 	for nodeID, flow := range flows {
 		if a.flowID.IsUnset() {
 			a.flowID = flow.FlowID
-		} else if util.CrdbTestBuild && !a.flowID.Equal(flow.FlowID) {
+		} else if buildutil.CrdbTestBuild && !a.flowID.Equal(flow.FlowID) {
 			panic(
 				errors.AssertionFailedf(
 					"expected the same FlowID to be used for all flows. UUID of first flow: %v, UUID of flow on node %s: %v",

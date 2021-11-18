@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -34,9 +34,9 @@ func TestVectorizedPlanning(t *testing.T) {
 	conn := tc.Conns[0]
 
 	t.Run("no columnarizer-materializer", func(t *testing.T) {
-		if !util.CrdbTestBuild {
+		if !buildutil.CrdbTestBuild {
 			// The expected output below assumes that the invariants checkers
-			// are present which are planned only when util.CrdbTestBuild is
+			// are present which are planned only when buildutil.CrdbTestBuild is
 			// true; if it isn't, we skip this test.
 			return
 		}

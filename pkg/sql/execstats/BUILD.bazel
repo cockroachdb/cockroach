@@ -10,6 +10,7 @@ go_library(
         "//pkg/roachpb:with-mocks",
         "//pkg/sql/execinfrapb",
         "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
     ],
