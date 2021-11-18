@@ -67,11 +67,7 @@ func (idw intentDemuxWriter) ClearIntent(
 // scratch-space to avoid allocations -- its contents will be overwritten and
 // not appended to, and a possibly different buf returned.
 func (idw intentDemuxWriter) PutIntent(
-	ctx context.Context,
-	key roachpb.Key,
-	value []byte,
-	txnUUID uuid.UUID,
-	buf []byte,
+	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID, buf []byte,
 ) (_ []byte, _ error) {
 	// The intent is either staying separated, or there
 	// was no previous intent.
