@@ -20,9 +20,7 @@ import (
 
 // MakeAmbientCtx creates an AmbientContext with a Tracer in it.
 func MakeAmbientCtx() log.AmbientContext {
-	return log.AmbientContext{
-		Tracer: tracing.NewTracer(),
-	}
+	return log.MakeDummyAmbientContext(tracing.NewTracer())
 }
 
 // MatchInOrder matches interprets the given slice of strings as a slice of
