@@ -45,6 +45,12 @@
     margin-right: 12px;
   }
 
+  &--s {
+    height: 16px;
+    width: 16px;
+    margin-right: 10px;
+  }
+
   &--xxs {
     height: 8px;
     width: 8px;
@@ -90,25 +96,13 @@
   &-table {
     &__col {
       &-indexes {
+        font-family: $font-family--semi-bold;
         width: 30em;
       }
       &-last-used {
         width: 30em;
       }
     }
-  }
-}
-
-
-.icon {
-  &--s {
-    height: $line-height--x-small;
-    width: $line-height--x-small;
-    margin-right: 10px;
-  }
-
-  &--primary {
-    fill: $colors--primary-text;
   }
 }
 

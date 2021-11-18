@@ -31,7 +31,7 @@ import {
 } from "src/redux/nodes";
 import { getNodesByRegionString } from "../utils";
 import { TimestampToMoment } from "src/util/convert";
-import { resetIndexUsageStatsAction } from "oss/src/redux/indexUsageStats";
+import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
 
 const {
   TableDetailsRequest,
