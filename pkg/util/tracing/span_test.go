@@ -30,6 +30,17 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+func TestStartSpan(t *testing.T) {
+	tr := NewTracer()
+	sp := tr.StartSpan("test")
+	defer sp.Finish()
+	require.Equal(t, "noop", sp.OperationName())
+
+	sp2 := tr.StartSpan("test", WithRecording(RecordingStructured))
+	defer sp2.Finish()
+	require.Equal(t, "test", sp2.OperationName())
+}
+
 func TestRecordingString(t *testing.T) {
 	tr := NewTracer()
 	tr2 := NewTracer()
