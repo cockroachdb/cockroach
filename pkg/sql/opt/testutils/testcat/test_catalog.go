@@ -220,6 +220,10 @@ func (tc *Catalog) HasRoleOption(ctx context.Context, roleOption roleoption.Opti
 	return true, nil
 }
 
+func (tc *Catalog) GetAllTableNames(ctx context.Context) ([]string, error) {
+	return []string{}, nil
+}
+
 // FullyQualifiedName is part of the cat.Catalog interface.
 func (tc *Catalog) FullyQualifiedName(
 	ctx context.Context, ds cat.DataSource,

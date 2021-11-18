@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -219,6 +220,35 @@ func (oc *optCatalog) ResolveDataSource(
 		return nil, cat.DataSourceName{}, err
 	}
 	return ds, oc.tn, nil
+}
+
+func (oc *optCatalog) GetAllTableNames(ctx context.Context) ([]string, error) {
+	it, err := oc.planner.ExecCfg().InternalExecutor.QueryIteratorEx(
+		ctx, `get-all-table-names`, oc.planner.Txn(), sessiondata.InternalExecutorOverride{
+			User:     oc.planner.SessionData().User(),
+			Database: oc.planner.SessionData().Database,
+		}, `SELECT table_name FROM [SHOW TABLES] ORDER BY table_name`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := it.Close(); err != nil {
+			log.Warningf(ctx, "failed to close %+v", err)
+		}
+	}()
+
+	var tableNames []string
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		if err != nil {
+			return nil, err
+		}
+		row := it.Cur()
+		tableName := tree.MustBeDString(row[0])
+		tableNames = append(tableNames, string(tableName))
+	}
+	return tableNames, err
 }
 
 // ResolveDataSourceByID is part of the cat.Catalog interface.

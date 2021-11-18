@@ -1,0 +1,132 @@
+statement ok
+CREATE TABLE vehicles();
+CREATE TABLE promo_codes();
+CREATE TABLE rides();
+CREATE TABLE user_promo_codes();
+CREATE TABLE users();
+CREATE TABLE vehicle_location_histories();
+
+
+query I
+select 1
+----
+1
+
+query T
+show completions at offset 1 'select 1'
+----
+SAVEPOINT
+SCANS
+SCATTER
+SCHEDULE
+SCHEDULES
+SCHEMA
+SCHEMAS
+SCONST
+SCRUB
+SEARCH
+SECOND
+SELECT
+SEQUENCE
+SEQUENCES
+SERIALIZABLE
+SERVER
+SESSION
+SESSIONS
+SESSION_USER
+SET
+SETS
+SETTING
+SETTINGS
+SHARE
+SHOW
+SIMILAR
+SIMPLE
+SKIP
+SKIP_LOCALITIES_CHECK
+SKIP_MISSING_FOREIGN_KEYS
+SKIP_MISSING_SEQUENCES
+SKIP_MISSING_SEQUENCE_OWNERS
+SKIP_MISSING_VIEWS
+SMALLINT
+SMALLSERIAL
+SNAPSHOT
+SOME
+SPLIT
+SQL
+SQRT
+START
+STATEMENTS
+STATISTICS
+STATUS
+STDIN
+STORAGE
+STORE
+STORED
+STORING
+STREAM
+STRICT
+STRING
+SUBSCRIPTION
+SUBSTRING
+SURVIVAL
+SURVIVE
+SYMMETRIC
+SYNTAX
+SYSTEM
+
+query T
+show completions at offset 7 'select 1'
+----
+·
+
+query T
+show completions at offset 7 'select 2'
+----
+·
+
+query T
+show completions at offset 10 'select * fro'
+----
+FAILURE
+FALSE
+FAMILY
+FCONST
+FETCH
+FETCHTEXT
+FETCHTEXT_PATH
+FETCHVAL
+FETCHVAL_PATH
+FILES
+FILTER
+FIRST
+FLOAT
+FLOAT4
+FLOAT8
+FLOORDIV
+FOLLOWING
+FOR
+FORCE
+FORCE_INDEX
+FORCE_ZIGZAG
+FOREIGN
+FROM
+FULL
+FUNCTION
+FUNCTIONS
+
+query T
+show completions at offset 11 'select * fro'
+----
+FROM
+
+query T
+show completions at offset 15 'select * from r';
+----
+rides
+
+query T
+show completions at offset 15 'select * from v';
+----
+vehicle_location_histories
+vehicles

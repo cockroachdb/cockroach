@@ -885,3 +885,19 @@ func (n *ShowDefaultPrivileges) Format(ctx *FmtCtx) {
 		ctx.WriteString("FOR ALL ROLES ")
 	}
 }
+
+type ShowCompletions struct {
+	Statement string
+	Offset    *NumVal
+}
+
+func (s ShowCompletions) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW COMPLETIONS AT OFFSET ")
+	s.Offset.Format(ctx)
+	ctx.WriteString(" ")
+	ctx.WriteString("'")
+	ctx.WriteString(s.Statement)
+	ctx.WriteString("'")
+}
+
+var _ Statement = &ShowCompletions{}
