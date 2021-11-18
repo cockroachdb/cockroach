@@ -1181,6 +1181,11 @@ func (s *SQLServer) StartDiagnostics(ctx context.Context) {
 	s.diagnosticsReporter.PeriodicallyReportDiagnostics(ctx, s.stopper)
 }
 
+// AmbientCtx retrieves the ambient context for this server.
+func (s *SQLServer) AmbientCtx() log.AmbientContext {
+	return s.ambientCtx
+}
+
 // AnnotateCtx annotates the given context with the server tracer and tags.
 func (s *SQLServer) AnnotateCtx(ctx context.Context) context.Context {
 	return s.ambientCtx.AnnotateCtx(ctx)

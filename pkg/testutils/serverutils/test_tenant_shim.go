@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -76,6 +77,9 @@ type TestTenantInterface interface {
 
 	// Stopper returns the stopper used by the tenant.
 	Stopper() *stop.Stopper
+
+	// AmbientCtx retrieves the AmbientContext for this server.
+	AmbientCtx() log.AmbientContext
 
 	// Clock returns the clock used by the tenant.
 	Clock() *hlc.Clock
