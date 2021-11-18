@@ -620,3 +620,8 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 func (s *Stopper) SetTracer(tr *tracing.Tracer) {
 	s.tracer = tr
 }
+
+// Tracer returns the Tracer that the Stopper will use for tasks.
+func (s *Stopper) Tracer() *tracing.Tracer {
+	return s.tracer
+}

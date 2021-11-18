@@ -582,11 +582,21 @@ func (ts *TestServer) StartTenant(
 	if params.TempStorageConfig != nil {
 		sqlCfg.TempStorageConfig = *params.TempStorageConfig
 	}
-	tr := params.Tracer
-	if params.Tracer == nil {
-		tr = tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
+
+	stopper := params.Stopper
+	if stopper == nil {
+		// We don't share the stopper with the server because we want their Tracers
+		// to be different, to simulate them being different processes.
+		tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
+		stopper = stop.NewStopper(stop.WithTracer(tr))
+		// The server's stopper stops the tenant, for convenience.
+		ts.Stopper().AddCloser(stop.CloserFn(func() { stopper.Stop(context.Background()) }))
+	} else if stopper.Tracer() == nil {
+		tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
+		stopper.SetTracer(tr)
 	}
-	baseCfg := makeTestBaseConfig(st, tr)
+
+	baseCfg := makeTestBaseConfig(st, stopper.Tracer())
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.Insecure = params.ForceInsecure
 	baseCfg.Locality = params.Locality
@@ -602,10 +612,6 @@ func (ts *TestServer) StartTenant(
 		if tenantKnobs.ClusterSettingsUpdater == nil {
 			tenantKnobs.ClusterSettingsUpdater = st.MakeUpdater()
 		}
-	}
-	stopper := params.Stopper
-	if stopper == nil {
-		stopper = ts.Stopper()
 	}
 	sqlServer, addr, httpAddr, err := StartTenant(
 		ctx,
