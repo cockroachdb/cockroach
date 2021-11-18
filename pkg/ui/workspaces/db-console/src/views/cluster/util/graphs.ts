@@ -30,6 +30,7 @@ import {
   QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
 import uPlot from "uplot";
+import { LegendProps } from "oss/src/views/cluster/components/linegraph";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
@@ -544,6 +545,7 @@ export function configureUPlotLineChart(
   setTimeRange: (startMillis: number, endMillis: number) => void,
   getLatestXAxisDomain: () => AxisDomain,
   getLatestYAxisDomain: () => AxisDomain,
+  setLegendState: (legendProps: LegendProps) => void,
 ): uPlot.Options {
   const formattedRaw = formatMetricData(metrics, data);
   // Copy palette over since we mutate it in the `series` function
@@ -552,36 +554,32 @@ export function configureUPlotLineChart(
   // graph will always have the first color, etc.
   const strokeColors = [...seriesPalette];
 
+  const debouncedSetCursor = _.throttle((self: uPlot) => {
+    setLegendState({
+      show: true, // TODO(davidh): manage cursor entering/leaving the plot
+      cursor: self.cursor,
+      xValue: self.series[0].value(self, self.data[0][self.cursor.idx]),
+      yValues: self.series
+        .filter((_, i) => {
+          return i !== 0;
+        })
+        .map((s, i) => {
+          const raw = self.data[i + 1][self.cursor.idx];
+          return {
+            name: s.label,
+            value: s.value(self, raw),
+            raw: raw,
+            color: s.stroke(),
+          };
+        }),
+    });
+  }, 50);
+
   const tooltipPlugin = () => {
     return {
       hooks: {
-        init: (self: uPlot) => {
-          const over: HTMLElement = self.root.querySelector(".u-over");
-          const legend: HTMLElement = self.root.querySelector(".u-legend");
-
-          // apply class to stick a legend to the bottom of a chart if it has more than 10 series
-          if (self.series.length > 10) {
-            legend.classList.add("u-legend--place-bottom");
-          }
-
-          // Show/hide legend when we enter/exit the bounds of the graph
-          over.onmouseenter = () => {
-            legend.style.display = "block";
-          };
-
-          over.onmouseleave = () => {
-            legend.style.display = "none";
-          };
-        },
-        setCursor: (self: uPlot) => {
-          // Place legend to the right of the mouse pointer
-          const legend: HTMLElement = self.root.querySelector(".u-legend");
-          if (self.cursor.left > 0 && self.cursor.top > 0) {
-            // TODO(davidh): This placement is not aware of the viewport edges
-            legend.style.left = self.cursor.left + 100 + "px";
-            legend.style.top = self.cursor.top - 10 + "px";
-          }
-        },
+        init: (self: uPlot) => {},
+        setCursor: debouncedSetCursor,
       },
     };
   };
@@ -602,11 +600,7 @@ export function configureUPlotLineChart(
     //   },
     // },
     legend: {
-      show: true,
-
-      // This setting sets the default legend behavior to isolate
-      // a series when it's clicked in the legend.
-      isolate: true,
+      show: false,
     },
     // By default, uPlot expects unix seconds in the x axis.
     // This setting defaults it to milliseconds which our

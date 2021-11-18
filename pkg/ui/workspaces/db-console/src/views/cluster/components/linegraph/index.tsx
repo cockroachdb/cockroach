@@ -399,11 +399,23 @@ export function fillGaps(
 // and store its ref in a global variable.
 // Once we receive updates to props, we push new data to the
 // uPlot object.
-export class LineGraph extends React.Component<LineGraphProps, {}> {
+export class LineGraph extends React.Component<
+  LineGraphProps,
+  { legend: LegendProps }
+> {
   constructor(props: LineGraphProps) {
     super(props);
 
     this.setNewTimeRange = this.setNewTimeRange.bind(this);
+
+    this.state = {
+      legend: {
+        show: false,
+        cursor: undefined,
+        xValue: undefined,
+        yValues: [],
+      },
+    };
   }
 
   // axis is copied from the nvd3 LineGraph component above
@@ -494,6 +506,12 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   // to a closure that holds a reference to this value.
   xAxisDomain: AxisDomain;
 
+  setLegendState = (legendProps: LegendProps) => {
+    this.setState({
+      legend: legendProps,
+    });
+  };
+
   componentDidUpdate(prevProps: Readonly<LineGraphProps>) {
     if (
       !this.props.data?.results ||
@@ -551,6 +569,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         this.setNewTimeRange,
         () => this.xAxisDomain,
         () => this.yAxisDomain,
+        this.setLegendState,
       );
 
       if (this.u) {
@@ -581,7 +600,45 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         <div className="linegraph">
           <div ref={this.el} />
         </div>
+        <Legend {...this.state.legend} />
       </Visualization>
+    );
+  }
+}
+
+interface YValue {
+  raw: number;
+  value: string;
+  color: string;
+  name: string;
+}
+
+export interface LegendProps {
+  show: boolean;
+  cursor: uPlot.Cursor;
+  xValue: string;
+  yValues: YValue[];
+}
+
+class Legend extends React.Component<LegendProps> {
+  render() {
+    return (
+      <div>
+        <div>{this.props.xValue}</div>
+        <ul>
+          {this.props.yValues
+            .sort((a, b) => {
+              return b.raw - a.raw;
+            })
+            .map(y => {
+              return (
+                <li style={{ border: `2px solid ${y.color}` }}>
+                  {y.name}: {y.value}
+                </li>
+              );
+            })}
+        </ul>
+      </div>
     );
   }
 }
