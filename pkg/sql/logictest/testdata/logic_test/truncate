@@ -50,9 +50,10 @@ query II
 SELECT * FROM kview
 ----
 
-query T
+query T retry
 SELECT status FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'
 ----
+running
 running
 
 # Ensure that TRUNCATE works with a self referential FK.

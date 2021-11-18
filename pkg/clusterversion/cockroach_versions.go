@@ -289,6 +289,9 @@ const (
 	// bundles when the query latency exceeds the user provided threshold.
 	AlterSystemStmtDiagReqs
 
+	// UnsplitRangesInAsyncGCJobs moves ranges unsplitting from transaction of
+	// "drop table"/"truncate table" to async gc jobs
+	UnsplitRangesInAsyncGCJobs
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -496,6 +499,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemStmtDiagReqs,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 14},
+	},
+	{
+		Key:     UnsplitRangesInAsyncGCJobs,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 16},
 	},
 
 	// *************************************************

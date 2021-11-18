@@ -233,9 +233,9 @@ func getAllTablesWaitingForGC(
 // described in the comment for SchemaChangeGCDetails.
 func validateDetails(details *jobspb.SchemaChangeGCDetails) error {
 	if details.Tenant != nil &&
-		(len(details.Tables) > 0 || len(details.Indexes) > 0) {
+		(len(details.Tables) > 0 || len(details.Indexes) > 0 || len(details.UnsplitTables) > 0) {
 		return errors.AssertionFailedf(
-			"Either field Tenant is set or any of Tables or Indexes: %+v", *details,
+			"Either field Tenant is set or any of Tables, Indexes or UnsplitTables: %+v", *details,
 		)
 	}
 	if len(details.Indexes) > 0 {
