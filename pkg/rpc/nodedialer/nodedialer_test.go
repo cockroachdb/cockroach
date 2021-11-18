@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -447,7 +446,7 @@ func newTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
 	cfg.RPCHeartbeatInterval = 100 * time.Millisecond
 	rctx := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx: testutils.MakeAmbientCtx(),
 		Config:     cfg,
 		Clock:      clock,
 		Stopper:    stopper,

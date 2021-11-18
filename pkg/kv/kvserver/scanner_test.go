@@ -25,13 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
 )
 
 func makeAmbCtx() log.AmbientContext {
-	return log.AmbientContext{Tracer: tracing.NewTracer()}
+	return testutils.MakeAmbientCtx()
 }
 
 // Test implementation of a range set backed by btree.BTree.
