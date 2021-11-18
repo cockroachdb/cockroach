@@ -242,7 +242,6 @@ type TestTenantArgs struct {
 	// Settings allows the caller to control the settings object used for the
 	// tenant cluster.
 	Settings *cluster.Settings
-	Tracer   *tracing.Tracer
 
 	// AllowSettingClusterSettings, if true, allows the tenant to set in-memory
 	// cluster settings.

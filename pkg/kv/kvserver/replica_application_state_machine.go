@@ -428,9 +428,10 @@ type replicaAppBatch struct {
 // the batch. This allows the batch to make an accurate determination about
 // whether to accept or reject the next command that is staged without needing
 // to actually update the replica state machine in between.
-func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error) {
+func (b *replicaAppBatch) Stage(
+	ctx context.Context, cmdI apply.Command,
+) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
-	ctx := cmd.ctx
 	if cmd.ent.Index == 0 {
 		return nil, makeNonDeterministicFailure("processRaftCommand requires a non-zero index")
 	}
@@ -457,7 +458,7 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 		cmd.raftCmd.LogicalOpLog = nil
 		cmd.raftCmd.ClosedTimestamp = nil
 	} else {
-		if err := b.assertNoCmdClosedTimestampRegression(cmd); err != nil {
+		if err := b.assertNoCmdClosedTimestampRegression(ctx, cmd); err != nil {
 			return nil, err
 		}
 		if err := b.assertNoWriteBelowClosedTimestamp(cmd); err != nil {
@@ -991,7 +992,9 @@ func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) 
 
 // Assert that the closed timestamp carried by the command is not below one from
 // previous commands.
-func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(cmd *replicatedCmd) error {
+func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
+	ctx context.Context, cmd *replicatedCmd,
+) error {
 	if !raftClosedTimestampAssertionsEnabled {
 		return nil
 	}
@@ -1011,7 +1014,7 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(cmd *replicatedCm
 			prevReq.SafeString("<unknown; not leaseholder or not lease request>")
 		}
 
-		logTail, err := b.r.printRaftTail(cmd.ctx, 100 /* maxEntries */, 2000 /* maxCharsPerEntry */)
+		logTail, err := b.r.printRaftTail(ctx, 100 /* maxEntries */, 2000 /* maxCharsPerEntry */)
 		if err != nil {
 			if logTail != "" {
 				logTail = logTail + "\n; error printing log: " + err.Error()
@@ -1042,9 +1045,10 @@ type ephemeralReplicaAppBatch struct {
 }
 
 // Stage implements the apply.Batch interface.
-func (mb *ephemeralReplicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error) {
+func (mb *ephemeralReplicaAppBatch) Stage(
+	ctx context.Context, cmdI apply.Command,
+) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
-	ctx := cmd.ctx
 
 	mb.r.shouldApplyCommand(ctx, cmd, &mb.state)
 	mb.state.LeaseAppliedIndex = cmd.leaseIndex
@@ -1070,10 +1074,9 @@ func (mb *ephemeralReplicaAppBatch) Close() {
 // side effects of commands, such as finalizing splits/merges and informing
 // raft about applied config changes.
 func (sm *replicaStateMachine) ApplySideEffects(
-	cmdI apply.CheckedCommand,
+	ctx context.Context, cmdI apply.CheckedCommand,
 ) (apply.AppliedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
-	ctx := cmd.ctx
 
 	// Deal with locking during side-effect handling, which is sometimes
 	// associated with complex commands such as splits and merged.

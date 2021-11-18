@@ -160,10 +160,11 @@ func TestTracerRecording(t *testing.T) {
 	`); err != nil {
 		t.Fatal(err)
 	}
-	s1.ResetRecording()
-	s1.SetVerbose(false)
-	s1.Recordf("x=%d", 100)
-	require.Nil(t, s1.GetRecording(RecordingStructured))
+
+	s4 := tr.StartSpan("a", WithRecording(RecordingStructured))
+	s4.SetVerbose(false)
+	s4.Recordf("x=%d", 100)
+	require.Nil(t, s4.GetRecording(RecordingStructured))
 
 	s1.Finish()
 }
