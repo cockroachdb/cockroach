@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TestTenantInterface defines SQL-only tenant functionality that tests need; it
@@ -61,4 +62,7 @@ type TestTenantInterface interface {
 
 	// AnnotateCtx annotates a context.
 	AnnotateCtx(context.Context) context.Context
+
+	// AmbientCtx retrieves the AmbientContext for this server.
+	AmbientCtx() log.AmbientContext
 }
