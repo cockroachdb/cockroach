@@ -532,7 +532,8 @@ func generateRandomData(
 }
 
 func writeRandomData(
-	t *testing.T, eng Engine, lkv []lockKeyValue, mvcckv []MVCCKeyValue, interleave bool) {
+	t *testing.T, eng Engine, lkv []lockKeyValue, mvcckv []MVCCKeyValue, interleave bool,
+) {
 	batch := eng.NewBatch()
 	// Iterate in reverse order, so that older locks for a key are encountered
 	// before newer ones. This is because we use ClearUnversioned below to

@@ -467,7 +467,6 @@ func (i *intentInterleavingIter) Valid() (bool, error) {
 
 func (i *intentInterleavingIter) Next() {
 	if i.err != nil {
-
 		return
 	}
 	if i.dir < 0 {
