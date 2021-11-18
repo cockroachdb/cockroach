@@ -23,8 +23,10 @@ import { DateRange } from "src/dateRange";
 import { TransactionDetails } from "../transactionDetails";
 import {
   ColumnDescriptor,
+  handleSortSettingFromQueryString,
   ISortedTablePagination,
   SortSetting,
+  updateSortSettingQueryParamsOnTab,
 } from "../sortedtable";
 import { Pagination } from "../pagination";
 import { TableStatistics } from "../tableStatistics";
@@ -39,7 +41,8 @@ import {
   getStatementsByFingerprintIdAndTime,
 } from "./utils";
 import Long from "long";
-import { getSearchParams, unique, syncHistory } from "src/util";
+import { merge } from "lodash";
+import { unique, syncHistory } from "src/util";
 import { EmptyTransactionsPlaceholder } from "./emptyTransactionsPlaceholder";
 import { Loading } from "../loading";
 import { PageConfig, PageConfigItem } from "../pageConfig";
@@ -48,7 +51,8 @@ import {
   Filter,
   Filters,
   defaultFilters,
-  getFiltersFromQueryString,
+  handleFiltersFromQueryString,
+  updateFiltersQueryParamsOnTab,
 } from "../queryFilter";
 import { UIConfigState } from "../store";
 import { StatementsRequest } from "src/api/statementsApi";
@@ -87,6 +91,7 @@ export interface TransactionsPageStateProps {
   isTenant?: UIConfigState["isTenant"];
   columns: string[];
   sortSetting: SortSetting;
+  filters: Filters;
 }
 
 export interface TransactionsPageDispatchProps {
@@ -94,6 +99,7 @@ export interface TransactionsPageDispatchProps {
   resetSQLStats: () => void;
   onDateRangeChange?: (start: Moment, end: Moment) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
+  onFilterChange?: (value: Filters) => void;
   onSortingChange?: (
     name: string,
     columnTitle: string,
@@ -120,42 +126,47 @@ export class TransactionsPage extends React.Component<
 > {
   constructor(props: TransactionsPageProps) {
     super(props);
-    const filters = getFiltersFromQueryString(
-      this.props.history.location.search,
-    );
-
-    const trxSearchParams = getSearchParams(this.props.history.location.search);
     this.state = {
       pagination: {
         pageSize: this.props.pageSize || 20,
         current: 1,
       },
-      search: trxSearchParams("q", "").toString(),
-      filters: filters,
+      search: "",
       aggregatedTs: null,
       statementFingerprintIds: null,
       transactionStats: null,
       transactionFingerprintId: null,
     };
-
-    const ascending = trxSearchParams("ascending", false).toString() === "true";
-    const columnTitle = trxSearchParams("columnTitle", undefined);
-    if (
-      this.props.onSortingChange &&
-      columnTitle &&
-      (this.props.sortSetting.columnTitle != columnTitle ||
-        this.props.sortSetting.ascending != ascending)
-    ) {
-      this.props.onSortingChange(
-        "Transactions",
-        columnTitle.toString(),
-        ascending,
-      );
-    }
+    const stateFromHistory = this.getStateFromHistory();
+    this.state = merge(this.state, stateFromHistory);
   }
 
-  static defaultProps: Partial<TransactionsPageProps> = {
-    isTenant: false,
+  getStateFromHistory = (): Partial<TState> => {
+    const { history, sortSetting, filters } = this.props;
+    const searchParams = new URLSearchParams(history.location.search);
+
+    // Search query.
+    const searchQuery = searchParams.get("q") || undefined;
+
+    // Sort Settings.
+    handleSortSettingFromQueryString(
+      "Transactions",
+      history.location.search,
+      sortSetting,
+      this.props.onSortingChange,
+    );
+
+    // Filters.
+    const latestFilter = handleFiltersFromQueryString(
+      history,
+      filters,
+      this.props.onFilterChange,
+    );
+
+    return {
+      search: searchQuery,
+      filters: latestFilter,
+    };
   };
 
   refreshData = (): void => {
@@ -166,7 +177,27 @@ export class TransactionsPage extends React.Component<
   componentDidMount(): void {
     this.refreshData();
   }
+
+  updateQueryParams(): void {
+    updateFiltersQueryParamsOnTab(
+      "Transactions",
+      this.state.filters,
+      this.props.history,
+    );
+
+    updateSortSettingQueryParamsOnTab(
+      "Transactions",
+      this.props.sortSetting,
+      {
+        ascending: false,
+        columnTitle: "executionCount",
+      },
+      this.props.history,
+    );
+  }
+
   componentDidUpdate(): void {
+    this.updateQueryParams();
     this.refreshData();
   }
 
@@ -221,11 +252,12 @@ export class TransactionsPage extends React.Component<
   };
 
   onSubmitFilters = (filters: Filters): void => {
+    if (this.props.onFilterChange) {
+      this.props.onFilterChange(filters);
+    }
+
     this.setState({
-      filters: {
-        ...this.state.filters,
-        ...filters,
-      },
+      filters: filters,
     });
     this.resetPagination();
     syncHistory(
@@ -241,6 +273,10 @@ export class TransactionsPage extends React.Component<
   };
 
   onClearFilters = (): void => {
+    if (this.props.onFilterChange) {
+      this.props.onFilterChange(defaultFilters);
+    }
+
     this.setState({
       filters: {
         ...defaultFilters,
