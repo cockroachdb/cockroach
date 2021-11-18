@@ -13,12 +13,18 @@ package gcjob
 import (
 	"context"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -84,6 +90,150 @@ func performGC(
 	return nil
 }
 
+// unsplitRange unsets the sticky bit of a range if it's manually split
+func unsplitRange(
+	ctx context.Context, execCfg *sql.ExecutorConfig, desc roachpb.RangeDescriptor,
+) error {
+	if !execCfg.Codec.ForSystemTenant() {
+		return nil
+	}
+
+	if !desc.GetStickyBit().IsEmpty() {
+		// Swallow "key is not the start of a range" errors because it would mean
+		// that the sticky bit was removed and merged concurrently. DROP TABLE
+		// should not fail because of this.
+		if err := execCfg.DB.AdminUnsplit(ctx, desc.StartKey); err != nil &&
+			!strings.Contains(err.Error(), "is not the start of a range") {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// unsplitRangesForTable unsplit any manually split ranges within the table span.
+func unsplitRangesForTable(
+	ctx context.Context, execCfg *sql.ExecutorConfig, tableDesc catalog.TableDescriptor,
+) error {
+	// Gate this on being the system tenant because secondary tenants aren't
+	// allowed to scan the meta ranges directly.
+	if !execCfg.Codec.ForSystemTenant() {
+		return nil
+	}
+
+	span := tableDesc.TableSpan(execCfg.Codec)
+	ranges, err := kvclient.ScanMetaKVs(ctx, execCfg.DB.NewTxn(ctx, "unsplit-ranges-for-table"), span)
+	if err != nil {
+		return err
+	}
+	for _, r := range ranges {
+		var desc roachpb.RangeDescriptor
+		if err := r.ValueProto(&desc); err != nil {
+			return err
+		}
+
+		if err := unsplitRange(ctx, execCfg, desc); err != nil {
+			return nil
+		}
+	}
+
+	return nil
+}
+
+func unsplitRangesForTables(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	droppedTables []jobspb.SchemaChangeGCDetails_DroppedID,
+) error {
+	if !execCfg.Codec.ForSystemTenant() {
+		return nil
+	}
+
+	for _, droppedTable := range droppedTables {
+		var table catalog.TableDescriptor
+		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			var err error
+			table, err = catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, droppedTable.ID)
+			return err
+		}); err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
+				continue
+			}
+			return errors.Wrapf(err, "failed to fetch table %d", droppedTable.ID)
+		}
+
+		if err := unsplitRangesForTable(ctx, execCfg, table); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// unsplitRangesForIndexes unsplits ranges with dropped index in key prefix
+func unsplitRangesForIndexes(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	indexes []jobspb.SchemaChangeGCDetails_DroppedIndex,
+	parentTableID descpb.ID,
+) error {
+	if !execCfg.Codec.ForSystemTenant() {
+		return nil
+	}
+
+	tableKeyPrefix := execCfg.Codec.TablePrefix(uint32(parentTableID))
+	ranges, err := kvclient.ScanMetaKVs(
+		ctx,
+		execCfg.DB.NewTxn(ctx, "gc-unsplit-ranges-for-indexes"),
+		roachpb.Span{
+			Key:    tableKeyPrefix,
+			EndKey: tableKeyPrefix.PrefixEnd(),
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	droppedIndexIDs := make(map[descpb.IndexID]struct{})
+	for _, idx := range indexes {
+		droppedIndexIDs[idx.IndexID] = struct{}{}
+	}
+
+	var desc roachpb.RangeDescriptor
+	for i := range ranges {
+		if err := ranges[i].ValueProto(&desc); err != nil {
+			return err
+		}
+
+		_, foundTabldID, foundIndexID, err := execCfg.Codec.DecodeIndexPrefix(roachpb.Key(desc.StartKey))
+		if err != nil {
+			// If we get an error here, it means that either our key didn't contain
+			// an index ID (because it was the first range in a table) or the key
+			// didn't contain a table ID (because it's still the first range in the
+			// system that hasn't split off yet).
+			// In this case, we can't translate this range into the new keyspace,
+			// so we just have to continue along.
+			continue
+		}
+
+		if foundTabldID != uint32(parentTableID) {
+			// We found a split point that started somewhere else in the database,
+			// so we can't translate it to the new keyspace. Don't bother with this
+			// range.
+			continue
+		}
+
+		if _, ok := droppedIndexIDs[descpb.IndexID(foundIndexID)]; ok {
+			if err := unsplitRange(ctx, execCfg, desc); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) (err error) {
 	defer func() {
@@ -102,6 +252,23 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 	details, progress, err := initDetailsAndProgress(ctx, execCfg, r.jobID)
 	if err != nil {
 		return err
+	}
+
+	if !progress.TablesUnsplitDone {
+		if len(details.Indexes) > 0 {
+			if err := unsplitRangesForIndexes(ctx, execCfg, details.Indexes, details.ParentID); err != nil {
+				return err
+			}
+		}
+
+		if len(details.Tables) > 0 {
+			if err := unsplitRangesForTables(ctx, execCfg, details.Tables); err != nil {
+				return err
+			}
+		}
+
+		progress.TablesUnsplitDone = true
+		persistProgress(ctx, execCfg, r.jobID, progress, runningStatusGC(progress))
 	}
 
 	tableDropTimes, indexDropTimes := getDropTimes(details)

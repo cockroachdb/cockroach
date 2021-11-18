@@ -642,6 +642,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 			if tableDesc.GetDropTime() > 0 {
 				dropTime = tableDesc.GetDropTime()
 			}
+
 			gcDetails := jobspb.SchemaChangeGCDetails{
 				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
 					{
@@ -2186,6 +2187,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 		for i, table := range details.DroppedTables {
 			tablesToGC[i] = jobspb.SchemaChangeGCDetails_DroppedID{ID: table.ID, DropTime: dropTime}
 		}
+
 		multiTableGCDetails := jobspb.SchemaChangeGCDetails{
 			Tables:   tablesToGC,
 			ParentID: details.DroppedDatabaseID,
