@@ -192,9 +192,6 @@ RUN apt-get purge -y \
     autopoint \
     gettext \
     golang \
-    python-is-python3 \
-    python3 \
-    python3.8-venv \
     rsync \
     texinfo \
  && apt-get autoremove -y
