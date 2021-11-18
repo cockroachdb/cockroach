@@ -3033,8 +3033,10 @@ func TestReplicaGCRace(t *testing.T) {
 	// Create a new transport for store 0. Error responses are passed
 	// back along the same grpc stream as the request so it's ok that
 	// there are two (this one and the one actually used by the store).
+	ambient := tc.Servers[0].AmbientCtx()
+	ambient.AddLogTag("test-raft-transport", nil)
 	fromTransport := kvserver.NewRaftTransport(
-		tc.Servers[0].AmbientCtx(),
+		ambient,
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(tc.Servers[0].RPCContext(), gossip.AddressResolver(fromStore.Gossip())),
 		nil, /* grpcServer */
@@ -3516,7 +3518,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	// so it's ok that there are two (this one and the one actually used by the
 	// store).
 	transport0 := kvserver.NewRaftTransport(
-		log.AmbientContext{Tracer: tc.Servers[0].RaftTransport().Tracer},
+		tc.Servers[0].AmbientCtx(),
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(tc.Servers[0].RPCContext(),
 			gossip.AddressResolver(tc.GetFirstStoreFromServer(t, 0).Gossip())),
