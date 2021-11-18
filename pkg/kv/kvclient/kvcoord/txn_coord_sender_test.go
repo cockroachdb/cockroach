@@ -166,8 +166,8 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	ambient := *s.AmbientContext
 	// Make a db with a short heartbeat interval.
-	ambient := s.AmbientCtx()
 	tsf := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
@@ -2291,9 +2291,8 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 		return distSender.Send(ctx, ba)
 	}
 
-	ambientCtx := s.AmbientCtx()
 	tsf := NewTxnCoordSenderFactory(TxnCoordSenderFactoryConfig{
-		AmbientCtx: ambientCtx,
+		AmbientCtx: *s.AmbientContext,
 		Settings:   s.Cfg.Settings,
 		Clock:      s.Clock,
 		Stopper:    s.Stopper(),
@@ -2301,7 +2300,7 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 		// track the requests issued by the transactions.
 		HeartbeatInterval: -1,
 	}, senderFn)
-	db := kv.NewDB(ambientCtx, tsf, s.Clock, s.Stopper())
+	db := kv.NewDB(*s.AmbientContext, tsf, s.Clock, s.Stopper())
 
 	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return txn.Put(ctx, "key", "val")

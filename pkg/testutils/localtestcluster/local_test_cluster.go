@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -50,6 +51,7 @@ import (
 // Note that the LocalTestCluster is different from server.TestCluster
 // in that although it uses a distributed sender, there is no RPC traffic.
 type LocalTestCluster struct {
+	*log.AmbientContext
 	Cfg               kvserver.StoreConfig
 	Manual            *hlc.ManualClock
 	Clock             *hlc.Clock
@@ -109,10 +111,11 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	cfg := kvserver.TestStoreConfigWithRandomizedClusterSeparatedIntentsMigration(clock)
 	tr := cfg.AmbientCtx.Tracer
 	ltc.stopper = stop.NewStopper(stop.WithTracer(tr))
+	ltc.AmbientContext = &cfg.AmbientCtx
 	ltc.Manual = manualClock
 	ltc.Clock = clock
+	ambient := *ltc.AmbientContext
 
-	ambient := cfg.AmbientCtx
 	nc := &base.NodeIDContainer{}
 	ambient.AddLogTag("n", nc)
 
@@ -132,7 +135,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		Settings:   cfg.Settings,
 		NodeID:     nc,
 	})
-	cfg.RPCContext.NodeID.Set(ambient.AnnotateCtx(context.Background()), nodeID)
+	cfg.RPCContext.NodeID.Set(ltc.AnnotateCtx(context.Background()), nodeID)
 	clusterID := cfg.RPCContext.ClusterID
 	server := rpc.NewServer(cfg.RPCContext) // never started
 	ltc.Gossip = gossip.New(ambient, clusterID, nc, cfg.RPCContext, server, ltc.stopper, metric.NewRegistry(), roachpb.Locality{}, zonepb.DefaultZoneConfigRef())
@@ -170,7 +173,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	} else {
 		cfg.TestingKnobs = *ltc.StoreTestingKnobs
 	}
-	cfg.AmbientCtx = ambient
 	cfg.DB = ltc.DB
 	cfg.Gossip = ltc.Gossip
 	cfg.HistogramWindowInterval = metric.TestSampleInterval
@@ -185,7 +187,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		Settings:                cfg.Settings,
 		HistogramWindowInterval: cfg.HistogramWindowInterval,
 	})
-	ctx := context.TODO()
+	ctx := cfg.AmbientCtx.AnnotateCtx(context.TODO())
 	kvserver.TimeUntilStoreDead.Override(ctx, &cfg.Settings.SV, kvserver.TestTimeUntilStoreDead)
 	cfg.StorePool = kvserver.NewStorePool(
 		cfg.AmbientCtx,
