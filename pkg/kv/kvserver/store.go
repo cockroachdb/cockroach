@@ -242,7 +242,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 	sc := StoreConfig{
 		DefaultSpanConfig:           zonepb.DefaultZoneConfigRef().AsSpanConfig(),
 		Settings:                    st,
-		AmbientCtx:                  log.AmbientContext{Tracer: tracer},
+		AmbientCtx:                  log.MakeDummyAmbientContext(tracer),
 		Clock:                       clock,
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		ScanInterval:                10 * time.Minute,
