@@ -695,3 +695,13 @@ func ColumnNeedsBackfill(col Column) bool {
 	}
 	return col.HasDefault() || !col.IsNullable() || col.IsComputed()
 }
+
+// HasConcurrentSchemaChanges returns whether the table descriptor is undergoing
+// concurrent schema changes.
+func HasConcurrentSchemaChanges(table TableDescriptor) bool {
+	// TODO(ajwerner): For now we simply check for the absence of mutations. Once
+	// we start implementing schema changes with ops to be executed during
+	// statement execution, we'll have to take into account mutations that were
+	// written in this transaction.
+	return len(table.AllMutations()) > 0
+}
