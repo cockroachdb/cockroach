@@ -868,6 +868,7 @@ unreserved_keyword ::=
 	| 'COMMITTED'
 	| 'COMPACT'
 	| 'COMPLETE'
+	| 'COMPLETIONS'
 	| 'CONFLICT'
 	| 'CONFIGURATION'
 	| 'CONFIGURATIONS'

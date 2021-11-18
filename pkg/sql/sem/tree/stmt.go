@@ -1571,6 +1571,15 @@ func (*ShowDefaultPrivileges) StatementType() StatementType { return TypeDML }
 func (*ShowDefaultPrivileges) StatementTag() string { return "SHOW DEFAULT PRIVILEGES" }
 
 // StatementReturnType implements the Statement interface.
+func (*ShowCompletions) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowCompletions) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowCompletions) StatementTag() string { return "SHOW COMPLETIONS" }
+
+// StatementReturnType implements the Statement interface.
 func (*Split) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -1788,6 +1797,7 @@ func (n *ShowVar) String() string                        { return AsString(n) }
 func (n *ShowZoneConfig) String() string                 { return AsString(n) }
 func (n *ShowFingerprints) String() string               { return AsString(n) }
 func (n *ShowDefaultPrivileges) String() string          { return AsString(n) }
+func (n *ShowCompletions) String() string                { return AsString(n) }
 func (n *Split) String() string                          { return AsString(n) }
 func (n *StreamIngestion) String() string                { return AsString(n) }
 func (n *Unsplit) String() string                        { return AsString(n) }

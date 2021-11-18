@@ -764,7 +764,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> CACHE CANCEL CANCELQUERY CASCADE CASE CAST CBRT CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
-%token <str> COMMITTED COMPACT COMPLETE CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
+%token <str> COMMITTED COMPACT COMPLETE COMPLETIONS CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
 %token <str> CONFLICT CONNECTION CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB
 %token <str> CONVERSION CONVERT COPY COVERING CREATE CREATEDB CREATELOGIN CREATEROLE
 %token <str> CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
@@ -1091,6 +1091,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> show_zone_stmt
 %type <tree.Statement> show_schedules_stmt
 %type <tree.Statement> show_full_scans_stmt
+%type <tree.Statement> show_completions_stmt
 
 %type <str> statements_or_queries
 
@@ -4911,6 +4912,7 @@ show_stmt:
 | show_last_query_stats_stmt
 | show_full_scans_stmt
 | show_default_privileges_stmt // EXTEND WITH HELP: SHOW DEFAULT PRIVILEGES
+| show_completions_stmt
 
 // Cursors are not yet supported by CockroachDB. CLOSE ALL is safe to no-op
 // since there will be no open cursors.
@@ -5574,6 +5576,16 @@ show_syntax_stmt:
     $$.val = &tree.ShowSyntax{Statement: $3}
   }
 | SHOW SYNTAX error // SHOW HELP: SHOW SYNTAX
+
+show_completions_stmt:
+  SHOW COMPLETIONS AT OFFSET ICONST FOR SCONST
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowCompletions{
+        Statement: $7,
+        Offset: $5.numVal(),
+    }
+  }
 
 show_last_query_stats_stmt:
   SHOW LAST QUERY STATISTICS query_stats_cols
@@ -13112,6 +13124,7 @@ unreserved_keyword:
 | COMMITTED
 | COMPACT
 | COMPLETE
+| COMPLETIONS
 | CONFLICT
 | CONFIGURATION
 | CONFIGURATIONS
