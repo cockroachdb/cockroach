@@ -12,11 +12,13 @@ package gcjob
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -27,6 +29,37 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+// unsplitRangesForTable unsplit any manually split ranges within the table span.
+func unsplitRangesForTable(
+	ctx context.Context, execCfg *sql.ExecutorConfig, tableDesc catalog.TableDescriptor,
+) error {
+	// Gate this on being the system tenant because secondary tenants aren't
+	// allowed to scan the meta ranges directly.
+	if execCfg.Codec.ForSystemTenant() {
+		span := tableDesc.TableSpan(execCfg.Codec)
+		ranges, err := kvclient.ScanMetaKVs(ctx, execCfg.DB.NewTxn(ctx, "unsplit-ranges-for-table"), span)
+		if err != nil {
+			return err
+		}
+		for _, r := range ranges {
+			var desc roachpb.RangeDescriptor
+			if err := r.ValueProto(&desc); err != nil {
+				return err
+			}
+			if !desc.GetStickyBit().IsEmpty() {
+				// Swallow "key is not the start of a range" errors because it would mean
+				// that the sticky bit was removed and merged concurrently. DROP TABLE
+				// should not fail because of this.
+				if err := execCfg.DB.AdminUnsplit(ctx, desc.StartKey); err != nil &&
+					!strings.Contains(err.Error(), "is not the start of a range") {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
 
 // gcTables drops the table data and descriptor of tables that have an expired
 // deadline and updates the job details to mark the work it did.
@@ -63,6 +96,12 @@ func gcTables(
 		if !table.Dropped() {
 			// We shouldn't drop this table yet.
 			continue
+		}
+
+		// Unsplit all manually split ranges in the table, so they can be
+		// automatically merged by the merge queue.
+		if err := unsplitRangesForTable(ctx, execCfg, table); err != nil {
+			return err
 		}
 
 		// First, delete all the table data.

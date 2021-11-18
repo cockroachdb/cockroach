@@ -916,6 +916,133 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 
 }
 
+func TestDropTableUnsplitManuallySplitRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	params, _ := tests.CreateTestServerParams()
+
+	defer gcjob.SetSmallMaxGCIntervalForTest()()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+
+	const numRows = 2*row.TableTruncateChunkSize + 1
+	const numKeys = 3 * numRows
+
+	tableName := fmt.Sprintf("test1")
+	if err := tests.CreateKVTable(sqlDB, tableName, numRows); err != nil {
+		t.Fatal(err)
+	}
+
+	var tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
+
+	nameKey := catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, keys.MinNonPredefinedUserDescID, tableName)
+	gr, err := kvDB.Get(ctx, nameKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !gr.Exists() {
+		t.Fatalf("Name entry %q does not exist", nameKey)
+	}
+
+	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
+	metaStartKey := keys.RangeMetaKey(keys.MustAddr(tableSpan.Key))
+	metaEndKey := keys.RangeMetaKey(keys.MustAddr(tableSpan.EndKey))
+
+	tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
+
+	// The closure checks whether there is any range has sticky bit
+	// hasManualSplitRange==true: fails when no ranges have sticky bit
+	// hasManualSplitRange==false: fails when any range has sticky bit
+	checkManuallySplitRange := func(hasManualSplitRange bool) {
+		ranges, err := kvDB.Scan(ctx, metaStartKey, metaEndKey, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		require.NotEmpty(t, ranges)
+		hasManuallySplitRange := false
+		for _, r := range ranges {
+			var desc roachpb.RangeDescriptor
+			if err := r.ValueProto(&desc); err != nil {
+				t.Fatal(err)
+			}
+			hasManuallySplitRange = hasManuallySplitRange || !desc.GetStickyBit().IsEmpty()
+		}
+		require.Equal(t, hasManuallySplitRange, hasManualSplitRange)
+	}
+
+	// assert that all ranges are not manually split
+	checkManuallySplitRange(false)
+
+	// split the last range
+	ranges, err := kvDB.Scan(ctx, metaStartKey, metaEndKey, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lastRange := ranges[len(ranges)-1]
+	var lastRangeDesc roachpb.RangeDescriptor
+	if err := lastRange.ValueProto(&lastRangeDesc); err != nil {
+		t.Fatal(err)
+	}
+	splitKey := tests.GetMidKeyInSpan(t, kvDB, lastRangeDesc.StartKey, lastRangeDesc.EndKey)
+	splitKey, err = keys.EnsureSafeSplitKey(splitKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := kvDB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(fmt.Sprintf(`DROP TABLE t.%s`, tableName)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Data hasn't been GC-ed.
+	if err := descExists(sqlDB, true, tableDesc.GetID()); err != nil {
+		t.Fatal(err)
+	}
+	tableSpan = tableDesc.TableSpan(keys.SystemSQLCodec)
+	tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
+
+	// The closure pushes a zone config reducing the TTL to 0 for descriptor i.
+	pushZoneCfg := func() {
+		if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// The closure check table data has been cleaned
+	checkTableGCed := func() {
+		testutils.SucceedsSoon(t, func() error {
+			if err := descExists(sqlDB, false, tableDesc.GetID()); err != nil {
+				return err
+			}
+
+			return zoneExists(sqlDB, nil, tableDesc.GetID())
+		})
+		tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
+		tests.CheckKeyCount(t, kvDB, tableSpan, 0)
+	}
+
+	// Verify there are manually split ranges before gc.
+	checkManuallySplitRange(true)
+
+	// Push a new zone config for a few tables with TTL=0 so the data
+	// is deleted immediately.
+	pushZoneCfg()
+
+	// Check GC worked!
+	checkTableGCed()
+
+	// Verify there is no manually split ranges after gc.
+	checkManuallySplitRange(false)
+}
+
 // Tests DROP DATABASE after DROP TABLE just before the table name has been
 // recycle.
 func TestDropDatabaseAfterDropTable(t *testing.T) {
