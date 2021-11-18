@@ -575,7 +575,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t").TableDesc()
 
 	// Run the flow in a verbose trace so that we can test for tracing info.
-	tracer := tracing.NewTracer()
+	tracer := s.TracerI().(*tracing.Tracer)
 	ctx, sp := tracing.StartVerboseTrace(context.Background(), tracer, "test flow ctx")
 	defer sp.Finish()
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
