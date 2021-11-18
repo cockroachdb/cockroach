@@ -188,3 +188,9 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 
 	return tracing.EnsureChildSpan(ctx, ac.Tracer, opName)
 }
+
+// MakeClientAmbientContext creates an AmbientContext for use by
+// client commands.
+func MakeClientAmbientContext(tracer *tracing.Tracer) AmbientContext {
+	return AmbientContext{Tracer: tracer}
+}
