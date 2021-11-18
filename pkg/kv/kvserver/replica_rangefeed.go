@@ -62,6 +62,14 @@ var RangefeedTBIEnabled = settings.RegisterBoolSetting(
 	util.ConstantWithMetamorphicTestBool("kv.rangefeed.catchup_scan_iterator_optimization.enabled", false),
 )
 
+// RangefeedSeparatedIntentScanEnabled controls whether to use the
+// separated lock table when scanning a range for intents.
+var RangefeedSeparatedIntentScanEnabled = settings.RegisterBoolSetting(
+	"kv.rangefeed.separated_intent_scan.enabled",
+	"if true, rangefeeds will use the separated lock table to scan for intents when possible",
+	util.ConstantWithMetamorphicTestBool("kv.rangefeed.separated_intent_scan.enabled", false),
+)
+
 // lockedRangefeedStream is an implementation of rangefeed.Stream which provides
 // support for concurrent calls to Send. Note that the default implementation of
 // grpc.Stream is not safe for concurrent calls to Send.
@@ -378,23 +386,31 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p = rangefeed.NewProcessor(cfg)
 
 	// Start it with an iterator to initialize the resolved timestamp.
-	rtsIter := func() storage.SimpleMVCCIterator {
+	rtsIter := func() rangefeed.IntentScanner {
 		// Assert that we still hold the raftMu when this is called to ensure
 		// that the rtsIter reads from the current snapshot. The replica
 		// synchronizes with the rangefeed Processor calling this function by
 		// waiting for the Register call below to return.
 		r.raftMu.AssertHeld()
-		return r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+
+		onlySeparatedIntents := r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.PostSeparatedIntentsMigration)
+		useSeparatedIntents := RangefeedSeparatedIntentScanEnabled.Get(&r.store.cfg.Settings.SV)
+		if onlySeparatedIntents && useSeparatedIntents {
+			lowerBound, _ := keys.LockTableSingleKey(desc.StartKey.AsRawKey(), nil)
+			upperBound, _ := keys.LockTableSingleKey(desc.EndKey.AsRawKey(), nil)
+			iter := r.Engine().NewEngineIterator(storage.IterOptions{
+				LowerBound: lowerBound,
+				UpperBound: upperBound,
+			})
+			return rangefeed.NewSeparatedIntentScanner(iter)
+
+		}
+		iter := r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 			UpperBound: desc.EndKey.AsRawKey(),
-			// TODO(nvanbenschoten): To facilitate fast restarts of rangefeed
-			// we should periodically persist the resolved timestamp so that we
-			// can initialize the rangefeed using an iterator that only needs to
-			// observe timestamps back to the last recorded resolved timestamp.
-			// This is safe because we know that there are no unresolved intents
-			// at times before a resolved timestamp.
-			// MinTimestampHint: r.ResolvedTimestamp,
 		})
+		return rangefeed.NewLegacyIntentScanner(iter)
 	}
+
 	p.Start(r.store.Stopper(), rtsIter)
 
 	// Register with the processor *before* we attach its reference to the

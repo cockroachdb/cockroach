@@ -88,6 +88,7 @@ func cdcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
 	// kv.rangefeed.enabled is required for changefeeds to run
 	db.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 	randomlyRun(t, db, "SET CLUSTER SETTING kv.rangefeed.catchup_scan_iterator_optimization.enabled = true")
+	randomlyRun(t, db, "SET CLUSTER SETTING kv.rangefeed.separated_intent_scan.enabled = true")
 }
 
 const randomSettingPercent = 0.50
