@@ -1521,3 +1521,19 @@ CREATE TABLE uses_in_index_predicate (i INT PRIMARY KEY, t enum_for_predicate, I
 
 statement error pgcode 2BP01 could not remove enum value "a" as it is being used in a predicate of index uses_in_index_predicate@uses_in_index_predicate_t_idx
 ALTER TYPE enum_for_predicate DROP VALUE 'a'
+
+# Regression test for not hydrating an enum when it is used in a tuple.
+statement ok
+DROP TYPE IF EXISTS greeting;
+CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi');
+CREATE TABLE seed AS SELECT g::INT8 AS _int8 FROM generate_series(1, 5) AS g;
+WITH
+  cte1 (col1)
+    AS (
+      SELECT * FROM (VALUES (COALESCE((NULL, 'hello':::greeting), (1, 'howdy':::greeting))), ((2, 'hi':::greeting)))
+    ),
+  cte2 (col2) AS (SELECT _int8 FROM seed)
+SELECT
+  col1, col2
+FROM
+  cte1, cte2;

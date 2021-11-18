@@ -114,18 +114,8 @@ func (dt DistSQLTypeResolver) GetTypeDescriptor(
 // HydrateTypeSlice installs metadata into a slice of types.T's.
 func (dt DistSQLTypeResolver) HydrateTypeSlice(ctx context.Context, typs []*types.T) error {
 	for _, t := range typs {
-		if t.UserDefined() {
-			id, err := typedesc.GetUserDefinedTypeDescID(t)
-			if err != nil {
-				return err
-			}
-			name, desc, err := dt.GetTypeDescriptor(ctx, id)
-			if err != nil {
-				return err
-			}
-			if err := desc.HydrateTypeInfoWithName(ctx, t, &name, dt); err != nil {
-				return err
-			}
+		if err := typedesc.EnsureTypeIsHydrated(ctx, t, dt); err != nil {
+			return err
 		}
 	}
 	return nil
