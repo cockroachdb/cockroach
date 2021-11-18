@@ -564,7 +564,7 @@ CREATE TABLE test (
   k INT PRIMARY KEY,
   a INT,
   b INT,
-  INDEX(a)
+  INDEX(a, b)
 );`)
 
 	// Record scan on primary index.
@@ -589,14 +589,27 @@ SELECT * FROM test;
 		}, 1 /* expectedEventCnt*/, 5*time.Second /* timeout */),
 	)
 
+	getCreateStmtQuery := `
+SELECT indexdef
+FROM pg_catalog.pg_indexes
+WHERE tablename = 'test' AND indexname = $1`
+
 	// Get index usage stats and assert expected results.
 	resp := getTableIndexStats(testHelper, "test_db1")
 	require.Equal(t, uint64(1), resp.Statistics[0].Statistics.Stats.TotalReadCount)
 	require.True(t, resp.Statistics[0].Statistics.Stats.LastRead.After(timePreRead))
+	indexName := resp.Statistics[0].IndexName
+	createStmt := cluster.tenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
+	print(createStmt)
+	require.Equal(t, resp.Statistics[0].CreateStatement, createStmt)
 
 	resp = getTableIndexStats(testHelper, "test_db2")
 	require.Equal(t, uint64(0), resp.Statistics[0].Statistics.Stats.TotalReadCount)
 	require.Equal(t, resp.Statistics[0].Statistics.Stats.LastRead, time.Time{})
+	indexName = resp.Statistics[0].IndexName
+	cluster.tenantConn(0).Exec(t, `SET DATABASE=test_db2`)
+	createStmt = cluster.tenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
+	require.Equal(t, resp.Statistics[0].CreateStatement, createStmt)
 }
 
 func ensureExpectedStmtFingerprintExistsInRPCResponse(
