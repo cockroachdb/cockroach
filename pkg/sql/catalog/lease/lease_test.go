@@ -207,6 +207,9 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 		var c base.NodeIDContainer
 		c.Set(context.Background(), roachpb.NodeID(nodeID))
 		nc := base.NewSQLIDContainerForNode(&c)
+		// Note: we create a fresh AmbientContext here, instead of using
+		// t.server.AmbientCtx(), because we want the lease manager to
+		// pretend to be a mock node with its own node ID.
 		ambientCtx := testutils.MakeAmbientCtx()
 		ambientCtx.AddLogTag("n", nc)
 		// Hack the ExecutorConfig that we pass to the Manager to have a
