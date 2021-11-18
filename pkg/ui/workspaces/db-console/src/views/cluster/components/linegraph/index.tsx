@@ -41,8 +41,12 @@ import Visualization from "src/views/cluster/components/visualization";
 import { MilliToSeconds, NanoToMilli } from "src/util/convert";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
-import { findClosestTimeScale, TimeWindow } from "src/redux/timewindow";
 import Long from "long";
+import {
+  findClosestTimeScale,
+  defaultTimeScaleOptions,
+  TimeWindow,
+} from "@cockroachlabs/cluster-ui";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
@@ -454,7 +458,11 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       start: moment.unix(start),
       end: moment.unix(end),
     };
-    let newTimeScale = findClosestTimeScale(end - start, start);
+    let newTimeScale = findClosestTimeScale(
+      defaultTimeScaleOptions,
+      end - start,
+      start,
+    );
     if (this.props.adjustTimeScaleOnChange) {
       newTimeScale = this.props.adjustTimeScaleOnChange(
         newTimeScale,
