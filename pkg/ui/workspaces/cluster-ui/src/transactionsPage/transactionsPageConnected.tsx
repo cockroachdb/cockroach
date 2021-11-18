@@ -30,10 +30,13 @@ import {
 } from "./transactionsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectDateRange } from "src/statementsPage/statementsPage.selectors";
+import {
+  selectDateRange,
+  selectFilters,
+} from "src/statementsPage/statementsPage.selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { actions as localStorageActions } from "../store/localStorage";
-import { actions as analyticsActions } from "../store/analytics";
+import { Filters } from "../queryFilter";
 
 export const TransactionsPageConnected = withRouter(
   connect<
@@ -49,6 +52,7 @@ export const TransactionsPageConnected = withRouter(
       dateRange: selectDateRange(state),
       columns: selectTxnColumns(state),
       sortSetting: selectSortSetting(state),
+      filters: selectFilters(state),
     }),
     (dispatch: Dispatch) => ({
       refreshData: (req?: StatementsRequest) =>
@@ -83,6 +87,14 @@ export const TransactionsPageConnected = withRouter(
           localStorageActions.update({
             key: "sortSetting/TransactionsPage",
             value: { columnTitle: columnName, ascending: ascending },
+          }),
+        );
+      },
+      onFilterChange: (value: Filters) => {
+        dispatch(
+          localStorageActions.update({
+            key: "filters/TransactionsPage",
+            value: value,
           }),
         );
       },

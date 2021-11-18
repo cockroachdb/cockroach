@@ -15,9 +15,11 @@ import { cloneDeep, noop, extend } from "lodash";
 import {
   data,
   nodeRegions,
+  columns,
   routeProps,
   dateRange,
   sortSetting,
+  filters,
 } from "./transactions.fixture";
 
 import { TransactionsPage } from ".";
@@ -37,10 +39,13 @@ storiesOf("Transactions Page", module)
       data={data}
       dateRange={dateRange}
       nodeRegions={nodeRegions}
+      columns={columns}
       refreshData={noop}
       resetSQLStats={noop}
       sortSetting={sortSetting}
       onSortingChange={noop}
+      filters={filters}
+      onFilterChange={noop}
     />
   ))
   .add("without data", () => {
@@ -50,10 +55,13 @@ storiesOf("Transactions Page", module)
         data={getEmptyData()}
         dateRange={dateRange}
         nodeRegions={nodeRegions}
+        columns={columns}
         refreshData={noop}
         resetSQLStats={noop}
         sortSetting={sortSetting}
         onSortingChange={noop}
+        filters={filters}
+        onFilterChange={noop}
       />
     );
   })
@@ -70,11 +78,14 @@ storiesOf("Transactions Page", module)
         data={getEmptyData()}
         dateRange={dateRange}
         nodeRegions={nodeRegions}
+        columns={columns}
         refreshData={noop}
         history={history}
         resetSQLStats={noop}
         sortSetting={sortSetting}
         onSortingChange={noop}
+        filters={filters}
+        onFilterChange={noop}
       />
     );
   })
@@ -85,10 +96,13 @@ storiesOf("Transactions Page", module)
         data={undefined}
         dateRange={dateRange}
         nodeRegions={nodeRegions}
+        columns={columns}
         refreshData={noop}
         resetSQLStats={noop}
         sortSetting={sortSetting}
         onSortingChange={noop}
+        filters={filters}
+        onFilterChange={noop}
       />
     );
   })
@@ -99,6 +113,7 @@ storiesOf("Transactions Page", module)
         data={undefined}
         dateRange={dateRange}
         nodeRegions={nodeRegions}
+        columns={columns}
         error={
           new RequestError(
             "Forbidden",
@@ -110,6 +125,8 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         sortSetting={sortSetting}
         onSortingChange={noop}
+        filters={filters}
+        onFilterChange={noop}
       />
     );
   });
