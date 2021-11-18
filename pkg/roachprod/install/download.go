@@ -17,8 +17,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 )
 
 const (
@@ -76,7 +74,7 @@ func Download(c *SyncedCluster, sourceURLStr string, sha string, dest string) er
 	// If we are local and the destination is relative, then copy the file from
 	// the download node to the other nodes.
 	if c.IsLocal() && !filepath.IsAbs(dest) {
-		src := filepath.Join(local.VMDir(c.Name, downloadNodes[0]), dest)
+		src := filepath.Join(c.localVMDir(downloadNodes[0]), dest)
 		cpCmd := fmt.Sprintf(`cp "%s" "%s"`, src, dest)
 		return c.Run(os.Stdout, os.Stderr, c.Nodes[1:], "copying to remaining nodes", cpCmd)
 	}

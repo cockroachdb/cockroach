@@ -31,12 +31,12 @@ var certsDirRe = regexp.MustCompile(`{certs-dir}`)
 // attributes like pgurl, pghost, pgport, uiport, store-dir, and log-dir with
 // the corresponding values.
 type expander struct {
-	node int
+	node Node
 
-	pgURLs  map[int]string
-	pgHosts map[int]string
-	pgPorts map[int]string
-	uiPorts map[int]string
+	pgURLs  map[Node]string
+	pgHosts map[Node]string
+	pgPorts map[Node]string
+	uiPorts map[Node]string
 }
 
 // expanderFunc is a function which may expand a string with a templated value.
@@ -80,7 +80,7 @@ func (e *expander) expand(c *SyncedCluster, arg string) (string, error) {
 // list of strings which correspond to the values in m for each node specified
 // by nodeSpec.
 func (e *expander) maybeExpandMap(
-	c *SyncedCluster, m map[int]string, nodeSpec string,
+	c *SyncedCluster, m map[Node]string, nodeSpec string,
 ) (string, error) {
 	if nodeSpec == "" {
 		nodeSpec = "all"
@@ -94,8 +94,8 @@ func (e *expander) maybeExpandMap(
 	}
 
 	var result []string
-	for _, i := range nodes {
-		if s, ok := m[i]; ok {
+	for _, node := range nodes {
+		if s, ok := m[node]; ok {
 			result = append(result, s)
 		}
 	}
@@ -151,9 +151,9 @@ func (e *expander) maybeExpandPgPort(c *SyncedCluster, s string) (string, bool, 
 	}
 
 	if e.pgPorts == nil {
-		e.pgPorts = make(map[int]string, len(c.VMs))
-		for _, i := range allNodes(len(c.VMs)) {
-			e.pgPorts[i] = fmt.Sprint(c.NodePort(i))
+		e.pgPorts = make(map[Node]string, len(c.VMs))
+		for _, node := range allNodes(len(c.VMs)) {
+			e.pgPorts[node] = fmt.Sprint(c.NodePort(node))
 		}
 	}
 
@@ -169,9 +169,9 @@ func (e *expander) maybeExpandUIPort(c *SyncedCluster, s string) (string, bool, 
 	}
 
 	if e.uiPorts == nil {
-		e.uiPorts = make(map[int]string, len(c.VMs))
-		for _, i := range allNodes(len(c.VMs)) {
-			e.uiPorts[i] = fmt.Sprint(c.NodeUIPort(i))
+		e.uiPorts = make(map[Node]string, len(c.VMs))
+		for _, node := range allNodes(len(c.VMs)) {
+			e.uiPorts[node] = fmt.Sprint(c.NodeUIPort(node))
 		}
 	}
 
