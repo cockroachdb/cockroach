@@ -188,13 +188,12 @@ func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 		clusterID: &base.ClusterIDContainer{},
 		serverID:  &base.NodeIDContainer{},
 	}
-
 	baseCfg := BaseConfig{
 		Tracer:             tr,
 		idProvider:         idsProvider,
 		IDContainer:        idsProvider.serverID,
 		ClusterIDContainer: idsProvider.clusterID,
-		AmbientCtx:         log.AmbientContext{Tracer: tr, ServerIDs: idsProvider},
+		AmbientCtx:         log.MakeServerAmbientContext(tr, idsProvider),
 		Config:             new(base.Config),
 		Settings:           st,
 		MaxOffset:          MaxOffsetType(base.DefaultMaxClockOffset),
