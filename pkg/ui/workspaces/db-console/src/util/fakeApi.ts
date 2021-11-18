@@ -11,7 +11,7 @@
 import * as $protobuf from "protobufjs";
 
 import { cockroach } from "src/js/protos";
-import { API_PREFIX, toArrayBuffer } from "src/util/api";
+import { API_PREFIX, STATUS_PREFIX, toArrayBuffer } from "src/util/api";
 import fetchMock from "src/util/fetch-mock";
 
 const {
@@ -19,6 +19,7 @@ const {
   DatabaseDetailsResponse,
   TableDetailsResponse,
   TableStatsResponse,
+  TableIndexStatsResponse,
 } = cockroach.server.serverpb;
 
 // These test-time functions provide typesafe wrappers around fetchMock,
@@ -56,7 +57,7 @@ export function restore() {
 export function stubDatabases(
   response: cockroach.server.serverpb.IDatabasesResponse,
 ) {
-  stubGet("/databases", DatabasesResponse.encode(response));
+  stubGet("/databases", DatabasesResponse.encode(response), API_PREFIX);
 }
 
 export function stubDatabaseDetails(
@@ -66,6 +67,7 @@ export function stubDatabaseDetails(
   stubGet(
     `/databases/${database}?include_stats=true`,
     DatabaseDetailsResponse.encode(response),
+    API_PREFIX,
   );
 }
 
@@ -77,6 +79,7 @@ export function stubTableDetails(
   stubGet(
     `/databases/${database}/tables/${table}`,
     TableDetailsResponse.encode(response),
+    API_PREFIX,
   );
 }
 
@@ -88,9 +91,22 @@ export function stubTableStats(
   stubGet(
     `/databases/${database}/tables/${table}/stats`,
     TableStatsResponse.encode(response),
+    API_PREFIX,
   );
 }
 
-function stubGet(path: string, writer: $protobuf.Writer) {
-  fetchMock.get(`${API_PREFIX}${path}`, toArrayBuffer(writer.finish()));
+export function stubIndexStats(
+  database: string,
+  table: string,
+  response: cockroach.server.serverpb.ITableIndexStatsResponse,
+) {
+  stubGet(
+    `/databases/${database}/tables/${table}/indexstats`,
+    TableIndexStatsResponse.encode(response),
+    STATUS_PREFIX,
+  );
+}
+
+function stubGet(path: string, writer: $protobuf.Writer, prefix: string) {
+  fetchMock.get(`${prefix}${path}`, toArrayBuffer(writer.finish()));
 }

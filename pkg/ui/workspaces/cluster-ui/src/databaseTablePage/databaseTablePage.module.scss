@@ -10,6 +10,10 @@
 
 @import "src/core/index.module";
 
+.tab-area {
+  padding-bottom: 80px;
+}
+
 .database-table-page {
   &__indexes {
     &--value {
@@ -54,3 +58,58 @@
     fill: $colors--primary-text;
   }
 }
+
+.index-stats {
+  &__summary-card {
+    width: fit-content;
+    padding: 0;
+  }
+
+  &__header {
+    align-items: baseline;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 24px 24px 0;
+  }
+
+  &__clear-info {
+    display: flex;
+    flex-direction: row;
+  }
+
+  &__last-cleared {
+    color: "#475872";
+    margin-right: 6px;
+  }
+
+  &__clear-btn {
+    border-bottom: none;
+    text-decoration: none;
+  }
+
+  &-table {
+    &__col {
+      &-indexes {
+        width: 30em;
+      }
+      &-last-used {
+        width: 30em;
+      }
+    }
+  }
+}
+
+
+.icon {
+  &--s {
+    height: 16px;
+    width: 16px;
+    margin-right: 10px;
+  }
+
+  &--primary {
+    fill: $colors--primary-text;
+  }
+}
+
