@@ -447,17 +447,23 @@ func allocateDescriptorRewrites(
 		descriptorRewrites[tempSysDBID] = &jobspb.RestoreDetails_DescriptorRewrite{ID: tempSysDBID}
 		for _, table := range tablesByID {
 			if table.GetParentID() == systemschema.SystemDB.GetID() {
-				descriptorRewrites[table.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
+				descriptorRewrites[table.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{
+					ParentID:       tempSysDBID,
+					ParentSchemaID: keys.PublicSchemaID,
+				}
 			}
 		}
-		for _, sc := range typesByID {
+		for _, sc := range schemasByID {
 			if sc.GetParentID() == systemschema.SystemDB.GetID() {
 				descriptorRewrites[sc.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
 			}
 		}
 		for _, typ := range typesByID {
 			if typ.GetParentID() == systemschema.SystemDB.GetID() {
-				descriptorRewrites[typ.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
+				descriptorRewrites[typ.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{
+					ParentID:       tempSysDBID,
+					ParentSchemaID: keys.PublicSchemaID,
+				}
 			}
 		}
 
@@ -795,8 +801,8 @@ func allocateDescriptorRewrites(
 			descriptorRewrites[db.GetID()].NewDBName = newDBName
 		}
 
-		for _, tableID := range needsNewParentIDs[db.GetName()] {
-			descriptorRewrites[tableID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: newID}
+		for _, objectID := range needsNewParentIDs[db.GetName()] {
+			descriptorRewrites[objectID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: newID}
 		}
 	}
 
@@ -849,13 +855,32 @@ func allocateDescriptorRewrites(
 
 	sort.Sort(catalog.Descriptors(descriptorsToRemap))
 
-	// Generate new IDs for the tables that need to be remapped.
+	// Generate new IDs for the schemas, tables, and types that need to be
+	// remapped.
 	for _, desc := range descriptorsToRemap {
 		newTableID, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 		if err != nil {
 			return nil, err
 		}
 		descriptorRewrites[desc.GetID()].ID = newTableID
+	}
+
+	// Now that the descriptorRewrites contains a complete rewrite entry for every
+	// schema that is being restored, we can correctly populate the ParentSchemaID
+	// of all tables and types.
+	rewriteObject := func(desc catalog.Descriptor) {
+		curSchemaID := desc.GetParentSchemaID()
+		newSchemaID := curSchemaID
+		if rw, ok := descriptorRewrites[curSchemaID]; ok {
+			newSchemaID = rw.ID
+		}
+		descriptorRewrites[desc.GetID()].ParentSchemaID = newSchemaID
+	}
+	for _, table := range tablesByID {
+		rewriteObject(table)
+	}
+	for _, typ := range typesByID {
+		rewriteObject(typ)
 	}
 
 	return descriptorRewrites, nil
@@ -1066,8 +1091,7 @@ func rewriteTypeDescs(types []*typedesc.Mutable, descriptorRewrites DescRewriteM
 		typ.ModificationTime = hlc.Timestamp{}
 
 		typ.ID = rewrite.ID
-		typ.ParentSchemaID = maybeRewriteSchemaID(typ.ParentSchemaID, descriptorRewrites,
-			false /* isTemporaryDesc */)
+		typ.ParentSchemaID = rewrite.ParentSchemaID
 		typ.ParentID = rewrite.ParentID
 		for i := range typ.ReferencingDescriptorIDs {
 			id := typ.ReferencingDescriptorIDs[i]
@@ -1110,21 +1134,6 @@ func rewriteSchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites DescRe
 	return nil
 }
 
-func maybeRewriteSchemaID(
-	curSchemaID descpb.ID, descriptorRewrites DescRewriteMap, isTemporaryDesc bool,
-) descpb.ID {
-	// If the current schema is the public schema, then don't attempt to
-	// do any rewriting.
-	if curSchemaID == keys.PublicSchemaID && !isTemporaryDesc {
-		return curSchemaID
-	}
-	rw, ok := descriptorRewrites[curSchemaID]
-	if !ok {
-		return curSchemaID
-	}
-	return rw.ID
-}
-
 // RewriteTableDescs mutates tables to match the ID and privilege specified
 // in descriptorRewrites, as well as adjusting cross-table references to use the
 // new IDs. overrideDB can be specified to set database names in views.
@@ -1153,8 +1162,7 @@ func RewriteTableDescs(
 		}
 
 		table.ID = tableRewrite.ID
-		table.UnexposedParentSchemaID = maybeRewriteSchemaID(table.GetParentSchemaID(),
-			descriptorRewrites, table.IsTemporary())
+		table.UnexposedParentSchemaID = tableRewrite.ParentSchemaID
 		table.ParentID = tableRewrite.ParentID
 
 		// Remap type IDs and sequence IDs in all serialized expressions within the TableDescriptor.
