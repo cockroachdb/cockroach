@@ -517,6 +517,9 @@ message SchemaChangeGCDetails {
 
   // Tenant to GC.
   DroppedTenant tenant = 6;
+
+  // UnsplitTables are the tables we want to unsplit their manually split ranges
+  repeated uint32 unsplit_tables = 11 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
 }
 
 message SchemaChangeDetails {
@@ -591,6 +594,12 @@ message SchemaChangeGCProgress {
     Status status = 2;
   }
 
+  message TableUnsplitRangesProgress {
+    int64 id = 1 [(gogoproto.customname) = "ID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+    Status status = 2;
+  }
+
   message TenantProgress {
     Status status = 1;
   }
@@ -602,7 +611,10 @@ message SchemaChangeGCProgress {
   repeated TableProgress tables = 2 [(gogoproto.nullable) = false];
 
   // The status of the tenant to be deleted.
- TenantProgress tenant = 3;
+  TenantProgress tenant = 3;
+
+  // UnsplitTables are the tables we want to unsplit their manually split ranges
+  repeated TableUnsplitRangesProgress unsplit_tables = 4 [(gogoproto.nullable) = false];
 }
 
 message ChangefeedTarget {

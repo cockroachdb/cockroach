@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -642,6 +643,14 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 			if tableDesc.GetDropTime() > 0 {
 				dropTime = tableDesc.GetDropTime()
 			}
+
+			// TODO(Chengxiong): remove the "if" check in 22.2
+			var unspliTables []descpb.ID
+			st := sc.execCfg.Settings
+			if st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {
+				unspliTables = append(unspliTables, tableDesc.GetID())
+			}
+
 			gcDetails := jobspb.SchemaChangeGCDetails{
 				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
 					{
@@ -649,6 +658,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 						DropTime: dropTime,
 					},
 				},
+				UnsplitTables: unspliTables,
 			}
 			if err := startGCJob(
 				ctx, sc.db, sc.jobRegistry, sc.job.Payload().UsernameProto.Decode(), sc.job.Payload().Description, gcDetails,
@@ -2185,9 +2195,21 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 		for i, table := range details.DroppedTables {
 			tablesToGC[i] = jobspb.SchemaChangeGCDetails_DroppedID{ID: table.ID, DropTime: dropTime}
 		}
+
+		// TODO(Chengxiong): remove the "if check" in 22.2
+		var tablesToUnsplit []descpb.ID
+		st := p.ExecCfg().Settings
+		if st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {
+			tablesToUnsplit = make([]descpb.ID, len(details.DroppedTables))
+			for i, table := range details.DroppedTables {
+				tablesToUnsplit[i] = table.ID
+			}
+		}
+
 		multiTableGCDetails := jobspb.SchemaChangeGCDetails{
-			Tables:   tablesToGC,
-			ParentID: details.DroppedDatabaseID,
+			Tables:        tablesToGC,
+			ParentID:      details.DroppedDatabaseID,
+			UnsplitTables: tablesToUnsplit,
 		}
 
 		if err := startGCJob(
