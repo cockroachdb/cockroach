@@ -1495,15 +1495,69 @@ func injectTableStats(
 				return err
 			}
 		}
-		var name interface{}
-		if s.Name != "" {
-			name = s.Name
+
+		if err := insertJSONStatistic(params, desc.GetID(), columnIDs, s, histogram); err != nil {
+			return errors.Wrap(err, "failed to insert stats")
 		}
-		if _ /* rows */, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
-			params.ctx,
+	}
+
+	// Invalidate the local cache synchronously; this guarantees that the next
+	// statement in the same session won't use a stale cache (the cache would
+	// normally be updated asynchronously).
+	params.extendedEvalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(params.ctx, desc.GetID())
+
+	return nil
+}
+
+func insertJSONStatistic(
+	params runParams,
+	tableID descpb.ID,
+	columnIDs *tree.DArray,
+	s *stats.JSONStatistic,
+	histogram interface{},
+) error {
+	var (
+		ctx      = params.ctx
+		ie       = params.ExecCfg().InternalExecutor
+		txn      = params.EvalContext().Txn
+		settings = params.ExecCfg().Settings
+	)
+
+	var name interface{}
+	if s.Name != "" {
+		name = s.Name
+	}
+
+	if !settings.Version.IsActive(params.ctx, clusterversion.AlterSystemTableStatisticsAddAvgSizeCol) {
+		_ /* rows */, err := ie.Exec(
+			ctx,
 			"insert-stats",
-			params.EvalContext().Txn,
+			txn,
 			`INSERT INTO system.table_statistics (
+					"tableID",
+					"name",
+					"columnIDs",
+					"createdAt",
+					"rowCount",
+					"distinctCount",
+					"nullCount",
+					histogram
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			tableID,
+			name,
+			columnIDs,
+			s.CreatedAt,
+			s.RowCount,
+			s.DistinctCount,
+			s.NullCount,
+			histogram)
+		return err
+	}
+	_ /* rows */, err := ie.Exec(
+		ctx,
+		"insert-stats",
+		txn,
+		`INSERT INTO system.table_statistics (
 					"tableID",
 					"name",
 					"columnIDs",
@@ -1514,26 +1568,16 @@ func injectTableStats(
 					"avgSize",
 					histogram
 				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-			desc.GetID(),
-			name,
-			columnIDs,
-			s.CreatedAt,
-			s.RowCount,
-			s.DistinctCount,
-			s.NullCount,
-			s.AvgSize,
-			histogram,
-		); err != nil {
-			return errors.Wrapf(err, "failed to insert stats")
-		}
-	}
-
-	// Invalidate the local cache synchronously; this guarantees that the next
-	// statement in the same session won't use a stale cache (the cache would
-	// normally be updated asynchronously).
-	params.extendedEvalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(params.ctx, desc.GetID())
-
-	return nil
+		tableID,
+		name,
+		columnIDs,
+		s.CreatedAt,
+		s.RowCount,
+		s.DistinctCount,
+		s.NullCount,
+		s.AvgSize,
+		histogram)
+	return err
 }
 
 func (p *planner) removeColumnComment(
