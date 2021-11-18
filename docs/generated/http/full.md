@@ -4067,8 +4067,9 @@ Response object returned by TableIndexStatsResponse.
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | statistics | [cockroach.sql.CollectedIndexUsageStatistics](#cockroach.server.serverpb.TableIndexStatsResponse-cockroach.sql.CollectedIndexUsageStatistics) |  |  | [reserved](#support-status) |
-| index_name | [string](#cockroach.server.serverpb.TableIndexStatsResponse-string) |  | IndexName is the name of the index. | [reserved](#support-status) |
-| index_type | [string](#cockroach.server.serverpb.TableIndexStatsResponse-string) |  | IndexType is the type of the index i.e. primary, secondary. | [reserved](#support-status) |
+| index_name | [string](#cockroach.server.serverpb.TableIndexStatsResponse-string) |  | index_name is the name of the index. | [reserved](#support-status) |
+| index_type | [string](#cockroach.server.serverpb.TableIndexStatsResponse-string) |  | index_type is the type of the index i.e. primary, secondary. | [reserved](#support-status) |
+| create_statement | [string](#cockroach.server.serverpb.TableIndexStatsResponse-string) |  | create_statement is the SQL statement that would re-create the current index if executed. | [reserved](#support-status) |
 
 
 
