@@ -208,7 +208,7 @@ func TestRangefeedIsRoutedToNonVoter(t *testing.T) {
 	startTS := db.Clock().Now()
 	rangefeedCtx, rangefeedCancel := context.WithCancel(ctx)
 	rangefeedCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(rangefeedCtx,
-		tracing.NewTracer(),
+		tc.Server(1).TracerI().(*tracing.Tracer),
 		"rangefeed over non-voter")
 	defer getRecAndFinish()
 
