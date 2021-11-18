@@ -893,11 +893,13 @@ func (n *ShowDefaultPrivileges) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowCompletions represents a SHOW COMPLETIONS statement.
 type ShowCompletions struct {
 	Statement string
 	Offset    *NumVal
 }
 
+// Format implements the NodeFormatter interface.
 func (s ShowCompletions) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW COMPLETIONS AT OFFSET ")
 	s.Offset.Format(ctx)

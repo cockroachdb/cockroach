@@ -6,12 +6,10 @@ SELECT
 query T
 show completions at offset 7 for 'select 1'
 ----
-·
 
 query T
 show completions at offset 7 for 'select 2'
 ----
-·
 
 query T
 show completions at offset 10 for 'select * fro'

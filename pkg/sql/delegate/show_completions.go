@@ -1,3 +1,13 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 package delegate
 
 import (
@@ -24,7 +34,7 @@ func (d *delegator) delegateShowCompletions(n *tree.ShowCompletions) (tree.State
 		return nil, err
 	}
 
-	completions, err := runShowCompletions(n.Statement, offset)
+	completions, err := RunShowCompletions(n.Statement, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +59,9 @@ func (d *delegator) delegateShowCompletions(n *tree.ShowCompletions) (tree.State
 	return parse(query.String())
 }
 
-func runShowCompletions(stmt string, offset int) ([]string, error) {
+// RunShowCompletions returns a list of completion keywords for the given
+// statement and offset.
+func RunShowCompletions(stmt string, offset int) ([]string, error) {
 	if offset <= 0 || offset > len(stmt) {
 		return nil, nil
 	}
@@ -81,8 +93,8 @@ func runShowCompletions(stmt string, offset int) ([]string, error) {
 	// For example if the stmt is SELECT with offset 2, even though SEARCH would
 	// come first for "SE", we want to return "SELECT".
 	// Similarly, if we have SEL with offset 2, we want to return "SEL".
-	allSqlTokens := parser.TokensIgnoreErrors(stmt)
-	lastWordFull := allSqlTokens[len(sqlTokenStrings)-1]
+	allSQLTokens := parser.TokensIgnoreErrors(stmt)
+	lastWordFull := allSQLTokens[len(sqlTokenStrings)-1]
 	if lastWordFull.Str != lastWordTruncated {
 		return []string{strings.ToUpper(lastWordFull.Str)}, nil
 	}

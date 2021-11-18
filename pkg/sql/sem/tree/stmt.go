@@ -1601,6 +1601,11 @@ func (*ShowCompletions) StatementType() StatementType { return TypeDML }
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowCompletions) StatementTag() string { return "SHOW COMPLETIONS" }
 
+// observerStatement implements the ObserverStatement interface.
+func (*ShowCompletions) observerStatement() {}
+
+func (*ShowCompletions) hiddenFromShowQueries() {}
+
 // StatementReturnType implements the Statement interface.
 func (*Split) StatementReturnType() StatementReturnType { return Rows }
 
