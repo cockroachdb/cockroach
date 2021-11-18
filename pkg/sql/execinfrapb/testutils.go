@@ -33,7 +33,7 @@ import (
 func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
 	return rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx: log.MakeServerAmbientContext(tracing.NewTracer()),
 		Config:     &base.Config{Insecure: true},
 		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		Stopper:    stopper,

@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -110,7 +109,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	ltc.Manual = hlc.NewManualClock(123)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano, 50*time.Millisecond)
 	cfg := kvserver.TestStoreConfigWithRandomizedClusterSeparatedIntentsMigration(ltc.Clock)
-	ambient := log.AmbientContext{Tracer: cfg.AmbientCtx.Tracer}
+	ambient := cfg.AmbientCtx
 	nc := &base.NodeIDContainer{}
 	ambient.AddLogTag("n", nc)
 

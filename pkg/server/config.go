@@ -170,7 +170,7 @@ func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	}
 	baseCfg := BaseConfig{
 		Tracer:            tr,
-		AmbientCtx:        log.AmbientContext{Tracer: tr},
+		AmbientCtx:        log.MakeServerAmbientContext(tr),
 		Config:            new(base.Config),
 		Settings:          st,
 		MaxOffset:         MaxOffsetType(base.DefaultMaxClockOffset),
