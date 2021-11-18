@@ -501,6 +501,7 @@ func TestSpanRecordingFinished(t *testing.T) {
 	tr2 := NewTracer()
 	remoteChildChild := tr2.StartSpan("root.child.remotechild", WithParentAndManualCollection(child.Meta()))
 	child.ImportRemoteSpans(remoteChildChild.GetRecording(RecordingVerbose))
+	remoteChildChild.Finish()
 
 	// All spans are un-finished.
 	sortedSpanOps := getSortedSpanOps(t, tr1)
@@ -527,22 +528,16 @@ func TestSpanRecordingFinished(t *testing.T) {
 	require.True(t, spanOpsWithFinished["root.child.child"])
 	require.False(t, spanOpsWithFinished["root.child.remotechild"])
 
-	remoteChildChild.SetOperationName("root.child.remotechild-reimport")
-	// NB: importing a span twice is essentially a bad idea. It's ok in
-	// this test though.
-	child.ImportRemoteSpans(remoteChildChild.FinishAndGetRecording(RecordingVerbose))
 	child.Finish()
 	spanOpsWithFinished = getSpanOpsWithFinished(t, tr1)
 
-	// Only child, childChild, and remoteChildChild should appear to have finished.
+	// Only child and childChild should appear to have finished.
 	require.False(t, spanOpsWithFinished["root"])
 	require.True(t, spanOpsWithFinished["root.child"])
 	require.True(t, spanOpsWithFinished["root.child.child"])
 	// The original remotechild import is still unfinished, as it was imported from
 	// unfinished span.
 	require.False(t, spanOpsWithFinished["root.child.remotechild"])
-	// The re-imported remotechild (after it had finished) is finished, though.
-	require.True(t, spanOpsWithFinished["root.child.remotechild-reimport"])
 
 	root.Finish()
 	// Nothing is tracked anymore.
