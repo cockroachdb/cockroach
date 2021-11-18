@@ -145,7 +145,11 @@ func makeSocketFile(t *testing.T) (socketDir, socketFile string, cleanupFn func(
 	//
 	// macOS has a tendency to produce very long temporary directory names, so
 	// we are careful to keep all the constants involved short.
-	tempDir, err := ioutil.TempDir("", "TestAuth")
+	baseTmpDir := ""
+	if runtime.GOOS == "darwin" || strings.Contains(runtime.GOOS, "bsd") {
+		baseTmpDir = "/tmp"
+	}
+	tempDir, err := ioutil.TempDir(baseTmpDir, "TestAuth")
 	if err != nil {
 		t.Fatal(err)
 	}
