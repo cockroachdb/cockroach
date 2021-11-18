@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
 )
 
 type alterSequenceNode struct {
@@ -66,10 +68,28 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	oldMinValue := desc.SequenceOpts.MinValue
 	oldMaxValue := desc.SequenceOpts.MaxValue
 
-	err := assignSequenceOptions(
-		desc.SequenceOpts, n.n.Options, false /* setDefaults */, &params, desc.GetID(), desc.ParentID,
-	)
-	if err != nil {
+	existingType := types.Int
+	if desc.GetSequenceOpts().AsIntegerType != "" {
+		switch desc.GetSequenceOpts().AsIntegerType {
+		case types.Int2.SQLString():
+			existingType = types.Int2
+		case types.Int4.SQLString():
+			existingType = types.Int4
+		case types.Int.SQLString():
+			// Already set.
+		default:
+			return errors.AssertionFailedf("sequence has unexpected type %s", desc.GetSequenceOpts().AsIntegerType)
+		}
+	}
+	if err := assignSequenceOptions(
+		desc.SequenceOpts,
+		n.n.Options,
+		false, /* setDefaults */
+		&params,
+		desc.GetID(),
+		desc.ParentID,
+		existingType,
+	); err != nil {
 		return err
 	}
 	opts := desc.SequenceOpts

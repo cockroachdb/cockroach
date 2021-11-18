@@ -173,3 +173,35 @@ CREATE SEQUENCE a OWNED BY NONE
 CREATE SEQUENCE a OWNED BY NONE -- fully parenthesized
 CREATE SEQUENCE a OWNED BY NONE -- literals removed
 CREATE SEQUENCE _ OWNED BY NONE -- identifiers removed
+
+parse
+CREATE SEQUENCE a AS integer
+----
+CREATE SEQUENCE a AS INT8 -- normalized!
+CREATE SEQUENCE a AS INT8 -- fully parenthesized
+CREATE SEQUENCE a AS INT8 -- literals removed
+CREATE SEQUENCE _ AS INT8 -- identifiers removed
+
+parse
+CREATE SEQUENCE a AS int
+----
+CREATE SEQUENCE a AS INT8 -- normalized!
+CREATE SEQUENCE a AS INT8 -- fully parenthesized
+CREATE SEQUENCE a AS INT8 -- literals removed
+CREATE SEQUENCE _ AS INT8 -- identifiers removed
+
+parse
+CREATE SEQUENCE a AS bigint
+----
+CREATE SEQUENCE a AS INT8 -- normalized!
+CREATE SEQUENCE a AS INT8 -- fully parenthesized
+CREATE SEQUENCE a AS INT8 -- literals removed
+CREATE SEQUENCE _ AS INT8 -- identifiers removed
+
+parse
+CREATE SEQUENCE a AS smallint
+----
+CREATE SEQUENCE a AS INT2 -- normalized!
+CREATE SEQUENCE a AS INT2 -- fully parenthesized
+CREATE SEQUENCE a AS INT2 -- literals removed
+CREATE SEQUENCE _ AS INT2 -- identifiers removed
