@@ -3687,7 +3687,12 @@ func NewTestingEvalContext(st *cluster.Settings) *EvalContext {
 
 // Stop closes out the EvalContext and must be called once it is no longer in use.
 func (ctx *EvalContext) Stop(c context.Context) {
-	ctx.Mon.Stop(c)
+	if r := recover(); r != nil {
+		ctx.Mon.EmergencyStop(c)
+		panic(r)
+	} else {
+		ctx.Mon.Stop(c)
+	}
 }
 
 // FmtCtx creates a FmtCtx with the given options as well as the EvalContext's session data.
