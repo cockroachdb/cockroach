@@ -122,7 +122,7 @@ export const ConnectedStatementsPage = withRouter(
         dispatch(
           localStorageActions.update({
             key: "filters/StatementsPage",
-            value: { filters: value },
+            value: value,
           }),
         );
       },
