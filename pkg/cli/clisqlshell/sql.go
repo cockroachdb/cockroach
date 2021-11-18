@@ -895,8 +895,20 @@ func (c *cliState) GetCompletions(_ string) []string {
 	sql, _ := c.ins.GetLineInfo()
 
 	if !strings.HasSuffix(sql, "??") {
-		fmt.Fprintf(c.iCtx.stdout,
-			"\ntab completion not supported; append '??' and press tab for contextual help\n\n")
+		query := fmt.Sprintf(`SHOW COMPLETIONS AT OFFSET %d FOR %s`, len(sql), lexbase.EscapeSQLString(sql))
+		_, rows, err := c.sqlExecCtx.RunQuery(c.conn,
+			clisqlclient.MakeQuery(query), true)
+		if err != nil {
+			fmt.Fprintln(c.iCtx.stdout)
+			clierror.OutputError(c.iCtx.stdout, err, true /*showSeverity*/, false /*verbose*/)
+		}
+
+		var completions []string
+		for _, row := range rows {
+			completions = append(completions, row[0])
+		}
+
+		return completions
 	} else {
 		helpText, err := c.serverSideParse(sql)
 		if helpText != "" {
