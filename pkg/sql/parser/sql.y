@@ -6132,7 +6132,7 @@ show_completions_stmt:
   {
     /* SKIP DOC */
     $$.val = &tree.ShowCompletions{
-        Statement: $7,
+        Statement: tree.NewStrVal($7),
         Offset: $5.numVal(),
     }
   }

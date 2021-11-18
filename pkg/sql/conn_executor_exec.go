@@ -16,6 +16,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -1704,6 +1706,8 @@ func (ex *connExecutor) runObserverStatement(
 		return ex.runShowLastQueryStatistics(ctx, res, sqlStmt)
 	case *tree.ShowTransferState:
 		return ex.runShowTransferState(ctx, res, sqlStmt)
+	case *tree.ShowCompletions:
+		return ex.runShowCompletions(ctx, sqlStmt, res)
 	default:
 		res.SetError(errors.AssertionFailedf("unrecognized observer statement type %T", ast))
 		return nil
@@ -1825,6 +1829,33 @@ func (ex *connExecutor) runShowTransferState(
 		row = append(row, tree.NewDString(stmt.TransferKey.RawString()))
 	}
 	return res.AddRow(ctx, row)
+}
+
+// runShowCompletions executes a SHOW COMPLETIONS statement.
+func (ex *connExecutor) runShowCompletions(
+	ctx context.Context, n *tree.ShowCompletions, res RestrictedCommandResult,
+) error {
+	res.SetColumns(ctx, colinfo.ResultColumns{{Name: "COMPLETIONS", Typ: types.String}})
+	offsetVal, ok := n.Offset.AsConstantInt()
+	if !ok {
+		return errors.Newf("invalid offset %v", n.Offset)
+	}
+	offset, err := strconv.Atoi(offsetVal.String())
+	if err != nil {
+		return err
+	}
+	completions, err := delegate.RunShowCompletions(n.Statement.RawString(), offset)
+	if err != nil {
+		return err
+	}
+
+	for _, completion := range completions {
+		err = res.AddRow(ctx, tree.Datums{tree.NewDString(completion)})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // showQueryStatsFns maps column names as requested by the SQL clients

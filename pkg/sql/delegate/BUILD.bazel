@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "delegate",
@@ -7,6 +7,7 @@ go_library(
         "job_control.go",
         "show_all_cluster_settings.go",
         "show_changefeed_jobs.go",
+        "show_completions.go",
         "show_database_indexes.go",
         "show_databases.go",
         "show_default_privileges.go",
@@ -56,4 +57,10 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "@com_github_cockroachdb_errors//:errors",
     ],
+)
+
+go_test(
+    name = "delegate_test",
+    srcs = ["show_completions_test.go"],
+    embed = [":delegate"],
 )
