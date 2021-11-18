@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -325,33 +326,62 @@ func (p *planner) dropTableImpl(
 	return droppedViews, err
 }
 
-// unsplitRangesForTable unsplit any manually split ranges within the table span.
-func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledesc.Mutable) error {
-	// Gate this on being the system tenant because secondary tenants aren't
-	// allowed to scan the meta ranges directly.
-	if p.ExecCfg().Codec.ForSystemTenant() {
-		span := tableDesc.TableSpan(p.ExecCfg().Codec)
-		ranges, err := kvclient.ScanMetaKVs(ctx, p.execCfg.DB.NewTxn(ctx, "unsplit-ranges-for-table"), span)
-		if err != nil {
+// UnsplitRange unsets the sticky bit of a range if it's manually split
+// TODO(Chengxiong): move this function to gc_job.go in 22.2
+func UnsplitRange(
+	ctx context.Context, execCfg *ExecutorConfig, desc roachpb.RangeDescriptor,
+) error {
+	if !execCfg.Codec.ForSystemTenant() {
+		return nil
+	}
+
+	if !desc.GetStickyBit().IsEmpty() {
+		// Swallow "key is not the start of a range" errors because it would mean
+		// that the sticky bit was removed and merged concurrently. DROP TABLE
+		// should not fail because of this.
+		if err := execCfg.DB.AdminUnsplit(ctx, desc.StartKey); err != nil &&
+			!strings.Contains(err.Error(), "is not the start of a range") {
 			return err
 		}
-		for _, r := range ranges {
-			var desc roachpb.RangeDescriptor
-			if err := r.ValueProto(&desc); err != nil {
-				return err
-			}
-			if !desc.GetStickyBit().IsEmpty() {
-				// Swallow "key is not the start of a range" errors because it would mean
-				// that the sticky bit was removed and merged concurrently. DROP TABLE
-				// should not fail because of this.
-				if err := p.ExecCfg().DB.AdminUnsplit(ctx, desc.StartKey); err != nil &&
-					!strings.Contains(err.Error(), "is not the start of a range") {
-					return err
-				}
-			}
+	}
+
+	return nil
+}
+
+// UnsplitRangesForTable unsplit any manually split ranges within the table span.
+// TODO(Chengxiong): move this function to gc_job.go in 22.2
+func UnsplitRangesForTable(
+	ctx context.Context, execCfg *ExecutorConfig, tableDesc catalog.TableDescriptor,
+) error {
+	// Gate this on being the system tenant because secondary tenants aren't
+	// allowed to scan the meta ranges directly.
+	if !execCfg.Codec.ForSystemTenant() {
+		return nil
+	}
+
+	span := tableDesc.TableSpan(execCfg.Codec)
+	ranges, err := kvclient.ScanMetaKVs(ctx, execCfg.DB.NewTxn(ctx, "unsplit-ranges-for-table"), span)
+	if err != nil {
+		return err
+	}
+	for _, r := range ranges {
+		var desc roachpb.RangeDescriptor
+		if err := r.ValueProto(&desc); err != nil {
+			return err
+		}
+
+		if err := UnsplitRange(ctx, execCfg, desc); err != nil {
+			return err
 		}
 	}
+
 	return nil
+}
+
+// TODO(Chengxiong): Remove this function in 22.2
+// unsplitRangesForTable unsplit any manually split ranges within the table span.
+func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledesc.Mutable) error {
+	return UnsplitRangesForTable(ctx, p.execCfg, tableDesc)
 }
 
 // drainName when set implies that the name needs to go through the draining
@@ -381,10 +411,14 @@ func (p *planner) initiateDropTable(
 		tableDesc.DropTime = timeutil.Now().UnixNano()
 	}
 
-	// Unsplit all manually split ranges in the table so they can be
-	// automatically merged by the merge queue.
-	if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
-		return err
+	// TODO(Chengxiong): Remove this range unsplitting in 22.2
+	st := p.EvalContext().Settings
+	if !st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {
+		// Unsplit all manually split ranges in the table so they can be
+		// automatically merged by the merge queue.
+		if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
+			return err
+		}
 	}
 
 	// Actually mark table descriptor as dropped.
