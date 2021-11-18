@@ -2855,7 +2855,6 @@ type iterForKeyVersions interface {
 	UnsafeKey() MVCCKey
 	UnsafeValue() []byte
 	ValueProto(msg protoutil.Message) error
-	IsCurIntent() bool
 }
 
 // separatedIntentAndVersionIter is an implementation of iterForKeyVersions
@@ -2963,13 +2962,6 @@ func (s *separatedIntentAndVersionIter) ValueProto(msg protoutil.Message) error 
 	}
 	v := s.engineIter.UnsafeValue()
 	return protoutil.Unmarshal(v, msg)
-}
-
-func (s *separatedIntentAndVersionIter) IsCurIntent() bool {
-	if s.atMVCCIter {
-		panic(errors.AssertionFailedf("IsCurIntent called when not positioned at intent"))
-	}
-	return true
 }
 
 // mvccGetIntent uses an iterForKeyVersions that has been seeked to

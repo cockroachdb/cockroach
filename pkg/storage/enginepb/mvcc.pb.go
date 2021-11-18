@@ -276,7 +276,10 @@ type MVCCStats struct {
 	// a non-empty Transaction proto.
 	IntentCount int64 `protobuf:"fixed64,11,opt,name=intent_count,json=intentCount" json:"intent_count"`
 	// separated_intent_count is the number of intents that are in the separated
-	// lock table. It is == intent_count as of 22.1.
+	// lock table. It is <= intent_count. Separated intents will not be enabled
+	// in a cluster until all nodes in that cluster know how to read/write such
+	// intents, so mixed-version clusters with nodes preceding this knowledge
+	// will always have a 0 value for this field.
 	SeparatedIntentCount int64 `protobuf:"fixed64,16,opt,name=separated_intent_count,json=separatedIntentCount" json:"separated_intent_count"`
 	// sys_bytes is the number of bytes stored in system-local kv-pairs.
 	// This tracks the same quantity as (key_bytes + val_bytes), but

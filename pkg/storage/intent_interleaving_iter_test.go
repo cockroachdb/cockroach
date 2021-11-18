@@ -108,11 +108,7 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 		return
 	}
 	rawMVCCKey := iter.UnsafeRawMVCCKey()
-	if iter.IsCurIntent() {
-		if !engineKey.IsLockTableKey() {
-			fmt.Fprintf(b, "output: engineKey should be a lock table key: %s\n", engineKey)
-			return
-		}
+	if engineKey.IsLockTableKey() {
 		ltKey, err := engineKey.ToLockTableKey()
 		if err != nil {
 			fmt.Fprintf(b, "output: engineKey should be a lock table key: %s\n", err.Error())
@@ -194,6 +190,10 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 // - starting with Y is interpreted as a local key starting immediately after
 //   the lock table key space. This is for testing edge cases wrt bounds.
 // - a single Z is interpreted as LocalMax
+//
+// Note: This test still manually writes interleaved intents. Even though
+// we've removed codepaths to write interleaved intents, intentInterleavingIter
+// can still allows physically interleaved intents.
 func TestIntentInterleavingIter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -531,7 +531,8 @@ func generateRandomData(
 	return lkv, mvcckv
 }
 
-func writeRandomData(t *testing.T, eng Engine, lkv []lockKeyValue, mvcckv []MVCCKeyValue) {
+func writeRandomData(
+	t *testing.T, eng Engine, lkv []lockKeyValue, mvcckv []MVCCKeyValue, interleave bool) {
 	batch := eng.NewBatch()
 	// Iterate in reverse order, so that older locks for a key are encountered
 	// before newer ones. This is because we use ClearUnversioned below to
@@ -543,10 +544,17 @@ func writeRandomData(t *testing.T, eng Engine, lkv []lockKeyValue, mvcckv []MVCC
 	// flushed, so both will be in the engine during iteration.
 	for i := len(lkv) - 1; i >= 0; i-- {
 		kv := lkv[i]
-		eKey, _ := kv.key.ToEngineKey(nil)
-		require.NoError(t, batch.PutEngineKey(eKey, kv.val))
-		if !kv.liveIntent {
-			require.NoError(t, batch.SingleClearEngineKey(eKey))
+		if interleave || !kv.separated {
+			require.NoError(t, batch.PutUnversioned(kv.key.Key, kv.val))
+			if !kv.liveIntent {
+				require.NoError(t, batch.ClearUnversioned(kv.key.Key))
+			}
+		} else {
+			eKey, _ := kv.key.ToEngineKey(nil)
+			require.NoError(t, batch.PutEngineKey(eKey, kv.val))
+			if !kv.liveIntent {
+				require.NoError(t, batch.SingleClearEngineKey(eKey))
+			}
 		}
 	}
 	for _, kv := range mvcckv {
@@ -716,10 +724,10 @@ func TestRandomizedIntentInterleavingIter(t *testing.T) {
 	eng2 := createTestPebbleEngine()
 	defer eng1.Close()
 	defer eng2.Close()
-	writeRandomData(t, eng1, lockKV, mvccKV)
-	writeRandomData(t, eng1, localLockKV, localMvccKV)
-	writeRandomData(t, eng2, lockKV, mvccKV)
-	writeRandomData(t, eng2, localLockKV, localMvccKV)
+	writeRandomData(t, eng1, lockKV, mvccKV, false /* interleave */)
+	writeRandomData(t, eng1, localLockKV, localMvccKV, false /* interleave */)
+	writeRandomData(t, eng2, lockKV, mvccKV, true /* interleave */)
+	writeRandomData(t, eng2, localLockKV, localMvccKV, true /* interleave */)
 	var ops []string
 	for _, isLocal := range []bool{false, true} {
 		for i := 0; i < 10; i++ {
