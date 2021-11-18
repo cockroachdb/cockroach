@@ -349,6 +349,13 @@ func (r *Replica) handleChangeReplicasResult(
 		log.Infof(ctx, "removing replica due to ChangeReplicasTrigger: %v", chng)
 	}
 
+	if err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.NextReplicaID(), RemoveOptions{
+		// We destroyed the data when the batch committed so don't destroy it again.
+		DestroyData: false,
+	}); err != nil {
+		log.Fatalf(ctx, "failed to remove replica: %v", err)
+	}
+
 	// NB: postDestroyRaftMuLocked requires that the batch which removed the data
 	// be durably synced to disk, which we have.
 	// See replicaAppBatch.ApplyToStateMachine().
@@ -356,12 +363,6 @@ func (r *Replica) handleChangeReplicasResult(
 		log.Fatalf(ctx, "failed to run Replica postDestroy: %v", err)
 	}
 
-	if err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.NextReplicaID(), RemoveOptions{
-		// We destroyed the data when the batch committed so don't destroy it again.
-		DestroyData: false,
-	}); err != nil {
-		log.Fatalf(ctx, "failed to remove replica: %v", err)
-	}
 	return true
 }
 

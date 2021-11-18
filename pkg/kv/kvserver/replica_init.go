@@ -339,7 +339,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 				"replica %v: %v", r, err)
 		}
 		r.mu.tenantID = tenantID
-		r.store.metrics.acquireTenant(tenantID)
+		r.tenantMetricsRef = r.store.metrics.acquireTenant(tenantID)
 		if tenantID != roachpb.SystemTenantID {
 			r.tenantLimiter = r.store.tenantRateLimiters.GetTenant(ctx, tenantID, r.store.stopper.ShouldQuiesce())
 		}

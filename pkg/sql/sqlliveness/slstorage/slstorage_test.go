@@ -72,7 +72,8 @@ func TestStorage(t *testing.T) {
 		}, base.DefaultMaxClockOffset)
 		settings := cluster.MakeTestingClusterSettings()
 		stopper := stop.NewStopper()
-		storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+		var ambientCtx log.AmbientContext
+		storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
 			tableID, timeSource.NewTimer)
 		return clock, timeSource, settings, stopper, storage
 	}
@@ -330,7 +331,8 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
-	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+	var ambientCtx log.AmbientContext
+	storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
 		tableID, timeSource.NewTimer)
 	storage.Start(ctx)
 
@@ -494,7 +496,8 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
-	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+	var ambientCtx log.AmbientContext
+	storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
 		tableID, timeSource.NewTimer)
 	storage.Start(ctx)
 
@@ -686,6 +689,7 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 	tableID := getTableID(t, tdb, dbName, "sqlliveness")
 
 	storage := slstorage.NewTestingStorage(
+		s.DB().AmbientContext,
 		s.Stopper(), s.Clock(), kvDB, keys.SystemSQLCodec, s.ClusterSettings(),
 		tableID, timeutil.DefaultTimeSource{}.NewTimer,
 	)

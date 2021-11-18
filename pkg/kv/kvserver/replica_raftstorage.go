@@ -949,8 +949,8 @@ func (r *Replica) applySnapshot(
 	r.mu.lastTerm = invalidLastTerm
 	r.mu.raftLogSize = 0
 	// Update the store stats for the data in the snapshot.
-	r.store.metrics.subtractMVCCStats(ctx, r.mu.tenantID, *r.mu.state.Stats)
-	r.store.metrics.addMVCCStats(ctx, r.mu.tenantID, *state.Stats)
+	r.store.metrics.subtractMVCCStats(ctx, r.tenantMetricsRef, *r.mu.state.Stats)
+	r.store.metrics.addMVCCStats(ctx, r.tenantMetricsRef, *state.Stats)
 	lastKnownLease := r.mu.state.Lease
 	// Update the rest of the Raft state. Changes to r.mu.state.Desc must be
 	// managed by r.setDescRaftMuLocked and changes to r.mu.state.Lease must be handled
@@ -1135,11 +1135,6 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 	ctx context.Context, subsumedRepls []*Replica, subsumedNextReplicaID roachpb.ReplicaID,
 ) error {
 	for _, sr := range subsumedRepls {
-		// We removed sr's data when we committed the batch. Finish subsumption by
-		// updating the in-memory bookkeping.
-		if err := sr.postDestroyRaftMuLocked(ctx, sr.GetMVCCStats()); err != nil {
-			return err
-		}
 		// We already hold sr's raftMu, so we must call removeReplicaImpl directly.
 		// Note that it's safe to update the store's metadata for sr's removal
 		// separately from updating the store's metadata for r's new descriptor
@@ -1151,6 +1146,11 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 			// The data was already destroyed by clearSubsumedReplicaDiskData.
 			DestroyData: false,
 		}); err != nil {
+			return err
+		}
+		// We removed sr's data when we committed the batch. Finish subsumption by
+		// updating the in-memory bookkeping.
+		if err := sr.postDestroyRaftMuLocked(ctx, sr.GetMVCCStats()); err != nil {
 			return err
 		}
 	}

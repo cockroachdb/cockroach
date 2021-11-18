@@ -54,13 +54,13 @@ func TestTenantsStorageMetricsConcurrency(t *testing.T) {
 			tid := tenantIDs[rand.Intn(tenants)]
 
 			time.Sleep(randDuration())
-			sm.acquireTenant(tid)
+			ref := sm.acquireTenant(tid)
 
 			time.Sleep(randDuration())
-			sm.incMVCCGauges(ctx, tid, enginepb.MVCCStats{})
+			sm.incMVCCGauges(ctx, ref, enginepb.MVCCStats{})
 
 			time.Sleep(randDuration())
-			sm.releaseTenant(ctx, tid)
+			sm.releaseTenant(ctx, ref)
 		}
 	}
 	var wg sync.WaitGroup
