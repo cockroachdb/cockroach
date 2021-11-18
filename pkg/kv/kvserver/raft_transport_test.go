@@ -115,7 +115,7 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 	}
 	rttc.nodeRPCContext = rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tr},
+		AmbientCtx: log.MakeDummyAmbientContext(tr),
 		Config:     testutils.NewNodeTestBaseContext(),
 		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		Stopper:    rttc.stopper,
@@ -160,7 +160,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 ) (*kvserver.RaftTransport, net.Addr) {
 	grpcServer := rpc.NewServer(rttc.nodeRPCContext)
 	transport := kvserver.NewRaftTransport(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
+		testutils.MakeAmbientCtx(),
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(rttc.nodeRPCContext, gossip.AddressResolver(rttc.gossip)),
 		grpcServer,

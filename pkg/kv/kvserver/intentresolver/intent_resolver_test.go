@@ -28,10 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -796,9 +794,7 @@ func newIntentResolverWithSendFuncs(
 			f := sf.popLocked()
 			return f(ba)
 		})
-	db := kv.NewDB(log.AmbientContext{
-		Tracer: tracing.NewTracer(),
-	}, txnSenderFactory, c.Clock, stopper)
+	db := kv.NewDB(testutils.MakeAmbientCtx(), txnSenderFactory, c.Clock, stopper)
 	c.DB = db
 	c.MaxGCBatchWait = time.Nanosecond
 	return New(c)
