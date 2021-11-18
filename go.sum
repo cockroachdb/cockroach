@@ -384,8 +384,9 @@ github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 h1:Yq
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55/go.mod h1:QqVqNIiRhLqJXif5C9wbM4JydBhrAF2WDMxkv5xkyxQ=
 github.com/cockroachdb/gostdlib v1.13.0 h1:TzSEPYgkKDNei3gbLc0rrHu4iHyBp7/+NxPOFmcXGaw=
 github.com/cockroachdb/gostdlib v1.13.0/go.mod h1:eXX95p9QDrYwJfJ6AgeN9QnRa/lqqid9LAzWz/l5OgA=
-github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f h1:o/kfcElHqOiXqcou5a3rIlMc7oJbMQkeLk0VQJ7zgqY=
 github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f/go.mod h1:i/u985jwjWRlyHXQbwatDASoW0RMlZ/3i9yJHE2xLkI=
+github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f h1:6jduT9Hfc0njg5jJ1DdKCFPdMBrp/mdZfCpa5h+WM74=
+github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f/go.mod h1:Vz9DsVWQQhf3vs21MhPMZpMGSht7O/2vFW2xusFUVOs=
 github.com/cockroachdb/panicparse/v2 v2.0.0-20211103220158-604c82a44f1e h1:FrERdkPlRj+v7fc+PGpey3GUiDGuTR5CsmLCA54YJ8I=
 github.com/cockroachdb/panicparse/v2 v2.0.0-20211103220158-604c82a44f1e/go.mod h1:pMxsKyCewnV3xPaFvvT9NfwvDTcIx2Xqg0qL5Gq0SjM=
 github.com/cockroachdb/pebble v0.0.0-20211019184201-7fec828fc1af h1:NY+UDVTyU+Y2wKr0ocnBSbXGYTHEGwnQ9ukP+qg7xfY=
