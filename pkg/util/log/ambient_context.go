@@ -199,3 +199,13 @@ func MakeClientAmbientContext(tracer *tracing.Tracer) AmbientContext {
 func MakeDummyAmbientContext(tracer *tracing.Tracer) AmbientContext {
 	return AmbientContext{Tracer: tracer}
 }
+
+// MakeServerAmbientContext creates an AmbientContext for use by
+// server processes.
+func MakeServerAmbientContext(
+	tracer *tracing.Tracer, idProvider ServerIdentificationPayload,
+) AmbientContext {
+	// TODO(knz): add the server identifier containers here as mandatory
+	// arguments.
+	return AmbientContext{Tracer: tracer, ServerIDs: idProvider}
+}
