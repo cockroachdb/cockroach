@@ -213,7 +213,10 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 		cfgCpy := t.server.ExecutorConfig().(sql.ExecutorConfig)
 		cfgCpy.NodeInfo.NodeID = nc
 		mgr = lease.NewLeaseManager(
-			log.AmbientContext{Tracer: tracing.NewTracer()},
+			// Note: we create a fresh AmbientContext here, instead of using
+			// t.server.AmbientCtx(), because we want the lease manager to
+			// pretend to be a mock node with its own node ID.
+			log.MakeServerAmbientContext(tracing.NewTracer()),
 			nc,
 			cfgCpy.DB,
 			cfgCpy.Clock,

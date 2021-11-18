@@ -74,7 +74,6 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/stop",
-        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
