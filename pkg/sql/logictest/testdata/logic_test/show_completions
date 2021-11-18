@@ -1,0 +1,61 @@
+query T
+show completions at offset 1 for 'select 1'
+----
+SELECT
+
+query T
+show completions at offset 7 for 'select 1'
+----
+·
+
+query T
+show completions at offset 7 for 'select 2'
+----
+·
+
+query T
+show completions at offset 10 for 'select * fro'
+----
+FRO
+
+query T
+show completions at offset 11 for 'select * fro'
+----
+FRO
+
+query T
+show completions at offset 12 for 'select * fro'
+----
+FROM
+
+query T
+show completions at offset 10 for 'select * from'
+----
+FROM
+
+query T
+show completions at offset 11 for 'select * from'
+----
+FROM
+
+# This case doesn't really make sense - completing this as SELECT doesn't
+# really make sense but we'll need to add more complex logic to determine
+# whether our SQL token is a string const.
+# However we do want to test this so we can ensure we handle escaped strings.
+query T
+show completions at offset 4 for e'\'se\'';
+----
+SEARCH
+SECOND
+SELECT
+SEQUENCE
+SEQUENCES
+SERIALIZABLE
+SERVER
+SESSION
+SESSIONS
+SESSION_USER
+SET
+SETS
+SETTING
+SETTINGS

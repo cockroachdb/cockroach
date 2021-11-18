@@ -139,6 +139,9 @@ func TryDelegate(
 	case *tree.ShowSchedules:
 		return d.delegateShowSchedules(t)
 
+	case *tree.ShowCompletions:
+		return d.delegateShowCompletions(t)
+
 	case *tree.ControlJobsForSchedules:
 		return d.delegateJobControl(ControlJobsDelegate{
 			Schedules: t.Schedules,
