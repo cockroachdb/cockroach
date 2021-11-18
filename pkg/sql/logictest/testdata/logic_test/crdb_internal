@@ -620,7 +620,7 @@ TRUNCATE TABLE foo
 # Ensure that there are no longer any splits left over on the original indexes.
 # TRUNCATE will have created equivalent splits points on the new indexes, so
 # this test just checks that there are no more on the old indexes.
-query TT
+query TT retry
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges
 WHERE split_enforced_until IS NOT NULL
 AND (start_pretty LIKE '/Table/58/1%' OR start_pretty LIKE '/Table/58/2%')
@@ -632,7 +632,7 @@ ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
 statement ok
 ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 
-query TT colnames
+query TT colnames,retry
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty   end_pretty
@@ -646,7 +646,7 @@ start_pretty   end_pretty
 statement ok
 DROP TABLE foo
 
-query TT colnames
+query TT colnames,retry
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty   end_pretty
@@ -660,7 +660,7 @@ ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
 statement ok
 ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 
-query TT colnames
+query TT colnames,retry
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty   end_pretty
@@ -676,7 +676,7 @@ DROP INDEX foo@idx
 
 # Verify only the start keys of the manually split ranges because the merge queue could merge the
 # ranges [/Table/58/1/3, /Table/58/2/1) with its right neighbors.
-query T colnames
+query T colnames,retry
 SELECT start_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty

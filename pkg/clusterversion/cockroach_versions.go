@@ -294,6 +294,9 @@ const (
 	// Public schema is backed by a descriptor.
 	PublicSchemasWithDescriptors
 
+	// UnsplitRangesInAsyncGCJobs moves ranges unsplitting from transaction of
+	// "drop table"/"truncate table" to async gc jobs
+	UnsplitRangesInAsyncGCJobs
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -509,6 +512,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PublicSchemasWithDescriptors,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 18},
+	},
+	{
+		Key:     UnsplitRangesInAsyncGCJobs,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 20},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
