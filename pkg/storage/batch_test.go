@@ -552,7 +552,7 @@ func TestBatchMerge(t *testing.T) {
 	}
 }
 
-func TestBatchProto(t *testing.T) {
+func TestBatchGetProto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -565,9 +565,14 @@ func TestBatchProto(t *testing.T) {
 			defer b.Close()
 
 			val := roachpb.MakeValueFromString("value")
-			if _, _, err := PutProto(b, mvccKey("proto").Key, &val); err != nil {
+			data, err := protoutil.Marshal(&val)
+			if err != nil {
 				t.Fatal(err)
 			}
+			if err := b.PutUnversioned(mvccKey("proto").Key, data); err != nil {
+				t.Fatal(err)
+			}
+
 			getVal := &roachpb.Value{}
 			ok, keySize, valSize, err := b.MVCCGetProto(mvccKey("proto"), getVal)
 			if !ok || err != nil {
@@ -575,10 +580,6 @@ func TestBatchProto(t *testing.T) {
 			}
 			if keySize != 6 {
 				t.Errorf("expected key size 6; got %d", keySize)
-			}
-			data, err := protoutil.Marshal(&val)
-			if err != nil {
-				t.Fatal(err)
 			}
 			if valSize != int64(len(data)) {
 				t.Errorf("expected value size %d; got %d", len(data), valSize)

@@ -85,7 +85,7 @@ func wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Comma
 func clusterOpts() install.ClusterSettings {
 	return install.ClusterSettings{
 		Tag:            tag,
-		CertsDir:       certsDir,
+		PGUrlCertsDir:  pgurlCertsDir,
 		Secure:         secure,
 		Quiet:          quiet || !term.IsTerminal(int(os.Stdout.Fd())),
 		UseTreeDist:    useTreeDist,

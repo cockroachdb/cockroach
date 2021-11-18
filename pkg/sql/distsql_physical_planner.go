@@ -2546,15 +2546,62 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	planCtx *PlanningCtx, n *zigzagJoinNode,
 ) (plan *PhysicalPlan, err error) {
-	plan = planCtx.NewPhysicalPlan()
 
-	tables := make([]descpb.TableDescriptor, len(n.sides))
-	indexOrdinals := make([]uint32, len(n.sides))
-	cols := make([]execinfrapb.Columns, len(n.sides))
-	numStreamCols := 0
+	sides := make([]zigzagPlanningSide, len(n.sides))
+
 	for i, side := range n.sides {
-		tables[i] = *side.scan.desc.TableDesc()
-		indexOrdinals[i], err = getIndexIdx(side.scan.index, side.scan.desc)
+		// The fixed values are represented as a Values node with one tuple.
+		typs := getTypesFromResultColumns(side.fixedVals.columns)
+		valuesSpec, err := dsp.createValuesSpecFromTuples(planCtx, side.fixedVals.tuples, typs)
+		if err != nil {
+			return nil, err
+		}
+
+		sides[i] = zigzagPlanningSide{
+			desc:        side.scan.desc,
+			index:       side.scan.index,
+			cols:        side.scan.cols,
+			eqCols:      side.eqCols,
+			fixedValues: valuesSpec,
+		}
+	}
+
+	return dsp.planZigzagJoin(planCtx, zigzagPlanningInfo{
+		sides:       sides,
+		columns:     n.columns,
+		onCond:      n.onCond,
+		reqOrdering: n.reqOrdering,
+	})
+}
+
+type zigzagPlanningSide struct {
+	desc        catalog.TableDescriptor
+	index       catalog.Index
+	cols        []catalog.Column
+	eqCols      []int
+	fixedValues *execinfrapb.ValuesCoreSpec
+}
+
+type zigzagPlanningInfo struct {
+	sides       []zigzagPlanningSide
+	columns     colinfo.ResultColumns
+	onCond      tree.TypedExpr
+	reqOrdering ReqOrdering
+}
+
+func (dsp *DistSQLPlanner) planZigzagJoin(
+	planCtx *PlanningCtx, pi zigzagPlanningInfo,
+) (plan *PhysicalPlan, err error) {
+
+	plan = planCtx.NewPhysicalPlan()
+	tables := make([]descpb.TableDescriptor, len(pi.sides))
+	indexOrdinals := make([]uint32, len(pi.sides))
+	cols := make([]execinfrapb.Columns, len(pi.sides))
+	fixedValues := make([]*execinfrapb.ValuesCoreSpec, len(pi.sides))
+
+	for i, side := range pi.sides {
+		tables[i] = *side.desc.TableDesc()
+		indexOrdinals[i], err = getIndexIdx(side.index, side.desc)
 		if err != nil {
 			return nil, err
 		}
@@ -2563,29 +2610,17 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		for j, col := range side.eqCols {
 			cols[i].Columns[j] = uint32(col)
 		}
-
-		numStreamCols += len(side.scan.desc.PublicColumns())
+		fixedValues[i] = side.fixedValues
 	}
 
 	// The zigzag join node only represents inner joins, so hardcode Type to
 	// InnerJoin.
 	zigzagJoinerSpec := execinfrapb.ZigzagJoinerSpec{
 		Tables:        tables,
-		IndexOrdinals: indexOrdinals,
 		EqColumns:     cols,
+		IndexOrdinals: indexOrdinals,
+		FixedValues:   fixedValues,
 		Type:          descpb.InnerJoin,
-	}
-	zigzagJoinerSpec.FixedValues = make([]*execinfrapb.ValuesCoreSpec, len(n.sides))
-
-	// The fixed values are represented as a Values node with one tuple.
-	for i := range n.sides {
-		fixedVals := n.sides[i].fixedVals
-		typs := getTypesFromResultColumns(fixedVals.columns)
-		valuesSpec, err := dsp.createValuesSpecFromTuples(planCtx, fixedVals.tuples, typs)
-		if err != nil {
-			return nil, err
-		}
-		zigzagJoinerSpec.FixedValues[i] = valuesSpec
 	}
 
 	// The internal schema of the zigzag joiner is:
@@ -2597,8 +2632,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	// so the planToStreamColMap has to basically map index ordinals
 	// to table ordinals.
 	post := execinfrapb.PostProcessSpec{Projection: true}
-	numOutCols := len(n.columns)
-
+	numOutCols := len(pi.columns)
 	post.OutputColumns = make([]uint32, numOutCols)
 	types := make([]*types.T, numOutCols)
 	planToStreamColMap := makePlanToStreamColMap(numOutCols)
@@ -2607,33 +2641,31 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 
 	// Populate post.OutputColumns (the implicit projection), result types,
 	// and the planToStreamColMap for index columns from all sides.
-	for _, side := range n.sides {
+	for _, side := range pi.sides {
 		// Note that the side's scanNode only contains the columns from that
 		// index that are also in n.columns. This is because we generated
 		// colCfg.wantedColumns for only the necessary columns in
 		// opt/exec/execbuilder/relational_builder.go, similar to lookup joins.
-		for _, col := range side.scan.cols {
-			ord := tableOrdinal(side.scan.desc, col.GetID(), side.scan.colCfg.visibility)
+		for _, col := range side.cols {
+			ord := tableOrdinal(side.desc, col.GetID(), execinfra.ScanVisibilityPublic)
 			post.OutputColumns[i] = uint32(colOffset + ord)
 			types[i] = col.GetType()
 			planToStreamColMap[i] = i
-
 			i++
 		}
-
-		colOffset += len(side.scan.desc.PublicColumns())
+		colOffset += len(side.desc.PublicColumns())
 	}
 
 	// Set the ON condition.
-	if n.onCond != nil {
+	if pi.onCond != nil {
 		// Note that the ON condition refers to the *internal* columns of the
 		// processor (before the OutputColumns projection).
-		indexVarMap := makePlanToStreamColMap(len(n.columns))
-		for i := range n.columns {
+		indexVarMap := makePlanToStreamColMap(len(pi.columns))
+		for i := 0; i < len(pi.columns); i++ {
 			indexVarMap[i] = int(post.OutputColumns[i])
 		}
 		zigzagJoinerSpec.OnExpr, err = physicalplan.MakeExpression(
-			n.onCond, planCtx, indexVarMap,
+			pi.onCond, planCtx, indexVarMap,
 		)
 		if err != nil {
 			return nil, err
