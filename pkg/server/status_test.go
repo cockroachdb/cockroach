@@ -348,7 +348,7 @@ func startServer(t *testing.T) *TestServer {
 }
 
 func newRPCTestContext(ts *TestServer, cfg *base.Config) *rpc.Context {
-	ac := testutils.MakeAmbientCtx()
+	ac := log.MakeClientAmbientContext(ts.Tracer())
 	var c base.NodeIDContainer
 	ac.AddLogTag("n", &c)
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
