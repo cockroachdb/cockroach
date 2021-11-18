@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -48,7 +49,7 @@ import (
 type joinReaderStrategy interface {
 	// getLookupRowsBatchSizeHint returns the size in bytes of the batch of lookup
 	// rows.
-	getLookupRowsBatchSizeHint() int64
+	getLookupRowsBatchSizeHint(*settings.Values) int64
 	// getMaxLookupKeyCols returns the maximum number of key columns used to
 	// lookup into the index.
 	getMaxLookupKeyCols() int
@@ -152,7 +153,7 @@ type joinReaderNoOrderingStrategy struct {
 // and 11 with varying batch sizes and choosing the smallest batch size that
 // offered a significant performance improvement. Larger batch sizes offered
 // small to no marginal improvements.
-func (s *joinReaderNoOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
+func (s *joinReaderNoOrderingStrategy) getLookupRowsBatchSizeHint(*settings.Values) int64 {
 	return 2 << 20 /* 2 MiB */
 }
 
@@ -359,7 +360,7 @@ type joinReaderIndexJoinStrategy struct {
 // and 19 with varying batch sizes and choosing the smallest batch size that
 // offered a significant performance improvement. Larger batch sizes offered
 // small to no marginal improvements.
-func (s *joinReaderIndexJoinStrategy) getLookupRowsBatchSizeHint() int64 {
+func (s *joinReaderIndexJoinStrategy) getLookupRowsBatchSizeHint(*settings.Values) int64 {
 	return 4 << 20 /* 4 MB */
 }
 
@@ -502,10 +503,17 @@ type joinReaderOrderingStrategy struct {
 	testingInfoSpilled bool
 }
 
-func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
+var jrOrderingStrategyBatchSize = settings.RegisterByteSizeSetting(
+	"sql.distsql.join_reader_ordering_strategy.batch_size",
+	"size limit on the input rows to construct a single lookup KV batch",
+	10<<10, /* 10 KiB */
+	settings.PositiveInt,
+)
+
+func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint(sv *settings.Values) int64 {
 	// TODO(asubiotto): Eventually we might want to adjust this batch size
 	//  dynamically based on whether the result row container spilled or not.
-	return 10 << 10 /* 10 KiB */
+	return jrOrderingStrategyBatchSize.Get(sv)
 }
 
 func (s *joinReaderOrderingStrategy) getMaxLookupKeyCols() int {
