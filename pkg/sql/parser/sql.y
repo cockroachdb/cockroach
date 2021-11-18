@@ -1630,6 +1630,7 @@ alter_view_stmt:
 // %Category: DDL
 // %Text:
 // ALTER SEQUENCE [IF EXISTS] <name>
+//   [AS <typename>]
 //   [INCREMENT <increment>]
 //   [MINVALUE <minvalue> | NO MINVALUE]
 //   [MAXVALUE <maxvalue> | NO MAXVALUE]
@@ -7270,6 +7271,7 @@ reference_action:
 // %Category: DDL
 // %Text:
 // CREATE [TEMPORARY | TEMP] SEQUENCE <seqname>
+//   [AS <typename>]
 //   [INCREMENT <increment>]
 //   [MINVALUE <minvalue> | NO MINVALUE]
 //   [MAXVALUE <maxvalue> | NO MAXVALUE]
@@ -7309,7 +7311,15 @@ sequence_option_list:
 | sequence_option_list sequence_option_elem  { $$.val = append($1.seqOpts(), $2.seqOpt()) }
 
 sequence_option_elem:
-  AS typename                  { return unimplementedWithIssueDetail(sqllex, 25110, $2.typeReference().SQLString()) }
+  AS typename                  { 
+                                  // Valid option values must be integer types (ex. int2, bigint)
+                                  parsedType := $2.colType()
+                                  if parsedType.Family() != types.IntFamily {
+                                      sqllex.Error(fmt.Sprintf("invalid integer type: %s", parsedType.SQLString()))
+                                      return 1
+                                  }
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptAs, AsIntegerType: parsedType}
+                                }
 | CYCLE                        { /* SKIP DOC */
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptCycle} }
 | NO CYCLE                     { $$.val = tree.SequenceOption{Name: tree.SeqOptNoCycle} }
