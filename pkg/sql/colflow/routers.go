@@ -462,9 +462,7 @@ func NewHashRouter(
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
 ) (*HashRouter, []colexecop.DrainableOperator) {
-	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
-		colexecerror.InternalError(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
-	}
+	diskQueueCfg.SetCacheMode(colcontainer.DiskQueueCacheModeIntertwinedCalls)
 	outputs := make([]routerOutput, len(unlimitedAllocators))
 	outputsAsOps := make([]colexecop.DrainableOperator, len(unlimitedAllocators))
 	// unblockEventsChan is buffered to 2*numOutputs as we don't want the outputs

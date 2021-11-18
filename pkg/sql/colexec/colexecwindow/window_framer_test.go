@@ -59,8 +59,6 @@ func TestWindowFramer(t *testing.T) {
 
 	factory := coldataext.NewExtendedColumnFactory(evalCtx)
 	allocator := colmem.NewAllocator(evalCtx.Ctx(), &memAcc, factory)
-	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
-	queueCfg.SetDefaultBufferSizeBytesForCacheMode()
 
 	var memLimits = []int64{1, 1 << 10, 1 << 20}
 

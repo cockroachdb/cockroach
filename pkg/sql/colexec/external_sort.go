@@ -137,8 +137,8 @@ type externalSorter struct {
 	columnOrdering     colinfo.ColumnOrdering
 	inMemSorter        colexecop.ResettableOperator
 	inMemSorterInput   *inputPartitioningOperator
-	partitioner        colcontainer.PartitionedQueue
-	partitionerCreator func() colcontainer.PartitionedQueue
+	partitioner        *colcontainer.PartitionedDiskQueue
+	partitionerCreator func() *colcontainer.PartitionedDiskQueue
 	// partitionerToOperators stores all partitionerToOperator instances that we
 	// have created when merging partitions. This allows for reusing them in
 	// case we need to perform repeated merging (namely, we'll be able to reuse
@@ -232,10 +232,6 @@ func NewExternalSorter(
 	fdSemaphore semaphore.Semaphore,
 	diskAcc *mon.BoundAccount,
 ) colexecop.Operator {
-	// The cache mode is chosen to reuse the cache to have a smaller cache per
-	// partition without affecting performance.
-	diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
-	diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
 	if diskQueueCfg.BufferSizeBytes > 0 && maxNumberPartitions == 0 {
 		// With the default limit of 256 file descriptors, this results in 16
 		// partitions. This is a hard maximum of partitions that will be used by
@@ -295,7 +291,7 @@ func NewExternalSorter(
 		mergeMemoryLimit:         mergeMemoryLimit,
 		inMemSorter:              inMemSorter,
 		inMemSorterInput:         inputPartitioner.(*inputPartitioningOperator),
-		partitionerCreator: func() colcontainer.PartitionedQueue {
+		partitionerCreator: func() *colcontainer.PartitionedDiskQueue {
 			return colcontainer.NewPartitionedDiskQueue(inputTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition, diskAcc)
 		},
 		inputTypes:           inputTypes,

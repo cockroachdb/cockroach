@@ -121,10 +121,6 @@ func NewSpillingBuffer(
 	// must reserve memory for the disk queue and dequeue scratch batch.
 	diskReservedMem := colmem.EstimateBatchSizeBytes(storedTypes, coldata.BatchSize()) +
 		int64(diskQueueCfg.BufferSizeBytes)
-	// The SpillingBuffer disk queue always uses
-	// DiskQueueCacheModeClearAndReuseCache since all writes happen before any
-	// reads.
-	diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
 	return &SpillingBuffer{
 		unlimitedAllocator: unlimitedAllocator,
 		memoryLimit:        memoryLimit,
@@ -140,7 +136,7 @@ func NewSpillingBuffer(
 	}
 }
 
-// The disk queue will always use DiskQueueCacheModeClearAndReuseCache, so
+// The disk queue will always use colcontainer.DiskQueueCacheModeDefault, so
 // all writes will always occur before all reads.
 const numSpillingBufferFDs = 1
 

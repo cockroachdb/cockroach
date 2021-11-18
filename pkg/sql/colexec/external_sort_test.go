@@ -253,8 +253,6 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
-	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
-	queueCfg.SetDefaultBufferSizeBytesForCacheMode()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
 

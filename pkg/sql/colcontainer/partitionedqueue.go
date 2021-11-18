@@ -21,61 +21,32 @@ import (
 	"github.com/marusama/semaphore"
 )
 
-// PartitionedQueue is the abstraction for on-disk storage.
-type PartitionedQueue interface {
-	// Enqueue adds the batch to the end of the partitionIdx'th partition. If a
-	// partition at that index does not exist, a new one is created. Existing
-	// partitions may not be Enqueued to after calling
-	// CloseAllOpenWriteFileDescriptors. A zero-length batch must be enqueued as
-	// the last one.
-	// WARNING: Selection vectors are ignored.
-	Enqueue(ctx context.Context, partitionIdx int, batch coldata.Batch) error
-	// Dequeue removes and returns the batch from the front of the
-	// partitionIdx'th partition. If the partition is empty, or no partition at
-	// that index was Enqueued to, a zero-length batch is returned. Note that
-	// it is illegal to call Enqueue on a partition after Dequeue.
-	Dequeue(ctx context.Context, partitionIdx int, batch coldata.Batch) error
-	// CloseAllOpenWriteFileDescriptors notifies the PartitionedQueue that it can
-	// close all open write file descriptors. After this point, only new
-	// partitions may be Enqueued to.
-	CloseAllOpenWriteFileDescriptors(ctx context.Context) error
-	// CloseAllOpenReadFileDescriptors closes the open read file descriptors
-	// belonging to partitions. These partitions may still be Dequeued from,
-	// although this will trigger files to be reopened.
-	CloseAllOpenReadFileDescriptors() error
-	// CloseInactiveReadPartitions closes all partitions that have been Dequeued
-	// from and have either been temporarily closed through
-	// CloseAllOpenReadFileDescriptors or have returned a coldata.ZeroBatch from
-	// Dequeue. This close removes the underlying files.
-	CloseInactiveReadPartitions(ctx context.Context) error
-	// Close closes all partitions created.
-	Close(ctx context.Context) error
-}
-
 // partitionState is the state a partition is in.
 type partitionState int
 
 const (
-	// partitionStateWriting is the initial state of a partition. A partition will
-	// always transition to partitionStateClosedForWriting next.
+	// partitionStateWriting is the initial state of a partition. A partition
+	// will always transition to partitionStateClosedForWriting next.
 	partitionStateWriting partitionState = iota
 	// partitionStateClosedForWriting is the state a partition is in when it is
 	// closed for writing. The next possible state is for reads to happen, and
 	// thus a transition to partitionStateReading. Note that if a partition is
-	// in this state when entering a method of PartitionedDiskQueue, it is always
-	// true that the file descriptor for this partition has been released.
+	// in this state when entering a method of PartitionedDiskQueue, it is
+	// always true that the file descriptor for this partition has been
+	// released.
 	partitionStateClosedForWriting
-	// partitionStateReading is the state a partition is in when Dequeue has been
-	// called. It is always the case that this partition has been closed for
-	// writing and may not transition back to partitionStateWriting or
-	// partitionStateClosedForWriting. The read file descriptor for this partition
-	// may be closed in this state, although it will be reacquired on the next
-	// read.
+	// partitionStateReading is the state a partition is in when Dequeue has
+	// been called. It is always the case that this partition has been closed
+	// for writing and may not transition back to partitionStateWriting or
+	// partitionStateClosedForWriting. The read file descriptor for this
+	// partition may be closed in this state, although it will be reacquired on
+	// the next read.
 	partitionStateReading
 	// partitionStateClosedForReading is the state a partition is in when a
-	// partition was in partitionStateReading and CloseAllOpenReadFileDescriptors
-	// was called. If Dequeued, this partition will reacquire a file descriptor
-	// and transition back to partitionStateReading.
+	// partition was in partitionStateReading and
+	// CloseAllOpenReadFileDescriptors was called. If Dequeued, this partition
+	// will reacquire a file descriptor and transition back to
+	// partitionStateReading.
 	partitionStateClosedForReading
 	// partitionStatePermanentlyClosed is the state a partition is in when its
 	// underlying DiskQueue has been Closed.
@@ -88,14 +59,14 @@ type partition struct {
 	state partitionState
 }
 
-// PartitionerStrategy describes a strategy used by the PartitionedQueue during
-// its operation.
+// PartitionerStrategy describes a strategy used by the PartitionedDiskQueue
+// during its operation.
 type PartitionerStrategy int
 
 const (
 	// PartitionerStrategyDefault is a partitioner strategy in which the
-	// PartitionedQueue will keep all partitions open for writing.
-	// Note that this uses up as many file descriptors as partitions.
+	// PartitionedDiskQueue will keep all partitions open for writing. Note that
+	// this uses up as many file descriptors as partitions.
 	PartitionerStrategyDefault PartitionerStrategy = iota
 	// PartitionerStrategyCloseOnNewPartition is a partitioner strategy that
 	// closes an open partition for writing if a new partition is created. This
@@ -104,7 +75,7 @@ const (
 	PartitionerStrategyCloseOnNewPartition
 )
 
-// PartitionedDiskQueue is a PartitionedQueue whose partitions are on-disk.
+// PartitionedDiskQueue stores partitions on-disk.
 type PartitionedDiskQueue struct {
 	typs     []*types.T
 	strategy PartitionerStrategy
@@ -122,18 +93,16 @@ type PartitionedDiskQueue struct {
 	diskAcc     *mon.BoundAccount
 }
 
-var _ PartitionedQueue = &PartitionedDiskQueue{}
-
-// NewPartitionedDiskQueue creates a PartitionedDiskQueue whose partitions are
-// all on-disk queues. Note that diskQueues will be lazily created when
-// enqueueing to a new partition. Each new partition will use
-// cfg.BufferSizeBytes, so memory usage may increase in an unbounded fashion if
-// used unmethodically. The file descriptors are acquired through fdSemaphore.
-// If fdSemaphore is nil, the partitioned disk queue will not Acquire or Release
-// file descriptors. Do this if the caller knows that it will use a constant
-// maximum number of file descriptors and wishes to acquire these up front.
-// Note that actual file descriptors open may be less than, but never more than
-// the number acquired through the semaphore.
+// NewPartitionedDiskQueue creates a partitioned queue whose partitions are all
+// on-disk queues. Note that diskQueues will be lazily created when enqueueing
+// to a new partition. Each new partition will use cfg.BufferSizeBytes, so
+// memory usage may increase in an unbounded fashion if used unmethodically. The
+// file descriptors are acquired through fdSemaphore. If fdSemaphore is nil, the
+// partitioned disk queue will not Acquire or Release file descriptors. Do this
+// if the caller knows that it will use a constant maximum number of file
+// descriptors and wishes to acquire these up front. Note that actual file
+// descriptors open may be less than, but never more than the number acquired
+// through the semaphore.
 func NewPartitionedDiskQueue(
 	typs []*types.T,
 	cfg DiskQueueCfg,
@@ -209,7 +178,12 @@ func (p *PartitionedDiskQueue) acquireNewFD(ctx context.Context) error {
 	return nil
 }
 
-// Enqueue enqueues a batch at partition partitionIdx.
+// Enqueue adds the batch to the end of the partitionIdx'th partition. If a
+// partition at that index does not exist, a new one is created. Existing
+// partitions may not be Enqueued to after calling
+// CloseAllOpenWriteFileDescriptors. A zero-length batch must be enqueued as the
+// last one.
+// WARNING: Selection vectors are ignored.
 func (p *PartitionedDiskQueue) Enqueue(
 	ctx context.Context, partitionIdx int, batch coldata.Batch,
 ) error {
@@ -223,24 +197,25 @@ func (p *PartitionedDiskQueue) Enqueue(
 				return errors.New("PartitionerStrategyCloseOnNewPartition unable to find last Enqueued partition")
 			}
 			if p.partitions[idxToClose].state == partitionStateWriting {
-				// Close the last enqueued partition. No need to release or acquire a new
-				// file descriptor, since the acquired FD will represent the new
-				// partition's FD opened in Enqueue below.
+				// Close the last enqueued partition. No need to release or
+				// acquire a new file descriptor, since the acquired FD will
+				// represent the new partition's FD opened in Enqueue below.
 				if err := p.closeWritePartition(ctx, idxToClose, retainFD); err != nil {
 					return err
 				}
 				needToAcquireFD = false
 			} else {
-				// The partition that was last enqueued to is not open for writing, so
-				// we need to acquire a new FD for this new partition.
+				// The partition that was last enqueued to is not open for
+				// writing, so we need to acquire a new FD for this new
+				// partition.
 				needToAcquireFD = true
 			}
 		}
 
 		if needToAcquireFD {
-			// Acquire only one file descriptor. This will represent the write file
-			// descriptor. When we start Dequeueing from this partition, this will
-			// represent the read file descriptor.
+			// Acquire only one file descriptor. This will represent the write
+			// file descriptor. When we start Dequeueing from this partition,
+			// this will represent the read file descriptor.
 			if err := p.acquireNewFD(ctx); err != nil {
 				return err
 			}
@@ -264,9 +239,10 @@ func (p *PartitionedDiskQueue) Enqueue(
 	return p.partitions[idx].Enqueue(ctx, batch)
 }
 
-// Dequeue dequeues a batch from partition partitionIdx, returns a
-// coldata.ZeroBatch if that partition does not exist. If the partition exists
-// and a coldata.ZeroBatch is returned, that partition is closed.
+// Dequeue removes and returns the batch from the front of the partitionIdx'th
+// partition. If the partition is empty, or no partition at that index was
+// Enqueued to, a zero-length batch is returned. Note that it is illegal to call
+// Enqueue on a partition after Dequeue.
 func (p *PartitionedDiskQueue) Dequeue(
 	ctx context.Context, partitionIdx int, batch coldata.Batch,
 ) error {
@@ -284,8 +260,8 @@ func (p *PartitionedDiskQueue) Dequeue(
 		}
 		p.partitions[idx].state = partitionStateReading
 	case partitionStateClosedForWriting, partitionStateClosedForReading:
-		// There will never be a file descriptor acquired for a partition in this
-		// state, so acquire it.
+		// There will never be a file descriptor acquired for a partition in
+		// this state, so acquire it.
 		if err := p.acquireNewFD(ctx); err != nil {
 			return err
 		}
@@ -309,18 +285,18 @@ func (p *PartitionedDiskQueue) Dequeue(
 	}
 	if !notEmpty {
 		// This should never happen. It simply means that there was no batch to
-		// Dequeue but more batches will be added in the future (i.e. a zero batch
-		// was never enqueued). Since we require partitions to be closed for writing
-		// before reading, this state is unexpected.
+		// Dequeue but more batches will be added in the future (i.e. a zero
+		// batch was never enqueued). Since we require partitions to be closed
+		// for writing before reading, this state is unexpected.
 		colexecerror.InternalError(
 			errors.AssertionFailedf("DiskQueue unexpectedly returned that more data will be added"))
 	}
 	return nil
 }
 
-// CloseAllOpenWriteFileDescriptors closes all open write file descriptors
-// belonging to partitions that are being Enqueued to. Once this method is
-// called, existing partitions may not be enqueued to again.
+// CloseAllOpenWriteFileDescriptors notifies the PartitionedQueue that it can
+// close all open write file descriptors. After this point, only new partitions
+// may be Enqueued to.
 func (p *PartitionedDiskQueue) CloseAllOpenWriteFileDescriptors(ctx context.Context) error {
 	for i, q := range p.partitions {
 		if q.state != partitionStateWriting {
@@ -334,9 +310,9 @@ func (p *PartitionedDiskQueue) CloseAllOpenWriteFileDescriptors(ctx context.Cont
 	return nil
 }
 
-// CloseAllOpenReadFileDescriptors closes all open read file descriptors
-// belonging to partitions that are being Dequeued from. If Dequeue is called
-// on a closed partition, it will be reopened.
+// CloseAllOpenReadFileDescriptors closes the open read file descriptors
+// belonging to partitions. These partitions may still be Dequeued from,
+// although this will trigger files to be reopened.
 func (p *PartitionedDiskQueue) CloseAllOpenReadFileDescriptors() error {
 	for i, q := range p.partitions {
 		if q.state != partitionStateReading {
@@ -350,10 +326,10 @@ func (p *PartitionedDiskQueue) CloseAllOpenReadFileDescriptors() error {
 	return nil
 }
 
-// CloseInactiveReadPartitions closes all partitions that were Dequeued from
-// and either Dequeued a coldata.ZeroBatch or were closed through
-// CloseAllOpenReadFileDescriptors. This method call Closes the underlying
-// DiskQueue to remove its files, so a partition may never be used again.
+// CloseInactiveReadPartitions closes all partitions that have been Dequeued
+// from and have either been temporarily closed through
+// CloseAllOpenReadFileDescriptors or have returned a coldata.ZeroBatch from
+// Dequeue. This close removes the underlying files.
 func (p *PartitionedDiskQueue) CloseInactiveReadPartitions(ctx context.Context) error {
 	var lastErr error
 	for i, q := range p.partitions {
