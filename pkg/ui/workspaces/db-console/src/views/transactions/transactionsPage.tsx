@@ -21,7 +21,11 @@ import { StatementsResponseMessage } from "src/util/api";
 import { TimestampToMoment } from "src/util/convert";
 import { PrintTime } from "src/views/reports/containers/range/print";
 
-import { TransactionsPage } from "@cockroachlabs/cluster-ui";
+import {
+  TransactionsPage,
+  Filters,
+  defaultFilters,
+} from "@cockroachlabs/cluster-ui";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { statementsDateRangeLocalSetting } from "src/redux/statementsDateRange";
 import { setCombinedStatementsDateRangeAction } from "src/redux/statements";
@@ -68,6 +72,12 @@ export const sortSettingLocalSetting = new LocalSetting(
   { ascending: false, columnTitle: "executionCount" },
 );
 
+export const filtersLocalSetting = new LocalSetting(
+  "filters/TransactionsPage",
+  (state: AdminUIState) => state.localSettings,
+  defaultFilters,
+);
+
 export const transactionColumnsLocalSetting = new LocalSetting(
   "showColumns/TransactionPage",
   (state: AdminUIState) => state.localSettings,
@@ -85,6 +95,7 @@ const TransactionsPageConnected = withRouter(
       nodeRegions: nodeRegionsByIDSelector(state),
       columns: transactionColumnsLocalSetting.selectorToArray(state),
       sortSetting: sortSettingLocalSetting.selector(state),
+      filters: filtersLocalSetting.selector(state),
     }),
     {
       refreshData: refreshStatements,
@@ -107,6 +118,7 @@ const TransactionsPageConnected = withRouter(
           ascending: ascending,
           columnTitle: columnName,
         }),
+      onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
     },
   )(TransactionsPage),
 );

@@ -32,6 +32,7 @@ export type LocalStorageState = {
   "sortSetting/TransactionsPage": SortSetting;
   "sortSetting/SessionsPage": SortSetting;
   "filters/StatementsPage": Filters;
+  "filters/TransactionsPage": Filters;
 };
 
 type Payload = {
@@ -80,6 +81,9 @@ const initialState: LocalStorageState = {
     defaultSessionsSortSetting,
   "filters/StatementsPage":
     JSON.parse(localStorage.getItem("filters/StatementsPage")) ||
+    defaultFilters,
+  "filters/TransactionsPage":
+    JSON.parse(localStorage.getItem("filters/TransactionsPage")) ||
     defaultFilters,
 };
 
