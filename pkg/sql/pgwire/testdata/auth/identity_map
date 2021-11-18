@@ -1,0 +1,262 @@
+# Verify system-identity to database-user substitutions.
+
+config secure
+----
+
+
+# Set HBA to add an ident map.
+set_hba
+host  all all  all cert-password map=testing
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all all  all cert-password map=testing
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      root all     cert-password
+host   all      all  all     cert-password map=testing
+
+set_identity_map
+testing testuser carl               # Exact remapping
+testing /(.*)@cockroachlabs.com \1  # Generalized domain mapping
+testing testuser another_carl       # Verify first-one-wins
+testing will_be_carl carl           # Another user for password testing
+testing testuser2 carl              # Cert that doesn't correspond to a db user
+testing testuser@example.com carl   # Cert with a non-SQL principal baked in
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all all  all cert-password map=testing
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      root all     cert-password
+host   all      all  all     cert-password map=testing
+# Active identity mapping on this node:
+# Original configuration:
+# testing testuser carl               # Exact remapping
+# testing /(.*)@cockroachlabs.com \1  # Generalized domain mapping
+# testing testuser another_carl       # Verify first-one-wins
+# testing will_be_carl carl           # Another user for password testing
+# testing testuser2 carl              # Cert that doesn't correspond to a db user
+# testing testuser@example.com carl   # Cert with a non-SQL principal baked in
+# Active configuration:
+# map-name system-username         database-username
+testing    ^testuser$              carl
+testing    (.*)@cockroachlabs.com  \1                # substituteAt=0
+testing    ^testuser$              another_carl
+testing    ^will_be_carl$          carl
+testing    ^testuser2$             carl
+testing    ^testuser@example\.com$ carl
+
+sql
+CREATE USER carl WITH PASSWORD 'doggo';
+CREATE USER will_be_carl WITH PASSWORD 'oggod';
+----
+ok
+
+
+subtest password_still_works_with_db_username
+
+# Sanity-check the database user
+connect user=carl database=mydb password=doggo
+----
+ok mydb
+
+authlog 6
+.*client_connection_end
+----
+5 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+6 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+7 {"EventType":"client_authentication_info","Info":"no client certificate, proceeding with password authentication","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+8 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+9 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+10 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+subtest end
+
+
+# This test verifies that we validate the password of an incoming
+# username-based request before any remapping occurs.
+subtest password_evaluated_before_remapping
+
+connect user=carl@cockroachlabs.com database=mydb password=doggo
+----
+ERROR: password authentication failed for user carl@cockroachlabs.com (SQLSTATE 28000)
+
+authlog 6
+.*client_connection_end
+----
+11 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+12 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"carl@cockroachlabs.com","Timestamp":"XXX","Transport":"hostssl"}
+13 {"EventType":"client_authentication_info","Info":"no client certificate, proceeding with password authentication","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"carl@cockroachlabs.com","Timestamp":"XXX","Transport":"hostssl"}
+14 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-password","Network":"tcp","Reason":2,"RemoteAddress":"XXX","SystemIdentity":"carl@cockroachlabs.com","Timestamp":"XXX","Transport":"hostssl","User":"carl@cockroachlabs.com"}
+15 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+16 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+subtest end
+
+# Verify the good path, where we verify the password against the
+# system identity and get a remapping.
+subtest password_remapped_user_ok
+
+connect user=will_be_carl database=mydb password=oggod
+----
+ok mydb
+
+authlog 6
+.*client_connection_end
+----
+17 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+18 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"will_be_carl","Timestamp":"XXX","Transport":"hostssl"}
+19 {"EventType":"client_authentication_info","Info":"no client certificate, proceeding with password authentication","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"will_be_carl","Timestamp":"XXX","Transport":"hostssl"}
+20 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"will_be_carl","Timestamp":"XXX","Transport":"hostssl","User":"will_be_carl"}
+21 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+22 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+subtest end
+
+# Connect as the magic "testuser" since that comes pre-equipped with a cert.
+subtest certificate_good
+
+connect user=testuser database=mydb
+----
+ok mydb
+
+authlog 6
+.*client_connection_end
+----
+23 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+24 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl"}
+25 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl"}
+26 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+27 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+28 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+subtest end
+
+# There's a certificate on disk for a "testuser2" principal that doesn't
+# correspond to an actual SQL user. We want to test the case where
+# arbitrary system identities in a certificate must be mapped onto a
+# database username.
+subtest cert_with_principal_not_in_users
+
+connect user=testuser2 database=mydb force_certs
+----
+ok mydb
+
+authlog 6
+.*client_connection_end
+----
+29 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+30 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"testuser2","Timestamp":"XXX","Transport":"hostssl"}
+31 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"testuser2","Timestamp":"XXX","Transport":"hostssl"}
+32 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"testuser2","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+33 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+34 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+subtest end
+
+subtest password_should_not_accept_map
+
+set_hba
+host   all      all  all     password map=testing
+----
+ERROR: the HBA method "password" does not accept options
+
+subtest end
+
+subtest trust_should_not_accept_map
+
+set_hba
+host   all      all  all     trust map=testing
+----
+ERROR: the HBA method "trust" does not accept options
+
+subtest end
+
+subtest verify_root_mapping_fails
+
+set_identity_map
+testing testuser root               # Exact remapping
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all all  all cert-password map=testing
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      root all     cert-password
+host   all      all  all     cert-password map=testing
+# Active identity mapping on this node:
+# Original configuration:
+# testing testuser root               # Exact remapping
+# Active configuration:
+# map-name system-username database-username
+testing    ^testuser$      root
+
+connect user=testuser database=mydb
+----
+ERROR: system identity "testuser" mapped to reserved database role "root" (SQLSTATE 28000)
+
+subtest end
+
+subtest verify_node_mapping_fails
+
+set_identity_map
+testing testuser node               # Exact remapping
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all all  all cert-password map=testing
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      root all     cert-password
+host   all      all  all     cert-password map=testing
+# Active identity mapping on this node:
+# Original configuration:
+# testing testuser node               # Exact remapping
+# Active configuration:
+# map-name system-username database-username
+testing    ^testuser$      node
+
+connect user=testuser database=mydb
+----
+ERROR: system identity "testuser" mapped to reserved database role "node" (SQLSTATE 28000)
+
+subtest end
+
+
+# Clean up
+
+set_identity_map
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all all  all cert-password map=testing
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      root all     cert-password
+host   all      all  all     cert-password map=testing
+
+set_hba
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all all  all cert-password # built-in CockroachDB default
+# local all all      password      # built-in CockroachDB default
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      root all     cert-password
+host   all      all  all     cert-password
+local  all      all          password
