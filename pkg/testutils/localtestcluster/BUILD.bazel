@@ -23,6 +23,7 @@ go_library(
         "//pkg/storage",
         "//pkg/util",
         "//pkg/util/hlc",
+        "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/tracing",

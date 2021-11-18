@@ -4620,7 +4620,7 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 			}
 
 			cfg := DistSenderConfig{
-				AmbientCtx: log.AmbientContext{Tracer: tr},
+				AmbientCtx: log.MakeDummyAmbientContext(tr),
 				Clock:      clock,
 				NodeDescs:  ns,
 				RPCContext: rpcContext,
