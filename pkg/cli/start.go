@@ -1222,7 +1222,7 @@ func getClientGRPCConn(
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: cfg.Tracer},
+		AmbientCtx: log.MakeClientAmbientContext(cfg.Tracer),
 		Config:     cfg.Config,
 		Clock:      clock,
 		Stopper:    stopper,
