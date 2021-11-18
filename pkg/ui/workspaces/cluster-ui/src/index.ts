@@ -23,6 +23,7 @@ export * from "./downloadFile";
 export * from "./dropdown";
 export * from "./empty";
 export * from "./highlightedText";
+export * from "./indexDetailsPage";
 export * from "./loading";
 export * from "./modal";
 export * from "./pageConfig";
