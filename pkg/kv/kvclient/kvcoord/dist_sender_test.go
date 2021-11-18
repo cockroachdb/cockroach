@@ -4391,7 +4391,8 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
-			tr := tracing.NewTracer()
+			ambientCtx := testutils.MakeAmbientCtx()
+			tr := ambientCtx.Tracer
 			getRangeDescCacheSize := func() int64 {
 				return 1 << 20
 			}
@@ -4436,7 +4437,7 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 			}
 
 			cfg := DistSenderConfig{
-				AmbientCtx: log.AmbientContext{Tracer: tr},
+				AmbientCtx: ambientCtx,
 				Clock:      clock,
 				NodeDescs:  ns,
 				RPCContext: rpcContext,
