@@ -27,6 +27,7 @@ export * from "./loading";
 export * from "./modal";
 export * from "./pageConfig";
 export * from "./pagination";
+export * from "./queryFilter";
 export * from "./search";
 export * from "./sortedtable";
 export * from "./statementsDiagnostics";

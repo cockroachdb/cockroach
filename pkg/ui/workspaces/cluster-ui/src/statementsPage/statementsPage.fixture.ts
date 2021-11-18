@@ -271,6 +271,16 @@ const statementsPagePropsFixture: StatementsPageProps = {
     ascending: false,
     columnTitle: "executionCount"
   },
+  filters: {
+    app: "",
+    timeNumber: "0",
+    timeUnit: "seconds",
+    fullScan: false,
+    sqlType: "",
+    database: "",
+    regions: "",
+    nodes: "",
+  },
   statements: [
     {
       label:
@@ -691,6 +701,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   onDiagnosticsReportDownload: noop,
   onColumnsChange: noop,
   onSortingChange: noop,
+  onFilterChange: noop,
 };
 
 export const statementsPagePropsWithRequestError: StatementsPageProps = {
