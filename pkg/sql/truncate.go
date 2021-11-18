@@ -239,12 +239,6 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		return err
 	}
 
-	// Unsplit all manually split ranges in the table so they can be
-	// automatically merged by the merge queue.
-	if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
-		return err
-	}
-
 	oldIndexIDs := make([]descpb.IndexID, len(oldIndexes))
 	for i := range oldIndexIDs {
 		oldIndexIDs[i] = oldIndexes[i].ID
