@@ -565,7 +565,7 @@ func Monitor(
 		if msg.Err != nil {
 			msg.Msg += "error: " + msg.Err.Error()
 		}
-		thisError := errors.Newf("%d: %s", msg.Index, msg.Msg)
+		thisError := errors.Newf("%d: %s", msg.Node, msg.Msg)
 		if msg.Err != nil || strings.Contains(msg.Msg, "dead") {
 			err = errors.CombineErrors(err, thisError)
 		}
@@ -740,7 +740,7 @@ func AdminURL(
 	}
 
 	for i, node := range c.TargetNodes() {
-		host := vm.Name(c.Name, node) + "." + gce.Subdomain
+		host := vm.Name(c.Name, int(node)) + "." + gce.Subdomain
 
 		// verify DNS is working / fallback to IPs if not.
 		if i == 0 && !adminurlIPs {
@@ -808,14 +808,16 @@ func Pprof(
 
 	httpClient := httputil.NewClientWithTimeout(timeout)
 	startTime := timeutil.Now().Unix()
-	failed, err := c.ParallelE(description, len(c.TargetNodes()), 0, func(i int) ([]byte, error) {
-		host := c.VMs[i].PublicIP
-		port := c.NodeUIPort(i)
+	nodes := c.TargetNodes()
+	failed, err := c.ParallelE(description, len(nodes), 0, func(i int) ([]byte, error) {
+		node := nodes[i]
+		host := c.Host(node)
+		port := c.NodeUIPort(node)
 		scheme := "http"
 		if c.Secure {
 			scheme = "https"
 		}
-		outputFile := fmt.Sprintf("pprof-%s-%d-%s-%04d.out", profType, startTime, c.Name, i+1)
+		outputFile := fmt.Sprintf("pprof-%s-%d-%s-%04d.out", profType, startTime, c.Name, node)
 		outputDir := filepath.Dir(outputFile)
 		file, err := ioutil.TempFile(outputDir, ".pprof")
 		if err != nil {
