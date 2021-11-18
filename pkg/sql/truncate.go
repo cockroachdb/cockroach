@@ -14,6 +14,7 @@ import (
 	"context"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -239,10 +240,14 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		return err
 	}
 
-	// Unsplit all manually split ranges in the table so they can be
-	// automatically merged by the merge queue.
-	if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
-		return err
+	// TODO(Chengxiong): remove this block in 22.2
+	st := p.EvalContext().Settings
+	if !st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {
+		// Unsplit all manually split ranges in the table so they can be
+		// automatically merged by the merge queue.
+		if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
+			return err
+		}
 	}
 
 	oldIndexIDs := make([]descpb.IndexID, len(oldIndexes))

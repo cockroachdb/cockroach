@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -325,33 +326,48 @@ func (p *planner) dropTableImpl(
 	return droppedViews, err
 }
 
-// unsplitRangesForTable unsplit any manually split ranges within the table span.
-func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledesc.Mutable) error {
-	// Gate this on being the system tenant because secondary tenants aren't
-	// allowed to scan the meta ranges directly.
-	if p.ExecCfg().Codec.ForSystemTenant() {
-		span := tableDesc.TableSpan(p.ExecCfg().Codec)
-		ranges, err := kvclient.ScanMetaKVs(ctx, p.execCfg.DB.NewTxn(ctx, "unsplit-ranges-for-table"), span)
-		if err != nil {
+// UnsplitRangesInSpan unsplist any manually split ranges within a span.
+// TODO(Chengxiong): move this function to gc_job.go in 22.2
+func UnsplitRangesInSpan(ctx context.Context, kvDB *kv.DB, span roachpb.Span) error {
+	ranges, err := kvclient.ScanMetaKVs(ctx, kvDB.NewTxn(ctx, "unsplit-ranges-in-span"), span)
+	if err != nil {
+		return err
+	}
+	for _, r := range ranges {
+		var desc roachpb.RangeDescriptor
+		if err := r.ValueProto(&desc); err != nil {
 			return err
 		}
-		for _, r := range ranges {
-			var desc roachpb.RangeDescriptor
-			if err := r.ValueProto(&desc); err != nil {
+
+		if !span.ContainsKey(desc.StartKey.AsRawKey()) {
+			continue
+		}
+
+		if !desc.GetStickyBit().IsEmpty() {
+			// Swallow "key is not the start of a range" errors because it would mean
+			// that the sticky bit was removed and merged concurrently. DROP TABLE
+			// should not fail because of this.
+			if err := kvDB.AdminUnsplit(ctx, desc.StartKey); err != nil &&
+				!strings.Contains(err.Error(), "is not the start of a range") {
 				return err
-			}
-			if !desc.GetStickyBit().IsEmpty() {
-				// Swallow "key is not the start of a range" errors because it would mean
-				// that the sticky bit was removed and merged concurrently. DROP TABLE
-				// should not fail because of this.
-				if err := p.ExecCfg().DB.AdminUnsplit(ctx, desc.StartKey); err != nil &&
-					!strings.Contains(err.Error(), "is not the start of a range") {
-					return err
-				}
 			}
 		}
 	}
+
 	return nil
+}
+
+// unsplitRangesForTable unsplit any manually split ranges within the tablespan.
+// TODO(Chengxiong): Remove this function in 22.2
+func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledesc.Mutable) error {
+	// Gate this on being the system tenant because secondary tenants aren't
+	// allowed to scan the meta ranges directly.
+	if !p.ExecCfg().Codec.ForSystemTenant() {
+		return nil
+	}
+
+	span := tableDesc.TableSpan(p.ExecCfg().Codec)
+	return UnsplitRangesInSpan(ctx, p.execCfg.DB, span)
 }
 
 // drainName when set implies that the name needs to go through the draining
@@ -381,10 +397,14 @@ func (p *planner) initiateDropTable(
 		tableDesc.DropTime = timeutil.Now().UnixNano()
 	}
 
-	// Unsplit all manually split ranges in the table so they can be
-	// automatically merged by the merge queue.
-	if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
-		return err
+	// TODO(Chengxiong): Remove this range unsplitting in 22.2
+	st := p.EvalContext().Settings
+	if !st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {
+		// Unsplit all manually split ranges in the table so they can be
+		// automatically merged by the merge queue.
+		if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
+			return err
+		}
 	}
 
 	// Actually mark table descriptor as dropped.

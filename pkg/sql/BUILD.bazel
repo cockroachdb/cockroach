@@ -528,6 +528,7 @@ go_test(
         "txn_restart_test.go",
         "txn_state_test.go",
         "type_change_test.go",
+        "unsplit_range_test.go",
         "unsplit_test.go",
         "upsert_test.go",
         "user_test.go",
