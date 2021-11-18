@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -206,6 +207,7 @@ func TestStopServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	tr := tc.Server(0).TracerI().(*tracing.Tracer)
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: server1.AmbientCtx(),
