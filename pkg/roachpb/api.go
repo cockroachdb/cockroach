@@ -263,25 +263,6 @@ func (r *AddSSTableRequest) WriteBytes() int64 {
 	return int64(len(r.Data))
 }
 
-// leaseRequestor is implemented by requests dealing with leases.
-// Implementors return the previous lease at the time the request
-// was proposed.
-type leaseRequestor interface {
-	prevLease() Lease
-}
-
-var _ leaseRequestor = &RequestLeaseRequest{}
-
-func (rlr *RequestLeaseRequest) prevLease() Lease {
-	return rlr.PrevLease
-}
-
-var _ leaseRequestor = &TransferLeaseRequest{}
-
-func (tlr *TransferLeaseRequest) prevLease() Lease {
-	return tlr.PrevLease
-}
-
 // Response is an interface for RPC responses.
 type Response interface {
 	protoutil.Message
@@ -692,6 +673,9 @@ func (*RequestLeaseRequest) Method() Method { return RequestLease }
 func (*TransferLeaseRequest) Method() Method { return TransferLease }
 
 // Method implements the Request interface.
+func (*ProbeRequest) Method() Method { return Probe }
+
+// Method implements the Request interface.
 func (*LeaseInfoRequest) Method() Method { return LeaseInfo }
 
 // Method implements the Request interface.
@@ -919,6 +903,12 @@ func (rlr *RequestLeaseRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (tlr *TransferLeaseRequest) ShallowCopy() Request {
 	shallowCopy := *tlr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *ProbeRequest) ShallowCopy() Request {
+	shallowCopy := *r
 	return &shallowCopy
 }
 
@@ -1331,6 +1321,9 @@ func (*TransferLeaseRequest) flags() flag {
 	// the store has registered that a transfer is in progress and
 	// `redirectOnOrAcquireLease` would already tentatively redirect to the future
 	// lease holder.
+	return isWrite | isAlone | skipsLeaseCheck
+}
+func (*ProbeRequest) flags() flag {
 	return isWrite | isAlone | skipsLeaseCheck
 }
 func (*RecomputeStatsRequest) flags() flag                { return isWrite | isAlone }

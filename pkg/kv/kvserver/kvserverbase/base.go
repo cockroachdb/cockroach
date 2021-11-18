@@ -79,10 +79,11 @@ type ProposalFilterArgs struct {
 // ApplyFilterArgs groups the arguments to a ReplicaApplyFilter.
 type ApplyFilterArgs struct {
 	kvserverpb.ReplicatedEvalResult
-	CmdID   CmdIDKey
-	RangeID roachpb.RangeID
-	StoreID roachpb.StoreID
-	Req     *roachpb.BatchRequest // only set on the leaseholder
+	CmdID       CmdIDKey
+	RangeID     roachpb.RangeID
+	StoreID     roachpb.StoreID
+	Req         *roachpb.BatchRequest // only set on the leaseholder
+	ForcedError *roachpb.Error
 }
 
 // InRaftCmd returns true if the filter is running in the context of a Raft
@@ -110,11 +111,8 @@ type ReplicaCommandFilter func(args FilterArgs) *roachpb.Error
 // from proposals after a request is evaluated but before it is proposed.
 type ReplicaProposalFilter func(args ProposalFilterArgs) *roachpb.Error
 
-// A ReplicaApplyFilter can be used in testing to influence the error returned
-// from proposals after they apply. The returned int is treated as a
-// storage.proposalReevaluationReason and will only take an effect when it is
-// nonzero and the existing reason is zero. Similarly, the error is only applied
-// if there's no error so far.
+// A ReplicaApplyFilter is a testing hook into raft command application.
+// See StoreTestingKnobs.
 type ReplicaApplyFilter func(args ApplyFilterArgs) (int, *roachpb.Error)
 
 // ReplicaResponseFilter is used in unittests to modify the outbound

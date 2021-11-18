@@ -273,6 +273,17 @@ func (r *Replica) executeWriteBatch(
 					})
 				propResult.Err = roachpb.NewError(applicationErr)
 			}
+			if propResult.Err != nil && ba.IsSingleProbeRequest() && errors.Is(
+				propResult.Err.GoError(), noopOnProbeCommandErr.GoError(),
+			) {
+				// During command application, a Probe will fail due to the
+				// mismatched lease (noop writes skip lease checks and so also don't
+				// plumb the lease around in the first place) and they have special
+				// casing to return a noopOnProbeCommandErr instead. So when we see
+				// this error here, it means that the noop write succeeded.
+				propResult.Reply, propResult.Err = ba.CreateReply(), nil
+			}
+
 			return propResult.Reply, nil, propResult.Err
 
 		case <-slowTimer.C:

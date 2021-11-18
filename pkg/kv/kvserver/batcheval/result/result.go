@@ -304,6 +304,11 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.PriorReadSummary = nil
 
+	if !p.Replicated.IsProbe {
+		p.Replicated.IsProbe = q.Replicated.IsProbe
+	}
+	q.Replicated.IsProbe = false
+
 	if p.Local.EncounteredIntents == nil {
 		p.Local.EncounteredIntents = q.Local.EncounteredIntents
 	} else {
