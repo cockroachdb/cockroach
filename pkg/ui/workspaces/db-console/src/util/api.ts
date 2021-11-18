@@ -59,6 +59,9 @@ export type ClusterResponseMessage = protos.cockroach.server.serverpb.ClusterRes
 export type TableStatsRequestMessage = protos.cockroach.server.serverpb.TableStatsRequest;
 export type TableStatsResponseMessage = protos.cockroach.server.serverpb.TableStatsResponse;
 
+export type IndexStatsRequestMessage = protos.cockroach.server.serverpb.TableIndexStatsRequest;
+export type IndexStatsResponseMessage = protos.cockroach.server.serverpb.TableIndexStatsResponse;
+
 export type NonTableStatsRequestMessage = protos.cockroach.server.serverpb.NonTableStatsRequest;
 export type NonTableStatsResponseMessage = protos.cockroach.server.serverpb.NonTableStatsResponse;
 
@@ -135,6 +138,9 @@ export type StatementsRequestMessage = protos.cockroach.server.serverpb.Statemen
 
 export type ResetSQLStatsRequestMessage = protos.cockroach.server.serverpb.ResetSQLStatsRequest;
 export type ResetSQLStatsResponseMessage = protos.cockroach.server.serverpb.ResetSQLStatsResponse;
+
+export type ResetIndexUsageStatsRequestMessage = protos.cockroach.server.serverpb.ResetIndexUsageStatsRequest;
+export type ResetIndexUsageStatsResponseMessage = protos.cockroach.server.serverpb.ResetIndexUsageStatsResponse;
 
 // API constants
 
@@ -456,6 +462,19 @@ export function getTableStats(
   );
 }
 
+// getIndexStats gets detailed stats about the current table's index usage statistics.
+export function getIndexStats(
+  req: IndexStatsRequestMessage,
+  timeout?: moment.Duration,
+): Promise<IndexStatsResponseMessage> {
+  return timeoutFetch(
+    serverpb.TableIndexStatsResponse,
+    `${STATUS_PREFIX}/databases/${req.database}/tables/${req.table}/indexstats`,
+    null,
+    timeout,
+  );
+}
+
 // getNonTableStats gets detailed stats about non-table data ranges on the
 // cluster.
 export function getNonTableStats(
@@ -755,6 +774,19 @@ export function resetSQLStats(
   return timeoutFetch(
     serverpb.ResetSQLStatsResponse,
     `${STATUS_PREFIX}/resetsqlstats`,
+    req as any,
+    timeout,
+  );
+}
+
+// resetIndexUsageStats refreshes all index usage stats for all tables.
+export function resetIndexUsageStats(
+  req: ResetIndexUsageStatsRequestMessage,
+  timeout?: moment.Duration,
+): Promise<ResetIndexUsageStatsResponseMessage> {
+  return timeoutFetch(
+    serverpb.ResetIndexUsageStatsResponse,
+    `${STATUS_PREFIX}/resetindexusagestats`,
     req as any,
     timeout,
   );
