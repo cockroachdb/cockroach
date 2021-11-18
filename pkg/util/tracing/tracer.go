@@ -616,6 +616,16 @@ func (t *Tracer) startSpanGeneric(
 			// WithParentAndAutoCollection.
 			panic("invalid sterile parent")
 		}
+		if opts.Parent.Tracer() != t {
+			// Creating a child with a different Tracer than the parent is not allowed
+			// because it would become unclear which active span registry the new span
+			// should belong to. In particular, the child could end up in the parent's
+			// registry if the parent Finish()es before the child, and then it would
+			// be leaked because Finish()ing the child would attempt to remove the
+			// span from the child tracer's registry.
+			panic(fmt.Sprintf("attempting to start span with parent from different Tracer. parent: %s, child: %s",
+				opts.Parent.OperationName(), opName))
+		}
 	}
 
 	// Are we tracing everything, or have a parent, or want a real span, or were
