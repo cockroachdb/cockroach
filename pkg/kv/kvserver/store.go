@@ -1811,8 +1811,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 			// Add this range and its stats to our counter.
 			s.metrics.ReplicaCount.Inc(1)
-			if tenantID, ok := rep.TenantID(); ok {
-				s.metrics.addMVCCStats(ctx, tenantID, rep.GetMVCCStats())
+			if _, ok := rep.TenantID(); ok {
+				// TODO(tbg): why the check? We're definitely an initialized range so
+				// we have a tenantID.
+				s.metrics.addMVCCStats(ctx, rep.tenantMetricsRef, rep.GetMVCCStats())
 			} else {
 				return errors.AssertionFailedf("found newly constructed replica"+
 					" for range %d at generation %d with an invalid tenant ID in store %d",

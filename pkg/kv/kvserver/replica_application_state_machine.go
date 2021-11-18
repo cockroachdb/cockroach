@@ -890,7 +890,6 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	needsSplitBySize := r.needsSplitBySizeRLocked()
 	needsMergeBySize := r.needsMergeBySizeRLocked()
 	needsTruncationByLogSize := r.needsRaftLogTruncationLocked()
-	tenantID := r.mu.tenantID
 	r.mu.Unlock()
 	if closedTimestampUpdated {
 		r.handleClosedTimestampUpdateRaftMuLocked(ctx, b.state.RaftClosedTimestamp)
@@ -899,7 +898,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// Record the stats delta in the StoreMetrics.
 	deltaStats := *b.state.Stats
 	deltaStats.Subtract(prevStats)
-	r.store.metrics.addMVCCStats(ctx, tenantID, deltaStats)
+	r.store.metrics.addMVCCStats(ctx, r.tenantMetricsRef, deltaStats)
 
 	// Record the write activity, passing a 0 nodeID because replica.writeStats
 	// intentionally doesn't track the origin of the writes.
