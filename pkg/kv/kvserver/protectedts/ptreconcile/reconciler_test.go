@@ -71,7 +71,7 @@ func TestReconciler(t *testing.T) {
 		},
 	}
 	r := ptreconcile.NewReconciler(cfg)
-	require.NoError(t, r.Start(ctx, tc.Stopper()))
+	require.NoError(t, r.Start(ctx, s0.Stopper()))
 	recMeta := "a"
 	rec1 := ptpb.Record{
 		ID:        uuid.MakeV4(),

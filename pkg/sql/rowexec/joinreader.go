@@ -417,7 +417,7 @@ func newJoinReader(
 	if err := jr.initJoinReaderStrategy(flowCtx, columnTypes, len(columnIDs), rightCols, readerType); err != nil {
 		return nil, err
 	}
-	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint()
+	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint(flowCtx.EvalCtx.SessionData())
 
 	// TODO(radu): verify the input types match the index key types
 	return jr, nil
