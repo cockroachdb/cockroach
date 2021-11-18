@@ -26,6 +26,16 @@ import (
 	"github.com/lib/pq/oid"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ colexecerror.StorageError
+	_ json.JSON
+	_ pgdate.Date
+	_ = typeconv.DatumVecCanonicalTypeFamily
+	_ uuid.UUID
+)
+
 // VecToDatumConverter is a helper struct that converts vectors from batches to
 // their datum representations.
 // TODO(yuzefovich): the result of converting the vectors to datums is usually

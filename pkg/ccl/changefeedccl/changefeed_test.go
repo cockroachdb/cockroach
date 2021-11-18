@@ -538,7 +538,7 @@ func TestChangefeedTimestamps(t *testing.T) {
 		// Check that we eventually get a resolved timestamp greater than ts1.
 		parsed := parseTimeToHLC(t, ts1)
 		for {
-			if resolved := expectResolvedTimestamp(t, foo); parsed.Less(resolved) {
+			if resolved, _ := expectResolvedTimestamp(t, foo); parsed.Less(resolved) {
 				break
 			}
 		}
@@ -598,7 +598,7 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 		// one partition first, and compare the first and last.
 		resolved := make([]hlc.Timestamp, 2*len(foo.Partitions()))
 		for i := range resolved {
-			resolved[i] = expectResolvedTimestamp(t, foo)
+			resolved[i], _ = expectResolvedTimestamp(t, foo)
 		}
 		sort.Slice(resolved, func(i, j int) bool { return resolved[i].Less(resolved[j]) })
 		first, last := resolved[0], resolved[len(resolved)-1]

@@ -18,6 +18,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ encoding.Direction
+	_ = typeconv.DatumVecCanonicalTypeFamily
+)
+
 // GetDatumToPhysicalFn returns a function for converting a datum of the given
 // ColumnType to the corresponding Go type. Note that the signature of the
 // return function doesn't contain an error since we assume that the conversion

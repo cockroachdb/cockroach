@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var (
@@ -41,7 +42,12 @@ var (
 type sz int64
 
 func (b sz) String() string {
-	return humanizeutil.IBytes(int64(b))
+	return redact.StringWithoutMarkers(b)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (b sz) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Print(humanizeutil.IBytes(int64(b)))
 }
 
 // SSTBatcher is a helper for bulk-adding many KVs in chunks via AddSSTable. An
@@ -460,7 +466,11 @@ func AddSSTable(
 				if m := (*roachpb.RangeKeyMismatchError)(nil); errors.As(err, &m) {
 					// TODO(andrei): We just use the first of m.Ranges; presumably we
 					// should be using all of them to avoid further retries.
-					split := m.Ranges()[0].Desc.EndKey.AsRawKey()
+					mr, err := m.MismatchedRange()
+					if err != nil {
+						return err
+					}
+					split := mr.Desc.EndKey.AsRawKey()
 					log.Infof(ctx, "SSTable cannot be added spanning range bounds %v, retrying...", split)
 					left, right, err := createSplitSSTable(ctx, db, item.start, split, item.disallowShadowing, iter, settings)
 					if err != nil {

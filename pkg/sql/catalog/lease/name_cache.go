@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -29,7 +30,7 @@ func makeNameCache() nameCache {
 // from the store. The cache maintains the latest version for each name.
 // All methods are thread-safe.
 type nameCache struct {
-	mu          syncutil.Mutex
+	mu          syncutil.RWMutex
 	descriptors nstree.Map
 }
 
@@ -47,14 +48,15 @@ func (c *nameCache) get(
 	name string,
 	timestamp hlc.Timestamp,
 ) *descriptorVersionState {
-	c.mu.Lock()
+	c.mu.RLock()
 	desc, ok := c.descriptors.GetByName(
 		parentID, parentSchemaID, name,
 	).(*descriptorVersionState)
-	c.mu.Unlock()
+	c.mu.RUnlock()
 	if !ok {
 		return nil
 	}
+	expensiveLogEnabled := log.ExpensiveLogEnabled(ctx, 2)
 	desc.mu.Lock()
 	if desc.mu.lease == nil {
 		desc.mu.Unlock()
@@ -80,7 +82,7 @@ func (c *nameCache) get(
 		return nil
 	}
 
-	desc.incRefCountLocked(ctx)
+	desc.incRefCountLocked(ctx, expensiveLogEnabled)
 	return desc
 }
 

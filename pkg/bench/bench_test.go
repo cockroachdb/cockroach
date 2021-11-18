@@ -479,12 +479,16 @@ func BenchmarkTracing(b *testing.B) {
 						// the generation of structured events. The latter seems to be much
 						// more expensive.
 						sqlTraceRatio float64
+						// netTrace, if set, enables use of net.Traces. This is similar to
+						// the effects of the trace.debug.enable cluster setting.
+						netTrace bool
 					}
 					for _, test := range []testSpec{
 						{alwaysTrace: false},
 						{sqlTraceRatio: 0.01},
 						{sqlTraceRatio: 1.0},
 						{alwaysTrace: true},
+						{netTrace: true},
 					} {
 						if test.alwaysTrace && test.sqlTraceRatio != 0 {
 							panic("invalid test")
@@ -494,6 +498,8 @@ func BenchmarkTracing(b *testing.B) {
 						name.WriteString("trace=")
 						if test.alwaysTrace {
 							name.WriteString("on")
+						} else if test.netTrace {
+							name.WriteString("netTrace")
 						} else if test.sqlTraceRatio == 0 {
 							name.WriteString("off")
 						} else {
@@ -502,7 +508,10 @@ func BenchmarkTracing(b *testing.B) {
 						}
 						b.Run(name.String(), func(b *testing.B) {
 							tr := tracing.NewTracerWithOpt(ctx,
-								tracing.WithTestingKnobs(tracing.TracerTestingKnobs{ForceRealSpans: test.alwaysTrace}))
+								tracing.WithTestingKnobs(tracing.TracerTestingKnobs{
+									ForceRealSpans: test.alwaysTrace,
+									UseNetTrace:    test.netTrace,
+								}))
 							sqlRunner, stop := cluster.create(tr)
 							defer stop.Stop(ctx)
 

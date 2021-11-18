@@ -73,7 +73,7 @@ func (r *registry) buildGraph(currentPhase scop.Phase, initial scpb.State) (*scg
 					if op.minPhase > currentPhase {
 						// make this a no-op edge but add the node
 						op.from = op.to
-						op.ops = func(element scpb.Element) []scop.Op { return nil }
+						op.ops = func(element scpb.Element, data *scpb.ElementMetadata) []scop.Op { return nil }
 					}
 					edgesToAdd = append(edgesToAdd, toAdd{
 						transition: op,
@@ -86,8 +86,9 @@ func (r *registry) buildGraph(currentPhase scop.Phase, initial scpb.State) (*scg
 			return nil, err
 		}
 		for _, op := range edgesToAdd {
+			metadata := g.GetMetadataFromTarget(op.n.Target)
 			if err := g.AddOpEdges(
-				op.n.Target, op.from, op.to, op.revertible, op.ops(op.n.Element())...,
+				op.n.Target, op.from, op.to, op.revertible, op.ops(op.n.Element(), &metadata)...,
 			); err != nil {
 				return nil, err
 			}

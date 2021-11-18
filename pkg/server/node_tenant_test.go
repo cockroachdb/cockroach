@@ -49,8 +49,7 @@ func TestRedactRecordingForTenant(t *testing.T) {
 
 		log.Eventf(ctx, "%s %s", msgSensitive, log.Safe(msgNotSensitive))
 		sp.SetTag("all_span_tags_are_stripped", attribute.StringValue("because_no_redactability"))
-		sp.Finish()
-		rec := sp.GetRecording(tracing.RecordingVerbose)
+		rec := sp.FinishAndGetRecording(tracing.RecordingVerbose)
 		require.Len(t, rec, 1)
 		return rec
 	}

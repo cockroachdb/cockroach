@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
@@ -138,6 +139,9 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		p.ExecCfg().IndexBackfiller,
 		p.ExecCfg().IndexValidator,
 		scsqldeps.NewCCLCallbacks(p.ExecCfg().Settings, p.EvalContext()),
+		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
+			return LogEventForSchemaChanger(ctx, p.ExecCfg(), txn, depth+1, descID, metadata, event)
+		},
 		p.ExecCfg().NewSchemaChangerTestingKnobs,
 		scs.stmts,
 		scop.StatementPhase,

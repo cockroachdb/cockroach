@@ -42,7 +42,7 @@ func init() {
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.MakeAddedIndexDeleteOnly{
 					TableID:             this.TableID,
-					IndexID:             this.IndexId,
+					IndexID:             this.IndexID,
 					IndexName:           this.IndexName,
 					Unique:              this.Unique,
 					KeyColumnIDs:        this.KeyColumnIDs,
@@ -61,14 +61,14 @@ func init() {
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.MakeAddedIndexDeleteAndWriteOnly{
 					TableID: this.TableID,
-					IndexID: this.IndexId,
+					IndexID: this.IndexID,
 				}
 			})),
 		to(scpb.Status_BACKFILLED,
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.BackfillIndex{
 					TableID: this.TableID,
-					IndexID: this.IndexId,
+					IndexID: this.IndexID,
 				}
 			})),
 		// If this index is unique (which primary indexes should be) and
@@ -80,14 +80,14 @@ func init() {
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.ValidateUniqueIndex{
 					TableID: this.TableID,
-					IndexID: this.IndexId,
+					IndexID: this.IndexID,
 				}
 			})),
 		to(scpb.Status_PUBLIC,
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.MakeAddedPrimaryIndexPublic{
 					TableID: this.TableID,
-					IndexID: this.IndexId,
+					IndexID: this.IndexID,
 				}
 			})),
 	)
@@ -102,7 +102,7 @@ func init() {
 				// Most of this logic is taken from MakeMutationComplete().
 				return &scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly{
 					TableID: this.TableID,
-					IndexID: this.IndexId,
+					IndexID: this.IndexID,
 				}
 			})),
 		to(scpb.Status_DELETE_ONLY,
@@ -112,7 +112,7 @@ func init() {
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.MakeDroppedIndexDeleteOnly{
 					TableID: this.TableID,
-					IndexID: this.IndexId,
+					IndexID: this.IndexID,
 				}
 			})),
 		to(scpb.Status_ABSENT,
@@ -120,7 +120,7 @@ func init() {
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.MakeIndexAbsent{
 					TableID: this.TableID,
-					IndexID: this.IndexId,
+					IndexID: this.IndexID,
 				}
 			})),
 	)

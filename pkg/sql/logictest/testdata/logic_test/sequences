@@ -114,10 +114,6 @@ CREATE SEQUENCE zero_test INCREMENT 0
 statement ok
 CREATE SEQUENCE high_minvalue_test MINVALUE 5
 
-# Test unimplemented syntax.
-statement error at or near "EOF": syntax error: unimplemented
-CREATE SEQUENCE err_test AS INT2
-
 # Verify validation of START vs MINVALUE/MAXVALUE.
 
 statement error pgcode 22023 START value \(11\) cannot be greater than MAXVALUE \(10\)
@@ -1894,3 +1890,142 @@ query I
 SELECT nextval('seq_txn')
 ----
 612
+
+# Verify CREATE SEQUENCE ... AS works as expected.
+statement ok
+CREATE SEQUENCE seqas_0 AS smallint
+
+statement ok
+CREATE SEQUENCE seqas_1 AS int4
+
+statement ok
+CREATE SEQUENCE seqas_2 AS bigint
+
+statement ok
+CREATE SEQUENCE public.seqas_3 AS int2 START WITH -4 INCREMENT BY -3
+
+query TT colnames
+SHOW CREATE SEQUENCE seqas_3
+----
+table_name        create_statement
+seqas_3           CREATE SEQUENCE public.seqas_3 AS INT2 MINVALUE -32768 MAXVALUE -1 INCREMENT -3 START -4
+
+statement ok
+CREATE SEQUENCE seqas_4 AS integer
+
+query TT colnames
+SHOW CREATE SEQUENCE seqas_4
+----
+table_name        create_statement
+seqas_4           CREATE SEQUENCE public.seqas_4 AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+
+statement ok
+CREATE SEQUENCE seqas_5 AS int8
+
+statement error pgcode 22023 pq: MAXVALUE \(2000000\) must be less than \(32767\) for type INT2
+CREATE SEQUENCE public.seqas_6 AS smallint MAXVALUE 2000000
+
+statement error pgcode 22023 pq: MINVALUE \(-2000000\) must be greater than \(-32768\) for type INT2
+CREATE SEQUENCE public.seqas_7 AS smallint MINVALUE -2000000
+
+statement error pgcode 22023 pq: MINVALUE \(-9999999999999999\) must be greater than \(-2147483648\) for type INT4
+CREATE SEQUENCE seqas_8 as int4 INCREMENT BY -1 MINVALUE -9999999999999999;
+
+statement ok
+SET default_int_size=4
+
+statement ok
+CREATE SEQUENCE seqas_9 AS integer
+
+query TT colnames
+SHOW CREATE SEQUENCE seqas_9
+----
+table_name        create_statement
+seqas_9           CREATE SEQUENCE public.seqas_9 AS INT4 MINVALUE 1 MAXVALUE 2147483647 INCREMENT 1 START 1
+
+statement ok
+ALTER SEQUENCE seqas_9 AS smallint
+
+query TT colnames
+SHOW CREATE SEQUENCE seqas_9
+----
+table_name        create_statement
+seqas_9           CREATE SEQUENCE public.seqas_9 AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1
+
+statement ok
+CREATE SEQUENCE seqas_10
+AS integer
+START WITH 1
+INCREMENT BY 1
+MAXVALUE 9001
+CACHE 1
+
+query TT colnames
+SHOW CREATE SEQUENCE seqas_10
+----
+table_name  create_statement
+seqas_10    CREATE SEQUENCE public.seqas_10 AS INT4 MINVALUE 1 MAXVALUE 9001 INCREMENT 1 START 1
+
+statement ok
+CREATE SEQUENCE seqas_11 AS integer
+				START WITH 2
+				INCREMENT BY 1
+				MINVALUE 0
+				MAXVALUE 234567
+				CACHE 1
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seqas_11]
+----
+CREATE SEQUENCE public.seqas_11 AS INT4 MINVALUE 0 MAXVALUE 234567 INCREMENT 1 START 2
+
+statement ok
+CREATE SEQUENCE seqas_12 AS smallint
+  START WITH -4
+  INCREMENT BY -3
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seqas_12]
+----
+CREATE SEQUENCE public.seqas_12 AS INT2 MINVALUE -32768 MAXVALUE -1 INCREMENT -3 START -4
+
+statement ok
+CREATE SEQUENCE seqas_13
+  AS integer
+  START WITH 1
+  INCREMENT BY 1
+  MAXVALUE 9001
+  CACHE 1
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seqas_13]
+----
+CREATE SEQUENCE public.seqas_13 AS INT4 MINVALUE 1 MAXVALUE 9001 INCREMENT 1 START 1
+
+statement error START value \(45678\) cannot be greater than MAXVALUE \(32767\)
+CREATE SEQUENCE seq_error AS smallint
+  START WITH 45678
+  INCREMENT BY 1
+
+statement error syntax error: invalid integer type: STRING
+CREATE SEQUENCE seqas_error
+  AS string
+  START WITH 1
+  INCREMENT BY 1
+  CACHE 1
+
+statement error MINVALUE \(-1000000\) must be greater than \(-32768\) for type INT2
+CREATE SEQUENCE seqas_error
+  AS smallint
+  START WITH 1
+  INCREMENT BY 1
+  MINVALUE -1000000
+  CACHE 1
+
+statement error pq: MAXVALUE \(123456\) must be less than \(32767\) for type INT2
+CREATE SEQUENCE seqas_error
+  AS smallint
+  START WITH 1
+  INCREMENT BY 1
+  MAXVALUE 123456
+  CACHE 1

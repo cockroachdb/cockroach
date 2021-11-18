@@ -11,18 +11,26 @@
 package sctestutils
 
 import (
+	"bytes"
 	"context"
+	gojson "encoding/json"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	jsonb "github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/kylelemons/godebug/diff"
+	"gopkg.in/yaml.v2"
 )
 
 // WithBuilderDependenciesFromTestServer sets up and tears down an
@@ -60,4 +68,82 @@ func WithBuilderDependenciesFromTestServer(
 		execCfg.Settings,
 		nil, /* statements */
 	))
+}
+
+// ProtoToYAML marshals a protobuf to YAML in a roundabout way.
+func ProtoToYAML(m protoutil.Message) (string, error) {
+	js, err := protoreflect.MessageToJSON(m, protoreflect.FmtFlags{})
+	if err != nil {
+		return "", err
+	}
+	str, err := jsonb.Pretty(js)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	buf.WriteString(str)
+	target := make(map[string]interface{})
+	err = gojson.Unmarshal(buf.Bytes(), &target)
+	if err != nil {
+		return "", err
+	}
+	out, err := yaml.Marshal(target)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// DiffArgs defines arguments for the Diff function.
+type DiffArgs struct {
+	Indent       string
+	CompactLevel uint
+}
+
+// Diff returns an edit diff by calling diff.Diff and reformatting the results.
+func Diff(a, b string, args DiffArgs) string {
+	d := diff.Diff(a, b)
+	lines := strings.Split(d, "\n")
+
+	visible := make(map[int]struct{})
+	if args.CompactLevel > 0 {
+		n := int(args.CompactLevel) - 1
+		for lineno, line := range lines {
+			if strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
+				for i := lineno - n; i <= lineno+n; i++ {
+					visible[i] = struct{}{}
+				}
+			}
+		}
+	}
+
+	result := make([]string, 0, len(lines))
+	skipping := false
+	for lineno, line := range lines {
+		if _, found := visible[lineno]; found || args.CompactLevel == 0 {
+			skipping = false
+			result = append(result, args.Indent+line)
+		} else if !skipping {
+			skipping = true
+			result = append(result, args.Indent+"...")
+		}
+	}
+	return strings.Join(result, "\n")
+}
+
+// ProtoDiff generates an indented summary of the diff between two protos'
+// YAML representations.
+func ProtoDiff(a, b protoutil.Message, args DiffArgs) string {
+	toYAML := func(m protoutil.Message) string {
+		if m == nil {
+			return ""
+		}
+		str, err := ProtoToYAML(m)
+		if err != nil {
+			panic(err)
+		}
+		return strings.TrimSpace(str)
+	}
+
+	return Diff(toYAML(a), toYAML(b), args)
 }

@@ -289,7 +289,7 @@ func verifyCleanup(key roachpb.Key, eng storage.Engine, t *testing.T, coords ...
 		//lint:ignore SA1019 historical usage of deprecated eng.MVCCGetProto is OK
 		ok, _, _, err := eng.MVCCGetProto(storage.MakeMVCCMetadataKey(key), meta)
 		if err != nil {
-			return fmt.Errorf("error getting MVCC metadata: %s", err)
+			return errors.Wrap(err, "error getting MVCC metadata")
 		}
 		if ok && meta.Txn != nil {
 			return fmt.Errorf("found unexpected write intent: %s", meta)

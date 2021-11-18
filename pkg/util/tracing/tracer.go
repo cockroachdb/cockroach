@@ -297,6 +297,9 @@ type TracerTestingKnobs struct {
 	// ForceRealSpans, if set, forces the Tracer to create spans even when tracing
 	// is otherwise disabled.
 	ForceRealSpans bool
+	// UseNetTrace, if set, forces the Traces to always create spans which record
+	// to net.Trace objects.
+	UseNetTrace bool
 }
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
@@ -523,7 +526,7 @@ func (t *Tracer) HasExternalSink() bool {
 }
 
 func (t *Tracer) useNetTrace() bool {
-	return atomic.LoadInt32(&t._useNetTrace) != 0
+	return t.testing.UseNetTrace || atomic.LoadInt32(&t._useNetTrace) != 0
 }
 
 // Close cleans up any resources associated with a Tracer.

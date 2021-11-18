@@ -1590,20 +1590,25 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	})
 
-	// NB: if this store is freshly initialized (or no upper bound was
-	// persisted), hlcUpperBound will be zero.
-	hlcUpperBound, err := kvserver.ReadMaxHLCUpperBound(ctx, s.engines)
-	if err != nil {
-		return errors.Wrap(err, "reading max HLC upper bound")
-	}
+	// If the server is being restarted, sleep to ensure monotonicity of the HLC
+	// clock. This can be skipped on server bootstrap because the server has never
+	// been used before.
+	var hlcUpperBoundExists bool
+	if !initialStart {
+		hlcUpperBound, err := kvserver.ReadMaxHLCUpperBound(ctx, s.engines)
+		if err != nil {
+			return errors.Wrap(err, "reading max HLC upper bound")
+		}
+		hlcUpperBoundExists = hlcUpperBound > 0
 
-	ensureClockMonotonicity(
-		ctx,
-		s.clock,
-		s.startTime,
-		hlcUpperBound,
-		s.clock.SleepUntil,
-	)
+		ensureClockMonotonicity(
+			ctx,
+			s.clock,
+			s.startTime,
+			hlcUpperBound,
+			s.clock.SleepUntil,
+		)
+	}
 
 	// Record a walltime that is lower than the lowest hlc timestamp this current
 	// instance of the node can use. We do not use startTime because it is lower
@@ -1642,7 +1647,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	log.Event(ctx, "started node")
 	if err := s.startPersistingHLCUpperBound(
 		ctx,
-		hlcUpperBound > 0,
+		hlcUpperBoundExists,
 		func(t int64) error { /* function to persist upper bound of HLC to all stores */
 			return s.node.SetHLCUpperBound(context.Background(), t)
 		},

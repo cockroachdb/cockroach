@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Query searches for sets of entities which uphold A set of constraints.
+// Query searches for sets of entities which uphold a set of constraints.
 type Query struct {
 	schema *Schema
 	// clauses are the original clauses. They exist for debugging.

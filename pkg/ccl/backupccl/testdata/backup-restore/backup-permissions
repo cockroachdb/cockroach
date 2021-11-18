@@ -112,7 +112,7 @@ BACKUP TABLE d2.t TO 'nodelocal://0/d2-table';
 exec-sql server=s2 user=testuser
 SHOW BACKUP 'http://COCKROACH_TEST_HTTP_SERVER/'
 ----
-pq: http storage file does not exist: error response from server: 404 Not Found "404 page not found\n": external_storage: file doesn't exist
+pq: error response from server: 404 Not Found "404 page not found\n": http storage file does not exist: external_storage: file doesn't exist
 
 # Test that implicit access is disallowed when the testing knob is not set.
 new-server name=s3 share-io-dir=s1

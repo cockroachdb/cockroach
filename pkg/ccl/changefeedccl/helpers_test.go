@@ -104,7 +104,7 @@ func stripTsFromPayloads(payloads []cdctest.TestFeedMessage) ([]string, error) {
 		var value []byte
 		var message map[string]interface{}
 		if err := gojson.Unmarshal(m.Value, &message); err != nil {
-			return nil, errors.Newf(`unmarshal: %s: %s`, m.Value, err)
+			return nil, errors.Wrapf(err, `unmarshal: %s`, m.Value)
 		}
 		delete(message, "updated")
 		value, err := reformatJSON(message)
@@ -121,7 +121,7 @@ func extractUpdatedFromValue(value []byte) (float64, error) {
 		Updated string `json:"updated"`
 	}
 	if err := gojson.Unmarshal(value, &updatedRaw); err != nil {
-		return -1, errors.Newf(`unmarshal: %s: %s`, value, err)
+		return -1, errors.Wrapf(err, `unmarshal: %s`, value)
 	}
 	updatedVal, err := strconv.ParseFloat(updatedRaw.Updated, 64)
 	if err != nil {
@@ -250,7 +250,9 @@ func parseTimeToHLC(t testing.TB, s string) hlc.Timestamp {
 	return ts
 }
 
-func expectResolvedTimestamp(t testing.TB, f cdctest.TestFeed) hlc.Timestamp {
+// Expect to receive a resolved timestamp and the partition it belongs to from
+// a test changefeed.
+func expectResolvedTimestamp(t testing.TB, f cdctest.TestFeed) (hlc.Timestamp, string) {
 	t.Helper()
 	m, err := f.Next()
 	if err != nil {
@@ -258,7 +260,7 @@ func expectResolvedTimestamp(t testing.TB, f cdctest.TestFeed) hlc.Timestamp {
 	} else if m == nil {
 		t.Fatal(`expected message`)
 	}
-	return extractResolvedTimestamp(t, m)
+	return extractResolvedTimestamp(t, m), m.Partition
 }
 
 func extractResolvedTimestamp(t testing.TB, m *cdctest.TestFeedMessage) hlc.Timestamp {
@@ -343,7 +345,7 @@ func startTestFullServer(
 	}
 
 	ctx := context.Background()
-	resetFlushFrequency := changefeedbase.TestingSetDefaultFlushFrequency(testSinkFlushFrequency)
+	resetFlushFrequency := changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)
 	s, db, _ := serverutils.StartServer(t, args)
 
 	cleanup := func() {
@@ -381,7 +383,7 @@ func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 
-	resetFlushFrequency := changefeedbase.TestingSetDefaultFlushFrequency(testSinkFlushFrequency)
+	resetFlushFrequency := changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)
 	cluster, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /* numServers */, knobs,
 		multiregionccltestutils.WithUseDatabase("d"),

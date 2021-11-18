@@ -20,7 +20,7 @@ import {
   requestMetrics as requestMetricsAction,
 } from "src/redux/metrics";
 import { AdminUIState } from "src/redux/state";
-import { MilliToNano } from "src/util/convert";
+import { MilliToNano, MilliToSeconds } from "src/util/convert";
 import { findChildrenOfType } from "src/util/find";
 import {
   Metric,
@@ -29,7 +29,11 @@ import {
   QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
 import { PayloadAction } from "src/interfaces/action";
-import { TimeWindow, TimeScale } from "src/redux/timewindow";
+import {
+  TimeWindow,
+  TimeScale,
+  findClosestTimeScale,
+} from "src/redux/timewindow";
 import { History } from "history";
 import { refreshSettings } from "src/redux/apiReducers";
 
@@ -249,11 +253,20 @@ const timeInfoSelector = createSelector(
     if (!_.isObject(tw.currentWindow)) {
       return null;
     }
+
+    // It is possible for the currentWindow and scale to be out of sync due to
+    // the flow of some events such as drag-to-zoom. Thus, the source of truth for
+    // scale here should be based on the currentWindow.
+    const { currentWindow } = tw;
+    const start = currentWindow.start.valueOf();
+    const end = currentWindow.end.valueOf();
+    const syncedScale = findClosestTimeScale(MilliToSeconds(end - start));
+
     return {
-      start: Long.fromNumber(MilliToNano(tw.currentWindow.start.valueOf())),
-      end: Long.fromNumber(MilliToNano(tw.currentWindow.end.valueOf())),
+      start: Long.fromNumber(MilliToNano(start)),
+      end: Long.fromNumber(MilliToNano(end)),
       sampleDuration: Long.fromNumber(
-        MilliToNano(tw.scale.sampleSize.asMilliseconds()),
+        MilliToNano(syncedScale.sampleSize.asMilliseconds()),
       ),
     };
   },
