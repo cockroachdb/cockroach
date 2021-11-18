@@ -464,6 +464,8 @@ func (z *zigzagJoiner) setupInfo(
 		neededCols.Add(int(col))
 	}
 
+	z.addColumnsNeededByOnExpr(&neededCols, colOffset, maxCol)
+
 	// Setup the RowContainers.
 	info.container.Reset()
 
