@@ -763,7 +763,7 @@ If problems persist, please see %s.`
 			}
 			// Don't use shutdownCtx because this is in a goroutine that may
 			// still be running after shutdownCtx's span has been finished.
-			drainCtx := ambientCtx.AnnotateCtx(context.Background())
+			drainCtx := s.AnnotateCtx(context.Background())
 			drainCtx = logtags.AddTag(drainCtx, "server drain process", nil)
 
 			// Perform a graceful drain. We keep retrying forever, in
