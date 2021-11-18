@@ -26,12 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -177,7 +175,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := kvtenant.ConnectorConfig{
-		AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:      rpcContext.AmbientCtx,
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
@@ -302,7 +300,7 @@ func TestConnectorRangeLookup(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := kvtenant.ConnectorConfig{
-		AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:      rpcContext.AmbientCtx,
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
@@ -401,7 +399,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 
 	// Add listen address into list of other bogus addresses.
 	cfg := kvtenant.ConnectorConfig{
-		AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:      rpcContext.AmbientCtx,
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
@@ -510,7 +508,7 @@ func TestConnectorRetriesError(t *testing.T) {
 
 			// Add listen address into list of other bogus addresses.
 			cfg := kvtenant.ConnectorConfig{
-				AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
+				AmbientCtx:      rpcContext.AmbientCtx,
 				RPCContext:      rpcContext,
 				RPCRetryOptions: rpcRetryOpts,
 			}
