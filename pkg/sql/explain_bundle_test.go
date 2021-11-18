@@ -140,6 +140,16 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		)
 		r.Exec(t, `RESET enable_insert_fast_path;`)
 	})
+
+	t.Run("basic when tracing already enabled", func(t *testing.T) {
+		r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='100ms';")
+		defer r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='0ms';")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
+		checkBundle(
+			t, fmt.Sprint(rows), "public.abc",
+			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
+		)
+	})
 }
 
 // checkBundle searches text strings for a bundle URL and then verifies that the
