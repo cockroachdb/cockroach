@@ -108,7 +108,10 @@ export function generateTableID(db: string, table: string) {
 }
 
 export const tableRequestToID = (
-  req: api.TableDetailsRequestMessage | api.TableStatsRequestMessage,
+  req:
+    | api.TableDetailsRequestMessage
+    | api.TableStatsRequestMessage
+    | api.IndexStatsRequestMessage,
 ): string => generateTableID(req.database, req.table);
 
 const tableDetailsReducerObj = new KeyedCachedDataReducer(
@@ -124,6 +127,16 @@ const tableStatsReducerObj = new KeyedCachedDataReducer(
   tableRequestToID,
 );
 export const refreshTableStats = tableStatsReducerObj.refresh;
+
+const indexStatsReducerObj = new KeyedCachedDataReducer(
+  api.getIndexStats,
+  "indexStats",
+  tableRequestToID,
+);
+
+export const invalidateIndexStats =
+  indexStatsReducerObj.cachedDataReducer.invalidateData;
+export const refreshIndexStats = indexStatsReducerObj.refresh;
 
 const nonTableStatsReducerObj = new CachedDataReducer(
   api.getNonTableStats,
@@ -325,6 +338,7 @@ export interface APIReducersState {
   >;
   tableDetails: KeyedCachedDataReducerState<api.TableDetailsResponseMessage>;
   tableStats: KeyedCachedDataReducerState<api.TableStatsResponseMessage>;
+  indexStats: KeyedCachedDataReducerState<api.IndexStatsResponseMessage>;
   nonTableStats: CachedDataReducerState<api.NonTableStatsResponseMessage>;
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
@@ -362,6 +376,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
     databaseDetailsReducerObj.reducer,
   [tableDetailsReducerObj.actionNamespace]: tableDetailsReducerObj.reducer,
   [tableStatsReducerObj.actionNamespace]: tableStatsReducerObj.reducer,
+  [indexStatsReducerObj.actionNamespace]: indexStatsReducerObj.reducer,
   [nonTableStatsReducerObj.actionNamespace]: nonTableStatsReducerObj.reducer,
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,

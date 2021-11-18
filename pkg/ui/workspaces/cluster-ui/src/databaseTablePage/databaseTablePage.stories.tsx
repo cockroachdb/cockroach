@@ -19,6 +19,7 @@ import {
   randomTablePrivilege,
 } from "src/storybook/fixtures";
 import { DatabaseTablePage, DatabaseTablePageProps } from "./databaseTablePage";
+import moment from "moment";
 
 const withLoadingIndicator: DatabaseTablePageProps = {
   databaseName: randomName(),
@@ -37,8 +38,16 @@ const withLoadingIndicator: DatabaseTablePageProps = {
     sizeInBytes: 0,
     rangeCount: 0,
   },
+  indexStats: {
+    loading: true,
+    loaded: false,
+    stats: [],
+    lastReset: moment("2021-09-04T13:55:00Z"),
+  },
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
+  refreshIndexStats: () => {},
+  resetIndexUsageStats: () => {},
 };
 
 const name = randomName();
@@ -80,8 +89,35 @@ const withData: DatabaseTablePageProps = {
     nodesByRegionString:
       "gcp-europe-west1(n8), gcp-us-east1(n1), gcp-us-west1(n6)",
   },
+  indexStats: {
+    loading: false,
+    loaded: true,
+    stats: [
+      {
+        totalReads: 0,
+        lastUsed: moment("2021-10-11T11:29:00Z"),
+        lastUsedType: "read",
+        indexName: "primary",
+      },
+      {
+        totalReads: 3,
+        lastUsed: moment("2021-11-10T16:29:00Z"),
+        lastUsedType: "read",
+        indexName: "primary",
+      },
+      {
+        totalReads: 2,
+        lastUsed: moment("2021-09-04T13:55:00Z"),
+        lastUsedType: "reset",
+        indexName: "secondary",
+      },
+    ],
+    lastReset: moment("2021-09-04T13:55:00Z"),
+  },
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
+  refreshIndexStats: () => {},
+  resetIndexUsageStats: () => {},
 };
 
 storiesOf("Database Table Page", module)
