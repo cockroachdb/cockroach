@@ -63,3 +63,24 @@ genrule(
         ":element-generator",
     ],
 )
+
+go_binary(
+    name = "element-uml-generator",
+    srcs = ["element_uml_generator.go"],
+    gotags = ["generator"],
+    deps = [
+        "//pkg/cli/exit",
+        "//pkg/sql/schemachanger/scpb",
+    ],
+)
+
+genrule(
+    name = "gen-elements-uml",
+    outs = ["uml/table.puml"],
+    cmd = """
+        $(location :element-uml-generator) --out $(location uml/table.puml)
+       """,
+    exec_tools = [
+        ":element-uml-generator",
+    ],
+)
