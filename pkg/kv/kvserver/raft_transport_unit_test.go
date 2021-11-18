@@ -23,13 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -67,7 +67,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 	}
 
 	tp := NewRaftTransport(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
+		testutils.MakeAmbientCtx(),
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(rpcC, resolver),
 		grpcServer,

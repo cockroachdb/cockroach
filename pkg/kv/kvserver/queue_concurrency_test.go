@@ -21,12 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -70,7 +70,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 	store := &Store{
 		cfg: StoreConfig{
 			Clock:             hlc.NewClock(hlc.UnixNano, time.Second),
-			AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+			AmbientCtx:        testutils.MakeAmbientCtx(),
 			DefaultSpanConfig: roachpb.TestingDefaultSpanConfig(),
 		},
 	}

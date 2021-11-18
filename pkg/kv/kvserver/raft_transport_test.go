@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -114,7 +113,7 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 	}
 	rttc.nodeRPCContext = rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx: testutils.MakeAmbientCtx(),
 		Config:     testutils.NewNodeTestBaseContext(),
 		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		Stopper:    rttc.stopper,
@@ -159,7 +158,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 ) (*kvserver.RaftTransport, net.Addr) {
 	grpcServer := rpc.NewServer(rttc.nodeRPCContext)
 	transport := kvserver.NewRaftTransport(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
+		testutils.MakeAmbientCtx(),
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(rttc.nodeRPCContext, gossip.AddressResolver(rttc.gossip)),
 		grpcServer,

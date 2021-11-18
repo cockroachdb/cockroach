@@ -19,11 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var alphaRangeDescriptors []roachpb.RangeDescriptor
@@ -61,7 +61,7 @@ func TestRangeIterForward(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:        testutils.MakeAmbientCtx(),
 		Clock:             clock,
 		NodeDescs:         g,
 		RPCContext:        rpcContext,
@@ -98,7 +98,7 @@ func TestRangeIterSeekForward(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:        testutils.MakeAmbientCtx(),
 		Clock:             clock,
 		NodeDescs:         g,
 		RPCContext:        rpcContext,
@@ -138,7 +138,7 @@ func TestRangeIterReverse(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:        testutils.MakeAmbientCtx(),
 		Clock:             clock,
 		NodeDescs:         g,
 		RPCContext:        rpcContext,
@@ -175,7 +175,7 @@ func TestRangeIterSeekReverse(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:        testutils.MakeAmbientCtx(),
 		Clock:             clock,
 		NodeDescs:         g,
 		RPCContext:        rpcContext,

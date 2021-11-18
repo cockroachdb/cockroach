@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -35,7 +34,7 @@ func makeMockTxnHeartbeater(
 	mockSender, mockGatekeeper = &mockLockedSender{}, &mockLockedSender{}
 	manual := hlc.NewManualClock(123)
 	th.init(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
+		testutils.MakeAmbientCtx(),
 		stop.NewStopper(),
 		hlc.NewClock(manual.UnixNano, time.Nanosecond),
 		new(TxnMetrics),

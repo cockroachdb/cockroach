@@ -3032,7 +3032,7 @@ func TestReplicaGCRace(t *testing.T) {
 	// back along the same grpc stream as the request so it's ok that
 	// there are two (this one and the one actually used by the store).
 	fromTransport := kvserver.NewRaftTransport(
-		log.AmbientContext{Tracer: tc.Servers[0].RaftTransport().Tracer},
+		tc.Servers[0].Cfg.AmbientCtx,
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(tc.Servers[0].RPCContext(), gossip.AddressResolver(fromStore.Gossip())),
 		nil, /* grpcServer */

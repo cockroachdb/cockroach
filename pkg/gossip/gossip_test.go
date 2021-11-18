@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -483,7 +482,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 	}
 
 	for _, peer := range peers {
-		c := newClient(log.AmbientContext{Tracer: tracing.NewTracer()}, local.GetNodeAddr(), makeMetrics())
+		c := newClient(testutils.MakeAmbientCtx(), local.GetNodeAddr(), makeMetrics())
 
 		testutils.SucceedsSoon(t, func() error {
 			conn, err := peer.rpcContext.GRPCUnvalidatedDial(c.addr.String()).Connect(ctx)
@@ -519,7 +518,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 
 		for {
 			localAddr := local.GetNodeAddr()
-			c := newClient(log.AmbientContext{Tracer: tracing.NewTracer()}, localAddr, makeMetrics())
+			c := newClient(testutils.MakeAmbientCtx(), localAddr, makeMetrics())
 			peer.mu.Lock()
 			c.startLocked(peer, disconnectedCh, peer.rpcContext, stopper, peer.rpcContext.NewBreaker(""))
 			peer.mu.Unlock()

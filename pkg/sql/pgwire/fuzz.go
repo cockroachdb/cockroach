@@ -23,13 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 func FuzzServeConn(data []byte) int {
 	s := MakeServer(
-		log.AmbientContext{},
+		testutils.MakeAmbientCtx(),
 		&base.Config{},
 		&cluster.Settings{},
 		sql.MemoryMetrics{},

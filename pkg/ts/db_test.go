@@ -32,10 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 )
@@ -777,7 +775,7 @@ func TestPollSource(t *testing.T) {
 			},
 		}
 
-		ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+		ambient := testutils.MakeAmbientCtx()
 		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
 		<-testSource.stopper.IsStopped()
 		if a, e := testSource.calledCount, 2; a != e {
@@ -830,7 +828,7 @@ func TestDisableStorage(t *testing.T) {
 			},
 		}
 
-		ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+		ambient := testutils.MakeAmbientCtx()
 		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
 		select {
 		case <-testSource.stopper.IsStopped():
