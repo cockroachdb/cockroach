@@ -70,7 +70,6 @@ func (idw intentDemuxWriter) PutIntent(
 	ctx context.Context,
 	key roachpb.Key,
 	value []byte,
-	state PrecedingIntentState,
 	txnUUID uuid.UUID,
 	buf []byte,
 ) (_ []byte, _ error) {

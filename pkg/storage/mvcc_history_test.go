@@ -512,11 +512,11 @@ type intentPrintingReadWriter struct {
 }
 
 func (rw intentPrintingReadWriter) PutIntent(
-	ctx context.Context, key roachpb.Key, value []byte, state PrecedingIntentState, txnUUID uuid.UUID,
+	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
 ) error {
-	rw.buf.Printf("called PutIntent(%v, _, %v, %v)\n",
-		key, state, txnUUID)
-	return rw.ReadWriter.PutIntent(ctx, key, value, state, txnUUID)
+	rw.buf.Printf("called PutIntent(%v, _, %v)\n",
+		key, txnUUID)
+	return rw.ReadWriter.PutIntent(ctx, key, value, txnUUID)
 }
 
 func (rw intentPrintingReadWriter) ClearIntent(

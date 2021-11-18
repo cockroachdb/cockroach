@@ -176,11 +176,6 @@ func (i *MVCCIterator) UnsafeValue() []byte {
 	return i.i.UnsafeValue()
 }
 
-// IsCurIntent implements the MVCCIterator interface.
-func (i *MVCCIterator) IsCurIntent() bool {
-	return i.i.IsCurIntent()
-}
-
 // ComputeStats is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) ComputeStats(
 	start, end roachpb.Key, nowNanos int64,
@@ -642,13 +637,12 @@ func (s spanSetWriter) PutIntent(
 	ctx context.Context,
 	key roachpb.Key,
 	value []byte,
-	state storage.PrecedingIntentState,
 	txnUUID uuid.UUID,
 ) error {
 	if err := s.checkAllowed(key); err != nil {
 		return err
 	}
-	return s.w.PutIntent(ctx, key, value, state, txnUUID)
+	return s.w.PutIntent(ctx, key, value, txnUUID)
 }
 
 func (s spanSetWriter) PutEngineKey(key storage.EngineKey, value []byte) error {

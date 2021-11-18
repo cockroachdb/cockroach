@@ -233,9 +233,8 @@ func TestIntentDemuxWriter(t *testing.T) {
 				if err != nil {
 					return err.Error()
 				}
-				state := readPrecedingIntentState(t, d)
 				scratch, err = w.PutIntent(
-					context.Background(), key, val, state, txnUUID, scratch)
+					context.Background(), key, val, txnUUID, scratch)
 				if err != nil {
 					return err.Error()
 				}
