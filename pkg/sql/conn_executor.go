@@ -260,6 +260,10 @@ type Server struct {
 	// sqlStatsController is the control-plane interface for sqlStats.
 	sqlStatsController *persistedsqlstats.Controller
 
+	// indexUsageStatsController is the control-plane interface for
+	// indexUsageStats.
+	indexUsageStatsController *idxusage.Controller
+
 	// reportedStats is a pool of stats that is held for reporting, and is
 	// cleared on a lower interval than sqlStats. Stats from sqlStats flow
 	// into reported stats when sqlStats is cleared.
@@ -373,6 +377,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 
 	s.sqlStats = persistedSQLStats
 	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
+	s.indexUsageStatsController = idxusage.NewController(cfg.SQLStatusServer)
 	return s
 }
 
@@ -453,6 +458,12 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 // sql.Server's SQL Stats.
 func (s *Server) GetSQLStatsController() *persistedsqlstats.Controller {
 	return s.sqlStatsController
+}
+
+// GetIndexUsageStatsController returns the idxusage.Controller for current
+// sql.Server's index usage stats.
+func (s *Server) GetIndexUsageStatsController() *idxusage.Controller {
+	return s.indexUsageStatsController
 }
 
 // GetSQLStatsProvider returns the provider for the sqlstats subsystem.
@@ -2397,29 +2408,30 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 
 	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Planner:                p,
-			PrivilegedAccessor:     p,
-			SessionAccessor:        p,
-			ClientNoticeSender:     p,
-			Sequence:               p,
-			Tenant:                 p,
-			Regions:                p,
-			JoinTokenCreator:       p,
-			PreparedStatementState: &ex.extraTxnState.prepStmtsNamespace,
-			SessionDataStack:       ex.sessionDataStack,
-			Settings:               ex.server.cfg.Settings,
-			TestingKnobs:           ex.server.cfg.EvalContextTestingKnobs,
-			ClusterID:              ex.server.cfg.ClusterID(),
-			ClusterName:            ex.server.cfg.RPCContext.ClusterName(),
-			NodeID:                 ex.server.cfg.NodeID,
-			Codec:                  ex.server.cfg.Codec,
-			Locality:               ex.server.cfg.Locality,
-			ReCache:                ex.server.reCache,
-			InternalExecutor:       &ie,
-			DB:                     ex.server.cfg.DB,
-			SQLLivenessReader:      ex.server.cfg.SQLLiveness,
-			SQLStatsController:     ex.server.sqlStatsController,
-			CompactEngineSpan:      ex.server.cfg.CompactEngineSpanFunc,
+			Planner:                   p,
+			PrivilegedAccessor:        p,
+			SessionAccessor:           p,
+			ClientNoticeSender:        p,
+			Sequence:                  p,
+			Tenant:                    p,
+			Regions:                   p,
+			JoinTokenCreator:          p,
+			PreparedStatementState:    &ex.extraTxnState.prepStmtsNamespace,
+			SessionDataStack:          ex.sessionDataStack,
+			Settings:                  ex.server.cfg.Settings,
+			TestingKnobs:              ex.server.cfg.EvalContextTestingKnobs,
+			ClusterID:                 ex.server.cfg.ClusterID(),
+			ClusterName:               ex.server.cfg.RPCContext.ClusterName(),
+			NodeID:                    ex.server.cfg.NodeID,
+			Codec:                     ex.server.cfg.Codec,
+			Locality:                  ex.server.cfg.Locality,
+			ReCache:                   ex.server.reCache,
+			InternalExecutor:          &ie,
+			DB:                        ex.server.cfg.DB,
+			SQLLivenessReader:         ex.server.cfg.SQLLiveness,
+			SQLStatsController:        ex.server.sqlStatsController,
+			IndexUsageStatsController: ex.server.indexUsageStatsController,
+			CompactEngineSpan:         ex.server.cfg.CompactEngineSpanFunc,
 		},
 		SessionMutatorIterator: ex.dataMutatorIterator,
 		VirtualSchemas:         ex.server.cfg.VirtualSchemas,

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -297,6 +298,142 @@ func TestResetSQLStatsRPCForTenant(t *testing.T) {
 
 			ensureExpectedStmtFingerprintExistsInRPCResponse(t, stmts, statsFromControlCluster, "control")
 		})
+	}
+}
+
+func TestResetIndexUsageStatsRPCForTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "expensive tests")
+
+	ctx := context.Background()
+
+	statsIngestionCb, statsIngestionNotifier := idxusage.CreateIndexStatsIngestedCallbackForTest()
+
+	knobs := tests.CreateTestingKnobs()
+	knobs.IndexUsageStatsKnobs = &idxusage.TestingKnobs{
+		OnIndexUsageStatsProcessedCallback: statsIngestionCb,
+	}
+
+	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
+	defer testHelper.cleanup(ctx, t)
+
+	testingCluster := testHelper.testCluster()
+	controlCluster := testHelper.controlCluster()
+	var testingTableID, controlTableID string
+
+	for i, cluster := range []tenantCluster{testingCluster, controlCluster} {
+		// Create tables and insert data.
+		cluster.tenantConn(0).Exec(t, `
+CREATE TABLE test (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX(a)
+)
+`)
+
+		cluster.tenantConn(0).Exec(t, `
+INSERT INTO test
+VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
+`)
+
+		// Record scan on primary index.
+		cluster.tenantConn(0).Exec(t, "SELECT * FROM test")
+
+		// Record scan on secondary index.
+		cluster.tenantConn(1).Exec(t, "SELECT * FROM test@test_a_idx")
+		testTableIDStr := cluster.tenantConn(2).QueryStr(t, "SELECT 'test'::regclass::oid")[0][0]
+		testTableID, err := strconv.Atoi(testTableIDStr)
+		require.NoError(t, err)
+
+		// Set table ID outside of loop.
+		if i == 0 {
+			testingTableID = testTableIDStr
+		} else {
+			controlTableID = testTableIDStr
+		}
+
+		// Wait for the stats to be ingested.
+		require.NoError(t,
+			idxusage.WaitForIndexStatsIngestionForTest(statsIngestionNotifier, map[roachpb.IndexUsageKey]struct{}{
+				{
+					TableID: roachpb.TableID(testTableID),
+					IndexID: 1,
+				}: {},
+				{
+					TableID: roachpb.TableID(testTableID),
+					IndexID: 2,
+				}: {},
+			}, 2 /* expectedEventCnt*/, 5*time.Second /* timeout */),
+		)
+
+		query := `
+SELECT
+  table_id,
+  index_id,
+  total_reads,
+  extract_duration('second', now() - last_read) < 5
+FROM
+  crdb_internal.index_usage_statistics
+WHERE
+  table_id = ` + testTableIDStr
+		// Assert index usage data was inserted.
+		expected := [][]string{
+			{testTableIDStr, "1", "1", "true"},
+			{testTableIDStr, "2", "1", "true"},
+		}
+		cluster.tenantConn(2).CheckQueryResults(t, query, expected)
+	}
+
+	// Reset index usage stats.
+	timePreReset := timeutil.Now()
+	status := testingCluster.tenantStatusSrv(1 /* idx */)
+	_, err := status.ResetIndexUsageStats(ctx, &serverpb.ResetIndexUsageStatsRequest{})
+	require.NoError(t, err)
+
+	// Check that last reset time was updated for test cluster.
+	resp, err := status.IndexUsageStatistics(ctx, &serverpb.IndexUsageStatisticsRequest{})
+	require.NoError(t, err)
+	require.True(t, resp.LastReset.After(timePreReset))
+
+	// Ensure tenant data isolation.
+	// Check that last reset time was not updated for control cluster.
+	status = controlCluster.tenantStatusSrv(1 /* idx */)
+	resp, err = status.IndexUsageStatistics(ctx, &serverpb.IndexUsageStatisticsRequest{})
+	require.NoError(t, err)
+	require.Equal(t, resp.LastReset, time.Time{})
+
+	// Query to fetch index usage stats. We do this instead of sending
+	// an RPC request so that we can filter by table id.
+	query := `
+SELECT
+  table_id,
+  total_reads,
+  last_read
+FROM
+  crdb_internal.index_usage_statistics
+WHERE
+  table_id = $1
+`
+
+	// Check that index usage stats were reset.
+	rows := testingCluster.tenantConn(2).QueryStr(t, query, testingTableID)
+	require.NotNil(t, rows)
+	for _, row := range rows {
+		require.Equal(t, row[1], "0", "expected total reads for table %s to be reset, but got %s",
+			row[0], row[1])
+		require.Equal(t, row[2], "NULL", "expected last read time for table %s to be reset, but got %s",
+			row[0], row[2])
+	}
+
+	// Ensure tenant data isolation.
+	rows = controlCluster.tenantConn(2).QueryStr(t, query, controlTableID)
+	require.NotNil(t, rows)
+	for _, row := range rows {
+		require.NotEqual(t, row[1], "0", "expected total reads for table %s to not be reset, but got %s", row[0], row[1])
+		require.NotEqual(t, row[2], "NULL", "expected last read time for table %s to not be reset, but got %s", row[0], row[2])
 	}
 }
 
