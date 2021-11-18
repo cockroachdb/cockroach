@@ -32,6 +32,20 @@ func CheckKeyCount(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) {
 	}
 }
 
+// GetMidKeyInSpan returns median of existing keys in the span{key, endKey}
+func GetMidKeyInSpan(t *testing.T, kvDB *kv.DB, key, endKey interface{}) roachpb.Key {
+	t.Helper()
+	if kvs, err := kvDB.Scan(context.TODO(), key, endKey, 0); err == nil && len(kvs) > 0 {
+		return kvs[len(kvs)/2].Key
+	} else if err != nil {
+		t.Fatal(err)
+	} else if len(kvs) == 0 {
+		t.Fatal("expected at least one key value pairs, but got zero")
+	}
+
+	return nil
+}
+
 // CreateKVTable creates a basic table named t.<name> that stores key/value
 // pairs with numRows of arbitrary data.
 func CreateKVTable(sqlDB *gosql.DB, name string, numRows int) error {
