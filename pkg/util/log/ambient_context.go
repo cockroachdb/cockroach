@@ -188,3 +188,8 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 
 	return tracing.EnsureChildSpan(ctx, ac.Tracer, opName)
 }
+
+// MakeDummyAmbientContext creates an AmbientContext for use in tests.
+func MakeDummyAmbientContext(tracer *tracing.Tracer) AmbientContext {
+	return AmbientContext{Tracer: tracer}
+}
