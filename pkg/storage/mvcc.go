@@ -1141,9 +1141,8 @@ func (b *putBuffer) putIntentMeta(
 //   where we use Writer.OverrideTxnDidNotUpdateMetaToFalse to override to
 //   false until there can never be v21.1 nodes.
 type txnDidNotUpdateMetaHelper struct {
-	txnDidNotUpdateMeta bool
-	state               PrecedingIntentState
-	w                   Writer
+	state PrecedingIntentState
+	w     Writer
 }
 
 func (t txnDidNotUpdateMetaHelper) populateMeta(ctx context.Context, meta *enginepb.MVCCMetadata) {
@@ -1504,20 +1503,13 @@ func mvccPutInternal(
 	// Compute PrecedingIntentState and whether the transaction has previously
 	// updated the intent. This is to prepare for a later Put.
 	var precedingIntentState PrecedingIntentState
-	var txnDidNotUpdateMeta bool
 	if !ok || buf.meta.Txn == nil {
 		// !ok represents no meta (no actual intent and no manufactured meta).
 		// buf.meta.Txn==nil represents a manufactured meta, i.e., there is no
 		// intent.
 		precedingIntentState = NoExistingIntent
-		txnDidNotUpdateMeta = true
 	} else {
 		precedingIntentState = ExistingIntentSeparated
-		if buf.meta.TxnDidNotUpdateMeta == nil {
-			txnDidNotUpdateMeta = false
-		} else {
-			txnDidNotUpdateMeta = *buf.meta.TxnDidNotUpdateMeta
-		}
 	}
 
 	// Determine the read and write timestamps for the write. For a
@@ -1787,9 +1779,8 @@ func mvccPutInternal(
 		metaKeySize, metaValSize, err = buf.putIntentMeta(
 			ctx, writer, metaKey,
 			txnDidNotUpdateMetaHelper{
-				txnDidNotUpdateMeta: txnDidNotUpdateMeta,
-				state:               precedingIntentState,
-				w:                   writer,
+				state: precedingIntentState,
+				w:     writer,
 			}, newMeta)
 		if err != nil {
 			return err
@@ -3249,9 +3240,8 @@ func mvccResolveWriteIntent(
 			metaKeySize, metaValSize, err = buf.putIntentMeta(
 				ctx, rw, metaKey,
 				txnDidNotUpdateMetaHelper{
-					txnDidNotUpdateMeta: canSingleDelHelper.v(),
-					state:               precedingIntentState,
-					w:                   rw,
+					state: precedingIntentState,
+					w:     rw,
 				},
 				&buf.newMeta)
 		} else {

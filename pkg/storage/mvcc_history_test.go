@@ -91,8 +91,6 @@ func TestMVCCHistories(t *testing.T) {
 	span := roachpb.Span{Key: keys.LocalMax, EndKey: roachpb.KeyMax}
 
 	datadriven.Walk(t, "testdata/mvcc_histories", func(t *testing.T, path string) {
-		// Default to random behavior wrt cluster version and separated
-		// intents.
 		// We start from a clean slate in every test file.
 		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */),
 			func(cfg *engineConfig) error {
