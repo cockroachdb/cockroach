@@ -194,3 +194,8 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 func MakeClientAmbientContext(tracer *tracing.Tracer) AmbientContext {
 	return AmbientContext{Tracer: tracer}
 }
+
+// MakeDummyAmbientContext creates an AmbientContext for use in tests.
+func MakeDummyAmbientContext(tracer *tracing.Tracer) AmbientContext {
+	return AmbientContext{Tracer: tracer}
+}
