@@ -321,7 +321,7 @@ func TestTableReaderDrain(t *testing.T) {
 	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	// Run the flow in a verbose trace so that we can test for tracing info.
-	tracer := tracing.NewTracer()
+	tracer := s.TracerI().(*tracing.Tracer)
 	ctx, sp := tracing.StartVerboseTrace(context.Background(), tracer, "test flow ctx")
 	defer sp.Finish()
 	st := s.ClusterSettings()
@@ -400,7 +400,7 @@ func TestLimitScans(t *testing.T) {
 	post := execinfrapb.PostProcessSpec{Limit: limit}
 
 	// Now we're going to run the tableReader and trace it.
-	tracer := tracing.NewTracer()
+	tracer := s.TracerI().(*tracing.Tracer)
 	sp := tracer.StartSpan("root", tracing.WithRecording(tracing.RecordingVerbose))
 	ctx = tracing.ContextWithSpan(ctx, sp)
 	flowCtx.EvalCtx.Context = ctx

@@ -738,7 +738,7 @@ func TestInvertedJoinerDrain(t *testing.T) {
 	const biIndex = 1
 	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
-	tracer := tracing.NewTracer()
+	tracer := s.TracerI().(*tracing.Tracer)
 	ctx, sp := tracing.StartVerboseTrace(context.Background(), tracer, "test flow ctx")
 	defer sp.Finish()
 	st := cluster.MakeTestingClusterSettings()
