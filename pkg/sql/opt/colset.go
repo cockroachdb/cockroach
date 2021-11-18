@@ -12,6 +12,7 @@ package opt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -150,7 +151,7 @@ func TranslateColSet(colSetIn ColSet, from ColList, to ColList) ColSet {
 // TranslateColSetStrict is a version of TranslateColSet which requires that all
 // columns in the input set appear in the from list.
 func TranslateColSetStrict(colSetIn ColSet, from ColList, to ColList) ColSet {
-	if util.CrdbTestBuild && !colSetIn.SubsetOf(from.ToSet()) {
+	if buildutil.CrdbTestBuild && !colSetIn.SubsetOf(from.ToSet()) {
 		panic(errors.AssertionFailedf("input set contains unknown columns"))
 	}
 	return TranslateColSet(colSetIn, from, to)

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -670,7 +671,7 @@ func (pb *ProcessorBaseNoHelper) moveToTrailingMeta() {
 		}
 	}
 
-	if util.CrdbTestBuild && pb.Ctx == nil {
+	if buildutil.CrdbTestBuild && pb.Ctx == nil {
 		panic(
 			errors.AssertionFailedf(
 				"unexpected nil ProcessorBase.Ctx when draining. Was StartInternal called?",

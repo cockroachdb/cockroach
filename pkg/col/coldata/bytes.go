@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -135,7 +135,7 @@ func (b *Bytes) Get(i int) []byte {
 // This method will panic if i is less than maximum previously Set index.
 //gcassert:inline
 func (b *Bytes) getAppendTo(i int) []byte {
-	if util.CrdbTestBuild {
+	if buildutil.CrdbTestBuild {
 		if b.isWindow {
 			panic("getAppendTo is called on a window into Bytes")
 		}
