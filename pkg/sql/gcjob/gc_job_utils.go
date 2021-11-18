@@ -101,13 +101,25 @@ func initializeProgress(
 			Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC,
 		}
 		update = true
-	} else if len(progress.Tables) != len(details.Tables) || len(progress.Indexes) != len(details.Indexes) {
+	} else if len(progress.Tables) != len(details.Tables) ||
+		len(progress.Indexes) != len(details.Indexes) ||
+		len(progress.UnsplitTables) != len(details.UnsplitTables) {
+
 		update = true
 		for _, table := range details.Tables {
 			progress.Tables = append(progress.Tables, jobspb.SchemaChangeGCProgress_TableProgress{ID: table.ID})
 		}
 		for _, index := range details.Indexes {
 			progress.Indexes = append(progress.Indexes, jobspb.SchemaChangeGCProgress_IndexProgress{IndexID: index.IndexID})
+		}
+		for _, tableID := range details.UnsplitTables {
+			progress.UnsplitTables = append(
+				progress.UnsplitTables,
+				jobspb.SchemaChangeGCProgress_TableUnsplitRangesProgress{
+					ID:     tableID,
+					Status: jobspb.SchemaChangeGCProgress_DELETING,
+				},
+			)
 		}
 	}
 
@@ -233,9 +245,9 @@ func getAllTablesWaitingForGC(
 // described in the comment for SchemaChangeGCDetails.
 func validateDetails(details *jobspb.SchemaChangeGCDetails) error {
 	if details.Tenant != nil &&
-		(len(details.Tables) > 0 || len(details.Indexes) > 0) {
+		(len(details.Tables) > 0 || len(details.Indexes) > 0 || len(details.UnsplitTables) > 0) {
 		return errors.AssertionFailedf(
-			"Either field Tenant is set or any of Tables or Indexes: %+v", *details,
+			"Either field Tenant is set or any of Tables, Indexes or UnsplitTables: %+v", *details,
 		)
 	}
 	if len(details.Indexes) > 0 {

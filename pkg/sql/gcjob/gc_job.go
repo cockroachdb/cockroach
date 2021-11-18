@@ -13,12 +13,19 @@ package gcjob
 import (
 	"context"
 	"math"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -84,6 +91,69 @@ func performGC(
 	return nil
 }
 
+// unsplitRangesForTable unsplit any manually split ranges within the table span.
+func unsplitRangesForTable(
+	ctx context.Context, execCfg *sql.ExecutorConfig, tableDesc catalog.TableDescriptor,
+) error {
+	// Gate this on being the system tenant because secondary tenants aren't
+	// allowed to scan the meta ranges directly.
+	if execCfg.Codec.ForSystemTenant() {
+		span := tableDesc.TableSpan(execCfg.Codec)
+		ranges, err := kvclient.ScanMetaKVs(ctx, execCfg.DB.NewTxn(ctx, "unsplit-ranges-for-table"), span)
+		if err != nil {
+			return err
+		}
+		for _, r := range ranges {
+			var desc roachpb.RangeDescriptor
+			if err := r.ValueProto(&desc); err != nil {
+				return err
+			}
+			if !desc.GetStickyBit().IsEmpty() {
+				// Swallow "key is not the start of a range" errors because it would mean
+				// that the sticky bit was removed and merged concurrently. DROP TABLE
+				// should not fail because of this.
+				if err := execCfg.DB.AdminUnsplit(ctx, desc.StartKey); err != nil &&
+					!strings.Contains(err.Error(), "is not the start of a range") {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func unsplitRangesForTables(
+	ctx context.Context, execCfg *sql.ExecutorConfig, progress *jobspb.SchemaChangeGCProgress,
+) error {
+	for i, unsplitTable := range progress.UnsplitTables {
+		if unsplitTable.Status != jobspb.SchemaChangeGCProgress_DELETING {
+			continue
+		}
+
+		var table catalog.TableDescriptor
+		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			var err error
+			table, err = catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, unsplitTable.ID)
+			return err
+		}); err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", unsplitTable.ID)
+				progress.UnsplitTables[i].Status = jobspb.SchemaChangeGCProgress_DELETED
+				continue
+			}
+			return errors.Wrapf(err, "failed to fetch table %d", unsplitTable.ID)
+		}
+
+		if err := unsplitRangesForTable(ctx, execCfg, table); err != nil {
+			return err
+		}
+
+		progress.UnsplitTables[i].Status = jobspb.SchemaChangeGCProgress_DELETED
+	}
+
+	return nil
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) (err error) {
 	defer func() {
@@ -140,6 +210,18 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 		timerDuration := time.Until(earliestDeadline)
 
 		if expired {
+			// TODO(Chengxiong): remove "if check" in 22.2
+			st := p.ExecCfg().Settings
+			if st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {
+				if len(progress.UnsplitTables) > 0 {
+					// Unsplit all manually split ranges in the table, so they can be
+					// automatically merged by the merge queue.
+					if err := unsplitRangesForTables(ctx, execCfg, progress); err != nil {
+						return nil
+					}
+				}
+			}
+
 			// Some elements have been marked as DELETING so save the progress.
 			persistProgress(ctx, execCfg, r.jobID, progress, runningStatusGC(progress))
 			if fn := execCfg.GCJobTestingKnobs.RunBeforePerformGC; fn != nil {

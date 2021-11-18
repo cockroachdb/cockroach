@@ -114,6 +114,10 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		)
 	}
 
+	// p.extendedEvalCtx.SchemaChangeJobRecords refers to schemaChangeJobRecords
+	// `of extraTxnState` in `sql.connExecutor`. `connExecutor.createJobs` is the
+	// actual function enqueues jobs with these records when transaction is
+	// committed.
 	record, recordExists := p.extendedEvalCtx.SchemaChangeJobRecords[tableDesc.ID]
 	if p.extendedEvalCtx.ExecCfg.TestingKnobs.RunAfterSCJobsCacheLookup != nil {
 		p.extendedEvalCtx.ExecCfg.TestingKnobs.RunAfterSCJobsCacheLookup(record)
