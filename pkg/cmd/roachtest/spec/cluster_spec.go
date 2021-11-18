@@ -42,6 +42,7 @@ type ClusterSpec struct {
 	// CPUs is the number of CPUs per node.
 	CPUs           int
 	SSDs           int
+	RAID0          bool
 	VolumeSize     int
 	PreferLocalSSD bool
 	Zones          string
@@ -173,6 +174,12 @@ func (s *ClusterSpec) Args(extra ...string) ([]string, error) {
 		switch s.Cloud {
 		case GCE:
 			args = append(args, fmt.Sprintf("--gce-local-ssd-count=%d", s.SSDs))
+
+			// NB: As the default behavior for _roachprod_ (at least in AWS/GCP) is
+			// to mount multiple disks as a single store using a RAID 0 array, we
+			// must explicitly ask for multiple stores to be enabled, _unless_ the
+			// test has explicitly asked for RAID0.
+			args = append(args, fmt.Sprintf("--gce-enable-multiple-stores=%s", strconv.FormatBool(!s.RAID0)))
 		default:
 			return nil, errors.Errorf("specifying SSD count is not yet supported on %s", s.Cloud)
 		}

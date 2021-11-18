@@ -20,29 +20,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []scop.Op) error {
 	mvs := newMutationVisitorState(deps.Catalog())
-	v := scmutationexec.NewMutationVisitor(deps.Catalog(), mvs)
+	v := scmutationexec.NewMutationVisitor(deps.Catalog(), mvs, deps.EventLogger())
 	for _, op := range ops {
 		if err := op.(scop.MutationOp).Visit(ctx, v); err != nil {
 			return err
 		}
 	}
 	b := deps.Catalog().NewCatalogChangeBatcher()
-	for _, id := range mvs.checkedOutDescriptors.Ordered() {
-		desc, err := mvs.c.MustReadMutableDescriptor(ctx, id)
-		if err != nil {
-			return errors.NewAssertionErrorWithWrappedErrf(err, "failed to retrieve modified descriptor")
-		}
-		if err := b.CreateOrUpdateDescriptor(ctx, desc); err != nil {
-			return err
-		}
+	err := mvs.checkedOutDescriptors.IterateByID(func(entry catalog.NameEntry) error {
+		return b.CreateOrUpdateDescriptor(ctx, entry.(catalog.MutableDescriptor))
+	})
+	if err != nil {
+		return err
 	}
 	for id, drainedNames := range mvs.drainedNames {
 		for _, name := range drainedNames {
@@ -65,12 +62,15 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			return err
 		}
 	}
+	if err := deps.EventLogger().ProcessAndSubmitEvents(ctx); err != nil {
+		return err
+	}
 	return b.ValidateAndRun(ctx)
 }
 
 type mutationVisitorState struct {
 	c                     Catalog
-	checkedOutDescriptors catalog.DescriptorIDSet
+	checkedOutDescriptors nstree.Map
 	drainedNames          map[descpb.ID][]descpb.NameInfo
 	descriptorGCJobs      []jobspb.SchemaChangeGCDetails_DroppedID
 }
@@ -87,13 +87,17 @@ var _ scmutationexec.MutationVisitorStateUpdater = (*mutationVisitorState)(nil)
 func (mvs *mutationVisitorState) CheckOutDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.MutableDescriptor, error) {
+	entry := mvs.checkedOutDescriptors.GetByID(id)
+	if entry != nil {
+		return entry.(catalog.MutableDescriptor), nil
+	}
 	desc, err := mvs.c.MustReadMutableDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	mut := desc.(catalog.MutableDescriptor)
 	mut.MaybeIncrementVersion()
-	mvs.checkedOutDescriptors.Add(id)
+	mvs.checkedOutDescriptors.Upsert(mut)
 	return mut, nil
 }
 

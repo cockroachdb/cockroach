@@ -11,7 +11,6 @@
 package install
 
 import (
-	"context"
 	_ "embed" // required for go:embed
 	"fmt"
 	"net/url"
@@ -27,24 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
 
 //go:embed scripts/start.sh
 var startScript string
-
-// StartOptsType houses the options needed by Start()
-type StartOptsType struct {
-	Encrypt    bool
-	Sequential bool
-	SkipInit   bool
-	StoreCount int
-}
-
-// StartOpts is exported to be updated before calling Start()
-var StartOpts StartOptsType
 
 // Cockroach TODO(peter): document
 type Cockroach struct{}
@@ -143,18 +130,20 @@ func argExists(args []string, target string) int {
 // "first" node (node 1, as understood by SyncedCluster.ServerNodes), we use
 // `start-single-node` (this was written to provide a short hand to start a
 // single node cluster with a replication factor of one).
-func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
+func (r Cockroach) Start(c *SyncedCluster, startOpts StartOpts) error {
 	h := &crdbInstallHelper{c: c, r: r}
-	h.distributeCerts()
+	if err := h.distributeCerts(); err != nil {
+		return err
+	}
 
 	nodes := c.ServerNodes()
 	var parallelism = 0
-	if StartOpts.Sequential {
+	if startOpts.Sequential {
 		parallelism = 1
 	}
 
 	fmt.Printf("%s: starting nodes\n", c.Name)
-	c.Parallel("", len(nodes), parallelism, func(nodeIdx int) ([]byte, error) {
+	return c.Parallel("", len(nodes), parallelism, func(nodeIdx int) ([]byte, error) {
 		vers, err := getCockroachVersion(c, nodes[nodeIdx])
 		if err != nil {
 			return nil, err
@@ -162,7 +151,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 
 		// NB: if cockroach started successfully, we ignore the output as it is
 		// some harmless start messaging.
-		if _, err := h.startNode(nodeIdx, extraArgs, vers); err != nil {
+		if _, err := h.startNode(nodeIdx, startOpts, vers); err != nil {
 			return nil, err
 		}
 
@@ -182,7 +171,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		//   `generateStartArgs`),which prompts CRDB to auto-initialize. For
 		//    nodes running >=20.1, we need to explicitly initialize.
 
-		if StartOpts.SkipInit {
+		if startOpts.SkipInit {
 			return nil, nil
 		}
 
@@ -191,7 +180,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			fmt.Printf("%s: initializing cluster\n", h.c.Name)
 			initOut, err := h.initializeCluster(nodeIdx)
 			if err != nil {
-				log.Fatalf(context.Background(), "unable to initialize cluster: %v", err)
+				return nil, errors.WithDetail(err, "unable to initialize cluster")
 			}
 
 			if initOut != "" {
@@ -212,7 +201,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			markBootstrap := fmt.Sprintf("touch %s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx], 1 /* storeIndex */), "cluster-bootstrapped")
 			cmdOut, err := h.run(nodeIdx, markBootstrap)
 			if err != nil {
-				log.Fatalf(context.Background(), "unable to run cmd: %v", err)
+				return nil, errors.WithDetail(err, "unable to run cmd")
 			}
 			if cmdOut != "" {
 				fmt.Println(cmdOut)
@@ -225,7 +214,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		fmt.Printf("%s: setting cluster settings\n", h.c.Name)
 		clusterSettingsOut, err := h.setClusterSettings(nodeIdx)
 		if err != nil {
-			log.Fatalf(context.Background(), "unable to set cluster settings: %v", err)
+			return nil, errors.Wrap(err, "unable to set cluster settings")
 		}
 		if clusterSettingsOut != "" {
 			fmt.Println(clusterSettingsOut)
@@ -314,7 +303,7 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 	resultChan := make(chan result, len(c.Nodes))
 
 	display := fmt.Sprintf("%s: executing sql", c.Name)
-	c.Parallel(display, len(c.Nodes), 0, func(nodeIdx int) ([]byte, error) {
+	if err := c.Parallel(display, len(c.Nodes), 0, func(nodeIdx int) ([]byte, error) {
 		sess, err := c.newSession(c.Nodes[nodeIdx])
 		if err != nil {
 			return nil, err
@@ -336,7 +325,9 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 
 		resultChan <- result{node: c.Nodes[nodeIdx], output: string(out)}
 		return nil, nil
-	})
+	}); err != nil {
+		return err
+	}
 
 	results := make([]result, 0, len(c.Nodes))
 	for range c.Nodes {
@@ -358,9 +349,9 @@ type crdbInstallHelper struct {
 }
 
 func (h *crdbInstallHelper) startNode(
-	nodeIdx int, extraArgs []string, vers *version.Version,
+	nodeIdx int, startOpts StartOpts, vers *version.Version,
 ) (string, error) {
-	startCmd, err := h.generateStartCmd(nodeIdx, extraArgs, vers)
+	startCmd, err := h.generateStartCmd(nodeIdx, startOpts, vers)
 	if err != nil {
 		return "", err
 	}
@@ -407,10 +398,10 @@ func (h *crdbInstallHelper) startNode(
 }
 
 func (h *crdbInstallHelper) generateStartCmd(
-	nodeIdx int, extraArgs []string, vers *version.Version,
+	nodeIdx int, startOpts StartOpts, vers *version.Version,
 ) (string, error) {
 
-	args, advertiseFirstIP, err := h.generateStartArgs(nodeIdx, extraArgs, vers)
+	args, advertiseFirstIP, err := h.generateStartArgs(nodeIdx, startOpts, vers)
 	if err != nil {
 		return "", err
 	}
@@ -426,7 +417,7 @@ func (h *crdbInstallHelper) generateStartCmd(
 	nodes := h.c.ServerNodes()
 	return execStartTemplate(startTemplateData{
 		LogDir: h.c.Impl.LogDir(h.c, nodes[nodeIdx]),
-		KeyCmd: h.generateKeyCmd(nodeIdx, extraArgs),
+		KeyCmd: h.generateKeyCmd(nodeIdx, startOpts),
 		EnvVars: append(append([]string{
 			fmt.Sprintf("ROACHPROD=%s", h.c.roachprodEnvValue(nodes[nodeIdx])),
 			"GOTRACEBACK=crash",
@@ -471,7 +462,7 @@ func execStartTemplate(data startTemplateData) (string, error) {
 }
 
 func (h *crdbInstallHelper) generateStartArgs(
-	nodeIdx int, extraArgs []string, vers *version.Version,
+	nodeIdx int, startOpts StartOpts, vers *version.Version,
 ) (_ []string, _advertiseFirstIP bool, _ error) {
 	var args []string
 	nodes := h.c.ServerNodes()
@@ -483,8 +474,8 @@ func (h *crdbInstallHelper) generateStartArgs(
 	}
 
 	var storeDirs []string
-	if idx := argExists(extraArgs, "--store"); idx == -1 {
-		for i := 1; i <= StartOpts.StoreCount; i++ {
+	if idx := argExists(startOpts.ExtraArgs, "--store"); idx == -1 {
+		for i := 1; i <= startOpts.StoreCount; i++ {
 			storeDir := h.c.Impl.NodeDir(h.c, nodes[nodeIdx], i)
 			storeDirs = append(storeDirs, storeDir)
 			// Place a store{i} attribute on each store to allow for zone configs
@@ -493,11 +484,11 @@ func (h *crdbInstallHelper) generateStartArgs(
 				`path=`+storeDir+`,attrs=`+fmt.Sprintf("store%d", i))
 		}
 	} else {
-		storeDir := strings.TrimPrefix(extraArgs[idx], "--store=")
+		storeDir := strings.TrimPrefix(startOpts.ExtraArgs[idx], "--store=")
 		storeDirs = append(storeDirs, storeDir)
 	}
 
-	if StartOpts.Encrypt {
+	if startOpts.Encrypt {
 		// Encryption at rest is turned on for the cluster.
 		for _, storeDir := range storeDirs {
 			// TODO(windchan7): allow key size to be specified through flags.
@@ -540,7 +531,7 @@ func (h *crdbInstallHelper) generateStartArgs(
 		fmt.Sprintf("--http-port=%d", h.r.NodeUIPort(h.c, nodes[nodeIdx])),
 	)
 	if locality := h.c.locality(nodes[nodeIdx]); locality != "" {
-		if idx := argExists(extraArgs, "--locality"); idx == -1 {
+		if idx := argExists(startOpts.ExtraArgs, "--locality"); idx == -1 {
 			args = append(args, "--locality="+locality)
 		}
 	}
@@ -574,7 +565,7 @@ func (h *crdbInstallHelper) generateStartArgs(
 	e := expander{
 		node: nodes[nodeIdx],
 	}
-	for _, arg := range extraArgs {
+	for _, arg := range startOpts.ExtraArgs {
 		expandedArg, err := e.expand(h.c, arg)
 		if err != nil {
 			return nil, false, err
@@ -667,20 +658,20 @@ func (h *crdbInstallHelper) generateInitCmd(nodeIdx int) string {
 	return initCmd
 }
 
-func (h *crdbInstallHelper) generateKeyCmd(nodeIdx int, extraArgs []string) string {
-	if !StartOpts.Encrypt {
+func (h *crdbInstallHelper) generateKeyCmd(nodeIdx int, startOpts StartOpts) string {
+	if !startOpts.Encrypt {
 		return ""
 	}
 
 	nodes := h.c.ServerNodes()
 	var storeDirs []string
-	if idx := argExists(extraArgs, "--store"); idx == -1 {
-		for i := 1; i <= StartOpts.StoreCount; i++ {
+	if idx := argExists(startOpts.ExtraArgs, "--store"); idx == -1 {
+		for i := 1; i <= startOpts.StoreCount; i++ {
 			storeDir := h.c.Impl.NodeDir(h.c, nodes[nodeIdx], i)
 			storeDirs = append(storeDirs, storeDir)
 		}
 	} else {
-		storeDir := strings.TrimPrefix(extraArgs[idx], "--store=")
+		storeDir := strings.TrimPrefix(startOpts.ExtraArgs[idx], "--store=")
 		storeDirs = append(storeDirs, storeDir)
 	}
 
@@ -702,13 +693,16 @@ func (h *crdbInstallHelper) useStartSingleNode(vers *version.Version) bool {
 
 // distributeCerts, like the name suggests, distributes certs if it's a secure
 // cluster and we're starting n1.
-func (h *crdbInstallHelper) distributeCerts() {
+func (h *crdbInstallHelper) distributeCerts() error {
 	for _, node := range h.c.ServerNodes() {
 		if node == 1 && h.c.Secure {
-			h.c.DistributeCerts()
+			if err := h.c.DistributeCerts(); err != nil {
+				return err
+			}
 			break
 		}
 	}
+	return nil
 }
 
 func (h *crdbInstallHelper) shouldAdvertisePublicIP() bool {

@@ -113,7 +113,11 @@ func (e *expander) maybeExpandPgURL(c *SyncedCluster, s string) (string, bool, e
 	}
 
 	if e.pgURLs == nil {
-		e.pgURLs = c.pgurls(allNodes(len(c.VMs)))
+		var err error
+		e.pgURLs, err = c.pgurls(allNodes(len(c.VMs)))
+		if err != nil {
+			return "", false, err
+		}
 	}
 
 	s, err := e.maybeExpandMap(c, e.pgURLs, m[1])
@@ -128,7 +132,11 @@ func (e *expander) maybeExpandPgHost(c *SyncedCluster, s string) (string, bool, 
 	}
 
 	if e.pgHosts == nil {
-		e.pgHosts = c.pghosts(allNodes(len(c.VMs)))
+		var err error
+		e.pgHosts, err = c.pghosts(allNodes(len(c.VMs)))
+		if err != nil {
+			return "", false, err
+		}
 	}
 
 	s, err := e.maybeExpandMap(c, e.pgHosts, m[1])

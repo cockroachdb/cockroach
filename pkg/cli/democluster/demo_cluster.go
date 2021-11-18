@@ -367,6 +367,8 @@ func (c *transientCluster) Start(
 
 		c.tenantServers = make([]serverutils.TestTenantInterface, c.demoCtx.NumNodes)
 		for i := 0; i < c.demoCtx.NumNodes; i++ {
+			// Steal latency map from the neighboring server.
+			latencyMap := c.servers[i].Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
 			c.infoLog(phaseCtx, "starting tenant node %d", i)
 			ts, err := c.servers[i].StartTenant(ctx, base.TestTenantArgs{
 				// We set the tenant ID to i+2, since tenant 0 is not a tenant, and
@@ -378,6 +380,11 @@ func (c *transientCluster) Start(
 				Locality:      c.demoCtx.Localities[i],
 				TestingKnobs: base.TestingKnobs{
 					TenantTestingKnobs: &sql.TenantTestingKnobs{DisableLogTags: true},
+					Server: &server.TestingKnobs{
+						ContextTestingKnobs: rpc.ContextTestingKnobs{
+							ArtificialLatencyMap: latencyMap,
+						},
+					},
 				},
 			})
 			if err != nil {

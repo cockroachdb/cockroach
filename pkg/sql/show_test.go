@@ -416,6 +416,38 @@ func TestShowCreateSequence(t *testing.T) {
 			`CREATE SEQUENCE %s INCREMENT 5 MAXVALUE 10000 START 10 MINVALUE 0 CACHE 10`,
 			`CREATE SEQUENCE public.%s MINVALUE 0 MAXVALUE 10000 INCREMENT 5 START 10 CACHE 10`,
 		},
+		{
+			`CREATE SEQUENCE %s AS smallint`,
+			`CREATE SEQUENCE public.%s AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1`,
+		},
+		{
+			`CREATE SEQUENCE %s AS int2`,
+			`CREATE SEQUENCE public.%s AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1`,
+		},
+		// Int type is determined by `default_int_size` in cluster settings. Default is int8.
+		{
+			`CREATE SEQUENCE %s AS int`,
+			`CREATE SEQUENCE public.%s AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
+		},
+		{
+			`CREATE SEQUENCE %s AS bigint`,
+			`CREATE SEQUENCE public.%s AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
+		},
+		// Override int/bigint's max value with user configured max value.
+		{
+			`CREATE SEQUENCE %s AS integer MINVALUE -5 MAXVALUE 9001`,
+			`CREATE SEQUENCE public.%s AS INT8 MINVALUE -5 MAXVALUE 9001 INCREMENT 1 START -5`,
+		},
+		{
+			`
+			CREATE SEQUENCE %s AS integer
+			START WITH -20000
+			INCREMENT BY -1
+			MINVALUE -20000
+			MAXVALUE 0
+			CACHE 1;`,
+			`CREATE SEQUENCE public.%s AS INT8 MINVALUE -20000 MAXVALUE 0 INCREMENT -1 START -20000`,
+		},
 	}
 	for i, test := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {

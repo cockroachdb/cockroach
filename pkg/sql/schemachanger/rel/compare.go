@@ -17,7 +17,6 @@ import (
 )
 
 // compare assumes that a and b are comparable and of the same type.
-// comparable here
 func compare(a, b interface{}) (less, eq bool) {
 	// Note: this would be nice and easy to represent generics
 	switch a := a.(type) {
@@ -172,7 +171,7 @@ func compareOn(attr ordinal, a, b *valuesMap) (less, eq bool) {
 	}
 }
 
-// Compare compares two elements by their attributes.
+// compareEntities compares two elements by their attributes.
 func compareEntities(a, b *entity) (less, eq bool) {
 	ordinalSet.union(
 		a.attrs, b.attrs,

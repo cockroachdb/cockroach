@@ -1889,7 +1889,7 @@ func indexDefFromDescriptor(
 		}
 		indexDef.Predicate = pred
 	}
-	fmtCtx := tree.NewFmtCtx(tree.FmtPGCatalog)
+	fmtCtx := tree.NewFmtCtx(tree.FmtPGCatalog, tree.FmtDataConversionConfig(p.SessionData().DataConversionConfig))
 	fmtCtx.FormatNode(&indexDef)
 	return fmtCtx.String(), nil
 }
@@ -2960,7 +2960,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				if typDesc.GetKind() == descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE {
 					table, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
 					if err != nil {
-						if errors.Is(err, catalog.ErrDescriptorNotFound) || pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+						if errors.Is(err, catalog.ErrDescriptorNotFound) ||
+							pgerror.GetPGCode(err) == pgcode.UndefinedObject ||
+							pgerror.GetPGCode(err) == pgcode.UndefinedTable {
 							return false, nil
 						}
 						return false, err

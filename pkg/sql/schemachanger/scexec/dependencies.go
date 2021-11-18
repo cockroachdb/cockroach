@@ -34,7 +34,7 @@ type Dependencies interface {
 	IndexValidator() IndexValidator
 	IndexSpanSplitter() IndexSpanSplitter
 	JobProgressTracker() JobProgressTracker
-
+	EventLogger() EventLogger
 	// TestingKnobs returns the testing knobs for the new schema changer.
 	TestingKnobs() *NewSchemaChangerTestingKnobs
 
@@ -59,6 +59,13 @@ type Catalog interface {
 	// NewCatalogChangeBatcher is equivalent to creating a new kv.Batch for the
 	// current kv.Txn.
 	NewCatalogChangeBatcher() CatalogChangeBatcher
+}
+
+// EventLogger encapsulates the operations for collecting
+// and emitting event log entries.
+type EventLogger interface {
+	scmutationexec.EventLogWriter
+	ProcessAndSubmitEvents(ctx context.Context) error
 }
 
 // CatalogChangeBatcher encapsulates batched updates to the catalog: descriptor

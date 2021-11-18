@@ -17,6 +17,27 @@ Stage 0
         width: 64
     FamilyName: primary
     TableID: 52
+  *scop.LogEvent
+    DescID: 52
+    Direction: 1
+    Element:
+      column:
+        column:
+          id: 2
+          name: j
+          nullable: true
+          type:
+            family: IntFamily
+            oid: 20
+            width: 64
+        familyName: primary
+        tableId: 52
+    Metadata:
+      Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      Username: root
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
     IndexName: new_primary_key
@@ -79,6 +100,28 @@ Stage 0
         width: 64
     FamilyName: primary
     TableID: 52
+  *scop.LogEvent
+    DescID: 52
+    Direction: 1
+    Element:
+      column:
+        column:
+          defaultExpr: 123:::INT8
+          id: 2
+          name: j
+          nullable: true
+          type:
+            family: IntFamily
+            oid: 20
+            width: 64
+        familyName: primary
+        tableId: 52
+    Metadata:
+      Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      Username: root
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
     IndexName: new_primary_key
@@ -142,6 +185,28 @@ Stage 0
         width: 64
     FamilyName: primary
     TableID: 52
+  *scop.LogEvent
+    DescID: 52
+    Direction: 1
+    Element:
+      column:
+        column:
+          defaultExpr: 123:::INT8
+          id: 2
+          name: j
+          nullable: true
+          type:
+            family: IntFamily
+            oid: 20
+            width: 64
+        familyName: primary
+        tableId: 52
+    Metadata:
+      Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      Username: root
   *scop.MakeAddedColumnDeleteOnly
     Column:
       DefaultExpr: 456:::INT8
@@ -154,6 +219,29 @@ Stage 0
         width: 64
     FamilyName: primary
     TableID: 52
+  *scop.LogEvent
+    DescID: 52
+    Direction: 1
+    Element:
+      column:
+        column:
+          defaultExpr: 456:::INT8
+          id: 3
+          name: k
+          nullable: true
+          type:
+            family: IntFamily
+            oid: 20
+            width: 64
+        familyName: primary
+        tableId: 52
+    Metadata:
+      Statement: ALTER TABLE defaultdb.foo ADD COLUMN k INT8 DEFAULT 456
+      TargetMetadata:
+        SourceElementID: 1
+        StatementID: 1
+        SubWorkID: 1
+      Username: root
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
     IndexName: new_primary_key
@@ -223,6 +311,28 @@ Stage 0
         width: 64
     FamilyName: primary
     TableID: 52
+  *scop.LogEvent
+    DescID: 52
+    Direction: 1
+    Element:
+      column:
+        column:
+          computeExpr: i + 1:::INT8
+          id: 2
+          name: a
+          nullable: true
+          type:
+            family: IntFamily
+            oid: 20
+            width: 64
+        familyName: primary
+        tableId: 52
+    Metadata:
+      Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      Username: root
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
     IndexName: new_primary_key
@@ -290,6 +400,27 @@ Stage 0
         width: 64
     FamilyName: primary
     TableID: 52
+  *scop.LogEvent
+    DescID: 52
+    Direction: 1
+    Element:
+      column:
+        column:
+          id: 2
+          name: a
+          nullable: true
+          type:
+            family: IntFamily
+            oid: 20
+            width: 64
+        familyName: primary
+        tableId: 52
+    Metadata:
+      Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      Username: root
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
     IndexName: new_primary_key
@@ -313,6 +444,28 @@ Stage 0
         width: 64
     FamilyName: primary
     TableID: 53
+  *scop.LogEvent
+    DescID: 53
+    Direction: 1
+    Element:
+      column:
+        column:
+          id: 3
+          name: b
+          nullable: true
+          type:
+            family: IntFamily
+            oid: 20
+            width: 64
+        familyName: primary
+        tableId: 53
+    Metadata:
+      Statement: ALTER TABLE defaultdb.bar ADD COLUMN b INT8
+      TargetMetadata:
+        SourceElementID: 1
+        StatementID: 1
+        SubWorkID: 1
+      Username: root
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
     IndexName: new_primary_key

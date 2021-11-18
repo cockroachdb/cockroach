@@ -54,9 +54,15 @@ message CommonConnectionDetails {
 message CommonSessionDetails {
   // The connection type after transport negotiation.
   string transport = 1 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
-  // The username the session is for. This is the username passed by
-  // the client, after case-folding and Unicode normalization.
+  // The database username the session is for. This username will have
+  // undergone case-folding and Unicode normalization.
   string user = 2 [(gogoproto.jsontag) = ",omitempty"];
+  // The original system identity provided by the client, if an identity
+  // mapping was used per Host-Based Authentication rules. This may be a
+  // GSSAPI or X.509 principal or any other external value, so no
+  // specific assumptions should be made about the contents of this
+  // field.
+  string system_identity = 3 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // ClientConnectionStart is reported when a client connection

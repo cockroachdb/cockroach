@@ -1619,6 +1619,10 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 		option := &(*node)[i]
 		ctx.WriteByte(' ')
 		switch option.Name {
+		case SeqOptAs:
+			ctx.WriteString(option.Name)
+			ctx.WriteByte(' ')
+			ctx.WriteString(option.AsIntegerType.SQLString())
 		case SeqOptCycle, SeqOptNoCycle:
 			ctx.WriteString(option.Name)
 		case SeqOptCache:
@@ -1692,6 +1696,9 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 // SequenceOption represents an option on a CREATE SEQUENCE statement.
 type SequenceOption struct {
 	Name string
+
+	// AsIntegerType specifies default min and max values of a sequence.
+	AsIntegerType *types.T
 
 	IntVal *int64
 

@@ -81,14 +81,6 @@ func StartTenant(
 		settings:                args.Settings,
 	})
 
-	connManager := netutil.MakeServer(
-		args.stopper,
-		// The SQL server only uses connManager.ServeWith. The both below
-		// are unused.
-		nil, // tlsConfig
-		nil, // handler
-	)
-
 	// Initialize gRPC server for use on shared port with pg
 	grpcMain := newGRPCServer(args.rpcContext)
 	grpcMain.setMode(modeOperational)
@@ -130,8 +122,8 @@ func StartTenant(
 			// quiescing starts to allow that worker to shut down.
 			_ = pgL.Close()
 		}
-		if err := args.stopper.RunAsyncTask(ctx, "wait-quiesce-pgl", waitQuiesce); err != nil {
-			waitQuiesce(ctx)
+		if err := args.stopper.RunAsyncTask(background, "wait-quiesce-pgl", waitQuiesce); err != nil {
+			waitQuiesce(background)
 			return nil, "", "", err
 		}
 	}
@@ -153,8 +145,8 @@ func StartTenant(
 			<-args.stopper.ShouldQuiesce()
 			_ = httpL.Close()
 		}
-		if err := args.stopper.RunAsyncTask(ctx, "wait-quiesce-http", waitQuiesce); err != nil {
-			waitQuiesce(ctx)
+		if err := args.stopper.RunAsyncTask(background, "wait-quiesce-http", waitQuiesce); err != nil {
+			waitQuiesce(background)
 			return nil, "", "", err
 		}
 	}
@@ -193,17 +185,16 @@ func StartTenant(
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
 	// SpanResolver.
 	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: 0})
-	workersCtx := tenantStatusServer.AnnotateCtx(context.Background())
 
 	// Register and start gRPC service on pod. This is separate from the
 	// gRPC + Gateway services configured below.
 	tenantStatusServer.RegisterService(grpcMain.Server)
-	startRPCServer(workersCtx)
+	startRPCServer(background)
 
 	// Begin configuration of GRPC Gateway
 	gwMux, gwCtx, conn, err := ConfigureGRPCGateway(
 		ctx,
-		workersCtx,
+		background,
 		args.AmbientCtx,
 		tenantStatusServer.rpcCtx,
 		s.stopper,
@@ -226,30 +217,29 @@ func StartTenant(
 		pgLAddr,   // sql addr
 	)
 
-	if err := args.stopper.RunAsyncTask(ctx, "serve-http", func(ctx context.Context) {
-		mux := http.NewServeMux()
-		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
-		mux.Handle("/", debugServer)
-		mux.Handle("/_status/", gwMux)
-		mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
-			// Return Bad Request if called with arguments.
-			if err := req.ParseForm(); err != nil || len(req.Form) != 0 {
-				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-				return
-			}
-		})
-		f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
-		mux.Handle(statusVars, http.HandlerFunc(f))
-		ff := loadVarsHandler(ctx, args.runtime)
-		mux.Handle(loadStatusVars, http.HandlerFunc(ff))
+	mux := http.NewServeMux()
+	debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
+	mux.Handle("/", debugServer)
+	mux.Handle("/_status/", gwMux)
+	mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
+		// Return Bad Request if called with arguments.
+		if err := req.ParseForm(); err != nil || len(req.Form) != 0 {
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+	})
+	f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
+	mux.Handle(statusVars, http.HandlerFunc(f))
+	ff := loadVarsHandler(ctx, args.runtime)
+	mux.Handle(loadStatusVars, http.HandlerFunc(ff))
 
-		tlsConnManager := netutil.MakeServer(
-			args.stopper,
-			serverTLSConfig, // tlsConfig
-			mux,             // handler
-		)
-
-		netutil.FatalIfUnexpected(tlsConnManager.Serve(httpL))
+	connManager := netutil.MakeServer(
+		args.stopper,
+		serverTLSConfig, // tlsConfig
+		mux,             // handler
+	)
+	if err := args.stopper.RunAsyncTask(background, "serve-http", func(ctx context.Context) {
+		netutil.FatalIfUnexpected(connManager.Serve(httpL))
 	}); err != nil {
 		return nil, "", "", err
 	}

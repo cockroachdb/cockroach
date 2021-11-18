@@ -34,6 +34,7 @@ import {
   selectTotalFingerprints,
   selectColumns,
   selectDateRange,
+  selectSortSetting,
 } from "./statementsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
 import { AggregateStatistics } from "../statementsTable";
@@ -55,8 +56,9 @@ export const ConnectedStatementsPage = withRouter(
       lastReset: selectLastReset(state),
       columns: selectColumns(state),
       nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
-      isTenant: selectIsTenant(state),
       dateRange: selectDateRange(state),
+      sortSetting: selectSortSetting(state),
+      isTenant: selectIsTenant(state),
     }),
     (dispatch: Dispatch) => ({
       refreshStatements: (req?: StatementsRequest) =>
@@ -115,7 +117,11 @@ export const ConnectedStatementsPage = withRouter(
             value,
           }),
         ),
-      onSortingChange: (tableName: string, columnName: string) =>
+      onSortingChange: (
+        tableName: string,
+        columnName: string,
+        ascending: boolean,
+      ) => {
         dispatch(
           analyticsActions.track({
             name: "Column Sorted",
@@ -123,7 +129,14 @@ export const ConnectedStatementsPage = withRouter(
             tableName,
             columnName,
           }),
-        ),
+        );
+        dispatch(
+          localStorageActions.update({
+            key: "sortSetting/StatementsPage",
+            value: { columnTitle: columnName, ascending: ascending },
+          }),
+        );
+      },
       onStatementClick: () =>
         dispatch(
           analyticsActions.track({

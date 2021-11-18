@@ -14,6 +14,7 @@ package lease
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -207,15 +208,23 @@ func getDescriptorsFromStoreForInterval(
 	lowerBound, upperBound hlc.Timestamp,
 ) ([]historicalDescriptor, error) {
 	// Ensure lower bound is not an empty timestamp (now).
-	if lowerBound.Logical == 0 && lowerBound.WallTime == 0 {
-		return nil, errors.New("Lower bound for export request cannot be 0")
+	if lowerBound.IsEmpty() {
+		return nil, errors.AssertionFailedf(
+			"getDescriptorsFromStoreForInterval: lower bound cannot be empty")
+	}
+	// TODO(ajwerner): We'll want to lift this limitation in order to allow this
+	// function to find descriptors which could not be found by leasing. This
+	// will also require some careful managing of expiration timestamps for the
+	// final descriptor.
+	if upperBound.IsEmpty() {
+		return nil, errors.AssertionFailedf(
+			"getDescriptorsFromStoreForInterval: upper bound cannot be empty")
 	}
 
 	// Create an export request (1 kv call) for all descriptors for given
 	// descriptor ID written during the interval [timestamp, endTimestamp).
-	batchRequestHeader := roachpb.Header{}
-	if upperBound.WallTime != 0 {
-		batchRequestHeader = roachpb.Header{Timestamp: upperBound.Prev()}
+	batchRequestHeader := roachpb.Header{
+		Timestamp: upperBound.Prev(),
 	}
 	descriptorKey := catalogkeys.MakeDescMetadataKey(codec, id)
 	requestHeader := roachpb.RequestHeader{
@@ -308,17 +317,50 @@ func getDescriptorsFromStoreForInterval(
 func (m *Manager) readOlderVersionForTimestamp(
 	ctx context.Context, id descpb.ID, timestamp hlc.Timestamp,
 ) ([]historicalDescriptor, error) {
-	// Retrieve the endTimestamp for our query, which will be the modification
-	// time of the first descriptor in the manager's active set.
+	// Retrieve the endTimestamp for our query, which will be the first
+	// modification timestamp above our query timestamp.
 	t := m.findDescriptorState(id, false /*create*/)
-	endTimestamp := func() hlc.Timestamp {
+	// A missing descriptor state indicates that this descriptor has been
+	// purged in the meantime. We should go back around in the acquisition
+	// loop to make the appropriate error appear.
+	if t == nil {
+		return nil, nil
+	}
+	endTimestamp, done := func() (hlc.Timestamp, bool) {
 		t.mu.Lock()
 		defer t.mu.Unlock()
+
+		// If there are no descriptors, then we won't have a valid end timestamp.
 		if len(t.mu.active.data) == 0 {
-			return hlc.Timestamp{}
+			return hlc.Timestamp{}, true
 		}
-		return t.mu.active.data[0].GetModificationTime()
+		// We permit gaps in historical versions. We want to find the timestamp
+		// that represents the start of the validity interval for the known version
+		// which immediately follows the timestamps we're searching for.
+		i := sort.Search(len(t.mu.active.data), func(i int) bool {
+			return timestamp.Less(t.mu.active.data[i].GetModificationTime())
+		})
+
+		// If the timestamp we're searching for is somehow after the last descriptor
+		// we have in play, then either we have the right descriptor, or some other
+		// shenanigans where we've evicted the descriptor has occurred.
+		//
+		// TODO(ajwerner): When we come to modify this code to allow us to find
+		// historical descriptors which have been dropped, we'll need to rework
+		// this case and support providing no upperBound to
+		// getDescriptorFromStoreForInterval.
+		if i == len(t.mu.active.data) ||
+			// If we found a descriptor that isn't the first descriptor, go and check
+			// whether the descriptor for which we're searching actually exists. This
+			// will deal with cases where a concurrent fetch filled it in for us.
+			i > 0 && timestamp.Less(t.mu.active.data[i-1].getExpiration()) {
+			return hlc.Timestamp{}, true
+		}
+		return t.mu.active.data[i].GetModificationTime(), false
 	}()
+	if done {
+		return nil, nil
+	}
 
 	// Retrieve descriptors in range [timestamp, endTimestamp) in decreasing
 	// modification time order.
@@ -431,7 +473,9 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 		// because of its use of `singleflight.Group`. See issue #41780 for how this has
 		// happened.
 		baseCtx := m.ambientCtx.AnnotateCtx(context.Background())
-		baseCtx = logtags.WithTags(baseCtx, logtags.FromContext(ctx))
+		// AddTags and not WithTags, so that we combine the tags with those
+		// filled by AnnotateCtx.
+		baseCtx = logtags.AddTags(baseCtx, logtags.FromContext(ctx))
 		newCtx, cancel := m.stopper.WithCancelOnQuiesce(baseCtx)
 		defer cancel()
 		if m.isDraining() {
@@ -484,7 +528,9 @@ func releaseLease(ctx context.Context, lease *storedLease, m *Manager) {
 
 	// Release to the store asynchronously, without the descriptorState lock.
 	newCtx := m.ambientCtx.AnnotateCtx(context.Background())
-	newCtx = logtags.WithTags(newCtx, logtags.FromContext(ctx))
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	newCtx = logtags.AddTags(newCtx, logtags.FromContext(ctx))
 	if err := m.stopper.RunAsyncTask(
 		newCtx, "sql.descriptorState: releasing descriptor lease",
 		func(ctx context.Context) {
@@ -666,9 +712,9 @@ func NewLeaseManager(
 func NameMatchesDescriptor(
 	desc catalog.Descriptor, parentID descpb.ID, parentSchemaID descpb.ID, name string,
 ) bool {
-	return desc.GetParentID() == parentID &&
-		desc.GetParentSchemaID() == parentSchemaID &&
-		desc.GetName() == name
+	return desc.GetName() == name &&
+		desc.GetParentID() == parentID &&
+		desc.GetParentSchemaID() == parentSchemaID
 }
 
 // findNewest returns the newest descriptor version state for the ID.
@@ -1185,7 +1231,9 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 	// Run as async worker to prevent blocking the main server Start method.
 	// Exit after releasing all the orphaned leases.
 	newCtx := m.ambientCtx.AnnotateCtx(context.Background())
-	newCtx = logtags.WithTags(newCtx, logtags.FromContext(ctx))
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	newCtx = logtags.AddTags(newCtx, logtags.FromContext(ctx))
 	_ = m.stopper.RunAsyncTask(newCtx, "del-orphaned-leases", func(ctx context.Context) {
 		// This could have been implemented using DELETE WHERE, but DELETE WHERE
 		// doesn't implement AS OF SYSTEM TIME.

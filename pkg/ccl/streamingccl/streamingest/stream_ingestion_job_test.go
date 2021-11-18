@@ -59,7 +59,7 @@ func TestTenantStreaming(t *testing.T) {
 	sourceSQL := sqlutils.MakeSQLRunner(tenantConn)
 
 	// Make changefeeds run faster.
-	resetFreq := changefeedbase.TestingSetDefaultFlushFrequency(50 * time.Millisecond)
+	resetFreq := changefeedbase.TestingSetDefaultMinCheckpointFrequency(50 * time.Millisecond)
 	defer resetFreq()
 	// Set required cluster settings.
 	_, err := sourceDB.Exec(`

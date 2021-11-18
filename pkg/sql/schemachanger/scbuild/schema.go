@@ -47,7 +47,7 @@ func (b *buildContext) dropSchemaDesc(
 		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
 			"schema %q is not empty and CASCADE was not specified", schema.GetName()))
 	}
-
+	lastSourceID := b.setSourceElementID(b.newSourceElementID())
 	for _, id := range dropIDs.Ordered() {
 		desc := b.CatalogReader().MustReadDescriptor(ctx, id)
 		switch t := desc.(type) {
@@ -69,7 +69,7 @@ func (b *buildContext) dropSchemaDesc(
 				t.GetName(), t.GetID(), t.DescriptorType()))
 		}
 	}
-
+	b.setSourceElementID(lastSourceID)
 	switch schema.SchemaKind() {
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 		return false, dropIDs
@@ -102,5 +102,6 @@ func (b *buildContext) dropSchema(ctx context.Context, n *tree.DropSchema) {
 			panic(errors.AssertionFailedf("unknown schema kind %d", schema.SchemaKind()))
 		}
 		b.dropSchemaDesc(ctx, db, schema, n.DropBehavior)
+		b.incrementSubWorkID()
 	}
 }

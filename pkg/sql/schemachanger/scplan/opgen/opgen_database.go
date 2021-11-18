@@ -44,6 +44,13 @@ func init() {
 				return &scop.DrainDescriptorName{
 					TableID: this.DatabaseID,
 				}
+			}),
+			emit(func(this *scpb.Database, md *scpb.ElementMetadata) scop.Op {
+				return &scop.LogEvent{Metadata: *md,
+					DescID:    this.DatabaseID,
+					Element:   &scpb.ElementProto{Database: this},
+					Direction: scpb.Target_DROP,
+				}
 			})),
 	)
 }

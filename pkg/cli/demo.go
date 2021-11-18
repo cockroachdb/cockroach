@@ -196,13 +196,6 @@ func checkDemoConfiguration(
 		}
 	}
 
-	// If the user has specified the --global flag, disable multi-tenant mode
-	// unless the user has requested it explicitly. This is required until we
-	// address #72231.
-	if demoCtx.SimulateLatency && !f.Lookup(cliflags.DemoMultitenant.Name).Changed {
-		demoCtx.Multitenant = false
-	}
-
 	return gen, nil
 }
 

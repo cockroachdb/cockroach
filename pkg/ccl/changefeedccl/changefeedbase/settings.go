@@ -28,16 +28,16 @@ var TableDescriptorPollInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
-// DefaultFlushFrequency is the default frequency to flush sink.
+// DefaultMinCheckpointFrequency is the default frequency to flush sink.
 // See comment in newChangeAggregatorProcessor for explanation on the value.
-var DefaultFlushFrequency = 5 * time.Second
+var DefaultMinCheckpointFrequency = 30 * time.Second
 
-// TestingSetDefaultFlushFrequency changes defaultFlushFrequency for tests.
+// TestingSetDefaultMinCheckpointFrequency changes DefaultMinCheckpointFrequency for tests.
 // Returns function to restore flush frequency to its original value.
-func TestingSetDefaultFlushFrequency(f time.Duration) func() {
-	old := DefaultFlushFrequency
-	DefaultFlushFrequency = f
-	return func() { DefaultFlushFrequency = old }
+func TestingSetDefaultMinCheckpointFrequency(f time.Duration) func() {
+	old := DefaultMinCheckpointFrequency
+	DefaultMinCheckpointFrequency = f
+	return func() { DefaultMinCheckpointFrequency = old }
 }
 
 // PerChangefeedMemLimit controls how much data can be buffered by

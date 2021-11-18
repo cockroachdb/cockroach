@@ -794,6 +794,11 @@ func waitForApplication(
 	replicas []roachpb.ReplicaDescriptor,
 	leaseIndex uint64,
 ) error {
+	if dialer == nil && len(replicas) == 1 {
+		// This early return supports unit tests (testContext{}) that also
+		// want to perform merges.
+		return nil
+	}
 	return contextutil.RunWithTimeout(ctx, "wait for application", 5*time.Second, func(ctx context.Context) error {
 		g := ctxgroup.WithContext(ctx)
 		for _, repl := range replicas {
@@ -825,6 +830,11 @@ func waitForReplicasInit(
 	rangeID roachpb.RangeID,
 	replicas []roachpb.ReplicaDescriptor,
 ) error {
+	if dialer == nil && len(replicas) == 1 {
+		// This early return supports unit tests (testContext{}) that also
+		// want to perform merges.
+		return nil
+	}
 	return contextutil.RunWithTimeout(ctx, "wait for replicas init", 5*time.Second, func(ctx context.Context) error {
 		g := ctxgroup.WithContext(ctx)
 		for _, repl := range replicas {
@@ -1798,7 +1808,10 @@ func (r *Replica) tryRollbackRaftLearner(
 			})
 		return err
 	}
-	rollbackCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	rollbackCtx := r.AnnotateCtx(context.Background())
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	rollbackCtx = logtags.AddTags(rollbackCtx, logtags.FromContext(ctx))
 	if err := contextutil.RunWithTimeout(
 		rollbackCtx, "learner rollback", rollbackTimeout, rollbackFn,
 	); err != nil {

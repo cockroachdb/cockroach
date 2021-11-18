@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scsqldeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -974,7 +976,10 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 		panic(panicErr)
 	}
 	// Closing is not cancelable.
-	closeCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	closeCtx := ex.server.cfg.AmbientCtx.AnnotateCtx(context.Background())
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	closeCtx = logtags.AddTags(closeCtx, logtags.FromContext(ctx))
 	ex.close(closeCtx, normalClose)
 }
 
@@ -2952,6 +2957,9 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		ex.server.cfg.IndexBackfiller,
 		ex.server.cfg.IndexValidator,
 		scsqldeps.NewCCLCallbacks(ex.server.cfg.Settings, ex.planner.EvalContext()),
+		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
+			return LogEventForSchemaChanger(ctx, ex.planner.execCfg, txn, depth+1, descID, metadata, event)
+		},
 		ex.server.cfg.NewSchemaChangerTestingKnobs,
 		scs.stmts,
 		scop.PreCommitPhase,

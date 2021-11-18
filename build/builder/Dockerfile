@@ -16,7 +16,7 @@ FROM ubuntu:focal-20210119
 # gnupg2 - for apt
 # libncurses-dev - CRDB build system
 # make - CRDB build system
-# python - awscli install
+# python3,python3-venv - awscli install
 # rsync - sed build
 # texinfo - sed build
 RUN apt-get update \
@@ -39,7 +39,9 @@ RUN apt-get update \
     make \
     patch \
     patchelf \
-    python \
+    python-is-python3 \
+    python3 \
+    python3.8-venv \
     rsync \
     texinfo \
  && apt-get clean \
@@ -112,8 +114,8 @@ RUN curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.20.3/cmake-
 # releases of Go will no longer be run in CI once it is changed. Consider
 # bumping the minimum allowed version of Go in /build/go-version-check.sh.
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends golang \
- && curl -fsSL https://storage.googleapis.com/golang/go1.16.6.src.tar.gz -o golang.tar.gz \
- && echo 'a3a5d4bc401b51db065e4f93b523347a4d343ae0c0b08a65c3423b05a138037d golang.tar.gz' | sha256sum -c - \
+ && curl -fsSL https://storage.googleapis.com/golang/go1.17.3.src.tar.gz -o golang.tar.gz \
+ && echo '705c64251e5b25d5d55ede1039c6aa22bea40a7a931d14c370339853643c3df0 golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
@@ -190,7 +192,9 @@ RUN apt-get purge -y \
     autopoint \
     gettext \
     golang \
-    python \
+    python-is-python3 \
+    python3 \
+    python3.8-venv \
     rsync \
     texinfo \
  && apt-get autoremove -y
@@ -202,7 +206,8 @@ RUN ln -s /go/src/github.com/cockroachdb/cockroach/build/builder/mkrelease.sh /u
 
 RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.2.0/autouseradd-1.2.0-amd64.tar.gz -o autouseradd.tar.gz \
   && echo 'f7b0cf67564044c31ffc5e84c961726098b88b0296a57c84421659d56434a365 autouseradd.tar.gz' | sha256sum -c - \
-  && tar xzf autouseradd.tar.gz --strip-components 1 \
+  && tar xzf autouseradd.tar.gz -C / --strip-components 1 \
+  && chmod +x /usr/local/bin/autouseradd \
   && rm autouseradd.tar.gz
 
 COPY entrypoint.sh /usr/local/bin

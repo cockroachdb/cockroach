@@ -11,7 +11,6 @@
 package vm
 
 import (
-	"context"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -20,11 +19,30 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
 )
+
+const (
+	// TagCluster is cluster name tag const.
+	TagCluster = "cluster"
+	// TagCreated is created time tag const, RFC3339-formatted timestamp.
+	TagCreated = "created"
+	// TagLifetime is lifetime tag const.
+	TagLifetime = "lifetime"
+	// TagRoachprod is roachprod tag const, value is true & false.
+	TagRoachprod = "roachprod"
+)
+
+// GetDefaultLabelMap returns a label map for a common set of labels.
+func GetDefaultLabelMap(opts CreateOpts) map[string]string {
+	return map[string]string{
+		TagCluster:   opts.ClusterName,
+		TagLifetime:  opts.Lifetime.String(),
+		TagRoachprod: "true",
+	}
+}
 
 // A VM is an abstract representation of a specific machine instance.  This type is used across
 // the various cloud providers supported by roachprod.
@@ -33,8 +51,9 @@ type VM struct {
 	CreatedAt time.Time `json:"created_at"`
 	// If non-empty, indicates that some or all of the data in the VM instance
 	// is not present or otherwise invalid.
-	Errors   []error       `json:"errors"`
-	Lifetime time.Duration `json:"lifetime"`
+	Errors   []error           `json:"errors"`
+	Lifetime time.Duration     `json:"lifetime"`
+	Labels   map[string]string `json:"labels"`
 	// The provider-internal DNS name for the VM instance
 	DNS string `json:"dns"`
 	// The name of the cloud provider that hosts the VM instance
@@ -92,16 +111,16 @@ func (vm *VM) IsLocal() bool {
 
 // Locality returns the cloud, region, and zone for the VM.  We want to include the cloud, since
 // GCE and AWS use similarly-named regions (e.g. us-east-1)
-func (vm *VM) Locality() string {
+func (vm *VM) Locality() (string, error) {
 	var region string
 	if vm.IsLocal() {
 		region = vm.Zone
 	} else if match := regionRE.FindStringSubmatch(vm.Zone); len(match) == 2 {
 		region = match[1]
 	} else {
-		log.Fatalf(context.Background(), "unable to parse region from zone %q", vm.Zone)
+		return "", errors.Newf("unable to parse region from zone %q", vm.Zone)
 	}
-	return fmt.Sprintf("cloud=%s,region=%s,zone=%s", vm.Provider, region, vm.Zone)
+	return fmt.Sprintf("cloud=%s,region=%s,zone=%s", vm.Provider, region, vm.Zone), nil
 }
 
 // ZoneEntry returns a line representing the VMs DNS zone entry
@@ -151,8 +170,10 @@ const (
 
 // CreateOpts is the set of options when creating VMs.
 type CreateOpts struct {
-	ClusterName    string
-	Lifetime       time.Duration
+	ClusterName  string
+	Lifetime     time.Duration
+	CustomLabels map[string]string
+
 	GeoDistributed bool
 	VMProviders    []string
 	SSDOpts        struct {

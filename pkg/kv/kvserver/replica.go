@@ -267,8 +267,17 @@ type Replica struct {
 	concMgr concurrency.Manager
 
 	// tenantLimiter rate limits requests on a per-tenant basis and accumulates
-	// metrics about it.
+	// metrics about it. This is determined by the start key of the Replica,
+	// once initialized.
 	tenantLimiter tenantrate.Limiter
+
+	// tenantMetricsRef is a metrics reference indicating the tenant under
+	// which to track the range's contributions. This is determined by the
+	// start key of the Replica, once initialized.
+	// Its purpose is to help track down missing/extraneous release operations
+	// that would not be apparent or easy to resolve when refcounting at the store
+	// level only.
+	tenantMetricsRef *tenantMetricsRef
 
 	// sideTransportClosedTimestamp encapsulates state related to the closed
 	// timestamp's information about the range. Note that the

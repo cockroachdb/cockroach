@@ -45,6 +45,13 @@ func init() {
 					TableID: this.TableID,
 				}
 			}),
+			emit(func(this *scpb.Table, md *scpb.ElementMetadata) scop.Op {
+				return &scop.LogEvent{Metadata: *md,
+					DescID:    this.TableID,
+					Element:   &scpb.ElementProto{Table: this},
+					Direction: scpb.Target_DROP,
+				}
+			}),
 			emit(func(this *scpb.Table) scop.Op {
 				return &scop.CreateGcJobForDescriptor{
 					DescID: this.TableID,

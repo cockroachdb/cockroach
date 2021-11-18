@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -3183,7 +3184,7 @@ CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
 						return errors.New("expected error, found none")
 					}
 					if !testutils.IsError(err, tc.expectedError[i]) {
-						return errors.Newf("expected error %v, found %v", tc.expectedError[i], err)
+						return errors.Newf("expected error %q, found %v", tc.expectedError[i], pgerror.FullError(err))
 					}
 					return nil
 				})
