@@ -136,11 +136,6 @@ type sizeLimitedBuffer struct {
 	limit int64 // in bytes
 }
 
-func (b *sizeLimitedBuffer) Reset() {
-	b.Buffer.Reset()
-	b.size = 0
-}
-
 // finish marks the span as finished. Further operations on the span are not
 // allowed. Returns false if the span was already finished.
 //
@@ -183,16 +178,13 @@ func (s *crdbSpan) finish() bool {
 		parent.childFinished(s)
 	}
 
+	// Deal with the orphaned children - make them roots.
 	for _, c := range children {
 		c.parentFinished()
 	}
-
 	// Atomically replace s in the registry with all of its still-open children.
 	s.tracer.activeSpansRegistry.swap(s.spanID, children)
 
-	// TODO(andrei): All the children that are still open are getting orphaned by
-	// the finishing of this parent. We should make them all root spans and
-	// register them with the active spans registry.
 	return true
 }
 
@@ -213,22 +205,6 @@ func (s *crdbSpan) enableRecording(recType RecordingType) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.recording.recordingType.swap(recType)
-}
-
-// resetRecording clears any previously recorded info.
-//
-// NB: This is needed by SQL SessionTracing, who likes to start and stop
-// recording repeatedly on the same Span, and collect the (separate) recordings
-// every time.
-func (s *crdbSpan) resetRecording() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.mu.recording.logs.Reset()
-	s.mu.recording.structured.Reset()
-	s.mu.recording.dropped = false
-	s.mu.recording.openChildren = s.mu.recording.openChildren[:0]
-	s.mu.recording.finishedChildren = s.mu.recording.finishedChildren[:0]
 }
 
 func (s *crdbSpan) disableRecording() {

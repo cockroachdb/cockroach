@@ -226,41 +226,43 @@ func (c *transientCluster) Start(
 	latencyMapWaitChs := make([]chan struct{}, c.demoCtx.NumNodes)
 
 	// Step 1: create the first node.
-	{
-		phaseCtx := logtags.AddTag(ctx, "phase", 1)
-		c.infoLog(phaseCtx, "creating the first node")
+	phaseCtx := logtags.AddTag(ctx, "phase", 1)
+	if err := func(ctx context.Context) error {
+		c.infoLog(ctx, "creating the first node")
 
 		latencyMapWaitChs[0] = make(chan struct{})
-		firstRPCAddrReadyCh, err := c.createAndAddNode(phaseCtx, 0, latencyMapWaitChs[0], timeoutCh)
+		firstRPCAddrReadyCh, err := c.createAndAddNode(ctx, 0, latencyMapWaitChs[0], timeoutCh)
 		if err != nil {
 			return err
 		}
 		rpcAddrReadyChs[0] = firstRPCAddrReadyCh
+		return nil
+	}(phaseCtx); err != nil {
+		return err
 	}
 
 	// Step 2: start the first node asynchronously, then wait for RPC
 	// listen readiness or error.
-	{
-		phaseCtx := logtags.AddTag(ctx, "phase", 2)
-
-		c.infoLog(phaseCtx, "starting first node")
-		if err := c.startNodeAsync(phaseCtx, 0, errCh, timeoutCh); err != nil {
+	phaseCtx = logtags.AddTag(ctx, "phase", 2)
+	if err := func(ctx context.Context) error {
+		c.infoLog(ctx, "starting first node")
+		if err := c.startNodeAsync(ctx, 0, errCh, timeoutCh); err != nil {
 			return err
 		}
-		c.infoLog(phaseCtx, "waiting for first node RPC address")
-		if err := c.waitForRPCAddrReadinessOrError(phaseCtx, 0, errCh, rpcAddrReadyChs, timeoutCh); err != nil {
-			return err
-		}
+		c.infoLog(ctx, "waiting for first node RPC address")
+		return c.waitForRPCAddrReadinessOrError(ctx, 0, errCh, rpcAddrReadyChs, timeoutCh)
+	}(phaseCtx); err != nil {
+		return err
 	}
 
 	// Step 3: create the other nodes and start them asynchronously.
-	{
-		phaseCtx := logtags.AddTag(ctx, "phase", 3)
-		c.infoLog(phaseCtx, "creating other nodes")
+	phaseCtx = logtags.AddTag(ctx, "phase", 3)
+	if err := func(ctx context.Context) error {
+		c.infoLog(ctx, "creating other nodes")
 
 		for i := 1; i < c.demoCtx.NumNodes; i++ {
 			latencyMapWaitChs[i] = make(chan struct{})
-			rpcAddrReady, err := c.createAndAddNode(phaseCtx, i, latencyMapWaitChs[i], timeoutCh)
+			rpcAddrReady, err := c.createAndAddNode(ctx, i, latencyMapWaitChs[i], timeoutCh)
 			if err != nil {
 				return err
 			}
@@ -278,36 +280,40 @@ func (c *transientCluster) Start(
 
 		// Start the remaining nodes asynchronously.
 		for i := 1; i < c.demoCtx.NumNodes; i++ {
-			if err := c.startNodeAsync(phaseCtx, i, errCh, timeoutCh); err != nil {
+			if err := c.startNodeAsync(ctx, i, errCh, timeoutCh); err != nil {
 				return err
 			}
 		}
+		return nil
+	}(phaseCtx); err != nil {
+		return err
 	}
 
 	// Step 4: wait for all the nodes to know their RPC address,
 	// or for an error or premature shutdown.
-	{
-		phaseCtx := logtags.AddTag(ctx, "phase", 4)
-		c.infoLog(phaseCtx, "waiting for remaining nodes to get their RPC address")
+	phaseCtx = logtags.AddTag(ctx, "phase", 4)
+	if err := func(ctx context.Context) error {
+		c.infoLog(ctx, "waiting for remaining nodes to get their RPC address")
 
 		for i := 0; i < c.demoCtx.NumNodes; i++ {
-			if err := c.waitForRPCAddrReadinessOrError(phaseCtx, i, errCh, rpcAddrReadyChs, timeoutCh); err != nil {
+			if err := c.waitForRPCAddrReadinessOrError(ctx, i, errCh, rpcAddrReadyChs, timeoutCh); err != nil {
 				return err
 			}
 		}
+		return nil
+	}(phaseCtx); err != nil {
+		return err
 	}
 
 	// Step 5: optionally initialize the latency map, then let the servers
 	// proceed with their initialization.
-
-	{
-		phaseCtx := logtags.AddTag(ctx, "phase", 5)
-
+	phaseCtx = logtags.AddTag(ctx, "phase", 5)
+	if err := func(ctx context.Context) error {
 		// If latency simulation is requested, initialize the latency map.
 		if c.demoCtx.SimulateLatency {
 			// Now, all servers have been started enough to know their own RPC serving
 			// addresses, but nothing else. Assemble the artificial latency map.
-			c.infoLog(phaseCtx, "initializing latency map")
+			c.infoLog(ctx, "initializing latency map")
 			for i, serv := range c.servers {
 				latencyMap := serv.Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
 				srcLocality, ok := serv.Cfg.Locality.Find("region")
@@ -331,92 +337,115 @@ func (c *transientCluster) Start(
 				}
 			}
 		}
+		return nil
+	}(phaseCtx); err != nil {
+		return err
 	}
 
-	{
-		phaseCtx := logtags.AddTag(ctx, "phase", 6)
-
+	// Step 6: cluster initialization.
+	phaseCtx = logtags.AddTag(ctx, "phase", 6)
+	if err := func(ctx context.Context) error {
 		for i := 0; i < c.demoCtx.NumNodes; i++ {
-			c.infoLog(phaseCtx, "letting server %d initialize", i)
+			c.infoLog(ctx, "letting server %d initialize", i)
 			close(latencyMapWaitChs[i])
-			if err := c.waitForNodeIDReadiness(phaseCtx, i, errCh, timeoutCh); err != nil {
+			if err := c.waitForNodeIDReadiness(ctx, i, errCh, timeoutCh); err != nil {
 				return err
 			}
-			c.infoLog(phaseCtx, "node n%d initialized", c.servers[i].NodeID())
+			c.infoLog(ctx, "node n%d initialized", c.servers[i].NodeID())
 		}
+		return nil
+	}(phaseCtx); err != nil {
+		return err
 	}
 
-	{
-		phaseCtx := logtags.AddTag(ctx, "phase", 7)
-
+	// Step 7: wait for SQL to signal ready.
+	phaseCtx = logtags.AddTag(ctx, "phase", 7)
+	if err := func(ctx context.Context) error {
 		for i := 0; i < c.demoCtx.NumNodes; i++ {
-			c.infoLog(phaseCtx, "waiting for server %d SQL readiness", i)
-			if err := c.waitForSQLReadiness(phaseCtx, i, errCh, timeoutCh); err != nil {
+			c.infoLog(ctx, "waiting for server %d SQL readiness", i)
+			if err := c.waitForSQLReadiness(ctx, i, errCh, timeoutCh); err != nil {
 				return err
 			}
-			c.infoLog(phaseCtx, "node n%d ready", c.servers[i].NodeID())
+			c.infoLog(ctx, "node n%d ready", c.servers[i].NodeID())
 		}
+		return nil
+	}(phaseCtx); err != nil {
+		return err
 	}
 
 	const demoUsername = "demo"
 	demoPassword := genDemoPassword(demoUsername)
 
-	if c.demoCtx.Multitenant {
-		phaseCtx := logtags.AddTag(ctx, "phase", 8)
-		c.infoLog(phaseCtx, "starting tenant nodes")
+	// Step 8: initialize tenant servers, if enabled.
+	phaseCtx = logtags.AddTag(ctx, "phase", 8)
+	if err := func(ctx context.Context) error {
+		if c.demoCtx.Multitenant {
+			c.infoLog(ctx, "starting tenant nodes")
 
-		c.tenantServers = make([]serverutils.TestTenantInterface, c.demoCtx.NumNodes)
-		for i := 0; i < c.demoCtx.NumNodes; i++ {
-			// Steal latency map from the neighboring server.
-			latencyMap := c.servers[i].Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
-			c.infoLog(phaseCtx, "starting tenant node %d", i)
-			ts, err := c.servers[i].StartTenant(ctx, base.TestTenantArgs{
-				// We set the tenant ID to i+2, since tenant 0 is not a tenant, and
-				// tenant 1 is the system tenant.
-				TenantID:      roachpb.MakeTenantID(uint64(i + 2)),
-				Stopper:       c.stopper,
-				ForceInsecure: c.demoCtx.Insecure,
-				SSLCertsDir:   c.demoDir,
-				Locality:      c.demoCtx.Localities[i],
-				TestingKnobs: base.TestingKnobs{
-					TenantTestingKnobs: &sql.TenantTestingKnobs{DisableLogTags: true},
-					Server: &server.TestingKnobs{
-						ContextTestingKnobs: rpc.ContextTestingKnobs{
-							ArtificialLatencyMap: latencyMap,
+			c.tenantServers = make([]serverutils.TestTenantInterface, c.demoCtx.NumNodes)
+			for i := 0; i < c.demoCtx.NumNodes; i++ {
+				latencyMap := c.servers[i].Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
+				c.infoLog(ctx, "starting tenant node %d", i)
+				ts, err := c.servers[i].StartTenant(ctx, base.TestTenantArgs{
+					// We set the tenant ID to i+2, since tenant 0 is not a tenant, and
+					// tenant 1 is the system tenant.
+					TenantID:      roachpb.MakeTenantID(uint64(i + 2)),
+					Stopper:       c.stopper,
+					ForceInsecure: c.demoCtx.Insecure,
+					SSLCertsDir:   c.demoDir,
+					Locality:      c.demoCtx.Localities[i],
+					TestingKnobs: base.TestingKnobs{
+						TenantTestingKnobs: &sql.TenantTestingKnobs{DisableLogTags: true},
+						Server: &server.TestingKnobs{
+							ContextTestingKnobs: rpc.ContextTestingKnobs{
+								ArtificialLatencyMap: latencyMap,
+							},
 						},
 					},
-				},
-			})
-			if err != nil {
-				return err
-			}
-			c.tenantServers[i] = ts
-			c.infoLog(phaseCtx, "started tenant %d: %s", i, ts.SQLAddr())
-			if !c.demoCtx.Insecure {
-				// Set up the demo username and password on each tenant.
-				ie := ts.DistSQLServer().(*distsql.ServerImpl).ServerConfig.Executor
-				_, err = ie.Exec(ctx, "tenant-password", nil,
-					fmt.Sprintf("CREATE USER %s WITH PASSWORD %s", demoUsername, demoPassword))
+				})
 				if err != nil {
 					return err
 				}
-				_, err = ie.Exec(ctx, "tenant-grant", nil, fmt.Sprintf("GRANT admin TO %s", demoUsername))
-				if err != nil {
-					return err
+				c.tenantServers[i] = ts
+				c.infoLog(ctx, "started tenant %d: %s", i, ts.SQLAddr())
+
+				// Propagate the tenant server tags to the initialization
+				// context, so that the initialization messages below are
+				// properly annotated in traces.
+				ctx = ts.AnnotateCtx(ctx)
+
+				if !c.demoCtx.Insecure {
+					// Set up the demo username and password on each tenant.
+					ie := ts.DistSQLServer().(*distsql.ServerImpl).ServerConfig.Executor
+					_, err = ie.Exec(ctx, "tenant-password", nil,
+						fmt.Sprintf("CREATE USER %s WITH PASSWORD %s", demoUsername, demoPassword))
+					if err != nil {
+						return err
+					}
+					_, err = ie.Exec(ctx, "tenant-grant", nil, fmt.Sprintf("GRANT admin TO %s", demoUsername))
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
+		return nil
+	}(phaseCtx); err != nil {
+		return err
 	}
 
-	{
-		phaseCtx := logtags.AddTag(ctx, "phase", 9)
-
+	// Step 9: run SQL initialization.
+	phaseCtx = logtags.AddTag(ctx, "phase", 9)
+	if err := func(ctx context.Context) error {
 		// Run the SQL initialization. This takes care of setting up the
 		// initial replication factor for small clusters and creating the
 		// admin user.
-		c.infoLog(phaseCtx, "running initial SQL for demo cluster")
+		c.infoLog(ctx, "running initial SQL for demo cluster")
+		// Propagate the server log tags to the operations below, to include node ID etc.
+		server := c.firstServer.Server
+		ctx = server.AnnotateCtx(ctx)
 
-		if err := runInitialSQL(phaseCtx, c.firstServer.Server, c.demoCtx.NumNodes < 3, demoUsername, demoPassword); err != nil {
+		if err := runInitialSQL(ctx, server, c.demoCtx.NumNodes < 3, demoUsername, demoPassword); err != nil {
 			return err
 		}
 		if c.demoCtx.Insecure {
@@ -446,9 +475,13 @@ func (c *transientCluster) Start(
 		// We don't do this in (*server.Server).Start() because we don't want this
 		// overhead and possible interference in tests.
 		if !c.demoCtx.DisableTelemetry {
-			c.infoLog(phaseCtx, "starting telemetry")
-			c.firstServer.StartDiagnostics(phaseCtx)
+			c.infoLog(ctx, "starting telemetry")
+			c.firstServer.StartDiagnostics(ctx)
 		}
+
+		return nil
+	}(phaseCtx); err != nil {
+		return err
 	}
 	return nil
 }

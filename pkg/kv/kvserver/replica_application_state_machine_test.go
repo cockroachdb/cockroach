@@ -110,7 +110,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 			},
 		}
 
-		checkedCmd, err := b.Stage(cmd)
+		checkedCmd, err := b.Stage(cmd.ctx, cmd)
 		require.NoError(t, err)
 		require.Equal(t, !add, b.changeRemovesReplica)
 		require.Equal(t, b.state.RaftAppliedIndex, cmd.ent.Index)
@@ -129,7 +129,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		require.NoError(t, err)
 
 		// Apply the side effects of the command to the StateMachine.
-		_, err = sm.ApplySideEffects(checkedCmd)
+		_, err = sm.ApplySideEffects(checkedCmd.Ctx(), checkedCmd)
 		if add {
 			require.NoError(t, err)
 		} else {

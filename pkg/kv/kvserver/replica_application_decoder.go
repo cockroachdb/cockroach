@@ -139,7 +139,7 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
 		cmd := it.cur()
 		if cmd.IsLocal() {
-			cmd.ctx, cmd.sp = tracing.ForkSpan(cmd.proposal.ctx, opName)
+			cmd.ctx, cmd.sp = tracing.ChildSpan(cmd.proposal.ctx, opName)
 		} else if cmd.raftCmd.TraceData != nil {
 			// The proposal isn't local, and trace data is available. Extract
 			// the remote span and start a server-side span that follows from it.
@@ -159,7 +159,7 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 				)
 			}
 		} else {
-			cmd.ctx, cmd.sp = tracing.ForkSpan(ctx, opName)
+			cmd.ctx, cmd.sp = tracing.ChildSpan(ctx, opName)
 		}
 	}
 }

@@ -68,10 +68,6 @@ func (s *spanInner) SetVerbose(to bool) {
 	s.crdb.SetVerbose(to)
 }
 
-func (s *spanInner) ResetRecording() {
-	s.crdb.resetRecording()
-}
-
 func (s *spanInner) GetRecording(recType RecordingType) Recording {
 	if s.isNoop() {
 		return nil
