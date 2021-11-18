@@ -46,6 +46,7 @@ type Element interface {
 }
 
 //go:generate go run element_generator.go --in scpb.proto --out elements_generated.go
+//go:generate go run element_uml_generator.go --out uml/table.puml
 
 // Element returns an Element from its wrapper for serialization.
 func (e *ElementProto) Element() Element {
