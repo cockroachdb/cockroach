@@ -311,6 +311,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 			var span *tracing.Span
 			if rb.statsCollectionEnabled {
 				ctx, span = execinfra.ProcessorSpan(ctx, "router output")
+				defer span.Finish()
 				span.SetTag(execinfrapb.StreamIDTagKey, attribute.IntValue(int(ro.streamID)))
 				ro.stats.Inputs = make([]execinfrapb.InputStats, 1)
 			}
@@ -374,11 +375,10 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 						ro.stats.Exec.MaxAllocatedMem.Set(uint64(ro.memoryMonitor.MaximumBytes()))
 						ro.stats.Exec.MaxAllocatedDisk.Set(uint64(ro.diskMonitor.MaximumBytes()))
 						span.RecordStructured(&ro.stats)
-						span.Finish()
-						if trace := execinfra.GetTraceData(ctx); trace != nil {
+						if meta := execinfra.GetTraceDataAsMetadata(span); meta != nil {
 							ro.mu.Unlock()
 							rb.semaphore <- struct{}{}
-							status := ro.stream.Push(nil, &execinfrapb.ProducerMetadata{TraceData: trace})
+							status := ro.stream.Push(nil /* row */, meta)
 							rb.updateStreamState(&streamStatus, status)
 							<-rb.semaphore
 							ro.mu.Lock()
