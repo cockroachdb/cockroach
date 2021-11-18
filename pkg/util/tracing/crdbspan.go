@@ -36,6 +36,7 @@ type crdbSpan struct {
 	spanID       tracingpb.SpanID  // probabilistically unique
 	parentSpanID tracingpb.SpanID
 	goroutineID  uint64
+	operation    string // name of operation associated with the span
 
 	startTime time.Time
 
@@ -69,8 +70,7 @@ type crdbSpanMu struct {
 
 	finished bool
 	// duration is initialized to -1 and set on Finish().
-	duration  time.Duration
-	operation string // name of operation associated with the span
+	duration time.Duration
 
 	recording struct {
 		// recordingType is the recording type of the ongoing recording, if any.
@@ -490,7 +490,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		SpanID:         s.spanID,
 		ParentSpanID:   s.parentSpanID,
 		GoroutineID:    s.goroutineID,
-		Operation:      s.mu.operation,
+		Operation:      s.operation,
 		StartTime:      s.startTime,
 		Duration:       s.mu.duration,
 		RedactableLogs: true,

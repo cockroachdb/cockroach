@@ -135,19 +135,6 @@ func (s *spanInner) Meta() SpanMeta {
 	}
 }
 
-func (s *spanInner) SetOperationName(operationName string) *spanInner {
-	if s.isNoop() {
-		return s
-	}
-	if s.otelSpan != nil {
-		s.otelSpan.SetName(operationName)
-	}
-	s.crdb.mu.Lock()
-	s.crdb.mu.operation = operationName
-	s.crdb.mu.Unlock()
-	return s
-}
-
 func (s *spanInner) SetTag(key string, value attribute.Value) *spanInner {
 	if s.isNoop() {
 		return s

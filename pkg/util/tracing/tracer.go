@@ -708,7 +708,7 @@ func (t *Tracer) startSpanGeneric(
 			tags:     helper.tagsAlloc[:0],
 		},
 	}
-	helper.crdbSpan.mu.operation = opName
+	helper.crdbSpan.operation = opName
 	helper.crdbSpan.mu.recording.logs = makeSizeLimitedBuffer(maxLogBytesPerSpan, nil /* scratch */)
 	helper.crdbSpan.mu.recording.structured = makeSizeLimitedBuffer(maxStructuredBytesPerSpan, helper.structuredEventsAlloc[:])
 	helper.crdbSpan.mu.recording.openChildren = helper.childrenAlloc[:0]

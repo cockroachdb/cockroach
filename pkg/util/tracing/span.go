@@ -74,14 +74,6 @@ func (sp *Span) Tracer() *Tracer {
 	return sp.i.Tracer()
 }
 
-// SetOperationName sets the name of the operation.
-func (sp *Span) SetOperationName(operationName string) {
-	if sp.done() {
-		return
-	}
-	sp.i.SetOperationName(operationName)
-}
-
 // Finish idempotently marks the Span as completed (at which point it will
 // silently drop any new data added to it). Finishing a nil *Span is a noop.
 func (sp *Span) Finish() {
@@ -220,6 +212,18 @@ func (sp *Span) SetTag(key string, value attribute.Value) {
 // TraceID retrieves a span's trace ID.
 func (sp *Span) TraceID() tracingpb.TraceID {
 	return sp.i.TraceID()
+}
+
+// OperationName returns the name of this span assigned when the span was
+// created.
+func (sp *Span) OperationName() string {
+	if sp == nil {
+		return "<nil>"
+	}
+	if sp.IsNoop() {
+		return "noop"
+	}
+	return sp.i.crdb.operation
 }
 
 // IsSterile returns true if this span does not want to have children spans. In
