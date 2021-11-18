@@ -17,8 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -84,6 +88,64 @@ func performGC(
 	return nil
 }
 
+func unsplitRangesForTables(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	droppedTables []jobspb.SchemaChangeGCDetails_DroppedID,
+) error {
+	if !execCfg.Codec.ForSystemTenant() {
+		return nil
+	}
+
+	for _, droppedTable := range droppedTables {
+		var table catalog.TableDescriptor
+		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			var err error
+			table, err = catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, droppedTable.ID)
+			return err
+		}); err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
+				continue
+			}
+			return errors.Wrapf(err, "failed to fetch table %d", droppedTable.ID)
+		}
+
+		span := table.TableSpan(execCfg.Codec)
+		if err := sql.UnsplitRangesInSpan(ctx, execCfg.DB, span); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// unsplitRangesForIndexes unsplits ranges with dropped index in key prefix
+func unsplitRangesForIndexes(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	indexes []jobspb.SchemaChangeGCDetails_DroppedIndex,
+	parentTableID descpb.ID,
+) error {
+	if !execCfg.Codec.ForSystemTenant() {
+		return nil
+	}
+
+	for _, idx := range indexes {
+		startKey := execCfg.Codec.IndexPrefix(uint32(parentTableID), uint32(idx.IndexID))
+		idxSpan := roachpb.Span{
+			Key:    startKey,
+			EndKey: startKey.PrefixEnd(),
+		}
+
+		if err := sql.UnsplitRangesInSpan(ctx, execCfg.DB, idxSpan); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) (err error) {
 	defer func() {
@@ -102,6 +164,23 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 	details, progress, err := initDetailsAndProgress(ctx, execCfg, r.jobID)
 	if err != nil {
 		return err
+	}
+
+	if !progress.RangesUnsplitDone {
+		if len(details.Indexes) > 0 {
+			if err := unsplitRangesForIndexes(ctx, execCfg, details.Indexes, details.ParentID); err != nil {
+				return err
+			}
+		}
+
+		if len(details.Tables) > 0 {
+			if err := unsplitRangesForTables(ctx, execCfg, details.Tables); err != nil {
+				return err
+			}
+		}
+
+		progress.RangesUnsplitDone = true
+		persistProgress(ctx, execCfg, r.jobID, progress, runningStatusGC(progress))
 	}
 
 	tableDropTimes, indexDropTimes := getDropTimes(details)
