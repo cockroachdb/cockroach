@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -209,9 +208,9 @@ func TestStopServer(t *testing.T) {
 
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tc.Server(0).TracerI().(*tracing.Tracer)},
-		Config:     tc.Server(1).RPCContext().Config,
-		Clock:      tc.Server(1).Clock(),
+		AmbientCtx: server1.AmbientCtx(),
+		Config:     server1.RPCContext().Config,
+		Clock:      server1.Clock(),
 		Stopper:    tc.Stopper(),
 		Settings:   tc.Server(1).ClusterSettings(),
 	})

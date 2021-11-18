@@ -57,7 +57,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/v3"
+	raft "go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/grpc"
 )
@@ -3034,7 +3034,7 @@ func TestReplicaGCRace(t *testing.T) {
 	// back along the same grpc stream as the request so it's ok that
 	// there are two (this one and the one actually used by the store).
 	fromTransport := kvserver.NewRaftTransport(
-		log.AmbientContext{Tracer: tc.Servers[0].RaftTransport().Tracer},
+		tc.Servers[0].AmbientCtx(),
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(tc.Servers[0].RPCContext(), gossip.AddressResolver(fromStore.Gossip())),
 		nil, /* grpcServer */
