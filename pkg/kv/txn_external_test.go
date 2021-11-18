@@ -341,6 +341,7 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 	for _, s := range tc.Servers {
 		store, err := s.Stores().GetStore(s.GetFirstStoreID())
 		require.NoError(t, err)
+		tracer := s.Tracer()
 		g.Go(func() error {
 			// Prime range cache so that follower read attempts don't initially miss.
 			if _, err := store.DB().Scan(ctx, keySpan.Key, keySpan.EndKey, 0); err != nil {
@@ -381,8 +382,7 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 					// Trace the request so we can determine whether it was served as a
 					// follower read. If running on a store with a follower replica and
 					// with a NEAREST routing policy, we expect follower reads.
-					ctx, collectAndFinish := tracing.ContextWithRecordingSpan(
-						ctx, tracing.NewTracer(), "reader")
+					ctx, collectAndFinish := tracing.ContextWithRecordingSpan(ctx, tracer, "reader")
 					defer collectAndFinish()
 
 					br, pErr := txn.NegotiateAndSend(ctx, ba)
