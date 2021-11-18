@@ -17,6 +17,7 @@ import { createSelector } from "reselect";
 import { SessionsPage } from "./index";
 
 import { actions as sessionsActions } from "src/store/sessions";
+import { actions as localStorageActions } from "src/store/localStorage";
 import {
   actions as terminateQueryActions,
   ICancelQueryRequest,
@@ -36,12 +37,18 @@ export const selectSessions = createSelector(
   },
 );
 
+export const selectSortSetting = createSelector(
+  (state: AppState) => state.adminUI.localStorage,
+  localStorage => localStorage["sortSetting/SessionsPage"],
+);
+
 export const SessionsPageConnected = withRouter(
   connect(
     (state: AppState, props: RouteComponentProps) => ({
       sessions: selectSessions(state),
       sessionsError: state.adminUI.sessions.lastError,
       isCloud: true,
+      sortSetting: selectSortSetting(state),
     }),
     (dispatch: Dispatch) => ({
       refreshSessions: () => dispatch(sessionsActions.refresh()),
@@ -49,13 +56,23 @@ export const SessionsPageConnected = withRouter(
         dispatch(terminateQueryActions.terminateSession(payload)),
       cancelQuery: (payload: ICancelQueryRequest) =>
         dispatch(terminateQueryActions.terminateQuery(payload)),
-      onSortingChange: (columnName: string) => {
+      onSortingChange: (
+        tableName: string,
+        columnName: string,
+        ascending: boolean,
+      ) => {
         dispatch(
           analyticsActions.track({
             name: "Column Sorted",
             page: "Sessions",
+            tableName,
             columnName,
-            tableName: "Sessions",
+          }),
+        );
+        dispatch(
+          localStorageActions.update({
+            key: "sortSetting/SessionsPage",
+            value: { columnTitle: columnName, ascending: ascending },
           }),
         );
       },

@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { isNil, merge } from "lodash";
+import { isNil } from "lodash";
 
 import { syncHistory } from "src/util/query";
 import { appAttr } from "src/util/constants";
@@ -52,19 +52,23 @@ const sessionsPageCx = classNames.bind(sessionPageStyles);
 export interface OwnProps {
   sessions: SessionInfo[];
   sessionsError: Error | Error[];
+  sortSetting: SortSetting;
   refreshSessions: () => void;
   cancelSession: (payload: ICancelSessionRequest) => void;
   cancelQuery: (payload: ICancelQueryRequest) => void;
   isCloud?: boolean;
   onPageChanged?: (newPage: number) => void;
-  onSortingChange?: (columnName: string) => void;
+  onSortingChange?: (
+    name: string,
+    columnTitle: string,
+    ascending: boolean,
+  ) => void;
   onSessionClick?: () => void;
   onTerminateSessionClick?: () => void;
   onTerminateStatementClick?: () => void;
 }
 
 export interface SessionsPageState {
-  sortSetting: SortSetting;
   pagination: ISortedTablePagination;
 }
 
@@ -79,45 +83,35 @@ export class SessionsPage extends React.Component<
 
   constructor(props: SessionsPageProps) {
     super(props);
-    const defaultState = {
-      sortSetting: {
-        // Sort by Statement Age column as default option.
-        ascending: false,
-        columnTitle: "statementAge",
-      },
+    this.state = {
       pagination: {
         pageSize: 20,
         current: 1,
       },
     };
-
-    const stateFromHistory = this.getStateFromHistory();
-    this.state = merge(defaultState, stateFromHistory);
     this.terminateSessionRef = React.createRef();
     this.terminateQueryRef = React.createRef();
-  }
 
-  getStateFromHistory = (): Partial<SessionsPageState> => {
     const { history } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
-    const ascending = searchParams.get("ascending") || undefined;
+    const ascending = (searchParams.get("ascending") || undefined) === "true";
     const columnTitle = searchParams.get("columnTitle") || undefined;
+    const sortSetting = this.props.sortSetting;
 
-    return {
-      sortSetting: {
-        ascending: ascending === "true",
-        columnTitle: columnTitle,
-      },
-    };
-  };
+    if (
+      this.props.onSortingChange &&
+      columnTitle &&
+      (sortSetting.columnTitle != columnTitle ||
+        sortSetting.ascending != ascending)
+    ) {
+      this.props.onSortingChange("Sessions", columnTitle, ascending);
+    }
+  }
 
   changeSortSetting = (ss: SortSetting): void => {
-    const { onSortingChange } = this.props;
-    onSortingChange && onSortingChange(ss.columnTitle);
-
-    this.setState({
-      sortSetting: ss,
-    });
+    if (this.props.onSortingChange) {
+      this.props.onSortingChange("Sessions", ss.columnTitle, ss.ascending);
+    }
 
     syncHistory(
       {
@@ -143,7 +137,7 @@ export class SessionsPage extends React.Component<
     this.props.refreshSessions();
   }
 
-  componentDidUpdate = (__: SessionsPageProps, _: SessionsPageState): void => {
+  componentDidUpdate = (): void => {
     this.props.refreshSessions();
   };
 
@@ -195,7 +189,7 @@ export class SessionsPage extends React.Component<
                 }
               />
             }
-            sortSetting={this.state.sortSetting}
+            sortSetting={this.props.sortSetting}
             onChangeSortSetting={this.changeSortSetting}
             pagination={pagination}
           />

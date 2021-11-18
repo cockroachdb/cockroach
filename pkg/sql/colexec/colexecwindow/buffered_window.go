@@ -37,12 +37,16 @@ func newBufferedWindowOperator(
 	outputTypes = append(outputTypes, outputColType)
 	input := colexecutils.NewVectorTypeEnforcer(
 		args.MainAllocator, args.Input, outputColType, args.OutputColIdx)
+	queueCfg := args.QueueCfg
+	// bufferedWindowOp intertwines calls to Enqueue and Dequeue, so we have to
+	// use the corresponding disk queue cache mode.
+	queueCfg.SetCacheMode(colcontainer.DiskQueueCacheModeIntertwinedCalls)
 	return &bufferedWindowOp{
 		windowInitFields: windowInitFields{
 			OneInputNode: colexecop.NewOneInputNode(input),
 			allocator:    args.MainAllocator,
 			memoryLimit:  memoryLimit,
-			diskQueueCfg: args.QueueCfg,
+			diskQueueCfg: queueCfg,
 			fdSemaphore:  args.FdSemaphore,
 			outputTypes:  outputTypes,
 			diskAcc:      args.DiskAcc,

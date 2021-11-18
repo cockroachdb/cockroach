@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -186,7 +185,6 @@ func NewColBatchScan(
 	allocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
-	evalCtx *tree.EvalContext,
 	helper *colexecargs.ExprHelper,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
@@ -209,7 +207,7 @@ func NewColBatchScan(
 	table := spec.BuildTableDescriptor()
 	invertedColumn := tabledesc.FindInvertedColumn(table, spec.InvertedColumn)
 	tableArgs, idxMap, err := populateTableArgs(
-		ctx, flowCtx, evalCtx, table, table.ActiveIndexes()[spec.IndexIdx],
+		ctx, flowCtx, table, table.ActiveIndexes()[spec.IndexIdx],
 		invertedColumn, spec.Visibility, spec.HasSystemColumns, post, helper,
 	)
 	if err != nil {
@@ -217,7 +215,7 @@ func NewColBatchScan(
 	}
 
 	if err = keepOnlyNeededColumns(
-		evalCtx, tableArgs, idxMap, spec.NeededColumns, post, helper, flowCtx.TraceKV, flowCtx.PreserveFlowSpecs,
+		flowCtx, tableArgs, idxMap, spec.NeededColumns, post, helper,
 	); err != nil {
 		return nil, err
 	}
@@ -239,7 +237,7 @@ func NewColBatchScan(
 	}
 
 	var bsHeader *roachpb.BoundedStalenessHeader
-	if aost := evalCtx.AsOfSystemTime; aost != nil && aost.BoundedStaleness {
+	if aost := flowCtx.EvalCtx.AsOfSystemTime; aost != nil && aost.BoundedStaleness {
 		ts := aost.Timestamp
 		// If the descriptor's modification time is after the bounded staleness min bound,
 		// we have to increase the min bound.
@@ -251,7 +249,7 @@ func NewColBatchScan(
 		bsHeader = &roachpb.BoundedStalenessHeader{
 			MinTimestampBound:       ts,
 			MinTimestampBoundStrict: aost.NearestOnly,
-			MaxTimestampBound:       evalCtx.AsOfSystemTime.MaxTimestampBound, // may be empty
+			MaxTimestampBound:       flowCtx.EvalCtx.AsOfSystemTime.MaxTimestampBound, // may be empty
 		}
 	}
 

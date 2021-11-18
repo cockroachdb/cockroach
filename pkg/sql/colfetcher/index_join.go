@@ -386,7 +386,6 @@ func NewColIndexJoin(
 	fetcherAllocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
-	evalCtx *tree.EvalContext,
 	helper *colexecargs.ExprHelper,
 	input colexecop.Operator,
 	spec *execinfrapb.JoinReaderSpec,
@@ -414,7 +413,7 @@ func NewColIndexJoin(
 	table := spec.BuildTableDescriptor()
 	index := table.ActiveIndexes()[spec.IndexIdx]
 	tableArgs, idxMap, err := populateTableArgs(
-		ctx, flowCtx, evalCtx, table, index, nil, /* invertedCol */
+		ctx, flowCtx, table, index, nil, /* invertedCol */
 		spec.Visibility, spec.HasSystemColumns, post, helper,
 	)
 	if err != nil {
@@ -436,7 +435,10 @@ func NewColIndexJoin(
 		}
 	} else {
 		proc := &execinfra.ProcOutputHelper{}
-		if err = proc.Init(post, tableArgs.typs, helper.SemaCtx, evalCtx); err != nil {
+		// It is ok to use the evalCtx of the flowCtx here since we only use the
+		// ProcOutputHelper to get a set of the needed columns and will not be
+		// evaluating any expressions.
+		if err = proc.Init(post, tableArgs.typs, helper.SemaCtx, flowCtx.EvalCtx); err != nil {
 			return nil, err
 		}
 		neededColOrdsInWholeTable = proc.NeededColumns()
@@ -447,7 +449,7 @@ func NewColIndexJoin(
 	}
 
 	if err = keepOnlyNeededColumns(
-		evalCtx, tableArgs, idxMap, neededColumns, post, helper, flowCtx.TraceKV, flowCtx.PreserveFlowSpecs,
+		flowCtx, tableArgs, idxMap, neededColumns, post, helper,
 	); err != nil {
 		return nil, err
 	}

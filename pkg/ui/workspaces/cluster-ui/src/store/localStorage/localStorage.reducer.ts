@@ -29,6 +29,7 @@ export type LocalStorageState = {
   "dateRange/StatementsPage": StatementsDateRangeState;
   "sortSetting/StatementsPage": SortSetting;
   "sortSetting/TransactionsPage": SortSetting;
+  "sortSetting/SessionsPage": SortSetting;
 };
 
 type Payload = {
@@ -49,6 +50,11 @@ const defaultSortSetting: SortSetting = {
   columnTitle: "executionCount",
 };
 
+const defaultSessionsSortSetting: SortSetting = {
+  ascending: false,
+  columnTitle: "statementAge",
+};
+
 // TODO (koorosh): initial state should be restored from preserved keys in LocalStorage
 const initialState: LocalStorageState = {
   "adminUi/showDiagnosticsModal":
@@ -67,6 +73,9 @@ const initialState: LocalStorageState = {
   "sortSetting/TransactionsPage":
     JSON.parse(localStorage.getItem("sortSetting/TransactionsPage")) ||
     defaultSortSetting,
+  "sortSetting/SessionsPage":
+    JSON.parse(localStorage.getItem("sortSetting/SessionsPage")) ||
+    defaultSessionsSortSetting,
 };
 
 const localStorageSlice = createSlice({
