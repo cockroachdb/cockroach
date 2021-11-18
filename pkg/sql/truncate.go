@@ -14,6 +14,7 @@ import (
 	"context"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -218,31 +219,36 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		indexIDMapping[oldIndexes[idx.Ordinal()].ID] = idx.GetID()
 	}
 
-	// Create schema change GC jobs for all of the indexes.
-	dropTime := timeutil.Now().UnixNano()
-	droppedIndexes := make([]jobspb.SchemaChangeGCDetails_DroppedIndex, 0, len(oldIndexes))
-	for i := range oldIndexes {
-		idx := oldIndexes[i]
-		droppedIndexes = append(droppedIndexes, jobspb.SchemaChangeGCDetails_DroppedIndex{
-			IndexID:  idx.ID,
-			DropTime: dropTime,
-		})
-	}
+	// TODO(Chengxiong): remove this block in 22.2
+	st := p.EvalContext().Settings
+	inVersionUnsplitRangesInAsyncGCJobs := st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs)
+	if !inVersionUnsplitRangesInAsyncGCJobs {
+		// Create schema change GC jobs for all of the indexes.
+		dropTime := timeutil.Now().UnixNano()
+		droppedIndexes := make([]jobspb.SchemaChangeGCDetails_DroppedIndex, 0, len(oldIndexes))
+		for i := range oldIndexes {
+			idx := oldIndexes[i]
+			droppedIndexes = append(droppedIndexes, jobspb.SchemaChangeGCDetails_DroppedIndex{
+				IndexID:  idx.ID,
+				DropTime: dropTime,
+			})
+		}
 
-	details := jobspb.SchemaChangeGCDetails{
-		Indexes:  droppedIndexes,
-		ParentID: tableDesc.ID,
-	}
-	record := CreateGCJobRecord(jobDesc, p.User(), details)
-	if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-		ctx, record, p.ExecCfg().JobRegistry.MakeJobID(), p.txn); err != nil {
-		return err
-	}
+		details := jobspb.SchemaChangeGCDetails{
+			Indexes:  droppedIndexes,
+			ParentID: tableDesc.ID,
+		}
+		record := CreateGCJobRecord(jobDesc, p.User(), details)
+		if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+			ctx, record, p.ExecCfg().JobRegistry.MakeJobID(), p.txn); err != nil {
+			return err
+		}
 
-	// Unsplit all manually split ranges in the table so they can be
-	// automatically merged by the merge queue.
-	if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
-		return err
+		// Unsplit all manually split ranges in the table so they can be
+		// automatically merged by the merge queue.
+		if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
+			return err
+		}
 	}
 
 	oldIndexIDs := make([]descpb.IndexID, len(oldIndexes))
@@ -277,6 +283,30 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 	// Reassign any index comments.
 	if err := p.reassignIndexComments(ctx, tableDesc, indexIDMapping); err != nil {
 		return err
+	}
+
+	// TODO(Chengxiong): remove this "if check" in 22.2
+	if inVersionUnsplitRangesInAsyncGCJobs {
+		// Create schema change GC jobs for all of the indexes.
+		dropTime := timeutil.Now().UnixNano()
+		droppedIndexes := make([]jobspb.SchemaChangeGCDetails_DroppedIndex, 0, len(oldIndexes))
+		for i := range oldIndexes {
+			idx := oldIndexes[i]
+			droppedIndexes = append(droppedIndexes, jobspb.SchemaChangeGCDetails_DroppedIndex{
+				IndexID:  idx.ID,
+				DropTime: dropTime,
+			})
+		}
+
+		details := jobspb.SchemaChangeGCDetails{
+			Indexes:  droppedIndexes,
+			ParentID: tableDesc.ID,
+		}
+		record := CreateGCJobRecord(jobDesc, p.User(), details)
+		if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+			ctx, record, p.ExecCfg().JobRegistry.MakeJobID(), p.txn); err != nil {
+			return err
+		}
 	}
 
 	// Mark any mutation jobs as successful and then clear the record of

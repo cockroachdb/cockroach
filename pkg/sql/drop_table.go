@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -325,6 +326,7 @@ func (p *planner) dropTableImpl(
 	return droppedViews, err
 }
 
+// TODO(Chengxiong): Remove this function in 22.2
 // unsplitRangesForTable unsplit any manually split ranges within the table span.
 func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledesc.Mutable) error {
 	// Gate this on being the system tenant because secondary tenants aren't
@@ -381,10 +383,14 @@ func (p *planner) initiateDropTable(
 		tableDesc.DropTime = timeutil.Now().UnixNano()
 	}
 
-	// Unsplit all manually split ranges in the table so they can be
-	// automatically merged by the merge queue.
-	if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
-		return err
+	// TODO(Chengxiong): Remove this range unsplitting in 22.2
+	st := p.EvalContext().Settings
+	if !st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {
+		// Unsplit all manually split ranges in the table so they can be
+		// automatically merged by the merge queue.
+		if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
+			return err
+		}
 	}
 
 	// Actually mark table descriptor as dropped.
