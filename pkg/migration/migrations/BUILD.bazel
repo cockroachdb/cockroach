@@ -122,7 +122,6 @@ go_test(
         "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
-        "//pkg/util/tracing",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_datadriven//:datadriven",
