@@ -480,9 +480,15 @@ func prepareNewTablesForIngestion(
 		if err != nil {
 			return nil, err
 		}
+		oldParentSchemaID := tableDesc.Desc.GetUnexposedParentSchemaID()
+		parentSchemaID := oldParentSchemaID
+		if rw, ok := schemaRewrites[oldParentSchemaID]; ok {
+			parentSchemaID = rw.ID
+		}
 		tableRewrites[tableDesc.Desc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
-			ID:       id,
-			ParentID: parentID,
+			ID:             id,
+			ParentSchemaID: parentSchemaID,
+			ParentID:       parentID,
 		}
 		seqVals[id] = tableDesc.SeqVal
 	}

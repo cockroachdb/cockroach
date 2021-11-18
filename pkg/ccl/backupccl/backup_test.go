@@ -1831,8 +1831,9 @@ func TestBackupRestoreResume(t *testing.T) {
 			jobspb.RestoreDetails{
 				DescriptorRewrites: map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite{
 					backupTableDesc.GetID(): {
-						ParentID: descpb.ID(restoreDatabaseID),
-						ID:       restoreTableID,
+						ParentID:       descpb.ID(restoreDatabaseID),
+						ID:             restoreTableID,
+						ParentSchemaID: keys.PublicSchemaID,
 					},
 				},
 				URIs: []string{restoreDir},
