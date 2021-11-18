@@ -11,7 +11,7 @@
 import * as $protobuf from "protobufjs";
 
 import { cockroach } from "src/js/protos";
-import { API_PREFIX, toArrayBuffer } from "src/util/api";
+import {API_PREFIX, STATUS_PREFIX, toArrayBuffer} from "src/util/api";
 import fetchMock from "src/util/fetch-mock";
 
 const {
@@ -19,6 +19,7 @@ const {
   DatabaseDetailsResponse,
   TableDetailsResponse,
   TableStatsResponse,
+  TableIndexStatsResponse,
 } = cockroach.server.serverpb;
 
 // These test-time functions provide typesafe wrappers around fetchMock,
@@ -91,6 +92,22 @@ export function stubTableStats(
   );
 }
 
+export function stubIndexStats(
+  database: string,
+  table: string,
+  response: cockroach.server.serverpb.ITableIndexStatsResponse,
+) {
+  stubGetStatus(
+    `/databases/${database}/tables/${table}/stats`,
+    TableIndexStatsResponse.encode(response),
+  );
+}
+
 function stubGet(path: string, writer: $protobuf.Writer) {
   fetchMock.get(`${API_PREFIX}${path}`, toArrayBuffer(writer.finish()));
+}
+
+
+function stubGetStatus(path: string, writer: $protobuf.Writer) {
+  fetchMock.get(`${STATUS_PREFIX}${path}`, toArrayBuffer(writer.finish()));
 }
