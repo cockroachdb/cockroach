@@ -210,9 +210,9 @@ func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
 	// NB: unlike flushAndStartNewBatch, we don't bother with admission control
 	// for response processing when finalizing.
 	tb.rowsWritten += int64(tb.currentBatchSize)
-	if tb.autoCommit == autoCommitEnabled && (tb.rowsWrittenLimit == 0 || tb.rowsWritten < tb.rowsWrittenLimit) {
+	if tb.autoCommit == autoCommitEnabled && (tb.rowsWrittenLimit == 0 || tb.rowsWritten <= tb.rowsWrittenLimit) {
 		// We can only auto commit if the rows written guardrail is disabled or
-		// we haven't reached the specified limit (the optimizer is responsible
+		// we haven't exceeded the specified limit (the optimizer is responsible
 		// for making sure that there is exactly one mutation before enabling
 		// the auto commit).
 		log.Event(ctx, "autocommit enabled")
