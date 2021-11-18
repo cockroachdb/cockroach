@@ -207,9 +207,10 @@ func TestStopServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	tr := tc.Server(0).TracerI().(*tracing.Tracer)
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tc.Server(0).TracerI().(*tracing.Tracer)},
+		AmbientCtx: log.MakeClientAmbientContext(tr),
 		Config:     tc.Server(1).RPCContext().Config,
 		Clock:      tc.Server(1).Clock(),
 		Stopper:    tc.Stopper(),
