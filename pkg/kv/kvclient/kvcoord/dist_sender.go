@@ -1643,7 +1643,7 @@ func (ds *DistSender) sendPartialBatch(
 			// Range descriptor might be out of date - evict it. This is likely the
 			// result of a range split. If we have new range descriptors, insert them
 			// instead.
-			for _, ri := range tErr.Ranges() {
+			for _, ri := range tErr.Ranges {
 				// Sanity check that we got the different descriptors. Getting the same
 				// descriptor and putting it in the cache would be bad, as we'd go through
 				// an infinite loops of retries.
@@ -1653,7 +1653,7 @@ func (ds *DistSender) sendPartialBatch(
 						routingTok.Desc(), ri.Desc, pErr))}
 				}
 			}
-			routingTok.EvictAndReplace(ctx, tErr.Ranges()...)
+			routingTok.EvictAndReplace(ctx, tErr.Ranges...)
 			// On addressing errors (likely a split), we need to re-invoke
 			// the range descriptor lookup machinery, so we recurse by
 			// sending batch to just the partial span this descriptor was
@@ -1662,7 +1662,7 @@ func (ds *DistSender) sendPartialBatch(
 			// to it matches the positions into our batch (using the full
 			// batch here would give a potentially larger response slice
 			// with unknown mapping to our truncated reply).
-			log.VEventf(ctx, 1, "likely split; will resend. Got new descriptors: %s", tErr.Ranges())
+			log.VEventf(ctx, 1, "likely split; will resend. Got new descriptors: %s", tErr.Ranges)
 			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, batchIdx)
 			return response{reply: reply, positions: positions, pErr: pErr}
 		}
