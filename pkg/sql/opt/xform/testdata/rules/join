@@ -1307,7 +1307,7 @@ full-join (hash)
 # Verify that commuting works correctly when there is a lookup join hint
 # (specifically that it returns the original expression and flags when applied
 # twice; if it didn't, we'd see more inner-join expressions).
-memo expect=ReorderJoins
+memo expect-not=ReorderJoins
 SELECT * FROM abc INNER LOOKUP JOIN xyz ON a=x
 ----
 memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
