@@ -129,6 +129,13 @@ func (c CounterWithMetric) Inc() {
 	c.metric.Inc(1)
 }
 
+// Count returns the value of the metric, not the telemetry. Note that the
+// telemetry value may reset to zero when, for example, GetFeatureCounts() is
+// called with ResetCounts to generate a report.
+func (c CounterWithMetric) Count() int64 {
+	return c.metric.Count()
+}
+
 // Forward the metric.Iterable interface to the metric counter. We
 // don't just embed the counter because our Inc() interface is a bit
 // different.
