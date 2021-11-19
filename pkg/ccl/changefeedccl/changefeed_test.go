@@ -4288,7 +4288,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 		// Checkpoint progress frequently, and set the checkpoint size limit.
 		changefeedbase.FrontierCheckpointFrequency.Override(
-			context.Background(), &f.Server().ClusterSettings().SV, 10*time.Millisecond)
+			context.Background(), &f.Server().ClusterSettings().SV, 1)
 		changefeedbase.FrontierCheckpointMaxBytes.Override(
 			context.Background(), &f.Server().ClusterSettings().SV, maxCheckpointSize)
 
@@ -4298,15 +4298,25 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		g := ctxgroup.WithContext(context.Background())
 		g.Go(func() error {
 			for {
-				_, err := foo.Next()
+				m, err := foo.Next()
 				if err != nil {
 					return err
 				}
+
+				if m.Resolved != nil {
+					ts := extractResolvedTimestamp(t, m)
+					if ts.IsEmpty() {
+						return errors.New("unexpected epoch resolved event")
+					}
+				}
 			}
 		})
+
 		defer func() {
 			closeFeed(t, foo)
-			_ = g.Wait()
+			if err := g.Wait(); err != nil {
+				require.Truef(t, jobs.HasErrJobCanceled(err), "err=%v", err)
+			}
 		}()
 
 		jobFeed := foo.(cdctest.EnterpriseTestFeed)
