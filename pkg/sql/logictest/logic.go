@@ -3482,8 +3482,10 @@ func RunLogicTestWithDefaultConfig(
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
 					}
-					serverArgs.forceProductionBatchSizes = onlyNonMetamorphic
-					lt.setup(cfg, serverArgs, readClusterOptions(t, path))
+					// Each test needs a copy because of Parallel
+					serverArgsCopy := serverArgs
+					serverArgsCopy.forceProductionBatchSizes = onlyNonMetamorphic
+					lt.setup(cfg, serverArgsCopy, readClusterOptions(t, path))
 					lt.runFile(path, cfg)
 
 					progress.Lock()
