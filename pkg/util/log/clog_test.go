@@ -651,7 +651,7 @@ func TestExitOnFullDisk(t *testing.T) {
 	fs := &fileSink{}
 	l := &loggerT{sinkInfos: []*sinkInfo{{
 		sink:        fs,
-		editor:      func(r redactablePackage) redactablePackage { return r },
+		editor:      getEditor(SelectEditMode(false /* redact */, true /* redactable */)),
 		criticality: true,
 	}}}
 	fs.mu.file = &syncBuffer{
