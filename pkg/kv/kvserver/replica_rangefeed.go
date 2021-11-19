@@ -392,7 +392,6 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 			UpperBound: upperBound,
 		})
 		return rangefeed.NewSeparatedIntentScanner(iter)
-
 	}
 
 	p.Start(r.store.Stopper(), rtsIter)

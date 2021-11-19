@@ -53,14 +53,3 @@ func NewDefaultInMemForTesting(opts ...ConfigOption) Engine {
 	}
 	return eng
 }
-
-// NewInMemForTesting is just like NewDefaultInMemForTesting but allows to
-// deterministically define whether it separates intents from MVCC data.
-func NewInMemForTesting(opts ...ConfigOption) Engine {
-	eng, err := Open(context.Background(), InMemory(),
-		MaxSize(1<<20), CombineOptions(opts...))
-	if err != nil {
-		panic(err)
-	}
-	return eng
-}

@@ -1004,12 +1004,8 @@ func (p *Pebble) PutUnversioned(key roachpb.Key, value []byte) error {
 }
 
 // PutIntent implements the Engine interface.
-func (p *Pebble) PutIntent(
-	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
-) error {
-
-	_, err :=
-		p.wrappedIntentWriter.PutIntent(ctx, key, value, txnUUID, nil)
+func (p *Pebble) PutIntent(ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID) error {
+	_, err := p.wrappedIntentWriter.PutIntent(ctx, key, value, txnUUID, nil)
 	return err
 }
 

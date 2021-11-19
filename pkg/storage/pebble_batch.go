@@ -449,8 +449,7 @@ func (p *pebbleBatch) PutIntent(
 	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
 ) error {
 	var err error
-	p.scratch, err =
-		p.wrappedIntentWriter.PutIntent(ctx, key, value, txnUUID, p.scratch)
+	p.scratch, err = p.wrappedIntentWriter.PutIntent(ctx, key, value, txnUUID, p.scratch)
 	return err
 }
 

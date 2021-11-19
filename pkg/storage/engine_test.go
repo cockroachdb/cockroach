@@ -1712,31 +1712,23 @@ func TestScanSeparatedIntents(t *testing.T) {
 		"1000 bytes":      {keys[0], maxKey, 0, 1000, keys},
 	}
 
-	for name, enableSeparatedIntents := range map[string]bool{"separated": true} {
+	eng, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */))
+	require.NoError(t, err)
+	defer eng.Close()
+
+	for _, key := range keys {
+		err := MVCCPut(ctx, eng, nil, key, txn1.ReadTimestamp, roachpb.Value{RawBytes: key}, txn1)
+		require.NoError(t, err)
+	}
+
+	for name, tc := range testcases {
+		tc := tc
 		t.Run(name, func(t *testing.T) {
-			eng, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */))
+			intents, err := ScanSeparatedIntents(eng, tc.from, tc.to, tc.max, tc.targetBytes)
 			require.NoError(t, err)
-			defer eng.Close()
-
-			for _, key := range keys {
-				err := MVCCPut(ctx, eng, nil, key, txn1.ReadTimestamp, roachpb.Value{RawBytes: key}, txn1)
-				require.NoError(t, err)
-			}
-
-			for name, tc := range testcases {
-				tc := tc
-				t.Run(name, func(t *testing.T) {
-					intents, err := ScanSeparatedIntents(eng, tc.from, tc.to, tc.max, tc.targetBytes)
-					require.NoError(t, err)
-					if enableSeparatedIntents {
-						require.Len(t, intents, len(tc.expectIntents), "unexpected number of separated intents")
-						for i, intent := range intents {
-							require.Equal(t, tc.expectIntents[i], intent.Key)
-						}
-					} else {
-						require.Empty(t, intents)
-					}
-				})
+			require.Len(t, intents, len(tc.expectIntents), "unexpected number of separated intents")
+			for i, intent := range intents {
+				require.Equal(t, tc.expectIntents[i], intent.Key)
 			}
 		})
 	}

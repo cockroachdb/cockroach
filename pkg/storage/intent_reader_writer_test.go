@@ -233,8 +233,7 @@ func TestIntentDemuxWriter(t *testing.T) {
 				if err != nil {
 					return err.Error()
 				}
-				scratch, err = w.PutIntent(
-					context.Background(), key, val, txnUUID, scratch)
+				scratch, err = w.PutIntent(context.Background(), key, val, txnUUID, scratch)
 				if err != nil {
 					return err.Error()
 				}
