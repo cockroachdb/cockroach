@@ -1500,7 +1500,7 @@ func (cf *changeFrontier) maybeProtectTimestamp(
 }
 
 func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
-	if cf.freqEmitResolved == emitNoResolved {
+	if cf.freqEmitResolved == emitNoResolved || newResolved.IsEmpty() {
 		return nil
 	}
 	sinceEmitted := newResolved.GoTime().Sub(cf.lastEmitResolved)
