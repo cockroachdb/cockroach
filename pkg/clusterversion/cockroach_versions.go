@@ -229,7 +229,9 @@ const (
 	// system.protected_ts_records table that describes what is protected by the
 	// record.
 	AlterSystemProtectedTimestampAddColumn
-
+	// SingleVersionDescriptorLeaseTable adds the single_version_descriptor_lease
+	// table.
+	SingleVersionDescriptorLeaseTable
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -336,6 +338,11 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemProtectedTimestampAddColumn,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 36},
+	},
+
+	{
+		Key:     SingleVersionDescriptorLeaseTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 38},
 	},
 
 	// *************************************************
