@@ -91,12 +91,6 @@ const (
 	// [1] https://www.postgresql.org/docs/13/catalog-pg-cast.html#CATALOG-PG-CAST
 	// [2] https://www.postgresql.org/docs/13/sql-createcast.html#SQL-CREATECAST-NOTES
 	contextOriginAutomaticIOConversion
-	// contextOriginNullConversion specifies that a cast's maximum context is
-	// not included in Postgres's pg_cast table. This is only used for casts
-	// where the source is the unknown type. The unknown type is only used for
-	// expressions that statically evaluate to NULL. NULL can be implicitly
-	// converted to any type.
-	contextOriginNullConversion
 )
 
 // cast includes details about a cast from one OID to another.
@@ -120,8 +114,10 @@ type cast struct {
 	origin contextOrigin
 }
 
-// castMap defines all possible casts. It maps from a source OID to a target OID
-// to a cast struct that contains information about the cast.
+// castMap defines valid casts. It maps from a source OID to a target OID to a
+// cast struct that contains information about the cast. Some possible casts,
+// such as casts from the UNKNOWN type and casts from a type to the identical
+// type, are not defined in the castMap and are instead codified in ValidCast.
 //
 // Validation is performed on the map in init().
 //
@@ -629,43 +625,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_text:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 	},
-	oid.T_unknown: {
-		// Unknown is the type of an expression that statically evaluates to
-		// NULL. NULL can be implicitly cast to any type.
-		oid.T_bit:          {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_bool:         {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_bpchar:       {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oidext.T_box2d:     {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_bytea:        {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_char:         {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_date:         {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_float4:       {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_float8:       {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oidext.T_geography: {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oidext.T_geometry:  {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_inet:         {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_int2:         {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_int4:         {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_int8:         {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_interval:     {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_jsonb:        {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_name:         {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_numeric:      {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_oid:          {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_regclass:     {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_regnamespace: {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_regproc:      {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_regprocedure: {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_regrole:      {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_regtype:      {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_text:         {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_time:         {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_timestamp:    {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_timestamptz:  {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_timetz:       {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_varbit:       {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-		oid.T_varchar:      {maxContext: CastContextImplicit, origin: contextOriginNullConversion},
-	},
 	oid.T_uuid: {
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
@@ -800,27 +759,6 @@ func init() {
 					srcStr, tgtStr,
 				))
 			}
-
-			// Casts from NULL are implicit.
-			if src == oid.T_unknown {
-				if ent.maxContext != CastContextImplicit {
-					panic(fmt.Sprintf(
-						"cast from %s to %s must be an implicit cast",
-						srcStr, tgtStr,
-					))
-				}
-				if tgt != oid.T_unknown && ent.origin != contextOriginNullConversion {
-					panic(fmt.Sprintf(
-						"cast from T_unknown to %s must have an origin of contextOriginNullConversion",
-						tgtStr,
-					))
-				}
-			}
-
-			// Only casts from NULL should use contextOriginNullConversion.
-			if ent.origin == contextOriginNullConversion && src != oid.T_unknown {
-				panic("contextOriginNullConversion should only be set for casts from unknown")
-			}
 		}
 	}
 }
@@ -840,6 +778,12 @@ func ForEachCast(fn func(src, tgt oid.Oid)) {
 func ValidCast(src, tgt *types.T, ctx CastContext) bool {
 	// If src and tgt are identical, a cast is valid in any context.
 	if src.Identical(tgt) {
+		return true
+	}
+
+	// Unknown is the type given to an expression that statically evaluates to
+	// NULL. NULL can be cast to any type in any context.
+	if src.Oid() == oid.T_unknown {
 		return true
 	}
 
