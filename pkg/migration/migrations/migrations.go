@@ -143,6 +143,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		seedSpanCountTableMigration,
 	),
+	migration.NewTenantMigration(
+		"add system.single_version_descriptor_lease",
+		toCV(clusterversion.SingleVersionDescriptorLeaseTable),
+		NoPrecondition,
+		addSingleVersionDescriptorLeaseTable,
+	),
 }
 
 func init() {

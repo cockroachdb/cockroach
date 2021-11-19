@@ -405,6 +405,9 @@ const (
 	TenantsTablePrimaryKeyIndexID            = 1
 	SpanConfigurationsTablePrimaryKeyIndexID = 1
 
+	SingleVersionDescriptorLeasePrimaryKeyIndexID = 1
+	SingleVersionDescriptorLeasePrimaryColFamID   = 0
+
 	// Reserved IDs for other system tables. Note that some of these IDs refer
 	// to "Ranges" instead of a Table - these IDs are needed to store custom
 	// configuration for non-table ranges (e.g. Zone Configs).

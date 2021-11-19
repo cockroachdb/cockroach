@@ -19,6 +19,7 @@ go_library(
         "remove_invalid_database_privileges.go",
         "schema_changes.go",
         "seed_tenant_span_configs.go",
+        "single_version_descriptor_lease_table.go",
         "span_count_table.go",
         "tenant_settings.go",
     ],
