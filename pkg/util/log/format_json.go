@@ -369,25 +369,9 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 	}
 
 	// Tags.
-	if entry.tags != nil {
+	if entry.payload.tags != nil {
 		buf.WriteString(`,"tags":{`)
-		comma := `"`
-		for _, t := range entry.tags.Get() {
-			buf.WriteString(comma)
-			escapeString(buf, t.Key())
-			buf.WriteString(`":"`)
-			if v := t.Value(); v != nil && v != "" {
-				var r string
-				if entry.payload.redactable {
-					r = string(redact.Sprint(v))
-				} else {
-					r = fmt.Sprint(v)
-				}
-				escapeString(buf, r)
-			}
-			buf.WriteByte('"')
-			comma = `,"`
-		}
+		entry.payload.tags.formatJSONToBuffer(buf)
 		buf.WriteByte('}')
 	}
 
