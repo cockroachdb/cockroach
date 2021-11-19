@@ -153,12 +153,12 @@ func (f *txnKVFetcher) getBatchKeyLimitForIdx(batchIdx int) rowinfra.KeyLimit {
 		// size and at least 1/10 of the default batch size). Sample
 		// progressions of batch sizes:
 		//
-		//  First batch | Second batch | Subsequent batches
+		//  First batch |  Second batch  | Subsequent batches
 		//  -----------------------------------------------
-		//         1    |     1,000     |     10,000
-		//       100    |     1,000     |     10,000
-		//       500    |     5,000     |     10,000
-		//      1000    |    10,000     |     10,000
+		//         1    |     10,000     |     100,000
+		//       100    |     10,000     |     100,000
+		//      5000    |     50,000     |     100,000
+		//     10000    |    100,000     |     100,000
 		secondBatch := f.firstBatchKeyLimit * 10
 		switch {
 		case secondBatch < kvBatchSize/10:
