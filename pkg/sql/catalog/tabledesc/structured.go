@@ -134,10 +134,25 @@ func (desc *wrapper) KeysPerRow(indexID descpb.IndexID) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if idx.NumSecondaryStoredColumns() == 0 {
+	if idx.NumSecondaryStoredColumns() == 0 || len(desc.Families) == 1 {
 		return 1, nil
 	}
-	return len(desc.Families), nil
+	// Calculate the number of column families used by the secondary index. We
+	// only need to look at the stored columns because column families are only
+	// applicable to the value part of the KV.
+	//
+	// 0th family is always present.
+	numUsedFamilies := 1
+	storedColumnIDs := idx.CollectSecondaryStoredColumnIDs()
+	for _, family := range desc.Families[1:] {
+		for _, columnID := range family.ColumnIDs {
+			if storedColumnIDs.Contains(columnID) {
+				numUsedFamilies++
+				break
+			}
+		}
+	}
+	return numUsedFamilies, nil
 }
 
 // BuildIndexName returns an index name that is not equal to any
