@@ -13,10 +13,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "f0af9c876235d2bc69bddb9c33126f78d95f0bc9cec2d5aa497d5cab6325e733",
-    strip_prefix = "rules_go-4a7bcc9b9051eb6a12bcb03a9bf38138c4bbc2ea",
+    sha256 = "f22ee17cb3fca740bca01cf4a6d95f5ccc3a411b77044357edff4f2524965261",
+    strip_prefix = "cockroachdb-rules_go-442d7c1",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_go-4a7bcc9b9051eb6a12bcb03a9bf38138c4bbc2ea.tar.gz",
+        # cockroachdb/rules_go as of 442d7c1f3bfe86f75f1bff048f3f4016021a3371
+        # (upstream release-0.29 plus a few patches).
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-49-g442d7c1.tar.gz",
     ],
 )
 
@@ -33,10 +35,11 @@ http_archive(
 # repo.
 http_archive(
     name = "bazel_gazelle",
-    sha256 = "2f3cf903386c2a841522af9ee916f7c33fa27e113033a1ccae8e9dcedb09a99e",
-    strip_prefix = "bazel-gazelle-0ac66c98675a24d58f89a614b84dcd920a7e1762",
+    sha256 = "9fba095e4bebd8c6748154ca53c365862af47fa1651f7c0d25459e6ca5bb208f",
+    strip_prefix = "bazelbuild-bazel-gazelle-3ea1d64",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-gazelle-0ac66c98675a24d58f89a614b84dcd920a7e1762.tar.gz",
+        # v0.24.0
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazelbuild-bazel-gazelle-v0.24.0-0-g3ea1d64.tar.gz",
     ],
 )
 
@@ -121,11 +124,11 @@ http_archive(
         "@io_bazel_rules_go//third_party:go_googleapis-directives.patch",
         "@io_bazel_rules_go//third_party:go_googleapis-gazelle.patch",
     ],
-    sha256 = "711bc79bd40406dda685a8633f7478979baabaab19eeac664d53f7621866bebc",
-    strip_prefix = "googleapis-d4cd8d96ed6eb5dd7c997aab68a1d6bb0825090c",
-    # master, as of 2021-03-05
+    sha256 = "a85c6a00e9cf0f004992ebea1d10688e3beea9f8e1a5a04ee53f367e72ee85af",
+    strip_prefix = "googleapis-409e134ffaacc243052b08e6fb8e2d458014ed37",
+    # master, as of 2021-10-06
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/d4cd8d96ed6eb5dd7c997aab68a1d6bb0825090c.zip",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/409e134ffaacc243052b08e6fb8e2d458014ed37.zip",
     ],
 )
 
