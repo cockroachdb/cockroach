@@ -12,6 +12,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb:with-mocks",
+        "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/util/contextutil",
