@@ -467,7 +467,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	})
 
 	// Verify epoch increment metric count.
-	if c := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).Metrics().EpochIncrements.Count(); c != 1 {
+	if c := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).Metrics().EpochIncrements.MetricValue(); c != 1 {
 		t.Errorf("expected epoch increment == 1; got %d", c)
 	}
 

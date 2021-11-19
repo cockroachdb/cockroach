@@ -128,6 +128,17 @@ func (c CounterWithMetric) Inc() {
 	c.metric.Inc(1)
 }
 
+// CounterValue returns the telemetry value. Note that this value can be
+// different from MetricValue because telemetry may reset to zero occasionally.
+func (c CounterWithMetric) CounterValue() int32 {
+	return Read(c.telemetry)
+}
+
+// MetricValue returns the value of the metric, not the telemetry.
+func (c CounterWithMetric) MetricValue() int64 {
+	return c.metric.Count()
+}
+
 // Forward the metric.Iterable interface to the metric counter. We
 // don't just embed the counter because our Inc() interface is a bit
 // different.
