@@ -34,7 +34,7 @@ func (b *Builder) buildExport(export *tree.Export, inScope *scope) (outScope *sc
 	outScope = inScope.push()
 	b.synthesizeResultColumns(outScope, colinfo.ExportColumns)
 	outScope.expr = b.factory.ConstructExport(
-		inputScope.expr.(memo.RelExpr),
+		inputScope.expr,
 		fileName,
 		options,
 		&memo.ExportPrivate{

@@ -146,7 +146,7 @@ func (b *storeReplicaBTree) VisitKeyRange(
 	// exclusive and the high end as inclusive.
 	return b.descendLessOrEqual(ctx, endKey,
 		func(ctx context.Context, it replicaOrPlaceholder) error {
-			if it.item.(rangeKeyItem).key().Equal(endKey) {
+			if it.item.key().Equal(endKey) {
 				// Skip the range starting at endKey.
 				return nil
 			}

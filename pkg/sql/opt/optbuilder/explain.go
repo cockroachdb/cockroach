@@ -63,7 +63,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 	}
 	b.synthesizeResultColumns(outScope, colinfo.ExplainPlanColumns)
 
-	input := stmtScope.expr.(memo.RelExpr)
+	input := stmtScope.expr
 	private := memo.ExplainPrivate{
 		Options:  explain.ExplainOptions,
 		ColList:  colsToColList(outScope.cols),

@@ -34,7 +34,7 @@ func (b *Builder) constructProjectForScope(inScope, projectionsScope *scope) {
 		projectionsScope.expr = inScope.expr
 	} else {
 		projectionsScope.expr = b.constructProject(
-			inScope.expr.(memo.RelExpr),
+			inScope.expr,
 			append(projectionsScope.cols, projectionsScope.extraCols...),
 		)
 	}

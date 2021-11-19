@@ -109,7 +109,7 @@ func BuildChildPhysicalProps(
 		childProps.LimitHint = parentProps.LimitHint
 
 	case opt.DistinctOnOp:
-		distinctCount := parent.(memo.RelExpr).Relational().Stats.RowCount
+		distinctCount := parent.Relational().Stats.RowCount
 		if parentProps.LimitHint > 0 {
 			// TODO(mgartner): If the expression is a streaming DistinctOn, this
 			// estimated limit hint is much lower than it should be.
@@ -127,7 +127,7 @@ func BuildChildPhysicalProps(
 			break
 		}
 
-		outputRows := parent.(memo.RelExpr).Relational().Stats.RowCount
+		outputRows := parent.Relational().Stats.RowCount
 		if outputRows == 0 || outputRows < parentProps.LimitHint {
 			break
 		}
@@ -145,7 +145,7 @@ func BuildChildPhysicalProps(
 	case opt.SelectOp, opt.LookupJoinOp:
 		// These operations are assumed to produce a constant number of output rows
 		// for each input row, independent of already-processed rows.
-		outputRows := parent.(memo.RelExpr).Relational().Stats.RowCount
+		outputRows := parent.Relational().Stats.RowCount
 		if outputRows == 0 || outputRows < parentProps.LimitHint {
 			break
 		}

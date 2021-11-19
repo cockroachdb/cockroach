@@ -45,7 +45,7 @@ func (b *Builder) buildControlJobs(n *tree.ControlJobs, inScope *scope) (outScop
 	)
 	outScope = inScope.push()
 	outScope.expr = b.factory.ConstructControlJobs(
-		inputScope.expr.(memo.RelExpr),
+		inputScope.expr,
 		reason,
 		&memo.ControlJobsPrivate{
 			Props:   inputScope.makePhysicalProps(),
@@ -71,7 +71,7 @@ func (b *Builder) buildCancelQueries(n *tree.CancelQueries, inScope *scope) (out
 	)
 	outScope = inScope.push()
 	outScope.expr = b.factory.ConstructCancelQueries(
-		inputScope.expr.(memo.RelExpr),
+		inputScope.expr,
 		&memo.CancelPrivate{
 			Props:    inputScope.makePhysicalProps(),
 			IfExists: n.IfExists,
@@ -96,7 +96,7 @@ func (b *Builder) buildCancelSessions(n *tree.CancelSessions, inScope *scope) (o
 	)
 	outScope = inScope.push()
 	outScope.expr = b.factory.ConstructCancelSessions(
-		inputScope.expr.(memo.RelExpr),
+		inputScope.expr,
 		&memo.CancelPrivate{
 			Props:    inputScope.makePhysicalProps(),
 			IfExists: n.IfExists,
@@ -128,7 +128,7 @@ func (b *Builder) buildControlSchedules(
 
 	outScope = inScope.push()
 	outScope.expr = b.factory.ConstructControlSchedules(
-		inputScope.expr.(memo.RelExpr),
+		inputScope.expr,
 		&memo.ControlSchedulesPrivate{
 			Props:   inputScope.makePhysicalProps(),
 			Command: n.Command,

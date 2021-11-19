@@ -105,7 +105,7 @@ func TestDataDriven(t *testing.T) {
 				logs, err := ioutil.ReadAll(logger)
 				require.NoError(t, err)
 
-				return fmt.Sprintf("%s", logs)
+				return string(logs)
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
