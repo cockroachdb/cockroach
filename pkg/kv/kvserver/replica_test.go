@@ -509,8 +509,12 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ctx := context.Background()
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
-	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
 	st := r.CurrentLeaseStatus(ctx)
+	leaseReq := &roachpb.RequestLeaseRequest{
+		Lease:     *l,
+		PrevLease: st.Lease,
+	}
+	ba.Add(leaseReq)
 	_, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
 	ch, _, _, pErr := r.evalAndPropose(ctx, &ba, allSpansGuard(), st, hlc.Timestamp{}, tok.Move(ctx))
 	if pErr == nil {
