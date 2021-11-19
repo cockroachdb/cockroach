@@ -562,6 +562,18 @@ func postSeparatedIntentsMigration(
 				return err
 			})
 			if err != nil {
+				// TODO(erikgrinaker): This should be moved into a common helper for
+				// all migrations that e.g. manages checkpointing and retries as well.
+				// We add a message here for 21.2 temporarily, since this has been seen
+				// to fail in the wild.
+				log.Warningf(ctx, `Migrate command failed for range %d: %s.
+Command must be applied on all range replicas (not just a quorum). Please make
+sure all ranges are healthy and fully upreplicated. Heavy rebalancing may
+interfere with the migration, consider temporarily disabling rebalancing with
+the cluster setting kv.allocator.load_based_rebalancing=1 and
+kv.allocator.range_rebalance_threshold=1. The timeout can also be increased
+with kv.migration.migrate_application.timeout.`,
+					desc.RangeID, err)
 				return err
 			}
 		}
