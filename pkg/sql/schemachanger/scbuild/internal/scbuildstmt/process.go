@@ -11,31 +11,58 @@
 package scbuildstmt
 
 import (
+	"reflect"
+
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+var declarativeForSupportedAllOps = settings.RegisterBoolSetting(
+	"sql.schema_changer.declarative_for_all",
+	"when set to true the declarative schema changer is enabled for "+
+		"buth supported/unsupported operations which are full tested.",
+	false,
+)
+
+type supportedStatement struct {
+	fn             interface{}
+	fullySupported bool
+}
+
+// Tracks operations which are fully supported when the declarative schema
+// changer is enabled. Operations marked as non-fully supported can only be
+// with the sql.schema_changer.declarative_for_all toggle enabled.
+var supportStatements = map[reflect.Type]supportedStatement{
+	reflect.TypeOf((*tree.AlterTable)(nil)):   {AlterTable, false},
+	reflect.TypeOf((*tree.CreateIndex)(nil)):  {CreateIndex, false},
+	reflect.TypeOf((*tree.DropDatabase)(nil)): {DropDatabase, true},
+	reflect.TypeOf((*tree.DropSchema)(nil)):   {DropSchema, true},
+	reflect.TypeOf((*tree.DropSequence)(nil)): {DropSequence, true},
+	reflect.TypeOf((*tree.DropTable)(nil)):    {DropTable, true},
+	reflect.TypeOf((*tree.DropType)(nil)):     {DropType, true},
+	reflect.TypeOf((*tree.DropView)(nil)):     {DropView, true},
+}
+
 // Process dispatches on the statement type to populate the BuilderState
 // embedded in the BuildCtx. Any error will be panicked.
 func Process(b BuildCtx, n tree.Statement) {
-	switch n := n.(type) {
-	case *tree.AlterTable:
-		AlterTable(b, n)
-	case *tree.CreateIndex:
-		CreateIndex(b, n)
-	case *tree.DropDatabase:
-		DropDatabase(b, n)
-	case *tree.DropSchema:
-		DropSchema(b, n)
-	case *tree.DropSequence:
-		DropSequence(b, n)
-	case *tree.DropTable:
-		DropTable(b, n)
-	case *tree.DropType:
-		DropType(b, n)
-	case *tree.DropView:
-		DropView(b, n)
-	default:
+	// Check if an entry exists for the statement type, in which
+	// case its either fully or partially supported.
+	info, ok := supportStatements[reflect.TypeOf(n)]
+	if !ok {
 		panic(scerrors.NotImplementedError(n))
 	}
+	// Check if partially supported operations are allowed next. If an
+	// operation is not fully supported will not allow it to be run in
+	// the declarative schema changer until its fully supported.
+	if !declarativeForSupportedAllOps.Get(&b.EvalCtx().Settings.SV) &&
+		!info.fullySupported {
+		panic(scerrors.NotImplementedError(n))
+	}
+
+	// Next invoke the callback function, with the concrete types.
+	fn := reflect.ValueOf(info.fn)
+	in := []reflect.Value{reflect.ValueOf(b), reflect.ValueOf(n)}
+	fn.Call(in)
 }

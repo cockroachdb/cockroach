@@ -63,9 +63,8 @@ func TestBuilderAlterTable(t *testing.T) {
 			t.Run(depsType.name, func(t *testing.T) {
 				s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 				defer s.Stopper().Stop(ctx)
-
 				tdb := sqlutils.MakeSQLRunner(sqlDB)
-
+				tdb.ExecSucceedsSoon(t, "SET CLUSTER SETTING sql.schema_changer.declarative_for_all = 'on'")
 				datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 					return run(ctx, t, d, s, tdb, depsType.dependenciesWrapper)
 				})

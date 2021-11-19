@@ -1,6 +1,9 @@
 statement ok
 SET experimental_use_new_schema_changer = 'on'
 
+statement ok
+SET CLUSTER SETTING sql.schema_changer.declarative_for_all = 'on'
+
 subtest create_index
 
 statement ok

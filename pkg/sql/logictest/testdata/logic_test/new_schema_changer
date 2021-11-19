@@ -7,6 +7,17 @@ statement ok
 CREATE TABLE foo (i INT PRIMARY KEY)
 
 statement ok
+SET CLUSTER SETTING sql.schema_changer.declarative_for_all = 'off'
+
+# Declarative is not fully enabled for this statement,
+# so it should error out.
+statement error cannot explain a non-schema change statement
+EXPLAIN (DDL) ALTER TABLE foo ADD COLUMN j INT
+
+statement ok
+SET CLUSTER SETTING sql.schema_changer.declarative_for_all = 'on'
+
+statement ok
 EXPLAIN (DDL) ALTER TABLE foo ADD COLUMN j INT
 
 statement ok

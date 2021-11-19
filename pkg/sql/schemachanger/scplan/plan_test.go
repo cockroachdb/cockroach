@@ -52,6 +52,7 @@ func TestPlanAlterTable(t *testing.T) {
 		defer s.Stopper().Stop(ctx)
 
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
+		tdb.ExecSucceedsSoon(t, "SET CLUSTER SETTING sql.schema_changer.declarative_for_all = 'on'")
 		run := func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "create-view", "create-sequence", "create-table", "create-type", "create-database", "create-schema", "create-index":

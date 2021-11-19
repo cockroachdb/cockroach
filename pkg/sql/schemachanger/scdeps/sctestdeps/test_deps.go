@@ -69,7 +69,13 @@ func (s *TestState) SessionData() *sessiondata.SessionData {
 
 // ClusterSettings implements the scbuild.Dependencies interface.
 func (s *TestState) ClusterSettings() *cluster.Settings {
-	return cluster.MakeTestingClusterSettings()
+	st := cluster.MakeTestingClusterSettings()
+	// By default enable all schema changes.
+	err := st.MakeUpdater().Set(context.Background(), "sql.schema_changer.declarative_for_all", "true", "b")
+	if err != nil {
+		panic(err)
+	}
+	return st
 }
 
 // Statements implements the scbuild.Dependencies interface.
