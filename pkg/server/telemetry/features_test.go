@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
 )
 
@@ -90,4 +91,24 @@ func TestBucket(t *testing.T) {
 			t.Errorf("%d: expected %d, got %d", tc.input, expected, actual)
 		}
 	}
+}
+
+// TestCounterWithMetric verifies that only the telemetry is reset to zero when,
+// for example, a report is created.
+func TestCounterWithMetric(t *testing.T) {
+	cm := telemetry.NewCounterWithMetric(metric.Metadata{Name: "test-metric"})
+	cm.Inc()
+
+	// Using GetFeatureCounts to read the telemetry value.
+	m1 := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ReadOnly)
+	require.Equal(t, int32(1), m1["test-metric"])
+	require.Equal(t, int64(1), cm.Count())
+
+	// Reset the telemetry.
+	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+
+	// Verify only the telemetry is back to 0.
+	m2 := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ReadOnly)
+	require.Equal(t, int32(0), m2["test-metric"])
+	require.Equal(t, int64(1), cm.Count())
 }
