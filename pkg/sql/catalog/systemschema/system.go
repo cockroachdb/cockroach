@@ -758,6 +758,16 @@ CREATE TABLE system.job_info (
 	CONSTRAINT "primary" PRIMARY KEY (job_id, info_key, written DESC),
 	FAMILY "primary" (job_id, info_key, written, value)
 );`
+	SingleVersionDescriptorLeasesTableSchema = `
+CREATE TABLE system.single_version_descriptor_leases (
+    action        STRING NOT NULL,
+    descriptor_id INT8 NOT NULL,
+    session_id    BYTES NOT NULL,
+
+    CONSTRAINT "primary" PRIMARY KEY (action, descriptor_id, session_id),
+    CONSTRAINT check_action CHECK (action IN ('notify', 'lease')),
+    FAMILY "primary" (action, descriptor_id, session_id)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -2866,6 +2876,44 @@ var (
 				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
 			},
 		),
+	)
+
+	SingleVersionDescriptorLeaseTable = makeSystemTable(
+		SingleVersionDescriptorLeasesTableSchema,
+		systemTable(
+			catconstants.SingleVersionDescriptorLeasesTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "action", ID: 1, Type: types.String},
+				{Name: "descriptor_id", ID: 2, Type: types.Int},
+				{Name: "session_id", ID: 3, Type: types.Bytes},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          keys.SingleVersionDescriptorLeasePrimaryColFamID,
+					ColumnNames: []string{"action", "descriptor_id", "session_id"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           "primary",
+				ID:             keys.SingleVersionDescriptorLeasePrimaryKeyIndexID,
+				Unique:         true,
+				KeyColumnNames: []string{"action", "descriptor_id", "session_id"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2, 3},
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
+				Name:      "check_action",
+				Expr:      "action IN ('notify':::STRING, 'lease':::STRING)",
+				ColumnIDs: []descpb.ColumnID{1},
+			}}
+		},
 	)
 )
 

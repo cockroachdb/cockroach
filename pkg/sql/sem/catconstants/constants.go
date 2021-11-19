@@ -88,6 +88,7 @@ const (
 	SystemExternalConnectionsTableName     SystemTableName = "external_connections"
 	RoleIDSequenceName                     SystemTableName = "role_id_seq"
 	SystemJobInfoTableName                 SystemTableName = "job_info"
+	SingleVersionDescriptorLeasesTableName SystemTableName = "single_version_descriptor_leases"
 )
 
 // Oid for virtual database and table.

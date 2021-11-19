@@ -234,6 +234,11 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		backfillSystemRoleMembersIDColumns,
 	),
+	upgrade.NewTenantUpgrade("add system.single_version_descriptor_lease",
+		toCV(clusterversion.V23_1SingleVersionDescriptorLeaseTable),
+		upgrade.NoPrecondition,
+		addSingleVersionDescriptorLeaseTable,
+	),
 }
 
 func init() {

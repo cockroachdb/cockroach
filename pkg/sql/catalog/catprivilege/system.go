@@ -65,6 +65,7 @@ var (
 		catconstants.SystemPrivilegeTableName,
 		catconstants.SystemExternalConnectionsTableName,
 		catconstants.SystemJobInfoTableName,
+		catconstants.SingleVersionDescriptorLeasesTableName,
 	}
 
 	readWriteSystemSequences = []catconstants.SystemTableName{
