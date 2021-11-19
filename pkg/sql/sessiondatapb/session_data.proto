@@ -83,6 +83,11 @@ message SessionData {
   // the joinReader processor (when ordering is required to be maintained) to
   // construct a single lookup KV batch.
   int64 join_reader_ordering_strategy_batch_size = 18;
+  // ParallelizeMultiKeyLookupJoinsEnabled is true when the join reader should
+  // parallelize lookup batches under all circumstances. Enabling this will
+  // increase the speed of lookup joins when each input row might get multiple
+  // looked up rows at the cost of increased memory usage.
+  bool parallelize_multi_key_lookup_joins_enabled = 19;
 }
 
 // DataConversionConfig contains the parameters that influence the output
