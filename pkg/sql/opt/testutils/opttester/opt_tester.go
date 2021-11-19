@@ -661,6 +661,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
+		ot.checkExpectedRules(tb, d)
 		return result
 
 	case "expr":
@@ -736,15 +737,7 @@ func formatRuleSet(r RuleSet) string {
 	return buf.String()
 }
 
-func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Expr) {
-	fillInLazyProps(e)
-
-	if rel, ok := e.(memo.RelExpr); ok {
-		for _, cols := range ot.Flags.ColStats {
-			memo.RequestColStat(&ot.evalCtx, rel, cols)
-		}
-	}
-
+func (ot *OptTester) checkExpectedRules(tb testing.TB, d *datadriven.TestData) {
 	if !ot.Flags.ExpectedRules.SubsetOf(ot.appliedRules) {
 		unseen := ot.Flags.ExpectedRules.Difference(ot.appliedRules)
 		d.Fatalf(tb, "expected to see %s, but was not triggered. Did see %s",
@@ -755,6 +748,17 @@ func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Ex
 		seen := ot.Flags.UnexpectedRules.Intersection(ot.appliedRules)
 		d.Fatalf(tb, "expected not to see %s, but it was triggered", formatRuleSet(seen))
 	}
+}
+
+func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Expr) {
+	fillInLazyProps(e)
+
+	if rel, ok := e.(memo.RelExpr); ok {
+		for _, cols := range ot.Flags.ColStats {
+			memo.RequestColStat(&ot.evalCtx, rel, cols)
+		}
+	}
+	ot.checkExpectedRules(tb, d)
 }
 
 // Fills in lazily-derived properties (for display).
@@ -1146,9 +1150,11 @@ func (ot *OptTester) PlaceholderFastPath() (_ opt.Expr, ok bool, _ error) {
 // Memo returns a string that shows the memo data structure that is constructed
 // by the optimizer.
 func (ot *OptTester) Memo() (string, error) {
-	var o xform.Optimizer
-	o.Init(&ot.evalCtx, ot.catalog)
-	if _, err := ot.optimizeExpr(&o); err != nil {
+	o := ot.makeOptimizer()
+	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		return !ot.Flags.DisableRules.Contains(int(ruleName))
+	})
+	if _, err := ot.optimizeExpr(o); err != nil {
 		return "", err
 	}
 	return o.FormatMemo(ot.Flags.MemoFormat), nil
