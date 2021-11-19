@@ -727,9 +727,11 @@ func (r *Replica) AdminMerge(
 		}
 		rhsSnapshotRes := br.(*roachpb.SubsumeResponse)
 
-		err = waitForApplication(
-			ctx, r.store.cfg.NodeDialer, rightDesc.RangeID, mergeReplicas,
-			rhsSnapshotRes.LeaseAppliedIndex)
+		err = contextutil.RunWithTimeout(ctx, "waiting for merge application",
+			5*time.Second, func(ctx context.Context) error {
+				return waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc.RangeID, mergeReplicas,
+					rhsSnapshotRes.LeaseAppliedIndex)
+			})
 		if err != nil {
 			return errors.Wrap(err, "waiting for all right-hand replicas to catch up")
 		}
