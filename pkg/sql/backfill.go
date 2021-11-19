@@ -701,9 +701,10 @@ func (sc *SchemaChanger) validateConstraints(
 				// print the check expression back to the user.
 				evalCtx.Txn = txn
 				// Use the DistSQLTypeResolver because we need to resolve types by ID.
-				semaCtx := tree.MakeSemaContext()
 				collection := evalCtx.Descs
-				semaCtx.TypeResolver = descs.NewDistSQLTypeResolver(collection, txn)
+				resolver := descs.NewDistSQLTypeResolver(collection, txn)
+				semaCtx := tree.MakeSemaContext()
+				semaCtx.TypeResolver = &resolver
 				// TODO (rohany): When to release this? As of now this is only going to get released
 				//  after the check is validated.
 				defer func() { collection.ReleaseAll(ctx) }()

@@ -119,9 +119,12 @@ func NewMemBatch(typs []*types.T, factory ColumnFactory) Batch {
 // column size. Use for operators that have a precisely-sized output batch.
 func NewMemBatchWithCapacity(typs []*types.T, capacity int, factory ColumnFactory) Batch {
 	b := NewMemBatchNoCols(typs, capacity).(*MemBatch)
+	cols := make([]memColumn, len(typs))
 	for i, t := range typs {
-		b.b[i] = NewMemColumn(t, capacity, factory)
-		if b.b[i].IsBytesLike() {
+		col := &cols[i]
+		col.init(t, capacity, factory)
+		b.b[i] = col
+		if col.IsBytesLike() {
 			b.bytesVecIdxs.Add(i)
 		}
 	}

@@ -199,7 +199,14 @@ func (cf *defaultColumnFactory) MakeColumn(t *types.T, length int) Column {
 // NewMemColumn returns a new memColumn, initialized with a length using the
 // given column factory.
 func NewMemColumn(t *types.T, length int, factory ColumnFactory) Vec {
-	return &memColumn{
+	var m memColumn
+	m.init(t, length, factory)
+	return &m
+}
+
+// init initializes the receiver with a length using the given column factory.
+func (m *memColumn) init(t *types.T, length int, factory ColumnFactory) {
+	*m = memColumn{
 		t:                   t,
 		canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()),
 		col:                 factory.MakeColumn(t, length),
