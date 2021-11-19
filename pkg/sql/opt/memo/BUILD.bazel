@@ -51,7 +51,7 @@ go_library(
 
 go_test(
     name = "memo_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "cost_test.go",
         "expr_test.go",
