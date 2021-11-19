@@ -13413,6 +13413,7 @@ unreserved_keyword:
 | VARYING
 | VIEW
 | VIEWACTIVITY
+| VISIBLE
 | VOTERS
 | WITHIN
 | WITHOUT
@@ -13618,7 +13619,6 @@ reserved_keyword:
 | USER
 | USING
 | VARIADIC
-| VISIBLE
 | WHEN
 | WHERE
 | WINDOW
