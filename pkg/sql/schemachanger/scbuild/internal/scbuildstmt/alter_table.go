@@ -11,11 +11,40 @@
 package scbuildstmt
 
 import (
+	"reflect"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
+
+// supportedAlterTableStatements tracks alter table operations fully supported by
+// declarative schema  changer. Operations marked as non-fully supported can
+// only be with the experimental_use_new_schema_changer session variable.
+var supportedAlterTableStatements = map[reflect.Type]supportedStatement{
+	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)): {alterTableAddColumn, false},
+}
+
+func init() {
+	// Check function signatures inside the supportedAlterTableStatements map.
+	for statementType, statementEntry := range supportedAlterTableStatements {
+		callBackType := reflect.TypeOf(statementEntry.fn)
+		if callBackType.Kind() != reflect.Func {
+			panic(errors.AssertionFailedf("%v entry for statement is "+
+				"not a function", statementType))
+		}
+		if callBackType.NumIn() != 4 ||
+			!callBackType.In(0).Implements(reflect.TypeOf((*BuildCtx)(nil)).Elem()) ||
+			!callBackType.In(1).Implements(reflect.TypeOf((*catalog.TableDescriptor)(nil)).Elem()) ||
+			callBackType.In(2) != statementType ||
+			callBackType.In(3) != reflect.TypeOf((*tree.TableName)(nil)) {
+			panic(errors.AssertionFailedf("%v entry for alter table statement "+
+				"does not have a valid signature got %v", statementType, callBackType))
+		}
+	}
+}
 
 // AlterTable implements ALTER TABLE.
 func AlterTable(b BuildCtx, n *tree.AlterTable) {
@@ -46,10 +75,22 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 func alterTableCmd(
 	b BuildCtx, table catalog.TableDescriptor, cmd tree.AlterTableCmd, tn *tree.TableName,
 ) {
-	switch t := cmd.(type) {
-	case *tree.AlterTableAddColumn:
-		alterTableAddColumn(b, table, t, tn)
-	default:
+	// Check if an entry exists for the statement type, in which
+	// case its either fully or partially supported.
+	info, ok := supportedAlterTableStatements[reflect.TypeOf(cmd)]
+	if !ok {
 		panic(scerrors.NotImplementedError(cmd))
 	}
+	// Check if partially supported operations are allowed next. If an
+	// operation is not fully supported will not allow it to be run in
+	// the declarative schema changer until its fully supported.
+	if !info.IsFullySupported(b.EvalCtx().SessionData().NewSchemaChangerMode) {
+		panic(scerrors.NotImplementedError(cmd))
+	}
+
+	// Next invoke the callback function, with the concrete types.
+	fn := reflect.ValueOf(info.fn)
+	in := []reflect.Value{reflect.ValueOf(b), reflect.ValueOf(table),
+		reflect.ValueOf(cmd), reflect.ValueOf(tn)}
+	fn.Call(in)
 }
