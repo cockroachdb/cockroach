@@ -3332,6 +3332,10 @@ func RunLogicTestWithDefaultConfig(
 	// As of 6/4/2019, the logic tests never complete under race.
 	skip.UnderStressRace(t, "logic tests and race detector don't mix: #37993")
 
+	// Use this for !metaporhic tests to lock in various batching parameters.
+	nonMetamorphicArgs := serverArgs
+	nonMetamorphicArgs.forceProductionBatchSizes = true
+
 	if skipLogicTests {
 		skip.IgnoreLint(t, "COCKROACH_LOGIC_TESTS_SKIP")
 	}
@@ -3482,8 +3486,11 @@ func RunLogicTestWithDefaultConfig(
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
 					}
-					serverArgs.forceProductionBatchSizes = onlyNonMetamorphic
-					lt.setup(cfg, serverArgs, readClusterOptions(t, path))
+					serverArgsP := &serverArgs
+					if onlyNonMetamorphic {
+						serverArgsP = &nonMetamorphicArgs
+					}
+					lt.setup(cfg, *serverArgsP, readClusterOptions(t, path))
 					lt.runFile(path, cfg)
 
 					progress.Lock()
