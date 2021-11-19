@@ -131,7 +131,11 @@ type TestServerArgs struct {
 	// IF set, the demo login endpoint will be enabled.
 	EnableDemoLoginEndpoint bool
 
+	// Tracer, if set, will be used by the Server for creating Spans.
 	Tracer *tracing.Tracer
+	// TracingDefault kicks in if Tracer is not set. It is passed to the Tracer
+	// that will be created for the server.
+	TracingDefault tracing.TracingDefaultOption
 	// If set, a TraceDir is initialized at the provided path.
 	TraceDir string
 
@@ -289,4 +293,7 @@ type TestTenantArgs struct {
 	// SSLCertsDir is a path to a custom certs dir. If empty, will use the default
 	// embedded certs.
 	SSLCertsDir string
+
+	// TracingDefault controls whether the tracing will be on or off by default.
+	TracingDefault tracing.TracingDefaultOption
 }

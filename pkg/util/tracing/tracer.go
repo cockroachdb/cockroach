@@ -22,6 +22,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
@@ -137,6 +138,14 @@ var ZipkinCollector = settings.RegisterValidatedStringSetting(
 	},
 ).WithPublic()
 
+type TracingDefaultOption int
+
+const (
+	TracingOnForTests TracingDefaultOption = iota
+	TracingOffByDefault
+	TracingOn
+)
+
 // Tracer implements tracing requests. It supports:
 //
 //  - forwarding events to x/net/trace instances
@@ -157,6 +166,8 @@ type Tracer struct {
 	// Preallocated noopSpan, used to avoid creating spans when we are not using
 	// x/net/trace or lightstep and we are not recording.
 	noopSpan *Span
+
+	tracingDefault TracingDefaultOption
 
 	// backardsCompatibilityWith211, if set, makes the Tracer
 	// work with 21.1 remote nodes.
@@ -344,6 +355,7 @@ func NewTracerWithOpt(ctx context.Context, opts ...TracerOption) *Tracer {
 		t.debugUseAfterFinish = o.useAfterFinishOpt.debugUseAfterFinish
 	}
 	t.testing = o.knobs
+	t.tracingDefault = TracingDefaultOption(o.tracingDefault)
 	return t
 }
 
@@ -352,6 +364,7 @@ type tracerOptions struct {
 	sv                *settings.Values
 	knobs             TracerTestingKnobs
 	useAfterFinishOpt *useAfterFinishOpt
+	tracingDefault    tracingDefaultOpt
 }
 
 // TracerOption is implemented by the arguments to the Tracer constructor.
@@ -421,6 +434,18 @@ func WithUseAfterFinishOpt(panicOnUseAfterFinish, debugUseAfterFinish bool) Trac
 		panicOnUseAfterFinish: panicOnUseAfterFinish,
 		debugUseAfterFinish:   debugUseAfterFinish,
 	}
+}
+
+type tracingDefaultOpt TracingDefaultOption
+
+var _ TracerOption = tracingDefaultOpt(TracingOnForTests)
+
+func (o tracingDefaultOpt) apply(opt *tracerOptions) {
+	opt.tracingDefault = o
+}
+
+func WithTracingDefault(opt TracingDefaultOption) TracerOption {
+	return tracingDefaultOpt(opt)
 }
 
 // Configure sets up the Tracer according to the cluster settings (and keeps
@@ -637,8 +662,18 @@ func (t *Tracer) AlwaysTrace() bool {
 	if t.testing.ForceRealSpans {
 		return true
 	}
-	if ForceRealSpans {
+	switch t.tracingDefault {
+	case TracingOnForTests:
+		if ForceRealSpans {
+			return true
+		}
+		if buildutil.CrdbTestBuild {
+			return true
+		}
+	case TracingOn:
 		return true
+	case TracingOffByDefault:
+		return false
 	}
 	otelTracer := t.getOtelTracer()
 	return t.useNetTrace() || otelTracer != nil
