@@ -30,8 +30,10 @@ import (
 //  2. Add a single-column index on any Range expression, comparison
 //     expression (=, <, >, <=, >=), and IS expression.
 // 	3. Add a single-column index on any column that appears in a JOIN predicate.
-//  4. If there exist multiple columns from the same table in a JOIN predicate,
-//     create a single index on all such columns.
+//  4. a. If there exists multiple columns from the same table in a JOIN
+//        predicate, create a single index on all such columns.
+//     b. If there exists multiple columns from the same table in non-equality
+//        comparison conditions, create a single index on all such columns.
 //  5. Construct three groups for each table: EQ, R, and J.
 //     - EQ is a single index of all columns that appear in equality predicates.
 //     - R is all indexes that come from rule 2.
@@ -73,8 +75,8 @@ func (ics *indexCandidateSet) init() {
 }
 
 // combineIndexCandidates adds index candidates that are combinations of
-// candidates in the JOIN, EQUAL, and RANGE categories. See rule 5 in
-// FindIndexCandidateSet.
+// candidates in the JOIN, EQUAL, and RANGE categories. See rule 4b and rule 5
+// in FindIndexCandidateSet.
 func (ics *indexCandidateSet) combineIndexCandidates() {
 	// Copy indexes in each category to overallCandidates without duplicates.
 	copyIndexes(ics.equalCandidates, ics.overallCandidates)
@@ -84,10 +86,15 @@ func (ics *indexCandidateSet) combineIndexCandidates() {
 	numTables := len(ics.overallCandidates)
 	equalJoinCandidates := make(map[cat.Table][][]cat.IndexColumn, numTables)
 	equalGroupedCandidates := make(map[cat.Table][][]cat.IndexColumn, numTables)
+	rangeGroupedCandidates := make(map[cat.Table][][]cat.IndexColumn, numTables)
 
-	// Construct EQ, EQ + R, J + R, EQ + J, EQ + J + R.
+	// Construct EQ, EQ + R, J + R, EQ + J, EQ + J + R (rule 5). Also, construct
+	// combined range candidates according to rule 4b.
 	groupIndexesByTable(ics.equalCandidates, equalGroupedCandidates)
+	groupIndexesByTable(ics.rangeCandidates, rangeGroupedCandidates)
 	copyIndexes(equalGroupedCandidates, ics.overallCandidates)
+	copyIndexes(rangeGroupedCandidates, ics.overallCandidates)
+
 	constructIndexCombinations(equalGroupedCandidates, ics.rangeCandidates, ics.overallCandidates)
 	constructIndexCombinations(ics.joinCandidates, ics.rangeCandidates, ics.overallCandidates)
 	constructIndexCombinations(equalGroupedCandidates, ics.joinCandidates, equalJoinCandidates)
@@ -285,7 +292,7 @@ func addMultiColumnIndex(
 ) {
 	// Group columns by table in a temporary map as single-column indexes,
 	// getting rid of duplicates.
-	tableToCols := make(map[cat.Table][][]cat.IndexColumn)
+	tableToCols := make(map[cat.Table][][]cat.IndexColumn, len(md.AllTables()))
 	for i, colID := range cols {
 		if desc != nil {
 			addSingleColumnIndex(colID, desc[i], md, tableToCols)
