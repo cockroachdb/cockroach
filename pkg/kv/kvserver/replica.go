@@ -1273,8 +1273,11 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 // checkExecutionCanProceed returns an error if a batch request cannot be
 // executed by the Replica. An error indicates that the Replica is not live and
 // able to serve traffic or that the request is not compatible with the state of
-// the Range due to the range's key bounds, the range's lease, or the ranges GC
-// threshold.
+// the Range due to the range's key bounds, the range's lease, the range's GC
+// threshold, or due to a pending merge. On success, returns nil and either a
+// zero LeaseStatus (indicating that the request was permitted to skip the lease
+// checks) or a LeaseStatus in LeaseState_VALID (indicating that the Replica is
+// the leaseholder and able to serve this request).
 //
 // The method accepts a concurrency Guard, which is used to indicate whether the
 // caller has acquired latches. When this condition is false, the batch request
@@ -1284,14 +1287,6 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 func (r *Replica) checkExecutionCanProceed(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
 ) (kvserverpb.LeaseStatus, error) {
-	var st kvserverpb.LeaseStatus
-	var shouldExtend bool
-	defer func() {
-		if shouldExtend {
-			r.maybeExtendLeaseAsync(ctx, st)
-		}
-	}()
-	now := r.Clock().NowAsClockTimestamp()
 	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
 		return kvserverpb.LeaseStatus{}, err
@@ -1323,41 +1318,16 @@ func (r *Replica) checkExecutionCanProceed(
 		return kvserverpb.LeaseStatus{}, err
 	}
 
-	// Is the lease valid?
-	if ba.ReadConsistency == roachpb.INCONSISTENT {
-		// For INCONSISTENT requests, we don't need the lease.
-		st = kvserverpb.LeaseStatus{
-			Now: now,
-		}
-	} else if ba.IsSingleSkipLeaseCheckRequest() {
-		// For lease commands, use the provided previous lease for verification.
-		st = kvserverpb.LeaseStatus{
-			Lease: ba.GetPrevLeaseForLeaseRequest(),
-			Now:   now,
-		}
-	} else {
-		// If the request is a write or a consistent read, it requires the
-		// replica serving it to hold the range lease. We pass the write
-		// timestamp of the request because this is the maximum timestamp that
-		// the request will operate at, ignoring the uncertainty interval, which
-		// is already accounted for in LeaseStatus's stasis period handling.
-		st, shouldExtend, err = r.leaseGoodToGoRLocked(ctx, now, ba.WriteTimestamp())
-		if err != nil {
-			// If not, can we serve this request on a follower?
-			if !r.canServeFollowerReadRLocked(ctx, ba) {
-				return st, err
-			}
-			err = nil                     // ignore error
-			st = kvserverpb.LeaseStatus{} // already empty for follower reads, but be explicit
-		}
-	}
-
-	// Is the request below the GC threshold?
-	if err := r.checkTSAboveGCThresholdRLocked(ba.EarliestActiveTimestamp(), st, ba.IsAdmin()); err != nil {
+	st, shouldExtend, err := r.checkGCThresholdAndLeaseRLocked(ctx, ba)
+	if err != nil {
 		return kvserverpb.LeaseStatus{}, err
 	}
 
-	// Is there a merge in progress?
+	// Is there a merge in progress? We intentionally check this last to let requests error out
+	// for other reasons first, in case callers don't require this replica to service the request.
+	// Tests such as TestClosedTimestampFrozenAfterSubsumption also rely on this late-checking of
+	// merges by checking for a NotLeaseholderError on replicas in a critical phase for certain
+	// requests.
 	if r.mergeInProgressRLocked() && g.HoldingLatches() {
 		// We only check for a merge if we are holding latches. In practice,
 		// this means that any request where concurrency.shouldAcquireLatches()
@@ -1372,7 +1342,67 @@ func (r *Replica) checkExecutionCanProceed(
 		}
 	}
 
+	// The happy case, serving from the leaseholder. If we're asked to extend the
+	// lease, do it in a separate goroutine as this requires an exclusive lock,
+	// and we only hold a read-only lock.
+	if shouldExtend {
+		_ = r.store.stopper.RunAsyncTask(ctx, "maybe-extend-async", func(ctx context.Context) {
+			r.maybeExtendLeaseAsync(ctx, st)
+		})
+	}
 	return st, nil
+}
+
+// checkGCThresholdAndLeaseRLocked checks the provided batch against the GC
+// threshold and lease. A nil error indicates to go ahead with the batch, and
+// is accompanied either by a valid or zero lease status, the latter case
+// indicating that the request was permitted to bypass the lease check.
+func (r *Replica) checkGCThresholdAndLeaseRLocked(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) (_ kvserverpb.LeaseStatus, shouldExtend bool, _ error) {
+	now := r.Clock().NowAsClockTimestamp()
+	// If the request is a write or a consistent read, it requires the
+	// replica serving it to hold the range lease. We pass the write
+	// timestamp of the request because this is the maximum timestamp that
+	// the request will operate at, ignoring the uncertainty interval, which
+	// is already accounted for in LeaseStatus's stasis period handling.
+	// For INCONSISTENT requests (which are always pure reads), this coincides
+	// with the read timestamp.
+	reqTS := ba.WriteTimestamp()
+	st := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
+
+	// Check if request is below the GC threshold and if so, error out.
+	if err := r.checkTSAboveGCThresholdRLocked(ba.EarliestActiveTimestamp(), st, ba.IsAdmin()); err != nil {
+		return kvserverpb.LeaseStatus{}, false, err
+	}
+
+	// If the request is INCONSISTENT, it doesn't need the lease, so return
+	// success unconditionally.
+	if ba.ReadConsistency == roachpb.INCONSISTENT {
+		return kvserverpb.LeaseStatus{}, false, nil
+	}
+
+	// Commands that skip the lease check in practice are exactly RequestLease and
+	// TransferLease. Both use the provided previous lease for verification below
+	// raft. We return a zero lease status here and task evalAndPropose with
+	// pulling the correct lease sequence number from the lease request.
+	if ba.IsSingleSkipLeaseCheckRequest() {
+		return kvserverpb.LeaseStatus{}, false, nil
+	}
+
+	// Now check the lease.
+	shouldExtend, err := r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
+	if err != nil {
+		// No valid lease, but if we can serve this request via follower reads,
+		// return success.
+		if r.canServeFollowerReadRLocked(ctx, ba) {
+			return kvserverpb.LeaseStatus{}, false, nil
+		}
+		// Otherwise, return the error.
+		return kvserverpb.LeaseStatus{}, false, err
+	}
+
+	return st, shouldExtend, nil
 }
 
 // checkExecutionCanProceedForRangeFeed returns an error if a rangefeed request

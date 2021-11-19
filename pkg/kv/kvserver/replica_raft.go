@@ -168,11 +168,20 @@ func (r *Replica) evalAndPropose(
 		// Continue with proposal...
 	}
 
-	// Attach information about the proposer to the command.
-	proposal.command.ProposerLeaseSequence = st.Lease.Sequence
-	// Perform a sanity check that the lease is owned by this replica.
-	if !st.Lease.OwnedBy(r.store.StoreID()) && !ba.IsLeaseRequest() {
+	// Attach information about the proposer's lease to the command, for
+	// verification below raft. Lease requests are special since they are not
+	// necessarily proposed under a valid lease (by necessity). Instead, they
+	// reference the previous lease. Note that TransferLease also skip lease
+	// checks (for technical reasons, see `TransferLease.flags`) and uses the
+	// same mechanism.
+	if ba.IsSingleSkipLeaseCheckRequest() {
+		proposal.command.ProposerLeaseSequence = ba.GetPrevLeaseForLeaseRequest().Sequence
+	} else if !st.Lease.OwnedBy(r.store.StoreID()) {
+		// Perform a sanity check that the lease is owned by this replica. This must
+		// have been ascertained by the callers in checkExecutionCanProceed.
 		log.Fatalf(ctx, "cannot propose %s on follower with remotely owned lease %s", ba, st.Lease)
+	} else {
+		proposal.command.ProposerLeaseSequence = st.Lease.Sequence
 	}
 
 	// Once a command is written to the raft log, it must be loaded into memory
