@@ -519,9 +519,10 @@ func generateRandomData(
 			}
 			val, err := protoutil.Marshal(&meta)
 			require.NoError(t, err)
+			isSeparated := rng.Int31n(2) == 0
 			ltKey := LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID[:]}
 			lkv = append(lkv, lockKeyValue{
-				key: ltKey, val: val, liveIntent: hasIntent && i == 0, separated: true})
+				key: ltKey, val: val, liveIntent: hasIntent && i == 0, separated: isSeparated})
 			mvcckv = append(mvcckv, MVCCKeyValue{
 				Key:   MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(ts)}},
 				Value: []byte("value"),
