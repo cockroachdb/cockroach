@@ -45,7 +45,7 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 	// We don't set def.Ordering. Because the ordering can only refer to projected
 	// columns, it does not affect the results; it doesn't need to be required of
 	// the DistinctOn input.
-	input := inScope.expr.(memo.RelExpr)
+	input := inScope.expr
 	return b.factory.ConstructDistinctOn(input, memo.EmptyAggregationsExpr, &private)
 }
 
@@ -155,7 +155,7 @@ func (b *Builder) buildDistinctOn(
 		}
 	}
 
-	input := inScope.expr.(memo.RelExpr)
+	input := inScope.expr
 	if nullsAreDistinct {
 		if errorOnDup == "" {
 			outScope.expr = b.factory.ConstructUpsertDistinctOn(input, aggs, &private)

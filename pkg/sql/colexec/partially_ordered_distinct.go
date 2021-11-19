@@ -61,7 +61,7 @@ func newPartiallyOrderedDistinct(
 	distinct := NewUnorderedDistinct(allocator, chunkerOperator, distinctUnorderedCols, typs, nullsAreDistinct, errorOnDup)
 	return &partiallyOrderedDistinct{
 		input:    chunkerOperator,
-		distinct: distinct.(colexecop.ResettableOperator),
+		distinct: distinct,
 	}, nil
 }
 

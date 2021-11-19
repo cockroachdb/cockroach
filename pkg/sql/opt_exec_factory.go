@@ -248,8 +248,7 @@ func constructSimpleProjectForPlanNode(
 		r.reqOrdering = ReqOrdering(reqOrdering)
 		return r, nil
 	}
-	inputCols := planColumns(n.(planNode))
-
+	inputCols := planColumns(n)
 	var rb renderBuilder
 	rb.init(n, reqOrdering)
 

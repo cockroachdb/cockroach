@@ -855,12 +855,13 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 		}
 		return iter
 	}
-	iter := MVCCIterator(newPebbleIterator(p.db, nil, opts))
+
+	iter := newPebbleIterator(p.db, nil, opts)
 	if iter == nil {
 		panic("couldn't create a new iterator")
 	}
 	if util.RaceEnabled {
-		iter = wrapInUnsafeIter(iter)
+		return wrapInUnsafeIter(iter)
 	}
 	return iter
 }

@@ -662,7 +662,7 @@ func prettyPrintInternal(valDirs []encoding.Direction, key roachpb.Key, quoteRaw
 		if quoteRawKeys {
 			return fmt.Sprintf("%q", []byte(key)), false
 		}
-		return fmt.Sprintf("%s", []byte(key)), false
+		return string(key), false
 	}
 
 	for _, k := range keyOfKeyDict {
