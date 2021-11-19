@@ -41,7 +41,8 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	// transaction, since we don't know if subsequent statements don't
 	// support it.
 	if mode == sessiondatapb.UseNewSchemaChangerOff ||
-		(mode == sessiondatapb.UseNewSchemaChangerOn && !p.extendedEvalCtx.TxnImplicit) {
+		((mode == sessiondatapb.UseNewSchemaChangerOn ||
+			mode == sessiondatapb.UseNewSchemaChangerUnsafe) && !p.extendedEvalCtx.TxnImplicit) {
 		return nil, false, nil
 	}
 	scs := p.extendedEvalCtx.SchemaChangerState
@@ -57,7 +58,8 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		scs.stmts,
 	)
 	outputNodes, err := scbuild.Build(ctx, deps, scs.state, stmt)
-	if scerrors.HasNotImplemented(err) && mode == sessiondatapb.UseNewSchemaChangerOn {
+	if scerrors.HasNotImplemented(err) &&
+		mode != sessiondatapb.UseNewSchemaChangerUnsafeAlways {
 		return nil, false, nil
 	}
 	if err != nil {

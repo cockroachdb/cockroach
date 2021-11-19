@@ -6,6 +6,14 @@ SET experimental_use_new_schema_changer = 'on'
 statement ok
 CREATE TABLE foo (i INT PRIMARY KEY)
 
+# Declarative is not fully enabled for this statement,
+# so it should error out.
+statement error cannot explain a non-schema change statement
+EXPLAIN (DDL) ALTER TABLE foo ADD COLUMN j INT
+
+statement ok
+SET experimental_use_new_schema_changer = 'unsafe'
+
 statement ok
 EXPLAIN (DDL) ALTER TABLE foo ADD COLUMN j INT
 
@@ -55,7 +63,7 @@ SELECT * FROM foo
 1  2  3
 
 statement ok
-SET experimental_use_new_schema_changer = 'on'
+SET experimental_use_new_schema_changer = 'unsafe'
 
 statement ok
 DROP TABLE foo;
@@ -177,7 +185,7 @@ j  b
 3  4
 
 statement ok
-SET experimental_use_new_schema_changer = 'on'
+SET experimental_use_new_schema_changer = 'unsafe'
 
 statement error pq: cannot explain a non-schema change statement
 EXPLAIN (DDL) ALTER TABLE bar ALTER COLUMN j TYPE BOOL
@@ -463,7 +471,7 @@ statement ok
 SET experimental_use_new_schema_changer = 'unsafe_always'
 
 statement ok
-SET experimental_use_new_schema_changer = 'on'
+SET experimental_use_new_schema_changer = 'unsafe'
 
 # Basic test -- create and drop a type.
 statement ok
@@ -650,7 +658,7 @@ statement ok
 SELECT 'a'::db1.sc1.typ::string
 
 statement ok
-SET experimental_use_new_schema_changer = 'on'
+SET experimental_use_new_schema_changer = 'unsafe'
 
 # Actually drop the database now.
 statement ok
@@ -911,7 +919,7 @@ DROP TABLE s1dr;
 subtest event-log
 
 statement ok
-SET experimental_use_new_schema_changer = 'on'
+SET experimental_use_new_schema_changer = 'unsafe'
 
 statement ok
 set sql_safe_updates=false;
