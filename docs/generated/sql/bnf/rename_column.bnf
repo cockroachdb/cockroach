@@ -1,1 +1,2 @@
-alter_rename_table_stmt ::=
+alter_table_cmd ::=
+	'RENAME' opt_column column_name 'TO' column_name
