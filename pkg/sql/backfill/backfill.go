@@ -201,12 +201,12 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(txn)
 		// Hydrate all the types present in the table.
-		if err := typedesc.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), resolver); err != nil {
+		if err := typedesc.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), &resolver); err != nil {
 			return err
 		}
 		// Set up a SemaContext to type check the default and computed expressions.
 		semaCtx := tree.MakeSemaContext()
-		semaCtx.TypeResolver = resolver
+		semaCtx.TypeResolver = &resolver
 		var err error
 		defaultExprs, err = schemaexpr.MakeDefaultExprs(
 			ctx, cb.added, &transform.ExprTransformContext{}, evalCtx, &semaCtx,
@@ -600,13 +600,13 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(txn)
 		// Hydrate all the types present in the table.
 		if err = typedesc.HydrateTypesInTableDescriptor(
-			ctx, desc.TableDesc(), resolver,
+			ctx, desc.TableDesc(), &resolver,
 		); err != nil {
 			return err
 		}
 		// Set up a SemaContext to type check the default and computed expressions.
 		semaCtx := tree.MakeSemaContext()
-		semaCtx.TypeResolver = resolver
+		semaCtx.TypeResolver = &resolver
 		// Convert any partial index predicate strings into expressions.
 		predicates, colExprs, referencedColumns, err = constructExprs(
 			ctx, desc, ib.added, ib.cols, ib.addedCols, ib.computedCols, evalCtx, &semaCtx,

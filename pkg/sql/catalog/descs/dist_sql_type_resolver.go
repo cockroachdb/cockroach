@@ -49,8 +49,9 @@ func (df *DistSQLTypeResolverFactory) NewTypeResolver(txn *kv.Txn) DistSQLTypeRe
 // NewSemaContext creates a new SemaContext with a TypeResolver bound to the
 // input transaction.
 func (df *DistSQLTypeResolverFactory) NewSemaContext(txn *kv.Txn) *tree.SemaContext {
+	resolver := df.NewTypeResolver(txn)
 	semaCtx := tree.MakeSemaContext()
-	semaCtx.TypeResolver = df.NewTypeResolver(txn)
+	semaCtx.TypeResolver = &resolver
 	return &semaCtx
 }
 
@@ -70,14 +71,16 @@ func NewDistSQLTypeResolver(descs *Collection, txn *kv.Txn) DistSQLTypeResolver 
 }
 
 // ResolveType implements the tree.TypeReferenceResolver interface.
-func (dt DistSQLTypeResolver) ResolveType(
+func (dt *DistSQLTypeResolver) ResolveType(
 	context.Context, *tree.UnresolvedObjectName,
 ) (*types.T, error) {
 	return nil, errors.AssertionFailedf("cannot resolve types in DistSQL by name")
 }
 
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
-func (dt DistSQLTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
+func (dt *DistSQLTypeResolver) ResolveTypeByOID(
+	ctx context.Context, oid oid.Oid,
+) (*types.T, error) {
 	id, err := typedesc.UserDefinedTypeOIDToID(oid)
 	if err != nil {
 		return nil, err
@@ -90,7 +93,7 @@ func (dt DistSQLTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid)
 }
 
 // GetTypeDescriptor implements the sqlbase.TypeDescriptorResolver interface.
-func (dt DistSQLTypeResolver) GetTypeDescriptor(
+func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
 	flags := tree.CommonLookupFlags{
@@ -129,7 +132,7 @@ func (dt DistSQLTypeResolver) GetTypeDescriptor(
 }
 
 // HydrateTypeSlice installs metadata into a slice of types.T's.
-func (dt DistSQLTypeResolver) HydrateTypeSlice(ctx context.Context, typs []*types.T) error {
+func (dt *DistSQLTypeResolver) HydrateTypeSlice(ctx context.Context, typs []*types.T) error {
 	for _, t := range typs {
 		if err := typedesc.EnsureTypeIsHydrated(ctx, t, dt); err != nil {
 			return err
