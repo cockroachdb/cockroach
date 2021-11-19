@@ -80,6 +80,7 @@ type webhookSink struct {
 	workerGroup ctxgroup.Group
 	exitWorkers func() // Signaled to shut down all workers.
 	eventsChans []chan []messagePayload
+	metrics     *sliMetrics
 }
 
 type webhookSinkPayload struct {
@@ -87,12 +88,28 @@ type webhookSinkPayload struct {
 	Length  int               `json:"length"`
 }
 
-func encodePayloadWebhook(messages []messagePayload) ([]byte, kvevent.Alloc, error) {
-	var alloc kvevent.Alloc
+type encodedPayload struct {
+	data     []byte
+	alloc    kvevent.Alloc
+	emitTime time.Time
+	mvcc     hlc.Timestamp
+}
+
+func encodePayloadWebhook(messages []messagePayload) (encodedPayload, error) {
+	result := encodedPayload{
+		emitTime: timeutil.Now(),
+	}
+
 	payload := make([]json.RawMessage, len(messages))
 	for i, m := range messages {
-		alloc.Merge(&m.alloc)
+		result.alloc.Merge(&m.alloc)
 		payload[i] = m.val
+		if m.emitTime.Before(result.emitTime) {
+			result.emitTime = m.emitTime
+		}
+		if result.mvcc.IsEmpty() || m.mvcc.Less(result.mvcc) {
+			result.mvcc = m.mvcc
+		}
 	}
 
 	body := &webhookSinkPayload{
@@ -101,16 +118,19 @@ func encodePayloadWebhook(messages []messagePayload) ([]byte, kvevent.Alloc, err
 	}
 	j, err := json.Marshal(body)
 	if err != nil {
-		return nil, alloc, err
+		return encodedPayload{}, err
 	}
-	return j, alloc, err
+	result.data = j
+	return result, err
 }
 
 type messagePayload struct {
 	// Payload message fields.
-	key   []byte
-	val   []byte
-	alloc kvevent.Alloc
+	key      []byte
+	val      []byte
+	alloc    kvevent.Alloc
+	emitTime time.Time
+	mvcc     hlc.Timestamp
 }
 
 // webhookMessage contains either messagePayload or a flush request.
@@ -229,6 +249,7 @@ func makeWebhookSink(
 	opts map[string]string,
 	parallelism int,
 	source timeutil.TimeSource,
+	m *sliMetrics,
 ) (Sink, error) {
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
 		return nil, errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeHTTPS)
@@ -279,6 +300,7 @@ func makeWebhookSink(
 		exitWorkers: cancel,
 		parallelism: parallelism,
 		ts:          source,
+		metrics:     m,
 	}
 
 	var err error
@@ -527,16 +549,18 @@ func (s *webhookSink) workerLoop(workerIndex int) {
 				continue
 			}
 
-			encodedMsgs, alloc, err := encodePayloadWebhook(msgs)
+			encoded, err := encodePayloadWebhook(msgs)
 			if err != nil {
 				s.exitWorkersWithError(err)
 				return
 			}
-			if err := s.sendMessageWithRetries(s.workerCtx, encodedMsgs); err != nil {
+			if err := s.sendMessageWithRetries(s.workerCtx, encoded.data); err != nil {
 				s.exitWorkersWithError(err)
 				return
 			}
-			alloc.Release(s.workerCtx)
+			encoded.alloc.Release(s.workerCtx)
+			s.metrics.recordEmittedBatch(
+				encoded.emitTime, len(msgs), encoded.mvcc, len(encoded.data), sinkDoesNotCompress)
 		}
 	}
 }
@@ -607,7 +631,11 @@ func (s *webhookSink) sinkError() error {
 }
 
 func (s *webhookSink) EmitRow(
-	ctx context.Context, _ TopicDescriptor, key, value []byte, _ hlc.Timestamp, alloc kvevent.Alloc,
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
 ) error {
 	select {
 	// check the webhook sink context in case workers have been terminated
@@ -619,7 +647,14 @@ func (s *webhookSink) EmitRow(
 		return ctx.Err()
 	case err := <-s.errChan:
 		return err
-	case s.batchChan <- webhookMessage{payload: messagePayload{key: key, val: value, alloc: alloc}}:
+	case s.batchChan <- webhookMessage{
+		payload: messagePayload{
+			key:      key,
+			val:      value,
+			alloc:    alloc,
+			emitTime: timeutil.Now(),
+			mvcc:     mvcc,
+		}}:
 	}
 	return nil
 }
@@ -627,6 +662,8 @@ func (s *webhookSink) EmitRow(
 func (s *webhookSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
+	defer s.metrics.recordResolvedCallback()()
+
 	payload, err := encoder.EncodeResolvedTimestamp(ctx, "", resolved)
 	if err != nil {
 		return err
@@ -654,6 +691,8 @@ func (s *webhookSink) EmitResolvedTimestamp(
 }
 
 func (s *webhookSink) Flush(ctx context.Context) error {
+	s.metrics.recordFlushRequestCallback()()
+
 	// Send flush request.
 	select {
 	case <-ctx.Done():

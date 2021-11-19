@@ -57,16 +57,20 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
-	codec   io.WriteCloser
-	rawSize int
-	buf     bytes.Buffer
-	alloc   kvevent.Alloc
+	codec         io.WriteCloser
+	rawSize       int
+	numMessages   int
+	buf           bytes.Buffer
+	alloc         kvevent.Alloc
+	oldestMVCC    hlc.Timestamp
+	recordMetrics recordEmittedMessagesCallback
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
 
 func (f *cloudStorageSinkFile) Write(p []byte) (int, error) {
 	f.rawSize += len(p)
+	f.numMessages++
 	if f.codec != nil {
 		return f.codec.Write(p)
 	}
@@ -296,6 +300,7 @@ type cloudStorageSink struct {
 	dataFileTs        string
 	dataFilePartition string
 	prevFilename      string
+	metrics           *sliMetrics
 }
 
 const sinkCompressionGzip = "gzip"
@@ -322,6 +327,7 @@ func makeCloudStorageSink(
 	timestampOracle timestampLowerBoundOracle,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	user security.SQLUsername,
+	m *sliMetrics,
 ) (Sink, error) {
 	var targetMaxFileSize int64 = 16 << 20 // 16MB
 	if fileSizeParam := u.consumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
@@ -343,6 +349,7 @@ func makeCloudStorageSink(
 		timestampOracle:   timestampOracle,
 		// TODO(dan,ajwerner): Use the jobs framework's session ID once that's available.
 		jobSessionID: generateChangefeedSessionID(),
+		metrics:      m,
 	}
 
 	if partitionFormat := u.consumeParam(changefeedbase.SinkParamPartitionFormat); partitionFormat != "" {
@@ -398,13 +405,21 @@ func makeCloudStorageSink(
 	return s, nil
 }
 
-func (s *cloudStorageSink) getOrCreateFile(topic TopicDescriptor) *cloudStorageSinkFile {
+func (s *cloudStorageSink) getOrCreateFile(
+	topic TopicDescriptor, eventMVCC hlc.Timestamp,
+) *cloudStorageSinkFile {
 	key := cloudStorageSinkKey{topic.GetName(), int64(topic.GetVersion())}
 	if item := s.files.Get(key); item != nil {
-		return item.(*cloudStorageSinkFile)
+		f := item.(*cloudStorageSinkFile)
+		if eventMVCC.Less(f.oldestMVCC) {
+			f.oldestMVCC = eventMVCC
+		}
+		return f
 	}
 	f := &cloudStorageSinkFile{
 		cloudStorageSinkKey: key,
+		recordMetrics:       s.metrics.recordEmittedMessages(),
+		oldestMVCC:          eventMVCC,
 	}
 	switch s.compression {
 	case sinkCompressionGzip:
@@ -419,14 +434,14 @@ func (s *cloudStorageSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
+	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
 
-	file := s.getOrCreateFile(topic)
+	file := s.getOrCreateFile(topic, mvcc)
 	file.alloc.Merge(&alloc)
 
 	if _, err := file.Write(value); err != nil {
@@ -451,6 +466,8 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
+
+	defer s.metrics.recordResolvedCallback()()
 
 	var noTopic string
 	payload, err := encoder.EncodeResolvedTimestamp(ctx, noTopic, resolved)
@@ -509,6 +526,8 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 		return errors.New(`cannot Flush on a closed sink`)
 	}
 
+	s.metrics.recordFlushRequestCallback()()
+
 	var err error
 	s.files.Ascend(func(i btree.Item) (wantMore bool) {
 		err = s.flushFile(ctx, i.(*cloudStorageSinkFile))
@@ -558,9 +577,12 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 			"precedes a file emitted before: %s", filename, s.prevFilename)
 	}
 	s.prevFilename = filename
+	compressedBytes := file.buf.Len()
 	if err := cloud.WriteFile(ctx, s.es, filepath.Join(s.dataFilePartition, filename), bytes.NewReader(file.buf.Bytes())); err != nil {
 		return err
 	}
+	file.recordMetrics(file.numMessages, file.oldestMVCC, file.rawSize, compressedBytes)
+
 	return nil
 }
 

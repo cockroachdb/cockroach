@@ -8,11 +8,7 @@
 
 package kvevent
 
-import (
-	"context"
-
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-)
+import "context"
 
 // chanBuffer mediates between the changed data KVFeed and the rest of the
 // changefeed pipeline (which is backpressured all the way to the sink).
@@ -65,7 +61,6 @@ func (b *chanBuffer) Get(ctx context.Context) (Event, error) {
 			// Writer. No more events will be returned.
 			return e, ErrBufferClosed{reason: b.closedReason}
 		}
-		e.bufferGetTimestamp = timeutil.Now()
 		return e, nil
 	}
 }
