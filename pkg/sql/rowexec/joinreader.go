@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -204,6 +205,16 @@ var _ execinfra.OpNode = &joinReader{}
 
 const joinReaderProcName = "join reader"
 
+// ParallelizeMultiKeyLookupJoinsEnabled determines whether the joinReader
+// parallelizes KV batches in all cases.
+var ParallelizeMultiKeyLookupJoinsEnabled = settings.RegisterBoolSetting(
+	"sql.distsql.parallelize_multi_key_lookup_joins.enabled",
+	"determines whether KV batches are executed in parallel for lookup joins in all cases. "+
+		"Enabling this will increase the speed of lookup joins when each input row might get "+
+		"multiple looked up rows at the cost of increased memory usage.",
+	false,
+)
+
 // newJoinReader returns a new joinReader.
 func newJoinReader(
 	flowCtx *execinfra.FlowCtx,
@@ -256,23 +267,27 @@ func newJoinReader(
 	default:
 		return nil, errors.Errorf("unsupported joinReaderType")
 	}
+	// The joiner has a choice to make between getting DistSender-level
+	// parallelism for its lookup batches and setting row and memory limits (due
+	// to implementation limitations, you can't have both at the same time). We
+	// choose parallelism when we know that each lookup returns at most one row:
+	// in case of indexJoinReaderType, we know that there's exactly one lookup
+	// row for each input row. Similarly, in case of spec.LookupColumnsAreKey,
+	// we know that there's at most one lookup row per input row. In other
+	// cases, we use limits.
+	shouldLimitBatches := !spec.LookupColumnsAreKey && readerType == lookupJoinReaderType
+	if flowCtx.EvalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
+		shouldLimitBatches = false
+	}
 	jr := &joinReader{
 		desc:                              tableDesc,
 		maintainOrdering:                  spec.MaintainOrdering,
 		input:                             input,
 		lookupCols:                        lookupCols,
 		outputGroupContinuationForLeftRow: spec.OutputGroupContinuationForLeftRow,
-		// The joiner has a choice to make between getting DistSender-level
-		// parallelism for its lookup batches and setting row and memory limits (due
-		// to implementation limitations, you can't have both at the same time). We
-		// choose parallelism when we know that each lookup returns at most one row:
-		// in case of indexJoinReaderType, we know that there's exactly one lookup
-		// row for each input row. Similarly, in case of spec.LookupColumnsAreKey,
-		// we know that there's at most one lookup row per input row. In other
-		// cases, we use limits.
-		shouldLimitBatches:    !spec.LookupColumnsAreKey && readerType == lookupJoinReaderType,
-		readerType:            readerType,
-		lookupBatchBytesLimit: rowinfra.BytesLimit(spec.LookupBatchBytesLimit),
+		shouldLimitBatches:                shouldLimitBatches,
+		readerType:                        readerType,
+		lookupBatchBytesLimit:             rowinfra.BytesLimit(spec.LookupBatchBytesLimit),
 	}
 	if readerType != indexJoinReaderType {
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
