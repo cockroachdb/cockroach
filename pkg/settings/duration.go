@@ -202,3 +202,11 @@ func NonNegativeDurationWithMaximum(maxValue time.Duration) func(time.Duration) 
 		return nil
 	}
 }
+
+// PositiveDuration can be passed to RegisterDurationSetting.
+func PositiveDuration(v time.Duration) error {
+	if v <= 0 {
+		return errors.Errorf("cannot be set to a non-positive duration: %s", v)
+	}
+	return nil
+}
