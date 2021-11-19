@@ -152,7 +152,7 @@ var (
 
 // jitter adds a small jitter in the given duration.
 func jitter(dur time.Duration) time.Duration {
-	const jitter = 1 / 6
+	const jitter = 1.0 / 6.0
 	jitterFraction := 1 + (2*rand.Float64()-1)*jitter // 1 + [-1/6, +1/6)
 	return time.Duration(float64(dur) * jitterFraction)
 }
