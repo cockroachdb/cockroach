@@ -21,8 +21,9 @@
 package colexechash
 
 import (
-	"math/rand"
 	"unsafe"
+
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 const (
@@ -158,9 +159,7 @@ func f64hash(p unsafe.Pointer, h uintptr) uintptr {
 	case f == 0:
 		return c1 * (c0 ^ h) // +0, -0
 	case f != f:
-		// TODO(asubiotto): fastrand relies on some stack internals.
-		//return c1 * (c0 ^ h ^ uintptr(fastrand())) // any kind of NaN
-		return c1 * (c0 ^ h ^ uintptr(rand.Uint32())) // any kind of NaN
+		return c1 * (c0 ^ h ^ uintptr(randutil.FastUint32())) // any kind of NaN
 	default:
 		return memhash(p, h, 8)
 	}
