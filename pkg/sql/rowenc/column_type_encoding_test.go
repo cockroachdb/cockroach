@@ -338,3 +338,22 @@ func TestDecodeTableValueOutOfRangeTimestamp(t *testing.T) {
 		})
 	}
 }
+
+// This test ensures that decoding a tuple value with a specific, labeled tuple
+// type preserves the labels.
+func TestDecodeTupleValueWithType(t *testing.T) {
+	tupleType := types.MakeLabeledTuple([]*types.T{types.Int, types.String}, []string{"a", "b"})
+	datum := tree.NewDTuple(tupleType, tree.NewDInt(tree.DInt(1)), tree.NewDString("foo"))
+	buf, err := rowenc.EncodeTableValue(nil, descpb.ColumnID(encoding.NoColumnID), datum, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	da := rowenc.DatumAlloc{}
+	var decoded tree.Datum
+	decoded, _, err = rowenc.DecodeTableValue(&da, tupleType, buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	require.Equal(t, decoded, datum)
+}
