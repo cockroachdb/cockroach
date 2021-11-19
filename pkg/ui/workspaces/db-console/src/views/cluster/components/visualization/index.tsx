@@ -28,6 +28,8 @@ interface VisualizationProps {
   // If loading is true a spinner is shown instead of the graph.
   loading?: boolean;
   preCalcGraphSize?: boolean;
+  canvasWrapper: JSX.Element;
+  legend: JSX.Element;
 }
 
 /**
@@ -74,14 +76,17 @@ export default class extends React.Component<VisualizationProps, {}> {
 
     return (
       <div className={vizClasses}>
-        <div className="visualization__header">{tooltipNode}</div>
-        <div className={contentClasses}>
-          {this.props.loading ? (
-            <img className="visualization__spinner" src={spinner} />
-          ) : (
-            this.props.children
-          )}
+        <div>
+          <div className="visualization__header">{tooltipNode}</div>
+          <div className={contentClasses}>
+            {this.props.loading ? (
+              <img className="visualization__spinner" src={spinner} />
+            ) : (
+              this.props.canvasWrapper
+            )}
+          </div>
         </div>
+        {this.props.legend}
       </div>
     );
   }

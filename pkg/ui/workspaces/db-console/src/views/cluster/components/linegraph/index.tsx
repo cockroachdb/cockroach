@@ -588,7 +588,12 @@ export class LineGraph extends React.Component<
 
   render() {
     const { title, subtitle, tooltip, data, preCalcGraphSize } = this.props;
-
+    const lineGraph = (
+      <div className="linegraph">
+        <div ref={this.el} />
+      </div>
+    );
+    const legend = <Legend {...this.state.legend} />;
     return (
       <Visualization
         title={title}
@@ -596,12 +601,9 @@ export class LineGraph extends React.Component<
         tooltip={tooltip}
         loading={!data}
         preCalcGraphSize={preCalcGraphSize}
-      >
-        <div className="linegraph">
-          <div ref={this.el} />
-        </div>
-        <Legend {...this.state.legend} />
-      </Visualization>
+        canvasWrapper={lineGraph}
+        legend={legend}
+      />
     );
   }
 }
@@ -623,7 +625,7 @@ export interface LegendProps {
 class Legend extends React.Component<LegendProps> {
   render() {
     return (
-      <div>
+      <div style={{ height: "350px", overflow: "scroll" }}>
         <div>{this.props.xValue}</div>
         <ul>
           {this.props.yValues
@@ -632,7 +634,7 @@ class Legend extends React.Component<LegendProps> {
             })
             .map(y => {
               return (
-                <li style={{ border: `2px solid ${y.color}` }}>
+                <li style={{ border: `2px solid ${y.color}` }} key={y.name}>
                   {y.name}: {y.value}
                 </li>
               );

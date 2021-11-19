@@ -554,7 +554,7 @@ export function configureUPlotLineChart(
   // graph will always have the first color, etc.
   const strokeColors = [...seriesPalette];
 
-  const debouncedSetCursor = _.throttle((self: uPlot) => {
+  const throttledLegendCallback = _.throttle((self: uPlot) => {
     setLegendState({
       show: true, // TODO(davidh): manage cursor entering/leaving the plot
       cursor: self.cursor,
@@ -573,13 +573,12 @@ export function configureUPlotLineChart(
           };
         }),
     });
-  }, 50);
+  }, 100);
 
   const tooltipPlugin = () => {
     return {
       hooks: {
-        init: (self: uPlot) => {},
-        setCursor: debouncedSetCursor,
+        setCursor: throttledLegendCallback,
       },
     };
   };
@@ -589,16 +588,14 @@ export function configureUPlotLineChart(
   return {
     width: 947,
     height: 300,
-    // TODO(davidh): Enable sync-ed guidelines once legend is redesigned
-    // currently, if you enable this with a hovering legend, the FPS
-    // gets quite choppy on large clusters.
-    // cursor: {
-    //   sync: {
-    //     // graphs with matching keys will get their guidelines
-    //     // sync-ed so we just use the same key for the page
-    //     key: "sync-everything",
-    //   },
-    // },
+    cursor: {
+      lock: true,
+      sync: {
+        // graphs with matching keys will get their guidelines
+        // sync-ed so we just use the same key for the page
+        key: "sync-everything",
+      },
+    },
     legend: {
       show: false,
     },
