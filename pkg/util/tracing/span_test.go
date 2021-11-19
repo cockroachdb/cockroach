@@ -323,7 +323,7 @@ func TestChildSpanRegisteredWithRecordingParent(t *testing.T) {
 	defer sp.Finish()
 	ch := tr.StartSpan("child", WithParentAndAutoCollection(sp))
 	defer ch.Finish()
-	children := sp.i.crdb.mu.recording.openChildren
+	children := sp.i.crdb.mu.openChildren
 	require.Len(t, children, 1)
 	require.Equal(t, ch.i.crdb, children[0])
 	ch.RecordStructured(&types.Int32Value{Value: 5})
@@ -345,7 +345,7 @@ func TestSpanMaxChildren(t *testing.T) {
 		if exp > maxChildrenPerSpan {
 			exp = maxChildrenPerSpan
 		}
-		require.Len(t, sp.i.crdb.mu.recording.openChildren, exp)
+		require.Len(t, sp.i.crdb.mu.openChildren, exp)
 	}
 }
 

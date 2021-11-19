@@ -711,7 +711,7 @@ func (t *Tracer) startSpanGeneric(
 	helper.crdbSpan.mu.operation = opName
 	helper.crdbSpan.mu.recording.logs = makeSizeLimitedBuffer(maxLogBytesPerSpan, nil /* scratch */)
 	helper.crdbSpan.mu.recording.structured = makeSizeLimitedBuffer(maxStructuredBytesPerSpan, helper.structuredEventsAlloc[:])
-	helper.crdbSpan.mu.recording.openChildren = helper.childrenAlloc[:0]
+	helper.crdbSpan.mu.openChildren = helper.childrenAlloc[:0]
 	if opts.SpanKind != oteltrace.SpanKindUnspecified {
 		helper.crdbSpan.setTagLocked(spanKindTagKey, attribute.StringValue(opts.SpanKind.String()))
 	}
@@ -730,10 +730,8 @@ func (t *Tracer) startSpanGeneric(
 		// created Span to the parent so that the parent will later be able to
 		// collect the child's recording.
 		if opts.Parent != nil && opts.Parent.i.crdb != nil {
-			if opts.Parent.i.crdb.recordingType() != RecordingOff {
-				s.i.crdb.mu.parent = opts.Parent.i.crdb
-				opts.Parent.i.crdb.addChild(s.i.crdb)
-			}
+			s.i.crdb.mu.parent = opts.Parent.i.crdb
+			opts.Parent.i.crdb.addChild(s.i.crdb)
 		}
 		s.i.crdb.enableRecording(opts.recordingType())
 	}
@@ -743,13 +741,6 @@ func (t *Tracer) startSpanGeneric(
 	//
 	// NB: (opts.Parent != nil && opts.Parent.i.crdb == nil) is not possible at
 	// the moment, but let's not rely on that.
-	//
-	// TODO(andrei): We should be adding to the registry also if the span has a
-	// local parent but the parent is not recording, since in that case we haven't
-	// linked the span to the parent above. But I don't want to do that before
-	// optimizing the registry code. For now, not adding the span to the registry
-	// in this case doesn't really matter, since the only cases where we're
-	// creating spans is when the parent is recording.
 	if opts.Parent == nil || opts.Parent.i.crdb == nil {
 		t.activeSpansRegistry.addSpan(s.i.crdb)
 	}

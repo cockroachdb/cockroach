@@ -72,6 +72,15 @@ type crdbSpanMu struct {
 	duration  time.Duration
 	operation string // name of operation associated with the span
 
+	// openChildren maintains the list of currently-open local children. These
+	// children are part of the active spans registry only indirectly, through
+	// this parent. When the parent finishes, any child that's still open will be
+	// inserted into the registry directly. When a child Finish()es, its recording
+	// is collected in recording.finishedChildren if this parent is recording.
+	//
+	// The spans are not maintained in a particular order.
+	openChildren []*crdbSpan
+
 	recording struct {
 		// recordingType is the recording type of the ongoing recording, if any.
 		// Its 'load' method may be called without holding the surrounding mutex,
@@ -89,12 +98,6 @@ type crdbSpanMu struct {
 		// annotate recordings with the _dropped tag, when applicable.
 		dropped bool
 
-		// openChildren contains the list of local child spans started after this
-		// Span started recording, that haven't been Finish()ed yet. After Finish(),
-		// the respective child moves to finishedChildren.
-		//
-		// The spans are not maintained in a particular order.
-		openChildren []*crdbSpan
 		// finishedChildren contains the recordings of finished children (and
 		// grandchildren recursively). This includes remote child span recordings
 		// that were manually imported, as well as recordings from local children
@@ -148,6 +151,7 @@ type sizeLimitedBuffer struct {
 func (s *crdbSpan) finish() bool {
 	var children []*crdbSpan
 	var parent *crdbSpan
+	var needRegistryChange bool
 	{
 		s.mu.Lock()
 		if s.mu.finished {
@@ -156,6 +160,11 @@ func (s *crdbSpan) finish() bool {
 			return false
 		}
 		s.mu.finished = true
+		// If the span is not part of the registry now, it never will be. So, we'll
+		// need to remove it from the registry only if it currently does not have a
+		// parent. We'll also need to manipulate the registry if there are open
+		// children (they'll need to be added to the registry).
+		needRegistryChange = s.mu.parent == nil || len(s.mu.openChildren) > 0
 
 		finishTime := timeutil.Now()
 		duration := finishTime.Sub(s.startTime)
@@ -165,8 +174,8 @@ func (s *crdbSpan) finish() bool {
 		s.mu.duration = duration
 
 		// Shallow-copy the children so they can be processed outside the lock.
-		children = make([]*crdbSpan, len(s.mu.recording.openChildren))
-		copy(children, s.mu.recording.openChildren)
+		children = make([]*crdbSpan, len(s.mu.openChildren))
+		copy(children, s.mu.openChildren)
 
 		// We'll operate on the parent outside of the child's lock.
 		parent = s.mu.parent
@@ -182,8 +191,10 @@ func (s *crdbSpan) finish() bool {
 	for _, c := range children {
 		c.parentFinished()
 	}
-	// Atomically replace s in the registry with all of its still-open children.
-	s.tracer.activeSpansRegistry.swap(s.spanID, children)
+	if needRegistryChange {
+		// Atomically replace s in the registry with all of its still-open children.
+		s.tracer.activeSpansRegistry.swap(s.spanID, children)
+	}
 
 	return true
 }
@@ -244,11 +255,11 @@ func (s *crdbSpan) getVerboseRecording() Recording {
 	s.mu.Lock()
 	// The capacity here is approximate since we don't know how many
 	// grandchildren there are.
-	result := make(Recording, 0, 1+len(s.mu.recording.openChildren)+len(s.mu.recording.finishedChildren))
+	result := make(Recording, 0, 1+len(s.mu.openChildren)+len(s.mu.recording.finishedChildren))
 	result = append(result, s.getRecordingNoChildrenLocked(RecordingVerbose))
 	result = append(result, s.mu.recording.finishedChildren...)
 
-	for _, child := range s.mu.recording.openChildren {
+	for _, child := range s.mu.openChildren {
 		result = append(result, child.getVerboseRecording()...)
 	}
 	s.mu.Unlock()
@@ -280,7 +291,7 @@ func (s *crdbSpan) getStructuredRecording() Recording {
 			buffer = append(buffer, &c.StructuredRecords[i])
 		}
 	}
-	for _, c := range s.mu.recording.openChildren {
+	for _, c := range s.mu.openChildren {
 		buffer = c.getStructuredEventsRecursively(buffer)
 	}
 
@@ -454,7 +465,7 @@ func (s *crdbSpan) getStructuredEventsRecursively(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	buffer = s.getStructuredEventsLocked(buffer)
-	for _, c := range s.mu.recording.openChildren {
+	for _, c := range s.mu.openChildren {
 		buffer = c.getStructuredEventsRecursively(buffer)
 	}
 	for _, c := range s.mu.recording.finishedChildren {
@@ -566,15 +577,8 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 func (s *crdbSpan) addChild(child *crdbSpan) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.recordingType() == RecordingOff {
-		// We're not recording; there's nothing to do. The caller also checks the
-		// recording status, but we want to also check it here under the lock
-		// (double-checked locking).
-		return
-	}
-
-	if len(s.mu.recording.openChildren) < maxChildrenPerSpan {
-		s.mu.recording.openChildren = append(s.mu.recording.openChildren, child)
+	if len(s.mu.openChildren) < maxChildrenPerSpan {
+		s.mu.openChildren = append(s.mu.openChildren, child)
 	}
 }
 
@@ -619,14 +623,14 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 	}
 
 	// Unlink the child.
-	l := len(s.mu.recording.openChildren)
-	for i, c := range s.mu.recording.openChildren {
+	l := len(s.mu.openChildren)
+	for i, c := range s.mu.openChildren {
 		if c != child {
 			continue
 		}
-		s.mu.recording.openChildren[i] = s.mu.recording.openChildren[l-1]
-		s.mu.recording.openChildren[l-1] = nil
-		s.mu.recording.openChildren = s.mu.recording.openChildren[:l-1]
+		s.mu.openChildren[i] = s.mu.openChildren[l-1]
+		s.mu.openChildren[l-1] = nil
+		s.mu.openChildren = s.mu.openChildren[:l-1]
 		break
 	}
 }
@@ -651,7 +655,7 @@ func (s *crdbSpan) SetVerbose(to bool) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, child := range s.mu.recording.openChildren {
+	for _, child := range s.mu.openChildren {
 		child.SetVerbose(to)
 	}
 
