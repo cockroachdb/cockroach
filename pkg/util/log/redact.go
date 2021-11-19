@@ -76,6 +76,7 @@ func getEditor(editMode EditSensitiveData) redactEditor {
 		return func(r redactablePackage) redactablePackage {
 			if !r.redactable {
 				r.msg = []byte(redact.EscapeBytes(r.msg))
+				r.tags = formattableTags(redact.EscapeBytes([]byte(r.tags)))
 				r.redactable = true
 			}
 			return r
@@ -84,6 +85,7 @@ func getEditor(editMode EditSensitiveData) redactEditor {
 		return func(r redactablePackage) redactablePackage {
 			if r.redactable {
 				r.msg = redact.RedactableBytes(r.msg).StripMarkers()
+				r.tags = formattableTags(redact.RedactableBytes(r.tags).StripMarkers())
 				r.redactable = false
 			}
 			return r
@@ -92,8 +94,10 @@ func getEditor(editMode EditSensitiveData) redactEditor {
 		return func(r redactablePackage) redactablePackage {
 			if r.redactable {
 				r.msg = []byte(redact.RedactableBytes(r.msg).Redact())
+				r.tags = formattableTags(redact.RedactableBytes(r.tags).Redact())
 			} else {
 				r.msg = redact.RedactedMarker()
+				r.tags = r.tags.redactTagValues(true /* preserveMarkers */)
 				r.redactable = true
 			}
 			return r
@@ -102,9 +106,11 @@ func getEditor(editMode EditSensitiveData) redactEditor {
 		return func(r redactablePackage) redactablePackage {
 			if r.redactable {
 				r.msg = redact.RedactableBytes(r.msg).Redact().StripMarkers()
+				r.tags = formattableTags(redact.RedactableBytes(r.tags).Redact().StripMarkers())
 				r.redactable = false
 			} else {
 				r.msg = strippedMarker
+				r.tags = r.tags.redactTagValues(false /* preserveMarkers */)
 			}
 			return r
 		}
@@ -113,22 +119,24 @@ func getEditor(editMode EditSensitiveData) redactEditor {
 	}
 }
 
-var strippedMarker = redact.RedactableBytes(redact.RedactedMarker()).StripMarkers()
+var redactedMarker = redact.RedactedMarker()
+var strippedMarker = redact.RedactableBytes(redactedMarker).StripMarkers()
 
 // maybeRedactEntry transforms a logpb.Entry to either strip
 // sensitive data or keep it, or strip the redaction markers or keep them,
 // or a combination of both. The specific behavior is selected
 // by the provided redactEditor.
-func maybeRedactEntry(payload entryPayload, editor redactEditor) entryPayload {
+func maybeRedactEntry(payload entryPayload, editor redactEditor) (res entryPayload) {
 	r := redactablePackage{
 		redactable: payload.redactable,
+		tags:       payload.tags,
 		msg:        []byte(payload.message),
 	}
 	r = editor(r)
-	return entryPayload{
-		redactable: r.redactable,
-		message:    string(r.msg),
-	}
+	res.redactable = r.redactable
+	res.message = string(r.msg)
+	res.tags = r.tags
+	return res
 }
 
 // Safe constructs a SafeFormatter / SafeMessager.
@@ -167,6 +175,7 @@ func init() {
 
 type redactablePackage struct {
 	msg        []byte
+	tags       formattableTags
 	redactable bool
 }
 
