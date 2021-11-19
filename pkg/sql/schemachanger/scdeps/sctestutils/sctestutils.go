@@ -58,6 +58,9 @@ func WithBuilderDependenciesFromTestServer(
 		resolver.SchemaResolver
 		scbuild.AuthorizationAccessor
 	})
+	// For setting up a builder inside tests we will ensure that the new schema
+	// changer will allow non-fully implemented operations.
+	planner.SessionData().NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
 	fn(scdeps.NewBuilderDependencies(
 		execCfg.Codec,
 		planner.Txn(),
