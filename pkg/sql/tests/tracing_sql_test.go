@@ -67,16 +67,8 @@ func TestSetTraceSpansVerbosityBuiltin(t *testing.T) {
 	)
 
 	require.True(t, root.IsVerbose())
-	// The children have not been made verbose. This is an artifact of the current
-	// implementation; it might change in the future. Children are only registered
-	// with the parent if the parent is recording at the time when the children
-	// are created (which was not the case here). set_trace_verbose only operates
-	// on spans that are linked to their parent. set_trace_verbose could also go
-	// through the span registry looking for more spans in the trace, but it
-	// doesn't currently do that (and also currently we don't add most spans to
-	// the registry, but that also should change in the future).
-	require.False(t, child.IsVerbose())
-	require.False(t, childChild.IsVerbose())
+	require.True(t, child.IsVerbose())
+	require.True(t, childChild.IsVerbose())
 
 	// New child of verbose child span should also be verbose by default.
 	newChild := tr.StartSpan("root.child.newchild", tracing.WithParent(root))
