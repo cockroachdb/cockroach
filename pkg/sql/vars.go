@@ -1801,6 +1801,25 @@ var varGen = map[string]sessionVar{
 			return string(humanizeutil.IBytes(rowexec.JoinReaderOrderingStrategyBatchSize.Get(sv)))
 		},
 	},
+
+	// CockroachDB extension.
+	`unsafe_parallelize_lookup_joins_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`unsafe_parallelize_lookup_joins_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("unsafe_parallelize_lookup_joins_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetUnsafeParallelizeLookupJoinsEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UnsafeParallelizeLookupJoinsEnabled), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return rowexec.UnsafeParallizeLookupJoinsEnabled.String(sv)
+		},
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
