@@ -131,6 +131,11 @@ type intentInterleavingIter struct {
 	intentLimitKeyBuf []byte
 }
 
+// TODO(bananabrick): Update intent interleaving iter so that
+// it doesn't understand interleaved intents. As of now, cockroach
+// can't write new interleaved intents, but can read them using
+// this iterator.
+
 var _ MVCCIterator = &intentInterleavingIter{}
 
 var intentInterleavingIterPool = sync.Pool{
