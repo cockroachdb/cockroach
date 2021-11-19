@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
 	"github.com/gorhill/cronexpr"
@@ -294,7 +295,7 @@ func TestJobSchedulerCanBeDisabledWhileSleeping(t *testing.T) {
 	neverExecute := &recordScheduleExecutor{}
 	defer registerScopedScheduledJobExecutor(executorName, neverExecute)()
 
-	stopper := stop.NewStopper()
+	stopper := stop.NewStopper(stop.WithTracer(h.server.TracerI().(*tracing.Tracer)))
 	getWaitPeriodCalled := make(chan struct{})
 
 	knobs := fastDaemonKnobs(func() time.Duration {
@@ -391,7 +392,7 @@ func TestJobSchedulerDaemonProcessesJobs(t *testing.T) {
 	h.cfg.TestingKnobs = fastDaemonKnobs(overridePaceSetting(10 * time.Millisecond))
 
 	// Start daemon.
-	stopper := stop.NewStopper()
+	stopper := stop.NewStopper(stop.WithTracer(h.server.TracerI().(*tracing.Tracer)))
 	daemon := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
 	daemon.runDaemon(ctx, stopper)
 
@@ -439,7 +440,7 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 	h.cfg.TestingKnobs = fastDaemonKnobs(overridePaceSetting(time.Hour))
 
 	// Start daemon.
-	stopper := stop.NewStopper()
+	stopper := stop.NewStopper(stop.WithTracer(h.server.TracerI().(*tracing.Tracer)))
 	daemon := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
 	daemon.runDaemon(ctx, stopper)
 
