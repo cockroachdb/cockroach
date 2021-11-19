@@ -335,6 +335,7 @@ func (s *ColBatchScan) Release() {
 
 // Close implements the colexecop.Closer interface.
 func (s *ColBatchScan) Close() error {
+	s.rf.Close(s.EnsureCtx())
 	if s.tracingSpan != nil {
 		s.tracingSpan.Finish()
 		s.tracingSpan = nil
