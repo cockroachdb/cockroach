@@ -93,10 +93,11 @@ CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 511) AS
 
 			kvRowsReadRegex := regexp.MustCompile(`KV rows read: (\d+)`)
 			batchCountRegex := regexp.MustCompile(`vectorized batch count: (\d+)`)
+			mvccStepCountRegex := regexp.MustCompile(`MVCC step count \(ext/int\): (\d+)/\d+`)
 			testutils.SucceedsSoon(t, func() error {
-				rows, err := conn.QueryContext(ctx, `EXPLAIN ANALYZE (VERBOSE, DISTSQL) `+testCase.query)
+				rows, err := conn.QueryContext(ctx, `EXPLAIN ANALYZE (VERBOSE) `+testCase.query)
 				assert.NoError(t, err)
-				foundKVRowsRead, foundBatches := -1, -1
+				foundKVRowsRead, foundBatches, foundMVCCSteps := -1, -1, -1
 				var sb strings.Builder
 				for rows.Next() {
 					var res string
@@ -109,6 +110,9 @@ CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 511) AS
 					} else if matches = batchCountRegex.FindStringSubmatch(res); len(matches) > 0 {
 						foundBatches, err = strconv.Atoi(matches[1])
 						assert.NoError(t, err)
+					} else if matches = mvccStepCountRegex.FindStringSubmatch(res); len(matches) > 0 {
+						foundMVCCSteps, err = strconv.Atoi(matches[1])
+						assert.NoError(t, err)
 					}
 				}
 				if foundKVRowsRead != testCase.expectedKVRowsRead {
@@ -116,6 +120,9 @@ CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 511) AS
 				}
 				if foundBatches != 1 {
 					return fmt.Errorf("should use just 1 batch to scan rows, found %d:\n%s", foundBatches, sb.String())
+				}
+				if foundMVCCSteps != testCase.expectedKVRowsRead {
+					return fmt.Errorf("expected to do %d MVCC steps, found %d", testCase.expectedKVRowsRead, foundMVCCSteps)
 				}
 				return nil
 			})

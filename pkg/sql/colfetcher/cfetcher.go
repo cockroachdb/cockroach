@@ -607,13 +607,24 @@ func (rf *cFetcher) StartScan(
 	// a very restrictive filter and actually have to retrieve a lot of rows).
 	firstBatchLimit := rowinfra.KeyLimit(limitHint)
 	if firstBatchLimit != 0 {
-		// The limitHint is a row limit, but each row could be made up
-		// of more than one key. We take the maximum possible keys
-		// per row out of all the table rows we could potentially
-		// scan over.
+		// The limitHint is a row limit, but each row could be made up of more
+		// than one key. We take the maximum possible keys per row out of all
+		// the table rows we could potentially scan over.
+		//
+		// Note that unlike for the row.Fetcher, we don't need an extra key to
+		// form the last row in the cFetcher because we are eagerly finalizing
+		// each row once we know that all KVs comprising that row have been
+		// fetched. Consider several cases:
+		// - the table has only one column family - then we can finalize each
+		//   row right after the first KV is decoded;
+		// - the table has multiple column families:
+		//   - KVs for all column families are present for all rows - then for
+		//     each row, when its last KV is fetched, the row can be finalized
+		//     (and firstBatchLimit asks exactly for the correct number of KVs);
+		//   - KVs for some column families are omitted for some rows - then we
+		//     will actually fetch more KVs than necessary, but we'll decode
+		//     limitHint number of rows.
 		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * rf.maxKeysPerRow)
-		// We need an extra key to make sure we form the last row.
-		firstBatchLimit++
 	}
 
 	f, err := row.NewKVFetcher(
