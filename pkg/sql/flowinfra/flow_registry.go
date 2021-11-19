@@ -52,24 +52,27 @@ const expectedConnectionTime time.Duration = 500 * time.Millisecond
 
 // InboundStreamInfo represents the endpoint where a data stream from another
 // node connects to a flow. The external node initiates this process through a
-// FlowStream RPC, which uses (*Flow).connectInboundStream() to associate the
-// stream to a receiver to push rows to.
+// FlowStream RPC, which uses FlowRegistry.ConnectInboundStream() to associate
+// the stream to a receiver to push rows to.
 type InboundStreamInfo struct {
+	mu struct {
+		syncutil.Mutex
+		connected bool
+		// if set, indicates that we waited too long for an inbound connection,
+		// or we don't want this stream to connect anymore due to flow
+		// cancellation.
+		canceled bool
+		// finished is set if we have signaled that the stream is done
+		// transferring rows (to the flow's wait group).
+		finished bool
+	}
 	// receiver is the entity that will receive rows from another host, which is
 	// part of a processor (normally an input synchronizer) for row-based
 	// execution and a colrpc.Inbox for vectorized execution.
 	//
 	// During a FlowStream RPC, the stream is handed off to this strategy to
 	// process.
-	receiver  InboundStreamHandler
-	connected bool
-	// if set, indicates that we waited too long for an inbound connection, or
-	// we don't want this stream to connect anymore due to flow cancellation.
-	canceled bool
-	// finished is set if we have signaled that the stream is done transferring
-	// rows (to the flow's wait group).
-	finished bool
-
+	receiver InboundStreamHandler
 	// waitGroup to signal on when finished.
 	waitGroup *sync.WaitGroup
 }
@@ -85,6 +88,9 @@ func NewInboundStreamInfo(
 }
 
 // flowEntry is a structure associated with a (potential) flow.
+//
+// All fields in flowEntry are protected by the FlowRegistry mutex and, thus,
+// must be accessed while holding the lock.
 type flowEntry struct {
 	// waitCh is set if one or more clients are waiting for the flow; the
 	// channel gets closed when the flow is registered.
@@ -97,10 +103,10 @@ type flowEntry struct {
 
 	flow *FlowBase
 
-	// inboundStreams are streams that receive data from other hosts, through the
-	// FlowStream API. All fields in the inboundStreamInfos are protected by the
-	// FlowRegistry mutex (except the receiver, whose methods can be called
-	// freely).
+	// inboundStreams are streams that receive data from other hosts, through
+	// the FlowStream API. Each InboundStreamInfo has its own mutex, separate
+	// from the FlowRegistry mutex. This map is set in Flow.Setup(), so it is
+	// safe to lookup into concurrently later.
 	inboundStreams map[execinfrapb.StreamID]*InboundStreamInfo
 
 	// streamTimer is a timer that fires after a timeout and verifies that all
@@ -282,15 +288,17 @@ func (fr *FlowRegistry) cancelPendingStreamsLocked(id execinfrapb.FlowID) []Inbo
 		return nil
 	}
 	pendingReceivers := make([]InboundStreamHandler, 0)
-	for streamID, is := range entry.inboundStreams {
+	for _, is := range entry.inboundStreams {
 		// Connected, non-finished inbound streams will get an error
 		// returned in ProcessInboundStream(). Non-connected streams
 		// are handled below.
-		if !is.connected && !is.finished && !is.canceled {
-			is.canceled = true
+		is.mu.Lock()
+		if !is.mu.connected && !is.mu.finished && !is.mu.canceled {
+			is.mu.canceled = true
 			pendingReceivers = append(pendingReceivers, is.receiver)
-			fr.finishInboundStreamLocked(id, streamID)
+			fr.finishInboundStreamLocked(is)
 		}
+		is.mu.Unlock()
 	}
 	return pendingReceivers
 }
@@ -312,13 +320,14 @@ func (fr *FlowRegistry) UnregisterFlow(id execinfrapb.FlowID) {
 // up to the given timeout - and returns the flowEntry. If the timeout elapses,
 // returns nil. It should only be called while holding the mutex. The mutex is
 // temporarily unlocked if we need to wait.
-// It is illegal to call this if the flow is already connected.
 func (fr *FlowRegistry) waitForFlowLocked(
 	ctx context.Context, id execinfrapb.FlowID, timeout time.Duration,
 ) *flowEntry {
 	entry := fr.getEntryLocked(id)
 	if entry.flow != nil {
-		log.Fatalf(ctx, "waitForFlowLocked called for a flow that's already registered: %d", id)
+		// The flow has just arrived (when the caller temporarily released the
+		// lock to send a handshake message on the gRPC stream).
+		return entry
 	}
 
 	// Flow not registered (at least not yet).
@@ -478,10 +487,10 @@ func (fr *FlowRegistry) ConnectInboundStream(
 	timeout time.Duration,
 ) (_ *FlowBase, _ InboundStreamHandler, _ func(), retErr error) {
 	fr.Lock()
-	defer fr.Unlock()
-
 	entry := fr.getEntryLocked(flowID)
-	if entry.flow == nil {
+	flow := entry.flow
+	fr.Unlock()
+	if flow == nil {
 		// Send the handshake message informing the producer that the consumer has
 		// not been scheduled yet. Another handshake will be sent below once the
 		// consumer has been connected.
@@ -503,20 +512,30 @@ func (fr *FlowRegistry) ConnectInboundStream(
 			// except there we already have the consumer and we can push the error.
 			return nil, nil, nil, err
 		}
+		fr.Lock()
 		entry = fr.waitForFlowLocked(ctx, flowID, timeout)
-		if entry == nil {
+		flowNotFound := true
+		if entry != nil {
+			flowNotFound = false
+			flow = entry.flow
+		}
+		fr.Unlock()
+		if flowNotFound {
 			return nil, nil, nil, errors.Errorf("flow %s not found", flowID)
 		}
 	}
 
+	// entry.inboundStreams is safe to access without holding the mutex since
+	// the map is not modified after Flow.Setup.
 	s, ok := entry.inboundStreams[streamID]
 	if !ok {
 		return nil, nil, nil, errors.Errorf("flow %s: no inbound stream %d", flowID, streamID)
 	}
-	if s.connected {
+	s.mu.Lock()
+	if s.mu.connected {
 		return nil, nil, nil, errors.Errorf("flow %s: inbound stream %d already connected", flowID, streamID)
 	}
-	if s.canceled {
+	if s.mu.canceled {
 		return nil, nil, nil, errors.Errorf("flow %s: inbound stream %d came too late", flowID, streamID)
 	}
 
@@ -524,10 +543,13 @@ func (fr *FlowRegistry) ConnectInboundStream(
 	// the handshake fails, we reset the state; we want the stream to be
 	// considered timed out when the moment comes just as if this connection
 	// attempt never happened.
-	s.connected = true
+	s.mu.connected = true
+	s.mu.Unlock()
 	defer func() {
 		if retErr != nil {
-			s.connected = false
+			s.mu.Lock()
+			s.mu.connected = false
+			s.mu.Unlock()
 		}
 	}()
 
@@ -542,26 +564,22 @@ func (fr *FlowRegistry) ConnectInboundStream(
 	}
 
 	cleanup := func() {
-		fr.Lock()
-		fr.finishInboundStreamLocked(flowID, streamID)
-		fr.Unlock()
+		s.mu.Lock()
+		fr.finishInboundStreamLocked(s)
+		s.mu.Unlock()
 	}
-	return entry.flow, s.receiver, cleanup, nil
+	return flow, s.receiver, cleanup, nil
 }
 
-func (fr *FlowRegistry) finishInboundStreamLocked(
-	fid execinfrapb.FlowID, sid execinfrapb.StreamID,
-) {
-	flowEntry := fr.getEntryLocked(fid)
-	streamEntry := flowEntry.inboundStreams[sid]
-
-	if !streamEntry.connected && !streamEntry.canceled {
+// The mutex of the streamEntry must be held when calling this method.
+func (fr *FlowRegistry) finishInboundStreamLocked(streamEntry *InboundStreamInfo) {
+	if !streamEntry.mu.connected && !streamEntry.mu.canceled {
 		panic("finishing inbound stream that didn't connect or time out")
 	}
-	if streamEntry.finished {
+	if streamEntry.mu.finished {
 		panic("double finish")
 	}
 
-	streamEntry.finished = true
+	streamEntry.mu.finished = true
 	streamEntry.waitGroup.Done()
 }
