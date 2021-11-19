@@ -790,7 +790,7 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 		return err
 	}
 	pb.SemaCtx = tree.MakeSemaContext()
-	pb.SemaCtx.TypeResolver = resolver
+	pb.SemaCtx.TypeResolver = &resolver
 
 	return pb.OutputHelper.Init(post, coreOutputTypes, &pb.SemaCtx, pb.EvalCtx)
 }
