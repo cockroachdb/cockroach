@@ -334,7 +334,7 @@ func TestChildSpanRegisteredWithRecordingParent(t *testing.T) {
 	defer sp.Finish()
 	ch := tr.StartSpan("child", WithParent(sp))
 	defer ch.Finish()
-	children := sp.i.crdb.mu.recording.openChildren
+	children := sp.i.crdb.mu.openChildren
 	require.Len(t, children, 1)
 	require.Equal(t, ch.i.crdb, children[0].crdbSpan)
 	ch.RecordStructured(&types.Int32Value{Value: 5})
@@ -342,27 +342,6 @@ func TestChildSpanRegisteredWithRecordingParent(t *testing.T) {
 	rec := sp.GetRecording(RecordingStructured)
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].StructuredRecords, 1)
-}
-
-// TestSpanMaxChildren verifies that a Span can
-// track at most maxChildrenPerSpan direct children.
-func TestSpanMaxChildren(t *testing.T) {
-	tr := NewTracer()
-	sp := tr.StartSpan("root", WithRecording(RecordingStructured))
-	defer sp.Finish()
-	numChildren := maxChildrenPerSpan + 123
-	children := make([]*Span, numChildren)
-	for i := 0; i < numChildren; i++ {
-		children[i] = tr.StartSpan(fmt.Sprintf("child %d", i), WithParent(sp))
-		exp := i + 1
-		if exp > maxChildrenPerSpan {
-			exp = maxChildrenPerSpan
-		}
-		require.Len(t, sp.i.crdb.mu.recording.openChildren, exp)
-	}
-	for _, s := range children {
-		s.Finish()
-	}
 }
 
 type explodyNetTr struct {
