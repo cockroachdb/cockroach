@@ -1010,44 +1010,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.Success = true
 		rts.check(t, jobs.StatusSucceeded)
 	})
-	t.Run("trace ID only set if requested", func(t *testing.T) {
-		// The trace ID can be set on the job if the job should be traced.
-		// Not all jobs should be traced. If the job is not being traced,
-		// ensure that we do not do an extra write to set it.
-
-		rts := registryTestSuite{}
-		rts.setUp(t)
-		defer rts.tearDown()
-
-		// Inject an error in the update to record the trace ID.
-		var updateCalls int
-		rts.beforeUpdate = func(orig, updated jobs.JobMetadata) error {
-			updateCalls++
-			return nil
-		}
-
-		runJob := func(t *testing.T) int {
-			t.Helper()
-			j, err := jobs.TestingCreateAndStartJob(context.Background(), rts.registry, rts.s.DB(), rts.mockJob)
-			require.NoError(t, err)
-			rts.job = j
-
-			// Make sure the job succeeds.
-			rts.resumeCheckCh <- struct{}{}
-			rts.resumeCh <- nil
-			rts.mu.e.ResumeStart = true
-			rts.mu.e.ResumeExit++
-			rts.mu.e.Success = true
-			rts.check(t, jobs.StatusSucceeded)
-			return updateCalls
-		}
-
-		updatedWithoutTracing := runJob(t)
-		updateCalls = 0
-		rts.traceRealSpan = true
-		updatedWithTracing := runJob(t)
-		require.Equal(t, updatedWithoutTracing, updatedWithTracing-1)
-	})
 
 	t.Run("dump traces on pause-unpause-success", func(t *testing.T) {
 		completeCh := make(chan struct{})
