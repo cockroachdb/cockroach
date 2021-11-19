@@ -285,7 +285,7 @@ func addMultiColumnIndex(
 ) {
 	// Group columns by table in a temporary map as single-column indexes,
 	// getting rid of duplicates.
-	tableToCols := make(map[cat.Table][][]cat.IndexColumn)
+	tableToCols := make(map[cat.Table][][]cat.IndexColumn, len(md.AllTables()))
 	for i, colID := range cols {
 		if desc != nil {
 			addSingleColumnIndex(colID, desc[i], md, tableToCols)
