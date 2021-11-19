@@ -16,6 +16,7 @@ go_library(
         "retry_jobs_with_exponential_backoff.go",
         "schema_changes.go",
         "separated_intents.go",
+        "single_version_descriptor_lease_table.go",
         "span_configurations.go",
         "sql_instances.go",
         "sql_stats.go",
