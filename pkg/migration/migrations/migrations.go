@@ -136,6 +136,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		alterSystemTableStatisticsAddAvgSize,
 	),
+	migration.NewTenantMigration(
+		"add system.single_version_descriptor_lease",
+		toCV(clusterversion.SingleVersionDescriptorLeaseTable),
+		NoPrecondition,
+		addSingleVersionDescriptorLeaseTable,
+	),
 }
 
 func init() {

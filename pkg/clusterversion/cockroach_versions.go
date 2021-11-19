@@ -285,6 +285,9 @@ const (
 	// AlterSystemTableStatisticsAddAvgSizeCol adds the column avgSize to the
 	// table system.table_statistics that contains a new statistic.
 	AlterSystemTableStatisticsAddAvgSizeCol
+	// SingleVersionDescriptorLeaseTable adds the single_version_descriptor_lease
+	// table.
+	SingleVersionDescriptorLeaseTable
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -489,6 +492,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemTableStatisticsAddAvgSizeCol,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 12},
+	},
+	{
+		Key:     SingleVersionDescriptorLeaseTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 14},
 	},
 
 	// *************************************************
