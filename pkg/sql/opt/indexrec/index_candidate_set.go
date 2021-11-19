@@ -46,8 +46,8 @@ import (
 // may also consider matching more types of SQL expressions, including LIKE
 // expressions.
 func FindIndexCandidateSet(rootExpr opt.Expr, md *opt.Metadata) map[cat.Table][][]cat.IndexColumn {
-	candidateSet := indexCandidateSet{md: md}
-	candidateSet.init()
+	var candidateSet indexCandidateSet
+	candidateSet.init(md)
 	candidateSet.categorizeIndexCandidates(rootExpr)
 	candidateSet.combineIndexCandidates()
 	return candidateSet.overallCandidates
@@ -64,8 +64,9 @@ type indexCandidateSet struct {
 }
 
 // init allocates memory for the maps in the set.
-func (ics *indexCandidateSet) init() {
-	numTables := len(ics.md.AllTables())
+func (ics *indexCandidateSet) init(md *opt.Metadata) {
+	numTables := len(md.AllTables())
+	ics.md = md
 	ics.equalCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
 	ics.rangeCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
 	ics.joinCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
@@ -285,7 +286,7 @@ func addMultiColumnIndex(
 ) {
 	// Group columns by table in a temporary map as single-column indexes,
 	// getting rid of duplicates.
-	tableToCols := make(map[cat.Table][][]cat.IndexColumn)
+	tableToCols := make(map[cat.Table][][]cat.IndexColumn, len(md.AllTables()))
 	for i, colID := range cols {
 		if desc != nil {
 			addSingleColumnIndex(colID, desc[i], md, tableToCols)

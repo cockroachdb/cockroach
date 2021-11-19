@@ -99,7 +99,7 @@ func (ot *OptTester) ReorderJoins() (string, error) {
 		joinsConsidered++
 	})
 
-	expr, err := ot.optimizeExpr(o)
+	expr, err := ot.optimizeExpr(o, nil)
 	if err != nil {
 		return "", err
 	}
