@@ -654,11 +654,49 @@ func TestKeysPerRow(t *testing.T) {
 		indexID     descpb.IndexID
 		expected    int
 	}{
-		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 1, 1},                                     // Primary index
-		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 2, 1},                                     // 'b' index
-		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 1, 2},             // Primary index
-		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 2, 1},             // 'b' index
-		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (a) STORING (b))", 2, 2}, // 'a' index
+		{
+			"(a INT PRIMARY KEY, b INT, INDEX (b))",
+			1, // Primary index
+			1,
+		},
+		{
+			"(a INT PRIMARY KEY, b INT, INDEX (b))",
+			2, // 'b' index
+			1,
+		},
+		{
+			"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))",
+			1, // Primary index
+			2,
+		},
+		{
+			"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))",
+			2, // 'b' index
+			1,
+		},
+		{
+			"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (a) STORING (b))",
+			2, // 'a' index
+			2,
+		},
+		{
+			"(a INT, b INT, c INT, d INT, e INT, FAMILY f0 (a, b), " +
+				"FAMILY f1 (c), FAMILY f2(d, e), INDEX (d) STORING (b))",
+			2, // 'd' index
+			1, // Only f0 is needed.
+		},
+		{
+			"(a INT, b INT, c INT, d INT, e INT, FAMILY f0 (a, b), " +
+				"FAMILY f1 (c), FAMILY f2(d, e), INDEX (d) STORING (c, e))",
+			2, // 'd' index
+			3, // f1 and f2 are needed, but f0 is always present.
+		},
+		{
+			"(a INT, b INT, c INT, d INT, e INT, FAMILY f0 (a, b), " +
+				"FAMILY f1 (c), FAMILY f2(d, e), INDEX (a, c) STORING (d))",
+			2, // 'a, c' index
+			2, // Only f2 is needed, but f0 is always present.
+		},
 	}
 
 	for i, test := range tests {
