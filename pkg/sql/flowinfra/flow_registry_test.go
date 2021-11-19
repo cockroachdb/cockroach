@@ -34,41 +34,35 @@ import (
 
 // lookupFlow returns the registered flow with the given ID. If no such flow is
 // registered, waits until it gets registered - up to the given timeout. If the
-// timeout elapses and the flow is not registered, the bool return value will be
-// false.
-func lookupFlow(fr *FlowRegistry, fid execinfrapb.FlowID, timeout time.Duration) Flow {
+// timeout elapses and the flow is not registered, nil is returned.
+func lookupFlow(fr *FlowRegistry, fid execinfrapb.FlowID, timeout time.Duration) *FlowBase {
 	fr.Lock()
-	defer fr.Unlock()
 	entry := fr.getEntryLocked(fid)
-	if entry.flow != nil {
-		return entry.flow
+	flow := entry.flow
+	fr.Unlock()
+	if flow == nil {
+		flow = fr.waitForFlow(context.Background(), fid, timeout)
 	}
-	entry = fr.waitForFlowLocked(context.Background(), fid, timeout)
-	if entry == nil {
-		return nil
-	}
-	return entry.flow
+	return flow
 }
 
 // lookupStreamInfo returns a stream entry from a FlowRegistry. If either the
 // flow or the streams are missing, an error is returned.
-//
-// A copy of the registry's InboundStreamInfo is returned so it can be accessed
-// without locking.
 func lookupStreamInfo(
 	fr *FlowRegistry, fid execinfrapb.FlowID, sid execinfrapb.StreamID,
-) (InboundStreamInfo, error) {
+) (*InboundStreamInfo, error) {
 	fr.Lock()
-	defer fr.Unlock()
 	entry := fr.getEntryLocked(fid)
-	if entry.flow == nil {
-		return InboundStreamInfo{}, errors.Errorf("missing flow entry: %s", fid)
+	flowFound := entry.flow != nil
+	fr.Unlock()
+	if !flowFound {
+		return nil, errors.Errorf("missing flow entry: %s", fid)
 	}
 	si, ok := entry.inboundStreams[sid]
 	if !ok {
-		return InboundStreamInfo{}, errors.Errorf("missing stream entry: %d", sid)
+		return nil, errors.Errorf("missing stream entry: %d", sid)
 	}
-	return *si, nil
+	return si, nil
 }
 
 func TestFlowRegistry(t *testing.T) {
@@ -240,7 +234,9 @@ func TestStreamConnectionTimeout(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !si.canceled {
+		si.mu.Lock()
+		defer si.mu.Unlock()
+		if !si.mu.canceled {
 			return errors.Errorf("not timed out yet")
 		}
 		return nil
