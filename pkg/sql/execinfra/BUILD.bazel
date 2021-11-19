@@ -45,6 +45,7 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
+        "//pkg/sql/rowinfra",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlliveness",

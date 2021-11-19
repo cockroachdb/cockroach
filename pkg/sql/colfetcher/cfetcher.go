@@ -605,15 +605,19 @@ func (rf *cFetcher) StartScan(
 	// If we have a limit hint, we limit the first batch size. Subsequent
 	// batches get larger to avoid making things too slow (e.g. in case we have
 	// a very restrictive filter and actually have to retrieve a lot of rows).
-	firstBatchLimit := rowinfra.KeyLimit(limitHint)
+	firstBatchLimit := rowinfra.KeyLimit(limitHint.Limit)
 	if firstBatchLimit != 0 {
 		// The limitHint is a row limit, but each row could be made up
 		// of more than one key. We take the maximum possible keys
 		// per row out of all the table rows we could potentially
 		// scan over.
-		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * rf.maxKeysPerRow)
-		// We need an extra key to make sure we form the last row.
-		firstBatchLimit++
+		firstBatchLimit = rowinfra.KeyLimit(int(limitHint.Limit) * rf.maxKeysPerRow)
+		if !limitHint.IsHardLimit {
+			// We need an extra key to make sure we form the last row if the
+			// limit is not hard (if it is, then the KV will indicate that there
+			// is no data which will form the last row).
+			firstBatchLimit++
+		}
 	}
 
 	f, err := row.NewKVFetcher(
@@ -635,7 +639,7 @@ func (rf *cFetcher) StartScan(
 	}
 	rf.fetcher = f
 	rf.machine.lastRowPrefix = nil
-	rf.machine.limitHint = int(limitHint)
+	rf.machine.limitHint = int(limitHint.Limit)
 	rf.machine.state[0] = stateResetBatch
 	rf.machine.state[1] = stateInitFetch
 	return nil

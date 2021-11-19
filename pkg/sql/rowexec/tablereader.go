@@ -98,7 +98,7 @@ func newTableReader(
 
 	tr := trPool.Get().(*tableReader)
 
-	tr.limitHint = rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
+	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
 	tr.parallelize = spec.Parallelize
 	tr.batchBytesLimit = batchBytesLimit
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)

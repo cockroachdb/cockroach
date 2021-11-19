@@ -148,7 +148,7 @@ func (b *backfiller) mainLoop(ctx context.Context) (roachpb.Spans, error) {
 		for todo.Key != nil {
 			log.VEventf(ctx, 3, "%s backfiller starting chunk %d: %s", b.name, chunks, todo)
 			var err error
-			todo.Key, err = b.chunks.runChunk(ctx, todo, rowinfra.RowLimit(b.spec.ChunkSize), b.spec.ReadAsOf)
+			todo.Key, err = b.chunks.runChunk(ctx, todo, rowinfra.MakeRowLimit(uint64(b.spec.ChunkSize)), b.spec.ReadAsOf)
 			if err != nil {
 				return nil, err
 			}

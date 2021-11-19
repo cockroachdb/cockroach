@@ -2287,7 +2287,7 @@ func columnBackfillInTxn(
 	for sp.Key != nil {
 		var err error
 		sp.Key, err = backfiller.RunColumnBackfillChunk(ctx,
-			txn, tableDesc, sp, rowinfra.RowLimit(columnBackfillBatchSize.Get(&evalCtx.Settings.SV)),
+			txn, tableDesc, sp, rowinfra.MakeRowLimit(uint64(columnBackfillBatchSize.Get(&evalCtx.Settings.SV))),
 			false /*alsoCommit*/, traceKV)
 		if err != nil {
 			return err

@@ -315,7 +315,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	iv.Cols = append(iv.Cols, tableDesc.PublicColumns()...)
 	iv.Cols = append(iv.Cols, cb.added...)
 	cb.evalCtx.IVarContainer = iv
-	for i := int64(0); i < int64(chunkSize); i++ {
+	for i := uint64(0); i < chunkSize.Limit; i++ {
 		datums, _, _, err := cb.fetcher.NextRowDecoded(ctx)
 		if err != nil {
 			return roachpb.Key{}, err
@@ -819,7 +819,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	}
 	defer fetcher.Close(ctx)
 	if err := fetcher.StartScan(
-		ctx, txn, []roachpb.Span{sp}, rowinfra.DefaultBatchBytesLimit, initBufferSize,
+		ctx, txn, []roachpb.Span{sp}, rowinfra.DefaultBatchBytesLimit, rowinfra.MakeRowLimit(uint64(initBufferSize)),
 		traceKV, false, /* forceProductionKVBatchSize */
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)

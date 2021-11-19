@@ -609,7 +609,7 @@ func (rf *Fetcher) StartInconsistentScan(
 }
 
 func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint rowinfra.RowLimit) rowinfra.KeyLimit {
-	if rowLimitHint == 0 {
+	if rowLimitHint.Limit == 0 {
 		return 0
 	}
 	// If we have a limit hint, we limit the first batch size. Subsequent
@@ -618,9 +618,14 @@ func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint rowinfra.RowLimit) rowinfra.K
 	// The rowLimitHint is a row limit, but each row could be made up of more than
 	// one key. We take the maximum possible keys per row out of all the table
 	// rows we could potentially scan over.
-	//
-	// We add an extra key to make sure we form the last row.
-	return rowinfra.KeyLimit(int64(rowLimitHint)*int64(rf.numKeysPerRow) + 1)
+	firstBatchLimit := rowinfra.KeyLimit(int64(rowLimitHint.Limit) * int64(rf.numKeysPerRow))
+	if !rowLimitHint.IsHardLimit {
+		// We need an extra key to make sure we form the last row if the limit
+		// is not hard (if it is, then the KV will indicate that there is no
+		// data which will form the last row).
+		firstBatchLimit++
+	}
+	return firstBatchLimit
 }
 
 // StartScanFrom initializes and starts a scan from the given kvBatchFetcher. Can be

@@ -276,7 +276,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
 				rowinfra.DefaultBatchBytesLimit,
-				10,    /*limitHint*/
+				rowinfra.MakeRowLimit(10),
 				false, /*traceKV*/
 				false, /*forceProductionKVBatchSize*/
 			); err != nil {
@@ -471,7 +471,7 @@ INDEX(c)
 		rowinfra.DefaultBatchBytesLimit,
 		// Set a limitHint of 1 to more quickly end the first batch, causing a
 		// batch that ends between rows.
-		1,     /*limitHint*/
+		rowinfra.MakeRowLimit(1),
 		false, /*traceKV*/
 		false, /*forceProductionKVBatchSize*/
 	); err != nil {

@@ -255,11 +255,11 @@ type zigzagJoiner struct {
 // be fetched at a time. Increasing this will improve performance for when
 // matched rows are grouped together, but increasing this too much will result
 // in fetching too many rows and therefore skipping less rows.
-var zigzagJoinerBatchSize = rowinfra.RowLimit(util.ConstantWithMetamorphicTestValue(
+var zigzagJoinerBatchSize = rowinfra.MakeRowLimit(uint64(util.ConstantWithMetamorphicTestValue(
 	"zig-zag-joiner-batch-size",
 	5, /* defaultValue */
 	1, /* metamorphicValue */
-))
+)))
 
 var _ execinfra.Processor = &zigzagJoiner{}
 var _ execinfra.RowSource = &zigzagJoiner{}

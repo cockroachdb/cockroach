@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -28,16 +29,20 @@ const readerOverflowProtection = 1000000000000000 /* 10^15 */
 
 // LimitHint returns the limit hint to set for a KVFetcher based on
 // the spec's limit hint and the PostProcessSpec.
-func LimitHint(specLimitHint int64, post *execinfrapb.PostProcessSpec) (limitHint int64) {
+func LimitHint(specLimitHint int64, post *execinfrapb.PostProcessSpec) rowinfra.RowLimit {
 	// We prioritize the post process's limit since ProcOutputHelper
 	// will tell us to stop once we emit enough rows.
 	if post.Limit != 0 && post.Limit <= readerOverflowProtection {
-		limitHint = int64(post.Limit)
-	} else if specLimitHint != 0 && specLimitHint <= readerOverflowProtection {
-		limitHint = specLimitHint
+		return rowinfra.RowLimit{
+			Limit:       post.Limit,
+			IsHardLimit: true,
+		}
+	}
+	if specLimitHint != 0 && specLimitHint <= readerOverflowProtection {
+		return rowinfra.MakeRowLimit(uint64(specLimitHint))
 	}
 
-	return limitHint
+	return rowinfra.NoRowLimit
 }
 
 // MisplannedRanges queries the range cache for all the passed-in spans and

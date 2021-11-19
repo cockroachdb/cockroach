@@ -15,7 +15,16 @@ package rowinfra
 // RowLimit represents a response limit expressed in terms of number of result
 // rows. RowLimits get ultimately converted to KeyLimits and are translated into
 // BatchRequest.MaxSpanRequestKeys.
-type RowLimit uint64
+type RowLimit struct {
+	Limit uint64
+	// IsHardLimit indicates whether at most Limit rows will be needed.
+	IsHardLimit bool
+}
+
+// MakeRowLimit returns a new RowLimit with IsHardLimit set to false.
+func MakeRowLimit(limit uint64) RowLimit {
+	return RowLimit{Limit: limit}
+}
 
 // KeyLimit represents a response limit expressed in terms of number of keys.
 type KeyLimit int64
@@ -26,7 +35,7 @@ type BytesLimit uint64
 
 // NoRowLimit can be passed to Fetcher.StartScan to signify that the caller
 // doesn't want to limit the number of result rows for each scan request.
-const NoRowLimit RowLimit = 0
+var NoRowLimit RowLimit
 
 // NoBytesLimit can be passed to Fetcher.StartScan to signify that the caller
 // doesn't want to limit the size of results for each scan request.

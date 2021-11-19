@@ -31,6 +31,7 @@ type scanBatchSizeTestCase struct {
 	needsStats         bool
 	query              string
 	expectedKVRowsRead int
+	expectedMVCCSteps  int
 }
 
 var scanBatchSizeTestCases = []scanBatchSizeTestCase{
@@ -39,12 +40,21 @@ var scanBatchSizeTestCases = []scanBatchSizeTestCase{
 		needsStats:         false,
 		query:              "SELECT * FROM t LIMIT 511",
 		expectedKVRowsRead: 511,
+		expectedMVCCSteps:  511,
+	},
+	// Uses the small hard limit.
+	{
+		needsStats:         false,
+		query:              "SELECT * FROM t LIMIT 5",
+		expectedKVRowsRead: 5,
+		expectedMVCCSteps:  5,
 	},
 	// Uses the estimated row count.
 	{
 		needsStats:         true,
 		query:              "SELECT * FROM t",
 		expectedKVRowsRead: 511,
+		expectedMVCCSteps:  511,
 	},
 	// Uses the soft limit.
 	{
@@ -53,6 +63,9 @@ var scanBatchSizeTestCases = []scanBatchSizeTestCase{
 		// We have a soft limit of 2 calculated by the optimizer given the
 		// selectivity of the filter (511 / 256).
 		expectedKVRowsRead: 2,
+		// Because it's a soft limit, we need to fetch an extra key to finalize
+		// the last row.
+		expectedMVCCSteps: 3,
 	},
 }
 
@@ -93,10 +106,11 @@ CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 511) AS
 
 			kvRowsReadRegex := regexp.MustCompile(`KV rows read: (\d+)`)
 			batchCountRegex := regexp.MustCompile(`vectorized batch count: (\d+)`)
+			mvccStepCountRegex := regexp.MustCompile(`MVCC step count \(ext/int\): (\d+)/\d+`)
 			testutils.SucceedsSoon(t, func() error {
-				rows, err := conn.QueryContext(ctx, `EXPLAIN ANALYZE (VERBOSE, DISTSQL) `+testCase.query)
+				rows, err := conn.QueryContext(ctx, `EXPLAIN ANALYZE (VERBOSE) `+testCase.query)
 				assert.NoError(t, err)
-				foundKVRowsRead, foundBatches := -1, -1
+				foundKVRowsRead, foundBatches, foundMVCCSteps := -1, -1, -1
 				var sb strings.Builder
 				for rows.Next() {
 					var res string
@@ -109,6 +123,9 @@ CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 511) AS
 					} else if matches = batchCountRegex.FindStringSubmatch(res); len(matches) > 0 {
 						foundBatches, err = strconv.Atoi(matches[1])
 						assert.NoError(t, err)
+					} else if matches = mvccStepCountRegex.FindStringSubmatch(res); len(matches) > 0 {
+						foundMVCCSteps, err = strconv.Atoi(matches[1])
+						assert.NoError(t, err)
 					}
 				}
 				if foundKVRowsRead != testCase.expectedKVRowsRead {
@@ -116,6 +133,9 @@ CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 511) AS
 				}
 				if foundBatches != 1 {
 					return fmt.Errorf("should use just 1 batch to scan rows, found %d:\n%s", foundBatches, sb.String())
+				}
+				if foundMVCCSteps != testCase.expectedMVCCSteps {
+					return fmt.Errorf("expected to do %d MVCC steps, found %d", testCase.expectedMVCCSteps, foundMVCCSteps)
 				}
 				return nil
 			})
