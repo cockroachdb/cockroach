@@ -554,7 +554,7 @@ type Writer interface {
 	// txnDidNotUpdateMeta allows for performance optimization when set to true,
 	// and has semantics defined in MVCCMetadata.TxnDidNotUpdateMeta (it can
 	// be conservatively set to false).
-	// REQUIRES: state is ExistingIntentInterleaved or ExistingIntentSeparated.
+	// REQUIRES: state is ExistingIntentSeparated.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	//
@@ -658,8 +658,7 @@ type Writer interface {
 	// conservatively set to false).
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
-	PutIntent(
-		ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID) error
+	PutIntent(ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID) error
 	// PutEngineKey sets the given key to the value provided. This is a
 	// general-purpose and low-level method that should be used sparingly,
 	// only when the other Put* methods are not applicable.

@@ -226,7 +226,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 
 	makeEngine := func() storage.Engine {
 		ctx := context.Background()
-		engine := storage.NewInMemForTesting()
+		engine := storage.NewDefaultInMemForTesting()
 		testData := []op{
 			{kv: makeKV("a", "val1", 10)},
 			{kv: makeInline("b", "val2")},

@@ -69,8 +69,6 @@ func (idw intentDemuxWriter) ClearIntent(
 func (idw intentDemuxWriter) PutIntent(
 	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID, buf []byte,
 ) (_ []byte, _ error) {
-	// The intent is either staying separated, or there
-	// was no previous intent.
 	var engineKey EngineKey
 	engineKey, buf = LockTableKey{
 		Key:      key,

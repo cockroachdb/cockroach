@@ -135,8 +135,8 @@ func (registry *stickyInMemEnginesRegistryImpl) GetOrCreateStickyInMemEngine(
 		storage.CacheSize(cfg.CacheSize),
 		storage.MaxSize(spec.Size.InBytes),
 		storage.EncryptionAtRest(spec.EncryptionOptions),
+		storage.ForStickyEngineTesting,
 	}
-	options = append(options, storage.ForStickyEngineTesting)
 
 	log.Infof(ctx, "creating new sticky in-mem engine %s", spec.StickyInMemoryEngineID)
 	engine := storage.InMemFromFS(ctx, fs, "", options...)
