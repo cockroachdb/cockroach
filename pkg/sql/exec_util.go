@@ -2946,6 +2946,10 @@ func (m *sessionDataMutator) SetJoinReaderOrderingStrategyBatchSize(val int64) {
 	m.data.JoinReaderOrderingStrategyBatchSize = val
 }
 
+func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsEnabled(val bool) {
+	m.data.ParallelizeMultiKeyLookupJoinsEnabled = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
