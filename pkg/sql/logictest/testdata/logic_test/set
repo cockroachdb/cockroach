@@ -673,3 +673,9 @@ SET join_reader_ordering_strategy_batch_size = '-1B'
 
 statement ok
 SET join_reader_ordering_strategy_batch_size = '1B'
+
+statement ok
+SET parallelize_multi_key_lookup_joins_enabled = true
+
+statement ok
+SET parallelize_multi_key_lookup_joins_enabled = false
