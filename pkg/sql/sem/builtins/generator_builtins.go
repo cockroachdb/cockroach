@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
-	pbtypes "github.com/gogo/protobuf/types"
 )
 
 // See the comments at the start of generators.go for details about
@@ -366,7 +365,7 @@ var generators = map[string]builtinDefinition{
 			},
 			payloadsForSpanGeneratorType,
 			makePayloadsForSpanGenerator,
-			"Returns the payload(s) of the requested span.",
+			"Returns the payload(s) of the requested span and all its children.",
 			tree.VolatilityVolatile,
 		),
 	),
@@ -1769,18 +1768,13 @@ var payloadsForSpanGeneratorType = types.MakeLabeledTuple(
 )
 
 // payloadsForSpanGenerator is a value generator that iterates over all payloads
-// over all recordings for a given Span.
+// in a Span's recording. The recording includes the span's children.
 type payloadsForSpanGenerator struct {
 	// The span to iterate over.
 	span tracing.RegistrySpan
 
-	// recordingIndex maintains the current position of the index of the iterator
-	// in the list of recordings surfaced by a given span. The payloads of the
-	// recording that this iterator points to are buffered in `payloads`
-	recordingIndex int
-
-	// payloads represents all payloads for a given recording currently accessed
-	// by the iterator, and accesses more in a streaming fashion.
+	// payloads represents all of span's structured records. It's set at Start()
+	// time.
 	payloads []json.JSON
 
 	// payloadIndex maintains the current position of the index of the iterator
@@ -1820,8 +1814,21 @@ func (p *payloadsForSpanGenerator) ResolvedType() *types.T {
 func (p *payloadsForSpanGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	// The user of the generator first calls Next(), then Values(), so the index
 	// managing the iterator's position needs to start at -1 instead of 0.
-	p.recordingIndex = -1
 	p.payloadIndex = -1
+
+	rec := p.span.GetRecording(tracing.RecordingStructured)
+	if rec == nil {
+		// No structured records.
+		return nil
+	}
+	p.payloads = make([]json.JSON, len(rec[0].StructuredRecords))
+	for i, sr := range rec[0].StructuredRecords {
+		var err error
+		p.payloads[i], err = protoreflect.MessageToJSON(sr.Payload, protoreflect.FmtFlags{EmitDefaults: true})
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -1829,39 +1836,7 @@ func (p *payloadsForSpanGenerator) Start(_ context.Context, _ *kv.Txn) error {
 // Next implements the tree.ValueGenerator interface.
 func (p *payloadsForSpanGenerator) Next(_ context.Context) (bool, error) {
 	p.payloadIndex++
-
-	// If payloadIndex is within payloads and there are some payloads, then we
-	// have more buffered payloads to return.
-	if p.payloads != nil && p.payloadIndex < len(p.payloads) {
-		return true, nil
-	}
-
-	// Otherwise either there are no payloads or we have exhausted the payloads in
-	// our current recording, and we need to access another set of payloads from
-	// another recording.
-	p.payloads = nil
-
-	// Keep searching recordings for one with a valid (non-nil) payload.
-	for p.payloads == nil {
-		p.recordingIndex++
-		// If there are no more recordings, then we cannot continue.
-		if !(p.recordingIndex < p.span.GetRecording(tracing.RecordingVerbose).Len()) {
-			return false, nil
-		}
-		currRecording := p.span.GetRecording(tracing.RecordingVerbose)[p.recordingIndex]
-		currRecording.Structured(func(item *pbtypes.Any, _ time.Time) {
-			payload, err := protoreflect.MessageToJSON(item, protoreflect.FmtFlags{EmitDefaults: true})
-			if err != nil {
-				return
-			}
-			if payload != nil {
-				p.payloads = append(p.payloads, payload)
-			}
-		})
-	}
-
-	p.payloadIndex = 0
-	return true, nil
+	return p.payloadIndex < len(p.payloads), nil
 }
 
 // Values implements the tree.ValueGenerator interface.
