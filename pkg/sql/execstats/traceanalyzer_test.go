@@ -106,8 +106,8 @@ func TestTraceAnalyzer(t *testing.T) {
 		colexecTraceAnalyzer *execstats.TraceAnalyzer
 	)
 	for _, vectorizeMode := range []sessiondatapb.VectorizeExecMode{sessiondatapb.VectorizeOff, sessiondatapb.VectorizeOn} {
-		var sp *tracing.Span
-		ctx, sp = tracing.StartVerboseTrace(ctx, execCfg.AmbientCtx.Tracer, t.Name())
+		execCtx, finishAndCollect := tracing.ContextWithRecordingSpan(ctx, execCfg.AmbientCtx.Tracer, t.Name())
+		defer finishAndCollect()
 		ie := execCfg.InternalExecutor
 		ie.SetSessionData(
 			&sessiondata.SessionData{
@@ -120,15 +120,14 @@ func TestTraceAnalyzer(t *testing.T) {
 			},
 		)
 		_, err := ie.ExecEx(
-			ctx,
+			execCtx,
 			t.Name(),
 			nil, /* txn */
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			testStmt,
 		)
-		sp.Finish()
 		require.NoError(t, err)
-		trace := sp.GetRecording(tracing.RecordingVerbose)
+		trace := finishAndCollect()
 		analyzer := <-analyzerChan
 		require.NoError(t, analyzer.AddTrace(trace, true /* makeDeterministic */))
 		require.NoError(t, analyzer.ProcessStats())
