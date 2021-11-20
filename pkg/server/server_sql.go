@@ -418,7 +418,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.stopper,
 		cfg.rangeFeedFactory,
 	)
-	cfg.registry.AddMetricStruct(leaseMgr.MetricsStruct())
 
 	rootSQLMetrics := cfg.monitorAndMetrics.rootSQLMetrics
 	cfg.registry.AddMetricStruct(rootSQLMetrics)
@@ -430,10 +429,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	rootSQLMemoryMonitor := cfg.monitorAndMetrics.rootSQLMemoryMonitor
 
 	// leaseMgrMonitor is the memory metric for all leases by the Manager.
+	leaseMetrics := sql.MakeBaseMemMetrics("lease-manager-memory", cfg.HistogramWindowInterval())
+	leaseMgrMetrics := leaseMgr.MetricsStruct(leaseMetrics.CurBytesCount, leaseMetrics.MaxBytesHist)
+	cfg.registry.AddMetricStruct(leaseMgrMetrics)
 	leaseMgrMonitor := mon.NewMonitorInheritWithLimit("lease-manager", 0 /* limit */, rootSQLMemoryMonitor)
-	leaseMetrics := lease.MakeLeaseMgrMetrics(cfg.HistogramWindowInterval())
-	cfg.registry.AddMetricStruct(leaseMetrics)
-	leaseMgrMonitor.SetMetrics(leaseMetrics.CurBytesCount, leaseMetrics.MaxBytesHist)
+	leaseMgrMonitor.SetMetrics(leaseMgrMetrics.CurBytesCount, leaseMgrMetrics.MaxBytesHist)
 	leaseMgrMonitor.Start(context.Background(), rootSQLMemoryMonitor, mon.BoundAccount{})
 
 	// bulkMemoryMonitor is the parent to all child SQL monitors tracking bulk

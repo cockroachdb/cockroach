@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -1331,5 +1330,5 @@ func TestManagerLeaseMemoryMonitor(t *testing.T) {
 
 	// Extract memory monitor information.
 	print(acquired.Underlying().GetModificationTime().String())
-	log.Infof(ctx, "number of bytes allocated: %d", manager.mu.leaseMemMonitor.AllocBytes())
+	//log.Infof(ctx, "number of bytes allocated: %d", manager.mu.mon.AllocBytes())
 }

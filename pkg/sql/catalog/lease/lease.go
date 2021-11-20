@@ -591,9 +591,7 @@ type Manager struct {
 	storage          storage
 	mu               struct {
 		syncutil.Mutex
-		descriptors     map[descpb.ID]*descriptorState
-		leaseMemMonitor *mon.BytesMonitor
-		leaseMemAcc     mon.BoundAccount
+		descriptors map[descpb.ID]*descriptorState
 
 		// updatesResolvedTimestamp keeps track of a timestamp before which all
 		// descriptor updates have already been seen.
@@ -611,6 +609,12 @@ type Manager struct {
 	ambientCtx   log.AmbientContext
 	stopper      *stop.Stopper
 	sem          *quotapool.IntPool
+
+	// mon is a memory monitor linked with the leaseMgr on creation.
+	mon *mon.BytesMonitor
+	// boundAccount is associated with mon and is used to track memory allocations
+	// during lease acquires.
+	boundAccount mon.BoundAccount
 }
 
 const leaseConcurrencyLimit = 5
@@ -663,15 +667,6 @@ func NewLeaseManager(
 
 	lm.draining.Store(false)
 
-	// Set up memory monitoring for the manager's leases.
-	//opt := leaseMonitorOptions{
-	//	memoryPoolSize:          6000,
-	//	histogramWindowInterval: time.Hour,
-	//	settings:                settings,
-	//}
-	//lm.mu.leaseMemMonitor = newManagerMonitor(opt)
-	//lm.mu.leaseMemAcc = lm.mu.leaseMemMonitor.MakeBoundAccount()
-
 	return lm
 }
 
@@ -680,23 +675,6 @@ type leaseMonitorOptions struct {
 	histogramWindowInterval time.Duration
 	settings                *cluster.Settings
 }
-
-//// growBoundAccount grows the mutex protected bound account backing the
-//// Manager.
-//func (m *Manager) growBoundAccount(ctx context.Context, growBy int64) error {
-//	m.mu.Lock()
-//	defer m.mu.Unlock()
-//	err := m.mu.leaseMemAcc.Grow(ctx, growBy)
-//	return err
-//}
-//
-//// shrinkBoundAccount shrinks the mutex protected bound account backing the
-//// Manager.
-//func (m *Manager) shrinkBoundAccount(ctx context.Context, shrinkBy int64) {
-//	m.mu.Lock()
-//	defer m.mu.Unlock()
-//	m.mu.leaseMemAcc.Shrink(ctx, shrinkBy)
-//}
 
 // newManagerMonitor returns a BytesMonitor configured with given options.
 func newManagerMonitor(options leaseMonitorOptions) *mon.BytesMonitor {
@@ -1315,37 +1293,16 @@ func (m *Manager) Codec() keys.SQLCodec {
 // registration.
 type Metrics struct {
 	OutstandingLeases *metric.Gauge
+	CurBytesCount     *metric.Gauge
+	MaxBytesHist      *metric.Histogram
 }
 
 // MetricsStruct returns a struct containing all of this Manager's metrics.
-func (m *Manager) MetricsStruct() Metrics {
+func (m *Manager) MetricsStruct(gauge *metric.Gauge, histogram *metric.Histogram) Metrics {
 	return Metrics{
 		OutstandingLeases: m.storage.outstandingLeases,
-	}
-}
-
-// LeaseMetrics contains pointer to lease.Manager metrics
-// TODO(james): Merge with existing Metrics struct
-type LeaseMetrics struct {
-	CurBytesCount *metric.Gauge
-	MaxBytesHist  *metric.Histogram
-}
-
-func MakeLeaseMgrMetrics(histogramWindowInterval time.Duration) LeaseMetrics {
-	metadata := metric.Metadata{
-		Name: "manager.lease.monitor.memory-consumption",
-		Help: "The in memory consumption of all the leases acquired during " +
-			"transactions by the LeaseManager specified as maintaining this metric",
-		Measurement: "Memory",
-		Unit:        metric.Unit_BYTES,
-	}
-
-	gauge := metric.NewGauge(metadata)
-	histogram := metric.NewHistogram(metadata, histogramWindowInterval, math.MaxInt64, 1)
-
-	return LeaseMetrics{
-		CurBytesCount: gauge,
-		MaxBytesHist:  histogram,
+		CurBytesCount:     gauge,
+		MaxBytesHist:      histogram,
 	}
 }
 
