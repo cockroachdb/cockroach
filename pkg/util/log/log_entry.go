@@ -83,6 +83,9 @@ type logEntry struct {
 	// Whether the entry is structured or not.
 	structured bool
 
+	// The format of the log entry.
+	format string
+
 	// The entry payload.
 	payload entryPayload
 }

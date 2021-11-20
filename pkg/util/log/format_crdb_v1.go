@@ -461,6 +461,8 @@ func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 		// where the stack trace starts. This is another reason why the
 		// crdb-v1 format is lossy.
 
+		entry.Format = "v1"
+
 		return nil
 	}
 }

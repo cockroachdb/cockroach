@@ -40,7 +40,12 @@ type logStream interface {
 // writeLogStream pops messages off of s and writes them to out prepending
 // prefix per message and filtering messages which match filter.
 func writeLogStream(
-	s logStream, out io.Writer, filter *regexp.Regexp, keepRedactable bool, cp ttycolor.Profile,
+	s logStream,
+	out io.Writer,
+	filter *regexp.Regexp,
+	keepRedactable bool,
+	logFormat string,
+	cp ttycolor.Profile,
 ) error {
 	const chanSize = 1 << 16        // 64k
 	const maxWriteBufSize = 1 << 18 // 256kB

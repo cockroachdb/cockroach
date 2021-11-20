@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/ttycolor"
 )
 
@@ -32,8 +33,16 @@ func FormatLegacyEntry(e logpb.Entry, w io.Writer) error {
 
 // FormatLegacyEntryWithOptionalColors is like FormatLegacyEntry but the caller can specify
 // a color profile.
-func FormatLegacyEntryWithOptionalColors(e logpb.Entry, w io.Writer, cp ttycolor.Profile) error {
-	buf := formatLogEntryInternalV1(e, false /* isHeader */, true /* showCounter */, cp)
+func FormatLegacyEntryWithOptionalColors(
+	legacyEntry logpb.Entry, w io.Writer, cp ttycolor.Profile,
+) error {
+	var buf *buffer
+	switch legacyEntry.Format {
+	case "v2":
+		buf = formatLogEntryInternalV2(convertToCanon(legacyEntry), cp)
+	default:
+		buf = formatLogEntryInternalV1(legacyEntry, false /* isHeader */, true /* showCounter */, cp)
+	}
 	defer putBuffer(buf)
 	_, err := w.Write(buf.Bytes())
 	return err
@@ -61,4 +70,38 @@ func FormatLegacyEntryPrefix(prefix []byte, w io.Writer, cp ttycolor.Profile) (e
 
 	_, err = w.Write(prefix)
 	return err
+}
+
+// convertToCanon turns the legacy log entry struct into the canonical struct.
+func convertToCanon(e logpb.Entry) (res logEntry) {
+	res = logEntry{
+		sev:     e.Severity,
+		ch:      e.Channel,
+		ts:      e.Time,
+		file:    e.File,
+		format:  e.Format,
+		line:    int(e.Line),
+		gid:     e.Goroutine,
+		counter: e.Counter,
+		payload: entryPayload{
+			redactable: e.Redactable,
+			message:    e.Message,
+		},
+	}
+
+	if e.Tags != "" {
+		res.tags = logtags.SingleTagBuffer(e.Tags, "" /* value */)
+	}
+
+	if e.StructuredEnd != 0 {
+		res.structured = true
+		res.payload.message = res.payload.message[e.StructuredStart:e.StructuredEnd]
+	}
+
+	if e.StackTraceStart != 0 {
+		res.stacks = []byte(res.payload.message[e.StackTraceStart:])
+		res.payload.message = res.payload.message[:e.StackTraceStart]
+	}
+
+	return res
 }

@@ -544,6 +544,8 @@ func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
 	entry.Message = string(r.msg)
 	entry.Redactable = r.redactable
 
+	entry.Format = "v2"
+
 	return nil
 }
 

@@ -191,8 +191,7 @@ enum Channel {
 }
 
 // Entry represents a cockroach log entry in the following two cases:
-// - when reading a log file using the crdb-v1 format, entries
-//   are parsed into this struct.
+// - when reading a log file, entries are parsed into this struct.
 // - when injecting an interceptor into the logging package, the
 //   interceptor is fed entries using this structure.
 message Entry {
@@ -256,6 +255,9 @@ message Entry {
   // Entry are still expecting the message and the stack trace in the
   // same field.
   uint32 stack_trace_start = 13;
+
+  // Format is the log format.
+  string format = 14;
 }
 
 // A FileDetails holds all of the particulars that can be parsed by the name of
