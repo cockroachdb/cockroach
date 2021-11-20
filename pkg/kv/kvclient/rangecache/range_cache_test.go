@@ -892,7 +892,7 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 					var desc *roachpb.RangeDescriptor
 					// Each request goes to a different key.
 					var err error
-					ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tracing.NewTracer(), "test")
+					ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, db.cache.tracer, "test")
 					defer getRecAndFinish()
 					tok, err := db.cache.lookupInternal(
 						ctx, key, oldToken,
