@@ -145,7 +145,6 @@ func getCases(format string) []testCase {
 				"--file-pattern",
 				".*",
 				"--filter",
-				`(?m)^(panic\(.*\n.*\n.*\n.*\n[^p].*)`,
 			},
 		},
 		{
@@ -171,6 +170,16 @@ func getCases(format string) []testCase {
 	}
 	for i := range cases {
 		cases[i].format = format
+
+		// Change the filter regexp for some test cases depending on the log format.
+		if cases[i].name == "4.filter-npe-origin-stack-only" {
+			switch format {
+			case "crdb-v2":
+				cases[i].flags = append(cases[i].flags, `(?m)^(.*panic\(.*\n.*panic\.go.*\n.*\n.*\n[^\!]*\![^p].*)`)
+			default:
+				cases[i].flags = append(cases[i].flags, `(?m)^(panic\(.*\n.*\n.*\n.*\n[^p].*)`)
+			}
+		}
 	}
 	return cases
 }

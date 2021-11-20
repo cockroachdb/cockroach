@@ -53,7 +53,7 @@ func TestCrdbV1EncodeDecode(t *testing.T) {
 			var buf bytes.Buffer
 			// Encode.
 			for _, entry := range inputEntries {
-				_ = FormatLegacyEntry(entry, &buf)
+				_ = FormatLegacyEntry(entry, &buf, "crdb-v1" /* format */)
 			}
 			// Decode.
 			entryStr := buf.String()
@@ -113,7 +113,7 @@ func TestCrdbV1EntryDecoderForVeryLargeEntries(t *testing.T) {
 		}
 		entryIdx++
 		var buf bytes.Buffer
-		_ = FormatLegacyEntry(entry, &buf)
+		_ = FormatLegacyEntry(entry, &buf, "crdb-v1" /* format */)
 		return buf.String()
 	}
 

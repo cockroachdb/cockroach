@@ -1406,7 +1406,7 @@ func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return writeLogStream(s, outStream, o.filter, o.keepRedactable, cp)
+	return writeLogStream(s, outStream, o.filter, o.keepRedactable, o.format, cp)
 }
 
 var debugIntentCount = &cobra.Command{

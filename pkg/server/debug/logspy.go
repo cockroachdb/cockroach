@@ -267,7 +267,7 @@ func (i *logSpyInterceptor) Intercept(jsonEntry []byte) {
 
 func (i *logSpyInterceptor) outputEntry(w io.Writer, entry logpb.Entry) error {
 	if i.opts.Flatten > 0 {
-		return log.FormatLegacyEntry(entry, w)
+		return log.FormatLegacyEntry(entry, w, log.DefaultFormat)
 	}
 	j, _ := json.Marshal(entry)
 	return i.outputJSONEntry(w, j)

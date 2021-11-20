@@ -516,7 +516,7 @@ func (zc *debugZipContext) collectPerNodeData(
 						// We're also going to print a warning at the end.
 						warnRedactLeak = true
 					}
-					if err := log.FormatLegacyEntry(e, logOut); err != nil {
+					if err := log.FormatLegacyEntry(e, logOut, log.DefaultFormat); err != nil {
 						return err
 					}
 				}

@@ -695,7 +695,7 @@ func BenchmarkHeader(b *testing.B) {
 	}
 	for i := 0; i < b.N; i++ {
 		var w bytes.Buffer
-		_ = FormatLegacyEntry(entry, &w)
+		_ = FormatLegacyEntry(entry, &w, DefaultFormat)
 	}
 }
 
