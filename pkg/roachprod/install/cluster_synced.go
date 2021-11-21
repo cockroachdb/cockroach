@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -1933,15 +1932,6 @@ func (c *SyncedCluster) Init() error {
 	// See Start(). We reserve a few special operations for the first node, so we
 	// strive to maintain the same here for interoperability.
 	const firstNodeIdx = 0
-
-	vers, err := getCockroachVersion(c, c.TargetNodes()[firstNodeIdx])
-	if err != nil {
-		return errors.WithDetail(err, "install.Init() failed: unable to retrieve cockroach version.")
-	}
-
-	if !vers.AtLeast(version.MustParse("v20.1.0")) {
-		return errors.New("install.Init() failed: `roachprod init` only supported for v20.1 and beyond")
-	}
 
 	fmt.Printf("%s: initializing cluster\n", c.Name)
 	initOut, err := c.initializeCluster(firstNodeIdx)

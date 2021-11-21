@@ -17,7 +17,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"text/template"
@@ -80,34 +79,13 @@ func getCockroachVersion(c *SyncedCluster, node Node) (*version.Version, error) 
 	}
 	defer sess.Close()
 
-	var verString string
-
 	cmd := cockroachNodeBinary(c, node) + " version"
 	out, err := sess.CombinedOutput(cmd + " --build-tag")
 	if err != nil {
-		// The --build-tag may not be supported. Try without.
-		// Note: this way to extract the version number is brittle.
-		// It should be removed once 'roachprod' is not used
-		// to invoke pre-v20.2 binaries any more.
-		sess, err := c.newSession(node)
-		if err != nil {
-			return nil, err
-		}
-		defer sess.Close()
-		out, err = sess.CombinedOutput(cmd)
-		if err != nil {
-			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
-		}
-
-		matches := regexp.MustCompile(`(?m)^Build Tag:\s+(.*)$`).FindSubmatch(out)
-		if len(matches) != 2 {
-			return nil, fmt.Errorf("unable to parse cockroach version output:%s", out)
-		}
-
-		verString = string(matches[1])
-	} else {
-		verString = strings.TrimSpace(string(out))
+		return nil, errors.Wrapf(err, "~ %s --build-tag\n%s", cmd, out)
 	}
+
+	verString := strings.TrimSpace(string(out))
 	return version.Parse(verString)
 }
 
@@ -164,16 +142,12 @@ func (c *SyncedCluster) Start(startOpts StartOpts) error {
 
 		// 1. We don't init invoked using `--skip-init`.
 		// 2. We don't init when invoking with `start-single-node`.
-		// 3. For nodes running <20.1, the --join flags are constructed in a
-		//    manner such that the first node doesn't have any (see
-		//   `generateStartArgs`),which prompts CRDB to auto-initialize. For
-		//    nodes running >=20.1, we need to explicitly initialize.
 
 		if startOpts.SkipInit {
 			return nil, nil
 		}
 
-		shouldInit := !c.useStartSingleNode(vers) && vers.AtLeast(version.MustParse("v20.1.0"))
+		shouldInit := !c.useStartSingleNode()
 		if shouldInit {
 			fmt.Printf("%s: initializing cluster\n", c.Name)
 			initOut, err := c.initializeCluster(node)
@@ -183,26 +157,6 @@ func (c *SyncedCluster) Start(startOpts StartOpts) error {
 
 			if initOut != "" {
 				fmt.Println(initOut)
-			}
-		}
-
-		if !vers.AtLeast(version.MustParse("v20.1.0")) {
-			// Given #51897 remains unresolved, master-built roachprod is used
-			// to run roachtests against the 20.1 branch. Some of those
-			// roachtests test mixed-version clusters that start off at 19.2.
-			// Consequently, we manually add this `cluster-bootstrapped` file
-			// where roachprod expects to find it for already-initialized
-			// clusters. This is a pretty gross hack, that we should address by
-			// addressing #51897.
-			//
-			// TODO(irfansharif): Remove this once #51897 is resolved.
-			markBootstrap := fmt.Sprintf("touch %s/%s", c.NodeDir(node, 1 /* storeIndex */), "cluster-bootstrapped")
-			cmdOut, err := c.run(node, markBootstrap)
-			if err != nil {
-				return nil, errors.WithDetail(err, "unable to run cmd")
-			}
-			if cmdOut != "" {
-				fmt.Println(cmdOut)
 			}
 		}
 
@@ -408,7 +362,7 @@ func (c *SyncedCluster) generateStartCmd(
 	// For a one-node cluster, use `start-single-node` to disable replication.
 	// For everything else we'll fall back to using `cockroach start`.
 	var startCmd string
-	if c.useStartSingleNode(vers) {
+	if c.useStartSingleNode() {
 		startCmd = "start-single-node"
 	} else {
 		startCmd = "start"
@@ -504,24 +458,19 @@ func (c *SyncedCluster) generateStartArgs(
 		args = append(args, `--log-dir`, logDir)
 	}
 
-	if vers.AtLeast(version.MustParse("v1.1.0")) {
-		cache := 25
-		if c.IsLocal() {
-			cache /= len(nodes)
-			if cache == 0 {
-				cache = 1
-			}
+	cache := 25
+	if c.IsLocal() {
+		cache /= len(nodes)
+		if cache == 0 {
+			cache = 1
 		}
-		args = append(args, fmt.Sprintf("--cache=%d%%", cache))
-		args = append(args, fmt.Sprintf("--max-sql-memory=%d%%", cache))
 	}
+	args = append(args, fmt.Sprintf("--cache=%d%%", cache))
+	args = append(args, fmt.Sprintf("--max-sql-memory=%d%%", cache))
+
 	if c.IsLocal() {
 		// This avoids annoying firewall prompts on Mac OS X.
-		if vers.AtLeast(version.MustParse("v2.1.0")) {
-			args = append(args, "--listen-addr=127.0.0.1")
-		} else {
-			args = append(args, "--host=127.0.0.1")
-		}
+		args = append(args, "--listen-addr=127.0.0.1")
 	}
 
 	args = append(args,
@@ -534,17 +483,9 @@ func (c *SyncedCluster) generateStartArgs(
 		}
 	}
 
-	if !c.useStartSingleNode(vers) {
-		// --join flags are unsupported/unnecessary in `cockroach
-		// start-single-node`. That aside, setting up --join flags is a bit
-		// precise. We have every node point to node 1. For clusters running
-		// <20.1, we have node 1 not point to anything (which in turn is used to
-		// trigger auto-initialization node 1). For clusters running >=20.1,
-		// node 1 also points to itself, and an explicit `cockroach init` is
-		// needed.
-		if node != 1 || vers.AtLeast(version.MustParse("v20.1.0")) {
-			args = append(args, fmt.Sprintf("--join=%s:%d", c.Host(1), c.NodePort(1)))
-		}
+	// --join flags are unsupported/unnecessary in `cockroach start-single-node`.
+	if !c.useStartSingleNode() {
+		args = append(args, fmt.Sprintf("--join=%s:%d", c.Host(1), c.NodePort(1)))
 	}
 
 	var advertiseFirstIP bool
@@ -679,8 +620,8 @@ func (c *SyncedCluster) generateKeyCmd(node Node, startOpts StartOpts) string {
 	return keyCmd.String()
 }
 
-func (c *SyncedCluster) useStartSingleNode(vers *version.Version) bool {
-	return len(c.VMs) == 1 && vers.AtLeast(version.MustParse("v19.2.0"))
+func (c *SyncedCluster) useStartSingleNode() bool {
+	return len(c.VMs) == 1
 }
 
 // distributeCerts distributes certs if it's a secure cluster and we're
@@ -716,18 +657,4 @@ func getEnvVars() []string {
 		}
 	}
 	return sl
-}
-
-func (c *SyncedCluster) run(node Node, cmd string) (string, error) {
-	sess, err := c.newSession(node)
-	if err != nil {
-		return "", err
-	}
-	defer sess.Close()
-
-	out, err := sess.CombinedOutput(cmd)
-	if err != nil {
-		return "", errors.Wrapf(err, "~ %s\n%s", cmd, out)
-	}
-	return strings.TrimSpace(string(out)), nil
 }
