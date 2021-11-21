@@ -23,6 +23,7 @@ go_library(
         "//pkg/util/retry",
         "//pkg/util/timeutil",
         "//pkg/workload",
+        "//pkg/workload/changefeeds",
         "//pkg/workload/histogram",
         "//pkg/workload/workloadsql",
         "@com_github_cockroachdb_errors//:errors",
