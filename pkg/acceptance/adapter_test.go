@@ -12,6 +12,8 @@ package acceptance
 
 import (
 	"context"
+	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -19,7 +21,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+func showpwd() {
+	output, err := exec.Command(
+		"pwd",
+	).Output()
+	if err != nil {
+		fmt.Printf("cannot pwd: %v", err.Error())
+	}
+	fmt.Printf("pwd: %s", string(output))
+}
+
 func TestDockerC(t *testing.T) {
+
+	showpwd()
+
 	s := log.Scope(t)
 	defer s.Close(t)
 
