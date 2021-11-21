@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/changefeeds"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
@@ -87,6 +88,8 @@ var secure = securityFlags.Bool("secure", false,
 		"For example when using root, certs/client.root.crt certs/client.root.key should exist.")
 var user = securityFlags.String("user", "root", "Specify a user to run the workload as")
 var password = securityFlags.String("password", "", "Optionally specify a password for the user")
+var withChangefeed = runFlags.Bool("with-changefeed", false,
+	"Optionally run a changefeed over the tables")
 
 func init() {
 
@@ -423,13 +426,20 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				log.Warningf(ctx, "retrying after error while creating load: %v", err)
 			}
 			ops, err = o.Ops(ctx, urls, reg)
-			if err == nil {
-				return nil
+			if err != nil {
+				if *tolerateErrors {
+					continue
+				}
+				return errors.Wrapf(err, "failed to initialize the load generator")
 			}
-			err = errors.Wrapf(err, "failed to initialize the load generator")
-			if !*tolerateErrors {
-				return err
+			if *withChangefeed {
+				if err := changefeeds.AddChangefeedToQueryLoad(
+					ctx, gen, urls, reg, &ops,
+				); err != nil {
+					return err
+				}
 			}
+			return nil
 		}
 		if ctx.Err() != nil {
 			// Don't retry endlessly. Note that this retry loop is not under the
