@@ -3153,6 +3153,28 @@ func TestSnapshotRateLimit(t *testing.T) {
 	}
 }
 
+// TestManuallyEnqueueUninitializedReplica makes sure that uninitialized
+// replicas cannot be enqueued.
+func TestManuallyEnqueueUninitializedReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc := testContext{}
+	tc.Start(t, stopper)
+
+	repl, _, _ := tc.store.getOrCreateReplica(ctx, 42, 7, &roachpb.ReplicaDescriptor{
+		NodeID:    tc.store.NodeID(),
+		StoreID:   tc.store.StoreID(),
+		ReplicaID: 7,
+	})
+	_, _, err := tc.store.ManuallyEnqueue(ctx, "replicaGC", repl, true)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not enqueueing uninitialized replica")
+}
+
 func BenchmarkStoreGetReplica(b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
