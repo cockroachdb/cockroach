@@ -12,6 +12,7 @@ package tracing
 
 import (
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync/atomic"
 
@@ -51,13 +52,22 @@ const (
 type Span struct {
 	// Span itself is a very thin wrapper around spanInner whose only job is
 	// to guard spanInner against use-after-Finish.
-	i               spanInner
-	numFinishCalled int32 // atomic
+	i spanInner
+	// finished is set on Finish(). Used to detect use-after-Finish.
+	finished int32 // atomic
+	// finishStack is set if debugUseAfterFinish is set. It represents the stack
+	// that called Finish(), in order to report it on further use.
+	finishStack string
 }
 
 // IsNoop returns true if this span is a black hole - it doesn't correspond to a
 // CRDB span and it doesn't output either to an OpenTelemetry tracer, or to
 // net.Trace.
+//
+// As opposed to other spans, a noop span can be used after Finish(). In
+// practice, noop spans are pre-allocated by the Tracer and handed out to
+// everybody (shared) if the Tracer is configured to not always create real
+// spans (i.e. TracingModeOnDemand).
 func (sp *Span) IsNoop() bool {
 	return sp.i.isNoop()
 }
@@ -66,7 +76,24 @@ func (sp *Span) done() bool {
 	if sp == nil {
 		return true
 	}
-	return atomic.LoadInt32(&sp.numFinishCalled) != 0
+	if sp.IsNoop() {
+		return true
+	}
+	alreadyFinished := atomic.LoadInt32(&sp.finished) != 0
+	// In test builds, we panic on span use after Finish. This is in preparation
+	// of span pooling, at which point use-after-Finish would become corruption.
+	if alreadyFinished && sp.Tracer().PanicOnUseAfterFinish() {
+		var finishStack string
+		if sp.finishStack == "" {
+			finishStack = "<stack not captured. Set debugUseAfterFinish>"
+		} else {
+			finishStack = sp.finishStack
+		}
+		panic(fmt.Sprintf("use of Span after Finish. Span: %s. Finish previously called at: %s",
+			sp.i.OperationName(), finishStack))
+	}
+
+	return alreadyFinished
 }
 
 // Tracer exports the tracer this span was created using.
@@ -82,13 +109,19 @@ func (sp *Span) Redactable() bool {
 	return sp.Tracer().Redactable()
 }
 
-// Finish idempotently marks the Span as completed (at which point it will
-// silently drop any new data added to it). Finishing a nil *Span is a noop.
+// Finish marks the Span as completed. Its illegal to use a Span after calling
+// Finish().
+//
+// Finishing a nil *Span is a noop.
 func (sp *Span) Finish() {
-	if sp == nil || sp.IsNoop() || atomic.AddInt32(&sp.numFinishCalled, 1) != 1 {
+	if sp == nil || sp.IsNoop() || sp.done() {
 		return
 	}
+	atomic.StoreInt32(&sp.finished, 1)
 	sp.i.Finish()
+	if sp.Tracer().debugUseAfterFinish {
+		sp.finishStack = string(debug.Stack())
+	}
 }
 
 // FinishAndGetRecording finishes the span and gets a recording at the same
@@ -125,6 +158,9 @@ func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
 // If recType is RecordingStructured, the return value will be nil if the span
 // doesn't have any structured events.
 func (sp *Span) GetRecording(recType RecordingType) Recording {
+	if sp.done() {
+		return nil
+	}
 	return sp.i.GetRecording(recType)
 }
 
