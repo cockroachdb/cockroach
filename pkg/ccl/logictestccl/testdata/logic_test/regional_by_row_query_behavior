@@ -798,6 +798,7 @@ Scan /Table/57/1/"\x80"/20/0, /Table/57/1/"\xc0"/20/0
 fetched: /parent/primary/'ca-central-1'/20 -> NULL
 
 # Semi join with locality optimized search enabled.
+# TODO(rytaft): currently disabled due to #73024.
 query T
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
 ----
@@ -805,8 +806,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM
 • lookup join (semi)
 │ table: parent@primary
 │ equality cols are key
-│ lookup condition: (p_id = c_p_id) AND (crdb_region = 'ap-southeast-2')
-│ remote lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│ lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │
 └── • union all
     │ limit: 1
@@ -821,7 +821,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM
           table: child@primary
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk1Fr2zAQgN_3K457STI0IjsZFEHAZXWYi5t0sWGFxhTPPlpvjuRJMqSE_PcRO9A4LF26vlmn-3Qfd-cNmt8lCoz80P8Sw0eYLuY3cO_f3YaXwQz6V0EUR9_CAXQTsqeizOH7V3_hg3-3y4F-N6NKNUm7T6keihwmkD3sPgZwObuCftbGHD5IYD6dRn4MLjKUKqdZuiKD4h4dTBhWWmVkjNK70KZJCPI1Cs6wkFVtd-GEYaY0odigLWxJKDBOf5S0oDQnPeTIMCebFmXzbGPvVbpYpfoZGUZVKo2A4RKXy_UFX-LQ4UMOqczBAWWfSCPDeW0FeA7zXEy2DFVtX2obmz4SCmfL_s_POdfP27ud5-Oe9HnRMKSLtIRaKp2Tprxjkmz_Ij5Tn1Q1dLvKYbEqLDgnVfhbWnOtCrnvzKhbJn6uSEDoT2OI_JsArufBDBm2y3bQsVCpX3UFP1UhQUkBfW8EE_Dc_e55Y5jAujfmPSGE53DOP48HyHBBK2UJyn_Su19j3bs45Bmse1nnwcF5Uxq9pTULMpWSho7GdKrpCUPKH6kduVG1zuhWq6wp0x7nDdcEcjK2vXXbQyCbq2atD2HnPbD7KjzqwPwYHr0Kj4_gZPvhTwAAAP__xPiDsw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykklFr2zAUhd_3Ky73pcnQiOxkUAQFl9VhLm7SxYYVGlM8-9JqcyVPkiEl5L-P2IHGYSnp9mYdneP7-fiu0f6uUGASxuGXFD7CdDG_gfvw7ja-jGYwuIqSNPkWD6FvKJ5kVcL3r-EihPBu64FB31HnhpTbWeoHWcIFFA_bhyFczq5gUHSax4cZzKfTJEzBR4ZKlzTLn8miuEcPM4a10QVZq81WWreGqFyh4Aylqhu3lTOGhTaEYo1OuopQYJr_qGhBeUlmxJFhSS6XVfvalj6ojXzOzQsyTOpcWQGjJS6Xq3O-xJHHRxxyVYIH2j2RQYbzxgkIPBb4mG0Y6sa9zrYufyQU3ob9G593Kl-wYzuNxz_K84phyci8gkZpU5KhskeSbf4CPtOfdD3y-8ixfJYOvKMo_D3VXGupds2M-2PSl5oExOE0hSS8ieB6Hs2QYbdse43FWv9qavippQKtBAyCMVxA4O92L5jAdrlXZxN-JoQIPM755wmD1dn5oVDsC8PhacWP3_O1C7K1VpYOmj_WY8aQykfq_qLVjSno1uiiHdMd522uFUqyrrv1u0Ok2qt2U_fD3v-E_TfD416YH4bHb4YnB-Fs8-FPAAAA___xgHc6
 
 statement ok
 SET vectorize=on
@@ -844,6 +844,7 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
 
 # If the row is found in the local region, the other regions are not searched.
+# TODO(rytaft): currently disabled due to #73024.
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
@@ -852,7 +853,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 ----
 Scan /Table/58/1/"@"/10/0
 fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
-Scan /Table/57/1/"@"/10/0
+Scan /Table/57/1/"@"/10/0, /Table/57/1/"\x80"/10/0, /Table/57/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
 output row: [10 10]
 
@@ -861,6 +862,7 @@ SET tracing = on,kv,results; SELECT * FROM child WHERE EXISTS (SELECT * FROM par
 
 # If the row is not found in the local region, the other regions are searched in
 # parallel.
+# TODO(rytaft): currently disabled due to #73024.
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
@@ -870,12 +872,12 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 Scan /Table/58/1/"@"/20/0
 Scan /Table/58/1/"\x80"/20/0, /Table/58/1/"\xc0"/20/0
 fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
-Scan /Table/57/1/"@"/20/0
-Scan /Table/57/1/"\x80"/20/0, /Table/57/1/"\xc0"/20/0
+Scan /Table/57/1/"@"/20/0, /Table/57/1/"\x80"/20/0, /Table/57/1/"\xc0"/20/0
 fetched: /parent/primary/'ca-central-1'/20 -> NULL
 output row: [20 20]
 
 # Inner join with locality optimized search enabled.
+# TODO(rytaft): currently disabled due to #73024.
 query T
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
 ----
@@ -883,8 +885,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id =
 • lookup join
 │ table: parent@primary
 │ equality cols are key
-│ lookup condition: (p_id = c_p_id) AND (crdb_region = 'ap-southeast-2')
-│ remote lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│ lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │
 └── • union all
     │ limit: 1
@@ -899,7 +900,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id =
           table: child@primary
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykklFr2zAQx9_3KY57STM0ItsZFEHBZXWYS2Z3TmCDxhTPPlptjuRJMmSEfPcRu9A4LF27vdkn_XQ__ndbtD9rFLiI5tGHJbyFWZZ-gtvo6838Mk7g7CpeLBef52MYXigfZF1BnCRRBtdpnEBTGFIO0gSaO1nBBZR33ceXj1EWQdnXPJ5DOpstoiX4yFDpipJiTRbFLXqYM2yMLslabfalbXchrjYoOEOpmtbtyznDUhtCsUUnXU0ocFl8qymjoiIz4ciwIlfIunu2Ew0bI9eF-YUMF02hrIDJClerzTlf4cTjEw6FqsAD7R7IIMO0dQJCj4U-5juGunVPva0r7gmFt2P_5ue91C98dHuZj3_S50nDkpFFDa3SpiJD1cAk3_1BPNHvdDPxh8pzuZYOvJMq_DXRXGupHpMJhm36jTqIZq71j7aB71oq0ErAWRjABYT-GC6TKzgLp3ABm9GUj4QQocc5fz8dI8OM1toR1H-l9-u-GZ0f8gw2o3Lw4HgwDhYGJ2MIXhNDRrbRytLRSE4FnDOk6p768VrdmpJujC67Nv1v2nFdoSLr-lO__4lVd9St8CHs_Q_sPwsHA5gfw8Gz8PQIzndvfgcAAP___at5GA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkmFr2z4Qxt__P8Vxb9r80YhsZ1AEBZfVYS6Z3SWBDRpTPOtotTmSJ8mQEfLdR-xC47CUdntnPbrH97tHt0X3s0aBi2SWfFjC_zCd55_gLvl6O7tKMzi_ThfLxefZCIYF1aOqJaRZlszhJk8zaEpL2kOeQXOvJFxCdd99fPmYzBOoei3gBeTT6SJZQogMtZGUlWtyKO4wwIJhY01Fzhm7l7ZdQSo3KDhDpZvW7-WCYWUsodiiV74mFLgsv9U0p1KSHXNkKMmXqu5-24HGjVXr0v5Choum1E7AeIWr1eaCr3Ac8DGHUksIwPhHssgwb72AOGBxiMWOoWn9c2_nywdCEezY3_EFr-WLn9hexxOe5HnGcGRVWUOrjZVkSQ5Iit0fwDPzzjTjcIg8U2vlITiJwt8SzY1R-imZaNim36iDaGbG_Ggb-G6UBqMFnMcRXEIcjuAqu4bzeAL7hd2cTfiZECIOOOfvJww2ZxfHQnUojEaDhFkcnZwsestkc3KN0Y6OUj6VWcGQ5AP1L-ZMayu6tabq2vTHvPN1giTn-9uwP6S6u-q28tAc_Is5fNEcDcz82By9aJ4cmYvdf78DAAD___4YbJ8=
 
 statement ok
 SET vectorize=on
@@ -922,6 +923,7 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10; SET tracing = off
 
 # If the row is found in the local region, the other regions are not searched.
+# TODO(rytaft): currently disabled due to #73024.
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
@@ -930,7 +932,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 ----
 Scan /Table/58/1/"@"/10/0
 fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
-Scan /Table/57/1/"@"/10/0
+Scan /Table/57/1/"@"/10/0, /Table/57/1/"\x80"/10/0, /Table/57/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
 output row: [10 10 10]
 
@@ -939,6 +941,7 @@ SET tracing = on,kv,results; SELECT * FROM child INNER JOIN parent ON p_id = c_p
 
 # If the row is not found in the local region, the other regions are searched in
 # parallel.
+# TODO(rytaft): currently disabled due to #73024.
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
@@ -948,12 +951,12 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 Scan /Table/58/1/"@"/20/0
 Scan /Table/58/1/"\x80"/20/0, /Table/58/1/"\xc0"/20/0
 fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
-Scan /Table/57/1/"@"/20/0
-Scan /Table/57/1/"\x80"/20/0, /Table/57/1/"\xc0"/20/0
+Scan /Table/57/1/"@"/20/0, /Table/57/1/"\x80"/20/0, /Table/57/1/"\xc0"/20/0
 fetched: /parent/primary/'ca-central-1'/20 -> NULL
 output row: [20 20 20]
 
 # Left join with locality optimized search enabled.
+# TODO(rytaft): currently disabled due to #73024.
 query T
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
 ----
@@ -961,8 +964,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = 
 • lookup join (left outer)
 │ table: parent@primary
 │ equality cols are key
-│ lookup condition: (p_id = c_p_id) AND (crdb_region = 'ap-southeast-2')
-│ remote lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│ lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │
 └── • union all
     │ limit: 1
@@ -977,7 +979,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = 
           table: child@primary
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk1Fr2zAQx9_3KY57STM0ItsZFEHAZXVYimd3jscGjSmefbTeHMmTZEgJ-e4jdqFxWLp2e7NO-kk__nfeovlVo8BlEAYfUngL8yT-BDfBt-vwYhHB2eVimS4_h2MYHijuq7qEMJincBUvImhyTdJCHEFzW5Uwg-K2-_j6MUgCKPqawzOI5_NlkIKLDKUqKcrXZFDcoIMZw0argoxRel_adgcW5QYFZ1jJprX7csawUJpQbNFWtiYUmObfa0ooL0lPODIsyeZV3V3befqNrta5fkCGyyaXRsBkhavV5pyvcOLwCYdcluCAsvekkWHcWgG-w3wXsx1D1dqnt43N7wiFs2P_5ue81M9_dHuZj3vS50nDkK7yGlqpdEmayoFJtvuDeKTeqWbiDpXDal1ZcE6q8NdEc6Uq-ZiMN3wmfWhI9BMWf0mDpJszZNhP2kFkoVI_2wZ-qEqCkgLOfA9m4LtjuIgu4cyfwgw2oykfCSF8h3P-fjpGhgmtlSWo_0rv_4LN6PyQZ7AZFYMLx4M2Md87GY_3mngSMo2Sho5adSr4jCGVd9S33ahWF3StVdE90y_jjusKJRnb77r9YiG7rW60D2Hnf2D3WdgbwPwY9p6Fp0dwtnvzOwAA__9DX39d
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykklFr2z4Uxd__n-JyX5r80YhsZ1AEBZfVYSme3SUeGzSmePal1eZIniRDSsh3H7ELjcNS2u3NOtLx_enobNH-qlHgMoqjDxn8D7NF-gluo2838eU8gdHVfJktP8djGB4oH2RdQRzNMrhO5wk0hSHlIE2guZMVXEB51318_RgtIih7zeM5pLPZMsrAR4ZKV5QUa7IobtHDnGFjdEnWarOXtt2BebVBwRlK1bRuL-cMS20IxRaddDWhwKz4XtOCiorMhCPDilwh6-63HWfYGLkuzCMyXDaFsgImK1ytNud8hROPTzgUqgIPtHsggwzT1gkIPRb6mO8Y6tY9z7auuCcU3o79HZ_3Wr7wie11PP5JnmcMS0YWNbRKm4oMVQOSfPcH8ES_083EHyLHci0deCdR-FuiudZSPSUTDMdkjw2JvmHplyxadD1Dhn3TDiKLtf7ZNvBDSwVaCRiFAVxA6I_hMrmCUTiFfY83Z1N-JoQIPc75-ymDzdn5sVAeCuPxIHkWBidvHLzlxguyjVaWjtI_lWXOkKp76l_S6taUdGN02Y3pl2nn64SKrOt3_X4xV91W19ZDs_cvZv9FczAw82Nz8KJ5emTOd__9DgAA__8pnHLk
 
 statement ok
 SET vectorize=on
@@ -1000,6 +1002,7 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10; SET tracing = off
 
 # If the row is found in the local region, the other regions are not searched.
+# TODO(rytaft): currently disabled due to #73024.
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
@@ -1008,7 +1011,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 ----
 Scan /Table/58/1/"@"/10/0
 fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
-Scan /Table/57/1/"@"/10/0
+Scan /Table/57/1/"@"/10/0, /Table/57/1/"\x80"/10/0, /Table/57/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
 output row: [10 10 10]
 
@@ -1017,6 +1020,7 @@ SET tracing = on,kv,results; SELECT * FROM child LEFT JOIN parent ON p_id = c_p_
 
 # If the row is not found in the local region, the other regions are searched in
 # parallel.
+# TODO(rytaft): currently disabled due to #73024.
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
@@ -1026,8 +1030,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 Scan /Table/58/1/"@"/20/0
 Scan /Table/58/1/"\x80"/20/0, /Table/58/1/"\xc0"/20/0
 fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
-Scan /Table/57/1/"@"/20/0
-Scan /Table/57/1/"\x80"/20/0, /Table/57/1/"\xc0"/20/0
+Scan /Table/57/1/"@"/20/0, /Table/57/1/"\x80"/20/0, /Table/57/1/"\xc0"/20/0
 fetched: /parent/primary/'ca-central-1'/20 -> NULL
 output row: [20 20 20]
 
@@ -1052,8 +1055,7 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 2
 │       │
 │       └── • lookup join (semi)
 │           │ table: child@primary
-│           │ lookup condition: (column1 = c_id) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column1 = c_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column1 = c_id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: crdb_region_default != crdb_region
 │           │
 │           └── • scan buffer
@@ -1157,8 +1159,7 @@ SELECT * FROM [EXPLAIN DELETE FROM parent WHERE p_id = 1] OFFSET 2
         │
         └── • lookup join (semi)
             │ table: child@child_c_p_id_idx
-            │ lookup condition: (p_id = c_p_id) AND (crdb_region = 'ap-southeast-2')
-            │ remote lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │ lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
             │
             └── • scan buffer
                   label: buffer 1
@@ -1434,8 +1435,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@primary
-│           │ lookup condition: (column1 = pk) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column1 = pk) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column1 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: crdb_region_default != crdb_region
 │           │
 │           └── • scan buffer
@@ -1447,8 +1447,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ lookup condition: (column4 = b) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column4 = b) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column4 = b) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
 │           │
 │           └── • scan buffer
@@ -1460,8 +1459,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@new_idx
-│           │ lookup condition: ((column3 = a) AND (crdb_region = 'ap-southeast-2')) AND (b > 0)
-│           │ remote lookup condition: ((column3 = a) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (b > 0)
+│           │ lookup condition: ((column3 = a) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))) AND (b > 0)
 │           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
 │           │
 │           └── • filter
@@ -1477,8 +1475,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table@new_idx
-            │ lookup condition: ((column3 = a) AND (column4 = b)) AND (crdb_region = 'ap-southeast-2')
-            │ remote lookup condition: ((column3 = a) AND (column4 = b)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │ lookup condition: ((column3 = a) AND (column4 = b)) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
             │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
             │
             └── • scan buffer
@@ -1531,8 +1528,7 @@ SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ lookup condition: (column5 = b) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column5 = b) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column5 = b) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
 │           └── • scan buffer
@@ -1544,8 +1540,7 @@ SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@new_idx
-│           │ lookup condition: ((column4 = a) AND (crdb_region = 'ap-southeast-2')) AND (b > 0)
-│           │ remote lookup condition: ((column4 = a) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (b > 0)
+│           │ lookup condition: ((column4 = a) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))) AND (b > 0)
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
 │           └── • filter
@@ -1560,8 +1555,7 @@ SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, 
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table@new_idx
-            │ lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region = 'ap-southeast-2')
-            │ remote lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │ lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
             │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
             │
             └── • scan buffer
@@ -1589,8 +1583,7 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
 │           └── • lookup join (left outer)
 │               │ table: regional_by_row_table@primary
 │               │ equality cols are key
-│               │ lookup condition: (column2 = pk) AND (crdb_region = 'ap-southeast-2')
-│               │ remote lookup condition: (column2 = pk) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│               │ lookup condition: (column2 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │               │ locking strength: for update
 │               │
 │               └── • render
@@ -1605,8 +1598,7 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ lookup condition: (column5 = b) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column5 = b) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column5 = b) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
 │           └── • scan buffer
@@ -1618,8 +1610,7 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@new_idx
-│           │ lookup condition: ((column4 = a) AND (crdb_region = 'ap-southeast-2')) AND (b > 0)
-│           │ remote lookup condition: ((column4 = a) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (b > 0)
+│           │ lookup condition: ((column4 = a) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))) AND (b > 0)
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
 │           └── • filter
@@ -1634,8 +1625,7 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table@new_idx
-            │ lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region = 'ap-southeast-2')
-            │ remote lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │ lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
             │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
             │
             └── • scan buffer
@@ -1769,8 +1759,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table_as@regional_by_row_table_as_b_key
-            │ lookup condition: (column3 = b) AND (crdb_region_col = 'ap-southeast-2')
-            │ remote lookup condition: (column3 = b) AND (crdb_region_col IN ('ca-central-1', 'us-east-1'))
+            │ lookup condition: (column3 = b) AND (crdb_region_col IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
             │ pred: (column1 != pk) OR (crdb_region_col_comp != crdb_region_col)
             │
             └── • scan buffer
@@ -1830,8 +1819,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table_virt@primary
-│           │ lookup condition: (column1 = pk) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column1 = pk) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column1 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: crdb_region_default != crdb_region
 │           │
 │           └── • scan buffer
@@ -2009,8 +1997,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table_virt_partial@primary
-│           │ lookup condition: (column1 = pk) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column1 = pk) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column1 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: crdb_region_default != crdb_region
 │           │
 │           └── • scan buffer
@@ -2259,3 +2246,17 @@ SELECT * FROM [EXPLAIN SELECT * FROM t65064 WHERE username = 'kharris'] OFFSET 2
       estimated row count: 1 (100% of the table; stats collected <hidden> ago)
       table: t65064@t65064_username_key
       spans: [/'ca-central-1'/'kharris' - /'ca-central-1'/'kharris'] [/'us-east-1'/'kharris' - /'us-east-1'/'kharris']
+
+# Regression test for #73024. Ensure that uniqueness checks actually check all
+# regions.
+statement ok
+CREATE TABLE t73024 (p INT PRIMARY KEY) LOCALITY REGIONAL BY ROW;
+INSERT INTO t73024 (crdb_region, p) VALUES ('us-east-1', 100);
+
+query error duplicate key value violates unique constraint
+INSERT INTO t73024 VALUES (100);
+
+query I
+SELECT * FROM t73024
+----
+100

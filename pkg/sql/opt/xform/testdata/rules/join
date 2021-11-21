@@ -9278,11 +9278,7 @@ semi-join (lookup abc_part)
  ├── lookup expression
  │    └── filters
  │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 = 'central' [outer=(7), constraints=(/7: [/'central' - /'central']; tight), fd=()-->(7)]
- ├── remote lookup expression
- │    └── filters
- │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 IN ('east', 'west') [outer=(7), constraints=(/7: [/'east' - /'east'] [/'west' - /'west']; tight)]
+ │         └── abc_part.r:7 IN ('central', 'east', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
  ├── lookup columns are key
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -9315,7 +9311,9 @@ semi-join (lookup abc_part)
 # --------------------------------------------------
 
 # Locality optimized inner join.
-opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
+# TODO(rytaft): currently disabled due to #73024.
+# opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
+opt locality=(region=east)
 SELECT * FROM def_part INNER JOIN abc_part ON e = a WHERE d = 1
 ----
 inner-join (lookup abc_part)
@@ -9323,11 +9321,7 @@ inner-join (lookup abc_part)
  ├── lookup expression
  │    └── filters
  │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
- ├── remote lookup expression
- │    └── filters
- │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 IN ('central', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ │         └── abc_part.r:7 IN ('central', 'east', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
  ├── lookup columns are key
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -9356,7 +9350,9 @@ inner-join (lookup abc_part)
  └── filters (true)
 
 # Locality optimized left join, in a different region.
-opt locality=(region=west) expect=GenerateLocalityOptimizedLookupJoin
+# TODO(rytaft): currently disabled due to #73024.
+# opt locality=(region=west) expect=GenerateLocalityOptimizedLookupJoin
+opt locality=(region=west)
 SELECT * FROM def_part LEFT JOIN abc_part ON e = a WHERE d = 1
 ----
 left-join (lookup abc_part)
@@ -9364,11 +9360,7 @@ left-join (lookup abc_part)
  ├── lookup expression
  │    └── filters
  │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 = 'west' [outer=(7), constraints=(/7: [/'west' - /'west']; tight), fd=()-->(7)]
- ├── remote lookup expression
- │    └── filters
- │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 IN ('central', 'east') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'east' - /'east']; tight)]
+ │         └── abc_part.r:7 IN ('central', 'east', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
  ├── lookup columns are key
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -9397,7 +9389,9 @@ left-join (lookup abc_part)
  └── filters (true)
 
 # Locality optimized semi join, in a different region.
-opt locality=(region=central) expect=GenerateLocalityOptimizedLookupJoin
+# TODO(rytaft): currently disabled due to #73024.
+# opt locality=(region=central) expect=GenerateLocalityOptimizedLookupJoin
+opt locality=(region=central)
 SELECT * FROM def_part WHERE EXISTS (SELECT * FROM abc_part WHERE e = a) AND d = 1
 ----
 semi-join (lookup abc_part)
@@ -9405,11 +9399,7 @@ semi-join (lookup abc_part)
  ├── lookup expression
  │    └── filters
  │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 = 'central' [outer=(7), constraints=(/7: [/'central' - /'central']; tight), fd=()-->(7)]
- ├── remote lookup expression
- │    └── filters
- │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 IN ('east', 'west') [outer=(7), constraints=(/7: [/'east' - /'east'] [/'west' - /'west']; tight)]
+ │         └── abc_part.r:7 IN ('central', 'east', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
  ├── lookup columns are key
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -9438,7 +9428,9 @@ semi-join (lookup abc_part)
  └── filters (true)
 
 # Locality optimized inner join, different join condition.
-opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
+# TODO(rytaft): currently disabled due to #73024.
+# opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
+opt locality=(region=east)
 SELECT * FROM def_part INNER JOIN abc_part ON f = b WHERE d = 10
 ----
 inner-join (lookup abc_part)
@@ -9453,11 +9445,7 @@ inner-join (lookup abc_part)
  │    ├── lookup expression
  │    │    └── filters
  │    │         ├── f:4 = b:9 [outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
- │    │         └── abc_part.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
- │    ├── remote lookup expression
- │    │    └── filters
- │    │         ├── f:4 = b:9 [outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
- │    │         └── abc_part.r:7 IN ('central', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ │    │         └── abc_part.r:7 IN ('central', 'east', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
@@ -9487,7 +9475,9 @@ inner-join (lookup abc_part)
  └── filters (true)
 
 # With an extra ON filter.
-opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
+# TODO(rytaft): currently disabled due to #73024.
+# opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
+opt locality=(region=east)
 SELECT * FROM def_part INNER JOIN abc_part ON e = a AND f > b WHERE d = 1
 ----
 inner-join (lookup abc_part)
@@ -9495,11 +9485,7 @@ inner-join (lookup abc_part)
  ├── lookup expression
  │    └── filters
  │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
- ├── remote lookup expression
- │    └── filters
- │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 IN ('central', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ │         └── abc_part.r:7 IN ('central', 'east', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
  ├── lookup columns are key
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -9529,7 +9515,9 @@ inner-join (lookup abc_part)
       └── f:4 > b:9 [outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ])]
 
 # Optimization applies even though the scan may produce more than one row.
-opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
+# TODO(rytaft): currently disabled due to #73024.
+# opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
+opt locality=(region=east)
 SELECT * FROM def_part INNER JOIN abc_part ON e = a WHERE f = 10
 ----
 inner-join (lookup abc_part)
@@ -9537,11 +9525,7 @@ inner-join (lookup abc_part)
  ├── lookup expression
  │    └── filters
  │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
- ├── remote lookup expression
- │    └── filters
- │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 IN ('central', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ │         └── abc_part.r:7 IN ('central', 'east', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
  ├── lookup columns are key
  ├── key: (2)
  ├── fd: ()-->(4), (2)-->(1,3), (3)-->(1,2), (8)-->(7,9,10), (9)~~>(7,8,10), (3)==(8), (8)==(3)
@@ -9561,7 +9545,9 @@ inner-join (lookup abc_part)
 
 # Optimization applies for a semi join even though the lookup join may have more
 # than one matching row.
-opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
+# TODO(rytaft): currently disabled due to #73024.
+# opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
+opt locality=(region=east)
 SELECT * FROM def_part WHERE EXISTS (SELECT * FROM abc_part WHERE f = c) AND d = 10
 ----
 semi-join (lookup abc_part@c_idx)
@@ -9569,11 +9555,7 @@ semi-join (lookup abc_part@c_idx)
  ├── lookup expression
  │    └── filters
  │         ├── f:4 = c:10 [outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
- │         └── abc_part.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
- ├── remote lookup expression
- │    └── filters
- │         ├── f:4 = c:10 [outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
- │         └── abc_part.r:7 IN ('central', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ │         └── abc_part.r:7 IN ('central', 'east', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
