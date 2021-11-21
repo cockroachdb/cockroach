@@ -136,6 +136,15 @@ func (s *spanInner) Meta() SpanMeta {
 	}
 }
 
+// OperationName returns the span's name. The name was specified at span
+// creation time.
+func (s *spanInner) OperationName() string {
+	if s.isNoop() {
+		return "noop"
+	}
+	return s.crdb.operation
+}
+
 func (s *spanInner) SetTag(key string, value attribute.Value) *spanInner {
 	if s.isNoop() {
 		return s
