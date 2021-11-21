@@ -12,6 +12,7 @@ package tracing
 
 import (
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync/atomic"
 
@@ -51,22 +52,55 @@ const (
 type Span struct {
 	// Span itself is a very thin wrapper around spanInner whose only job is
 	// to guard spanInner against use-after-Finish.
-	i               spanInner
-	numFinishCalled int32 // atomic
+	i spanInner
+	// finished is set on Finish(). Used to detect use-after-Finish.
+	finished int32 // atomic
+	// finishStack is set if debugUseAfterFinish is set. It represents the stack
+	// that called Finish(), in order to report it on further use.
+	finishStack string
 }
 
 // IsNoop returns true if this span is a black hole - it doesn't correspond to a
 // CRDB span and it doesn't output either to an OpenTelemetry tracer, or to
 // net.Trace.
+//
+// As opposed to other spans, a noop span can be used after Finish(). In
+// practice, noop spans are pre-allocated by the Tracer and handed out to
+// everybody (shared) if the Tracer is configured to not always create real
+// spans (i.e. TracingModeOnDemand).
 func (sp *Span) IsNoop() bool {
 	return sp.i.isNoop()
 }
 
-func (sp *Span) done() bool {
+// detectUseAfterFinish() checks whether sp has already been Finish()ed. If it
+// did, the behavior depends on the Tracer's configuration: if it was configured
+// to tolerate use-after-Finish, detectUseAfterFinish returns true. If it has
+// been configured to not tolerate use-after-Finish, it crashes.
+//
+// Exported methods on Span are supposed to call this and short-circuit if true
+// is returrned.
+func (sp *Span) detectUseAfterFinish() bool {
 	if sp == nil {
 		return true
 	}
-	return atomic.LoadInt32(&sp.numFinishCalled) != 0
+	if sp.IsNoop() {
+		return true
+	}
+	alreadyFinished := atomic.LoadInt32(&sp.finished) != 0
+	// In test builds, we panic on span use after Finish. This is in preparation
+	// of span pooling, at which point use-after-Finish would become corruption.
+	if alreadyFinished && sp.Tracer().PanicOnUseAfterFinish() {
+		var finishStack string
+		if sp.finishStack == "" {
+			finishStack = "<stack not captured. Set debugUseAfterFinish>"
+		} else {
+			finishStack = sp.finishStack
+		}
+		panic(fmt.Sprintf("use of Span after Finish. Span: %s. Finish previously called at: %s",
+			sp.i.OperationName(), finishStack))
+	}
+
+	return alreadyFinished
 }
 
 // Tracer exports the tracer this span was created using.
@@ -82,13 +116,19 @@ func (sp *Span) Redactable() bool {
 	return sp.Tracer().Redactable()
 }
 
-// Finish idempotently marks the Span as completed (at which point it will
-// silently drop any new data added to it). Finishing a nil *Span is a noop.
+// Finish marks the Span as completed. Its illegal to use a Span after calling
+// Finish().
+//
+// Finishing a nil *Span is a noop.
 func (sp *Span) Finish() {
-	if sp == nil || sp.IsNoop() || atomic.AddInt32(&sp.numFinishCalled, 1) != 1 {
+	if sp == nil || sp.IsNoop() || sp.detectUseAfterFinish() {
 		return
 	}
+	atomic.StoreInt32(&sp.finished, 1)
 	sp.i.Finish()
+	if sp.Tracer().debugUseAfterFinish {
+		sp.finishStack = string(debug.Stack())
+	}
 }
 
 // FinishAndGetRecording finishes the span and gets a recording at the same
@@ -98,7 +138,8 @@ func (sp *Span) Finish() {
 // recording after the span finishes, except by using this method).
 func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
 	sp.Finish()
-	// Reach directly into sp.i to avoide the done() check in sp.GetRecording().
+	// Reach directly into sp.i to avoid the detectUseAfterFinish() check in
+	// sp.GetRecording().
 	return sp.i.GetRecording(recType)
 }
 
@@ -125,6 +166,9 @@ func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
 // If recType is RecordingStructured, the return value will be nil if the span
 // doesn't have any structured events.
 func (sp *Span) GetRecording(recType RecordingType) Recording {
+	if sp.detectUseAfterFinish() {
+		return nil
+	}
 	return sp.i.GetRecording(recType)
 }
 
@@ -132,7 +176,7 @@ func (sp *Span) GetRecording(recType RecordingType) Recording {
 // these spans will be part of the result of GetRecording. Used to import
 // recorded traces from other nodes.
 func (sp *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
-	if !sp.done() {
+	if !sp.detectUseAfterFinish() {
 		sp.i.ImportRemoteSpans(remoteSpans)
 	}
 }
@@ -159,7 +203,7 @@ func (sp *Span) Meta() SpanMeta {
 // auxiliary trace sink). This does not apply to Spans derived from this one
 // when it was verbose.
 func (sp *Span) SetVerbose(to bool) {
-	if sp.done() {
+	if sp.detectUseAfterFinish() {
 		return
 	}
 	// We allow toggling verbosity on and off for a finished span. This shouldn't
@@ -184,7 +228,7 @@ func (sp *Span) IsVerbose() bool {
 //
 // TODO(tbg): make sure `msg` is lint-forced to be const.
 func (sp *Span) Record(msg string) {
-	if sp.done() {
+	if sp.detectUseAfterFinish() {
 		return
 	}
 	sp.i.Record(msg)
@@ -192,7 +236,7 @@ func (sp *Span) Record(msg string) {
 
 // Recordf is like Record, but accepts a format specifier.
 func (sp *Span) Recordf(format string, args ...interface{}) {
-	if sp.done() {
+	if sp.detectUseAfterFinish() {
 		return
 	}
 	sp.i.Recordf(format, args...)
@@ -205,7 +249,7 @@ func (sp *Span) Recordf(format string, args ...interface{}) {
 //
 // The caller must not mutate the item once RecordStructured has been called.
 func (sp *Span) RecordStructured(item Structured) {
-	if sp.done() {
+	if sp.detectUseAfterFinish() {
 		return
 	}
 	sp.i.RecordStructured(item)
@@ -214,7 +258,7 @@ func (sp *Span) RecordStructured(item Structured) {
 // SetTag adds a tag to the span. If there is a pre-existing tag set for the
 // key, it is overwritten.
 func (sp *Span) SetTag(key string, value attribute.Value) {
-	if sp.done() {
+	if sp.detectUseAfterFinish() {
 		return
 	}
 	sp.i.SetTag(key, value)
