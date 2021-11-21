@@ -28,7 +28,8 @@ import (
 )
 
 const (
-	numWorkersPerWarehouse = 10
+	// NumWorkersPerWarehouse is the default number of workers per warehouse.
+	NumWorkersPerWarehouse = 10
 	numConnsPerWarehouse   = 2
 )
 
