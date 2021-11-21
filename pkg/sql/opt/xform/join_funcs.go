@@ -1424,6 +1424,14 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 		return nil, nil, false
 	}
 
+	// There is currently a bug in the joinReader code for locality optimized
+	// lookup joins. This code is not used for anti joins, but it is used for
+	// for all other join types.
+	// TODO(rytaft): Remove this check when #73024 is fixed.
+	if private.JoinType != opt.AntiJoinOp {
+		return nil, nil, false
+	}
+
 	// Check whether this lookup join has already been locality optimized.
 	if private.LocalityOptimized {
 		return nil, nil, false
