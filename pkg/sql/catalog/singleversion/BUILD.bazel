@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "singleversion",
+    srcs = ["singleversion.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/singleversion",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/util/hlc",
+    ],
+)
