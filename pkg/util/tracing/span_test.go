@@ -337,7 +337,7 @@ func TestChildSpanRegisteredWithRecordingParent(t *testing.T) {
 	defer ch.Finish()
 	children := sp.i.crdb.mu.openChildren
 	require.Len(t, children, 1)
-	require.Equal(t, ch.i.crdb, children[0].crdbSpan)
+	require.Equal(t, ch.i.crdb, children[0].spanRef.i.crdb)
 	ch.RecordStructured(&types.Int32Value{Value: 5})
 	// Check that the child's structured event is in the recording.
 	rec := sp.GetRecording(RecordingStructured)
@@ -550,4 +550,19 @@ func TestStructureRecording(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Test that a child span that's still open at the time when
+// parent.FinishAndGetRecording() is called is included in the parent's
+// recording.
+func TestOpenChildIncludedRecording(t *testing.T) {
+	tr := NewTracerWithOpt(context.Background())
+	parent := tr.StartSpan("parent", WithRecording(RecordingVerbose))
+	child := tr.StartSpan("child", WithParent(parent))
+	rec := parent.FinishAndGetRecording(RecordingVerbose)
+	child.Finish()
+	require.NoError(t, CheckRecording(rec, `
+		=== operation:parent _verbose:1
+			=== operation:child _unfinished:1 _verbose:1
+	`))
 }

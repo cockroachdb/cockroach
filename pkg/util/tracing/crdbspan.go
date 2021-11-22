@@ -50,13 +50,15 @@ type crdbSpan struct {
 	// tag's key to a user.
 	logTags *logtags.Buffer
 
-	// Locking rules: if locking both a parent and a child, the parent must be
-	// locked first. In practice, children don't take the parent's lock.
+	// Locking rules:
+	// - If locking both a parent and a child, the parent must be locked first. In
+	// practice, children don't take the parent's lock.
+	// - The active spans registry's lock must be acquired before this lock.
 	mu crdbSpanMu
 }
 
 type childRef struct {
-	*crdbSpan
+	spanRef
 	// collectRecording is set if this child's recording should be included in the
 	// parent's recording. This is usually the case, except for children created
 	// with the WithDetachedRecording() option.
@@ -74,9 +76,15 @@ type crdbSpanMu struct {
 	// Note that parent is mutable; a span can start by having a parent but then,
 	// if the parent finishes before the child does (which is uncommon), the
 	// child's parent is set to nil.
-	parent *crdbSpan
+	//
+	// While parent is set, this child is holding a reference in the parent's
+	// reference counter. The parent's ref count is decremented when this child
+	// Finish()es, or otherwise when this pointer is nil'ed (i.e. on parent
+	// Finish()).
+	parent spanRef
 
 	finished bool
+
 	// duration is initialized to -1 and set on Finish().
 	duration time.Duration
 
@@ -151,19 +159,32 @@ type sizeLimitedBuffer struct {
 	limit int64 // in bytes
 }
 
+func (buf *sizeLimitedBuffer) Reset() {
+	buf.Buffer.Reset()
+	buf.size = 0
+}
+
 // finish marks the span as finished. Further operations on the span are not
 // allowed. Returns false if the span was already finished.
 //
-// TODO(andrei): The intention is for a span to be available for reuse (e.g.
-// through a sync.Pool) after finish(), although we're not currently taking
-// advantage of this. I think there might be users that collect a span's
-// recording after finish(), which should be illegal. For now, use-after-finish
-// is generally tolerated - and that's also why this method returns false when
-// called a second time.
+// Calling finish() a second time is illegal, as is any use-after-finish().
+// Still, the Tracer can be configured to tolerate such uses. If the Tracer was
+// configured to not tolerate use-after-Finish, we would have crashed before
+// calling this.
 func (s *crdbSpan) finish() bool {
-	var children []*crdbSpan
-	var parent *crdbSpan
-	var needRegistryChange bool
+	// Finishing involves the following steps:
+	// 1) Take the lock and capture a reference to the parent.
+	// 2) Operate on the parent outside of the lock.
+	// 3) Take the lock again, operate on the children under the lock, and also
+	//    capture references to the children for further operations outside of the
+	//    lock.
+	// 4) Insert the children into the active spans registry outside of the lock.
+	//
+	// We could reorder things such that the lock is only taken once, but it
+	// results in more awkward code because operating on the s' parent expects to
+	// find s' children in place, to collect their recordings.
+
+	var parent spanRef
 	{
 		s.mu.Lock()
 		if s.mu.finished {
@@ -172,11 +193,6 @@ func (s *crdbSpan) finish() bool {
 			return false
 		}
 		s.mu.finished = true
-		// If the span is not part of the registry now, it never will be. So, we'll
-		// need to remove it from the registry only if it currently does not have a
-		// parent. We'll also need to manipulate the registry if there are open
-		// children (they'll need to be added to the registry).
-		needRegistryChange = s.mu.parent == nil || len(s.mu.openChildren) > 0
 
 		if s.recordingType() != RecordingOff {
 			duration := timeutil.Since(s.startTime)
@@ -186,26 +202,57 @@ func (s *crdbSpan) finish() bool {
 			s.mu.duration = duration
 		}
 
-		// Shallow-copy the children so they can be processed outside the lock.
-		children = make([]*crdbSpan, len(s.mu.openChildren))
-		for i, c := range s.mu.openChildren {
-			children[i] = c.crdbSpan
-		}
+		// We'll operate on the parent below, outside the child's lock, as per the
+		// lock ordering convention between parents and children. The parent might
+		// get Finish()ed by the time we call parent.childFinished(s) on it below;
+		// that's OK because we're going to hold on taking a reference in the
+		// parent's reference counter. Notice that we move the reference out of
+		// s.mu.parent; leaving it there would not work because s.mu.parent can be
+		// released by s.parentFinished() after we drop our lock.
+		parent = s.mu.parent.move()
+		s.mu.Unlock()
+	}
 
-		// We'll operate on the parent outside of the child's lock.
-		parent = s.mu.parent
+	// Operate on the parent outside the child's lock. childFinished() might call
+	// back into the child and acquire the child's lock.
+	if !parent.empty() {
+		parent.Span.i.crdb.childFinished(s)
+		parent.release()
+	}
+
+	// Operate on children.
+	var children []spanRef
+	var needRegistryChange bool
+	{
+		s.mu.Lock()
+
+		// If the span is not part of the registry now, it never will be. So, we'll
+		// need to remove it from the registry only if it currently does not have a
+		// parent. We'll also need to manipulate the registry if there are open
+		// children (they'll need to be added to the registry).
+		needRegistryChange = s.mu.parent.empty() || len(s.mu.openChildren) > 0
+
+		// Deal with the orphaned children - make them roots. We call into the
+		// children while holding the parent's lock. As per the span locking
+		// convention, that's OK (but the reverse isn't).
+		//
+		// We also shallow-copy the children for operating on them outside the lock.
+		children = make([]spanRef, len(s.mu.openChildren))
+		for i, c := range s.mu.openChildren {
+			c.parentFinished()
+			// Move ownership of the child reference, and also nil out the pointer to
+			// the child, making it available for GC.
+			children[i] = c.spanRef.move()
+		}
+		// Make the openChildren array available for GC if it has grown from the
+		// initial capacity provided by the spanAllocHelper. We don't want to reuse
+		// it in case it has grown too much, so that we don't accumulate many large
+		// arrays.
+		s.mu.openChildren = nil
 
 		s.mu.Unlock()
 	}
 
-	if parent != nil {
-		parent.childFinished(s)
-	}
-
-	// Deal with the orphaned children - make them roots.
-	for _, c := range children {
-		c.parentFinished()
-	}
 	if needRegistryChange {
 		// Atomically replace s in the registry with all of its still-open children.
 		s.tracer.activeSpansRegistry.swap(s.spanID, children)
@@ -297,7 +344,8 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 
 	for _, child := range s.mu.openChildren {
 		if child.collectRecording || includeDetachedChildren {
-			result = append(result, child.getVerboseRecording(includeDetachedChildren, false /* finishing */)...)
+			sp := child.Span.i.crdb
+			result = append(result, sp.getVerboseRecording(includeDetachedChildren, false /* finishing */)...)
 		}
 	}
 	s.mu.Unlock()
@@ -331,7 +379,8 @@ func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) Recordin
 	}
 	for _, c := range s.mu.openChildren {
 		if c.collectRecording || includeDetachedChildren {
-			buffer = c.getStructuredEventsRecursively(buffer, includeDetachedChildren)
+			sp := c.Span.i.crdb
+			buffer = sp.getStructuredEventsRecursively(buffer, includeDetachedChildren)
 		}
 	}
 
@@ -510,7 +559,8 @@ func (s *crdbSpan) getStructuredEventsRecursively(
 	buffer = s.getStructuredEventsLocked(buffer)
 	for _, c := range s.mu.openChildren {
 		if c.collectRecording || includeDetachedChildren {
-			buffer = c.getStructuredEventsRecursively(buffer, includeDetachedChildren)
+			sp := c.Span.i.crdb
+			buffer = sp.getStructuredEventsRecursively(buffer, includeDetachedChildren)
 		}
 	}
 	for _, c := range s.mu.recording.finishedChildren {
@@ -629,7 +679,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 // The adding fails if the receiver has already Finish()ed. This should never
 // happen, since using a Span after Finish() is illegal. But still, we
 // defensively return false.
-func (s *crdbSpan) addChildLocked(child *crdbSpan, collectChildRec bool) bool {
+func (s *crdbSpan) addChildLocked(child *Span, collectChildRec bool) bool {
 	s.mu.AssertHeld()
 
 	if s.mu.finished {
@@ -638,39 +688,49 @@ func (s *crdbSpan) addChildLocked(child *crdbSpan, collectChildRec bool) bool {
 
 	s.mu.openChildren = append(
 		s.mu.openChildren,
-		childRef{crdbSpan: child, collectRecording: collectChildRec},
+		childRef{spanRef: makeSpanRef(child), collectRecording: collectChildRec},
 	)
 	return true
 }
 
 // childFinished is called when a child is Finish()ed. Depending on the
 // receiver's recording mode, the child is atomically removed and replaced it
-// with its recording. This allows the child span to be reused (since the parent
-// no longer references it).
+// with its recording.
 //
 // child is the child span that just finished.
 func (s *crdbSpan) childFinished(child *crdbSpan) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.mu.finished {
+		return
+	}
+
 	var childIdx int
 	found := false
 	for i, c := range s.mu.openChildren {
-		if c.crdbSpan == child {
+		sp := c.Span.i.crdb
+		if sp == child {
 			childIdx = i
 			found = true
 			break
 		}
 	}
 	if !found {
+		// The child is expected to be found. In particular, this parent span is not
+		// supposed to be reused while children are holding a reference to it
+		// (courtesy of the parent's reference counter).
 		panic("child not present in parent")
 	}
 
 	collectChildRec := s.mu.openChildren[childIdx].collectRecording
+	// Remember to drop the child's reference at the end.
+	childPtr := s.mu.openChildren[childIdx].move()
+	defer childPtr.release()
 
 	// Unlink the child.
 	l := len(s.mu.openChildren)
 	s.mu.openChildren[childIdx] = s.mu.openChildren[l-1]
-	s.mu.openChildren[l-1].crdbSpan = nil // Make the child available to GC.
 	s.mu.openChildren = s.mu.openChildren[:l-1]
 
 	// Collect the child's recording.
@@ -715,10 +775,7 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 func (s *crdbSpan) parentFinished() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.mu.finished {
-		return
-	}
-	s.mu.parent = nil
+	s.mu.parent.release()
 }
 
 // SetVerbose is part of the RegistrySpan interface.

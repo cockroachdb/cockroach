@@ -16,6 +16,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/types"
@@ -693,4 +694,50 @@ func TestChildNeedsSameTracerAsParent(t *testing.T) {
 	require.NotPanics(t, func() {
 		tr2.StartSpan("child", WithParent(parent))
 	})
+}
+
+// TestSpanReuse checks that spans are reused through the Tracer's pool, instead
+// of being allocated every time. This is a basic test, because the sync.Pool is
+// generally not deterministic. See TestSpanPooling for a more comprehensive
+// one.
+func TestSpanReuse(t *testing.T) {
+	skip.UnderRace(t, "sync.Pool seems to be emptied very frequently under race, making the test unreliable")
+	ctx := context.Background()
+	tr := NewTracerWithOpt(ctx,
+		// Ask the tracer to always reuse spans, overriding the testing's
+		// metamorphic default and mimicking production.
+		WithSpanReusePercent(100),
+		WithTracingMode(TracingModeActiveSpansRegistry),
+		WithTestingKnobs(TracerTestingKnobs{
+			MaintainAllocationCounters: true,
+		}))
+	s1 := tr.StartSpan("root")
+	s2 := tr.StartSpan("child", WithParent(s1))
+	s3 := tr.StartSpan("child2", WithParent(s2))
+	s1.Finish()
+	s2.Finish()
+	s3.Finish()
+	created, alloc := tr.TestingGetStatsAndReset()
+	require.Equal(t, 3, created)
+	require.Equal(t, 3, alloc)
+
+	// Due to the vagaries of sync.Pool (interaction with GC), the reuse is not
+	// perfectly reliable. We try several times, and declare success if we ever
+	// get full reuse.
+	for i := 0; i < 10; i++ {
+		created, alloc := tr.TestingGetStatsAndReset()
+		s1 = tr.StartSpan("root")
+		s2 = tr.StartSpan("child", WithParent(s1))
+		s3 = tr.StartSpan("child2", WithParent(s2))
+		s2.Finish()
+		s3.Finish()
+		s1.Finish()
+		created, alloc = tr.TestingGetStatsAndReset()
+		require.Equal(t, created, 3)
+		if alloc == 0 {
+			// Test succeeded.
+			return
+		}
+	}
+	t.Fatal("spans do not seem to be reused reliably")
 }
