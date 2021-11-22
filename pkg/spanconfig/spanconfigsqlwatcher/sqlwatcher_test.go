@@ -46,22 +46,22 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	}{
 		{
 			stmt:        "CREATE TABLE t()",
-			expectedIDs: descpb.IDs{52},
+			expectedIDs: descpb.IDs{54},
 		},
 		{
 			setup:       "CREATE TABLE t2()",
 			stmt:        "ALTER TABLE t2 CONFIGURE ZONE USING num_replicas = 3",
-			expectedIDs: descpb.IDs{53},
+			expectedIDs: descpb.IDs{55},
 		},
 		{
 			setup:       "CREATE DATABASE d; CREATE TABLE d.t1(); CREATE TABLE d.t2()",
 			stmt:        "ALTER DATABASE d CONFIGURE ZONE USING num_replicas=5",
-			expectedIDs: descpb.IDs{54},
+			expectedIDs: descpb.IDs{56},
 		},
 		{
 			setup:       "CREATE TABLE t3(); CREATE TABLE t4()",
 			stmt:        "ALTER TABLE t3 CONFIGURE ZONE USING num_replicas=5; CREATE TABLE t5(); DROP TABLE t4;",
-			expectedIDs: descpb.IDs{57, 58, 59},
+			expectedIDs: descpb.IDs{60, 61, 62},
 		},
 		// Named zone tests.
 		{
@@ -88,13 +88,13 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 		{
 			setup: "CREATE DATABASE db",
 			stmt:  "CREATE SCHEMA db.sc",
-			// One ID each for the parent database and the schema.
-			expectedIDs: descpb.IDs{60, 61},
+			// One ID each for the parent database, public schema and the schema.
+			expectedIDs: descpb.IDs{63, 65},
 		},
 		{
 			stmt: "CREATE TYPE typ AS ENUM()",
 			// One ID each for the enum and the array type.
-			expectedIDs: descpb.IDs{62, 63},
+			expectedIDs: descpb.IDs{66, 67},
 		},
 	}
 
