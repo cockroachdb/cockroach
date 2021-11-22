@@ -12,12 +12,14 @@ package log
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/jsonbytes"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -420,4 +422,71 @@ func escapeString(buf *buffer, s string) {
 	b := buf.Bytes()
 	b = jsonbytes.EncodeString(b, s)
 	buf.Buffer = *bytes.NewBuffer(b)
+}
+
+type entryDecoderJSON struct {
+	decoder         *json.Decoder
+	sensitiveEditor redactEditor
+}
+
+// Decode decodes the next log entry into the provided protobuf message.
+func (d *entryDecoderJSON) Decode(entry *logpb.Entry) error {
+	var e map[string]interface{}
+
+	err := d.decoder.Decode(&e)
+	if err != nil {
+		return err
+	}
+
+	// Erase all the fields, to be sure.
+	*entry = logpb.Entry{
+		Time:       e["timestamp"].(int64),
+		Goroutine:  e["goroutine"].(int64),
+		File:       e["file"].(string),
+		Line:       e["line"].(int64),
+		Redactable: e["redactable"].(bool),
+	}
+
+	// If not a header entry, process the fields that belong to such entries.
+	if _, ok := e["header"].(int); !ok {
+		entry.Severity = Severity(e["severity_numeric"].(int))
+		entry.Channel = Channel(e["channel_numeric"].(int))
+		entry.Counter = e["entry_counter"].(uint64)
+	}
+
+	// Process the message.
+	var entryMsg bytes.Buffer
+	if event, ok := e["event"].([]byte); ok {
+		entryMsg.Write(event)
+		entry.StructuredStart = 0
+		entry.StructuredEnd = uint32(entryMsg.Len())
+	} else {
+		entryMsg.Write(e["message"].([]byte))
+	}
+
+	// Process conditional fields.
+	if tags, ok := e["tags"].(map[string]interface{}); ok {
+		var t *logtags.Buffer
+		for k, v := range tags {
+			t = t.Add(k, v)
+		}
+		entry.Tags = renderTagsAsString(t, entry.Redactable)
+	}
+
+	if stacks, ok := e["stacks"].([]byte); ok {
+		entry.StackTraceStart = uint32(entryMsg.Len()) + 1
+		entryMsg.Write([]byte("\nstack trace:\n"))
+		entryMsg.Write(stacks)
+	}
+
+	r := redactablePackage{
+		msg:        entryMsg.Bytes(),
+		redactable: entry.Redactable,
+	}
+	r = d.sensitiveEditor(r)
+	entry.Message = string(r.msg)
+	entry.Redactable = r.redactable
+
+	return nil
+
 }

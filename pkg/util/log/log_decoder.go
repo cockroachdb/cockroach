@@ -13,6 +13,7 @@ package log
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"io"
 	"regexp"
 
@@ -27,13 +28,18 @@ var (
 			/* Prefix */ `(?:.*\[config\][ ]+log format \(utf8=.+\): )` +
 			/* Format */ `(.*)$`,
 	)
-	v1IndicatorRE = regexp.MustCompile(
-		`(?m)^` +
-			/* crdb-v1 Indicator */ `(?:.*line format: \[IWEF\]yymmdd hh:mm:ss.uuuuuu goid file:line.*)$`,
-	)
 	v2IndicatorRE = regexp.MustCompile(
 		`(?m)^` +
-			/* crdb-v2 Indicator */ `(?:.*line format: \[IWEF\]yymmdd hh:mm:ss.uuuuuu goid \[chan@\]file:line.*)$`)
+			/* crdb-v2 indicator */ `(?:.*line format: \[IWEF\]yymmdd hh:mm:ss.uuuuuu goid \[chan@\]file:line.*)$`,
+	)
+	v1IndicatorRE = regexp.MustCompile(
+		`(?m)^` +
+			/* crdb-v1 indicator */ `(?:.*line format: \[IWEF\]yymmdd hh:mm:ss.uuuuuu goid file:line.*)$`,
+	)
+	jsonIndicatorRE = regexp.MustCompile(
+		`(?m)^` +
+			/* JSON indicator */ `(?:.*"message":"file created at:.*)$`,
+	)
 )
 
 // EntryDecoder is used to decode log entries.
@@ -83,6 +89,11 @@ func NewEntryDecoderWithFormat(
 		}
 		decoder.scanner.Split(decoder.split)
 		d = decoder
+	case "json":
+		d = &entryDecoderJSON{
+			decoder:         json.NewDecoder(in),
+			sensitiveEditor: getEditor(editMode),
+		}
 	default:
 		// The unimplemented.WithIssue function is not used here because it results in circular dependency issues.
 		return nil, errors.WithTelemetry(
@@ -123,12 +134,14 @@ func getLogFormat(data []byte) (string, error) {
 	}
 
 	// If the log format is not specified in the log, determine the format based on the line format entry.
+	if v2IndicatorRE.Match(data) {
+		return "crdb-v2", nil
+	}
 	if v1IndicatorRE.Match(data) {
 		return "crdb-v1", nil
 	}
-
-	if v2IndicatorRE.Match(data) {
-		return "crdb-v2", nil
+	if jsonIndicatorRE.Match(data) {
+		return "json", nil
 	}
 
 	return "", errors.New("failed to extract log file format from the log")
