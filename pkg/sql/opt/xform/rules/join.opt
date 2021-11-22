@@ -489,10 +489,7 @@
                 $localExpr
                 $remoteExpr
                 $ok
-            ):(GetLocalityOptimizedLookupJoinExprs
-                $input
-                $private
-            )
+            ):(GetLocalityOptimizedLookupJoinExprs $on $private)
             $ok
         )
 )
@@ -603,10 +600,7 @@
                 $localExpr
                 $remoteExpr
                 $ok
-            ):(GetLocalityOptimizedLookupJoinExprs
-                $input
-                $private
-            )
+            ):(GetLocalityOptimizedLookupJoinExprs $on $private)
             $ok
         )
 )
