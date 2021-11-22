@@ -217,6 +217,11 @@ func (m *MockTransactionalSender) DeferCommitWait(ctx context.Context) func(cont
 	panic("unimplemented")
 }
 
+// ForwardWriteTimestamp is part of the TxnSender interface.
+func (m *MockTransactionalSender) ForwardWriteTimestamp(to hlc.Timestamp) error {
+	panic("unimplemented")
+}
+
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
 	senderFunc func(context.Context, *roachpb.Transaction, roachpb.BatchRequest) (
