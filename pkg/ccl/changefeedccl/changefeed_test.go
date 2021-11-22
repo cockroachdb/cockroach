@@ -948,6 +948,248 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	}
 }
 
+// Test checkpointing during schema change backfills that can be paused and
+// resumed multiple times during execution
+func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rnd, _ := randutil.NewPseudoRand()
+
+	// This test asserts that a second checkpoint made after resumption does its
+	// best to not lose information from the first checkpoint, therefore the
+	// maxCheckpointSize should be large enough to hold both without any
+	// truncation
+	var maxCheckpointSize int64 = 100 << 20
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		// Initialize table
+		sqlDB.Exec(t, `CREATE TABLE foo(key INT PRIMARY KEY DEFAULT unique_rowid(), val INT)`)
+		sqlDB.Exec(t, `INSERT INTO foo (val) SELECT * FROM generate_series(1, 1000)`)
+
+		// Ensure Scan Requests are always small enough that we receive multiple
+		// resolved events during a backfill
+		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) {
+			b.Header.MaxSpanRequestKeys = 10
+		}
+
+		// Setup changefeed job details, avoid relying on initial scan functionality
+		baseFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms', no_initial_scan`)
+		jobFeed := baseFeed.(cdctest.EnterpriseTestFeed)
+		jobRegistry := f.Server().JobRegistry().(*jobs.Registry)
+
+		// Ensure events are consumed for sinks that don't buffer (ex: Kafka)
+		g := ctxgroup.WithContext(context.Background())
+		g.Go(func() error {
+			for {
+				_, err := baseFeed.Next()
+				if err != nil {
+					return err
+				}
+			}
+		})
+		defer func() {
+			closeFeed(t, baseFeed)
+			_ = g.Wait()
+		}()
+
+		// Helper to read job progress
+		loadProgress := func() jobspb.Progress {
+			jobID := jobFeed.JobID()
+			job, err := jobRegistry.LoadJob(context.Background(), jobID)
+			require.NoError(t, err)
+			return job.Progress()
+		}
+
+		// Ensure initial backfill completes
+		testutils.SucceedsSoon(t, func() error {
+			prog := loadProgress()
+			if p := prog.GetHighWater(); p != nil && !p.IsEmpty() {
+				return nil
+			}
+			return errors.New("waiting for highwater")
+		})
+
+		// Pause job and setup overrides to force a checkpoint
+		require.NoError(t, jobFeed.Pause())
+
+		// Checkpoint progress frequently, and set the checkpoint size limit.
+		changefeedbase.FrontierCheckpointFrequency.Override(
+			context.Background(), &f.Server().ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.FrontierCheckpointMaxBytes.Override(
+			context.Background(), &f.Server().ClusterSettings().SV, maxCheckpointSize)
+
+		// Note the tableSpan to avoid resolved events that leave no gaps
+		fooDesc := catalogkv.TestingGetTableDescriptor(
+			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
+		tableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+
+		// ShouldSkipResolved should ensure that once the backfill begins, the following resolved events
+		// that are for that backfill (are of the timestamp right after the backfill timestamp) resolve some
+		// but not all of the time, which results in a checkpoint eventually being created
+		haveGaps := false
+		var backfillTimestamp hlc.Timestamp
+		var initialCheckpoint roachpb.SpanGroup
+		var foundCheckpoint int32
+		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+			// Stop resolving anything after checkpoint set to avoid eventually resolving the full span
+			if initialCheckpoint.Len() > 0 {
+				return true
+			}
+
+			// A backfill begins when the backfill resolved event arrives, which has a
+			// timestamp such that all backfill spans have a timestamp of
+			// timestamp.Next()
+			if r.BoundaryType == jobspb.ResolvedSpan_BACKFILL {
+				backfillTimestamp = r.Timestamp
+				return false
+			}
+
+			// Check if we've set a checkpoint yet
+			progress := loadProgress()
+			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
+				initialCheckpoint.Add(p.Checkpoint.Spans...)
+				atomic.StoreInt32(&foundCheckpoint, 1)
+			}
+
+			// Filter non-backfill-related spans
+			if !r.Timestamp.Equal(backfillTimestamp.Next()) {
+				// Only allow spans prior to a valid backfillTimestamp to avoid moving past the backfill
+				return !(backfillTimestamp.IsEmpty() || r.Timestamp.LessEq(backfillTimestamp.Next()))
+			}
+
+			// Only allow resolving if we definitely won't have a completely resolved table
+			if !r.Span.Equal(tableSpan) && haveGaps {
+				return rnd.Intn(10) > 7
+			}
+			haveGaps = true
+			return true
+		}
+
+		require.NoError(t, jobFeed.Resume())
+		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b STRING DEFAULT 'd'`)
+
+		// Wait for a checkpoint to have been set
+		testutils.SucceedsSoon(t, func() error {
+			if atomic.LoadInt32(&foundCheckpoint) != 0 {
+				return nil
+			}
+			return errors.New("waiting for checkpoint")
+		})
+
+		require.NoError(t, jobFeed.Pause())
+
+		// All spans up to the backfill event should've been resolved, therefore the
+		// highwater mark should be that of the backfill event
+		progress := loadProgress()
+		h := progress.GetHighWater()
+		require.True(t, h.Equal(backfillTimestamp))
+
+		// We ensure that if the job is resumed, it builds off of the existing
+		// checkpoint, not resolving any already-checkpointed-spans while also
+		// setting a new checkpoint that contains both initially checkpointed spans
+		// as well as the newly resolved ones
+		var secondCheckpoint roachpb.SpanGroup
+		foundCheckpoint = 0
+		haveGaps = false
+		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+			// Stop resolving anything after second checkpoint set to avoid backfill completion
+			if secondCheckpoint.Len() > 0 {
+				return true
+			}
+
+			// Once we've set a checkpoint that covers new spans, record it
+			progress := loadProgress()
+			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil {
+				var currentCheckpoint roachpb.SpanGroup
+				currentCheckpoint.Add(p.Checkpoint.Spans...)
+
+				// Ensure that the second checkpoint both contains all spans in the first checkpoint as well as new spans
+				if currentCheckpoint.Encloses(initialCheckpoint.Slice()...) && !initialCheckpoint.Encloses(currentCheckpoint.Slice()...) {
+					secondCheckpoint = currentCheckpoint
+					atomic.StoreInt32(&foundCheckpoint, 1)
+				}
+			}
+
+			// Filter non-backfill-related spans
+			if !r.Timestamp.Equal(backfillTimestamp.Next()) {
+				// Only allow spans prior to a valid backfillTimestamp to avoid moving past the backfill
+				return !(backfillTimestamp.IsEmpty() || r.Timestamp.LessEq(backfillTimestamp.Next()))
+			}
+
+			require.Falsef(t, initialCheckpoint.Encloses(r.Span), "second backfill should not resolve checkpointed span")
+
+			// Only allow resolving if we definitely won't have a completely resolved table
+			if !r.Span.Equal(tableSpan) && haveGaps {
+				return rnd.Intn(10) > 7
+			}
+			haveGaps = true
+			return true
+		}
+
+		require.NoError(t, jobFeed.Resume())
+		testutils.SucceedsSoon(t, func() error {
+			if atomic.LoadInt32(&foundCheckpoint) != 0 {
+				return nil
+			}
+			return errors.New("waiting for second checkpoint")
+		})
+
+		require.NoError(t, jobFeed.Pause())
+		for _, span := range initialCheckpoint.Slice() {
+			require.Truef(t, secondCheckpoint.Contains(span.Key), "second checkpoint should contain all values in first checkpoint")
+		}
+
+		// Collect spans we attempt to resolve after when we resume.
+		var resolved []roachpb.Span
+		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+			resolved = append(resolved, r.Span)
+			return false
+		}
+
+		// Resume job.
+		require.NoError(t, jobFeed.Resume())
+
+		// checkpoint should eventually be gone once backfill completes.
+		testutils.SucceedsSoon(t, func() error {
+			progress := loadProgress()
+			if p := progress.GetChangefeed(); p == nil || p.Checkpoint == nil || len(p.Checkpoint.Spans) == 0 {
+				return nil
+			}
+			return errors.New("checkpoint still non-empty")
+		})
+
+		// Pause job to avoid race on the resolved array
+		require.NoError(t, jobFeed.Pause())
+
+		// Verify that none of the resolved spans after resume were checkpointed.
+		for _, sp := range resolved {
+			require.Falsef(t, !sp.Equal(tableSpan) && secondCheckpoint.Contains(sp.Key), "span should not have been resolved: %s", sp)
+		}
+	}
+
+	// TODO(ssd): Tenant testing disabled because of use of DB()
+	t.Run("enterprise", enterpriseTest(testFn, feedTestNoTenants))
+	t.Run("cloudstorage", cloudStorageTest(testFn, feedTestNoTenants))
+	t.Run("kafka", kafkaTest(testFn, feedTestNoTenants))
+
+	log.Flush()
+	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
+		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) > 0 {
+		t.Fatalf("Found violation of CDC's guarantees: %v", entries)
+	}
+}
+
 // Test schema changes that require a backfill when the backfill option is
 // allowed.
 func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
@@ -1482,7 +1724,7 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 	t.Run(`webhook`, webhookTest(testFn, feedTestNoTenants))
 }
 
-func TestChangefeedRestartMutliNode(t *testing.T) {
+func TestChangefeedRestartMultiNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -4260,8 +4502,8 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 
-		// Make it appear as if this table has many ranges.  We do this by limiting the number
-		// of keys returned by Scan request.
+		// Ensure Scan Requests are always small enough that we receive multiple
+		// resolved events during a backfill
 		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) {
 			b.Header.MaxSpanRequestKeys = 1 + rnd.Int63n(100)
 		}
